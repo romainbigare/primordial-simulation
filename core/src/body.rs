@@ -54,11 +54,11 @@ const GAS_DEPTH: f64 = 1.0;
 /// Standing liquid depth at which the ground counts as half wet, m.
 const WET_DEPTH: f64 = 0.01;
 /// Upkeep of catalysts, J per kg per day per decade of speed-up.
-const C_CAT: f64 = 5e2;
+const C_CAT: f64 = 2e2;
 /// Upkeep of strength, J per kg per day at strength 1.
 const C_STRENGTH: f64 = 5e3;
 /// Upkeep of light-capture area, J per m² per day.
-const C_LEAF: f64 = 3e3;
+const C_LEAF: f64 = 2e3;
 /// Cost of one decision, J per kg.
 const C_BRAIN: f64 = 1e5;
 

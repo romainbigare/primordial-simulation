@@ -61,8 +61,11 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     let mut busy = Duration::ZERO;
     let life_year = if resumed { -1 } else { a.get("--life-year", 2i64) };
     for y in y0 + 1..=y0 + years {
-        if y as i64 - 1 == life_year {
-            worldgen::life::seed(&mut w);
+        // First light-eaters, a few years later eaters among them.
+        for (kind, at) in [(0, life_year), (1, life_year + 3)] {
+            if life_year >= 0 && y as i64 - 1 == at {
+                worldgen::life::seed(&mut w, kind);
+            }
         }
         for _ in 0..w.cfg.months_per_year {
             let t = Instant::now();

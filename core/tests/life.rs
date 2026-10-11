@@ -4,7 +4,7 @@ use pcore::rng::{Purpose, Rng};
 #[test]
 fn child_has_parent_genes_plus_noise() {
     let mut w = worldgen::new_world(1, 32, 32);
-    worldgen::life::seed(&mut w);
+    worldgen::life::seed(&mut w, 0);
     let parent = w.life.alive().next().expect("a body").genes.clone();
     let lay = Layout::of(&w.chem);
     let child = pcore::copy::mutate(&lay, &parent, &mut Rng::new(1, 0, 0, Purpose::Mutate));
@@ -21,7 +21,8 @@ fn bodies_keep_elements_and_energy() {
     for _ in 0..24 {
         pcore::step(&mut w);
     }
-    worldgen::life::seed(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
     for _ in 0..12 {
         pcore::step(&mut w);
     }
