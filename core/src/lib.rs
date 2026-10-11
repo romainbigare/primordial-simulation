@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// Planet settings and free physics numbers.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    /// Sun strength at the top of the air, W/m²
+    /// Sun strength at the top of the air, W/m² (the air reflects no sunlight here)
     pub sun: f64,
     /// Axial tilt, degrees
     pub tilt: f64,
@@ -35,12 +35,26 @@ pub struct Config {
     pub air_top_m: f64,
     /// Gravity, m/s²
     pub gravity: f64,
+    /// Heat exchange between ground and the air touching it, W/(m² K)
+    pub sensible: f64,
+    /// Transfer speed of evaporation, m/s
+    pub evap: f64,
+    /// Overturning air speed per K of warmth difference between neighbouring air nodes, m/s
+    pub wind: f64,
+    /// Mixing of neighbouring air columns by eddies, m²/s
+    pub mix: f64,
+    /// Loose solid volume moving liquid can carry per J it dissipates, m³/J
+    pub carry: f64,
+    /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J
+    pub wear: f64,
+    /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
+    pub creep: f64,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            sun: 1361.0,
+            sun: 1100.0,
             tilt: 23.4,
             lat_south: 5.0,
             lat_north: 55.0,
@@ -51,6 +65,13 @@ impl Default for Config {
             skin_m: 2.0,
             air_top_m: 10_000.0,
             gravity: 9.81,
+            sensible: 10.0,
+            evap: 0.006,
+            wind: 0.25,
+            mix: 2e4,
+            carry: 1e-7,
+            wear: 3e-9,
+            creep: 1e-6,
         }
     }
 }
@@ -106,6 +127,9 @@ pub struct World {
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,
+    /// Working memory of the laws, rebuilt when missing
+    #[serde(skip)]
+    pub scratch: flow::Scratch,
 }
 
 impl World {

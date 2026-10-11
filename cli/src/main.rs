@@ -21,7 +21,18 @@ fn main() {
     match args.0.get(1).map(String::as_str).unwrap_or("help") {
         "run" => {
             let size = args.get("--size", 128usize);
-            drive(worldgen::new_world(args.get("--seed", 1u64), size, size), &args, false);
+            let mut w = worldgen::new_world(args.get("--seed", 1u64), size, size);
+            w.cfg.sun *= args.get("--sun", 1.0);
+            let absorber = args.get("--absorber", 1.0);
+            let na = w.grid.na();
+            for j in 0..na {
+                let t = w.t_air(j);
+                for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
+                    w.air[k * na + j] *= absorber;
+                }
+                w.e_air[j] = w.heat_cap_air(j) * t;
+            }
+            drive(w, &args, false);
         }
         "chem" => chem::run(&args.0),
         "resume" => {

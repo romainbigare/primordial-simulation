@@ -23,29 +23,28 @@ fn ramp(stops: &[(f64, Rgb)], v: f64) -> Rgb {
 }
 
 fn map_pixel(w: &World, f: &Fields, i: usize) -> Rgb {
-    let (x, y) = w.grid.xy(i);
     let flux = w.diag.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     let shade = {
-        let zl = f.z[w.grid.step(i, (-1, 0)).unwrap_or(i)] + f.depth[w.grid.step(i, (-1, 0)).unwrap_or(i)];
-        let zu = f.z[w.grid.step(i, (0, -1)).unwrap_or(i)] + f.depth[w.grid.step(i, (0, -1)).unwrap_or(i)];
-        let s = ((zl - f.z[i] - f.depth[i]) + (zu - f.z[i] - f.depth[i])) / w.grid.cell_m;
+        let zl = f.z[w.grid.step(i, (-1, 0)).unwrap_or(i)];
+        let zu = f.z[w.grid.step(i, (0, -1)).unwrap_or(i)];
+        let s = ((zl - f.z[i]) + (zu - f.z[i])) / w.grid.cell_m;
         (1.0 - s * 6.0).clamp(0.6, 1.3)
     };
-    let _ = (x, y);
     let c = if f.ice[i] > 0.05 {
         [240, 244, 250]
-    } else if f.depth[i] > 3.0 {
-        ramp(&[(3.0, [70, 130, 190]), (100.0, [30, 70, 140]), (800.0, [10, 30, 80])], f.depth[i])
-    } else if flux > 2.0e3 {
-        ramp(&[(2.0e3, [110, 170, 220]), (1.0e5, [40, 110, 210])], flux)
-    } else if f.depth[i] > 0.3 {
-        [90, 150, 205]
+    } else if f.depth[i] > 1.0 {
+        // Standing liquid: shallow light, deep dark.
+        ramp(&[(1.0, [90, 160, 215]), (30.0, [50, 110, 190]), (200.0, [25, 60, 140]), (800.0, [10, 30, 80])], f.depth[i])
+    } else if flux > 3.0e4 {
+        // Flowing liquid, mol/s, on a log scale.
+        ramp(&[(4.5, [120, 175, 225]), (5.5, [50, 110, 215]), (6.5, [20, 50, 170])], flux.log10())
     } else {
         ramp(
             &[(0.0, [120, 160, 90]), (400.0, [150, 170, 100]), (1000.0, [170, 150, 110]), (1800.0, [140, 120, 105]), (2600.0, [200, 200, 200])],
             f.z[i],
         )
     };
+    let shade = if f.depth[i] > 1.0 || flux > 3.0e4 { 1.0 } else { shade };
     c.map(|v| (v as f64 * shade).clamp(0.0, 255.0) as u8)
 }
 
@@ -57,13 +56,13 @@ pub fn save(w: &World, path: &str) {
     let (pw, ph) = (gw * s * panels + (panels - 1) * 4, gh * s);
     let mut img = vec![255u8; pw * ph * 3];
     let n = w.grid.n();
-    let maxrain = w.diag.rain.iter().cloned().fold(1e-12f32, f32::max) as f64;
     for i in 0..n {
         let (x, y) = w.grid.xy(i);
         let cols = [
             map_pixel(w, &f, i),
             ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
-            ramp(&[(0.0, [235, 225, 200]), (0.3, [120, 190, 120]), (1.0, [20, 60, 160])], w.diag.rain[i] as f64 / maxrain),
+            // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
+            ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.diag.rain[i] as f64 * 3.15e7).max(1.0).log10()),
         ];
         for (p, c) in cols.iter().enumerate() {
             for dy in 0..s {
