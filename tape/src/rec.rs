@@ -24,6 +24,8 @@ pub struct Recorder {
     /// Births and deaths by cause since the last yearly row
     births: f64,
     deaths: [f64; 4],
+    /// Body updates counted at the last yearly row
+    updates: u64,
 }
 
 fn describe(e: &Event) -> String {
@@ -52,6 +54,7 @@ impl Recorder {
             log: vec![],
             births: 0.0,
             deaths: [0.0; 4],
+            updates: 0,
         }
     }
 
@@ -128,6 +131,7 @@ impl Recorder {
             ("animals".to_string(), "1", bodies - light_eaters),
             ("eat_animals".to_string(), "1", life.alive().filter(|b| b.took[1] > b.took[0]).count() as f64),
             ("lineages".to_string(), "1", life.lineages() as f64),
+            ("updates".to_string(), "1/yr", life.updates.saturating_sub(self.updates) as f64),
             ("lineages_ever".to_string(), "1", life.brains.len() as f64),
             ("births".to_string(), "1/yr", self.births),
             ("died_lack".to_string(), "1/yr", self.deaths[0]),
@@ -136,7 +140,11 @@ impl Recorder {
             ("died_taken".to_string(), "1/yr", self.deaths[3]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
-        (self.births, self.deaths) = (0.0, [0.0; 4]);
+        // Mole fraction in the air of each heat-absorbing gas.
+        let (na, ns) = (w.grid.na(), w.chem.ns());
+        let air: f64 = w.air.iter().sum();
+        row.extend((0..ns).filter(|&k| w.chem.subs[k].ir_abs > 0.0).map(|k| (format!("air_{k}"), "1", w.air[k * na..(k + 1) * na].iter().sum::<f64>() / air)));
+        (self.births, self.deaths, self.updates) = (0.0, [0.0; 4], life.updates);
         if self.series.is_empty() {
             self.series = row.iter().map(|r| (r.0.clone(), r.1, vec![])).collect();
         }

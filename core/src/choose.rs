@@ -28,7 +28,7 @@ pub fn shape(ns: usize) -> Shape {
 
 pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (chem, lay, i) = (&w.chem, Layout::of(&w.chem), b.cell as usize);
-    let (ns, area) = (chem.ns(), w.grid.area());
+    let ns = chem.ns();
     let Some(weights) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
     let (mass, env) = (b.mass(chem), w.life.env[i]);
@@ -38,7 +38,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let x = &mut t.input;
     x.clear();
     x.extend((0..ns).map(|k| 0.25 * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + 1e-4) - 0.25 * ln(b.genes[lay.min + k].max(0.0) + 1e-2)));
-    x.extend((0..ns).map(|k| 0.2 * ln(1.0 + (w.g(k, i) / area) as f32)));
+    x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = w.life.at[i].len() as f32 / w.cfg.max_bodies_per_cell as f32;
     let (dt, lit) = ((b.temp(chem) - env[0]) as f32, t.lit as f32);
     x.extend([dt / 10.0, ln(mass as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd]);
@@ -93,9 +93,12 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     }
 }
 
-/// Move to a neighbour: cost by mass, distance, climb, and the bodies already there.
+/// Move to a neighbour that has room: cost by mass, distance, climb, and the bodies already there.
 fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let i = b.cell as usize;
+    if w.life.at[j].len() >= w.cfg.max_bodies_per_cell {
+        return;
+    }
     let climb = (w.life.env[j][2] - w.life.env[i][2]).max(0.0);
     let resist = 1.0 + w.life.sum[j][1] / w.grid.area() / RHO_PASS;
     let cost = b.mass(&w.chem) * (C_MOVE * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist;

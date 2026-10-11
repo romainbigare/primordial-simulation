@@ -26,7 +26,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::STRENGTH => (0.1, 0.0, 1.0),
         body::CHILD => (0.05, 0.05, 0.5),
         body::COPY_MASS => (0.2, 0.0, 8.0),
-        body::INTERVAL => (0.2, 0.0, 1.78),
+        body::INTERVAL => (0.2, 0.7, 1.78),
         body::MUT => (0.2, -3.0, 0.0),
         g if g < lay.min => (1.0, -2.0, 18.0),
         g if g < lay.upt => (0.05, -0.2, 0.9),
@@ -40,7 +40,9 @@ pub fn mutate(lay: &Layout, genes: &[f32], r: &mut Rng) -> Vec<f32> {
     (genes.iter().enumerate())
         .map(|(g, &v)| {
             let (step, lo, hi) = range(lay, g);
-            (v + step * size * r.normal() as f32).clamp(lo, hi)
+            // Noise near a standard normal: a sum of four uniforms, centred and scaled.
+            let z = ((0..4).map(|_| r.f64()).sum::<f64>() - 2.0) * 3f64.sqrt();
+            (v + step * size * z as f32).clamp(lo, hi)
         })
         .collect()
 }

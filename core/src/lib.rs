@@ -57,7 +57,7 @@ pub struct Config {
     pub wear: f64,
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
-    /// Most bodies one cell can hold (a speed safeguard: copying into a full cell fails)
+    /// Most bodies one cell can hold (a speed safeguard: copying or moving into a full cell fails)
     pub max_bodies_per_cell: usize,
 }
 
@@ -84,7 +84,7 @@ impl Default for Config {
             carry: 1e-7,
             wear: 3e-9,
             creep: 1e-6,
-            max_bodies_per_cell: 6,
+            max_bodies_per_cell: 2,
         }
     }
 }
@@ -258,15 +258,24 @@ impl World {
 
 /// Advance the world by one month. This is the whole step: `next_state = step(state)`.
 pub fn step(w: &mut World) {
+    step_marked(w, &mut |_| {});
+}
+
+/// `step`, calling `mark(part)` after each part (0 flow, 1 change, 2 bodies), e.g. to time them.
+pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(usize)) {
     let dpm = w.cfg.days_per_month;
     for d in 0..dpm {
         if d % w.cfg.phys_days == 0 {
             let dt = w.cfg.phys_days.min(dpm - d) as f64 * 86_400.0;
             body::survey(w);
+            mark(2);
             flow::step(w, dt);
+            mark(0);
             change::step(w, dt);
+            mark(1);
         }
         body::day(w);
         w.day += 1;
+        mark(2);
     }
 }

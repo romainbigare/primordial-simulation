@@ -52,11 +52,24 @@ fn rows(w: &[f32], h: &[f32; H], out: &mut [f32]) {
     }
 }
 
+/// Dot product in 8 lanes (so it can use vector instructions).
+#[inline]
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    let mut acc = [0f32; 8];
+    let (ca, cb) = (a.chunks_exact(8), b.chunks_exact(8));
+    let tail: f32 = ca.remainder().iter().zip(cb.remainder()).map(|(x, y)| x * y).sum();
+    for (p, q) in ca.zip(cb) {
+        for l in 0..8 {
+            acc[l] += p[l] * q[l];
+        }
+    }
+    acc.iter().sum::<f32>() + tail
+}
+
 pub fn think(w: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
     let mut h = [0f32; H];
     for (m, hm) in h.iter_mut().enumerate() {
-        let row = &w[m * s.ni..(m + 1) * s.ni];
-        *hm = squash(w[s.b1() + m] + row.iter().zip(x).map(|(a, b)| a * b).sum::<f32>());
+        *hm = squash(w[s.b1() + m] + dot(&w[m * s.ni..(m + 1) * s.ni], x));
     }
     rows(&w[s.w2()..s.dir()], &h, &mut t.fixed);
     t.dir.resize(s.nf + 1, 0.0);

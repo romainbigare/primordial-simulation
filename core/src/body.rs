@@ -46,6 +46,8 @@ pub const LIGHT_EATER: f32 = 8.0;
 const DAY: f64 = 86_400.0;
 /// Updates are kept in a ring of this many days (more than the longest interval).
 const RING: u64 = 64;
+/// Shortest and longest interval between updates, days (the shortest is a speed safeguard).
+const MIN_INTERVAL: f64 = 5.0;
 const MAX_INTERVAL: f64 = 60.0;
 /// Liquid thickness over a body that holds back 63% of the light reaching it, m.
 const LIGHT_DEPTH: f64 = 10.0;
@@ -128,7 +130,7 @@ impl Body {
         self.e / self.heat_cap(chem).max(1e-9)
     }
     pub fn interval(&self) -> u64 {
-        self.dec(INTERVAL).round().clamp(1.0, MAX_INTERVAL) as u64
+        self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64
     }
     /// Visible traits; the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
@@ -180,11 +182,16 @@ pub struct Life {
     pub sum: Vec<[f64; 7]>,
     /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
+    /// Per cell, from the last monthly survey: its loose substances as a brain perceives them,
+    /// [cell * substances + k]
+    pub seen: Vec<f32>,
     /// Updates due, by day modulo RING: (slot, generation)
     due: Vec<Vec<(u32, u32)>>,
     /// Brain weights of each lineage (None once it died out), and its living bodies
     pub brains: Vec<Option<Vec<f32>>>,
     pub members: Vec<u32>,
+    /// Body updates since the start
+    pub updates: u64,
 }
 
 impl Life {
@@ -245,9 +252,9 @@ pub fn fused(chem: &Chemistry, k: usize, t: f64) -> f64 {
     if t >= chem.subs[k].melt { chem.subs[k].lf } else { 0.0 }
 }
 
-/// Temperature, liquid depth and surface height of a ground cell.
+/// Temperature (as of the last flow step), liquid depth and surface height of a ground cell.
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
-    let t = w.t_ground(i);
+    let t = w.scratch.temps().0.get(i).copied().unwrap_or_else(|| w.t_ground(i));
     let (mut z, mut d) = (0.0, 0.0);
     for k in 0..w.chem.ns() {
         z += w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
@@ -284,8 +291,10 @@ pub fn survey(w: &mut World) {
     for (c, s) in w.canopy.iter_mut().zip(&life.sum) {
         *c = (s[2] / area) as f32;
     }
-    if w.day % w.cfg.days_per_month as u64 == 0 || w.life.env.len() != n {
+    if w.day % w.cfg.days_per_month as u64 == 0 || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
+        let (ns, area) = (w.chem.ns(), w.grid.area());
+        w.life.seen = (0..n * ns).map(|x| 0.2 * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
     }
 }
 
@@ -320,6 +329,7 @@ pub fn day(w: &mut World) {
             continue;
         }
         let mut b = std::mem::take(&mut w.life.bodies[s]);
+        w.life.updates += 1;
         match live(w, &mut b, &mut rc, &mut tmp) {
             Some(cause) => die(w, s, b, cause),
             None => {
