@@ -1,5 +1,6 @@
 //! Headless runs and pictures.
 
+mod chem;
 mod render;
 
 use std::time::Instant;
@@ -45,6 +46,7 @@ fn main() {
             let s = start.elapsed().as_secs_f64();
             println!("{years} years in {s:.2} s ({:.1} ms per year)", s * 1000.0 / years as f64);
         }
+        "chem" => chem::run(&args),
         _ => println!("usage: ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR]"),
     }
 }

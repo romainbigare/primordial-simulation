@@ -33,13 +33,13 @@ pub fn drift(w: &World, start: &Totals, start_ledger: &crate::Ledger) -> (f64, f
     let l = &w.ledger;
     let mut worst_e: f64 = 0.0;
     for j in 0..start.elems.len() {
-        let god = l.god_elems.get(j).copied().unwrap_or(0.0) - start_ledger.god_elems.get(j).copied().unwrap_or(0.0);
-        let d = (now.elems[j] - start.elems[j] - god).abs() / start.elems[j].abs().max(1.0);
+        let added = l.outside_elems.get(j).copied().unwrap_or(0.0) - start_ledger.outside_elems.get(j).copied().unwrap_or(0.0);
+        let d = (now.elems[j] - start.elems[j] - added).abs() / start.elems[j].abs().max(1.0);
         worst_e = worst_e.max(d);
     }
     let boundary = (l.sun_in - start_ledger.sun_in) - (l.space_out - start_ledger.space_out)
         + (l.gravity - start_ledger.gravity)
-        + (l.god_energy - start_ledger.god_energy);
+        + (l.outside_energy - start_ledger.outside_energy);
     let change = (now.thermal + now.chemical) - (start.thermal + start.chemical);
     let scale = (l.sun_in - start_ledger.sun_in).abs().max(start.thermal.abs()).max(1.0);
     (worst_e, (change - boundary).abs() / scale)

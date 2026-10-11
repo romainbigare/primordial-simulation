@@ -38,7 +38,7 @@ fn fbm(seed: u64, x: f64, y: f64, octaves: u32) -> f64 {
     sum / norm
 }
 
-/// Height map in metres (sea level 0).
+/// Height map in metres (zero is the flat reference level).
 pub fn heights(seed: u64, w: usize, h: usize) -> Vec<f64> {
     let mut out = vec![0.0; w * h];
     let scale = 6.0 / w.max(h) as f64;
@@ -140,7 +140,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         diag: Diag { liquid_flux: vec![0.0; n], rain: vec![0.0; n] },
         ledger: Ledger::default(),
     };
-    world.ledger.god_elems = vec![0.0; world.chem.n_elements];
+    world.ledger.outside_elems = vec![0.0; world.chem.n_elements];
 
     // Starting temperatures: warm low latitudes, cooler poles and heights.
     let t_at = |w: &World, y: usize, z: f64| {

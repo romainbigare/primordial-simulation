@@ -62,10 +62,10 @@ pub struct Ledger {
     pub space_out: f64,
     /// Potential energy turned into heat (negative when matter is lifted), J
     pub gravity: f64,
-    /// Energy added by god actions, J
-    pub god_energy: f64,
-    /// Elements added by god actions, mol
-    pub god_elems: Vec<f64>,
+    /// Energy added by outside actions, J
+    pub outside_energy: f64,
+    /// Elements added by outside actions, mol
+    pub outside_elems: Vec<f64>,
     /// Tiny negative amounts clamped to zero, mol
     pub clamped: f64,
 }
