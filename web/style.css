@@ -4,10 +4,14 @@
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14171a; --panel: #1b1f23; --ink: #e6e8ea; --muted: #8d959c; --line: #2c3237; --chip: #252b30;
-    --accent: #6fb2e3; --on-accent: #0c1217; --map-bg: #0f1214;
+    --accent: #6fb2e3; --on-accent: #0c1217; --map-bg: #0f1214; color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+    --bg: #14171a; --panel: #1b1f23; --ink: #e6e8ea; --muted: #8d959c; --line: #2c3237; --chip: #252b30;
+    --accent: #6fb2e3; --on-accent: #0c1217; --map-bg: #0f1214; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }

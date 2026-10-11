@@ -233,6 +233,18 @@ impl Life {
     }
 }
 
+/// Energy a mole of `k` carries apart from its heat while in the air (fusion and vaporisation).
+#[inline]
+fn held(chem: &Chemistry, k: usize) -> f64 {
+    chem.subs[k].lf + chem.subs[k].lv
+}
+
+/// Fusion enthalpy a mole of `k` holds in the ground's heat at temperature `t`.
+#[inline]
+pub fn fused(chem: &Chemistry, k: usize, t: f64) -> f64 {
+    if t >= chem.subs[k].melt { chem.subs[k].lf } else { 0.0 }
+}
+
 /// Temperature, liquid depth and surface height of a ground cell.
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     let t = w.t_ground(i);
@@ -387,14 +399,16 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
     let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(&tmp.cat), lit, dt);
-    let heat = e - e_start + lit - used + upkeep;
+    let mut heat = e - e_start + lit - used + upkeep;
     for k in 0..ns {
-        air[k * na + j] += tmp.pool[k] - tmp.pool0[k];
+        let d = tmp.pool[k] - tmp.pool0[k];
+        air[k * na + j] += d;
+        heat -= d * held(chem, k);
     }
 
     // Liquids the body holds evaporate toward their vapour pressure at its temperature; what
     // falls as liquid on its capture area is caught, from the vapour it falls from. The net
-    // goes in or out, up to the level the body keeps.
+    // goes in or out, up to the level the body keeps, with its latent heat.
     let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * dt;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
@@ -410,6 +424,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
             b.store[k] += m;
             e_air[j] -= q;
             b.e += q;
+            heat += m * held(chem, k);
         }
     }
 
@@ -426,7 +441,8 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += q;
-        e_ground[i] -= q;
+        e_ground[i] -= q + d * fused(chem, k, tg);
+        heat += d * fused(chem, k, tg);
     }
 
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
@@ -459,7 +475,7 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    let World { chem, grid, air, ledger, life, .. } = w;
+    let World { chem, grid, air, life, .. } = w;
     let (ns, na, i, cat) = (chem.ns().min(64), grid.na(), b.cell as usize, Layout::of(chem).cat);
     let j = grid.air_of(i);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
@@ -490,21 +506,25 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if left > 1e-9 * cost {
         return false;
     }
+    let mut latent = 0.0;
     for (r, rx) in chem.reactions.iter().enumerate().take(64).filter(|p| ext[p.0] > 0.0) {
         for &(k, nu) in &rx.inputs {
             let k = k as usize;
             let a = if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] };
-            *a -= nu as f64 * ext[r];
-            if *a < 0.0 {
-                ledger.clamped -= *a;
-                *a = 0.0;
+            let d = (nu as f64 * ext[r]).min(*a);
+            *a -= d;
+            if gas(k) {
+                latent -= d * held(chem, k);
             }
         }
         for &(k, nu) in &rx.outputs {
-            let k = k as usize;
-            *if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] } += nu as f64 * ext[r];
+            let (k, d) = (k as usize, nu as f64 * ext[r]);
+            *if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] } += d;
+            if gas(k) {
+                latent += d * held(chem, k);
+            }
         }
     }
-    b.e += cost - left;
+    b.e += cost - left - latent;
     true
 }

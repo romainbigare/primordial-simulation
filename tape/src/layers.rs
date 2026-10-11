@@ -32,7 +32,7 @@ pub fn fields(w: &World) -> Fields {
     let (n, ns, area) = (w.grid.n(), w.chem.ns(), w.grid.area());
     let mut f = Fields { z: vec![0.0; n], depth: vec![0.0; n], ice: vec![0.0; n], loose: vec![0.0; n], t: vec![0.0; n], rgb: vec![[0.0; 3]; n] };
     for i in 0..n {
-        let t = w.t_ground(i);
+        let (t, pl) = w.thaw(i);
         // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
         let mut acc = [[0.0f64; 4]; 4];
         let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
@@ -43,13 +43,11 @@ pub fn fields(w: &World) -> Fields {
         };
         for k in 0..ns {
             let s = &w.chem.subs[k];
-            let p = w.chem.phase(k, t);
-            let vol = w.g(k, i) * w.chem.molar_volume(k, p);
-            match p {
-                Phase::Solid if is_cover(s) => add(0, vol, s.refl[0]),
-                Phase::Solid => add(2, vol, s.refl[0]),
-                Phase::Liquid => add(1, vol, s.refl[1]),
-                Phase::Gas => {}
+            let (melt, a) = (w.molten(k, t, pl), w.g(k, i));
+            let solid = a * (1.0 - melt) * w.chem.molar_volume(k, Phase::Solid);
+            add(if is_cover(s) { 0 } else { 2 }, solid, s.refl[0]);
+            if t < s.boil {
+                add(1, a * melt * w.chem.molar_volume(k, Phase::Liquid), s.refl[1]);
             }
             add(3, w.b(k, i) * w.chem.molar_volume(k, Phase::Solid), s.refl[0]);
         }
@@ -132,7 +130,7 @@ pub const LAYERS: &[Layer] = &[
     l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
-    l("rain", "mol/m2/s", "log", 1e-9, 1e-4, |c, i| c.w.diag.rain.get(i).copied().unwrap_or(0.0) as f64),
+    l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.diag.rain.get(i).copied().unwrap_or(0.0) as f64),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
     l("plants", "kg/m2", "log", 1e-3, 10.0, |c, i| c.plants[i]),

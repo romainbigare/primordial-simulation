@@ -9,10 +9,9 @@ const NEGLIGIBLE: f64 = 1e-12;
 /// Largest temperature change in one sub-step, K.
 const MAX_DT_K: f64 = 30.0;
 const MAX_SUBSTEPS: usize = 48;
-/// Each ground and air node reacts every `LAZY` ticks with `LAZY` times the time. Reactions at
-/// ordinary temperatures are slow, so one long step is as good as many short ones; a node that is
-/// hot when its turn comes is sub-stepped (see `MAX_DT_K`). The cost is that a node heated between
-/// turns starts reacting up to `LAZY` ticks late. Nodes take turns in blocks of `BLOCK` (contiguous memory).
+/// A node that is neither frozen nor hot reacts every `LAZY` ticks with `LAZY` times the time:
+/// reactions at ordinary temperatures are slow, so one long step is as good as many short ones.
+/// Nodes take turns in blocks of `BLOCK` (contiguous memory).
 const LAZY: u64 = 40;
 const BLOCK: usize = 64;
 
@@ -185,22 +184,44 @@ impl Reactor {
 }
 
 /// Run Law 2 on ground nodes (loose amounts, gas from the air above) and on air nodes.
+/// Node temperatures come from the last flow step: a node colder than every reaction that
+/// could run here is skipped; a node hot enough for some reaction to go far within one step
+/// reacts every step; the others take turns (see `LAZY`).
 pub fn step(w: &mut World, dt: f64) {
-    let first = (LAZY - (w.day / w.cfg.phys_days as u64) % LAZY) % LAZY;
-    let (first, lazy) = (first as usize, LAZY as usize);
-    let dt = dt * LAZY as f64;
+    let s = std::mem::take(&mut w.scratch);
+    let (tg, ta) = s.temps();
+    let turn = ((LAZY - (w.day / w.cfg.phys_days as u64) % LAZY) % LAZY) as usize;
     let chem = &w.chem;
     let (ns, n, na) = (chem.ns(), w.grid.n(), w.grid.na());
     let share = 1.0 / (w.grid.air_scale * w.grid.air_scale) as f64;
     let skin_area = w.cfg.skin_m * w.grid.area();
     let vol: Vec<f64> = (0..ns).map(|k| chem.molar_volume(k, crate::chem::Phase::Solid)).collect();
+    // Gas held by the air carries its fusion and vaporisation enthalpy (see `check::totals`).
+    let held: Vec<f64> = chem.subs.iter().map(|b| b.lf + b.lv).collect();
     let mut rc = Reactor::new(chem);
+    let live: Vec<usize> = (0..chem.reactions.len())
+        .filter(|&r| tg.is_empty() || chem.reactions[r].inputs.iter().all(|&(k, _)| s.present(k as usize)))
+        .collect();
+    let cold = live.iter().map(|&r| rc.thr[r]).fold(f64::INFINITY, f64::min);
+    let hot = live
+        .iter()
+        .filter(|&&r| !chem.reactions[r].light)
+        .map(|&r| chem.reactions[r].ea / (chem.reactions[r].k * dt / 0.05).ln().max(1e-9))
+        .fold(f64::INFINITY, f64::min);
+    // How long node `i` (temperature `t`) reacts in block or node turn `b` now: 0 if not at all.
+    let span = |t: f64, b: usize| {
+        if t >= hot { dt } else if b % LAZY as usize == turn && t >= cold { dt * LAZY as f64 } else { 0.0 }
+    };
+    let t_of = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(hot);
     let (mut amt, mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns], vec![0.0; ns]);
     let mut blk = vec![0.0; ns * BLOCK];
 
-    // Ground: blocks of neighbouring nodes take turns, so memory is read in runs.
-    for b in (first..n.div_ceil(BLOCK)).step_by(lazy) {
+    // Ground: blocks of neighbouring nodes, so memory is read in runs.
+    for b in 0..n.div_ceil(BLOCK) {
         let (i0, i1) = (b * BLOCK, ((b + 1) * BLOCK).min(n));
+        if (i0..i1).all(|i| span(t_of(tg, i), b) == 0.0) {
+            continue;
+        }
         let m = i1 - i0;
         let (mut bc, mut bv) = ([0.0; BLOCK], [0.0; BLOCK]);
         for k in 0..ns {
@@ -211,18 +232,28 @@ pub fn step(w: &mut World, dt: f64) {
             }
         }
         for x in 0..m {
-            let j = w.grid.air_of(i0 + x);
+            let (i, t) = (i0 + x, t_of(tg, i0 + x));
+            let time = span(t, b);
+            if time == 0.0 {
+                continue;
+            }
+            let j = w.grid.air_of(i);
             for k in 0..ns {
                 amt[k] = blk[k * BLOCK + x];
                 pool0[k] = w.air[k * na + j] * share;
             }
             pool.copy_from_slice(&pool0);
             let c_bed = if bv[x] > 0.0 { bc[x] / bv[x] * skin_area } else { 0.0 };
-            rc.react(chem, &mut amt, Some(&mut pool), &mut w.e_ground[i0 + x], c_bed, None, 0.0, dt);
+            // The reactor sees sensible heat: molten amounts hold their fusion enthalpy apart.
+            let fused: f64 = (0..ns).filter(|&k| chem.subs[k].melt <= t).map(|k| amt[k] * chem.subs[k].lf).sum();
+            let mut e = w.e_ground[i] - fused;
+            rc.react(chem, &mut amt, Some(&mut pool), &mut e, c_bed, None, 0.0, time);
+            w.e_ground[i] = e + fused;
             for k in 0..ns {
                 blk[k * BLOCK + x] = amt[k];
                 if pool[k] != pool0[k] {
                     w.air[k * na + j] += pool[k] - pool0[k];
+                    w.e_ground[i] -= (pool[k] - pool0[k]) * held[k];
                 }
             }
         }
@@ -231,13 +262,19 @@ pub fn step(w: &mut World, dt: f64) {
         }
     }
     // Air.
-    for j in (first..na).step_by(lazy) {
+    for j in 0..na {
+        let time = span(t_of(ta, j), j);
+        if time == 0.0 {
+            continue;
+        }
         for k in 0..ns {
             amt[k] = w.air[k * na + j];
         }
-        rc.react(chem, &mut amt, None, &mut w.e_air[j], 0.0, None, 0.0, dt);
+        rc.react(chem, &mut amt, None, &mut w.e_air[j], 0.0, None, 0.0, time);
         for k in 0..ns {
+            w.e_air[j] -= (amt[k] - w.air[k * na + j]) * held[k];
             w.air[k * na + j] = amt[k];
         }
     }
+    w.scratch = s;
 }

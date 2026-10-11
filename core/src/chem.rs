@@ -41,6 +41,9 @@ pub struct Substance {
     pub conductivity: f64,
     /// Vaporisation enthalpy, J/mol (sets the vapour pressure curve)
     pub lv: f64,
+    /// Fusion enthalpy, J/mol
+    #[serde(default)]
+    pub lf: f64,
     /// Formation enthalpy, J/mol. Chemical energy held by one mole.
     pub hf: f64,
 }

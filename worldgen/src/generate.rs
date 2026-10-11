@@ -70,6 +70,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 conductivity: if melt > 290.0 { 0.5 + 60.0 * coh * coh } else { 0.03 },
                 hf: -120e3 * n * spread * (0.4 + 0.7 * r.f64()),
                 lv: 88.0 * boil * (0.9 + 0.4 * r.f64()),
+                lf: 9.5 * melt,
             }
         })
         .collect();

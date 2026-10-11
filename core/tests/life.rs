@@ -17,8 +17,11 @@ fn child_has_parent_genes_plus_noise() {
 #[test]
 fn bodies_keep_elements_and_energy() {
     let mut w = worldgen::new_world(1, 32, 32);
-    worldgen::life::seed(&mut w);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    for _ in 0..24 {
+        pcore::step(&mut w);
+    }
+    worldgen::life::seed(&mut w);
     for _ in 0..12 {
         pcore::step(&mut w);
     }

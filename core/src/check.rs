@@ -8,7 +8,7 @@ pub struct Totals {
     pub elems: Vec<f64>,
     /// J
     pub thermal: f64,
-    /// J, chemical energy held in substances (from formation enthalpies)
+    /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air)
     pub chemical: f64,
 }
 
@@ -16,11 +16,12 @@ pub fn totals(w: &World) -> Totals {
     let chem = &w.chem;
     let mut elems = vec![0.0; chem.n_elements];
     let mut chemical = 0.0;
-    for (store, len) in [(&w.ground, w.grid.n()), (&w.bed, w.grid.n()), (&w.air, w.grid.na())] {
+    for (store, len, held) in [(&w.ground, w.grid.n(), false), (&w.bed, w.grid.n(), false), (&w.air, w.grid.na(), true)] {
         for k in 0..chem.ns() {
-            let sum: f64 = store[k * len..(k + 1) * len].iter().sum();
+            let (sum, s): (f64, _) = (store[k * len..(k + 1) * len].iter().sum(), &chem.subs[k]);
             chem.add_elems(k, sum, &mut elems);
-            chemical += sum * chem.subs[k].hf;
+            // Air holds its gases' fusion and vaporisation enthalpy; the ground holds fusion in `e_ground`.
+            chemical += sum * (s.hf + if held { s.lf + s.lv } else { 0.0 });
         }
     }
     let mut thermal = w.e_ground.iter().sum::<f64>() + w.e_air.iter().sum::<f64>();

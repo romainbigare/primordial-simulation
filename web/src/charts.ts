@@ -15,7 +15,7 @@ export class Charts {
     this.root.replaceChildren();
     const ys = series.year ?? years;
     this.x0 = Math.min(ys[0] ?? 0, years[0] ?? 0); this.x1 = Math.max(ys[ys.length - 1] ?? 1, years[years.length - 1] ?? 1);
-    this.cards = Object.keys(series).filter(k => k !== 'year' && series[k].length > 1).map(name => {
+    this.cards = Object.keys(series).filter(k => k !== 'year' && !/^elem_|^energy$/.test(k) && series[k].length > 1).map(name => {
       const el = document.createElement('div');
       el.className = 'card';
       el.innerHTML = `<div class="hd"><span></span><b></b></div><div class="plot"><canvas></canvas><i></i></div>`;

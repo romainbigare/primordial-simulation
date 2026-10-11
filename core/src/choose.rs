@@ -130,7 +130,7 @@ fn take_node(w: &mut World, b: &mut Body) {
         return;
     }
     for (k, &a) in m.iter().enumerate() {
-        let q = a * w.chem.subs[k].cp * tg;
+        let q = a * (w.chem.subs[k].cp * tg + body::fused(&w.chem, k, tg));
         w.ground[k * n + i] -= a;
         b.store[k] += a;
         w.e_ground[i] -= q;
