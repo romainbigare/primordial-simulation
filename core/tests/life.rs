@@ -31,3 +31,22 @@ fn bodies_keep_elements_and_energy() {
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// The same seed gives the same history, with brains shared by bodies that stayed together.
+#[test]
+fn same_seed_same_history_with_shared_brains() {
+    let run = || {
+        let mut w = worldgen::new_world(1, 32, 32);
+        pcore::step(&mut w);
+        worldgen::life::seed(&mut w, 0);
+        worldgen::life::seed(&mut w, 1);
+        for _ in 0..30 {
+            pcore::step(&mut w);
+        }
+        w
+    };
+    let (a, b) = (run(), run());
+    assert_eq!(pcore::check::hash(&a), pcore::check::hash(&b));
+    let shared = a.life.groups.iter().filter(|g| g.members > 1).count();
+    assert!(shared > 0, "no shared brains among {} bodies", a.life.alive().count());
+}

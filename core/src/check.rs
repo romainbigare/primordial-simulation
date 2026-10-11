@@ -93,5 +93,8 @@ pub fn hash(w: &World) -> u64 {
             eat(&mut h, x.to_bits());
         }
     }
+    for x in w.life.groups.iter().flat_map(|g| &g.rows) {
+        eat(&mut h, x.to_bits() as u64);
+    }
     h
 }

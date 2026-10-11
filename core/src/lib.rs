@@ -113,6 +113,14 @@ pub struct Diag {
     pub liquid_flux: Vec<f32>,
     /// Liquid falling on each ground cell, mol/(m² s) (moving average)
     pub rain: Vec<f32>,
+    /// Bodies moving into each ground cell, per year (moving average over about a year), and
+    /// since the last month
+    pub traffic: Vec<f32>,
+    pub crossings: Vec<f32>,
+    /// Mass of what they can burn taken by bodies that are not light-eaters since the shell last
+    /// read it, kg: from light-eaters, from other bodies, from the ground (not saved)
+    #[serde(skip)]
+    pub intake: [f64; 3],
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

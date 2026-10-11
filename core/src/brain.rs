@@ -1,14 +1,24 @@
-//! A small brain, shared by all bodies of one lineage: one hidden layer over what the body
-//! perceives, fixed action scores, and two shared scorers (one used for every neighbour
-//! direction, one for every perceived body) whose feature weights depend on the hidden layer.
-//! Kept apart from the laws so it can be swapped.
+//! A small brain. Its base (one hidden layer over what a body perceives and remembers) belongs
+//! to a lineage and changes only by evolution. Its rows belong to a group of bodies: read from
+//! the hidden layer, they give fixed action scores, the weights of shared scorers (one used for
+//! every neighbour direction, one per verb for every perceived body), the mean of the signal
+//! and the next memory, and an estimate of how well-being will go. Within a life the rows that
+//! pick actions and signals follow a policy gradient against that estimate (actor-critic); all
+//! rows also change by imitation. Kept apart from the laws so it can be swapped.
 
 use crate::rng::Rng;
 
 /// Hidden units.
 pub const H: usize = 12;
-/// Fixed actions: rest, copy, put, take from the node.
+/// Fixed actions: rest, copy, put to the node, take from the node.
 pub const FIXED: usize = 4;
+/// Verbs toward a perceived body: take from it, put to it, watch it.
+pub const VERBS: usize = 3;
+/// Signal outputs and memory numbers.
+pub const SIG: usize = 2;
+pub const MEM: usize = 6;
+/// One row: H weights, then a bias.
+pub const R: usize = H + 1;
 
 /// Sizes of the inputs, the direction features and the body features.
 #[derive(Clone, Copy, Debug)]
@@ -19,42 +29,46 @@ pub struct Shape {
 }
 
 impl Shape {
-    fn b1(&self) -> usize {
-        H * self.ni
+    /// Length of the base.
+    pub fn base(&self) -> usize {
+        H * self.ni + H
     }
-    fn w2(&self) -> usize {
-        self.b1() + H
+    /// First row of the direction scorer, of a verb's scorer, of the signal, of the memory.
+    pub fn dir(&self) -> usize {
+        FIXED
     }
-    fn dir(&self) -> usize {
-        self.w2() + FIXED * (H + 1)
+    pub fn verb(&self, v: usize) -> usize {
+        FIXED + self.nf + 1 + v * (self.nt + 1)
     }
-    fn body(&self) -> usize {
-        self.dir() + (self.nf + 1) * (H + 1)
+    pub fn sig(&self) -> usize {
+        self.verb(VERBS)
+    }
+    /// Rows that learn within a life (all but the memory rows).
+    pub fn learned(&self) -> usize {
+        self.sig() + SIG
+    }
+    /// The row that estimates how well-being will go from here (the critic).
+    pub fn critic(&self) -> usize {
+        self.learned() + MEM
+    }
+    pub fn rows(&self) -> usize {
+        self.critic() + 1
     }
     pub fn len(&self) -> usize {
-        self.body() + (self.nt + 1) * (H + 1)
+        self.base() + self.rows() * R
     }
 }
 
-/// What one evaluation gives: fixed action scores and the weights of the two scorers
-/// ([bias, one per feature]) for this situation.
+/// What one evaluation gives: the hidden layer and every row's value.
 #[derive(Default)]
 pub struct Thought {
-    pub fixed: [f32; FIXED],
-    pub dir: Vec<f32>,
-    pub body: Vec<f32>,
-}
-
-/// Rows of `w` (each H weights then a bias) applied to `h`, into `out`.
-fn rows(w: &[f32], h: &[f32; H], out: &mut [f32]) {
-    for (o, r) in out.iter_mut().zip(w.chunks_exact(H + 1)) {
-        *o = r[H] + r[..H].iter().zip(h).map(|(a, b)| a * b).sum::<f32>();
-    }
+    pub h: [f32; H],
+    pub out: Vec<f32>,
 }
 
 /// Dot product in 8 lanes (so it can use vector instructions).
 #[inline]
-fn dot(a: &[f32], b: &[f32]) -> f32 {
+pub fn dot(a: &[f32], b: &[f32]) -> f32 {
     let mut acc = [0f32; 8];
     let (ca, cb) = (a.chunks_exact(8), b.chunks_exact(8));
     let tail: f32 = ca.remainder().iter().zip(cb.remainder()).map(|(x, y)| x * y).sum();
@@ -66,21 +80,23 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
     acc.iter().sum::<f32>() + tail
 }
 
-pub fn think(w: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
-    let mut h = [0f32; H];
-    for (m, hm) in h.iter_mut().enumerate() {
-        *hm = squash(w[s.b1() + m] + dot(&w[m * s.ni..(m + 1) * s.ni], x));
+/// `base` is the lineage's (its first `s.base()` numbers are used), `rows` the group's.
+pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
+    let b1 = H * s.ni;
+    for (m, hm) in t.h.iter_mut().enumerate() {
+        *hm = squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x));
     }
-    rows(&w[s.w2()..s.dir()], &h, &mut t.fixed);
-    t.dir.resize(s.nf + 1, 0.0);
-    t.body.resize(s.nt + 1, 0.0);
-    rows(&w[s.dir()..s.body()], &h, &mut t.dir);
-    rows(&w[s.body()..s.len()], &h, &mut t.body);
+    t.out.clear();
+    let h = &t.h;
+    t.out.extend(rows.chunks_exact(R).map(|r| {
+        let r: &[f32; R] = r.try_into().expect("row");
+        r[H] + (0..H).map(|m| r[m] * h[m]).sum::<f32>()
+    }));
 }
 
 /// A cheap tanh (error below 0.025).
 #[inline]
-fn squash(x: f32) -> f32 {
+pub fn squash(x: f32) -> f32 {
     let x = x.clamp(-3.0, 3.0);
     x * (27.0 + x * x) / (27.0 + 9.0 * x * x)
 }
@@ -93,20 +109,47 @@ pub fn ln(x: f32) -> f32 {
     ((b >> 23) as f32 - 127.0 + m * (1.3466 - 0.3466 * m)) * std::f32::consts::LN_2
 }
 
-/// Score of one option from its features with a scorer's weights.
+/// Score of one option from its features with a scorer's weights ([bias, one per feature]).
 #[inline]
 pub fn score(c: &[f32], f: &[f32]) -> f32 {
     c[0] + c[1..].iter().zip(f).map(|(a, b)| a * b).sum::<f32>()
 }
 
-/// Small random weights, then the biases given for the fixed actions and the two scorers.
-pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, body: f32) -> Vec<f32> {
-    let mut w: Vec<f32> = (0..s.len()).map(|_| size * r.normal() as f32).collect();
-    for (a, b) in fixed.iter().enumerate() {
-        w[s.w2() + a * (H + 1) + H] = *b;
+/// Add `a · coef[r] · [h, 1]` to each learned row `r`, the step kept below `MAX_STEP`.
+pub fn learn(rows: &mut [f32], h: &[f32; H], coef: &[f32], a: f32) {
+    const MAX_STEP: f32 = 0.1;
+    let hh = 1.0 + h.iter().map(|x| x * x).sum::<f32>();
+    let size = a.abs() * (coef.iter().map(|c| c * c).sum::<f32>() * hh).sqrt();
+    let a = if size > MAX_STEP { a * MAX_STEP / size } else { a };
+    for (r, &c) in rows.chunks_exact_mut(R).zip(coef) {
+        let c = a * c;
+        if c != 0.0 {
+            for m in 0..H {
+                r[m] += c * h[m];
+            }
+            r[H] += c;
+        }
     }
-    w[s.dir() + H] = dir;
-    w[s.body() + H] = body;
+}
+
+/// Move `w` a share `a` of the way toward `o`.
+pub fn blend(w: &mut [f32], o: &[f32], a: f32) {
+    for (x, y) in w.iter_mut().zip(o) {
+        *x += a * (y - *x);
+    }
+}
+
+/// Small random weights, then the biases given for the fixed actions, moving and the verbs.
+pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, verbs: [f32; VERBS]) -> Vec<f32> {
+    let mut w: Vec<f32> = (0..s.len()).map(|_| size * r.normal() as f32).collect();
+    let row = |q: usize| s.base() + q * R + H;
+    for (a, b) in fixed.iter().enumerate() {
+        w[row(a)] = *b;
+    }
+    w[row(s.dir())] = dir;
+    for (v, b) in verbs.iter().enumerate() {
+        w[row(s.verb(v))] = *b;
+    }
     w
 }
 

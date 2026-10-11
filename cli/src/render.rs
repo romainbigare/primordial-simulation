@@ -52,7 +52,7 @@ pub fn save(w: &World, path: &str) {
     let f = fields(w);
     let (gw, gh) = (w.grid.w, w.grid.h);
     let s = 3; // pixels per cell
-    let panels = 4;
+    let panels = 5;
     // Life: mass per area of light-eaters (green) and of the other bodies (orange dots), kg/m².
     let (mut green, mut other) = (vec![0.0; w.grid.n()], vec![0.0; w.grid.n()]);
     for b in w.life.alive() {
@@ -72,6 +72,12 @@ pub fn save(w: &World, path: &str) {
             {
                 let base = if f.depth[i] > 1.0 { [40, 50, 70] } else { [90, 85, 80] };
                 ramp(&[(-3.0, base), (-1.5, [60, 120, 40]), (0.0, [30, 200, 40])], green[i].max(1e-9).log10())
+            },
+            // Bodies moving into the cell per year, on a log scale, over the map in grey.
+            {
+                let t = w.diag.traffic.get(i).copied().unwrap_or(0.0) as f64;
+                let g = map_pixel(w, &f, i).map(|v| v / 3 + 40);
+                if t < 1.0 { g } else { ramp(&[(0.0, [90, 70, 120]), (1.0, [200, 60, 160]), (2.0, [255, 160, 40]), (3.0, [255, 255, 200])], t.log10()) }
             },
         ];
         for (p, c) in cols.iter().enumerate() {

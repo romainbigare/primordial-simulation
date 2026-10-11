@@ -4,7 +4,7 @@
 //! to the surface, upkeep, and death. Choose (`choose`) and Copy (`copy`) act on them.
 //! A body updates every `interval` days; everything in between is integrated at its update.
 
-use crate::brain::Thought;
+use crate::brain::{ln, Thought, FIXED, MEM, SIG, VERBS};
 use crate::change::Reactor;
 use crate::chem::{Chemistry, Phase, P_REF};
 use crate::event::{Event, EventKind};
@@ -32,7 +32,9 @@ pub const COPY_MASS: usize = 6;
 pub const INTERVAL: usize = 7;
 /// Mutation size, log10
 pub const MUT: usize = 8;
-pub const NSCALAR: usize = 9;
+/// Learning rate of the brain within a life, log10 (off at the lower end)
+pub const LEARN: usize = 9;
+pub const NSCALAR: usize = 10;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -40,6 +42,10 @@ pub const LACK: u8 = 0;
 pub const PHASE: u8 = 1;
 pub const SPENT: u8 = 2;
 pub const TAKEN: u8 = 3;
+/// Bonds broken by bodies moving through its cell.
+pub const BROKEN: u8 = 4;
+/// Others a body remembers.
+pub const KNOWN: usize = 4;
 
 /// A body whose light reactions are sped up at least this much (log10) is a light-eater.
 pub const LIGHT_EATER: f32 = 8.0;
@@ -62,7 +68,11 @@ const C_STRENGTH: f64 = 5e3;
 /// Upkeep of light-capture area, J per m² per day.
 const C_LEAF: f64 = 2e3;
 /// Cost of one decision, J per kg.
-const C_BRAIN: f64 = 1e5;
+pub const C_BRAIN: f64 = 1e5;
+/// Upkeep of learning, J per kg per day at learning rate 1.
+const C_LEARN: f64 = 3e4;
+/// Cost of signalling, J per kg per day at signal size 1.
+const C_SIGNAL: f64 = 2e2;
 
 /// Where the genes of each kind start, for a chemistry.
 #[derive(Clone, Copy)]
@@ -105,6 +115,42 @@ pub struct Body {
     pub vis: [f32; 6],
     /// Mass taken from other bodies in its life, kg: from light-eaters, from the others
     pub took: [f32; 2],
+    /// Brain group; the other group it has stayed near, and since when (day)
+    pub group: u32,
+    pub near: u32,
+    pub since: u64,
+    /// Its own adjustment of the action scores: fixed actions, moving, the verbs
+    pub adj: [f32; FIXED + 1 + VERBS],
+    /// Memory the brain reads and writes; the signal emitted at the last decision
+    pub mem: [f32; MEM],
+    pub sig: [f32; SIG],
+    /// Others it knows (id) and how dealings with them went (-1 worse .. 1 better)
+    pub known: [(u64, f32); KNOWN],
+    /// Well-being at the last decision; the trace of that decision for learning
+    pub wb: f32,
+    pub trace: Vec<f32>,
+    /// Numbers that follow from the genes (rebuilt when missing)
+    #[serde(skip)]
+    pub k: Consts,
+}
+
+/// Numbers that follow from a body's genes, kept to save time.
+#[derive(Clone, Debug, Default)]
+pub struct Consts {
+    /// 10 to the power of the gas, liquid, heat and light-capture genes
+    pub gas: f64,
+    pub liq: f64,
+    pub heat: f64,
+    pub leaf: f64,
+    /// Catalyst factor of each reaction (1 when off), and the summed speed-up (decades)
+    pub cat: Vec<f64>,
+    pub cats: f64,
+    pub interval: u64,
+    /// Catalysed reactions that release heat, with the heat per unit, J
+    pub burn: Vec<(usize, f64)>,
+    /// What a brain perceives of each safe minimum; the substances taken, by selectivity
+    pub minln: Vec<f32>,
+    pub upt: Vec<(usize, f32)>,
 }
 
 impl Body {
@@ -130,7 +176,24 @@ impl Body {
         self.e / self.heat_cap(chem).max(1e-9)
     }
     pub fn interval(&self) -> u64 {
+        if self.k.interval > 0 {
+            return self.k.interval;
+        }
         self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64
+    }
+    /// Fill `k` from the genes if it is missing.
+    pub fn prepare(&mut self, chem: &Chemistry) {
+        if !self.k.cat.is_empty() {
+            return;
+        }
+        let cat = Layout::of(chem).cat;
+        let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
+        let cats = (0..chem.reactions.len()).map(|r| self.gene(cat + r).max(0.0)).sum();
+        let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0).map(|r| (r, -chem.dh(r))).collect();
+        let lay = Layout::of(chem);
+        let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
+        let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
+        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, cats, interval: self.interval(), burn, minln, upt };
     }
     /// Visible traits; the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
@@ -149,6 +212,10 @@ impl Body {
         let leaf = m * self.dec(LEAF);
         [m as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
+    /// Learning rate of its brain within its life (0 when off).
+    pub fn learn_rate(&self) -> f32 {
+        if self.genes[LEARN] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[LEARN]) }
+    }
     /// Key stores that are liquid now.
     pub fn key_liquids(&self, chem: &Chemistry) -> u64 {
         let (t, lay) = (self.temp(chem), Layout::of(chem));
@@ -156,10 +223,51 @@ impl Body {
     }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
     /// body's mass it may make up (below 0.95). Liquid caught, taken or put stops there.
-    pub fn level(&self, chem: &Chemistry, k: usize) -> f64 {
+    pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let f = self.gene(Layout::of(chem).keep + k).clamp(0.0, 0.95);
         let mm = chem.subs[k].molar_mass;
-        (f / (1.0 - f) * (self.mass(chem) - self.store[k] * mm) / mm).max(0.0)
+        (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
+    }
+    /// Well-being: the energy its catalysed reactions could release from its stores (log, in
+    /// decisions' worth per kg), less how near its key stores are to their safe minimums (the
+    /// log of each one's margin, which is the log of its share over its minimum, counted up to
+    /// 2) and its key liquids to freezing or boiling (within 5 K). Needs `prepare`.
+    pub fn wellbeing(&self, chem: &Chemistry, mass: f64) -> f32 {
+        let (lay, t) = (Layout::of(chem), self.temp(chem));
+        let mut e = 0.0;
+        for &(r, q) in &self.k.burn {
+            let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
+            e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
+        }
+        let mut w = ln(1.0 + (e / mass / C_BRAIN) as f32);
+        for k in 0..chem.ns() {
+            let min = self.genes[lay.min + k];
+            if min > 0.0 {
+                w += ln(ln((self.store[k] * chem.subs[k].molar_mass / mass) as f32 / min).clamp(1e-3, 2.0) / 2.0);
+            }
+            if self.wet >> k & 1 == 1 {
+                let s = &chem.subs[k];
+                w += (((t - s.melt).min(s.boil - t) as f32 - 5.0) / 5.0).min(0.0);
+            }
+        }
+        w
+    }
+    /// How past dealings with body `id` went, if it is known.
+    pub fn recall(&self, id: u64) -> Option<f32> {
+        self.known.iter().find(|k| k.0 == id && id != 0).map(|k| k.1)
+    }
+    /// Remember a dealing with body `id`: better (+) or worse (-). A new one replaces the least
+    /// marked.
+    pub fn note(&mut self, id: u64, d: f32) {
+        let s = match self.known.iter().position(|k| k.0 == id) {
+            Some(s) => s,
+            None => {
+                let s = (0..KNOWN).min_by(|&a, &b| self.known[a].1.abs().total_cmp(&self.known[b].1.abs())).unwrap_or(0);
+                self.known[s] = (id, 0.0);
+                s
+            }
+        };
+        self.known[s].1 = (self.known[s].1 + d).clamp(-1.0, 1.0);
     }
     /// A store below its safe minimum, or nothing left.
     pub fn lacking(&self, chem: &Chemistry) -> bool {
@@ -185,13 +293,41 @@ pub struct Life {
     /// Per cell, from the last monthly survey: its loose substances as a brain perceives them,
     /// [cell * substances + k]
     pub seen: Vec<f32>,
+    /// Per cell, from the last survey: what a brain perceives of it as a place to move to
+    #[serde(skip)]
+    pub cellf: Vec<[f32; 8]>,
     /// Updates due, by day modulo RING: (slot, generation)
     due: Vec<Vec<(u32, u32)>>,
     /// Brain weights of each lineage (None once it died out), and its living bodies
     pub brains: Vec<Option<Vec<f32>>>,
     pub members: Vec<u32>,
+    /// Brain groups (a group with no members is free)
+    pub groups: Vec<Group>,
+    free_groups: Vec<u32>,
+    /// Grid width (for the groups' centres)
+    pub gw: u32,
     /// Body updates since the start
     pub updates: u64,
+}
+
+/// Bodies that stayed near each other share the rows of one brain.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Group {
+    pub lineage: u32,
+    pub members: u32,
+    /// Sums of the members' cell coordinates
+    pub sx: i64,
+    pub sy: i64,
+    pub rows: Vec<f32>,
+    /// Moving average of the square of the critic's error
+    pub var: f32,
+}
+
+impl Group {
+    pub fn centre(&self) -> (f32, f32) {
+        let m = self.members.max(1) as f32;
+        (self.sx as f32 / m, self.sy as f32 / m)
+    }
 }
 
 impl Life {
@@ -206,6 +342,31 @@ impl Life {
         self.members.push(0);
         (self.brains.len() - 1) as u32
     }
+    /// A new group of `lineage` with these rows.
+    pub fn new_group(&mut self, lineage: u32, rows: Vec<f32>) -> u32 {
+        let g = Group { lineage, rows, var: 1.0, ..Default::default() };
+        match self.free_groups.pop() {
+            Some(i) => {
+                self.groups[i as usize] = g;
+                i
+            }
+            None => {
+                self.groups.push(g);
+                (self.groups.len() - 1) as u32
+            }
+        }
+    }
+    /// Count a body at `cell` in group `g` (`d` = 1) or no longer (`d` = -1).
+    pub fn enrol(&mut self, g: u32, cell: u32, d: i64) {
+        let (x, y) = ((cell % self.gw) as i64, (cell / self.gw) as i64);
+        let gr = &mut self.groups[g as usize];
+        gr.members = (gr.members as i64 + d) as u32;
+        (gr.sx, gr.sy) = (gr.sx + d * x, gr.sy + d * y);
+        if gr.members == 0 {
+            (gr.rows, gr.sx, gr.sy) = (Vec::new(), 0, 0);
+            self.free_groups.push(g);
+        }
+    }
     /// Place a new body on `day`; it first updates `delay` days later (1..=60).
     pub fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
         let slot = match self.free.pop() {
@@ -218,15 +379,17 @@ impl Life {
         (b.gen, b.alive, b.last) = (self.bodies[slot].gen, true, day);
         self.at[b.cell as usize].push(slot as u32);
         self.members[b.lineage as usize] += 1;
+        self.enrol(b.group, b.cell, 1);
         self.due[((day + delay.clamp(1, MAX_INTERVAL as u64)) % RING) as usize].push((slot as u32, b.gen));
         self.bodies[slot] = b;
         slot
     }
     fn remove(&mut self, slot: usize) {
         let b = &mut self.bodies[slot];
-        let (cell, lin) = (b.cell as usize, b.lineage as usize);
-        (b.alive, b.store, b.genes) = (false, Vec::new(), Vec::new());
+        let (cell, lin, g) = (b.cell as usize, b.lineage as usize, b.group);
+        (b.alive, b.store, b.genes, b.trace) = (false, Vec::new(), Vec::new(), Vec::new());
         b.gen += 1;
+        self.enrol(g, cell as u32, -1);
         self.at[cell].retain(|&s| s as usize != slot);
         self.members[lin] -= 1;
         if self.members[lin] == 0 {
@@ -234,9 +397,11 @@ impl Life {
         }
         self.free.push(slot as u32);
     }
-    pub fn relocate(&mut self, slot: usize, from: usize, to: usize) {
+    pub fn relocate(&mut self, slot: usize, g: u32, from: usize, to: usize) {
         self.at[from].retain(|&s| s as usize != slot);
         self.at[to].push(slot as u32);
+        self.enrol(g, to as u32, 1);
+        self.enrol(g, from as u32, -1);
     }
 }
 
@@ -272,7 +437,7 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 pub fn survey(w: &mut World) {
     let n = w.grid.n();
     if w.life.at.len() != n {
-        (w.life.at, w.life.due) = (vec![Vec::new(); n], vec![Vec::new(); RING as usize]);
+        (w.life.at, w.life.due, w.life.gw) = (vec![Vec::new(); n], vec![Vec::new(); RING as usize], w.grid.w as u32);
     }
     if w.canopy.len() != n {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
@@ -291,17 +456,29 @@ pub fn survey(w: &mut World) {
     for (c, s) in w.canopy.iter_mut().zip(&life.sum) {
         *c = (s[2] / area) as f32;
     }
-    if w.day % w.cfg.days_per_month as u64 == 0 || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
+    let monthly = w.day % w.cfg.days_per_month as u64 == 0;
+    if monthly && w.day > 0 {
+        choose::regroup(w);
+        let d = &mut w.diag;
+        d.traffic.resize(n, 0.0);
+        d.crossings.resize(n, 0.0);
+        let a = 1.0 / w.cfg.months_per_year as f32;
+        for (t, c) in d.traffic.iter_mut().zip(d.crossings.iter_mut()) {
+            *t += a * (*c * w.cfg.months_per_year as f32 - *t);
+            *c = 0.0;
+        }
+    }
+    if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
         let (ns, area) = (w.chem.ns(), w.grid.area());
         w.life.seen = (0..n * ns).map(|x| 0.2 * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
     }
+    choose::cells(w);
 }
 
 /// Working memory for body updates.
 #[derive(Default)]
 pub struct Tmp {
-    cat: Vec<f64>,
     pool: Vec<f64>,
     pool0: Vec<f64>,
     x: Vec<f64>,
@@ -309,6 +486,8 @@ pub struct Tmp {
     pub lit: f64,
     pub input: Vec<f32>,
     pub thought: Thought,
+    /// Features of each option a scorer scored (flat), for learning
+    pub feat: Vec<f32>,
 }
 
 /// Update the bodies due today.
@@ -317,9 +496,9 @@ pub fn day(w: &mut World) {
     if due.is_empty() {
         return;
     }
-    // Cell by cell (a fixed order that keeps memory reads close together).
+    // Group by group, cell by cell (a fixed order that keeps memory reads close together).
     let bodies = &w.life.bodies;
-    let mut list: Vec<(u32, u32, u32)> = due.iter().filter(|&&(s, g)| bodies[s as usize].alive && bodies[s as usize].gen == g).map(|&(s, g)| (bodies[s as usize].cell, s, g)).collect();
+    let mut list: Vec<(u64, u32, u32)> = due.iter().filter(|&&(s, g)| bodies[s as usize].alive && bodies[s as usize].gen == g).map(|&(s, g)| ((bodies[s as usize].group as u64) << 32 | bodies[s as usize].cell as u64, s, g)).collect();
     list.sort_unstable();
     let mut rc = Reactor::new(&w.chem);
     let mut tmp = Tmp::default();
@@ -329,6 +508,7 @@ pub fn day(w: &mut World) {
             continue;
         }
         let mut b = std::mem::take(&mut w.life.bodies[s]);
+        b.prepare(&w.chem);
         w.life.updates += 1;
         match live(w, &mut b, &mut rc, &mut tmp) {
             Some(cause) => die(w, s, b, cause),
@@ -358,15 +538,16 @@ pub fn die(w: &mut World, slot: usize, b: Body, cause: u8) {
 fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<u8> {
     let i = b.cell as usize;
     let [tg, depth, _] = w.life.env[i];
-    let lay = Layout::of(&w.chem);
     let days = w.day.saturating_sub(b.last).max(1) as f64;
     let mass = b.mass(&w.chem);
     b.last = w.day;
 
     // Upkeep of catalysts, strength and capture area by the day, and of this decision; its
     // heat is spread over the time like the rest.
-    let cats: f64 = (0..w.chem.reactions.len()).map(|r| b.gene(lay.cat + r).max(0.0)).sum();
-    let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH)) + C_LEAF * b.vis[1] as f64) + C_BRAIN * mass;
+    let cats = b.k.cats;
+    let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
+    let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
+    let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64) + C_BRAIN * mass;
     let e0 = b.e;
     if !pay(w, b, upkeep, days) {
         return Some(SPENT);
@@ -381,7 +562,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // Light caught since the last update, less what the body reflects; liquid over the body
     // absorbs its share first.
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
-    let got = mass * b.dec(LEAF) * (light[i] - b.mark) * (1.0 - refl);
+    let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl);
     b.mark = light[i];
     let reach = (-depth / LIGHT_DEPTH).exp();
     ledger.sun_in += got;
@@ -392,7 +573,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // The air the body exchanges gas with in this time (mol), from its air node; liquid over
     // the body slows it.
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let reach_mol = b.dec(GAS) * mass * days * (-depth / GAS_DEPTH).exp();
+    let reach_mol = b.k.gas * mass * days * (-depth / GAS_DEPTH).exp();
     tmp.x.clear();
     tmp.x.extend((0..ns).map(|k| air[k * na + j] / tot));
     tmp.pool.clear();
@@ -401,14 +582,12 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 
     // Catalysed reactions, at the body's temperature held fixed; their heat is spread over the
     // time below.
-    tmp.cat.clear();
-    tmp.cat.extend((0..chem.reactions.len()).map(|r| if b.genes[lay.cat + r] > 0.0 { b.dec(lay.cat + r) } else { 1.0 }));
     let c0 = b.heat_cap(chem);
     let t0 = b.e / c0;
     let fixed = 1e6 * c0;
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
-    let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(&tmp.cat), lit, dt);
+    let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(&b.k.cat), lit, dt);
     let mut heat = e - e_start + lit - used + upkeep;
     for k in 0..ns {
         let d = tmp.pool[k] - tmp.pool0[k];
@@ -425,13 +604,22 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
     let vap_tot: f64 = tmp.pool.iter().sum();
+    let mass1 = b.mass(chem);
     for k in 0..ns {
-        let push = if b.store[k] > 0.0 && chem.phase(k, t0) == Phase::Liquid { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
-        let paid = (lit + heat).max(0.0) + b.dec(HEAT) * mass * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0);
-        let (out, vap) = ((push * reach_mol).min(paid / held(chem, k)), tmp.pool[k]);
+        let (vap, wet) = (tmp.pool[k], b.store[k] > 0.0 && chem.phase(k, t0) == Phase::Liquid);
+        if !wet && (fall <= 0.0 || vap <= 0.0) {
+            continue;
+        }
+        let push = if wet { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
+        let out = if push > 0.0 {
+            let paid = (lit + heat).max(0.0) + b.k.heat * mass * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0);
+            (push * reach_mol).min(paid / held(chem, k))
+        } else {
+            0.0
+        };
         let caught = if fall > 0.0 && vap > 0.0 { (fall * vap / vap_tot).min(0.5 * vap) } else { 0.0 };
         let net = caught - out;
-        let (m, t) = if net > 0.0 { (net.min(b.level(chem, k) - b.store[k]).max(0.0), tg) } else { (net.max(-b.store[k]), t0) };
+        let (m, t) = if net > 0.0 { (net.min(b.level(chem, k, mass1) - b.store[k]).max(0.0), tg) } else { (net.max(-b.store[k]), t0) };
         if m != 0.0 {
             let q = m * chem.subs[k].cp * t;
             air[k * na + j] -= m;
@@ -447,10 +635,11 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let wet = depth / (depth + WET_DEPTH);
     let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
-    let rate = -(-b.dec(LIQ) * days).exp_m1() * wet;
-    for k in (0..ns).filter(|&k| liq(k) && in_ground > 0.0) {
+    let rate = -(-b.k.liq * days).exp_m1() * wet;
+    let mass2 = b.mass(chem);
+    for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
         let x = ground[k * n + i] / in_ground;
-        let d = ((b.level(chem, k) - b.store[k]) * x * rate * chem.subs[k].solubility).min(0.5 * ground[k * n + i]).max(0.0);
+        let d = ((b.level(chem, k, mass2) - b.store[k]) * x * rate * chem.subs[k].solubility).min(0.5 * ground[k * n + i]).max(0.0);
         let q = d * chem.subs[k].cp * tg;
         b.store[k] += d;
         ground[k * n + i] -= d;
@@ -463,7 +652,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // toward the ground's temperature plus the warming of the heat released, over the time.
     let c = b.heat_cap(chem);
     if c > 0.0 {
-        let g = b.dec(HEAT) * mass;
+        let g = b.k.heat * mass;
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
         e_ground[i] += b.e + heat - e1;
@@ -489,50 +678,52 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
+    b.prepare(&w.chem);
     let World { chem, grid, air, life, .. } = w;
-    let (ns, na, i, cat) = (chem.ns().min(64), grid.na(), b.cell as usize, Layout::of(chem).cat);
+    let (ns, na, i) = (chem.ns(), grid.na(), b.cell as usize);
     let j = grid.air_of(i);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
     let depth = life.env.get(i).map_or(0.0, |e| e[1]);
-    let reach_mol = b.dec(GAS) * b.mass(chem) * days * (-depth / GAS_DEPTH).exp() / tot;
-    let share = reach_mol.min(0.5);
+    let share = (b.k.gas * b.mass(chem) * days * (-depth / GAS_DEPTH).exp() / tot).min(0.5);
     let t = b.temp(chem);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; 64];
-    for (k, h) in have.iter_mut().enumerate().take(ns) {
-        *h = if gas(k) { air[k * na + j] * share } else { b.store[k] };
+    for &(r, _) in &b.k.burn {
+        for &(k, _) in &chem.reactions[r].inputs {
+            let k = k as usize;
+            have[k] = if gas(k) { air[k * na + j] * share } else { b.store[k] };
+        }
     }
     let (mut ext, mut left) = ([0.0f64; 64], cost);
-    for (r, rx) in chem.reactions.iter().enumerate().take(64) {
-        if left <= 0.0 || b.genes[cat + r] <= 0.0 {
-            continue;
+    for (q, &(r, e)) in b.k.burn.iter().enumerate() {
+        if left <= 0.0 {
+            break;
         }
-        let dh = chem.dh(r);
-        if dh < 0.0 {
-            let lim = rx.inputs.iter().map(|&(k, nu)| have[k as usize] / nu as f64).fold(f64::MAX, f64::min);
-            ext[r] = lim.min(left / -dh);
-            left += dh * ext[r];
-            for &(k, nu) in &rx.inputs {
-                have[k as usize] -= nu as f64 * ext[r];
-            }
+        let inputs = &chem.reactions[r].inputs;
+        let lim = inputs.iter().map(|&(k, nu)| have[k as usize] / nu as f64).fold(f64::MAX, f64::min);
+        ext[q] = lim.min(left / e);
+        left -= e * ext[q];
+        for &(k, nu) in inputs {
+            have[k as usize] -= nu as f64 * ext[q];
         }
     }
     if left > 1e-9 * cost {
         return false;
     }
     let mut latent = 0.0;
-    for (r, rx) in chem.reactions.iter().enumerate().take(64).filter(|p| ext[p.0] > 0.0) {
+    for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
+        let rx = &chem.reactions[r];
         for &(k, nu) in &rx.inputs {
             let k = k as usize;
             let a = if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] };
-            let d = (nu as f64 * ext[r]).min(*a);
+            let d = (nu as f64 * ext[q]).min(*a);
             *a -= d;
             if gas(k) {
                 latent -= d * held(chem, k);
             }
         }
         for &(k, nu) in &rx.outputs {
-            let (k, d) = (k as usize, nu as f64 * ext[r]);
+            let (k, d) = (k as usize, nu as f64 * ext[q]);
             *if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] } += d;
             if gas(k) {
                 latent += d * held(chem, k);

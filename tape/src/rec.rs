@@ -6,10 +6,63 @@ use pcore::check;
 use pcore::event::{Event, EventKind};
 use pcore::World;
 use serde_json::json;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 type Column = (String, &'static str, Vec<f64>);
+
+/// What bodies did to and with each other in the current year, and how they move and signal.
+#[derive(Default)]
+struct Social {
+    /// Watch events, of them within a lineage; watcher groups per watched group
+    watched: f64,
+    kin_watched: f64,
+    spread: BTreeMap<u32, BTreeSet<u32>>,
+    /// Puts into other bodies, kg put, (giver, receiver) pairs
+    gave: f64,
+    gave_kg: f64,
+    /// Of the puts, those by bodies that are not light-eaters (still alive at the month's end)
+    gave_eaters: f64,
+    pairs: BTreeSet<(u64, u64)>,
+    /// Cell of each body at the last month (for movement by month)
+    last: BTreeMap<u64, u32>,
+    /// Per lineage and context (cold, hurt, low): counts of (context, signal quarter)
+    sig: BTreeMap<u32, [[[f64; 4]; 2]; 3]>,
+    /// Top traffic cells at the last decade
+    top: Vec<usize>,
+    persist: f64,
+    /// kg taken by bodies that are not light-eaters this year: from light-eaters, others, ground
+    intake: [f64; 3],
+    months: String,
+}
+
+/// Mutual information (bits) between a binary context and the signal quarter, given lineage,
+/// less its small-sample bias.
+fn info(sig: &BTreeMap<u32, [[[f64; 4]; 2]; 3]>, c: usize) -> f64 {
+    let (mut sum, mut all) = (0.0, 0.0);
+    for t in sig.values() {
+        let j = &t[c];
+        let n: f64 = j.iter().flatten().sum();
+        if n < 20.0 {
+            continue;
+        }
+        let pc = [0, 1].map(|a| j[a].iter().sum::<f64>() / n);
+        let ps: Vec<f64> = (0..4).map(|q| (j[0][q] + j[1][q]) / n).collect();
+        let mut i = 0.0;
+        for a in 0..2 {
+            for q in 0..4 {
+                let p = j[a][q] / n;
+                if p > 0.0 {
+                    i += p * (p / pc[a] / ps[q]).log2();
+                }
+            }
+        }
+        sum += n * (i - 3.0 / (2.0 * n * std::f64::consts::LN_2)).max(0.0);
+        all += n;
+    }
+    sum / all.max(1.0)
+}
 
 pub struct Recorder {
     /// Meta: width, height, cell size, seed, days per year
@@ -23,9 +76,10 @@ pub struct Recorder {
     log: Vec<(u64, String)>,
     /// Births and deaths by cause since the last yearly row
     births: f64,
-    deaths: [f64; 4],
+    deaths: [f64; 5],
     /// Body updates counted at the last yearly row
     updates: u64,
+    social: Social,
 }
 
 fn describe(e: &Event) -> String {
@@ -36,6 +90,7 @@ fn describe(e: &Event) -> String {
         EventKind::BondMade => format!("bond made at node {}", e.node),
         EventKind::BondBroken => format!("bond broken at node {}", e.node),
         EventKind::Imposed => format!("god action at node {}", e.node),
+        EventKind::Watched { .. } | EventKind::Gave { .. } => String::new(),
     }
 }
 
@@ -53,8 +108,9 @@ impl Recorder {
             series: vec![],
             log: vec![],
             births: 0.0,
-            deaths: [0.0; 4],
+            deaths: [0.0; 5],
             updates: 0,
+            social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz\n".into(), ..Default::default() },
         }
     }
 
@@ -84,18 +140,35 @@ impl Recorder {
     /// Call at the start and after every simulated month.
     pub fn record_month(&mut self, w: &mut World) {
         self.detect(w);
-        for e in w.events.drain(..) {
+        let events: Vec<Event> = w.events.drain(..).collect();
+        for e in events {
             match e.kind {
                 EventKind::Born => self.births += 1.0,
-                EventKind::Died { cause } => self.deaths[(cause as usize).min(3)] += 1.0,
+                EventKind::Died { cause } => self.deaths[(cause as usize).min(4)] += 1.0,
+                EventKind::Watched { by, of } => {
+                    let s = &mut self.social;
+                    (s.watched, s.kin_watched) = (s.watched + 1.0, s.kin_watched + e.value);
+                    s.spread.entry(of).or_default().insert(by);
+                }
+                EventKind::Gave { from, to } => {
+                    let s = &mut self.social;
+                    (s.gave, s.gave_kg) = (s.gave + 1.0, s.gave_kg + e.value);
+                    s.pairs.insert((from, to));
+                    let b = w.life.bodies.get(from as u32 as usize).filter(|b| b.alive && b.gen == (from >> 32) as u32);
+                    s.gave_eaters += b.is_some_and(|b| !pcore::body::light_eater(&w.chem, &b.genes)) as u8 as f64;
+                }
                 _ => self.log.push((e.day, describe(&e))),
             }
         }
         let dpy = w.days_per_year();
         let (year, yearly) = (w.day / dpy, w.day % dpy == 0);
         let framed = year < self.monthly || (yearly && self.every > 0 && year % self.every == 0);
+        self.month(w);
         if !yearly && !framed {
             return;
+        }
+        if yearly {
+            self.social.intake = std::mem::take(&mut w.diag.intake);
         }
         let c = Ctx::new(w);
         if yearly {
@@ -105,6 +178,42 @@ impl Recorder {
             self.frames.push(w.day);
             frame(&c, &mut self.bytes);
         }
+    }
+
+    /// Monthly: where mobile bodies are and how they moved since last month; signals by context.
+    fn month(&mut self, w: &World) {
+        let (chem, gw, s) = (&w.chem, w.grid.w as u32, &mut self.social);
+        let (mut n, mut sum) = (0.0f64, [0.0; 4]);
+        let mut last = BTreeMap::new();
+        for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
+            let id = b.id(slot);
+            last.insert(id, b.cell);
+            let i = b.cell as usize;
+            let t = w.life.env.get(i).map_or(285.0, |e| e[0]);
+            let ctx = [t < 283.0, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0];
+            let q = (b.sig[0] > 0.0) as usize * 2 + (b.sig[1] > 0.0) as usize;
+            let tab = s.sig.entry(b.lineage).or_insert([[[0.0; 4]; 2]; 3]);
+            for (c, &on) in ctx.iter().enumerate() {
+                tab[c][on as usize][q] += 1.0;
+            }
+            if pcore::body::light_eater(chem, &b.genes) {
+                continue;
+            }
+            let z = w.life.env.get(i).map_or(0.0, |e| e[2]);
+            let (dy, dz) = match s.last.get(&id) {
+                Some(&c) => ((b.cell / gw) as f64 - (c / gw) as f64, z - w.life.env.get(c as usize).map_or(z, |e| e[2])),
+                None => (0.0, 0.0),
+            };
+            n += 1.0;
+            for (a, v) in sum.iter_mut().zip([(b.cell / gw) as f64, z, dy, dz]) {
+                *a += v;
+            }
+        }
+        s.last = last;
+        let dpm = w.cfg.days_per_month as u64;
+        let (y, m) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
+        let mean = sum.map(|v| v / n.max(1.0));
+        s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3}\n", mean[0], mean[1], mean[2], mean[3]);
     }
 
     fn push_series(&mut self, c: &Ctx) {
@@ -140,11 +249,59 @@ impl Recorder {
             ("died_taken".to_string(), "1/yr", self.deaths[3]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
+        // Traffic: share of crossings on the top 2% cells, their overlap with the top cells a
+        // decade ago, and the body mass per area there and on other land.
+        let (traffic, gn) = (&w.diag.traffic, w.grid.n());
+        let mut order: Vec<usize> = (0..gn).filter(|&i| traffic.get(i).is_some_and(|&t| t > 0.0)).collect();
+        order.sort_by(|&a, &b| traffic[b].total_cmp(&traffic[a]).then(a.cmp(&b)));
+        let top = &order[..(gn / 50).min(order.len())];
+        let all: f64 = order.iter().map(|&i| traffic[i] as f64).sum();
+        let on_top: f64 = top.iter().map(|&i| traffic[i] as f64).sum();
+        let s = &mut self.social;
+        if w.day / w.days_per_year() % 10 == 0 && !top.is_empty() {
+            let old: BTreeSet<usize> = s.top.iter().copied().collect();
+            s.persist = if old.is_empty() { f64::NAN } else { top.iter().filter(|i| old.contains(i)).count() as f64 / top.len() as f64 };
+            s.top = top.to_vec();
+        }
+        let mass = |i: usize| (c.plants[i] + c.animals[i]) as f64;
+        let land: Vec<usize> = (0..gn).filter(|&i| c.f.z[i] > 0.0 && !top.contains(&i)).collect();
+        let mean = |v: &[usize]| v.iter().map(|&i| mass(i)).sum::<f64>() / v.len().max(1) as f64;
+        let groups = life.groups.iter().filter(|g| g.members > 0).count() as f64;
+        let shared = life.groups.iter().filter(|g| g.members > 1).map(|g| g.members as f64).sum::<f64>();
+        let reciprocal = s.pairs.iter().filter(|&&(a, b)| a < b && s.pairs.contains(&(b, a))).count() as f64;
+        let widest = s.spread.values().map(|v| v.len()).max().unwrap_or(0) as f64;
+        row.extend([
+            ("died_broken".to_string(), "1/yr", self.deaths[4]),
+            ("crossings".to_string(), "1/yr", all),
+            ("traffic_top2".to_string(), "1", on_top / all.max(1.0)),
+            ("traffic_persist".to_string(), "1", s.persist),
+            ("mass_top2".to_string(), "kg/m2", mean(top)),
+            ("mass_land".to_string(), "kg/m2", mean(&land)),
+            ("groups".to_string(), "1", groups),
+            ("in_shared".to_string(), "1", shared / bodies.max(1.0)),
+            ("watched".to_string(), "1/yr", s.watched),
+            ("watched_kin".to_string(), "1/yr", s.kin_watched),
+            ("watched_groups".to_string(), "1", s.spread.len() as f64),
+            ("spread_max".to_string(), "groups", widest),
+            ("gave".to_string(), "1/yr", s.gave),
+            ("gave_kg".to_string(), "kg/yr", s.gave_kg),
+            ("gave_eaters".to_string(), "1/yr", s.gave_eaters),
+            ("gave_pairs".to_string(), "1", s.pairs.len() as f64),
+            ("gave_reciprocal".to_string(), "1", reciprocal),
+            ("ate_light_eaters".to_string(), "kg/yr", s.intake[0]),
+            ("ate_others".to_string(), "kg/yr", s.intake[1]),
+            ("ate_ground".to_string(), "kg/yr", s.intake[2]),
+            ("mi_cold".to_string(), "bit", info(&s.sig, 0)),
+            ("mi_hurt".to_string(), "bit", info(&s.sig, 1)),
+            ("mi_low".to_string(), "bit", info(&s.sig, 2)),
+        ]);
+        (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        (s.spread, s.pairs, s.sig) = Default::default();
         // Mole fraction in the air of each heat-absorbing gas.
         let (na, ns) = (w.grid.na(), w.chem.ns());
         let air: f64 = w.air.iter().sum();
         row.extend((0..ns).filter(|&k| w.chem.subs[k].ir_abs > 0.0).map(|k| (format!("air_{k}"), "1", w.air[k * na..(k + 1) * na].iter().sum::<f64>() / air)));
-        (self.births, self.deaths, self.updates) = (0.0, [0.0; 4], life.updates);
+        (self.births, self.deaths, self.updates) = (0.0, [0.0; 5], life.updates);
         if self.series.is_empty() {
             self.series = row.iter().map(|r| (r.0.clone(), r.1, vec![])).collect();
         }
@@ -179,6 +336,7 @@ impl Recorder {
         for row in 0..self.series.first().map_or(0, |c| c.2.len()) {
             csv += &format!("\n{}", self.series.iter().map(|c| c.2[row].to_string()).collect::<Vec<_>>().join(","));
         }
+        std::fs::write(dir.join("months.csv"), &self.social.months)?;
         std::fs::write(dir.join("series.csv"), csv + "\n")
     }
 }

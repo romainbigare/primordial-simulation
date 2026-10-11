@@ -8,6 +8,10 @@ pub enum EventKind {
     FirstSubstance(u16),
     Born,
     Died { cause: u8 },
+    /// A body of group `by` watched a body of group `of` (value 1 if of the same lineage)
+    Watched { by: u32, of: u32 },
+    /// Body `from` put stores into body `to` (value: kg)
+    Gave { from: u64, to: u64 },
     BondMade,
     BondBroken,
     Imposed,

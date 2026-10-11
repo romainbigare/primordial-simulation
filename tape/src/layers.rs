@@ -136,6 +136,7 @@ pub const LAYERS: &[Layer] = &[
     l("plants", "kg/m2", "log", 1e-3, 10.0, |c, i| c.plants[i]),
     l("animals", "kg/m2", "log", 1e-4, 1.0, |c, i| c.animals[i]),
     l("bodies", "1", "lin", 0.0, 32.0, |c, i| c.bodies[i]),
+    l("traffic", "1/yr", "log", 1.0, 1e4, |c, i| c.w.diag.traffic.get(i).copied().unwrap_or(0.0) as f64),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),

@@ -1,6 +1,7 @@
 //! Law 4: Copy. A body with enough mass that can pay the cost makes a child: a share of each
-//! of its stores and of its heat, and its genes plus small noise. Now and then the brain of
-//! its lineage is copied with noise too, which starts a new lineage.
+//! of its stores and of its heat, and its genes plus small noise; it starts in its parent's
+//! brain group. Now and then the brain of its lineage is copied with noise too, which starts a
+//! new lineage (and a new group).
 
 use crate::body::{self, Body, Layout};
 use crate::brain;
@@ -28,6 +29,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::COPY_MASS => (0.2, 0.0, 8.0),
         body::INTERVAL => (0.2, 0.7, 1.78),
         body::MUT => (0.2, -3.0, 0.0),
+        body::LEARN => (0.2, -4.0, 0.0),
         g if g < lay.min => (1.0, -2.0, 18.0),
         g if g < lay.upt => (0.05, -0.2, 0.9),
         _ => (0.2, -0.5, 2.0),
@@ -72,6 +74,8 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         e: b.e * frac,
         store: b.store.iter().map(|a| a * frac).collect(),
         genes: mutate(&lay, &b.genes, &mut r),
+        group: b.group,
+        near: u32::MAX,
         ..Default::default()
     };
     b.e -= c.e;
@@ -82,6 +86,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         if let Some(mut brain) = w.life.brains[b.lineage as usize].clone() {
             brain::mutate(&mut brain, &mut r, BRAIN_NOISE);
             c.lineage = w.life.new_lineage(brain);
+            c.group = crate::choose::found(w, c.lineage);
         }
     }
     (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem));
