@@ -416,18 +416,19 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         heat -= d * held(chem, k);
     }
 
-    // Liquids the body holds evaporate toward their vapour pressure at its temperature (as far
-    // as its light and heat pay the latent heat); what
+    // Liquids the body holds evaporate toward their vapour pressure at its temperature; what
     // falls as liquid on its capture area is caught, from the vapour it falls from. The net
-    // goes in or out, up to the level the body keeps, with its latent heat.
+    // goes in or out, up to the level the body keeps, with its latent heat. The latent heat
+    // is paid by the light and heat released, and by what the surface can conduct into a body
+    // that evaporating cools no lower than the vapour's condensing point.
     let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * dt;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
     let vap_tot: f64 = tmp.pool.iter().sum();
     for k in 0..ns {
-        // Evaporating takes latent heat: the light caught and the heat released can pay for it.
         let push = if b.store[k] > 0.0 && chem.phase(k, t0) == Phase::Liquid { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
-        let (out, vap) = ((push * reach_mol).min((lit + heat).max(0.0) / held(chem, k)), tmp.pool[k]);
+        let paid = (lit + heat).max(0.0) + b.dec(HEAT) * mass * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0);
+        let (out, vap) = ((push * reach_mol).min(paid / held(chem, k)), tmp.pool[k]);
         let caught = if fall > 0.0 && vap > 0.0 { (fall * vap / vap_tot).min(0.5 * vap) } else { 0.0 };
         let net = caught - out;
         let (m, t) = if net > 0.0 { (net.min(b.level(chem, k) - b.store[k]).max(0.0), tg) } else { (net.max(-b.store[k]), t0) };

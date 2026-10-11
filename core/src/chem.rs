@@ -100,6 +100,12 @@ impl Chemistry {
         P_REF * (l / R_GAS * (1.0 / tb - 1.0 / t.max(1.0))).exp()
     }
 
+    /// Temperature at which the vapour pressure of `k` is `x` times the reference pressure, K.
+    pub fn t_sat(&self, k: usize, x: f64) -> f64 {
+        let (tb, l) = (self.subs[k].boil, self.subs[k].lv);
+        1.0 / (1.0 / tb - R_GAS * x.max(1e-30).ln() / l)
+    }
+
     /// Enthalpy change of one reaction unit, J (positive takes energy).
     pub fn dh(&self, r: usize) -> f64 {
         let rx = &self.reactions[r];
