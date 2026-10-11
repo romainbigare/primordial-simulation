@@ -10,4 +10,5 @@ path = "src/main.rs"
 [dependencies]
 pcore = { path = "../core" }
 worldgen = { path = "../worldgen" }
+tape = { path = "../tape" }
 png = "0.17"

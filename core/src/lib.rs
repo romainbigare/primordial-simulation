@@ -3,11 +3,13 @@
 pub mod change;
 pub mod check;
 pub mod chem;
+pub mod event;
 pub mod flow;
 pub mod grid;
 pub mod rng;
 
 use chem::Chemistry;
+use event::Event;
 use grid::Grid;
 use serde::{Deserialize, Serialize};
 
@@ -101,6 +103,9 @@ pub struct World {
     pub base_z: f64,
     pub diag: Diag,
     pub ledger: Ledger,
+    /// Raw physical facts since the shell last drained them (not part of the saved state)
+    #[serde(skip)]
+    pub events: Vec<Event>,
 }
 
 impl World {
