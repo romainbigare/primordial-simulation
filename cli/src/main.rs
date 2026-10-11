@@ -23,6 +23,16 @@ fn main() {
     match cmd {
         "run" => {
             let mut w = worldgen::new_world(seed, size, size);
+            w.cfg.sun *= arg(&args, "--sun", 1.0);
+            let absorber = arg(&args, "--absorber", 1.0);
+            let na = w.grid.na();
+            for j in 0..na {
+                let t = w.t_air(j);
+                for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
+                    w.air[k * na + j] *= absorber;
+                }
+                w.e_air[j] = w.heat_cap_air(j) * t;
+            }
             let t0 = pcore::check::totals(&w);
             let l0 = w.ledger.clone();
             render::save(&w, &format!("{out}/year0000.png"));
@@ -45,6 +55,6 @@ fn main() {
             let s = start.elapsed().as_secs_f64();
             println!("{years} years in {s:.2} s ({:.1} ms per year)", s * 1000.0 / years as f64);
         }
-        _ => println!("usage: ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR]"),
+        _ => println!("usage: ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--sun F] [--absorber F]"),
     }
 }
