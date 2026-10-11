@@ -174,6 +174,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ch
 $('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
 
 requestAnimationFrame(loop);
+const embedded = document.getElementById('world-data')?.textContent?.trim();
 const url = new URLSearchParams(location.search).get('f') ?? 'world.ewf.gz';
-fetch(url).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${url}: ${r.status}`))))
+if (embedded) load(Uint8Array.from(atob(embedded), c => c.charCodeAt(0)).buffer);
+else fetch(url).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${url}: ${r.status}`))))
   .then(load, () => say('Drop a .ewf.gz file here, or use “Open file”.'));
