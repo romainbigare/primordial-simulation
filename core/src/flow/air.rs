@@ -11,6 +11,10 @@ const SIGMA: f64 = 5.670e-8;
 const EVEN: f64 = 0.25;
 /// Most of a node's amount the overturning may exchange over one edge per call.
 const OVER: f64 = 3.0;
+/// A gas making up less than this share of the air is a trace: it evaporates and condenses
+/// only every `TRACE_TURN`-th call, for all the time since.
+const TRACE_AIR: f64 = 1e-7;
+const TRACE_TURN: u32 = 4;
 
 /// The air seen by ground cell `i`: a node field interpolated from the four nearest nodes.
 #[inline]
@@ -79,16 +83,20 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
         s.gam[j] = g * s.mass[j] / (s.capa[j] + s.p[j]);
         s.p[j] = 0.0;
     }
+    // (The vapour pressure falls by a factor exp(lv/R (1/(t-½) - 1/(t+½))) per K.)
+    let half = (-LN_2).exp();
     for (gi, &k) in s.gas.iter().enumerate() {
         for j in 0..na {
             let h = (R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j])).min((top - s.za[j]).max(100.0));
-            let mut hk = h;
+            let (mut hk, mut split) = (h, half);
             if s.cond[gi] {
                 let t = s.ta[j] + s.gam[j] * (s.zair[j] - s.za[j]);
-                hk = (1.0 / (s.gam[j] * (w.chem.p_sat(k, t + 0.5) / w.chem.p_sat(k, t - 0.5)).ln())).min(h);
+                let fall = s.sp[k].lv / R_GAS * (1.0 / (t - 0.5).max(1.0) - 1.0 / (t + 0.5).max(1.0));
+                hk = (1.0 / (s.gam[j] * fall)).min(h);
+                split = (-(h / hk) * LN_2).exp();
             }
             s.hk[gi * na + j] = hk;
-            s.split[gi * na + j] = (-(h / hk) * LN_2).exp();
+            s.split[gi * na + j] = split;
         }
     }
     let node: Vec<[f64; 4]> = (0..na).map(|j| [s.gam[j], s.zair[j], s.fabs[j], s.ta[j]]).collect();
@@ -118,7 +126,7 @@ fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
 pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
     let World { cfg, grid, e_ground, e_air, ledger, canopy, light, .. } = w;
-    let (na, area) = (grid.na(), s.area);
+    let (na, adt) = (grid.na(), s.area * dt);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
     s.p.fill(0.0);
@@ -127,28 +135,33 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         // The air this cell sees, and its temperature where it touches the ground.
         let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
         let ta = ta + s.ta[j] - s.ta0[j];
-        let (tl, down) = ((ta - gam * (s.head[i] - zair)).max(1.0), f * SIGMA * ta.powi(4));
+        let (tl, down) = ((ta - gam * (s.head[i] - zair)).max(1.0), f * SIGMA * (ta * ta) * (ta * ta));
         s.tl[i] = tl;
         // Bodies with light-capture area `a` per ground area intercept a share 1 - exp(-a) of
         // what passes the clouds.
-        let a = canopy[i] as f64;
-        let cover = -(-a).exp_m1();
+        let (a, mut cover) = (canopy[i] as f64, 0.0);
         if a > 0.0 {
+            cover = -(-a).exp_m1();
             light[i] += q * (1.0 - c) * cover * dt / a;
         }
         let sw = q * (1.0 - c) * (1.0 - cover) * (1.0 - s.alb[i]);
         // The surface temperature, implicit: heat reaches the surface from the node through
         // its heat capacity over the step (none on a melting plateau, which holds the node
         // still) in series with the conduction of any soft solid cover.
-        let (k1, t3) = (s.cap[i] / (area * dt), SIGMA * t * t * t);
-        let r = if s.pk[i] != NONE { 0.0 } else { 1.0 / k1 } + s.rc[i];
-        let ts = if r > 0.0 { (t / r + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (1.0 / r + 4.0 * t3 + cfg.sensible) } else { t };
+        let t3 = SIGMA * t * t * t;
+        let r = if s.pk[i] != NONE { 0.0 } else { adt / s.cap[i] } + s.rc[i];
+        let ts = if r > 0.0 {
+            let k = 1.0 / r;
+            (t * k + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (k + 4.0 * t3 + cfg.sensible)
+        } else {
+            t
+        };
         let up = t3 * (4.0 * ts - 3.0 * t);
         let hs = cfg.sensible * (ts - tl);
-        e_ground[i] += area * dt * (sw + down - up - hs);
-        s.p[j] += area * dt * (f * up + hs - 2.0 * down);
-        sun += area * dt * sw;
-        out += area * dt * ((1.0 - f) * up + down);
+        e_ground[i] += adt * (sw + down - up - hs);
+        s.p[j] += adt * (f * up + hs - 2.0 * down);
+        sun += adt * sw;
+        out += adt * ((1.0 - f) * up + down);
     }
     for j in 0..na {
         e_air[j] += s.p[j];
@@ -162,13 +175,27 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
 struct Sat(f64, Vec<f64>);
 
 impl Sat {
+    /// Exact every 64 entries; between, each from the last by their ratio, exp(b (1/t' - 1/t)),
+    /// summed to its fifth term (ln p is linear in 1/t).
     fn new(w: &World, k: usize, lo: f64, hi: f64) -> Self {
-        let t0 = lo.max(2.0) - 1.0;
-        Sat(t0, (0..((hi + 1.0 - t0) * 20.0) as usize + 2).map(|i| w.chem.p_sat(k, t0 + i as f64 / 20.0)).collect())
+        let (t0, b) = (lo.max(2.0) - 1.0, w.chem.subs[k].lv / R_GAS);
+        let mut p = 0.0;
+        let v = (0..((hi + 1.0 - t0) * 20.0) as usize + 2).map(|i| {
+            let t = t0 + i as f64 / 20.0;
+            if i % 64 == 0 {
+                p = w.chem.p_sat(k, t);
+            } else {
+                let x = b * 0.05 / (t * (t - 0.05));
+                p *= 1.0 + x * (1.0 + x / 2.0 * (1.0 + x / 3.0 * (1.0 + x / 4.0)));
+            }
+            p
+        });
+        Sat(t0, v.collect())
     }
     fn at(&self, t: f64) -> f64 {
         let x = ((t - self.0) * 20.0).clamp(0.0, (self.1.len() - 2) as f64);
-        let (i, f) = (x as usize, x.fract());
+        let i = x as usize;
+        let f = x - i as f64;
         self.1[i] + (self.1[i + 1] - self.1[i]) * f
     }
 }
@@ -181,24 +208,41 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
     let ((tmin, tmax), tl) = (range(&s.tg), range(&s.tl));
     let (lo, hi) = (tmin.min(tl.0), tmax.max(tl.1));
-    for gi in 0..s.gas.len() {
-        let (k, sp) = (s.gas[gi], s.sp[s.gas[gi]]);
-        let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0;
-        if !up && !s.cond[gi] {
-            continue;
-        }
-        let sat = Sat::new(w, k, lo, hi);
-        // The column above a cell, and the height it fills near the ground.
-        let column = |s: &Scratch, i: usize| (lerp(s, &s.snap, i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
+    // The gases that leave the ground or may condense, their saturation pressures, and their
+    // evaporation per unit vapour pressure deficit; each pass sees the air as it was before it.
+    // A trace gas moves only every `TRACE_TURN`-th call, for all the time since.
+    let all: f64 = s.nt.iter().sum();
+    s.trace = [s.trace[0] + dt, (s.trace[1] + 1.0) % TRACE_TURN as f64];
+    let (turn, since) = (s.trace[1] == 0.0, s.trace[0]);
+    if turn {
+        s.trace[0] = 0.0;
+    }
+    let act: Vec<(usize, usize, bool, Sat, f64)> = (0..s.gas.len())
+        .filter_map(|gi| {
+            let k = s.gas[gi];
+            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0;
+            let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
+            ((up || s.cond[gi]) && (turn || !trace)).then(|| (gi, k, up, Sat::new(w, k, lo, hi), w.cfg.evap * area * if trace { since } else { dt } / R_GAS))
+        })
+        .collect();
+    let snap = |w: &World, s: &mut Scratch| {
         s.snap.clear();
-        s.snap.extend_from_slice(&w.air[k * na..(k + 1) * na]);
-        for i in 0..n {
-            let (a, t, j, tl) = (w.ground[k * n + i], s.tg[i], s.air_of[i] as usize, s.tl[i]);
+        for &(_, k, ..) in &act {
+            s.snap.extend_from_slice(&w.air[k * na..(k + 1) * na]);
+        }
+    };
+    let (c_cond, mut lifted) = (area / R_GAS, 0.0);
+    snap(w, s);
+    for i in 0..n {
+        let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
+        for (x, &(gi, k, up, ref sat, c_evap)) in act.iter().enumerate() {
+            let a = w.ground[k * n + i];
             if !up || a <= 0.0 {
                 continue;
             }
-            let (share, hk) = column(s, i);
-            let pa = share * R_GAS * tl / (area * hk);
+            // The column above the cell, and the height it fills near the ground.
+            let (share, hk) = (lerp(s, &s.snap[x * na..(x + 1) * na], i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
+            let (sp, pa) = (s.sp[k], share * tl / (c_cond * hk));
             let ps = if t >= sp.boil { f64::INFINITY } else { sat.at(t) };
             if ps <= pa {
                 continue;
@@ -207,7 +251,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
                 a
             } else {
                 let d = a * sp.v[(t >= sp.melt) as usize] / area;
-                (w.cfg.evap * (ps - pa) / (R_GAS * t) * d / (d + HIDE_M[1]) * area * dt).min(a)
+                (c_evap * (ps - pa) / t * d / (d + HIDE_M[1])).min(a)
             };
             // The ground also pays the fusion and vaporisation enthalpy the air will hold.
             let (heat, lift) = (m * sp.cp * t, m * g * sp.mm * (s.zair[j] - s.head[i]));
@@ -217,21 +261,23 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * sp.cp, s.capa[j] + m * sp.cp, s.nt[j] + m, s.mass[j] + m * sp.mm);
             w.e_ground[i] -= heat + m * (sp.lf + sp.lv);
             w.e_air[j] += heat - lift;
-            w.ledger.gravity -= lift;
+            lifted += lift;
         }
-        if !s.cond[gi] {
-            continue;
-        }
-        s.snap.clear();
-        s.snap.extend_from_slice(&w.air[k * na..(k + 1) * na]);
-        let mut rained = false;
-        for i in 0..n {
-            let (j, tl) = (s.air_of[i] as usize, s.tl[i]);
-            let (share, hk) = column(s, i);
-            let m = (share - sat.at(tl) * area * hk / (R_GAS * tl)).min(w.air[k * na + j]);
+    }
+    snap(w, s);
+    let mut rained = vec![false; act.len()];
+    for i in 0..n {
+        let (j, tl) = (s.air_of[i] as usize, s.tl[i]);
+        for (x, &(gi, k, _, ref sat, _)) in act.iter().enumerate() {
+            if !s.cond[gi] {
+                continue;
+            }
+            let (share, hk) = (lerp(s, &s.snap[x * na..(x + 1) * na], i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
+            let m = (share - sat.at(tl) * c_cond * hk / tl).min(w.air[k * na + j]);
             if m <= 0.0 {
                 continue;
             }
+            let sp = s.sp[k];
             let (tair, lift) = (w.e_air[j] / s.capa[j], m * g * sp.mm * (s.head[i] - s.zair[j]));
             settle(s, k, i, m);
             w.ground[k * n + i] += m;
@@ -240,12 +286,15 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             // Condensing frees the vaporisation enthalpy into the air; the liquid keeps its fusion.
             w.e_ground[i] += m * (sp.cp * tair + sp.lf) - lift;
             w.e_air[j] += m * (sp.lv - sp.cp * tair);
-            w.ledger.gravity -= lift;
+            lifted += lift;
             s.rain[i] += m;
             s.cloud[j] = [s.cloud[j][0] + m, s.cloud[j][1] + m * sp.refl[0]];
-            rained = true;
+            rained[x] = true;
         }
-        if rained && !s.loose.contains(&k) {
+    }
+    w.ledger.gravity -= lifted;
+    for (&(_, k, ..), _) in act.iter().zip(&rained).filter(|(_, &r)| r) {
+        if !s.loose.contains(&k) {
             s.loose.push(k);
             s.vary.push(k);
         }

@@ -11,8 +11,16 @@ const MAX_DT_K: f64 = 30.0;
 const MAX_SUBSTEPS: usize = 48;
 /// A node that is neither frozen nor hot reacts every `LAZY` ticks with `LAZY` times the time:
 /// reactions at ordinary temperatures are slow, so one long step is as good as many short ones.
-/// Nodes take turns in blocks of `BLOCK` (contiguous memory).
+/// Nodes take turns in blocks of `BLOCK` (contiguous memory). A ground node waits `SLOW` ticks
+/// if over that time its reactions would go no further than a share `CALM` of their inputs
+/// (but for reactions on a `SPECK` of what it holds) and warm it by no more than `CALM_K` kelvin.
 const LAZY: u64 = 40;
+const SLOW: u64 = 8 * LAZY;
+const CALM: f64 = 0.05;
+const CALM_K: f64 = 0.5;
+const SPECK: f64 = 1e-12;
+/// A reaction goes far within a step when its rate times the step reaches this.
+const FAR: f64 = 0.05;
 /// A substance making up less than this share of a ground node's loose amounts is a trace:
 /// reactions on traces alone never make a node react every step.
 const TRACE: f64 = 1e-6;
@@ -34,8 +42,40 @@ pub struct Reactor {
     av: Vec<f64>,
     /// Effective rate of each reaction in this sub-step, 1/s (0 = idle).
     kap: Vec<f64>,
-    /// Limiting input amount of each reaction at the start of the sub-step, in reaction units.
+    /// Limiting input amount of each reaction at the start of the sub-step, in reaction units,
+    /// and the share of it that reacts over the whole time left.
     lim: Vec<f64>,
+    far: Vec<f64>,
+    /// At the start of the last `react`: the heat capacity, J/K, and the rate of each reaction
+    /// not driven by light, 1/s.
+    cap0: f64,
+    kap0: Vec<f64>,
+}
+
+/// `f` to a small whole power.
+#[inline]
+fn pow(f: f64, nu: u16) -> f64 {
+    match nu {
+        1 => f,
+        2 => f * f,
+        _ => f.powi(nu as i32),
+    }
+}
+
+/// `a` per `nu` (exact).
+#[inline]
+fn per(a: f64, nu: u16) -> f64 {
+    match nu {
+        1 => a,
+        2 => a * 0.5,
+        _ => a / nu as f64,
+    }
+}
+
+/// The smaller of two numbers that are not NaN.
+#[inline]
+fn least(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
 }
 
 /// 1 - exp(-z), cheap when small.
@@ -62,7 +102,70 @@ impl Reactor {
             av: vec![0.0; ns],
             kap: vec![0.0; nr],
             lim: vec![0.0; nr],
+            far: vec![0.0; nr],
+            cap0: 0.0,
+            kap0: vec![0.0; nr],
         }
+    }
+
+    /// Would the last `react` have gone no further over `span` seconds than a share `far` of
+    /// each reaction's inputs, nor than a `trace` of the amounts, nor heated by more than `dt_k`?
+    /// (Rates and limits as at its start.)
+    fn calm(&self, span: f64, far: f64, trace: f64, dt_k: f64) -> bool {
+        let mut heat = 0.0;
+        for (r, &k) in self.kap0.iter().enumerate() {
+            let go = self.lim[r] * k * span;
+            if k * span > far && go > trace {
+                return false;
+            }
+            heat += self.dh[r].abs() * go;
+        }
+        heat <= dt_k * self.cap0
+    }
+
+    /// Fastest rate, 1/s, among the reactions not driven by light that the amounts `n` of one
+    /// node can run at `t`.
+    pub fn fastest(&mut self, chem: &Chemistry, n: &[f64], t: f64) -> f64 {
+        let tot = self.phases(n, None, t);
+        let mut best = 0.0f64;
+        for (r, rx) in chem.reactions.iter().enumerate() {
+            if rx.light || t < self.thr[r] {
+                continue;
+            }
+            let mut x = 1.0;
+            for &(k, nu) in &rx.inputs {
+                let (k, p) = (k as usize, self.ph[k as usize] as usize);
+                if n[k] <= 0.0 {
+                    x = 0.0;
+                    break;
+                }
+                if p > 0 {
+                    x *= pow(self.av[k] / tot[p], nu);
+                }
+            }
+            if x > 0.0 {
+                best = best.max(rx.k * (-rx.ea / t).exp() * x);
+            }
+        }
+        best
+    }
+
+    /// Phase and available amount of each substance at `t` (the node's, plus for a gas the gas
+    /// around it), and the total of each phase: in a gas or a liquid the mole fraction is a
+    /// substance's activity; a solid is a phase of its own (activity 1).
+    fn phases(&mut self, n: &[f64], gas: Option<&[f64]>, t: f64) -> [f64; 3] {
+        let mut tot = [0.0; 3];
+        for k in 0..n.len() {
+            let p = (t >= self.melt[k]) as usize + (t >= self.boil[k]) as usize;
+            let a = match gas {
+                Some(g) if p == 2 => n[k] + g[k],
+                _ => n[k],
+            };
+            self.ph[k] = p as u8;
+            self.av[k] = a;
+            tot[p] += a;
+        }
+        tot
     }
 
     /// React the amounts `n` of one node for `dt` seconds. Returns the light energy used, J.
@@ -88,25 +191,19 @@ impl Reactor {
     ) -> f64 {
         let pool: &mut [f64] = gas.unwrap_or(&mut []);
         let has_pool = !pool.is_empty();
-        let ns = n.len();
         let mut light = light_j;
         let mut left = dt;
+        self.kap0.fill(0.0);
         for iter in 0..=MAX_SUBSTEPS {
             if left <= 0.0 {
                 break;
             }
             let c = heat_cap + n.iter().zip(&self.cp).map(|(a, c)| a * c).sum::<f64>();
             let t = *energy / c.max(1.0);
-            // Phases, and the total moles of each phase: in a gas or a liquid the mole fraction is
-            // a substance's activity; a solid is a phase of its own (activity 1).
-            let mut tot = [0.0; 3];
-            for k in 0..ns {
-                let p = (t >= self.melt[k]) as usize + (t >= self.boil[k]) as usize;
-                let a = if p == 2 && has_pool { n[k] + pool[k] } else { n[k] };
-                self.ph[k] = p as u8;
-                self.av[k] = a;
-                tot[p] += a;
+            if iter == 0 {
+                self.cap0 = c;
             }
+            let tot = self.phases(n, has_pool.then_some(&*pool), t);
             // Rates of the reactions that are not frozen and have all their inputs.
             let (mut any, mut heat) = (false, 0.0);
             for (r, rx) in chem.reactions.iter().enumerate() {
@@ -119,13 +216,12 @@ impl Reactor {
                 let (mut lim, mut x) = (f64::MAX, 1.0);
                 for &(k, nu) in &rx.inputs {
                     let (k, a) = (k as usize, self.av[k as usize]);
-                    lim = lim.min(a / nu as f64);
+                    lim = least(lim, per(a, nu));
                     if a <= 0.0 {
                         break;
                     }
                     if self.ph[k] > 0 {
-                        let f = a / tot[self.ph[k] as usize];
-                        x *= if nu == 1 { f } else { f.powi(nu as i32) };
+                        x *= pow(a / tot[self.ph[k] as usize], nu);
                     }
                 }
                 if lim > 0.0 {
@@ -133,8 +229,12 @@ impl Reactor {
                     self.kap[r] = kap;
                     self.lim[r] = lim;
                     any = true;
+                    self.far[r] = frac(kap * left);
                     if !uses_light {
-                        heat += self.dh[r].abs() * lim * frac(kap * left);
+                        heat += self.dh[r].abs() * lim * self.far[r];
+                        if iter == 0 {
+                            self.kap0[r] = kap;
+                        }
                     }
                 }
             }
@@ -159,8 +259,8 @@ impl Reactor {
                 }
                 let dh = self.dh[r];
                 let uses_light = rx.light && dh > 0.0;
-                let lim = rx.inputs.iter().map(|&(k, nu)| self.av[k as usize] / nu as f64).fold(f64::MAX, f64::min);
-                let mut ext = lim * frac(self.kap[r] * sub);
+                let lim = rx.inputs.iter().fold(f64::MAX, |m, &(k, nu)| least(m, per(self.av[k as usize], nu)));
+                let mut ext = lim * if sub == left { self.far[r] } else { frac(self.kap[r] * sub) };
                 if uses_light {
                     ext = ext.min(light / dh);
                 } else if dh > 0.0 {
@@ -191,117 +291,251 @@ impl Reactor {
     }
 }
 
+/// A reaction that may go far within a step somewhere: its barrier, its inputs (one bit per
+/// substance), those that are gas at every temperature (drawn from the air) and the others
+/// with their boiling points, and its rate constant over the step relative to going far. It
+/// needs at least `hot` (all activities 1), and `low` for the gases of any air node; per air
+/// node, `need` for those gases at the most activity they can have there (their share of the
+/// air's gas), once asked for (NaN before).
+struct Cand {
+    ea: f64,
+    kdt: f64,
+    hot: f64,
+    low: f64,
+    need_bits: u64,
+    gas: Vec<(usize, u16)>,
+    held: Vec<(usize, f64)>,
+    need: Vec<std::cell::Cell<f64>>,
+}
+
+impl Cand {
+    /// Temperature at which it goes far, for `z` times its rate constant over the step.
+    fn warm(&self, z: f64) -> f64 {
+        if z > 1.0 { self.ea / z.ln() } else { f64::INFINITY }
+    }
+}
+
 /// Run Law 2 on ground nodes (loose amounts, gas from the air above) and on air nodes.
-/// Node temperatures come from the last flow step. Each node looks at the reactions whose
-/// inputs it holds: if one of them goes far within one step it reacts every step; if they are
-/// only slow it reacts every `LAZY` steps (in turns, by block) for that time; if all are frozen
-/// it is skipped.
+/// Node temperatures come from the last flow step. A ground node whose reactions may go far
+/// within one step (by their rate at its temperature and the most activity their inputs can
+/// have, a bound checked one reaction at a time over all nodes) reacts every step; at its turn,
+/// every `LAZY` (or `SLOW`) steps by block, a node reacts for all the time since its last turn
+/// it has not reacted for, unless all its reactions are frozen. Air nodes go far by their exact
+/// rates, else react at their turn.
 pub fn step(w: &mut World, dt: f64) {
-    let s = std::mem::take(&mut w.scratch);
-    let (tg, ta) = s.temps();
-    let turn = ((LAZY - (w.day / w.cfg.phys_days as u64) % LAZY) % LAZY) as usize;
+    let mut s = std::mem::take(&mut w.scratch);
     let chem = &w.chem;
-    let (ns, n, na) = (chem.ns(), w.grid.n(), w.grid.na());
-    let share = 1.0 / (w.grid.air_scale * w.grid.air_scale) as f64;
-    let skin_area = w.cfg.skin_m * w.grid.area();
-    let vol: Vec<f64> = (0..ns).map(|k| chem.molar_volume(k, crate::chem::Phase::Solid)).collect();
+    let (ns, n, na, sc) = (chem.ns(), w.grid.n(), w.grid.na(), w.grid.air_scale);
+    let tick = (w.day / w.cfg.phys_days as u64) as u32;
+    if s.slow.len() != n {
+        // Blocks take turns: block `b` first reacts when `(b + tick) % LAZY == 0`.
+        s.slow = (0..n)
+            .map(|i| tick + ((2 * LAZY - (i / BLOCK) as u64 % LAZY - tick as u64 % LAZY) % LAZY) as u32)
+            .map(|due| [due.saturating_sub(LAZY as u32), due, 0])
+            .collect();
+    }
+    let mut slow = std::mem::take(&mut s.slow);
+    let fallback: (Vec<f64>, Vec<[f64; 4]>, Vec<u32>, Vec<f64>);
+    let (mut tg, mut bed, mut air_of, mut ta) = s.view();
+    if tg.len() != n || bed.len() != n || air_of.len() != n || ta.len() != na {
+        let skin = |i: usize| {
+            let (c, v) = (0..ns).fold((0.0, 0.0), |(c, v), k| (c + w.b(k, i) * chem.subs[k].cp, v + w.b(k, i) * chem.molar_volume(k, crate::chem::Phase::Solid)));
+            if v > 0.0 { c / v * w.cfg.skin_m * w.grid.area() } else { 0.0 }
+        };
+        fallback = ((0..n).map(|i| w.t_ground(i)).collect(), (0..n).map(|i| [skin(i), 0.0, 0.0, 0.0]).collect(), (0..n).map(|i| w.grid.air_of(i) as u32).collect(), (0..na).map(|j| w.t_air(j)).collect());
+        (tg, bed, air_of, ta) = (&fallback.0, &fallback.1, &fallback.2, &fallback.3);
+    }
+    let turn = ((LAZY - tick as u64 % LAZY) % LAZY) as usize;
+    let share = 1.0 / (sc * sc) as f64;
     // Gas held by the air carries its fusion and vaporisation enthalpy (see `check::totals`).
     let held: Vec<f64> = chem.subs.iter().map(|b| b.lf + b.lv).collect();
     let mut rc = Reactor::new(chem);
-    // Per reaction (not driven by light): its inputs (one bit per substance), frozen below
-    // `thr`, goes far within a step above `hot`.
     let bit = |k: usize| 1u64 << k.min(63);
-    let rxs: Vec<(u64, f64, f64)> = (0..chem.reactions.len())
+    // Per reaction not driven by light: its inputs (one bit per substance), frozen below `thr`,
+    // too slow to go far within a step below `hot` even with all its inputs at activity 1.
+    let rxs: Vec<(usize, u64, f64, f64)> = (0..chem.reactions.len())
         .filter(|&r| !chem.reactions[r].light)
         .map(|r| {
             let rx = &chem.reactions[r];
-            (rx.inputs.iter().fold(0, |m, p| m | bit(p.0 as usize)), rc.thr[r], rx.ea / (rx.k * dt / 0.05).ln().max(1e-9))
+            let hot = if rx.k > 0.0 { rx.ea / (rx.k * dt / FAR).ln().max(1e-9) } else { f64::INFINITY };
+            (r, rx.inputs.iter().fold(0, |m, p| m | bit(p.0 as usize)), rc.thr[r], hot)
         })
         .collect();
-    // How long a node at `t` holding the substances `has` (`more`: beyond traces) reacts in turn
-    // `b` now: 0 if not at all.
-    let span = |t: f64, b: usize, has: u64, more: u64| {
-        let (mut cold, mut fast) = (true, false);
-        for &(need, thr, hot) in &rxs {
-            if t >= thr && has & need == need {
-                cold = false;
-                fast |= t >= hot && more & need == need;
-            }
+    let cold = |t: f64, has: u64| !rxs.iter().any(|&(_, need, thr, _)| t >= thr && has & need == need);
+    let mut in_air = vec![0u64; na];
+    for k in 0..ns {
+        for (m, &a) in in_air.iter_mut().zip(&w.air[k * na..(k + 1) * na]) {
+            *m |= if a > 0.0 { bit(k) } else { 0 };
         }
-        if fast { dt } else if !cold && b % LAZY as usize == turn { dt * LAZY as f64 } else { 0.0 }
+    }
+    let warmest = |v: &[f64]| v.iter().fold(f64::MIN, |a, &t| a.max(t));
+    let (gmax, thi) = (warmest(tg), warmest(tg).max(warmest(ta)));
+    let anywhere = in_air.iter().fold(0, |m, &x| m | x);
+    let col = |k: usize| &w.ground[k * n..(k + 1) * n];
+    let somewhere = |k: usize| anywhere & bit(k) != 0 || col(k).chunks(256).any(|c| c.iter().fold(false, |m, &a| m | (a > 0.0)));
+    // Reactions that may go far somewhere; a node must be at least as warm as `hot` for one, so
+    // substances boiling below the least `hot` are gas wherever one can.
+    let fast: Vec<_> = rxs.iter().filter(|&&(r, _, _, hot)| hot <= thi && chem.reactions[r].inputs.iter().all(|p| somewhere(p.0 as usize))).collect();
+    let tlo = fast.iter().fold(f64::INFINITY, |m, x| m.min(x.3));
+    let mut pool_lo = vec![0.0; na];
+    for k in (0..ns).filter(|&k| chem.subs[k].boil <= tlo) {
+        for (p, &a) in pool_lo.iter_mut().zip(&w.air[k * na..(k + 1) * na]) {
+            *p += a;
+        }
+    }
+    // The most activity `a` mol of a gas can have among at least `d` mol of gas.
+    let act = |a: f64, d: f64, nu: u16| if d > 0.0 { pow((a / d).min(1.0), nu) } else { 1.0 };
+    let most_act: Vec<f64> = (0..ns).map(|k| if chem.subs[k].boil <= tlo { (0..na).fold(0.0, |m, j| act(w.air[k * na + j], pool_lo[j], 1).max(m)) } else { 1.0 }).collect();
+    let cand: Vec<Cand> = (fast.iter())
+        .map(|&&(r, need_bits, _, hot)| {
+            let rx = &chem.reactions[r];
+            let (gas, held): (Vec<_>, Vec<_>) = rx.inputs.iter().map(|p| (p.0 as usize, p.1)).partition(|p| chem.subs[p.0].boil <= tlo);
+            let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil)).collect();
+            let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, need: vec![std::cell::Cell::new(f64::NAN); na] };
+            c.low = c.warm(c.kdt * c.gas.iter().map(|&(k, nu)| pow(most_act[k], nu)).product::<f64>()).max(hot);
+            c
+        })
+        .collect();
+    let need = |c: &Cand, j: usize| {
+        if c.need[j].get().is_nan() {
+            c.need[j].set(c.warm(c.kdt * c.gas.iter().map(|&(k, nu)| act(w.air[k * na + j], pool_lo[j], nu)).product::<f64>()));
+        }
+        c.need[j].get()
     };
-    // Can a reaction anywhere go far within a step? If not, blocks off their turn are skipped
-    // unread.
-    let tmax = tg.iter().cloned().fold(f64::MIN, f64::max);
-    let present = (0..ns).filter(|&k| tg.is_empty() || s.present(k)).fold(0, |m, k| m | bit(k));
-    let fast_any = tg.is_empty() || rxs.iter().any(|&(need, _, hot)| hot <= tmax && present & need == need);
-    let in_air: Vec<u64> = (0..na).map(|j| (0..ns).filter(|&k| w.air[k * na + j] > 0.0).fold(0, |m, k| m | bit(k))).collect();
-    let t_of = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(f64::INFINITY);
-    let (mut amt, mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns], vec![0.0; ns]);
-    let mut blk = vec![0.0; ns * BLOCK];
-
-    // Ground: blocks of neighbouring nodes, so memory is read in runs.
-    for b in 0..n.div_ceil(BLOCK) {
-        let (i0, i1) = (b * BLOCK, ((b + 1) * BLOCK).min(n));
-        if !fast_any && b % LAZY as usize != turn {
+    // Ground nodes that may go far: warm enough; holding the inputs that are not gas there
+    // beyond a trace (of at least what the node holds of them and of the substances most of the
+    // ground is made of); and warm enough for the gases of the air above, thinned by those the
+    // node holds or gives off itself. Reactions that need warmth few nodes have look at those
+    // nodes only.
+    let mut most: Vec<(f64, usize)> = (0..ns).map(|k| (col(k).iter().step_by(61).sum::<f64>(), k)).collect();
+    most.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let most: Vec<usize> = most.iter().take(3).map(|m| m.1).collect();
+    let fits = |c: &Cand, i: usize, t: f64| {
+        let held = |all: f64| c.held.iter().all(|&(k, boil)| t >= boil || col(k)[i] > TRACE * all);
+        if t < c.hot || !held(col(most[0])[i]) {
+            return false;
+        }
+        let (j, own) = (air_of[i] as usize, c.gas.iter().any(|&(k, _)| col(k)[i] > 0.0));
+        if !own && (t < c.low || (!c.gas.is_empty() && t < need(c, j))) {
+            return false;
+        }
+        // Vapour of what the node holds thins the gas too.
+        let vapour = most.iter().filter(|&&k| t >= chem.subs[k].boil).map(|&k| col(k)[i]).sum::<f64>();
+        let d = pool_lo[j] + vapour / share;
+        if (own || vapour > 0.0) && t < c.warm(c.kdt * c.gas.iter().map(|&(k, nu)| act(col(k)[i] / share + w.air[k * na + j], d, nu)).product::<f64>()) {
+            return false;
+        }
+        held(most.iter().map(|&k| col(k)[i]).sum::<f64>() + c.held.iter().filter(|h| !most.contains(&h.0)).map(|&(k, _)| col(k)[i]).sum::<f64>())
+    };
+    let (mut maybe, mut ok, mut gas) = (vec![false; n], vec![false; n], vec![false; n]);
+    let mut warm: Option<Vec<u32>> = None;
+    let mut cs: Vec<&Cand> = cand.iter().filter(|c| c.hot <= gmax).collect();
+    cs.sort_by(|a, b| a.hot.total_cmp(&b.hot));
+    for c in cs {
+        if warm.is_none() && tg.iter().filter(|&&t| t >= c.hot).count() * 8 <= n {
+            warm = Some((0..n as u32).filter(|&i| tg[i as usize] >= c.hot).collect());
+        }
+        if let Some(v) = &mut warm {
+            v.retain(|&i| tg[i as usize] >= c.hot);
+            for &i in v.iter() {
+                maybe[i as usize] = maybe[i as usize] || fits(c, i as usize, tg[i as usize]);
+            }
             continue;
         }
-        let m = i1 - i0;
-        let (mut bc, mut bv) = ([0.0; BLOCK], [0.0; BLOCK]);
-        for k in 0..ns {
-            blk[k * BLOCK..k * BLOCK + m].copy_from_slice(&w.ground[k * n + i0..k * n + i1]);
-            for (x, &v) in w.bed[k * n + i0..k * n + i1].iter().enumerate() {
-                bc[x] += v * chem.subs[k].cp;
-                bv[x] += v * vol[k];
+        // Many warm nodes: first a cheap test over all nodes (holding the inputs not gas there
+        // beyond a trace of the commonest substance, and warm enough for the air's gases or
+        // holding a gas input), then the full one.
+        for (o, &t) in ok.iter_mut().zip(tg) {
+            *o = t >= c.hot;
+        }
+        for &(k, boil) in &c.held {
+            for ((o, &t), (&a, &b)) in ok.iter_mut().zip(tg).zip(col(k).iter().zip(col(most[0]))) {
+                *o &= t >= boil || a > TRACE * b;
             }
         }
-        for x in 0..m {
-            let (i, t) = (i0 + x, t_of(tg, i0 + x));
-            let j = w.grid.air_of(i);
-            let trace = TRACE * (0..ns).map(|k| blk[k * BLOCK + x]).sum::<f64>();
-            let has = (0..ns).filter(|&k| blk[k * BLOCK + x] > 0.0).fold(in_air[j], |m, k| m | bit(k));
-            let more = (0..ns).filter(|&k| blk[k * BLOCK + x] > trace).fold(in_air[j], |m, k| m | bit(k));
-            let time = span(t, b, has, more);
-            if time == 0.0 {
-                continue;
+        if !c.gas.is_empty() {
+            for (g, &t) in gas.iter_mut().zip(tg) {
+                *g = t >= c.low;
             }
+            for &(k, _) in &c.gas {
+                for (g, &a) in gas.iter_mut().zip(col(k)) {
+                    *g |= a > 0.0;
+                }
+            }
+            for (o, &g) in ok.iter_mut().zip(&gas) {
+                *o &= g;
+            }
+        }
+        for i in 0..n {
+            if ok[i] && !maybe[i] {
+                maybe[i] = fits(c, i, tg[i]);
+            }
+        }
+    }
+    let (mut amt, mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns], vec![0.0; ns]);
+
+    // Air nodes that may go far.
+    let air_maybe: Vec<bool> = (0..na).map(|j| cand.iter().any(|c| in_air[j] & c.need_bits == c.need_bits && ta[j] >= c.low && ta[j] >= need(c, j))).collect();
+
+    // Ground.
+    for i in 0..n {
+        let due = slow[i][1] <= tick;
+        if !due && !maybe[i] {
+            continue;
+        }
+        let (t, j) = (tg[i], air_of[i] as usize);
+        for k in 0..ns {
+            amt[k] = w.ground[k * n + i];
+        }
+        let has = || (0..ns).filter(|&k| amt[k] > 0.0).fold(in_air[j], |m, k| m | bit(k));
+        // A node that may go far reacts for this step; at its turn, for all the time since its
+        // last turn it has not reacted for.
+        let [last, _, fasts] = slow[i];
+        let ticks = if due && !cold(t, has()) { (tick - last).saturating_sub(fasts) } else { maybe[i] as u32 };
+        let mut next = LAZY;
+        if ticks > 0 {
             for k in 0..ns {
-                amt[k] = blk[k * BLOCK + x];
                 pool0[k] = w.air[k * na + j] * share;
             }
             pool.copy_from_slice(&pool0);
-            let c_bed = if bv[x] > 0.0 { bc[x] / bv[x] * skin_area } else { 0.0 };
+            let all = amt.iter().sum::<f64>();
             // The reactor sees sensible heat: molten amounts hold their fusion enthalpy apart.
             let fused: f64 = (0..ns).filter(|&k| chem.subs[k].melt <= t).map(|k| amt[k] * chem.subs[k].lf).sum();
             let mut e = w.e_ground[i] - fused;
-            rc.react(chem, &mut amt, Some(&mut pool), &mut e, c_bed, None, 0.0, time);
+            rc.react(chem, &mut amt, Some(&mut pool), &mut e, bed[i][0], None, 0.0, ticks as f64 * dt);
             w.e_ground[i] = e + fused;
             for k in 0..ns {
-                blk[k * BLOCK + x] = amt[k];
+                w.ground[k * n + i] = amt[k];
                 if pool[k] != pool0[k] {
                     w.air[k * na + j] += pool[k] - pool0[k];
                     w.e_ground[i] -= (pool[k] - pool0[k]) * held[k];
                 }
             }
+            if rc.calm(SLOW as f64 * dt, CALM, SPECK * all, CALM_K) {
+                next = SLOW;
+            }
         }
-        for k in 0..ns {
-            w.ground[k * n + i0..k * n + i1].copy_from_slice(&blk[k * BLOCK..k * BLOCK + m]);
-        }
+        slow[i] = if due { [tick, tick + next as u32, 0] } else { [last, slow[i][1], fasts + 1] };
     }
     // Air.
     for j in 0..na {
-        let time = span(t_of(ta, j), j, in_air[j], in_air[j]);
-        if time == 0.0 {
-            continue;
-        }
+        let t = ta[j];
         for k in 0..ns {
             amt[k] = w.air[k * na + j];
         }
+        let time = if air_maybe[j] && rc.fastest(chem, &amt, t) * dt >= FAR {
+            dt
+        } else if j % LAZY as usize == turn && !cold(t, in_air[j]) {
+            dt * LAZY as f64
+        } else {
+            continue;
+        };
         rc.react(chem, &mut amt, None, &mut w.e_air[j], 0.0, None, 0.0, time);
         for k in 0..ns {
             w.e_air[j] -= (amt[k] - w.air[k * na + j]) * held[k];
             w.air[k * na + j] = amt[k];
         }
     }
+    s.slow = slow;
     w.scratch = s;
 }
