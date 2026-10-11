@@ -39,6 +39,8 @@ pub struct Substance {
     pub solubility: f64,
     /// Heat conductivity of the solid, W/(m K)
     pub conductivity: f64,
+    /// Vaporisation enthalpy, J/mol (sets the vapour pressure curve)
+    pub lv: f64,
     /// Formation enthalpy, J/mol. Chemical energy held by one mole.
     pub hf: f64,
 }
@@ -89,10 +91,9 @@ impl Chemistry {
         }
     }
 
-    /// Equilibrium vapour pressure (Pa) from the boiling point (Trouton's rule, Clausius-Clapeyron).
+    /// Equilibrium vapour pressure (Pa) from the boiling point (Clausius-Clapeyron).
     pub fn p_sat(&self, k: usize, t: f64) -> f64 {
-        let tb = self.subs[k].boil;
-        let l = 88.0 * tb;
+        let (tb, l) = (self.subs[k].boil, self.subs[k].lv);
         P_REF * (l / R_GAS * (1.0 / tb - 1.0 / t.max(1.0))).exp()
     }
 

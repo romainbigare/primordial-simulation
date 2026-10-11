@@ -26,6 +26,8 @@ struct S {
     sol: f64,
     cond: f64,
     hf: f64,
+    /// kJ/mol; Trouton's rule (88 J/(mol K) × boil) when missing
+    lv: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -75,6 +77,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
                 solubility: s.sol,
                 conductivity: s.cond,
                 hf: s.hf * 1000.0,
+                lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
             })
             .collect(),
         reactions: f
