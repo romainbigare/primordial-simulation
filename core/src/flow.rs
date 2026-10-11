@@ -11,34 +11,52 @@ mod air;
 
 use crate::grid::{DIRS, FORWARD};
 use crate::World;
+use serde::{Deserialize, Serialize};
 
 /// Thickness of a layer that hides half of what lies below it, m: [soft solid, liquid, loose solid].
-const HIDE_M: [f64; 3] = [0.01, 0.5, 0.02];
+const HIDE_M: [f64; 3] = [0.2, 0.5, 0.02];
 /// A solid warmer than this share of its melting point is soft cover lying on top.
 const SOFT: f64 = 0.75;
+/// Moving liquid does work on its bed (carrying, wear) once in this many months (seven,
+/// so the season sampled turns over the years).
+const WORK_MONTHS: u64 = 7;
+/// The slow-changing ground and the substances present are rechecked this often, months.
+const REFRESH_MONTHS: u64 = 3;
+/// Liquid leaving a node goes only to neighbours at least this share as steep as the steepest.
+const SPLIT: f64 = 0.2;
+/// Liquid does not move for a smaller head difference, m.
+const STILL_M: f64 = 0.01;
 
-/// Numbers of one substance the laws read often: heat capacity, molar mass, molar volume
-/// as [solid, liquid], melting and boiling point, reflectance as [solid, liquid].
-#[derive(Clone, Copy, Debug, Default)]
+/// Numbers of one substance the laws read often: heat capacity, molar mass, fusion and
+/// vaporisation enthalpy, molar volume as [solid, liquid], melting and boiling point,
+/// reflectance as [solid, liquid].
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 struct Sp {
     cp: f64,
     mm: f64,
+    lf: f64,
+    lv: f64,
+    cond: f64,
     v: [f64; 2],
     melt: f64,
     boil: f64,
     refl: [f64; 2],
 }
 
-/// Working memory of the law, rebuilt from the world when missing.
-#[derive(Clone, Debug, Default)]
+/// Working memory of the law, rebuilt from the world when missing. It is saved with the
+/// world (but for the space used only within a call), as the slower parts of the law run
+/// from what it held at their last turn.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
     month: Option<u64>,
     year: Option<u64>,
+    /// Seconds since liquid, air and rain last moved.
+    pending: f64,
     area: f64,
     sp: Vec<Sp>,
     /// Substances present in ground, bonded ground and air nodes. Loose ones that stay solid
     /// and cannot evaporate at any ground temperature are `fixed`: their volume and volume ×
-    /// reflectance per node are kept for a month in `fix`; the others `vary`.
+    /// reflectance per node are kept between refreshes in `fix`; the others `vary`.
     loose: Vec<usize>,
     fixed: Vec<usize>,
     vary: Vec<usize>,
@@ -50,25 +68,48 @@ pub struct Scratch {
     bed: Vec<[f64; 4]>,
     cap: Vec<f64>,
     tg: Vec<f64>,
+    /// Substance held at its melting point in each ground node (or `NONE`), and its molten share.
+    pk: Vec<usize>,
+    phi: Vec<f64>,
+    /// Off a plateau: the fusion enthalpy held, and the energies between which it holds
+    /// (until the amounts change); and how many of `vary` are molten.
+    hold: Vec<[f64; 4]>,
     z: Vec<f64>,
     head: Vec<f64>,
     alb: Vec<f64>,
-    /// Volume and volume × reflectance of [soft solid, liquid, loose solid].
-    lay: Vec<[f64; 6]>,
+    /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
+    rc: Vec<f64>,
+    #[serde(skip)]
     rain: Vec<f64>,
     order: Vec<u64>,
+    /// Neighbours of each ground node along `DIRS` (`NONE` off the map).
+    #[serde(skip)]
+    nbr: Vec<[usize; 8]>,
+    #[serde(skip)]
     done: Vec<bool>,
     /// Loose solids carried by liquid, [cell * carried kinds + kind], and their heat.
+    #[serde(skip)]
     sed: Vec<f64>,
+    #[serde(skip)]
     sed_e: Vec<f64>,
+    #[serde(skip)]
     mob: Vec<f64>,
-    // Ground node to air: own node, four nearest nodes and weights, share of a node; the air
-    // seen: [temperature touching the ground, heat-absorbing share, radiation down].
+    // Ground node to air: own node, four nearest nodes and weights, share of a node; the
+    // temperature of the air touching the ground.
     air_of: Vec<u32>,
     near: Vec<[u32; 4]>,
     wt: Vec<[f64; 4]>,
     per: Vec<f64>,
-    view: Vec<[f64; 3]>,
+    tl: Vec<f64>,
+    /// Per ground cell, from the last full step: temperature drop per metre, mean height of
+    /// the air's mass, heat-absorbing share, sunlight reflected by condensate in the air,
+    /// air temperature; and the temperature of each air node then.
+    seen: Vec<[f64; 5]>,
+    ta0: Vec<f64>,
+    /// Per air node: condensed in the last full step, mol, and × its reflectance.
+    #[serde(skip)]
+    cloud: Vec<[f64; 2]>,
+    #[serde(skip)]
     snap: Vec<f64>,
     // Air nodes: ground cells, mean ground height, volume, amount, heat capacity, mass,
     // heat-absorbing share, temperature drop per metre, mean height of the air's mass,
@@ -83,8 +124,11 @@ pub struct Scratch {
     gam: Vec<f64>,
     zair: Vec<f64>,
     ta: Vec<f64>,
+    #[serde(skip)]
     p: Vec<f64>,
+    #[serde(skip)]
     th: Vec<f64>,
+    #[serde(skip)]
     grad: Vec<[f64; 2]>,
     /// Per gas [g * na + j]: may it condense in the column; height its amount fills near the
     /// ground, m; share of it in the upper half of the column.
@@ -92,32 +136,64 @@ pub struct Scratch {
     hk: Vec<f64>,
     split: Vec<f64>,
     // One line of air nodes: pushes [mix, overturn, even] per edge, and solver space.
+    #[serde(skip)]
     push: Vec<[f64; 3]>,
+    #[serde(skip)]
     al: Vec<f64>,
+    #[serde(skip)]
     be: Vec<f64>,
+    #[serde(skip)]
     x: Vec<f64>,
+    #[serde(skip)]
     cw: Vec<f64>,
+    #[serde(skip)]
     mflux: Vec<f64>,
+    #[serde(skip)]
     lh: Vec<[f64; 2]>,
+    #[serde(skip)]
     xs: Vec<f64>,
+    #[serde(skip)]
     fl: Vec<f64>,
+    #[serde(skip)]
     nt_new: Vec<f64>,
 }
 
-/// Advance flow by `dt` seconds.
+impl Scratch {
+    /// Temperature of each ground node and of each air node at the last flow step, K (empty before it).
+    pub fn temps(&self) -> (&[f64], &[f64]) {
+        (&self.tg, &self.ta)
+    }
+    /// Is substance `k` present in ground or air nodes (as of the last refresh)?
+    pub fn present(&self, k: usize) -> bool {
+        self.loose.contains(&k) || self.gas.contains(&k)
+    }
+}
+
+/// Advance flow by `dt` seconds: radiation every call; liquid, air and rain once
+/// `cfg.flow_days` have passed, for all the time since they last moved.
 pub fn step(w: &mut World, dt: f64) {
     let mut s = std::mem::take(&mut w.scratch);
-    let month = w.day / w.cfg.days_per_month as u64;
-    let monthly = s.month != Some(month);
-    if s.cap.len() != w.grid.n() {
+    let first = s.cap.len() != w.grid.n();
+    if first {
         refresh(w, &mut s);
     }
-    ground_state(w, &mut s);
-    air::state(w, &mut s);
+    if s.done.len() != w.grid.n() {
+        space(w, &mut s);
+    }
+    s.pending += dt;
+    let full = first || s.pending >= w.cfg.flow_days as f64 * 86_400.0 - 1.0;
+    ground_state(w, &mut s, full);
+    air::state(w, &mut s, full);
     air::radiation(w, &mut s, dt);
+    if !full {
+        w.scratch = s;
+        return;
+    }
+    let (dt, month) = (std::mem::take(&mut s.pending), w.day / w.cfg.days_per_month as u64);
+    let monthly = s.month != Some(month);
     air::exchange(w, &mut s, dt);
     air::wind(w, &mut s, dt);
-    liquid(w, &mut s, dt, if monthly { w.cfg.days_per_month as f64 * 86_400.0 / dt } else { 0.0 });
+    liquid(w, &mut s, dt, if monthly && month % WORK_MONTHS == 0 { (WORK_MONTHS * w.cfg.days_per_month as u64) as f64 * 86_400.0 / dt } else { 0.0 });
     let year = w.day / w.days_per_year();
     if s.year != Some(year) {
         if s.year.is_some() {
@@ -125,42 +201,51 @@ pub fn step(w: &mut World, dt: f64) {
         }
         s.year = Some(year);
     }
-    if monthly {
+    if monthly && month % REFRESH_MONTHS == 0 {
         refresh(w, &mut s);
-        s.month = Some(month);
     }
+    s.month = Some(month);
     w.scratch = s;
 }
 
-/// Is substance `k` liquid at temperature `t`?
+const NONE: usize = usize::MAX;
+
+/// Molten share of substance `k` in ground node `i` (liquid, or gas above boiling).
 #[inline]
-fn wet(s: &Scratch, k: usize, t: f64) -> bool {
-    t >= s.sp[k].melt && t < s.sp[k].boil
+fn molten(s: &Scratch, k: usize, i: usize) -> f64 {
+    if s.pk[i] == k { s.phi[i] } else { (s.tg[i] >= s.sp[k].melt) as u8 as f64 }
+}
+
+/// Liquid share of substance `k` in ground node `i`.
+#[inline]
+fn wet(s: &Scratch, k: usize, i: usize) -> f64 {
+    if s.tg[i] < s.sp[k].boil { molten(s, k, i) } else { 0.0 }
 }
 
 /// Raise (or with negative `m`, lower) the surface of ground node `i` for `m` mol of `k`.
 #[inline]
 fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
-    let p = s.sp[k];
-    if s.tg[i] < p.melt {
+    let (p, t) = (&s.sp[k], s.tg[i]);
+    s.hold[i][2] = f64::MIN;
+    if t < p.melt {
         let dz = m * p.v[0] / s.area;
         s.z[i] += dz;
         s.head[i] += dz;
-    } else if s.tg[i] < p.boil {
+    } else if t < p.boil {
         s.head[i] += m * p.v[1] / s.area;
     }
 }
 
-/// Move `m` mol of substance `k` from ground node `i` to `j`, with its heat at `t`.
+/// Move `m` mol of substance `k` from ground node `i` to `j`, with `e` J of heat per mol.
 #[inline]
-fn shift(w: &mut World, s: &mut Scratch, k: usize, i: usize, j: usize, m: f64, t: f64) {
+fn shift(w: &mut World, s: &mut Scratch, k: usize, i: usize, j: usize, m: f64, e: f64) {
     let (n, cp) = (w.grid.n(), s.sp[k].cp);
     w.ground[k * n + i] -= m;
     w.ground[k * n + j] += m;
     s.cap[i] -= m * cp;
     s.cap[j] += m * cp;
-    w.e_ground[i] -= m * cp * t;
-    w.e_ground[j] += m * cp * t;
+    w.e_ground[i] -= m * e;
+    w.e_ground[j] += m * e;
     settle(s, k, i, -m);
     settle(s, k, j, m);
 }
@@ -184,7 +269,7 @@ fn around<const N: usize>(dirs: &[(i32, i32); N], gw: usize, gh: usize, i: usize
     })
 }
 
-/// Monthly: which substances are present, the slow-changing bonded ground and fixed solids,
+/// Every few months: which substances are present, the slow-changing bonded ground and fixed solids,
 /// and (once) the map from ground cells to air nodes.
 fn refresh(w: &World, s: &mut Scratch) {
     let (n, na, ns, g) = (w.grid.n(), w.grid.na(), w.chem.ns(), &w.grid);
@@ -194,6 +279,9 @@ fn refresh(w: &World, s: &mut Scratch) {
         .map(|b| Sp {
             cp: b.cp,
             mm: b.molar_mass,
+            lf: b.lf,
+            lv: b.lv,
+            cond: b.conductivity.max(1e-3),
             v: [b.molar_mass / b.density[0], b.molar_mass / b.density[1]],
             melt: b.melt,
             boil: b.boil,
@@ -201,11 +289,13 @@ fn refresh(w: &World, s: &mut Scratch) {
         })
         .collect();
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
-    let tmax = (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) + 20.0;
+    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) } + 20.0;
     let up = |k: usize| w.chem.p_sat(k, tmax) > 1.0;
     s.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
     s.fixed = s.loose.iter().copied().filter(|&k| SOFT * s.sp[k].melt > tmax && !up(k)).collect();
     s.vary = s.loose.iter().copied().filter(|k| !s.fixed.contains(k)).collect();
+    s.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
+    s.order.clear();
     s.bedk = (0..ns).filter(|&k| any(&w.bed, n, k)).collect();
     s.gas = (0..ns).filter(|&k| any(&w.air, na, k) || (s.loose.contains(&k) && up(k))).collect();
     s.fix = vec![[0.0; 2]; n];
@@ -252,82 +342,126 @@ fn refresh(w: &World, s: &mut Scratch) {
         s.cells[j as usize] += 1.0;
     }
     s.per = (0..n).map(|i| 1.0 / air::lerp(s, &s.cells, i)).collect();
-    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.alb, &mut s.rain, &mut s.sed_e, &mut s.mob] {
+    (s.pk, s.phi, s.hold) = (vec![NONE; n], vec![0.0; n], vec![[0.0, 0.0, f64::MIN, 0.0]; n]);
+    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.alb, &mut s.rc, &mut s.tl] {
         *v = vec![0.0; n];
     }
-    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair] {
+    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {
         *v = vec![0.0; na];
     }
-    for v in [&mut s.ta, &mut s.p, &mut s.th] {
-        *v = vec![0.0; na];
-    }
-    (s.lay, s.view, s.done, s.grad) = (vec![[0.0; 6]; n], vec![[0.0; 3]; n], vec![false; n], vec![[0.0; 2]; na]);
+    s.seen = vec![[0.0; 5]; n];
 }
 
-/// Heat capacity, temperature, surface, head and reflectance of every ground node.
-fn ground_state(w: &World, s: &mut Scratch) {
-    let (n, area) = (w.grid.n(), s.area);
-    for i in 0..n {
-        s.cap[i] = s.bed[i][0];
+/// Space used only within a call, and the neighbour table (not saved).
+fn space(w: &World, s: &mut Scratch) {
+    let (n, na) = (w.grid.n(), w.grid.na());
+    s.nbr = (0..n).map(|i| around(&DIRS, w.grid.w, w.grid.h, i)).collect();
+    for v in [&mut s.rain, &mut s.sed_e, &mut s.mob] {
+        *v = vec![0.0; n];
     }
-    for &k in &s.loose {
-        let cp = s.sp[k].cp;
-        for (c, &a) in s.cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
-            *c += a * cp;
+    (s.p, s.th) = (vec![0.0; na], vec![0.0; na]);
+    (s.done, s.grad, s.cloud) = (vec![false; n], vec![[0.0; 2]; na], vec![[0.0; 2]; na]);
+}
+
+/// Heat capacity, temperature, surface, head and reflectance of every ground node. Between
+/// full steps the amounts change little: only nodes whose phases change (on or off a
+/// melting plateau, or past a melting point) get a new surface.
+fn ground_state(w: &World, s: &mut Scratch, full: bool) {
+    let n = w.grid.n();
+    if full {
+        for i in 0..n {
+            s.cap[i] = s.bed[i][0];
+        }
+        for &k in &s.loose {
+            let cp = s.sp[k].cp;
+            for (c, &a) in s.cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
+                *c += a * cp;
+            }
         }
     }
+    // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting
+    // point (a plateau) until all of that substance has frozen or melted.
     for i in 0..n {
-        s.tg[i] = w.e_ground[i] / s.cap[i].max(1.0);
-        s.z[i] = w.base_z + (s.bed[i][1] + s.fix[i][0]) / area;
-        s.lay[i] = [0.0, 0.0, 0.0, 0.0, s.fix[i][0], s.fix[i][1]];
+        let (c, e, [held, lo, hi, was]) = (s.cap[i].max(1.0), w.e_ground[i], s.hold[i]);
+        if !full && e >= lo && e < hi {
+            s.tg[i] = (e - held) / c;
+            continue;
+        }
+        let (mut held, mut lo, mut hi, pk) = (0.0, f64::MIN, f64::MAX, s.pk[i]);
+        s.pk[i] = NONE;
+        let mut stage = 0.0;
+        for &k in &s.vary {
+            let (p, a) = (&s.sp[k], w.ground[k * n + i]);
+            let at = c * p.melt + held;
+            if e < at {
+                hi = at;
+                break;
+            }
+            if a > 0.0 && e < at + a * p.lf {
+                (s.pk[i], s.phi[i], hi) = (k, (e - at) / (a * p.lf), f64::MIN);
+                break;
+            }
+            held += a * p.lf;
+            lo = at + a * p.lf;
+            stage += 1.0;
+        }
+        s.hold[i] = [held, lo, hi, stage];
+        s.tg[i] = if s.pk[i] == NONE { (e - held) / c } else { s.sp[s.pk[i]].melt };
+        if full || pk != NONE || s.pk[i] != NONE || stage != was {
+            surface(w, s, i);
+        }
     }
+}
+
+/// Solid surface, head, heat resistance of the soft cover and reflectance of node `i`, from
+/// the volume and volume × reflectance of its layers [soft solid, liquid, loose solid].
+fn surface(w: &World, s: &mut Scratch, i: usize) {
+    let (n, area, t) = (w.grid.n(), s.area, s.tg[i]);
+    let mut l = [0.0, 0.0, 0.0, 0.0, s.fix[i][0], s.fix[i][1]];
+    let (mut z, mut rc) = (w.base_z + (s.bed[i][1] + s.fix[i][0]) / area, 0.0);
     for &k in &s.vary {
-        let p = s.sp[k];
-        for (i, &a) in w.ground[k * n..(k + 1) * n].iter().enumerate() {
-            let (t, l) = (s.tg[i], &mut s.lay[i]);
-            if a <= 0.0 || t >= p.boil {
-                continue;
-            }
-            let (ph, o) = if t >= p.melt { (1, 2) } else if t > SOFT * p.melt { (0, 0) } else { (0, 4) };
-            l[o] += a * p.v[ph];
-            l[o + 1] += a * p.v[ph] * p.refl[ph];
-            if ph == 0 {
-                s.z[i] += a * p.v[0] / area;
-            }
+        let (p, a) = (&s.sp[k], w.ground[k * n + i]);
+        if a <= 0.0 || t >= p.boil {
+            continue;
+        }
+        let liq = molten(s, k, i);
+        let solid = a * (1.0 - liq) * p.v[0];
+        let o = if t > SOFT * p.melt { 0 } else { 4 };
+        (l[o], l[o + 1]) = (l[o] + solid, l[o + 1] + solid * p.refl[0]);
+        (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
+        z += solid / area;
+        if o == 0 {
+            rc += solid / area / p.cond;
         }
     }
-    for i in 0..n {
-        let l = s.lay[i];
-        s.head[i] = s.z[i] + l[2] / area;
-        let (mut a, mut seen) = (0.0, 1.0);
-        for c in 0..3 {
-            if l[2 * c] > 0.0 {
-                let d = l[2 * c] / area;
-                let cover = d / (d + HIDE_M[c]);
-                a += seen * cover * l[2 * c + 1] / l[2 * c];
-                seen *= 1.0 - cover;
-            }
+    let (mut a, mut seen) = (0.0, 1.0);
+    for c in 0..3 {
+        if l[2 * c] > 0.0 {
+            let d = l[2 * c] / area;
+            let cover = d / (d + HIDE_M[c]);
+            a += seen * cover * l[2 * c + 1] / l[2 * c];
+            seen *= 1.0 - cover;
         }
-        s.alb[i] = a + seen * s.bed[i][2];
     }
+    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, a + seen * s.bed[i][2]);
 }
 
 /// Liquid by head, as one ordered sweep from the highest head down: each node passes liquid
 /// to its lower neighbours, more to the steeper, so it can cross the map in one sweep while
-/// depressions fill and spill. The head lost heats the node. Once a month (`work` > 0, the
-/// month's share of this call) the power lost also does work: it carries loose solids up to
+/// depressions fill and spill. The head lost heats the node. Every few months (`work` > 0,
+/// their share of this call) the power lost also does work: it carries loose solids up to
 /// a capacity, drops the rest, and breaks bonded ground by power over bond strength.
 fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
-    let (n, gw, gh, area, g) = (w.grid.n(), w.grid.w, w.grid.h, s.area, w.cfg.gravity);
-    let dist = DIRS.map(|d| w.grid.dist(d));
+    let (n, area, g) = (w.grid.n(), s.area, w.cfg.gravity);
+    let inv = DIRS.map(|d| 1.0 / w.grid.dist(d));
     let (tmin, tmax) = range(&s.tg);
     let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && s.sp[k].boil > tmin).collect();
     let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin).collect();
     let ns = sol.len();
     s.sed.resize(n * ns, 0.0);
-    // Highest head first (heads to 0.1 m, then by cell). The order is kept for a month: any
-    // order is safe, it only sets how far liquid gets in one call.
-    if work > 0.0 || s.order.len() != n {
+    // Highest head first (heads to 0.1 m, then by cell). The order is kept between refreshes:
+    // any order is safe, it only sets how far liquid gets in one call.
+    if s.order.len() != n {
         s.order = s.head.iter().enumerate().map(|(i, &h)| (((2e4 - h).max(0.0) * 10.0) as u64) << 20 | i as u64).collect();
         s.order.sort_unstable();
     }
@@ -338,28 +472,41 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         let i = (s.order[r] & 0xf_ffff) as usize;
         let t = s.tg[i];
         s.done[i] = true;
-        let lvol: f64 = liq.iter().filter(|&&k| wet(s, k, t)).map(|&k| w.ground[k * n + i] * s.sp[k].v[1]).sum();
-        if lvol <= 0.0 && work <= 0.0 {
-            w.diag.liquid_flux[i] *= 1.0 - ema;
-            continue;
-        }
         // Lower neighbours, and how far this node's head may fall for each: down to a
         // neighbour still to come (which passes the liquid on) or to its own bed; half way
         // to one already done, so heads never cross.
         let (mut nb, mut q, mut room) = ([(0usize, 0.0f64); 8], [0.0f64; 8], [0.0f64; 8]);
         let (mut cnt, mut wsum, mut rmax) = (0, 0.0, 0.0f64);
-        for (d, j) in around(&DIRS, gw, gh, i).into_iter().enumerate() {
-            let dh = if j == usize::MAX { 0.0 } else { s.head[i] - s.head[j] };
-            if dh > 0.0 {
+        for (d, &j) in s.nbr[i].iter().enumerate() {
+            if j == NONE {
+                continue;
+            }
+            let dh = s.head[i] - s.head[j];
+            let r = if s.done[j] { 0.5 * dh } else { s.head[i] - s.head[j].max(s.z[i]) };
+            if dh > STILL_M && r > 0.0 {
                 nb[cnt] = (j, dh);
-                room[cnt] = if s.done[j] { 0.5 * dh } else { s.head[i] - s.head[j].max(s.z[i]) };
-                q[cnt] = dh / dist[d];
+                room[cnt] = r;
+                q[cnt] = dh * inv[d];
                 wsum += q[cnt];
                 rmax = rmax.max(room[cnt]);
                 cnt += 1;
             }
         }
-        let tcur = w.e_ground[i] / s.cap[i];
+        // The head above the surface is the liquid standing here.
+        if (cnt == 0 || s.head[i] <= s.z[i]) && work <= 0.0 {
+            w.diag.liquid_flux[i] *= 1.0 - ema;
+            continue;
+        }
+        let lvol: f64 = liq.iter().map(|&k| w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]).sum();
+        // Neighbours much less steep than the steepest get nothing.
+        let qmax = q[..cnt].iter().fold(0.0f64, |a, &b| a.max(b));
+        for c in 0..cnt {
+            if q[c] < SPLIT * qmax {
+                wsum -= q[c];
+                q[c] = 0.0;
+            }
+        }
+        let tcur = t;
         let (mut qsum, mut power, mut out) = (0.0, 0.0, 0.0);
         if lvol > 0.0 && cnt > 0 {
             let x = lvol.min(area * rmax);
@@ -368,15 +515,22 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 qsum += q[c];
             }
             for &k in &liq {
-                let a = w.ground[k * n + i];
-                if a <= 0.0 || !wet(s, k, t) {
+                let f = w.ground[k * n + i] * wet(s, k, i) / lvol;
+                if f <= 0.0 {
                     continue;
                 }
+                let (p, m) = (s.sp[k], (f * qsum).min(w.ground[k * n + i]));
+                let e = m * (p.cp * tcur + p.lf);
+                (w.ground[k * n + i], s.cap[i], w.e_ground[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp, w.e_ground[i] - e);
+                settle(s, k, i, -m);
+                out += m;
                 for (&(j, dh), &q) in nb[..cnt].iter().zip(&q) {
-                    let m = (a * q / lvol).min(w.ground[k * n + i]);
-                    shift(w, s, k, i, j, m, tcur);
-                    power += m * s.sp[k].mm * g * dh;
-                    out += m;
+                    if q > 0.0 {
+                        let (m, e) = (m * q / qsum, e * q / qsum);
+                        (w.ground[k * n + j], s.cap[j], w.e_ground[j]) = (w.ground[k * n + j] + m, s.cap[j] + m * p.cp, w.e_ground[j] + e);
+                        settle(s, k, j, m);
+                        power += m * p.mm * g * dh;
+                    }
                 }
             }
         }
@@ -387,12 +541,15 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             continue;
         }
 
-        // The month's work, on the bed below the liquid left standing (which hides it): drop
+        // The work, on the bed below the liquid left standing (which hides it): drop
         // what is over capacity (all of it where nothing flows on), else pick up loose solids
         // and break bonded ground; pass the load on with the flow.
         let bedwork = power * work * HIDE_M[1] / (HIDE_M[1] + (lvol - qsum).max(0.0) / area);
         let load: f64 = sol.iter().enumerate().map(|(si, &k)| s.sed[i * ns + si] * s.sp[k].v[0]).sum();
         let capv = w.cfg.carry * bedwork;
+        if load <= 0.0 && capv < 1.0 {
+            continue;
+        }
         if load > capv || qsum <= 0.0 {
             let f = if qsum > 0.0 { 1.0 - capv / load } else { 1.0 };
             for (si, &k) in sol.iter().enumerate() {
@@ -405,11 +562,12 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             w.e_ground[i] += s.sed_e[i] * f;
             s.sed_e[i] -= s.sed_e[i] * f;
         } else if bedwork > 0.0 {
-            let avail: f64 = sol.iter().filter(|&&k| t < s.sp[k].melt).map(|&k| w.ground[k * n + i] * s.sp[k].v[0]).sum();
+            let solid = |k: usize| w.ground[k * n + i] * (1.0 - molten(s, k, i));
+            let avail: f64 = sol.iter().map(|&k| solid(k) * s.sp[k].v[0]).sum();
             let f = if avail > 0.0 { ((capv - load) / avail).min(0.5) } else { 0.0 };
             for (si, &k) in sol.iter().enumerate() {
-                if t < s.sp[k].melt && f > 0.0 {
-                    let m = w.ground[k * n + i] * f;
+                if f > 0.0 {
+                    let m = w.ground[k * n + i] * (1.0 - molten(s, k, i)) * f;
                     w.ground[k * n + i] -= m;
                     s.sed[i * ns + si] += m;
                     s.cap[i] -= m * s.sp[k].cp;
@@ -475,9 +633,7 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     s.mob.fill(0.0);
     for &k in &sol {
         for i in 0..n {
-            if s.tg[i] < s.sp[k].melt {
-                s.mob[i] += w.ground[k * n + i] * s.sp[k].v[0] * soft[k];
-            }
+            s.mob[i] += w.ground[k * n + i] * (1.0 - molten(s, k, i)) * s.sp[k].v[0] * soft[k];
         }
     }
     let mut heat = 0.0;
@@ -487,7 +643,7 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
                 continue;
             }
             let dist = w.grid.dist(FORWARD[d]);
-            let (ti, tj) = (w.e_ground[i] / s.cap[i], w.e_ground[j] / s.cap[j]);
+            let (ti, tj) = (s.tg[i], s.tg[j]);
             let gk = (s.bed[i][3] + s.bed[j][3]) / 2.0 * w.cfg.skin_m * cell / dist;
             let qmax = 0.2 * (ti - tj).abs() * s.cap[i].min(s.cap[j]);
             let qh = (gk * (ti - tj) * dt).clamp(-qmax, qmax);
@@ -501,12 +657,12 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             }
             let r = w.cfg.creep * dz / dist * cell * dt / area;
             let f = (area * dz / 4.0 / (r * s.mob[a])).min(1.0);
-            let ta = w.e_ground[a] / s.cap[a];
+            let ta = s.tg[a];
             for &k in &sol {
-                let x = w.ground[k * n + a];
-                if x > 0.0 && s.tg[a] < s.sp[k].melt {
+                let x = w.ground[k * n + a] * (1.0 - molten(s, k, a));
+                if x > 0.0 {
                     let m = (x * r * f * soft[k]).min(0.25 * x);
-                    shift(w, s, k, a, b, m, ta);
+                    shift(w, s, k, a, b, m, s.sp[k].cp * ta);
                     let drop = m * s.sp[k].mm * g * dz / 2.0;
                     w.e_ground[b] += drop;
                     heat += drop;

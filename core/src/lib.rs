@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// Planet settings and free physics numbers.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
-    /// Sun strength at the top of the air, W/m² (the air reflects no sunlight here)
+    /// Sun strength at the top of the air, W/m²
     pub sun: f64,
     /// Axial tilt, degrees
     pub tilt: f64,
@@ -29,6 +29,8 @@ pub struct Config {
     pub months_per_year: u32,
     /// Ground and air physics run every `phys_days` days
     pub phys_days: u32,
+    /// Liquid, air and rain move every `flow_days` days (radiation every `phys_days`)
+    pub flow_days: u32,
     /// Depth of ground that exchanges heat with the surface, m
     pub skin_m: f64,
     /// Height of the air column, m
@@ -43,6 +45,8 @@ pub struct Config {
     pub wind: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
     pub mix: f64,
+    /// Condensation in the air at which its droplets cover half the sky, mol/(m² s)
+    pub cloud: f64,
     /// Loose solid volume moving liquid can carry per J it dissipates, m³/J
     pub carry: f64,
     /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J
@@ -54,7 +58,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            sun: 1100.0,
+            sun: 1361.0,
             tilt: 23.4,
             lat_south: 5.0,
             lat_north: 55.0,
@@ -62,6 +66,7 @@ impl Default for Config {
             days_per_month: 30,
             months_per_year: 12,
             phys_days: 3,
+            flow_days: 15,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             gravity: 9.81,
@@ -69,6 +74,7 @@ impl Default for Config {
             evap: 0.006,
             wind: 0.25,
             mix: 2e4,
+            cloud: 1.2e-2,
             carry: 1e-7,
             wear: 3e-9,
             creep: 1e-6,
@@ -127,8 +133,7 @@ pub struct World {
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,
-    /// Working memory of the laws, rebuilt when missing
-    #[serde(skip)]
+    /// Working memory of the laws, rebuilt when missing (saved, so a resumed run goes on the same)
     pub scratch: flow::Scratch,
 }
 
@@ -172,8 +177,41 @@ impl World {
         }
         c
     }
+    /// Temperature of a ground node, and the substance held at its melting point with its
+    /// liquid share, if any. Molten amounts hold their fusion enthalpy in `e_ground`, so a node
+    /// freezes or melts at a plateau.
+    pub fn thaw(&self, i: usize) -> (f64, Option<(usize, f64)>) {
+        let c = self.heat_cap_ground(i).max(1.0);
+        let mut ks: Vec<usize> = (0..self.chem.ns()).filter(|&k| self.g(k, i) > 0.0).collect();
+        ks.sort_by(|&a, &b| self.chem.subs[a].melt.total_cmp(&self.chem.subs[b].melt));
+        let (e, mut held) = (self.e_ground[i], 0.0);
+        for k in ks {
+            let (s, lat) = (&self.chem.subs[k], self.g(k, i) * self.chem.subs[k].lf);
+            let lo = c * s.melt + held;
+            if e < lo {
+                break;
+            }
+            if e < lo + lat {
+                return (s.melt, Some((k, (e - lo) / lat)));
+            }
+            held += lat;
+        }
+        ((e - held) / c, None)
+    }
     pub fn t_ground(&self, i: usize) -> f64 {
-        self.e_ground[i] / self.heat_cap_ground(i).max(1.0)
+        self.thaw(i).0
+    }
+    /// Thermal energy of a ground node at temperature `t` (with the fusion enthalpy of what is molten).
+    pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
+        let held: f64 = (0..self.chem.ns()).filter(|&k| self.chem.subs[k].melt < t).map(|k| self.g(k, i) * self.chem.subs[k].lf).sum();
+        self.heat_cap_ground(i) * t + held
+    }
+    /// Molten share of substance `k` in ground node `i` at temperature `t` (from `thaw`).
+    pub fn molten(&self, k: usize, t: f64, plateau: Option<(usize, f64)>) -> f64 {
+        match plateau {
+            Some((pk, f)) if pk == k => f,
+            _ => (t >= self.chem.subs[k].melt) as u8 as f64,
+        }
     }
     pub fn heat_cap_air(&self, j: usize) -> f64 {
         (0..self.chem.ns()).map(|k| self.a(k, j) * self.chem.subs[k].cp).sum()
@@ -184,24 +222,21 @@ impl World {
 
     /// Height of the solid surface (bonded + loose solids), m.
     pub fn surface_z(&self, i: usize) -> f64 {
-        let t = self.t_ground(i);
+        let (t, pl) = self.thaw(i);
         let mut v = 0.0;
         for k in 0..self.chem.ns() {
-            v += self.b(k, i) * self.chem.molar_volume(k, chem::Phase::Solid);
-            let p = self.chem.phase(k, t);
-            if p == chem::Phase::Solid {
-                v += self.g(k, i) * self.chem.molar_volume(k, p);
-            }
+            let mv = self.chem.molar_volume(k, chem::Phase::Solid);
+            v += (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, t, pl))) * mv;
         }
         self.base_z + v / self.grid.area()
     }
     /// Depth of liquid standing on a ground cell, m.
     pub fn liquid_depth(&self, i: usize) -> f64 {
-        let t = self.t_ground(i);
+        let (t, pl) = self.thaw(i);
         let mut v = 0.0;
         for k in 0..self.chem.ns() {
-            if self.chem.phase(k, t) == chem::Phase::Liquid {
-                v += self.g(k, i) * self.chem.molar_volume(k, chem::Phase::Liquid);
+            if t < self.chem.subs[k].boil {
+                v += self.g(k, i) * self.molten(k, t, pl) * self.chem.molar_volume(k, chem::Phase::Liquid);
             }
         }
         v / self.grid.area()

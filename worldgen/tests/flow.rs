@@ -12,7 +12,7 @@ fn liquid_runs_downhill() {
     let top = (0..n).max_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).unwrap();
     let t = w.t_ground(top).max(w.chem.subs[k].melt + 5.0);
     w.ground[k * n + top] += 1e9;
-    w.e_ground[top] = w.heat_cap_ground(top) * t;
+    w.e_ground[top] = w.energy_ground(top, t);
     let (t0, l0) = (totals(&w), w.ledger.clone());
     pcore::flow::step(&mut w, DT);
     assert!(w.ground[k * n + top] < 1e8, "liquid stayed on the top: {}", w.ground[k * n + top]);

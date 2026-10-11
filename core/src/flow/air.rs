@@ -1,7 +1,7 @@
 //! Flow in and through the air: radiation, contact heat, evaporation and condensation,
 //! and gas between air nodes.
 
-use super::{range, settle, Scratch, HIDE_M};
+use super::{range, settle, Scratch, HIDE_M, NONE};
 use crate::chem::R_GAS;
 use crate::World;
 use std::f64::consts::{LN_2, PI, TAU};
@@ -23,10 +23,16 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
 /// the air each ground cell sees, and for each gas how high it fills its column: a gas that
 /// would condense higher up is held near the ground, by how fast its vapour pressure falls
 /// with the temperature falling upwards.
-pub(super) fn state(w: &World, s: &mut Scratch) {
+pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
     let (n, na, g, top) = (w.grid.n(), w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
+    if !full {
+        for j in 0..na {
+            s.ta[j] = w.e_air[j] / s.capa[j];
+        }
+        return;
+    }
     for j in 0..na {
-        (s.za[j], s.nt[j], s.capa[j], s.mass[j], s.fabs[j]) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        (s.za[j], s.nt[j], s.capa[j], s.mass[j], s.fabs[j], s.p[j]) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     }
     for i in 0..n {
         s.za[s.air_of[i] as usize] += s.head[i];
@@ -50,10 +56,6 @@ pub(super) fn state(w: &World, s: &mut Scratch) {
         let h = R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j]);
         s.zair[j] = s.za[j] + h - l / (l / h).exp_m1();
     }
-    for i in 0..n {
-        let (ta, f) = (lerp(s, &s.ta, i), lerp(s, &s.fabs, i));
-        s.view[i] = [(ta - lerp(s, &s.gam, i) * (s.head[i] - lerp(s, &s.zair, i))).max(1.0), f, f * SIGMA * ta.powi(4)];
-    }
     let ng = s.gas.len();
     (s.cond, s.hk, s.split) = (vec![false; ng], vec![0.0; ng * na], vec![0.0; ng * na]);
     for (gi, &k) in s.gas.iter().enumerate() {
@@ -61,6 +63,23 @@ pub(super) fn state(w: &World, s: &mut Scratch) {
             let t = (s.ta[j] - s.gam[j] * (top - s.zair[j])).max(1.0);
             w.chem.p_sat(k, t) < w.air[k * na + j] * R_GAS * s.ta[j] / s.vol[j]
         });
+    }
+    // Rising air in which a gas condenses cools slower: its vaporisation enthalpy is freed
+    // as the share it can hold falls with the temperature (Clausius-Clapeyron).
+    for (gi, &k) in s.gas.iter().enumerate() {
+        if s.cond[gi] {
+            for j in 0..na {
+                let (t, lv) = (s.ta[j], s.sp[k].lv);
+                let x = w.chem.p_sat(k, t) * s.vol[j] / (s.nt[j] * R_GAS * t);
+                s.p[j] += s.nt[j] * lv * lv * x.min(1.0) / (R_GAS * t * t);
+            }
+        }
+    }
+    for j in 0..na {
+        s.gam[j] = g * s.mass[j] / (s.capa[j] + s.p[j]);
+        s.p[j] = 0.0;
+    }
+    for (gi, &k) in s.gas.iter().enumerate() {
         for j in 0..na {
             let h = (R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j])).min((top - s.za[j]).max(100.0));
             let mut hk = h;
@@ -72,6 +91,18 @@ pub(super) fn state(w: &World, s: &mut Scratch) {
             s.split[gi * na + j] = (-(h / hk) * LN_2).exp();
         }
     }
+    let node: Vec<[f64; 4]> = (0..na).map(|j| [s.gam[j], s.zair[j], s.fabs[j], s.ta[j]]).collect();
+    for i in 0..n {
+        let (j, wt, mut v) = (s.near[i], s.wt[i], [0.0; 4]);
+        for c in 0..4 {
+            let x = node[j[c] as usize];
+            for f in 0..4 {
+                v[f] += wt[c] * x[f];
+            }
+        }
+        s.seen[i] = [v[0], v[1], v[2], s.seen[i][3], v[3]];
+    }
+    s.ta0.copy_from_slice(&s.ta);
 }
 
 /// Daily-mean sunlight at the top of the air, W/m².
@@ -87,23 +118,28 @@ fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
 pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
     let World { cfg, grid, e_ground, e_air, ledger, .. } = w;
-    let (n, na, area) = (grid.n(), grid.na(), s.area);
+    let (na, area) = (grid.na(), s.area);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
-    let (mut sun, mut out, mut row, mut q) = (0.0, 0.0, usize::MAX, 0.0);
+    let (mut sun, mut out) = (0.0, 0.0);
     s.p.fill(0.0);
-    for i in 0..n {
-        if i / grid.w != row {
-            row = i / grid.w;
-            q = insolation(cfg.sun, grid.lat(row, cfg.lat_south, cfg.lat_north).to_radians(), decl);
-        }
-        let ([tl, f, down], t) = (s.view[i], s.tg[i]);
-        let sw = q * (1.0 - s.alb[i]);
+    let suns = (0..grid.h).map(|y| insolation(cfg.sun, grid.lat(y, cfg.lat_south, cfg.lat_north).to_radians(), decl));
+    for (i, q) in suns.flat_map(|q| std::iter::repeat_n(q, grid.w)).enumerate() {
+        // The air this cell sees, and its temperature where it touches the ground.
+        let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
+        let ta = ta + s.ta[j] - s.ta0[j];
+        let (tl, down) = ((ta - gam * (s.head[i] - zair)).max(1.0), f * SIGMA * ta.powi(4));
+        s.tl[i] = tl;
+        let sw = q * (1.0 - c) * (1.0 - s.alb[i]);
+        // The surface temperature, implicit: heat reaches the surface from the node through
+        // its heat capacity over the step (none on a melting plateau, which holds the node
+        // still) in series with the conduction of any soft solid cover.
         let (k1, t3) = (s.cap[i] / (area * dt), SIGMA * t * t * t);
-        let t1 = (k1 * t + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (k1 + 4.0 * t3 + cfg.sensible);
-        let up = t3 * (4.0 * t1 - 3.0 * t);
-        let hs = cfg.sensible * (t1 - tl);
+        let r = if s.pk[i] != NONE { 0.0 } else { 1.0 / k1 } + s.rc[i];
+        let ts = if r > 0.0 { (t / r + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (1.0 / r + 4.0 * t3 + cfg.sensible) } else { t };
+        let up = t3 * (4.0 * ts - 3.0 * t);
+        let hs = cfg.sensible * (ts - tl);
         e_ground[i] += area * dt * (sw + down - up - hs);
-        s.p[s.air_of[i] as usize] += area * dt * (f * up + hs - 2.0 * down);
+        s.p[j] += area * dt * (f * up + hs - 2.0 * down);
         sun += area * dt * sw;
         out += area * dt * ((1.0 - f) * up + down);
     }
@@ -115,79 +151,108 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     ledger.space_out += out;
 }
 
+/// Saturation pressure of one substance, tabulated every 0.05 K over a range of temperatures.
+struct Sat(f64, Vec<f64>);
+
+impl Sat {
+    fn new(w: &World, k: usize, lo: f64, hi: f64) -> Self {
+        let t0 = lo.max(2.0) - 1.0;
+        Sat(t0, (0..((hi + 1.0 - t0) * 20.0) as usize + 2).map(|i| w.chem.p_sat(k, t0 + i as f64 / 20.0)).collect())
+    }
+    fn at(&self, t: f64) -> f64 {
+        let x = ((t - self.0) * 20.0).clamp(0.0, (self.1.len() - 2) as f64);
+        let (i, f) = (x as usize, x.fract());
+        self.1[i] + (self.1[i + 1] - self.1[i]) * f
+    }
+}
+
 /// Evaporation by vapour pressure (the ground's saturation pressure against the partial
-/// pressure near the ground), gases leaving the ground, and condensation where the air a
-/// ground cell sees holds more than it can at its temperature (colder on higher ground).
+/// pressure near the ground), gases leaving the ground; then condensation where the air a
+/// ground cell sees holds more than it can at its temperature (colder on higher ground), so
+/// what the air cannot hold rains out within the call.
 pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
-    let (_, tmax) = range(&s.tg);
+    let ((tmin, tmax), tl) = (range(&s.tg), range(&s.tl));
+    let (lo, hi) = (tmin.min(tl.0), tmax.max(tl.1));
     for gi in 0..s.gas.len() {
         let (k, sp) = (s.gas[gi], s.sp[s.gas[gi]]);
-        if !s.loose.contains(&k) || w.chem.p_sat(k, tmax) <= 1.0 {
+        let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0;
+        if !up && !s.cond[gi] {
             continue;
         }
+        let sat = Sat::new(w, k, lo, hi);
+        // The column above a cell, and the height it fills near the ground.
+        let column = |s: &Scratch, i: usize| (lerp(s, &s.snap, i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
         s.snap.clear();
         s.snap.extend_from_slice(&w.air[k * na..(k + 1) * na]);
         for i in 0..n {
-            let (a, t, j) = (w.ground[k * n + i], s.tg[i], s.air_of[i] as usize);
-            if a <= 0.0 {
+            let (a, t, j, tl) = (w.ground[k * n + i], s.tg[i], s.air_of[i] as usize, s.tl[i]);
+            if !up || a <= 0.0 {
+                continue;
+            }
+            let (share, hk) = column(s, i);
+            let pa = share * R_GAS * tl / (area * hk);
+            let ps = if t >= sp.boil { f64::INFINITY } else { sat.at(t) };
+            if ps <= pa {
                 continue;
             }
             let m = if t >= sp.boil {
                 a
             } else {
-                let (ps, hk, tl) = (w.chem.p_sat(k, t), lerp(s, &s.hk[gi * na..(gi + 1) * na], i), s.view[i][0]);
-                let pa = lerp(s, &s.snap, i) * s.per[i] * R_GAS * tl / (area * hk);
-                if ps <= pa {
-                    continue;
-                }
                 let d = a * sp.v[(t >= sp.melt) as usize] / area;
-                let rate = w.cfg.evap * (ps - pa) / (R_GAS * t) * d / (d + HIDE_M[1]) * area * dt;
-                rate.min((ps - pa) * area * hk / (R_GAS * tl)).min(a)
+                (w.cfg.evap * (ps - pa) / (R_GAS * t) * d / (d + HIDE_M[1]) * area * dt).min(a)
             };
-            let heat = m * sp.cp * w.e_ground[i] / s.cap[i];
-            let lift = m * g * sp.mm * (s.zair[j] - s.head[i]);
+            // The ground also pays the fusion and vaporisation enthalpy the air will hold.
+            let (heat, lift) = (m * sp.cp * t, m * g * sp.mm * (s.zair[j] - s.head[i]));
             settle(s, k, i, -m);
             w.ground[k * n + i] -= m;
             w.air[k * na + j] += m;
             (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * sp.cp, s.capa[j] + m * sp.cp, s.nt[j] + m, s.mass[j] + m * sp.mm);
-            w.e_ground[i] -= heat;
+            w.e_ground[i] -= heat + m * (sp.lf + sp.lv);
             w.e_air[j] += heat - lift;
             w.ledger.gravity -= lift;
         }
-    }
-    for gi in 0..s.gas.len() {
-        let (k, sp) = (s.gas[gi], s.sp[s.gas[gi]]);
         if !s.cond[gi] {
             continue;
         }
         s.snap.clear();
         s.snap.extend_from_slice(&w.air[k * na..(k + 1) * na]);
+        let mut rained = false;
         for i in 0..n {
-            let (j, tl) = (s.air_of[i] as usize, s.view[i][0]);
-            let hold = w.chem.p_sat(k, tl) * area * lerp(s, &s.hk[gi * na..(gi + 1) * na], i) / (R_GAS * tl);
-            let m = (lerp(s, &s.snap, i) * s.per[i] - hold).min(w.air[k * na + j]);
+            let (j, tl) = (s.air_of[i] as usize, s.tl[i]);
+            let (share, hk) = column(s, i);
+            let m = (share - sat.at(tl) * area * hk / (R_GAS * tl)).min(w.air[k * na + j]);
             if m <= 0.0 {
                 continue;
             }
-            let tair = w.e_air[j] / s.capa[j];
-            let lift = m * g * sp.mm * (s.head[i] - s.zair[j]);
+            let (tair, lift) = (w.e_air[j] / s.capa[j], m * g * sp.mm * (s.head[i] - s.zair[j]));
             settle(s, k, i, m);
             w.ground[k * n + i] += m;
             w.air[k * na + j] -= m;
             (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] + m * sp.cp, s.capa[j] - m * sp.cp, s.nt[j] - m, s.mass[j] - m * sp.mm);
-            w.e_ground[i] += m * sp.cp * tair - lift;
-            w.e_air[j] -= m * sp.cp * tair;
+            // Condensing frees the vaporisation enthalpy into the air; the liquid keeps its fusion.
+            w.e_ground[i] += m * (sp.cp * tair + sp.lf) - lift;
+            w.e_air[j] += m * (sp.lv - sp.cp * tair);
             w.ledger.gravity -= lift;
             s.rain[i] += m;
+            s.cloud[j] = [s.cloud[j][0] + m, s.cloud[j][1] + m * sp.refl[0]];
+            rained = true;
         }
-        if !s.loose.contains(&k) && (0..n).any(|i| s.rain[i] > 0.0) {
+        if rained && !s.loose.contains(&k) {
             s.loose.push(k);
             s.vary.push(k);
         }
     }
+    // Condensate in the air scatters sunlight like the powder of its solid; the faster a
+    // node condenses, the more of its sky it covers.
+    for j in 0..na {
+        let [m, mr] = std::mem::take(&mut s.cloud[j]);
+        let rate = m / (area * s.cells[j] * dt);
+        s.p[j] = if m > 0.0 { rate / (rate + w.cfg.cloud) * mr / m } else { 0.0 };
+    }
     let ema = (dt / (w.days_per_year() as f64 * 86_400.0)) as f32;
     for i in 0..n {
+        s.seen[i][3] = lerp(s, &s.p, i);
         let r = (s.rain[i] / (area * dt)) as f32;
         w.diag.rain[i] += (r - w.diag.rain[i]) * ema;
         s.rain[i] = 0.0;
@@ -256,39 +321,37 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
                 s.push[p] = [cfg.mix * rho * depth, over, even];
                 s.mflux[p] = 0.0;
             }
-            // Gases. The halves are refreshed from the previous solution (Picard); the
+            // Gases, split into lower and upper halves by the amounts before the step. The
             // overturning moves as much up as down, so any net amount left over on an edge
             // beyond the pressure push is handed back by the node that gained it.
-            for it in 0..3 {
-                for p in 0..len {
-                    s.lh[p] = [0.0; 2];
-                    for t in 0..ng {
-                        let (j, k) = (node(line, p), s.gas[t]);
-                        let a = if it == 0 { air[k * na + j] } else { s.xs[t * len + p] };
-                        let u = a * s.split[t * na + j];
-                        s.lh[p][0] += a - u;
-                        s.lh[p][1] += u;
-                    }
-                }
+            for p in 0..len {
+                s.lh[p] = [0.0; 2];
                 for t in 0..ng {
-                    for p in 0..len - 1 {
-                        let (a, b) = (node(line, p), node(line, p + 1));
-                        let [mix, over, even] = s.push[p];
-                        let (fp, fm, ep, em) = (over.max(0.0), (-over).max(0.0), even.max(0.0), (-even).max(0.0));
-                        let ([la, ua], [lb, ub]) = (s.lh[p], s.lh[p + 1]);
-                        let (sa, sb) = (s.split[t * na + a], s.split[t * na + b]);
-                        s.al[p] = dt * ((mix + ep) / s.nt[a] + fp * (1.0 - sa) / la + fm * sa / ua);
-                        s.be[p] = dt * ((mix + em) / s.nt[b] + fp * sb / ub + fm * (1.0 - sb) / lb);
-                    }
-                    let k = s.gas[t];
-                    for p in 0..len {
-                        s.x[p] = air[k * na + node(line, p)];
-                    }
-                    thomas(&s.al[..len - 1], &s.be[..len - 1], &mut s.x[..len], &mut s.cw[..len]);
-                    s.xs[t * len..(t + 1) * len].copy_from_slice(&s.x[..len]);
-                    for p in 0..len - 1 {
-                        s.fl[t * len + p] = s.al[p] * s.x[p] - s.be[p] * s.x[p + 1];
-                    }
+                    let j = node(line, p);
+                    let a = air[s.gas[t] * na + j];
+                    let u = a * s.split[t * na + j];
+                    s.lh[p][0] += a - u;
+                    s.lh[p][1] += u;
+                }
+            }
+            for t in 0..ng {
+                for p in 0..len - 1 {
+                    let (a, b) = (node(line, p), node(line, p + 1));
+                    let [mix, over, even] = s.push[p];
+                    let (fp, fm, ep, em) = (over.max(0.0), (-over).max(0.0), even.max(0.0), (-even).max(0.0));
+                    let ([la, ua], [lb, ub]) = (s.lh[p], s.lh[p + 1]);
+                    let (sa, sb) = (s.split[t * na + a], s.split[t * na + b]);
+                    s.al[p] = dt * ((mix + ep) / s.nt[a] + fp * (1.0 - sa) / la + fm * sa / ua);
+                    s.be[p] = dt * ((mix + em) / s.nt[b] + fp * sb / ub + fm * (1.0 - sb) / lb);
+                }
+                let k = s.gas[t];
+                for p in 0..len {
+                    s.x[p] = air[k * na + node(line, p)];
+                }
+                thomas(&s.al[..len - 1], &s.be[..len - 1], &mut s.x[..len], &mut s.cw[..len]);
+                s.xs[t * len..(t + 1) * len].copy_from_slice(&s.x[..len]);
+                for p in 0..len - 1 {
+                    s.fl[t * len + p] = s.al[p] * s.x[p] - s.be[p] * s.x[p + 1];
                 }
             }
             for p in 0..len {

@@ -151,8 +151,9 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     };
     for i in 0..n {
         let (_, y) = world.grid.xy(i);
-        let t = t_at(&world, y, hz[i]);
-        world.e_ground[i] = world.heat_cap_ground(i) * t;
+        // Low ground starts with its liquid molten.
+        let t = t_at(&world, y, hz[i]).max(if hz[i] < 0.0 { world.chem.subs[init.low].melt + 2.0 } else { 0.0 });
+        world.e_ground[i] = world.energy_ground(i, t);
     }
     for j in 0..na {
         let y = (j / world.grid.aw()) * world.grid.air_scale + world.grid.air_scale / 2;
