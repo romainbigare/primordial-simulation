@@ -20,6 +20,7 @@ pub enum Purpose {
     Choose,
     Learn,
     Bond,
+    Chem,
 }
 
 pub struct Rng(u64);

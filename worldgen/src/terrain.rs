@@ -38,7 +38,7 @@ fn fbm(seed: u64, x: f64, y: f64, octaves: u32) -> f64 {
     sum / norm
 }
 
-/// Height map in metres (sea level 0).
+/// Height map in metres (zero is the flat reference level).
 pub fn heights(seed: u64, w: usize, h: usize) -> Vec<f64> {
     let mut out = vec![0.0; w * h];
     let scale = 6.0 / w.max(h) as f64;

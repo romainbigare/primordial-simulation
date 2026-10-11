@@ -1,5 +1,6 @@
 //! Headless runs, pictures and the history tape.
 
+mod chem;
 mod render;
 
 use pcore::World;
@@ -22,12 +23,13 @@ fn main() {
             let size = args.get("--size", 128usize);
             drive(worldgen::new_world(args.get("--seed", 1u64), size, size), &args, false);
         }
+        "chem" => chem::run(&args.0),
         "resume" => {
             let from = args.get("--from", String::new());
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
