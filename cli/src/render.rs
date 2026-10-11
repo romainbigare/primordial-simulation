@@ -1,4 +1,4 @@
-//! Quick PNG pictures of a world: map, temperature, rain side by side.
+//! Quick PNG pictures of a world: map, temperature, rain and life side by side.
 
 use pcore::World;
 use tape::{fields, Fields};
@@ -52,7 +52,13 @@ pub fn save(w: &World, path: &str) {
     let f = fields(w);
     let (gw, gh) = (w.grid.w, w.grid.h);
     let s = 3; // pixels per cell
-    let panels = 3;
+    let panels = 4;
+    // Life: mass per area of light-eaters (green) and of the other bodies (orange dots), kg/m².
+    let (mut green, mut other) = (vec![0.0; w.grid.n()], vec![0.0; w.grid.n()]);
+    for b in w.life.alive() {
+        let m = b.mass(&w.chem) / w.grid.area();
+        *if pcore::body::light_eater(&w.chem, &b.genes) { &mut green[b.cell as usize] } else { &mut other[b.cell as usize] } += m;
+    }
     let (pw, ph) = (gw * s * panels + (panels - 1) * 4, gh * s);
     let mut img = vec![255u8; pw * ph * 3];
     let n = w.grid.n();
@@ -63,10 +69,16 @@ pub fn save(w: &World, path: &str) {
             ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
             ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.diag.rain[i] as f64 * 3.15e7).max(1.0).log10()),
+            {
+                let base = if f.depth[i] > 1.0 { [40, 50, 70] } else { [90, 85, 80] };
+                ramp(&[(-3.0, base), (-1.5, [60, 120, 40]), (0.0, [30, 200, 40])], green[i].max(1e-9).log10())
+            },
         ];
         for (p, c) in cols.iter().enumerate() {
             for dy in 0..s {
                 for dx in 0..s {
+                    let dot = p == 3 && other[i] > 1e-5 && dx == 1 && dy == 1;
+                    let c = &if dot { ramp(&[(-5.0, [255, 170, 60]), (-2.0, [255, 30, 0])], other[i].log10()) } else { *c };
                     let px = p * (gw * s + 4) + x * s + dx;
                     let o = ((y * s + dy) * pw + px) * 3;
                     img[o..o + 3].copy_from_slice(c);

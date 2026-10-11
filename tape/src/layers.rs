@@ -71,6 +71,10 @@ pub struct Ctx<'a> {
     pub t_air: Vec<f64>,
     pub vapor: Vec<f64>,
     pub absorber: Vec<f64>,
+    /// Per ground cell: body mass of light-eaters ("plants") and of the others ("animals"), kg/m²; bodies
+    pub plants: Vec<f64>,
+    pub animals: Vec<f64>,
+    pub bodies: Vec<f64>,
 }
 
 impl<'a> Ctx<'a> {
@@ -80,7 +84,15 @@ impl<'a> Ctx<'a> {
         for i in 0..w.grid.n() {
             cells[w.grid.air_of(i)] += 1.0;
         }
-        let mut c = Ctx { w, f: fields(w), t_air: (0..na).map(|j| w.t_air(j)).collect(), vapor: vec![0.0; na], absorber: vec![0.0; na] };
+        let n = w.grid.n();
+        let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
+        let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n] };
+        for b in w.life.alive() {
+            let i = b.cell as usize;
+            let m = b.mass(&w.chem) / w.grid.area();
+            *if pcore::body::light_eater(&w.chem, &b.genes) { &mut c.plants[i] } else { &mut c.animals[i] } += m;
+            c.bodies[i] += 1.0;
+        }
         for j in 0..na {
             let area = cells[j] * w.grid.area();
             for k in 0..ns {
@@ -123,6 +135,9 @@ pub const LAYERS: &[Layer] = &[
     l("rain", "mol/m2/s", "log", 1e-9, 1e-4, |c, i| c.w.diag.rain.get(i).copied().unwrap_or(0.0) as f64),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
+    l("plants", "kg/m2", "log", 1e-3, 10.0, |c, i| c.plants[i]),
+    l("animals", "kg/m2", "log", 1e-4, 1.0, |c, i| c.animals[i]),
+    l("bodies", "1", "lin", 0.0, 32.0, |c, i| c.bodies[i]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),

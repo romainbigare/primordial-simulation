@@ -2,6 +2,7 @@
 
 pub mod chemistry;
 pub mod generate;
+pub mod life;
 pub mod richness;
 pub mod terrain;
 

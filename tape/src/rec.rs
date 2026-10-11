@@ -21,6 +21,9 @@ pub struct Recorder {
     bytes: Vec<u8>,
     series: Vec<Column>,
     log: Vec<(u64, String)>,
+    /// Births and deaths by cause since the last yearly row
+    births: f64,
+    deaths: [f64; 4],
 }
 
 fn describe(e: &Event) -> String {
@@ -47,6 +50,8 @@ impl Recorder {
             bytes: vec![],
             series: vec![],
             log: vec![],
+            births: 0.0,
+            deaths: [0.0; 4],
         }
     }
 
@@ -76,7 +81,13 @@ impl Recorder {
     /// Call at the start and after every simulated month.
     pub fn record_month(&mut self, w: &mut World) {
         self.detect(w);
-        self.log.extend(w.events.drain(..).map(|e| (e.day, describe(&e))));
+        for e in w.events.drain(..) {
+            match e.kind {
+                EventKind::Born => self.births += 1.0,
+                EventKind::Died { cause } => self.deaths[(cause as usize).min(3)] += 1.0,
+                _ => self.log.push((e.day, describe(&e))),
+            }
+        }
         let dpy = w.days_per_year();
         let (year, yearly) = (w.day / dpy, w.day % dpy == 0);
         let framed = year < self.monthly || (yearly && self.every > 0 && year % self.every == 0);
@@ -94,6 +105,9 @@ impl Recorder {
     }
 
     fn push_series(&mut self, c: &Ctx) {
+        let life = &c.w.life;
+        let light_eaters = life.alive().filter(|b| pcore::body::light_eater(&c.w.chem, &b.genes)).count() as f64;
+        let bodies = life.alive().count() as f64;
         let w = c.w;
         let n = w.grid.n() as f64;
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
@@ -109,7 +123,20 @@ impl Recorder {
             ("ice_frac".to_string(), "1", c.f.ice.iter().filter(|&&v| v >= COVER_MIN).count() as f64 / n),
             ("liquid_land".to_string(), "km3", land_liquid / 1e9),
             ("rain".to_string(), "mol/m2/s", w.diag.rain.iter().map(|&v| v as f64).sum::<f64>() / n),
+            ("bodies".to_string(), "1", bodies),
+            ("plants".to_string(), "1", light_eaters),
+            ("animals".to_string(), "1", bodies - light_eaters),
+            ("eat_animals".to_string(), "1", life.alive().filter(|b| b.took[1] > b.took[0]).count() as f64),
+            ("lineages".to_string(), "1", life.lineages() as f64),
+            ("lineages_ever".to_string(), "1", life.brains.len() as f64),
+            ("births".to_string(), "1/yr", self.births),
+            ("died_lack".to_string(), "1/yr", self.deaths[0]),
+            ("died_phase".to_string(), "1/yr", self.deaths[1]),
+            ("died_spent".to_string(), "1/yr", self.deaths[2]),
+            ("died_taken".to_string(), "1/yr", self.deaths[3]),
+            ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
+        (self.births, self.deaths) = (0.0, [0.0; 4]);
         if self.series.is_empty() {
             self.series = row.iter().map(|r| (r.0.clone(), r.1, vec![])).collect();
         }

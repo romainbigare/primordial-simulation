@@ -86,7 +86,7 @@ fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
 /// from the air's mean height). The ground temperature is solved implicitly.
 pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, e_ground, e_air, ledger, .. } = w;
+    let World { cfg, grid, e_ground, e_air, ledger, canopy, light, .. } = w;
     let (n, na, area) = (grid.n(), grid.na(), s.area);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out, mut row, mut q) = (0.0, 0.0, usize::MAX, 0.0);
@@ -97,7 +97,13 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
             q = insolation(cfg.sun, grid.lat(row, cfg.lat_south, cfg.lat_north).to_radians(), decl);
         }
         let ([tl, f, down], t) = (s.view[i], s.tg[i]);
-        let sw = q * (1.0 - s.alb[i]);
+        // Bodies with light-capture area `a` per ground area intercept a share 1 - exp(-a).
+        let a = canopy[i] as f64;
+        let cover = -(-a).exp_m1();
+        if a > 0.0 {
+            light[i] += q * cover * dt / a;
+        }
+        let sw = q * (1.0 - cover) * (1.0 - s.alb[i]);
         let (k1, t3) = (s.cap[i] / (area * dt), SIGMA * t * t * t);
         let t1 = (k1 * t + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (k1 + 4.0 * t3 + cfg.sensible);
         let up = t3 * (4.0 * t1 - 3.0 * t);

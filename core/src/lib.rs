@@ -1,8 +1,12 @@
 //! The world core: one graph, five laws. No IO, no clocks, no Earth words.
 
+pub mod body;
+pub mod brain;
 pub mod change;
 pub mod check;
 pub mod chem;
+pub mod choose;
+pub mod copy;
 pub mod event;
 pub mod flow;
 pub mod grid;
@@ -49,6 +53,8 @@ pub struct Config {
     pub wear: f64,
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
+    /// Most bodies one cell can hold (a speed safeguard: copying into a full cell fails)
+    pub max_bodies_per_cell: usize,
 }
 
 impl Default for Config {
@@ -72,6 +78,7 @@ impl Default for Config {
             carry: 1e-7,
             wear: 3e-9,
             creep: 1e-6,
+            max_bodies_per_cell: 6,
         }
     }
 }
@@ -124,6 +131,12 @@ pub struct World {
     pub base_z: f64,
     pub diag: Diag,
     pub ledger: Ledger,
+    /// Bodies (the sparse graph)
+    pub life: body::Life,
+    /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
+    pub canopy: Vec<f32>,
+    /// Light intercepted in each cell per m² of light-capture area since the start, J/m²
+    pub light: Vec<f64>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,
@@ -214,9 +227,11 @@ pub fn step(w: &mut World) {
     for d in 0..dpm {
         if d % w.cfg.phys_days == 0 {
             let dt = w.cfg.phys_days.min(dpm - d) as f64 * 86_400.0;
+            body::survey(w);
             flow::step(w, dt);
             change::step(w, dt);
         }
+        body::day(w);
         w.day += 1;
     }
 }

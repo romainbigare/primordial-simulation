@@ -23,7 +23,14 @@ pub fn totals(w: &World) -> Totals {
             chemical += sum * chem.subs[k].hf;
         }
     }
-    let thermal = w.e_ground.iter().sum::<f64>() + w.e_air.iter().sum::<f64>();
+    let mut thermal = w.e_ground.iter().sum::<f64>() + w.e_air.iter().sum::<f64>();
+    for b in w.life.alive() {
+        for (k, &a) in b.store.iter().enumerate() {
+            chem.add_elems(k, a, &mut elems);
+            chemical += a * chem.subs[k].hf;
+        }
+        thermal += b.e;
+    }
     Totals { elems, thermal, chemical }
 }
 
@@ -57,6 +64,11 @@ pub fn broken(w: &World) -> Option<String> {
             return Some(format!("{name}[{i}] = {}", v[i]));
         }
     }
+    for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
+        if !b.e.is_finite() || b.e <= 0.0 || b.store.iter().any(|x| !x.is_finite() || *x < 0.0) {
+            return Some(format!("body {s}: energy {}, stores {:?}", b.e, b.store));
+        }
+    }
     None
 }
 
@@ -71,6 +83,12 @@ pub fn hash(w: &World) -> u64 {
     eat(&mut h, w.day);
     for v in [&w.ground, &w.bed, &w.e_ground, &w.air, &w.e_air] {
         for x in v {
+            eat(&mut h, x.to_bits());
+        }
+    }
+    for b in w.life.alive() {
+        eat(&mut h, b.cell as u64);
+        for x in b.store.iter().chain([&b.e]) {
             eat(&mut h, x.to_bits());
         }
     }

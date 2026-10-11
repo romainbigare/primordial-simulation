@@ -40,7 +40,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -59,7 +59,11 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     render::save(&w, &format!("{out}/year{y0:04}.png"));
     rec.record_month(&mut w);
     let mut busy = Duration::ZERO;
+    let life_year = if resumed { -1 } else { a.get("--life-year", 2i64) };
     for y in y0 + 1..=y0 + years {
+        if y as i64 - 1 == life_year {
+            worldgen::life::seed(&mut w);
+        }
         for _ in 0..w.cfg.months_per_year {
             let t = Instant::now();
             pcore::step(&mut w);
@@ -73,7 +77,8 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
         }
         if y % every == 0 || y == y0 + years {
             let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}");
+            let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| pcore::body::light_eater(&w.chem, &b.genes)).count());
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, bodies {all} ({le} light-eaters), lineages {}", w.life.lineages());
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }
         if y % snap_every == 0 || y == y0 + years {
