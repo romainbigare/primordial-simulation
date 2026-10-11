@@ -1,0 +1,179 @@
+import { World, gunzip, parse, plane, fmt, fmtYear, unitText } from './data';
+import { CLASSES, paint, rampFor, rampCss } from './earth';
+import { MapView } from './map';
+import { Charts } from './charts';
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const LABELS: Record<string, string> = {
+  t_ground: 'Ground temperature', t_air: 'Air temperature', rain: 'Rain', vapor: 'Vapor', absorber: 'Absorber',
+  depth: 'Liquid depth', flux: 'River flux', loose: 'Loose sediment', ice: 'Ice', z: 'Elevation',
+};
+const ORDER = Object.keys(LABELS);
+const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).replace(/_/g, ' '));
+const SPEEDS = [1, 2, 4, 8, 16, 32];
+
+let world: World | null = null;
+let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null;
+let cls = new Uint8Array(0);
+
+const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect());
+const charts = new Charts($('charts'), year => world && setFrame(nearestFrame(year)));
+
+// ---- loading
+async function load(buf: ArrayBuffer): Promise<void> {
+  try {
+    world = parse(await gunzip(buf));
+  } catch (e) { return say(String(e instanceof Error ? e.message : e)); }
+  setup(world);
+}
+const say = (t: string) => { $('msg').textContent = t; $('msg').hidden = !t; };
+
+function setup(w: World): void {
+  const m = w.meta;
+  say('');
+  cls = new Uint8Array(m.w * m.h);
+  map.setWorld(m.w, m.h, m.cell_m);
+  $('meta').innerHTML = [['seed', m.seed], ['size', `${m.w}×${m.h}`], ['cell', m.cell_m >= 1000 ? `${m.cell_m / 1000} km` : `${m.cell_m} m`]]
+    .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + '<span>year <b id="hy"></b></span>';
+  const names = m.layers.map(l => l.name).filter(n => !/^true_[rgb]$/.test(n));
+  const sorted = [...names.filter(n => ORDER.includes(n)).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)), ...names.filter(n => !ORDER.includes(n))];
+  $('layers').replaceChildren(...sorted.map(n => button(label(n), () => setLayer(layer === n ? null : n), n)));
+  const years = m.frames.map(f => f.year), last = years.length - 1;
+  charts.set(m.series, m.series_units, years);
+  const tl = $<HTMLInputElement>('tl');
+  tl.max = String(last); tl.disabled = last < 1;
+  $('y0').textContent = `year ${fmtYear(years[0])}`; $('y1').textContent = `year ${fmtYear(years[last])}`;
+  $('marks').replaceChildren(...m.events.map(ev => {
+    const i = nearestFrame(ev.year), el = document.createElement('i');
+    el.style.setProperty('--p', String(last ? i / last : 0));
+    const text = `Year ${fmtYear(ev.year)}: ${ev.text}`;
+    el.onmouseenter = () => tip(el, text); el.onmouseleave = () => ($('tip').hidden = true);
+    el.onclick = () => { setFrame(i); tip(el, text); };
+    return el;
+  }));
+  playing = false; layer = null;
+  setFrame(0); setLayer(null); syncUi();
+}
+
+function nearestFrame(year: number): number {
+  const ys = world!.meta.frames.map(f => f.year);
+  return ys.reduce((best, y, i) => (Math.abs(y - year) < Math.abs(ys[best] - year) ? i : best), 0);
+}
+
+// ---- state changes
+function setFrame(f: number): void {
+  if (!world) return;
+  frame = Math.min(Math.max(f, 0), world.meta.frames.length - 1);
+  const y = world.meta.frames[frame].year;
+  $<HTMLInputElement>('tl').value = String(frame);
+  $('year').textContent = `Year ${fmtYear(y)}`;
+  const hy = document.getElementById('hy'); if (hy) hy.textContent = fmtYear(y);
+  charts.setYear(y);
+  repaint();
+}
+
+function repaint(): void {
+  if (!world) return;
+  paint(world, frame, layer ?? view, map.img!, cls);
+  map.commit();
+  inspect();
+}
+
+function setLayer(n: string | null): void {
+  layer = n;
+  const r = $('ramp'); r.hidden = !n;
+  if (n && world) {
+    const l = world.meta.layers[world.index.get(n)!], lut = world.lut[world.index.get(n)!];
+    $('rampbar').style.background = rampCss(rampFor(n));
+    [0, 128, 255].forEach((b, k) => ($('ramp').querySelectorAll('.lbl span')[k].textContent = fmt(lut[b])));
+    $('rampunit').textContent = `${label(n)}${unitText(l.unit) ? ` (${unitText(l.unit)})` : ''}${l.scale === 'log' ? ', log scale' : ''}`;
+  }
+  syncUi(); repaint();
+}
+
+function syncUi(): void {
+  document.querySelectorAll<HTMLElement>('#views button').forEach(b => b.classList.toggle('on', !layer && b.dataset.view === view));
+  document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
+  document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
+  $('play').classList.toggle('playing', playing);
+}
+
+function setView(v: string): void { view = v; layer = null; setLayer(null); }
+
+function button(text: string, fn: () => void, layerName?: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.textContent = text; b.onclick = fn;
+  if (layerName) b.dataset.layer = layerName;
+  return b;
+}
+
+// ---- inspect
+function inspect(): void {
+  const el = $('inspect'), i = map.hover >= 0 ? map.hover : map.pick;
+  if (!world || i < 0) { el.innerHTML = '<p class="hint">Hover or tap the map.</p>'; return; }
+  const { meta } = world, [name, color] = CLASSES[cls[i]];
+  let rows = '';
+  meta.layers.forEach((l, k) => {
+    if (/^true_[rgb]$/.test(l.name)) return;
+    rows += `<tr><td>${label(l.name)}</td><td>${fmt(world!.lut[k][plane(world!, frame, l.name)![i]])} <u>${unitText(l.unit)}</u></td></tr>`;
+  });
+  const t = ['true_r', 'true_g', 'true_b'].map(n => plane(world!, frame, n)?.[i]);
+  if (t.every(v => v !== undefined)) rows += `<tr><td>True colour</td><td><s style="background:rgb(${t})"></s></td></tr>`;
+  el.innerHTML = `<div class="cell"><s style="background:${color}"></s><b>${name}</b><span>x ${i % meta.w}, y ${(i / meta.w) | 0}</span></div><table>${rows}</table>`;
+}
+
+function tip(at: HTMLElement, text: string): void {
+  const t = $('tip'), r = at.getBoundingClientRect();
+  t.textContent = text; t.hidden = false;
+  t.style.left = `${Math.min(Math.max(r.left + r.width / 2 - t.offsetWidth / 2, 8), innerWidth - t.offsetWidth - 8)}px`;
+  t.style.top = `${r.top - t.offsetHeight - 8}px`;
+}
+
+// ---- playback
+let last = 0, acc = 0;
+function loop(now: number): void {
+  const dt = Math.min((now - last) / 1000, 0.25); last = now;
+  if (playing && world) {
+    acc += dt * speed;
+    if (acc >= 1) {
+      const n = Math.floor(acc); acc -= n;
+      if (frame + n >= world.meta.frames.length - 1) { playing = false; syncUi(); }
+      setFrame(frame + n);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+function togglePlay(): void {
+  if (!world) return;
+  if (!playing && frame >= world.meta.frames.length - 1) setFrame(0);
+  playing = !playing; acc = 0; syncUi();
+}
+
+// ---- wiring
+$('play').onclick = togglePlay;
+$('fit').onclick = () => map.fit();
+$('speeds').replaceChildren(...SPEEDS.map(s => { const b = button(`×${s}`, () => { speed = s; syncUi(); }); b.dataset.speed = String(s); return b; }));
+document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
+$<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
+$<HTMLInputElement>('file').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(load); };
+addEventListener('keydown', e => {
+  const tag = (e.target as HTMLElement).tagName;
+  if (e.key === 't' || e.key === 'T') setView(view === 'earth' ? 'true' : 'earth');
+  else if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'ArrowLeft' && tag !== 'INPUT') setFrame(frame - (e.shiftKey ? 10 : 1));
+  else if (e.key === 'ArrowRight' && tag !== 'INPUT') setFrame(frame + (e.shiftKey ? 10 : 1));
+  else if (e.key === 'Escape') { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
+  else if (e.key === 'f') map.fit();
+});
+let depth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); depth++; $('drop').hidden = false; });
+addEventListener('dragleave', () => { if (--depth <= 0) $('drop').hidden = true; });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); depth = 0; $('drop').hidden = true; e.dataTransfer?.files[0]?.arrayBuffer().then(load); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { charts.draw(); map.invalidate(); });
+$('classes').innerHTML = CLASSES.map(([n, c]) => `<li><s style="background:${c}"></s>${n}</li>`).join('');
+
+requestAnimationFrame(loop);
+const url = new URLSearchParams(location.search).get('f') ?? 'world.ewf.gz';
+fetch(url).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${url}: ${r.status}`))))
+  .then(load, () => say('Drop a .ewf.gz file here, or use “Open file”.'));
