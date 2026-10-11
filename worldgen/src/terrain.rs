@@ -139,6 +139,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         base_z,
         diag: Diag { liquid_flux: vec![0.0; n], rain: vec![0.0; n] },
         ledger: Ledger::default(),
+        events: Vec::new(),
     };
     world.ledger.god_elems = vec![0.0; world.chem.n_elements];
 

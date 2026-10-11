@@ -1,7 +1,7 @@
 //! Quick PNG pictures of a world: map, temperature, rain side by side.
 
-use pcore::chem::Phase;
 use pcore::World;
+use tape::{fields, Fields};
 
 type Rgb = [u8; 3];
 
@@ -20,32 +20,6 @@ fn ramp(stops: &[(f64, Rgb)], v: f64) -> Rgb {
         }
     }
     stops[stops.len() - 1].1
-}
-
-pub struct Fields {
-    pub z: Vec<f64>,
-    pub depth: Vec<f64>,
-    pub ice: Vec<f64>,
-    pub t: Vec<f64>,
-}
-
-pub fn fields(w: &World) -> Fields {
-    let n = w.grid.n();
-    let area = w.grid.area();
-    let mut f = Fields { z: vec![0.0; n], depth: vec![0.0; n], ice: vec![0.0; n], t: vec![0.0; n] };
-    for i in 0..n {
-        f.z[i] = w.surface_z(i);
-        f.depth[i] = w.liquid_depth(i);
-        f.t[i] = w.t_ground(i);
-        for k in 0..w.chem.ns() {
-            let s = &w.chem.subs[k];
-            // Frozen substances that are liquid somewhere on the surface (melt within 200..320 K).
-            if s.melt > 200.0 && s.melt < 320.0 && w.chem.phase(k, f.t[i]) == Phase::Solid {
-                f.ice[i] += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid) / area;
-            }
-        }
-    }
-    f
 }
 
 fn map_pixel(w: &World, f: &Fields, i: usize) -> Rgb {

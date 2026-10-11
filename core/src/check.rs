@@ -59,3 +59,20 @@ pub fn broken(w: &World) -> Option<String> {
     }
     None
 }
+
+/// FNV-1a over the bits of the clock and every state array. Equal states give equal hashes.
+pub fn hash(w: &World) -> u64 {
+    fn eat(h: &mut u64, x: u64) {
+        for b in x.to_le_bytes() {
+            *h = (*h ^ b as u64).wrapping_mul(0x100_0000_01b3);
+        }
+    }
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    eat(&mut h, w.day);
+    for v in [&w.ground, &w.bed, &w.e_ground, &w.air, &w.e_air] {
+        for x in v {
+            eat(&mut h, x.to_bits());
+        }
+    }
+    h
+}

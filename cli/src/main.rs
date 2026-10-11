@@ -1,50 +1,73 @@
-//! Headless runs and pictures.
+//! Headless runs, pictures and the history tape.
 
 mod render;
 
-use std::time::Instant;
+use pcore::World;
+use std::time::{Duration, Instant};
+use tape::Recorder;
 
-fn arg<T: std::str::FromStr>(args: &[String], name: &str, default: T) -> T {
-    args.iter()
-        .position(|a| a == name)
-        .and_then(|p| args.get(p + 1))
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(default)
+/// Command line flags: `--name value`.
+struct Args(Vec<String>);
+
+impl Args {
+    fn get<T: std::str::FromStr>(&self, name: &str, default: T) -> T {
+        self.0.iter().position(|a| a == name).and_then(|p| self.0.get(p + 1)).and_then(|v| v.parse().ok()).unwrap_or(default)
+    }
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let cmd = args.get(1).map(String::as_str).unwrap_or("help");
-    let seed = arg(&args, "--seed", 1u64);
-    let size = arg(&args, "--size", 128usize);
-    let years = arg(&args, "--years", 10u64);
-    let out = arg(&args, "--out", String::from("out"));
-    std::fs::create_dir_all(&out).ok();
-    match cmd {
+    let args = Args(std::env::args().collect());
+    match args.0.get(1).map(String::as_str).unwrap_or("help") {
         "run" => {
-            let mut w = worldgen::new_world(seed, size, size);
-            let t0 = pcore::check::totals(&w);
-            let l0 = w.ledger.clone();
-            render::save(&w, &format!("{out}/year0000.png"));
-            let start = Instant::now();
-            for y in 1..=years {
-                for _ in 0..w.cfg.months_per_year {
-                    pcore::step(&mut w);
-                }
-                if let Some(e) = pcore::check::broken(&w) {
-                    eprintln!("year {y}: broken state: {e}");
-                    std::process::exit(1);
-                }
-                let every = arg(&args, "--every", 10u64);
-                if y % every == 0 || y == years {
-                    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-                    println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}");
-                    render::save(&w, &format!("{out}/year{y:04}.png"));
-                }
-            }
-            let s = start.elapsed().as_secs_f64();
-            println!("{years} years in {s:.2} s ({:.1} ms per year)", s * 1000.0 / years as f64);
+            let size = args.get("--size", 128usize);
+            drive(worldgen::new_world(args.get("--seed", 1u64), size, size), &args, false);
         }
-        _ => println!("usage: ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR]"),
+        "resume" => {
+            let from = args.get("--from", String::new());
+            drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
+        }
+        _ => println!(
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+        ),
     }
+}
+
+/// Simulate `--years` years, printing drift and speed and writing pictures and the tape to `--out`.
+fn drive(mut w: World, a: &Args, resumed: bool) {
+    let (years, every, out) = (a.get("--years", 10u64), a.get("--every", 10u64), a.get("--out", String::from("out")));
+    std::fs::create_dir_all(&out).expect("create out dir");
+    let mut rec = Recorder::new(&w, a.get("--frames-every", 10u64), a.get("--monthly-years", 2u64));
+    if resumed {
+        rec.skip_existing(&mut w);
+    }
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let (y0, snap_every) = (w.day / w.days_per_year(), 10);
+    let snap = |w: &World, y: u64| tape::save_snapshot(w, format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
+    render::save(&w, &format!("{out}/year{y0:04}.png"));
+    rec.record_month(&mut w);
+    let mut busy = Duration::ZERO;
+    for y in y0 + 1..=y0 + years {
+        for _ in 0..w.cfg.months_per_year {
+            let t = Instant::now();
+            pcore::step(&mut w);
+            busy += t.elapsed();
+            rec.record_month(&mut w);
+        }
+        if let Some(e) = pcore::check::broken(&w) {
+            eprintln!("year {y}: broken state: {e}");
+            rec.finish(&out).expect("write tape");
+            std::process::exit(1);
+        }
+        if y % every == 0 || y == y0 + years {
+            let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}");
+            render::save(&w, &format!("{out}/year{y:04}.png"));
+        }
+        if y % snap_every == 0 || y == y0 + years {
+            snap(&w, y);
+        }
+    }
+    rec.finish(&out).expect("write tape");
+    let s = busy.as_secs_f64();
+    println!("{years} years in {s:.2} s ({:.1} ms per year), hash {:016x}", s * 1000.0 / years.max(1) as f64, pcore::check::hash(&w));
 }

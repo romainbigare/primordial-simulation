@@ -1,0 +1,147 @@
+//! Surface fields, the layer table and byte quantisation for viewer frames.
+//! To add a layer, add one line to `LAYERS` (and the data it needs to `Ctx`).
+
+use pcore::chem::{Phase, Substance};
+use pcore::World;
+
+/// Thinnest cover (m) that hides what lies below it.
+pub const COVER_MIN: f64 = 0.01;
+
+/// Frozen cover: substances that are liquid somewhere on the surface (melt within 200..320 K).
+fn is_cover(s: &Substance) -> bool {
+    s.melt > 200.0 && s.melt < 320.0
+}
+
+/// Per ground cell values.
+pub struct Fields {
+    /// Surface elevation, m
+    pub z: Vec<f64>,
+    /// Liquid depth, m
+    pub depth: Vec<f64>,
+    /// Frozen cover depth, m
+    pub ice: Vec<f64>,
+    /// Loose solid depth (without frozen cover), m
+    pub loose: Vec<f64>,
+    /// Ground temperature, K
+    pub t: Vec<f64>,
+    /// Visible colour of what covers the surface, 0..1
+    pub rgb: Vec<[f64; 3]>,
+}
+
+pub fn fields(w: &World) -> Fields {
+    let (n, ns, area) = (w.grid.n(), w.chem.ns(), w.grid.area());
+    let mut f = Fields { z: vec![0.0; n], depth: vec![0.0; n], ice: vec![0.0; n], loose: vec![0.0; n], t: vec![0.0; n], rgb: vec![[0.0; 3]; n] };
+    for i in 0..n {
+        let t = w.t_ground(i);
+        // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
+        let mut acc = [[0.0f64; 4]; 4];
+        let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {
+            acc[kind][0] += vol;
+            for c in 0..3 {
+                acc[kind][1 + c] += vol * refl[c] as f64;
+            }
+        };
+        for k in 0..ns {
+            let s = &w.chem.subs[k];
+            let p = w.chem.phase(k, t);
+            let vol = w.g(k, i) * w.chem.molar_volume(k, p);
+            match p {
+                Phase::Solid if is_cover(s) => add(0, vol, s.refl[0]),
+                Phase::Solid => add(2, vol, s.refl[0]),
+                Phase::Liquid => add(1, vol, s.refl[1]),
+                Phase::Gas => {}
+            }
+            add(3, w.b(k, i) * w.chem.molar_volume(k, Phase::Solid), s.refl[0]);
+        }
+        f.t[i] = t;
+        f.z[i] = w.surface_z(i);
+        (f.ice[i], f.depth[i], f.loose[i]) = (acc[0][0] / area, acc[1][0] / area, acc[2][0] / area);
+        let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
+        let glow = 1.0 + 2.0 * ((t - 500.0) / 500.0).clamp(0.0, 1.0);
+        f.rgb[i] = [1, 2, 3].map(|c| if top[0] > 0.0 { (top[c] / top[0] * glow).min(1.0) } else { 0.0 });
+    }
+    f
+}
+
+/// Everything a layer may read.
+pub struct Ctx<'a> {
+    pub w: &'a World,
+    pub f: Fields,
+    /// Per air node: temperature K, column of condensable gases mol/m², heat-absorbing column (Σ n·ir_abs / area)
+    pub t_air: Vec<f64>,
+    pub vapor: Vec<f64>,
+    pub absorber: Vec<f64>,
+}
+
+impl<'a> Ctx<'a> {
+    pub fn new(w: &'a World) -> Self {
+        let (na, ns) = (w.grid.na(), w.chem.ns());
+        let mut cells = vec![0.0; na];
+        for i in 0..w.grid.n() {
+            cells[w.grid.air_of(i)] += 1.0;
+        }
+        let mut c = Ctx { w, f: fields(w), t_air: (0..na).map(|j| w.t_air(j)).collect(), vapor: vec![0.0; na], absorber: vec![0.0; na] };
+        for j in 0..na {
+            let area = cells[j] * w.grid.area();
+            for k in 0..ns {
+                let (s, n) = (&w.chem.subs[k], w.a(k, j));
+                c.absorber[j] += n * s.ir_abs / area;
+                if s.boil > 250.0 {
+                    c.vapor[j] += n / area;
+                }
+            }
+        }
+        c
+    }
+    fn air(&self, i: usize) -> usize {
+        self.w.grid.air_of(i)
+    }
+}
+
+pub struct Layer {
+    pub name: &'static str,
+    pub unit: &'static str,
+    /// "lin", "log" or "raw" (0..1)
+    pub scale: &'static str,
+    pub min: f64,
+    pub max: f64,
+    pub val: fn(&Ctx, usize) -> f64,
+}
+
+const fn l(name: &'static str, unit: &'static str, scale: &'static str, min: f64, max: f64, val: fn(&Ctx, usize) -> f64) -> Layer {
+    Layer { name, unit, scale, min, max, val }
+}
+
+pub const LAYERS: &[Layer] = &[
+    l("z", "m", "lin", -800.0, 4000.0, |c, i| c.f.z[i]),
+    l("depth", "m", "log", 0.01, 3000.0, |c, i| c.f.depth[i]),
+    l("ice", "m", "log", 0.001, 100.0, |c, i| c.f.ice[i]),
+    l("flux", "mol/s", "log", 1.0, 1e7, |c, i| c.w.diag.liquid_flux.get(i).copied().unwrap_or(0.0) as f64),
+    l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
+    l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
+    l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
+    l("rain", "mol/m2/s", "log", 1e-9, 1e-4, |c, i| c.w.diag.rain.get(i).copied().unwrap_or(0.0) as f64),
+    l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
+    l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
+    l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
+    l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
+    l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),
+];
+
+/// Quantise a value to a byte as the frames format defines.
+pub fn quantise(l: &Layer, v: f64) -> u8 {
+    let b = match l.scale {
+        "raw" => 255.0 * v,
+        "log" if v < l.min => 0.0,
+        "log" => 1.0 + 254.0 * (v.ln() - l.min.ln()) / (l.max.ln() - l.min.ln()),
+        _ => 255.0 * (v - l.min) / (l.max - l.min),
+    };
+    b.round().clamp(0.0, 255.0) as u8
+}
+
+/// Append one frame: every layer in table order, row-major.
+pub fn frame(c: &Ctx, out: &mut Vec<u8>) {
+    for l in LAYERS {
+        out.extend((0..c.w.grid.n()).map(|i| quantise(l, (l.val)(c, i))));
+    }
+}
