@@ -1,0 +1,13 @@
+[package]
+name = "cli"
+edition.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "ew"
+path = "src/main.rs"
+
+[dependencies]
+pcore = { path = "../core" }
+worldgen = { path = "../worldgen" }
+png = "0.17"

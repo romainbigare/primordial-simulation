@@ -1,0 +1,9 @@
+[package]
+name = "worldgen"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+pcore = { path = "../core" }
+serde.workspace = true
+toml = "0.8"

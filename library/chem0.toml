@@ -1,0 +1,14 @@
+# Earth names for chemistry 0 (viewer and analysis only; the core never reads this).
+elements = ["H", "C", "N", "O", "Si", "Ca", "Fe", "Cu", "Sn"]
+substances = [
+  "water", "nitrogen", "oxygen", "carbon dioxide", "methane", "sugar / plant matter",
+  "fat / oil", "charcoal / coal", "sand / quartz", "common rock", "limestone", "quicklime",
+  "slaked lime", "iron ore", "iron", "steel", "copper ore", "copper", "tin ore", "tin",
+  "bronze", "carbon monoxide",
+]
+reactions = [
+  "light to sugar", "burning sugar", "burning fat", "fat making", "charring", "burning charcoal",
+  "burning carbon monoxide", "partial burning charcoal", "burning methane", "rotting to methane",
+  "iron smelting", "copper smelting", "tin smelting", "bronze making", "steel making",
+  "lime burning", "lime slaking", "mortar setting", "rock weathering", "rusting", "copper tarnish",
+]
