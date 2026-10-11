@@ -67,7 +67,7 @@ function oceanFill(wet: Uint8Array, W: number, H: number): Uint8Array {
 export function paint(w: World, f: number, mode: string, img: ImageData, cls: Uint8Array): void {
   const { w: W, h: H, cell_m } = w.meta;
   const z = decode(w, f, 'z'), depthL = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
-  const rain = plane(w, f, 'rain'), flux = plane(w, f, 'flux'), plants = plane(w, f, 'plants');
+  const rain = plane(w, f, 'rain'), flux = decode(w, f, 'flux'), plants = plane(w, f, 'plants');
   const tr = plane(w, f, 'true_r'), tgc = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
   const over = ['earth', 'true'].includes(mode) ? null : plane(w, f, mode);
   const overLut = over ? w.lut[w.index.get(mode)!] : null;
@@ -116,7 +116,7 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
       const snow = ice ? iceI : smooth(266, 258, t);
       mix(c, SNOW, snow); if (snow > 0.5) cls[i] = ICE;
       k = 0.8 + 0.3 * snow;
-      river = flux ? smooth(0.3, 0.55, flux[i] / 255) * (1 - 0.6 * snow) : 0;
+      river = flux ? smooth(3.6, 4.3, Math.log10(flux[i] + 1)) * (1 - 0.6 * snow) : 0;
     }
     const m = clamp(1 + (shade - 1) * k, 0.5, 1.45);
     for (let j = 0; j < 3; j++) c[j] *= m;

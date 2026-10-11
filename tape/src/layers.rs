@@ -118,7 +118,7 @@ pub const LAYERS: &[Layer] = &[
     l("loose", "m", "log", 0.01, 100.0, |c, i| c.f.loose[i]),
     l("t_ground", "K", "lin", 220.0, 330.0, |c, i| c.f.t[i]),
     l("t_air", "K", "lin", 220.0, 330.0, |c, i| c.t_air[c.air(i)]),
-    l("rain", "mol/m2/s", "log", 1e-9, 1e-4, |c, i| c.w.diag.rain.get(i).copied().unwrap_or(0.0) as f64),
+    l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.diag.rain.get(i).copied().unwrap_or(0.0) as f64),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
