@@ -4,11 +4,11 @@
 //! to the surface, upkeep, and death. Choose (`choose`) and Copy (`copy`) act on them.
 //! A body updates every `interval` days; everything in between is integrated at its update.
 
-use crate::brain::{ln, Thought, FIXED, MEM, SIG, VERBS};
+use crate::brain::{ln, Thought, FIXED, MEM, OVERBS, SIG, VERBS};
 use crate::change::Reactor;
 use crate::chem::{Chemistry, Phase, P_REF};
 use crate::event::{Event, EventKind};
-use crate::{choose, World};
+use crate::{bond, choose, World};
 use serde::{Deserialize, Serialize};
 
 // Scalar genes, then one per reaction (catalyst, log10 speed-up) and three per substance
@@ -120,7 +120,12 @@ pub struct Body {
     pub near: u32,
     pub since: u64,
     /// Its own adjustment of the action scores: fixed actions, moving, the verbs
-    pub adj: [f32; FIXED + 1 + VERBS],
+    pub adj: [f32; FIXED + 1 + VERBS + OVERBS],
+    /// The part it holds, and a part of the structure it is inside (ids, 0 if none)
+    #[serde(default)]
+    pub hold: u64,
+    #[serde(default)]
+    pub inside: u64,
     /// Memory the brain reads and writes; the signal emitted at the last decision
     pub mem: [f32; MEM],
     pub sig: [f32; SIG],
@@ -442,6 +447,7 @@ pub fn survey(w: &mut World) {
     if w.canopy.len() != n {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
+    bond::ready(w);
     let life = &mut w.life;
     life.sum.clear();
     life.sum.resize(n, [0.0; 7]);
@@ -523,7 +529,8 @@ pub fn day(w: &mut World) {
 }
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
-pub fn die(w: &mut World, slot: usize, b: Body, cause: u8) {
+pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
+    bond::let_go(w, &mut b, false);
     let (n, i) = (w.grid.n(), b.cell as usize);
     for (k, &a) in b.store.iter().enumerate() {
         w.ground[k * n + i] += a;
@@ -538,6 +545,8 @@ pub fn die(w: &mut World, slot: usize, b: Body, cause: u8) {
 fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<u8> {
     let i = b.cell as usize;
     let [tg, depth, _] = w.life.env[i];
+    let (depth, walls) = (bond::depth(w, b, depth), bond::walls_around(w, b));
+    let open = 1.0 - walls.map_or(0.0, |x| x.0);
     let days = w.day.saturating_sub(b.last).max(1) as f64;
     let mass = b.mass(&w.chem);
     b.last = w.day;
@@ -559,10 +568,10 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let (ns, n, na, j) = (chem.ns(), grid.n(), grid.na(), grid.air_of(i));
     let dt = days * DAY;
 
-    // Light caught since the last update, less what the body reflects; liquid over the body
-    // absorbs its share first.
+    // Light caught since the last update (through the openings of walls around it), less what
+    // the body reflects; liquid over the body absorbs its share first.
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
-    let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl);
+    let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
     b.mark = light[i];
     let reach = (-depth / LIGHT_DEPTH).exp();
     ledger.sun_in += got;
@@ -600,7 +609,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // goes in or out, up to the level the body keeps, with its latent heat. The latent heat
     // is paid by the light and heat released, and by what the surface can conduct into a body
     // that evaporating cools no lower than the vapour's condensing point.
-    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * dt;
+    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * dt * open;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
     let vap_tot: f64 = tmp.pool.iter().sum();
@@ -650,9 +659,10 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
     // toward the ground's temperature plus the warming of the heat released, over the time.
+    // Walls around it add their conductance (its share of it) in series.
     let c = b.heat_cap(chem);
     if c > 0.0 {
-        let g = b.k.heat * mass;
+        let g = walls.map_or(b.k.heat * mass, |x| 1.0 / (1.0 / (b.k.heat * mass) + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
         e_ground[i] += b.e + heat - e1;
@@ -679,11 +689,11 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
         return true;
     }
     b.prepare(&w.chem);
-    let World { chem, grid, air, life, .. } = w;
+    let depth = bond::depth(w, b, w.life.env.get(b.cell as usize).map_or(0.0, |e| e[1]));
+    let World { chem, grid, air, .. } = w;
     let (ns, na, i) = (chem.ns(), grid.na(), b.cell as usize);
     let j = grid.air_of(i);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let depth = life.env.get(i).map_or(0.0, |e| e[1]);
     let share = (b.k.gas * b.mass(chem) * days * (-depth / GAS_DEPTH).exp() / tot).min(0.5);
     let t = b.temp(chem);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;

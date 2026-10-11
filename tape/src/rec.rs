@@ -35,6 +35,14 @@ struct Social {
     /// kg taken by bodies that are not light-eaters this year: from light-eaters, others, ground
     intake: [f64; 3],
     months: String,
+    /// Bonds made this year by kind (held, joined, anchored); broken by bodies; failed by load
+    made: [f64; 3],
+    broken: f64,
+    failed: f64,
+    /// Body-months of bodies that are not light-eaters, [cold, warm]: all, inside walls
+    inside: [[f64; 2]; 2],
+    /// What bodies did with parts this year (from the core's tally)
+    tally: pcore::bond::Tally,
 }
 
 /// Mutual information (bits) between a binary context and the signal quarter, given lineage,
@@ -87,10 +95,8 @@ fn describe(e: &Event) -> String {
         EventKind::FirstSubstance(k) => format!("substance {k} first appears"),
         EventKind::Born => format!("body born at node {}", e.node),
         EventKind::Died { cause } => format!("body died at node {} (cause {cause})", e.node),
-        EventKind::BondMade => format!("bond made at node {}", e.node),
-        EventKind::BondBroken => format!("bond broken at node {}", e.node),
         EventKind::Imposed => format!("god action at node {}", e.node),
-        EventKind::Watched { .. } | EventKind::Gave { .. } => String::new(),
+        EventKind::Watched { .. } | EventKind::Gave { .. } | EventKind::BondMade | EventKind::BondBroken => String::new(),
     }
 }
 
@@ -110,7 +116,7 @@ impl Recorder {
             births: 0.0,
             deaths: [0.0; 5],
             updates: 0,
-            social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz\n".into(), ..Default::default() },
+            social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile\n".into(), ..Default::default() },
         }
     }
 
@@ -157,6 +163,9 @@ impl Recorder {
                     let b = w.life.bodies.get(from as u32 as usize).filter(|b| b.alive && b.gen == (from >> 32) as u32);
                     s.gave_eaters += b.is_some_and(|b| !pcore::body::light_eater(&w.chem, &b.genes)) as u8 as f64;
                 }
+                EventKind::BondMade => self.social.made[(e.value as usize).min(2)] += 1.0,
+                EventKind::BondBroken if e.value >= pcore::bond::LOAD => self.social.failed += 1.0,
+                EventKind::BondBroken => self.social.broken += 1.0,
                 _ => self.log.push((e.day, describe(&e))),
             }
         }
@@ -169,6 +178,7 @@ impl Recorder {
         }
         if yearly {
             self.social.intake = std::mem::take(&mut w.diag.intake);
+            self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
         if yearly {
@@ -183,7 +193,7 @@ impl Recorder {
     /// Monthly: where mobile bodies are and how they moved since last month; signals by context.
     fn month(&mut self, w: &World) {
         let (chem, gw, s) = (&w.chem, w.grid.w as u32, &mut self.social);
-        let (mut n, mut sum) = (0.0f64, [0.0; 4]);
+        let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
         let mut last = BTreeMap::new();
         for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let id = b.id(slot);
@@ -199,6 +209,9 @@ impl Recorder {
             if pcore::body::light_eater(chem, &b.genes) {
                 continue;
             }
+            let ins = pcore::bond::room(w, b).is_some();
+            let c = &mut s.inside[(t >= 278.0) as usize];
+            (c[0], c[1], inside, tm) = (c[0] + 1.0, c[1] + ins as u8 as f64, inside + ins as u8 as f64, tm + t);
             let z = w.life.env.get(i).map_or(0.0, |e| e[2]);
             let (dy, dz) = match s.last.get(&id) {
                 Some(&c) => ((b.cell / gw) as f64 - (c / gw) as f64, z - w.life.env.get(c as usize).map_or(z, |e| e[2])),
@@ -213,7 +226,7 @@ impl Recorder {
         let dpm = w.cfg.days_per_month as u64;
         let (y, m) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
         let mean = sum.map(|v| v / n.max(1.0));
-        s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3}\n", mean[0], mean[1], mean[2], mean[3]);
+        s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0));
     }
 
     fn push_series(&mut self, c: &Ctx) {
@@ -295,6 +308,48 @@ impl Recorder {
             ("mi_hurt".to_string(), "bit", info(&s.sig, 1)),
             ("mi_low".to_string(), "bit", info(&s.sig, 2)),
         ]);
+        // Made objects (parts) and their bonds.
+        let (parts, chem) = (&w.parts, &w.chem);
+        let roots: Vec<&pcore::bond::Part> = parts.parts.iter().enumerate().filter(|(r, p)| p.alive && p.root as usize == *r).map(|p| p.1).collect();
+        let links = |g: bool| parts.alive().flat_map(|p| &p.links).filter(|l| (l.0 == pcore::bond::GROUND) == g).count() as f64;
+        let filled: Vec<f64> = parts.alive().map(|p| p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.molar_mass).sum::<f64>()).filter(|&m| m > 0.0).collect();
+        let t = &s.tally;
+        let mean = |x: [f64; 2]| x[1] / x[0].max(1.0);
+        let share = |c: [f64; 2]| c[1] / c[0].max(1.0);
+        row.extend([
+            ("parts".to_string(), "1", parts.alive().count() as f64),
+            ("parts_held".to_string(), "1", parts.alive().filter(|p| p.held != pcore::bond::NOBODY).count() as f64),
+            ("parts_mass".to_string(), "t", parts.alive().map(|p| p.mass(chem)).sum::<f64>() / 1e3),
+            ("parts_formed".to_string(), "1/yr", t.formed),
+            ("put_to_parts".to_string(), "kg/yr", t.to_parts),
+            ("taken_from_parts".to_string(), "kg/yr", t.from_parts),
+            ("bonds_joined".to_string(), "1", links(false) / 2.0),
+            ("bonds_ground".to_string(), "1", links(true)),
+            ("structures".to_string(), "1", roots.iter().filter(|r| r.s.parts > 1).count() as f64),
+            ("enclosed".to_string(), "1", roots.iter().filter(|r| r.s.encl >= 0.5).count() as f64),
+            ("made_held".to_string(), "1/yr", s.made[0]),
+            ("made_joined".to_string(), "1/yr", s.made[1]),
+            ("made_ground".to_string(), "1/yr", s.made[2]),
+            ("bonds_broken".to_string(), "1/yr", s.broken),
+            ("bonds_failed".to_string(), "1/yr", s.failed),
+            ("inside_now".to_string(), "1", life.alive().filter(|b| pcore::bond::room(w, b).is_some()).count() as f64),
+            ("inside_cold".to_string(), "1", share(s.inside[0])),
+            ("inside_warm".to_string(), "1", share(s.inside[1])),
+            ("cold_months".to_string(), "1/yr", s.inside[0][0]),
+            ("holding_liquid".to_string(), "1", filled.len() as f64),
+            ("liquid_held".to_string(), "kg", filled.iter().sum()),
+            ("afloat".to_string(), "1", roots.iter().filter(|r| r.s.afloat).count() as f64),
+            ("afloat_moves".to_string(), "1/yr", t.afloat),
+            ("take_bare".to_string(), "1/yr", t.take[0][0]),
+            ("take_held".to_string(), "1/yr", t.take[1][0]),
+            ("take_bare_yield".to_string(), "1", mean(t.take[0])),
+            ("take_held_yield".to_string(), "1", mean(t.take[1])),
+            ("dig_bare".to_string(), "1/yr", t.dig[0][0]),
+            ("dig_held".to_string(), "1/yr", t.dig[1][0]),
+            ("dig_bare_yield".to_string(), "1", mean(t.dig[0])),
+            ("dig_held_yield".to_string(), "1", mean(t.dig[1])),
+        ]);
+        (s.made, s.broken, s.failed, s.inside) = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();
         // Mole fraction in the air of each heat-absorbing gas.

@@ -1,6 +1,7 @@
 //! The world core: one graph, five laws. No IO, no clocks, no Earth words.
 
 pub mod body;
+pub mod bond;
 pub mod brain;
 pub mod change;
 pub mod check;
@@ -145,8 +146,10 @@ pub struct World {
     pub base_z: f64,
     pub diag: Diag,
     pub ledger: Ledger,
-    /// Bodies (the sparse graph)
+    /// Bodies and made parts (the sparse graph)
     pub life: body::Life,
+    #[serde(default)]
+    pub parts: bond::Parts,
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
     pub canopy: Vec<f32>,
     /// Light intercepted in each cell per m² of light-capture area since the start, J/m²
@@ -269,7 +272,8 @@ pub fn step(w: &mut World) {
     step_marked(w, &mut |_| {});
 }
 
-/// `step`, calling `mark(part)` after each part (0 flow, 1 change, 2 bodies), e.g. to time them.
+/// `step`, calling `mark(part)` after each part (0 flow, 1 change, 2 bodies, 3 parts), e.g. to
+/// time them.
 pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(usize)) {
     let dpm = w.cfg.days_per_month;
     for d in 0..dpm {
@@ -281,6 +285,10 @@ pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(usize)) {
             mark(0);
             change::step(w, dt);
             mark(1);
+        }
+        if d == 0 {
+            bond::step(w);
+            mark(3);
         }
         body::day(w);
         w.day += 1;

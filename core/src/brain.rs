@@ -1,8 +1,9 @@
 //! A small brain. Its base (one hidden layer over what a body perceives and remembers) belongs
 //! to a lineage and changes only by evolution. Its rows belong to a group of bodies: read from
 //! the hidden layer, they give fixed action scores, the weights of shared scorers (one used for
-//! every neighbour direction, one per verb for every perceived body), the mean of the signal
-//! and the next memory, and an estimate of how well-being will go. Within a life the rows that
+//! every neighbour direction, one per verb for every perceived body or part), the mean of the
+//! signal and of the shape of a part made, the next memory, and an estimate of how well-being
+//! will go. Within a life the rows that
 //! pick actions and signals follow a policy gradient against that estimate (actor-critic); all
 //! rows also change by imitation. Kept apart from the laws so it can be swapped.
 
@@ -10,22 +11,27 @@ use crate::rng::Rng;
 
 /// Hidden units.
 pub const H: usize = 12;
-/// Fixed actions: rest, copy, put to the node, take from the node.
-pub const FIXED: usize = 4;
+/// Fixed actions: rest, copy, put to the node, take from the node, form a part, let go (or
+/// leave the inside), join the held part to the ground, break the bonded ground.
+pub const FIXED: usize = 8;
 /// Verbs toward a perceived body: take from it, put to it, watch it.
 pub const VERBS: usize = 3;
+/// Verbs toward a perceived part: hold it, take from it, put to it, join the held part to it,
+/// break its bonds, enter the inside of its structure.
+pub const OVERBS: usize = 6;
 /// Signal outputs and memory numbers.
 pub const SIG: usize = 2;
 pub const MEM: usize = 6;
 /// One row: H weights, then a bias.
 pub const R: usize = H + 1;
 
-/// Sizes of the inputs, the direction features and the body features.
+/// Sizes of the inputs, the direction features, the body features and the part features.
 #[derive(Clone, Copy, Debug)]
 pub struct Shape {
     pub ni: usize,
     pub nf: usize,
     pub nt: usize,
+    pub no: usize,
 }
 
 impl Shape {
@@ -33,19 +39,24 @@ impl Shape {
     pub fn base(&self) -> usize {
         H * self.ni + H
     }
-    /// First row of the direction scorer, of a verb's scorer, of the signal, of the memory.
+    /// First row of the direction scorer, of a verb's scorer (body verbs, then part verbs), of
+    /// the signal, of the shape of a part made (elongation, hollowness), of the memory.
     pub fn dir(&self) -> usize {
         FIXED
     }
     pub fn verb(&self, v: usize) -> usize {
-        FIXED + self.nf + 1 + v * (self.nt + 1)
+        let b = FIXED + self.nf + 1 + v.min(VERBS) * (self.nt + 1);
+        b + v.saturating_sub(VERBS) * (self.no + 1)
     }
     pub fn sig(&self) -> usize {
-        self.verb(VERBS)
+        self.verb(VERBS + OVERBS)
+    }
+    pub fn form(&self) -> usize {
+        self.sig() + SIG
     }
     /// Rows that learn within a life (all but the memory rows).
     pub fn learned(&self) -> usize {
-        self.sig() + SIG
+        self.form() + 2
     }
     /// The row that estimates how well-being will go from here (the critic).
     pub fn critic(&self) -> usize {
@@ -139,8 +150,9 @@ pub fn blend(w: &mut [f32], o: &[f32], a: f32) {
     }
 }
 
-/// Small random weights, then the biases given for the fixed actions, moving and the verbs.
-pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, verbs: [f32; VERBS]) -> Vec<f32> {
+/// Small random weights, then the biases given for the fixed actions, moving and the verbs
+/// (toward bodies, then toward parts).
+pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, verbs: [f32; VERBS + OVERBS]) -> Vec<f32> {
     let mut w: Vec<f32> = (0..s.len()).map(|_| size * r.normal() as f32).collect();
     let row = |q: usize| s.base() + q * R + H;
     for (a, b) in fixed.iter().enumerate() {

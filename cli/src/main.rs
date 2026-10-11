@@ -58,8 +58,8 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     let snap = |w: &World, y: u64| tape::save_snapshot(w, format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
     render::save(&w, &format!("{out}/year{y0:04}.png"));
     rec.record_month(&mut w);
-    // Time spent in flow, change and bodies, since the last print and in all.
-    let (mut part, mut busy, mut since) = ([Duration::ZERO; 3], Duration::ZERO, y0);
+    // Time spent in flow, change, bodies and parts, since the last print and in all.
+    let (mut part, mut busy, mut since) = ([Duration::ZERO; 4], Duration::ZERO, y0);
     let life_year = if resumed { -1 } else { a.get("--life-year", 2i64) };
     for y in y0 + 1..=y0 + years {
         // First light-eaters; once they have spread, eaters among them.
@@ -86,9 +86,9 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| pcore::body::light_eater(&w.chem, &b.genes)).count());
             let ms = part.map(|d| d.as_secs_f64() * 1000.0 / (y - since) as f64);
             since = y;
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, bodies {all} ({le} light-eaters), lineages {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}", w.life.lineages(), ms[0], ms[1], ms[2]);
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, bodies {all} ({le} light-eaters), lineages {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1} ({} parts)", w.life.lineages(), ms[0], ms[1], ms[2], ms[3], w.parts.alive().count());
             busy += part.iter().sum::<Duration>();
-            part = [Duration::ZERO; 3];
+            part = [Duration::ZERO; 4];
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }
         if y % snap_every == 0 || y == y0 + years {

@@ -20,11 +20,12 @@ struct Kind {
     mass: f64,
     /// Chance per land cell
     chance: f64,
-    /// Brain biases: rest, copy (its own chance, as a logit), put, take from the node; move;
-    /// take from, put to, watch a body
-    fixed: [f32; 4],
+    /// Brain biases: rest, copy (its own chance, as a logit), put, take from the node, form a
+    /// part, let go, join to the ground, break the ground; move; take from, put to, watch a body;
+    /// hold, take from, put to, join to, break, enter a part
+    fixed: [f32; brain::FIXED],
     dir: f32,
-    verbs: [f32; 3],
+    verbs: [f32; brain::VERBS + brain::OVERBS],
 }
 
 /// Light reaction, energy-rich solid, liquid, burning reaction.
@@ -51,10 +52,10 @@ pub fn seed(w: &mut World, which: usize) {
     let kinds = [
         // Light-eaters: strong light reaction, slow burning, wide gas exchange and capture
         // area, long intervals, resting.
-        Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 5.7, 1.3, -0.7, -4.0], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 2e5, chance: 0.3, fixed: [2.0, -1.0, -3.0, -2.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0] },
+        Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 5.7, 1.3, -0.7, -4.0], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 2e5, chance: 0.3, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
         // Eaters: fast burning, take the energy-rich solid from bodies and the ground, short
         // intervals.
-        Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 4.7, 1.0, -0.7, -2.0], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 2e4, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5], dir: -1.0, verbs: [2.0, -2.0, -2.0] },
+        Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 4.7, 1.0, -0.7, -2.0], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 2e4, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
     ];
     let Some(kind) = kinds.get(which) else { return };
     let lineage = w.life.new_lineage(brain::random(shape, &mut r, 0.1, kind.fixed, kind.dir, kind.verbs));

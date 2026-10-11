@@ -1,9 +1,11 @@
-//! Law 5: Choose. A body perceives a little of itself, its memory, its cell, its 8 neighbours
-//! and up to 3 other bodies in or next to its cell (their looks, signals and well-being, and how
-//! past dealings with them went). The brain of its group, plus a few numbers of its own, scores
-//! every action; one is drawn by those scores, and the body emits a signal and writes its
-//! memory. Actions are physical: move, take from the node or a body, put to the node or a body,
-//! watch a body (copy part of its brain), copy, rest. Each costs energy paid by the body's own
+//! Law 5: Choose. A body perceives a little of itself, what it holds, its memory, its cell, its 8
+//! neighbours, up to 3 other bodies in or next to its cell (their looks, signals and well-being,
+//! and how past dealings with them went; walls hide them) and up to 3 parts in its cell. The
+//! brain of its group, plus a few numbers of its own, scores every action; one is drawn by those
+//! scores, and the body emits a signal and writes its memory. Actions are physical: move, take
+//! from the node or a body, put to the node or a body, watch a body (copy part of its brain),
+//! copy, rest, and the actions of Bond (`bond`): form a part, hold, let go, join, break, enter.
+//! Each costs energy paid by the body's own
 //! reactions; if it cannot pay, it fails. Copying is drawn first, by its own chance. At its next
 //! decision the brain learns from the change of the body's own well-being (a policy gradient
 //! whose baseline is the brain's own estimate of how well-being will go).
@@ -13,28 +15,30 @@
 //! its lineage joins it.
 
 use crate::body::{self, Body, Layout, Tmp, BROKEN, STRENGTH, TAKEN};
-use crate::brain::{self, ln, score, squash, Shape, FIXED, H, R, SIG, VERBS};
+use crate::brain::{self, ln, score, squash, Shape, FIXED, H, OVERBS, R, SIG, VERBS};
 use crate::chem::Phase;
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
-use crate::{copy, World};
+use crate::{bond, copy, World};
 
-/// Features of a neighbour direction and of a perceived body; bodies perceived; options.
-const NF: usize = 9;
+/// Features of a neighbour direction and of a perceived body; bodies and parts perceived; options.
+const NF: usize = 10;
 const NT: usize = 11;
 const SEEN: usize = 3;
-const OPTS: usize = FIXED + 8 + VERBS * SEEN;
+const OPTS: usize = FIXED + 8 + VERBS * SEEN + OVERBS * SEEN;
 /// Energy to move one kg one metre on the flat, J.
-const C_MOVE: f64 = 3.0;
+pub(crate) const C_MOVE: f64 = 3.0;
 /// Body mass per area that doubles the cost of entering a cell, kg/m².
 const RHO_PASS: f64 = 5.0;
 /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J.
 const WEAR: f64 = 3e-5;
 /// Most a body can take per day of its interval, as a share of its own mass.
-const TAKE: f64 = 0.05;
+pub(crate) const TAKE: f64 = 0.05;
 /// Energy to handle one kg taken or put, J.
-const C_HANDLE: f64 = 1e3;
+pub(crate) const C_HANDLE: f64 = 1e3;
+/// Spread of the shape of a part made around its mean.
+const SHAPE_NOISE: f32 = 0.5;
 /// Spread of the signal around its mean.
 const NOISE: f32 = 0.3;
 /// Weight of well-being one decision ahead against well-being now.
@@ -51,7 +55,7 @@ const NONE: u32 = u32::MAX;
 const FORGET: f32 = 0.02;
 
 pub fn shape(ns: usize) -> Shape {
-    Shape { ni: 2 * ns + 10 + brain::MEM, nf: NF, nt: NT }
+    Shape { ni: 2 * ns + 15 + brain::MEM, nf: NF, nt: NT, no: bond::NO }
 }
 
 /// A new group of `lineage`, starting from the lineage's brain.
@@ -68,17 +72,30 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let wb = b.wellbeing(&w.chem, mass);
     let Some(base) = w.life.brains[b.lineage as usize].as_ref() else { return };
 
-    // Bodies perceived: in its own cell first, then next to it from a random side.
+    // Bodies perceived: in its own cell first, then next to it from a random side. Walls
+    // between two bodies hide them from each other by how closed they are.
     let (mut seen, mut cnt, side) = ([(0usize, false); SEEN], 0, rng.below(8));
+    let my_room = bond::room(w, b);
     for q in 0..9 {
         if cnt == SEEN {
             break;
         }
         let Some(j) = (if q == 0 { Some(i) } else { w.grid.step(i, DIRS[(side + q) % 8]) }) else { continue };
         for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
-            if cnt < SEEN {
+            let their = bond::room(w, &w.life.bodies[o as usize]);
+            let walls = if my_room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { my_room.map_or(0.0, |r| r.1).max(their.map_or(0.0, |r| r.1)) };
+            if cnt < SEEN && (walls == 0.0 || rng.f64() as f32 >= walls) {
                 (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);
             }
+        }
+    }
+    // Parts perceived in its cell (not the one it holds), from a random one on.
+    let (held, list) = (bond::held(w, b), &w.parts.at[i]);
+    let (mut parts, mut np, off) = ([0usize; SEEN], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
+    for q in 0..list.len() {
+        let p = list[(off + q) % list.len()] as usize;
+        if np < SEEN && Some(p) != held {
+            (parts[np], np) = (p, np + 1);
         }
     }
     let heard = seen[..cnt].iter().fold([0f32; SIG], |h, &(o, _)| [0, 1].map(|k| h[k] + w.life.bodies[o].sig[k] / cnt as f32));
@@ -95,6 +112,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (dt, lit, sun) = ((b.temp(chem) - env[0]) as f32, t.lit as f32, w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / 10.0, ln(mass as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
+    x.extend(bond::sense(w, b, mass));
     x.extend(b.mem);
     brain::think(base, &w.life.groups[b.group as usize].rows, s, x, &mut t.thought);
     learn(w, b, s, wb, &t.thought.h);
@@ -117,6 +135,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         let fd = &mut f[d * NF..(d + 1) * NF];
         fd[..8].copy_from_slice(cj);
         (fd[0], fd[6], fd[8]) = (((e[2] - env[2]) / 200.0) as f32, ((e[0] - env[0]) / 5.0) as f32, smell(j) - here);
+        fd[9] = ln(1.0 + w.parts.at[j].len() as f32);
         logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd) + b.adj[FIXED];
         to[d] = j;
     }
@@ -131,6 +150,22 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             if same || verb == 2 {
                 logit[FIXED + 8 + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq) + b.adj[FIXED + 1 + verb];
             }
+        }
+    }
+    let (o0, mut fo, vol) = (FIXED + 8 + VERBS * SEEN, [0f32; SEEN * bond::NO], bond::volume(&w.chem, b));
+    for (q, &p) in parts[..np].iter().enumerate() {
+        let fq = &mut fo[q * bond::NO..(q + 1) * bond::NO];
+        fq.copy_from_slice(&bond::features(w, b, p, mass));
+        for v in (0..OVERBS).filter(|&v| bond::possible(w, b, v, p, vol)) {
+            let r = s.verb(VERBS + v);
+            logit[o0 + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq) + b.adj[FIXED + 1 + VERBS + v];
+        }
+    }
+    // Letting go needs something held or walls around; joining to the ground, a held part.
+    if held.is_none() {
+        logit[6] = f32::NEG_INFINITY;
+        if my_room.is_none() {
+            logit[5] = f32::NEG_INFINITY;
         }
     }
 
@@ -175,12 +210,26 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
                 add(s.verb(verb), g(FIXED + 8 + q * VERBS + verb), &fb[q * NT..(q + 1) * NT]);
             }
         }
+        for q in 0..np {
+            for v in 0..OVERBS {
+                add(s.verb(VERBS + v), g(o0 + q * OVERBS + v), &fo[q * bond::NO..(q + 1) * bond::NO]);
+            }
+        }
     }
     for k in 0..SIG {
         let (mu, z) = (squash(out[s.sig() + k]), rng.normal() as f32);
         b.sig[k] = mu + NOISE * z;
         if learning {
             b.trace[H + s.sig() + k] = z / NOISE * (1.0 - mu * mu);
+        }
+    }
+    // The shape of a part made: elongation and hollowness, drawn around the brain's means.
+    let mut shape = [0f32; 2];
+    for k in 0..2 {
+        let (mu, z) = (squash(out[s.form() + k]), rng.normal() as f32);
+        shape[k] = mu + SHAPE_NOISE * z;
+        if learning {
+            b.trace[H + s.form() + k] = if a == 4 { z / SHAPE_NOISE * (1.0 - mu * mu) } else { 0.0 };
         }
     }
     for k in 0..brain::MEM {
@@ -195,7 +244,12 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
         2 => put(w, b),
         3 => take_node(w, b),
+        4 => bond::form(w, slot, b, [shape[0], 0.5 * (shape[1] + 1.0)]),
+        5 => bond::release(w, b),
+        6 => bond::anchor(w, b),
+        7 => bond::dig(w, b),
         a if a < FIXED + 8 => go(w, slot, b, a - FIXED, to[a - FIXED]),
+        a if a >= o0 => bond::act(w, slot, b, (a - o0) % OVERBS, parts[(a - o0) / OVERBS]),
         a => {
             let (q, verb) = ((a - FIXED - 8) / VERBS, (a - FIXED - 8) % VERBS);
             match verb {
@@ -242,7 +296,7 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32; H]) {
     }
     brain::learn(&mut gr.rows[cr..cr + R], h, &[1.0], lr * delta);
     brain::learn(&mut gr.rows[..l * R], h, c, a);
-    let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS).map(|v| c[s.verb(v)]));
+    let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS + OVERBS).map(|v| c[s.verb(v)]));
     for (j, cb) in b.adj.iter_mut().zip(bias) {
         *j = (*j + 0.1 * a * cb).clamp(-3.0, 3.0);
     }
@@ -314,20 +368,27 @@ pub fn regroup(w: &mut World) {
     }
 }
 
-/// Move to a neighbour that has room: cost by mass, distance, climb, and the bodies already
-/// there. The part spent pushing through them breaks their bonds (`wear`). A body that strays
-/// from its group's centre leaves with a copy of its rows.
+/// Move to a neighbour that has room: cost by mass (with the structure it carries), distance,
+/// climb, and the bodies already there; less, and no climb, into deep liquid while held up by
+/// what it carries. The part spent pushing through bodies breaks their bonds (`wear`). A body
+/// that strays from its group's centre leaves with a copy of its rows.
 fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let i = b.cell as usize;
     if w.life.at[j].len() >= w.cfg.max_bodies_per_cell {
         return;
     }
-    let climb = (w.life.env[j][2] - w.life.env[i][2]).max(0.0);
+    let mb = b.mass(&w.chem);
+    let carried = bond::carry(w, b, mb);
+    let afloat = carried.is_some() && bond::afloat(w, b, j, mb);
+    let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = 1.0 + w.life.sum[j][1] / w.grid.area() / RHO_PASS;
-    let cost = b.mass(&w.chem) * (C_MOVE * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist;
+    let mass = mb + carried.map_or(0.0, |c| c.1);
+    let cost = mass * (C_MOVE * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { bond::AFLOAT } else { 1.0 };
     if !body::pay(w, b, cost, b.interval() as f64) {
         return;
     }
+    bond::moved(w, b, carried, j, mb);
+    w.parts.tally.afloat += afloat as u8 as f64;
     w.life.relocate(slot, b.group, i, j);
     b.cell = j as u32;
     b.mark = w.light[j];
@@ -381,7 +442,7 @@ fn wear(w: &mut World, j: usize, mover: usize, energy: f64) {
 }
 
 /// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all.
-fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64) -> Vec<f64> {
+pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64) -> Vec<f64> {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let from = |k: usize| from(k).max(0.0);
     let up = |k: usize| if from(k) > 0.0 { b.gene(lay.upt + k).max(0.0) } else { 0.0 };
@@ -391,7 +452,7 @@ fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64) -> Vec<f64>
     (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect()
 }
 
-fn kg(w: &World, m: &[f64]) -> f64 {
+pub(crate) fn kg(w: &World, m: &[f64]) -> f64 {
     m.iter().zip(&w.chem.subs).map(|(a, s)| a * s.molar_mass).sum()
 }
 
@@ -455,12 +516,14 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 }
 
 /// Take from another body in the cell, by uptake selectivity, as much as the body's mass and
-/// its strength against the other's allow. The other dies if it loses half its mass or falls
-/// below a safe minimum; else it remembers this against the taker.
+/// its strength against the other's allow (each times what a held part adds), and its room. The
+/// other dies if it loses half its mass or falls below a safe minimum; else it remembers this
+/// against the taker.
 fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
-    let (sb, so) = (b.gene(STRENGTH), o.gene(STRENGTH));
+    let lever = bond::lever(w, b, mb);
+    let (sb, so) = (b.gene(STRENGTH) * lever, o.gene(STRENGTH) * bond::lever(w, o, mo));
     let m = wanted(w, b, |k| o.store[k], TAKE * b.interval() as f64 * mb * sb / (sb + so + 1e-9));
     if !body::pay(w, b, C_HANDLE * kg(w, &m), b.interval() as f64) {
         return;
@@ -468,6 +531,8 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let mut o = std::mem::take(&mut w.life.bodies[s]);
     transfer(w, &mut o, b, &m);
     let got = kg(w, &m);
+    let t = &mut w.parts.tally.take[(lever > 1.0) as usize];
+    (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
     let kind = !body::light_eater(&w.chem, &o.genes) as usize;
     b.took[kind] += got as f32;
     if !body::light_eater(&w.chem, &b.genes) {

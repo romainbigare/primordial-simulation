@@ -73,6 +73,8 @@ pub struct Ctx<'a> {
     pub plants: Vec<f64>,
     pub animals: Vec<f64>,
     pub bodies: Vec<f64>,
+    /// Per ground cell: mass of made objects (parts), kg/m²
+    pub parts: Vec<f64>,
 }
 
 impl<'a> Ctx<'a> {
@@ -84,7 +86,10 @@ impl<'a> Ctx<'a> {
         }
         let n = w.grid.n();
         let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
-        let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n] };
+        let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n] };
+        for p in w.parts.alive() {
+            c.parts[p.cell as usize] += p.mass(&w.chem) / w.grid.area();
+        }
         for b in w.life.alive() {
             let i = b.cell as usize;
             let m = b.mass(&w.chem) / w.grid.area();
@@ -137,6 +142,7 @@ pub const LAYERS: &[Layer] = &[
     l("animals", "kg/m2", "log", 1e-4, 1.0, |c, i| c.animals[i]),
     l("bodies", "1", "lin", 0.0, 32.0, |c, i| c.bodies[i]),
     l("traffic", "1/yr", "log", 1.0, 1e4, |c, i| c.w.diag.traffic.get(i).copied().unwrap_or(0.0) as f64),
+    l("structures", "kg/m2", "log", 1e-6, 1.0, |c, i| c.parts[i]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
     l("true_b", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][2]),

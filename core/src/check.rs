@@ -32,6 +32,13 @@ pub fn totals(w: &World) -> Totals {
         }
         thermal += b.e;
     }
+    for p in w.parts.alive() {
+        for (k, (&a, &f)) in p.wall.iter().zip(&p.fill).enumerate() {
+            chem.add_elems(k, a + f, &mut elems);
+            chemical += (a + f) * chem.subs[k].hf;
+        }
+        thermal += p.e;
+    }
     Totals { elems, thermal, chemical }
 }
 
@@ -70,6 +77,11 @@ pub fn broken(w: &World) -> Option<String> {
             return Some(format!("body {s}: energy {}, stores {:?}", b.e, b.store));
         }
     }
+    for (s, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
+        if !p.e.is_finite() || p.e <= 0.0 || p.wall.iter().chain(&p.fill).any(|x| !x.is_finite() || *x < 0.0) {
+            return Some(format!("part {s}: energy {}, walls {:?}, fill {:?}", p.e, p.wall, p.fill));
+        }
+    }
     None
 }
 
@@ -95,6 +107,12 @@ pub fn hash(w: &World) -> u64 {
     }
     for x in w.life.groups.iter().flat_map(|g| &g.rows) {
         eat(&mut h, x.to_bits() as u64);
+    }
+    for p in w.parts.alive() {
+        eat(&mut h, p.cell as u64 | (p.links.len() as u64) << 32);
+        for x in p.wall.iter().chain(&p.fill).chain([&p.e]) {
+            eat(&mut h, x.to_bits());
+        }
     }
     h
 }

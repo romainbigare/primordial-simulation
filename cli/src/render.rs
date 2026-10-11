@@ -59,6 +59,10 @@ pub fn save(w: &World, path: &str) {
         let m = b.mass(&w.chem) / w.grid.area();
         *if pcore::body::light_eater(&w.chem, &b.genes) { &mut green[b.cell as usize] } else { &mut other[b.cell as usize] } += m;
     }
+    let mut made = vec![false; w.grid.n()];
+    for p in w.parts.alive() {
+        made[p.cell as usize] = true;
+    }
     let (pw, ph) = (gw * s * panels + (panels - 1) * 4, gh * s);
     let mut img = vec![255u8; pw * ph * 3];
     let n = w.grid.n();
@@ -85,6 +89,8 @@ pub fn save(w: &World, path: &str) {
                 for dx in 0..s {
                     let dot = p == 3 && other[i] > 1e-5 && dx == 1 && dy == 1;
                     let c = &if dot { ramp(&[(-5.0, [255, 170, 60]), (-2.0, [255, 30, 0])], other[i].log10()) } else { *c };
+                    // Made objects: a white dot in the corner.
+                    let c = &if p == 3 && made[i] && dx == 0 && dy == 0 { [255, 255, 255] } else { *c };
                     let px = p * (gw * s + 4) + x * s + dx;
                     let o = ((y * s + dy) * pw + px) * 3;
                     img[o..o + 3].copy_from_slice(c);

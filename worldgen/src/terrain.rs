@@ -140,6 +140,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         diag: Diag { liquid_flux: vec![0.0; n], rain: vec![0.0; n], ..Default::default() },
         ledger: Ledger::default(),
         life: Default::default(),
+        parts: Default::default(),
         canopy: vec![0.0; n],
         light: vec![0.0; n],
         events: Vec::new(),
