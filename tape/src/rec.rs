@@ -30,7 +30,7 @@ fn describe(e: &Event) -> String {
         EventKind::Died { cause } => format!("body died at node {} (cause {cause})", e.node),
         EventKind::BondMade => format!("bond made at node {}", e.node),
         EventKind::BondBroken => format!("bond broken at node {}", e.node),
-        EventKind::GodAction => format!("god action at node {}", e.node),
+        EventKind::Imposed => format!("god action at node {}", e.node),
     }
 }
 

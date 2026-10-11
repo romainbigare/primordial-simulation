@@ -141,7 +141,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         ledger: Ledger::default(),
         events: Vec::new(),
     };
-    world.ledger.god_elems = vec![0.0; world.chem.n_elements];
+    world.ledger.imposed_elems = vec![0.0; world.chem.n_elements];
 
     // Starting temperatures: warm low latitudes, cooler poles and heights.
     let t_at = |w: &World, y: usize, z: f64| {

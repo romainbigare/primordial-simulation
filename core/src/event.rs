@@ -10,7 +10,7 @@ pub enum EventKind {
     Died { cause: u8 },
     BondMade,
     BondBroken,
-    GodAction,
+    Imposed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
