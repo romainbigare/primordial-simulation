@@ -131,6 +131,23 @@ pub fn share(took: f64, want: f64) -> f64 {
     if took >= want { 1.0 } else { took / want }
 }
 
+/// Heat capacity of a ground node's active layer, J/K (from the fields of the world).
+pub fn cap_ground(chem: &Chemistry, grid: &Grid, cfg: &Config, ground: &[f64], bed: &[f64], i: usize) -> f64 {
+    let n = grid.n();
+    let (mut c, mut bc, mut bv) = (0.0, 0.0, 0.0);
+    for k in 0..chem.ns() {
+        let s = &chem.subs[k];
+        c += ground[k * n + i] * s.cp;
+        let b = bed[k * n + i];
+        bc += b * s.cp;
+        bv += b * s.molar_mass / s.density[0];
+    }
+    if bv > 0.0 {
+        c += bc / bv * cfg.skin_m * grid.area();
+    }
+    c
+}
+
 /// Heat a node with energy `e` and heat capacity `cap` can give before it falls to `T_FLOOR`, J.
 #[inline]
 pub fn heat_above_floor(e: f64, cap: f64) -> f64 {
@@ -219,19 +236,7 @@ impl World {
 
     /// Heat capacity of a ground node's active layer, J/K.
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
-        let ns = self.chem.ns();
-        let (mut c, mut bc, mut bv) = (0.0, 0.0, 0.0);
-        for k in 0..ns {
-            let s = &self.chem.subs[k];
-            c += self.g(k, i) * s.cp;
-            let b = self.b(k, i);
-            bc += b * s.cp;
-            bv += b * s.molar_mass / s.density[0];
-        }
-        if bv > 0.0 {
-            c += bc / bv * self.cfg.skin_m * self.grid.area();
-        }
-        c
+        cap_ground(&self.chem, &self.grid, &self.cfg, &self.ground, &self.bed, i)
     }
     /// Temperature of a ground node, and the substance held at its melting point with its
     /// liquid share, if any. Molten amounts hold their fusion enthalpy in `e_ground`, so a node

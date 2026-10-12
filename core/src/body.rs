@@ -578,9 +578,15 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let upkeep = b.e - e0;
     b.e = e0;
 
-    // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks up liquid).
-    let cap = w.heat_cap_ground(i);
-    let World { chem, grid, ground, e_ground, air, e_air, ledger, light, diag, .. } = w;
+    // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks
+    // up liquid): found when first needed, but before the body soaks anything up.
+    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, diag, .. } = w;
+    let mut gcap = None;
+    macro_rules! cap {
+        () => {
+            *gcap.get_or_insert_with(|| crate::cap_ground(chem, grid, cfg, ground, bed, i))
+        };
+    }
     let (ns, n, na, j) = (chem.ns(), grid.n(), grid.na(), grid.air_of(i));
     let dt = days * DAY;
 
@@ -600,9 +606,12 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
     let reach_mol = b.k.gas * mass * days * (-depth / GAS_DEPTH).exp();
     tmp.x.clear();
-    tmp.x.extend((0..ns).map(|k| air[k * na + j] / tot));
     tmp.pool.clear();
-    tmp.pool.extend((0..ns).map(|k| (tmp.x[k] * reach_mol).min(0.5 * air[k * na + j])));
+    for k in 0..ns {
+        let (a, x) = (air[k * na + j], air[k * na + j] / tot);
+        tmp.x.push(x);
+        tmp.pool.push((x * reach_mol).min(0.5 * a));
+    }
     tmp.pool0.clone_from(&tmp.pool);
 
     // Catalysed reactions, at the body's temperature held fixed; their heat is spread over the
@@ -639,7 +648,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let push = if wet { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
         let out = if push > 0.0 {
             let owed = (lit + heat).min(0.0);
-            let room = (crate::heat_above_floor(e_ground[i], cap) + owed).max(0.0);
+            let room = (crate::heat_above_floor(e_ground[i], cap!()) + owed).max(0.0);
             let paid = (lit + heat).max(0.0) + (b.k.heat * mass * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
             (push * reach_mol).min(paid / held(chem, k))
         } else {
@@ -664,6 +673,9 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let wet = depth / (depth + WET_DEPTH);
     let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
+    if in_ground > 0.0 {
+        let _ = cap!();
+    }
     let rate = -(-b.k.liq * days).exp_m1() * wet;
     let mass2 = if moved { b.mass(chem) } else { mass1 };
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
@@ -673,7 +685,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         // cannot pay it all, the body soaks up less.
         let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg));
         let want = d * (per + f);
-        let d = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap, want), want) } else { 0.0 };
+        let d = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap!(), want), want) } else { 0.0 };
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += d * per;
@@ -690,7 +702,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
         // The ground pays the difference; if it cannot, the body ends colder.
         let give = e1 - b.e - heat;
-        let got = crate::draw(&mut e_ground[i], ledger, cap, give);
+        let got = crate::draw(&mut e_ground[i], ledger, cap!(), give);
         b.e = if got == give { e1 } else { e1 - (give - got) };
     }
 
