@@ -276,7 +276,8 @@ pub fn cells(w: &mut World) {
 /// Learn from the last decision: the change of well-being since, plus the discounted estimate
 /// of how it will go from the state now, less the estimate made then. The critic row moves
 /// toward that; the group's learned rows and the body's own adjustment move along the
-/// decision's trace by it, in units of its spread, times the body's learning rate.
+/// decision's trace by it, in units of its spread, times the body's learning rate (each row by
+/// a step of its own size, `brain::learn`).
 fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32; H]) {
     let (l, lr, cr) = (s.learned(), b.learn_rate(), s.critic() * R);
     if b.trace.len() != H + l || lr <= 0.0 {
@@ -291,8 +292,8 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32; H]) {
     if !a.is_finite() {
         return;
     }
-    brain::learn(&mut gr.rows[cr..cr + R], h, &[1.0], lr * delta);
-    brain::learn(&mut gr.rows[..l * R], h, c, a);
+    brain::fit(&mut gr.rows[cr..cr + R], h, &[1.0], lr * delta);
+    brain::learn(&mut gr.rows[..l * R], h, c, a / lr, lr, &mut gr.ms);
     let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS + OVERBS).map(|v| c[s.verb(v)]));
     for (j, cb) in b.adj.iter_mut().zip(bias) {
         *j = (*j + 0.1 * a * cb).clamp(-3.0, 3.0);
@@ -401,9 +402,9 @@ fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let gr = &w.life.groups[b.group as usize];
     let ((cx, cy), (x, y)) = (gr.centre(), w.grid.xy(j));
     if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > LEAVE {
-        let (rows, var) = (gr.rows.clone(), gr.var);
+        let (rows, var, ms) = (gr.rows.clone(), gr.var, gr.ms.clone());
         let g = w.life.new_group(b.lineage, rows);
-        w.life.groups[g as usize].var = var;
+        (w.life.groups[g as usize].var, w.life.groups[g as usize].ms) = (var, ms);
         w.life.enrol(g, b, 1);
         w.life.enrol(b.group, b, -1);
         (b.group, b.near) = (g, NONE);

@@ -339,6 +339,8 @@ pub struct Group {
     pub forget: f32,
     /// Moving average of the square of the critic's error (0 until the first one)
     pub var: f32,
+    /// Per learned row, a moving average of the square of its share of the learning steps
+    pub ms: Vec<f32>,
 }
 
 impl Group {
@@ -391,7 +393,7 @@ impl Life {
         gr.members = (gr.members as i64 + d) as u32;
         gr.forget += d as f32 * b.forget();
         if gr.members == 0 {
-            (gr.rows, gr.sum, gr.sx, gr.sy, gr.forget) = (Vec::new(), Vec::new(), 0, 0, 0.0);
+            (gr.rows, gr.sum, gr.ms, gr.sx, gr.sy, gr.forget) = (Vec::new(), Vec::new(), Vec::new(), 0, 0, 0.0);
             self.free_groups.push(g);
             return;
         }

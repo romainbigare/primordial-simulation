@@ -127,8 +127,8 @@ pub fn score(c: &[f32], f: &[f32]) -> f32 {
     c[0] + c[1..].iter().zip(f).map(|(a, b)| a * b).sum::<f32>()
 }
 
-/// Add `a · coef[r] · [h, 1]` to each learned row `r`, the step kept below `MAX_STEP`.
-pub fn learn(rows: &mut [f32], h: &[f32; H], coef: &[f32], a: f32) {
+/// Add `a · coef[r] · [h, 1]` to each row `r` (the critic's), the step kept below 0.1.
+pub fn fit(rows: &mut [f32], h: &[f32; H], coef: &[f32], a: f32) {
     const MAX_STEP: f32 = 0.1;
     let hh = 1.0 + h.iter().map(|x| x * x).sum::<f32>();
     let size = a.abs() * (coef.iter().map(|c| c * c).sum::<f32>() * hh).sqrt();
@@ -141,6 +141,31 @@ pub fn learn(rows: &mut [f32], h: &[f32; H], coef: &[f32], a: f32) {
             }
             r[H] += c;
         }
+    }
+}
+
+/// Weight of the newest step in each row's mean square of steps.
+const BETA: f32 = 0.1;
+/// Most a row moves in one step, in units of the learning rate (times [h, 1]).
+const MOST: f32 = 0.5;
+
+/// Move each learned row `r` by `lr · g / rms · [h, 1]`, where `g = a · coef[r]` is its share of
+/// the step and `rms` the root of a moving average of its squares (kept in `ms`), capped at
+/// `MOST · lr`. Each row thus gets a step of its own size: a row that rarely matters (a
+/// feature seen only now and then) learns as fast when it does as one that matters every time.
+pub fn learn(rows: &mut [f32], h: &[f32; H], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>) {
+    ms.resize(coef.len(), 0.0);
+    for ((r, &c), v) in rows.chunks_exact_mut(R).zip(coef).zip(ms.iter_mut()) {
+        let g = a * c;
+        if g == 0.0 {
+            continue;
+        }
+        *v += BETA * (g * g - *v);
+        let c = lr * (g / v.sqrt()).clamp(-MOST, MOST);
+        for m in 0..H {
+            r[m] += c * h[m];
+        }
+        r[H] += c;
     }
 }
 

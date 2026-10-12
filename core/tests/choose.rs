@@ -94,9 +94,10 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
 }
 
 /// Over all seeds: share of decisions made on the strip; of the moves made from a cell next to a
-/// richer one, the share to a richer cell, and what random moves would give; decisions.
-fn measure(learn: f32) -> (f64, f64, f64, usize) {
-    let (mut on, mut n, mut moves, mut toward, mut chance) = (0, 0, 0, 0, 0.0);
+/// richer one, the share to a richer cell, and what random moves would give; decisions; those
+/// moves.
+fn measure(learn: f32) -> (f64, f64, f64, usize, usize) {
+    let (mut on, mut n, mut moves, mut toward, mut chance) = (0, 0, 0usize, 0, 0.0);
     for seed in 1..=SEEDS {
         for (strip, moved, next, up, share) in run(seed, learn) {
             (on, n) = (on + strip as usize, n + 1);
@@ -105,23 +106,26 @@ fn measure(learn: f32) -> (f64, f64, f64, usize) {
             }
         }
     }
-    (on as f64 / n as f64, toward as f64 / moves as f64, chance / moves as f64, n)
+    (on as f64 / n as f64, toward as f64 / moves as f64, chance / moves as f64, n, moves)
 }
 
 #[test]
 fn body_learns_to_move_toward_what_it_can_take() {
-    let (strip_on, toward_on, chance_on, n_on) = measure(ON);
-    let (strip_off, toward_off, chance_off, n_off) = measure(OFF);
+    let (strip_on, toward_on, chance_on, n_on, m_on) = measure(ON);
+    let (strip_off, toward_off, chance_off, n_off, m_off) = measure(OFF);
     let report = format!(
-        "learning on: on the strip {strip_on:.3}, toward {toward_on:.3} (chance {chance_on:.3}), {n_on} decisions; \
-         off: on the strip {strip_off:.3}, toward {toward_off:.3} (chance {chance_off:.3}), {n_off} decisions"
+        "learning on: on the strip {strip_on:.3}, toward {toward_on:.3} (chance {chance_on:.3}), {n_on} decisions, {m_on} moves; \
+         off: on the strip {strip_off:.3}, toward {toward_off:.3} (chance {chance_off:.3}), {n_off} decisions, {m_off} moves"
     );
     eprintln!("{report}");
-    // It ends up on the strip clearly more often than a body that does not learn (about 0.62
-    // against 0.52 here; 0.64 against 0.52 and 0.67 against 0.49 on seeds 121 to 360).
+    // It ends up on the strip clearly more often than a body that does not learn (about 0.74
+    // against 0.51 here; 0.70 against 0.53 and 0.76 against 0.48 on seeds 121 to 360).
     assert!(strip_on > strip_off + 0.07, "{report}");
-    // Its moves go toward richer cells more often than chance, but only by 1 to 3 points: moving
-    // pays only through a take at a later decision, and the hidden layer does not learn within a
-    // life. (Not yet clearly above a body that does not learn; to be made stronger.)
-    assert!(toward_on > chance_on + 0.01, "{report}");
+    // Its moves go toward richer cells clearly more often than chance, and clearly more than
+    // those of a body that does not learn (about 14 points over chance against 1 here; 15
+    // against -1 and 16 against -1 on seeds 121 to 360). Moving pays only through a take at a
+    // later decision; it is learned because each row of the brain steps by its own size, so the
+    // row for the richness of a neighbour learns when that matters, not drowned by the others.
+    let (up_on, up_off) = (toward_on - chance_on, toward_off - chance_off);
+    assert!(up_on > 0.05 && up_on > up_off + 0.05, "{report}");
 }
