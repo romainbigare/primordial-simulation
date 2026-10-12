@@ -47,8 +47,6 @@ pub const BROKEN: u8 = 4;
 /// Others a body remembers.
 pub const KNOWN: usize = 4;
 
-/// A body whose light reactions are sped up at least this much (log10) is a light-eater.
-pub const LIGHT_EATER: f32 = 8.0;
 const DAY: f64 = 86_400.0;
 /// Updates are kept in a ring of this many days (more than the longest interval).
 const RING: u64 = 64;
@@ -113,8 +111,6 @@ pub struct Body {
     pub wet: u64,
     /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands)
     pub vis: [f32; 6],
-    /// Mass taken from other bodies in its life, kg: from light-eaters, from the others
-    pub took: [f32; 2],
     /// Brain group; the other group it has stayed near, and since when (day)
     pub group: u32,
     pub near: u32,
@@ -281,8 +277,10 @@ impl Body {
     }
 }
 
-pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
-    chem.reactions.iter().enumerate().any(|(r, rx)| rx.light && genes[NSCALAR + r] >= LIGHT_EATER)
+/// The highest speed-up (log10) of any reaction driven by light in the genes (a raw number; 0
+/// if the chemistry has none).
+pub fn light_cat(chem: &Chemistry, genes: &[f32]) -> f32 {
+    chem.reactions.iter().enumerate().filter(|(_, rx)| rx.light).map(|(r, _)| genes[NSCALAR + r]).fold(0.0, f32::max)
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

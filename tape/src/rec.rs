@@ -1,6 +1,7 @@
 //! The recorder: driven once per simulated month by the shell.
 
 use crate::layers::{frame, Ctx, COVER_MIN, LAYERS};
+use crate::measure;
 use flate2::{write::GzEncoder, Compression};
 use pcore::check;
 use pcore::event::{Event, EventKind};
@@ -32,8 +33,14 @@ struct Social {
     /// Top traffic cells at the last decade
     top: Vec<usize>,
     persist: f64,
-    /// kg taken by bodies that are not light-eaters this year: from light-eaters, others, ground
+    /// kg that bodies that are not light-eaters could burn of what they took this year: from
+    /// light-eaters, from others, from the ground
     intake: [f64; 3],
+    /// Per body slot: its generation, and what it took from other bodies in its life, kg: from
+    /// light-eaters, from the others
+    took: Vec<(u32, [f32; 2])>,
+    /// Decisions drawn this year, and those where the action drawn had the top score
+    decisions: [f64; 2],
     months: String,
     /// Bonds made this year by kind (held, joined, anchored); broken by bodies; failed by load
     made: [f64; 3],
@@ -43,6 +50,13 @@ struct Social {
     inside: [[f64; 2]; 2],
     /// What bodies did with parts this year (from the core's tally)
     tally: pcore::bond::Tally,
+}
+
+impl Social {
+    /// What the body with this id took from other bodies in its life, kg (none if nothing).
+    fn eaten(&self, id: u64) -> Option<[f32; 2]> {
+        self.took.get(id as u32 as usize).filter(|t| t.0 == (id >> 32) as u32).map(|t| t.1)
+    }
 }
 
 /// Mutual information (bits) between a binary context and the signal quarter, given lineage,
@@ -93,10 +107,9 @@ pub struct Recorder {
 fn describe(e: &Event) -> String {
     match e.kind {
         EventKind::FirstSubstance(k) => format!("substance {k} first appears"),
-        EventKind::Born => format!("body born at node {}", e.node),
-        EventKind::Died { cause } => format!("body died at node {} (cause {cause})", e.node),
         EventKind::Imposed => format!("god action at node {}", e.node),
-        EventKind::Watched { .. } | EventKind::Gave { .. } | EventKind::BondMade | EventKind::BondBroken => String::new(),
+        // Counted before they get here (see `record_month`).
+        _ => String::new(),
     }
 }
 
@@ -161,7 +174,23 @@ impl Recorder {
                     (s.gave, s.gave_kg) = (s.gave + 1.0, s.gave_kg + e.value);
                     s.pairs.insert((from, to));
                     let b = w.life.bodies.get(from as u32 as usize).filter(|b| b.alive && b.gen == (from >> 32) as u32);
-                    s.gave_eaters += b.is_some_and(|b| !pcore::body::light_eater(&w.chem, &b.genes)) as u8 as f64;
+                    s.gave_eaters += b.is_some_and(|b| !crate::light_eater(&w.chem, &b.genes)) as u8 as f64;
+                }
+                EventKind::Took { by, from, burn, cat } => {
+                    let s = &mut self.social;
+                    if from != u64::MAX {
+                        if s.took.len() <= by as u32 as usize {
+                            s.took.resize(by as u32 as usize + 1, (0, [0.0; 2]));
+                        }
+                        let t = &mut s.took[by as u32 as usize];
+                        if t.0 != (by >> 32) as u32 {
+                            *t = ((by >> 32) as u32, [0.0; 2]);
+                        }
+                        t.1[(cat[1] < measure::LIGHT_EATER) as usize] += e.value as f32;
+                    }
+                    if cat[0] < measure::LIGHT_EATER {
+                        s.intake[if from == u64::MAX { 2 } else { (cat[1] < measure::LIGHT_EATER) as usize }] += burn as f64;
+                    }
                 }
                 EventKind::BondMade => self.social.made[(e.value as usize).min(2)] += 1.0,
                 EventKind::BondBroken if e.value >= pcore::bond::LOAD => self.social.failed += 1.0,
@@ -177,7 +206,7 @@ impl Recorder {
             return;
         }
         if yearly {
-            self.social.intake = std::mem::take(&mut w.diag.intake);
+            self.social.decisions = [std::mem::take(&mut w.diag.decisions), std::mem::take(&mut w.diag.greedy)];
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -206,7 +235,7 @@ impl Recorder {
             for (c, &on) in ctx.iter().enumerate() {
                 tab[c][on as usize][q] += 1.0;
             }
-            if pcore::body::light_eater(chem, &b.genes) {
+            if crate::light_eater(chem, &b.genes) {
                 continue;
             }
             let ins = pcore::bond::room(w, b).is_some();
@@ -229,9 +258,44 @@ impl Recorder {
         s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0));
     }
 
+    /// How far learning has moved the brains from their start, and how often the best-scored
+    /// action was the one drawn.
+    fn learning(&self, w: &World) -> [(String, &'static str, f64); 2] {
+        let [n, g] = self.social.decisions;
+        [("learned".to_string(), "1", measure::learned(w)), ("greedy".to_string(), "1", g / n.max(1.0))]
+    }
+
+    /// Kinds of live bodies by their genes (see `measure::kinds`), the mass range of the bodies
+    /// (kg), and the share of what a kind took from other bodies that came from bodies that are
+    /// not light-eaters: for the kind with most bodies, and the highest of any kind.
+    fn variety(&self, w: &World) -> [(String, &'static str, f64); 6] {
+        let (of, k) = measure::kinds(w);
+        let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();
+        let mut mass: Vec<f64> = live.iter().map(|(_, b)| b.mass(&w.chem)).collect();
+        mass.sort_by(|a, b| a.total_cmp(b));
+        let at = |q: usize| mass.get(q).copied().unwrap_or(f64::NAN);
+        let (mut cnt, mut took) = (vec![0usize; k], vec![[0f64; 2]; k]);
+        for (&j, (i, b)) in of.iter().zip(&live) {
+            cnt[j] += 1;
+            let t = self.social.eaten(b.id(*i)).unwrap_or([0.0; 2]);
+            (took[j][0], took[j][1]) = (took[j][0] + t[0] as f64, took[j][1] + t[1] as f64);
+        }
+        let share = |j: usize| took[j][1] / (took[j][0] + took[j][1]).max(1e-9);
+        let big = (0..k).max_by(|&a, &b| cnt[a].cmp(&cnt[b]).then(b.cmp(&a)));
+        let high = (0..k).map(share).fold(0.0, f64::max);
+        [
+            ("kinds".to_string(), "1", if live.is_empty() { 0.0 } else { k as f64 }),
+            ("mass_min".to_string(), "kg", at(0)),
+            ("mass_median".to_string(), "kg", at(mass.len() / 2)),
+            ("mass_max".to_string(), "kg", at(mass.len().wrapping_sub(1))),
+            ("trophic_max".to_string(), "1", big.map_or(f64::NAN, share)),
+            ("trophic_high".to_string(), "1", high),
+        ]
+    }
+
     fn push_series(&mut self, c: &Ctx) {
         let life = &c.w.life;
-        let light_eaters = life.alive().filter(|b| pcore::body::light_eater(&c.w.chem, &b.genes)).count() as f64;
+        let light_eaters = life.alive().filter(|b| crate::light_eater(&c.w.chem, &b.genes)).count() as f64;
         let bodies = life.alive().count() as f64;
         let w = c.w;
         let n = w.grid.n() as f64;
@@ -251,7 +315,7 @@ impl Recorder {
             ("bodies".to_string(), "1", bodies),
             ("plants".to_string(), "1", light_eaters),
             ("animals".to_string(), "1", bodies - light_eaters),
-            ("eat_animals".to_string(), "1", life.alive().filter(|b| b.took[1] > b.took[0]).count() as f64),
+            ("eat_animals".to_string(), "1", life.bodies.iter().enumerate().filter(|(i, b)| b.alive && self.social.eaten(b.id(*i)).is_some_and(|t| t[1] > t[0])).count() as f64),
             ("lineages".to_string(), "1", life.lineages() as f64),
             ("updates".to_string(), "1/yr", life.updates.saturating_sub(self.updates) as f64),
             ("lineages_ever".to_string(), "1", life.brains.len() as f64),
@@ -262,6 +326,8 @@ impl Recorder {
             ("died_taken".to_string(), "1/yr", self.deaths[3]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
+        row.extend(self.learning(w));
+        row.extend(self.variety(w));
         // Traffic: share of crossings on the top 2% cells, their overlap with the top cells a
         // decade ago, and the body mass per area there and on other land.
         let (traffic, gn) = (&w.diag.traffic, w.grid.n());
@@ -349,7 +415,7 @@ impl Recorder {
             ("dig_bare_yield".to_string(), "1", mean(t.dig[0])),
             ("dig_held_yield".to_string(), "1", mean(t.dig[1])),
         ]);
-        (s.made, s.broken, s.failed, s.inside) = Default::default();
+        (s.made, s.broken, s.failed, s.inside, s.intake) = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();
         // Mole fraction in the air of each heat-absorbing gas.

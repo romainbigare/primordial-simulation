@@ -93,7 +93,7 @@ impl<'a> Ctx<'a> {
         for b in w.life.alive() {
             let i = b.cell as usize;
             let m = b.mass(&w.chem) / w.grid.area();
-            *if pcore::body::light_eater(&w.chem, &b.genes) { &mut c.plants[i] } else { &mut c.animals[i] } += m;
+            *if crate::light_eater(&w.chem, &b.genes) { &mut c.plants[i] } else { &mut c.animals[i] } += m;
             c.bodies[i] += 1.0;
         }
         for j in 0..na {

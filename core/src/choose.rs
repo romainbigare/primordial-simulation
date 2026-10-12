@@ -183,6 +183,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         u < 0.0
     });
     let a = if copying { 1 } else { a.unwrap_or(0) };
+    if !copying {
+        (w.diag.decisions, w.diag.greedy) = (w.diag.decisions + 1.0, w.diag.greedy + (logit[a] >= top) as u8 as f64);
+    }
 
     // The trace of this decision for learning: the hidden layer, and per learned row how its
     // output moves the log-chance of what was done (nothing for a copy) and of the signal.
@@ -243,7 +246,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             copy::copy(w, slot, b);
         }
         2 => put(w, b),
-        3 => take_node(w, b),
+        3 => take_node(w, slot, b),
         4 => bond::form(w, slot, b, [shape[0], 0.5 * (shape[1] + 1.0)]),
         5 => bond::release(w, b),
         6 => bond::anchor(w, b),
@@ -464,7 +467,7 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
 }
 
 /// Take loose solids and liquids from the cell's ground.
-fn take_node(w: &mut World, b: &mut Body) {
+fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
     let tg = w.life.env[i][0];
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
@@ -472,9 +475,8 @@ fn take_node(w: &mut World, b: &mut Body) {
     if !body::pay(w, b, C_HANDLE * kg(w, &m), b.interval() as f64) {
         return;
     }
-    if !body::light_eater(&w.chem, &b.genes) {
-        w.diag.intake[2] += burnable(w, b, &m);
-    }
+    let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), 0.0] };
+    w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: kg(w, &m) });
     for (k, &a) in m.iter().enumerate() {
         let q = a * (w.chem.subs[k].cp * tg + body::fused(&w.chem, k, tg));
         w.ground[k * n + i] -= a;
@@ -533,11 +535,8 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let got = kg(w, &m);
     let t = &mut w.parts.tally.take[(lever > 1.0) as usize];
     (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
-    let kind = !body::light_eater(&w.chem, &o.genes) as usize;
-    b.took[kind] += got as f32;
-    if !body::light_eater(&w.chem, &b.genes) {
-        w.diag.intake[kind] += burnable(w, b, &m);
-    }
+    let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), body::light_cat(&w.chem, &o.genes)] };
+    w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: got });
     if o.mass(&w.chem) < 0.5 * mo || o.lacking(&w.chem) {
         body::die(w, s, o, TAKEN);
     } else {

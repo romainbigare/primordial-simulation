@@ -12,6 +12,10 @@ pub enum EventKind {
     Watched { by: u32, of: u32 },
     /// Body `from` put stores into body `to` (value: kg)
     Gave { from: u64, to: u64 },
+    /// Body `by` took from body `from` (`u64::MAX`: from the ground); value: kg taken. `burn` is
+    /// the part of it that `by`'s own reactions can burn; `cat` the highest speed-up (log10) of
+    /// any light reaction in the genes of the taker and of the one taken from (0 for ground)
+    Took { by: u64, from: u64, burn: f32, cat: [f32; 2] },
     BondMade,
     BondBroken,
     Imposed,

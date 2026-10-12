@@ -118,10 +118,12 @@ pub struct Diag {
     /// since the last month
     pub traffic: Vec<f32>,
     pub crossings: Vec<f32>,
-    /// Mass of what they can burn taken by bodies that are not light-eaters since the shell last
-    /// read it, kg: from light-eaters, from other bodies, from the ground (not saved)
+    /// Decisions drawn since the shell last read them, and of them those where the action drawn
+    /// had the highest score (not saved)
     #[serde(skip)]
-    pub intake: [f64; 3],
+    pub decisions: f64,
+    #[serde(skip)]
+    pub greedy: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

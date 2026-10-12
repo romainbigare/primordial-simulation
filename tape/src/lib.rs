@@ -1,9 +1,11 @@
 //! The history tape: snapshots, yearly summary series, raw events and viewer frames.
 
 mod layers;
+mod measure;
 mod rec;
 
 pub use layers::{fields, quantise, Ctx, Fields, Layer, COVER_MIN, LAYERS};
+pub use measure::{kinds, learned, light_eater, LIGHT_EATER};
 pub use rec::Recorder;
 
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};

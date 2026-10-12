@@ -51,3 +51,38 @@ fn hot_energy_rich_node_keeps_burning() {
     }
     assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
 }
+
+/// A ground node at 600 K holding the energy-rich solid (the one the light reaction makes) with
+/// the burning gas above it reacts in the very next step, whichever turn its block has.
+#[test]
+fn hot_node_reacts_in_the_next_step() {
+    use pcore::chem::Phase;
+    let base = worldgen::new_world(1, 16, 16);
+    let chem = &base.chem;
+    // The roles are found from the chemistry as `worldgen/src/life.rs` does.
+    let at = |k: u16| chem.phase(k as usize, 290.0);
+    let lit = (0..chem.reactions.len()).find(|&r| chem.reactions[r].light && chem.dh(r) > 0.0).expect("a light reaction");
+    let rich = chem.reactions[lit].outputs.iter().find(|p| at(p.0) == Phase::Solid).expect("a solid made").0 as usize;
+    let burn = (0..chem.reactions.len())
+        .find(|&r| chem.dh(r) < 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == rich) && chem.reactions[r].inputs.iter().any(|p| at(p.0) == Phase::Gas))
+        .expect("a burning reaction");
+    let (n, na, i) = (base.grid.n(), base.grid.na(), 17);
+    let j = base.grid.air_of(i);
+    for tick in 0..40 {
+        let mut w = base.clone();
+        w.scratch = Default::default();
+        w.day = 3 * tick;
+        for k in 0..w.chem.ns() {
+            w.ground[k * n + i] = 0.0;
+            w.bed[k * n + i] = 0.0;
+        }
+        w.ground[rich * n + i] = 1000.0;
+        let tot: f64 = (0..w.chem.ns()).map(|k| w.air[k * na + j]).sum();
+        for p in w.chem.reactions[burn].inputs.clone().iter().filter(|p| at(p.0) == Phase::Gas) {
+            w.air[p.0 as usize * na + j] += 0.2 * tot;
+        }
+        w.e_ground[i] = w.energy_ground(i, 600.0);
+        pcore::change::step(&mut w, 3.0 * 86_400.0);
+        assert!(w.ground[rich * n + i] < 999.0, "tick {tick}: amount left {}", w.ground[rich * n + i]);
+    }
+}

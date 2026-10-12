@@ -491,7 +491,8 @@ pub fn step(w: &mut World, dt: f64) {
         // A node that may go far reacts for this step; at its turn, for all the time since its
         // last turn it has not reacted for.
         let [last, _, fasts] = slow[i];
-        let ticks = if due && !cold(t, has()) { (tick - last).saturating_sub(fasts) } else { maybe[i] as u32 };
+        // (At least this step if it may go far: a first turn has no earlier turn to count from.)
+        let ticks = if due && !cold(t, has()) { (tick - last).saturating_sub(fasts).max(maybe[i] as u32) } else { maybe[i] as u32 };
         let mut next = LAZY;
         if ticks > 0 {
             for k in 0..ns {

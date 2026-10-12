@@ -57,7 +57,7 @@ pub fn save(w: &World, path: &str) {
     let (mut green, mut other) = (vec![0.0; w.grid.n()], vec![0.0; w.grid.n()]);
     for b in w.life.alive() {
         let m = b.mass(&w.chem) / w.grid.area();
-        *if pcore::body::light_eater(&w.chem, &b.genes) { &mut green[b.cell as usize] } else { &mut other[b.cell as usize] } += m;
+        *if tape::light_eater(&w.chem, &b.genes) { &mut green[b.cell as usize] } else { &mut other[b.cell as usize] } += m;
     }
     let mut made = vec![false; w.grid.n()];
     for p in w.parts.alive() {
