@@ -379,9 +379,6 @@ impl Lineage {
     }
 }
 
-/// Scale of the whole-number sums of born rows.
-const FIX: f64 = 4_294_967_296.0;
-
 /// Bodies that stayed near each other share the rows of one brain: the mean of the rows they
 /// were born with, plus what the group learned (by learning and watching). `rows` holds that
 /// sum, kept up to date as members come and go.
@@ -393,11 +390,11 @@ pub struct Group {
     pub sx: i64,
     pub sy: i64,
     pub rows: Vec<f32>,
-    /// Sums of the members' born rows, in units of 1 / `FIX` (whole numbers, so a sum does not
-    /// depend on the order members came and went and is rebuilt exactly after a load, see
-    /// `Life::resum`); and of their forgetting rates
+    /// Sums of the members' born rows (kept up to date as members come and go, and rebuilt
+    /// from the members at the start of each month, so a run resumed from a snapshot goes on
+    /// the same; not saved); and of their forgetting rates
     #[serde(skip)]
-    pub sum: Vec<i64>,
+    pub sum: Vec<f32>,
     pub forget: f32,
     /// Moving average of the square of the critic's error (0 until the first one)
     pub var: f32,
@@ -412,8 +409,8 @@ impl Group {
     }
     /// The mean of its members' born rows.
     pub fn innate(&self) -> impl Iterator<Item = f32> + '_ {
-        let k = 1.0 / (FIX * self.members.max(1) as f64);
-        self.sum.iter().map(move |&s| (s as f64 * k) as f32)
+        let k = 1.0 / self.members.max(1) as f32;
+        self.sum.iter().map(move |&s| s * k)
     }
     /// What the group learned: its rows less the mean of its members' born rows.
     pub fn learned(&self) -> impl Iterator<Item = f32> + '_ {
@@ -480,27 +477,24 @@ impl Life {
             self.free_groups.push(g);
             return;
         }
-        gr.sum.resize(gr.rows.len(), 0);
-        let (k1, k0) = (1.0 / (FIX * gr.members as f64), if n0 > 0.0 { 1.0 / (FIX * n0 as f64) } else { 0.0 });
+        gr.sum.resize(gr.rows.len(), 0.0);
+        // A new group keeps the rows it was given (the first member's difference counts as learned).
+        let (k1, k0, d) = if n0 > 0.0 { (1.0 / gr.members as f32, 1.0 / n0, d as f32) } else { (0.0, 0.0, d as f32) };
         for ((r, s), &x) in gr.rows.iter_mut().zip(gr.sum.iter_mut()).zip(born) {
-            let s1 = *s + d * (x as f64 * FIX) as i64;
-            if n0 > 0.0 {
-                *r += (s1 as f64 * k1 - *s as f64 * k0) as f32;
-            }
+            let s1 = *s + d * x;
+            *r += s1 * k1 - *s * k0;
             *s = s1;
         }
     }
-    /// Rebuild the sums of born rows of the groups if they are missing (after a load).
+    /// Rebuild the groups' sums of born rows from their members, in slot order.
     pub fn resum(&mut self) {
-        if !self.groups.iter().any(|g| g.members > 0 && g.sum.is_empty()) {
-            return;
-        }
         for g in self.groups.iter_mut() {
-            g.sum = vec![0; g.rows.len()];
+            g.sum.clear();
+            g.sum.resize(g.rows.len(), 0.0);
         }
         for b in self.bodies.iter().filter(|b| b.alive) {
             let (gr, born) = (&mut self.groups[b.group as usize], &self.genomes[b.genome as usize].rows);
-            gr.sum.iter_mut().zip(born).for_each(|(s, &x)| *s += (x as f64 * FIX) as i64);
+            gr.sum.iter_mut().zip(born).for_each(|(s, &x)| *s += x);
         }
     }
     /// Move the centre of group `g` by a member at `cell` (`d` = 1 arrived, -1 left).
@@ -593,7 +587,10 @@ pub fn survey(w: &mut World) {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
     bond::ready(w);
-    w.life.resum();
+    let monthly = w.day % w.cfg.days_per_month as u64 == 0;
+    if monthly || w.life.groups.iter().any(|g| g.members > 0 && g.sum.is_empty()) {
+        w.life.resum();
+    }
     let life = &mut w.life;
     life.sum.clear();
     life.sum.resize(n, [0.0; 7]);
@@ -608,7 +605,6 @@ pub fn survey(w: &mut World) {
     for (c, s) in w.canopy.iter_mut().zip(&life.sum) {
         *c = (s[2] / area) as f32;
     }
-    let monthly = w.day % w.cfg.days_per_month as u64 == 0;
     if monthly && w.day > 0 {
         choose::regroup(w);
         let d = &mut w.diag;

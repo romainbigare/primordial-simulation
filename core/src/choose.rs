@@ -341,8 +341,11 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     if !a.is_finite() {
         return;
     }
-    brain::fit(&mut gr.rows[cr..cr + s.r()], h, &[1.0], lr * delta);
-    brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, lr, &mut gr.ms);
+    // The group's rows step by the rate split over its members, so a shared brain moves as fast
+    // as one body's would (on the mean of what its members met).
+    let gl = lr / gr.members.max(1) as f32;
+    brain::fit(&mut gr.rows[cr..cr + s.r()], h, &[1.0], gl * delta);
+    brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, gl, &mut gr.ms);
     let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS + OVERBS).map(|v| c[s.verb(v)]));
     for (j, cb) in b.adj.iter_mut().zip(bias) {
         *j = (*j + 0.1 * a * cb).clamp(-3.0, 3.0);

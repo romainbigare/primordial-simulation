@@ -25,7 +25,7 @@ pub fn save_snapshot(w: &World, path: impl AsRef<Path>) -> io::Result<()> {
 }
 
 /// Load a snapshot. Skipped scratch fields come back as their defaults (the groups' sums of
-/// born rows are rebuilt).
+/// born rows are rebuilt, as each month does).
 pub fn load_snapshot(path: impl AsRef<Path>) -> io::Result<World> {
     let mut w: World = bincode::deserialize_from(GzDecoder::new(BufReader::new(std::fs::File::open(path)?))).map_err(bad)?;
     w.life.resum();
