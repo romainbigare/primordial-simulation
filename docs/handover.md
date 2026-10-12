@@ -1,6 +1,6 @@
 # Handover: Emergent World, version 2
 
-**Written:** 10 October 2026. **Revised:** 11 October 2026 (chemistry 0; shared group brains; word-ban fix; honest speed targets; budgets as goals; M3 check point).
+**Written:** 10 October 2026. **Revised:** 11 October 2026 (chemistry 0; shared group brains; word-ban fix; honest speed targets; budgets as goals; M3 check point). 12 October 2026 (after the M3 check point review: real-sized bodies, no hard density limit, fix list before M4, reports kept in `docs/reports/`).
 **For:** a new AI agent (or engineer) who will start building version 2 from an empty project.
 **From:** a design conversation between the project owner and Claude, after a review of version 1, an earlier attempt with the same goal. You do not have version 1. Everything useful from it is written in this document.
 
@@ -94,6 +94,7 @@ What went wrong:
 | Core idea | 5 laws on one graph: Flow, Change, Bond, Copy, Choose |
 | Coordination, trade, property, institutions | **Not** primitives. They must emerge from Choose + Bond + Flow + Copy (+ signals) |
 | Actors | Individual bodies where it matters. Groups of similar bodies merged into population nodes elsewhere (Section 7) |
+| Body scale (12 Oct 2026) | Bodies are **real-sized**: an individual weighs what a real living thing weighs (grams to tonnes, set by its genes and selection). Plant cover holds real mass per m² (about 1 to 50 kg/m²). **No hard-coded limit on bodies per cell**: density is an outcome of light, cover, crowding and food. Speed comes from population nodes (Section 7.1, light-eaters first) and better algorithms, never from giant bodies |
 | World chemistry | One fixed Earth-like "chemistry 0" through M6 (numbers only, no names in core). Random chemistry per world from M7 (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
 | Visuals | **2D map, no 3D**: colour-coded pixels for land plus small axonometric sprites. Earth view (default) with a switch to true view |
@@ -793,7 +794,7 @@ That is all, until something emerges. No receipts, no proof campaigns, no advers
 
 ### 12.4 Watch reports
 
-Each milestone ends with a short report for the owner, in simple English:
+Each milestone ends with a short report for the owner, in simple English, saved in the repository as `docs/reports/<name>.md` with its pictures (the repository is the record):
 - what we built (a few lines)
 - **pictures or a short video**
 - key numbers (speed, population, how many kinds, how many patterns)
