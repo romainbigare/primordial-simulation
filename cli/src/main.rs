@@ -24,6 +24,8 @@ fn main() {
             let mut w = worldgen::new_world(args.get("--seed", 1u64), size, size);
             w.cfg.sun *= args.get("--sun", 1.0);
             w.cfg.flow_days = args.get("--flow-days", w.cfg.flow_days);
+            w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
+            w.cfg.exchange_days = args.get("--exchange-days", w.cfg.exchange_days.min(w.cfg.flow_days).max(w.cfg.air_days));
             let absorber = args.get("--absorber", 1.0);
             let na = w.grid.na();
             for j in 0..na {
@@ -41,7 +43,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -103,7 +105,8 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     let flux = |i: usize| w.diag.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     let dry: Vec<usize> = (0..w.grid.n()).filter(|&i| f.z[i] > 0.0 && f.depth[i] <= 1.0).collect();
     let over = |t: f64| dry.iter().filter(|&&i| flux(i) > t).count();
-    println!("rivers: max flux {:.3e} mol/s on land, dry land cells over 9e3 (web) {}, over 3e4 (png) {}", dry.iter().map(|&i| flux(i)).fold(0.0, f64::max), over(9e3), over(3e4));
+    let rain = (0..w.grid.n()).filter(|&i| f.z[i] > 0.0).map(|i| w.diag.rain[i] as f64).sum::<f64>() / (0..w.grid.n()).filter(|&i| f.z[i] > 0.0).count().max(1) as f64;
+    println!("rivers: max flux {:.3e} mol/s on land, dry land cells over 9e3 (web) {}, over 3e4 (png) {}, mean land rain {rain:.3e} mol/m2/s", dry.iter().map(|&i| flux(i)).fold(0.0, f64::max), over(9e3), over(3e4));
     let s = (busy + part.iter().sum::<Duration>()).as_secs_f64();
     println!("{years} years in {s:.2} s ({:.1} ms per year), hash {:016x}", s * 1000.0 / years.max(1) as f64, pcore::check::hash(&w));
 }
