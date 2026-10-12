@@ -75,3 +75,16 @@ fn take_heat_never_takes_a_node_below_the_floor() {
     // A negative request gives heat and is returned whole.
     assert_eq!(w.take_heat(i, -5.0), -5.0);
 }
+
+/// A brain grown (more hidden units and memory) and shrunk back is the brain it was.
+#[test]
+fn brain_grown_and_shrunk_back_is_unchanged() {
+    let (a, b) = (pcore::choose::shape(9, 12, 6), pcore::choose::shape(9, 16, 8));
+    let mut r = Rng::new(1, 0, 0, Purpose::Body);
+    let w = pcore::brain::random(a, &mut r, 0.1, [0.0; 8], 0.0, [0.0; 9]);
+    let (base, rows) = w.split_at(a.base());
+    let grown = (pcore::brain::rebase(base, a, b, &mut r, 0.1), pcore::brain::rerow(rows, a, b, &mut r, 0.1));
+    assert_eq!((grown.0.len(), grown.1.len()), (b.base(), b.rows() * b.r()));
+    assert_eq!(pcore::brain::rebase(&grown.0, b, a, &mut r, 0.1), base);
+    assert_eq!(pcore::brain::rerow(&grown.1, b, a, &mut r, 0.1), rows);
+}

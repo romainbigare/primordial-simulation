@@ -3,7 +3,7 @@
 //! chemistry's numbers: the light reaction, the energy-rich solid it makes, the liquid it
 //! uses, and the reaction that burns that solid with a gas.
 
-use pcore::body::{self, Body, Layout};
+use pcore::body::{self, Body, Layout, Lineage};
 use pcore::chem::{Chemistry, Phase};
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, choose, World};
@@ -46,8 +46,8 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// capture area, long intervals, resting. Eaters: fast burning, take the energy-rich solid from
 /// bodies and the ground, short intervals.
 const KINDS: [Kind; 2] = [
-    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 5.7, 1.3, -0.7, -4.0, -4.0], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 2e5, chance: 0.3, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
-    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 4.7, 1.0, -0.7, -2.0, -4.0], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 2e4, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
+    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 5.7, 1.3, -0.7, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 2e5, chance: 0.3, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
+    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 4.7, 1.0, -0.7, -2.0, -4.0, 12.0, 6.0, 3.0, 1.0], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 2e4, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
 ];
 
 /// Place bodies of starting kind `which`: 0 light-eaters on land, 1 eaters where bodies already are.
@@ -57,11 +57,12 @@ pub fn seed(w: &mut World, which: usize) {
         return;
     }
     body::survey(w);
-    let shape = choose::shape(w.chem.ns());
+    let [h, mem, seen, sight] = choose::sizes(&kind.scalars);
+    let shape = choose::shape(w.chem.ns(), h, mem);
     let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Body);
-    let mut brain = brain::random(shape, &mut r, 0.1, kind.fixed, kind.dir, kind.verbs);
-    let rows = brain.split_off(shape.base());
-    let lineage = w.life.new_lineage(brain);
+    let mut base = brain::random(shape, &mut r, 0.1, kind.fixed, kind.dir, kind.verbs);
+    let rows = base.split_off(shape.base());
+    let lineage = w.life.new_lineage(Lineage { shape, seen, sight, base });
     for i in 0..w.grid.n() {
         let [_, depth, z] = w.life.env[i];
         if z <= 0.0 || depth > 0.5 || r.f64() >= kind.chance || (which > 0 && w.life.at[i].is_empty()) {

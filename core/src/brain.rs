@@ -9,9 +9,8 @@
 //! rows also change by imitation. Kept apart from the laws so it can be swapped.
 
 use crate::rng::Rng;
+use serde::{Deserialize, Serialize};
 
-/// Hidden units.
-pub const H: usize = 12;
 /// Fixed actions: rest, copy, put to the node, take from the node, form a part, let go (or
 /// leave the inside), join the held part to the ground, break the bonded ground.
 pub const FIXED: usize = 8;
@@ -20,15 +19,15 @@ pub const VERBS: usize = 3;
 /// Verbs toward a perceived part: hold it, take from it, put to it, join the held part to it,
 /// break its bonds, enter the inside of its structure.
 pub const OVERBS: usize = 6;
-/// Signal outputs and memory numbers.
+/// Signal outputs.
 pub const SIG: usize = 2;
-pub const MEM: usize = 6;
-/// One row: H weights, then a bias.
-pub const R: usize = H + 1;
 
-/// Sizes of the inputs, the direction features, the body features and the part features.
-#[derive(Clone, Copy, Debug)]
+/// Sizes of a brain: hidden units, memory numbers, inputs (the memory last), direction
+/// features, body features and part features. A row is `h` weights, then a bias.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Shape {
+    pub h: usize,
+    pub mem: usize,
     pub ni: usize,
     pub nf: usize,
     pub nt: usize,
@@ -36,9 +35,13 @@ pub struct Shape {
 }
 
 impl Shape {
+    /// Length of a row.
+    pub fn r(&self) -> usize {
+        self.h + 1
+    }
     /// Length of the base.
     pub fn base(&self) -> usize {
-        H * self.ni + H
+        self.h * self.ni + self.h
     }
     /// First row of the direction scorer, of a verb's scorer (body verbs, then part verbs), of
     /// the signal, of the shape of a part made (elongation, hollowness), of the memory.
@@ -61,20 +64,20 @@ impl Shape {
     }
     /// The row that estimates how well-being will go from here (the critic).
     pub fn critic(&self) -> usize {
-        self.learned() + MEM
+        self.learned() + self.mem
     }
     pub fn rows(&self) -> usize {
         self.critic() + 1
     }
     pub fn len(&self) -> usize {
-        self.base() + self.rows() * R
+        self.base() + self.rows() * self.r()
     }
 }
 
 /// What one evaluation gives: the hidden layer and every row's value.
 #[derive(Default)]
 pub struct Thought {
-    pub h: [f32; H],
+    pub h: Vec<f32>,
     pub out: Vec<f32>,
 }
 
@@ -92,18 +95,14 @@ pub fn dot(a: &[f32], b: &[f32]) -> f32 {
     acc.iter().sum::<f32>() + tail
 }
 
-/// `base` is the lineage's (its first `s.base()` numbers are used), `rows` the group's.
+/// `base` is the lineage's, `rows` the group's.
 pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
-    let b1 = H * s.ni;
-    for (m, hm) in t.h.iter_mut().enumerate() {
-        *hm = squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x));
-    }
+    let b1 = s.h * s.ni;
+    t.h.clear();
+    t.h.extend((0..s.h).map(|m| squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x))));
     t.out.clear();
     let h = &t.h;
-    t.out.extend(rows.chunks_exact(R).map(|r| {
-        let r: &[f32; R] = r.try_into().expect("row");
-        r[H] + (0..H).map(|m| r[m] * h[m]).sum::<f32>()
-    }));
+    t.out.extend(rows.chunks_exact(s.r()).map(|r| r[s.h] + dot(&r[..s.h], h)));
 }
 
 /// A cheap tanh (error below 0.025).
@@ -128,18 +127,14 @@ pub fn score(c: &[f32], f: &[f32]) -> f32 {
 }
 
 /// Add `a · coef[r] · [h, 1]` to each row `r` (the critic's), the step kept below 0.1.
-pub fn fit(rows: &mut [f32], h: &[f32; H], coef: &[f32], a: f32) {
+pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
     const MAX_STEP: f32 = 0.1;
     let hh = 1.0 + h.iter().map(|x| x * x).sum::<f32>();
     let size = a.abs() * (coef.iter().map(|c| c * c).sum::<f32>() * hh).sqrt();
     let a = if size > MAX_STEP { a * MAX_STEP / size } else { a };
-    for (r, &c) in rows.chunks_exact_mut(R).zip(coef) {
-        let c = a * c;
+    for (r, &c) in rows.chunks_exact_mut(h.len() + 1).zip(coef) {
         if c != 0.0 {
-            for m in 0..H {
-                r[m] += c * h[m];
-            }
-            r[H] += c;
+            step(r, h, a * c);
         }
     }
 }
@@ -153,20 +148,24 @@ const MOST: f32 = 0.5;
 /// the step and `rms` the root of a moving average of its squares (kept in `ms`), capped at
 /// `MOST · lr`. Each row thus gets a step of its own size: a row that rarely matters (a
 /// feature seen only now and then) learns as fast when it does as one that matters every time.
-pub fn learn(rows: &mut [f32], h: &[f32; H], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>) {
+pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>) {
     ms.resize(coef.len(), 0.0);
-    for ((r, &c), v) in rows.chunks_exact_mut(R).zip(coef).zip(ms.iter_mut()) {
+    for ((r, &c), v) in rows.chunks_exact_mut(h.len() + 1).zip(coef).zip(ms.iter_mut()) {
         let g = a * c;
         if g == 0.0 {
             continue;
         }
         *v += BETA * (g * g - *v);
-        let c = lr * (g / v.sqrt()).clamp(-MOST, MOST);
-        for m in 0..H {
-            r[m] += c * h[m];
-        }
-        r[H] += c;
+        step(r, h, lr * (g / v.sqrt()).clamp(-MOST, MOST));
     }
+}
+
+/// Add `c · [h, 1]` to a row.
+#[inline]
+fn step(r: &mut [f32], h: &[f32], c: f32) {
+    let (w, b) = r.split_at_mut(h.len());
+    w.iter_mut().zip(h).for_each(|(w, x)| *w += c * x);
+    b[0] += c;
 }
 
 /// Move `w` a share `a` of the way toward `o`.
@@ -180,7 +179,7 @@ pub fn blend(w: &mut [f32], o: &[f32], a: f32) {
 /// (toward bodies, then toward parts).
 pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, verbs: [f32; VERBS + OVERBS]) -> Vec<f32> {
     let mut w: Vec<f32> = (0..s.len()).map(|_| size * r.normal() as f32).collect();
-    let row = |q: usize| s.base() + q * R + H;
+    let row = |q: usize| s.base() + q * s.r() + s.h;
     for (a, b) in fixed.iter().enumerate() {
         w[row(a)] = *b;
     }
@@ -191,3 +190,40 @@ pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, v
     w
 }
 
+
+/// The base of shape `a` carried over to shape `b`: weights both shapes have keep their values
+/// (the memory inputs matched from their first), new ones are noise of spread `size`.
+pub fn rebase(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> {
+    let fixed = b.ni - b.mem;
+    let input = |i: usize| if i < fixed { Some(i) } else { (i - fixed < a.mem).then(|| a.ni - a.mem + i - fixed) };
+    let mut o = Vec::with_capacity(b.base());
+    for m in 0..b.h {
+        o.extend((0..b.ni).map(|i| match input(i) {
+            Some(j) if m < a.h => w[m * a.ni + j],
+            _ => size * r.normal() as f32,
+        }));
+    }
+    o.extend((0..b.h).map(|m| if m < a.h { w[a.h * a.ni + m] } else { size * r.normal() as f32 }));
+    o
+}
+
+/// Rows of shape `a` carried over to shape `b`, the same way: rows matched by what they do
+/// (the memory rows from their first), weights by hidden unit, the bias kept.
+pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> {
+    let l = b.learned();
+    let row = |q: usize| match q {
+        q if q < l => Some(q),
+        q if q == b.critic() => Some(a.critic()),
+        q => (q - l < a.mem).then_some(q),
+    };
+    let mut o = Vec::with_capacity(b.rows() * b.r());
+    for q in 0..b.rows() {
+        let src = row(q).map(|p| &w[p * a.r()..(p + 1) * a.r()]);
+        o.extend((0..b.h).map(|m| match src {
+            Some(s) if m < a.h => s[m],
+            _ => size * r.normal() as f32,
+        }));
+        o.push(src.map_or(size * r.normal() as f32, |s| s[a.h]));
+    }
+    o
+}

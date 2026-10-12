@@ -1,9 +1,12 @@
 //! Law 4: Copy. A body with enough mass that can pay the cost makes a child: a share of each
 //! of its stores and of its heat, and its genes plus small noise, the brain rows it was born
-//! with among them; it starts in its parent's brain group. Rarely the base of its lineage's
-//! brain is copied with small noise too, which starts a new lineage (and a new group).
+//! with among them; it starts in its parent's brain group. A child whose brain-size genes are
+//! a whole unit away from its lineage's sizes starts a new lineage (and group) with the new
+//! sizes, its brain carried over where the sizes overlap; rarely the base of its lineage's brain
+//! is copied with small noise, which starts a new lineage too.
 
-use crate::body::{self, Body, Layout};
+use crate::body::{self, Body, Layout, Lineage};
+use crate::{brain, choose};
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
@@ -17,6 +20,8 @@ const NEW_LINEAGE: f64 = 0.005;
 const BASE_NOISE: f32 = 0.03;
 /// Mutation step of the born brain rows (times the body's mutation size).
 const ROW_NOISE: f32 = 0.05;
+/// Spread of the weights a bigger brain adds.
+const NEW_NOISE: f32 = 0.1;
 
 /// Mutation step (times the body's mutation size) and range of a gene.
 fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
@@ -32,6 +37,10 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::MUT => (0.2, -3.0, 0.0),
         body::LEARN => (0.2, -4.0, 0.0),
         body::FORGET => (0.2, -4.0, -1.7),
+        body::HIDDEN => (1.0, 4.0, 64.0),
+        body::MEMORY => (0.5, 0.0, 12.0),
+        body::SEEN => (0.3, 1.0, 6.0),
+        body::SIGHT => (0.2, 1.0, 4.0),
         g if g < lay.min => (1.0, -2.0, 18.0),
         g if g < lay.upt => (0.05, -0.2, 0.9),
         _ => (0.2, -0.5, 2.0),
@@ -97,10 +106,23 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         *a -= x;
     }
     shake(&mut c.rows, &mut r, ROW_NOISE * 10f32.powf(b.genes[body::MUT]));
-    if r.f64() < NEW_LINEAGE {
-        if let Some(mut base) = w.life.brains[b.lineage as usize].clone() {
-            shake(&mut base, &mut r, BASE_NOISE);
-            c.lineage = w.life.new_lineage(base);
+    if let Some(lin) = &w.life.brains[b.lineage as usize] {
+        let (old, want) = (choose::sizes_of(lin), choose::sizes(&c.genes));
+        let gene = [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| c.genes[g]);
+        let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
+        let fresh = if new != old {
+            let to = choose::shape(w.chem.ns(), new[0], new[1]);
+            c.rows = brain::rerow(&c.rows, lin.shape, to, &mut r, NEW_NOISE);
+            Some(Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, &mut r, NEW_NOISE) })
+        } else if r.f64() < NEW_LINEAGE {
+            let mut l = lin.clone();
+            shake(&mut l.base, &mut r, BASE_NOISE);
+            Some(l)
+        } else {
+            None
+        };
+        if let Some(l) = fresh {
+            c.lineage = w.life.new_lineage(l);
             c.group = w.life.new_group(c.lineage, c.rows.clone());
         }
     }

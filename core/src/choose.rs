@@ -1,6 +1,8 @@
-//! Law 5: Choose. A body perceives a little of itself, what it holds, its memory, its cell, its 8
-//! neighbours, up to 3 other bodies in or next to its cell (their looks, signals and well-being,
-//! and how past dealings with them went; walls hide them) and up to 3 parts in its cell. The
+//! Law 5: Choose. A body perceives a little of itself, what it holds, its memory, its cell, the
+//! cells around it in 8 directions (as far as its sight), up to a few other bodies in or next to
+//! its cell (their looks, signals and well-being, and how past dealings with them went; walls
+//! hide them) and up to 3 parts in its cell. How much it remembers, sees and thinks is set by
+//! genes, and each costs energy per decision (`body::Lineage::cost`). The
 //! brain of its group, plus a few numbers of its own, scores every action; one is drawn by those
 //! scores, and the body emits a signal and writes its memory. Actions are physical: move, take
 //! from the node or a body, put to the node or a body, watch a body (copy part of its brain),
@@ -15,19 +17,21 @@
 //! copy and starts a group; one that stays a year near a bigger group of its lineage joins it.
 //! What a group learned fades at the mean forgetting rate of its members.
 
-use crate::body::{self, Body, Layout, Tmp, BROKEN, STRENGTH, TAKEN};
-use crate::brain::{self, ln, score, squash, Shape, FIXED, H, OVERBS, R, SIG, VERBS};
+use crate::body::{self, Body, Layout, Lineage, Tmp, BROKEN, STRENGTH, TAKEN};
+use crate::brain::{self, ln, score, squash, Shape, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::Phase;
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
 use crate::{bond, copy, World};
 
-/// Features of a neighbour direction and of a perceived body; bodies and parts perceived; options.
+/// Features of a neighbour direction and of a perceived body; most bodies perceived (the
+/// `SEEN` gene sets how many), parts perceived; options.
 const NF: usize = 10;
 const NT: usize = 11;
-const SEEN: usize = 3;
-const OPTS: usize = FIXED + 8 + VERBS * SEEN + OVERBS * SEEN;
+const MAX_SEEN: usize = 6;
+const PARTS: usize = 3;
+const OPTS: usize = FIXED + 8 + VERBS * MAX_SEEN + OVERBS * PARTS;
 /// Energy to move one kg one metre on the flat, J.
 pub(crate) const C_MOVE: f64 = 3.0;
 /// Body mass per area that doubles the cost of entering a cell, kg/m².
@@ -53,40 +57,75 @@ const JOIN: usize = 2;
 const STAY: u64 = 360;
 const NONE: u32 = u32::MAX;
 
-pub fn shape(ns: usize) -> Shape {
-    Shape { ni: 2 * ns + 15 + brain::MEM, nf: NF, nt: NT, no: bond::NO }
+/// The brain's sizes for `ns` substances, `h` hidden units and `mem` memory numbers.
+pub fn shape(ns: usize, h: usize, mem: usize) -> Shape {
+    Shape { h, mem, ni: 2 * ns + 15 + mem, nf: NF, nt: NT, no: bond::NO }
+}
+
+/// The sizes the genes give: hidden units, memory numbers, bodies perceived, sight (cells).
+pub fn sizes(genes: &[f32]) -> [usize; 4] {
+    [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| genes[g].round().max(0.0) as usize)
+}
+
+/// The sizes of a lineage.
+pub fn sizes_of(l: &Lineage) -> [usize; 4] {
+    [l.shape.h, l.shape.mem, l.seen, l.sight]
+}
+
+/// Per direction, the offsets of the cells seen that way and their weights.
+pub type Sector = [Vec<(i32, i32, f32)>; 8];
+
+/// The cells within `sight` of a cell, by the nearest of the 8 directions they lie in: offsets
+/// and weights (nearer cells more, 1 / distance², distance counted in rings).
+fn sector(sight: usize) -> Sector {
+    let (mut s, r): (Sector, i32) = (Default::default(), sight as i32);
+    for dy in -r..=r {
+        for dx in -r..=r {
+            let k = dx.abs().max(dy.abs());
+            if k > 0 {
+                let d = ((dy as f64).atan2(dx as f64) / std::f64::consts::FRAC_PI_4).round() as i32;
+                s[d.rem_euclid(8) as usize].push((dx, dy, 1.0 / (k * k) as f32));
+            }
+        }
+    }
+    s
 }
 
 pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
-    let (i, ns, s) = (b.cell as usize, w.chem.ns(), shape(w.chem.ns()));
+    let (i, ns) = (b.cell as usize, w.chem.ns());
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
     let (mass, env) = (b.mass(&w.chem), w.life.env[i]);
     let wb = b.wellbeing(&w.chem, mass);
-    let Some(base) = w.life.brains[b.lineage as usize].as_ref() else { return };
+    let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
+    let (s, base, nseen, sight) = (lin.shape, &lin.base, lin.seen.min(MAX_SEEN), lin.sight.max(1));
+    b.mem.resize(s.mem, 0.0);
+    while t.sector.len() <= sight {
+        t.sector.push(sector(t.sector.len()));
+    }
 
     // Bodies perceived: in its own cell first, then next to it from a random side. Walls
     // between two bodies hide them from each other by how closed they are.
-    let (mut seen, mut cnt, side) = ([(0usize, false); SEEN], 0, rng.below(8));
+    let (mut seen, mut cnt, side) = ([(0usize, false); MAX_SEEN], 0, rng.below(8));
     let my_room = bond::room(w, b);
     for q in 0..9 {
-        if cnt == SEEN {
+        if cnt == nseen {
             break;
         }
         let Some(j) = (if q == 0 { Some(i) } else { w.grid.step(i, DIRS[(side + q) % 8]) }) else { continue };
         for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
             let their = bond::room(w, &w.life.bodies[o as usize]);
             let walls = if my_room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { my_room.map_or(0.0, |r| r.1).max(their.map_or(0.0, |r| r.1)) };
-            if cnt < SEEN && (walls == 0.0 || rng.f64() as f32 >= walls) {
+            if cnt < nseen && (walls == 0.0 || rng.f64() as f32 >= walls) {
                 (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);
             }
         }
     }
     // Parts perceived in its cell (not the one it holds), from a random one on.
     let (held, list) = (bond::held(w, b), &w.parts.at[i]);
-    let (mut parts, mut np, off) = ([0usize; SEEN], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
+    let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
     for q in 0..list.len() {
         let p = list[(off + q) % list.len()] as usize;
-        if np < SEEN && Some(p) != held {
+        if np < PARTS && Some(p) != held {
             (parts[np], np) = (p, np + 1);
         }
     }
@@ -105,7 +144,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     x.extend([dt / 10.0, ln(mass as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
     x.extend(bond::sense(w, b, mass));
-    x.extend(b.mem);
+    x.extend_from_slice(&b.mem);
     brain::think(base, &w.life.groups[b.group as usize].rows, s, x, &mut t.thought);
     learn(w, b, s, wb, &t.thought.h);
     let out = &t.thought.out;
@@ -115,23 +154,32 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     for a in 0..FIXED {
         logit[a] = out[a] + b.adj[a];
     }
-    // What the body can take (by its uptake selectivity) in a cell, as it perceives it.
+    // What the body can take (by its uptake selectivity) in a cell, as it perceives it. Each
+    // direction's features are the weighted mean over the cells it sees that way.
     let smell = |j: usize| b.k.upt.iter().map(|&(k, u)| u * w.life.seen[j * ns + k]).sum::<f32>();
-    let (here, f) = (smell(i), &mut t.feat);
+    let (here, f, sec) = (smell(i), &mut t.feat, &t.sector[sight]);
     f.clear();
-    f.resize((8 * NF).max(SEEN * NT), 0.0);
+    f.resize(8 * NF, 0.0);
     let mut to = [usize::MAX; 8];
     for (d, &off) in DIRS.iter().enumerate() {
         let Some(j) = w.grid.step(i, off) else { continue };
-        let (cj, e) = (&w.life.cellf[j], w.life.env[j]);
-        let fd = &mut f[d * NF..(d + 1) * NF];
-        fd[..8].copy_from_slice(cj);
-        (fd[0], fd[6], fd[8]) = (((e[2] - env[2]) / 200.0) as f32, ((e[0] - env[0]) / 5.0) as f32, smell(j) - here);
-        fd[9] = ln(1.0 + w.parts.at[j].len() as f32);
+        let (fd, mut sum) = (&mut f[d * NF..(d + 1) * NF], 0.0);
+        for &(dx, dy, wt) in &sec[d] {
+            let Some(k) = w.grid.step(i, (dx, dy)) else { continue };
+            let (ck, e) = (&w.life.cellf[k], w.life.env[k]);
+            fd[..8].iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
+            fd[0] += wt * ((e[2] - env[2]) / 200.0) as f32;
+            fd[6] += wt * ((e[0] - env[0]) / 5.0) as f32;
+            fd[8] += wt * smell(k);
+            fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
+            sum += wt;
+        }
+        fd.iter_mut().for_each(|x| *x /= sum);
+        fd[8] -= here;
         logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd) + b.adj[FIXED];
         to[d] = j;
     }
-    let mut fb = [0f32; SEEN * NT];
+    let mut fb = [0f32; MAX_SEEN * NT];
     for (q, &(o, same)) in seen[..cnt].iter().enumerate() {
         let o = &w.life.bodies[o];
         let v = o.vis;
@@ -144,7 +192,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             }
         }
     }
-    let (o0, mut fo, vol) = (FIXED + 8 + VERBS * SEEN, [0f32; SEEN * bond::NO], bond::volume(&w.chem, b));
+    let (o0, mut fo, vol) = (FIXED + 8 + VERBS * MAX_SEEN, [0f32; PARTS * bond::NO], bond::volume(&w.chem, b));
     for (q, &p) in parts[..np].iter().enumerate() {
         let fq = &mut fo[q * bond::NO..(q + 1) * bond::NO];
         fq.copy_from_slice(&bond::features(w, b, p, mass));
@@ -183,10 +231,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     // output moves the log-chance of what was done (nothing for a copy) and of the signal. For
     // the values drawn around a mean (signal, shape) that is the natural gradient (times the
     // spread squared), so their noise does not use up the step allowed to the actions.
-    let (l, learning) = (s.learned(), b.learn_rate() > 0.0);
-    b.trace.resize(if learning { H + l } else { 0 }, 0.0);
+    let (l, nh, learning) = (s.learned(), s.h, b.learn_rate() > 0.0);
+    b.trace.resize(if learning { nh + l } else { 0 }, 0.0);
     if learning {
-        let (th, c) = b.trace.split_at_mut(H);
+        let (th, c) = b.trace.split_at_mut(nh);
         th.copy_from_slice(&t.thought.h);
         c.fill(0.0);
         let g = |o: usize| if copying { 0.0 } else { (o == a) as u8 as f32 - p[o] };
@@ -217,7 +265,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         let (mu, z) = (squash(out[s.sig() + k]), rng.normal() as f32);
         b.sig[k] = mu + NOISE * z;
         if learning {
-            b.trace[H + s.sig() + k] = z * NOISE * (1.0 - mu * mu);
+            b.trace[nh + s.sig() + k] = z * NOISE * (1.0 - mu * mu);
         }
     }
     // The shape of a part made: elongation and hollowness, drawn around the brain's means.
@@ -226,11 +274,11 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         let (mu, z) = (squash(out[s.form() + k]), rng.normal() as f32);
         shape[k] = mu + SHAPE_NOISE * z;
         if learning {
-            b.trace[H + s.form() + k] = if a == 4 { z * SHAPE_NOISE * (1.0 - mu * mu) } else { 0.0 };
+            b.trace[nh + s.form() + k] = if a == 4 { z * SHAPE_NOISE * (1.0 - mu * mu) } else { 0.0 };
         }
     }
-    for k in 0..brain::MEM {
-        b.mem[k] = squash(out[l + k]);
+    for (k, m) in b.mem.iter_mut().enumerate() {
+        *m = squash(out[l + k]);
     }
     b.wb = wb;
 
@@ -278,22 +326,22 @@ pub fn cells(w: &mut World) {
 /// toward that; the group's learned rows and the body's own adjustment move along the
 /// decision's trace by it, in units of its spread, times the body's learning rate (each row by
 /// a step of its own size, `brain::learn`).
-fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32; H]) {
-    let (l, lr, cr) = (s.learned(), b.learn_rate(), s.critic() * R);
-    if b.trace.len() != H + l || lr <= 0.0 {
+fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
+    let (l, lr, cr, nh) = (s.learned(), b.learn_rate(), s.critic() * s.r(), s.h);
+    if b.trace.len() != nh + l || lr <= 0.0 {
         return;
     }
     let gr = &mut w.life.groups[b.group as usize];
-    let (h, c): (&[f32; H], _) = (b.trace[..H].try_into().expect("trace"), &b.trace[H..]);
-    let v = |x: &[f32; H]| gr.rows[cr + H] + brain::dot(&gr.rows[cr..cr + H], x);
+    let (h, c) = b.trace.split_at(nh);
+    let v = |x: &[f32]| gr.rows[cr + nh] + brain::dot(&gr.rows[cr..cr + nh], x);
     let delta = wb - b.wb + DISCOUNT * v(now) - v(h);
     gr.var = if gr.var > 0.0 { gr.var + 0.05 * (delta * delta - gr.var) } else { delta * delta };
     let a = lr * delta / (gr.var.sqrt() + 1e-3);
     if !a.is_finite() {
         return;
     }
-    brain::fit(&mut gr.rows[cr..cr + R], h, &[1.0], lr * delta);
-    brain::learn(&mut gr.rows[..l * R], h, c, a / lr, lr, &mut gr.ms);
+    brain::fit(&mut gr.rows[cr..cr + s.r()], h, &[1.0], lr * delta);
+    brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, lr, &mut gr.ms);
     let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS + OVERBS).map(|v| c[s.verb(v)]));
     for (j, cb) in b.adj.iter_mut().zip(bias) {
         *j = (*j + 0.1 * a * cb).clamp(-3.0, 3.0);
@@ -573,8 +621,9 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     w.life.bodies[s] = o;
 }
 
-/// Watch another body (it costs the turn): the group's rows move part of the way
-/// toward the rows of the other's group (the share split over the group's members), and the
+/// Watch another body (it costs the turn): the group's rows move part of the way toward the
+/// rows of the other's group if their brains have the same sizes (the share split over the
+/// group's members), and the
 /// body's own adjustment toward the other's; less the less alike the two bodies are (size,
 /// light-capture area, strength), as a body can only copy what its own body can do.
 fn watch(w: &mut World, b: &mut Body, s: usize) {
@@ -583,8 +632,8 @@ fn watch(w: &mut World, b: &mut Body, s: usize) {
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / 0.2).powi(2))).exp();
     brain::blend(&mut b.adj, &oadj, BLEND * alike);
-    let g = b.group as usize;
-    if og != g {
+    let (g, shape) = (b.group as usize, |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape));
+    if og != g && shape(ol) == shape(b.lineage) {
         let (lo, hi) = w.life.groups.split_at_mut(g.max(og));
         let (mine, theirs) = if g < og { (&mut lo[g], &hi[0]) } else { (&mut hi[0], &lo[og]) };
         brain::blend(&mut mine.rows, &theirs.rows, BLEND * alike / mine.members.max(1) as f32);

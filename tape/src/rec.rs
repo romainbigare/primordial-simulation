@@ -258,11 +258,20 @@ impl Recorder {
         s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0));
     }
 
-    /// How far learning has moved the brains from their start, and how often the best-scored
-    /// action was the one drawn.
-    fn learning(&self, w: &World) -> [(String, &'static str, f64); 2] {
+    /// How far learning has moved the brains from their start, how often the best-scored
+    /// action was the one drawn, and the mean sizes of the live bodies' brains and senses
+    /// (hidden units, memory numbers, bodies perceived, sight) with the largest hidden layer.
+    fn learning(&self, w: &World) -> [(String, &'static str, f64); 7] {
         let [n, g] = self.social.decisions;
-        [("learned".to_string(), "1", measure::learned(w)), ("greedy".to_string(), "1", g / n.max(1.0))]
+        let (mut sz, mut top, mut k) = ([0.0; 4], 0.0f64, 0.0);
+        for l in w.life.alive().filter_map(|b| w.life.brains[b.lineage as usize].as_ref()) {
+            let x = pcore::choose::sizes_of(l);
+            sz.iter_mut().zip(x).for_each(|(s, v)| *s += v as f64);
+            (top, k) = (top.max(x[0] as f64), k + 1.0);
+        }
+        let sz = sz.map(|v| v / f64::max(k, 1.0));
+        let name = |s: &str| s.to_string();
+        [(name("learned"), "1", measure::learned(w)), (name("greedy"), "1", g / n.max(1.0)), (name("hidden"), "1", sz[0]), (name("memory"), "1", sz[1]), (name("seen"), "1", sz[2]), (name("sight"), "cells", sz[3]), (name("hidden_max"), "1", top)]
     }
 
     /// Kinds of live bodies by their genes (see `measure::kinds`), the mass range of the bodies

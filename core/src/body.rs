@@ -4,7 +4,7 @@
 //! to the surface, upkeep, and death. Choose (`choose`) and Copy (`copy`) act on them.
 //! A body updates every `interval` days; everything in between is integrated at its update.
 
-use crate::brain::{ln, Thought, FIXED, MEM, OVERBS, SIG, VERBS};
+use crate::brain::{ln, Shape, Thought, FIXED, OVERBS, SIG, VERBS};
 use crate::change::Reactor;
 use crate::chem::{Chemistry, Phase, P_REF};
 use crate::event::{Event, EventKind};
@@ -37,7 +37,14 @@ pub const LEARN: usize = 9;
 /// Share of what its group learned that fades each month, log10 (off at the lower end): the
 /// group forgets at the mean rate of its members
 pub const FORGET: usize = 10;
-pub const NSCALAR: usize = 11;
+/// Sizes of the brain and the senses (each rounded): hidden units (4..64), memory numbers
+/// (0..12), bodies perceived (1..6), sight in cells (1..4). A body whose size genes are a whole
+/// unit away from its lineage's sizes starts a new lineage with those sizes.
+pub const HIDDEN: usize = 11;
+pub const MEMORY: usize = 12;
+pub const SEEN: usize = 13;
+pub const SIGHT: usize = 14;
+pub const NSCALAR: usize = 15;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -68,8 +75,15 @@ const C_CAT: f64 = 2e2;
 const C_STRENGTH: f64 = 5e3;
 /// Upkeep of light-capture area, J per m² per day.
 const C_LEAF: f64 = 2e3;
-/// Cost of one decision, J per kg.
+/// Cost of one decision of the starting brain (12 hidden units, 6 memory numbers, 3 bodies
+/// perceived, sight of 1 cell), J per kg; it is the sum of the costs below at those sizes.
 pub const C_BRAIN: f64 = 1e5;
+/// Cost of one decision per hidden unit, per memory number, per body perceived, and per square
+/// cell of sight, J per kg.
+const C_HIDDEN: f64 = 5e3;
+const C_MEMORY: f64 = 5e3 / 3.0;
+const C_SEEN: f64 = 5e3;
+const C_SIGHT: f64 = 1.5e4;
 /// Upkeep of learning, J per kg per day at learning rate 1.
 const C_LEARN: f64 = 3e4;
 /// Cost of signalling, J per kg per day at signal size 1.
@@ -128,7 +142,7 @@ pub struct Body {
     #[serde(default)]
     pub inside: u64,
     /// Memory the brain reads and writes; the signal emitted at the last decision
-    pub mem: [f32; MEM],
+    pub mem: Vec<f32>,
     pub sig: [f32; SIG],
     /// Others it knows (id) and how dealings with them went (-1 worse .. 1 better)
     pub known: [(u64, f32); KNOWN],
@@ -311,8 +325,8 @@ pub struct Life {
     pub cellf: Vec<[f32; 8]>,
     /// Updates due, by day modulo RING: (slot, generation)
     due: Vec<Vec<(u32, u32)>>,
-    /// The base of the brain of each lineage (None once it died out), and its living bodies
-    pub brains: Vec<Option<Vec<f32>>>,
+    /// The brain of each lineage (None once it died out), and its living bodies
+    pub brains: Vec<Option<Lineage>>,
     pub members: Vec<u32>,
     /// Brain groups (a group with no members is free)
     pub groups: Vec<Group>,
@@ -321,6 +335,24 @@ pub struct Life {
     pub gw: u32,
     /// Body updates since the start
     pub updates: u64,
+}
+
+/// What the bodies of a lineage share: the sizes of their brain and senses, and the base of
+/// the brain (its hidden layer).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Lineage {
+    pub shape: Shape,
+    pub seen: usize,
+    pub sight: usize,
+    pub base: Vec<f32>,
+}
+
+impl Lineage {
+    /// Energy one decision takes, J per kg of body.
+    pub fn cost(&self) -> f64 {
+        let sq = |x: usize| (x * x) as f64;
+        C_HIDDEN * self.shape.h as f64 + C_MEMORY * self.shape.mem as f64 + C_SEEN * self.seen as f64 + C_SIGHT * sq(self.sight)
+    }
 }
 
 /// Bodies that stayed near each other share the rows of one brain: the mean of the rows they
@@ -362,9 +394,8 @@ impl Life {
     pub fn lineages(&self) -> usize {
         self.members.iter().filter(|&&m| m > 0).count()
     }
-    /// A new lineage with this base.
-    pub fn new_lineage(&mut self, base: Vec<f32>) -> u32 {
-        self.brains.push(Some(base));
+    pub fn new_lineage(&mut self, l: Lineage) -> u32 {
+        self.brains.push(Some(l));
         self.members.push(0);
         (self.brains.len() - 1) as u32
     }
@@ -434,7 +465,7 @@ impl Life {
         let mut b = std::mem::take(&mut self.bodies[slot]);
         let (cell, lin, g) = (b.cell as usize, b.lineage as usize, b.group);
         self.enrol(g, &b, -1);
-        (b.alive, b.store, b.genes, b.rows, b.trace) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        (b.alive, b.store, b.genes, b.rows, b.trace, b.mem) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         b.gen += 1;
         self.bodies[slot] = b;
         self.at[cell].retain(|&s| s as usize != slot);
@@ -536,6 +567,8 @@ pub struct Tmp {
     pub thought: Thought,
     /// Features of each option a scorer scored (flat), for learning
     pub feat: Vec<f32>,
+    /// By sight, the cells seen in each direction (`choose::act`)
+    pub sector: Vec<choose::Sector>,
 }
 
 /// Update the bodies due today.
@@ -598,7 +631,8 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let cats = b.k.cats;
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
-    let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64) + C_BRAIN * mass;
+    let think = w.life.brains[b.lineage as usize].as_ref().map_or(C_BRAIN, |l| l.cost());
+    let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64) + think * mass;
     let e0 = b.e;
     if !pay(w, b, upkeep, days) {
         return Some(SPENT);

@@ -3,7 +3,7 @@
 //! that solid and takes it from the ground) just west of the strip, with a neutral brain. Over
 //! its first 200 decisions, with learning on against off, over many seeds.
 
-use pcore::body::{self, INTERVAL, LEARN};
+use pcore::body::{self, Lineage, INTERVAL, LEARN};
 use pcore::grid::DIRS;
 use pcore::rng::{Purpose, Rng};
 use pcore::{bond, brain, change, choose, flow, World};
@@ -58,10 +58,10 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // other bodies kept rare, as they are not part of this scene.
     let mut r = Rng::new(seed, 0, 0, Purpose::Body);
     let fixed = [0.0, -8.0, 0.0, 0.0, -8.0, -8.0, -8.0, -8.0];
-    let shape = choose::shape(w.chem.ns());
-    let mut brain = brain::random(shape, &mut r, 0.1, fixed, 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    let rows = brain.split_off(shape.base());
-    let lineage = w.life.new_lineage(brain);
+    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let mut base = brain::random(shape, &mut r, 0.1, fixed, 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base });
     let start = w.grid.idx(STRIP - 1, H / 2);
     let mut b = worldgen::life::make(&mut w, 1, start, lineage, &rows).expect("body");
     // Decisions every 5 days (the shortest interval).
