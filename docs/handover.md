@@ -351,6 +351,7 @@ There is no "farm", "trade", "build house" or "attack" action. Those are pattern
   - This is a **speed tool**, like population nodes (Section 7). It must give the same patterns as one brain per body. Check this on a small world before using it everywhere.
   - Be aware it makes coordination inside a group easier for free. That is acceptable, but cooperation **between** groups must still be learned.
   - Order: one brain per lineage at M1; shared group brains at M2; population nodes at M4.
+  - **Since 12 Oct 2026:** a body's starting brain rows are genes (inherited with noise), and so are its forgetting rate and its brain size (hidden units, memory slots, bodies perceived, sight range), each with an energy cost. A group's shared rows are the mean of its members' born rows plus what the group learned. `Config::share_brains = false` gives one brain per body, for the comparison this section asks for.
 - Evaluate all bodies of one lineage together as one batch of matrix operations.
 - Simple learning methods are enough to start: evolution strategies, or a basic policy-gradient method with a moving-average baseline.
 - Keep the brain code independent from the rest, so it can be swapped later.
@@ -378,6 +379,7 @@ The first and cheapest speed tool: one brain per group of bodies that stay close
 - It runs the same five laws in average form: flows × count, reactions × count, children as a birth rate, choices as a spread of actions.
 - **Split** it back into individuals when the player looks closely, or when its members start to differ a lot.
 - Conservation must hold exactly when merging and splitting.
+- **Built before M4 (12 Oct 2026, after the M3 review):** a body node has a member count. Light-eaters live as one node per lineage per cell from the start. Each month, a cell with more than `Config::crowd` nodes merges its most alike nodes (genes averaged by count) until it has at most that many. This bounds the number of *nodes*, never the number of members, so density stays free. Not built yet: splitting back into individuals, and the check that merged and individual forms give the same patterns (M4). Known cost: averaging genes on merge slows evolution inside nodes.
 
 ### 7.2 Coarse regions
 
