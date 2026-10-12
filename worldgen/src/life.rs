@@ -51,9 +51,15 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// 2 kg), 0.1 kg/m². Eaters: fast burning, take the energy-rich solid from bodies and the
 /// ground, short intervals; individuals of 30 kg (copying at 63 kg), two in some cells. Both
 /// start with a mutation size of 10^-1.2 per generation (generations are short at these sizes).
-const KINDS: [Kind; 2] = [
+/// The third kind is the clever lineage of the experiment `--clever-year`: an eater with a big
+/// brain (48 hidden units, 12 memory numbers, 6 bodies perceived, sight of 3 cells) and learning
+/// on (rate 10^-1.5), one per cell in 30% of the cells with bodies. It always starts with the
+/// hand-set eater biases: with neutral ones even the small brain dies out (see `Seeding`), so
+/// the question "does a big brain pay for its cost" could not be asked.
+const KINDS: [Kind; 3] = [
     Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [15.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
     Kind { scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -2.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
+    Kind { scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
 ];
 
 /// How the first bodies are placed. What is placed, and when, is initial condition and must be
@@ -92,7 +98,7 @@ impl Default for Seeding {
 }
 
 /// Place bodies of starting kind `which` (0 light-eaters on land, 1 eaters where bodies already
-/// are) as a neutral ancestor sprayed with 20 rounds of mutation (`Seeding::default`).
+/// are, 2 the clever lineage where bodies already are) as a neutral ancestor sprayed with 20 rounds of mutation (`Seeding::default`).
 pub fn seed(w: &mut World, which: usize) -> String {
     seed_with(w, which, &Seeding::default())
 }
@@ -107,7 +113,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let [h, mem, seen, sight] = choose::sizes(&kind.scalars);
     let shape = choose::shape(w.chem.ns(), h, mem);
     let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Body);
-    let hand = how.hand[which];
+    let hand = how.hand[which.min(1)] || which == 2;
     let (fixed, dir, verbs) = if hand {
         (kind.fixed, kind.dir, kind.verbs)
     } else {
@@ -152,7 +158,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
             w.life.add(b, w.day, delay);
         }
     }
-    let name = ["light-eaters", "eaters"][which];
+    let name = ["light-eaters", "eaters", "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)"][which];
     let brain = if hand { "hand-set brain biases (old start)" } else { "neutral brain (action biases 0, copy logit kept)" };
     format!(
         "year {:.1}: placed {placed} {name} ({members:.3e} members, {kg:.3e} kg) with {brain}, {} rounds of mutation each; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}",
