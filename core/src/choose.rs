@@ -96,6 +96,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
     let (mass, env, temp) = (t.mass, w.life.env[i], b.e / t.cap.max(1e-9));
+    // A brain perceives sizes per member.
+    let pm = mass / b.n();
     let wb = b.wellbeing_at(&w.chem, mass, temp);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, base, nseen, sight) = (lin.shape, &lin.base, lin.seen.min(MAX_SEEN), lin.sight.max(1));
@@ -142,9 +144,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = w.life.at[i].len() as f32 / w.cfg.max_bodies_per_cell as f32;
     let (dt, lit, sun) = ((temp - env[0]) as f32, t.lit as f32, w.season() as f32 * std::f32::consts::TAU);
-    x.extend([dt / 10.0, ln(mass as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
+    x.extend([dt / 10.0, ln(pm as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
-    x.extend(bond::sense(w, b, mass));
+    x.extend(bond::sense(w, b, pm));
     x.extend_from_slice(&b.mem);
     brain::think(base, &w.life.groups[b.group as usize].rows, s, x, &mut t.thought);
     learn(w, b, s, wb, &t.thought.h);
@@ -186,7 +188,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         let v = o.vis;
         let known = b.recall(o.id(seen[q].0));
         let fq = &mut fb[q * NT..(q + 1) * NT];
-        fq.copy_from_slice(&[ln(v[0] / mass as f32) / 7.0, ln(v[1] / v[0]) / 5.0, v[2], v[3], v[4], v[5], o.sig[0], o.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, o.wb / 4.0]);
+        fq.copy_from_slice(&[ln(v[0] / pm as f32) / 7.0, ln(v[1] / v[0]) / 5.0, v[2], v[3], v[4], v[5], o.sig[0], o.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, o.wb / 4.0]);
         for verb in 0..VERBS {
             if same || verb == 2 {
                 logit[FIXED + 8 + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq) + b.adj[FIXED + 1 + verb];
@@ -196,7 +198,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (o0, mut fo, vol) = (FIXED + 8 + VERBS * MAX_SEEN, [0f32; PARTS * bond::NO], bond::volume(&w.chem, b));
     for (q, &p) in parts[..np].iter().enumerate() {
         let fq = &mut fo[q * bond::NO..(q + 1) * bond::NO];
-        fq.copy_from_slice(&bond::features(w, b, p, mass));
+        fq.copy_from_slice(&bond::features(w, b, p, pm));
         for v in (0..OVERBS).filter(|&v| bond::possible(w, b, v, p, vol)) {
             let r = s.verb(VERBS + v);
             logit[o0 + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq) + b.adj[FIXED + 1 + VERBS + v];

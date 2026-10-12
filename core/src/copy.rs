@@ -79,7 +79,7 @@ pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let lay = Layout::of(&w.chem);
     let mass = b.mass(&w.chem);
-    if mass < b.dec(body::COPY_MASS) {
+    if mass < b.dec(body::COPY_MASS) * b.n() {
         return false;
     }
     let id = b.id(slot);

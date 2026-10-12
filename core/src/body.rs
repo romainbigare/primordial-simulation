@@ -112,6 +112,12 @@ pub struct Body {
     pub gen: u32,
     pub alive: bool,
     pub cell: u32,
+    /// Members this node stands for (1: an individual; more: a population node, plan 7.1). Its
+    /// stores and heat are the members' totals, its genes and brain one (their mean), so every
+    /// law runs on the totals: rates are per kg or per member, times the count. Per member: the
+    /// size a brain perceives, the mass compared with the copy mass. Use `n()`.
+    #[serde(default = "one")]
+    pub count: f64,
     pub lineage: u32,
     pub parent: u64,
     pub born: u64,
@@ -173,7 +179,16 @@ pub struct Consts {
     pub upt: Vec<(usize, f32)>,
 }
 
+fn one() -> f64 {
+    1.0
+}
+
 impl Body {
+    /// Members (at least 1).
+    #[inline]
+    pub fn n(&self) -> f64 {
+        self.count.max(1.0)
+    }
     pub fn id(&self, slot: usize) -> u64 {
         (self.gen as u64) << 32 | slot as u64
     }
@@ -219,9 +234,10 @@ impl Body {
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, cats, interval: self.interval(), burn, minln, upt };
     }
-    /// Visible traits; the colour is the reflectance of the stores by volume.
+    /// Visible traits of one member; the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
         let (m, cap) = self.mass_cap(chem);
+        let m1 = m / self.n();
         let t = self.e / cap.max(1e-9);
         let (mut v, mut c) = (1e-12, [0.0; 3]);
         for (k, &a) in self.store.iter().enumerate() {
@@ -234,8 +250,8 @@ impl Body {
                 }
             }
         }
-        let leaf = m * self.dec(LEAF);
-        [m as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
+        let leaf = m1 * self.dec(LEAF);
+        [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Learning rate of its brain within its life (0 when off).
     pub fn learn_rate(&self) -> f32 {
@@ -257,8 +273,8 @@ impl Body {
         let mm = chem.subs[k].molar_mass;
         (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
     }
-    /// Well-being: the energy its catalysed reactions could release from its stores (log, in
-    /// decisions' worth for a body of the mass it copies at, so shedding mass does not raise
+    /// Well-being: the energy its catalysed reactions could release from a member's stores (log,
+    /// in decisions' worth for a body of the mass it copies at, so shedding mass does not raise
     /// it), less how near its key stores are to their safe minimums (the log of each one's
     /// margin, which is the log of its share over its minimum, counted up to 2) and its key
     /// liquids to freezing or boiling (within 5 K). Needs `prepare`.
@@ -273,7 +289,7 @@ impl Body {
             let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
             e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
         }
-        let mut w = ln(1.0 + (e / self.dec(COPY_MASS) / C_BRAIN) as f32);
+        let mut w = ln(1.0 + (e / self.n() / self.dec(COPY_MASS) / C_BRAIN) as f32);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
@@ -303,14 +319,14 @@ impl Body {
         };
         self.known[s].1 = (self.known[s].1 + d).clamp(-1.0, 1.0);
     }
-    /// A store below its safe minimum, or nothing left.
+    /// A store below its safe minimum, or nothing left of a member.
     pub fn lacking(&self, chem: &Chemistry) -> bool {
         self.lacking_at(chem, self.mass(chem))
     }
     /// `lacking` when the mass `m` is known.
     pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
         let lay = Layout::of(chem);
-        m < 1e-3 || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * m)
+        m < 1e-3 * self.n() || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * m)
     }
 }
 
@@ -326,7 +342,8 @@ pub struct Life {
     free: Vec<u32>,
     /// Bodies in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
-    /// Per cell, from the last survey: count, then the visible traits summed over its bodies
+    /// Per cell, from the last survey: members, then the visible traits summed over them (mass
+    /// and light-capture area are the totals)
     pub sum: Vec<[f64; 7]>,
     /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
@@ -512,7 +529,7 @@ impl Life {
                 self.bodies.len() - 1
             }
         };
-        (b.gen, b.alive, b.last) = (self.bodies[slot].gen, true, day);
+        (b.gen, b.alive, b.last, b.count) = (self.bodies[slot].gen, true, day, b.n());
         self.at[b.cell as usize].push(slot as u32);
         self.members[b.lineage as usize] += 1;
         self.genomes[b.genome as usize].bodies += 1;
@@ -595,10 +612,10 @@ pub fn survey(w: &mut World) {
     life.sum.clear();
     life.sum.resize(n, [0.0; 7]);
     for b in life.bodies.iter().filter(|b| b.alive) {
-        let s = &mut life.sum[b.cell as usize];
-        s[0] += 1.0;
+        let (s, n) = (&mut life.sum[b.cell as usize], b.n());
+        s[0] += n;
         for (x, &v) in s[1..].iter_mut().zip(&b.vis) {
-            *x += v as f64;
+            *x += v as f64 * n;
         }
     }
     let area = w.grid.area();
@@ -704,7 +721,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
     let think = w.life.brains[b.lineage as usize].as_ref().map_or(C_BRAIN, |l| l.cost());
-    let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64) + think * mass;
+    let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64 * b.n()) + think * mass;
     let e0 = b.e;
     if !pay_at(w, b, upkeep, days, mass, cap) {
         return Some(SPENT);

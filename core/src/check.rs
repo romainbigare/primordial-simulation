@@ -101,6 +101,9 @@ pub fn hash(w: &World) -> u64 {
     }
     for b in w.life.alive() {
         eat(&mut h, b.cell as u64);
+        if b.count != 1.0 {
+            eat(&mut h, b.count.to_bits());
+        }
         for x in b.store.iter().chain([&b.e]) {
             eat(&mut h, x.to_bits());
         }
