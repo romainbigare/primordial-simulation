@@ -151,24 +151,19 @@ pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
     }
 }
 
-/// Weight of the newest step in each row's mean square of steps.
-const BETA: f32 = 0.1;
-/// Most a row moves in one step, in units of the learning rate (times [h, 1]).
-const MOST: f32 = 0.5;
-
 /// Move each learned row `r` by `lr · g / rms · [h, 1]`, where `g = a · coef[r]` is its share of
 /// the step and `rms` the root of a moving average of its squares (kept in `ms`), capped at
-/// `MOST · lr`. Each row thus gets a step of its own size: a row that rarely matters (a
+/// `most · lr` (`(beta, most)` are `Physics::learn_beta` and `learn_most`). Each row thus gets a step of its own size: a row that rarely matters (a
 /// feature seen only now and then) learns as fast when it does as one that matters every time.
-pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>) {
+pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>, (beta, most): (f32, f32)) {
     ms.resize(coef.len(), 0.0);
     for ((r, &c), v) in rows.chunks_exact_mut(h.len() + 1).zip(coef).zip(ms.iter_mut()) {
         let g = a * c;
         if g == 0.0 {
             continue;
         }
-        *v += BETA * (g * g - *v);
-        step(r, h, lr * (g / v.sqrt()).clamp(-MOST, MOST));
+        *v += beta * (g * g - *v);
+        step(r, h, lr * (g / v.sqrt()).clamp(-most, most));
     }
 }
 

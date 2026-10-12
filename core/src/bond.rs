@@ -20,7 +20,7 @@
 use crate::body::{self, Body, Layout, STRENGTH};
 use crate::change::Reactor;
 use crate::chem::{Chemistry, Phase};
-use crate::choose::{kg, wanted, C_HANDLE, C_MOVE, TAKE};
+use crate::choose::{kg, wanted};
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
@@ -38,36 +38,10 @@ pub const ANCHORED: f64 = 2.0;
 pub const LOAD: f64 = 3.0;
 /// Features of a perceived part.
 pub const NO: usize = 8;
-/// Tensile strength of a solid of bond strength 1, Pa.
-const SIGMA: f64 = 1e7;
-/// Share of the contact area a joint pressed by a body holds.
-const JOINT: f64 = 0.05;
-/// Energy to shape one kg into a part, J.
-const C_FORM: f64 = 1e5;
-/// Energy to make a joint, J per m² of contact.
-const C_JOIN: f64 = 1e7;
-/// Heat passed through an opening, W/(m² K).
-const LEAK: f64 = 25.0;
-/// Most of its mass a body puts into one part.
-const FORM: f64 = 0.1;
 /// Most parts in a cell (a speed safeguard: forming fails, drifting stops).
 const MAX_PARTS: usize = 6;
-/// Walls lighter than this fall apart, kg.
-const MIN_KG: f64 = 1.0;
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
-/// A held part multiplies a body's force by 1 + LEVER · hardness · m / (m + 0.05 body mass).
-const LEVER: f64 = 3.0;
-/// Force of a body of strength 1, as a share of its weight.
-const GRIP: f64 = 0.5;
-/// Push of a body moving through a cell on each structure there, as a share of its weight.
-const BUMP: f64 = 0.05;
-/// Most bonded ground a body breaks per day of its interval, as a share of its mass.
-const DIG: f64 = 0.01;
-/// Liquid deeper than this is crossed afloat by a body holding a structure the liquid holds up
-/// with it, m; at this share of the cost of walking.
-pub const DEEP: f64 = 0.5;
-pub const AFLOAT: f64 = 0.2;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Part {
@@ -269,7 +243,7 @@ fn restructure(w: &mut World, p: usize) {
     let plates = if list.len() > 1 { (s.foot / need).min(1.0) } else { 0.0 };
     let (e, space) = if plates * l.powi(3) > best.1 { (plates, plates * l.powi(3)) } else { best };
     (s.encl, s.space) = (e as f32, space);
-    s.g = e * cond + LEAK * (1.0 - e) * 6.0 * space.powf(2.0 / 3.0);
+    s.g = e * cond + w.cfg.phys.leak * (1.0 - e) * 6.0 * space.powf(2.0 / 3.0);
     let root = *list.iter().min().expect("one part");
     for &x in &list {
         w.parts.parts[x].root = root as u32;
@@ -363,13 +337,13 @@ pub fn let_go(w: &mut World, b: &mut Body, load: bool) {
 pub fn lever(w: &World, b: &Body, mb: f64) -> f64 {
     held(w, b).map_or(1.0, |p| {
         let [m, _, hard, _, _] = w.parts.parts[p].walls(&w.chem);
-        1.0 + LEVER * hard * m / (m + 0.05 * mb)
+        1.0 + w.cfg.phys.lever * hard * m / (m + 0.05 * mb)
     })
 }
 
 /// Force a body pushes or pulls with, N.
 fn force(w: &World, b: &Body, mb: f64) -> f64 {
-    b.gene(STRENGTH) * lever(w, b, mb) * mb * w.cfg.gravity * GRIP
+    b.gene(STRENGTH) * lever(w, b, mb) * mb * w.cfg.gravity * w.cfg.phys.grip
 }
 
 /// The structure body `b` is inside: its root, how closed it is, its conductance (W/K).
@@ -409,7 +383,7 @@ pub fn afloat(w: &World, b: &Body, j: usize, mb: f64) -> bool {
     let Some(p) = held(w, b) else { return false };
     let s = &w.parts.parts[w.parts.parts[p].root as usize].s;
     let (depth, rho, _) = liquid(w, j);
-    depth >= DEEP && !s.anchored && rho * s.outer >= s.mass + mb
+    depth >= w.cfg.phys.deep && !s.anchored && rho * s.outer >= s.mass + mb
 }
 
 /// Depth of liquid over a body: none while afloat.
@@ -458,7 +432,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
     let (mb, days) = (b.mass(&w.chem), b.interval() as f64);
     match v {
         0 => {
-            if w.parts.parts[p].held == NOBODY && body::pay(w, b, 0.1 * C_HANDLE * w.parts.parts[p].mass(&w.chem), days) {
+            if w.parts.parts[p].held == NOBODY && body::pay(w, b, 0.1 * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
                 let_go(w, b, false);
                 grab(w, slot, b, p);
             }
@@ -469,8 +443,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
             let Some(h) = held(w, b) else { return };
             let (a, c) = (&w.parts.parts[h], &w.parts.parts[p]);
             let ac = a.contact().min(c.contact());
-            let s = a.walls(&w.chem)[3].min(c.walls(&w.chem)[3]) * SIGMA * JOINT * ac;
-            if a.root != c.root && body::pay(w, b, C_JOIN * ac, days) {
+            let s = a.walls(&w.chem)[3].min(c.walls(&w.chem)[3]) * w.cfg.phys.tensile * w.cfg.phys.joint * ac;
+            if a.root != c.root && body::pay(w, b, w.cfg.phys.c_join * ac, days) {
                 link(w, h, p as u32, s);
             }
         }
@@ -497,7 +471,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
             let i = b.cell as usize;
             let used: f64 = w.life.at[i].iter().map(|&o| &w.life.bodies[o as usize]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| volume(&w.chem, o)).sum();
             let s = w.parts.parts[r].s;
-            if s.encl > 0.0 && s.space >= used + volume(&w.chem, b) && body::pay(w, b, C_MOVE * mb * w.parts.parts[p].size[0] as f64, days) {
+            if s.encl > 0.0 && s.space >= used + volume(&w.chem, b) && body::pay(w, b, w.cfg.phys.c_move * mb * w.parts.parts[p].size[0] as f64, days) {
                 b.inside = w.parts.parts[p].id(p);
             }
         }
@@ -505,12 +479,12 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
 }
 
 /// Take from a part by the body's uptake selectivity, the held liquid first. Walls taken
-/// below `MIN_KG` fall apart.
+/// below `w.cfg.phys.min_kg` fall apart.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
-    let m = wanted(w, b, |k| pt.wall[k] + pt.fill[k], TAKE * days * mb);
+    let m = wanted(w, b, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * mb);
     let got = kg(w, &m);
-    if got <= 0.0 || !body::pay(w, b, C_HANDLE * got, days) {
+    if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;
     }
     let (chem, pt) = (&w.chem, &mut w.parts.parts[p]);
@@ -523,7 +497,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     }
     (pt.e, b.e) = (pt.e - q, b.e + q);
     w.parts.tally.from_parts += got;
-    if pt.walls(chem)[0] < MIN_KG {
+    if pt.walls(chem)[0] < w.cfg.phys.min_kg {
         if b.hold == pt.id(p) {
             let_go(w, b, false);
         }
@@ -544,12 +518,12 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
         return;
     }
     let wet: Vec<bool> = (0..chem.ns()).map(|k| chem.phase(k, t) == Phase::Liquid).collect();
-    let mut m: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * (TAKE * days * mb / all).min(1.0)).min(0.5 * s)).collect();
+    let mut m: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * (w.cfg.phys.take * days * mb / all).min(1.0)).min(0.5 * s)).collect();
     let lv: f64 = (0..chem.ns()).filter(|&k| wet[k]).map(|k| m[k] * chem.molar_volume(k, Phase::Liquid)).sum();
     let fit = (w.parts.parts[p].room(chem) / lv.max(1e-12)).min(1.0);
     (0..chem.ns()).filter(|&k| wet[k]).for_each(|k| m[k] *= fit);
     let got = kg(w, &m);
-    if got <= 0.0 || !body::pay(w, b, C_HANDLE * got, days) {
+    if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;
     }
     let chem = &w.chem;
@@ -566,7 +540,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     restructure(w, p);
 }
 
-/// Put solid stores above twice their safe minimums out as a new part (up to `FORM` of the
+/// Put solid stores above twice their safe minimums out as a new part (up to `phys.form` of the
 /// body's mass), shaped by the brain: elongation and hollowness. The body holds it if its hands
 /// are free.
 pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
@@ -577,8 +551,8 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     }
     let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Solid { (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * mb / chem.subs[k].molar_mass).max(0.0) } else { 0.0 }).collect();
     let all = kg(w, &spare);
-    let f = (FORM * mb / all.max(1e-9)).min(1.0);
-    if all * f < 10.0 * MIN_KG || !body::pay(w, b, C_FORM * all * f, b.interval() as f64) {
+    let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
+    if all * f < 10.0 * w.cfg.phys.min_kg || !body::pay(w, b, w.cfg.phys.c_form * all * f, b.interval() as f64) {
         return;
     }
     let wall: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * f).min(0.5 * s)).collect();
@@ -608,8 +582,8 @@ pub fn anchor(w: &mut World, b: &mut Body) {
         (v, sv) = (v + vol, sv + vol * w.chem.subs[k].strength);
     }
     let ac = w.parts.parts[p].contact();
-    let s = w.parts.parts[p].walls(&w.chem)[3].min(sv / v.max(1e-12)) * SIGMA * JOINT * ac;
-    if v > 0.0 && body::pay(w, b, C_JOIN * ac, b.interval() as f64) {
+    let s = w.parts.parts[p].walls(&w.chem)[3].min(sv / v.max(1e-12)) * w.cfg.phys.tensile * w.cfg.phys.joint * ac;
+    if v > 0.0 && body::pay(w, b, w.cfg.phys.c_join * ac, b.interval() as f64) {
         link(w, p, GROUND, s);
         let_go(w, b, false);
     }
@@ -625,7 +599,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
     if vol <= 0.0 {
         return;
     }
-    let most = DIG * b.interval() as f64 * mb;
+    let most = w.cfg.phys.dig * b.interval() as f64 * mb;
     let m: Vec<f64> = (0..chem.ns())
         .map(|k| {
             let (a, s) = (w.bed[k * n + i], &chem.subs[k]);
@@ -633,7 +607,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
         })
         .collect();
     let got = kg(w, &m);
-    if !body::pay(w, b, C_HANDLE * got, b.interval() as f64) {
+    if !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
         return;
     }
     for (k, a) in m.iter().enumerate() {
@@ -665,7 +639,7 @@ pub fn moved(w: &mut World, b: &mut Body, carried: Option<(usize, f64)>, j: usiz
             w.parts.relocate(x, j);
         }
     }
-    let push = (BUMP * mb * w.cfg.gravity) as f32;
+    let push = (w.cfg.phys.bump * mb * w.cfg.gravity) as f32;
     for x in 0..w.parts.at[j].len() {
         let r = w.parts.parts[w.parts.at[j][x] as usize].root as usize;
         w.parts.parts[r].push = w.parts.parts[r].push.max(push);
@@ -732,7 +706,7 @@ pub fn step(w: &mut World) {
         let p = &mut w.parts.parts[s];
         p.e = if got == e1 - e0 { e1 } else { e0 + got };
         let chem = &w.chem;
-        let gone = p.walls(chem)[0] < MIN_KG;
+        let gone = p.walls(chem)[0] < w.cfg.phys.min_kg;
         p.resize(chem);
         if gone {
             dissolve(w, s);

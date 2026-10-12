@@ -67,7 +67,7 @@ pub struct Config {
     /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J
     pub wear: f64,
     /// Speed at which bodies spread back into ground cleared along an edge, from each side, when
-    /// the cover is dense (scaled down by `cover / RHO_PASS` below that), m/s.
+    /// the cover is dense (scaled down by `cover / phys.rho_pass` below that), m/s.
     #[serde(default = "regrow")]
     pub regrow: f64,
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
@@ -84,6 +84,196 @@ pub struct Config {
     /// same patterns as one brain per body.
     #[serde(default = "yes")]
     pub share_brains: bool,
+    /// The tuned numbers of the laws of bodies (M7's world search varies them).
+    #[serde(default)]
+    pub phys: Physics,
+}
+
+/// Free physics numbers of the laws of bodies, grouped by the law that reads them. Each has the
+/// value it was tuned to; none is a rule, all are sizes of costs, strengths and spreads.
+/// Numerical safeguards, speed schedules and fixed sizes stay consts in the code.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Physics {
+    // Change and Flow, as bodies feel them
+    /// Member mass at which the heat gene is the conductance per kg (the starting eaters' mass), kg
+    pub heat_mass: f64,
+    /// Liquid thickness over a body that holds back 63% of the light reaching it, m
+    pub light_depth: f64,
+    /// Liquid thickness over a body that cuts its gas exchange by a factor e, m
+    pub gas_depth: f64,
+    /// Standing liquid depth at which the ground counts as half wet, m
+    pub wet_depth: f64,
+    /// Upkeep of catalysts, J per kg per day per decade of speed-up
+    pub c_cat: f64,
+    /// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg)
+    pub c_strength: f64,
+    /// Upkeep of light-capture area, J per m² per day
+    pub c_leaf: f64,
+    /// Cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1), J per kg
+    pub c_brain: f64,
+    /// Cost of one decision per hidden unit, per memory number, per body perceived and per square
+    /// cell of sight, J per kg
+    pub c_hidden: f64,
+    pub c_memory: f64,
+    pub c_seen: f64,
+    pub c_sight: f64,
+    /// Upkeep of learning, J per kg per day at learning rate 1
+    pub c_learn: f64,
+    /// Cost of signalling, J per kg per day at signal size 1
+    pub c_signal: f64,
+    // Choose
+    /// Energy to move one kg one metre on the flat, J
+    pub c_move: f64,
+    /// Body mass per area that doubles the cost of entering a cell, kg/m² (and of handling what is
+    /// taken from a body there)
+    pub rho_pass: f64,
+    /// Width of the passage a mover clears through bodies, m
+    pub lane: f64,
+    /// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³
+    pub layer: f64,
+    pub rho_body: f64,
+    /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J
+    pub walk_wear: f64,
+    /// Most a body can take per day of its interval, as a share of its own mass
+    pub take: f64,
+    /// Energy to handle one kg taken or put, J
+    pub c_handle: f64,
+    /// Spread of the shape of a part made, and of the signal, around their means
+    pub shape_noise: f32,
+    pub signal_noise: f32,
+    /// Weight of well-being one decision ahead against well-being now
+    pub discount: f32,
+    /// Share of the way a watcher's rows move toward the watched one's (split over its group)
+    pub blend: f32,
+    /// A body further than `leave` cells from its group's centre leaves it; one within `join`
+    /// cells of a bigger group's centre for `stay` days joins it
+    pub leave: f32,
+    pub join: usize,
+    pub stay: u64,
+    /// Weight of the newest step in a learned row's mean square of steps, and the most a row
+    /// moves in one step in units of the learning rate
+    pub learn_beta: f32,
+    pub learn_most: f32,
+    // Bond
+    /// Tensile strength of a solid of bond strength 1, Pa
+    pub tensile: f64,
+    /// Share of the contact area a joint pressed by a body holds
+    pub joint: f64,
+    /// Energy to shape one kg into a part, J
+    pub c_form: f64,
+    /// Energy to make a joint, J per m² of contact
+    pub c_join: f64,
+    /// Heat passed through an opening, W/(m² K)
+    pub leak: f64,
+    /// Most of its mass a body puts into one part
+    pub form: f64,
+    /// Walls lighter than this fall apart, kg
+    pub min_kg: f64,
+    /// A held part multiplies a body's force by 1 + lever · hardness · m / (m + 0.05 body mass)
+    pub lever: f64,
+    /// Force of a body of strength 1, as a share of its weight
+    pub grip: f64,
+    /// Push of a body moving through a cell on each structure there, as a share of its weight
+    pub bump: f64,
+    /// Most bonded ground a body breaks per day of its interval, as a share of its mass
+    pub dig: f64,
+    /// Liquid deeper than this is crossed afloat by a body holding a structure the liquid holds
+    /// up, m, at this share of the cost of walking
+    pub deep: f64,
+    pub afloat: f64,
+    // Copy
+    /// Energy to make one kg of child, J
+    pub c_copy: f64,
+    /// Chance that a child starts a new lineage with a changed base, and the size of that change
+    pub new_lineage: f64,
+    pub base_noise: f32,
+    /// Chance that a child's born brain rows change, and the step of that change per generation
+    /// (times the body's mutation size, bigger by 1 / sqrt(chance))
+    pub row_chance: f64,
+    pub row_noise: f32,
+    /// Spread of the weights a bigger brain adds
+    pub new_noise: f32,
+    /// A member holding this many times its copy mass copies whether its brain draws it or not
+    pub full: f64,
+    /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
+    pub alike: f32,
+    // Flow, as ground cover and moving liquid feel it
+    /// Thickness of a layer that hides half of what lies below it, m: [soft solid, liquid, loose]
+    pub hide: [f64; 3],
+    /// A solid warmer than this share of its melting point is soft cover lying on top
+    pub soft: f64,
+    /// Liquid leaving a node goes only to neighbours at least this share as steep as the steepest
+    pub split: f64,
+    /// Liquid does not move for a smaller head difference, m
+    pub still: f64,
+    /// Body mass per area that halves what moving liquid can carry off a cell and how fast its
+    /// loose solids creep, kg/m²
+    pub hold: f64,
+}
+
+impl Default for Physics {
+    fn default() -> Self {
+        Physics {
+            heat_mass: 30.0,
+            light_depth: 10.0,
+            gas_depth: 1.0,
+            wet_depth: 0.01,
+            c_cat: 2e2,
+            c_strength: 1e5,
+            c_leaf: 2e3,
+            c_brain: 1e5,
+            c_hidden: 5e3,
+            c_memory: 5e3 / 3.0,
+            c_seen: 5e3,
+            c_sight: 1.5e4,
+            c_learn: 3e4,
+            c_signal: 2e2,
+            c_move: 3.0,
+            rho_pass: 5.0,
+            lane: 1.0,
+            layer: 10.0,
+            rho_body: 1e3,
+            walk_wear: 3e-5,
+            take: 0.05,
+            c_handle: 1e3,
+            shape_noise: 0.5,
+            signal_noise: 0.3,
+            discount: 0.9,
+            blend: 0.3,
+            leave: 2.5,
+            join: 2,
+            stay: 360,
+            learn_beta: 0.1,
+            learn_most: 0.5,
+            tensile: 1e7,
+            joint: 0.05,
+            c_form: 1e5,
+            c_join: 1e7,
+            leak: 25.0,
+            form: 0.1,
+            min_kg: 1.0,
+            lever: 3.0,
+            grip: 0.5,
+            bump: 0.05,
+            dig: 0.01,
+            deep: 0.5,
+            afloat: 0.2,
+            c_copy: 5e5,
+            new_lineage: 0.001,
+            base_noise: 0.03,
+            row_chance: 0.1,
+            row_noise: 0.05,
+            new_noise: 0.1,
+            full: 2.0,
+            alike: 4.0,
+            hide: [0.2, 0.5, 0.02],
+            soft: 0.75,
+            split: 0.2,
+            still: 0.01,
+            hold: 2.0,
+        }
+    }
 }
 
 fn yes() -> bool {
@@ -124,6 +314,7 @@ impl Default for Config {
             regrow: 1e-9,
             crowd: 4,
             share_brains: true,
+            phys: Physics::default(),
         }
     }
 }

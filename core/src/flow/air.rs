@@ -1,7 +1,7 @@
 //! Flow in and through the air: radiation, contact heat, evaporation and condensation,
 //! and gas between air nodes.
 
-use super::{range, settle, Scratch, HIDE_M, NONE};
+use super::{range, settle, Scratch, NONE};
 use crate::chem::R_GAS;
 use crate::World;
 use std::f64::consts::{LN_2, PI, TAU};
@@ -260,7 +260,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
                 let d = a * sp.v[(t >= sp.melt) as usize] / area;
                 // No more than fills the column above the cell to saturation: with long steps the
                 // wind cannot carry the excess off in between, so it would only rain back at once.
-                (c_evap * (ps - pa) / t * d / (d + HIDE_M[1])).min(a).min((ps - pa) * c_cond * hk / tl)
+                (c_evap * (ps - pa) / t * d / (d + w.cfg.phys.hide[1])).min(a).min((ps - pa) * c_cond * hk / tl)
             };
             // Evaporating cools the node, and no further than the temperature where the vapour
             // pressure falls to the partial pressure (the boiling point, when it boils): only the

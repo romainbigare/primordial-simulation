@@ -19,7 +19,7 @@ pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;
 /// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
-/// `M_HEAT` kg; it goes with mass^(2/3) (`Body::conductance`)
+/// `Physics::heat_mass` kg; it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
 /// Light-capture area, log10 m²/kg
 pub const LEAF: usize = 3;
@@ -61,38 +61,11 @@ pub const BROKEN: u8 = 4;
 pub const KNOWN: usize = 4;
 
 const DAY: f64 = 86_400.0;
-/// Member mass at which the heat gene is the conductance per kg (the starting eaters' mass), kg.
-const M_HEAT: f64 = 30.0;
 /// Updates are kept in a ring of this many days (more than the longest interval).
 const RING: u64 = 64;
 /// Shortest and longest interval between updates, days (the shortest is a speed safeguard).
 const MIN_INTERVAL: f64 = 5.0;
 const MAX_INTERVAL: f64 = 60.0;
-/// Liquid thickness over a body that holds back 63% of the light reaching it, m.
-const LIGHT_DEPTH: f64 = 10.0;
-/// Liquid thickness over a body that cuts its gas exchange by a factor e, m.
-const GAS_DEPTH: f64 = 1.0;
-/// Standing liquid depth at which the ground counts as half wet, m.
-const WET_DEPTH: f64 = 0.01;
-/// Upkeep of catalysts, J per kg per day per decade of speed-up.
-const C_CAT: f64 = 2e2;
-/// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg: strong tissue is costly).
-const C_STRENGTH: f64 = 1e5;
-/// Upkeep of light-capture area, J per m² per day.
-const C_LEAF: f64 = 2e3;
-/// Cost of one decision of the starting brain (12 hidden units, 6 memory numbers, 3 bodies
-/// perceived, sight of 1 cell), J per kg; it is the sum of the costs below at those sizes.
-pub const C_BRAIN: f64 = 1e5;
-/// Cost of one decision per hidden unit, per memory number, per body perceived, and per square
-/// cell of sight, J per kg.
-const C_HIDDEN: f64 = 5e3;
-const C_MEMORY: f64 = 5e3 / 3.0;
-const C_SEEN: f64 = 5e3;
-const C_SIGHT: f64 = 1.5e4;
-/// Upkeep of learning, J per kg per day at learning rate 1.
-const C_LEARN: f64 = 3e4;
-/// Cost of signalling, J per kg per day at signal size 1.
-const C_SIGNAL: f64 = 2e2;
 
 /// Where the genes of each kind start, for a chemistry.
 #[derive(Clone, Copy)]
@@ -221,9 +194,9 @@ impl Body {
     }
     /// Heat conductance to the surface, W/K: through each member's surface, which grows as
     /// mass^(2/3), so a small body cools faster per kg than a big one. Needs `prepare`.
-    pub fn conductance(&self, mass: f64) -> f64 {
+    pub fn conductance(&self, heat_mass: f64, mass: f64) -> f64 {
         let n = self.n();
-        self.k.heat * n * M_HEAT.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
+        self.k.heat * n * heat_mass.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
     }
     pub fn interval(&self) -> u64 {
         if self.k.interval > 0 {
@@ -291,14 +264,14 @@ impl Body {
     /// counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
     /// the same margin form), and its key liquids to freezing or boiling (within 5 K). Needs
     /// `prepare`.
-    pub fn wellbeing_at(&self, chem: &Chemistry, mass: f64, t: f64, spare: f64) -> f32 {
+    pub fn wellbeing_at(&self, chem: &Chemistry, c_brain: f64, mass: f64, t: f64, spare: f64) -> f32 {
         let lay = Layout::of(chem);
         let mut e = 0.0;
         for &(r, q) in &self.k.burn {
             let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
             e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
         }
-        let mut w = ln(1.0 + (e / self.n() / self.dec(COPY_MASS) / C_BRAIN) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
+        let mut w = ln(1.0 + (e / self.n() / self.dec(COPY_MASS) / c_brain) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
@@ -399,9 +372,9 @@ pub struct Lineage {
 
 impl Lineage {
     /// Energy one decision takes, J per kg of body.
-    pub fn cost(&self) -> f64 {
+    pub fn cost(&self, p: &crate::Physics) -> f64 {
         let sq = |x: usize| (x * x) as f64;
-        C_HIDDEN * self.shape.h as f64 + C_MEMORY * self.shape.mem as f64 + C_SEEN * self.seen as f64 + C_SIGHT * sq(self.sight)
+        p.c_hidden * self.shape.h as f64 + p.c_memory * self.shape.mem as f64 + p.c_seen * self.seen as f64 + p.c_sight * sq(self.sight)
     }
 }
 
@@ -689,7 +662,7 @@ fn crowd(w: &mut World) {
         for x in 0..list.len() {
             let a = &b[list[x].1];
             if a.n() > 1.0 {
-                head[x] = (0..x).find(|&y| head[y] == y && (b[list[y].1].lineage == a.lineage || crate::copy::alike(&lay, &b[list[y].1].genes, &a.genes))).unwrap_or(x);
+                head[x] = (0..x).find(|&y| head[y] == y && (b[list[y].1].lineage == a.lineage || crate::copy::alike(&lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes))).unwrap_or(x);
             }
         }
         for x in (0..list.len()).filter(|&x| head[x] != x) {
@@ -887,7 +860,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
     let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
     b.mark = light[i];
-    let reach = (-depth / LIGHT_DEPTH).exp();
+    let reach = (-depth / cfg.phys.light_depth).exp();
     ledger.sun_in += got;
     e_ground[i] += got * (1.0 - reach);
     let lit = got * reach;
@@ -896,7 +869,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // The air the body exchanges gas with in this time (mol), from its air node; liquid over
     // the body slows it.
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let reach_mol = b.k.gas * mass * days * (-depth / GAS_DEPTH).exp();
+    let reach_mol = b.k.gas * mass * days * (-depth / cfg.phys.gas_depth).exp();
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..ns {
@@ -946,7 +919,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let out = if push > 0.0 {
             let owed = (lit + heat).min(0.0);
             let room = (crate::heat_above_floor(e_ground[i], cap!()) + owed).max(0.0);
-            let paid = (lit + heat).max(0.0) + (b.conductance(mass) * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
+            let paid = (lit + heat).max(0.0) + (b.conductance(cfg.phys.heat_mass, mass) * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
             (push * reach_mol).min(paid / held(chem, k))
         } else {
             0.0
@@ -967,7 +940,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 
     // Liquids standing on the ground soak in by solubility, faster where the ground is wet,
     // up to the level the body keeps.
-    let wet = depth / (depth + WET_DEPTH);
+    let wet = depth / (depth + cfg.phys.wet_depth);
     let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
     if in_ground > 0.0 {
@@ -994,7 +967,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // Walls around it add their conductance (its share of it) in series.
     let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
-        let g0 = b.conductance(mass);
+        let g0 = b.conductance(cfg.phys.heat_mass, mass);
         let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
@@ -1024,9 +997,10 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 /// the day, of learning and signalling, and of one decision. Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
-    let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
-    let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(C_BRAIN, |l| l.cost());
-    days * (mass * (C_CAT * b.k.cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64 * b.n()) + think * mass
+    let p = &w.cfg.phys;
+    let mind = p.c_learn * b.learn_rate() as f64 + p.c_signal * sig;
+    let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p));
+    days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + think * mass
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
@@ -1070,7 +1044,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (b.k.gas * mass * days * (-depth / GAS_DEPTH).exp() / tot).min(0.5);
+    let share = (b.k.gas * mass * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
     let t = b.e / cap.max(1e-9);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; 64];

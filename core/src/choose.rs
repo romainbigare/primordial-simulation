@@ -32,35 +32,6 @@ const NT: usize = 11;
 const MAX_SEEN: usize = 6;
 const PARTS: usize = 3;
 const OPTS: usize = FIXED + 8 + VERBS * MAX_SEEN + OVERBS * PARTS;
-/// Energy to move one kg one metre on the flat, J.
-pub(crate) const C_MOVE: f64 = 3.0;
-/// Body mass per area that doubles the cost of entering a cell, kg/m² (and of handling what is
-/// taken from a body there).
-pub(crate) const RHO_PASS: f64 = 5.0;
-/// Width of the passage a mover clears through bodies, m.
-const LANE: f64 = 1.0;
-/// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³.
-const LAYER: f64 = 10.0;
-const RHO_BODY: f64 = 1e3;
-/// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J.
-const WEAR: f64 = 3e-5;
-/// Most a body can take per day of its interval, as a share of its own mass.
-pub(crate) const TAKE: f64 = 0.05;
-/// Energy to handle one kg taken or put, J.
-pub(crate) const C_HANDLE: f64 = 1e3;
-/// Spread of the shape of a part made around its mean.
-const SHAPE_NOISE: f32 = 0.5;
-/// Spread of the signal around its mean.
-const NOISE: f32 = 0.3;
-/// Weight of well-being one decision ahead against well-being now.
-const DISCOUNT: f32 = 0.9;
-/// Share of the way a watcher's rows move toward the watched one's (split over its group).
-const BLEND: f32 = 0.3;
-/// A body further than `LEAVE` cells from its group's centre leaves it; one within `JOIN` cells
-/// of a bigger group's centre for `STAY` days joins it.
-const LEAVE: f32 = 2.5;
-const JOIN: usize = 2;
-const STAY: u64 = 360;
 const NONE: u32 = u32::MAX;
 
 /// The brain's sizes for `ns` substances, `h` hidden units and `mem` memory numbers.
@@ -104,7 +75,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (mass, env, temp) = (t.mass, w.life.env[i], b.e / t.cap.max(1e-9));
     // A brain perceives sizes per member.
     let pm = mass / b.n();
-    let wb = b.wellbeing_at(&w.chem, mass, temp, t.spare);
+    let wb = b.wellbeing_at(&w.chem, w.cfg.phys.c_brain, mass, temp, t.spare);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, base, nseen, sight) = (lin.shape, &lin.base, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
@@ -232,9 +203,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     }
 
     // Copy by its own chance (set by evolution and imitation, never learned), and always once a
-    // member holds `copy::FULL` times its copy mass; else draw one of the other actions by its
+    // member holds `phys.full` times its copy mass; else draw one of the other actions by its
     // score.
-    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) || pm >= copy::FULL * b.dec(body::COPY_MASS);
+    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) || pm >= w.cfg.phys.full * b.dec(body::COPY_MASS);
     logit[1] = f32::NEG_INFINITY;
     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
     let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
@@ -286,18 +257,18 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     }
     for k in 0..SIG {
         let (mu, z) = (squash(out[s.sig() + k]), rng.normal() as f32);
-        b.sig[k] = mu + NOISE * z;
+        b.sig[k] = mu + w.cfg.phys.signal_noise * z;
         if learning {
-            b.trace[nh + s.sig() + k] = z * NOISE * (1.0 - mu * mu);
+            b.trace[nh + s.sig() + k] = z * w.cfg.phys.signal_noise * (1.0 - mu * mu);
         }
     }
     // The shape of a part made: elongation and hollowness, drawn around the brain's means.
     let mut shape = [0f32; 2];
     for k in 0..2 {
         let (mu, z) = (squash(out[s.form() + k]), rng.normal() as f32);
-        shape[k] = mu + SHAPE_NOISE * z;
+        shape[k] = mu + w.cfg.phys.shape_noise * z;
         if learning {
-            b.trace[nh + s.form() + k] = if a == 4 { z * SHAPE_NOISE * (1.0 - mu * mu) } else { 0.0 };
+            b.trace[nh + s.form() + k] = if a == 4 { z * w.cfg.phys.shape_noise * (1.0 - mu * mu) } else { 0.0 };
         }
     }
     for (k, m) in b.mem.iter_mut().enumerate() {
@@ -339,7 +310,7 @@ pub fn cells(w: &mut World) {
         let c = c.map(|v| v as f32);
         let n = c[0].max(1.0);
         let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / 5.0 } else { 0.0 };
-        let resist = 1.0 + c[1] / area / RHO_PASS as f32;
+        let resist = 1.0 + c[1] / area / w.cfg.phys.rho_pass as f32;
         [0.0, ln(1.0 + e[1] as f32), ln(1.0 + c[0]) / 10.0, ln((c[1] / n).max(1.0)) / 7.0 - 1.0, leaf, c[3] / n, 0.0, ln(resist)]
     }));
 }
@@ -357,7 +328,7 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     let gr = &mut w.life.groups[b.group as usize];
     let (h, c) = b.trace.split_at(nh);
     let v = |x: &[f32]| gr.rows[cr + nh] + brain::dot(&gr.rows[cr..cr + nh], x);
-    let delta = wb - b.wb + DISCOUNT * v(now) - v(h);
+    let delta = wb - b.wb + w.cfg.phys.discount * v(now) - v(h);
     gr.var = if gr.var > 0.0 { gr.var + 0.05 * (delta * delta - gr.var) } else { delta * delta };
     let a = lr * delta / (gr.var.sqrt() + 1e-3);
     if !a.is_finite() {
@@ -367,7 +338,7 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     // as one body's would (on the mean of what its members met).
     let gl = lr / gr.members.max(1) as f32;
     brain::fit(&mut gr.rows[cr..cr + s.r()], h, &[1.0], gl * delta);
-    brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, gl, &mut gr.ms);
+    brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, gl, &mut gr.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
     let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS + OVERBS).map(|v| c[s.verb(v)]));
     for (j, cb) in b.adj.iter_mut().zip(bias) {
         *j = (*j + 0.1 * a * cb).clamp(-3.0, 3.0);
@@ -375,7 +346,7 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 }
 
 /// Monthly: what each group learned fades by its forgetting rate. A body that has stayed for a
-/// year within `JOIN` cells of the centre of a bigger group of its lineage joins it; if it was
+/// year within `phys.join` cells of the centre of a bigger group of its lineage joins it; if it was
 /// alone, what it learned is blended in by its share. (No joining unless brains are shared.)
 pub fn regroup(w: &mut World) {
     let (gw, gh, day, share, life) = (w.grid.w, w.grid.h, w.day, w.cfg.share_brains, &mut w.life);
@@ -414,8 +385,8 @@ pub fn regroup(w: &mut World) {
         let ((x, y), groups) = (((b.cell as usize) % gw, (b.cell as usize) / gw), &life.groups);
         let key = |g: u32| (groups[g as usize].members, u32::MAX - g);
         let mut best = b.group;
-        for yy in y.saturating_sub(JOIN)..=(y + JOIN).min(gh - 1) {
-            for xx in x.saturating_sub(JOIN)..=(x + JOIN).min(gw - 1) {
+        for yy in y.saturating_sub(w.cfg.phys.join)..=(y + w.cfg.phys.join).min(gh - 1) {
+            for xx in x.saturating_sub(w.cfg.phys.join)..=(x + w.cfg.phys.join).min(gw - 1) {
                 let c = yy * gw + xx;
                 for &g in &list[head[c] as usize..head[c + 1] as usize] {
                     if groups[g as usize].members > 0 && groups[g as usize].lineage == b.lineage && key(g) > key(best) {
@@ -429,7 +400,7 @@ pub fn regroup(w: &mut World) {
             b.near = NONE;
         } else if best != b.near {
             (b.near, b.since) = (best, day);
-        } else if day - b.since >= STAY {
+        } else if day - b.since >= w.cfg.phys.stay {
             let old = b.group;
             (b.group, b.near) = (best, NONE);
             let o = &life.groups[old as usize];
@@ -450,13 +421,13 @@ pub fn regroup(w: &mut World) {
 
 /// Move to a neighbour: cost by mass (with the structure it carries), distance, climb, and the
 /// body mass per area already there; less, and no climb, into deep liquid while held up by what
-/// it carries. The movers must fit in the free space over the cell (`LAYER`). The part spent
+/// it carries. The movers must fit in the free space over the cell (`phys.layer`). The part spent
 /// pushing through bodies breaks their bonds (`wear`). A body that strays from its group's
 /// centre leaves with a copy of its rows. A node moves as one: all its members go (they drew
 /// the same action), and it stays one node.
 pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
-    if (w.life.sum[j][1] + mb) / RHO_BODY > LAYER * w.grid.area() {
+    if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.grid.area() {
         return;
     }
     let carried = bond::carry(w, b, mb);
@@ -464,7 +435,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = resist(w, i, d, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
-    let cost = mass * (C_MOVE * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { bond::AFLOAT } else { 1.0 };
+    let cost = mass * (w.cfg.phys.c_move * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
     if !body::pay(w, b, cost, b.interval() as f64) {
         return;
     }
@@ -482,11 +453,11 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
         // The cover broken along the way was the lane's: that much ground is now clear.
         w.pass.resize(4 * n, 0.0);
         let e = &mut w.pass[edge(i, d, j)];
-        *e = (*e + (broken / cover) as f32).min((LANE * w.grid.dist(DIRS[d])) as f32);
+        *e = (*e + (broken / cover) as f32).min((w.cfg.phys.lane * w.grid.dist(DIRS[d])) as f32);
     }
     let gr = &w.life.groups[b.group as usize];
     let ((cx, cy), (x, y)) = (gr.centre(), w.grid.xy(j));
-    if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > LEAVE {
+    if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > w.cfg.phys.leave {
         let (rows, var, ms) = (gr.rows.clone(), gr.var, gr.ms.clone());
         let g = w.life.new_group(b.lineage, rows);
         (w.life.groups[g as usize].var, w.life.groups[g as usize].ms) = (var, ms);
@@ -511,7 +482,7 @@ fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
         let s = s as usize;
         let mut o = std::mem::take(&mut w.life.bodies[s]);
         let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
-        let f = (WEAR * energy / total / (o.gene(STRENGTH) + 0.1)).min(0.5);
+        let f = (w.cfg.phys.walk_wear * energy / total / (o.gene(STRENGTH) + 0.1)).min(0.5);
         broken += m * f;
         let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
         // In a node, members are broken off; an individual loses part of itself.
@@ -534,22 +505,22 @@ fn edge(i: usize, d: usize, j: usize) -> usize {
 }
 
 /// What it costs, against bare ground, to step from `i` along `DIRS[d]` into `j`: one, plus the
-/// body mass per area in `j` over `RHO_PASS` for the share of the passage not yet cleared.
+/// body mass per area in `j` over `phys.rho_pass` for the share of the passage not yet cleared.
 pub(crate) fn resist(w: &World, i: usize, d: usize, j: usize) -> f64 {
-    let open = w.pass.get(edge(i, d, j)).map_or(0.0, |&a| (a as f64 / (LANE * w.grid.dist(DIRS[d]))).min(1.0));
-    1.0 + (1.0 - open) * w.life.sum[j][1] / w.grid.area() / RHO_PASS
+    let open = w.pass.get(edge(i, d, j)).map_or(0.0, |&a| (a as f64 / (w.cfg.phys.lane * w.grid.dist(DIRS[d]))).min(1.0));
+    1.0 + (1.0 - open) * w.life.sum[j][1] / w.grid.area() / w.cfg.phys.rho_pass
 }
 
 /// How much cheaper the edge from `i` along `FORWARD[f]` is than uncleared ground, for the mean
 /// cover of its two cells (1 when bare or not cleared).
 pub fn eased(w: &World, i: usize, f: usize) -> f64 {
     let Some(j) = w.grid.step(i, FORWARD[f]).filter(|_| !w.pass.is_empty()) else { return 1.0 };
-    let (a, c) = (w.pass.get(4 * i + f).copied().unwrap_or(0.0) as f64, (w.life.sum[i][1] + w.life.sum[j][1]) / 2.0 / w.grid.area() / RHO_PASS);
-    (1.0 + c) / (1.0 + (1.0 - (a / (LANE * w.grid.dist(FORWARD[f]))).min(1.0)) * c)
+    let (a, c) = (w.pass.get(4 * i + f).copied().unwrap_or(0.0) as f64, (w.life.sum[i][1] + w.life.sum[j][1]) / 2.0 / w.grid.area() / w.cfg.phys.rho_pass);
+    (1.0 + c) / (1.0 + (1.0 - (a / (w.cfg.phys.lane * w.grid.dist(FORWARD[f]))).min(1.0)) * c)
 }
 
 /// Slow (yearly, from Flow): bodies spread back into the cleared ground of every edge from both
-/// sides, at `cfg.regrow` times the cover there over `RHO_PASS` (all of it when dense).
+/// sides, at `cfg.regrow` times the cover there over `phys.rho_pass` (all of it when dense).
 pub fn regrow(w: &mut World, dt: f64) {
     for i in 0..w.pass.len() / 4 {
         for (f, &off) in FORWARD.iter().enumerate() {
@@ -557,7 +528,7 @@ pub fn regrow(w: &mut World, dt: f64) {
                 continue;
             }
             let Some(j) = w.grid.step(i, off) else { continue };
-            let fill = ((w.life.sum[i][1] + w.life.sum[j][1]) / 2.0 / w.grid.area() / RHO_PASS).min(1.0);
+            let fill = ((w.life.sum[i][1] + w.life.sum[j][1]) / 2.0 / w.grid.area() / w.cfg.phys.rho_pass).min(1.0);
             let a = &mut w.pass[4 * i + f];
             *a = (*a - (2.0 * w.cfg.regrow * fill * w.grid.dist(off) * dt) as f32).max(0.0);
         }
@@ -591,8 +562,8 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
     let tg = w.life.env[i][0];
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
-    let m = wanted(w, b, free, TAKE * b.interval() as f64 * b.mass(&w.chem));
-    if !body::pay(w, b, C_HANDLE * kg(w, &m), b.interval() as f64) {
+    let m = wanted(w, b, free, w.cfg.phys.take * b.interval() as f64 * b.mass(&w.chem));
+    if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m), b.interval() as f64) {
         return;
     }
     let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), 0.0] };
@@ -613,7 +584,7 @@ fn put(w: &mut World, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
     let mass = b.mass(&w.chem);
     let m: Vec<f64> = (0..w.chem.ns()).map(|k| (b.store[k] - b.level(&w.chem, k, mass)).clamp(0.0, b.store[k])).collect();
-    if !body::pay(w, b, C_HANDLE * kg(w, &m), b.interval() as f64) {
+    if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m), b.interval() as f64) {
         return;
     }
     let t = b.temp(&w.chem);
@@ -651,10 +622,10 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let lever = bond::lever(w, b, mb);
     let (fb, fo) = (b.gene(STRENGTH) * lever * mb / b.n(), o.gene(STRENGTH) * bond::lever(w, o, mo) * mo / o.n());
-    let m = wanted(w, b, |k| o.store[k], TAKE * b.interval() as f64 * mb * fb / (fb + fo + 1e-30));
-    let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / RHO_PASS;
+    let m = wanted(w, b, |k| o.store[k], w.cfg.phys.take * b.interval() as f64 * mb * fb / (fb + fo + 1e-30));
+    let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / w.cfg.phys.rho_pass;
     let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
-    if !body::pay(w, b, C_HANDLE * kg(w, &m) * resist, b.interval() as f64) || away {
+    if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m) * resist, b.interval() as f64) || away {
         return;
     }
     let mut o = std::mem::take(&mut w.life.bodies[s]);
@@ -686,11 +657,11 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let spare = |k: usize| (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * mb / chem.subs[k].molar_mass).max(0.0);
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
-    let share = (TAKE * b.interval() as f64 * mb / all.max(1e-9)).min(1.0);
+    let share = (w.cfg.phys.take * b.interval() as f64 * mb / all.max(1e-9)).min(1.0);
     let mo = o.mass(chem);
     let m: Vec<f64> = (0..chem.ns()).map(|k| (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0))).collect();
     let got = kg(w, &m);
-    if got <= 0.0 || !body::pay(w, b, C_HANDLE * got, b.interval() as f64) {
+    if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
         return;
     }
     // Paying may have used some of what was to be put.
@@ -713,12 +684,12 @@ fn watch(w: &mut World, b: &mut Body, s: usize) {
     let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem)));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / 0.2).powi(2))).exp();
-    brain::blend(&mut b.adj, &oadj, BLEND * alike);
+    brain::blend(&mut b.adj, &oadj, w.cfg.phys.blend * alike);
     let (g, shape) = (b.group as usize, |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape));
     if og != g && shape(ol) == shape(b.lineage) {
         let (lo, hi) = w.life.groups.split_at_mut(g.max(og));
         let (mine, theirs) = if g < og { (&mut lo[g], &hi[0]) } else { (&mut hi[0], &lo[og]) };
-        brain::blend(&mut mine.rows, &theirs.rows, BLEND * alike / mine.members.max(1) as f32);
+        brain::blend(&mut mine.rows, &theirs.rows, w.cfg.phys.blend * alike / mine.members.max(1) as f32);
     }
     let same = (ol == b.lineage) as u8 as f64;
     w.events.push(Event { day: w.day, kind: EventKind::Watched { by: g as u32, of: og as u32 }, node: b.cell, value: same });

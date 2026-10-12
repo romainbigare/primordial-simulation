@@ -13,26 +13,15 @@ use crate::grid::{DIRS, FORWARD};
 use crate::World;
 use serde::{Deserialize, Serialize};
 
-/// Thickness of a layer that hides half of what lies below it, m: [soft solid, liquid, loose solid].
-const HIDE_M: [f64; 3] = [0.2, 0.5, 0.02];
-/// A solid warmer than this share of its melting point is soft cover lying on top.
-const SOFT: f64 = 0.75;
 /// Moving liquid does work on its bed (carrying, wear) once in this many months (seven,
 /// so the season sampled turns over the years).
 const WORK_MONTHS: u64 = 7;
 /// The slow-changing ground and the substances present are rechecked this often, months.
 const REFRESH_MONTHS: u64 = 3;
-/// Liquid leaving a node goes only to neighbours at least this share as steep as the steepest.
-const SPLIT: f64 = 0.2;
-/// Liquid does not move for a smaller head difference, m.
-const STILL_M: f64 = 0.01;
-/// Body mass per area that halves what moving liquid can carry off a cell and how fast its loose
-/// solids creep (bodies on the ground hold it), kg/m².
-const HOLD: f64 = 2.0;
 
 /// What the bodies on cell `i` leave of carrying and creep there (1 when bare).
 fn held(w: &World, i: usize) -> f64 {
-    1.0 / (1.0 + w.life.sum.get(i).map_or(0.0, |s| s[1]) / w.grid.area() / HOLD)
+    1.0 / (1.0 + w.life.sum.get(i).map_or(0.0, |s| s[1]) / w.grid.area() / w.cfg.phys.hold)
 }
 
 /// Numbers of one substance the laws read often: heat capacity, molar mass, fusion and
@@ -366,7 +355,7 @@ fn refresh(w: &World, s: &mut Scratch) {
     let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) } + 20.0;
     let up = |k: usize| w.chem.p_sat(k, tmax) > 1.0;
     s.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
-    s.fixed = s.loose.iter().copied().filter(|&k| SOFT * s.sp[k].melt > tmax && !up(k)).collect();
+    s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax && !up(k)).collect();
     s.vary = s.loose.iter().copied().filter(|k| !s.fixed.contains(k)).collect();
     s.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
     s.order.clear();
@@ -523,7 +512,7 @@ fn surface(w: &World, s: &mut Scratch, i: usize) {
         }
         let liq = molten(s, k, i);
         let solid = a * (1.0 - liq) * p.v[0];
-        let o = if t > SOFT * p.melt { 0 } else { 4 };
+        let o = if t > w.cfg.phys.soft * p.melt { 0 } else { 4 };
         (l[o], l[o + 1]) = (l[o] + solid, l[o + 1] + solid * p.refl[0]);
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
         z += solid / area;
@@ -535,7 +524,7 @@ fn surface(w: &World, s: &mut Scratch, i: usize) {
     for c in 0..3 {
         if l[2 * c] > 0.0 {
             let d = l[2 * c] / area;
-            let cover = d / (d + HIDE_M[c]);
+            let cover = d / (d + w.cfg.phys.hide[c]);
             a += seen * cover * l[2 * c + 1] / l[2 * c];
             seen *= 1.0 - cover;
         }
@@ -586,7 +575,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             }
             let (j, hj) = (j as usize, s.head[j as usize]);
             let (dh, r) = (hd - hj, if s.done[j as usize] { 0.5 * (hd - hj) } else { hd - hj.max(zi) });
-            if dh > STILL_M && r > 0.0 {
+            if dh > w.cfg.phys.still && r > 0.0 {
                 (nb[cnt], room[cnt], q[cnt]) = ((j, dh), r, dh * inv[d]);
                 (wsum, rmax, qmax) = (wsum + q[cnt], rmax.max(r), qmax.max(q[cnt]));
                 cnt += 1;
@@ -603,7 +592,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         }
         // Neighbours much less steep than the steepest get nothing.
         for c in 0..cnt {
-            if q[c] < SPLIT * qmax {
+            if q[c] < w.cfg.phys.split * qmax {
                 wsum -= q[c];
                 q[c] = 0.0;
             }
@@ -644,7 +633,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // The work, on the bed below the liquid left standing (which hides it): drop
         // what is over capacity (all of it where nothing flows on), else pick up loose solids
         // and break bonded ground; pass the load on with the flow.
-        let bedwork = power * work * HIDE_M[1] / (HIDE_M[1] + (lvol - qsum).max(0.0) / area);
+        let bedwork = power * work * w.cfg.phys.hide[1] / (w.cfg.phys.hide[1] + (lvol - qsum).max(0.0) / area);
         let load: f64 = sol.iter().enumerate().map(|(si, &k)| s.sed[i * ns + si] * s.sp[k].v[0]).sum();
         let capv = w.cfg.carry * bedwork * held(w, i);
         if load <= 0.0 && capv < 1.0 {

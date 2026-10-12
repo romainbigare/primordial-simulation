@@ -5,7 +5,7 @@
 //! what its parent learned). A child whose brain-size genes are a whole unit away from its
 //! lineage's sizes starts a new lineage (and group) with the new sizes, its brain carried over
 //! where the sizes overlap; rarely the base of its lineage's brain is copied with small noise,
-//! which starts a new lineage too. A member past `FULL` times its copy mass has as many
+//! which starts a new lineage too. A member past `phys.full` times its copy mass has as many
 //! children as it grew past that.
 //!
 //! In a population node (count > 1) the children that stay are new members of it; a share of
@@ -22,26 +22,6 @@ use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
 use crate::World;
 
-/// Energy to make one kg of child, J.
-const C_COPY: f64 = 5e5;
-/// Chance that a child starts a new lineage with a changed base (bodies of real size have many
-/// more generations a year than the giant ones this was first set for).
-const NEW_LINEAGE: f64 = 0.001;
-/// Size of the base changes of a new lineage.
-const BASE_NOISE: f32 = 0.03;
-/// Chance that a child's born brain rows change, and the step of that change per generation
-/// (times the body's mutation size; a change is bigger by 1 / sqrt(chance), so the rows drift
-/// as if each child changed them a little). The other children share their parent's rows.
-const ROW_CHANCE: f64 = 0.1;
-const ROW_NOISE: f32 = 0.05;
-/// Spread of the weights a bigger brain adds.
-const NEW_NOISE: f32 = 0.1;
-/// A member holding this many times its copy mass copies whether its brain draws it or not
-/// (growth past the size its genes set goes into new members).
-pub const FULL: f64 = 2.0;
-/// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
-/// (`body::crowd`).
-const ALIKE: f32 = 4.0;
 
 /// Mutation step (times the body's mutation size) and range of a gene.
 fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
@@ -68,10 +48,10 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     }
 }
 
-/// Genes no more than `ALIKE` mutation steps apart in each gene (genes that are off count as 0;
+/// Genes no more than `limit` mutation steps apart in each gene (genes that are off count as 0;
 /// the sizes of brain and senses are not compared, as `merge` carries a brain over to other sizes).
-pub fn alike(lay: &Layout, a: &[f32], b: &[f32]) -> bool {
-    a.iter().zip(b).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= ALIKE)
+pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
+    a.iter().zip(b).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= limit)
 }
 
 /// A gene in mutation steps (off as 0; the sizes of brain and senses as 0): two bodies are as
@@ -116,13 +96,13 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let id = b.id(slot);
     let mut r = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     let frac = b.gene(body::CHILD).clamp(0.05, 0.5);
-    // A member past `FULL` times its copy mass gives all it grew past that to children of the
+    // A member past `phys.full` times its copy mass gives all it grew past that to children of the
     // size it would give at that mass: share `s` of its stores, `k` children.
-    let (m1, full) = (mass / n, FULL * mc);
+    let (m1, full) = (mass / n, w.cfg.phys.full * mc);
     let (s, k) = if m1 > full { (1.0 - (1.0 - frac) * full / m1, (m1 / full - 1.0 + frac) / frac) } else { (frac, 1.0) };
     // A node's members copy as far as its reactions can release the cost now (a share of them);
     // an individual all or nothing.
-    let (cost, days) = (C_COPY * s * mass, b.interval() as f64);
+    let (cost, days) = (w.cfg.phys.c_copy * s * mass, b.interval() as f64);
     let p = if n > 1.0 { (0.999 * body::release(w, b, days) / cost).min(1.0) } else { 1.0 };
     if p <= 0.0 || !body::pay(w, b, cost * p, days) {
         return false;
@@ -167,9 +147,9 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;
     }
-    let mut rows = (r.f64() < ROW_CHANCE).then(|| {
+    let mut rows = (r.f64() < w.cfg.phys.row_chance).then(|| {
         let mut v = w.life.born(b).to_vec();
-        shake(&mut v, &mut r, ROW_NOISE * 10f32.powf(b.genes[body::MUT]) / (ROW_CHANCE as f32).sqrt());
+        shake(&mut v, &mut r, w.cfg.phys.row_noise * 10f32.powf(b.genes[body::MUT]) / (w.cfg.phys.row_chance as f32).sqrt());
         v
     });
     // A node's children start no new lineage: a change of the brain's base or sizes in one child
@@ -180,11 +160,11 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
         let fresh = if new != old {
             let to = choose::shape(w.chem.ns(), new[0], new[1]);
-            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, to, &mut r, NEW_NOISE));
-            Some(Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, &mut r, NEW_NOISE) })
-        } else if r.f64() < NEW_LINEAGE {
+            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, to, &mut r, w.cfg.phys.new_noise));
+            Some(Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, &mut r, w.cfg.phys.new_noise) })
+        } else if r.f64() < w.cfg.phys.new_lineage {
             let mut l = lin.clone();
-            shake(&mut l.base, &mut r, BASE_NOISE);
+            shake(&mut l.base, &mut r, w.cfg.phys.base_noise);
             Some(l)
         } else {
             None
@@ -197,7 +177,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // Children of a node, or more than one child of an individual, join a node there of their
     // lineage, or alike with a brain of the same sizes.
     let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| (x.shape, x.seen, x.sight));
-    let joins = |o: &Body| o.alive && o.n() > 1.0 && (o.lineage == c.lineage || shape(o.lineage) == shape(c.lineage) && alike(&lay, &o.genes, &c.genes));
+    let joins = |o: &Body| o.alive && o.n() > 1.0 && (o.lineage == c.lineage || shape(o.lineage) == shape(c.lineage) && alike(&lay, w.cfg.phys.alike, &o.genes, &c.genes));
     if (node || m > 1.0) && c.lineage == b.lineage {
         if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| joins(&w.life.bodies[s])) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
@@ -229,7 +209,7 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
     let (life, c) = (&w.life, w.life.bodies[s].clone());
     let shape = |b: &Body| life.brains[b.lineage as usize].as_ref().map(|l| l.shape);
     let rows = match (shape(&c), shape(&life.bodies[t])) {
-        (Some(a), Some(b)) if a != b => brain::rerow(life.born(&c), a, b, &mut Rng::new(w.seed, w.day, c.id(s), Purpose::Mutate), NEW_NOISE),
+        (Some(a), Some(b)) if a != b => brain::rerow(life.born(&c), a, b, &mut Rng::new(w.seed, w.day, c.id(s), Purpose::Mutate), w.cfg.phys.new_noise),
         _ => life.born(&c).to_vec(),
     };
     w.life.remove(s);
