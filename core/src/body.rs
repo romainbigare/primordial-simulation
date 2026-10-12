@@ -173,6 +173,10 @@ impl Body {
     pub fn heat_cap(&self, chem: &Chemistry) -> f64 {
         self.store.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum()
     }
+    /// `mass` and `heat_cap` in one pass over the stores (the same sums).
+    pub fn mass_cap(&self, chem: &Chemistry) -> (f64, f64) {
+        self.store.iter().zip(&chem.subs).fold((0.0, 0.0), |(m, c), (a, s)| (m + a * s.molar_mass, c + a * s.cp))
+    }
     pub fn temp(&self, chem: &Chemistry) -> f64 {
         self.e / self.heat_cap(chem).max(1e-9)
     }
@@ -198,7 +202,8 @@ impl Body {
     }
     /// Visible traits; the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
-        let (t, m) = (self.temp(chem), self.mass(chem));
+        let (m, cap) = self.mass_cap(chem);
+        let t = self.e / cap.max(1e-9);
         let (mut v, mut c) = (1e-12, [0.0; 3]);
         for (k, &a) in self.store.iter().enumerate() {
             let p = chem.phase(k, t);
@@ -234,7 +239,11 @@ impl Body {
     /// log of each one's margin, which is the log of its share over its minimum, counted up to
     /// 2) and its key liquids to freezing or boiling (within 5 K). Needs `prepare`.
     pub fn wellbeing(&self, chem: &Chemistry, mass: f64) -> f32 {
-        let (lay, t) = (Layout::of(chem), self.temp(chem));
+        self.wellbeing_at(chem, mass, self.temp(chem))
+    }
+    /// `wellbeing` when the temperature `t` is known.
+    pub fn wellbeing_at(&self, chem: &Chemistry, mass: f64, t: f64) -> f32 {
+        let lay = Layout::of(chem);
         let mut e = 0.0;
         for &(r, q) in &self.k.burn {
             let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
@@ -272,7 +281,11 @@ impl Body {
     }
     /// A store below its safe minimum, or nothing left.
     pub fn lacking(&self, chem: &Chemistry) -> bool {
-        let (m, lay) = (self.mass(chem), Layout::of(chem));
+        self.lacking_at(chem, self.mass(chem))
+    }
+    /// `lacking` when the mass `m` is known.
+    pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
+        let lay = Layout::of(chem);
         m < 1e-3 || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * m)
     }
 }
@@ -488,6 +501,9 @@ pub struct Tmp {
     x: Vec<f64>,
     /// Light caught at the last update per kg per day, J
     pub lit: f64,
+    /// Mass and heat capacity of the body as `live` left it (valid until its stores change)
+    pub mass: f64,
+    pub cap: f64,
     pub input: Vec<f32>,
     pub thought: Thought,
     /// Features of each option a scorer scored (flat), for learning
@@ -546,7 +562,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let (depth, walls) = (bond::depth(w, b, depth), bond::walls_around(w, b));
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
     let days = w.day.saturating_sub(b.last).max(1) as f64;
-    let mass = b.mass(&w.chem);
+    let (mass, cap) = b.mass_cap(&w.chem);
     b.last = w.day;
 
     // Upkeep of catalysts, strength and capture area by the day, and of this decision; its
@@ -556,7 +572,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
     let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64) + C_BRAIN * mass;
     let e0 = b.e;
-    if !pay(w, b, upkeep, days) {
+    if !pay_at(w, b, upkeep, days, mass, cap) {
         return Some(SPENT);
     }
     let upkeep = b.e - e0;
@@ -614,6 +630,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
     let vap_tot: f64 = tmp.pool.iter().sum();
     let mass1 = b.mass(chem);
+    let mut moved = false;
     for k in 0..ns {
         let (vap, wet) = (tmp.pool[k], b.store[k] > 0.0 && chem.phase(k, t0) == Phase::Liquid);
         if !wet && (fall <= 0.0 || vap <= 0.0) {
@@ -632,6 +649,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let net = caught - out;
         let (m, t) = if net > 0.0 { (net.min(b.level(chem, k, mass1) - b.store[k]).max(0.0), tg) } else { (net.max(-b.store[k]), t0) };
         if m != 0.0 {
+            moved = true;
             let q = m * chem.subs[k].cp * t;
             air[k * na + j] -= m;
             b.store[k] += m;
@@ -647,7 +665,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
     let rate = -(-b.k.liq * days).exp_m1() * wet;
-    let mass2 = b.mass(chem);
+    let mass2 = if moved { b.mass(chem) } else { mass1 };
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
         let x = ground[k * n + i] / in_ground;
         let d = ((b.level(chem, k, mass2) - b.store[k]) * x * rate * chem.subs[k].solubility).min(0.5 * ground[k * n + i]).max(0.0);
@@ -665,7 +683,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
     // toward the ground's temperature plus the warming of the heat released, over the time.
     // Walls around it add their conductance (its share of it) in series.
-    let c = b.heat_cap(chem);
+    let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
         let g = walls.map_or(b.k.heat * mass, |x| 1.0 / (1.0 / (b.k.heat * mass) + 1.0 / x.1));
         let teq = tg + heat / dt / g;
@@ -677,10 +695,11 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     }
 
     let chem = &w.chem;
-    if b.lacking(chem) {
+    if b.lacking_at(chem, mass3) {
         return Some(LACK);
     }
-    let t = b.temp(chem);
+    (tmp.mass, tmp.cap) = (mass3, c);
+    let t = b.e / c.max(1e-9);
     if (0..ns).any(|k| b.wet >> k & 1 == 1 && chem.phase(k, t) != Phase::Liquid) {
         return Some(PHASE);
     }
@@ -695,14 +714,23 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
+    let (mass, cap) = b.mass_cap(&w.chem);
+    pay_at(w, b, cost, days, mass, cap)
+}
+
+/// `pay` when the body's mass and heat capacity are known.
+fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64) -> bool {
+    if cost <= 0.0 {
+        return true;
+    }
     b.prepare(&w.chem);
     let depth = bond::depth(w, b, w.life.env.get(b.cell as usize).map_or(0.0, |e| e[1]));
     let World { chem, grid, air, .. } = w;
     let (ns, na, i) = (chem.ns(), grid.na(), b.cell as usize);
     let j = grid.air_of(i);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (b.k.gas * b.mass(chem) * days * (-depth / GAS_DEPTH).exp() / tot).min(0.5);
-    let t = b.temp(chem);
+    let share = (b.k.gas * mass * days * (-depth / GAS_DEPTH).exp() / tot).min(0.5);
+    let t = b.e / cap.max(1e-9);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; 64];
     for &(r, _) in &b.k.burn {
