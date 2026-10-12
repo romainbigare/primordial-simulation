@@ -264,7 +264,8 @@ pub fn step(w: &mut World, dt: f64) {
     let monthly = s.month != Some(month);
     s.pending_exc += dt;
     if first || s.pending_exc >= w.cfg.exchange_days as f64 * day - 1.0 {
-        air::exchange(w, &mut s, std::mem::take(&mut s.pending_exc));
+        let dt = std::mem::take(&mut s.pending_exc);
+        air::exchange(w, &mut s, dt);
     }
     air::wind(w, &mut s, dt);
     s.owe_work |= monthly && month % WORK_MONTHS == 0;

@@ -24,7 +24,8 @@ fn main() {
             let mut w = worldgen::new_world(args.get("--seed", 1u64), size, size);
             w.cfg.sun *= args.get("--sun", 1.0);
             w.cfg.flow_days = args.get("--flow-days", w.cfg.flow_days);
-            w.cfg.air_days = args.get("--air-days", w.cfg.air_days);
+            w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
+            w.cfg.exchange_days = args.get("--exchange-days", w.cfg.exchange_days.min(w.cfg.flow_days).max(w.cfg.air_days));
             let absorber = args.get("--absorber", 1.0);
             let na = w.grid.na();
             for j in 0..na {
