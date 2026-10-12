@@ -57,13 +57,13 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     }
     let worn = choose::eased(&w, a, 0);
     assert!(crossed > 10 && worn > 3.0, "{crossed} crossings, edge {worn} times easier");
-    // Moving stops: the cover grows back into the cleared ground over some years.
+    // Moving stops: the cover grows back into the cleared ground over some decades.
     let year = 360.0 * 86_400.0;
     let mut left = vec![worn];
-    for _ in 0..8 {
+    for _ in 0..40 {
         choose::regrow(&mut w, year);
         left.push(choose::eased(&w, a, 0));
     }
     assert!(left[1] > 1.2, "recovers slowly: {left:?}");
-    assert!(left.windows(2).all(|p| p[1] <= p[0] + 1e-9) && left[8] < 1.01, "and fully: {left:?}");
+    assert!(left.windows(2).all(|p| p[1] <= p[0] + 1e-9) && left[40] < 1.01, "and fully: {left:?}");
 }

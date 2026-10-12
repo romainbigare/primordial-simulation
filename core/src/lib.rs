@@ -89,7 +89,7 @@ fn yes() -> bool {
     true
 }
 fn regrow() -> f64 {
-    5e-9
+    1e-9
 }
 fn eight() -> usize {
     8
@@ -120,7 +120,7 @@ impl Default for Config {
             carry: 1e-7,
             wear: 3e-9,
             creep: 1e-6,
-            regrow: 5e-9,
+            regrow: 1e-9,
             crowd: 8,
             share_brains: true,
         }
