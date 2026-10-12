@@ -11,9 +11,9 @@ fn world() -> (pcore::World, usize) {
     (w, i)
 }
 
-/// A flat part of `kg` of the cell's most plentiful loose substance, taken from the ground at
-/// its temperature.
-fn plate(w: &mut pcore::World, i: usize, kg: f64) -> usize {
+/// A part of `kg` of the cell's most plentiful loose substance, taken from the ground at its
+/// temperature: flat, or a block if `thick`.
+fn plate(w: &mut pcore::World, i: usize, kg: f64, thick: bool) -> usize {
     let n = w.grid.n();
     let k = (0..w.chem.ns()).max_by(|&a, &b| w.ground[a * n + i].total_cmp(&w.ground[b * n + i])).unwrap();
     let mut wall = vec![0.0; w.chem.ns()];
@@ -22,15 +22,15 @@ fn plate(w: &mut pcore::World, i: usize, kg: f64) -> usize {
     let e = wall[k] * w.chem.subs[k].cp * w.life.env[i][0];
     w.ground[k * n + i] -= wall[k];
     w.e_ground[i] -= e;
-    bond::make(w, i, wall, e, -1.0, 0.0)
+    bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0)
 }
 
 #[test]
 fn bond_breaks_under_too_much_load() {
     let (mut w, i) = world();
-    let top = plate(&mut w, i, 1e3);
+    let top = plate(&mut w, i, 1e3, false);
     bond::link(&mut w, top, GROUND, 1e9);
-    let (light, heavy) = (plate(&mut w, i, 1e3), plate(&mut w, i, 1e5));
+    let (light, heavy) = (plate(&mut w, i, 1e3, false), plate(&mut w, i, 1e5, false));
     // Each hangs on the anchored part by a bond that holds 10 t weight.
     bond::link(&mut w, light, top as u32, 1e5);
     bond::link(&mut w, heavy, top as u32, 1e5);
@@ -48,8 +48,9 @@ fn walls_keep_a_body_warm() {
     let (mut w, i) = world();
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
-    // Six plates joined around a space, one bonded to the ground.
-    let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 5e3)).collect();
+    // Six blocks joined around a small space, one bonded to the ground: thick walls, which
+    // conduct less than the body's surface.
+    let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 2e3, true)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);
     for p in &parts[1..] {
         bond::link(&mut w, *p, parts[0] as u32, 1e9);
@@ -66,6 +67,9 @@ fn walls_keep_a_body_warm() {
     // Enough liquid for a month without rain.
     let b = &mut w.life.bodies[slot];
     let k = (0..b.store.len()).max_by(|&x, &y| b.store[x].total_cmp(&b.store[y])).unwrap();
+    // It rests (its own adjustment of the action scores), so it stays where it is put.
+    b.adj.fill(-3.0);
+    b.adj[0] = 3.0;
     let t = b.temp(&w.chem);
     b.e += 0.3 * b.store[k] * w.chem.subs[k].cp * t;
     b.store[k] *= 1.3;
@@ -77,5 +81,5 @@ fn walls_keep_a_body_warm() {
         pcore::step(&mut inside);
     }
     assert!(w.life.bodies[slot].alive && inside.life.bodies[slot].alive);
-    assert!(temp(&inside) > temp(&w) + 0.5, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
+    assert!(temp(&inside) > temp(&w) + 1.0, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
 }

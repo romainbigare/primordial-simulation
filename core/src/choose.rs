@@ -1,7 +1,7 @@
 //! Law 5: Choose. A body perceives a little of itself, what it holds, its memory, its cell, the
 //! cells around it in 8 directions (as far as its sight), up to a few other bodies in or next to
 //! its cell (their looks, signals and well-being, and how past dealings with them went; walls
-//! hide them) and up to 3 parts in its cell. How much it remembers, sees and thinks is set by
+//! and cover hide them) and up to 3 parts in its cell. How much it remembers, sees and thinks is set by
 //! genes, and each costs energy per decision (`body::Lineage::cost`). The brain of its group,
 //! plus a few numbers of its own, scores every action; one is drawn by those scores, and the
 //! body emits a signal and writes its memory. Actions are physical: move, take from the node or
@@ -113,7 +113,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     }
 
     // Bodies perceived: in its own cell first, then next to it from a random side. Walls
-    // between two bodies hide them from each other by how closed they are.
+    // between two bodies hide them from each other by how closed they are; cover hides a body
+    // as it shades the ground: it is seen through the others' capture area per m² of its cell,
+    // a, with chance exp(-a).
     let (mut seen, mut cnt, side) = ([(0usize, false); MAX_SEEN], 0, rng.below(8));
     let my_room = bond::room(w, b);
     for q in 0..9 {
@@ -122,9 +124,11 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
         let Some(j) = (if q == 0 { Some(i) } else { w.grid.step(i, DIRS[(side + q) % 8]) }) else { continue };
         for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
-            let their = bond::room(w, &w.life.bodies[o as usize]);
+            let ob = &w.life.bodies[o as usize];
+            let their = bond::room(w, ob);
             let walls = if my_room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { my_room.map_or(0.0, |r| r.1).max(their.map_or(0.0, |r| r.1)) };
-            if cnt < nseen && (walls == 0.0 || rng.f64() as f32 >= walls) {
+            let cover = (w.canopy[j] as f64 - ob.vis[1] as f64 * ob.n() / w.grid.area()).max(0.0);
+            if cnt < nseen && (walls == 0.0 || rng.f64() as f32 >= walls) && (cover <= 0.0 || rng.f64() < (-cover).exp()) {
                 (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);
             }
         }
@@ -317,7 +321,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         a => {
             let (q, verb) = ((a - FIXED - 8) / VERBS, (a - FIXED - 8) % VERBS);
             match verb {
-                0 => take_body(w, slot, b, seen[q].0),
+                0 => take_body(w, slot, b, seen[q].0, &mut rng),
                 1 => give(w, slot, b, seen[q].0),
                 _ => watch(w, b, seen[q].0),
             }
@@ -636,17 +640,21 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 }
 
 /// Take from another body in the cell, by uptake selectivity, as much as the body's mass and
-/// its strength against the other's allow (each times what a held part adds), and its room. The
-/// other dies if it loses half its mass or falls below a safe minimum (a node loses the members
-/// eaten); else it remembers this against the taker.
-fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize) {
+/// its force against the other's allow (a member's force: strength x what a held part adds x
+/// its mass, as `bond::force`), and its room. The quicker body acts first: one that decides
+/// more often than the taker has acted again within part of the taker's interval and gets away
+/// with chance 1 - its interval / the taker's (the taker has paid). The other dies if it loses
+/// half its mass or falls below a safe minimum (a node loses the members eaten); else it
+/// remembers this against the taker.
+fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let lever = bond::lever(w, b, mb);
-    let (sb, so) = (b.gene(STRENGTH) * lever, o.gene(STRENGTH) * bond::lever(w, o, mo));
-    let m = wanted(w, b, |k| o.store[k], TAKE * b.interval() as f64 * mb * sb / (sb + so + 1e-9));
+    let (fb, fo) = (b.gene(STRENGTH) * lever * mb / b.n(), o.gene(STRENGTH) * bond::lever(w, o, mo) * mo / o.n());
+    let m = wanted(w, b, |k| o.store[k], TAKE * b.interval() as f64 * mb * fb / (fb + fo + 1e-30));
     let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / RHO_PASS;
-    if !body::pay(w, b, C_HANDLE * kg(w, &m) * resist, b.interval() as f64) {
+    let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
+    if !body::pay(w, b, C_HANDLE * kg(w, &m) * resist, b.interval() as f64) || away {
         return;
     }
     let mut o = std::mem::take(&mut w.life.bodies[s]);
