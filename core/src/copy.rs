@@ -10,8 +10,8 @@
 //!
 //! In a population node (count > 1) the children that stay are new members of it; a share of
 //! them (the `DISPERSE` gene; none if less than one member) starts in a random neighbour cell
-//! with the changed genes, where it joins the first node of its lineage (genes and born rows
-//! become the means by count) or starts a node. An individual's children are a new body, in a
+//! with the changed genes, where it joins the first node of its lineage, or alike in genes with
+//! a brain of the same sizes (genes and born rows become the means by count), or starts a node. An individual's children are a new body, in a
 //! neighbour cell by the same chance; if more than one, they join a node of its lineage there as
 //! a node's do. Only individuals' children start new lineages.
 
@@ -41,7 +41,7 @@ const NEW_NOISE: f32 = 0.1;
 pub const FULL: f64 = 2.0;
 /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
 /// (`body::crowd`).
-const ALIKE: f32 = 2.0;
+const ALIKE: f32 = 4.0;
 
 /// Mutation step (times the body's mutation size) and range of a gene.
 fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
@@ -183,9 +183,10 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             c.group = w.life.new_group(c.lineage, rows.clone().unwrap_or_else(|| w.life.born(b).to_vec()));
         }
     }
-    // Children of a node, or more than one child of an individual, join a node of their lineage
-    // there.
-    let joins = |o: &Body| o.alive && o.lineage == c.lineage && o.n() > 1.0;
+    // Children of a node, or more than one child of an individual, join a node there of their
+    // lineage, or alike with a brain of the same sizes.
+    let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| (x.shape, x.seen, x.sight));
+    let joins = |o: &Body| o.alive && o.n() > 1.0 && (o.lineage == c.lineage || shape(o.lineage) == shape(c.lineage) && alike(&lay, &o.genes, &c.genes));
     if (node || m > 1.0) && c.lineage == b.lineage {
         if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| joins(&w.life.bodies[s])) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
@@ -224,8 +225,8 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
     join(w, t, c, &rows);
 }
 
-/// Members `c` (not placed, born with `rows`) join body `t` of their lineage: stores and heat
-/// add up; genes and born rows become the means by count.
+/// Members `c` (not placed, born with `rows`, in the shape of `t`'s brain) join body `t`:
+/// stores and heat add up; genes and born rows become the means by count.
 pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
     let a = (c.n() / (o.n() + c.n())) as f32;
