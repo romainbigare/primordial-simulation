@@ -49,14 +49,14 @@ fn same_seed_same_history_with_shared_brains() {
     assert_eq!(pcore::check::hash(&a), pcore::check::hash(&b));
     let shared = a.life.groups.iter().filter(|g| g.members > 1).count();
     assert!(shared > 0, "no shared brains among {} bodies", a.life.alive().count());
-    // Each group holds the sum of its members' born rows.
+    // Each group knows the mean of its members' born rows.
     for (k, g) in a.life.groups.iter().enumerate().filter(|(_, g)| g.members > 0) {
-        let mut sum = vec![0f32; g.sum.len()];
+        let mut sum = vec![0f32; g.rows.len()];
         for b in a.life.alive().filter(|b| b.group as usize == k) {
-            sum.iter_mut().zip(&b.rows).for_each(|(s, x)| *s += x);
+            sum.iter_mut().zip(a.life.born(b)).for_each(|(s, x)| *s += x / g.members as f32);
         }
-        let err = sum.iter().zip(&g.sum).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max);
-        assert!(err < 1e-3 * g.members as f32, "group {k}: sum off by {err}");
+        let err = sum.iter().zip(g.innate()).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max);
+        assert!(err < 1e-4, "group {k}: mean off by {err}");
     }
 }
 

@@ -62,8 +62,8 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let mut base = brain::random(shape, &mut r, 0.1, fixed, 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base });
-    let start = w.grid.idx(STRIP - 1, H / 2);
-    let mut b = worldgen::life::make(&mut w, 1, start, lineage, &rows).expect("body");
+    let (start, genome) = (w.grid.idx(STRIP - 1, H / 2), w.life.new_genome(rows));
+    let mut b = worldgen::life::make(&mut w, 1, start, lineage, genome).expect("body");
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     let slot = w.life.add(b, w.day, 1);

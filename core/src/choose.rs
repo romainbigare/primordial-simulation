@@ -371,9 +371,10 @@ pub fn regroup(w: &mut World) {
         fill[at(g)] += 1;
     }
     for g in life.groups.iter_mut().filter(|g| g.members > 0) {
-        let (n, f) = (g.members as f32, (g.forget / g.members as f32).max(0.0));
+        let f = (g.forget / g.members as f32).max(0.0);
         if f > 0.0 {
-            g.rows.iter_mut().zip(&g.sum).for_each(|(r, s)| *r -= f * (*r - s / n));
+            let fade: Vec<f32> = g.learned().map(|l| f * l).collect();
+            g.rows.iter_mut().zip(fade).for_each(|(r, x)| *r -= x);
         }
     }
     if !share {
@@ -414,9 +415,8 @@ pub fn regroup(w: &mut World) {
             if let Some(o) = lone {
                 let gr = &mut life.groups[best as usize];
                 let n = gr.members as f32;
-                for ((r, s), x) in gr.rows.iter_mut().zip(&gr.sum).zip(o) {
-                    *r += (x - (*r - s / n)) / n;
-                }
+                let add: Vec<f32> = gr.learned().zip(o).map(|(l, x)| (x - l) / n).collect();
+                gr.rows.iter_mut().zip(add).for_each(|(r, a)| *r += a);
             }
         }
     }

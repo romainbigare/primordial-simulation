@@ -100,9 +100,21 @@ pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
     let b1 = s.h * s.ni;
     t.h.clear();
     t.h.extend((0..s.h).map(|m| squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x))));
+    // The rows four at a time (four sums that do not wait on each other), then the rest.
     t.out.clear();
-    let h = &t.h;
-    t.out.extend(rows.chunks_exact(s.r()).map(|r| r[s.h] + dot(&r[..s.h], h)));
+    let (h, n) = (&t.h, s.h);
+    let mut quads = rows.chunks_exact(4 * s.r());
+    for q in &mut quads {
+        let (r0, q) = q.split_at(s.r());
+        let (r1, q) = q.split_at(s.r());
+        let (r2, r3) = q.split_at(s.r());
+        let mut acc = [r0[n], r1[n], r2[n], r3[n]];
+        for ((((a, b), c), d), x) in r0[..n].iter().zip(&r1[..n]).zip(&r2[..n]).zip(&r3[..n]).zip(h) {
+            (acc[0], acc[1], acc[2], acc[3]) = (acc[0] + a * x, acc[1] + b * x, acc[2] + c * x, acc[3] + d * x);
+        }
+        t.out.extend(acc);
+    }
+    t.out.extend(quads.remainder().chunks_exact(s.r()).map(|r| r[n] + dot(&r[..n], h)));
 }
 
 /// A cheap tanh (error below 0.025).

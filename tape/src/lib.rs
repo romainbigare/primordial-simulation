@@ -24,7 +24,10 @@ pub fn save_snapshot(w: &World, path: impl AsRef<Path>) -> io::Result<()> {
     z.finish()?.flush()
 }
 
-/// Load a snapshot. Skipped scratch fields come back as their defaults.
+/// Load a snapshot. Skipped scratch fields come back as their defaults (the groups' sums of
+/// born rows are rebuilt).
 pub fn load_snapshot(path: impl AsRef<Path>) -> io::Result<World> {
-    bincode::deserialize_from(GzDecoder::new(BufReader::new(std::fs::File::open(path)?))).map_err(bad)
+    let mut w: World = bincode::deserialize_from(GzDecoder::new(BufReader::new(std::fs::File::open(path)?))).map_err(bad)?;
+    w.life.resum();
+    Ok(w)
 }

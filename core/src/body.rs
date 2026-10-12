@@ -124,8 +124,8 @@ pub struct Body {
     /// mol of each substance
     pub store: Vec<f64>,
     pub genes: Vec<f32>,
-    /// The brain rows it was born with (genes too: a child gets them with small noise)
-    pub rows: Vec<f32>,
+    /// The brain rows it was born with (genes too), in `Life::genomes`
+    pub genome: u32,
     /// Key stores (safe minimum > 0) that were liquid at birth, one bit per substance
     pub wet: u64,
     /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands)
@@ -331,10 +331,21 @@ pub struct Life {
     /// Brain groups (a group with no members is free)
     pub groups: Vec<Group>,
     free_groups: Vec<u32>,
+    /// Born brain rows, each shared by the bodies born with them (none: free)
+    pub genomes: Vec<Genome>,
+    free_genomes: Vec<u32>,
     /// Grid width (for the groups' centres)
     pub gw: u32,
     /// Body updates since the start
     pub updates: u64,
+}
+
+/// Born brain rows and how many living bodies were born with them. Most children are born
+/// with their parent's; a few with a changed copy (`copy`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Genome {
+    pub rows: Vec<f32>,
+    pub bodies: u32,
 }
 
 /// What the bodies of a lineage share: the sizes of their brain and senses, and the base of
@@ -355,6 +366,9 @@ impl Lineage {
     }
 }
 
+/// Scale of the whole-number sums of born rows.
+const FIX: f64 = 4_294_967_296.0;
+
 /// Bodies that stayed near each other share the rows of one brain: the mean of the rows they
 /// were born with, plus what the group learned (by learning and watching). `rows` holds that
 /// sum, kept up to date as members come and go.
@@ -366,8 +380,11 @@ pub struct Group {
     pub sx: i64,
     pub sy: i64,
     pub rows: Vec<f32>,
-    /// Sums of the members' born rows and of their forgetting rates
-    pub sum: Vec<f32>,
+    /// Sums of the members' born rows, in units of 1 / `FIX` (whole numbers, so a sum does not
+    /// depend on the order members came and went and is rebuilt exactly after a load, see
+    /// `Life::resum`); and of their forgetting rates
+    #[serde(skip)]
+    pub sum: Vec<i64>,
     pub forget: f32,
     /// Moving average of the square of the critic's error (0 until the first one)
     pub var: f32,
@@ -380,10 +397,14 @@ impl Group {
         let m = self.members.max(1) as f32;
         (self.sx as f32 / m, self.sy as f32 / m)
     }
+    /// The mean of its members' born rows.
+    pub fn innate(&self) -> impl Iterator<Item = f32> + '_ {
+        let k = 1.0 / (FIX * self.members.max(1) as f64);
+        self.sum.iter().map(move |&s| (s as f64 * k) as f32)
+    }
     /// What the group learned: its rows less the mean of its members' born rows.
     pub fn learned(&self) -> impl Iterator<Item = f32> + '_ {
-        let n = self.members.max(1) as f32;
-        self.rows.iter().zip(&self.sum).map(move |(r, s)| r - s / n)
+        self.rows.iter().zip(self.innate()).map(|(r, m)| r - m)
     }
 }
 
@@ -414,12 +435,30 @@ impl Life {
             }
         }
     }
+    /// New born rows (not yet given to a body).
+    pub fn new_genome(&mut self, rows: Vec<f32>) -> u32 {
+        let g = Genome { rows, bodies: 0 };
+        match self.free_genomes.pop() {
+            Some(i) => {
+                self.genomes[i as usize] = g;
+                i
+            }
+            None => {
+                self.genomes.push(g);
+                (self.genomes.len() - 1) as u32
+            }
+        }
+    }
+    /// The rows body `b` was born with.
+    pub fn born(&self, b: &Body) -> &[f32] {
+        &self.genomes[b.genome as usize].rows
+    }
     /// Count body `b` into group `g` (`d` = 1) or out of it (`d` = -1): its cell in the centre,
     /// its born rows in the sum (the rows shift by the change of the mean, so what the group
     /// learned stays), its forgetting rate.
     pub fn enrol(&mut self, g: u32, b: &Body, d: i64) {
         self.shift(g, b.cell, d);
-        let gr = &mut self.groups[g as usize];
+        let (gr, born) = (&mut self.groups[g as usize], &self.genomes[b.genome as usize].rows);
         let n0 = gr.members as f32;
         gr.members = (gr.members as i64 + d) as u32;
         gr.forget += d as f32 * b.forget();
@@ -428,14 +467,27 @@ impl Life {
             self.free_groups.push(g);
             return;
         }
-        gr.sum.resize(gr.rows.len(), 0.0);
-        let (n1, d) = (gr.members as f32, d as f32);
-        for ((r, s), x) in gr.rows.iter_mut().zip(gr.sum.iter_mut()).zip(&b.rows) {
-            let s1 = *s + d * x;
+        gr.sum.resize(gr.rows.len(), 0);
+        let (k1, k0) = (1.0 / (FIX * gr.members as f64), if n0 > 0.0 { 1.0 / (FIX * n0 as f64) } else { 0.0 });
+        for ((r, s), &x) in gr.rows.iter_mut().zip(gr.sum.iter_mut()).zip(born) {
+            let s1 = *s + d * (x as f64 * FIX).round() as i64;
             if n0 > 0.0 {
-                *r += s1 / n1 - *s / n0;
+                *r += (s1 as f64 * k1 - *s as f64 * k0) as f32;
             }
             *s = s1;
+        }
+    }
+    /// Rebuild the sums of born rows of the groups if they are missing (after a load).
+    pub fn resum(&mut self) {
+        if !self.groups.iter().any(|g| g.members > 0 && g.sum.is_empty()) {
+            return;
+        }
+        for g in self.groups.iter_mut() {
+            g.sum = vec![0; g.rows.len()];
+        }
+        for b in self.bodies.iter().filter(|b| b.alive) {
+            let (gr, born) = (&mut self.groups[b.group as usize], &self.genomes[b.genome as usize].rows);
+            gr.sum.iter_mut().zip(born).for_each(|(s, &x)| *s += (x as f64 * FIX).round() as i64);
         }
     }
     /// Move the centre of group `g` by a member at `cell` (`d` = 1 arrived, -1 left).
@@ -456,6 +508,7 @@ impl Life {
         (b.gen, b.alive, b.last) = (self.bodies[slot].gen, true, day);
         self.at[b.cell as usize].push(slot as u32);
         self.members[b.lineage as usize] += 1;
+        self.genomes[b.genome as usize].bodies += 1;
         self.enrol(b.group, &b, 1);
         self.due[((day + delay.clamp(1, MAX_INTERVAL as u64)) % RING) as usize].push((slot as u32, b.gen));
         self.bodies[slot] = b;
@@ -465,7 +518,13 @@ impl Life {
         let mut b = std::mem::take(&mut self.bodies[slot]);
         let (cell, lin, g) = (b.cell as usize, b.lineage as usize, b.group);
         self.enrol(g, &b, -1);
-        (b.alive, b.store, b.genes, b.rows, b.trace, b.mem) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let gen = &mut self.genomes[b.genome as usize];
+        gen.bodies -= 1;
+        if gen.bodies == 0 {
+            gen.rows = Vec::new();
+            self.free_genomes.push(b.genome);
+        }
+        (b.alive, b.store, b.genes, b.trace, b.mem) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new());
         b.gen += 1;
         self.bodies[slot] = b;
         self.at[cell].retain(|&s| s as usize != slot);
@@ -521,6 +580,7 @@ pub fn survey(w: &mut World) {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
     bond::ready(w);
+    w.life.resum();
     let life = &mut w.life;
     life.sum.clear();
     life.sum.resize(n, [0.0; 7]);

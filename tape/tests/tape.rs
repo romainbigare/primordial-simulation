@@ -47,6 +47,7 @@ fn snapshot_round_trip_mid_cycle() {
     let (mut a, mut whole) = (world(), world());
     for w in [&mut a, &mut whole] {
         worldgen::life::seed(w, 0);
+        worldgen::life::seed(w, 1);
     }
     run(&mut a, 17);
     tape::save_snapshot(&a, dir.join("s.bin.gz")).unwrap();

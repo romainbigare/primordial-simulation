@@ -1,10 +1,11 @@
 //! Law 4: Copy. A body with enough mass that can pay the cost makes a child: a share of each
-//! of its stores and of its heat, and its genes plus small noise, the brain rows it was born
-//! with among them; it starts in its parent's brain group (or, if brains are not shared, in a
-//! group of its own with what its parent learned). A child whose brain-size genes are
-//! a whole unit away from its lineage's sizes starts a new lineage (and group) with the new
-//! sizes, its brain carried over where the sizes overlap; rarely the base of its lineage's brain
-//! is copied with small noise, which starts a new lineage too.
+//! of its stores and of its heat, and its genes plus small noise (now and then a change of the
+//! brain rows it was born with, else it shares its parent's); it starts in its parent's brain
+//! group (or, if brains are not shared, in a group of its own with what its parent learned). A
+//! child whose brain-size genes are a whole unit away from its lineage's sizes starts a new
+//! lineage (and group) with the new sizes, its brain carried over where the sizes overlap;
+//! rarely the base of its lineage's brain is copied with small noise, which starts a new
+//! lineage too.
 
 use crate::body::{self, Body, Layout, Lineage};
 use crate::{brain, choose};
@@ -19,7 +20,10 @@ const C_COPY: f64 = 5e5;
 const NEW_LINEAGE: f64 = 0.005;
 /// Size of the base changes of a new lineage.
 const BASE_NOISE: f32 = 0.03;
-/// Mutation step of the born brain rows (times the body's mutation size).
+/// Chance that a child's born brain rows change, and the step of that change per generation
+/// (times the body's mutation size; a change is bigger by 1 / sqrt(chance), so the rows drift
+/// as if each child changed them a little). The other children share their parent's rows.
+const ROW_CHANCE: f64 = 0.1;
 const ROW_NOISE: f32 = 0.05;
 /// Spread of the weights a bigger brain adds.
 const NEW_NOISE: f32 = 0.1;
@@ -97,7 +101,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         e: b.e * frac,
         store: b.store.iter().map(|a| a * frac).collect(),
         genes: mutate(&lay, &b.genes, &mut r),
-        rows: b.rows.clone(),
+        genome: b.genome,
         group: b.group,
         near: u32::MAX,
         ..Default::default()
@@ -106,14 +110,18 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;
     }
-    shake(&mut c.rows, &mut r, ROW_NOISE * 10f32.powf(b.genes[body::MUT]));
+    let mut rows = (r.f64() < ROW_CHANCE).then(|| {
+        let mut v = w.life.born(b).to_vec();
+        shake(&mut v, &mut r, ROW_NOISE * 10f32.powf(b.genes[body::MUT]) / (ROW_CHANCE as f32).sqrt());
+        v
+    });
     if let Some(lin) = &w.life.brains[b.lineage as usize] {
         let (old, want) = (choose::sizes_of(lin), choose::sizes(&c.genes));
         let gene = [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| c.genes[g]);
         let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
         let fresh = if new != old {
             let to = choose::shape(w.chem.ns(), new[0], new[1]);
-            c.rows = brain::rerow(&c.rows, lin.shape, to, &mut r, NEW_NOISE);
+            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, to, &mut r, NEW_NOISE));
             Some(Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, &mut r, NEW_NOISE) })
         } else if r.f64() < NEW_LINEAGE {
             let mut l = lin.clone();
@@ -124,14 +132,17 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         };
         if let Some(l) = fresh {
             c.lineage = w.life.new_lineage(l);
-            c.group = w.life.new_group(c.lineage, c.rows.clone());
+            c.group = w.life.new_group(c.lineage, rows.clone().unwrap_or_else(|| w.life.born(b).to_vec()));
         }
+    }
+    if let Some(v) = rows {
+        c.genome = w.life.new_genome(v);
     }
     // Without shared brains the child starts a group of its own: its born rows plus what its
     // parent's group learned.
     if !w.cfg.share_brains && c.group == b.group {
         let gr = &w.life.groups[b.group as usize];
-        let rows = c.rows.iter().zip(gr.learned()).map(|(r, l)| r + l).collect();
+        let rows = w.life.born(&c).iter().zip(gr.learned()).map(|(r, l)| r + l).collect();
         let (var, ms) = (gr.var, gr.ms.clone());
         c.group = w.life.new_group(c.lineage, rows);
         (w.life.groups[c.group as usize].var, w.life.groups[c.group as usize].ms) = (var, ms);

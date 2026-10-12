@@ -63,23 +63,24 @@ pub fn seed(w: &mut World, which: usize) {
     let mut base = brain::random(shape, &mut r, 0.1, kind.fixed, kind.dir, kind.verbs);
     let rows = base.split_off(shape.base());
     let lineage = w.life.new_lineage(Lineage { shape, seen, sight, base });
+    let genome = w.life.new_genome(rows);
     for i in 0..w.grid.n() {
         let [_, depth, z] = w.life.env[i];
         if z <= 0.0 || depth > 0.5 || r.f64() >= kind.chance || (which > 0 && w.life.at[i].is_empty()) {
             continue;
         }
-        let Some(b) = make(w, which, i, lineage, &rows) else { return };
+        let Some(b) = make(w, which, i, lineage, genome) else { return };
         let delay = 1 + r.below(b.interval() as usize) as u64;
         w.life.add(b, w.day, delay);
     }
 }
 
-/// A body of starting kind `which` in cell `i`, of `lineage`, born with brain `rows`, in a new
-/// group of it, at the cell's temperature; its matter and energy are booked like an edit. Not
-/// yet placed.
-pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, rows: &[f32]) -> Option<Body> {
+/// A body of starting kind `which` in cell `i`, of `lineage`, born with brain rows `genome`, in
+/// a new group of it, at the cell's temperature; its matter and energy are booked like an edit.
+/// Not yet placed.
+pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32) -> Option<Body> {
     let ((r_light, rich, liquid, burn), kind) = (roles(&w.chem)?, KINDS.get(which)?);
-    let group = w.life.new_group(lineage, rows.to_vec());
+    let group = w.life.new_group(lineage, w.life.genomes[genome as usize].rows.clone());
     let (chem, ledger, t) = (&w.chem, &mut w.ledger, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
     // Genes that are off start below zero, so small changes keep them off.
@@ -94,7 +95,7 @@ pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, rows: &[f32]) -
     let mut store = vec![0.0; ns];
     store[liquid] = 0.7 * kind.mass / chem.subs[liquid].molar_mass;
     store[rich] = 0.3 * kind.mass / chem.subs[rich].molar_mass;
-    let mut b = Body { cell: i as u32, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, rows: rows.to_vec(), ..Default::default() };
+    let mut b = Body { cell: i as u32, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
     b.e = b.heat_cap(chem) * t;
     ledger.imposed_energy += b.e;
     for (k, &a) in b.store.iter().enumerate() {
