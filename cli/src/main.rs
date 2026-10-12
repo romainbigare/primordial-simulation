@@ -113,6 +113,8 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
         }
         if y % snap_every == 0 || y == y0 + years {
             snap(&w, y);
+            // Write the tape so far too, so a stopped run keeps its series and frames.
+            rec.finish(&out).expect("write tape");
         }
     }
     rec.finish(&out).expect("write tape");
