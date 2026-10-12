@@ -251,7 +251,9 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
                 a
             } else {
                 let d = a * sp.v[(t >= sp.melt) as usize] / area;
-                (c_evap * (ps - pa) / t * d / (d + HIDE_M[1])).min(a)
+                // No more than fills the column above the cell to saturation: with long steps the
+                // wind cannot carry the excess off in between, so it would only rain back at once.
+                (c_evap * (ps - pa) / t * d / (d + HIDE_M[1])).min(a).min((ps - pa) * c_cond * hk / tl)
             };
             // The ground also pays the fusion and vaporisation enthalpy the air will hold.
             let (heat, lift) = (m * sp.cp * t, m * g * sp.mm * (s.zair[j] - s.head[i]));
