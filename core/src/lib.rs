@@ -70,6 +70,16 @@ pub struct Config {
     pub creep: f64,
     /// Most bodies one cell can hold (a speed safeguard: copying or moving into a full cell fails)
     pub max_bodies_per_cell: usize,
+    /// Bodies that stay near each other share one brain's rows (for speed). When false each
+    /// body keeps its own rows: a child starts with its parent's (its own born rows plus what
+    /// the parent learned) and no body joins another's group. To check that sharing gives the
+    /// same patterns as one brain per body.
+    #[serde(default = "yes")]
+    pub share_brains: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -98,6 +108,7 @@ impl Default for Config {
             wear: 3e-9,
             creep: 1e-6,
             max_bodies_per_cell: 2,
+            share_brains: true,
         }
     }
 }

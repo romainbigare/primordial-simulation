@@ -1,6 +1,7 @@
 //! Law 4: Copy. A body with enough mass that can pay the cost makes a child: a share of each
 //! of its stores and of its heat, and its genes plus small noise, the brain rows it was born
-//! with among them; it starts in its parent's brain group. A child whose brain-size genes are
+//! with among them; it starts in its parent's brain group (or, if brains are not shared, in a
+//! group of its own with what its parent learned). A child whose brain-size genes are
 //! a whole unit away from its lineage's sizes starts a new lineage (and group) with the new
 //! sizes, its brain carried over where the sizes overlap; rarely the base of its lineage's brain
 //! is copied with small noise, which starts a new lineage too.
@@ -125,6 +126,15 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             c.lineage = w.life.new_lineage(l);
             c.group = w.life.new_group(c.lineage, c.rows.clone());
         }
+    }
+    // Without shared brains the child starts a group of its own: its born rows plus what its
+    // parent's group learned.
+    if !w.cfg.share_brains && c.group == b.group {
+        let gr = &w.life.groups[b.group as usize];
+        let rows = c.rows.iter().zip(gr.learned()).map(|(r, l)| r + l).collect();
+        let (var, ms) = (gr.var, gr.ms.clone());
+        c.group = w.life.new_group(c.lineage, rows);
+        (w.life.groups[c.group as usize].var, w.life.groups[c.group as usize].ms) = (var, ms);
     }
     (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem));
     let delay = c.interval();

@@ -350,9 +350,9 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 
 /// Monthly: what each group learned fades by its forgetting rate. A body that has stayed for a
 /// year within `JOIN` cells of the centre of a bigger group of its lineage joins it; if it was
-/// alone, what it learned is blended in by its share.
+/// alone, what it learned is blended in by its share. (No joining unless brains are shared.)
 pub fn regroup(w: &mut World) {
-    let (gw, gh, day, life) = (w.grid.w, w.grid.h, w.day, &mut w.life);
+    let (gw, gh, day, share, life) = (w.grid.w, w.grid.h, w.day, w.cfg.share_brains, &mut w.life);
     let at = |g: &body::Group| {
         let (x, y) = g.centre();
         (y.round() as usize).min(gh - 1) * gw + (x.round() as usize).min(gw - 1)
@@ -375,6 +375,9 @@ pub fn regroup(w: &mut World) {
         if f > 0.0 {
             g.rows.iter_mut().zip(&g.sum).for_each(|(r, s)| *r -= f * (*r - s / n));
         }
+    }
+    if !share {
+        return;
     }
     for slot in 0..life.bodies.len() {
         let b = &life.bodies[slot];

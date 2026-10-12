@@ -88,3 +88,23 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
     assert_eq!(pcore::brain::rebase(&grown.0, b, a, &mut r, 0.1), base);
     assert_eq!(pcore::brain::rerow(&grown.1, b, a, &mut r, 0.1), rows);
 }
+
+/// Without shared brains every body keeps a group of its own, and matter and energy still add up.
+#[test]
+fn own_brains_keep_one_body_per_group() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    w.cfg.share_brains = false;
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    let first = w.life.alive().count();
+    for _ in 0..30 {
+        pcore::step(&mut w);
+    }
+    let born = w.life.alive().filter(|b| b.born > 0).count();
+    assert!(born > 0 && w.life.alive().count() > 0, "{first} bodies placed, none born");
+    assert!(w.life.groups.iter().all(|g| g.members <= 1), "a group with more than one member");
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
