@@ -146,3 +146,27 @@ fn hot_cover_burns() {
     eprintln!("energy-rich solid left: {hot:.3} hot, {cold:.3} as it was");
     assert!(hot < 0.5 && cold > 0.9, "energy-rich solid left: {hot:.3} hot, {cold:.3} as it was");
 }
+
+/// More than `cfg.crowd` alike individuals in one cell (of light-eaters, which they eat) merge
+/// into one population node at the next month's start; matter and energy are kept exactly.
+#[test]
+fn crowded_individuals_merge_into_a_node() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
+    let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
+    let placed = w.cfg.crowd + 4;
+    for _ in 0..placed - w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage).count() {
+        let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
+        w.life.add(b, w.day, 1);
+    }
+    pcore::step(&mut w);
+    let here: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage).map(|b| b.count).collect();
+    assert!(here.len() < placed && here.iter().any(|&c| c > 1.0), "bodies of the lineage after a month: {here:?}");
+    assert_eq!(pcore::check::broken(&w), None);
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}

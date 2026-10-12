@@ -69,8 +69,8 @@ pub struct Config {
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
     /// A speed shortcut, not a law (plan 7.1): where a cell holds more than this many individuals of
-    /// one lineage and brain group, they merge into a population node each month (`body::crowd`).
-    /// It must give the same patterns as individuals (to be checked at M4).
+    /// one lineage (or alike in genes), they merge into a population node each month
+    /// (`body::crowd`). It must give the same patterns as individuals (to be checked at M4).
     #[serde(default = "eight")]
     pub crowd: usize,
     /// Bodies that stay near each other share one brain's rows (for speed). When false each

@@ -11,9 +11,9 @@
 //! In a population node (count > 1) the children that stay are new members of it; a share of
 //! them (the `DISPERSE` gene; none if less than one member) starts in a random neighbour cell
 //! with the changed genes, where it joins the first node of its lineage (genes and born rows
-//! become the means by count) or starts a node. An individual's children are a new body (a
-//! node if more than one), in a neighbour cell by the same chance. Only individuals' children
-//! start new lineages.
+//! become the means by count) or starts a node. An individual's children are a new body, in a
+//! neighbour cell by the same chance; if more than one, they join a node of its lineage there as
+//! a node's do. Only individuals' children start new lineages.
 
 use crate::body::{self, Body, Layout, Lineage};
 use crate::{brain, choose};
@@ -68,10 +68,12 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     }
 }
 
-/// Genes no more than `ALIKE` mutation steps apart in each gene (genes that are off count as 0).
+/// Genes no more than `ALIKE` mutation steps apart in each gene (genes that are off count as 0;
+/// the sizes of brain and senses are not compared, as `merge` carries a brain over to other sizes).
 pub fn alike(lay: &Layout, a: &[f32], b: &[f32]) -> bool {
     let on = |g: usize, x: f32| if g < lay.cat { x } else { x.max(0.0) };
-    a.iter().zip(b).enumerate().all(|(g, (&x, &y))| (on(g, x) - on(g, y)).abs() <= ALIKE * range(lay, g).0)
+    let sizes = body::HIDDEN..=body::SIGHT;
+    a.iter().zip(b).enumerate().all(|(g, (&x, &y))| sizes.contains(&g) || (on(g, x) - on(g, y)).abs() <= ALIKE * range(lay, g).0)
 }
 
 /// Parent genes plus noise, kept in range.
@@ -181,9 +183,10 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             c.group = w.life.new_group(c.lineage, rows.clone().unwrap_or_else(|| w.life.born(b).to_vec()));
         }
     }
-    // Children of a node join a body of their lineage there.
+    // Children of a node, or more than one child of an individual, join a node of their lineage
+    // there.
     let joins = |o: &Body| o.alive && o.lineage == c.lineage && o.n() > 1.0;
-    if node && c.lineage == b.lineage {
+    if (node || m > 1.0) && c.lineage == b.lineage {
         if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| joins(&w.life.bodies[s])) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             join(w, t, c, &rows);

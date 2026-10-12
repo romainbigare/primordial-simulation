@@ -661,39 +661,32 @@ pub fn survey(w: &mut World) {
 }
 
 /// A speed shortcut, not a law (plan 7.1; it must give the same patterns as individuals, to be
-/// checked at M4): where a cell holds more than `cfg.crowd` individuals of one lineage and brain
-/// group, those that hold and are inside nothing merge with the nodes of them there into one
-/// population node (the largest body); and nodes of one lineage, or alike in genes
-/// (`copy::alike`), merge. Stores and heat add up, genes and born rows become the means by count
-/// (`copy::merge`); its lineage and brain group are the largest one's, and its memory.
+/// checked at M4). Monthly, in each cell, the bodies that hold and are inside nothing gather,
+/// largest first, behind the first larger one of their lineage or alike in genes
+/// (`copy::alike`). Nodes merge into it; individuals too, once there are more than `cfg.crowd`
+/// of them (brain groups are not counted apart: bodies that stray start groups of their own).
+/// Stores and heat add up, genes and born rows become the means by count (`copy::merge`); the
+/// lineage, brain group and memory are the largest one's.
 fn crowd(w: &mut World) {
-    let max = w.cfg.crowd;
+    let (max, lay) = (w.cfg.crowd, Layout::of(&w.chem));
     for i in 0..w.grid.n() {
         if w.life.at[i].len() <= 1 {
             continue;
         }
-        let bodies = &w.life.bodies;
-        let free = |s: usize| bodies[s].hold == 0 && bodies[s].inside == 0;
-        let mut list: Vec<(u32, u32, u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| free(s)).map(|s| (bodies[s].lineage, bodies[s].group, u64::MAX - bodies[s].n().to_bits(), s)).collect();
+        let b = &w.life.bodies;
+        let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold == 0 && b[s].inside == 0).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
         list.sort_unstable();
-        for run in list.chunk_by(|a, b| (a.0, a.1) == (b.0, b.1)) {
-            // Largest first: the nodes, then the individuals.
-            let nodes = run.iter().take_while(|x| w.life.bodies[x.3].n() > 1.0).count();
-            if run.len() - nodes > max {
-                for &(_, _, _, s) in &run[1..] {
-                    crate::copy::merge(w, s, run[0].3);
-                }
-            }
+        let (mut head, mut solo) = (vec![0; list.len()], vec![0; list.len()]);
+        for x in 0..list.len() {
+            let a = &b[list[x].1];
+            let like = |y: usize| head[y] == y && (b[list[y].1].lineage == a.lineage || crate::copy::alike(&lay, &b[list[y].1].genes, &a.genes));
+            head[x] = (0..x).find(|&y| like(y)).unwrap_or(x);
+            solo[head[x]] += (a.n() <= 1.0) as usize;
         }
-        let (bodies, lay) = (&w.life.bodies, Layout::of(&w.chem));
-        let mut nodes: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| bodies[s].n() > 1.0).map(|s| (u64::MAX - bodies[s].n().to_bits(), s)).collect();
-        nodes.sort_unstable();
-        for x in 1..nodes.len() {
-            let (life, s) = (&w.life, nodes[x].1);
-            let (a, b) = (&life.bodies[s], |t: usize| &life.bodies[t]);
-            let like = |t: usize| b(t).alive && (b(t).lineage == a.lineage || crate::copy::alike(&lay, &b(t).genes, &a.genes));
-            if let Some(&(_, t)) = nodes[..x].iter().find(|p| like(p.1)) {
-                crate::copy::merge(w, s, t);
+        for x in 0..list.len() {
+            let h = head[x];
+            if h != x && (w.life.bodies[list[x].1].n() > 1.0 || solo[h] > max) {
+                crate::copy::merge(w, list[x].1, list[h].1);
             }
         }
     }
