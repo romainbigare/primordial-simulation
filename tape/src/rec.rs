@@ -47,6 +47,8 @@ struct Social {
     /// Decisions drawn this year, and those where the action drawn had the top score
     decisions: [f64; 2],
     months: String,
+    /// Members of the others that died of SPENT this month, and the sum of their rows (y)
+    spent: [f64; 2],
     /// Bonds made this year by kind (held, joined, anchored); broken by bodies; failed by load
     made: [f64; 3],
     broken: f64,
@@ -105,6 +107,8 @@ pub struct Recorder {
     /// and of the others
     births: f64,
     deaths: [f64; 5],
+    /// Members of the others (not light-eaters) died by cause since the last yearly row
+    deaths_a: [f64; 5],
     split: [[f64; 2]; 2],
     /// Body updates counted at the last yearly row
     updates: u64,
@@ -135,9 +139,10 @@ impl Recorder {
             log: vec![],
             births: 0.0,
             deaths: [0.0; 5],
+            deaths_a: [0.0; 5],
             split: [[0.0; 2]; 2],
             updates: 0,
-            social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile\n".into(), ..Default::default() },
+            social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile,spent,spent_y\n".into(), ..Default::default() },
         }
     }
 
@@ -176,6 +181,13 @@ impl Recorder {
                 }
                 EventKind::Died { cause, cat } => {
                     self.deaths[(cause as usize).min(4)] += e.value;
+                    if cat < measure::LIGHT_EATER {
+                        self.deaths_a[(cause as usize).min(4)] += e.value;
+                        if cause == pcore::body::SPENT {
+                            let s = &mut self.social.spent;
+                            (s[0], s[1]) = (s[0] + e.value, s[1] + e.value * (e.node / w.grid.w as u32) as f64);
+                        }
+                    }
                     self.split[1][(cat < measure::LIGHT_EATER) as usize] += e.value;
                 }
                 EventKind::Watched { by, of } => {
@@ -269,7 +281,8 @@ impl Recorder {
         let dpm = w.cfg.days_per_month as u64;
         let (y, m) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
         let mean = sum.map(|v| v / n.max(1.0));
-        s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0));
+        let [sp, sy] = std::mem::take(&mut s.spent);
+        s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2},{sp:.0},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0), sy / sp.max(1e-9));
     }
 
     /// How far learning has moved the brains from their start, how often the best-scored
@@ -366,6 +379,11 @@ impl Recorder {
             ("died_phase".to_string(), "1/yr", self.deaths[1]),
             ("died_spent".to_string(), "1/yr", self.deaths[2]),
             ("died_taken".to_string(), "1/yr", self.deaths[3]),
+            ("a_lack".to_string(), "1/yr", self.deaths_a[0]),
+            ("a_phase".to_string(), "1/yr", self.deaths_a[1]),
+            ("a_spent".to_string(), "1/yr", self.deaths_a[2]),
+            ("a_taken".to_string(), "1/yr", self.deaths_a[3]),
+            ("a_broken".to_string(), "1/yr", self.deaths_a[4]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
         row.extend(self.learning(w));
@@ -477,7 +495,7 @@ impl Recorder {
         let (na, ns) = (w.grid.na(), w.chem.ns());
         let air: f64 = w.air.iter().sum();
         row.extend((0..ns).filter(|&k| w.chem.subs[k].ir_abs > 0.0).map(|k| (format!("air_{k}"), "1", w.air[k * na..(k + 1) * na].iter().sum::<f64>() / air)));
-        (self.births, self.deaths, self.split, self.updates) = (0.0, [0.0; 5], [[0.0; 2]; 2], life.updates);
+        (self.births, self.deaths, self.deaths_a, self.split, self.updates) = (0.0, [0.0; 5], [0.0; 5], [[0.0; 2]; 2], life.updates);
         if self.series.is_empty() {
             self.series = row.iter().map(|r| (r.0.clone(), r.1, vec![])).collect();
         }
