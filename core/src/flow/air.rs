@@ -255,13 +255,16 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
                 continue;
             }
             let m = if t >= sp.boil {
-                // Boiling holds the node at its boiling point: only the heat above it pays.
-                let over = t - sp.boil;
-                a.min(s.cap[i].max(1.0) * over / (sp.cp * over + sp.lv))
+                a
             } else {
                 let d = a * sp.v[(t >= sp.melt) as usize] / area;
                 (c_evap * (ps - pa) / t * d / (d + HIDE_M[1])).min(a)
             };
+            // Evaporating cools the node, and no further than the temperature where the vapour
+            // pressure falls to the partial pressure (the boiling point, when it boils): only the
+            // heat above that pays, so a step cannot take more than the node can give.
+            let over = t - if t >= sp.boil { sp.boil } else { w.chem.t_sat(k, pa / crate::chem::P_REF).min(t) };
+            let m = m.min(s.cap[i].max(1.0) * over / (sp.cp * over + sp.lv));
             // The ground also pays the fusion and vaporisation enthalpy the air will hold, and
             // the heat the gas carries; if it cannot pay it all, less evaporates.
             let want = m * (sp.cp * t + sp.lf + sp.lv);
