@@ -17,7 +17,10 @@ struct Kind {
     cat: [f32; 2],
     /// Uptake selectivity of the liquid and the energy-rich solid
     upt: [f32; 2],
+    /// Mass of a member, kg; cover of a node, kg/m² (0: individuals); bodies per cell placed
     mass: f64,
+    cover: f64,
+    per: usize,
     /// Chance per land cell
     chance: f64,
     /// Brain biases: rest, copy (its own chance, as a logit), put, take from the node, form a
@@ -43,11 +46,12 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 }
 
 /// Starting kinds. Light-eaters: strong light reaction, slow burning, wide gas exchange and
-/// capture area, long intervals, resting. Eaters: fast burning, take the energy-rich solid from
-/// bodies and the ground, short intervals.
+/// capture area, long intervals, resting; one node per land cell, members of 1 kg (copying at
+/// 2 kg), 0.1 kg/m². Eaters: fast burning, take the energy-rich solid from bodies and the
+/// ground, short intervals; individuals of 30 kg (copying at 63 kg), two in some cells.
 const KINDS: [Kind; 2] = [
-    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 5.7, 1.3, -0.7, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 2e5, chance: 0.3, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
-    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 4.7, 1.0, -0.7, -2.0, -4.0, 12.0, 6.0, 3.0, 1.0], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 2e4, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
+    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -0.7, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
+    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -0.7, -2.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
 ];
 
 /// Place bodies of starting kind `which`: 0 light-eaters on land, 1 eaters where bodies already are.
@@ -69,9 +73,11 @@ pub fn seed(w: &mut World, which: usize) {
         if z <= 0.0 || depth > 0.5 || r.f64() >= kind.chance || (which > 0 && w.life.at[i].is_empty()) {
             continue;
         }
-        let Some(b) = make(w, which, i, lineage, genome) else { return };
-        let delay = 1 + r.below(b.interval() as usize) as u64;
-        w.life.add(b, w.day, delay);
+        for _ in 0..kind.per {
+            let Some(b) = make(w, which, i, lineage, genome) else { return };
+            let delay = 1 + r.below(b.interval() as usize) as u64;
+            w.life.add(b, w.day, delay);
+        }
     }
 }
 
@@ -92,10 +98,11 @@ pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32) ->
     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
     genes[lay.keep..].fill(0.9);
     genes[lay.keep + liquid] = 0.75;
+    let count = if kind.cover > 0.0 { kind.cover * w.grid.area() / kind.mass } else { 1.0 };
     let mut store = vec![0.0; ns];
-    store[liquid] = 0.7 * kind.mass / chem.subs[liquid].molar_mass;
-    store[rich] = 0.3 * kind.mass / chem.subs[rich].molar_mass;
-    let mut b = Body { cell: i as u32, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
+    store[liquid] = 0.7 * count * kind.mass / chem.subs[liquid].molar_mass;
+    store[rich] = 0.3 * count * kind.mass / chem.subs[rich].molar_mass;
+    let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
     b.e = b.heat_cap(chem) * t;
     ledger.imposed_energy += b.e;
     for (k, &a) in b.store.iter().enumerate() {

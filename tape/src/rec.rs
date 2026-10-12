@@ -96,9 +96,11 @@ pub struct Recorder {
     bytes: Vec<u8>,
     series: Vec<Column>,
     log: Vec<(u64, String)>,
-    /// Births and deaths by cause since the last yearly row
+    /// Members born and died by cause since the last yearly row; born and died, of light-eaters
+    /// and of the others
     births: f64,
     deaths: [f64; 5],
+    split: [[f64; 2]; 2],
     /// Body updates counted at the last yearly row
     updates: u64,
     social: Social,
@@ -128,6 +130,7 @@ impl Recorder {
             log: vec![],
             births: 0.0,
             deaths: [0.0; 5],
+            split: [[0.0; 2]; 2],
             updates: 0,
             social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile\n".into(), ..Default::default() },
         }
@@ -162,8 +165,14 @@ impl Recorder {
         let events: Vec<Event> = w.events.drain(..).collect();
         for e in events {
             match e.kind {
-                EventKind::Born => self.births += 1.0,
-                EventKind::Died { cause } => self.deaths[(cause as usize).min(4)] += 1.0,
+                EventKind::Born { cat } => {
+                    self.births += e.value;
+                    self.split[0][(cat < measure::LIGHT_EATER) as usize] += e.value;
+                }
+                EventKind::Died { cause, cat } => {
+                    self.deaths[(cause as usize).min(4)] += e.value;
+                    self.split[1][(cat < measure::LIGHT_EATER) as usize] += e.value;
+                }
                 EventKind::Watched { by, of } => {
                     let s = &mut self.social;
                     (s.watched, s.kin_watched) = (s.watched + 1.0, s.kin_watched + e.value);
@@ -274,13 +283,13 @@ impl Recorder {
         [(name("learned"), "1", measure::learned(w)), (name("greedy"), "1", g / n.max(1.0)), (name("hidden"), "1", sz[0]), (name("memory"), "1", sz[1]), (name("seen"), "1", sz[2]), (name("sight"), "cells", sz[3]), (name("hidden_max"), "1", top)]
     }
 
-    /// Kinds of live bodies by their genes (see `measure::kinds`), the mass range of the bodies
+    /// Kinds of live bodies by their genes (see `measure::kinds`), the mass range of their members
     /// (kg), and the share of what a kind took from other bodies that came from bodies that are
     /// not light-eaters: for the kind with most bodies, and the highest of any kind.
     fn variety(&self, w: &World) -> [(String, &'static str, f64); 6] {
         let (of, k) = measure::kinds(w);
         let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();
-        let mut mass: Vec<f64> = live.iter().map(|(_, b)| b.mass(&w.chem)).collect();
+        let mut mass: Vec<f64> = live.iter().map(|(_, b)| b.mass(&w.chem) / b.n()).collect();
         mass.sort_by(|a, b| a.total_cmp(b));
         let at = |q: usize| mass.get(q).copied().unwrap_or(f64::NAN);
         let (mut cnt, mut took) = (vec![0usize; k], vec![[0f64; 2]; k]);
@@ -307,6 +316,15 @@ impl Recorder {
         let light_eaters = life.alive().filter(|b| crate::light_eater(&c.w.chem, &b.genes)).count() as f64;
         let bodies = life.alive().count() as f64;
         let w = c.w;
+        // Members (the sum of counts) of light-eaters and of the others; nodes and individuals of the others.
+        let (mut members, mut nodes) = ([0.0; 2], 0.0);
+        for b in life.alive() {
+            members[!crate::light_eater(&w.chem, &b.genes) as usize] += b.n();
+            nodes += (!crate::light_eater(&w.chem, &b.genes) && b.n() > 1.0) as u8 as f64;
+        }
+        // Light-eater mass per m² on land: median and largest.
+        let mut cover: Vec<f64> = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| c.plants[i]).collect();
+        cover.sort_by(|a, b| a.total_cmp(b));
         let n = w.grid.n() as f64;
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let tot = check::totals(w);
@@ -324,6 +342,16 @@ impl Recorder {
             ("bodies".to_string(), "1", bodies),
             ("plants".to_string(), "1", light_eaters),
             ("animals".to_string(), "1", bodies - light_eaters),
+            ("plant_members".to_string(), "1", members[0]),
+            ("animal_members".to_string(), "1", members[1]),
+            ("animal_nodes".to_string(), "1", nodes),
+            ("animal_single".to_string(), "1", bodies - light_eaters - nodes),
+            ("cover_median".to_string(), "kg/m2", cover.get(cover.len() / 2).copied().unwrap_or(0.0)),
+            ("cover_max".to_string(), "kg/m2", cover.last().copied().unwrap_or(0.0)),
+            ("births_plants".to_string(), "1/yr", self.split[0][0]),
+            ("births_animals".to_string(), "1/yr", self.split[0][1]),
+            ("died_plants".to_string(), "1/yr", self.split[1][0]),
+            ("died_animals".to_string(), "1/yr", self.split[1][1]),
             ("eat_animals".to_string(), "1", life.bodies.iter().enumerate().filter(|(i, b)| b.alive && self.social.eaten(b.id(*i)).is_some_and(|t| t[1] > t[0])).count() as f64),
             ("lineages".to_string(), "1", life.lineages() as f64),
             ("updates".to_string(), "1/yr", life.updates.saturating_sub(self.updates) as f64),
@@ -431,7 +459,7 @@ impl Recorder {
         let (na, ns) = (w.grid.na(), w.chem.ns());
         let air: f64 = w.air.iter().sum();
         row.extend((0..ns).filter(|&k| w.chem.subs[k].ir_abs > 0.0).map(|k| (format!("air_{k}"), "1", w.air[k * na..(k + 1) * na].iter().sum::<f64>() / air)));
-        (self.births, self.deaths, self.updates) = (0.0, [0.0; 5], life.updates);
+        (self.births, self.deaths, self.split, self.updates) = (0.0, [0.0; 5], [[0.0; 2]; 2], life.updates);
         if self.series.is_empty() {
             self.series = row.iter().map(|r| (r.0.clone(), r.1, vec![])).collect();
         }

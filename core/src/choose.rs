@@ -34,8 +34,12 @@ const PARTS: usize = 3;
 const OPTS: usize = FIXED + 8 + VERBS * MAX_SEEN + OVERBS * PARTS;
 /// Energy to move one kg one metre on the flat, J.
 pub(crate) const C_MOVE: f64 = 3.0;
-/// Body mass per area that doubles the cost of entering a cell, kg/m².
+/// Body mass per area that doubles the cost of entering a cell, kg/m² (and of handling what is
+/// taken from a body there).
 const RHO_PASS: f64 = 5.0;
+/// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³.
+const LAYER: f64 = 10.0;
+const RHO_BODY: f64 = 1e3;
 /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J.
 const WEAR: f64 = 3e-5;
 /// Most a body can take per day of its interval, as a share of its own mass.
@@ -123,8 +127,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             }
         }
     }
-    // Parts perceived in its cell (not the one it holds), from a random one on.
-    let (held, list) = (bond::held(w, b), &w.parts.at[i]);
+    // Parts perceived in its cell (not the one it holds), from a random one on. A node (count >
+    // 1) does no actions of Bond: holding, forming and entering need a single body (a limit of
+    // the speed shortcut).
+    let (held, list) = (bond::held(w, b), if b.n() > 1.0 { &[][..] } else { &w.parts.at[i][..] });
     let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
     for q in 0..list.len() {
         let p = list[(off + q) % list.len()] as usize;
@@ -142,7 +148,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let none = 0.25 * ln(1e-4);
     x.extend((0..ns).map(|k| if b.store[k] > 0.0 { 0.25 * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + 1e-4) } else { none } - b.k.minln[k]));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
-    let crowd = w.life.at[i].len() as f32 / w.cfg.max_bodies_per_cell as f32;
+    let crowd = ln(1.0 + (w.life.sum[i][1] / w.grid.area()) as f32);
     let (dt, lit, sun) = ((temp - env[0]) as f32, t.lit as f32, w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / 10.0, ln(pm as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
@@ -205,6 +211,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
     }
     // Letting go needs something held or walls around; joining to the ground, a held part.
+    if b.n() > 1.0 {
+        logit[4..FIXED].fill(f32::NEG_INFINITY);
+    }
     if held.is_none() {
         logit[6] = f32::NEG_INFINITY;
         if my_room.is_none() {
@@ -212,9 +221,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
     }
 
-    // Copy by its own chance (set by evolution and imitation, never learned); else draw one of
-    // the other actions by its score.
-    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp());
+    // Copy by its own chance (set by evolution and imitation, never learned), and always once a
+    // member holds `copy::FULL` times its copy mass; else draw one of the other actions by its
+    // score.
+    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) || pm >= copy::FULL * b.dec(body::COPY_MASS);
     logit[1] = f32::NEG_INFINITY;
     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
     let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
@@ -310,7 +320,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
 }
 
 /// After each survey: what a brain perceives of each cell as a place to move to (liquid depth,
-/// bodies, their mean mass, light-capture area and strength, the resistance they give to moving
+/// members, their mean mass, light-capture area and strength, the resistance they give to moving
 /// through; the height and temperature differences are added per move, in places 0 and 6).
 pub fn cells(w: &mut World) {
     let (life, area) = (&mut w.life, w.grid.area() as f32);
@@ -320,7 +330,7 @@ pub fn cells(w: &mut World) {
         let n = c[0].max(1.0);
         let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / 5.0 } else { 0.0 };
         let resist = 1.0 + c[1] / area / RHO_PASS as f32;
-        [0.0, ln(1.0 + e[1] as f32), ln(1.0 + c[0]), ln((c[1] / n).max(1.0)) / 7.0 - 1.0, leaf, c[3] / n, 0.0, ln(resist)]
+        [0.0, ln(1.0 + e[1] as f32), ln(1.0 + c[0]) / 10.0, ln((c[1] / n).max(1.0)) / 7.0 - 1.0, leaf, c[3] / n, 0.0, ln(resist)]
     }));
 }
 
@@ -428,16 +438,17 @@ pub fn regroup(w: &mut World) {
     }
 }
 
-/// Move to a neighbour that has room: cost by mass (with the structure it carries), distance,
-/// climb, and the bodies already there; less, and no climb, into deep liquid while held up by
-/// what it carries. The part spent pushing through bodies breaks their bonds (`wear`). A body
-/// that strays from its group's centre leaves with a copy of its rows.
+/// Move to a neighbour: cost by mass (with the structure it carries), distance, climb, and the
+/// body mass per area already there; less, and no climb, into deep liquid while held up by what
+/// it carries. The movers must fit in the free space over the cell (`LAYER`). The part spent
+/// pushing through bodies breaks their bonds (`wear`). A body that strays from its group's
+/// centre leaves with a copy of its rows. A node moves as one: all its members go (they drew
+/// the same action), and it stays one node.
 fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
-    let i = b.cell as usize;
-    if w.life.at[j].len() >= w.cfg.max_bodies_per_cell {
+    let (i, mb) = (b.cell as usize, b.mass(&w.chem));
+    if (w.life.sum[j][1] + mb) / RHO_BODY > LAYER * w.grid.area() {
         return;
     }
-    let mb = b.mass(&w.chem);
     let carried = bond::carry(w, b, mb);
     let afloat = carried.is_some() && bond::afloat(w, b, j, mb);
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
@@ -454,7 +465,7 @@ fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     b.mark = w.light[j];
     let n = w.grid.n();
     w.diag.crossings.resize(n, 0.0);
-    w.diag.crossings[j] += 1.0;
+    w.diag.crossings[j] += b.n() as f32;
     wear(w, j, slot, cost * (1.0 - 1.0 / resist));
     let gr = &w.life.groups[b.group as usize];
     let ((cx, cy), (x, y)) = (gr.centre(), w.grid.xy(j));
@@ -469,8 +480,8 @@ fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
 }
 
 /// Energy dissipated pushing through the bodies of cell `j` breaks their bonds: each loses mass
-/// by its share of their mass, less when stronger. What breaks off goes to the ground as loose
-/// amounts, with its heat.
+/// by its share of their mass, less when stronger (a node loses members). What breaks off goes
+/// to the ground as loose amounts, with its heat.
 fn wear(w: &mut World, j: usize, mover: usize, energy: f64) {
     let chem = &w.chem;
     let others: Vec<u32> = w.life.at[j].iter().copied().filter(|&s| s as usize != mover).collect();
@@ -478,21 +489,15 @@ fn wear(w: &mut World, j: usize, mover: usize, energy: f64) {
     if energy <= 0.0 || total <= 0.0 {
         return;
     }
-    let n = w.grid.n();
     for s in others {
         let s = s as usize;
         let mut o = std::mem::take(&mut w.life.bodies[s]);
         let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
         let f = (WEAR * energy / total / (o.gene(STRENGTH) + 0.1)).min(0.5);
-        for k in (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) != Phase::Gas) {
-            let a = o.store[k] * f;
-            let q = a * w.chem.subs[k].cp * t;
-            o.store[k] -= a;
-            w.ground[k * n + j] += a;
-            o.e -= q;
-            w.e_ground[j] += q;
-        }
-        if o.mass(&w.chem) < 0.5 * m || o.lacking(&w.chem) {
+        let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
+        // In a node, members are broken off; an individual loses part of itself.
+        let left = body::thin(w, &mut o, f, &dead, BROKEN);
+        if !left || (o.n() <= 1.0 && (o.mass(&w.chem) < 0.5 * m || o.lacking(&w.chem))) {
             body::die(w, s, o, BROKEN);
         } else {
             o.vis = o.visible(&w.chem);
@@ -578,25 +583,31 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 
 /// Take from another body in the cell, by uptake selectivity, as much as the body's mass and
 /// its strength against the other's allow (each times what a held part adds), and its room. The
-/// other dies if it loses half its mass or falls below a safe minimum; else it remembers this
-/// against the taker.
+/// other dies if it loses half its mass or falls below a safe minimum (a node loses the members
+/// eaten); else it remembers this against the taker.
 fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let lever = bond::lever(w, b, mb);
     let (sb, so) = (b.gene(STRENGTH) * lever, o.gene(STRENGTH) * bond::lever(w, o, mo));
     let m = wanted(w, b, |k| o.store[k], TAKE * b.interval() as f64 * mb * sb / (sb + so + 1e-9));
-    if !body::pay(w, b, C_HANDLE * kg(w, &m), b.interval() as f64) {
+    let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / RHO_PASS;
+    if !body::pay(w, b, C_HANDLE * kg(w, &m) * resist, b.interval() as f64) {
         return;
     }
     let mut o = std::mem::take(&mut w.life.bodies[s]);
+    // From a node, whole members are eaten: the largest share taken of any store; what the taker
+    // does not take of them goes to the ground.
+    let node = o.n() > 1.0;
+    let f = if node { m.iter().zip(&o.store).map(|(a, s)| if *s > 0.0 { a / s } else { 0.0 }).fold(0.0, f64::max) } else { 0.0 };
+    let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
     transfer(w, &mut o, b, &m);
     let got = kg(w, &m);
     let t = &mut w.parts.tally.take[(lever > 1.0) as usize];
     (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), body::light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: got });
-    if o.mass(&w.chem) < 0.5 * mo || o.lacking(&w.chem) {
+    if if node { !body::thin(w, &mut o, f, &rest, TAKEN) } else { o.mass(&w.chem) < 0.5 * mo || o.lacking(&w.chem) } {
         body::die(w, s, o, TAKEN);
     } else {
         o.note(b.id(slot), -(10.0 * got / mo) as f32);

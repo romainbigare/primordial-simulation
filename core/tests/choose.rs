@@ -1,7 +1,8 @@
 //! Law 5 scene: one body learns to move toward what it can take. Flat ground, the energy-rich
 //! solid lying loose only in a strip on the east side, one body (of the starting kind that burns
 //! that solid and takes it from the ground) just west of the strip, with a neutral brain. Over
-//! its first 200 decisions, with learning on against off, over many seeds.
+//! its first 200 decisions, with learning on against off, over many seeds. Its children (it
+//! copies once it has eaten twice its copy mass) are taken out at once.
 
 use pcore::body::{self, Lineage, INTERVAL, LEARN};
 use pcore::grid::DIRS;
@@ -85,6 +86,14 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, rich, j) > seen(&w, rich, from) + 0.02).collect();
         body::day(&mut w);
         w.day += 1;
+        // A body that grew past twice its copy mass has children: they die at once, their matter
+        // back to the ground where they were born, so the scene stays one body.
+        for s in 0..w.life.bodies.len() {
+            if s != slot && w.life.bodies[s].alive {
+                let c = std::mem::take(&mut w.life.bodies[s]);
+                body::die(&mut w, s, c, body::LACK);
+            }
+        }
         if w.life.updates > u && w.life.bodies[slot].alive {
             let to = w.life.bodies[slot].cell as usize;
             log.push((from % W >= STRIP, to != from, !richer.is_empty(), richer.contains(&to), richer.len() as f64 / near.len() as f64));
@@ -119,13 +128,15 @@ fn body_learns_to_move_toward_what_it_can_take() {
     );
     eprintln!("{report}");
     // It ends up on the strip clearly more often than a body that does not learn (about 0.74
-    // against 0.51 here; 0.70 against 0.53 and 0.76 against 0.48 on seeds 121 to 360).
+    // against 0.52 here; 0.76 against 0.51 and 0.77 against 0.50 on seeds 121 to 360).
     assert!(strip_on > strip_off + 0.07, "{report}");
-    // Its moves go toward richer cells clearly more often than chance, and clearly more than
-    // those of a body that does not learn (about 14 points over chance against 1 here; 15
-    // against -1 and 16 against -1 on seeds 121 to 360). Moving pays only through a take at a
-    // later decision; it is learned because each row of the brain steps by its own size, so the
-    // row for the richness of a neighbour learns when that matters, not drowned by the others.
+    // Its moves go toward richer cells more often than chance, and more than those of a body
+    // that does not learn (about 4.5 points over chance against -0.6 here; 3 against 1 and 3
+    // against -2 on seeds 121 to 360; it was 14 to 16 points while bodies grew without bound: a
+    // body of real size that has eaten its fill copies, and gains no well-being by eating more).
+    // Moving pays only through a take at a later decision; it is learned because each row of the
+    // brain steps by its own size, so the row for the richness of a neighbour learns when that
+    // matters, not drowned by the others.
     let (up_on, up_off) = (toward_on - chance_on, toward_off - chance_off);
-    assert!(up_on > 0.05 && up_on > up_off + 0.05, "{report}");
+    assert!(up_on > 0.02 && up_on > up_off + 0.02, "{report}");
 }

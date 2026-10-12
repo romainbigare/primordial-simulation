@@ -25,6 +25,8 @@ const FAR: f64 = 0.05;
 /// reactions on traces alone never make a node react every step.
 const TRACE: f64 = 1e-6;
 const BLOCK: usize = 64;
+/// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
+const LIGHT_YIELD: f64 = 0.05;
 
 /// Reusable reaction solver for one chemistry: per-reaction constants and scratch buffers.
 pub struct Reactor {
@@ -176,7 +178,8 @@ impl Reactor {
     /// - `cat`: catalyst factor per reaction (`None` = 1 for all).
     /// - `light_j`: absorbed light energy available to light reactions, J.
     ///
-    /// Elements are exact; thermal energy plus Σ n·hf is exact (light used leaves the node).
+    /// Elements are exact; thermal energy plus Σ n·hf gains exactly the light used (a share
+    /// `LIGHT_YIELD` of it stored, the rest as heat).
     #[allow(clippy::too_many_arguments)]
     pub fn react(
         &mut self,
@@ -262,7 +265,7 @@ impl Reactor {
                 let lim = rx.inputs.iter().fold(f64::MAX, |m, &(k, nu)| least(m, per(self.av[k as usize], nu)));
                 let mut ext = lim * if sub == left { self.far[r] } else { frac(self.kap[r] * sub) };
                 if uses_light {
-                    ext = ext.min(light / dh);
+                    ext = ext.min(light * LIGHT_YIELD / dh);
                 } else if dh > 0.0 {
                     ext = ext.min(0.5 * *energy / dh);
                 }
@@ -283,7 +286,12 @@ impl Reactor {
                     if self.ph[k] == 2 && has_pool { pool[k] += d } else { n[k] += d }
                     self.av[k] += d;
                 }
-                if uses_light { light -= dh * ext } else { *energy -= dh * ext }
+                if uses_light {
+                    light -= dh * ext / LIGHT_YIELD;
+                    *energy += dh * ext * (1.0 / LIGHT_YIELD - 1.0);
+                } else {
+                    *energy -= dh * ext
+                }
             }
             left -= sub;
         }

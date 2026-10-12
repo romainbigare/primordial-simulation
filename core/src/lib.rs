@@ -68,8 +68,11 @@ pub struct Config {
     pub wear: f64,
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
-    /// Most bodies one cell can hold (a speed safeguard: copying or moving into a full cell fails)
-    pub max_bodies_per_cell: usize,
+    /// A speed shortcut, not a law (plan 7.1): where a cell holds more than this many individuals of
+    /// one lineage and brain group, they merge into a population node each month (`body::crowd`).
+    /// It must give the same patterns as individuals (to be checked at M4).
+    #[serde(default = "eight")]
+    pub crowd: usize,
     /// Bodies that stay near each other share one brain's rows (for speed). When false each
     /// body keeps its own rows: a child starts with its parent's (its own born rows plus what
     /// the parent learned) and no body joins another's group. To check that sharing gives the
@@ -80,6 +83,9 @@ pub struct Config {
 
 fn yes() -> bool {
     true
+}
+fn eight() -> usize {
+    8
 }
 
 impl Default for Config {
@@ -107,7 +113,7 @@ impl Default for Config {
             carry: 1e-7,
             wear: 3e-9,
             creep: 1e-6,
-            max_bodies_per_cell: 2,
+            crowd: 8,
             share_brains: true,
         }
     }
@@ -184,7 +190,7 @@ pub struct Diag {
     pub liquid_flux: Vec<f32>,
     /// Liquid falling on each ground cell, mol/(m² s) (moving average)
     pub rain: Vec<f32>,
-    /// Bodies moving into each ground cell, per year (moving average over about a year), and
+    /// Members moving into each ground cell, per year (moving average over about a year), and
     /// since the last month
     pub traffic: Vec<f32>,
     pub crossings: Vec<f32>,

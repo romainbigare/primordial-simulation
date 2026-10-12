@@ -108,3 +108,41 @@ fn own_brains_keep_one_body_per_group() {
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// Cover is fuel when hot: on a cell held at 700 K for a month, a light-eater node loses most of
+/// its energy-rich solid (it reacts with the gas, in the body or, once the body dies, in the
+/// ground), while the same cell left as it was keeps it.
+#[test]
+fn hot_cover_burns() {
+    let run = |hot: bool| {
+        let mut w = worldgen::new_world(1, 32, 32);
+        pcore::step(&mut w);
+        worldgen::life::seed(&mut w, 0);
+        let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");
+        let i = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node").cell as usize;
+        let n = w.grid.n();
+        let held = |w: &pcore::World| w.ground[rich * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[rich]).sum::<f64>();
+        let before = held(&w);
+        // The days of `pcore::step`, the cell heated back to 700 K before each (booked as an edit).
+        let dt = w.cfg.phys_days as f64 * 86_400.0;
+        for d in 0..w.cfg.days_per_month {
+            if hot {
+                let e = w.energy_ground(i, 700.0);
+                w.ledger.imposed_energy += e - w.e_ground[i];
+                w.e_ground[i] = e;
+            }
+            if d % w.cfg.phys_days == 0 {
+                pcore::body::survey(&mut w);
+                pcore::flow::step(&mut w, dt);
+                pcore::change::step(&mut w, dt);
+            }
+            pcore::body::day(&mut w);
+            w.day += 1;
+        }
+        assert_eq!(pcore::check::broken(&w), None);
+        held(&w) / before
+    };
+    let (hot, cold) = (run(true), run(false));
+    eprintln!("energy-rich solid left: {hot:.3} hot, {cold:.3} as it was");
+    assert!(hot < 0.5 && cold > 0.9, "energy-rich solid left: {hot:.3} hot, {cold:.3} as it was");
+}

@@ -44,7 +44,9 @@ pub const HIDDEN: usize = 11;
 pub const MEMORY: usize = 12;
 pub const SEEN: usize = 13;
 pub const SIGHT: usize = 14;
-pub const NSCALAR: usize = 15;
+/// Share of the children that start in a neighbour cell, 0..1 (for an individual, the chance)
+pub const DISPERSE: usize = 15;
+pub const NSCALAR: usize = 16;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -538,16 +540,11 @@ impl Life {
         self.bodies[slot] = b;
         slot
     }
-    fn remove(&mut self, slot: usize) {
+    pub(crate) fn remove(&mut self, slot: usize) {
         let mut b = std::mem::take(&mut self.bodies[slot]);
         let (cell, lin, g) = (b.cell as usize, b.lineage as usize, b.group);
         self.enrol(g, &b, -1);
-        let gen = &mut self.genomes[b.genome as usize];
-        gen.bodies -= 1;
-        if gen.bodies == 0 {
-            gen.rows = Vec::new();
-            self.free_genomes.push(b.genome);
-        }
+        self.unref(b.genome);
         (b.alive, b.store, b.genes, b.trace, b.mem) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new());
         b.gen += 1;
         self.bodies[slot] = b;
@@ -557,6 +554,25 @@ impl Life {
             self.brains[lin] = None;
         }
         self.free.push(slot as u32);
+    }
+    /// One body fewer born with rows `g`.
+    fn unref(&mut self, g: u32) {
+        let gen = &mut self.genomes[g as usize];
+        gen.bodies -= 1;
+        if gen.bodies == 0 {
+            gen.rows = Vec::new();
+            self.free_genomes.push(g);
+        }
+    }
+    /// Body `b` (taken out of its slot) now has these genes and born rows; its group follows.
+    pub fn reborn(&mut self, b: &mut Body, genes: Vec<f32>, rows: Vec<f32>) {
+        let g = if rows == self.genomes[b.genome as usize].rows { b.genome } else { self.new_genome(rows) };
+        let new = Body { cell: b.cell, genome: g, genes, ..Default::default() };
+        self.genomes[g as usize].bodies += 1;
+        self.enrol(b.group, &new, 1);
+        self.enrol(b.group, b, -1);
+        self.unref(b.genome);
+        (b.genome, b.genes, b.k) = (g, new.genes, Consts::default());
     }
     pub fn relocate(&mut self, slot: usize, g: u32, from: usize, to: usize) {
         self.at[from].retain(|&s| s as usize != slot);
@@ -608,6 +624,9 @@ pub fn survey(w: &mut World) {
     if monthly || w.life.groups.iter().any(|g| g.members > 0 && g.sum.is_empty()) {
         w.life.resum();
     }
+    if monthly {
+        crowd(w);
+    }
     let life = &mut w.life;
     life.sum.clear();
     life.sum.resize(n, [0.0; 7]);
@@ -640,6 +659,46 @@ pub fn survey(w: &mut World) {
     }
     choose::cells(w);
 }
+
+/// A speed shortcut, not a law (plan 7.1; it must give the same patterns as individuals, to be
+/// checked at M4): where a cell holds more than `cfg.crowd` individuals of one lineage and brain
+/// group, those that hold and are inside nothing merge with the nodes of them there into one
+/// population node (the largest body); and nodes of one lineage, or alike in genes
+/// (`copy::alike`), merge. Stores and heat add up, genes and born rows become the means by count
+/// (`copy::merge`); its lineage and brain group are the largest one's, and its memory.
+fn crowd(w: &mut World) {
+    let max = w.cfg.crowd;
+    for i in 0..w.grid.n() {
+        if w.life.at[i].len() <= 1 {
+            continue;
+        }
+        let bodies = &w.life.bodies;
+        let free = |s: usize| bodies[s].hold == 0 && bodies[s].inside == 0;
+        let mut list: Vec<(u32, u32, u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| free(s)).map(|s| (bodies[s].lineage, bodies[s].group, u64::MAX - bodies[s].n().to_bits(), s)).collect();
+        list.sort_unstable();
+        for run in list.chunk_by(|a, b| (a.0, a.1) == (b.0, b.1)) {
+            // Largest first: the nodes, then the individuals.
+            let nodes = run.iter().take_while(|x| w.life.bodies[x.3].n() > 1.0).count();
+            if run.len() - nodes > max {
+                for &(_, _, _, s) in &run[1..] {
+                    crate::copy::merge(w, s, run[0].3);
+                }
+            }
+        }
+        let (bodies, lay) = (&w.life.bodies, Layout::of(&w.chem));
+        let mut nodes: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| bodies[s].n() > 1.0).map(|s| (u64::MAX - bodies[s].n().to_bits(), s)).collect();
+        nodes.sort_unstable();
+        for x in 1..nodes.len() {
+            let (life, s) = (&w.life, nodes[x].1);
+            let (a, b) = (&life.bodies[s], |t: usize| &life.bodies[t]);
+            let like = |t: usize| b(t).alive && (b(t).lineage == a.lineage || crate::copy::alike(&lay, &b(t).genes, &a.genes));
+            if let Some(&(_, t)) = nodes[..x].iter().find(|p| like(p.1)) {
+                crate::copy::merge(w, s, t);
+            }
+        }
+    }
+}
+
 
 /// Working memory for body updates.
 #[derive(Default)]
@@ -700,19 +759,61 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
         w.ground[k * n + i] += a;
     }
     w.e_ground[i] += b.e;
-    w.events.push(Event { day: w.day, kind: EventKind::Died { cause }, node: b.cell, value: b.id(slot) as f64 });
+    let cat = light_cat(&w.chem, &b.genes);
+    w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat }, node: b.cell, value: b.count });
     w.life.bodies[slot] = b;
     w.life.remove(slot);
+}
+
+/// Some of a body's matter goes to its cell's ground as loose amounts: `dead` (mol of each
+/// substance), with its share of the heat. In a node these are the remains of a share `f` of
+/// its members, who died of `cause` (the count falls). False if less than one member is left
+/// (the caller lets the node die).
+pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> bool {
+    let (n, i, chem) = (w.grid.n(), b.cell as usize, &w.chem);
+    let cap = b.heat_cap(chem).max(1e-9);
+    let q = b.e * dead.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / cap;
+    for (k, &a) in dead.iter().enumerate() {
+        let a = a.min(b.store[k]);
+        b.store[k] -= a;
+        w.ground[k * n + i] += a;
+    }
+    b.e -= q;
+    w.e_ground[i] += q;
+    if b.n() > 1.0 && f > 0.0 {
+        let cat = light_cat(chem, &b.genes);
+        w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat }, node: b.cell, value: b.count * f });
+        b.count *= 1.0 - f;
+    }
+    b.count >= 1.0
+}
+
+/// A node short of key stores: the members poorest in them die (members differ around the
+/// mean), so the survivors keep those stores and the dead take their share of the rest. The
+/// share that dies is the least that lifts every key store to its safe minimum; false if that
+/// is all of them.
+fn starve(w: &mut World, b: &mut Body, m: f64) -> bool {
+    let (chem, lay) = (&w.chem, Layout::of(&w.chem));
+    let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
+    let short: Vec<usize> = (0..chem.ns()).filter(|&k| x(k) < b.gene(lay.min + k) * m).collect();
+    let kept: f64 = short.iter().map(|&k| x(k)).sum();
+    let live = short.iter().map(|&k| (x(k) / b.gene(lay.min + k) - kept) / (m - kept).max(1e-30)).fold(1.0, f64::min);
+    let f = 1.0 - live.max(0.0);
+    let dead: Vec<f64> = (0..chem.ns()).map(|k| if short.contains(&k) { 0.0 } else { b.store[k] * f }).collect();
+    f < 1.0 && thin(w, b, f, &dead, LACK) && !b.lacking(&w.chem)
 }
 
 /// Flow and Change on one body since its last update. Returns a death cause.
 fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<u8> {
     let i = b.cell as usize;
+    // The ground's temperature as of the last flow step (the monthly survey's is too old to feel
+    // a cell that turned hot).
     let [tg, depth, _] = w.life.env[i];
+    let tg = w.scratch.temps().0.get(i).copied().unwrap_or(tg);
     let (depth, walls) = (bond::depth(w, b, depth), bond::walls_around(w, b));
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
     let days = w.day.saturating_sub(b.last).max(1) as f64;
-    let (mass, cap) = b.mass_cap(&w.chem);
+    let (mut mass, cap) = b.mass_cap(&w.chem);
     b.last = w.day;
 
     // Upkeep of catalysts, strength and capture area by the day, and of this decision; its
@@ -722,12 +823,22 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
     let think = w.life.brains[b.lineage as usize].as_ref().map_or(C_BRAIN, |l| l.cost());
     let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64 * b.n()) + think * mass;
-    let e0 = b.e;
-    if !pay_at(w, b, upkeep, days, mass, cap) {
+    // In a node, the members whose upkeep could not be paid die.
+    let (e0, node) = (b.e, b.n() > 1.0);
+    let short = pay_at(w, b, upkeep, days, mass, cap, node) / upkeep.max(1e-300);
+    if short > 1e-9 && !node {
         return Some(SPENT);
     }
     let upkeep = b.e - e0;
     b.e = e0;
+    if short > 1e-9 {
+        let dead: Vec<f64> = b.store.iter().map(|a| a * short).collect();
+        if !thin(w, b, short, &dead, SPENT) {
+            b.e += upkeep;
+            return Some(SPENT);
+        }
+        mass = b.mass(&w.chem);
+    }
 
     // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks
     // up liquid): found when first needed, but before the body soaks anything up.
@@ -785,7 +896,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // goes in or out, up to the level the body keeps, with its latent heat. The latent heat
     // is paid by the light and heat released, and by what the surface can conduct into a body
     // that evaporating cools no lower than the vapour's condensing point.
-    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * dt * open;
+    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
     let vap_tot: f64 = tmp.pool.iter().sum();
@@ -857,10 +968,14 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         b.e = if got == give { e1 } else { e1 - (give - got) };
     }
 
-    let chem = &w.chem;
-    if b.lacking_at(chem, mass3) {
-        return Some(LACK);
+    let (mut mass3, mut c) = (mass3, c);
+    if b.lacking_at(&w.chem, mass3) {
+        if !(b.n() > 1.0 && mass3 >= 1e-3 * b.n() && starve(w, b, mass3)) {
+            return Some(LACK);
+        }
+        (mass3, c) = b.mass_cap(&w.chem);
     }
+    let chem = &w.chem;
     (tmp.mass, tmp.cap) = (mass3, c);
     let t = b.e / c.max(1e-9);
     if (0..ns).any(|k| b.wet >> k & 1 == 1 && chem.phase(k, t) != Phase::Liquid) {
@@ -877,14 +992,22 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    let (mass, cap) = b.mass_cap(&w.chem);
-    pay_at(w, b, cost, days, mass, cap)
+    let ((mass, cap), e0) = (b.mass_cap(&w.chem), b.e);
+    let paid = pay_at(w, b, cost, days, mass, cap, false) == 0.0;
+    // The heat released leaves the body for its cell's ground within the action (a body's heat
+    // relaxes within seconds), so a costly action does not leave it hot.
+    if b.e > e0 {
+        w.e_ground[b.cell as usize] += b.e - e0;
+        b.e = e0;
+    }
+    paid
 }
 
-/// `pay` when the body's mass and heat capacity are known.
-fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64) -> bool {
+/// `pay` when the body's mass and heat capacity are known; returns what was not paid. If
+/// `part`, it pays what it can; else all or nothing.
+fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64, part: bool) -> f64 {
     if cost <= 0.0 {
-        return true;
+        return 0.0;
     }
     b.prepare(&w.chem);
     let depth = bond::depth(w, b, w.life.env.get(b.cell as usize).map_or(0.0, |e| e[1]));
@@ -915,8 +1038,8 @@ fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64
             have[k as usize] -= nu as f64 * ext[q];
         }
     }
-    if left > 1e-9 * cost {
-        return false;
+    if left > 1e-9 * cost && !part {
+        return cost;
     }
     let mut latent = 0.0;
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
@@ -939,5 +1062,5 @@ fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64
         }
     }
     b.e += cost - left - latent;
-    true
+    if left > 1e-9 * cost { left } else { 0.0 }
 }

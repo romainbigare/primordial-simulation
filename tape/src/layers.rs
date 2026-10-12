@@ -69,7 +69,8 @@ pub struct Ctx<'a> {
     pub t_air: Vec<f64>,
     pub vapor: Vec<f64>,
     pub absorber: Vec<f64>,
-    /// Per ground cell: body mass of light-eaters ("plants") and of the others ("animals"), kg/m²; bodies
+    /// Per ground cell: body mass of light-eaters ("plants") and of the others ("animals"), kg/m²
+    /// (all members of each node); bodies (nodes and individuals)
     pub plants: Vec<f64>,
     pub animals: Vec<f64>,
     pub bodies: Vec<f64>,
@@ -138,8 +139,8 @@ pub const LAYERS: &[Layer] = &[
     l("rain", "mol/m2/s", "log", 1e-6, 1e-2, |c, i| c.w.diag.rain.get(i).copied().unwrap_or(0.0) as f64),
     l("vapor", "mol/m2", "log", 1.0, 1e5, |c, i| c.vapor[c.air(i)]),
     l("absorber", "1", "lin", 0.0, 5.0, |c, i| c.absorber[c.air(i)]),
-    l("plants", "kg/m2", "log", 1e-3, 10.0, |c, i| c.plants[i]),
-    l("animals", "kg/m2", "log", 1e-4, 1.0, |c, i| c.animals[i]),
+    l("plants", "kg/m2", "log", 0.03, 300.0, |c, i| c.plants[i]),
+    l("animals", "kg/m2", "log", 1e-4, 10.0, |c, i| c.animals[i]),
     l("bodies", "1", "lin", 0.0, 32.0, |c, i| c.bodies[i]),
     l("traffic", "1/yr", "log", 1.0, 1e4, |c, i| c.w.diag.traffic.get(i).copied().unwrap_or(0.0) as f64),
     l("structures", "kg/m2", "log", 1e-6, 1.0, |c, i| c.parts[i]),

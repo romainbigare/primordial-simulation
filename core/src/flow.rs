@@ -26,6 +26,14 @@ const REFRESH_MONTHS: u64 = 3;
 const SPLIT: f64 = 0.2;
 /// Liquid does not move for a smaller head difference, m.
 const STILL_M: f64 = 0.01;
+/// Body mass per area that halves what moving liquid can carry off a cell and how fast its loose
+/// solids creep (bodies on the ground hold it), kg/m².
+const HOLD: f64 = 2.0;
+
+/// What the bodies on cell `i` leave of carrying and creep there (1 when bare).
+fn held(w: &World, i: usize) -> f64 {
+    1.0 / (1.0 + w.life.sum.get(i).map_or(0.0, |s| s[1]) / w.grid.area() / HOLD)
+}
 
 /// Numbers of one substance the laws read often: heat capacity, molar mass, fusion and
 /// vaporisation enthalpy, molar volume as [solid, liquid], melting and boiling point,
@@ -638,7 +646,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // and break bonded ground; pass the load on with the flow.
         let bedwork = power * work * HIDE_M[1] / (HIDE_M[1] + (lvol - qsum).max(0.0) / area);
         let load: f64 = sol.iter().enumerate().map(|(si, &k)| s.sed[i * ns + si] * s.sp[k].v[0]).sum();
-        let capv = w.cfg.carry * bedwork;
+        let capv = w.cfg.carry * bedwork * held(w, i);
         if load <= 0.0 && capv < 1.0 {
             continue;
         }
@@ -755,7 +763,7 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             if s.mob[a] <= 0.0 || dz <= 0.0 {
                 continue;
             }
-            let r = w.cfg.creep * dz / dist * cell * dt / area;
+            let r = w.cfg.creep * dz / dist * cell * dt / area * held(w, a);
             let f = (area * dz / 4.0 / (r * s.mob[a])).min(1.0);
             let (ta, tb) = (s.tg[a], s.tg[b]);
             // What moves, summed over the substances: heat capacity, mass, mobility, and the

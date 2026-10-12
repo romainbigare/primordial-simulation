@@ -75,7 +75,7 @@ pub fn save(w: &World, path: &str) {
             ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.diag.rain[i] as f64 * 3.15e7).max(1.0).log10()),
             {
                 let base = if f.depth[i] > 1.0 { [40, 50, 70] } else { [90, 85, 80] };
-                ramp(&[(-3.0, base), (-1.5, [60, 120, 40]), (0.0, [30, 200, 40])], green[i].max(1e-9).log10())
+                ramp(&[(-1.5, base), (0.0, [60, 120, 40]), (1.5, [30, 200, 40])], green[i].max(1e-9).log10())
             },
             // Bodies moving into the cell per year, on a log scale, over the map in grey.
             {

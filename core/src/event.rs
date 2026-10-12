@@ -6,8 +6,11 @@ use serde::{Deserialize, Serialize};
 pub enum EventKind {
     /// Substance `k` has a non-zero amount somewhere for the first time
     FirstSubstance(u16),
-    Born,
-    Died { cause: u8 },
+    /// Members born (value), and the highest speed-up (log10) of any light reaction in the
+    /// parent's genes
+    Born { cat: f32 },
+    /// Members died (value), and the same speed-up in their genes
+    Died { cause: u8, cat: f32 },
     /// A body of group `by` watched a body of group `of` (value 1 if of the same lineage)
     Watched { by: u32, of: u32 },
     /// Body `from` put stores into body `to` (value: kg)

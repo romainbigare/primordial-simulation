@@ -89,9 +89,15 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
         if y % every == 0 || y == y0 + years {
             let (de, dq) = pcore::check::drift(&w, &t0, &l0);
             let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| tape::light_eater(&w.chem, &b.genes)).count());
+            // Members of light-eaters; individuals, nodes and members of the others.
+            let mut m = [0.0; 4];
+            for b in w.life.alive() {
+                let k = if tape::light_eater(&w.chem, &b.genes) { 0 } else { 1 + (b.n() > 1.0) as usize };
+                (m[k], m[3]) = (m[k] + if k == 0 { b.n() } else { 1.0 }, m[3] + if k > 0 { b.n() } else { 0.0 });
+            }
             let ms = part.map(|d| d.as_secs_f64() * 1000.0 / (y - since) as f64);
             since = y;
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} ({le} light-eaters), lineages {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1} ({} parts)", w.ledger.clamped_heat, w.life.lineages(), ms[0], ms[1], ms[2], ms[3], w.parts.alive().count());
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} ({le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1} ({} parts)", w.ledger.clamped_heat, m[0], m[1], m[2], m[3], w.life.lineages(), ms[0], ms[1], ms[2], ms[3], w.parts.alive().count());
             busy += part.iter().sum::<Duration>();
             part = [Duration::ZERO; 4];
             render::save(&w, &format!("{out}/year{y:04}.png"));
