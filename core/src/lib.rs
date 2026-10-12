@@ -34,7 +34,11 @@ pub struct Config {
     pub months_per_year: u32,
     /// Ground and air physics run every `phys_days` days
     pub phys_days: u32,
-    /// Liquid, air and rain move every `flow_days` days (radiation every `phys_days`)
+    /// Gas moves between air nodes (wind) every `air_days` days (radiation every `phys_days`)
+    pub air_days: u32,
+    /// Evaporation and condensation (rain) run every `exchange_days` days (a multiple of `air_days`)
+    pub exchange_days: u32,
+    /// Liquid and creep move every `flow_days` days (a multiple of `air_days` keeps them on air steps)
     pub flow_days: u32,
     /// Depth of ground that exchanges heat with the surface, m
     pub skin_m: f64,
@@ -73,6 +77,8 @@ impl Default for Config {
             days_per_month: 30,
             months_per_year: 12,
             phys_days: 3,
+            air_days: 15,
+            exchange_days: 15,
             flow_days: 15,
             skin_m: 2.0,
             air_top_m: 10_000.0,
