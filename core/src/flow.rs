@@ -46,6 +46,47 @@ struct Sp {
 /// Working memory of the law, rebuilt from the world when missing. It is saved with the
 /// world (but for the space used only within a call), as the slower parts of the law run
 /// from what it held at their last turn.
+///
+/// Who writes and who reads each field (R `refresh`, G `ground_state`, S `air::state`, Rad
+/// `air::radiation`, X `air::exchange`, W `air::wind`, L `liquid`, C `creep`, Law 2 `change`
+/// through `view`). Ground fields are per ground node, air fields per air node; "all" is every part.
+///
+/// | field | unit | written by | read by |
+/// | --- | --- | --- | --- |
+/// | `month`, `year`, `pending` | month, year, s | `step` | `step` |
+/// | `area`, `sp` | m², `Sp` per substance | R | all |
+/// | `loose`, `fixed`, `vary`, `bedk`, `gas` | substance lists | R (`loose`, `vary` also X, L) | all |
+/// | `fix` | m³ (volume, volume × reflectance) | R | `surface` |
+/// | `bed` | [J/K skin, m³, reflectance, W/(m K)] | R (L wears `[1]`) | G, Rad (via `alb`), C, Law 2 |
+/// | `cap` | J/K | G, X, L, C (moves of heat capacity) | G, Rad, X, L, C |
+/// | `tg` | K | G | all, Law 2, bodies (`temps`) |
+/// | `pk`, `phi` | substance, share | G | `molten`, Rad |
+/// | `hold` | [J held, J low, J high, stage] | G, `lift` (marks stale) | G |
+/// | `z`, `head` | m (solid surface, liquid surface) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
+/// | `alb`, `rc` | reflectance, m² K/W | `surface` | Rad |
+/// | `rain` | mol, condensed this call | X | X (to `diag.rain`) |
+/// | `order` | cell keys by head | L | L |
+/// | `nbr`, `done` | neighbour cells, visited flag | `space`; L | L |
+/// | `sed`, `sed_e`, `mob` | mol carried, J carried, m³ mobile | L (`sed`, `sed_e`); C (`mob`) | L; C |
+/// | `air_of`, `near`, `wt`, `per` | ground cell to air nodes and weights, share | R (once) | S, Rad, X, `lerp` |
+/// | `tl` | K, air touching the ground | Rad | X |
+/// | `seen` | [drop/m, air height, absorbing share, cloud reflectance, air K] | S (X sets `[3]`) | Rad |
+/// | `ta0` | K, air at the last S | S | Rad |
+/// | `cloud`, `snap` | [mol, mol × reflectance]; mol per gas | X | X |
+/// | `cells`, `za`, `vol` | count, m, m³ | R; S | S, W |
+/// | `nt`, `capa`, `mass` | mol, J/K, kg | S; X, W (moves) | X, W, Rad |
+/// | `fabs`, `gam`, `zair`, `ta` | share, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
+/// | `node_tmp` | reused: J/K (S), J (Rad), reflectance (X), Pa (W) | S, Rad, X, W | the same part |
+/// | `warmth`, `grad` | K at equal height, K per node | W | W |
+/// | `cond`, `hk`, `split` | may condense, m, share (per gas) | S | X, W |
+/// | `push` | [mix, overturn, even] mol/s per edge | W | W |
+/// | `to_next`, `to_prev` | edge coefficients, × dt / amount | W | W (`thomas`) |
+/// | `line_x`, `line_c` | line amounts (heat or gas), solver space | W | W |
+/// | `line_gas`, `line_flux` | solved amounts, edge flux per gas, mol | W | W |
+/// | `halves` | [lower, upper] half amounts, mol | W | W |
+/// | `mflux`, `nt_new` | kg per edge, mol | W | W |
+/// | `trace` | s, calls | X | X |
+/// | `slow` | [tick last, tick next, count] | Law 2 | Law 2 |
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
     month: Option<u64>,
@@ -125,9 +166,9 @@ pub struct Scratch {
     zair: Vec<f64>,
     ta: Vec<f64>,
     #[serde(skip)]
-    p: Vec<f64>,
+    node_tmp: Vec<f64>,
     #[serde(skip)]
-    th: Vec<f64>,
+    warmth: Vec<f64>,
     #[serde(skip)]
     grad: Vec<[f64; 2]>,
     /// Per gas [g * na + j]: may it condense in the column; height its amount fills near the
@@ -139,21 +180,21 @@ pub struct Scratch {
     #[serde(skip)]
     push: Vec<[f64; 3]>,
     #[serde(skip)]
-    al: Vec<f64>,
+    to_next: Vec<f64>,
     #[serde(skip)]
-    be: Vec<f64>,
+    to_prev: Vec<f64>,
     #[serde(skip)]
-    x: Vec<f64>,
+    line_x: Vec<f64>,
     #[serde(skip)]
-    cw: Vec<f64>,
+    line_c: Vec<f64>,
     #[serde(skip)]
     mflux: Vec<f64>,
     #[serde(skip)]
-    lh: Vec<[f64; 2]>,
+    halves: Vec<[f64; 2]>,
     #[serde(skip)]
-    xs: Vec<f64>,
+    line_gas: Vec<f64>,
     #[serde(skip)]
-    fl: Vec<f64>,
+    line_flux: Vec<f64>,
     #[serde(skip)]
     nt_new: Vec<f64>,
     /// Time since trace gases last evaporated and condensed, s, and the calls since.
@@ -367,7 +408,7 @@ fn space(w: &World, s: &mut Scratch) {
     for v in [&mut s.rain, &mut s.sed_e, &mut s.mob] {
         *v = vec![0.0; n];
     }
-    (s.p, s.th) = (vec![0.0; na], vec![0.0; na]);
+    (s.node_tmp, s.warmth) = (vec![0.0; na], vec![0.0; na]);
     (s.done, s.grad, s.cloud) = (vec![false; n], vec![[0.0; 2]; na], vec![[0.0; 2]; na]);
 }
 

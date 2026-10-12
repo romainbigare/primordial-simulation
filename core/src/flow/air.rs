@@ -36,7 +36,7 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
         return;
     }
     for j in 0..na {
-        (s.za[j], s.nt[j], s.capa[j], s.mass[j], s.fabs[j], s.p[j]) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        (s.za[j], s.nt[j], s.capa[j], s.mass[j], s.fabs[j], s.node_tmp[j]) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     }
     for i in 0..n {
         s.za[s.air_of[i] as usize] += s.head[i];
@@ -75,13 +75,13 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
             for j in 0..na {
                 let (t, lv) = (s.ta[j], s.sp[k].lv);
                 let x = w.chem.p_sat(k, t) * s.vol[j] / (s.nt[j] * R_GAS * t);
-                s.p[j] += s.nt[j] * lv * lv * x.min(1.0) / (R_GAS * t * t);
+                s.node_tmp[j] += s.nt[j] * lv * lv * x.min(1.0) / (R_GAS * t * t);
             }
         }
     }
     for j in 0..na {
-        s.gam[j] = g * s.mass[j] / (s.capa[j] + s.p[j]);
-        s.p[j] = 0.0;
+        s.gam[j] = g * s.mass[j] / (s.capa[j] + s.node_tmp[j]);
+        s.node_tmp[j] = 0.0;
     }
     // (The vapour pressure falls by a factor exp(lv/R (1/(t-½) - 1/(t+½))) per K.)
     let half = (-LN_2).exp();
@@ -129,7 +129,7 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let (na, adt) = (grid.na(), s.area * dt);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
-    s.p.fill(0.0);
+    s.node_tmp.fill(0.0);
     let suns = (0..grid.h).map(|y| insolation(cfg.sun, grid.lat(y, cfg.lat_south, cfg.lat_north).to_radians(), decl));
     for (i, q) in suns.flat_map(|q| std::iter::repeat_n(q, grid.w)).enumerate() {
         // The air this cell sees, and its temperature where it touches the ground.
@@ -159,12 +159,12 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         let up = t3 * (4.0 * ts - 3.0 * t);
         let hs = cfg.sensible * (ts - tl);
         e_ground[i] += adt * (sw + down - up - hs);
-        s.p[j] += adt * (f * up + hs - 2.0 * down);
+        s.node_tmp[j] += adt * (f * up + hs - 2.0 * down);
         sun += adt * sw;
         out += adt * ((1.0 - f) * up + down);
     }
     for j in 0..na {
-        e_air[j] += s.p[j];
+        e_air[j] += s.node_tmp[j];
         s.ta[j] = e_air[j] / s.capa[j];
     }
     ledger.sun_in += sun;
@@ -306,11 +306,11 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     for j in 0..na {
         let [m, mr] = std::mem::take(&mut s.cloud[j]);
         let rate = m / (area * s.cells[j] * dt);
-        s.p[j] = if m > 0.0 { rate / (rate + w.cfg.cloud) * mr / m } else { 0.0 };
+        s.node_tmp[j] = if m > 0.0 { rate / (rate + w.cfg.cloud) * mr / m } else { 0.0 };
     }
     let ema = (dt / (w.days_per_year() as f64 * 86_400.0)) as f32;
     for i in 0..n {
-        s.seen[i][3] = lerp(s, &s.p, i);
+        s.seen[i][3] = lerp(s, &s.node_tmp, i);
         let r = (s.rain[i] / (area * dt)) as f32;
         w.diag.rain[i] += (r - w.diag.rain[i]) * ema;
         s.rain[i] = 0.0;
@@ -343,25 +343,25 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
     let World { cfg, grid, air, e_air, ledger, .. } = w;
     let (na, aw, ah, ng, g) = (grid.na(), grid.aw(), grid.ah(), s.gas.len(), cfg.gravity);
     let (side, len_max) = (grid.cell_m * grid.air_scale as f64, aw.max(ah));
-    for v in [&mut s.al, &mut s.be, &mut s.x, &mut s.cw, &mut s.mflux] {
+    for v in [&mut s.to_next, &mut s.to_prev, &mut s.line_x, &mut s.line_c, &mut s.mflux] {
         v.resize(len_max, 0.0);
     }
-    (s.push, s.lh) = (vec![[0.0; 3]; len_max], vec![[0.0; 2]; len_max]);
-    s.xs.resize(ng * len_max, 0.0);
-    s.fl.resize(ng * len_max, 0.0);
+    (s.push, s.halves) = (vec![[0.0; 3]; len_max], vec![[0.0; 2]; len_max]);
+    s.line_gas.resize(ng * len_max, 0.0);
+    s.line_flux.resize(ng * len_max, 0.0);
     let mut lift = 0.0;
     for dir in 0..2 {
         s.nt_new.clone_from(&s.nt);
         for j in 0..na {
             s.ta[j] = e_air[j] / s.capa[j];
-            s.p[j] = s.nt[j] * R_GAS * s.ta[j] / s.vol[j];
-            s.th[j] = s.ta[j] + s.gam[j] * s.zair[j];
+            s.node_tmp[j] = s.nt[j] * R_GAS * s.ta[j] / s.vol[j];
+            s.warmth[j] = s.ta[j] + s.gam[j] * s.zair[j];
         }
         for j in 0..na {
             let (x, y) = (j % aw, j / aw);
             let (e, wst) = (if x + 1 < aw { j + 1 } else { j }, if x > 0 { j - 1 } else { j });
             let (no, so) = (if y > 0 { j - aw } else { j }, if y + 1 < ah { j + aw } else { j });
-            s.grad[j] = [(s.th[e] - s.th[wst]) / (e - wst).max(1) as f64, (s.th[no] - s.th[so]) / ((so - no) / aw).max(1) as f64];
+            s.grad[j] = [(s.warmth[e] - s.warmth[wst]) / (e - wst).max(1) as f64, (s.warmth[no] - s.warmth[so]) / ((so - no) / aw).max(1) as f64];
         }
         let (lines, len) = if dir == 0 { (ah, aw) } else { (aw, ah) };
         let node = |line: usize, p: usize| if dir == 0 { line * aw + p } else { p * aw + line };
@@ -374,8 +374,8 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
                 let turn = cfg.rotation * grid.lat(row.min(grid.h - 1), cfg.lat_south, cfg.lat_north).to_radians().sin();
                 let across = (s.grad[a][1 - dir] + s.grad[b][1 - dir]) / 2.0;
                 let cap = OVER * s.nt[a].min(s.nt[b]) / dt;
-                let over = (cfg.wind * (s.th[b] - s.th[a] + turn * across) * rho * side * depth / 2.0).clamp(-cap, cap);
-                let even = EVEN * (s.p[a] - s.p[b]) / (s.p[a] / s.nt[a] + s.p[b] / s.nt[b]) / dt;
+                let over = (cfg.wind * (s.warmth[b] - s.warmth[a] + turn * across) * rho * side * depth / 2.0).clamp(-cap, cap);
+                let even = EVEN * (s.node_tmp[a] - s.node_tmp[b]) / (s.node_tmp[a] / s.nt[a] + s.node_tmp[b] / s.nt[b]) / dt;
                 s.push[p] = [cfg.mix * rho * depth, over, even];
                 s.mflux[p] = 0.0;
             }
@@ -383,13 +383,13 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
             // overturning moves as much up as down, so any net amount left over on an edge
             // beyond the pressure push is handed back by the node that gained it.
             for p in 0..len {
-                s.lh[p] = [0.0; 2];
+                s.halves[p] = [0.0; 2];
                 for t in 0..ng {
                     let j = node(line, p);
                     let a = air[s.gas[t] * na + j];
                     let u = a * s.split[t * na + j];
-                    s.lh[p][0] += a - u;
-                    s.lh[p][1] += u;
+                    s.halves[p][0] += a - u;
+                    s.halves[p][1] += u;
                 }
             }
             for t in 0..ng {
@@ -397,37 +397,37 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
                     let (a, b) = (node(line, p), node(line, p + 1));
                     let [mix, over, even] = s.push[p];
                     let (fp, fm, ep, em) = (over.max(0.0), (-over).max(0.0), even.max(0.0), (-even).max(0.0));
-                    let ([la, ua], [lb, ub]) = (s.lh[p], s.lh[p + 1]);
+                    let ([la, ua], [lb, ub]) = (s.halves[p], s.halves[p + 1]);
                     let (sa, sb) = (s.split[t * na + a], s.split[t * na + b]);
-                    s.al[p] = dt * ((mix + ep) / s.nt[a] + fp * (1.0 - sa) / la + fm * sa / ua);
-                    s.be[p] = dt * ((mix + em) / s.nt[b] + fp * sb / ub + fm * (1.0 - sb) / lb);
+                    s.to_next[p] = dt * ((mix + ep) / s.nt[a] + fp * (1.0 - sa) / la + fm * sa / ua);
+                    s.to_prev[p] = dt * ((mix + em) / s.nt[b] + fp * sb / ub + fm * (1.0 - sb) / lb);
                 }
                 let k = s.gas[t];
                 for p in 0..len {
-                    s.x[p] = air[k * na + node(line, p)];
+                    s.line_x[p] = air[k * na + node(line, p)];
                 }
-                thomas(&s.al[..len - 1], &s.be[..len - 1], &mut s.x[..len], &mut s.cw[..len]);
-                s.xs[t * len..(t + 1) * len].copy_from_slice(&s.x[..len]);
+                thomas(&s.to_next[..len - 1], &s.to_prev[..len - 1], &mut s.line_x[..len], &mut s.line_c[..len]);
+                s.line_gas[t * len..(t + 1) * len].copy_from_slice(&s.line_x[..len]);
                 for p in 0..len - 1 {
-                    s.fl[t * len + p] = s.al[p] * s.x[p] - s.be[p] * s.x[p + 1];
+                    s.line_flux[t * len + p] = s.to_next[p] * s.line_x[p] - s.to_prev[p] * s.line_x[p + 1];
                 }
             }
             for p in 0..len {
-                s.x[p] = (0..ng).map(|t| s.xs[t * len + p]).sum();
+                s.line_x[p] = (0..ng).map(|t| s.line_gas[t * len + p]).sum();
             }
             for p in 0..len - 1 {
                 let (a, b, even) = (node(line, p), node(line, p + 1), s.push[p][2]);
-                let want = dt * (even.max(0.0) * s.x[p] / s.nt[a] - (-even).max(0.0) * s.x[p + 1] / s.nt[b]);
-                let extra = (0..ng).map(|t| s.fl[t * len + p]).sum::<f64>() - want;
+                let want = dt * (even.max(0.0) * s.line_x[p] / s.nt[a] - (-even).max(0.0) * s.line_x[p + 1] / s.nt[b]);
+                let extra = (0..ng).map(|t| s.line_flux[t * len + p]).sum::<f64>() - want;
                 let src = if extra > 0.0 { p + 1 } else { p };
                 for t in 0..ng {
-                    s.fl[t * len + p] -= extra * s.xs[t * len + src] / s.x[src];
+                    s.line_flux[t * len + p] -= extra * s.line_gas[t * len + src] / s.line_x[src];
                 }
             }
             for t in 0..ng {
                 let (k, sp) = (s.gas[t], s.sp[s.gas[t]]);
                 for p in 0..len - 1 {
-                    let (a, b, f) = (node(line, p), node(line, p + 1), s.fl[t * len + p]);
+                    let (a, b, f) = (node(line, p), node(line, p + 1), s.line_flux[t * len + p]);
                     air[k * na + a] -= f;
                     air[k * na + b] += f;
                     (s.nt_new[a], s.nt_new[b]) = (s.nt_new[a] - f, s.nt_new[b] + f);
@@ -440,16 +440,16 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
             // lifted by the heat of the node it enters.
             for p in 0..len - 1 {
                 let (a, b, [mix, over, even]) = (node(line, p), node(line, p + 1), s.push[p]);
-                s.al[p] = dt * (mix + over.abs() + even.max(0.0)) / s.nt[a];
-                s.be[p] = dt * (mix + over.abs() + (-even).max(0.0)) / s.nt[b];
+                s.to_next[p] = dt * (mix + over.abs() + even.max(0.0)) / s.nt[a];
+                s.to_prev[p] = dt * (mix + over.abs() + (-even).max(0.0)) / s.nt[b];
             }
             for p in 0..len {
-                s.x[p] = e_air[node(line, p)];
+                s.line_x[p] = e_air[node(line, p)];
             }
-            thomas(&s.al[..len - 1], &s.be[..len - 1], &mut s.x[..len], &mut s.cw[..len]);
+            thomas(&s.to_next[..len - 1], &s.to_prev[..len - 1], &mut s.line_x[..len], &mut s.line_c[..len]);
             for p in 0..len - 1 {
                 let (a, b) = (node(line, p), node(line, p + 1));
-                let f = s.al[p] * s.x[p] - s.be[p] * s.x[p + 1];
+                let f = s.to_next[p] * s.line_x[p] - s.to_prev[p] * s.line_x[p + 1];
                 e_air[a] -= f;
                 e_air[b] += f;
                 let l = g * s.mflux[p] * (s.zair[b] - s.zair[a]);
