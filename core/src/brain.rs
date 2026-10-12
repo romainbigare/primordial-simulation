@@ -1,5 +1,6 @@
 //! A small brain. Its base (one hidden layer over what a body perceives and remembers) belongs
-//! to a lineage and changes only by evolution. Its rows belong to a group of bodies: read from
+//! to a lineage and changes only by evolution. Its rows are genes of each body, and a group of
+//! bodies shares their mean plus what the group learned: read from
 //! the hidden layer, they give fixed action scores, the weights of shared scorers (one used for
 //! every neighbour direction, one per verb for every perceived body or part), the mean of the
 //! signal and of the shape of a part made, the next memory, and an estimate of how well-being
@@ -165,8 +166,3 @@ pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, v
     w
 }
 
-pub fn mutate(w: &mut [f32], r: &mut Rng, size: f32) {
-    for x in w {
-        *x += size * r.normal() as f32;
-    }
-}

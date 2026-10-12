@@ -58,9 +58,12 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // other bodies kept rare, as they are not part of this scene.
     let mut r = Rng::new(seed, 0, 0, Purpose::Body);
     let fixed = [0.0, -8.0, 0.0, 0.0, -8.0, -8.0, -8.0, -8.0];
-    let lineage = w.life.new_lineage(brain::random(choose::shape(w.chem.ns()), &mut r, 0.1, fixed, 0.0, [-8.0; brain::VERBS + brain::OVERBS]));
+    let shape = choose::shape(w.chem.ns());
+    let mut brain = brain::random(shape, &mut r, 0.1, fixed, 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = brain.split_off(shape.base());
+    let lineage = w.life.new_lineage(brain);
     let start = w.grid.idx(STRIP - 1, H / 2);
-    let mut b = worldgen::life::make(&mut w, 1, start, lineage).expect("body");
+    let mut b = worldgen::life::make(&mut w, 1, start, lineage, &rows).expect("body");
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     let slot = w.life.add(b, w.day, 1);

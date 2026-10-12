@@ -34,7 +34,10 @@ pub const INTERVAL: usize = 7;
 pub const MUT: usize = 8;
 /// Learning rate of the brain within a life, log10 (off at the lower end)
 pub const LEARN: usize = 9;
-pub const NSCALAR: usize = 10;
+/// Share of what its group learned that fades each month, log10 (off at the lower end): the
+/// group forgets at the mean rate of its members
+pub const FORGET: usize = 10;
+pub const NSCALAR: usize = 11;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -107,6 +110,8 @@ pub struct Body {
     /// mol of each substance
     pub store: Vec<f64>,
     pub genes: Vec<f32>,
+    /// The brain rows it was born with (genes too: a child gets them with small noise)
+    pub rows: Vec<f32>,
     /// Key stores (safe minimum > 0) that were liquid at birth, one bit per substance
     pub wet: u64,
     /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands)
@@ -217,6 +222,10 @@ impl Body {
     pub fn learn_rate(&self) -> f32 {
         if self.genes[LEARN] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[LEARN]) }
     }
+    /// Share of what its group learned that it would let fade each month (0 when off).
+    pub fn forget(&self) -> f32 {
+        if self.genes[FORGET] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[FORGET]) }
+    }
     /// Key stores that are liquid now.
     pub fn key_liquids(&self, chem: &Chemistry) -> u64 {
         let (t, lay) = (self.temp(chem), Layout::of(chem));
@@ -302,7 +311,7 @@ pub struct Life {
     pub cellf: Vec<[f32; 8]>,
     /// Updates due, by day modulo RING: (slot, generation)
     due: Vec<Vec<(u32, u32)>>,
-    /// Brain weights of each lineage (None once it died out), and its living bodies
+    /// The base of the brain of each lineage (None once it died out), and its living bodies
     pub brains: Vec<Option<Vec<f32>>>,
     pub members: Vec<u32>,
     /// Brain groups (a group with no members is free)
@@ -314,7 +323,9 @@ pub struct Life {
     pub updates: u64,
 }
 
-/// Bodies that stayed near each other share the rows of one brain.
+/// Bodies that stayed near each other share the rows of one brain: the mean of the rows they
+/// were born with, plus what the group learned (by learning and watching). `rows` holds that
+/// sum, kept up to date as members come and go.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Group {
     pub lineage: u32,
@@ -323,6 +334,9 @@ pub struct Group {
     pub sx: i64,
     pub sy: i64,
     pub rows: Vec<f32>,
+    /// Sums of the members' born rows and of their forgetting rates
+    pub sum: Vec<f32>,
+    pub forget: f32,
     /// Moving average of the square of the critic's error (0 until the first one)
     pub var: f32,
 }
@@ -331,6 +345,11 @@ impl Group {
     pub fn centre(&self) -> (f32, f32) {
         let m = self.members.max(1) as f32;
         (self.sx as f32 / m, self.sy as f32 / m)
+    }
+    /// What the group learned: its rows less the mean of its members' born rows.
+    pub fn learned(&self) -> impl Iterator<Item = f32> + '_ {
+        let n = self.members.max(1) as f32;
+        self.rows.iter().zip(&self.sum).map(move |(r, s)| r - s / n)
     }
 }
 
@@ -341,12 +360,14 @@ impl Life {
     pub fn lineages(&self) -> usize {
         self.members.iter().filter(|&&m| m > 0).count()
     }
-    pub fn new_lineage(&mut self, brain: Vec<f32>) -> u32 {
-        self.brains.push(Some(brain));
+    /// A new lineage with this base.
+    pub fn new_lineage(&mut self, base: Vec<f32>) -> u32 {
+        self.brains.push(Some(base));
         self.members.push(0);
         (self.brains.len() - 1) as u32
     }
-    /// A new group of `lineage` with these rows.
+    /// A new group of `lineage` with these rows (its first member brings its born rows, and
+    /// the difference counts as learned).
     pub fn new_group(&mut self, lineage: u32, rows: Vec<f32>) -> u32 {
         let g = Group { lineage, rows, ..Default::default() };
         match self.free_groups.pop() {
@@ -360,16 +381,35 @@ impl Life {
             }
         }
     }
-    /// Count a body at `cell` in group `g` (`d` = 1) or no longer (`d` = -1).
-    pub fn enrol(&mut self, g: u32, cell: u32, d: i64) {
+    /// Count body `b` into group `g` (`d` = 1) or out of it (`d` = -1): its cell in the centre,
+    /// its born rows in the sum (the rows shift by the change of the mean, so what the group
+    /// learned stays), its forgetting rate.
+    pub fn enrol(&mut self, g: u32, b: &Body, d: i64) {
+        self.shift(g, b.cell, d);
+        let gr = &mut self.groups[g as usize];
+        let n0 = gr.members as f32;
+        gr.members = (gr.members as i64 + d) as u32;
+        gr.forget += d as f32 * b.forget();
+        if gr.members == 0 {
+            (gr.rows, gr.sum, gr.sx, gr.sy, gr.forget) = (Vec::new(), Vec::new(), 0, 0, 0.0);
+            self.free_groups.push(g);
+            return;
+        }
+        gr.sum.resize(gr.rows.len(), 0.0);
+        let (n1, d) = (gr.members as f32, d as f32);
+        for ((r, s), x) in gr.rows.iter_mut().zip(gr.sum.iter_mut()).zip(&b.rows) {
+            let s1 = *s + d * x;
+            if n0 > 0.0 {
+                *r += s1 / n1 - *s / n0;
+            }
+            *s = s1;
+        }
+    }
+    /// Move the centre of group `g` by a member at `cell` (`d` = 1 arrived, -1 left).
+    fn shift(&mut self, g: u32, cell: u32, d: i64) {
         let (x, y) = ((cell % self.gw) as i64, (cell / self.gw) as i64);
         let gr = &mut self.groups[g as usize];
-        gr.members = (gr.members as i64 + d) as u32;
         (gr.sx, gr.sy) = (gr.sx + d * x, gr.sy + d * y);
-        if gr.members == 0 {
-            (gr.rows, gr.sx, gr.sy) = (Vec::new(), 0, 0);
-            self.free_groups.push(g);
-        }
     }
     /// Place a new body on `day`; it first updates `delay` days later (1..=60).
     pub fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
@@ -383,17 +423,18 @@ impl Life {
         (b.gen, b.alive, b.last) = (self.bodies[slot].gen, true, day);
         self.at[b.cell as usize].push(slot as u32);
         self.members[b.lineage as usize] += 1;
-        self.enrol(b.group, b.cell, 1);
+        self.enrol(b.group, &b, 1);
         self.due[((day + delay.clamp(1, MAX_INTERVAL as u64)) % RING) as usize].push((slot as u32, b.gen));
         self.bodies[slot] = b;
         slot
     }
     fn remove(&mut self, slot: usize) {
-        let b = &mut self.bodies[slot];
+        let mut b = std::mem::take(&mut self.bodies[slot]);
         let (cell, lin, g) = (b.cell as usize, b.lineage as usize, b.group);
-        (b.alive, b.store, b.genes, b.trace) = (false, Vec::new(), Vec::new(), Vec::new());
+        self.enrol(g, &b, -1);
+        (b.alive, b.store, b.genes, b.rows, b.trace) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new());
         b.gen += 1;
-        self.enrol(g, cell as u32, -1);
+        self.bodies[slot] = b;
         self.at[cell].retain(|&s| s as usize != slot);
         self.members[lin] -= 1;
         if self.members[lin] == 0 {
@@ -404,8 +445,8 @@ impl Life {
     pub fn relocate(&mut self, slot: usize, g: u32, from: usize, to: usize) {
         self.at[from].retain(|&s| s as usize != slot);
         self.at[to].push(slot as u32);
-        self.enrol(g, to as u32, 1);
-        self.enrol(g, from as u32, -1);
+        self.shift(g, to as u32, 1);
+        self.shift(g, from as u32, -1);
     }
 }
 

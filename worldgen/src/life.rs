@@ -46,8 +46,8 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// capture area, long intervals, resting. Eaters: fast burning, take the energy-rich solid from
 /// bodies and the ground, short intervals.
 const KINDS: [Kind; 2] = [
-    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 5.7, 1.3, -0.7, -4.0], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 2e5, chance: 0.3, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
-    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 4.7, 1.0, -0.7, -2.0], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 2e4, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
+    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 5.7, 1.3, -0.7, -4.0, -4.0], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 2e5, chance: 0.3, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
+    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 4.7, 1.0, -0.7, -2.0, -4.0], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 2e4, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
 ];
 
 /// Place bodies of starting kind `which`: 0 light-eaters on land, 1 eaters where bodies already are.
@@ -59,23 +59,26 @@ pub fn seed(w: &mut World, which: usize) {
     body::survey(w);
     let shape = choose::shape(w.chem.ns());
     let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Body);
-    let lineage = w.life.new_lineage(brain::random(shape, &mut r, 0.1, kind.fixed, kind.dir, kind.verbs));
+    let mut brain = brain::random(shape, &mut r, 0.1, kind.fixed, kind.dir, kind.verbs);
+    let rows = brain.split_off(shape.base());
+    let lineage = w.life.new_lineage(brain);
     for i in 0..w.grid.n() {
         let [_, depth, z] = w.life.env[i];
         if z <= 0.0 || depth > 0.5 || r.f64() >= kind.chance || (which > 0 && w.life.at[i].is_empty()) {
             continue;
         }
-        let Some(b) = make(w, which, i, lineage) else { return };
+        let Some(b) = make(w, which, i, lineage, &rows) else { return };
         let delay = 1 + r.below(b.interval() as usize) as u64;
         w.life.add(b, w.day, delay);
     }
 }
 
-/// A body of starting kind `which` in cell `i`, of `lineage`, in a new group of it, at the
-/// cell's temperature; its matter and energy are booked like an edit. Not yet placed.
-pub fn make(w: &mut World, which: usize, i: usize, lineage: u32) -> Option<Body> {
+/// A body of starting kind `which` in cell `i`, of `lineage`, born with brain `rows`, in a new
+/// group of it, at the cell's temperature; its matter and energy are booked like an edit. Not
+/// yet placed.
+pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, rows: &[f32]) -> Option<Body> {
     let ((r_light, rich, liquid, burn), kind) = (roles(&w.chem)?, KINDS.get(which)?);
-    let group = choose::found(w, lineage);
+    let group = w.life.new_group(lineage, rows.to_vec());
     let (chem, ledger, t) = (&w.chem, &mut w.ledger, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
     // Genes that are off start below zero, so small changes keep them off.
@@ -90,7 +93,7 @@ pub fn make(w: &mut World, which: usize, i: usize, lineage: u32) -> Option<Body>
     let mut store = vec![0.0; ns];
     store[liquid] = 0.7 * kind.mass / chem.subs[liquid].molar_mass;
     store[rich] = 0.3 * kind.mass / chem.subs[rich].molar_mass;
-    let mut b = Body { cell: i as u32, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, ..Default::default() };
+    let mut b = Body { cell: i as u32, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, rows: rows.to_vec(), ..Default::default() };
     b.e = b.heat_cap(chem) * t;
     ledger.imposed_energy += b.e;
     for (k, &a) in b.store.iter().enumerate() {

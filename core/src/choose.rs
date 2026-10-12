@@ -10,9 +10,10 @@
 //! decision the brain learns from the change of the body's own well-being (a policy gradient
 //! whose baseline is the brain's own estimate of how well-being will go).
 //!
-//! Bodies that stay near each other share their brain's rows: a body that strays from its
-//! group's centre takes a copy and starts a group; one that stays a year near a bigger group of
-//! its lineage joins it.
+//! Bodies that stay near each other share their brain's rows (the mean of the rows they were
+//! born with, plus what the group learned): a body that strays from its group's centre takes a
+//! copy and starts a group; one that stays a year near a bigger group of its lineage joins it.
+//! What a group learned fades at the mean forgetting rate of its members.
 
 use crate::body::{self, Body, Layout, Tmp, BROKEN, STRENGTH, TAKEN};
 use crate::brain::{self, ln, score, squash, Shape, FIXED, H, OVERBS, R, SIG, VERBS};
@@ -51,18 +52,9 @@ const LEAVE: f32 = 2.5;
 const JOIN: usize = 2;
 const STAY: u64 = 360;
 const NONE: u32 = u32::MAX;
-/// Share of what a group learned that fades each month.
-const FORGET: f32 = 0.02;
 
 pub fn shape(ns: usize) -> Shape {
     Shape { ni: 2 * ns + 15 + brain::MEM, nf: NF, nt: NT, no: bond::NO }
-}
-
-/// A new group of `lineage`, starting from the lineage's brain.
-pub fn found(w: &mut World, lineage: u32) -> u32 {
-    let base = shape(w.chem.ns()).base();
-    let rows = w.life.brains[lineage as usize].as_ref().map_or(Vec::new(), |b| b[base..].to_vec());
-    w.life.new_group(lineage, rows)
 }
 
 pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
@@ -307,10 +299,11 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32; H]) {
     }
 }
 
-/// Monthly: a body that has stayed for a year within `JOIN` cells of the centre of a bigger
-/// group of its lineage joins it; if it was alone, its rows are blended in by its share.
+/// Monthly: what each group learned fades by its forgetting rate. A body that has stayed for a
+/// year within `JOIN` cells of the centre of a bigger group of its lineage joins it; if it was
+/// alone, what it learned is blended in by its share.
 pub fn regroup(w: &mut World) {
-    let (gw, gh, day, ns, life) = (w.grid.w, w.grid.h, w.day, w.chem.ns(), &mut w.life);
+    let (gw, gh, day, life) = (w.grid.w, w.grid.h, w.day, &mut w.life);
     let at = |g: &body::Group| {
         let (x, y) = g.centre();
         (y.round() as usize).min(gh - 1) * gw + (x.round() as usize).min(gw - 1)
@@ -328,11 +321,10 @@ pub fn regroup(w: &mut World) {
         list[fill[at(g)] as usize] = k as u32;
         fill[at(g)] += 1;
     }
-    // What a group learned fades back toward its lineage's starting rows.
-    let base = shape(ns).base();
     for g in life.groups.iter_mut().filter(|g| g.members > 0) {
-        if let Some(start) = &life.brains[g.lineage as usize] {
-            brain::blend(&mut g.rows, &start[base..], FORGET);
+        let (n, f) = (g.members as f32, (g.forget / g.members as f32).max(0.0));
+        if f > 0.0 {
+            g.rows.iter_mut().zip(&g.sum).for_each(|(r, s)| *r -= f * (*r - s / n));
         }
     }
     for slot in 0..life.bodies.len() {
@@ -359,16 +351,21 @@ pub fn regroup(w: &mut World) {
         } else if best != b.near {
             (b.near, b.since) = (best, day);
         } else if day - b.since >= STAY {
-            let (old, cell) = (b.group, b.cell);
+            let old = b.group;
             (b.group, b.near) = (best, NONE);
-            if life.groups[old as usize].members == 1 {
-                let o = std::mem::take(&mut life.groups[old as usize].rows);
+            let o = &life.groups[old as usize];
+            let lone: Option<Vec<f32>> = (o.members == 1).then(|| o.learned().collect());
+            let b = std::mem::take(&mut life.bodies[slot]);
+            life.enrol(best, &b, 1);
+            life.enrol(old, &b, -1);
+            life.bodies[slot] = b;
+            if let Some(o) = lone {
                 let gr = &mut life.groups[best as usize];
-                brain::blend(&mut gr.rows, &o, 1.0 / (gr.members + 1) as f32);
-                life.groups[old as usize].rows = o;
+                let n = gr.members as f32;
+                for ((r, s), x) in gr.rows.iter_mut().zip(&gr.sum).zip(o) {
+                    *r += (x - (*r - s / n)) / n;
+                }
             }
-            life.enrol(best, cell, 1);
-            life.enrol(old, cell, -1);
         }
     }
 }
@@ -407,8 +404,8 @@ fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
         let (rows, var) = (gr.rows.clone(), gr.var);
         let g = w.life.new_group(b.lineage, rows);
         w.life.groups[g as usize].var = var;
-        w.life.enrol(g, b.cell, 1);
-        w.life.enrol(b.group, b.cell, -1);
+        w.life.enrol(g, b, 1);
+        w.life.enrol(b.group, b, -1);
         (b.group, b.near) = (g, NONE);
     }
 }

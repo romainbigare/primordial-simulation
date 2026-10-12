@@ -1,10 +1,9 @@
 //! Law 4: Copy. A body with enough mass that can pay the cost makes a child: a share of each
-//! of its stores and of its heat, and its genes plus small noise; it starts in its parent's
-//! brain group. Now and then the brain of its lineage is copied with noise too, which starts a
-//! new lineage (and a new group).
+//! of its stores and of its heat, and its genes plus small noise, the brain rows it was born
+//! with among them; it starts in its parent's brain group. Rarely the base of its lineage's
+//! brain is copied with small noise too, which starts a new lineage (and a new group).
 
 use crate::body::{self, Body, Layout};
-use crate::brain;
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
@@ -12,10 +11,12 @@ use crate::World;
 
 /// Energy to make one kg of child, J.
 const C_COPY: f64 = 5e5;
-/// Chance that a child starts a new lineage with a changed brain.
-const NEW_LINEAGE: f64 = 0.02;
-/// Size of the brain changes of a new lineage.
-const BRAIN_NOISE: f32 = 0.1;
+/// Chance that a child starts a new lineage with a changed base.
+const NEW_LINEAGE: f64 = 0.005;
+/// Size of the base changes of a new lineage.
+const BASE_NOISE: f32 = 0.03;
+/// Mutation step of the born brain rows (times the body's mutation size).
+const ROW_NOISE: f32 = 0.05;
 
 /// Mutation step (times the body's mutation size) and range of a gene.
 fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
@@ -30,6 +31,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::INTERVAL => (0.2, 0.7, 1.78),
         body::MUT => (0.2, -3.0, 0.0),
         body::LEARN => (0.2, -4.0, 0.0),
+        body::FORGET => (0.2, -4.0, -1.7),
         g if g < lay.min => (1.0, -2.0, 18.0),
         g if g < lay.upt => (0.05, -0.2, 0.9),
         _ => (0.2, -0.5, 2.0),
@@ -47,6 +49,17 @@ pub fn mutate(lay: &Layout, genes: &[f32], r: &mut Rng) -> Vec<f32> {
             (v + step * size * z as f32).clamp(lo, hi)
         })
         .collect()
+}
+
+/// Add noise near a normal of spread `size` to each weight (a sum of four 16-bit uniforms from
+/// one draw, centred and scaled: cheap, as a brain has many weights).
+pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
+    let k = size * 3f32.sqrt() / 65536.0;
+    for x in w {
+        let u = r.u64();
+        let s = (u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48);
+        *x += k * (s as f32 - 131070.0);
+    }
 }
 
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
@@ -74,6 +87,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         e: b.e * frac,
         store: b.store.iter().map(|a| a * frac).collect(),
         genes: mutate(&lay, &b.genes, &mut r),
+        rows: b.rows.clone(),
         group: b.group,
         near: u32::MAX,
         ..Default::default()
@@ -82,11 +96,12 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;
     }
+    shake(&mut c.rows, &mut r, ROW_NOISE * 10f32.powf(b.genes[body::MUT]));
     if r.f64() < NEW_LINEAGE {
-        if let Some(mut brain) = w.life.brains[b.lineage as usize].clone() {
-            brain::mutate(&mut brain, &mut r, BRAIN_NOISE);
-            c.lineage = w.life.new_lineage(brain);
-            c.group = crate::choose::found(w, c.lineage);
+        if let Some(mut base) = w.life.brains[b.lineage as usize].clone() {
+            shake(&mut base, &mut r, BASE_NOISE);
+            c.lineage = w.life.new_lineage(base);
+            c.group = w.life.new_group(c.lineage, c.rows.clone());
         }
     }
     (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem));

@@ -3,7 +3,7 @@
 
 use pcore::body::{self, Body, COPY_MASS, INTERVAL, LEAF, STRENGTH};
 use pcore::chem::Chemistry;
-use pcore::{choose, World};
+use pcore::World;
 
 /// A body whose light reactions are sped up at least this much (log10) is a light-eater.
 pub const LIGHT_EATER: f32 = 8.0;
@@ -12,19 +12,13 @@ pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
     body::light_cat(chem, genes) >= LIGHT_EATER
 }
 
-/// Mean absolute difference between the rows of each live group and its lineage's starting rows,
-/// averaged over groups by their members. (The one place that knows where learned rows live.)
+/// Mean absolute learned offset of each live group's rows (its rows less the mean of its members'
+/// born rows), averaged over groups by their members.
 pub fn learned(w: &World) -> f64 {
-    let base = choose::shape(w.chem.ns()).base();
     let (mut sum, mut members) = (0.0, 0.0);
-    for g in w.life.groups.iter().filter(|g| g.members > 0) {
-        let Some(start) = w.life.brains[g.lineage as usize].as_ref() else { continue };
-        let n = g.rows.len().min(start.len().saturating_sub(base));
-        if n == 0 {
-            continue;
-        }
-        let d: f64 = g.rows[..n].iter().zip(&start[base..]).map(|(a, b)| (a - b).abs() as f64).sum();
-        (sum, members) = (sum + d / n as f64 * g.members as f64, members + g.members as f64);
+    for g in w.life.groups.iter().filter(|g| g.members > 0 && !g.rows.is_empty()) {
+        let d: f64 = g.learned().map(|x| x.abs() as f64).sum();
+        (sum, members) = (sum + d / g.rows.len() as f64 * g.members as f64, members + g.members as f64);
     }
     sum / members.max(1.0)
 }
