@@ -185,7 +185,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let a = if copying { 1 } else { a.unwrap_or(0) };
 
     // The trace of this decision for learning: the hidden layer, and per learned row how its
-    // output moves the log-chance of what was done (nothing for a copy) and of the signal.
+    // output moves the log-chance of what was done (nothing for a copy) and of the signal. For
+    // the values drawn around a mean (signal, shape) that is the natural gradient (times the
+    // spread squared), so their noise does not use up the step allowed to the actions.
     let (l, learning) = (s.learned(), b.learn_rate() > 0.0);
     b.trace.resize(if learning { H + l } else { 0 }, 0.0);
     if learning {
@@ -220,7 +222,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         let (mu, z) = (squash(out[s.sig() + k]), rng.normal() as f32);
         b.sig[k] = mu + NOISE * z;
         if learning {
-            b.trace[H + s.sig() + k] = z / NOISE * (1.0 - mu * mu);
+            b.trace[H + s.sig() + k] = z * NOISE * (1.0 - mu * mu);
         }
     }
     // The shape of a part made: elongation and hollowness, drawn around the brain's means.
@@ -229,7 +231,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         let (mu, z) = (squash(out[s.form() + k]), rng.normal() as f32);
         shape[k] = mu + SHAPE_NOISE * z;
         if learning {
-            b.trace[H + s.form() + k] = if a == 4 { z / SHAPE_NOISE * (1.0 - mu * mu) } else { 0.0 };
+            b.trace[H + s.form() + k] = if a == 4 { z * SHAPE_NOISE * (1.0 - mu * mu) } else { 0.0 };
         }
     }
     for k in 0..brain::MEM {
@@ -289,7 +291,7 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32; H]) {
     let (h, c): (&[f32; H], _) = (b.trace[..H].try_into().expect("trace"), &b.trace[H..]);
     let v = |x: &[f32; H]| gr.rows[cr + H] + brain::dot(&gr.rows[cr..cr + H], x);
     let delta = wb - b.wb + DISCOUNT * v(now) - v(h);
-    gr.var += 0.05 * (delta * delta - gr.var);
+    gr.var = if gr.var > 0.0 { gr.var + 0.05 * (delta * delta - gr.var) } else { delta * delta };
     let a = lr * delta / (gr.var.sqrt() + 1e-3);
     if !a.is_finite() {
         return;

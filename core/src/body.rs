@@ -234,9 +234,10 @@ impl Body {
         (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
     }
     /// Well-being: the energy its catalysed reactions could release from its stores (log, in
-    /// decisions' worth per kg), less how near its key stores are to their safe minimums (the
-    /// log of each one's margin, which is the log of its share over its minimum, counted up to
-    /// 2) and its key liquids to freezing or boiling (within 5 K). Needs `prepare`.
+    /// decisions' worth for a body of the mass it copies at, so shedding mass does not raise
+    /// it), less how near its key stores are to their safe minimums (the log of each one's
+    /// margin, which is the log of its share over its minimum, counted up to 2) and its key
+    /// liquids to freezing or boiling (within 5 K). Needs `prepare`.
     pub fn wellbeing(&self, chem: &Chemistry, mass: f64) -> f32 {
         let (lay, t) = (Layout::of(chem), self.temp(chem));
         let mut e = 0.0;
@@ -244,7 +245,7 @@ impl Body {
             let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
             e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
         }
-        let mut w = ln(1.0 + (e / mass / C_BRAIN) as f32);
+        let mut w = ln(1.0 + (e / self.dec(COPY_MASS) / C_BRAIN) as f32);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
@@ -324,7 +325,7 @@ pub struct Group {
     pub sx: i64,
     pub sy: i64,
     pub rows: Vec<f32>,
-    /// Moving average of the square of the critic's error
+    /// Moving average of the square of the critic's error (0 until the first one)
     pub var: f32,
 }
 
@@ -349,7 +350,7 @@ impl Life {
     }
     /// A new group of `lineage` with these rows.
     pub fn new_group(&mut self, lineage: u32, rows: Vec<f32>) -> u32 {
-        let g = Group { lineage, rows, var: 1.0, ..Default::default() };
+        let g = Group { lineage, rows, ..Default::default() };
         match self.free_groups.pop() {
             Some(i) => {
                 self.groups[i as usize] = g;
