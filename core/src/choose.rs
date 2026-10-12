@@ -94,8 +94,9 @@ fn sector(sight: usize) -> Sector {
 pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (i, ns) = (b.cell as usize, w.chem.ns());
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
-    let (mass, env) = (b.mass(&w.chem), w.life.env[i]);
-    let wb = b.wellbeing(&w.chem, mass);
+    // Mass and heat capacity are as `body::live` just left them.
+    let (mass, env, temp) = (t.mass, w.life.env[i], b.e / t.cap.max(1e-9));
+    let wb = b.wellbeing_at(&w.chem, mass, temp);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, base, nseen, sight) = (lin.shape, &lin.base, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
@@ -140,7 +141,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     x.extend((0..ns).map(|k| if b.store[k] > 0.0 { 0.25 * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + 1e-4) } else { none } - b.k.minln[k]));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = w.life.at[i].len() as f32 / w.cfg.max_bodies_per_cell as f32;
-    let (dt, lit, sun) = ((b.temp(chem) - env[0]) as f32, t.lit as f32, w.season() as f32 * std::f32::consts::TAU);
+    let (dt, lit, sun) = ((temp - env[0]) as f32, t.lit as f32, w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / 10.0, ln(mass as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
     x.extend(bond::sense(w, b, mass));
@@ -214,7 +215,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp());
     logit[1] = f32::NEG_INFINITY;
     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
-    let mut p = logit.map(|l| (l - top).exp());
+    let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
     let sum = p.iter().sum::<f32>();
     p.iter_mut().for_each(|v| *v /= sum);
     let mut u = rng.f64() as f32;
