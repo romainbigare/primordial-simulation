@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;
-/// Heat conductance to the surface, log10 W/(K kg)
+/// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
+/// `M_HEAT` kg; it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
 /// Light-capture area, log10 m²/kg
 pub const LEAF: usize = 3;
@@ -60,6 +61,8 @@ pub const BROKEN: u8 = 4;
 pub const KNOWN: usize = 4;
 
 const DAY: f64 = 86_400.0;
+/// Member mass at which the heat gene is the conductance per kg (the starting eaters' mass), kg.
+const M_HEAT: f64 = 30.0;
 /// Updates are kept in a ring of this many days (more than the longest interval).
 const RING: u64 = 64;
 /// Shortest and longest interval between updates, days (the shortest is a speed safeguard).
@@ -215,6 +218,12 @@ impl Body {
     }
     pub fn temp(&self, chem: &Chemistry) -> f64 {
         self.e / self.heat_cap(chem).max(1e-9)
+    }
+    /// Heat conductance to the surface, W/K: through each member's surface, which grows as
+    /// mass^(2/3), so a small body cools faster per kg than a big one. Needs `prepare`.
+    pub fn conductance(&self, mass: f64) -> f64 {
+        let n = self.n();
+        self.k.heat * n * M_HEAT.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
     }
     pub fn interval(&self) -> u64 {
         if self.k.interval > 0 {
@@ -909,7 +918,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let out = if push > 0.0 {
             let owed = (lit + heat).min(0.0);
             let room = (crate::heat_above_floor(e_ground[i], cap!()) + owed).max(0.0);
-            let paid = (lit + heat).max(0.0) + (b.k.heat * mass * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
+            let paid = (lit + heat).max(0.0) + (b.conductance(mass) * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
             (push * reach_mol).min(paid / held(chem, k))
         } else {
             0.0
@@ -957,7 +966,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // Walls around it add their conductance (its share of it) in series.
     let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
-        let g0 = b.k.heat * mass;
+        let g0 = b.conductance(mass);
         let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
