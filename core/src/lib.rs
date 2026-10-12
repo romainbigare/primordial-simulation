@@ -66,6 +66,10 @@ pub struct Config {
     pub carry: f64,
     /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J
     pub wear: f64,
+    /// Speed at which bodies spread back into ground cleared along an edge, from each side, when
+    /// the cover is dense (scaled down by `cover / RHO_PASS` below that), m/s.
+    #[serde(default = "regrow")]
+    pub regrow: f64,
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
     /// A speed shortcut, not a law (plan 7.1): where a cell holds more than this many individuals of
@@ -83,6 +87,9 @@ pub struct Config {
 
 fn yes() -> bool {
     true
+}
+fn regrow() -> f64 {
+    5e-9
 }
 fn eight() -> usize {
     8
@@ -113,6 +120,7 @@ impl Default for Config {
             carry: 1e-7,
             wear: 3e-9,
             creep: 1e-6,
+            regrow: 5e-9,
             crowd: 8,
             share_brains: true,
         }
@@ -232,6 +240,11 @@ pub struct World {
     pub canopy: Vec<f32>,
     /// Light intercepted in each cell per m² of light-capture area since the start, J/m²
     pub light: Vec<f64>,
+    /// Ground cleared of bodies along each edge, m²: edge `4i + f` joins cell `i` to its
+    /// neighbour `FORWARD[f]` (each edge once, used both ways). Movers pushing through bodies raise
+    /// it (`choose::go`), cover growing back lowers it (`choose::regrow`). Empty until first used.
+    #[serde(default)]
+    pub pass: Vec<f32>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,

@@ -25,6 +25,7 @@ fn main() {
             w.cfg.sun *= args.get("--sun", 1.0);
             w.cfg.share_brains = !args.0.iter().any(|a| a == "--own-brains");
             w.cfg.flow_days = args.get("--flow-days", w.cfg.flow_days);
+            w.cfg.regrow = args.get("--regrow", w.cfg.regrow);
             w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
             w.cfg.exchange_days = args.get("--exchange-days", w.cfg.exchange_days.min(w.cfg.flow_days).max(w.cfg.air_days));
             let absorber = args.get("--absorber", 1.0);
