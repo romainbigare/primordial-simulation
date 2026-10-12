@@ -113,11 +113,15 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // size it would give at that mass: share `s` of its stores, `k` children.
     let (m1, full) = (mass / n, FULL * mc);
     let (s, k) = if m1 > full { (1.0 - (1.0 - frac) * full / m1, (m1 / full - 1.0 + frac) / frac) } else { (frac, 1.0) };
-    if !body::pay(w, b, C_COPY * s * mass, b.interval() as f64) {
+    // A node's members copy as far as its reactions can release the cost now (a share of them);
+    // an individual all or nothing.
+    let (cost, days) = (C_COPY * s * mass, b.interval() as f64);
+    let p = if n > 1.0 { (0.999 * body::release(w, b, days) / cost).min(1.0) } else { 1.0 };
+    if p <= 0.0 || !body::pay(w, b, cost * p, days) {
         return false;
     }
     // An individual's children are whole.
-    let (i, births) = (b.cell as usize, if n > 1.0 { n * k } else { k.round() });
+    let (i, births) = (b.cell as usize, if n > 1.0 { n * k * p } else { k.round() });
     let cat = body::light_cat(&w.chem, &b.genes);
     w.events.push(Event { day: w.day, kind: EventKind::Born { cat }, node: i as u32, value: births });
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
