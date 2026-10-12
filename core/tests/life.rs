@@ -117,7 +117,7 @@ fn hot_cover_burns() {
     let run = |hot: bool| {
         let mut w = worldgen::new_world(1, 32, 32);
         pcore::step(&mut w);
-        worldgen::life::seed(&mut w, 0);
+        worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
         let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");
         let i = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node").cell as usize;
         let n = w.grid.n();

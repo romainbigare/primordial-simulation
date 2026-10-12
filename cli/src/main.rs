@@ -11,6 +11,9 @@ use tape::{fields, Recorder};
 struct Args(Vec<String>);
 
 impl Args {
+    fn has(&self, name: &str) -> bool {
+        self.0.iter().any(|a| a == name)
+    }
     fn get<T: std::str::FromStr>(&self, name: &str, default: T) -> T {
         self.0.iter().position(|a| a == name).and_then(|p| self.0.get(p + 1)).and_then(|v| v.parse().ok()).unwrap_or(default)
     }
@@ -46,7 +49,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N] [--own-brains] [--crowd N]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N] [--own-brains] [--crowd N] [--spray ROUNDS (20)] [--plant-bias] [--eater-bias]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -67,11 +70,14 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     // Time spent in flow, change, bodies and parts, since the last print and in all.
     let (mut part, mut busy, mut since) = ([Duration::ZERO; 4], Duration::ZERO, y0);
     let life_year = if resumed { -1 } else { a.get("--life-year", 2i64) };
+    // What is placed and how: neutral brains sprayed with mutation, unless asked for the old
+    // hand-set biases (`--plant-bias`, `--eater-bias`) or another number of rounds (`--spray`).
+    let how = worldgen::life::Seeding { hand: [a.has("--plant-bias"), a.has("--eater-bias")], rounds: a.get("--spray", 20u32) };
     for y in y0 + 1..=y0 + years {
         // First light-eaters; once they have spread, eaters among them.
         for (kind, at) in [(0, life_year), (1, life_year + 20)] {
             if life_year >= 0 && y as i64 - 1 == at {
-                worldgen::life::seed(&mut w, kind);
+                println!("{}", worldgen::life::seed_with(&mut w, kind, &how));
             }
         }
         for _ in 0..w.cfg.months_per_year {

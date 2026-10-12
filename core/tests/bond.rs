@@ -46,8 +46,8 @@ fn bond_breaks_under_too_much_load() {
 #[test]
 fn walls_keep_a_body_warm() {
     let (mut w, i) = world();
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
     // Six blocks joined around a small space, one bonded to the ground: thick walls, which
     // conduct less than the body's surface.
     let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 2e3, true)).collect();
