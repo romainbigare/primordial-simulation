@@ -48,10 +48,11 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// Starting kinds. Light-eaters: strong light reaction, slow burning, wide gas exchange and
 /// capture area, long intervals, resting; one node per land cell, members of 1 kg (copying at
 /// 2 kg), 0.1 kg/m². Eaters: fast burning, take the energy-rich solid from bodies and the
-/// ground, short intervals; individuals of 30 kg (copying at 63 kg), two in some cells.
+/// ground, short intervals; individuals of 30 kg (copying at 63 kg), two in some cells. Both
+/// start with a mutation size of 10^-1.2 per generation (generations are short at these sizes).
 const KINDS: [Kind; 2] = [
-    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -0.7, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
-    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -0.7, -2.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
+    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [15.0, 1.2], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
+    Kind { scalars: [0.3, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -2.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [-1.0, 1.5], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
 ];
 
 /// Place bodies of starting kind `which`: 0 light-eaters on land, 1 eaters where bodies already are.

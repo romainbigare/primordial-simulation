@@ -73,8 +73,8 @@ const GAS_DEPTH: f64 = 1.0;
 const WET_DEPTH: f64 = 0.01;
 /// Upkeep of catalysts, J per kg per day per decade of speed-up.
 const C_CAT: f64 = 2e2;
-/// Upkeep of strength, J per kg per day at strength 1.
-const C_STRENGTH: f64 = 5e3;
+/// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg: strong tissue is costly).
+const C_STRENGTH: f64 = 1e5;
 /// Upkeep of light-capture area, J per m² per day.
 const C_LEAF: f64 = 2e3;
 /// Cost of one decision of the starting brain (12 hidden units, 6 memory numbers, 3 bodies

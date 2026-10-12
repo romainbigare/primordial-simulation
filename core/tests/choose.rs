@@ -127,16 +127,15 @@ fn body_learns_to_move_toward_what_it_can_take() {
          off: on the strip {strip_off:.3}, toward {toward_off:.3} (chance {chance_off:.3}), {n_off} decisions, {m_off} moves"
     );
     eprintln!("{report}");
-    // It ends up on the strip clearly more often than a body that does not learn (about 0.74
-    // against 0.52 here; 0.76 against 0.51 and 0.77 against 0.50 on seeds 121 to 360).
+    // It ends up on the strip clearly more often than a body that does not learn (about 0.88
+    // against 0.43 here; the one that does not learn mostly starves within 20 decisions).
     assert!(strip_on > strip_off + 0.07, "{report}");
     // Its moves go toward richer cells more often than chance, and more than those of a body
-    // that does not learn (about 4.5 points over chance against -0.6 here; 3 against 1 and 3
-    // against -2 on seeds 121 to 360; it was 14 to 16 points while bodies grew without bound: a
-    // body of real size that has eaten its fill copies, and gains no well-being by eating more).
-    // Moving pays only through a take at a later decision; it is learned because each row of the
-    // brain steps by its own size, so the row for the richness of a neighbour learns when that
-    // matters, not drowned by the others.
+    // that does not learn (about 8 points over chance against 3 here; it was 14 to 16 points
+    // while bodies grew without bound: a body of real size that has eaten its fill copies, and
+    // gains no well-being by eating more). Moving pays only through a take at a later decision;
+    // it is learned because each row of the brain steps by its own size, so the row for the
+    // richness of a neighbour learns when that matters, not drowned by the others.
     let (up_on, up_off) = (toward_on - chance_on, toward_off - chance_off);
     assert!(up_on > 0.02 && up_on > up_off + 0.02, "{report}");
 }
