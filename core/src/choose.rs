@@ -2,15 +2,15 @@
 //! cells around it in 8 directions (as far as its sight), up to a few other bodies in or next to
 //! its cell (their looks, signals and well-being, and how past dealings with them went; walls
 //! hide them) and up to 3 parts in its cell. How much it remembers, sees and thinks is set by
-//! genes, and each costs energy per decision (`body::Lineage::cost`). The
-//! brain of its group, plus a few numbers of its own, scores every action; one is drawn by those
-//! scores, and the body emits a signal and writes its memory. Actions are physical: move, take
-//! from the node or a body, put to the node or a body, watch a body (copy part of its brain),
-//! copy, rest, and the actions of Bond (`bond`): form a part, hold, let go, join, break, enter.
-//! Each costs energy paid by the body's own
-//! reactions; if it cannot pay, it fails. Copying is drawn first, by its own chance. At its next
-//! decision the brain learns from the change of the body's own well-being (a policy gradient
-//! whose baseline is the brain's own estimate of how well-being will go).
+//! genes, and each costs energy per decision (`body::Lineage::cost`). The brain of its group,
+//! plus a few numbers of its own, scores every action; one is drawn by those scores, and the
+//! body emits a signal and writes its memory. Actions are physical: move, take from the node or
+//! a body, put to the node or a body, watch a body (copy part of its brain), copy, rest, and the
+//! actions of Bond (`bond`): form a part, hold, let go, join, break, enter. Each costs energy
+//! paid by the body's own reactions; if it cannot pay, it fails. Copying is drawn first, by its
+//! own chance. At its next decision the brain learns from the change of the body's own
+//! well-being (a policy gradient whose baseline is the brain's own estimate of how well-being
+//! will go).
 //!
 //! Bodies that stay near each other share their brain's rows (the mean of the rows they were
 //! born with, plus what the group learned): a body that strays from its group's centre takes a

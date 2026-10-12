@@ -102,15 +102,15 @@ pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
     t.h.extend((0..s.h).map(|m| squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x))));
     // The rows four at a time (four sums that do not wait on each other), then the rest.
     t.out.clear();
-    let (h, n) = (&t.h, s.h);
-    let mut quads = rows.chunks_exact(4 * s.r());
+    let (n, r) = (s.h, s.r());
+    let h = &t.h[..n];
+    let mut quads = rows.chunks_exact(4 * r);
     for q in &mut quads {
-        let (r0, q) = q.split_at(s.r());
-        let (r1, q) = q.split_at(s.r());
-        let (r2, r3) = q.split_at(s.r());
-        let mut acc = [r0[n], r1[n], r2[n], r3[n]];
-        for ((((a, b), c), d), x) in r0[..n].iter().zip(&r1[..n]).zip(&r2[..n]).zip(&r3[..n]).zip(h) {
-            (acc[0], acc[1], acc[2], acc[3]) = (acc[0] + a * x, acc[1] + b * x, acc[2] + c * x, acc[3] + d * x);
+        let (r0, r1, r2, r3) = (&q[..n], &q[r..r + n], &q[2 * r..2 * r + n], &q[3 * r..3 * r + n]);
+        let mut acc = [q[n], q[r + n], q[2 * r + n], q[3 * r + n]];
+        for m in 0..n {
+            let x = h[m];
+            (acc[0], acc[1], acc[2], acc[3]) = (acc[0] + r0[m] * x, acc[1] + r1[m] * x, acc[2] + r2[m] * x, acc[3] + r3[m] * x);
         }
         t.out.extend(acc);
     }

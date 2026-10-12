@@ -483,7 +483,7 @@ impl Life {
         gr.sum.resize(gr.rows.len(), 0);
         let (k1, k0) = (1.0 / (FIX * gr.members as f64), if n0 > 0.0 { 1.0 / (FIX * n0 as f64) } else { 0.0 });
         for ((r, s), &x) in gr.rows.iter_mut().zip(gr.sum.iter_mut()).zip(born) {
-            let s1 = *s + d * (x as f64 * FIX).round() as i64;
+            let s1 = *s + d * (x as f64 * FIX) as i64;
             if n0 > 0.0 {
                 *r += (s1 as f64 * k1 - *s as f64 * k0) as f32;
             }
@@ -500,7 +500,7 @@ impl Life {
         }
         for b in self.bodies.iter().filter(|b| b.alive) {
             let (gr, born) = (&mut self.groups[b.group as usize], &self.genomes[b.genome as usize].rows);
-            gr.sum.iter_mut().zip(born).for_each(|(s, &x)| *s += (x as f64 * FIX).round() as i64);
+            gr.sum.iter_mut().zip(born).for_each(|(s, &x)| *s += (x as f64 * FIX) as i64);
         }
     }
     /// Move the centre of group `g` by a member at `cell` (`d` = 1 arrived, -1 left).
