@@ -72,10 +72,11 @@ pub struct Config {
     pub regrow: f64,
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
-    /// A speed shortcut, not a law (plan 7.1): where a cell holds more than this many individuals of
-    /// one lineage (or alike in genes), they merge into a population node each month
-    /// (`body::crowd`). It must give the same patterns as individuals (to be checked at M4).
-    #[serde(default = "eight")]
+    /// A speed shortcut, not a law (plan 7.1): most body nodes (individuals or population nodes) a
+    /// cell keeps at each month's start; past it the most alike merge (`body::crowd`). It bounds
+    /// only how many nodes represent the members, never how many members there are. It must give
+    /// the same patterns as individuals (to be checked at M4).
+    #[serde(default = "four")]
     pub crowd: usize,
     /// Bodies that stay near each other share one brain's rows (for speed). When false each
     /// body keeps its own rows: a child starts with its parent's (its own born rows plus what
@@ -91,8 +92,8 @@ fn yes() -> bool {
 fn regrow() -> f64 {
     1e-9
 }
-fn eight() -> usize {
-    8
+fn four() -> usize {
+    4
 }
 
 impl Default for Config {
@@ -121,7 +122,7 @@ impl Default for Config {
             wear: 3e-9,
             creep: 1e-6,
             regrow: 1e-9,
-            crowd: 8,
+            crowd: 4,
             share_brains: true,
         }
     }

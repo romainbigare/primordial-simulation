@@ -667,15 +667,17 @@ pub fn survey(w: &mut World) {
     choose::cells(w);
 }
 
-/// A speed shortcut, not a law (plan 7.1; it must give the same patterns as individuals, to be
-/// checked at M4). Monthly, in each cell, the bodies that hold and are inside nothing gather,
-/// largest first, behind the first larger one of their lineage or alike in genes
-/// (`copy::alike`). Nodes merge into it; individuals too, once there are more than `cfg.crowd`
-/// of them (brain groups are not counted apart: bodies that stray start groups of their own).
-/// Stores and heat add up, genes and born rows become the means by count (`copy::merge`); the
-/// lineage, brain group and memory are the largest one's.
+/// The speed shortcut of plan 7.1, not a law: it coarsens only how members are represented (as
+/// population nodes), never how many there are or where, and must give the same patterns as
+/// individuals (to be checked at M4). Monthly, in each cell, among the bodies that hold and are
+/// inside nothing: a node joins the first larger one of its lineage or alike in genes
+/// (`copy::alike`); then, while more than `cfg.crowd` remain, the two most alike (squared
+/// distance of their genes in mutation steps, `copy::steps`) merge, the smaller into the larger.
+/// So individuals stay individuals while their cell is not over `crowd`. Stores and heat add up,
+/// genes and born rows become the means by count, the born rows carried over to the larger's
+/// brain where its sizes differ (`copy::merge`); lineage, brain group and memory are the larger's.
 fn crowd(w: &mut World) {
-    let (max, lay) = (w.cfg.crowd, Layout::of(&w.chem));
+    let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.grid.n() {
         if w.life.at[i].len() <= 1 {
             continue;
@@ -683,22 +685,48 @@ fn crowd(w: &mut World) {
         let b = &w.life.bodies;
         let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold == 0 && b[s].inside == 0).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
         list.sort_unstable();
-        let (mut head, mut solo) = (vec![0; list.len()], vec![0; list.len()]);
+        let mut head: Vec<usize> = (0..list.len()).collect();
         for x in 0..list.len() {
             let a = &b[list[x].1];
-            let like = |y: usize| head[y] == y && (b[list[y].1].lineage == a.lineage || crate::copy::alike(&lay, &b[list[y].1].genes, &a.genes));
-            head[x] = (0..x).find(|&y| like(y)).unwrap_or(x);
-            solo[head[x]] += (a.n() <= 1.0) as usize;
+            if a.n() > 1.0 {
+                head[x] = (0..x).find(|&y| head[y] == y && (b[list[y].1].lineage == a.lineage || crate::copy::alike(&lay, &b[list[y].1].genes, &a.genes))).unwrap_or(x);
+            }
         }
-        for x in 0..list.len() {
-            let h = head[x];
-            if h != x && (w.life.bodies[list[x].1].n() > 1.0 || solo[h] > max) {
-                crate::copy::merge(w, list[x].1, list[h].1);
+        for x in (0..list.len()).filter(|&x| head[x] != x) {
+            crate::copy::merge(w, list[x].1, list[head[x]].1);
+        }
+        let mut left: Vec<usize> = (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect();
+        if left.len() <= max {
+            continue;
+        }
+        // The most alike pair first (ties: the earlier, larger ones), until `max` are left.
+        let m = left.len();
+        let steps = |w: &World, s: usize| crate::copy::steps(&lay, &w.life.bodies[s].genes);
+        let mut v: Vec<Vec<f32>> = left.iter().map(|&s| steps(w, s)).collect();
+        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).map(|(x, y)| (x - y) * (x - y)).sum::<f32>();
+        let mut d = vec![f32::INFINITY; m * m];
+        for p in 0..m {
+            for q in p + 1..m {
+                d[p * m + q] = dist(&v[p], &v[q]);
+            }
+        }
+        for _ in max..m {
+            let k = (0..m * m).fold(0, |k, x| if d[x] < d[k] { x } else { k });
+            let (p, q) = (k / m, k % m);
+            let (s, t) = if w.life.bodies[left[q]].n() > w.life.bodies[left[p]].n() { (p, q) } else { (q, p) };
+            crate::copy::merge(w, left[s], left[t]);
+            (left[s], v[t]) = (usize::MAX, steps(w, left[t]));
+            for o in 0..m {
+                let (lo, hi) = (o.min(s), o.max(s));
+                d[lo * m + hi] = f32::INFINITY;
+                if o != t && left[o] != usize::MAX {
+                    let (lo, hi) = (o.min(t), o.max(t));
+                    d[lo * m + hi] = dist(&v[o], &v[t]);
+                }
             }
         }
     }
 }
-
 
 /// Working memory for body updates.
 #[derive(Default)]

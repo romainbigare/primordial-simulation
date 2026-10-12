@@ -172,6 +172,32 @@ fn crowded_individuals_merge_into_a_node() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
+/// However unlike, the bodies of a cell merge at a month's start until at most `cfg.crowd` nodes
+/// are left; no member is lost and matter and energy are kept exactly.
+#[test]
+fn crowd_bounds_the_nodes_of_a_cell() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
+    let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
+    for x in 0..3 * w.cfg.crowd {
+        let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
+        b.genes[pcore::body::COPY_MASS] += 0.3 * x as f32;
+        w.life.add(b, w.day, 1);
+    }
+    let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.n()).collect::<Vec<f64>>();
+    let before: f64 = here(&w).iter().sum();
+    pcore::body::survey(&mut w);
+    let after = here(&w);
+    assert!(after.len() <= w.cfg.crowd, "{} nodes left", after.len());
+    assert!((after.iter().sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
 /// Cold costs energy: what a starting body's reactions can release over its interval, against
 /// its upkeep, falls with its temperature by Change's rate. Warm bodies can pay; cold ones not.
 #[test]

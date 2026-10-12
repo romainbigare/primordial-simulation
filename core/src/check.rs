@@ -12,34 +12,54 @@ pub struct Totals {
     pub chemical: f64,
 }
 
+/// A sum that carries the rounding error of each addition (Neumaier): the chemical energy of
+/// the world is about 100 times its heat, so a plain sum over many bodies loses more to rounding
+/// than the laws ever move by mistake.
+#[derive(Clone, Copy, Default)]
+struct Sum(f64, f64);
+
+impl Sum {
+    fn add(&mut self, x: f64) {
+        let y = self.0 + x;
+        self.1 += if self.0.abs() >= x.abs() { (self.0 - y) + x } else { (x - y) + self.0 };
+        self.0 = y;
+    }
+    fn get(self) -> f64 {
+        self.0 + self.1
+    }
+}
+
 pub fn totals(w: &World) -> Totals {
-    let chem = &w.chem;
-    let mut elems = vec![0.0; chem.n_elements];
-    let mut chemical = 0.0;
-    for (store, len, held) in [(&w.ground, w.grid.n(), false), (&w.bed, w.grid.n(), false), (&w.air, w.grid.na(), true)] {
-        for k in 0..chem.ns() {
-            let (sum, s): (f64, _) = (store[k * len..(k + 1) * len].iter().sum(), &chem.subs[k]);
-            chem.add_elems(k, sum, &mut elems);
+    let (chem, ns) = (&w.chem, w.chem.ns());
+    // mol of each substance, and the energy held as latent heat in the air
+    let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
+    for (store, len, air) in [(&w.ground, w.grid.n(), false), (&w.bed, w.grid.n(), false), (&w.air, w.grid.na(), true)] {
+        for (k, sum) in subs.iter_mut().enumerate() {
+            let mut s = Sum::default();
+            store[k * len..(k + 1) * len].iter().for_each(|&a| s.add(a));
+            sum.add(s.get());
             // Air holds its gases' fusion and vaporisation enthalpy; the ground holds fusion in `e_ground`.
-            chemical += sum * (s.hf + if held { s.lf + s.lv } else { 0.0 });
+            if air {
+                held.add(s.get() * (chem.subs[k].lf + chem.subs[k].lv));
+            }
         }
     }
-    let mut thermal = w.e_ground.iter().sum::<f64>() + w.e_air.iter().sum::<f64>();
+    w.e_ground.iter().chain(&w.e_air).for_each(|&e| thermal.add(e));
     for b in w.life.alive() {
-        for (k, &a) in b.store.iter().enumerate() {
-            chem.add_elems(k, a, &mut elems);
-            chemical += a * chem.subs[k].hf;
-        }
-        thermal += b.e;
+        b.store.iter().zip(subs.iter_mut()).for_each(|(&a, s)| s.add(a));
+        thermal.add(b.e);
     }
     for p in w.parts.alive() {
-        for (k, (&a, &f)) in p.wall.iter().zip(&p.fill).enumerate() {
-            chem.add_elems(k, a + f, &mut elems);
-            chemical += (a + f) * chem.subs[k].hf;
-        }
-        thermal += p.e;
+        p.wall.iter().zip(&p.fill).zip(subs.iter_mut()).for_each(|((&a, &f), s)| s.add(a + f));
+        thermal.add(p.e);
     }
-    Totals { elems, thermal, chemical }
+    let mut elems = vec![0.0; chem.n_elements];
+    let mut chemical = held;
+    for (k, s) in subs.iter().enumerate() {
+        chem.add_elems(k, s.get(), &mut elems);
+        chemical.add(s.get() * chem.subs[k].hf);
+    }
+    Totals { elems, thermal: thermal.get(), chemical: chemical.get() }
 }
 
 /// Compare now with a start point. Returns the worst relative drift of elements and of energy.

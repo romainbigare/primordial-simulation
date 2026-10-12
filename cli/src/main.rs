@@ -26,6 +26,7 @@ fn main() {
             w.cfg.share_brains = !args.0.iter().any(|a| a == "--own-brains");
             w.cfg.flow_days = args.get("--flow-days", w.cfg.flow_days);
             w.cfg.regrow = args.get("--regrow", w.cfg.regrow);
+            w.cfg.crowd = args.get("--crowd", w.cfg.crowd);
             w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
             w.cfg.exchange_days = args.get("--exchange-days", w.cfg.exchange_days.min(w.cfg.flow_days).max(w.cfg.air_days));
             let absorber = args.get("--absorber", 1.0);
@@ -45,7 +46,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N] [--own-brains]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N] [--own-brains] [--crowd N]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }

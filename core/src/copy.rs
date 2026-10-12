@@ -71,9 +71,16 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
 /// Genes no more than `ALIKE` mutation steps apart in each gene (genes that are off count as 0;
 /// the sizes of brain and senses are not compared, as `merge` carries a brain over to other sizes).
 pub fn alike(lay: &Layout, a: &[f32], b: &[f32]) -> bool {
-    let on = |g: usize, x: f32| if g < lay.cat { x } else { x.max(0.0) };
-    let sizes = body::HIDDEN..=body::SIGHT;
-    a.iter().zip(b).enumerate().all(|(g, (&x, &y))| sizes.contains(&g) || (on(g, x) - on(g, y)).abs() <= ALIKE * range(lay, g).0)
+    a.iter().zip(b).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= ALIKE)
+}
+
+/// A gene in mutation steps (off as 0; the sizes of brain and senses as 0): two bodies are as
+/// alike as their genes are near in these (`alike`, `body::crowd`).
+fn step(lay: &Layout, g: usize, x: f32) -> f32 {
+    if (body::HIDDEN..=body::SIGHT).contains(&g) { 0.0 } else { (if g < lay.cat { x } else { x.max(0.0) }) / range(lay, g).0 }
+}
+pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
+    a.iter().enumerate().map(|(g, &x)| step(lay, g, x)).collect()
 }
 
 /// Parent genes plus noise, kept in range.
