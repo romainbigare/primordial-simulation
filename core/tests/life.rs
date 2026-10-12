@@ -170,3 +170,26 @@ fn crowded_individuals_merge_into_a_node() {
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// Cold costs energy: what a starting body's reactions can release over its interval, against
+/// its upkeep, falls with its temperature by Change's rate. Warm bodies can pay; cold ones not.
+#[test]
+fn cold_bodies_release_too_little() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    for kind in [true, false] {
+        let mut b = w.life.alive().find(|b| (pcore::body::light_cat(&w.chem, &b.genes) > 5.0) == kind).expect("a body").clone();
+        b.prepare(&w.chem);
+        let ratio = |t: f64| {
+            let mut b = b.clone();
+            b.e = b.heat_cap(&w.chem) * t;
+            let days = b.interval() as f64;
+            pcore::body::release(&w, &b, days) / pcore::body::upkeep(&w, &b, days, b.mass(&w.chem))
+        };
+        let r = [250.0, 270.0, 280.0, 290.0, 300.0].map(ratio);
+        println!("light-capturing {kind}: release / upkeep at 250, 270, 280, 290, 300 K: {r:.3?}");
+        assert!(r[0] < 1.0 && r[3] > 1.0, "{r:?}");
+    }
+}

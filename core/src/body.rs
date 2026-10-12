@@ -275,23 +275,21 @@ impl Body {
         let mm = chem.subs[k].molar_mass;
         (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
     }
-    /// Well-being: the energy its catalysed reactions could release from a member's stores (log,
-    /// in decisions' worth for a body of the mass it copies at, so shedding mass does not raise
-    /// it), less how near its key stores are to their safe minimums (the log of each one's
-    /// margin, which is the log of its share over its minimum, counted up to 2) and its key
-    /// liquids to freezing or boiling (within 5 K). Needs `prepare`.
-    pub fn wellbeing(&self, chem: &Chemistry, mass: f64) -> f32 {
-        self.wellbeing_at(chem, mass, self.temp(chem))
-    }
-    /// `wellbeing` when the temperature `t` is known.
-    pub fn wellbeing_at(&self, chem: &Chemistry, mass: f64, t: f64) -> f32 {
+    /// Well-being at temperature `t`: the energy its catalysed reactions could release from a
+    /// member's stores (log, in decisions' worth for a body of the mass it copies at, so shedding
+    /// mass does not raise it), less how near it is to its limits: its key stores to their safe
+    /// minimums (the log of each one's margin, which is the log of its share over its minimum,
+    /// counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
+    /// the same margin form), and its key liquids to freezing or boiling (within 5 K). Needs
+    /// `prepare`.
+    pub fn wellbeing_at(&self, chem: &Chemistry, mass: f64, t: f64, spare: f64) -> f32 {
         let lay = Layout::of(chem);
         let mut e = 0.0;
         for &(r, q) in &self.k.burn {
             let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
             e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
         }
-        let mut w = ln(1.0 + (e / self.n() / self.dec(COPY_MASS) / C_BRAIN) as f32);
+        let mut w = ln(1.0 + (e / self.n() / self.dec(COPY_MASS) / C_BRAIN) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
@@ -701,6 +699,10 @@ pub struct Tmp {
     x: Vec<f64>,
     /// Light caught at the last update per kg per day, J
     pub lit: f64,
+    /// At the last update: what its reactions could release over the time against its upkeep
+    /// (counted up to 2); the catalyst factors of the reactions that run on their own
+    pub spare: f64,
+    cat: Vec<f64>,
     /// Mass and heat capacity of the body as `live` left it (valid until its stores change)
     pub mass: f64,
     pub cap: f64,
@@ -809,16 +811,14 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let (mut mass, cap) = b.mass_cap(&w.chem);
     b.last = w.day;
 
-    // Upkeep of catalysts, strength and capture area by the day, and of this decision; its
-    // heat is spread over the time like the rest.
-    let cats = b.k.cats;
-    let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
-    let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
-    let think = w.life.brains[b.lineage as usize].as_ref().map_or(C_BRAIN, |l| l.cost());
-    let upkeep = days * (mass * (C_CAT * cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64 * b.n()) + think * mass;
+    // Upkeep, paid by the reactions that breathe, as fast as they go at the body's temperature
+    // over the time (at least an interval: a decision takes one); its heat is spread over the
+    // time like the rest.
+    let (upkeep, span) = (upkeep(w, b, days, mass), days.max(b.interval() as f64));
+    tmp.spare = plan(w, b, 2.0 * upkeep, span, mass, cap).1 / upkeep.max(1e-300);
     // In a node, the members whose upkeep could not be paid die.
     let (e0, node) = (b.e, b.n() > 1.0);
-    let short = pay_at(w, b, upkeep, days, mass, cap, node) / upkeep.max(1e-300);
+    let short = pay_at(w, b, upkeep, span, mass, cap, node) / upkeep.max(1e-300);
     if short > 1e-9 && !node {
         return Some(SPENT);
     }
@@ -870,13 +870,18 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     tmp.pool0.clone_from(&tmp.pool);
 
     // Catalysed reactions, at the body's temperature held fixed; their heat is spread over the
-    // time below.
+    // time below. Those that breathe ran on demand (upkeep, actions) and go here at the open
+    // world's rate.
     let c0 = b.heat_cap(chem);
     let t0 = b.e / c0;
     let fixed = 1e6 * c0;
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
-    let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(&b.k.cat), lit, dt);
+    tmp.cat.clone_from(&b.k.cat);
+    for &(r, _) in b.k.burn.iter().filter(|p| breathes(chem, p.0, t0)) {
+        tmp.cat[r] = 1.0;
+    }
+    let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(&tmp.cat), lit, dt);
     let mut heat = e - e_start + lit - used + upkeep;
     for k in 0..ns {
         let d = tmp.pool[k] - tmp.pool0[k];
@@ -952,7 +957,8 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     // Walls around it add their conductance (its share of it) in series.
     let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
-        let g = walls.map_or(b.k.heat * mass, |x| 1.0 / (1.0 / (b.k.heat * mass) + 1.0 / x.1));
+        let g0 = b.k.heat * mass;
+        let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
         // The ground pays the difference; if it cannot, the body ends colder.
@@ -977,10 +983,31 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     None
 }
 
-/// Pay `cost` J by running the body's catalysed reactions that release heat, one after the
-/// other as far as their inputs allow; gases come from the air the body exchanges with in
-/// `days` and go to its cell's air, and the heat stays in the body. False, and nothing paid,
-/// if they cannot release that much.
+/// Upkeep over `days` of a body of `mass` kg, J: of catalysts, strength and capture area by
+/// the day, of learning and signalling, and of one decision. Needs `prepare`.
+pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
+    let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
+    let mind = C_LEARN * b.learn_rate() as f64 + C_SIGNAL * sig;
+    let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(C_BRAIN, |l| l.cost());
+    days * (mass * (C_CAT * b.k.cats + C_STRENGTH * b.gene(STRENGTH) + mind) + C_LEAF * b.vis[1] as f64 * b.n()) + think * mass
+}
+
+/// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
+fn breathes(chem: &Chemistry, r: usize, t: f64) -> bool {
+    chem.reactions[r].inputs.iter().any(|p| chem.phase(p.0 as usize, t) == Phase::Gas)
+}
+
+/// Energy the body's reactions can release over `days` at its temperature now, J (the most
+/// `pay` could pay). Needs `prepare`.
+pub fn release(w: &World, b: &Body, days: f64) -> f64 {
+    let (mass, cap) = b.mass_cap(&w.chem);
+    plan(w, b, f64::MAX, days, mass, cap).1
+}
+
+/// Pay `cost` J by running the body's catalysed reactions that release heat and breathe, one
+/// after the other as far as their inputs allow; gases come from the air the body exchanges
+/// with in `days` and go to its cell's air, and the heat stays in the body. False, and nothing
+/// paid, if they cannot release that much in that time.
 pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
@@ -996,17 +1023,15 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     paid
 }
 
-/// `pay` when the body's mass and heat capacity are known; returns what was not paid. If
-/// `part`, it pays what it can; else all or nothing.
-fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64, part: bool) -> f64 {
-    if cost <= 0.0 {
-        return 0.0;
-    }
-    b.prepare(&w.chem);
-    let depth = bond::depth(w, b, w.life.env.get(b.cell as usize).map_or(0.0, |e| e[1]));
-    let World { chem, grid, air, .. } = w;
-    let (ns, na, i) = (chem.ns(), grid.na(), b.cell as usize);
-    let j = grid.air_of(i);
+/// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`
+/// J, and the energy released. Each goes at most as far as Change's rate at the body's
+/// temperature takes it over `days`: catalyst · k · exp(−Ea/T) · the activity of its gases (their
+/// share of the air), on its scarcest input (its own stores, the air exchanged). So a cold body
+/// releases little: the cold cost is the rate, not a rule.
+fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64; 64], f64) {
+    let (chem, i) = (&w.chem, b.cell as usize);
+    let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
+    let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
     let share = (b.k.gas * mass * days * (-depth / GAS_DEPTH).exp() / tot).min(0.5);
     let t = b.e / cap.max(1e-9);
@@ -1018,22 +1043,39 @@ fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64
             have[k] = if gas(k) { air[k * na + j] * share } else { b.store[k] };
         }
     }
-    let (mut ext, mut left) = ([0.0f64; 64], cost);
+    let (mut ext, mut got) = ([0.0f64; 64], 0.0);
     for (q, &(r, e)) in b.k.burn.iter().enumerate() {
-        if left <= 0.0 {
-            break;
+        let rx = &chem.reactions[r];
+        if got >= cost || !breathes(chem, r, t) {
+            continue;
         }
-        let inputs = &chem.reactions[r].inputs;
-        let lim = inputs.iter().map(|&(k, nu)| have[k as usize] / nu as f64).fold(f64::MAX, f64::min);
-        ext[q] = lim.min(left / e);
-        left -= e * ext[q];
-        for &(k, nu) in inputs {
+        let act: f64 = rx.inputs.iter().filter(|p| gas(p.0 as usize)).map(|&(k, nu)| (air[k as usize * na + j] / tot).powi(nu as i32)).product();
+        let rate = b.k.cat[r] * rx.k * (-rx.ea / t).exp() * act;
+        let lim = rx.inputs.iter().map(|&(k, nu)| have[k as usize] / nu as f64).fold(f64::MAX, f64::min);
+        ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
+        got += e * ext[q];
+        for &(k, nu) in &rx.inputs {
             have[k as usize] -= nu as f64 * ext[q];
         }
     }
+    (ext, got.min(cost))
+}
+
+/// `pay` when the body's mass and heat capacity are known; returns what was not paid. If
+/// `part`, it pays what it can; else all or nothing.
+fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64, part: bool) -> f64 {
+    if cost <= 0.0 {
+        return 0.0;
+    }
+    b.prepare(&w.chem);
+    let (ext, paid) = plan(w, b, cost, days, mass, cap);
+    let left = cost - paid;
     if left > 1e-9 * cost && !part {
         return cost;
     }
+    let World { chem, grid, air, .. } = w;
+    let (na, j, t) = (grid.na(), grid.air_of(b.cell as usize), b.e / cap.max(1e-9));
+    let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut latent = 0.0;
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
         let rx = &chem.reactions[r];
@@ -1054,6 +1096,6 @@ fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64
             }
         }
     }
-    b.e += cost - left - latent;
+    b.e += paid - latent;
     if left > 1e-9 * cost { left } else { 0.0 }
 }

@@ -82,7 +82,7 @@ fn least(a: f64, b: f64) -> f64 {
 
 /// 1 - exp(-z), cheap when small.
 #[inline]
-fn frac(z: f64) -> f64 {
+pub(crate) fn frac(z: f64) -> f64 {
     if z < 1e-3 { z * (1.0 - 0.5 * z) } else { -(-z).exp_m1() }
 }
 

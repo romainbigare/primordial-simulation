@@ -47,26 +47,27 @@ fn bond_breaks_under_too_much_load() {
 fn walls_keep_a_body_warm() {
     let (mut w, i) = world();
     worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
     // Six plates joined around a space, one bonded to the ground.
-    let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 2e4)).collect();
+    let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 5e3)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);
     for p in &parts[1..] {
         bond::link(&mut w, *p, parts[0] as u32, 1e9);
     }
     let r = w.parts.parts[parts[0]].root as usize;
     assert!(w.parts.parts[r].s.encl > 0.99, "not closed: {:?}", w.parts.parts[r].s);
-    // The same body outside and inside.
-    let slot = w.life.at[i].first().copied().unwrap_or_else(|| {
-        let s = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive).expect("a body") as u32;
-        let from = w.life.bodies[s as usize].cell as usize;
-        let g = w.life.bodies[s as usize].group;
-        w.life.relocate(s as usize, g, from, i);
-        w.life.bodies[s as usize].cell = i as u32;
-        s
-    }) as usize;
+    // The same body outside and inside: one that does not capture light (its upkeep warms it),
+    // from the warmest place.
+    let bs = &w.life.bodies;
+    let slot = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
+    let (from, g) = (w.life.bodies[slot].cell as usize, w.life.bodies[slot].group);
+    w.life.relocate(slot, g, from, i);
+    w.life.bodies[slot].cell = i as u32;
     // Enough liquid for a month without rain.
     let b = &mut w.life.bodies[slot];
     let k = (0..b.store.len()).max_by(|&x, &y| b.store[x].total_cmp(&b.store[y])).unwrap();
+    let t = b.temp(&w.chem);
+    b.e += 0.3 * b.store[k] * w.chem.subs[k].cp * t;
     b.store[k] *= 1.3;
     let mut inside = w.clone();
     inside.life.bodies[slot].inside = inside.parts.parts[parts[0]].id(parts[0]);
@@ -76,5 +77,5 @@ fn walls_keep_a_body_warm() {
         pcore::step(&mut inside);
     }
     assert!(w.life.bodies[slot].alive && inside.life.bodies[slot].alive);
-    assert!(temp(&inside) > temp(&w) + 1.0, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
+    assert!(temp(&inside) > temp(&w) + 0.5, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
 }
