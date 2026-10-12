@@ -727,6 +727,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         s.sed_e[i] = 0.0;
     }
     w.ledger.gravity += heat;
+    crate::choose::regrow(w, dt);
 }
 
 /// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers
@@ -793,4 +794,5 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
         }
     }
     w.ledger.gravity += heat;
+    crate::choose::regrow(w, dt);
 }

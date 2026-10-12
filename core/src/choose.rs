@@ -21,7 +21,7 @@ use crate::body::{self, Body, Layout, Lineage, Tmp, BROKEN, STRENGTH, TAKEN};
 use crate::brain::{self, ln, score, squash, Shape, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::Phase;
 use crate::event::{Event, EventKind};
-use crate::grid::DIRS;
+use crate::grid::{DIRS, FORWARD};
 use crate::rng::{Purpose, Rng};
 use crate::{bond, copy, World};
 
@@ -36,7 +36,9 @@ const OPTS: usize = FIXED + 8 + VERBS * MAX_SEEN + OVERBS * PARTS;
 pub(crate) const C_MOVE: f64 = 3.0;
 /// Body mass per area that doubles the cost of entering a cell, kg/m² (and of handling what is
 /// taken from a body there).
-const RHO_PASS: f64 = 5.0;
+pub(crate) const RHO_PASS: f64 = 5.0;
+/// Width of the passage a mover clears through bodies, m.
+const LANE: f64 = 1.0;
 /// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³.
 const LAYER: f64 = 10.0;
 const RHO_BODY: f64 = 1e3;
@@ -181,6 +183,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             fd[6] += wt * ((e[0] - env[0]) / 5.0) as f32;
             fd[8] += wt * smell(k);
             fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
+            // The step into the next cell is felt along its edge, worn or not.
+            if (dx, dy) == off {
+                fd[7] += wt * (ln(resist(w, i, d, j) as f32) - ck[7]);
+            }
             sum += wt;
         }
         fd.iter_mut().for_each(|x| *x /= sum);
@@ -444,7 +450,7 @@ pub fn regroup(w: &mut World) {
 /// pushing through bodies breaks their bonds (`wear`). A body that strays from its group's
 /// centre leaves with a copy of its rows. A node moves as one: all its members go (they drew
 /// the same action), and it stays one node.
-fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
+pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
     if (w.life.sum[j][1] + mb) / RHO_BODY > LAYER * w.grid.area() {
         return;
@@ -452,7 +458,7 @@ fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let carried = bond::carry(w, b, mb);
     let afloat = carried.is_some() && bond::afloat(w, b, j, mb);
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
-    let resist = 1.0 + w.life.sum[j][1] / w.grid.area() / RHO_PASS;
+    let resist = resist(w, i, d, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
     let cost = mass * (C_MOVE * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { bond::AFLOAT } else { 1.0 };
     if !body::pay(w, b, cost, b.interval() as f64) {
@@ -466,7 +472,14 @@ fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let n = w.grid.n();
     w.diag.crossings.resize(n, 0.0);
     w.diag.crossings[j] += b.n() as f32;
-    wear(w, j, slot, cost * (1.0 - 1.0 / resist));
+    let cover = w.life.sum[j][1] / w.grid.area();
+    let broken = wear(w, j, slot, cost * (1.0 - 1.0 / resist));
+    if broken > 0.0 && cover > 0.0 {
+        // The cover broken along the way was the lane's: that much ground is now clear.
+        w.pass.resize(4 * n, 0.0);
+        let e = &mut w.pass[edge(i, d, j)];
+        *e = (*e + (broken / cover) as f32).min((LANE * w.grid.dist(DIRS[d])) as f32);
+    }
     let gr = &w.life.groups[b.group as usize];
     let ((cx, cy), (x, y)) = (gr.centre(), w.grid.xy(j));
     if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > LEAVE {
@@ -481,19 +494,21 @@ fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
 
 /// Energy dissipated pushing through the bodies of cell `j` breaks their bonds: each loses mass
 /// by its share of their mass, less when stronger (a node loses members). What breaks off goes
-/// to the ground as loose amounts, with its heat.
-fn wear(w: &mut World, j: usize, mover: usize, energy: f64) {
+/// to the ground as loose amounts, with its heat. Returns the mass broken, kg.
+fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     let chem = &w.chem;
     let others: Vec<u32> = w.life.at[j].iter().copied().filter(|&s| s as usize != mover).collect();
     let total: f64 = others.iter().map(|&s| w.life.bodies[s as usize].mass(chem)).sum();
+    let mut broken = 0.0;
     if energy <= 0.0 || total <= 0.0 {
-        return;
+        return 0.0;
     }
     for s in others {
         let s = s as usize;
         let mut o = std::mem::take(&mut w.life.bodies[s]);
         let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
         let f = (WEAR * energy / total / (o.gene(STRENGTH) + 0.1)).min(0.5);
+        broken += m * f;
         let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
         // In a node, members are broken off; an individual loses part of itself.
         let left = body::thin(w, &mut o, f, &dead, BROKEN);
@@ -502,6 +517,45 @@ fn wear(w: &mut World, j: usize, mover: usize, energy: f64) {
         } else {
             o.vis = o.visible(&w.chem);
             w.life.bodies[s] = o;
+        }
+    }
+    broken
+}
+
+/// The edge from cell `i` along `DIRS[d]` to `j` in `World::pass`: each edge once, as the forward
+/// edge of its lower end.
+fn edge(i: usize, d: usize, j: usize) -> usize {
+    const F: [usize; 4] = [0, 2, 1, 3];
+    if d < 4 { 4 * i + F[d] } else { 4 * j + F[d - 4] }
+}
+
+/// What it costs, against bare ground, to step from `i` along `DIRS[d]` into `j`: one, plus the
+/// body mass per area in `j` over `RHO_PASS` for the share of the passage not yet cleared.
+pub(crate) fn resist(w: &World, i: usize, d: usize, j: usize) -> f64 {
+    let open = w.pass.get(edge(i, d, j)).map_or(0.0, |&a| (a as f64 / (LANE * w.grid.dist(DIRS[d]))).min(1.0));
+    1.0 + (1.0 - open) * w.life.sum[j][1] / w.grid.area() / RHO_PASS
+}
+
+/// How much cheaper the edge from `i` along `FORWARD[f]` is than uncleared ground, for the mean
+/// cover of its two cells (1 when bare or not cleared).
+pub fn eased(w: &World, i: usize, f: usize) -> f64 {
+    let Some(j) = w.grid.step(i, FORWARD[f]).filter(|_| !w.pass.is_empty()) else { return 1.0 };
+    let (a, c) = (w.pass.get(4 * i + f).copied().unwrap_or(0.0) as f64, (w.life.sum[i][1] + w.life.sum[j][1]) / 2.0 / w.grid.area() / RHO_PASS);
+    (1.0 + c) / (1.0 + (1.0 - (a / (LANE * w.grid.dist(FORWARD[f]))).min(1.0)) * c)
+}
+
+/// Slow (yearly, from Flow): bodies spread back into the cleared ground of every edge from both
+/// sides, at `cfg.regrow` times the cover there over `RHO_PASS` (all of it when dense).
+pub fn regrow(w: &mut World, dt: f64) {
+    for i in 0..w.pass.len() / 4 {
+        for (f, &off) in FORWARD.iter().enumerate() {
+            if w.pass[4 * i + f] <= 0.0 {
+                continue;
+            }
+            let Some(j) = w.grid.step(i, off) else { continue };
+            let fill = ((w.life.sum[i][1] + w.life.sum[j][1]) / 2.0 / w.grid.area() / RHO_PASS).min(1.0);
+            let a = &mut w.pass[4 * i + f];
+            *a = (*a - (2.0 * w.cfg.regrow * fill * w.grid.dist(off) * dt) as f32).max(0.0);
         }
     }
 }

@@ -142,6 +142,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         life: Default::default(),
         parts: Default::default(),
         canopy: vec![0.0; n],
+        pass: Vec::new(),
         light: vec![0.0; n],
         events: Vec::new(),
         scratch: Default::default(),

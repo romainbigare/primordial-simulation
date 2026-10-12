@@ -33,6 +33,11 @@ struct Social {
     /// Top traffic cells at the last decade
     top: Vec<usize>,
     persist: f64,
+    /// Worn edges (cheaper than 2x less-worn ground) last year and at the last decade, and the
+    /// share of the decade's still worn
+    worn: Vec<u32>,
+    worn_old: Vec<u32>,
+    worn_persist: f64,
     /// kg that bodies that are not light-eaters could burn of what they took this year: from
     /// light-eaters, from others, from the ground
     intake: [f64; 3],
@@ -379,6 +384,15 @@ impl Recorder {
             s.persist = if old.is_empty() { f64::NAN } else { top.iter().filter(|i| old.contains(i)).count() as f64 / top.len() as f64 };
             s.top = top.to_vec();
         }
+        // Worn edges: cleared by movers so that crossing costs under half of uncleared ground.
+        let now: Vec<u32> = (0..4 * gn).filter(|&e| pcore::choose::eased(w, e / 4, e % 4) > 2.0).map(|e| e as u32).collect();
+        let fresh = now.iter().filter(|e| s.worn.binary_search(e).is_err()).count() as f64;
+        let widest_ease = (0..4 * gn).map(|e| pcore::choose::eased(w, e / 4, e % 4)).fold(1.0, f64::max);
+        if w.day / w.days_per_year() % 10 == 0 {
+            s.worn_persist = if s.worn_old.is_empty() { f64::NAN } else { s.worn_old.iter().filter(|e| now.binary_search(e).is_ok()).count() as f64 / s.worn_old.len() as f64 };
+            s.worn_old = now.clone();
+        }
+        s.worn = now;
         let mass = |i: usize| (c.plants[i] + c.animals[i]) as f64;
         let land: Vec<usize> = (0..gn).filter(|&i| c.f.z[i] > 0.0 && !top.contains(&i)).collect();
         let mean = |v: &[usize]| v.iter().map(|&i| mass(i)).sum::<f64>() / v.len().max(1) as f64;
@@ -391,6 +405,10 @@ impl Recorder {
             ("crossings".to_string(), "1/yr", all),
             ("traffic_top2".to_string(), "1", on_top / all.max(1.0)),
             ("traffic_persist".to_string(), "1", s.persist),
+            ("worn_edges".to_string(), "1", s.worn.len() as f64),
+            ("worn_new".to_string(), "1/yr", fresh),
+            ("worn_persist".to_string(), "1", s.worn_persist),
+            ("worn_max".to_string(), "1", widest_ease),
             ("mass_top2".to_string(), "kg/m2", mean(top)),
             ("mass_land".to_string(), "kg/m2", mean(&land)),
             ("groups".to_string(), "1", groups),
