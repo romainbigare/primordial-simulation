@@ -111,6 +111,36 @@ pub struct Ledger {
     pub imposed_elems: Vec<f64>,
     /// Tiny negative amounts clamped to zero, mol
     pub clamped: f64,
+    /// Heat a ground node could not give (it would have fallen below `T_FLOOR`), J: whoever asked
+    /// received that much less, so this is not a loss of energy.
+    #[serde(default)]
+    pub clamped_heat: f64,
+}
+
+/// The coldest a ground node may be taken by drawing heat from it, K.
+pub const T_FLOOR: f64 = 3.0;
+
+/// `World::take_heat` for callers that hold other parts of the world borrowed: take up to `q` from
+/// a node with energy `e` and heat capacity `cap` (at most what it holds above `T_FLOOR`), count
+/// the shortfall, return what was taken.
+#[inline]
+pub fn draw(e: &mut f64, ledger: &mut Ledger, cap: f64, q: f64) -> f64 {
+    let took = if q > 0.0 { q.min(heat_above_floor(*e, cap)) } else { q };
+    *e -= took;
+    ledger.clamped_heat += q - took;
+    took
+}
+
+/// The share of a wanted amount that was really given (exactly 1 when all of it was).
+#[inline]
+pub fn share(took: f64, want: f64) -> f64 {
+    if took >= want { 1.0 } else { took / want }
+}
+
+/// Heat a node with energy `e` and heat capacity `cap` can give before it falls to `T_FLOOR`, J.
+#[inline]
+pub fn heat_above_floor(e: f64, cap: f64) -> f64 {
+    (e - cap.max(1.0) * T_FLOOR).max(0.0)
 }
 
 /// Per-cell slow averages, useful to see the world (not read by the laws).
@@ -230,6 +260,18 @@ impl World {
         }
         ((e - held) / c, None)
     }
+    /// Heat ground node `i` can give before it falls to `T_FLOOR`, J.
+    pub fn heat_room(&self, i: usize) -> f64 {
+        heat_above_floor(self.e_ground[i], self.heat_cap_ground(i))
+    }
+    /// Take up to `q` J from ground node `i`, never more than `heat_room`, and return what was
+    /// really taken. The shortfall is counted in `ledger.clamped_heat`. Whoever wanted `q` must
+    /// pass on only the returned amount (evaporate less, carry less), so energy stays exact.
+    /// A negative `q` gives heat to the node and is returned whole.
+    pub fn take_heat(&mut self, i: usize, q: f64) -> f64 {
+        let cap = self.heat_cap_ground(i);
+        draw(&mut self.e_ground[i], &mut self.ledger, cap, q)
+    }
     pub fn t_ground(&self, i: usize) -> f64 {
         self.thaw(i).0
     }
@@ -280,6 +322,17 @@ pub fn step(w: &mut World) {
     step_marked(w, &mut |_| {});
 }
 
+/// Debug builds only: stop at the first law part that leaves the world broken (the yearly check of
+/// the shell comes too late to say which part did it). Release builds skip this.
+#[inline]
+fn audit(w: &World, part: &str) {
+    if cfg!(debug_assertions) {
+        if let Some(e) = check::broken(w) {
+            panic!("broken after {part} (day {}): {e}", w.day);
+        }
+    }
+}
+
 /// `step`, calling `mark(part)` after each part (0 flow, 1 change, 2 bodies, 3 parts), e.g. to
 /// time them.
 pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(usize)) {
@@ -289,17 +342,22 @@ pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(usize)) {
             let dt = w.cfg.phys_days.min(dpm - d) as f64 * 86_400.0;
             body::survey(w);
             mark(2);
+            audit(w, "survey");
             flow::step(w, dt);
             mark(0);
+            audit(w, "flow");
             change::step(w, dt);
             mark(1);
+            audit(w, "change");
         }
         if d == 0 {
             bond::step(w);
             mark(3);
+            audit(w, "bond");
         }
         body::day(w);
         w.day += 1;
         mark(2);
+        audit(w, "body day");
     }
 }

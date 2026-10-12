@@ -78,6 +78,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             });
             rec.record_month(&mut w);
         }
+        // The yearly check is the release check; debug builds also check after every law part.
         if let Some(e) = pcore::check::broken(&w) {
             eprintln!("year {y}: broken state: {e}");
             rec.finish(&out).expect("write tape");
@@ -88,7 +89,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| tape::light_eater(&w.chem, &b.genes)).count());
             let ms = part.map(|d| d.as_secs_f64() * 1000.0 / (y - since) as f64);
             since = y;
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, bodies {all} ({le} light-eaters), lineages {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1} ({} parts)", w.life.lineages(), ms[0], ms[1], ms[2], ms[3], w.parts.alive().count());
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} ({le} light-eaters), lineages {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1} ({} parts)", w.ledger.clamped_heat, w.life.lineages(), ms[0], ms[1], ms[2], ms[3], w.parts.alive().count());
             busy += part.iter().sum::<Duration>();
             part = [Duration::ZERO; 4];
             render::save(&w, &format!("{out}/year{y:04}.png"));

@@ -50,3 +50,19 @@ fn same_seed_same_history_with_shared_brains() {
     let shared = a.life.groups.iter().filter(|g| g.members > 1).count();
     assert!(shared > 0, "no shared brains among {} bodies", a.life.alive().count());
 }
+
+#[test]
+fn take_heat_never_takes_a_node_below_the_floor() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    let (i, e0) = (5, w.e_ground[5]);
+    let floor = w.heat_cap_ground(i).max(1.0) * pcore::T_FLOOR;
+    assert_eq!(w.take_heat(i, 0.25 * e0), 0.25 * e0);
+    assert_eq!(w.ledger.clamped_heat, 0.0);
+    // Asking for more than there is gives what is above the floor and counts the rest.
+    let took = w.take_heat(i, 10.0 * e0);
+    assert!((w.e_ground[i] - floor).abs() <= 1e-9 * e0, "{} vs {floor}", w.e_ground[i]);
+    assert!((took + w.ledger.clamped_heat - 10.0 * e0).abs() <= 1e-9 * e0);
+    assert!(pcore::check::broken(&w).is_none());
+    // A negative request gives heat and is returned whole.
+    assert_eq!(w.take_heat(i, -5.0), -5.0);
+}

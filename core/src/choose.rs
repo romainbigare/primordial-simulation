@@ -478,11 +478,13 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), 0.0] };
     w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: kg(w, &m) });
     for (k, &a) in m.iter().enumerate() {
+        // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let q = a * (w.chem.subs[k].cp * tg + body::fused(&w.chem, k, tg));
+        let took = w.take_heat(i, q);
+        let a = if q > 0.0 { a * crate::share(took, q) } else { a };
         w.ground[k * n + i] -= a;
         b.store[k] += a;
-        w.e_ground[i] -= q;
-        b.e += q;
+        b.e += took;
     }
 }
 
