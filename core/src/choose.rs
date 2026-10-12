@@ -476,11 +476,13 @@ fn take_node(w: &mut World, b: &mut Body) {
         w.diag.intake[2] += burnable(w, b, &m);
     }
     for (k, &a) in m.iter().enumerate() {
+        // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let q = a * (w.chem.subs[k].cp * tg + body::fused(&w.chem, k, tg));
+        let took = w.take_heat(i, q);
+        let a = if q > 0.0 { a * crate::share(took, q) } else { a };
         w.ground[k * n + i] -= a;
         b.store[k] += a;
-        w.e_ground[i] -= q;
-        b.e += q;
+        b.e += took;
     }
 }
 

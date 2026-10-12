@@ -504,12 +504,21 @@ pub fn step(w: &mut World, dt: f64) {
             let mut e = w.e_ground[i] - fused;
             rc.react(chem, &mut amt, Some(&mut pool), &mut e, bed[i][0], None, 0.0, ticks as f64 * dt);
             w.e_ground[i] = e + fused;
+            // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas
+            // taken back from the air returns it); gas the ground cannot pay for stays behind.
+            let (mut pay, mut back) = (0.0, 0.0);
             for k in 0..ns {
-                w.ground[k * n + i] = amt[k];
-                if pool[k] != pool0[k] {
-                    w.air[k * na + j] += pool[k] - pool0[k];
-                    w.e_ground[i] -= (pool[k] - pool0[k]) * held[k];
-                }
+                let d = pool[k] - pool0[k];
+                (pay, back) = (pay + d.max(0.0) * held[k], back - d.min(0.0) * held[k]);
+            }
+            w.e_ground[i] += back;
+            let cap = w.heat_cap_ground(i);
+            let paid = if pay > 0.0 { crate::share(crate::draw(&mut w.e_ground[i], &mut w.ledger, cap, pay), pay) } else { 1.0 };
+            for k in 0..ns {
+                let d = pool[k] - pool0[k];
+                let sent = if d > 0.0 { d * paid } else { d };
+                w.ground[k * n + i] = amt[k] + (d - sent);
+                w.air[k * na + j] += sent;
             }
             if rc.calm(SLOW as f64 * dt, CALM, SPECK * all, CALM_K) {
                 next = SLOW;

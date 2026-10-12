@@ -44,15 +44,21 @@ struct Sp {
 }
 
 /// Working memory of the law, rebuilt from the world when missing. It is saved with the
-/// world (but for the space used only within a call), as the slower parts of the law run
-/// from what it held at their last turn.
+/// world (but for the space used only within a call, and the tables that depend on the grid and
+/// the chemistry alone, which `tables` rebuilds on load), as the slower parts of the law run
+/// from what it held at their last turn: a resumed run must go on exactly as an unbroken one.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
     month: Option<u64>,
     year: Option<u64>,
     /// Seconds since liquid, air and rain last moved.
     pending: f64,
+    /// Tables of the grid and the chemistry alone (not saved): ground cell area, substance
+    /// constants, and the map from ground cells to air nodes (own node, four nearest nodes and
+    /// weights, ground cells per air node, share of a node).
+    #[serde(skip)]
     area: f64,
+    #[serde(skip)]
     sp: Vec<Sp>,
     /// Substances present in ground, bonded ground and air nodes. Loose ones that stay solid
     /// and cannot evaporate at any ground temperature are `fixed`: their volume and volume ×
@@ -94,11 +100,14 @@ pub struct Scratch {
     sed_e: Vec<f64>,
     #[serde(skip)]
     mob: Vec<f64>,
-    // Ground node to air: own node, four nearest nodes and weights, share of a node; the
-    // temperature of the air touching the ground.
+    // The temperature of the air touching the ground.
+    #[serde(skip)]
     air_of: Vec<u32>,
+    #[serde(skip)]
     near: Vec<[u32; 4]>,
+    #[serde(skip)]
     wt: Vec<[f64; 4]>,
+    #[serde(skip)]
     per: Vec<f64>,
     tl: Vec<f64>,
     /// Per ground cell, from the last full step: temperature drop per metre, mean height of
@@ -111,9 +120,10 @@ pub struct Scratch {
     cloud: Vec<[f64; 2]>,
     #[serde(skip)]
     snap: Vec<f64>,
-    // Air nodes: ground cells, mean ground height, volume, amount, heat capacity, mass,
+    // Air nodes: ground cells (a table), mean ground height, volume, amount, heat capacity, mass,
     // heat-absorbing share, temperature drop per metre, mean height of the air's mass,
     // temperature, pressure, warmth at equal height and its gradient.
+    #[serde(skip)]
     cells: Vec<f64>,
     za: Vec<f64>,
     vol: Vec<f64>,
@@ -180,6 +190,9 @@ impl Scratch {
 /// `cfg.flow_days` have passed, for all the time since they last moved.
 pub fn step(w: &mut World, dt: f64) {
     let mut s = std::mem::take(&mut w.scratch);
+    if s.air_of.len() != w.grid.n() {
+        tables(w, &mut s);
+    }
     let first = s.cap.len() != w.grid.n();
     if first {
         refresh(w, &mut s);
@@ -277,25 +290,10 @@ fn around<const N: usize>(dirs: &[(i32, i32); N], gw: usize, gh: usize, i: usize
     })
 }
 
-/// Every few months: which substances are present, the slow-changing bonded ground and fixed solids,
-/// and (once) the map from ground cells to air nodes.
+/// Every few months: which substances are present, the slow-changing bonded ground and fixed
+/// solids, and (once) the state vectors.
 fn refresh(w: &World, s: &mut Scratch) {
-    let (n, na, ns, g) = (w.grid.n(), w.grid.na(), w.chem.ns(), &w.grid);
-    let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
-    s.area = g.area();
-    s.sp = (w.chem.subs.iter())
-        .map(|b| Sp {
-            cp: b.cp,
-            mm: b.molar_mass,
-            lf: b.lf,
-            lv: b.lv,
-            cond: b.conductivity.max(1e-3),
-            v: [b.molar_mass / b.density[0], b.molar_mass / b.density[1]],
-            melt: b.melt,
-            boil: b.boil,
-            refl: [mean(b.refl[0]), mean(b.refl[1])],
-        })
-        .collect();
+    let (n, na, ns) = (w.grid.n(), w.grid.na(), w.chem.ns());
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
     let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) } + 20.0;
     let up = |k: usize| w.chem.p_sat(k, tmax) > 1.0;
@@ -328,9 +326,38 @@ fn refresh(w: &World, s: &mut Scratch) {
             [c, v, r / v.max(1e-9), kc / v.max(1e-9)]
         })
         .collect();
-    if s.air_of.len() == n {
+    if s.cap.len() == n {
         return;
     }
+    (s.pk, s.phi, s.hold) = (vec![NONE; n], vec![0.0; n], vec![[0.0, 0.0, f64::MIN, 0.0]; n]);
+    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.alb, &mut s.rc, &mut s.tl] {
+        *v = vec![0.0; n];
+    }
+    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {
+        *v = vec![0.0; na];
+    }
+    s.seen = vec![[0.0; 5]; n];
+}
+
+/// Tables that depend on the grid and the chemistry alone: ground cell area, substance constants,
+/// and the map from ground cells to air nodes. Rebuilt when missing (they are not saved).
+fn tables(w: &World, s: &mut Scratch) {
+    let (n, na, g) = (w.grid.n(), w.grid.na(), &w.grid);
+    let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
+    s.area = g.area();
+    s.sp = (w.chem.subs.iter())
+        .map(|b| Sp {
+            cp: b.cp,
+            mm: b.molar_mass,
+            lf: b.lf,
+            lv: b.lv,
+            cond: b.conductivity.max(1e-3),
+            v: [b.molar_mass / b.density[0], b.molar_mass / b.density[1]],
+            melt: b.melt,
+            boil: b.boil,
+            refl: [mean(b.refl[0]), mean(b.refl[1])],
+        })
+        .collect();
     s.air_of = (0..n).map(|i| g.air_of(i) as u32).collect();
     let axis = |c: usize, len: usize| {
         let f = ((c as f64 + 0.5) / g.air_scale as f64 - 0.5).clamp(0.0, (len - 1) as f64);
@@ -350,14 +377,6 @@ fn refresh(w: &World, s: &mut Scratch) {
         s.cells[j as usize] += 1.0;
     }
     s.per = (0..n).map(|i| 1.0 / air::lerp(s, &s.cells, i)).collect();
-    (s.pk, s.phi, s.hold) = (vec![NONE; n], vec![0.0; n], vec![[0.0, 0.0, f64::MIN, 0.0]; n]);
-    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.alb, &mut s.rc, &mut s.tl] {
-        *v = vec![0.0; n];
-    }
-    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {
-        *v = vec![0.0; na];
-    }
-    s.seen = vec![[0.0; 5]; n];
 }
 
 /// Space used only within a call, and the neighbour table (not saved).
@@ -530,8 +549,11 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             let (part, inv) = (qsum / lvol, 1.0 / qsum);
             for (&a, &k) in wa.iter().zip(&liq).filter(|p| *p.0 > 0.0) {
                 let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
-                let e = m * (p.cp * tcur + p.lf);
-                (w.ground[k * n + i], s.cap[i], w.e_ground[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp, w.e_ground[i] - e);
+                // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
+                let want = m * (p.cp * tcur + p.lf);
+                let e = w.take_heat(i, want);
+                let m = if want > 0.0 { m * crate::share(e, want) } else { m };
+                (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
                 settle(s, k, i, -m);
                 out += m;
                 for (&(j, dh), &q) in nb[..cnt].iter().zip(&q).filter(|p| *p.1 > 0.0) {
@@ -576,11 +598,14 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             for (si, &k) in sol.iter().enumerate() {
                 if f > 0.0 {
                     let m = w.ground[k * n + i] * (1.0 - molten(s, k, i)) * f;
+                    // Picked up with its heat; less is picked up if the node cannot pay.
+                    let want = m * s.sp[k].cp * tcur;
+                    let e = w.take_heat(i, want);
+                    let m = if want > 0.0 { m * crate::share(e, want) } else { m };
                     w.ground[k * n + i] -= m;
                     s.sed[i * ns + si] += m;
                     s.cap[i] -= m * s.sp[k].cp;
-                    w.e_ground[i] -= m * s.sp[k].cp * tcur;
-                    s.sed_e[i] += m * s.sp[k].cp * tcur;
+                    s.sed_e[i] += e;
                     settle(s, k, i, -m);
                 }
             }
@@ -658,8 +683,10 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             let gk = (s.bed[i][3] + s.bed[j][3]) / 2.0 * w.cfg.skin_m * cell / dist;
             let qmax = 0.2 * (ti - tj).abs() * s.cap[i].min(s.cap[j]);
             let qh = (gk * (ti - tj) * dt).clamp(-qmax, qmax);
-            w.e_ground[i] -= qh;
-            w.e_ground[j] += qh;
+            // Heat goes from the warmer node; it gives no more than it holds above `T_FLOOR`.
+            let (from, to) = if qh >= 0.0 { (i, j) } else { (j, i) };
+            let took = w.take_heat(from, qh.abs());
+            w.e_ground[to] += took;
 
             let (a, b) = if s.z[i] > s.z[j] { (i, j) } else { (j, i) };
             let dz = s.z[a] - s.z[b];
@@ -686,7 +713,9 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             if c > 0.0 {
                 let drop = mass * g * dz / 2.0;
                 (s.cap[a], s.cap[b], s.mob[a], s.mob[b]) = (s.cap[a] - c, s.cap[b] + c, s.mob[a] - mob, s.mob[b] + mob);
-                (w.e_ground[a], w.e_ground[b]) = (w.e_ground[a] - c * ta, w.e_ground[b] + c * ta + drop);
+                // The heat of what moved goes with it; the node it leaves gives no more than it holds above `T_FLOOR`.
+                let took = w.take_heat(a, c * ta);
+                w.e_ground[b] += took + drop;
                 lift(s, a, ua);
                 lift(s, b, ub);
                 heat += drop;

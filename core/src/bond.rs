@@ -689,32 +689,49 @@ pub fn step(w: &mut World) {
         }
         let (i, n) = (w.parts.parts[s].cell as usize, w.grid.n());
         let (j, tg) = (w.grid.air_of(i), w.life.env[i][0]);
-        let World { chem, parts, air, e_ground, ground, .. } = &mut *w;
-        let p = &mut parts.parts[s];
+        let chem = &w.chem;
+        let p = &mut w.parts.parts[s];
         if react {
             for k in 0..ns {
-                pool0[k] = air[k * na + j] * share;
+                pool0[k] = w.air[k * na + j] * share;
             }
             pool.copy_from_slice(&pool0);
             let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
             rc.react(chem, &mut p.wall, Some(&mut pool), &mut p.e, fixed, None, 0.0, dt);
+            // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas
+            // taken back returns it); gas the ground cannot pay for goes to the ground instead.
+            let held = |k: usize| chem.subs[k].lf + chem.subs[k].lv;
+            let (mut pay, mut back) = (0.0, 0.0);
             for k in 0..ns {
-                air[k * na + j] += pool[k] - pool0[k];
-                e_ground[i] -= (pool[k] - pool0[k]) * (chem.subs[k].lf + chem.subs[k].lv);
+                let d = pool[k] - pool0[k];
+                (pay, back) = (pay + d.max(0.0) * held(k), back - d.min(0.0) * held(k));
+            }
+            w.e_ground[i] += back;
+            let paid = if pay > 0.0 { crate::share(w.take_heat(i, pay), pay) } else { 1.0 };
+            for k in 0..ns {
+                let d = pool[k] - pool0[k];
+                let sent = if d > 0.0 { d * paid } else { d };
+                w.air[k * na + j] += sent;
+                w.ground[k * n + i] += d - sent;
             }
         }
         // Walls that are no longer solid run off to the ground; the part takes the ground's
-        // temperature.
+        // temperature (if the ground cannot pay the heat, it ends colder).
+        let chem = &w.chem;
+        let p = &mut w.parts.parts[s];
         let t = p.e / p.heat_cap(chem).max(1e-9);
         for k in 0..ns {
             if p.wall[k] > 0.0 && chem.phase(k, t) != Phase::Solid {
                 let q = p.wall[k] * chem.subs[k].cp * t;
-                (ground[k * n + i], e_ground[i], p.e) = (ground[k * n + i] + p.wall[k], e_ground[i] + q, p.e - q);
+                (w.ground[k * n + i], w.e_ground[i], p.e) = (w.ground[k * n + i] + p.wall[k], w.e_ground[i] + q, p.e - q);
                 p.wall[k] = 0.0;
             }
         }
-        let e1 = p.heat_cap(chem) * tg;
-        (e_ground[i], p.e) = (e_ground[i] + p.e - e1, e1);
+        let (e1, e0) = (p.heat_cap(chem) * tg, p.e);
+        let got = w.take_heat(i, e1 - e0);
+        let p = &mut w.parts.parts[s];
+        p.e = if got == e1 - e0 { e1 } else { e0 + got };
+        let chem = &w.chem;
         let gone = p.walls(chem)[0] < MIN_KG;
         p.resize(chem);
         if gone {
