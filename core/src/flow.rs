@@ -54,7 +54,7 @@ struct Sp {
 ///
 /// | field | unit | written by | read by |
 /// | --- | --- | --- | --- |
-/// | `month`, `year`, `pending` | month, year, s | `step` | `step` |
+/// | `month`, `year`, `pending`, `pending_liq`, `pending_exc`, `owe_work` | month, year, s, s, s, flag | `step` | `step` |
 /// | `area`, `sp` | m², `Sp` per substance | `tables` (on load) | all |
 /// | `loose`, `fixed`, `vary`, `bedk`, `gas` | substance lists | R (`loose`, `vary` also X, L) | all |
 /// | `fix` | m³ (volume, volume × reflectance) | R | `surface` |
@@ -92,8 +92,15 @@ struct Sp {
 pub struct Scratch {
     month: Option<u64>,
     year: Option<u64>,
-    /// Seconds since liquid, air and rain last moved.
+    /// Seconds since air and rain last moved, and since liquid (and creep) last moved.
     pending: f64,
+    pending_liq: f64,
+    pending_exc: f64,
+    /// The substances present changed: rebuild the state of ground and air at the next step.
+    #[serde(skip)]
+    stale: bool,
+    /// Moving liquid's work on its bed is due at the next liquid step.
+    owe_work: bool,
     /// Tables of the grid and the chemistry alone (not saved): ground cell area, substance
     /// constants, and the map from ground cells to air nodes (own node, four nearest nodes and
     /// weights, ground cells per air node, share of a node).
@@ -227,8 +234,8 @@ impl Scratch {
     }
 }
 
-/// Advance flow by `dt` seconds: radiation every call; liquid, air and rain once
-/// `cfg.flow_days` have passed, for all the time since they last moved.
+/// Advance flow by `dt` seconds: radiation every call; air and rain once `cfg.air_days` have
+/// passed, liquid and creep once `cfg.flow_days` have, each for all the time since it last moved.
 pub fn step(w: &mut World, dt: f64) {
     let mut s = std::mem::take(&mut w.scratch);
     if s.air_of.len() != w.grid.n() {
@@ -241,26 +248,38 @@ pub fn step(w: &mut World, dt: f64) {
     if s.done.len() != w.grid.n() {
         space(w, &mut s);
     }
-    s.pending += dt;
-    let full = first || s.pending >= w.cfg.flow_days as f64 * 86_400.0 - 1.0;
+    (s.pending, s.pending_liq) = (s.pending + dt, s.pending_liq + dt);
+    let day = 86_400.0;
+    let (air_due, liq_due) = (first || s.pending >= w.cfg.air_days as f64 * day - 1.0, first || s.pending_liq >= w.cfg.flow_days as f64 * day - 1.0);
+    // The state of ground and air is rebuilt at liquid steps (and when a refresh changed what is present).
+    let full = liq_due || std::mem::take(&mut s.stale);
     ground_state(w, &mut s, full);
     air::state(w, &mut s, full);
     air::radiation(w, &mut s, dt);
-    if !full {
+    if !air_due {
         w.scratch = s;
         return;
     }
     let (dt, month) = (std::mem::take(&mut s.pending), w.day / w.cfg.days_per_month as u64);
     let monthly = s.month != Some(month);
-    air::exchange(w, &mut s, dt);
+    s.pending_exc += dt;
+    if first || s.pending_exc >= w.cfg.exchange_days as f64 * day - 1.0 {
+        let dt = std::mem::take(&mut s.pending_exc);
+        air::exchange(w, &mut s, dt);
+    }
     air::wind(w, &mut s, dt);
-    liquid(w, &mut s, dt, if monthly && month % WORK_MONTHS == 0 { (WORK_MONTHS * w.cfg.days_per_month as u64) as f64 * 86_400.0 / dt } else { 0.0 });
-    let year = w.day / w.days_per_year();
-    if s.year != Some(year) {
-        if s.year.is_some() {
-            creep(w, &mut s, w.days_per_year() as f64 * 86_400.0);
+    s.owe_work |= monthly && month % WORK_MONTHS == 0;
+    if liq_due {
+        let dt = std::mem::take(&mut s.pending_liq);
+        let work = if std::mem::take(&mut s.owe_work) { (WORK_MONTHS * w.cfg.days_per_month as u64) as f64 * day / dt } else { 0.0 };
+        liquid(w, &mut s, dt, work);
+        let year = w.day / w.days_per_year();
+        if s.year != Some(year) {
+            if s.year.is_some() {
+                creep(w, &mut s, w.days_per_year() as f64 * day);
+            }
+            s.year = Some(year);
         }
-        s.year = Some(year);
     }
     if monthly && month % REFRESH_MONTHS == 0 {
         refresh(w, &mut s);
@@ -344,7 +363,9 @@ fn refresh(w: &World, s: &mut Scratch) {
     s.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
     s.order.clear();
     s.bedk = (0..ns).filter(|&k| any(&w.bed, n, k)).collect();
-    s.gas = (0..ns).filter(|&k| any(&w.air, na, k) || (s.loose.contains(&k) && up(k))).collect();
+    let gas = (0..ns).filter(|&k| any(&w.air, na, k) || (s.loose.contains(&k) && up(k))).collect();
+    s.stale |= gas != s.gas;
+    s.gas = gas;
     s.fix = vec![[0.0; 2]; n];
     for &k in &s.fixed {
         let (v, r) = (s.sp[k].v[0], s.sp[k].refl[0]);

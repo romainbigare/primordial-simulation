@@ -34,7 +34,17 @@ pub struct Config {
     pub months_per_year: u32,
     /// Ground and air physics run every `phys_days` days
     pub phys_days: u32,
-    /// Liquid, air and rain move every `flow_days` days (radiation every `phys_days`)
+    /// Gas moves between air nodes (wind) every `air_days` days (radiation every `phys_days`).
+    /// How often the moisture path runs sets how much rain reaches land, hence the flowing channels
+    /// (seed 5, 50 years, 128x128, no life; channel cells = dry land with liquid flux over 9e3 mol/s; extra
+    /// cost is ms per simulated year over 15/15/15):
+    /// air/exchange/flow 15/15/15: 240 channel cells (0 ms); 3/9/15: 484 (+120 ms);
+    /// 3/6/15: 776 (+185 ms); 3/3/15: 1405 (+400 ms); 3/3/3: 1369 (+850 ms).
+    /// Liquid at 15 days loses nothing against 3 days once the moisture path runs every 3.
+    pub air_days: u32,
+    /// Evaporation and condensation (rain) run every `exchange_days` days (a multiple of `air_days`)
+    pub exchange_days: u32,
+    /// Liquid and creep move every `flow_days` days (a multiple of `air_days`)
     pub flow_days: u32,
     /// Depth of ground that exchanges heat with the surface, m
     pub skin_m: f64,
@@ -73,6 +83,8 @@ impl Default for Config {
             days_per_month: 30,
             months_per_year: 12,
             phys_days: 3,
+            air_days: 3,
+            exchange_days: 9,
             flow_days: 15,
             skin_m: 2.0,
             air_top_m: 10_000.0,
