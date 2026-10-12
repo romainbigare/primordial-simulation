@@ -156,8 +156,15 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         } else {
             t
         };
-        let up = t3 * (4.0 * ts - 3.0 * t);
-        let hs = cfg.sensible * (ts - tl);
+        let (mut up, mut hs) = (t3 * (4.0 * ts - 3.0 * t), cfg.sensible * (ts - tl));
+        // A node on a plateau with no cover has no inertia in `r`: it can still pay only what it
+        // holds above `T_FLOOR`; it emits and conducts less in proportion (as `World::take_heat`).
+        let (room, lose) = (crate::heat_above_floor(e_ground[i], s.cap[i]), adt * (up + hs));
+        if lose > room + adt * (sw + down) {
+            let lam = (room + adt * (sw + down)) / lose;
+            ledger.clamped_heat += lose * (1.0 - lam);
+            (up, hs) = (up * lam, hs * lam);
+        }
         e_ground[i] += adt * (sw + down - up - hs);
         s.node_tmp[j] += adt * (f * up + hs - 2.0 * down);
         sun += adt * sw;
@@ -255,13 +262,23 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
                 // wind cannot carry the excess off in between, so it would only rain back at once.
                 (c_evap * (ps - pa) / t * d / (d + HIDE_M[1])).min(a).min((ps - pa) * c_cond * hk / tl)
             };
-            // The ground also pays the fusion and vaporisation enthalpy the air will hold.
+            // Evaporating cools the node, and no further than the temperature where the vapour
+            // pressure falls to the partial pressure (the boiling point, when it boils): only the
+            // heat above that pays, so a step cannot take more than the node can give.
+            let over = t - if t >= sp.boil { sp.boil } else { w.chem.t_sat(k, pa / crate::chem::P_REF).min(t) };
+            let m = m.min(s.cap[i].max(1.0) * over / (sp.cp * over + sp.lv));
+            // The ground also pays the fusion and vaporisation enthalpy the air will hold, and
+            // the heat the gas carries; if it cannot pay it all, less evaporates.
+            let want = m * (sp.cp * t + sp.lf + sp.lv);
+            let m = if want > 0.0 { m * crate::share(w.take_heat(i, want), want) } else { 0.0 };
+            if m <= 0.0 {
+                continue;
+            }
             let (heat, lift) = (m * sp.cp * t, m * g * sp.mm * (s.zair[j] - s.head[i]));
             settle(s, k, i, -m);
             w.ground[k * n + i] -= m;
             w.air[k * na + j] += m;
             (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * sp.cp, s.capa[j] + m * sp.cp, s.nt[j] + m, s.mass[j] + m * sp.mm);
-            w.e_ground[i] -= heat + m * (sp.lf + sp.lv);
             w.e_air[j] += heat - lift;
             lifted += lift;
         }

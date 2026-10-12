@@ -562,6 +562,8 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let upkeep = b.e - e0;
     b.e = e0;
 
+    // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks up liquid).
+    let cap = w.heat_cap_ground(i);
     let World { chem, grid, ground, e_ground, air, e_air, ledger, light, diag, .. } = w;
     let (ns, n, na, j) = (chem.ns(), grid.n(), grid.na(), grid.air_of(i));
     let dt = days * DAY;
@@ -619,7 +621,9 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         }
         let push = if wet { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
         let out = if push > 0.0 {
-            let paid = (lit + heat).max(0.0) + b.k.heat * mass * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0);
+            let owed = (lit + heat).min(0.0);
+            let room = (crate::heat_above_floor(e_ground[i], cap) + owed).max(0.0);
+            let paid = (lit + heat).max(0.0) + (b.k.heat * mass * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
             (push * reach_mol).min(paid / held(chem, k))
         } else {
             0.0
@@ -647,12 +651,15 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
         let x = ground[k * n + i] / in_ground;
         let d = ((b.level(chem, k, mass2) - b.store[k]) * x * rate * chem.subs[k].solubility).min(0.5 * ground[k * n + i]).max(0.0);
-        let q = d * chem.subs[k].cp * tg;
+        // The ground pays the heat that goes with the liquid and its fusion enthalpy; if it
+        // cannot pay it all, the body soaks up less.
+        let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg));
+        let want = d * (per + f);
+        let d = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap, want), want) } else { 0.0 };
         b.store[k] += d;
         ground[k * n + i] -= d;
-        b.e += q;
-        e_ground[i] -= q + d * fused(chem, k, tg);
-        heat += d * fused(chem, k, tg);
+        b.e += d * per;
+        heat += d * f;
     }
 
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
@@ -663,8 +670,10 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let g = walls.map_or(b.k.heat * mass, |x| 1.0 / (1.0 / (b.k.heat * mass) + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
-        e_ground[i] += b.e + heat - e1;
-        b.e = e1;
+        // The ground pays the difference; if it cannot, the body ends colder.
+        let give = e1 - b.e - heat;
+        let got = crate::draw(&mut e_ground[i], ledger, cap, give);
+        b.e = if got == give { e1 } else { e1 - (give - got) };
     }
 
     let chem = &w.chem;
