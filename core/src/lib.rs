@@ -105,10 +105,11 @@ pub struct Physics {
     /// Standing liquid depth at which the ground counts as half wet, m
     pub wet_depth: f64,
     /// Heat the cover of other bodies passes to a body: a layer of `m` kg/m² over it passes
-    /// `shelter / m` W per K and m² of its surface (a body's heat to its surface goes through it in
-    /// series with the body's own conductance), W kg/(m⁴ K). Thicker cover insulates more; bare
-    /// ground adds nothing. 270 gives a 30 kg member (52 W of upkeep, 30 W/K) under
-    /// 10 kg/m² of cover 3.4 K more warmth than bare ground (thick walls give 3.3 K).
+    /// `shelter / m` W per K and m² of its own surface (not of its light-capture area, which is
+    /// open to the air above), W kg/(m⁴ K); that part of the body's heat to its surface goes
+    /// through it in series. Thicker cover insulates more; bare ground adds nothing. 220 gives a
+    /// 30 kg member (52 W of upkeep, 30 W/K) under 10 kg/m² of cover 3.4 K more warmth than bare
+    /// ground (thick walls give 3.3 K), and a 1 kg plant member (capture area 2 m²) almost none.
     pub shelter: f64,
     /// Upkeep of catalysts, J per kg per day per decade² of speed-up: it grows as the square of
     /// each catalyst's decades (a speed-up of 10^15 costs 225 units, of 10^2.6 only 6.8), so a
@@ -251,7 +252,7 @@ impl Default for Physics {
             light_depth: 10.0,
             gas_depth: 1.0,
             wet_depth: 0.01,
-            shelter: 270.0,
+            shelter: 220.0,
             c_cat: 15.0,
             c_strength: 1e5,
             c_leaf: 2e3,

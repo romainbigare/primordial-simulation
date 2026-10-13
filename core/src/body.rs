@@ -990,17 +990,29 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
     // toward the ground's temperature plus the warming of the heat released, over the time.
-    // Walls around it add their conductance (its share of it) in series, and so does the cover
-    // of the other bodies in its cell: a layer of `cover` kg/m² passes `phys.shelter` / `cover`
-    // W per K and m² of surface, and each member has a surface of 6 (mass / `rho_body`)^(2/3)
-    // (as the space of walls); bare ground adds none. A member of 30 kg (surface 0.58 m²) under
-    // 10 kg/m² of cover gets 0.58 x 270 / 10 = 15.6 W/K in series with its own 30 W/K, 10.3 W/K
-    // in all: its 52 W of upkeep warm it 5.1 K (1.7 K bare), 3.4 K more, as much as thick walls
-    // give (3.3 K).
+    // Walls around it add their conductance (its share of it) in series. So does the cover of the
+    // other bodies in its cell, but only for the part of its surface that lies under the cover:
+    // its light-capture area is open to the air above (it is part of the canopy), so the body's
+    // conductance splits in the shares of the two areas, and only the share of its own surface
+    // (6 (mass / `rho_body`)^(2/3) per member, as the space of walls) goes through the cover. A
+    // layer of `cover` kg/m² passes `phys.shelter` / `cover` W per K and m² of surface; bare ground
+    // adds none. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the cover) with
+    // 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8
+    // W/K, and 1.5 W/K stays open: 10.3 W/K in all, so its 52 W of upkeep warm it 5.0 K (1.7 K
+    // bare), 3.4 K more, as much as thick walls give (3.3 K). A 1 kg plant member (surface 0.06
+    // m², capture area 2 m²: 3% under the cover) keeps 475 of its 490 W/K open; its 14 W/K under
+    // 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
     let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
         let g0 = b.conductance(cfg.phys.heat_mass, mass);
-        let g0 = if cover > 0.0 { 1.0 / (1.0 / g0 + cover / (cfg.phys.shelter * b.n() * 6.0 * (mass / b.n() / cfg.phys.rho_body).powf(2.0 / 3.0))) } else { g0 };
+        let g0 = if cover > 0.0 {
+            let (m1, n) = (mass / b.n(), b.n());
+            let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
+            let s = ab / (ab + m1 * b.k.leaf);
+            g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * n * ab))
+        } else {
+            g0
+        };
         let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
