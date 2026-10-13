@@ -174,6 +174,8 @@ pub struct Consts {
     /// What a brain perceives of each safe minimum; the substances taken, by selectivity
     pub minln: Vec<f32>,
     pub upt: Vec<(usize, f32)>,
+    /// Its catalysts' capacity (`upkeep`; an exponential per catalyst, so kept)
+    pub cats: f64,
 }
 
 fn one() -> f64 {
@@ -223,8 +225,8 @@ impl Body {
         }
         self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64
     }
-    /// Fill `k` from the genes if it is missing.
-    pub fn prepare(&mut self, chem: &Chemistry) {
+    /// Fill `k` from the genes (and the physics, which stays the same through a run) if it is missing.
+    pub fn prepare(&mut self, chem: &Chemistry, p: &crate::Physics) {
         if !self.k.cat.is_empty() {
             return;
         }
@@ -234,7 +236,11 @@ impl Body {
         let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
-        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt };
+        // By capacity: the catalysed rate per unit of input at `t_cat`, over the genes that are on
+        // (`Physics::c_cat`), dearer if they keep their shape when warmer (`Physics::t_firm`).
+        let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
+        let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
+        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
     }
     /// Visible traits of one member; the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
@@ -885,7 +891,7 @@ pub fn day(w: &mut World) {
             continue;
         }
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.prepare(&w.chem);
+        b.prepare(&w.chem, &w.cfg.phys);
         w.life.updates += 1;
         match live(w, s, &mut b, &mut rc, &mut tmp) {
             Some(cause) => die(w, s, b, cause),
@@ -1243,9 +1249,7 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p, &b.genes));
-    let cats: f64 = w.chem.reactions.iter().zip(&b.k.cat).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
-    let cats = cats * (1.0 + (b.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
-    days * (mass * (p.c_cat * cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
+    days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
@@ -1328,7 +1332,7 @@ fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64
     if cost <= 0.0 {
         return 0.0;
     }
-    b.prepare(&w.chem);
+    b.prepare(&w.chem, &w.cfg.phys);
     let (ext, paid) = plan(w, b, cost, days, mass, cap);
     let left = cost - paid;
     if left > 1e-9 * cost && !part {

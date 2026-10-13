@@ -22,7 +22,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     // Members copy now (a low copy mass) and all children stay.
     (b.genes[COPY_MASS], b.genes[DISPERSE]) = (-1.0, 0.0);
-    b.prepare(&w.chem);
+    b.prepare(&w.chem, &w.cfg.phys);
     let n0 = b.count;
     assert!(b.spread.is_empty() && copy::copy(&mut w, s, &mut b) && b.count > n0, "no children");
     let (f, size) = (((b.count - n0) / b.count) as f32, 10f32.powf(b.genes[MUT]));
@@ -99,7 +99,7 @@ fn genes_do_not_drift_without_selection() {
             for s in order {
                 let mut b = std::mem::take(&mut w.life.bodies[s]);
                 (b.store, b.e) = (per.iter().map(|a| a * b.count).collect(), e1 * b.count);
-                b.prepare(&w.chem);
+                b.prepare(&w.chem, &w.cfg.phys);
                 copy::copy(&mut w, s, &mut b);
                 copy::split(&mut w, s, &mut b);
                 w.life.bodies[s] = b;
