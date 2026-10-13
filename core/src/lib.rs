@@ -135,6 +135,15 @@ pub struct Physics {
     pub c_cat: f64,
     /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature)
     pub t_cat: f64,
+    /// Width over which catalysts lose their shape above their `DENATURE` gene, K: life's enzymes
+    /// unfold within a few K; smooth, so the reaction solver never meets a jump (`change::denature`)
+    pub unfold: f64,
+    /// Catalysts that keep their shape up to `t_firm` K cost no more; each `c_firm` K more of the
+    /// `DENATURE` gene adds their upkeep once more (a firmer shape needs more and stronger bonds:
+    /// so a catalyst firm when hot costs more). 320 K is about where life's enzymes fail; at 360 K
+    /// catalysts cost three times as much
+    pub t_firm: f64,
+    pub c_firm: f64,
     /// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg)
     pub c_strength: f64,
     /// Upkeep of light-capture area, J per m² per day
@@ -274,6 +283,9 @@ impl Default for Physics {
             shelter: 220.0,
             c_cat: 1.67e6,
             t_cat: 290.0,
+            unfold: 3.0,
+            t_firm: 320.0,
+            c_firm: 20.0,
             c_strength: 1e5,
             c_leaf: 2e3,
             c_brain: 1e5,

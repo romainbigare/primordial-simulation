@@ -52,6 +52,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::SEEN => (0.1, 1.0, 6.0),
         body::SIGHT => (0.07, 1.0, 4.0),
         body::DISPERSE => (0.05, 0.0, 1.0),
+        body::DENATURE => (5.0, 250.0, 450.0),
         g if g < lay.min => (1.0, -2.0, 18.0),
         g if g < lay.upt => (0.05, -0.2, 0.9),
         _ => (0.2, -0.5, 2.0),
