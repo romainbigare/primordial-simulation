@@ -1,7 +1,7 @@
 //! Flow in and through the air: radiation, contact heat, evaporation and condensation,
 //! and gas between air nodes.
 
-use super::{range, settle, Scratch, NONE};
+use super::{range, settle, wet, Scratch, NONE};
 use crate::chem::R_GAS;
 use crate::World;
 use std::f64::consts::{LN_2, PI, TAU};
@@ -24,7 +24,7 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
     w[0] * v[j[0] as usize] + w[1] * v[j[1] as usize] + w[2] * v[j[2] as usize] + w[3] * v[j[3] as usize]
 }
 
-/// Amounts, heat capacity, mass, heights, volume and heat-absorbing share of every air node,
+/// Amounts, heat capacity, mass, heights, volume and optical depth of every air node,
 /// the air each ground cell sees, and for each gas how high it fills its column: a gas that
 /// would condense higher up is held near the ground, by how fast its vapour pressure falls
 /// with the temperature falling upwards.
@@ -43,19 +43,18 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
         s.za[s.air_of[i] as usize] += s.head[i];
     }
     for &k in &s.gas {
-        let (sp, ir) = (s.sp[k], w.chem.subs[k].ir_abs);
+        let (sp, ir) = (s.sp[k], w.chem.subs[k].ir_abs > 0.0);
         for (j, &a) in w.air[k * na..(k + 1) * na].iter().enumerate() {
             s.nt[j] += a;
             s.capa[j] += a * sp.cp;
             s.mass[j] += a * sp.mm;
-            s.fabs[j] += a * ir;
+            s.fabs[j] += if ir { w.chem.depth(k, a / (s.area * s.cells[j])) } else { 0.0 };
         }
     }
     for j in 0..na {
         s.za[j] /= s.cells[j];
         let (a, l) = (s.area * s.cells[j], (top - s.za[j]).max(100.0));
         s.vol[j] = a * l;
-        s.fabs[j] = 1.0 - (-s.fabs[j] / a).exp();
         s.ta[j] = w.e_air[j] / s.capa[j];
         s.gam[j] = g * s.mass[j] / s.capa[j];
         let h = R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j]);
@@ -101,6 +100,7 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
         }
     }
     let node: Vec<[f64; 4]> = (0..na).map(|j| [s.gam[j], s.zair[j], s.fabs[j], s.ta[j]]).collect();
+    s.lay.resize(n, [[0.0; LAYERS]; 2]);
     for i in 0..n {
         let (j, wt, mut v) = (s.near[i], s.wt[i], [0.0; 4]);
         for c in 0..4 {
@@ -109,7 +109,9 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
                 v[f] += wt[c] * x[f];
             }
         }
-        s.seen[i] = [v[0], v[1], v[2], s.seen[i][3], v[3]];
+        let o = s.air_of[i] as usize;
+        s.lay[i] = column(v[2], v[0], (top - s.head[i]).max(100.0), R_GAS * s.ta[o] * s.nt[o] / (g * s.mass[o]));
+        s.seen[i] = [v[0], v[1], -(-v[2]).exp_m1(), s.seen[i][3], v[3]];
     }
     s.ta0.copy_from_slice(&s.ta);
 }
@@ -120,10 +122,39 @@ fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
     (s0 / PI * (h0 * lat.sin() * decl.sin() + lat.cos() * decl.cos() * h0.sin())).max(0.0)
 }
 
+/// Layers of the air over a cell in `column`.
+pub(crate) const LAYERS: usize = 4;
+
+/// The layers of the air over a cell that send heat radiation [down to the ground, up to space],
+/// as how much colder than the air touching the ground each is, K: the grey absorber of optical
+/// depth `x` lies like the air's mass (scale height `h`, in a column `l` deep), and the air's
+/// temperature falls by `gam` per metre. Each layer sends that side the same share of what the
+/// column sends it, from its height (Schwarzschild's integral, summed at `LAYERS` points: see
+/// `glow`). More gas lifts the layers that reach space into colder air, so less leaves and the
+/// ground warms, with no ceiling below the column's top (one slab at the air's mean temperature,
+/// emitting as much up as down, had one: 2^(1/4) times the bare ground's temperature).
+pub fn column(x: f64, gam: f64, l: f64, h: f64) -> [[f64; LAYERS]; 2] {
+    let (f, e, mut out) = (-(-x).exp_m1(), (-l / h).exp(), [[0.0; LAYERS]; 2]);
+    // Drop to the height with a share `above` of the absorber above it.
+    let drop = |above: f64| gam * h * (e + (1.0 - e) * above).ln();
+    for m in (0..LAYERS).filter(|_| x > 0.0) {
+        // Share of the absorber between the layer and the side it sends to.
+        let near = -(-f * (m as f64 + 0.5) / LAYERS as f64).ln_1p() / x;
+        (out[0][m], out[1][m]) = (drop(1.0 - near), drop(near));
+    }
+    out
+}
+
+/// What layers (`column`) over ground with air at `tl` that absorbs a share `f` send, W/m².
+pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> f64 {
+    lay.iter().map(|&d| (tl + d).max(1.0).powi(4)).sum::<f64>() * SIGMA * f / LAYERS as f64
+}
+
 /// Sunlight by latitude and season, reflected by what covers the ground; the ground emits
-/// σT⁴, of which the air absorbs its share and emits as much up as down (two layers); and
+/// σT⁴, of which the air absorbs its share and emits by its layers (`column`); and
 /// contact heat with the air touching the ground (warmer than the air's mean by the drop
-/// from the air's mean height). The ground temperature is solved implicitly.
+/// from the air's mean height). The ground temperature is solved implicitly. All the air
+/// absorbs and emits is booked to its node.
 pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
     let World { cfg, grid, ground, e_ground, e_air, ledger, canopy, light, light_pool, life, .. } = w;
@@ -137,7 +168,8 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         // The air this cell sees, and its temperature where it touches the ground.
         let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
         let ta = ta + s.ta[j] - s.ta0[j];
-        let (tl, down) = ((ta - gam * (s.head[i] - zair)).max(1.0), f * SIGMA * (ta * ta) * (ta * ta));
+        let tl = (ta - gam * (s.head[i] - zair)).max(1.0);
+        let (down, emit) = (glow(f, tl, &s.lay[i][0]), glow(f, tl, &s.lay[i][1]));
         s.tl[i] = tl;
         // Bodies with light-capture area `a` per ground area intercept a share 1 - exp(-a) of
         // what passes the clouds. What they absorb warms the surface now (they hand on all of it
@@ -181,9 +213,9 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
             (up, hs) = (up * lam, hs * lam);
         }
         e_ground[i] += adt * (sw + down - up - hs);
-        s.node_tmp[j] += adt * (f * up + hs - 2.0 * down);
+        s.node_tmp[j] += adt * (f * up + hs - down - emit);
         sun += adt * sw;
-        out += adt * ((1.0 - f) * up + down);
+        out += adt * ((1.0 - f) * up + emit);
     }
     for j in 0..na {
         e_air[j] += s.node_tmp[j];
@@ -225,11 +257,13 @@ impl Sat {
 /// Evaporation by vapour pressure (the ground's saturation pressure against the partial
 /// pressure near the ground), gases leaving the ground; then condensation where the air a
 /// ground cell sees holds more than it can at its temperature (colder on higher ground), so
-/// what the air cannot hold rains out within the call.
+/// what the air cannot hold rains out within the call; then gases that cannot condense on the
+/// ground dissolve in its liquid (`dissolve`, a slow process: with the trace gases).
 pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
     let ((tmin, tmax), tl) = (range(&s.tg), range(&s.tl));
     let (lo, hi) = (tmin.min(tl.0), tmax.max(tl.1));
+    let henry: Vec<(usize, usize)> = s.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
     // The gases that leave the ground or may condense, their saturation pressures, and their
     // evaporation per unit vapour pressure deficit; each pass sees the air as it was before it.
     // A trace gas moves only every `TRACE_TURN`-th call, for all the time since.
@@ -242,7 +276,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     let act: Vec<(usize, usize, bool, Sat, f64)> = (0..s.gas.len())
         .filter_map(|gi| {
             let k = s.gas[gi];
-            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0;
+            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0 && !henry.iter().any(|h| h.1 == k);
             let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
             ((up || s.cond[gi]) && (turn || !trace)).then(|| (gi, k, up, Sat::new(w, k, lo, hi), w.cfg.evap * area * if trace { since } else { dt } / R_GAS))
         })
@@ -326,6 +360,9 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             rained[x] = true;
         }
     }
+    if turn {
+        lifted += dissolve(w, s, since, &henry, (tmin, tmax));
+    }
     w.ledger.gravity -= lifted;
     for (&(_, k, ..), _) in act.iter().zip(&rained).filter(|(_, &r)| r) {
         if !s.loose.contains(&k) {
@@ -347,6 +384,67 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
         w.diag.rain[i] += (r - w.diag.rain[i]) * ema;
         s.rain[i] = 0.0;
     }
+}
+
+/// Gases that cannot condense on the ground (`henry`: index in `gas`, substance) dissolve in the
+/// liquid standing on each ground node toward the share Henry's law gives (`Chemistry::henry`, by
+/// the node's temperature and the gas's partial pressure near the ground), and come out as the
+/// liquid warms, thins or freezes or the gas thins. They cross the surface through the air's film
+/// (`evap`, as evaporation) and the liquid's (`dissolve`, over its whole depth: the liquid
+/// counts as one mixed layer, a known limit) in series, solved exactly over the step toward the
+/// balance of node and column. Dissolving frees the vaporisation enthalpy into the node (the heat
+/// of solution, as condensing) and the gas brings its heat; coming out takes them back, as
+/// evaporating. Dissolved gas moves with the liquid (`liquid`), may feed ground reactions (Law 2),
+/// and goes back to the air only here.
+/// Returns the energy spent lifting gas, J.
+fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) -> f64 {
+    let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
+    let solv: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && s.sp[k].boil > tmin).collect();
+    let mut lifted = 0.0;
+    for i in 0..n {
+        let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
+        let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.ground[k * n + i] * wet(s, k, i), v + w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
+        for &(gi, k) in henry {
+            let (a, sp) = (w.ground[k * n + i], s.sp[k]);
+            if l <= 0.0 && a <= 0.0 {
+                continue;
+            }
+            // The column over the cell, the height it fills near the ground, mol dissolved per mol
+            // of it at balance, and the time to reach balance through the two films.
+            let (col, hk) = (lerp(s, &w.air[k * na..(k + 1) * na], i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
+            let b = l * w.chem.henry(k, t, R_GAS * tl / (area * hk));
+            let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
+            let m = (b * (a + col) / (1.0 + b) - a) * -(-dt * (1.0 + b) / tau).exp_m1();
+            let m = if m >= 0.0 {
+                m.min(w.air[k * na + j])
+            } else {
+                // Coming out cools the node, no further than the boiling point; it pays what it can.
+                let q = (-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv));
+                let want = q * (sp.cp * t + sp.lf + sp.lv);
+                -q * if want > 0.0 { crate::share(crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - q * sp.cp, want), want) } else { 0.0 }
+            };
+            if m == 0.0 {
+                continue;
+            }
+            let (heat, lift) = (m * sp.cp * if m > 0.0 { w.e_air[j] / s.capa[j] } else { t }, m * g * sp.mm * (s.head[i] - s.zair[j]));
+            w.e_air[j] -= heat + if m < 0.0 { lift } else { 0.0 };
+            if m > 0.0 {
+                w.e_ground[i] += heat + m * (sp.lf + sp.lv) - lift;
+            }
+            w.ground[k * n + i] += m;
+            w.air[k * na + j] -= m;
+            (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] + m * sp.cp, s.capa[j] - m * sp.cp, s.nt[j] - m, s.mass[j] - m * sp.mm);
+            lifted += lift;
+        }
+    }
+    for &(_, k) in henry {
+        if !s.loose.contains(&k) && (0..n).any(|i| w.ground[k * n + i] > 0.0) {
+            s.loose.push(k);
+            let at = s.vary.partition_point(|&x| s.sp[x].melt < s.sp[k].melt);
+            s.vary.insert(at, k);
+        }
+    }
+    lifted
 }
 
 /// Solve x' + (out − in) = x along a line of nodes, in place, where edge p (between nodes

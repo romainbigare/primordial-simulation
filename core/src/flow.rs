@@ -8,6 +8,7 @@
 //! books matter lifted or dropped in the gravity ledger, so elements and energy are kept.
 
 pub(crate) mod air;
+pub use air::{column, glow};
 
 use crate::grid::{DIRS, FORWARD};
 use crate::World;
@@ -68,12 +69,12 @@ struct Sp {
 /// | `sed`, `sed_e`, `mob` | mol carried, J carried, m³ mobile | L (`sed`, `sed_e`); C (`mob`) | L; C |
 /// | `air_of`, `near`, `wt`, `per` | ground cell to air nodes and weights, share | `tables` (on load) | S, Rad, X, `lerp` |
 /// | `tl` | K, air touching the ground | Rad | X |
-/// | `seen` | [drop/m, air height, absorbing share, cloud reflectance, air K] | S (X sets `[3]`) | Rad |
+/// | `seen`, `lay` | [drop/m, air height, absorbing share, cloud reflectance, air K]; K below the ground's air, per layer | S (X sets `[3]`) | Rad |
 /// | `ta0` | K, air at the last S | S | Rad |
 /// | `cloud`, `snap` | [mol, mol × reflectance]; mol per gas | X | X |
 /// | `cells`, `za`, `vol` | count, m, m³ | `tables`; S | S, W |
 /// | `nt`, `capa`, `mass` | mol, J/K, kg | S; X, W (moves) | X, W, Rad |
-/// | `fabs`, `gam`, `zair`, `ta` | share, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
+/// | `fabs`, `gam`, `zair`, `ta` | optical depth, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
 /// | `node_tmp` | reused: J/K (S), J (Rad), reflectance (X), Pa (W) | S, Rad, X, W | the same part |
 /// | `warmth`, `grad` | K at equal height, K per node | W | W |
 /// | `cond`, `hk`, `split` | may condense, m, share (per gas) | S | X, W |
@@ -159,6 +160,10 @@ pub struct Scratch {
     /// the air's mass, heat-absorbing share, sunlight reflected by condensate in the air,
     /// air temperature; and the temperature of each air node then.
     seen: Vec<[f64; 5]>,
+    /// Per ground cell, from the last full step: how much colder than the air at the ground each
+    /// layer of the air is that sends heat radiation [down, up] (`air::column`).
+    #[serde(default)]
+    lay: Vec<[[f64; air::LAYERS]; 2]>,
     ta0: Vec<f64>,
     /// Per air node: condensed in the last full step, mol, and × its reflectance.
     #[serde(skip)]
@@ -166,7 +171,7 @@ pub struct Scratch {
     #[serde(skip)]
     snap: Vec<f64>,
     // Air nodes: ground cells (a table), mean ground height, volume, amount, heat capacity, mass,
-    // heat-absorbing share, temperature drop per metre, mean height of the air's mass,
+    // optical depth, temperature drop per metre, mean height of the air's mass,
     // temperature, pressure, warmth at equal height and its gradient.
     #[serde(skip)]
     cells: Vec<f64>,
@@ -248,8 +253,9 @@ pub fn step(w: &mut World, dt: f64) {
     (s.pending, s.pending_liq) = (s.pending + dt, s.pending_liq + dt);
     let day = 86_400.0;
     let (air_due, liq_due) = (first || s.pending >= w.cfg.air_days as f64 * day - 1.0, first || s.pending_liq >= w.cfg.flow_days as f64 * day - 1.0);
-    // The state of ground and air is rebuilt at liquid steps (and when a refresh changed what is present).
-    let full = liq_due || std::mem::take(&mut s.stale);
+    // The state of ground and air is rebuilt at liquid steps (and when a refresh changed what is
+    // present, or a snapshot from before 13 October 2026 has no air layers).
+    let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.grid.n();
     ground_state(w, &mut s, full);
     air::state(w, &mut s, full);
     air::radiation(w, &mut s, dt);
@@ -542,7 +548,8 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let (n, area, g) = (w.grid.n(), s.area, w.cfg.gravity);
     let inv = DIRS.map(|d| 1.0 / w.grid.dist(d));
     let (tmin, tmax) = range(&s.tg);
-    let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && s.sp[k].boil > tmin).collect();
+    // (With the gases dissolved in it, which are gas at every node: `air::dissolve`.)
+    let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && (s.sp[k].boil > tmin || w.chem.subs[k].solubility > 0.0)).collect();
     let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin).collect();
     let ns = sol.len();
     s.sed.resize(n * ns, 0.0);
@@ -588,8 +595,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         }
         let mut lvol = 0.0;
         for (a, &k) in wa.iter_mut().zip(&liq) {
-            *a = w.ground[k * n + i] * wet(s, k, i);
-            lvol += *a * s.sp[k].v[1];
+            // Dissolved gas moves with the liquid and adds no volume.
+            let gas = s.sp[k].boil <= tmin;
+            *a = w.ground[k * n + i] * if gas { 1.0 } else { wet(s, k, i) };
+            lvol += if gas { 0.0 } else { *a * s.sp[k].v[1] };
         }
         // Neighbours much less steep than the steepest get nothing.
         for c in 0..cnt {
@@ -616,7 +625,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
                 // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
                 let want = m * (p.cp * tcur + p.lf);
-                let e = w.take_heat_with(i, want, m * p.cp);
+                let e = crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * p.cp, want);
                 let m = if want > 0.0 { m * crate::share(e, want) } else { m };
                 (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
                 s.hold[i][0] -= if s.pk[i] != k { m * p.lf } else { 0.0 };

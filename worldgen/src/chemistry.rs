@@ -23,6 +23,8 @@ struct S {
     str: f64,
     refl: [[f32; 3]; 2],
     ir: f64,
+    #[serde(default)]
+    sat: f64,
     sol: f64,
     cond: f64,
     hf: f64,
@@ -75,6 +77,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
                 strength: s.str,
                 refl: s.refl,
                 ir_abs: s.ir,
+                ir_sat: s.sat,
                 solubility: s.sol,
                 conductivity: s.cond,
                 hf: s.hf * 1000.0,

@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub const R_GAS: f64 = 8.314;
 /// Atmospheric reference pressure used for saturation (Pa).
 pub const P_REF: f64 = 101_325.0;
+/// Temperature at which a gas's solubility is given, K (where tables give it).
+pub const T_SOL: f64 = 298.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
@@ -35,7 +37,12 @@ pub struct Substance {
     pub refl: [[f32; 3]; 2],
     /// Absorption of outgoing heat radiation per column amount (m²/mol), gas only
     pub ir_abs: f64,
-    /// Solubility in liquids (mol fraction that can dissolve)
+    /// Column amount past which the absorption grows only as the square root of the amount
+    /// (the gas's bands fill up, a stand-in for the logarithm of real gases), mol/m²; 0: never
+    #[serde(default)]
+    pub ir_sat: f64,
+    /// Solubility in liquids: the mole fraction that dissolves (for a gas, under the reference
+    /// pressure of it alone at `T_SOL`; `Chemistry::henry`)
     pub solubility: f64,
     /// Heat conductivity of the solid, W/(m K)
     pub conductivity: f64,
@@ -104,6 +111,22 @@ impl Chemistry {
     pub fn t_sat(&self, k: usize, x: f64) -> f64 {
         let (tb, l) = (self.subs[k].boil, self.subs[k].lv);
         1.0 / (1.0 / tb - R_GAS * x.max(1e-30).ln() / l)
+    }
+
+    /// Mole fraction of gas `k` that a liquid at `t` holds under its partial pressure `p`, Pa
+    /// (Henry's law). It falls with warmth by van 't Hoff's law, with the heat of solution taken
+    /// as the vaporisation enthalpy: dissolving is like condensing (for the carbon gas of
+    /// chemistry 0 that gives 2,100 K for the 2,400 K measured; for the others 800 to 1,200 K
+    /// for 1,300 to 1,700 K).
+    pub fn henry(&self, k: usize, t: f64, p: f64) -> f64 {
+        let s = &self.subs[k];
+        s.solubility * p / P_REF * (s.lv / R_GAS * (1.0 / t.max(1.0) - 1.0 / T_SOL)).exp()
+    }
+
+    /// Optical depth to outgoing heat radiation of a column of `c` mol/m² of substance `k`.
+    pub fn depth(&self, k: usize, c: f64) -> f64 {
+        let s = &self.subs[k];
+        s.ir_abs * if s.ir_sat > 0.0 && c > s.ir_sat { (s.ir_sat * c).sqrt() } else { c }
     }
 
     /// Enthalpy change of one reaction unit, J (positive takes energy).

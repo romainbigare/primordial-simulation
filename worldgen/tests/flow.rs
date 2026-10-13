@@ -58,3 +58,50 @@ fn warm_air_spreads() {
     let (de, dq) = drift(&warm, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }
+
+/// More heat-absorbing gas keeps warming the ground: under 240 W/m² of sunlight, with the air
+/// following the ground by the lapse rate, the balance at optical depth 17 is clearly warmer than
+/// at 9 (two seeds' late worlds; one slab at the air's mean temperature gave both the same).
+#[test]
+fn more_gas_warms_with_no_ceiling() {
+    let ground = |x: f64| {
+        let (mut lo, mut hi) = (150.0, 500.0);
+        for _ in 0..60 {
+            let t: f64 = (lo + hi) / 2.0;
+            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]);
+            (lo, hi) = if up > 240.0 { (lo, t) } else { (t, hi) };
+        }
+        lo
+    };
+    let (t1, t9, t17) = (ground(1.5), ground(9.0), ground(17.0));
+    assert!(t9 > t1 + 20.0 && t17 > t9 + 3.0, "{t1} {t9} {t17}");
+}
+
+/// The most soluble gas of the air dissolves in the liquid of the deepest node toward Henry's
+/// share (here with a fast liquid side, so within an exchange), and part of it comes out when that
+/// liquid is warmed by 20 K (a fifth at balance); matter and energy are kept.
+#[test]
+fn gas_dissolves_and_comes_out_when_warmed() {
+    let (_, init) = worldgen::chemistry0();
+    let mut w = worldgen::new_world(3, 16, 16);
+    (w.cfg.dissolve, w.cfg.exchange_days) = (1.0, 3);
+    let (n, na, c) = (w.grid.n(), w.grid.na(), &w.chem);
+    let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
+    let i = (0..n).max_by(|&a, &b| w.ground[init.low * n + a].total_cmp(&w.ground[init.low * n + b])).unwrap();
+    let (t0, l0) = (totals(&w), w.ledger.clone());
+    // (Gases dissolve at every fourth exchange, for all the time since.)
+    (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
+    // Dissolved per mol of liquid, against Henry's share under the gas's share of the reference pressure.
+    let held = |w: &pcore::World| w.ground[k * n + i] / w.ground[init.low * n + i];
+    let j = w.grid.air_of(i);
+    let x = w.air[k * na + j] / (0..w.chem.ns()).map(|q| w.air[q * na + j]).sum::<f64>();
+    let (h1, want) = (held(&w), w.chem.henry(k, w.t_ground(i), x * pcore::chem::P_REF));
+    assert!(h1 > 0.5 * want && h1 < 2.0 * want, "{h1} dissolved per mol, Henry's share {want}");
+    let e = w.energy_ground(i, w.t_ground(i) + 20.0) - w.e_ground[i];
+    w.e_ground[i] += e;
+    w.ledger.imposed_energy += e;
+    (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
+    assert!(held(&w) < 0.9 * h1, "{} dissolved per mol after warming, {h1} before", held(&w));
+    let (de, dq) = drift(&w, &t0, &l0);
+    assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
+}

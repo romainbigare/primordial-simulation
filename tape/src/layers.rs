@@ -101,7 +101,7 @@ impl<'a> Ctx<'a> {
             let area = cells[j] * w.grid.area();
             for k in 0..ns {
                 let (s, n) = (&w.chem.subs[k], w.a(k, j));
-                c.absorber[j] += n * s.ir_abs / area;
+                c.absorber[j] += w.chem.depth(k, n / area);
                 if s.boil > 250.0 {
                     c.vapor[j] += n / area;
                 }

@@ -289,7 +289,9 @@ fn a_body_that_gives_all_it_holds_dies_at_once() {
 /// ground (its upkeep warms it more).
 #[test]
 fn cover_keeps_a_body_warm() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    // The scene of the latitudes 5° to 55° the map had until 13 October 2026 (it picks the warmest body).
+    let (chem, init) = worldgen::chemistry0();
+    let mut w = worldgen::terrain::build(1, 32, 32, chem, &init, pcore::Config { lat_south: 5.0, lat_north: 55.0, ..Default::default() });
     pcore::step(&mut w);
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
