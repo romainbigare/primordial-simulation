@@ -91,9 +91,12 @@ pub fn mutate(lay: &Layout, genes: &[f32], r: &mut Rng) -> Vec<f32> {
     vary(lay, genes, &[], 1.0, 0.0, r).0
 }
 
-/// Noise near a standard normal: a sum of four uniforms, centred and scaled (within `REACH`).
+/// Noise near a standard normal: a sum of four 16-bit uniforms from one draw, centred and scaled
+/// (within `REACH`), as `shake` draws (four draws of 53 bits each cost a node's dispersing children
+/// as much as the rest of their genes).
 fn noise(r: &mut Rng) -> f32 {
-    (((0..4).map(|_| r.f64()).sum::<f64>() - 2.0) * 3f64.sqrt()) as f32
+    let u = r.u64();
+    (((u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48)) as f32 - 131070.0) * (3f32.sqrt() / 65536.0)
 }
 
 /// Most variance a node keeps along a gene (or its rows) of mutation step `step`, in its units
@@ -114,7 +117,7 @@ fn most(step: f32, alike: f32) -> f32 {
 /// from the wall, a drift no selection made (review 3, M1). A generation's own change may still
 /// be clamped (one small step; a gene at a wall can still move off it).
 pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
-    let (size, m, mut left) = (10f32.powf(genes[body::MUT]), m.max(1.0) as f32, Vec::new());
+    let (size, m, mut left) = (10f32.powf(genes[body::MUT]), m.max(1.0) as f32, Vec::with_capacity(genes.len()));
     let genes = (genes.iter().enumerate())
         .map(|(g, &v)| {
             let (step, lo, hi) = range(lay, g);
