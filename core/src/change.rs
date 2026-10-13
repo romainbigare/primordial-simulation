@@ -6,7 +6,8 @@
 //! share of the phase to their `nu` (the scarcest one to `nu − 1`: `lim` already counts it
 //! once, so it counts `nu` times in all, as mass action says). So the reaction is first order in
 //! its scarce input (a trace gas in plenty of the other goes at the same rate per unit whatever
-//! its amount), not second order. A solid is a phase of its own (share 1).
+//! its amount), not second order. A solid is a phase of its own (share 1). A body's catalysts
+//! work only below the temperature where they lose their shape (`denature`).
 
 use crate::World;
 use crate::chem::{Chemistry, Reaction};
@@ -97,6 +98,16 @@ fn per(a: f64, nu: u16) -> f64 {
         2 => a * 0.5,
         _ => a / nu as f64,
     }
+}
+
+/// Catalyst factor `f` at `t` of a catalyst that loses its shape above `td` K, over a width of
+/// `wk` K. A catalyst lowers the reaction's barrier (a speed-up `f` is a lowering of ln f × T);
+/// losing its shape loses the lowering, so the share it keeps, 1 / (1 + exp((t − td) / wk)), is
+/// the share of its decades kept: f to that power. Whole below `td`, near 1 a few `wk` above it
+/// whatever its size, and smooth, so a body warming past `td` slows without a jump.
+#[inline]
+pub fn denature(f: f64, t: f64, td: f64, wk: f64) -> f64 {
+    if f <= 1.0 { f } else { f.powf(1.0 / (1.0 + ((t - td) / wk).exp())) }
 }
 
 /// 1 - exp(-z), cheap when small.
@@ -198,7 +209,8 @@ impl Reactor {
     ///   gas at the node's temperature are drawn from it first, and gas products are put into it.
     /// - `energy`: thermal energy of the node, J. Its temperature is `energy / (heat_cap + Σ n·cp)`,
     ///   where `heat_cap` is the fixed part (e.g. bonded ground).
-    /// - `cat`: catalyst factor per reaction (`None` = 1 for all).
+    /// - `cat`: catalyst factor per reaction, the temperature above which they lose their shape and
+    ///   the width of that, K (`denature`; `None` = 1 for all).
     /// - `light_j`: absorbed light energy available to light reactions, J.
     ///
     /// Elements are exact; thermal energy plus Σ n·hf gains exactly the light used (a share
@@ -211,7 +223,7 @@ impl Reactor {
         gas: Option<&mut [f64]>,
         energy: &mut f64,
         heat_cap: f64,
-        cat: Option<&[f64]>,
+        cat: Option<(&[f64], f64, f64)>,
         light_j: f64,
         dt: f64,
     ) -> f64 {
@@ -234,7 +246,7 @@ impl Reactor {
             let (mut any, mut heat) = (false, 0.0);
             for (r, rx) in chem.reactions.iter().enumerate() {
                 self.kap[r] = 0.0;
-                let cr = cat.map_or(1.0, |c| c[r]);
+                let cr = cat.map_or(1.0, |(c, td, wk)| denature(c[r], t, td, wk));
                 let uses_light = rx.light && self.dh[r] > 0.0;
                 if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (uses_light && light <= 0.0) {
                     continue;

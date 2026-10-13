@@ -105,3 +105,24 @@ fn scarce_gas_goes_first_order() {
     assert!(few > 0.1 && few < 0.9, "share lost {few}");
     assert!((many - few).abs() < 0.01 * few, "1 mol lost {few}, 100 mol lost {many}");
 }
+
+/// A body's catalyst works below the temperature where it loses its shape, and a few K above it
+/// the reaction goes about as fast as bare.
+#[test]
+fn catalysts_fail_when_hot() {
+    let (chem, _) = worldgen::chemistry0();
+    let mut rc = Reactor::new(&chem);
+    let mut cat = vec![1.0; chem.reactions.len()];
+    cat[1] = 1e6;
+    let mut used = |t: f64, c: Option<(&[f64], f64, f64)>| {
+        let mut n = vec![0.0; chem.ns()];
+        let mut gas = vec![0.0; chem.ns()];
+        (n[5], gas[2]) = (1000.0, 1e6);
+        let mut e = t * 1e12; // huge heat capacity: temperature stays put
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e12, c, 0.0, 1.0);
+        1e6 - gas[2]
+    };
+    let (cool, cool_bare) = (used(310.0, Some((&cat, 320.0, 3.0))), used(310.0, None));
+    let (hot, hot_bare) = (used(340.0, Some((&cat, 320.0, 3.0))), used(340.0, None));
+    assert!(cool > 1e5 * cool_bare && hot < 1.2 * hot_bare, "310 K: {cool:e} vs bare {cool_bare:e}; 340 K: {hot:e} vs bare {hot_bare:e}");
+}

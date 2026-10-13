@@ -126,13 +126,31 @@ pub struct Physics {
     /// 30 kg member (52 W of upkeep, 30 W/K) under 10 kg/m² of cover 3.4 K more warmth than bare
     /// ground (thick walls give 3.3 K), and a 1 kg plant member (capture area 2 m²) almost none.
     pub shelter: f64,
-    /// Upkeep of catalysts, J per kg per day per decade² of speed-up: it grows as the square of
-    /// each catalyst's decades (a speed-up of 10^15 costs 225 units, of 10^2.6 only 6.8), so a
-    /// body that wants a far faster reaction pays far more. Life's enzymes cost by their amount,
-    /// which goes with the speed-up itself, not its logarithm; chemistry 0 cannot use that yet
-    /// (its light reaction needs 10^15), so this is a stand-in until chemistry is rescaled (M7).
-    /// 15 makes the starting light-eaters (genes 15 and 2) pay what a cost of 200 per decade did.
+    /// Upkeep of catalysts, J per kg per day per unit of capacity (1/s). A body pays for the amount
+    /// of its catalysts, which is what they can do: their capacity, the catalysed rate per unit of
+    /// input at `t_cat`, `c_cat` x the sum over its catalyst genes that are on of 10^gene x k x
+    /// exp(-Ea / `t_cat`). One constant serves every reaction, as it prices what the body can do,
+    /// not how slow the bare reaction was. A light reaction counts the same way: light only caps
+    /// how far it goes, the catalyst is kept whether light comes or not, so a light-eater pays for
+    /// all it could fix and is pushed to keep only what its light and gas can feed. 1.67 x 10^6
+    /// makes the starting light-eaters pay what the convex cost before made them pay (15 x (15² +
+    /// 2²) = 3,435 J/kg/day): their light gene (12 with k 10^-6, Ea 5,800 K; 15 with 10^-9 before)
+    /// gives 10^12 x 10^-6 x e^-20 = 2.06 x 10^-3 /s, their burn gene (2; k 4,300, Ea 7,760 K) 10^2 x 4,300 x e^-26.76 =
+    /// 1.0 x 10^-6 /s; 3,435 / 2.062 x 10^-3 = 1.67 x 10^6. The starting eaters' burn gene (2.6:
+    /// 4.1 x 10^-6 /s) then costs 6.8 J/kg/day (101 before), and burning 7 times faster (+0.86
+    /// decades, the cold tolerance of 290 to 270 K) 49.6 (+43, against +78 before).
     pub c_cat: f64,
+    /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature)
+    pub t_cat: f64,
+    /// Width over which catalysts lose their shape above their `DENATURE` gene, K: life's enzymes
+    /// unfold within a few K; smooth, so the reaction solver never meets a jump (`change::denature`)
+    pub unfold: f64,
+    /// Catalysts that keep their shape up to `t_firm` K cost no more; each `c_firm` K more of the
+    /// `DENATURE` gene adds their upkeep once more (a firmer shape needs more and stronger bonds:
+    /// so a catalyst firm when hot costs more). 320 K is about where life's enzymes fail; at 360 K
+    /// catalysts cost three times as much
+    pub t_firm: f64,
+    pub c_firm: f64,
     /// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg)
     pub c_strength: f64,
     /// Upkeep of light-capture area, J per m² per day
@@ -270,7 +288,11 @@ impl Default for Physics {
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
-            c_cat: 15.0,
+            c_cat: 1.67e6,
+            t_cat: 290.0,
+            unfold: 3.0,
+            t_firm: 320.0,
+            c_firm: 20.0,
             c_strength: 1e5,
             c_leaf: 2e3,
             c_brain: 1e5,

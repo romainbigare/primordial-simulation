@@ -32,6 +32,11 @@ pub fn save_snapshot(w: &World, path: impl AsRef<Path>) -> io::Result<()> {
 pub fn load_snapshot(path: impl AsRef<Path>) -> io::Result<World> {
     let z = BufReader::with_capacity(1 << 20, GzDecoder::new(std::fs::File::open(path)?));
     let mut w: World = bincode::deserialize_from(z.chain(io::repeat(0).take(64))).map_err(bad)?;
+    // A snapshot of another gene layout (genes added since) cannot be read as this one.
+    let len = pcore::body::Layout::of(&w.chem).len;
+    if w.life.alive().any(|b| b.genes.len() != len) {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "snapshot of an older gene layout"));
+    }
     w.life.resum();
     Ok(w)
 }

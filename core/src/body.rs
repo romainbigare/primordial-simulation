@@ -49,7 +49,10 @@ pub const SEEN: usize = 13;
 pub const SIGHT: usize = 14;
 /// Share of the children that start in a neighbour cell, 0..1 (for an individual, the chance)
 pub const DISPERSE: usize = 15;
-pub const NSCALAR: usize = 16;
+/// Temperature above which its catalysts lose their shape, K: their speed-up falls off within a
+/// few K (`change::denature`). A firmer catalyst costs more upkeep (`Physics::t_firm`)
+pub const DENATURE: usize = 16;
+pub const NSCALAR: usize = 17;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -156,10 +159,8 @@ pub struct Consts {
     pub liq: f64,
     pub heat: f64,
     pub leaf: f64,
-    /// Catalyst factor of each reaction (1 when off), and the sum of the squares of the speed-ups
-    /// (decades), which upkeep charges
+    /// Catalyst factor of each reaction (1 when off)
     pub cat: Vec<f64>,
-    pub cats: f64,
     pub interval: u64,
     /// Catalysed reactions that release heat, with the heat per unit, J
     pub burn: Vec<(usize, f64)>,
@@ -222,12 +223,11 @@ impl Body {
         }
         let cat = Layout::of(chem).cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
-        let cats = (0..chem.reactions.len()).map(|r| self.gene(cat + r).max(0.0).powi(2)).sum();
         let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0).map(|r| (r, -chem.dh(r))).collect();
         let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
-        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, cats, interval: self.interval(), burn, minln, upt };
+        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt };
     }
     /// Visible traits of one member; the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
@@ -990,7 +990,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // well bound to it reacts at a fixed temperature, a big one under cover warms with what
     // its reactions release and cools with what they take, and they cannot take more heat than
     // the body and that store hold. Those that breathe ran on demand (upkeep, actions) and go
-    // here at the open world's rate.
+    // here at the open world's rate. Above the DENATURE gene its catalysts lose their shape.
     let fixed = g * dt * tg / t0.max(1.0);
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
@@ -1003,7 +1003,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // what the body's heat, the heat released and that store hold pays for it (the rest stays
     // in the body), and leaves with its heat at the body's last temperature (`c_out`, below).
     let ta = e_air[j] / (0..ns).map(|k| air[k * na + j] * chem.subs[k].cp).sum::<f64>().max(1.0);
-    let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(&tmp.cat), lit, dt);
+    let den = (&tmp.cat[..], b.gene(DENATURE), cfg.phys.unfold);
+    let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(den), lit, dt);
     let mut heat = e - e_start + lit - used + upkeep;
     let (mut pay, mut q_in, mut c_out) = (0.0, 0.0, 0.0);
     for k in 0..ns {
@@ -1135,16 +1136,20 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     None
 }
 
-/// Upkeep over `days` of a body of `mass` kg, J: of catalysts (convex in decades of speed-up, as
-/// the square, see `Physics::c_cat`), strength and capture area by the day, of learning and
-/// signalling, and of one decision (per member, by the brain's cost and weakly the member's mass,
-/// `Physics::think`). Needs `prepare`.
+/// Upkeep over `days` of a body of `mass` kg, J: of catalysts (by their capacity, the catalysed
+/// rate per unit of input at `Physics::t_cat` summed over the genes that are on, see
+/// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength and
+/// capture area by the day, of learning and signalling, and of one
+/// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`).
+/// Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
     let mind = p.c_learn * b.learn_rate() as f64 + p.c_signal * sig;
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p));
-    days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
+    let cats: f64 = w.chem.reactions.iter().zip(&b.k.cat).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
+    let cats = cats * (1.0 + (b.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
+    days * (mass * (p.c_cat * cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
@@ -1180,7 +1185,7 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
 
 /// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`
 /// J, and the energy released. Each goes at most as far as Change's rate at the body's
-/// temperature takes it over `days`: catalyst · k · exp(−Ea/T) · the activity of its gases (their
+/// temperature takes it over `days`: catalyst (as far as it keeps its shape at T) · k · exp(−Ea/T) · the activity of its gases (their
 /// share of the air to their `nu`, the scarcest input's to `nu − 1`), per unit of its scarcest
 /// input (its own stores, the air exchanged): the same law as `change`. So a cold body
 /// releases little: the cold cost is the rate, not a rule.
@@ -1207,7 +1212,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
         }
         let (lim, who) = crate::change::scarce(&rx.inputs, |k| have[k]);
         let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, nu))| (air[k as usize * na + j] / tot).powi(nu as i32 - (q == who) as i32)).product();
-        let rate = b.k.cat[r] * rx.k * (-rx.ea / t).exp() * act;
+        let rate = crate::change::denature(b.k.cat[r], t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.k * (-rx.ea / t).exp() * act;
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];
         for &(k, nu) in &rx.inputs {

@@ -5,8 +5,9 @@ use pcore::body::{self, Body, Layout, COPY_MASS, INTERVAL, LEAF, STRENGTH};
 use pcore::chem::Chemistry;
 use pcore::World;
 
-/// A body whose light reactions are sped up at least this much (log10) is a light-eater.
-pub const LIGHT_EATER: f32 = 8.0;
+/// A body whose light reactions are sped up at least this much (log10) is a light-eater (5 with
+/// chemistry 0's light reaction at k 10^-6 is what 8 was at k 10^-9).
+pub const LIGHT_EATER: f32 = 5.0;
 
 pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
     body::light_cat(chem, genes) >= LIGHT_EATER
