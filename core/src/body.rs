@@ -1,7 +1,7 @@
 //! Bodies: nodes of the sparse graph that hold substances, heat and genes, with stable IDs
 //! (slot and generation). Here: their storage, and Flow and Change on each body since its
 //! last update: light, gas and liquid exchange with its cell, its catalysed reactions, heat
-//! to the surface, upkeep, and death. Choose (`choose`) and Copy (`copy`) act on them.
+//! to the surface, upkeep, death, and copying when full. Choose (`choose`) and Copy (`copy`) act on them.
 //! A body updates every `interval` days; everything in between is integrated at its update.
 //! The light it catches warms the surface as it falls, but for the share its cell sets aside for
 //! what light reactions store (`World::light_pool`), which it takes at its update.
@@ -1167,6 +1167,12 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let t = b.e / c.max(1e-9);
     if (0..ns).any(|k| b.wet >> k & 1 == 1 && chem.phase(k, t) != Phase::Liquid) {
         return Some(PHASE);
+    }
+    // Copying when full is physics, not a choice (review 3, W3): a member past `phys.full` times
+    // its copy mass copies at its update whatever its brain does (the brain's copy action is for
+    // copying before that), so a body that decides rarely still copies when full.
+    if mass3 / b.n() >= w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
+        (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
     }
     None
 }

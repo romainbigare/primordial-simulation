@@ -208,10 +208,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
     }
 
-    // Copy by its own chance (set by evolution and imitation, never learned), and always once a
-    // member holds `phys.full` times its copy mass; else draw one of the other actions by its
-    // score.
-    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) || pm >= w.cfg.phys.full * b.dec(body::COPY_MASS);
+    // Copy by its own chance (set by evolution and imitation, never learned) while a member holds
+    // less than `phys.full` times its copy mass (past it, it copied at its update, `body::live`);
+    // else draw one of the other actions by its score.
+    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) && pm < w.cfg.phys.full * b.dec(body::COPY_MASS);
     logit[1] = f32::NEG_INFINITY;
     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
     let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });

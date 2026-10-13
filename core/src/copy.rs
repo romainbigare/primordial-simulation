@@ -7,7 +7,7 @@
 //! lineage's sizes starts a new lineage (and group) with the new sizes, its brain carried over
 //! where the sizes overlap; rarely the base of its lineage's brain is copied with small noise,
 //! which starts a new lineage too. A member past `phys.full` times its copy mass has as many
-//! children as it grew past that.
+//! children as it grew past that, at its update whatever its brain does (`body::live`).
 //!
 //! A population node (count > 1) keeps how its members differ (plan 7.1): its spread, the
 //! variance of their genes around its genes, per gene, and of their born rows around its rows

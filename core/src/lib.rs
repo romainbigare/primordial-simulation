@@ -263,7 +263,8 @@ pub struct Physics {
     pub row_noise: f32,
     /// Spread of the weights a bigger brain adds
     pub new_noise: f32,
-    /// A member holding this many times its copy mass copies whether its brain draws it or not
+    /// A member holding this many times its copy mass copies at its update whatever its brain
+    /// does (`body::live`: physics); the brain's copy action copies only before that
     pub full: f64,
     /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge,
     /// and children join them (`copy::alike`). A node splits when its two halves would differ by
