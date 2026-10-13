@@ -440,6 +440,7 @@ web/        WebAssembly bindings, Web Worker, 2D map viewer (TypeScript)
 - **Raw physical events:** body born, body died (and cause: starved, broken, cold…), bond made or broken, first time a substance appears in the world, god action applied. Only raw physical facts. **"A city was founded" is not a raw event.** The pattern finder detects that later.
 - **Summary series** every year: totals per element, energy, population counts per lineage, temperature, absorbing-gas amount.
   Columns are named by index, never by Earth names: `air_<k>` is the share of the air that is absorbing gas `k` (`absorber` is their total absorption, so the gas that rises is a number), and `cat_<r>` is the mean catalyst gene of reaction `r` over live bodies, by members (log10 speed-up, off counts as 0), so the genes that speed up a reaction (fat-making, fat-burning) can be watched before they show on the map.
+  `kinds` clusters the live bodies on their size, interval, strength, light-capture area and light catalyst **and their diet** (13 October 2026: the catalyst of every other reaction and the uptake gene of every substance, off as 0, one place each, so a charcoal-eater and a sugar-eater of the same size are two kinds); it counts each body once. `kinds_members` is the same with each body counting as many times as it has members, so a node of 10^8 and a lone individual no longer weigh the same. `null` is 1 in a null run (see 18.3). The yearly line of `ew run` also prints `kinds`, `gave` and `watched` per year, to compare a run with its null.
 
 ### 8.4 Runtime shells
 

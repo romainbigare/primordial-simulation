@@ -355,10 +355,10 @@ impl Recorder {
         [(name("learned"), "1", measure::learned(w)), (name("greedy"), "1", g / n.max(1.0)), (name("hidden"), "1", sz[0]), (name("memory"), "1", sz[1]), (name("seen"), "1", sz[2]), (name("sight"), "cells", sz[3]), (name("hidden_max"), "1", top)]
     }
 
-    /// Kinds of live bodies by their genes (see `measure::kinds`), the mass range of their members
+    /// Kinds of live bodies by their genes and diet (see `measure::kinds`: `kinds` counts each body once, `kinds_members` each member), the mass range of their members
     /// (kg), and the share of what a kind took from other bodies that came from bodies that are
     /// not light-eaters: for the kind with most bodies, and the highest of any kind.
-    fn variety(&self, w: &World) -> [(String, &'static str, f64); 6] {
+    fn variety(&self, w: &World) -> [(String, &'static str, f64); 7] {
         let (of, k) = measure::kinds(w);
         let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();
         let mut mass: Vec<f64> = live.iter().map(|(_, b)| b.mass(&w.chem) / b.n()).collect();
@@ -375,6 +375,7 @@ impl Recorder {
         let high = (0..k).map(share).fold(0.0, f64::max);
         [
             ("kinds".to_string(), "1", if live.is_empty() { 0.0 } else { k as f64 }),
+            ("kinds_members".to_string(), "1", if live.is_empty() { 0.0 } else { measure::kinds_by_members(w) as f64 }),
             ("mass_min".to_string(), "kg", at(0)),
             ("mass_median".to_string(), "kg", at(mass.len() / 2)),
             ("mass_max".to_string(), "kg", at(mass.len().wrapping_sub(1))),
@@ -569,6 +570,11 @@ impl Recorder {
             col.1 = r.1;
             col.2.push(r.2);
         }
+    }
+
+    /// The latest value of a series column (NaN if there is none), for the run's printed line.
+    pub fn last(&self, name: &str) -> f64 {
+        self.series.iter().find(|c| c.0 == name).and_then(|c| c.2.last().copied()).unwrap_or(f64::NAN)
     }
 
     /// Write `world.ewf.gz` (viewer frames) and `series.csv` into `dir`.
