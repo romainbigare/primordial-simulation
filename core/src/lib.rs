@@ -85,6 +85,13 @@ pub struct Config {
     /// same patterns as one brain per body.
     #[serde(default = "yes")]
     pub share_brains: bool,
+    /// A node also splits along its born rows (`copy::split`), an experiment. Off by default:
+    /// row halves are alike in genes, so the next month's merge takes them back and the pooled
+    /// variance makes them split again; measured 2 to 2.5 times slower at 64x64 for a monthly
+    /// round of selection on behaviour. The rows' spread is still carried, sampled by children
+    /// and pooled.
+    #[serde(default)]
+    pub split_rows: bool,
     /// The tuned numbers of the laws of bodies (M7's world search varies them).
     #[serde(default)]
     pub phys: Physics,
@@ -353,6 +360,7 @@ impl Default for Config {
             regrow: 1e-9,
             crowd: 4,
             share_brains: true,
+            split_rows: false,
             phys: Physics::default(),
         }
     }

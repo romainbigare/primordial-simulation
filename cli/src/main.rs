@@ -30,6 +30,7 @@ fn main() {
             w.cfg.flow_days = args.get("--flow-days", w.cfg.flow_days);
             w.cfg.regrow = args.get("--regrow", w.cfg.regrow);
             w.cfg.crowd = args.get("--crowd", w.cfg.crowd);
+            w.cfg.split_rows = args.0.iter().any(|a| a == "--split-rows");
             w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
             // Watch runs keep the moisture path at 3 days: the rivers stay whole (`Config::air_days`).
             w.cfg.exchange_days = args.get("--exchange-days", 3u32.min(w.cfg.flow_days).max(w.cfg.air_days));
@@ -50,7 +51,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--split-rows] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -113,7 +114,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             let us = part[2].as_secs_f64() * 1e6 / (w.life.updates - upd).max(1) as f64;
             let ms_tape = tape.as_secs_f64() * 1000.0 / (y - since) as f64;
             (since, upd) = (y, w.life.updates);
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} ({le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts)", w.ledger.clamped_heat, m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count());
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} ({le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off", w.ledger.clamped_heat, m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count(), w.diag.splits[0], w.diag.splits[1]);
             busy += part.iter().sum::<Duration>() + tape;
             (part, tape) = ([Duration::ZERO; 4], Duration::ZERO);
             render::save(&w, &format!("{out}/year{y:04}.png"));

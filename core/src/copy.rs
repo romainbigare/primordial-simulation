@@ -312,9 +312,10 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// splits in two (plan 7.1). The halves of a normal spread have means `2·sqrt(2/π)` standard
 /// deviations apart, so it splits when that gap passes `phys.alike` steps along the widest
 /// spread: of a gene in mutation steps, as `step` counts them (not genes that are off, nor the
-/// brain's sizes), or of the born rows in row steps (the step of a changed child). Each half has
-/// half the members, stores and heat; their means are the mean ± `sqrt(2/π)` standard deviations,
-/// and the variance along it falls to `1 - 2/π` of it, so the spread of both together is kept.
+/// brain's sizes), or, with `cfg.split_rows`, of the born rows in row steps (the step of a
+/// changed child). Each half has half the members, stores and heat; their means are the mean ±
+/// `sqrt(2/π)` standard deviations, and the variance along it falls to `1 - 2/π` of it, so the
+/// spread of both together is kept.
 /// The rows, whose spread is one number for all, split all at once along a random direction of
 /// signs; the new half gets a genome of its own. Selection then acts between the halves until
 /// the next month's merge (`body::crowd`): the one that fits grows, the other shrinks. Halves of
@@ -332,7 +333,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     let row = p.row_noise * size / (p.row_chance as f32).sqrt();
     let on = |g: usize| !(body::HIDDEN..=body::SIGHT).contains(&g) && (g < lay.cat || b.genes[g] > 0.0);
     let genes = (0..b.spread.len()).filter(|&g| on(g)).map(|g| (g, b.spread[g] / range(&lay, g).0.powi(2)));
-    let (g, x) = genes.chain([(usize::MAX, b.row_spread / (row * row))]).fold((0, 0.0), |a, c| if c.1 > a.1 { c } else { a });
+    let (g, x) = genes.chain([(usize::MAX, if w.cfg.split_rows { b.row_spread / (row * row) } else { 0.0 })]).fold((0, 0.0), |a, c| if c.1 > a.1 { c } else { a });
     if 2.0 * (FRAC_2_PI * x).sqrt() <= p.alike {
         return;
     }
