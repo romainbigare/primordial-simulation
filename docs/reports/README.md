@@ -9,3 +9,5 @@ folder with the same name as the report.
   done before M4.
 - `watch-pre-m4.md`: the fix list done, and three 300-year runs, 13 October 2026. Pictures and
   the full analysis in `watch-pre-m4/`.
+- `review-2-before-m4.md`: the second review of Part 1, after the fixes. From reading the code
+  only, with the list of 16 items to do before M4 in order, 13 October 2026.
