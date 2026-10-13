@@ -115,7 +115,7 @@ fn forming_never_takes_more_than_is_left() {
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
     let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
     let (chem, b) = (&w.chem, &mut w.life.bodies[slot]);
-    b.prepare(chem);
+    b.prepare(chem, &w.cfg.phys);
     let t = b.temp(chem);
     let solid = |k: usize| chem.phase(k, t) == pcore::chem::Phase::Solid;
     let k = b.k.burn.iter().flat_map(|&(r, _)| chem.reactions[r].inputs.iter().map(|p| p.0 as usize)).find(|&k| solid(k)).expect("a solid fuel");

@@ -495,7 +495,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
 /// below `w.cfg.phys.min_kg` fall apart.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
-    let m = wanted(w, b, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * mb);
+    let m = wanted(w, b, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * mb, b.mass(&w.chem));
     let got = kg(w, &m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;

@@ -91,9 +91,12 @@ pub fn mutate(lay: &Layout, genes: &[f32], r: &mut Rng) -> Vec<f32> {
     vary(lay, genes, &[], 1.0, 0.0, r).0
 }
 
-/// Noise near a standard normal: a sum of four uniforms, centred and scaled (within `REACH`).
+/// Noise near a standard normal: a sum of four 16-bit uniforms from one draw, centred and scaled
+/// (within `REACH`), as `shake` draws (four draws of 53 bits each cost a node's dispersing children
+/// as much as the rest of their genes).
 fn noise(r: &mut Rng) -> f32 {
-    (((0..4).map(|_| r.f64()).sum::<f64>() - 2.0) * 3f64.sqrt()) as f32
+    let u = r.u64();
+    (((u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48)) as f32 - 131070.0) * (3f32.sqrt() / 65536.0)
 }
 
 /// Most variance a node keeps along a gene (or its rows) of mutation step `step`, in its units
@@ -114,7 +117,7 @@ fn most(step: f32, alike: f32) -> f32 {
 /// from the wall, a drift no selection made (review 3, M1). A generation's own change may still
 /// be clamped (one small step; a gene at a wall can still move off it).
 pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
-    let (size, m, mut left) = (10f32.powf(genes[body::MUT]), m.max(1.0) as f32, Vec::new());
+    let (size, m, mut left) = (10f32.powf(genes[body::MUT]), m.max(1.0) as f32, Vec::with_capacity(genes.len()));
     let genes = (genes.iter().enumerate())
         .map(|(g, &v)| {
             let (step, lo, hi) = range(lay, g);
@@ -149,14 +152,24 @@ fn row_step(p: &Physics, size: f32) -> f32 {
     p.row_noise * size / (p.row_chance as f32).sqrt()
 }
 
-/// Add noise near a normal of spread `size` to each weight (a sum of four 16-bit uniforms from
-/// one draw, centred and scaled: cheap, as a brain has many weights).
+/// Add noise near a normal of spread `size` to each weight: a sum of four 8-bit uniforms, centred
+/// and scaled (steps of 0.7% of `size`), two weights from one draw. Cheap, as a brain has many
+/// weights and a node's dispersing children shake them all (it was a third of their cost).
 pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
-    let k = size * 3f32.sqrt() / 65536.0;
-    for x in w {
-        let u = r.u64();
-        let s = (u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48);
-        *x += k * (s as f32 - 131070.0);
+    const B: u64 = 0x00ff_00ff_00ff_00ff;
+    let k = size * 3f32.sqrt() / 256.0;
+    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits.
+    let sums = |u: u64| {
+        let a = (u & B) + (u >> 8 & B);
+        [((a & 0xffff) + (a >> 16 & 0xffff)) as f32 - 510.0, ((a >> 32 & 0xffff) + (a >> 48)) as f32 - 510.0]
+    };
+    let mut pairs = w.chunks_exact_mut(2);
+    for p in &mut pairs {
+        let s = sums(r.u64());
+        (p[0], p[1]) = (p[0] + k * s[0], p[1] + k * s[1]);
+    }
+    if let [x] = pairs.into_remainder() {
+        *x += k * sums(r.u64())[0];
     }
 }
 
@@ -428,18 +441,20 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
     let row = row_step(p, 10f32.powf(b.genes[body::MUT]));
-    // Per gene the halves' shift from the mean (within the walls) and their gap in steps.
+    // Per gene the halves' shift from the mean (within the walls) and their gap in steps (as
+    // `step` counts them, with one look-up of the range: most updates do not split).
     let half = |g: usize| {
-        let ((_, lo, hi), m) = (range(&lay, g), b.genes[g]);
+        let ((u, lo, hi), m) = (range(&lay, g), b.genes[g]);
         let d = (FRAC_2_PI * b.spread[g].max(0.0)).sqrt().min(m - lo).min(hi - m).max(0.0);
-        (d, step(&lay, g, m + d) - step(&lay, g, m - d))
+        let (x, y) = if (body::HIDDEN..=body::SIGHT).contains(&g) { (0.0, 0.0) } else if g < lay.cat { (m + d, m - d) } else { ((m + d).max(0.0), (m - d).max(0.0)) };
+        (d, x / u - y / u)
     };
-    let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).collect();
-    gap.push((usize::MAX, if w.cfg.split_rows { 2.0 * (FRAC_2_PI * b.row_spread).sqrt() / row } else { 0.0 }));
-    let top = gap.iter().fold(0.0f32, |a, x| a.max(x.1));
+    let rows = if w.cfg.split_rows { 2.0 * (FRAC_2_PI * b.row_spread).sqrt() / row } else { 0.0 };
+    let top = (0..b.spread.len()).fold(0.0f32, |a, g| a.max(half(g).1)).max(rows);
     if top <= p.alike {
         return;
     }
+    let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).chain([(usize::MAX, rows)]).collect();
     // As wide but for rounding (a spread held at `most` is the same in steps in every gene).
     gap.retain(|x| x.1 >= top * (1.0 - 1e-4));
     let mut r = Rng::new(w.seed, w.day, b.id(slot), Purpose::Split);
