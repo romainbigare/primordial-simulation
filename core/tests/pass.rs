@@ -20,7 +20,7 @@ fn scene() -> (World, usize, usize, usize) {
     let shape = choose::shape(w.chem.ns(), 12, 6);
     let mut base = brain::random(shape, &mut r, 0.1, [0.0; 8], 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base });
+    let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });
     let genome = w.life.new_genome(rows);
     for cell in [a, a + 1] {
         let mut p = worldgen::life::make(&mut w, 0, cell, lineage, genome).expect("plant");

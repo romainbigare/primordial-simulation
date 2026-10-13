@@ -402,14 +402,18 @@ pub struct Genome {
     pub bodies: u32,
 }
 
-/// What the bodies of a lineage share: the sizes of their brain and senses, and the base of
-/// the brain (its hidden layer).
+/// What the bodies of a lineage share: the sizes of their brain and senses, the base of
+/// the brain (its hidden layer), and where it came from.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Lineage {
     pub shape: Shape,
     pub seen: usize,
     pub sight: usize,
     pub base: Vec<f32>,
+    /// The row of the starting kinds this lineage descends from (set where a kind is placed,
+    /// inherited by every lineage made from another one): only a label, for tallies by origin.
+    #[serde(default)]
+    pub root: u32,
 }
 
 impl Lineage {

@@ -146,7 +146,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         if hold { verbs[brain::VERBS] = 8.0 } else { fixed[7] = 8.0 }
         let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, verbs);
         let rows = base.split_off(shape.base());
-        let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows));
+        let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
         let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
         b.spread = vec![0.01; b.genes.len()];
         if case == 0 {
