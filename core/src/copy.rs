@@ -43,7 +43,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::STRENGTH => (0.1, 0.0, 1.0),
         body::CHILD => (0.05, 0.05, 0.5),
         body::COPY_MASS => (0.2, -3.0, 4.0),
-        body::INTERVAL => (0.2, 0.7, 1.78),
+        body::INTERVAL => (0.2, 0.7, 2.556),
         body::MUT => (0.2, -3.0, 0.0),
         body::LEARN => (0.2, -4.0, 0.0),
         body::FORGET => (0.2, -4.0, -1.7),

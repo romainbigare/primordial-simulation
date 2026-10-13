@@ -111,7 +111,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
     for q in 0..list.len() {
         let p = list[(off + q) % list.len()] as usize;
-        if np < PARTS && Some(p) != held {
+        if np == PARTS {
+            break;
+        }
+        if Some(p) != held {
             (parts[np], np) = (p, np + 1);
         }
     }
