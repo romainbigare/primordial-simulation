@@ -799,10 +799,13 @@ fn shade(w: &mut World) {
 /// inside nothing: a node joins the first larger one alike in genes (`copy::alike`; never for
 /// being of the same lineage, so variants of one lineage stay apart); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
-/// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are never
-/// merged, however many a cell holds (merging them blended a new kind into the nearest one every
-/// month, review 3, M3). So individuals stay individuals while their cell is not over `crowd`,
-/// and kinds stay apart. Stores and heat add up, genes and born rows become the means by
+/// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are not
+/// merged (merging them blended a new kind into the nearest one every month, review 3, M3),
+/// unless the cell holds more than twice `crowd`: then the most alike merge however unlike, down
+/// to that. That is a numerical safeguard, not a law: with about a hundred genes, variants of
+/// individuals and immigrants are often unlike in one gene, and with no ceiling one 64x64 world
+/// gathered about 146,000 bodies in one cell within a few years. So individuals stay individuals
+/// while their cell is not over `crowd`, and kinds stay apart up to twice that. Stores and heat add up, genes and born rows become the means by
 /// count and the spread of both is kept in the merged node's (`copy::join`), the born rows carried
 /// over to the larger's brain where its sizes differ (`copy::merge`); lineage, brain group and
 /// memory are the larger's. A node that grew too varied splits again at its next update
@@ -832,20 +835,21 @@ fn crowd(w: &mut World) {
             continue;
         }
         // The most alike pair first (ties: the earlier, larger ones), until `max` are left or no
-        // pair is alike (`copy::alike`, here in steps).
+        // pair is alike (`copy::alike`, here in steps); past twice `max`, unlike pairs too (the
+        // most alike of them first). A pair's key: unlike or not, then its squared distance.
         let (m, lim) = (left.len(), w.cfg.phys.alike);
         let steps = |w: &World, s: usize| crate::copy::steps(&lay, &w.life.bodies[s].genes);
         let mut v: Vec<Vec<f32>> = left.iter().map(|&s| steps(w, s)).collect();
-        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).map(|(x, y)| if (x - y).abs() <= lim { (x - y) * (x - y) } else { f32::INFINITY }).sum::<f32>();
-        let mut d = vec![f32::INFINITY; m * m];
+        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).fold((false, 0.0f32), |(u, d), (x, y)| (u || (x - y).abs() > lim, d + (x - y) * (x - y)));
+        let mut d = vec![(true, f32::INFINITY); m * m];
         for p in 0..m {
             for q in p + 1..m {
                 d[p * m + q] = dist(&v[p], &v[q]);
             }
         }
-        for _ in max..m {
+        for n in (max..m).rev() {
             let k = (0..m * m).fold(0, |k, x| if d[x] < d[k] { x } else { k });
-            if d[k] == f32::INFINITY {
+            if d[k].1 == f32::INFINITY || d[k].0 && n < 2 * max {
                 break;
             }
             let (p, q) = (k / m, k % m);
@@ -854,7 +858,7 @@ fn crowd(w: &mut World) {
             (left[s], v[t]) = (usize::MAX, steps(w, left[t]));
             for o in 0..m {
                 let (lo, hi) = (o.min(s), o.max(s));
-                d[lo * m + hi] = f32::INFINITY;
+                d[lo * m + hi] = (true, f32::INFINITY);
                 if o != t && left[o] != usize::MAX {
                     let (lo, hi) = (o.min(t), o.max(t));
                     d[lo * m + hi] = dist(&v[o], &v[t]);

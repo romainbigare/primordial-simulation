@@ -84,9 +84,10 @@ pub struct Config {
     pub creep: f64,
     /// A speed shortcut, not a law (plan 7.1): past this many body nodes (individuals or
     /// population nodes) in a cell at a month's start, its most alike pairs merge, but only pairs
-    /// that are alike (`body::crowd`), so a cell may keep more nodes of unlike kinds; it does not
-    /// block splits (`copy::split`). It never bounds how many members there are. It must give the
-    /// same patterns as individuals (to be checked at M4).
+    /// that are alike (`body::crowd`), so a cell may keep more nodes of unlike kinds, up to twice
+    /// this (past it the most alike merge however unlike, a safeguard); a node splits only while
+    /// its cell has fewer than this minus one (`copy::split`). It never bounds how many members
+    /// there are. It must give the same patterns as individuals (to be checked at M4).
     #[serde(default = "four")]
     pub crowd: usize,
     /// Bodies that stay near each other share one brain's rows (for speed). When false each

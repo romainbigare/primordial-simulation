@@ -431,12 +431,14 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// a gene are not alike, so the merge leaves them apart (it merges only alike nodes) until they
 /// grow alike again; halves of the rows are alike (likeness is in genes), so it takes them back,
 /// the mean moved toward the one that grew, and the node splits again while its rows still differ
-/// that much: a monthly round of selection. The cell's count does not block a split (review 3,
-/// M3): halves of neutral genes are pulled back together by the children that come and go
-/// between neighbours and merge, so the count stays small (a test with every spread held at
-/// `most`: 4 to 10 nodes a cell).
+/// that much: a monthly round of selection. A node splits only while its cell keeps a free place
+/// after it (fewer than `cfg.crowd` - 1 bodies): a node held at `most` in its neutral genes is
+/// past the threshold at every update, and its halves (unlike, so never merged back) split again,
+/// so with no such limit the nodes of a cell doubled at each update (one 64x64 world reached
+/// about 146,000 in one cell). Blocking it no longer biases the genes (review 3, M1): the spread
+/// stops at `most` and a split keeps the mean.
 pub fn split(w: &mut World, slot: usize, b: &mut Body) {
-    if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 {
+    if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
