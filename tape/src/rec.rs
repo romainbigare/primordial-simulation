@@ -8,7 +8,7 @@ use pcore::event::{Event, EventKind};
 use pcore::World;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 type Column = (String, &'static str, Vec<f64>);
@@ -586,7 +586,8 @@ impl Recorder {
             "events": self.log.iter().map(|(d, t)| json!({"day": d, "year": year(*d), "text": t})).collect::<Vec<_>>(),
         });
         let meta = serde_json::to_vec(&meta)?;
-        let mut z = GzEncoder::new(BufWriter::new(std::fs::File::create(dir.join("world.ewf.gz"))?), Compression::default());
+        // Four large writes, so no `BufWriter` is needed (for small writes it goes before the compressor, see `save_snapshot`).
+        let mut z = GzEncoder::new(std::fs::File::create(dir.join("world.ewf.gz"))?, Compression::default());
         z.write_all(b"EWF1")?;
         z.write_all(&(meta.len() as u32).to_le_bytes())?;
         z.write_all(&meta)?;
