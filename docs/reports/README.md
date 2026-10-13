@@ -15,3 +15,7 @@ folder with the same name as the report.
   the long runs), three 300-year runs with neutral eaters, and the two comparisons (nodes against
   individuals, shared against own brains), 13 October 2026. Pictures, charts and the full analysis
   in `watch-2-before-m4/`.
+- `review-3-before-m4.md`: the third review, 13 October 2026: what is still wrong in the math, the
+  physics, the chemistry and the world concepts after the second fix list, with the owner's two
+  questions (a roster of starting kinds; plants without a brain), a speed profile, and the list of
+  15 items to do before M4.
