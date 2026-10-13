@@ -231,7 +231,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     // output moves the log-chance of what was done (nothing for a copy) and of the signal. For
     // the values drawn around a mean (signal, shape) that is the natural gradient (times the
     // spread squared), so their noise does not use up the step allowed to the actions.
-    let (l, nh, learning) = (s.learned(), s.h, b.learn_rate() > 0.0);
+    let (l, nh, learning) = (s.learned(), s.h, b.learn_rate() > 0.0 && !w.cfg.null);
     b.trace.resize(if learning { nh + l } else { 0 }, 0.0);
     if learning {
         let (th, c) = b.trace.split_at_mut(nh);
@@ -726,12 +726,13 @@ fn watch(w: &mut World, b: &mut Body, s: usize) {
     let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem)));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / 0.2).powi(2))).exp();
-    brain::blend(&mut b.adj, &oadj, w.cfg.phys.blend * alike);
+    let alike = if w.cfg.null { 0.0 } else { w.cfg.phys.blend * alike };
+    brain::blend(&mut b.adj, &oadj, alike);
     let (g, shape) = (b.group as usize, |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape));
     if og != g && shape(ol) == shape(b.lineage) {
         let (lo, hi) = w.life.groups.split_at_mut(g.max(og));
         let (mine, theirs) = if g < og { (&mut lo[g], &hi[0]) } else { (&mut hi[0], &lo[og]) };
-        brain::blend(&mut mine.rows, &theirs.rows, w.cfg.phys.blend * alike / mine.members.max(1) as f32);
+        brain::blend(&mut mine.rows, &theirs.rows, alike / mine.members.max(1) as f32);
     }
     let same = (ol == b.lineage) as u8 as f64;
     w.events.push(Event { day: w.day, kind: EventKind::Watched { by: g as u32, of: og as u32 }, node: b.cell, value: same });

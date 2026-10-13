@@ -92,6 +92,13 @@ pub struct Config {
     /// and pooled.
     #[serde(default)]
     pub split_rows: bool,
+    /// A null run, to be compared with the real run of the same seed: no learning, no imitation
+    /// (a watch is drawn and counted but moves no rows), and the brains' born rows and bases never
+    /// change at a copy (`copy_phys`); genes still mutate and evolve. What a neutral brain does
+    /// by chance is then seen without selection or learning acting on it: an item has emerged
+    /// only where the real run beats the null run clearly (review 3, M6).
+    #[serde(default)]
+    pub null: bool,
     /// The tuned numbers of the laws of bodies (M7's world search varies them).
     #[serde(default)]
     pub phys: Physics,
@@ -361,8 +368,16 @@ impl Default for Config {
             crowd: 4,
             share_brains: true,
             split_rows: false,
+            null: false,
             phys: Physics::default(),
         }
+    }
+}
+
+impl Config {
+    /// The numbers the copy law reads: in a null run the born rows and the brain bases do not mutate.
+    pub fn copy_phys(&self) -> Physics {
+        if self.null { Physics { row_noise: 0.0, base_noise: 0.0, ..self.phys } } else { self.phys }
     }
 }
 

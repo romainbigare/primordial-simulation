@@ -8,7 +8,7 @@ use pcore::event::{Event, EventKind};
 use pcore::World;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 type Column = (String, &'static str, Vec<f64>);
@@ -355,10 +355,10 @@ impl Recorder {
         [(name("learned"), "1", measure::learned(w)), (name("greedy"), "1", g / n.max(1.0)), (name("hidden"), "1", sz[0]), (name("memory"), "1", sz[1]), (name("seen"), "1", sz[2]), (name("sight"), "cells", sz[3]), (name("hidden_max"), "1", top)]
     }
 
-    /// Kinds of live bodies by their genes (see `measure::kinds`), the mass range of their members
+    /// Kinds of live bodies by their genes and diet (see `measure::kinds`: `kinds` counts each body once, `kinds_members` each member), the mass range of their members
     /// (kg), and the share of what a kind took from other bodies that came from bodies that are
     /// not light-eaters: for the kind with most bodies, and the highest of any kind.
-    fn variety(&self, w: &World) -> [(String, &'static str, f64); 6] {
+    fn variety(&self, w: &World) -> [(String, &'static str, f64); 7] {
         let (of, k) = measure::kinds(w);
         let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();
         let mut mass: Vec<f64> = live.iter().map(|(_, b)| b.mass(&w.chem) / b.n()).collect();
@@ -375,6 +375,7 @@ impl Recorder {
         let high = (0..k).map(share).fold(0.0, f64::max);
         [
             ("kinds".to_string(), "1", if live.is_empty() { 0.0 } else { k as f64 }),
+            ("kinds_members".to_string(), "1", if live.is_empty() { 0.0 } else { measure::kinds_by_members(w) as f64 }),
             ("mass_min".to_string(), "kg", at(0)),
             ("mass_median".to_string(), "kg", at(mass.len() / 2)),
             ("mass_max".to_string(), "kg", at(mass.len().wrapping_sub(1))),
@@ -401,7 +402,7 @@ impl Recorder {
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let tot = check::totals(w);
         let land_liquid: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| c.f.depth[i]).sum::<f64>() * w.grid.area();
-        let mut row = vec![("year".to_string(), "yr", w.year())];
+        let mut row = vec![("year".to_string(), "yr", w.year()), ("null".to_string(), "1", w.cfg.null as u8 as f64)];
         row.extend(tot.elems.iter().enumerate().map(|(j, &v)| (format!("elem_{j}"), "mol", v)));
         row.extend([
             ("energy".to_string(), "J", tot.thermal + tot.chemical),
@@ -571,6 +572,11 @@ impl Recorder {
         }
     }
 
+    /// The latest value of a series column (NaN if there is none), for the run's printed line.
+    pub fn last(&self, name: &str) -> f64 {
+        self.series.iter().find(|c| c.0 == name).and_then(|c| c.2.last().copied()).unwrap_or(f64::NAN)
+    }
+
     /// Write `world.ewf.gz` (viewer frames) and `series.csv` into `dir`.
     pub fn finish(&self, dir: impl AsRef<Path>) -> io::Result<()> {
         let dir = dir.as_ref();
@@ -586,7 +592,8 @@ impl Recorder {
             "events": self.log.iter().map(|(d, t)| json!({"day": d, "year": year(*d), "text": t})).collect::<Vec<_>>(),
         });
         let meta = serde_json::to_vec(&meta)?;
-        let mut z = GzEncoder::new(BufWriter::new(std::fs::File::create(dir.join("world.ewf.gz"))?), Compression::default());
+        // Four large writes, so no `BufWriter` is needed (for small writes it goes before the compressor, see `save_snapshot`).
+        let mut z = GzEncoder::new(std::fs::File::create(dir.join("world.ewf.gz"))?, Compression::default());
         z.write_all(b"EWF1")?;
         z.write_all(&(meta.len() as u32).to_le_bytes())?;
         z.write_all(&meta)?;

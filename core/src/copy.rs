@@ -160,7 +160,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     };
     if node {
         b.count += births - m;
-        widen(&lay, &w.cfg.phys, b, ((births - m) / b.n()) as f32);
+        widen(&lay, &w.cfg.copy_phys(), b, ((births - m) / b.n()) as f32);
         if m == 0.0 {
             return true;
         }
@@ -192,8 +192,9 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // or a group of them, get the mean of the group drawn (noise of that variance and the
     // generation's change, over `m`) and keep the variance left among them.
     let (size, mm) = (10f32.powf(b.genes[body::MUT]), m.max(1.0) as f32);
-    let (var, changed) = (b.row_spread + (w.cfg.phys.row_noise * size).powi(2), r.f64() < w.cfg.phys.row_chance);
-    let sd = if b.row_spread > 0.0 || mm > 1.0 { (var / mm).sqrt() } else { changed as u8 as f32 * w.cfg.phys.row_noise * size / (w.cfg.phys.row_chance as f32).sqrt() };
+    let p = w.cfg.copy_phys();
+    let (var, changed) = (b.row_spread + (p.row_noise * size).powi(2), r.f64() < p.row_chance);
+    let sd = if w.cfg.null { 0.0 } else if b.row_spread > 0.0 || mm > 1.0 { (var / mm).sqrt() } else { changed as u8 as f32 * p.row_noise * size / (p.row_chance as f32).sqrt() };
     c.row_spread = var * (1.0 - 1.0 / mm);
     let mut rows = (sd > 0.0).then(|| {
         let mut v = w.life.born(b).to_vec();
@@ -212,7 +213,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             Some(Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, &mut r, w.cfg.phys.new_noise) })
         } else if r.f64() < w.cfg.phys.new_lineage {
             let mut l = lin.clone();
-            shake(&mut l.base, &mut r, w.cfg.phys.base_noise);
+            shake(&mut l.base, &mut r, p.base_noise);
             Some(l)
         } else {
             None
