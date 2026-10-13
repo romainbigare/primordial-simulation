@@ -585,6 +585,21 @@ impl Life {
         self.unref(b.genome);
         (b.genome, b.genes, b.k) = (g, new.genes, Consts::default());
     }
+    /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in group `group`
+    /// (new, for it); its old lineage, group and born rows lose it.
+    pub fn move_to(&mut self, b: &mut Body, lineage: u32, group: u32, rows: Vec<f32>) {
+        self.enrol(b.group, b, -1);
+        self.unref(b.genome);
+        let old = b.lineage as usize;
+        self.members[old] -= 1;
+        if self.members[old] == 0 {
+            self.brains[old] = None;
+        }
+        (b.lineage, b.group, b.genome) = (lineage, group, self.new_genome(rows));
+        self.genomes[b.genome as usize].bodies += 1;
+        self.members[lineage as usize] += 1;
+        self.enrol(group, b, 1);
+    }
     pub fn relocate(&mut self, slot: usize, g: u32, from: usize, to: usize) {
         self.at[from].retain(|&s| s as usize != slot);
         self.at[to].push(slot as u32);
@@ -700,8 +715,10 @@ pub fn survey(w: &mut World) {
 /// inside nothing: a node joins the first larger one alike in genes (`copy::alike`; never for
 /// being of the same lineage, so variants of one lineage stay apart); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
-/// `copy::steps`) merge, the smaller into the larger. So individuals stay individuals while their
-/// cell is not over `crowd`. Stores and heat add up, genes and born rows become the means by
+/// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are never
+/// merged, however many a cell holds (merging them blended a new kind into the nearest one every
+/// month, review 3, M3). So individuals stay individuals while their cell is not over `crowd`,
+/// and kinds stay apart. Stores and heat add up, genes and born rows become the means by
 /// count and the spread of both is kept in the merged node's (`copy::join`), the born rows carried
 /// over to the larger's brain where its sizes differ (`copy::merge`); lineage, brain group and
 /// memory are the larger's. A node that grew too varied splits again at its next update
@@ -730,11 +747,12 @@ fn crowd(w: &mut World) {
         if left.len() <= max {
             continue;
         }
-        // The most alike pair first (ties: the earlier, larger ones), until `max` are left.
-        let m = left.len();
+        // The most alike pair first (ties: the earlier, larger ones), until `max` are left or no
+        // pair is alike (`copy::alike`, here in steps).
+        let (m, lim) = (left.len(), w.cfg.phys.alike);
         let steps = |w: &World, s: usize| crate::copy::steps(&lay, &w.life.bodies[s].genes);
         let mut v: Vec<Vec<f32>> = left.iter().map(|&s| steps(w, s)).collect();
-        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).map(|(x, y)| (x - y) * (x - y)).sum::<f32>();
+        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).map(|(x, y)| if (x - y).abs() <= lim { (x - y) * (x - y) } else { f32::INFINITY }).sum::<f32>();
         let mut d = vec![f32::INFINITY; m * m];
         for p in 0..m {
             for q in p + 1..m {
@@ -743,6 +761,9 @@ fn crowd(w: &mut World) {
         }
         for _ in max..m {
             let k = (0..m * m).fold(0, |k, x| if d[x] < d[k] { x } else { k });
+            if d[k] == f32::INFINITY {
+                break;
+            }
             let (p, q) = (k / m, k % m);
             let (s, t) = if w.life.bodies[left[q]].n() > w.life.bodies[left[p]].n() { (p, q) } else { (q, p) };
             crate::copy::merge(w, left[s], left[t]);
@@ -812,6 +833,7 @@ pub fn day(w: &mut World) {
                     die(w, s, b, LACK);
                     continue;
                 }
+                crate::copy::resize(w, s, &mut b);
                 crate::copy::split(w, s, &mut b);
                 b.vis = b.visible(&w.chem);
                 w.life.due[((w.day + b.interval()) % RING) as usize].push((slot, gen));

@@ -72,11 +72,11 @@ pub struct Config {
     pub regrow: f64,
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
-    /// A speed shortcut, not a law (plan 7.1): most body nodes (individuals or population nodes) a
-    /// cell keeps at each month's start; past it the most alike merge (`body::crowd`), and below
-    /// it a node too varied may split (`copy::split`). It bounds only how many nodes represent the
-    /// members, never how many members there are. It must give the same patterns as individuals
-    /// (to be checked at M4).
+    /// A speed shortcut, not a law (plan 7.1): past this many body nodes (individuals or
+    /// population nodes) in a cell at a month's start, its most alike pairs merge, but only pairs
+    /// that are alike (`body::crowd`), so a cell may keep more nodes of unlike kinds; it does not
+    /// block splits (`copy::split`). It never bounds how many members there are. It must give the
+    /// same patterns as individuals (to be checked at M4).
     #[serde(default = "four")]
     pub crowd: usize,
     /// Bodies that stay near each other share one brain's rows (for speed). When false each

@@ -18,7 +18,9 @@
 //! with a brain of the same sizes, whatever its lineage (means by count, the spread pooled,
 //! `join`), or start a node. An individual's children stay together, in a neighbour cell with
 //! that chance (else in its own); there they join an alike node as a node's do, else they are a
-//! new body. Only individuals' children start new lineages.
+//! new body. Only individuals' children start new lineages; a node whose mean brain-size genes
+//! are a whole unit away from its lineage's sizes moves itself to a new lineage with them, its
+//! brain and what its group learned carried over (`resize`, at its update).
 //!
 //! A node whose halves would no longer be alike splits in two (`split`), so selection acts
 //! between them; a node does the actions of Bond through one member split off as an individual
@@ -30,10 +32,16 @@ use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
 use crate::{Physics, World};
-use std::f32::consts::FRAC_2_PI;
+use std::f32::consts::{FRAC_2_PI, FRAC_PI_8};
 
+/// Reach of the noise `noise` draws (a sum of four uniforms, centred and scaled): 2·sqrt(3).
+const REACH: f32 = 3.464_101_6;
 
-/// Mutation step (times the body's mutation size) and range of a gene.
+/// Mutation step (times the body's mutation size) and range of a gene. Catalysts, safe minimums
+/// and uptake are off below 0 (they cost nothing and do nothing there), and their ranges go 20
+/// steps below 0, so an off gene wanders as far as the noise of a node's spread reaches (about 10
+/// steps, `most`) without meeting a wall, whose clamp would push it up (review 3, M1). A catalyst
+/// step is 0.3 decades, so nodes alike within `phys.alike` steps differ by a factor 16 at most.
 fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     match g {
         body::GAS => (0.3, -1.0, 5.0),
@@ -53,8 +61,9 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::SIGHT => (0.07, 1.0, 4.0),
         body::DISPERSE => (0.05, 0.0, 1.0),
         body::DENATURE => (5.0, 250.0, 450.0),
-        g if g < lay.min => (1.0, -2.0, 18.0),
-        g if g < lay.upt => (0.05, -0.2, 0.9),
+        g if g < lay.min => (0.3, -6.0, 18.0),
+        g if g < lay.upt => (0.05, -1.0, 0.9),
+        g if g < lay.keep => (0.2, -4.0, 2.0),
         _ => (0.2, -0.5, 2.0),
     }
 }
@@ -76,42 +85,65 @@ pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
 
 /// Parent genes plus noise, kept in range.
 pub fn mutate(lay: &Layout, genes: &[f32], r: &mut Rng) -> Vec<f32> {
-    vary(lay, genes, &[], 1.0, r).0
+    vary(lay, genes, &[], 1.0, 0.0, r).0
+}
+
+/// Noise near a standard normal: a sum of four uniforms, centred and scaled (within `REACH`).
+fn noise(r: &mut Rng) -> f32 {
+    (((0..4).map(|_| r.f64()).sum::<f64>() - 2.0) * 3f64.sqrt()) as f32
+}
+
+/// Most variance a node keeps along a gene (or its rows) of mutation step `step`, in its units
+/// squared: the split threshold, where its halves (means `2·sqrt(2/π)` standard deviations apart)
+/// are `alike` steps apart, `(alike · step)² π / 8` (about 6.3 step² with `alike` 4), plus one
+/// step², so a node held there is past it and splits (`split`), while one that cannot split along
+/// it (a gene that is off, or near a wall) widens no further. Nothing else takes variance out of
+/// a node, so without it the spread grew with every generation and merge (review 3, M1).
+fn most(step: f32, alike: f32) -> f32 {
+    step * step * (alike * alike * FRAC_PI_8 + 1.0)
 }
 
 /// The genes of `m` members drawn from a node of mean `genes` and variance `spread` per gene
 /// (empty: none), each changed by a generation's mutation: their mean (the node's, plus noise of
-/// that variance over `m`), kept in range, and the variance left among them ((1 - 1/m) of it;
-/// none for one).
-pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
+/// that variance over `m`), and the variance left among them ((1 - 1/m) of it, up to `most` for
+/// `alike`; none for one). The spread's share of the noise is shrunk where it could cross a wall,
+/// so the mean drawn is never clamped: a clamp would move the mean of a node's children away
+/// from the wall, a drift no selection made (review 3, M1). A generation's own change may still
+/// be clamped (one small step; a gene at a wall can still move off it).
+pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
     let (size, m, mut left) = (10f32.powf(genes[body::MUT]), m.max(1.0) as f32, Vec::new());
     let genes = (genes.iter().enumerate())
         .map(|(g, &v)| {
             let (step, lo, hi) = range(lay, g);
-            let sd = (step * size).hypot(spread.get(g).map_or(0.0, |s| s.max(0.0).sqrt()));
+            let (u2, s2) = ((step * size).powi(2), spread.get(g).map_or(0.0, |s| s.max(0.0)));
             if m > 1.0 {
-                left.push(sd * sd * (1.0 - 1.0 / m));
+                left.push(((u2 + s2) * (1.0 - 1.0 / m)).min(most(step, alike)));
             }
-            // Noise near a standard normal: a sum of four uniforms, centred and scaled.
-            let z = ((0..4).map(|_| r.f64()).sum::<f64>() - 2.0) * 3f64.sqrt();
-            (v + sd / m.sqrt() * z as f32).clamp(lo, hi)
+            let room = (v - lo).min(hi - v).max(0.0) / REACH;
+            let s2 = s2.min((room * room * m - u2).max(0.0));
+            (v + ((u2 + s2) / m).sqrt() * noise(r)).clamp(lo, hi)
         })
         .collect();
     (genes, left)
 }
 
 /// A share `f` of a node's members are new, born of it with a generation's change (they stay):
-/// its spread grows by `f` times that change's variance (variances add). Per gene, its
-/// mutation's (`vary`), up to a standard deviation of half the gene's range; for the rows, a
-/// share `row_chance` of children changed by a step of `row_noise` × size / sqrt(row_chance).
+/// its spread grows by `f` times that change's variance (variances add), up to `most`. Per gene,
+/// its mutation's (`vary`); for the rows, a share `row_chance` of children changed by a step of
+/// `row_noise` × size / sqrt(row_chance).
 fn widen(lay: &Layout, p: &Physics, b: &mut Body, f: f32) {
     let size = 10f32.powf(b.genes[body::MUT]);
     b.spread.resize(b.genes.len(), 0.0);
     for (g, s) in b.spread.iter_mut().enumerate() {
-        let (step, lo, hi) = range(lay, g);
-        *s = (*s + f * (step * size).powi(2)).min((0.5 * (hi - lo)).powi(2));
+        let step = range(lay, g).0;
+        *s = (*s + f * (step * size).powi(2)).min(most(step, p.alike));
     }
-    b.row_spread += f * (p.row_noise * size).powi(2);
+    b.row_spread = (b.row_spread + f * (p.row_noise * size).powi(2)).min(most(row_step(p, size), p.alike));
+}
+
+/// The step of a node's born rows: that of a child whose rows changed, for mutation size `size`.
+fn row_step(p: &Physics, size: f32) -> f32 {
+    p.row_noise * size / (p.row_chance as f32).sqrt()
 }
 
 /// Add noise near a normal of spread `size` to each weight (a sum of four 16-bit uniforms from
@@ -167,7 +199,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         }
     }
     let share = s * m / births;
-    let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, &mut r);
+    let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, &mut r);
     let mut c = Body {
         cell: cell as u32,
         count: m,
@@ -202,16 +234,13 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         shake(&mut v, &mut r, sd);
         v
     });
-    // A node's children start no new lineage: a change of the brain's base or sizes in one child
-    // is lost in the mean of many (the laws in average form, plan 7.1).
+    // A node's children start no new lineage: a change of the brain's base in one child is lost in
+    // the mean of many (the laws in average form, plan 7.1); a node whose mean sizes moved moves
+    // itself (`resize`).
     if let Some(lin) = w.life.brains[b.lineage as usize].as_ref().filter(|_| !node) {
-        let (old, want) = (choose::sizes_of(lin), choose::sizes(&c.genes));
-        let gene = [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| c.genes[g]);
-        let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
-        let fresh = if new != old {
-            let to = choose::shape(w.chem.ns(), new[0], new[1]);
-            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, to, &mut r, w.cfg.phys.new_noise));
-            Some(Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, &mut r, w.cfg.phys.new_noise) })
+        let fresh = if let Some(l) = resized(lin, &c.genes, w.chem.ns(), &mut r, w.cfg.phys.new_noise) {
+            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, l.shape, &mut r, w.cfg.phys.new_noise));
+            Some(l)
         } else if r.f64() < w.cfg.phys.new_lineage {
             let mut l = lin.clone();
             shake(&mut l.base, &mut r, p.base_noise);
@@ -258,6 +287,41 @@ fn own(w: &mut World, b: &Body, c: &mut Body) {
     }
 }
 
+/// A lineage with the sizes of brain and senses that `genes` ask for, if one of them is a whole
+/// unit away from lineage `lin`'s (the others kept), its base carried over where the sizes
+/// overlap (`brain::rebase`, new weights of spread `noise`).
+fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, noise: f32) -> Option<Lineage> {
+    let (old, want) = (choose::sizes_of(lin), choose::sizes(genes));
+    let gene = [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| genes[g]);
+    let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
+    let to = choose::shape(ns, new[0], new[1]);
+    (new != old).then(|| Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, r, noise) })
+}
+
+/// At its update, a body whose brain-size genes (a node's: their mean) are a whole unit away from
+/// its lineage's sizes moves itself to a new lineage with those sizes, its brain carried over
+/// (`resized`; its born rows by `brain::rerow`), in a new group of its own whose rows are its
+/// group's shared rows carried over with the same new weights (so what it learned goes with it).
+/// An individual's child does this at birth (`copy`); a node's children start no lineage, so
+/// without this a node's size genes drifted but did nothing (review 3, M4). Nodes join and merge
+/// with others only of the same brain sizes (`copy`), or carry their rows over to the larger's
+/// sizes (`merge`). Moves no matter and no energy.
+pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
+    let (ns, noise, id) = (w.chem.ns(), w.cfg.phys.new_noise, b.id(slot));
+    let mut r = Rng::new(w.seed, w.day, id, Purpose::Body);
+    let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
+    let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };
+    // The born and the shared rows get the same new weights (two streams of one key, the body's
+    // id turned over).
+    let rerow = |x: &[f32]| brain::rerow(x, lin.shape, l.shape, &mut Rng::new(w.seed, w.day, !id, Purpose::Body), noise);
+    let gr = &w.life.groups[b.group as usize];
+    let (born, shared, var, ms) = (rerow(w.life.born(b)), rerow(&gr.rows), gr.var, gr.ms.clone());
+    let lineage = w.life.new_lineage(l);
+    let group = w.life.new_group(lineage, shared);
+    (w.life.groups[group as usize].var, w.life.groups[group as usize].ms) = (var, ms);
+    w.life.move_to(b, lineage, group, born);
+}
+
 /// The body in slot `s` joins the body in slot `t` (`join`), its born rows carried over to the
 /// sizes of the other's brain where they differ.
 pub fn merge(w: &mut World, s: usize, t: usize) {
@@ -274,8 +338,8 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 /// Members `c` (not placed, born with `rows`, in the shape of `t`'s brain) join body `t`:
 /// stores and heat add up; genes and born rows become the means by count, and the spread what
 /// both held around the new mean (each one's spread plus its gap from the new mean squared, by
-/// count; for the rows the gap squared is the mean over rows), so the smaller one's genes stay
-/// in the spread, not only in the mean.
+/// count; for the rows the gap squared is the mean over rows; up to `most`), so the smaller one's
+/// genes stay in the spread, not only in the mean.
 pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
     take_in(w, &mut o, c, rows);
@@ -284,14 +348,14 @@ pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
 
 /// `join` into body `o`, taken out of its slot.
 pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: &[f32]) {
-    let a = (c.n() / (o.n() + c.n())) as f32;
+    let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.n() / (o.n() + c.n())) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
-    let pool = |v: f32, u: f32, d2: f32| (1.0 - a) * v + a * u + a * (1.0 - a) * d2;
+    let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
     let s = |b: &Body, g: usize| b.spread.get(g).copied().unwrap_or(0.0);
-    o.spread = (0..o.genes.len()).map(|g| pool(s(o, g), s(&c, g), (c.genes[g] - o.genes[g]).powi(2))).collect();
+    o.spread = (0..o.genes.len()).map(|g| pool(s(o, g), s(&c, g), (c.genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
     let born = w.life.born(o);
     let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
-    o.row_spread = pool(o.row_spread, c.row_spread, gap);
+    o.row_spread = pool(o.row_spread, c.row_spread, gap, row_step(p, 10f32.powf(o.genes[body::MUT])));
     let (genes, born) = (mix(&o.genes, &c.genes), mix(born, rows));
     w.life.reborn(o, genes, born);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
@@ -312,38 +376,52 @@ fn part(b: &mut Body, f: f64) -> Body {
 }
 
 /// At its update, a node whose members differ so much that its two halves would not be alike
-/// splits in two (plan 7.1). The halves of a normal spread have means `2·sqrt(2/π)` standard
-/// deviations apart, so it splits when that gap passes `phys.alike` steps along the widest
-/// spread: of a gene in mutation steps, as `step` counts them (not genes that are off, nor the
-/// brain's sizes), or, with `cfg.split_rows`, of the born rows in row steps (the step of a
-/// changed child). Each half has half the members, stores and heat; their means are the mean ±
-/// `sqrt(2/π)` standard deviations, and the variance along it falls to `1 - 2/π` of it, so the
-/// spread of both together is kept.
+/// splits in two (plan 7.1). The halves of a normal spread have means `d = sqrt(2/π)` standard
+/// deviations from the mean, so it splits when the halves' gap passes `phys.alike` steps along
+/// the gene where it is widest, as `step` counts it (so not along a gene that is off in both
+/// halves, nor the brain's sizes), or, with `cfg.split_rows`, of the born rows in row steps (the
+/// step of a changed child); among genes as wide (a spread held at `most` is as wide in every
+/// gene), a keyed random pick. `d` is shrunk to the room left to the gene's walls, so the mean is
+/// kept exactly (clamped halves moved it away from the wall, review 3, M1). Each half has half the
+/// members, stores and heat; their means are the mean ± `d`, and the variance along it falls by
+/// `d²`, so the spread of both together is kept.
 /// The rows, whose spread is one number for all, split all at once along a random direction of
 /// signs; the new half gets a genome of its own. Selection then acts between the halves until
 /// the next month's merge (`body::crowd`): the one that fits grows, the other shrinks. Halves of
-/// a gene are not alike, so the merge leaves them apart while the cell is not over `cfg.crowd`;
-/// halves of the rows are (likeness is in genes), so it takes them back, the mean moved toward
-/// the one that grew, and the node splits again while its rows still differ that much: a monthly
-/// round of selection. A node splits only while its cell keeps a free place for a newcomer after
-/// it (fewer than `cfg.crowd` - 1 bodies), so newcomers are not forced into a node unlike them,
-/// and a node merged from two far apart does not split into many within a month.
+/// a gene are not alike, so the merge leaves them apart (it merges only alike nodes) until they
+/// grow alike again; halves of the rows are alike (likeness is in genes), so it takes them back,
+/// the mean moved toward the one that grew, and the node splits again while its rows still differ
+/// that much: a monthly round of selection. The cell's count does not block a split (review 3,
+/// M3): halves of neutral genes are pulled back together by the children that come and go
+/// between neighbours and merge, so the count stays small (a test with every spread held at
+/// `most`: 4 to 10 nodes a cell).
 pub fn split(w: &mut World, slot: usize, b: &mut Body) {
-    if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
+    if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 {
         return;
     }
-    let (lay, p, size) = (Layout::of(&w.chem), &w.cfg.phys, 10f32.powf(b.genes[body::MUT]));
-    let row = p.row_noise * size / (p.row_chance as f32).sqrt();
-    let on = |g: usize| !(body::HIDDEN..=body::SIGHT).contains(&g) && (g < lay.cat || b.genes[g] > 0.0);
-    let genes = (0..b.spread.len()).filter(|&g| on(g)).map(|g| (g, b.spread[g] / range(&lay, g).0.powi(2)));
-    let (g, x) = genes.chain([(usize::MAX, if w.cfg.split_rows { b.row_spread / (row * row) } else { 0.0 })]).fold((0, 0.0), |a, c| if c.1 > a.1 { c } else { a });
-    if 2.0 * (FRAC_2_PI * x).sqrt() <= p.alike {
+    let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
+    let row = row_step(p, 10f32.powf(b.genes[body::MUT]));
+    // Per gene the halves' shift from the mean (within the walls) and their gap in steps.
+    let half = |g: usize| {
+        let ((_, lo, hi), m) = (range(&lay, g), b.genes[g]);
+        let d = (FRAC_2_PI * b.spread[g].max(0.0)).sqrt().min(m - lo).min(hi - m).max(0.0);
+        (d, step(&lay, g, m + d) - step(&lay, g, m - d))
+    };
+    let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).collect();
+    gap.push((usize::MAX, if w.cfg.split_rows { 2.0 * (FRAC_2_PI * b.row_spread).sqrt() / row } else { 0.0 }));
+    let top = gap.iter().fold(0.0f32, |a, x| a.max(x.1));
+    if top <= p.alike {
         return;
     }
+    // As wide but for rounding (a spread held at `most` is the same in steps in every gene).
+    gap.retain(|x| x.1 >= top * (1.0 - 1e-4));
+    let mut r = Rng::new(w.seed, w.day, b.id(slot), Purpose::Split);
+    let g = gap[r.below(gap.len())].0;
+    let d = if g == usize::MAX { (FRAC_2_PI * b.row_spread).sqrt() } else { half(g).0 };
     let mut c = part(b, 0.5);
     let (mut genes, mut rows) = (b.genes.clone(), w.life.born(b).to_vec());
     if g == usize::MAX {
-        let (d, mut r, mut bits) = ((FRAC_2_PI * b.row_spread).sqrt(), Rng::new(w.seed, w.day, b.id(slot), Purpose::Split), 0);
+        let mut bits = 0;
         let mut theirs = rows.clone();
         for (k, (x, y)) in rows.iter_mut().zip(theirs.iter_mut()).enumerate() {
             bits = if k % 64 == 0 { r.u64() } else { bits >> 1 };
@@ -354,9 +432,10 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
         b.row_spread *= 1.0 - FRAC_2_PI;
         c.row_spread = b.row_spread;
     } else {
-        let ((_, lo, hi), d) = (range(&lay, g), (FRAC_2_PI * b.spread[g]).sqrt());
-        (genes[g], c.genes[g]) = ((genes[g] + d).clamp(lo, hi), (genes[g] - d).clamp(lo, hi));
-        b.spread[g] *= 1.0 - FRAC_2_PI;
+        // Which half keeps the slot (and so is first in the order of updates) is drawn.
+        let d = if r.below(2) == 0 { d } else { -d };
+        (genes[g], c.genes[g]) = (genes[g] + d, genes[g] - d);
+        b.spread[g] = (b.spread[g] - d * d).max(0.0);
         c.spread[g] = b.spread[g];
     }
     w.life.reborn(b, genes, rows);
@@ -368,15 +447,16 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 }
 
 /// One member of node `b` (at least two) split off as an individual, to do what only a single
-/// body can (plan 7.1): its genes the node's plus noise of their spread, a share 1/count of its
-/// stores and heat (`part`). The node's genes and spread become those of the others (so the
-/// member going back, `take_in`, gives them back). Placed; returns its slot.
+/// body can (plan 7.1): its genes the node's plus noise of their spread (shrunk near a wall, so
+/// it is never clamped, as in `vary`), a share 1/count of its stores and heat (`part`). The
+/// node's genes and spread become those of the others (so the member going back, `take_in`,
+/// gives them back). Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     let (mut c, mut genes) = (part(b, 1.0 / b.count), b.genes.clone());
     for (g, x) in c.genes.iter_mut().enumerate() {
         let ((_, lo, hi), v) = (range(&lay, g), b.spread.get(g).map_or(0.0, |s| s.max(0.0)));
-        *x = (*x + v.sqrt() * r.normal() as f32).clamp(lo, hi);
+        *x += v.sqrt().min((*x - lo).min(hi - *x).max(0.0) / REACH) * noise(r);
         let d = *x - genes[g];
         genes[g] = (genes[g] - d / (n - 1.0)).clamp(lo, hi);
         if let Some(s) = b.spread.get_mut(g) {
