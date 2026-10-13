@@ -187,7 +187,10 @@ pub struct Physics {
     pub deep: f64,
     pub afloat: f64,
     // Copy
-    /// Energy to make one kg of child, J
+    /// Energy to make one kg of child, J. Growth in life keeps 10 to 20% of the energy it eats, so
+    /// a kg of body costs about 10^7 J; 2 x 10^6 is a first step. A body must be able to release
+    /// it within one interval (gas exchange limits that): a starting eater copying at 63 kg
+    /// gives 19 kg to a child, 3.8 x 10^7 J, and can release 1.2 x 10^8 J in 9 days at 288 K.
     pub c_copy: f64,
     /// Chance that a child starts a new lineage with a changed base, and the size of that change
     pub new_lineage: f64,
@@ -264,7 +267,7 @@ impl Default for Physics {
             dig: 0.01,
             deep: 0.5,
             afloat: 0.2,
-            c_copy: 5e5,
+            c_copy: 2e6,
             new_lineage: 0.001,
             base_noise: 0.03,
             row_chance: 0.1,
