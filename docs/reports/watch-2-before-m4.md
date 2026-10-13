@@ -11,7 +11,7 @@ long runs then found seven more bugs. We fixed them all and ran the three seeds 
 
 What changed in the world:
 
-- **Eaters no longer wipe out the plants.** The median plant cover now stays near zero for 0 to 4
+- **Eaters no longer wipe out the plants.** The median plant cover now stays near zero for 0 to 2
   years after the eaters come, not 40 to 65 years.
 - **Neutral eaters live.** With no hand-set brain (every action bias starts near 0), eaters now
   survive 300 years in all three seeds. Before, they died out every time. Behaviour from zero works
@@ -25,7 +25,7 @@ What changed in the world:
   through one member at a time.
 
 What did not change: there are still only 1 to 3 kinds at a time, no seasonal travel, and no
-shelters or tools beyond a trace. The world is also slower: 18 to 24 s per simulated year, against
+shelters or tools beyond a trace. The world is also slower: 17 to 24 s per simulated year, against
 10 to 16 before (see "Speed").
 
 ## What we built
@@ -37,7 +37,7 @@ shelters or tools beyond a trace. The world is also slower: 18 to 24 s per simul
 | 3 | A node splits when its spread is too wide | yes | Selection between the halves. Splits by brain rows are an experiment, off (`--split-rows`): they were 2 times slower for little gain. |
 | 4 | Nodes do Bond actions through one member | yes | One member splits off and acts. If it then holds nothing, it goes back at once. |
 | 5 | No cap of 6 parts per cell; a part needs 1 kg, not 10 | yes | A 30 kg body can now make parts. |
-| 6 | Bigger starting spray; eaters learn at 10^-1; 6 times more row mutation | yes | Starting action biases spread ±0.9 (was ±0.05). This is what lets neutral eaters live. |
+| 6 | Bigger starting spray; eaters learn at 10^-1; 6 times more row mutation | yes | Starting action biases spread ±0.9 (was ±0.05). This lets neutral eaters live: in a 60-year test, the bigger spray alone, or the faster row mutation with learning alone, was already enough. |
 | 7 | Eating limited by the area a body works | yes | `phys.sweep` = 1 m² per kg per day. The brake on grazing. |
 | 8 | A body costs more to build | yes | `c_copy` 5×10⁵ → 2×10⁶ J/kg. 10⁷ did not fit: an eater cannot release that in one interval. |
 | 9 | Catalysts cost more the stronger they are | yes | Cost goes with the square of the speed-up. Cold tolerance has a price now. |
@@ -45,7 +45,7 @@ shelters or tools beyond a trace. The world is also slower: 18 to 24 s per simul
 | 11 | Microseconds per body update; time the tape | yes | Printed every 10 years. The tape's monthly table is 2.7 times cheaper. |
 | 12 | Bodies may decide only once a year (360 days) | yes | No speed gain yet: plants keep deciding every ~20 days (see "Problems"). |
 | 13 | Rain steps every 3 days in watch runs | yes | Rivers whole. |
-| 14 | Mean catalyst gene per reaction in the yearly series | yes | Columns `cat_0` to `cat_20`. They showed the charcoal burning before the climate did. |
+| 14 | Mean catalyst gene per reaction in the yearly series | yes | Columns `cat_0` to `cat_20`, means over all live members (plants and animals together). |
 | 15 | Write up the runs and the river numbers | yes | This file, and the section on rivers below. The M0 to M3 reports cannot be added: they were never saved, and nobody has them now. |
 | 16 | Watch again: 3 seeds, 300 years, neutral eaters; two comparisons | yes | Below. |
 
