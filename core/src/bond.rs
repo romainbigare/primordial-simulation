@@ -38,8 +38,6 @@ pub const ANCHORED: f64 = 2.0;
 pub const LOAD: f64 = 3.0;
 /// Features of a perceived part.
 pub const NO: usize = 8;
-/// Most parts in a cell (a speed safeguard: forming fails, drifting stops).
-const MAX_PARTS: usize = 6;
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
 
@@ -541,21 +539,20 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
 }
 
 /// Put solid stores above twice their safe minimums out as a new part (up to `phys.form` of the
-/// body's mass), shaped by the brain: elongation and hollowness. The body holds it if its hands
-/// are free.
+/// body's mass, and at least `phys.min_kg`: lighter walls fall apart), shaped by the brain:
+/// elongation and hollowness. The body holds it if its hands are free. The number of parts in a
+/// cell is not limited: each one costs matter and energy.
 pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
     let (chem, lay, mb, t) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem), b.temp(&w.chem));
-    if w.parts.at[i].len() >= MAX_PARTS {
-        return;
-    }
     let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Solid { (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * mb / chem.subs[k].molar_mass).max(0.0) } else { 0.0 }).collect();
     let all = kg(w, &spare);
     let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
-    if all * f < 10.0 * w.cfg.phys.min_kg || !body::pay(w, b, w.cfg.phys.c_form * all * f, b.interval() as f64) {
+    let wall: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * f).min(0.5 * s)).collect();
+    let got = kg(w, &wall);
+    if got < w.cfg.phys.min_kg || !body::pay(w, b, w.cfg.phys.c_form * got, b.interval() as f64) {
         return;
     }
-    let wall: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * f).min(0.5 * s)).collect();
     let e = b.e * wall.iter().zip(&w.chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / b.heat_cap(&w.chem);
     for (s, a) in b.store.iter_mut().zip(&wall) {
         *s -= a;
@@ -786,7 +783,7 @@ fn load(w: &mut World, r: usize) {
     }
     let mut rng = Rng::new(w.seed, w.day, w.parts.parts[r].id(r), Purpose::Bond);
     let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
-    let to = DIRS.iter().filter_map(|&d| w.grid.step(i, d)).filter(|&j| head(j) < head(i) && w.parts.at[j].len() + list.len() <= MAX_PARTS).min_by(|&a, &b| head(a).total_cmp(&head(b)));
+    let to = DIRS.iter().filter_map(|&d| w.grid.step(i, d)).filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
     if let Some(j) = to.filter(|_| rng.f64() < v * (w.cfg.days_per_month as f64 * 86_400.0) / w.grid.cell_m) {
         for p in w.parts.members(r) {
             w.parts.relocate(p, j);
