@@ -30,7 +30,10 @@ const SPECK: f64 = 1e-12;
 /// A reaction goes far within a step when its rate times the step reaches this.
 const FAR: f64 = 0.05;
 /// A substance making up less than this share of a ground node's loose amounts is a trace:
-/// reactions on traces alone never make a node react every step.
+/// reactions on traces alone never make a node react every step. Likewise a gas making up less
+/// than this share of its phase: a reaction that runs out of a trace of gas cannot do much in a
+/// step (heat, share of the others), and lumping it over `LAZY` steps is exact for a first-order
+/// decay at a fixed temperature (a speed schedule, as the others are).
 const TRACE: f64 = 1e-6;
 const BLOCK: usize = 64;
 /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
@@ -151,7 +154,8 @@ impl Reactor {
                 continue;
             }
             let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
-            if lim > 0.0 {
+            let k = rx.inputs[who].0 as usize;
+            if lim > 0.0 && (self.ph[k] == 0 || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
                 best = best.max(rx.k * (-rx.ea / t).exp() * self.share(rx, who, &tot));
             }
         }
@@ -403,9 +407,10 @@ pub fn step(w: &mut World, dt: f64) {
     // The most activity `a` mol of a gas can have among at least `d` mol of gas.
     let act = |a: f64, d: f64| if d > 0.0 { (a / d).min(1.0) } else { 1.0 };
     // The most activity the rate per unit of the scarcest input can have from gases with shares
-    // `f`, whichever input that is: all shares to `nu`, or one power of one of them left out.
+    // `f`, whichever input that is: all shares to `nu`, or one power of one of them left out (not
+    // of a trace: it does not make the node react every step, see `TRACE`).
     let up = |gas: &[(usize, u16)], f: &dyn Fn(usize) -> f64| {
-        (0..=gas.len()).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu - (q == d) as u16)).product::<f64>()).fold(0.0, f64::max)
+        (0..=gas.len()).filter(|&d| d == gas.len() || f(gas[d].0) >= TRACE).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu - (q == d) as u16)).product::<f64>()).fold(0.0, f64::max)
     };
     let most_act: Vec<f64> = (0..ns).map(|k| if chem.subs[k].boil <= tlo { (0..na).fold(0.0, |m, j| act(w.air[k * na + j], pool_lo[j]).max(m)) } else { 1.0 }).collect();
     let cand: Vec<Cand> = (fast.iter())
