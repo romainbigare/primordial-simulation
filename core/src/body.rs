@@ -700,8 +700,10 @@ pub fn survey(w: &mut World) {
 /// inside nothing: a node joins the first larger one alike in genes (`copy::alike`; never for
 /// being of the same lineage, so variants of one lineage stay apart); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
-/// `copy::steps`) merge, the smaller into the larger. So individuals stay individuals while their
-/// cell is not over `crowd`. Stores and heat add up, genes and born rows become the means by
+/// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are never
+/// merged, however many a cell holds (merging them blended a new kind into the nearest one every
+/// month, review 3, M3). So individuals stay individuals while their cell is not over `crowd`,
+/// and kinds stay apart. Stores and heat add up, genes and born rows become the means by
 /// count and the spread of both is kept in the merged node's (`copy::join`), the born rows carried
 /// over to the larger's brain where its sizes differ (`copy::merge`); lineage, brain group and
 /// memory are the larger's. A node that grew too varied splits again at its next update
@@ -730,11 +732,12 @@ fn crowd(w: &mut World) {
         if left.len() <= max {
             continue;
         }
-        // The most alike pair first (ties: the earlier, larger ones), until `max` are left.
-        let m = left.len();
+        // The most alike pair first (ties: the earlier, larger ones), until `max` are left or no
+        // pair is alike (`copy::alike`, here in steps).
+        let (m, lim) = (left.len(), w.cfg.phys.alike);
         let steps = |w: &World, s: usize| crate::copy::steps(&lay, &w.life.bodies[s].genes);
         let mut v: Vec<Vec<f32>> = left.iter().map(|&s| steps(w, s)).collect();
-        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).map(|(x, y)| (x - y) * (x - y)).sum::<f32>();
+        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).map(|(x, y)| if (x - y).abs() <= lim { (x - y) * (x - y) } else { f32::INFINITY }).sum::<f32>();
         let mut d = vec![f32::INFINITY; m * m];
         for p in 0..m {
             for q in p + 1..m {
@@ -743,6 +746,9 @@ fn crowd(w: &mut World) {
         }
         for _ in max..m {
             let k = (0..m * m).fold(0, |k, x| if d[x] < d[k] { x } else { k });
+            if d[k] == f32::INFINITY {
+                break;
+            }
             let (p, q) = (k / m, k % m);
             let (s, t) = if w.life.bodies[left[q]].n() > w.life.bodies[left[p]].n() { (p, q) } else { (q, p) };
             crate::copy::merge(w, left[s], left[t]);

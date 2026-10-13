@@ -352,14 +352,15 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// The rows, whose spread is one number for all, split all at once along a random direction of
 /// signs; the new half gets a genome of its own. Selection then acts between the halves until
 /// the next month's merge (`body::crowd`): the one that fits grows, the other shrinks. Halves of
-/// a gene are not alike, so the merge leaves them apart while the cell is not over `cfg.crowd`;
-/// halves of the rows are (likeness is in genes), so it takes them back, the mean moved toward
-/// the one that grew, and the node splits again while its rows still differ that much: a monthly
-/// round of selection. A node splits only while its cell keeps a free place for a newcomer after
-/// it (fewer than `cfg.crowd` - 1 bodies), so newcomers are not forced into a node unlike them,
-/// and a node merged from two far apart does not split into many within a month.
+/// a gene are not alike, so the merge leaves them apart (it merges only alike nodes) until they
+/// grow alike again; halves of the rows are alike (likeness is in genes), so it takes them back,
+/// the mean moved toward the one that grew, and the node splits again while its rows still differ
+/// that much: a monthly round of selection. The cell's count does not block a split (review 3,
+/// M3): halves of neutral genes are pulled back together by the children that come and go
+/// between neighbours and merge, so the count stays small (a test with every spread held at
+/// `most`: 4 to 10 nodes a cell).
 pub fn split(w: &mut World, slot: usize, b: &mut Body) {
-    if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
+    if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
