@@ -249,6 +249,7 @@ When the structures (for example plants) are worn away, the cost falls.
 - Surface emits `ε · σ · T⁴`.
 - The air column absorbs a fraction `1 − exp(−Σ gas_amount · absorption)` of the outgoing heat, and re-emits half up, half down (a two-layer model is enough to start).
 - Burning energy-rich substances can add heat-absorbing gas to the air. **Climate change then emerges with no climate-change rule.**
+- **Light on bodies (13 Oct 2026):** the light that bodies' capture area absorbs warms the surface as it falls, except for the share their light reactions store. That share (what each stored per J of light caught at its last update, weighted by the light each absorbs) is set aside in the cell as it falls (`World::light_pool`). A body takes its share of it at its update, and only the difference from what it really stored is settled with the ground. Why: a big node stores more over its update interval than the ground's heat can give at once. Drawing it back from the ground left negative body heat and "heat not given". The heat a body can spend to evaporate is its own: the light it caught is not counted a second time.
 
 **Wind.** Air moves between air nodes by pressure differences (from temperature differences). Planet rotation (deflection of moving air) is an optional physical setting. It gives prevailing winds, which matter for rain patterns and sailing.
 

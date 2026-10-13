@@ -10,7 +10,7 @@ pub use rec::Recorder;
 
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pcore::World;
-use std::io::{self, BufReader, BufWriter, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 fn bad(e: impl std::fmt::Display) -> io::Error {
@@ -25,9 +25,12 @@ pub fn save_snapshot(w: &World, path: impl AsRef<Path>) -> io::Result<()> {
 }
 
 /// Load a snapshot. Skipped scratch fields come back as their defaults (the groups' sums of
-/// born rows are rebuilt, as each month does).
+/// born rows are rebuilt, as each month does). Fields added at the end of `World` since the
+/// snapshot was saved come back empty: the file is read as if zeros followed it (an empty list
+/// is a zero length).
 pub fn load_snapshot(path: impl AsRef<Path>) -> io::Result<World> {
-    let mut w: World = bincode::deserialize_from(GzDecoder::new(BufReader::new(std::fs::File::open(path)?))).map_err(bad)?;
+    let z = GzDecoder::new(BufReader::new(std::fs::File::open(path)?));
+    let mut w: World = bincode::deserialize_from(z.chain(io::repeat(0).take(64))).map_err(bad)?;
     w.life.resum();
     Ok(w)
 }

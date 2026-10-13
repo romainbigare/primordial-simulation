@@ -493,9 +493,31 @@ pub struct World {
     pub events: Vec<Event>,
     /// Working memory of the laws, rebuilt when missing (saved, so a resumed run goes on the same)
     pub scratch: flow::Scratch,
+    // Fields added later go last: a snapshot without them loads them empty (`tape::load_snapshot`).
+    /// Light set aside in each cell for what its bodies' light reactions will store, J: put
+    /// aside as it falls (`flow::air::radiation`), not as heat; a body takes its share at its
+    /// update (`body::live`), what no body can claim goes to the ground's heat (`body::survey`).
+    #[serde(default)]
+    pub light_pool: Vec<f64>,
+    /// Per body slot: the share of the light it caught that its light reactions stored at its
+    /// last update (J per J), with the slot's generation (`World::keep_of`). Its cell sets that
+    /// share of the light it absorbs aside.
+    #[serde(default)]
+    pub light_keep: Vec<(u32, f32)>,
 }
 
 impl World {
+    /// The share of the light it caught that the body in `slot` (of generation `gen`) stored at
+    /// its last update (none before its first).
+    pub fn keep_of(&self, slot: usize, gen: u32) -> f32 {
+        self.light_keep.get(slot).filter(|k| k.0 == gen).map_or(0.0, |k| k.1)
+    }
+    pub fn set_keep(&mut self, slot: usize, gen: u32, k: f32) {
+        if self.light_keep.len() <= slot {
+            self.light_keep.resize(slot + 1, (u32::MAX, 0.0));
+        }
+        self.light_keep[slot] = (gen, k);
+    }
     pub fn days_per_year(&self) -> u64 {
         (self.cfg.days_per_month * self.cfg.months_per_year) as u64
     }

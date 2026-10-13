@@ -44,7 +44,8 @@ pub fn totals(w: &World) -> Totals {
             }
         }
     }
-    w.e_ground.iter().chain(&w.e_air).for_each(|&e| thermal.add(e));
+    // Light set aside for bodies counts as heat until they store it.
+    w.e_ground.iter().chain(&w.e_air).chain(&w.light_pool).for_each(|&e| thermal.add(e));
     for b in w.life.alive() {
         b.store.iter().zip(subs.iter_mut()).for_each(|(&a, s)| s.add(a));
         thermal.add(b.e);
@@ -82,7 +83,7 @@ pub fn drift(w: &World, start: &Totals, start_ledger: &crate::Ledger) -> (f64, f
 
 /// True if any amount or energy is NaN, infinite or negative.
 pub fn broken(w: &World) -> Option<String> {
-    for (name, v) in [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air)] {
+    for (name, v) in [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("light_pool", &w.light_pool)] {
         if let Some(i) = v.iter().position(|x| !x.is_finite() || *x < 0.0) {
             return Some(format!("{name}[{i}] = {}", v[i]));
         }
@@ -114,7 +115,7 @@ pub fn hash(w: &World) -> u64 {
     }
     let mut h = 0xcbf2_9ce4_8422_2325u64;
     eat(&mut h, w.day);
-    for v in [&w.ground, &w.bed, &w.e_ground, &w.air, &w.e_air] {
+    for v in [&w.ground, &w.bed, &w.e_ground, &w.air, &w.e_air, &w.light_pool] {
         for x in v {
             eat(&mut h, x.to_bits());
         }
@@ -127,6 +128,9 @@ pub fn hash(w: &World) -> u64 {
         for x in b.store.iter().chain([&b.e]) {
             eat(&mut h, x.to_bits());
         }
+    }
+    for &(g, k) in &w.light_keep {
+        eat(&mut h, g as u64 | (k.to_bits() as u64) << 32);
     }
     for x in w.life.groups.iter().flat_map(|g| &g.rows) {
         eat(&mut h, x.to_bits() as u64);

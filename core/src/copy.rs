@@ -239,7 +239,8 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     own(w, b, &mut c);
     (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem));
     let delay = c.interval();
-    w.life.add(c, w.day, delay);
+    let s = w.life.add(c, w.day, delay);
+    w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
     true
 }
 
@@ -360,7 +361,8 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     own(w, b, &mut c);
     w.diag.splits[0] += 1.0;
     let delay = c.interval();
-    w.life.add(c, w.day, delay);
+    let s = w.life.add(c, w.day, delay);
+    w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
 }
 
 /// One member of node `b` (at least two) split off as an individual, to do what only a single

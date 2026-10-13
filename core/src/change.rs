@@ -37,7 +37,7 @@ const FAR: f64 = 0.05;
 const TRACE: f64 = 1e-6;
 const BLOCK: usize = 64;
 /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
-const LIGHT_YIELD: f64 = 0.05;
+pub(crate) const LIGHT_YIELD: f64 = 0.05;
 
 /// Reusable reaction solver for one chemistry: per-reaction constants and scratch buffers.
 pub struct Reactor {

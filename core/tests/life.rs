@@ -318,3 +318,32 @@ fn cover_keeps_a_body_warm() {
     println!("above the ground: bare {} K, under cover {} K", temp(&w), temp(&covered));
     assert!(temp(&covered) > temp(&w) + 1.0, "bare {} K, under cover {} K above the ground", temp(&w), temp(&covered));
 }
+
+/// The light a node's light reactions store is set aside in its cell as it falls (not drawn
+/// back from the ground's heat at its update): a node a thousand times as large as seeded that
+/// decides once a year takes it from there, no heat goes ungiven, and matter and energy are
+/// kept exactly.
+#[test]
+fn a_big_node_stores_light_set_aside_as_it_fell() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    for _ in 0..3 {
+        pcore::step(&mut w);
+    }
+    let s = (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).max_by(|&a, &b| w.life.bodies[a].count.total_cmp(&w.life.bodies[b].count)).expect("a node");
+    let b = &mut w.life.bodies[s];
+    b.count *= 1e3;
+    b.store.iter_mut().for_each(|a| *a *= 1e3);
+    b.e *= 1e3;
+    // It decides once a year: a year's stored light at once.
+    (b.genes[pcore::body::INTERVAL], b.k) = (2.556, Default::default());
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    for _ in 0..14 {
+        pcore::step(&mut w);
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    assert!(w.light_pool.iter().sum::<f64>() > 0.0 && w.ledger.clamped_heat == l0.clamped_heat, "heat not given {:e} J", w.ledger.clamped_heat - l0.clamped_heat);
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}

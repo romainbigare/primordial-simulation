@@ -3,6 +3,8 @@
 //! last update: light, gas and liquid exchange with its cell, its catalysed reactions, heat
 //! to the surface, upkeep, and death. Choose (`choose`) and Copy (`copy`) act on them.
 //! A body updates every `interval` days; everything in between is integrated at its update.
+//! The light it catches warms the surface as it falls, but for the share its cell sets aside for
+//! what light reactions store (`World::light_pool`), which it takes at its update.
 
 use crate::brain::{ln, Shape, Thought, FIXED, OVERBS, SIG, VERBS};
 use crate::change::Reactor;
@@ -344,6 +346,10 @@ pub struct Life {
     /// that they absorb (1 - their reflectance, weighted by capture area)
     #[serde(skip)]
     pub absorb: Vec<f32>,
+    /// Per cell, from the last survey: the share of that absorbed light set aside for what its
+    /// bodies' light reactions store (`World::keep_of`, weighted by the light each absorbs)
+    #[serde(skip)]
+    pub keep: Vec<f32>,
     /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
     /// Per cell, from the last monthly survey: its loose substances as a brain perceives them,
@@ -608,7 +614,8 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 }
 
 /// Before each physics step: what each cell holds (sums of visible traits), its bodies'
-/// light-capture area per ground area, and once a month each cell's surroundings.
+/// light-capture area per ground area, the share of the light they absorb and set aside, and
+/// once a month each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.grid.n();
     if w.life.at.len() != n {
@@ -633,23 +640,33 @@ pub fn survey(w: &mut World) {
     if monthly {
         crowd(w);
     }
-    let life = &mut w.life;
-    life.sum.clear();
-    life.sum.resize(n, [0.0; 7]);
-    life.absorb.clear();
-    life.absorb.resize(n, 0.0);
-    for b in life.bodies.iter().filter(|b| b.alive) {
-        let (s, n) = (&mut life.sum[b.cell as usize], b.n());
-        s[0] += n;
-        for (x, &v) in s[1..].iter_mut().zip(&b.vis) {
-            *x += v as f64 * n;
+    let keep = |s: usize, g: u32| w.keep_of(s, g) as f64;
+    // Per cell: light absorbed per J reaching the capture area, the share of it set aside, and
+    // what its bodies can claim of the set-aside light at their updates (at most: walls aside).
+    let (mut abs, mut kept, mut claim) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    let mut sum = vec![[0.0; 7]; n];
+    for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
+        let (i, m, k) = (b.cell as usize, b.n(), keep(slot, b.gen));
+        sum[i][0] += m;
+        for (x, &v) in sum[i][1..].iter_mut().zip(&b.vis) {
+            *x += v as f64 * m;
         }
-        life.absorb[b.cell as usize] += b.vis[1] * b.n() as f32 * (1.0 - (b.vis[3] + b.vis[4] + b.vis[5]) / 3.0);
+        let a = b.vis[1] as f64 * m * (1.0 - (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0);
+        (abs[i], kept[i], claim[i]) = (abs[i] + a, kept[i] + a * k, claim[i] + a * k * (w.light[i] - b.mark));
     }
-    let area = w.grid.area();
-    for ((c, s), a) in w.canopy.iter_mut().zip(&life.sum).zip(life.absorb.iter_mut()) {
-        *c = (s[2] / area) as f32;
-        *a = if s[2] > 0.0 { (*a as f64 / s[2]) as f32 } else { 0.0 };
+    let World { life, grid, canopy, light_pool, e_ground, .. } = w;
+    life.sum = sum;
+    (life.absorb.resize(n, 0.0), life.keep.resize(n, 0.0), light_pool.resize(n, 0.0));
+    let area = grid.area();
+    for i in 0..n {
+        let s = life.sum[i][2];
+        canopy[i] = (s / area) as f32;
+        life.absorb[i] = if s > 0.0 { (abs[i] / s) as f32 } else { 0.0 };
+        life.keep[i] = if abs[i] > 0.0 { (kept[i] / abs[i]) as f32 } else { 0.0 };
+        // Set-aside light its bodies can no longer claim (one died, moved or merged before its
+        // update, or caught less than its share) becomes the ground's heat.
+        let over = (light_pool[i] - claim[i]).max(0.0);
+        (light_pool[i], e_ground[i]) = (light_pool[i] - over, e_ground[i] + over);
     }
     if monthly && w.day > 0 {
         choose::regroup(w);
@@ -778,7 +795,7 @@ pub fn day(w: &mut World) {
         let mut b = std::mem::take(&mut w.life.bodies[s]);
         b.prepare(&w.chem);
         w.life.updates += 1;
-        match live(w, &mut b, &mut rc, &mut tmp) {
+        match live(w, s, &mut b, &mut rc, &mut tmp) {
             Some(cause) => die(w, s, b, cause),
             None => {
                 choose::act(w, s, &mut b, &mut tmp);
@@ -850,7 +867,7 @@ fn starve(w: &mut World, b: &mut Body, m: f64) -> bool {
 }
 
 /// Flow and Change on one body since its last update. Returns a death cause.
-fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<u8> {
+fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<u8> {
     let i = b.cell as usize;
     // The ground's temperature as of the last flow step (the monthly survey's is too old to feel
     // a cell that turned hot).
@@ -891,7 +908,8 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 
     // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks
     // up liquid): found when first needed, but before the body soaks anything up.
-    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, diag, .. } = w;
+    let keep = w.keep_of(slot, b.gen) as f64;
+    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, light_pool, light_keep, diag, .. } = w;
     let mut gcap = None;
     macro_rules! cap {
         () => {
@@ -903,9 +921,9 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 
     // Light caught since the last update (through the openings of walls around it), less what
     // the body reflects; liquid over the body absorbs its share first. Its energy already
-    // warmed the surface as it fell (`flow::air::radiation`): the body draws from the ground's
-    // heat only what its light reactions store, so up to `MAX_INTERVAL` days of sunlight do not
-    // reach the ground in one go.
+    // warmed the surface as it fell (`flow::air::radiation`), but for the share set aside for
+    // what light reactions store: so up to `MAX_INTERVAL` days of sunlight neither reach the
+    // ground in one go nor are drawn back from it in one go.
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
     let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
     b.mark = light[i];
@@ -945,12 +963,27 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         air[k * na + j] += d;
         heat -= d * held(chem, k);
     }
+    // What its light reactions stored (`LIGHT_YIELD` of the light they used) is paid by the
+    // light set aside for it, as far as its share goes (the share it stored last time, of the
+    // light it caught); the difference is settled with the ground below. It keeps the share it
+    // stored now. The heat released is its own (`own`) but for the light, which is the ground's
+    // heat already.
+    let stored = crate::change::LIGHT_YIELD * used;
+    let took = (keep * got).min(light_pool[i]).max(0.0);
+    light_pool[i] -= took;
+    if got > 0.0 {
+        if light_keep.len() <= slot {
+            light_keep.resize(slot + 1, (u32::MAX, 0.0));
+        }
+        light_keep[slot] = (b.gen, (stored / got) as f32);
+    }
 
     // Liquids the body holds evaporate toward their vapour pressure at its temperature; what
     // falls as liquid on its capture area is caught, from the vapour it falls from. The net
     // goes in or out, up to the level the body keeps, with its latent heat. The latent heat
-    // is paid by the light and heat released, and by what the surface can conduct into a body
-    // that evaporating cools no lower than the vapour's condensing point.
+    // is paid by the body's own heat released (not the light: the ground has it), and by what
+    // the surface can conduct into a body that evaporating cools no lower than the vapour's
+    // condensing point.
     let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
@@ -964,9 +997,10 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         }
         let push = if wet { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
         let out = if push > 0.0 {
-            let owed = (lit + heat).min(0.0);
+            let own = heat - lit + took;
+            let owed = own.min(0.0);
             let room = (crate::heat_above_floor(e_ground[i], cap!()) + owed).max(0.0);
-            let paid = (lit + heat).max(0.0) + (b.conductance(cfg.phys.heat_mass, mass) * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
+            let paid = own.max(0.0) + (b.conductance(cfg.phys.heat_mass, mass) * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
             (push * reach_mol).min(paid / held(chem, k))
         } else {
             0.0
@@ -1037,9 +1071,9 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
-        // The ground pays the difference (the light is already in it); if it cannot, the body
-        // ends colder.
-        let give = e1 - b.e - heat + lit;
+        // The ground pays the difference (the light is already in it, but for what was set aside
+        // and taken); if it cannot, the body ends colder.
+        let give = e1 - b.e - heat + lit - took;
         let got = crate::draw(&mut e_ground[i], ledger, cap!(), give);
         b.e = if got == give { e1 } else { e1 - (give - got) };
     }

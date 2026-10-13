@@ -125,7 +125,8 @@ fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
 /// from the air's mean height). The ground temperature is solved implicitly.
 pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, ground, e_ground, e_air, ledger, canopy, light, life, .. } = w;
+    let World { cfg, grid, ground, e_ground, e_air, ledger, canopy, light, light_pool, life, .. } = w;
+    light_pool.resize(grid.n(), 0.0);
     let (n, na, adt) = (grid.n(), grid.na(), s.area * dt);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
@@ -139,14 +140,19 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         s.tl[i] = tl;
         // Bodies with light-capture area `a` per ground area intercept a share 1 - exp(-a) of
         // what passes the clouds. What they absorb warms the surface now (they hand on all of it
-        // as heat but for what their light reactions store, which they draw back when they update).
-        let (a, mut cover, mut caught) = (canopy[i] as f64, 0.0, 0.0);
+        // as heat) but for the share their light reactions store (as they did at their last
+        // update, `Life::keep`): that is set aside, and each takes its share when it updates
+        // (`body::live`).
+        let (a, mut cover, mut caught, mut kept) = (canopy[i] as f64, 0.0, 0.0, 0.0);
         if a > 0.0 {
             cover = -(-a).exp_m1();
             light[i] += q * (1.0 - c) * cover * dt / a;
             caught = cover * life.absorb.get(i).map_or(0.0, |&x| x as f64);
+            kept = q * (1.0 - c) * caught * life.keep.get(i).map_or(0.0, |&x| x as f64);
         }
-        let sw = q * (1.0 - c) * ((1.0 - cover) * (1.0 - s.alb[i]) + caught);
+        let sw = q * (1.0 - c) * ((1.0 - cover) * (1.0 - s.alb[i]) + caught) - kept;
+        light_pool[i] += adt * kept;
+        sun += adt * kept;
         // The surface temperature, implicit: heat reaches the surface from the node through
         // its heat capacity over the step (none on a melting plateau, which holds the node
         // still) in series with the conduction of any soft solid cover.
