@@ -50,7 +50,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--spray ROUNDS (20)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -73,9 +73,9 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     let (mut part, mut tape, mut busy, mut since, mut upd) = ([Duration::ZERO; 4], Duration::ZERO, Duration::ZERO, y0, w.life.updates);
     let life_year = if resumed { -1 } else { a.get("--life-year", 2i64) };
     // What is placed and how: neutral brains sprayed with mutation, unless asked for the old
-    // hand-set biases (`--plant-bias`, `--eater-bias`) or another number of rounds (`--spray`).
+    // hand-set biases (`--plant-bias`, `--eater-bias`) or another number of rounds (`--spray`) or size of spray (`--spray-size` on the row biases, `--spray-genes` on the genes).
     let clever = a.get("--clever-year", -1i64);
-    let how = worldgen::life::Seeding { hand: [a.has("--plant-bias"), a.has("--eater-bias")], rounds: a.get("--spray", 20u32) };
+    let how = worldgen::life::Seeding { hand: [a.has("--plant-bias"), a.has("--eater-bias")], rounds: a.get("--spray", 20u32), size: a.get("--spray-size", 0.2f32), genes: a.get("--spray-genes", 3.0f32) };
     for y in y0 + 1..=y0 + years {
         // First light-eaters; once they have spread, eaters among them.
         for (kind, at) in [(0, life_year), (1, life_year + 20), (2, clever)] {
@@ -113,7 +113,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             let us = part[2].as_secs_f64() * 1e6 / (w.life.updates - upd).max(1) as f64;
             let ms_tape = tape.as_secs_f64() * 1000.0 / (y - since) as f64;
             (since, upd) = (y, w.life.updates);
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} ({le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts)", w.ledger.clamped_heat, m[0], m[1], m[2], m[3], w.life.lineages(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count());
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} ({le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts)", w.ledger.clamped_heat, m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count());
             busy += part.iter().sum::<Duration>() + tape;
             (part, tape) = ([Duration::ZERO; 4], Duration::ZERO);
             render::save(&w, &format!("{out}/year{y:04}.png"));
