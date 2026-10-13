@@ -557,12 +557,22 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
     m.iter().enumerate().filter(|&(k, _)| fuel(k)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
 }
 
-/// Take loose solids and liquids from the cell's ground.
+/// Most a body takes per day per kg of its mass from amounts `from` (mol) spread over a cell:
+/// `phys.take`, and no more than the area it works per day per kg (`phys.sweep`) holds of what
+/// it takes by its uptake: the mass per m² of the cell of those substances. So a thin cover is
+/// as hard to find as it is thin, whatever the body could carry.
+fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
+    let dens: f64 = b.k.upt.iter().map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.grid.area();
+    w.cfg.phys.take.min(w.cfg.phys.sweep * dens)
+}
+
+/// Take loose solids and liquids from the cell's ground, as `reach` allows (a node's members
+/// each work their own area: the mass is the node's total).
 fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
     let tg = w.life.env[i][0];
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
-    let m = wanted(w, b, free, w.cfg.phys.take * b.interval() as f64 * b.mass(&w.chem));
+    let m = wanted(w, b, free, reach(w, b, free) * b.interval() as f64 * b.mass(&w.chem));
     if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m), b.interval() as f64) {
         return;
     }
@@ -616,13 +626,16 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 /// more often than the taker has acted again within part of the taker's interval and gets away
 /// with chance 1 - its interval / the taker's (the taker has paid). The other dies if it loses
 /// half its mass or falls below a safe minimum (a node loses the members eaten); else it
-/// remembers this against the taker.
+/// remembers this against the taker. From a node (its members lie spread over the cell) the
+/// taker also reaches only the area it works (`reach`); an individual it perceives is already
+/// found, so only the other caps hold for it.
 fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let lever = bond::lever(w, b, mb);
     let (fb, fo) = (b.gene(STRENGTH) * lever * mb / b.n(), o.gene(STRENGTH) * bond::lever(w, o, mo) * mo / o.n());
-    let m = wanted(w, b, |k| o.store[k], w.cfg.phys.take * b.interval() as f64 * mb * fb / (fb + fo + 1e-30));
+    let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
+    let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * mb);
     let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / w.cfg.phys.rho_pass;
     let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
     if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m) * resist, b.interval() as f64) || away {

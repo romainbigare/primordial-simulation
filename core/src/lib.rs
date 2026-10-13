@@ -137,6 +137,10 @@ pub struct Physics {
     pub walk_wear: f64,
     /// Most a body can take per day of its interval, as a share of its own mass
     pub take: f64,
+    /// Area a body works per day per kg of its mass, m²/(kg day): it takes no more per day than
+    /// the mass per m² of what it takes there times this times its mass (a 30 kg body works 300
+    /// m² in 10 days), so thin cover is hard to find
+    pub sweep: f64,
     /// Energy to handle one kg taken or put, J
     pub c_handle: f64,
     /// Spread of the shape of a part made, and of the signal, around their means
@@ -236,6 +240,7 @@ impl Default for Physics {
             rho_body: 1e3,
             walk_wear: 3e-5,
             take: 0.05,
+            sweep: 1.0,
             c_handle: 1e3,
             shape_noise: 0.5,
             signal_noise: 0.3,
