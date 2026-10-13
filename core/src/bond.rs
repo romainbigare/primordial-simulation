@@ -553,6 +553,8 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     if got < w.cfg.phys.min_kg || !body::pay(w, b, w.cfg.phys.c_form * got, b.interval() as f64) {
         return;
     }
+    // Paying may have used some of what was to be put out.
+    let wall: Vec<f64> = wall.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
     let e = b.e * wall.iter().zip(&w.chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / b.heat_cap(&w.chem);
     for (s, a) in b.store.iter_mut().zip(&wall) {
         *s -= a;

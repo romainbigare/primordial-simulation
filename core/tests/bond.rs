@@ -104,3 +104,36 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
     }
     assert!(w.parts.at[i].len() > 6, "{} parts in the cell", w.parts.at[i].len());
 }
+
+/// Forming pays first, and paying may burn the very solid put out: what goes out is cut to what
+/// is left, so no store goes below 0 and matter and energy stay exact (a costly form by a body
+/// whose only spare solid is its fuel, which it burns fast).
+#[test]
+fn forming_never_takes_more_than_is_left() {
+    let (mut w, _) = world();
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
+    let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
+    let (chem, b) = (&w.chem, &mut w.life.bodies[slot]);
+    b.prepare(chem);
+    let t = b.temp(chem);
+    let solid = |k: usize| chem.phase(k, t) == pcore::chem::Phase::Solid;
+    let k = b.k.burn.iter().flat_map(|&(r, _)| chem.reactions[r].inputs.iter().map(|p| p.0 as usize)).find(|&k| solid(k)).expect("a solid fuel");
+    (0..b.store.len()).filter(|&x| solid(x) && x != k).for_each(|x| b.store[x] = 0.0);
+    b.genes[pcore::body::Layout::of(chem).min + k] = 0.0;
+    b.store[k] = 0.05 * b.mass(chem) / chem.subs[k].molar_mass;
+    b.e = b.heat_cap(chem) * t;
+    b.k.cat.iter_mut().for_each(|c| *c *= 1e6);
+    // Half the fuel is to go out, and paying for it burns nearly all of it.
+    let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;
+    let r = pcore::body::release(&w, &w.life.bodies[slot], w.life.bodies[slot].interval() as f64);
+    (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
+    let (t0, l0) = (totals(&w), w.ledger.clone());
+    let mut b = std::mem::take(&mut w.life.bodies[slot]);
+    bond::form(&mut w, slot, &mut b, [0.0, 0.5]);
+    assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
+    w.life.bodies[slot] = b;
+    assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
+    let (de, dq) = drift(&w, &t0, &l0);
+    assert!(de < 1e-12 && dq < 1e-9, "drift {de:e} {dq:e}");
+}
