@@ -597,7 +597,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 q[c] = 0.0;
             }
         }
-        let tcur = t;
+        // What leaves carries the node's heat at its temperature now: radiation and evaporation
+        // earlier in this call may have cooled it below `tg` (liquid that came in from above
+        // brought its fusion enthalpy, so the mean only seems warmer then).
+        let tcur = t.min((w.e_ground[i] - s.hold[i][0]) / s.cap[i].max(1.0)).max(0.0);
         let (mut qsum, mut power, mut out) = (0.0, 0.0, 0.0);
         if lvol > 0.0 && cnt > 0 {
             let x = lvol.min(area * rmax) / wsum;
@@ -610,7 +613,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
                 // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
                 let want = m * (p.cp * tcur + p.lf);
-                let e = w.take_heat(i, want);
+                let e = w.take_heat_with(i, want, m * p.cp);
                 let m = if want > 0.0 { m * crate::share(e, want) } else { m };
                 (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
                 settle(s, k, i, -m);
@@ -659,7 +662,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                     let m = w.ground[k * n + i] * (1.0 - molten(s, k, i)) * f;
                     // Picked up with its heat; less is picked up if the node cannot pay.
                     let want = m * s.sp[k].cp * tcur;
-                    let e = w.take_heat(i, want);
+                    let e = w.take_heat_with(i, want, m * s.sp[k].cp);
                     let m = if want > 0.0 { m * crate::share(e, want) } else { m };
                     w.ground[k * n + i] -= m;
                     s.sed[i * ns + si] += m;

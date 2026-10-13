@@ -74,6 +74,11 @@ fn take_heat_never_takes_a_node_below_the_floor() {
     assert!(pcore::check::broken(&w).is_none());
     // A negative request gives heat and is returned whole.
     assert_eq!(w.take_heat(i, -5.0), -5.0);
+    // Heat that leaves with matter of most of the node's heat capacity may take the node down
+    // to the floor of the heat capacity that stays.
+    let (c, e1) = (0.9 * w.heat_cap_ground(i), w.e_ground[i]);
+    let took = w.take_heat_with(i, e1, c);
+    assert!((e1 - took - (w.heat_cap_ground(i) - c) * pcore::T_FLOOR).abs() <= 1e-9 * e1, "{took} of {e1}");
 }
 
 /// A brain grown (more hidden units and memory) and shrunk back is the brain it was.
@@ -219,4 +224,62 @@ fn cold_bodies_release_too_little() {
         println!("light-capturing {kind}: release / upkeep at 250, 270, 280, 290, 300 K: {r:.3?}");
         assert!(r[0] < 1.0 && r[3] > 1.0, "{r:?}");
     }
+}
+
+/// A body whose safe minimums are all off holds nothing it must keep, so it can give all it holds
+/// to a body with room (here handling costs nothing, so no reaction leaves it anything). Left with
+/// nothing of a member, it dies at once: no other body meets an empty body, which has no heat
+/// capacity to share its heat by (taking from one gave NaN, which reached the air).
+#[test]
+fn a_body_that_gives_all_it_holds_dies_at_once() {
+    use pcore::body::{Lineage, INTERVAL};
+    use pcore::event::EventKind;
+    use pcore::{body, bond, brain, change, choose, flow};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    w.cfg.phys.c_handle = 0.0;
+    let (n, ns, lay) = (w.grid.n(), w.chem.ns(), Layout::of(&w.chem));
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    // Brains that only give to a body they see, and that only rest.
+    let mut r = Rng::new(1, 0, 0, Purpose::Body);
+    let shape = choose::shape(ns, 12, 6);
+    let mut lineage = |w: &mut pcore::World, fixed: [f32; brain::FIXED], verbs: [f32; brain::VERBS + brain::OVERBS]| {
+        let mut base = brain::random(shape, &mut r, 0.1, fixed, -8.0, verbs);
+        let rows = base.split_off(shape.base());
+        (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows))
+    };
+    let mut give = [-8.0; brain::VERBS + brain::OVERBS];
+    give[1] = 8.0;
+    let (gl, gg) = lineage(&mut w, [-8.0; brain::FIXED], give);
+    let mut rest = [-8.0; brain::FIXED];
+    rest[0] = 8.0;
+    let (rl, rg) = lineage(&mut w, rest, [-8.0; brain::VERBS + brain::OVERBS]);
+    let mut giver = worldgen::life::make(&mut w, 1, i, gl, gg).expect("body");
+    // No safe minimums, and a long interval, so one give may move all it holds.
+    giver.genes[lay.min..lay.upt].fill(-0.1);
+    giver.genes[INTERVAL] = 1.5;
+    let mut taker = worldgen::life::make(&mut w, 1, i, rl, rg).expect("body");
+    taker.genes[lay.keep..].fill(0.95);
+    let g = w.life.add(giver, w.day, 1);
+    w.life.add(taker, w.day, 1);
+    let dt = w.cfg.phys_days as f64 * 86_400.0;
+    for _ in 0..3 {
+        let d = w.day % w.cfg.days_per_month as u64;
+        if d.is_multiple_of(w.cfg.phys_days as u64) {
+            body::survey(&mut w);
+            flow::step(&mut w, dt);
+            change::step(&mut w, dt);
+        }
+        if d == 0 {
+            bond::step(&mut w);
+        }
+        body::day(&mut w);
+        w.day += 1;
+        for b in w.life.alive() {
+            assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);
+        }
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    assert!(w.events.iter().any(|e| matches!(e.kind, EventKind::Gave { .. })), "nothing was given");
+    assert!(!w.life.bodies[g].alive, "the giver lives on");
 }

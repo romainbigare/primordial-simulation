@@ -125,8 +125,8 @@ fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
 /// from the air's mean height). The ground temperature is solved implicitly.
 pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, e_ground, e_air, ledger, canopy, light, life, .. } = w;
-    let (na, adt) = (grid.na(), s.area * dt);
+    let World { cfg, grid, ground, e_ground, e_air, ledger, canopy, light, life, .. } = w;
+    let (n, na, adt) = (grid.n(), grid.na(), s.area * dt);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
     s.node_tmp.fill(0.0);
@@ -151,16 +151,22 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         // its heat capacity over the step (none on a melting plateau, which holds the node
         // still) in series with the conduction of any soft solid cover.
         let t3 = SIGMA * t * t * t;
-        let r = if s.pk[i] != NONE { 0.0 } else { adt / s.cap[i] } + s.rc[i];
-        let ts = if r > 0.0 {
-            let k = 1.0 / r;
-            (t * k + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (k + 4.0 * t3 + cfg.sensible)
-        } else {
-            t
-        };
-        let (mut up, mut hs) = (t3 * (4.0 * ts - 3.0 * t), cfg.sensible * (ts - tl));
-        // A node on a plateau with no cover has no inertia in `r`: it can still pay only what it
-        // holds above `T_FLOOR`; it emits and conducts less in proportion (as `World::take_heat`).
+        let surface = |r: f64| if r > 0.0 { (t / r + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (1.0 / r + 4.0 * t3 + cfg.sensible) } else { t };
+        let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), cfg.sensible * (ts - tl));
+        let mut ts = surface(if s.pk[i] != NONE { 0.0 } else { adt / s.cap[i] } + s.rc[i]);
+        // A plateau holds the node only while its fusion enthalpy lasts: a step that would
+        // freeze (or melt) more than the node holds takes it off the plateau, so its heat
+        // capacity holds it back like any node's.
+        if s.pk[i] != NONE {
+            let ((up, hs), lat) = (flux(ts), ground[s.pk[i] * n + i] * s.sp[s.pk[i]].lf);
+            let net = adt * (sw + down - up - hs);
+            if net < -s.phi[i] * lat || net > (1.0 - s.phi[i]) * lat {
+                ts = surface(adt / s.cap[i] + s.rc[i]);
+            }
+        }
+        let (mut up, mut hs) = flux(ts);
+        // A node can pay only what it holds above `T_FLOOR`; if a step would take more, it
+        // emits and conducts less in proportion (as `World::take_heat`).
         let (room, lose) = (crate::heat_above_floor(e_ground[i], s.cap[i]), adt * (up + hs));
         if lose > room + adt * (sw + down) {
             let lam = (room + adt * (sw + down)) / lose;
@@ -272,7 +278,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             // The ground also pays the fusion and vaporisation enthalpy the air will hold, and
             // the heat the gas carries; if it cannot pay it all, less evaporates.
             let want = m * (sp.cp * t + sp.lf + sp.lv);
-            let m = if want > 0.0 { m * crate::share(w.take_heat(i, want), want) } else { 0.0 };
+            let m = if want > 0.0 { m * crate::share(w.take_heat_with(i, want, m * sp.cp), want) } else { 0.0 };
             if m <= 0.0 {
                 continue;
             }

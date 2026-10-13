@@ -301,6 +301,10 @@ impl Body {
         };
         self.known[s].1 = (self.known[s].1 + d).clamp(-1.0, 1.0);
     }
+    /// Nothing left of a member (under 1 g each) when the mass is `m`.
+    pub fn empty_at(&self, m: f64) -> bool {
+        m < 1e-3 * self.n()
+    }
     /// A store below its safe minimum, or nothing left of a member.
     pub fn lacking(&self, chem: &Chemistry) -> bool {
         self.lacking_at(chem, self.mass(chem))
@@ -308,7 +312,7 @@ impl Body {
     /// `lacking` when the mass `m` is known.
     pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
         let lay = Layout::of(chem);
-        m < 1e-3 * self.n() || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * m)
+        self.empty_at(m) || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * m)
     }
 }
 
@@ -756,6 +760,12 @@ pub fn day(w: &mut World) {
             Some(cause) => die(w, s, b, cause),
             None => {
                 choose::act(w, s, &mut b, &mut tmp);
+                // An action can leave nothing of a member (all its stores put or given away):
+                // it dies at once, before another body deals with it.
+                if b.empty_at(b.mass(&w.chem)) {
+                    die(w, s, b, LACK);
+                    continue;
+                }
                 b.vis = b.visible(&w.chem);
                 w.life.due[((w.day + b.interval()) % RING) as usize].push((slot, gen));
                 w.life.bodies[s] = b;
@@ -828,6 +838,10 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let days = w.day.saturating_sub(b.last).max(1) as f64;
     let (mut mass, cap) = b.mass_cap(&w.chem);
     b.last = w.day;
+    // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
+    if b.empty_at(mass) {
+        return Some(LACK);
+    }
 
     // Upkeep, paid by the reactions that breathe, as fast as they go at the body's temperature
     // over the time (at least an interval: a decision takes one); its heat is spread over the
@@ -964,7 +978,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         // cannot pay it all, the body soaks up less.
         let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg));
         let want = d * (per + f);
-        let d = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap!(), want), want) } else { 0.0 };
+        let d = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += d * per;
