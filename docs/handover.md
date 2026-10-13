@@ -431,6 +431,7 @@ web/        WebAssembly bindings, Web Worker, 2D map viewer (TypeScript)
 - **Snapshots:** every 10 years, and before every god action, save the full state, compressed (for example with `postcard` or `bincode`, plus `zstd`).
 - **Raw physical events:** body born, body died (and cause: starved, broken, cold…), bond made or broken, first time a substance appears in the world, god action applied. Only raw physical facts. **"A city was founded" is not a raw event.** The pattern finder detects that later.
 - **Summary series** every year: totals per element, energy, population counts per lineage, temperature, absorbing-gas amount.
+  Columns are named by index, never by Earth names: `air_<k>` is the share of the air that is absorbing gas `k` (`absorber` is their total absorption, so the gas that rises is a number), and `cat_<r>` is the mean catalyst gene of reaction `r` over live bodies, by members (log10 speed-up, off counts as 0), so the genes that speed up a reaction (fat-making, fat-burning) can be watched before they show on the map.
 
 ### 8.4 Runtime shells
 

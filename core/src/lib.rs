@@ -190,7 +190,7 @@ pub struct Physics {
     pub leak: f64,
     /// Most of its mass a body puts into one part
     pub form: f64,
-    /// Walls lighter than this fall apart, kg
+    /// Walls lighter than this fall apart, kg (so a part is made of at least this)
     pub min_kg: f64,
     /// A held part multiplies a body's force by 1 + lever · hardness · m / (m + 0.05 body mass)
     pub lever: f64,
@@ -298,8 +298,8 @@ impl Default for Physics {
             c_copy: 2e6,
             new_lineage: 0.001,
             base_noise: 0.03,
-            row_chance: 0.1,
-            row_noise: 0.05,
+            row_chance: 0.3,
+            row_noise: 0.3,
             new_noise: 0.1,
             full: 2.0,
             alike: 4.0,

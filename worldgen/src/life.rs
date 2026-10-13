@@ -47,9 +47,11 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 }
 
 /// Starting kinds. Light-eaters: strong light reaction, slow burning, wide gas exchange and
-/// capture area, long intervals, resting; one node per land cell, members of 1 kg (copying at
-/// 2 kg), 0.1 kg/m². Eaters: fast burning, take the energy-rich solid from bodies and the
-/// ground, short intervals; individuals of 30 kg (copying at 63 kg), two in some cells. Both
+/// capture area, long intervals, resting, learning off; one node per land cell, members of 1 kg
+/// (copying at 2 kg), 0.1 kg/m². Eaters: fast burning, take the energy-rich solid from bodies and
+/// the ground, short intervals, learning on at rate 10^-1 (the `LEARN` gene, -1.0: the rate the
+/// Choose test passed with, ten times slower than before; it evolves); individuals of 30 kg
+/// (copying at 63 kg), two in some cells. Both
 /// start with a mutation size of 10^-1.2 per generation (generations are short at these sizes).
 /// The third kind is the clever lineage of the experiment `--clever-year`: an eater with a big
 /// brain (48 hidden units, 12 memory numbers, 6 bodies perceived, sight of 3 cells) and learning
@@ -58,7 +60,7 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// the question "does a big brain pay for its cost" could not be asked.
 const KINDS: [Kind; 3] = [
     Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [15.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
-    Kind { scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -2.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
+    Kind { scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
     Kind { scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
 ];
 
@@ -74,26 +76,36 @@ const KINDS: [Kind; 3] = [
 /// decisions, a rate nobody chose; the old value keeps the pace of generations, not a behaviour.
 /// Then every body gets `rounds` rounds of mutation (genes by `copy::mutate`, born brain rows by
 /// `copy::shake` as large as a copy that changes rows), each body its own random walk and, for
-/// the rows, its own genome, so the first generation is already a spray of variants.
+/// the rows, its own genome, so the first generation is already a spray of variants. A neutral
+/// start gets more than one generation's step, since that step is too small to give selection
+/// anything to pick from in the time available (review 2, problem 2): the bias of every row (the
+/// action biases among them) gets rounds of `size`, so after 20 rounds they span about
+/// sqrt(20) × 0.2 = 0.9; the other entries of the rows keep the step of one generation, so the
+/// features do not swamp the brain; the genes get `genes` times the step of one generation.
+/// Hand-set starts (`hand`) keep the step of one generation for everything.
 #[derive(Clone, Copy, Debug)]
 pub struct Seeding {
     /// Restore the old hand-set brain biases, per kind (light-eaters, eaters), for comparison.
     pub hand: [bool; 2],
     /// Rounds of mutation given to every body placed (0: all bodies of a kind are the same).
     pub rounds: u32,
+    /// Step of one round on the bias of every row (neutral starts)
+    pub size: f32,
+    /// How many times the step of one generation the genes get in all (neutral starts)
+    pub genes: f32,
 }
 
 impl Seeding {
     /// The old start: hand-set brain biases and no mutation (for tests of the laws that need the
     /// same body every time).
     pub fn old() -> Self {
-        Seeding { hand: [true; 2], rounds: 0 }
+        Seeding { hand: [true; 2], rounds: 0, ..Default::default() }
     }
 }
 
 impl Default for Seeding {
     fn default() -> Self {
-        Seeding { hand: [false; 2], rounds: 20 }
+        Seeding { hand: [false; 2], rounds: 20, size: 0.2, genes: 3.0 }
     }
 }
 
@@ -128,6 +140,8 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let shared = (how.rounds == 0).then(|| w.life.new_genome(rows.clone()));
     let (mut placed, mut members, mut kg) = (0usize, 0.0, 0.0);
     let (mut cat, mut cmass) = ([(f32::MAX, f32::MIN); 2], (f32::MAX, f32::MIN));
+    // One action bias, "take from a body": its range and spread over the bodies placed.
+    let (at, mut tb) = (shape.verb(0) * shape.r() + shape.h, (f32::MAX, f32::MIN, 0.0f64, 0.0f64));
     let (light, burn) = roles(&w.chem).map_or((0, 0), |(l, _, _, b)| (l, b));
     for i in 0..w.grid.n() {
         let [_, depth, z] = w.life.env[i];
@@ -145,14 +159,21 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
                 for _ in 0..how.rounds {
                     pcore::copy::shake(&mut v, &mut rr, size);
                 }
+                // The bias of each row (its last entry) as far as `rounds` rounds of `size` go.
+                if !hand {
+                    let (r, extra) = (shape.r(), how.size * (how.rounds as f32).sqrt());
+                    v.chunks_exact_mut(r).for_each(|row| pcore::copy::shake(&mut row[shape.h..], &mut rr, extra));
+                }
                 w.life.new_genome(v)
             };
-            let Some(b) = make_with(w, which, i, lineage, genome, how.rounds, id) else { return String::new() };
+            let Some(b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { how.genes }, id) else { return String::new() };
             let lay = Layout::of(&w.chem);
             for (c, g) in cat.iter_mut().zip([lay.cat + light, lay.cat + burn]) {
                 *c = (c.0.min(b.genes[g]), c.1.max(b.genes[g]));
             }
             cmass = (cmass.0.min(b.genes[body::COPY_MASS]), cmass.1.max(b.genes[body::COPY_MASS]));
+            let x = w.life.born(&b)[at];
+            tb = (tb.0.min(x), tb.1.max(x), tb.2 + x as f64, tb.3 + (x * x) as f64);
             (placed, members, kg) = (placed + 1, members + b.count, kg + b.mass(&w.chem));
             let delay = 1 + r.below(b.interval() as usize) as u64;
             w.life.add(b, w.day, delay);
@@ -160,8 +181,16 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     }
     let name = ["light-eaters", "eaters", "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)"][which];
     let brain = if hand { "hand-set brain biases (old start)" } else { "neutral brain (action biases 0, copy logit kept)" };
+    let (m, n) = (tb.2 / placed.max(1) as f64, placed.max(1) as f64);
+    let spray = if how.rounds == 0 {
+        String::new()
+    } else if hand {
+        ", row and gene steps of one generation".to_string()
+    } else {
+        format!(", row biases {} x {} (spread {:.2}), other row entries and genes at one generation's step (genes x{})", how.rounds, how.size, how.size * (how.rounds as f32).sqrt(), how.genes)
+    };
     format!(
-        "year {:.1}: placed {placed} {name} ({members:.3e} members, {kg:.3e} kg) with {brain}, {} rounds of mutation each; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}",
+        "year {:.1}: placed {placed} {name} ({members:.3e} members, {kg:.3e} kg) with {brain}, {} rounds of mutation each{spray}; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}; bias of taking from a body {:.2}..{:.2} (mean {m:.2}, sd {:.2})",
         w.year(),
         how.rounds,
         cat[0].0,
@@ -169,7 +198,10 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         cat[1].0,
         cat[1].1,
         cmass.0,
-        cmass.1
+        cmass.1,
+        tb.0,
+        tb.1,
+        (tb.3 / n - m * m).max(0.0).sqrt()
     )
 }
 
@@ -177,11 +209,12 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
 /// a new group of it, at the cell's temperature; its matter and energy are booked like an edit.
 /// Not yet placed.
 pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32) -> Option<Body> {
-    make_with(w, which, i, lineage, genome, 0, 0)
+    make_with(w, which, i, lineage, genome, 0, 1.0, 0)
 }
 
-/// `make` after `rounds` rounds of mutation of its genes (a random walk keyed by `id`).
-fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, id: u64) -> Option<Body> {
+/// `make` after `rounds` rounds of mutation of its genes, `gmul` times a generation's step (a
+/// random walk keyed by `id`).
+fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, gmul: f32, id: u64) -> Option<Body> {
     let ((r_light, rich, liquid, burn), kind) = (roles(&w.chem)?, KINDS.get(which)?);
     let group = w.life.new_group(lineage, w.life.genomes[genome as usize].rows.clone());
     let (chem, ledger, t) = (&w.chem, &mut w.ledger, w.life.env[i][0]);
@@ -196,9 +229,12 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     genes[lay.keep..].fill(0.9);
     genes[lay.keep + liquid] = 0.75;
     let mut rg = Rng::new(w.seed, w.day, id, Purpose::Mutate);
+    // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
+    genes[body::MUT] += gmul.log10();
     for _ in 0..rounds {
         genes = pcore::copy::mutate(&lay, &genes, &mut rg);
     }
+    genes[body::MUT] -= gmul.log10();
     let count = if kind.cover > 0.0 { kind.cover * w.grid.area() / kind.mass } else { 1.0 };
     let mut store = vec![0.0; ns];
     store[liquid] = 0.7 * count * kind.mass / chem.subs[liquid].molar_mass;
