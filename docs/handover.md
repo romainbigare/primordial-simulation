@@ -244,7 +244,7 @@ cost = base(body mass) · slope_factor · (1 + resistance of bonded structures i
 When the structures (for example plants) are worn away, the cost falls.
 
 **Radiation (climate).** Radiation is also Flow, between surface nodes, air nodes and a single "space" node:
-- The sun gives energy to surface nodes by latitude, season and planet settings (sun strength, axial tilt, day length).
+- The sun gives energy to surface nodes by latitude, season and planet settings (sun strength, axial tilt, day length). **Latitudes (13 Oct 2026):** the island's rows span 31° to 33.3°, what its 256 km span on the planet (they spanned 5° to 55°, 20 times too wide: the air crosses the map in weeks, so no north-south difference could last). Its climate bands come from height (the lapse rate) and the liquid. Centred where the yearly sunlight equals the old mean, so the start stays near 287 K. Real latitude bands belong to the planet at M4.
 - Surface reflects part of it, based on the reflectance of its substances (ice and sand reflect more, dark plants less).
 - Surface emits `ε · σ · T⁴`.
 - The air column absorbs a fraction `1 − exp(−x)` of the outgoing heat, where `x` (the optical depth) is the sum over the gases of amount × absorption (each gas past its own column amount grows as the square root of its amount).

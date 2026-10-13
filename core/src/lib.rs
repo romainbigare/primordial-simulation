@@ -25,7 +25,11 @@ pub struct Config {
     pub sun: f64,
     /// Axial tilt, degrees
     pub tilt: f64,
-    /// Latitude of the map's south and north edges, degrees
+    /// Latitude of the map's south and north edges, degrees. The island (128 cells of 2 km) spans
+    /// what 256 km spans on the planet, 2.3°, so its climate bands come from height and the
+    /// liquid, not latitude (wide latitudes with air that mixes across the map in weeks gave
+    /// bands that could not last). Centred at 32°, where the yearly sunlight is the mean the
+    /// map had over 5° to 55°, so the starting ground stays near 287 K (40° gave 279 K).
     pub lat_south: f64,
     pub lat_north: f64,
     /// Strength of the deflection of moving air by planet rotation (0 = none)
@@ -337,8 +341,8 @@ impl Default for Config {
         Config {
             sun: 1361.0,
             tilt: 23.4,
-            lat_south: 5.0,
-            lat_north: 55.0,
+            lat_south: 31.0,
+            lat_north: 33.3,
             rotation: 1.0,
             days_per_month: 30,
             months_per_year: 12,
