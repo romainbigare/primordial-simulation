@@ -173,10 +173,12 @@ fn crowded_individuals_merge_into_a_node() {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         w.life.add(b, w.day, 1);
     }
+    // At the month's start (looked at before they act: within the month the node may give its
+    // members up one at a time to the actions of Bond, as the draws go).
+    pcore::body::survey(&mut w);
+    let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
+    assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
     pcore::step(&mut w);
-    // (They may have moved on together since.)
-    let nodes: Vec<f64> = w.life.alive().filter(|b| b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
-    assert!(!nodes.is_empty(), "no node of the lineage after a month");
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");

@@ -152,14 +152,24 @@ fn row_step(p: &Physics, size: f32) -> f32 {
     p.row_noise * size / (p.row_chance as f32).sqrt()
 }
 
-/// Add noise near a normal of spread `size` to each weight (a sum of four 16-bit uniforms from
-/// one draw, centred and scaled: cheap, as a brain has many weights).
+/// Add noise near a normal of spread `size` to each weight: a sum of four 8-bit uniforms, centred
+/// and scaled (steps of 0.7% of `size`), two weights from one draw. Cheap, as a brain has many
+/// weights and a node's dispersing children shake them all (it was a third of their cost).
 pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
-    let k = size * 3f32.sqrt() / 65536.0;
-    for x in w {
-        let u = r.u64();
-        let s = (u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48);
-        *x += k * (s as f32 - 131070.0);
+    const B: u64 = 0x00ff_00ff_00ff_00ff;
+    let k = size * 3f32.sqrt() / 256.0;
+    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits.
+    let sums = |u: u64| {
+        let a = (u & B) + (u >> 8 & B);
+        [((a & 0xffff) + (a >> 16 & 0xffff)) as f32 - 510.0, ((a >> 32 & 0xffff) + (a >> 48)) as f32 - 510.0]
+    };
+    let mut pairs = w.chunks_exact_mut(2);
+    for p in &mut pairs {
+        let s = sums(r.u64());
+        (p[0], p[1]) = (p[0] + k * s[0], p[1] + k * s[1]);
+    }
+    if let [x] = pairs.into_remainder() {
+        *x += k * sums(r.u64())[0];
     }
 }
 
