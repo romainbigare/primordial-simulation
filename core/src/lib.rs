@@ -104,6 +104,12 @@ pub struct Physics {
     pub gas_depth: f64,
     /// Standing liquid depth at which the ground counts as half wet, m
     pub wet_depth: f64,
+    /// Heat the cover of other bodies passes to a body: a layer of `m` kg/m² over it passes
+    /// `shelter / m` W per K and m² of its surface (a body's heat to its surface goes through it in
+    /// series with the body's own conductance), W kg/(m⁴ K). Thicker cover insulates more; bare
+    /// ground adds nothing. 270 gives a 30 kg member (52 W of upkeep, 30 W/K) under
+    /// 10 kg/m² of cover 3.4 K more warmth than bare ground (thick walls give 3.3 K).
+    pub shelter: f64,
     /// Upkeep of catalysts, J per kg per day per decade² of speed-up: it grows as the square of
     /// each catalyst's decades (a speed-up of 10^15 costs 225 units, of 10^2.6 only 6.8), so a
     /// body that wants a far faster reaction pays far more. Life's enzymes cost by their amount,
@@ -116,9 +122,15 @@ pub struct Physics {
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
     /// Cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1), J per kg
+    /// of a member of `m_ref` kg: a member of `m` kg pays `c_brain` x `m_ref` x (`m` / `m_ref`)^0.25
+    /// J (`Physics::think`)
     pub c_brain: f64,
+    /// Mass of the member for which a brain's cost is listed per kg, kg. The cost of a decision
+    /// goes with the brain and only weakly with the body: a 30 kg member pays 2.3 times what a
+    /// 1 kg member pays for the same brain (13 times less per kg), not 30 times
+    pub m_ref: f64,
     /// Cost of one decision per hidden unit, per memory number, per body perceived and per square
-    /// cell of sight, J per kg
+    /// cell of sight, J per kg of a member of `m_ref` kg
     pub c_hidden: f64,
     pub c_memory: f64,
     pub c_seen: f64,
@@ -224,6 +236,14 @@ pub struct Physics {
     pub hold: f64,
 }
 
+impl Physics {
+    /// Energy of one decision of a brain whose cost is `c` J per kg of a member of `m_ref` kg
+    /// (`body::Lineage::cost`), for a member of `m` kg, J: weakly more for a bigger body.
+    pub fn think(&self, c: f64, m: f64) -> f64 {
+        c * self.m_ref * (m / self.m_ref).powf(0.25)
+    }
+}
+
 impl Default for Physics {
     fn default() -> Self {
         Physics {
@@ -231,10 +251,12 @@ impl Default for Physics {
             light_depth: 10.0,
             gas_depth: 1.0,
             wet_depth: 0.01,
+            shelter: 270.0,
             c_cat: 15.0,
             c_strength: 1e5,
             c_leaf: 2e3,
             c_brain: 1e5,
+            m_ref: 1.0,
             c_hidden: 5e3,
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
