@@ -428,18 +428,20 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
     let row = row_step(p, 10f32.powf(b.genes[body::MUT]));
-    // Per gene the halves' shift from the mean (within the walls) and their gap in steps.
+    // Per gene the halves' shift from the mean (within the walls) and their gap in steps (as
+    // `step` counts them, with one look-up of the range: most updates do not split).
     let half = |g: usize| {
-        let ((_, lo, hi), m) = (range(&lay, g), b.genes[g]);
+        let ((u, lo, hi), m) = (range(&lay, g), b.genes[g]);
         let d = (FRAC_2_PI * b.spread[g].max(0.0)).sqrt().min(m - lo).min(hi - m).max(0.0);
-        (d, step(&lay, g, m + d) - step(&lay, g, m - d))
+        let (x, y) = if (body::HIDDEN..=body::SIGHT).contains(&g) { (0.0, 0.0) } else if g < lay.cat { (m + d, m - d) } else { ((m + d).max(0.0), (m - d).max(0.0)) };
+        (d, x / u - y / u)
     };
-    let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).collect();
-    gap.push((usize::MAX, if w.cfg.split_rows { 2.0 * (FRAC_2_PI * b.row_spread).sqrt() / row } else { 0.0 }));
-    let top = gap.iter().fold(0.0f32, |a, x| a.max(x.1));
+    let rows = if w.cfg.split_rows { 2.0 * (FRAC_2_PI * b.row_spread).sqrt() / row } else { 0.0 };
+    let top = (0..b.spread.len()).fold(0.0f32, |a, g| a.max(half(g).1)).max(rows);
     if top <= p.alike {
         return;
     }
+    let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).chain([(usize::MAX, rows)]).collect();
     // As wide but for rounding (a spread held at `most` is the same in steps in every gene).
     gap.retain(|x| x.1 >= top * (1.0 - 1e-4));
     let mut r = Rng::new(w.seed, w.day, b.id(slot), Purpose::Split);
