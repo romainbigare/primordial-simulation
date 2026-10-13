@@ -101,3 +101,62 @@ fn yearly_series_names_gases_and_catalysts() {
     assert_eq!(head.iter().filter(|h| h.starts_with("air_")).count(), gases);
     assert_eq!(head.iter().filter(|h| h.starts_with("cat_")).count(), w.chem.reactions.len());
 }
+
+/// What a tape folder holds: the viewer file's header and frame bytes, the series rows (as text)
+/// and the (year, month) of each months.csv row.
+fn read_tape(dir: &std::path::Path) -> (serde_json::Value, usize, Vec<String>, Vec<(u64, u64)>) {
+    let mut raw = vec![];
+    GzDecoder::new(std::fs::File::open(dir.join("world.ewf.gz")).unwrap()).read_to_end(&mut raw).unwrap();
+    let n = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
+    let meta = serde_json::from_slice(&raw[8..8 + n]).unwrap();
+    let series = std::fs::read_to_string(dir.join("series.csv")).unwrap().lines().map(String::from).collect();
+    let months = std::fs::read_to_string(dir.join("months.csv")).unwrap();
+    let ym = |l: &str| (l.split(',').next().unwrap().parse().unwrap(), l.split(',').nth(1).unwrap().parse().unwrap());
+    (meta, raw.len() - 8 - n, series, months.lines().skip(1).map(ym).collect())
+}
+
+/// A run written for 3 years and resumed from its year 2 snapshot into the same folder keeps
+/// the years 0..2 it had, replays 3 and goes on to 4: series, months, frames and events with no
+/// gap and no repeat.
+#[test]
+fn resume_into_the_same_folder_continues_the_tape() {
+    let dir = tmp("resume");
+    let mut w = world();
+    let (mpy, dpy) = (w.cfg.months_per_year as u64, w.days_per_year());
+    let mut rec = tape::Recorder::new(&w, 1, 0);
+    rec.record_month(&mut w);
+    for m in 1..=3 * mpy {
+        run(&mut w, 1);
+        rec.record_month(&mut w);
+        if m == 2 * mpy {
+            tape::save_snapshot(&w, dir.join("snap.bin.gz")).unwrap();
+        }
+    }
+    rec.finish(&dir).unwrap();
+    let (first, ..) = read_tape(&dir);
+    let first_series = std::fs::read_to_string(dir.join("series.csv")).unwrap();
+
+    let mut w = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
+    let mut rec = tape::Recorder::new(&w, 1, 0);
+    rec.resume(&mut w, &dir).unwrap();
+    rec.record_month(&mut w);
+    for _ in 0..2 * mpy {
+        run(&mut w, 1);
+        rec.record_month(&mut w);
+    }
+    rec.finish(&dir).unwrap();
+
+    let (meta, bytes, series, months) = read_tape(&dir);
+    let years: Vec<&str> = series[1..].iter().map(|r| r.split(',').next().unwrap()).collect();
+    assert_eq!(years, ["0", "1", "2", "3", "4"]);
+    // The row of the snapshot's year is the one the first run wrote, not a new one.
+    assert_eq!(series[..4], first_series.lines().take(4).map(String::from).collect::<Vec<_>>());
+    assert_eq!(months, (0..=4 * mpy).map(|i| (i / mpy, i % mpy)).collect::<Vec<_>>());
+    let days: Vec<u64> = meta["frames"].as_array().unwrap().iter().map(|f| f["day"].as_u64().unwrap()).collect();
+    assert_eq!(days, (0..5).map(|y| y * dpy).collect::<Vec<_>>());
+    assert_eq!(bytes, 5 * 32 * 32 * tape::LAYERS.len());
+    assert_eq!(meta["events"], first["events"]);
+    for col in meta["series"].as_object().unwrap().values() {
+        assert_eq!(col.as_array().unwrap().len(), 5);
+    }
+}
