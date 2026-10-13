@@ -362,8 +362,10 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
         return;
     }
     // The group's rows step by the rate split over its members, so a shared brain moves as fast
-    // as one body's would (on the mean of what its members met).
-    let gl = lr / gr.members.max(1) as f32;
+    // as one body's would (on the mean of what its members met): a node's decision is that of
+    // all its members, so it weighs by its count, and an individual split off a node of thousands
+    // weighs as one of them (counts as of the month's start; a new group's first body, all).
+    let gl = (lr as f64 * b.n() / gr.count.max(b.n())) as f32;
     brain::fit(&mut gr.rows[cr..cr + s.r()], h, &[1.0], gl * delta);
     brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, gl, &mut gr.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
     let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS + OVERBS).map(|v| c[s.verb(v)]));

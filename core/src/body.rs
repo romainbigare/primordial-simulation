@@ -418,6 +418,10 @@ pub struct Group {
     /// the same; not saved); and of their forgetting rates
     #[serde(skip)]
     pub sum: Vec<f32>,
+    /// Members of its bodies (a node counts its count), as of the start of the month (not saved;
+    /// rebuilt with `sum`): a body's decisions move the shared rows by its share of them
+    #[serde(skip)]
+    pub count: f64,
     pub forget: f32,
     /// Moving average of the square of the critic's error (0 until the first one)
     pub var: f32,
@@ -509,15 +513,18 @@ impl Life {
             *s = s1;
         }
     }
-    /// Rebuild the groups' sums of born rows from their members, in slot order.
+    /// Rebuild the groups' sums of born rows and their counts of members from their bodies, in slot
+    /// order.
     pub fn resum(&mut self) {
         for g in self.groups.iter_mut() {
             g.sum.clear();
             g.sum.resize(g.rows.len(), 0.0);
+            g.count = 0.0;
         }
         for b in self.bodies.iter().filter(|b| b.alive) {
             let (gr, born) = (&mut self.groups[b.group as usize], &self.genomes[b.genome as usize].rows);
             gr.sum.iter_mut().zip(born).for_each(|(s, &x)| *s += x);
+            gr.count += b.n();
         }
     }
     /// Move the centre of group `g` by a member at `cell` (`d` = 1 arrived, -1 left).
