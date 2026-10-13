@@ -146,7 +146,8 @@ pub struct Consts {
     pub liq: f64,
     pub heat: f64,
     pub leaf: f64,
-    /// Catalyst factor of each reaction (1 when off), and the summed speed-up (decades)
+    /// Catalyst factor of each reaction (1 when off), and the sum of the squares of the speed-ups
+    /// (decades), which upkeep charges
     pub cat: Vec<f64>,
     pub cats: f64,
     pub interval: u64,
@@ -211,7 +212,7 @@ impl Body {
         }
         let cat = Layout::of(chem).cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
-        let cats = (0..chem.reactions.len()).map(|r| self.gene(cat + r).max(0.0)).sum();
+        let cats = (0..chem.reactions.len()).map(|r| self.gene(cat + r).max(0.0).powi(2)).sum();
         let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0).map(|r| (r, -chem.dh(r))).collect();
         let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
@@ -1017,8 +1018,9 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     None
 }
 
-/// Upkeep over `days` of a body of `mass` kg, J: of catalysts, strength and capture area by
-/// the day, of learning and signalling, and of one decision. Needs `prepare`.
+/// Upkeep over `days` of a body of `mass` kg, J: of catalysts (convex in decades of speed-up, as
+/// the square, see `Physics::c_cat`), strength and capture area by the day, of learning and
+/// signalling, and of one decision. Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;

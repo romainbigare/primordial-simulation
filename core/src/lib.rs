@@ -104,7 +104,12 @@ pub struct Physics {
     pub gas_depth: f64,
     /// Standing liquid depth at which the ground counts as half wet, m
     pub wet_depth: f64,
-    /// Upkeep of catalysts, J per kg per day per decade of speed-up
+    /// Upkeep of catalysts, J per kg per day per decade² of speed-up: it grows as the square of
+    /// each catalyst's decades (a speed-up of 10^15 costs 225 units, of 10^2.6 only 6.8), so a
+    /// body that wants a far faster reaction pays far more. Life's enzymes cost by their amount,
+    /// which goes with the speed-up itself, not its logarithm; chemistry 0 cannot use that yet
+    /// (its light reaction needs 10^15), so this is a stand-in until chemistry is rescaled (M7).
+    /// 15 makes the starting light-eaters (genes 15 and 2) pay what a cost of 200 per decade did.
     pub c_cat: f64,
     /// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg)
     pub c_strength: f64,
@@ -226,7 +231,7 @@ impl Default for Physics {
             light_depth: 10.0,
             gas_depth: 1.0,
             wet_depth: 0.01,
-            c_cat: 2e2,
+            c_cat: 15.0,
             c_strength: 1e5,
             c_leaf: 2e3,
             c_brain: 1e5,
