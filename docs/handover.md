@@ -1,6 +1,6 @@
 # Handover: Emergent World, version 2
 
-**Written:** 10 October 2026. **Revised:** 11 October 2026 (chemistry 0; shared group brains; word-ban fix; honest speed targets; budgets as goals; M3 check point). 12 October 2026 (after the M3 check point review: real-sized bodies, no hard density limit, fix list before M4, reports kept in `docs/reports/`). 13 October 2026 (reaction rate first order in the scarce input).
+**Written:** 10 October 2026. **Revised:** 11 October 2026 (chemistry 0; shared group brains; word-ban fix; honest speed targets; budgets as goals; M3 check point). 12 October 2026 (after the M3 check point review: real-sized bodies, no hard density limit, fix list before M4, reports kept in `docs/reports/`). 13 October 2026 (after the second review: reaction rate first order in the scarce input; convex catalyst upkeep; population nodes that differ, split and act; holding needs force; light on bodies set aside as it falls; bodies radiate; report `watch-2-before-m4.md`).
 **For:** a new AI agent (or engineer) who will start building version 2 from an empty project.
 **From:** a design conversation between the project owner and Claude, after a review of version 1, an earlier attempt with the same goal. You do not have version 1. Everything useful from it is written in this document.
 

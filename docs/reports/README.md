@@ -11,3 +11,7 @@ folder with the same name as the report.
   the full analysis in `watch-pre-m4/`.
 - `review-2-before-m4.md`: the second review of Part 1, after the fixes. From reading the code
   only, with the list of 16 items to do before M4 in order, 13 October 2026.
+- `watch-2-before-m4.md`: the second fix list done (all 16 items, the new rate law, 7 bugs found by
+  the long runs), three 300-year runs with neutral eaters, and the two comparisons (nodes against
+  individuals, shared against own brains), 13 October 2026. Pictures, charts and the full analysis
+  in `watch-2-before-m4/`.
