@@ -349,3 +349,62 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// An individual far past `full` times its copy mass owes many children at once. It pays into its
+/// child store what its reactions can release (and it can spare) at each update and has the whole
+/// children the store covers, the rest later (review 3, P6; all or nothing, it could never pay and
+/// grew without end). Matter and energy are kept exactly; the store is a count of work done.
+#[test]
+fn a_heavy_individual_copies_over_several_updates() {
+    use pcore::body::{Lineage, DISPERSE};
+    use pcore::event::EventKind;
+    use pcore::{body, brain, change, choose, flow};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let n = w.grid.n();
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    // A starting eater whose brain only rests, ten times as heavy: 300 kg, 2.4 times `full`, so it
+    // owes 5.6 children and 2.1 x 10^9 J, more than its reactions can release in one interval (it
+    // does not eat).
+    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let mut rest = [-8.0; brain::FIXED];
+    rest[0] = 8.0;
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows));
+    let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+    for k in 0..w.chem.ns() {
+        w.chem.add_elems(k, 9.0 * b.store[k], &mut w.ledger.imposed_elems);
+        (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + 9.0 * b.store[k] * w.chem.subs[k].hf, 10.0 * b.store[k]);
+    }
+    (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + 9.0 * b.e, 10.0 * b.e, 0.0);
+    // Weak (strength costs most of its upkeep), so it lives on its stores a while.
+    b.genes[pcore::body::STRENGTH] = 0.0;
+    let (s, start) = (w.life.add(b, w.day, 1), w.day);
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let (mut log, mut born, dt) = (Vec::new(), 0.0, w.cfg.phys_days as f64 * 86_400.0);
+    for _ in 0..150 {
+        if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
+            body::survey(&mut w);
+            flow::step(&mut w, dt);
+            change::step(&mut w, dt);
+        }
+        w.events.clear();
+        body::day(&mut w);
+        let b = &w.life.bodies[s];
+        if b.alive && b.last == w.day && w.day > start {
+            let c: f64 = w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum();
+            assert_eq!(c, c.round(), "part of a child");
+            log.push((b.mass(&w.chem) as i64, b.paid as i64, c));
+            born += c;
+        }
+        w.day += 1;
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    println!("mass kg, child store J, children: {log:?}");
+    let with = log.iter().filter(|x| x.2 > 0.0).count();
+    assert!(with >= 2 && born >= 3.0 && log[0].2 < born, "children at once: {log:?}");
+    assert!(log.iter().any(|x| x.1 > 0 && x.2 == 0.0), "the store never carried work over: {log:?}");
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}

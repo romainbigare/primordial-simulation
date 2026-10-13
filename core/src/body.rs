@@ -146,6 +146,11 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
+    /// Child store: the work already done toward its next children, J (`copy::copy`). The energy
+    /// paid left the body as heat when it was paid (`pay`), so this is a count of work done, not
+    /// energy held: lost at death, shared out and added up as members split and join.
+    #[serde(default)]
+    pub paid: f64,
     /// Numbers that follow from the genes (rebuilt when missing)
     #[serde(skip)]
     pub k: Consts,
@@ -280,12 +285,7 @@ impl Body {
     /// `prepare`.
     pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, mass: f64, t: f64, spare: f64) -> f32 {
         let lay = Layout::of(chem);
-        let mut e = 0.0;
-        for &(r, q) in &self.k.burn {
-            let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
-            e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
-        }
-        let mut w = ln(1.0 + (e / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
+        let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
@@ -297,6 +297,16 @@ impl Body {
             }
         }
         w
+    }
+    /// Energy its catalysed reactions that release heat could release from its stores at
+    /// temperature `t` (each as far as its inputs that are not gas go), J. Needs `prepare`.
+    pub fn fuel(&self, chem: &Chemistry, t: f64) -> f64 {
+        let mut e = 0.0;
+        for &(r, q) in &self.k.burn {
+            let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
+            e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
+        }
+        e
     }
     /// How past dealings with body `id` went, if it is known.
     pub fn recall(&self, id: u64) -> Option<f32> {
@@ -1197,13 +1207,17 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    let ((mass, cap), e0) = (b.mass_cap(&w.chem), b.e);
+    let (mass, cap) = b.mass_cap(&w.chem);
+    let t0 = b.e / cap.max(1e-9);
     let paid = pay_at(w, b, cost, days, mass, cap, false) == 0.0;
     // The heat released leaves the body for its cell's ground within the action (a body's heat
-    // relaxes within seconds), so a costly action does not leave it hot.
-    if b.e > e0 {
-        w.e_ground[b.cell as usize] += b.e - e0;
-        b.e = e0;
+    // relaxes within seconds), so a costly action does not leave it hot; but for what keeps it at
+    // its temperature as what its reactions made holds more heat (a large cost, such as a child's,
+    // left it cold, and slow).
+    let keep = t0 * b.heat_cap(&w.chem);
+    if b.e > keep {
+        w.e_ground[b.cell as usize] += b.e - keep;
+        b.e = keep;
     }
     paid
 }

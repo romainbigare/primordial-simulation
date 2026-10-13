@@ -1,4 +1,5 @@
-//! Law 4: Copy. A body whose members have enough mass, if it can pay the cost, makes a child
+//! Law 4: Copy. A body whose members have enough mass pays the work of copying into its child
+//! store as far as its reactions can release it now, and makes the children it covers, a child
 //! per member: a share of each of its stores and of its heat, and its genes plus small noise
 //! (now and then a change of the brain rows it was born with, else it shares its parent's); it
 //! starts in its parent's brain group (or, if brains are not shared, in a group of its own with
@@ -170,15 +171,33 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // size it would give at that mass: share `s` of its stores, `k` children.
     let (m1, full) = (mass / n, w.cfg.phys.full * mc);
     let (s, k) = if m1 > full { (1.0 - (1.0 - frac) * full / m1, (m1 / full - 1.0 + frac) / frac) } else { (frac, 1.0) };
-    // A node's members copy as far as its reactions can release the cost now (a share of them);
-    // an individual all or nothing.
-    let (cost, days) = (w.cfg.phys.c_copy * s * mass, b.interval() as f64);
-    let p = if n > 1.0 { (0.999 * body::release(w, b, days) / cost).min(1.0) } else { 1.0 };
-    if p <= 0.0 || !body::pay(w, b, cost * p, days) {
+    // The work of making them, `c_copy` per kg given, is paid into the child store (`Body::paid`)
+    // as far as its reactions can release it now (review 3, P6): copying is a process, so a body
+    // need not release a child's whole cost in one interval, nor a member far past `full` all
+    // its children's at once (all or nothing, it could never pay and grew without end, M2). It
+    // pays from what it can spare: its fuel `f` (what its reactions could release from its
+    // stores) as far as, less what it pays, it can still release its upkeep `u` over an interval
+    // at today's rate `r` (first order in the fuel): (f - paid) r / f >= u (the children's share
+    // takes fuel and upkeep alike). Paying all it could release, a body starved with its children
+    // half paid. It has the children the store covers: a node a share of them, an individual
+    // whole ones; the rest later.
+    let (owe, days) = (w.cfg.phys.c_copy * s * mass, b.interval() as f64);
+    let more = if owe > b.paid {
+        let (f, r) = (b.fuel(&w.chem, b.temp(&w.chem)), 0.999 * body::release(w, b, days));
+        let spare = f * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300));
+        (owe - b.paid).min(spare).min(r)
+    } else {
+        0.0
+    };
+    if more > 0.0 && body::pay(w, b, more, days) {
+        b.paid += more;
+    }
+    let p = if owe > 0.0 { (b.paid / owe).min(1.0) } else { 1.0 };
+    let (i, births) = (b.cell as usize, if n > 1.0 { n * k * p } else { (k * p + 1e-9).floor() });
+    if births <= 0.0 {
         return false;
     }
-    // An individual's children are whole.
-    let (i, births) = (b.cell as usize, if n > 1.0 { n * k * p } else { k.round() });
+    b.paid = (b.paid - owe * births / (n * k)).max(0.0);
     let cat = body::light_cat(&w.chem, &b.genes);
     w.events.push(Event { day: w.day, kind: EventKind::Born { cat }, node: i as u32, value: births });
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
@@ -198,7 +217,9 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             return true;
         }
     }
-    let share = s * m / births;
+    // Each child gets share `s / k` of a member's stores (a node's children were 1 / p too big
+    // when it paid for a share p of them).
+    let share = s * m / (n * k);
     let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, &mut r);
     let mut c = Body {
         cell: cell as u32,
@@ -336,7 +357,7 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 }
 
 /// Members `c` (not placed, born with `rows`, in the shape of `t`'s brain) join body `t`:
-/// stores and heat add up; genes and born rows become the means by count, and the spread what
+/// stores, heat and child stores add up; genes and born rows become the means by count, and the spread what
 /// both held around the new mean (each one's spread plus its gap from the new mean squared, by
 /// count; for the rows the gap squared is the mean over rows; up to `most`), so the smaller one's
 /// genes stay in the spread, not only in the mean.
@@ -359,19 +380,19 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: &[f32]) {
     let (genes, born) = (mix(&o.genes, &c.genes), mix(born, rows));
     w.life.reborn(o, genes, born);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
-    (o.e, o.count) = (o.e + c.e, o.n() + c.n());
+    (o.e, o.count, o.paid) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid);
     o.vis = o.visible(&w.chem);
 }
 
-/// Share `f` of node `b`'s members as a new body (not placed): that share of each store and of
-/// the heat; lineage, group, genome, memory as the node's; holding nothing, inside nothing.
+/// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the
+/// heat and of the child store; lineage, group, genome, memory as the node's; holding nothing, inside nothing.
 fn part(b: &mut Body, f: f64) -> Body {
-    let mut c = Body { count: f * b.count, e: f * b.e, trace: Vec::new(), k: body::Consts::default(), hold: 0, inside: 0, ..b.clone() };
+    let mut c = Body { count: f * b.count, e: f * b.e, paid: f * b.paid, trace: Vec::new(), k: body::Consts::default(), hold: 0, inside: 0, ..b.clone() };
     for (a, x) in b.store.iter_mut().zip(c.store.iter_mut()) {
         *x = f * *a;
         *a -= *x;
     }
-    (b.e, b.count) = (b.e - c.e, b.count - c.count);
+    (b.e, b.count, b.paid) = (b.e - c.e, b.count - c.count, b.paid - c.paid);
     c
 }
 
