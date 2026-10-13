@@ -532,7 +532,8 @@ pub struct World {
     pub parts: bond::Parts,
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
     pub canopy: Vec<f32>,
-    /// Light intercepted in each cell per m² of light-capture area since the start, J/m²
+    /// Light intercepted in each cell per m² of light-capture area since the start (the mean of
+    /// its bodies: taller members catch more, `body::shade`), J/m²
     pub light: Vec<f64>,
     /// Ground cleared of bodies along each edge, m²: edge `4i + f` joins cell `i` to its
     /// neighbour `FORWARD[f]` (each edge once, used both ways). Movers pushing through bodies raise

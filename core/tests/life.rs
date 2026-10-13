@@ -349,3 +349,49 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// Light passes through a cell's bodies from the tallest member down (`body::shade`): of two
+/// light-eater nodes with the same capture area, the one of 100 times heavier members catches
+/// more light per m² of it (e^(its capture area per ground area) times more), the two together
+/// catch what the cell's canopy intercepts, and matter and energy are kept exactly.
+#[test]
+fn a_tall_member_shades_a_short_one() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    let short = (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).max_by(|&a, &b| w.life.bodies[a].count.total_cmp(&w.life.bodies[b].count)).expect("a node");
+    let (i, area) = (w.life.bodies[short].cell as usize, w.grid.area());
+    // The cell's other nodes move next door.
+    for s in w.life.at[i].clone().into_iter().map(|s| s as usize).filter(|&s| s != short) {
+        let (g, j) = (w.life.bodies[s].group, i ^ 1);
+        w.life.relocate(s, g, i, j);
+        (w.life.bodies[s].cell, w.life.bodies[s].mark) = (j as u32, w.light[j]);
+    }
+    // Two nodes of capture area 0.5 per ground area each, the same but for member mass (and
+    // the copy mass gene, so they are not alike and stay apart).
+    let b = &mut w.life.bodies[short];
+    let f = 0.5 * area / (b.vis[1] as f64 * b.n());
+    b.store.iter_mut().for_each(|a| *a *= f);
+    (b.e, b.count) = (b.e * f, b.n() * f);
+    let mut tall = b.clone();
+    (tall.count, tall.genes[pcore::body::COPY_MASS], tall.k) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0, Default::default());
+    (b.vis, tall.vis) = (b.visible(&w.chem), tall.visible(&w.chem));
+    let slots = [w.life.add(tall, w.day, 1), short];
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    pcore::body::survey(&mut w);
+    let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * 86_400.0);
+    pcore::flow::step(&mut w, dt);
+    let bs = &w.life.bodies;
+    let per = |s: usize| w.light[i] - bs[s].mark;
+    let cap = |s: usize| bs[s].vis[1] as f64 * bs[s].n();
+    let (t, sh) = (per(slots[0]), per(slots[1]));
+    println!("light per m² of capture area: tall {t:.4e}, short {sh:.4e} J");    assert!(sh > 0.0 && (t / sh / (cap(slots[0]) / area).exp() - 1.0).abs() < 1e-6, "tall {t:e}, short {sh:e}");
+    let (all, cell) = (cap(slots[0]) * t + cap(slots[1]) * sh, (w.light[i] - light0) * w.canopy[i] as f64 * area);
+    assert!((all / cell - 1.0).abs() < 1e-6, "bodies caught {all:e} J, the canopy {cell:e} J");
+    for _ in 0..3 {
+        pcore::step(&mut w);
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
