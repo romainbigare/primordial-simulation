@@ -11,7 +11,14 @@ use pcore::{brain, choose, World};
 /// Typical surface temperature, K.
 const T_SURF: f64 = 290.0;
 
-struct Kind {
+/// One row of the table of starting kinds: the genes it starts with and where and how many are placed.
+pub struct Kind {
+    /// What the seeding line calls it (physical terms only)
+    pub name: &'static str,
+    /// Years after the first life that it is placed (`--life-year`): light-eaters first, the others once what they take has spread
+    pub year: i64,
+    /// Placed on any land cell (else only where bodies already are)
+    anywhere: bool,
     scalars: [f32; body::NSCALAR],
     /// log10 speed-up of the light reaction and of the burning of the energy-rich solid
     cat: [f32; 2],
@@ -24,13 +31,16 @@ struct Kind {
     /// Chance per land cell
     chance: f64,
     /// Hand-set brain biases (the old start, used only with `Seeding::hand`; by default only the
-    /// copy logit is used): rest, copy (its own chance, as a logit), put, take from the node, form a
-    /// part, let go, join to the ground, break the ground; move; take from, put to, watch a body;
-    /// hold, take from, put to, join to, break, enter a part
-    fixed: [f32; brain::FIXED],
-    dir: f32,
-    verbs: [f32; brain::VERBS + brain::OVERBS],
+    /// copy logit is used)
+    hand: Hand,
 }
+
+/// Hand-set brain biases: rest, copy (its own chance, as a logit), put, take from the node, form a
+/// part, let go, join to the ground, break the ground; move; take from, put to, watch a body;
+/// hold, take from, put to, join to, break, enter a part
+type Hand = ([f32; brain::FIXED], f32, [f32; brain::VERBS + brain::OVERBS]);
+const H_LIGHT: Hand = ([2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], -4.0, [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0]);
+const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
 
 /// Light reaction, energy-rich solid, liquid, burning reaction.
 pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
@@ -46,7 +56,8 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
     Some((r_light, rich, liquid, burn))
 }
 
-/// Starting kinds. Light-eaters: strong light reaction, slow burning, wide gas exchange and
+/// Starting kinds, rows 0 to 2 the old ones and rows 3 to 10 more for the roster (`ROSTER`,
+/// `ew run --roster`). Light-eaters: strong light reaction, slow burning, wide gas exchange and
 /// capture area, long intervals, resting, learning off; one node per land cell, members of 1 kg
 /// (copying at 2 kg), 0.1 kg/m². Eaters: fast burning, take the energy-rich solid from bodies and
 /// the ground, short intervals, learning on at rate 10^-1 (the `LEARN` gene, -1.0: the rate the
@@ -59,11 +70,57 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// on (rate 10^-1.5), one per cell in 30% of the cells with bodies. It always starts with the
 /// hand-set eater biases: with neutral ones even the small brain dies out (see `Seeding`), so
 /// the question "does a big brain pay for its cost" could not be asked.
-const KINDS: [Kind; 3] = [
-    Kind { scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0], cat: [12.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, fixed: [2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], dir: -4.0, verbs: [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0] },
-    Kind { scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
-    Kind { scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, fixed: [0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], dir: -1.0, verbs: [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0] },
+///
+/// A row sets only what the laws read: the genes (mass of a member and where it copies, strength,
+/// interval, the four exchange genes, mutation, learning, brain sizes, dispersal, the temperature
+/// its catalysts hold to), the catalysts (what it digests and how fast), the uptake (what it
+/// takes), and when, where and how many are placed. There is no height, lifespan, speed or
+/// "intelligence" field, because the laws have none: size is the mass, speed is the interval
+/// (a move is a decision), mind is the brain's sizes and learning rate. Kinds are initial
+/// conditions, not laws; a bigger table is a bigger start, never a rule.
+///
+/// The roster has rungs from the first day, each derived from the two old rows by scaling their
+/// numbers and keeping what lets a kind live: light-eaters keep the light catalyst (12) and the
+/// exchange genes, the others the burning catalyst (2.6 or 3.0) and an uptake of the liquid and
+/// the energy-rich solid. Small ones copy at about twice their mass at short intervals, big ones
+/// at long intervals; the exchange genes are per kg and the heat gene goes with mass^(2/3), so a
+/// small body loses heat faster per kg and a big one slower (`Body::conductance`). What one body
+/// can take from another is set by its force against the other's (`choose::take_body`: the
+/// strength gene times the mass), and upkeep charges the gene by the kg: the "eaters of
+/// light-eaters" have genes of 0.3 to 0.5 (the light-eaters have 0.05), the "eaters of eaters" 0.6
+/// to 0.6 and 100 to 600 kg (the eaters have 0.6 and 30 kg: three to twenty times their force), and the "eaters of
+/// remains" none (0: they lose every fight, pay no upkeep for it, and work the ground). The gene
+/// need not go higher with the mass, and cannot with the interval: a body starts with 30% of its
+/// mass as the energy-rich solid, which at a strength gene of s lasts 85 days x 0.6 / s, and a
+/// neutral brain must find what to take within the few decisions that fit (a kind with long
+/// intervals and a high gene is out of store before it has decided twice: 600 kg members at 40
+/// days and strength 0.95 were all dead within 6 months). Eaters of eaters and big eaters are
+/// placed in hundreds (chance 0.15 of a cell) for that reason: most of a neutral start starves.
+pub const KINDS: [Kind; 11] = [
+    Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0], cat: [12.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, hand: H_LIGHT },
+    Kind { name: "eaters", year: 20, anywhere: false, scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, hand: H_EATER },
+    Kind { name: "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)", year: 0, anywhere: false, scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, hand: H_EATER },
+    // Light-eaters, small and fast: members of 0.05 kg copying at 0.1 kg every 10 days, children spread wide.
+    Kind { name: "small fast light-eaters", year: 0, anywhere: true, scalars: [2.5, 0.0, 2.2, 0.6, 0.05, 0.3, -1.0, 1.0, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0], cat: [12.0, 2.0], upt: [0.0, 0.0], mass: 0.05, cover: 0.05, per: 1, chance: 0.6, hand: H_LIGHT },
+    // Light-eaters, big and slow: members of 20 kg copying at 40 kg every 60 days, less capture area per kg, children stay.
+    Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [2.5, 0.0, 2.2, -0.3, 0.05, 0.3, 1.6, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0], cat: [12.0, 2.0], upt: [0.0, 0.0], mass: 20.0, cover: 0.3, per: 1, chance: 0.4, hand: H_LIGHT },
+    // Eaters of remains on the ground: weak (0.05 and 0.1), a quicker burning catalyst (3.0) for stores that lie thin, the solid first.
+    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [0.6, -0.5, 1.0, -3.0, 0.0, 0.3, 0.4, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0], cat: [-1.0, 3.0], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, hand: H_EATER },
+    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [0.6, -0.5, 0.3, -3.0, 0.0, 0.3, 1.48, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0], cat: [-1.0, 3.0], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, hand: H_EATER },
+    // Eaters of light-eaters, small and fast: 3 kg copying at 6 kg every 7 days, strength 0.3 (the light-eaters have 0.05, the eaters 0.6).
+    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [0.9, -0.5, 0.0, -3.0, 0.3, 0.3, 0.78, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, hand: H_EATER },
+    // Eaters of light-eaters, big and slow: 150 kg copying at 300 kg every 16 days, strength 0.5.
+    Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [0.6, -0.5, -0.3, -3.0, 0.5, 0.3, 2.48, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0], cat: [-1.0, 3.2], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, hand: H_EATER },
+    // Eaters of eaters (stronger in force than the eaters, whose strength gene is 0.6: the force is the gene times the mass), placed once the eaters have spread:
+    // 100 kg copying at 200 kg every 7 days, strength 0.6; 600 kg copying at 1200 kg every 14 days, strength 0.5. A bigger brain (16 hidden, 8 memory, 4 seen, sight 2), learning on.
+    Kind { name: "strong fast eaters of eaters", year: 24, anywhere: false, scalars: [0.6, -0.5, -0.3, -3.0, 0.6, 0.3, 2.3, 0.85, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.1, 320.0], cat: [-1.0, 3.2], upt: [0.3, 1.0], mass: 100.0, cover: 0.0, per: 1, chance: 0.15, hand: H_EATER },
+    Kind { name: "strong big slow eaters of eaters", year: 24, anywhere: false, scalars: [0.6, -0.5, -0.5, -3.0, 0.5, 0.3, 3.08, 1.15, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.05, 320.0], cat: [-1.0, 3.2], upt: [0.3, 1.0], mass: 600.0, cover: 0.0, per: 1, chance: 0.15, hand: H_EATER },
 ];
+
+/// The roster of `ew run --roster`: ten kinds with rungs from the first day (rows of `KINDS`,
+/// each placed at its `year`): light-eaters of three sizes, eaters of remains of two, eaters of
+/// light-eaters of three and eaters of eaters of two.
+pub const ROSTER: [usize; 10] = [3, 0, 4, 5, 6, 7, 1, 8, 9, 10];
 
 /// How the first bodies are placed. What is placed, and when, is initial condition and must be
 /// reported with every result (`seed` returns the line to print).
@@ -110,8 +167,8 @@ impl Default for Seeding {
     }
 }
 
-/// Place bodies of starting kind `which` (0 light-eaters on land, 1 eaters where bodies already
-/// are, 2 the clever lineage where bodies already are) as a neutral ancestor sprayed with 20 rounds of mutation (`Seeding::default`).
+/// Place bodies of starting kind `which` (a row of `KINDS`: 0 light-eaters on land, 1 eaters where bodies already
+/// are, 2 the clever lineage where bodies already are, 3 and on the roster) as a neutral ancestor sprayed with 20 rounds of mutation (`Seeding::default`).
 pub fn seed(w: &mut World, which: usize) -> String {
     seed_with(w, which, &Seeding::default())
 }
@@ -126,12 +183,12 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let [h, mem, seen, sight] = choose::sizes(&kind.scalars);
     let shape = choose::shape(w.chem.ns(), h, mem);
     let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Body);
-    let hand = how.hand[which.min(1)] || which == 2;
+    let hand = how.hand[(!kind.anywhere) as usize] || which == 2;
     let (fixed, dir, verbs) = if hand {
-        (kind.fixed, kind.dir, kind.verbs)
+        (kind.hand.0, kind.hand.1, kind.hand.2)
     } else {
         let mut fixed = [0.0; brain::FIXED];
-        fixed[1] = kind.fixed[1];
+        fixed[1] = kind.hand.0[1];
         (fixed, 0.0, [0.0; brain::VERBS + brain::OVERBS])
     };
     let mut base = brain::random(shape, &mut r, 0.1, fixed, dir, verbs);
@@ -146,7 +203,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let (light, burn) = roles(&w.chem).map_or((0, 0), |(l, _, _, b)| (l, b));
     for i in 0..w.grid.n() {
         let [_, depth, z] = w.life.env[i];
-        if z <= 0.0 || depth > 0.5 || r.f64() >= kind.chance || (which > 0 && w.life.at[i].is_empty()) {
+        if z <= 0.0 || depth > 0.5 || r.f64() >= kind.chance || (!kind.anywhere && w.life.at[i].is_empty()) {
             continue;
         }
         for k in 0..kind.per {
@@ -180,7 +237,8 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
             w.life.add(b, w.day, delay);
         }
     }
-    let name = ["light-eaters", "eaters", "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)"][which];
+    let sc = &kind.scalars;
+    let name = format!("{} (members of {} kg copying at {:.3} kg, every {:.0} days, strength {})", kind.name, kind.mass, 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH]);
     let brain = if hand { "hand-set brain biases (old start)" } else { "neutral brain (action biases 0, copy logit kept)" };
     let (m, n) = (tb.2 / placed.max(1) as f64, placed.max(1) as f64);
     let spray = if how.rounds == 0 {
