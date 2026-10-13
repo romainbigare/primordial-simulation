@@ -251,7 +251,7 @@ fn a_body_that_gives_all_it_holds_dies_at_once() {
     let mut lineage = |w: &mut pcore::World, fixed: [f32; brain::FIXED], verbs: [f32; brain::VERBS + brain::OVERBS]| {
         let mut base = brain::random(shape, &mut r, 0.1, fixed, -8.0, verbs);
         let rows = base.split_off(shape.base());
-        (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows))
+        (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows))
     };
     let mut give = [-8.0; brain::VERBS + brain::OVERBS];
     give[1] = 8.0;
@@ -423,7 +423,7 @@ fn a_heavy_individual_copies_over_several_updates() {
     rest[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
     for k in 0..w.chem.ns() {
         w.chem.add_elems(k, 9.0 * b.store[k], &mut w.ledger.imposed_elems);
@@ -478,7 +478,7 @@ fn a_body_with_no_brain_lives_and_copies() {
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     assert!(base.is_empty());
-    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     // A light-eater node whose members (1 kg) hold more than `full` times their copy mass (0.4 kg).
     let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
     (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.4);

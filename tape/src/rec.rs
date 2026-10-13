@@ -391,7 +391,18 @@ impl Recorder {
         let w = c.w;
         // Members (the sum of counts) of light-eaters and of the others; nodes and individuals of the others.
         let (mut members, mut nodes) = ([0.0; 2], 0.0);
+        // Bodies and members by the starting kind they descend from (`Lineage::root`). The columns `root_<k>_*` are for every
+        // k up to the largest seen so far (also in the columns of a resumed tape), so a kind that died out reads 0.
+        let mut by_root: Vec<[f64; 2]> = vec![[0.0; 2]; self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count()];
         for b in life.alive() {
+            if let Some(l) = &life.brains[b.lineage as usize] {
+                let k = l.root as usize;
+                if k >= by_root.len() {
+                    by_root.resize(k + 1, [0.0; 2]);
+                }
+                by_root[k][0] += b.n();
+                by_root[k][1] += 1.0;
+            }
             members[!crate::light_eater(&w.chem, &b.genes) as usize] += b.n();
             nodes += (!crate::light_eater(&w.chem, &b.genes) && b.n() > 1.0) as u8 as f64;
         }
@@ -441,6 +452,7 @@ impl Recorder {
             ("a_broken".to_string(), "1/yr", self.deaths_a[4]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
+        row.extend(by_root.iter().enumerate().flat_map(|(k, v)| [(format!("root_{k}_members"), "1", v[0]), (format!("root_{k}_bodies"), "1", v[1])]));
         row.extend(self.learning(w));
         row.extend(self.variety(w));
         // Traffic: share of crossings on the top 2% cells, their overlap with the top cells a

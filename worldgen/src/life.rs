@@ -193,7 +193,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     };
     let mut base = brain::random(shape, &mut r, 0.1, fixed, dir, verbs);
     let rows = base.split_off(shape.base());
-    let lineage = w.life.new_lineage(Lineage { shape, seen, sight, base });
+    let lineage = w.life.new_lineage(Lineage { shape, seen, sight, base, root: which as u32 });
     // One genome for all when nothing is sprayed; else one per body.
     let shared = (how.rounds == 0).then(|| w.life.new_genome(rows.clone()));
     let (mut placed, mut members, mut kg) = (0usize, 0.0, 0.0);

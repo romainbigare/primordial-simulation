@@ -15,6 +15,7 @@ fn every_roster_kind_is_placed_and_the_world_holds() {
         let line = seed(&mut w, k);
         assert!(line.contains(KINDS[k].name), "no seeding line for kind {k}: {line:?}");
         assert_eq!(w.life.brains.len(), lineages + 1, "kind {} has its own lineage", KINDS[k].name);
+        assert_eq!(w.life.brains[lineages].as_ref().map(|l| l.root), Some(k as u32), "kind {} labels its lineage with its row", KINDS[k].name);
         // Counted by its own lineage: placing also surveys the cells, where other bodies may merge or die.
         assert!(w.life.alive().any(|b| !old.contains(&b.lineage)), "kind {} placed nothing", KINDS[k].name);
         // Bodies are found in their cells after a month (animals are placed where bodies already are).
