@@ -15,7 +15,7 @@ const H: usize = 8;
 const STRIP: usize = 6;
 const RICH: f64 = 20.0;
 const DECISIONS: usize = 200;
-const SEEDS: u64 = 120;
+const SEEDS: u64 = 200;
 /// Learning rate genes (log10): on, and off.
 const ON: f32 = -1.0;
 const OFF: f32 = -4.0;

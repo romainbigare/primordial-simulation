@@ -926,6 +926,30 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let (ns, n, na, j) = (chem.ns(), grid.n(), grid.na(), grid.air_of(i));
     let dt = days * DAY;
 
+    // Its conductance to the surface it stands on, W/K (for its reactions, evaporation and the
+    // heat below). Walls around it add their conductance (its share of it) in series. So does the cover of the
+    // other bodies in its cell, but only for the part of its surface that lies under the cover:
+    // its light-capture area is open to the air above (it is part of the canopy), so the body's
+    // conductance splits in the shares of the two areas, and only the share of its own surface
+    // (6 (mass / `rho_body`)^(2/3) per member, as the space of walls) goes through the cover. A
+    // layer of `cover` kg/m² passes `phys.shelter` / `cover` W per K and m² of surface; bare ground
+    // adds none. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the cover) with
+    // 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8
+    // W/K, and 1.5 W/K stays open: 10.3 W/K in all, so its 52 W of upkeep warm it 5.0 K (1.7 K
+    // bare), 3.4 K more, as much as thick walls give (3.3 K). A 1 kg plant member (surface 0.06
+    // m², capture area 2 m²: 3% under the cover) keeps 475 of its 490 W/K open; its 14 W/K under
+    // 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
+    let g0 = b.conductance(cfg.phys.heat_mass, mass);
+    let g0 = if cover > 0.0 {
+        let (m1, n) = (mass / b.n(), b.n());
+        let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
+        let s = ab / (ab + m1 * b.k.leaf);
+        g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * n * ab))
+    } else {
+        g0
+    };
+    let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
+
     // Light caught since the last update (through the openings of walls around it), less what
     // the body reflects; liquid over the body absorbs its share first. Its energy already
     // warmed the surface as it fell (`flow::air::radiation`), but for the share set aside for
@@ -951,24 +975,41 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     }
     tmp.pool0.clone_from(&tmp.pool);
 
-    // Catalysed reactions, at the body's temperature held fixed; their heat is spread over the
-    // time below. Those that breathe ran on demand (upkeep, actions) and go here at the open
-    // world's rate.
+    // Catalysed reactions, at the body's temperature held by the surface it stands on; their
+    // heat is spread over the time below. The surface holds it as a store of the heat it can
+    // conduct into the body over the time (`g` dt `tg`, at the body's temperature): a body
+    // well bound to it reacts at a fixed temperature, a big one under cover warms with what
+    // its reactions release and cools with what they take, and they cannot take more heat than
+    // the body and that store hold. Those that breathe ran on demand (upkeep, actions) and go
+    // here at the open world's rate.
     let c0 = b.heat_cap(chem);
     let t0 = b.e / c0;
-    let fixed = 1e6 * c0;
+    let fixed = g * dt * tg / t0.max(1.0);
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
     tmp.cat.clone_from(&b.k.cat);
     for &(r, _) in b.k.burn.iter().filter(|p| breathes(chem, p.0, t0)) {
         tmp.cat[r] = 1.0;
     }
+    // Gas they take from the air brings its heat (at the air's temperature) and gives up its
+    // fusion and vaporisation enthalpy. Gas they put out takes that enthalpy, as far as half of
+    // what the body's heat, the heat released and that store hold pays for it (the rest stays
+    // in the body), and leaves with its heat at the body's last temperature (`c_out`, below).
+    let ta = e_air[j] / (0..ns).map(|k| air[k * na + j] * chem.subs[k].cp).sum::<f64>().max(1.0);
     let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(&tmp.cat), lit, dt);
     let mut heat = e - e_start + lit - used + upkeep;
+    let (mut pay, mut q_in, mut c_out) = (0.0, 0.0, 0.0);
     for k in 0..ns {
         let d = tmp.pool[k] - tmp.pool0[k];
-        air[k * na + j] += d;
-        heat -= d * held(chem, k);
+        (pay, heat, q_in) = (pay + d.max(0.0) * held(chem, k), heat - d.min(0.0) * held(chem, k), q_in - d.min(0.0) * chem.subs[k].cp * ta);
+    }
+    (b.e, e_air[j]) = (b.e + q_in, e_air[j] - q_in);
+    let paid = crate::share(0.5 * (b.e + heat + g * dt * tg).max(0.0), pay);
+    for k in 0..ns {
+        let d = tmp.pool[k] - tmp.pool0[k];
+        let sent = if d > 0.0 { d * paid } else { d };
+        (b.store[k], air[k * na + j]) = (b.store[k] + d - sent, air[k * na + j] + sent);
+        (heat, c_out) = (heat - sent.max(0.0) * held(chem, k), c_out + sent.max(0.0) * chem.subs[k].cp);
     }
     // What its light reactions stored (`LIGHT_YIELD` of the light they used) is paid by the
     // light set aside for it, as far as its share goes (the share it stored last time, of the
@@ -990,7 +1031,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // goes in or out, up to the level the body keeps, with its latent heat. The latent heat
     // is paid by the body's own heat released (not the light: the ground has it), and by what
     // the surface can conduct into a body that evaporating cools no lower than the vapour's
-    // condensing point.
+    // condensing point: through the same conductance as the heat below (cover and walls in
+    // series), and once for all the liquids (what one spent is owed by the next), so the heat
+    // step never needs more than the surface gives and the body never ends below that point.
     let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
@@ -1004,10 +1047,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         }
         let push = if wet { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
         let out = if push > 0.0 {
-            let own = heat - lit + took;
-            let owed = own.min(0.0);
-            let room = (crate::heat_above_floor(e_ground[i], cap!()) + owed).max(0.0);
-            let paid = own.max(0.0) + (b.conductance(cfg.phys.heat_mass, mass) * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room);
+            let (own, room) = (heat - lit + took, crate::heat_above_floor(e_ground[i], cap!()));
+            let paid = (own + (g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room)).max(0.0);
             (push * reach_mol).min(paid / held(chem, k))
         } else {
             0.0
@@ -1052,37 +1093,22 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
     // toward the ground's temperature plus the warming of the heat released, over the time.
-    // Walls around it add their conductance (its share of it) in series. So does the cover of the
-    // other bodies in its cell, but only for the part of its surface that lies under the cover:
-    // its light-capture area is open to the air above (it is part of the canopy), so the body's
-    // conductance splits in the shares of the two areas, and only the share of its own surface
-    // (6 (mass / `rho_body`)^(2/3) per member, as the space of walls) goes through the cover. A
-    // layer of `cover` kg/m² passes `phys.shelter` / `cover` W per K and m² of surface; bare ground
-    // adds none. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the cover) with
-    // 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8
-    // W/K, and 1.5 W/K stays open: 10.3 W/K in all, so its 52 W of upkeep warm it 5.0 K (1.7 K
-    // bare), 3.4 K more, as much as thick walls give (3.3 K). A 1 kg plant member (surface 0.06
-    // m², capture area 2 m²: 3% under the cover) keeps 475 of its 490 W/K open; its 14 W/K under
-    // 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
+    // Heat taken beyond what the surface can conduct into it (down to 0 K) over the time is
+    // taken from its own heat at once (its reactions took it at its temperature). The gas its
+    // reactions put out (heat capacity `c_out`) goes the same way until it leaves at the end,
+    // with its share of the heat.
     let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
-        let g0 = b.conductance(cfg.phys.heat_mass, mass);
-        let g0 = if cover > 0.0 {
-            let (m1, n) = (mass / b.n(), b.n());
-            let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
-            let s = ab / (ab + m1 * b.k.leaf);
-            g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * n * ab))
-        } else {
-            g0
-        };
-        let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
-        let teq = tg + heat / dt / g;
-        let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
+        let (r, ct) = (heat.max(-g * dt * tg), c + c_out);
+        let teq = tg + r / dt / g;
+        let e1 = ct * (teq + ((b.e + heat - r) / ct - teq) * (-g * dt / ct).exp());
         // The ground pays the difference (the light is already in it, but for what was set aside
         // and taken); if it cannot, the body ends colder.
         let give = e1 - b.e - heat + lit - took;
         let got = crate::draw(&mut e_ground[i], ledger, cap!(), give);
-        b.e = if got == give { e1 } else { e1 - (give - got) };
+        let e1 = if got == give { e1 } else { e1 - (give - got) };
+        let out = e1 * c_out / ct;
+        (b.e, e_air[j]) = (e1 - out, e_air[j] + out);
     }
 
     let (mut mass3, mut c) = (mass3, c);
