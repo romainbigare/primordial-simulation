@@ -11,11 +11,14 @@
 //! structure is loaded: a bond carries the weight hanging on it from the anchored part (or the
 //! held one), less what the liquid around holds up, plus the push of moving liquid and of bodies
 //! moving through the cell. A bond loaded beyond its strength breaks; what is left without
-//! support lies on the ground. A structure the liquid holds up floats and drifts down the
-//! liquid's slope. A structure whose walls close around a space has an inside: a body in it
-//! loses heat to the outside only through the walls and the openings (a conductance in series
-//! with its own), and gets the light and rain that come through the openings. The inside holds
-//! almost no heat itself, so it is solved in closed form.
+//! support lies on the ground. A body–part bond is as strong as the weight the holder bears by its
+//! own force (strength × its mass × gravity × grip; a lever does not lift itself): a body takes
+//! hold of a part only if that bears the weight of the part's structure, and lets go when it no
+//! longer does. A structure the liquid holds up floats and drifts down the liquid's slope. A
+//! structure whose walls close around a space has an inside: a body in it loses heat to the
+//! outside only through the walls and the openings (a conductance in series with its own), and
+//! gets the light and rain that come through the openings. The inside holds almost no heat
+//! itself, so it is solved in closed form.
 
 use crate::body::{self, Body, Layout, STRENGTH};
 use crate::change::Reactor;
@@ -316,7 +319,13 @@ fn holder(w: &World, p: usize) -> Option<usize> {
     (h != NOBODY && w.life.bodies.get(s).is_some_and(|o| o.alive && o.gen == (h >> 32) as u32 && o.hold == id)).then_some(s)
 }
 
-fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
+/// Body `b` (mass `mb`) takes hold of part `p` if it bears the weight of `p`'s structure (one
+/// bonded to the ground rests on it).
+fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize, mb: f64) {
+    let s = w.parts.parts[w.parts.parts[p].root as usize].s;
+    if !s.anchored && s.mass * w.cfg.gravity > bears(w, b, mb) {
+        return;
+    }
     w.parts.parts[p].held = b.id(slot);
     b.hold = w.parts.parts[p].id(p);
     event(w, true, b.cell, HELD);
@@ -337,6 +346,12 @@ pub fn lever(w: &World, b: &Body, mb: f64) -> f64 {
         let [m, _, hard, _, _] = w.parts.parts[p].walls(&w.chem);
         1.0 + w.cfg.phys.lever * hard * m / (m + 0.05 * mb)
     })
+}
+
+/// Weight a body bears by its own force, N: what it holds adds nothing (a lever does not lift
+/// itself).
+fn bears(w: &World, b: &Body, mb: f64) -> f64 {
+    b.gene(STRENGTH) * mb * w.cfg.gravity * w.cfg.phys.grip
 }
 
 /// Force a body pushes or pulls with, N.
@@ -432,7 +447,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
         0 => {
             if w.parts.parts[p].held == NOBODY && body::pay(w, b, 0.1 * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
                 let_go(w, b, false);
-                grab(w, slot, b, p);
+                grab(w, slot, b, p, mb);
             }
         }
         1 => take(w, b, p, mb, days),
@@ -540,8 +555,8 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
 
 /// Put solid stores above twice their safe minimums out as a new part (up to `phys.form` of the
 /// body's mass, and at least `phys.min_kg`: lighter walls fall apart), shaped by the brain:
-/// elongation and hollowness. The body holds it if its hands are free. The number of parts in a
-/// cell is not limited: each one costs matter and energy.
+/// elongation and hollowness. The body holds it if its hands are free and its force bears it
+/// (`grab`). The number of parts in a cell is not limited: each one costs matter and energy.
 pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
     let (chem, lay, mb, t) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem), b.temp(&w.chem));
@@ -563,7 +578,8 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let p = make(w, i, wall, e, shape[0], shape[1]);
     w.parts.tally.formed += 1.0;
     if held(w, b).is_none() {
-        grab(w, slot, b, p);
+        let mb = b.mass(&w.chem);
+        grab(w, slot, b, p, mb);
     }
 }
 
@@ -618,11 +634,11 @@ pub fn dig(w: &mut World, b: &mut Body) {
 }
 
 /// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets
-/// go (an anchored structure, or one heavier than the body can lift).
+/// go (an anchored structure, or one heavier than the body bears).
 pub fn carry(w: &mut World, b: &mut Body, mb: f64) -> Option<(usize, f64)> {
     let r = w.parts.parts[held(w, b)?].root as usize;
     let s = w.parts.parts[r].s;
-    if s.anchored || s.mass * w.cfg.gravity > force(w, b, mb) {
+    if s.anchored || s.mass * w.cfg.gravity > bears(w, b, mb) {
         let_go(w, b, true);
         return None;
     }
@@ -776,6 +792,17 @@ fn load(w: &mut World, r: usize) {
     for (a, o) in breaks {
         if w.parts.parts[a].links.iter().any(|l| l.0 == o) {
             unlink(w, a, o, true);
+        }
+    }
+    // The holder of a structure that does not rest on the ground bears what hangs on the part it
+    // holds (as of the start of the month) by its own force; past that, it lets go.
+    let x = held.filter(|_| !s.anchored).and_then(|h| list.iter().position(|&p| p == h));
+    if let Some((x, o)) = x.and_then(|x| holder(w, list[x]).map(|o| (x, o))) {
+        let ob = &w.life.bodies[o];
+        if wt[x] + push[x] > bears(w, ob, ob.mass(&w.chem)) {
+            let mut ob = std::mem::take(&mut w.life.bodies[o]);
+            let_go(w, &mut ob, true);
+            w.life.bodies[o] = ob;
         }
     }
     // Afloat and free: drift to the neighbour whose liquid stands lowest, as far as the
