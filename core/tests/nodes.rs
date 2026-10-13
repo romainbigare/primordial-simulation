@@ -1,6 +1,6 @@
 //! Population nodes (plan 7.1): how their members differ, how they split, how they act on bonds.
 
-use pcore::body::{Body, Layout, Lineage, COPY_MASS, DISPERSE, MUT, STRENGTH};
+use pcore::body::{Body, Layout, Lineage, COPY_MASS, DISPERSE, HIDDEN, MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, check, choose, copy};
 
@@ -176,4 +176,39 @@ fn a_node_acts_on_bonds_through_one_member() {
     scene(0);
     scene(1);
     scene(2);
+}
+
+/// A node whose mean brain-size gene moved a whole unit from its lineage's size moves to a new
+/// lineage with that size at its update (review 3, M4): its brain carried over, in a group of its
+/// own that keeps what its group learned; matter and energy as they were.
+#[test]
+fn a_node_whose_size_genes_moved_changes_lineage() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
+    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    let (lin0, g0) = (b.lineage, b.group);
+    let h0 = w.life.brains[lin0 as usize].as_ref().unwrap().shape.h;
+    w.life.groups[g0 as usize].rows[0] += 0.5;
+    let learned = w.life.groups[g0 as usize].rows[0] - w.life.born(&b)[0];
+    b.genes[HIDDEN] += 0.9;
+    copy::resize(&mut w, s, &mut b);
+    assert_eq!(b.lineage, lin0, "moved for less than a unit");
+    b.genes[HIDDEN] += 0.3;
+    copy::resize(&mut w, s, &mut b);
+    w.life.bodies[s] = b;
+    let b = &w.life.bodies[s];
+    let lin = w.life.brains[b.lineage as usize].as_ref().expect("its lineage");
+    assert!(b.lineage != lin0 && b.group != g0 && lin.shape.h == h0 + 1, "no new lineage of {} hidden units", h0 + 1);
+    assert_eq!((w.life.members[b.lineage as usize], w.life.groups[b.group as usize].members), (1, 1));
+    assert_eq!(w.life.born(b).len(), lin.shape.rows() * lin.shape.r());
+    assert!((w.life.groups[b.group as usize].rows[0] - w.life.born(b)[0] - learned).abs() < 1e-5, "what it learned is lost");
+    for _ in 0..2 {
+        pcore::step(&mut w);
+    }
+    assert_eq!(check::broken(&w), None);
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }

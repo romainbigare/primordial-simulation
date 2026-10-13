@@ -18,7 +18,9 @@
 //! with a brain of the same sizes, whatever its lineage (means by count, the spread pooled,
 //! `join`), or start a node. An individual's children stay together, in a neighbour cell with
 //! that chance (else in its own); there they join an alike node as a node's do, else they are a
-//! new body. Only individuals' children start new lineages.
+//! new body. Only individuals' children start new lineages; a node whose mean brain-size genes
+//! are a whole unit away from its lineage's sizes moves itself to a new lineage with them, its
+//! brain and what its group learned carried over (`resize`, at its update).
 //!
 //! A node whose halves would no longer be alike splits in two (`split`), so selection acts
 //! between them; a node does the actions of Bond through one member split off as an individual
@@ -230,16 +232,13 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         shake(&mut v, &mut r, sd);
         v
     });
-    // A node's children start no new lineage: a change of the brain's base or sizes in one child
-    // is lost in the mean of many (the laws in average form, plan 7.1).
+    // A node's children start no new lineage: a change of the brain's base in one child is lost in
+    // the mean of many (the laws in average form, plan 7.1); a node whose mean sizes moved moves
+    // itself (`resize`).
     if let Some(lin) = w.life.brains[b.lineage as usize].as_ref().filter(|_| !node) {
-        let (old, want) = (choose::sizes_of(lin), choose::sizes(&c.genes));
-        let gene = [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| c.genes[g]);
-        let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
-        let fresh = if new != old {
-            let to = choose::shape(w.chem.ns(), new[0], new[1]);
-            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, to, &mut r, w.cfg.phys.new_noise));
-            Some(Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, &mut r, w.cfg.phys.new_noise) })
+        let fresh = if let Some(l) = resized(lin, &c.genes, w.chem.ns(), &mut r, w.cfg.phys.new_noise) {
+            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, l.shape, &mut r, w.cfg.phys.new_noise));
+            Some(l)
         } else if r.f64() < w.cfg.phys.new_lineage {
             let mut l = lin.clone();
             shake(&mut l.base, &mut r, w.cfg.phys.base_noise);
@@ -284,6 +283,41 @@ fn own(w: &mut World, b: &Body, c: &mut Body) {
         c.group = w.life.new_group(c.lineage, rows);
         (w.life.groups[c.group as usize].var, w.life.groups[c.group as usize].ms) = (var, ms);
     }
+}
+
+/// A lineage with the sizes of brain and senses that `genes` ask for, if one of them is a whole
+/// unit away from lineage `lin`'s (the others kept), its base carried over where the sizes
+/// overlap (`brain::rebase`, new weights of spread `noise`).
+fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, noise: f32) -> Option<Lineage> {
+    let (old, want) = (choose::sizes_of(lin), choose::sizes(genes));
+    let gene = [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| genes[g]);
+    let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
+    let to = choose::shape(ns, new[0], new[1]);
+    (new != old).then(|| Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, r, noise) })
+}
+
+/// At its update, a body whose brain-size genes (a node's: their mean) are a whole unit away from
+/// its lineage's sizes moves itself to a new lineage with those sizes, its brain carried over
+/// (`resized`; its born rows by `brain::rerow`), in a new group of its own whose rows are its
+/// group's shared rows carried over with the same new weights (so what it learned goes with it).
+/// An individual's child does this at birth (`copy`); a node's children start no lineage, so
+/// without this a node's size genes drifted but did nothing (review 3, M4). Nodes join and merge
+/// with others only of the same brain sizes (`copy`), or carry their rows over to the larger's
+/// sizes (`merge`). Moves no matter and no energy.
+pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
+    let (ns, noise, id) = (w.chem.ns(), w.cfg.phys.new_noise, b.id(slot));
+    let mut r = Rng::new(w.seed, w.day, id, Purpose::Body);
+    let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
+    let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };
+    // The born and the shared rows get the same new weights (two streams of one key, the body's
+    // id turned over).
+    let rerow = |x: &[f32]| brain::rerow(x, lin.shape, l.shape, &mut Rng::new(w.seed, w.day, !id, Purpose::Body), noise);
+    let gr = &w.life.groups[b.group as usize];
+    let (born, shared, var, ms) = (rerow(w.life.born(b)), rerow(&gr.rows), gr.var, gr.ms.clone());
+    let lineage = w.life.new_lineage(l);
+    let group = w.life.new_group(lineage, shared);
+    (w.life.groups[group as usize].var, w.life.groups[group as usize].ms) = (var, ms);
+    w.life.move_to(b, lineage, group, born);
 }
 
 /// The body in slot `s` joins the body in slot `t` (`join`), its born rows carried over to the

@@ -585,6 +585,21 @@ impl Life {
         self.unref(b.genome);
         (b.genome, b.genes, b.k) = (g, new.genes, Consts::default());
     }
+    /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in group `group`
+    /// (new, for it); its old lineage, group and born rows lose it.
+    pub fn move_to(&mut self, b: &mut Body, lineage: u32, group: u32, rows: Vec<f32>) {
+        self.enrol(b.group, b, -1);
+        self.unref(b.genome);
+        let old = b.lineage as usize;
+        self.members[old] -= 1;
+        if self.members[old] == 0 {
+            self.brains[old] = None;
+        }
+        (b.lineage, b.group, b.genome) = (lineage, group, self.new_genome(rows));
+        self.genomes[b.genome as usize].bodies += 1;
+        self.members[lineage as usize] += 1;
+        self.enrol(group, b, 1);
+    }
     pub fn relocate(&mut self, slot: usize, g: u32, from: usize, to: usize) {
         self.at[from].retain(|&s| s as usize != slot);
         self.at[to].push(slot as u32);
@@ -818,6 +833,7 @@ pub fn day(w: &mut World) {
                     die(w, s, b, LACK);
                     continue;
                 }
+                crate::copy::resize(w, s, &mut b);
                 crate::copy::split(w, s, &mut b);
                 b.vis = b.visible(&w.chem);
                 w.life.due[((w.day + b.interval()) % RING) as usize].push((slot, gen));
