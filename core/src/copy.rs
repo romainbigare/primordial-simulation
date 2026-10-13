@@ -56,7 +56,9 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::MUT => (0.2, -3.0, 0.0),
         body::LEARN => (0.2, -4.0, 0.0),
         body::FORGET => (0.2, -4.0, -1.7),
-        body::HIDDEN => (0.3, 4.0, 64.0),
+        // Down to no brain (review 3, Q2): below 0.5 it rounds to 0 hidden units; the room below 0
+        // lets a node's mean reach it without meeting the wall.
+        body::HIDDEN => (0.3, -1.0, 64.0),
         body::MEMORY => (0.15, 0.0, 12.0),
         body::SEEN => (0.1, 1.0, 6.0),
         body::SIGHT => (0.07, 1.0, 4.0),
@@ -341,6 +343,10 @@ pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
     let group = w.life.new_group(lineage, shared);
     (w.life.groups[group as usize].var, w.life.groups[group as usize].ms) = (var, ms);
     w.life.move_to(b, lineage, group, born);
+    // With no brain it has no decision to learn from, no memory and no signal.
+    if w.life.brainless(b) {
+        (b.trace, b.mem, b.sig, b.wb) = (Vec::new(), Vec::new(), Default::default(), 0.0);
+    }
 }
 
 /// The body in slot `s` joins the body in slot `t` (`join`), its born rows carried over to the

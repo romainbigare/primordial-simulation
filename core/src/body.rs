@@ -40,9 +40,10 @@ pub const LEARN: usize = 9;
 /// Share of what its group learned that fades each month, log10 (off at the lower end): the
 /// group forgets at the mean rate of its members
 pub const FORGET: usize = 10;
-/// Sizes of the brain and the senses (each rounded): hidden units (4..64), memory numbers
-/// (0..12), bodies perceived (1..6), sight in cells (1..4). A body whose size genes are a whole
-/// unit away from its lineage's sizes starts a new lineage with those sizes.
+/// Sizes of the brain and the senses (each rounded): hidden units (0..64; 0 is no brain, see
+/// `Lineage::none`), memory numbers (0..12), bodies perceived (1..6), sight in cells (1..4). A
+/// body whose size genes are a whole unit away from its lineage's sizes starts a new lineage with
+/// those sizes.
 pub const HIDDEN: usize = 11;
 pub const MEMORY: usize = 12;
 pub const SEEN: usize = 13;
@@ -407,9 +408,18 @@ pub struct Lineage {
 }
 
 impl Lineage {
+    /// A brain of no hidden units is no brain (zero is a size, review 3, Q2): its bodies take no
+    /// decisions and pay nothing for a brain (no decision, learning or signal); their update is
+    /// their physics only (`body::day`). A lineage gets there by evolution, as it saves the cost.
+    pub fn none(&self) -> bool {
+        self.shape.h == 0
+    }
     /// Energy one decision takes, J per kg of a member of `Physics::m_ref` kg (`Physics::think`
-    /// gives it for a member of another mass).
+    /// gives it for a member of another mass); none without a brain.
     pub fn cost(&self, p: &crate::Physics) -> f64 {
+        if self.none() {
+            return 0.0;
+        }
         let sq = |x: usize| (x * x) as f64;
         p.c_hidden * self.shape.h as f64 + p.c_memory * self.shape.mem as f64 + p.c_seen * self.seen as f64 + p.c_sight * sq(self.sight)
     }
@@ -498,6 +508,10 @@ impl Life {
                 (self.genomes.len() - 1) as u32
             }
         }
+    }
+    /// Body `b` has no brain (`Lineage::none`).
+    pub fn brainless(&self, b: &Body) -> bool {
+        self.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).is_some_and(|l| l.none())
     }
     /// The rows body `b` was born with.
     pub fn born(&self, b: &Body) -> &[f32] {
@@ -839,12 +853,15 @@ pub fn day(w: &mut World) {
         match live(w, s, &mut b, &mut rc, &mut tmp) {
             Some(cause) => die(w, s, b, cause),
             None => {
-                choose::act(w, s, &mut b, &mut tmp);
-                // An action can leave nothing of a member (all its stores put or given away):
-                // it dies at once, before another body deals with it.
-                if b.empty_at(b.mass(&w.chem)) {
-                    die(w, s, b, LACK);
-                    continue;
+                // A body with no brain takes no decision: its update is its physics only.
+                if !w.life.brainless(&b) {
+                    choose::act(w, s, &mut b, &mut tmp);
+                    // An action can leave nothing of a member (all its stores put or given
+                    // away): it dies at once, before another body deals with it.
+                    if b.empty_at(b.mass(&w.chem)) {
+                        die(w, s, b, LACK);
+                        continue;
+                    }
                 }
                 crate::copy::resize(w, s, &mut b);
                 crate::copy::split(w, s, &mut b);
@@ -1181,12 +1198,13 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// rate per unit of input at `Physics::t_cat` summed over the genes that are on, see
 /// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength and
 /// capture area by the day, of learning and signalling, and of one
-/// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`).
+/// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`);
+/// a body with no brain pays none of the last three.
 /// Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
-    let mind = p.c_learn * b.learn_rate() as f64 + p.c_signal * sig;
+    let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p));
     let cats: f64 = w.chem.reactions.iter().zip(&b.k.cat).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
     let cats = cats * (1.0 + (b.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
