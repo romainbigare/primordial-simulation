@@ -327,6 +327,10 @@ pub struct Life {
     /// Per cell, from the last survey: members, then the visible traits summed over them (mass
     /// and light-capture area are the totals)
     pub sum: Vec<[f64; 7]>,
+    /// Per cell, from the last survey: the share of the light reaching its bodies' capture area
+    /// that they absorb (1 - their reflectance, weighted by capture area)
+    #[serde(skip)]
+    pub absorb: Vec<f32>,
     /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
     /// Per cell, from the last monthly survey: its loose substances as a brain perceives them,
@@ -610,16 +614,20 @@ pub fn survey(w: &mut World) {
     let life = &mut w.life;
     life.sum.clear();
     life.sum.resize(n, [0.0; 7]);
+    life.absorb.clear();
+    life.absorb.resize(n, 0.0);
     for b in life.bodies.iter().filter(|b| b.alive) {
         let (s, n) = (&mut life.sum[b.cell as usize], b.n());
         s[0] += n;
         for (x, &v) in s[1..].iter_mut().zip(&b.vis) {
             *x += v as f64 * n;
         }
+        life.absorb[b.cell as usize] += b.vis[1] * b.n() as f32 * (1.0 - (b.vis[3] + b.vis[4] + b.vis[5]) / 3.0);
     }
     let area = w.grid.area();
-    for (c, s) in w.canopy.iter_mut().zip(&life.sum) {
+    for ((c, s), a) in w.canopy.iter_mut().zip(&life.sum).zip(life.absorb.iter_mut()) {
         *c = (s[2] / area) as f32;
+        *a = if s[2] > 0.0 { (*a as f64 / s[2]) as f32 } else { 0.0 };
     }
     if monthly && w.day > 0 {
         choose::regroup(w);
@@ -856,13 +864,14 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let dt = days * DAY;
 
     // Light caught since the last update (through the openings of walls around it), less what
-    // the body reflects; liquid over the body absorbs its share first.
+    // the body reflects; liquid over the body absorbs its share first. Its energy already
+    // warmed the surface as it fell (`flow::air::radiation`): the body draws from the ground's
+    // heat only what its light reactions store, so up to `MAX_INTERVAL` days of sunlight do not
+    // reach the ground in one go.
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
     let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
     b.mark = light[i];
     let reach = (-depth / cfg.phys.light_depth).exp();
-    ledger.sun_in += got;
-    e_ground[i] += got * (1.0 - reach);
     let lit = got * reach;
     tmp.lit = lit / mass / days;
 
@@ -971,8 +980,9 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
         let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
-        // The ground pays the difference; if it cannot, the body ends colder.
-        let give = e1 - b.e - heat;
+        // The ground pays the difference (the light is already in it); if it cannot, the body
+        // ends colder.
+        let give = e1 - b.e - heat + lit;
         let got = crate::draw(&mut e_ground[i], ledger, cap!(), give);
         b.e = if got == give { e1 } else { e1 - (give - got) };
     }

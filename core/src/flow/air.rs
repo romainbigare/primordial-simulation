@@ -125,7 +125,7 @@ fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
 /// from the air's mean height). The ground temperature is solved implicitly.
 pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, e_ground, e_air, ledger, canopy, light, .. } = w;
+    let World { cfg, grid, e_ground, e_air, ledger, canopy, light, life, .. } = w;
     let (na, adt) = (grid.na(), s.area * dt);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
@@ -138,13 +138,15 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         let (tl, down) = ((ta - gam * (s.head[i] - zair)).max(1.0), f * SIGMA * (ta * ta) * (ta * ta));
         s.tl[i] = tl;
         // Bodies with light-capture area `a` per ground area intercept a share 1 - exp(-a) of
-        // what passes the clouds.
-        let (a, mut cover) = (canopy[i] as f64, 0.0);
+        // what passes the clouds. What they absorb warms the surface now (they hand on all of it
+        // as heat but for what their light reactions store, which they draw back when they update).
+        let (a, mut cover, mut caught) = (canopy[i] as f64, 0.0, 0.0);
         if a > 0.0 {
             cover = -(-a).exp_m1();
             light[i] += q * (1.0 - c) * cover * dt / a;
+            caught = cover * life.absorb.get(i).map_or(0.0, |&x| x as f64);
         }
-        let sw = q * (1.0 - c) * (1.0 - cover) * (1.0 - s.alb[i]);
+        let sw = q * (1.0 - c) * ((1.0 - cover) * (1.0 - s.alb[i]) + caught);
         // The surface temperature, implicit: heat reaches the surface from the node through
         // its heat capacity over the step (none on a melting plateau, which holds the node
         // still) in series with the conduction of any soft solid cover.
