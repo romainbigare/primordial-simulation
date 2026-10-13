@@ -249,9 +249,10 @@ pub struct Physics {
     pub afloat: f64,
     // Copy
     /// Energy to make one kg of child, J. Growth in life keeps 10 to 20% of the energy it eats, so
-    /// a kg of body costs about 10^7 J; 2 x 10^6 is a first step. A body must be able to release
-    /// it within one interval (gas exchange limits that): a starting eater copying at 63 kg
-    /// gives 19 kg to a child, 3.8 x 10^7 J, and can release 1.2 x 10^8 J in 9 days at 288 K.
+    /// a kg of body costs about 10^7 J. A body pays it into its child store across updates as
+    /// fast as its reactions release it (`Body::paid`, review 3, P6), so it need not release it
+    /// in one interval: a starting eater copying at 63 kg gives 19 kg to a child, 1.9 x 10^8 J,
+    /// and can release 1.2 x 10^8 J in 9 days at 288 K (2 x 10^6 until 13 Oct 2026, when it had to).
     pub c_copy: f64,
     /// Chance that a child starts a new lineage with a changed base, and the size of that change
     pub new_lineage: f64,
@@ -262,7 +263,8 @@ pub struct Physics {
     pub row_noise: f32,
     /// Spread of the weights a bigger brain adds
     pub new_noise: f32,
-    /// A member holding this many times its copy mass copies whether its brain draws it or not
+    /// A member holding this many times its copy mass copies at its update whatever its brain
+    /// does (`body::live`: physics); the brain's copy action copies only before that
     pub full: f64,
     /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge,
     /// and children join them (`copy::alike`). A node splits when its two halves would differ by
@@ -284,7 +286,9 @@ pub struct Physics {
 
 impl Physics {
     /// Energy of one decision of a brain whose cost is `c` J per kg of a member of `m_ref` kg
-    /// (`body::Lineage::cost`), for a member of `m` kg, J: weakly more for a bigger body.
+    /// (`body::Lineage::cost`), for a member of `m` kg, J: weakly more for a bigger body. Paid per
+    /// decision, not per day (a speed incentive kept on purpose: it pushes bodies toward long
+    /// intervals, plan 7.3; handover 6.5).
     pub fn think(&self, c: f64, m: f64) -> f64 {
         c * self.m_ref * (m / self.m_ref).powf(0.25)
     }
@@ -344,7 +348,7 @@ impl Default for Physics {
             dig: 0.01,
             deep: 0.5,
             afloat: 0.2,
-            c_copy: 2e6,
+            c_copy: 1e7,
             new_lineage: 0.001,
             base_noise: 0.03,
             row_chance: 0.3,

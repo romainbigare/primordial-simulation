@@ -208,10 +208,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
     }
 
-    // Copy by its own chance (set by evolution and imitation, never learned), and always once a
-    // member holds `phys.full` times its copy mass; else draw one of the other actions by its
-    // score.
-    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) || pm >= w.cfg.phys.full * b.dec(body::COPY_MASS);
+    // Copy by its own chance (set by evolution and imitation, never learned) while a member holds
+    // less than `phys.full` times its copy mass (past it, it copied at its update, `body::live`);
+    // else draw one of the other actions by its score.
+    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) && pm < w.cfg.phys.full * b.dec(body::COPY_MASS);
     logit[1] = f32::NEG_INFINITY;
     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
     let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
@@ -691,16 +691,19 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
     }
 }
 
-/// Put to another body in the cell: up to what a take would move, from the stores held above
-/// twice their safe minimum, by their shares, as far as the other has room. It remembers this
-/// for the giver.
+/// Put to another body in the cell: from the stores held above twice their safe minimum, by their
+/// shares, up to what the other could take by its own size in the time (`phys.take` x interval x
+/// its mass), as far as it has room. A node gives as one member: a share 1/count of its spare (its
+/// members cannot all reach one body). Before (review 3, M2) the cap was the giver's mass, so a
+/// node of 10^7 members could give its whole spare to a 1 kg member, which rain then filled to
+/// its keep level, and members of thousands of tonnes grew. It remembers this for the giver.
 fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let (chem, lay, mb) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem));
     let spare = |k: usize| (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * mb / chem.subs[k].molar_mass).max(0.0);
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
-    let share = (w.cfg.phys.take * b.interval() as f64 * mb / all.max(1e-9)).min(1.0);
     let mo = o.mass(chem);
+    let share = (w.cfg.phys.take * b.interval() as f64 * mo / all.max(1e-9)).min(1.0 / b.n());
     let m: Vec<f64> = (0..chem.ns()).map(|k| (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0))).collect();
     let got = kg(w, &m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {

@@ -24,8 +24,11 @@ const OFF: f32 = -4.0;
 fn scene(seed: u64) -> (World, usize) {
     let (chem, init) = worldgen::chemistry0();
     // The body is one of 30 kg: its brain costs what the scene was made with (a decision costs a
-    // member of `m_ref` kg `c_brain` per kg; a body of that mass pays it per kg as before).
-    let phys = pcore::Physics { m_ref: 30.0, ..Default::default() };
+    // member of `m_ref` kg `c_brain` per kg; a body of that mass pays it per kg as before), and
+    // so does copying (at 10^7 J/kg, 13 Oct 2026, the scene's body, whose brain costs 30 times
+    // what a 1 kg member's does, starves soon after its first child: 22 decisions on average
+    // against 98, before it can learn).
+    let phys = pcore::Physics { m_ref: 30.0, c_copy: 2e6, ..Default::default() };
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, phys, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);

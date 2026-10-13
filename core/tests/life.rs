@@ -92,6 +92,11 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
     assert_eq!((grown.0.len(), grown.1.len()), (b.base(), b.rows() * b.r()));
     assert_eq!(pcore::brain::rebase(&grown.0, b, a, &mut r, 0.1), base);
     assert_eq!(pcore::brain::rerow(&grown.1, b, a, &mut r, 0.1), rows);
+    // Down to no brain: no base, the rows' biases kept.
+    let z = pcore::choose::shape(9, 0, 6);
+    let none = pcore::brain::rerow(rows, a, z, &mut r, 0.1);
+    assert!(pcore::brain::rebase(base, a, z, &mut r, 0.1).is_empty() && none.len() == z.rows());
+    assert_eq!(none[0], rows[a.h]);
 }
 
 /// Without shared brains every body keeps a group of its own, and matter and energy still add up.
@@ -385,13 +390,117 @@ fn a_tall_member_shades_a_short_one() {
     let per = |s: usize| w.light[i] - bs[s].mark;
     let cap = |s: usize| bs[s].vis[1] as f64 * bs[s].n();
     let (t, sh) = (per(slots[0]), per(slots[1]));
-    println!("light per m² of capture area: tall {t:.4e}, short {sh:.4e} J");    assert!(sh > 0.0 && (t / sh / (cap(slots[0]) / area).exp() - 1.0).abs() < 1e-6, "tall {t:e}, short {sh:e}");
+    println!("light per m² of capture area: tall {t:.4e}, short {sh:.4e} J");
+    assert!(sh > 0.0 && (t / sh / (cap(slots[0]) / area).exp() - 1.0).abs() < 1e-6, "tall {t:e}, short {sh:e}");
     let (all, cell) = (cap(slots[0]) * t + cap(slots[1]) * sh, (w.light[i] - light0) * w.canopy[i] as f64 * area);
     assert!((all / cell - 1.0).abs() < 1e-6, "bodies caught {all:e} J, the canopy {cell:e} J");
     for _ in 0..3 {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// An individual far past `full` times its copy mass owes many children at once. It pays into its
+/// child store what its reactions can release (and it can spare) at each update and has the whole
+/// children the store covers, the rest later (review 3, P6; all or nothing, it could never pay and
+/// grew without end). Matter and energy are kept exactly; the store is a count of work done.
+#[test]
+fn a_heavy_individual_copies_over_several_updates() {
+    use pcore::body::{Lineage, DISPERSE};
+    use pcore::event::EventKind;
+    use pcore::{body, brain, change, choose, flow};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let n = w.grid.n();
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    // A starting eater whose brain only rests, ten times as heavy: 300 kg, 2.4 times `full`, so it
+    // owes 5.6 children and 2.1 x 10^9 J, more than its reactions can release in one interval (it
+    // does not eat).
+    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let mut rest = [-8.0; brain::FIXED];
+    rest[0] = 8.0;
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows));
+    let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+    for k in 0..w.chem.ns() {
+        w.chem.add_elems(k, 9.0 * b.store[k], &mut w.ledger.imposed_elems);
+        (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + 9.0 * b.store[k] * w.chem.subs[k].hf, 10.0 * b.store[k]);
+    }
+    (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + 9.0 * b.e, 10.0 * b.e, 0.0);
+    // Weak (strength costs most of its upkeep), so it lives on its stores a while.
+    b.genes[pcore::body::STRENGTH] = 0.0;
+    let (s, start) = (w.life.add(b, w.day, 1), w.day);
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let (mut log, mut born, dt) = (Vec::new(), 0.0, w.cfg.phys_days as f64 * 86_400.0);
+    for _ in 0..150 {
+        if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
+            body::survey(&mut w);
+            flow::step(&mut w, dt);
+            change::step(&mut w, dt);
+        }
+        w.events.clear();
+        body::day(&mut w);
+        let b = &w.life.bodies[s];
+        if b.alive && b.last == w.day && w.day > start {
+            let c: f64 = w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum();
+            assert_eq!(c, c.round(), "part of a child");
+            log.push((b.mass(&w.chem) as i64, b.paid as i64, c));
+            born += c;
+        }
+        w.day += 1;
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    println!("mass kg, child store J, children: {log:?}");
+    let with = log.iter().filter(|x| x.2 > 0.0).count();
+    assert!(with >= 2 && born >= 3.0 && log[0].2 < born, "children at once: {log:?}");
+    assert!(log.iter().any(|x| x.1 > 0 && x.2 == 0.0), "the store never carried work over: {log:?}");
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
+/// decision and pays nothing for a brain, but lives its physics at its updates and copies when
+/// full (W3). Matter and energy are kept exactly.
+#[test]
+fn a_body_with_no_brain_lives_and_copies() {
+    use pcore::body::{Lineage, COPY_MASS, HIDDEN};
+    use pcore::event::EventKind;
+    use pcore::{brain, choose};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let n = w.grid.n();
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    // The light-eaters' sizes but no hidden units.
+    let shape = choose::shape(w.chem.ns(), 0, 6);
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    assert!(base.is_empty());
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base }), w.life.new_genome(rows));
+    // A light-eater node whose members (1 kg) hold more than `full` times their copy mass (0.4 kg).
+    let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
+    (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.4);
+    let (n0, s) = (b.count, w.life.add(b, w.day, 1));
+    // It pays nothing for a brain, however costly brains are.
+    let mut x = w.life.bodies[s].clone();
+    x.prepare(&w.chem);
+    let (d, m, p0) = (x.interval() as f64, x.mass(&w.chem), w.cfg.phys);
+    let u0 = pcore::body::upkeep(&w, &x, d, m);
+    (w.cfg.phys.c_hidden, w.cfg.phys.c_memory, w.cfg.phys.c_seen, w.cfg.phys.c_sight, w.cfg.phys.c_learn) = (1e9, 1e9, 1e9, 1e9, 1e9);
+    assert_eq!(pcore::body::upkeep(&w, &x, d, m), u0);
+    w.cfg.phys = p0;
+    let (t0, l0, u) = (pcore::check::totals(&w), w.ledger.clone(), w.life.updates);
+    for _ in 0..2 {
+        pcore::step(&mut w);
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    let b = &w.life.bodies[s];
+    let born: f64 = w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum();
+    println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.life.updates - u, b.count);
+    assert!(b.alive && w.life.updates - u >= 2 && born > 0.0 && b.count > n0, "no children: {born}");
+    assert!(w.diag.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }

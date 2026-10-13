@@ -1,7 +1,7 @@
 //! Bodies: nodes of the sparse graph that hold substances, heat and genes, with stable IDs
 //! (slot and generation). Here: their storage, and Flow and Change on each body since its
 //! last update: light, gas and liquid exchange with its cell, its catalysed reactions, heat
-//! to the surface, upkeep, and death. Choose (`choose`) and Copy (`copy`) act on them.
+//! to the surface, upkeep, death, and copying when full. Choose (`choose`) and Copy (`copy`) act on them.
 //! A body updates every `interval` days; everything in between is integrated at its update.
 //! The light it catches warms the surface as it falls, but for the share its cell sets aside for
 //! what light reactions store (`World::light_pool`), which it takes at its update.
@@ -40,9 +40,10 @@ pub const LEARN: usize = 9;
 /// Share of what its group learned that fades each month, log10 (off at the lower end): the
 /// group forgets at the mean rate of its members
 pub const FORGET: usize = 10;
-/// Sizes of the brain and the senses (each rounded): hidden units (4..64), memory numbers
-/// (0..12), bodies perceived (1..6), sight in cells (1..4). A body whose size genes are a whole
-/// unit away from its lineage's sizes starts a new lineage with those sizes.
+/// Sizes of the brain and the senses (each rounded): hidden units (0..64; 0 is no brain, see
+/// `Lineage::none`), memory numbers (0..12), bodies perceived (1..6), sight in cells (1..4). A
+/// body whose size genes are a whole unit away from its lineage's sizes starts a new lineage with
+/// those sizes.
 pub const HIDDEN: usize = 11;
 pub const MEMORY: usize = 12;
 pub const SEEN: usize = 13;
@@ -147,6 +148,11 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
+    /// Child store: the work already done toward its next children, J (`copy::copy`). The energy
+    /// paid left the body as heat when it was paid (`pay`), so this is a count of work done, not
+    /// energy held: lost at death, shared out and added up as members split and join.
+    #[serde(default)]
+    pub paid: f64,
     /// Numbers that follow from the genes (rebuilt when missing)
     #[serde(skip)]
     pub k: Consts,
@@ -263,7 +269,10 @@ impl Body {
         (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase(k, t) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
     }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
-    /// body's mass it may make up (below 0.95). Liquid caught, taken or put stops there.
+    /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
+    /// taken or put stops there. It bounds the shares of the stores, not the size: what comes in
+    /// at an update goes with the body's own mass (takes and gifts, `phys.take`; rain, its capture
+    /// area), and a member past `phys.full` times its copy mass copies at its update (`copy`).
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let f = self.gene(Layout::of(chem).keep + k).clamp(0.0, 0.95);
         let mm = chem.subs[k].molar_mass;
@@ -278,12 +287,7 @@ impl Body {
     /// `prepare`.
     pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, mass: f64, t: f64, spare: f64) -> f32 {
         let lay = Layout::of(chem);
-        let mut e = 0.0;
-        for &(r, q) in &self.k.burn {
-            let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
-            e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
-        }
-        let mut w = ln(1.0 + (e / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
+        let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
@@ -295,6 +299,16 @@ impl Body {
             }
         }
         w
+    }
+    /// Energy its catalysed reactions that release heat could release from its stores at
+    /// temperature `t` (each as far as its inputs that are not gas go), J. Needs `prepare`.
+    pub fn fuel(&self, chem: &Chemistry, t: f64) -> f64 {
+        let mut e = 0.0;
+        for &(r, q) in &self.k.burn {
+            let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
+            e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
+        }
+        e
     }
     /// How past dealings with body `id` went, if it is known.
     pub fn recall(&self, id: u64) -> Option<f32> {
@@ -399,9 +413,18 @@ pub struct Lineage {
 }
 
 impl Lineage {
+    /// A brain of no hidden units is no brain (zero is a size, review 3, Q2): its bodies take no
+    /// decisions and pay nothing for a brain (no decision, learning or signal); their update is
+    /// their physics only (`body::day`). A lineage gets there by evolution, as it saves the cost.
+    pub fn none(&self) -> bool {
+        self.shape.h == 0
+    }
     /// Energy one decision takes, J per kg of a member of `Physics::m_ref` kg (`Physics::think`
-    /// gives it for a member of another mass).
+    /// gives it for a member of another mass); none without a brain.
     pub fn cost(&self, p: &crate::Physics) -> f64 {
+        if self.none() {
+            return 0.0;
+        }
         let sq = |x: usize| (x * x) as f64;
         p.c_hidden * self.shape.h as f64 + p.c_memory * self.shape.mem as f64 + p.c_seen * self.seen as f64 + p.c_sight * sq(self.sight)
     }
@@ -490,6 +513,10 @@ impl Life {
                 (self.genomes.len() - 1) as u32
             }
         }
+    }
+    /// Body `b` has no brain (`Lineage::none`).
+    pub fn brainless(&self, b: &Body) -> bool {
+        self.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).is_some_and(|l| l.none())
     }
     /// The rows body `b` was born with.
     pub fn born(&self, b: &Body) -> &[f32] {
@@ -859,12 +886,15 @@ pub fn day(w: &mut World) {
         match live(w, s, &mut b, &mut rc, &mut tmp) {
             Some(cause) => die(w, s, b, cause),
             None => {
-                choose::act(w, s, &mut b, &mut tmp);
-                // An action can leave nothing of a member (all its stores put or given away):
-                // it dies at once, before another body deals with it.
-                if b.empty_at(b.mass(&w.chem)) {
-                    die(w, s, b, LACK);
-                    continue;
+                // A body with no brain takes no decision: its update is its physics only.
+                if !w.life.brainless(&b) {
+                    choose::act(w, s, &mut b, &mut tmp);
+                    // An action can leave nothing of a member (all its stores put or given
+                    // away): it dies at once, before another body deals with it.
+                    if b.empty_at(b.mass(&w.chem)) {
+                        die(w, s, b, LACK);
+                        continue;
+                    }
                 }
                 crate::copy::resize(w, s, &mut b);
                 crate::copy::split(w, s, &mut b);
@@ -1188,6 +1218,12 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if (0..ns).any(|k| b.wet >> k & 1 == 1 && chem.phase(k, t) != Phase::Liquid) {
         return Some(PHASE);
     }
+    // Copying when full is physics, not a choice (review 3, W3): a member past `phys.full` times
+    // its copy mass copies at its update whatever its brain does (the brain's copy action is for
+    // copying before that), so a body that decides rarely still copies when full.
+    if mass3 / b.n() >= w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
+        (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
+    }
     None
 }
 
@@ -1195,12 +1231,13 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// rate per unit of input at `Physics::t_cat` summed over the genes that are on, see
 /// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength and
 /// capture area by the day, of learning and signalling, and of one
-/// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`).
+/// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`);
+/// a body with no brain pays none of the last three.
 /// Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
-    let mind = p.c_learn * b.learn_rate() as f64 + p.c_signal * sig;
+    let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p));
     let cats: f64 = w.chem.reactions.iter().zip(&b.k.cat).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
     let cats = cats * (1.0 + (b.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
@@ -1227,13 +1264,17 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    let ((mass, cap), e0) = (b.mass_cap(&w.chem), b.e);
+    let (mass, cap) = b.mass_cap(&w.chem);
+    let t0 = b.e / cap.max(1e-9);
     let paid = pay_at(w, b, cost, days, mass, cap, false) == 0.0;
     // The heat released leaves the body for its cell's ground within the action (a body's heat
-    // relaxes within seconds), so a costly action does not leave it hot.
-    if b.e > e0 {
-        w.e_ground[b.cell as usize] += b.e - e0;
-        b.e = e0;
+    // relaxes within seconds), so a costly action does not leave it hot; but for what keeps it at
+    // its temperature as what its reactions made holds more heat (a large cost, such as a child's,
+    // left it cold, and slow).
+    let keep = t0 * b.heat_cap(&w.chem);
+    if b.e > keep {
+        w.e_ground[b.cell as usize] += b.e - keep;
+        b.e = keep;
     }
     paid
 }
