@@ -176,17 +176,17 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // The work of making them, `c_copy` per kg given, is paid into the child store (`Body::paid`)
     // as far as its reactions can release it now (review 3, P6): copying is a process, so a body
     // need not release a child's whole cost in one interval, nor a member far past `full` all
-    // its children's at once (all or nothing, it could never pay and grew without end, M2). It
-    // pays from what it can spare: its fuel `f` (what its reactions could release from its
-    // stores) as far as, less what it pays, it can still release its upkeep `u` over an interval
-    // at today's rate `r` (first order in the fuel): (f - paid) r / f >= u (the children's share
-    // takes fuel and upkeep alike). Paying all it could release, a body starved with its children
-    // half paid. It has the children the store covers: a node a share of them, an individual
-    // whole ones; the rest later.
+    // its children's at once (all or nothing, it could never pay and grew without end, M2). Past
+    // `full` it must (physics, `body::live`); before, by its brain's choice, it pays only what it
+    // can spare: its fuel `f` (what its reactions could release from its stores) as far as, less
+    // what it pays, it can still release its upkeep `u` over an interval at today's rate `r`
+    // (first order in the fuel): (f - paid) r / f >= u. (Sparing past `full` too, a body short of
+    // fuel for its size never copied, and grew to 10^5 kg.) It has the children the store covers:
+    // a node a share of them, an individual whole ones; the rest later.
     let (owe, days) = (w.cfg.phys.c_copy * s * mass, b.interval() as f64);
     let more = if owe > b.paid {
-        let (f, r) = (b.fuel(&w.chem, b.temp(&w.chem)), 0.999 * body::release(w, b, days));
-        let spare = f * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300));
+        let r = 0.999 * body::release(w, b, days);
+        let spare = if m1 >= full { r } else { b.fuel(&w.chem, b.temp(&w.chem)) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300)) };
         (owe - b.paid).min(spare).min(r)
     } else {
         0.0
