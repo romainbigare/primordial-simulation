@@ -23,7 +23,10 @@ const OFF: f32 = -4.0;
 /// A flat, warm world: every cell a copy of one dry land cell, the strip added on top.
 fn scene(seed: u64) -> (World, usize) {
     let (chem, init) = worldgen::chemistry0();
-    let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
+    // The body is one of 30 kg: its brain costs what the scene was made with (a decision costs a
+    // member of `m_ref` kg `c_brain` per kg; a body of that mass pays it per kg as before).
+    let phys = pcore::Physics { m_ref: 30.0, ..Default::default() };
+    let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, phys, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);
     let (n, ns) = (w.grid.n(), w.chem.ns());
@@ -127,11 +130,11 @@ fn body_learns_to_move_toward_what_it_can_take() {
          off: on the strip {strip_off:.3}, toward {toward_off:.3} (chance {chance_off:.3}), {n_off} decisions, {m_off} moves"
     );
     eprintln!("{report}");
-    // It ends up on the strip clearly more often than a body that does not learn (about 0.88
-    // against 0.43 here; the one that does not learn mostly starves within 20 decisions).
+    // It ends up on the strip clearly more often than a body that does not learn (about 0.69
+    // against 0.47 here; the one that does not learn mostly starves within 20 decisions).
     assert!(strip_on > strip_off + 0.07, "{report}");
     // Its moves go toward richer cells more often than chance, and more than those of a body
-    // that does not learn (about 8 points over chance against 3 here; it was 14 to 16 points
+    // that does not learn (about 5 points over chance against 3 here; it was 14 to 16 points
     // while bodies grew without bound: a body of real size that has eaten its fill copies, and
     // gains no well-being by eating more). Moving pays only through a take at a later decision;
     // it is learned because each row of the brain steps by its own size, so the row for the

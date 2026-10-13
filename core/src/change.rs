@@ -1,7 +1,15 @@
 //! Law 2: Change. Substances react inside nodes, faster when hot.
+//!
+//! A reaction goes as far as `lim × (1 − exp(−rate × time))`, where `lim` is the amount of its
+//! scarcest input per `nu` (the first of the least) and `rate` is per unit of that input:
+//! catalyst · k · exp(−Ea/T) · the product, over the other inputs in a gas or a liquid, of their
+//! share of the phase to their `nu` (the scarcest one to `nu − 1`: `lim` already counts it
+//! once, so it counts `nu` times in all, as mass action says). So the reaction is first order in
+//! its scarce input (a trace gas in plenty of the other goes at the same rate per unit whatever
+//! its amount), not second order. A solid is a phase of its own (share 1).
 
 use crate::World;
-use crate::chem::Chemistry;
+use crate::chem::{Chemistry, Reaction};
 
 const YEAR_S: f64 = 3.156e7;
 /// A reaction whose fraction per year stays below this is frozen and skipped.
@@ -22,7 +30,10 @@ const SPECK: f64 = 1e-12;
 /// A reaction goes far within a step when its rate times the step reaches this.
 const FAR: f64 = 0.05;
 /// A substance making up less than this share of a ground node's loose amounts is a trace:
-/// reactions on traces alone never make a node react every step.
+/// reactions on traces alone never make a node react every step. Likewise a gas making up less
+/// than this share of its phase: a reaction that runs out of a trace of gas cannot do much in a
+/// step (heat, share of the others), and lumping it over `LAZY` steps is exact for a first-order
+/// decay at a fixed temperature (a speed schedule, as the others are).
 const TRACE: f64 = 1e-6;
 const BLOCK: usize = 64;
 /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
@@ -64,6 +75,20 @@ fn pow(f: f64, nu: u16) -> f64 {
     }
 }
 
+/// The input that runs out first: its amount per `nu` (reaction units) and its place in `inputs`
+/// (the first of the least). `a` gives the amount of a substance.
+#[inline]
+pub(crate) fn scarce(inputs: &[(u16, u16)], a: impl Fn(usize) -> f64) -> (f64, usize) {
+    let (mut lim, mut who) = (f64::MAX, 0);
+    for (q, &(k, nu)) in inputs.iter().enumerate() {
+        let l = per(a(k as usize), nu);
+        if l < lim {
+            (lim, who) = (l, q);
+        }
+    }
+    (lim, who)
+}
+
 /// `a` per `nu` (exact).
 #[inline]
 fn per(a: f64, nu: u16) -> f64 {
@@ -72,12 +97,6 @@ fn per(a: f64, nu: u16) -> f64 {
         2 => a * 0.5,
         _ => a / nu as f64,
     }
-}
-
-/// The smaller of two numbers that are not NaN.
-#[inline]
-fn least(a: f64, b: f64) -> f64 {
-    if b < a { b } else { a }
 }
 
 /// 1 - exp(-z), cheap when small.
@@ -134,22 +153,26 @@ impl Reactor {
             if rx.light || t < self.thr[r] {
                 continue;
             }
-            let mut x = 1.0;
-            for &(k, nu) in &rx.inputs {
-                let (k, p) = (k as usize, self.ph[k as usize] as usize);
-                if n[k] <= 0.0 {
-                    x = 0.0;
-                    break;
-                }
-                if p > 0 {
-                    x *= pow(self.av[k] / tot[p], nu);
-                }
-            }
-            if x > 0.0 {
-                best = best.max(rx.k * (-rx.ea / t).exp() * x);
+            let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
+            let k = rx.inputs[who].0 as usize;
+            if lim > 0.0 && (self.ph[k] == 0 || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
+                best = best.max(rx.k * (-rx.ea / t).exp() * self.share(rx, who, &tot));
             }
         }
         best
+    }
+
+    /// The product, over the inputs of `rx` in a gas or a liquid, of their share of the phase to
+    /// their `nu`; the scarcest input (place `who`) to `nu - 1`.
+    fn share(&self, rx: &Reaction, who: usize, tot: &[f64; 3]) -> f64 {
+        let mut x = 1.0;
+        for (q, &(k, nu)) in rx.inputs.iter().enumerate() {
+            let (k, p) = (k as usize, self.ph[k as usize] as usize);
+            if p > 0 {
+                x *= pow(self.av[k] / tot[p], nu - (q == who) as u16);
+            }
+        }
+        x
     }
 
     /// Phase and available amount of each substance at `t` (the node's, plus for a gas the gas
@@ -216,19 +239,9 @@ impl Reactor {
                 if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (uses_light && light <= 0.0) {
                     continue;
                 }
-                let (mut lim, mut x) = (f64::MAX, 1.0);
-                for &(k, nu) in &rx.inputs {
-                    let (k, a) = (k as usize, self.av[k as usize]);
-                    lim = least(lim, per(a, nu));
-                    if a <= 0.0 {
-                        break;
-                    }
-                    if self.ph[k] > 0 {
-                        x *= pow(a / tot[self.ph[k] as usize], nu);
-                    }
-                }
+                let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
                 if lim > 0.0 {
-                    let kap = cr * rx.k * (-rx.ea / t).exp() * x;
+                    let kap = cr * rx.k * (-rx.ea / t).exp() * self.share(rx, who, &tot);
                     self.kap[r] = kap;
                     self.lim[r] = lim;
                     any = true;
@@ -262,7 +275,7 @@ impl Reactor {
                 }
                 let dh = self.dh[r];
                 let uses_light = rx.light && dh > 0.0;
-                let lim = rx.inputs.iter().fold(f64::MAX, |m, &(k, nu)| least(m, per(self.av[k as usize], nu)));
+                let lim = scarce(&rx.inputs, |k| self.av[k]).0;
                 let mut ext = lim * if sub == left { self.far[r] } else { frac(self.kap[r] * sub) };
                 if uses_light {
                     ext = ext.min(light * LIGHT_YIELD / dh);
@@ -392,21 +405,27 @@ pub fn step(w: &mut World, dt: f64) {
         }
     }
     // The most activity `a` mol of a gas can have among at least `d` mol of gas.
-    let act = |a: f64, d: f64, nu: u16| if d > 0.0 { pow((a / d).min(1.0), nu) } else { 1.0 };
-    let most_act: Vec<f64> = (0..ns).map(|k| if chem.subs[k].boil <= tlo { (0..na).fold(0.0, |m, j| act(w.air[k * na + j], pool_lo[j], 1).max(m)) } else { 1.0 }).collect();
+    let act = |a: f64, d: f64| if d > 0.0 { (a / d).min(1.0) } else { 1.0 };
+    // The most activity the rate per unit of the scarcest input can have from gases with shares
+    // `f`, whichever input that is: all shares to `nu`, or one power of one of them left out (not
+    // of a trace: it does not make the node react every step, see `TRACE`).
+    let up = |gas: &[(usize, u16)], f: &dyn Fn(usize) -> f64| {
+        (0..=gas.len()).filter(|&d| d == gas.len() || f(gas[d].0) >= TRACE).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu - (q == d) as u16)).product::<f64>()).fold(0.0, f64::max)
+    };
+    let most_act: Vec<f64> = (0..ns).map(|k| if chem.subs[k].boil <= tlo { (0..na).fold(0.0, |m, j| act(w.air[k * na + j], pool_lo[j]).max(m)) } else { 1.0 }).collect();
     let cand: Vec<Cand> = (fast.iter())
         .map(|&&(r, need_bits, _, hot)| {
             let rx = &chem.reactions[r];
             let (gas, held): (Vec<_>, Vec<_>) = rx.inputs.iter().map(|p| (p.0 as usize, p.1)).partition(|p| chem.subs[p.0].boil <= tlo);
             let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil)).collect();
             let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, need: vec![std::cell::Cell::new(f64::NAN); na] };
-            c.low = c.warm(c.kdt * c.gas.iter().map(|&(k, nu)| pow(most_act[k], nu)).product::<f64>()).max(hot);
+            c.low = c.warm(c.kdt * up(&c.gas, &|k| most_act[k])).max(hot);
             c
         })
         .collect();
     let need = |c: &Cand, j: usize| {
         if c.need[j].get().is_nan() {
-            c.need[j].set(c.warm(c.kdt * c.gas.iter().map(|&(k, nu)| act(w.air[k * na + j], pool_lo[j], nu)).product::<f64>()));
+            c.need[j].set(c.warm(c.kdt * up(&c.gas, &|k| act(w.air[k * na + j], pool_lo[j]))));
         }
         c.need[j].get()
     };
@@ -430,7 +449,7 @@ pub fn step(w: &mut World, dt: f64) {
         // Vapour of what the node holds thins the gas too.
         let vapour = most.iter().filter(|&&k| t >= chem.subs[k].boil).map(|&k| col(k)[i]).sum::<f64>();
         let d = pool_lo[j] + vapour / share;
-        if (own || vapour > 0.0) && t < c.warm(c.kdt * c.gas.iter().map(|&(k, nu)| act(col(k)[i] / share + w.air[k * na + j], d, nu)).product::<f64>()) {
+        if (own || vapour > 0.0) && t < c.warm(c.kdt * up(&c.gas, &|k| act(col(k)[i] / share + w.air[k * na + j], d))) {
             return false;
         }
         held(most.iter().map(|&k| col(k)[i]).sum::<f64>() + c.held.iter().filter(|h| !most.contains(&h.0)).map(|&(k, _)| col(k)[i]).sum::<f64>())

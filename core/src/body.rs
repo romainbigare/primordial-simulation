@@ -154,7 +154,8 @@ pub struct Consts {
     pub liq: f64,
     pub heat: f64,
     pub leaf: f64,
-    /// Catalyst factor of each reaction (1 when off), and the summed speed-up (decades)
+    /// Catalyst factor of each reaction (1 when off), and the sum of the squares of the speed-ups
+    /// (decades), which upkeep charges
     pub cat: Vec<f64>,
     pub cats: f64,
     pub interval: u64,
@@ -219,7 +220,7 @@ impl Body {
         }
         let cat = Layout::of(chem).cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
-        let cats = (0..chem.reactions.len()).map(|r| self.gene(cat + r).max(0.0)).sum();
+        let cats = (0..chem.reactions.len()).map(|r| self.gene(cat + r).max(0.0).powi(2)).sum();
         let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0).map(|r| (r, -chem.dh(r))).collect();
         let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
@@ -266,20 +267,20 @@ impl Body {
         (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
     }
     /// Well-being at temperature `t`: the energy its catalysed reactions could release from a
-    /// member's stores (log, in decisions' worth for a body of the mass it copies at, so shedding
-    /// mass does not raise it), less how near it is to its limits: its key stores to their safe
-    /// minimums (the log of each one's margin, which is the log of its share over its minimum,
-    /// counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
+    /// member's stores (log, in decisions' worth: `think` is what one decision of the starting
+    /// brain costs a member of the mass it copies at, J, so shedding mass does not raise it), less
+    /// how near it is to its limits: its key stores to their safe minimums (the log of each one's
+    /// margin, which is the log of its share over its minimum, counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
     /// the same margin form), and its key liquids to freezing or boiling (within 5 K). Needs
     /// `prepare`.
-    pub fn wellbeing_at(&self, chem: &Chemistry, c_brain: f64, mass: f64, t: f64, spare: f64) -> f32 {
+    pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, mass: f64, t: f64, spare: f64) -> f32 {
         let lay = Layout::of(chem);
         let mut e = 0.0;
         for &(r, q) in &self.k.burn {
             let solid = chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas);
             e += q * solid.map(|&(k, nu)| self.store[k as usize] / nu as f64).fold(f64::MAX, f64::min).min(1e30);
         }
-        let mut w = ln(1.0 + (e / self.n() / self.dec(COPY_MASS) / c_brain) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
+        let mut w = ln(1.0 + (e / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
@@ -387,7 +388,8 @@ pub struct Lineage {
 }
 
 impl Lineage {
-    /// Energy one decision takes, J per kg of body.
+    /// Energy one decision takes, J per kg of a member of `Physics::m_ref` kg (`Physics::think`
+    /// gives it for a member of another mass).
     pub fn cost(&self, p: &crate::Physics) -> f64 {
         let sq = |x: usize| (x * x) as f64;
         p.c_hidden * self.shape.h as f64 + p.c_memory * self.shape.mem as f64 + p.c_seen * self.seen as f64 + p.c_sight * sq(self.sight)
@@ -855,6 +857,7 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     let [tg, depth, _] = w.life.env[i];
     let tg = w.scratch.temps().0.get(i).copied().unwrap_or(tg);
     let (depth, walls) = (bond::depth(w, b, depth), bond::walls_around(w, b));
+    let cover = (w.life.sum[i][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.grid.area();
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
     let days = w.day.saturating_sub(b.last).max(1) as f64;
     let (mut mass, cap) = b.mass_cap(&w.chem);
@@ -1008,10 +1011,29 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
 
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
     // toward the ground's temperature plus the warming of the heat released, over the time.
-    // Walls around it add their conductance (its share of it) in series.
+    // Walls around it add their conductance (its share of it) in series. So does the cover of the
+    // other bodies in its cell, but only for the part of its surface that lies under the cover:
+    // its light-capture area is open to the air above (it is part of the canopy), so the body's
+    // conductance splits in the shares of the two areas, and only the share of its own surface
+    // (6 (mass / `rho_body`)^(2/3) per member, as the space of walls) goes through the cover. A
+    // layer of `cover` kg/m² passes `phys.shelter` / `cover` W per K and m² of surface; bare ground
+    // adds none. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the cover) with
+    // 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8
+    // W/K, and 1.5 W/K stays open: 10.3 W/K in all, so its 52 W of upkeep warm it 5.0 K (1.7 K
+    // bare), 3.4 K more, as much as thick walls give (3.3 K). A 1 kg plant member (surface 0.06
+    // m², capture area 2 m²: 3% under the cover) keeps 475 of its 490 W/K open; its 14 W/K under
+    // 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
     let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
         let g0 = b.conductance(cfg.phys.heat_mass, mass);
+        let g0 = if cover > 0.0 {
+            let (m1, n) = (mass / b.n(), b.n());
+            let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
+            let s = ab / (ab + m1 * b.k.leaf);
+            g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * n * ab))
+        } else {
+            g0
+        };
         let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
         let teq = tg + heat / dt / g;
         let e1 = c * (teq + (b.e / c - teq) * (-g * dt / c).exp());
@@ -1038,14 +1060,16 @@ fn live(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<
     None
 }
 
-/// Upkeep over `days` of a body of `mass` kg, J: of catalysts, strength and capture area by
-/// the day, of learning and signalling, and of one decision. Needs `prepare`.
+/// Upkeep over `days` of a body of `mass` kg, J: of catalysts (convex in decades of speed-up, as
+/// the square, see `Physics::c_cat`), strength and capture area by the day, of learning and
+/// signalling, and of one decision (per member, by the brain's cost and weakly the member's mass,
+/// `Physics::think`). Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
     let mind = p.c_learn * b.learn_rate() as f64 + p.c_signal * sig;
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p));
-    days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + think * mass
+    days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
@@ -1082,7 +1106,8 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
 /// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`
 /// J, and the energy released. Each goes at most as far as Change's rate at the body's
 /// temperature takes it over `days`: catalyst · k · exp(−Ea/T) · the activity of its gases (their
-/// share of the air), on its scarcest input (its own stores, the air exchanged). So a cold body
+/// share of the air to their `nu`, the scarcest input's to `nu − 1`), per unit of its scarcest
+/// input (its own stores, the air exchanged): the same law as `change`. So a cold body
 /// releases little: the cold cost is the rate, not a rule.
 fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64; 64], f64) {
     let (chem, i) = (&w.chem, b.cell as usize);
@@ -1105,9 +1130,9 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
         if got >= cost || !breathes(chem, r, t) {
             continue;
         }
-        let act: f64 = rx.inputs.iter().filter(|p| gas(p.0 as usize)).map(|&(k, nu)| (air[k as usize * na + j] / tot).powi(nu as i32)).product();
+        let (lim, who) = crate::change::scarce(&rx.inputs, |k| have[k]);
+        let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, nu))| (air[k as usize * na + j] / tot).powi(nu as i32 - (q == who) as i32)).product();
         let rate = b.k.cat[r] * rx.k * (-rx.ea / t).exp() * act;
-        let lim = rx.inputs.iter().map(|&(k, nu)| have[k as usize] / nu as f64).fold(f64::MAX, f64::min);
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];
         for &(k, nu) in &rx.inputs {

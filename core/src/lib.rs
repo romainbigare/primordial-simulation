@@ -105,16 +105,34 @@ pub struct Physics {
     pub gas_depth: f64,
     /// Standing liquid depth at which the ground counts as half wet, m
     pub wet_depth: f64,
-    /// Upkeep of catalysts, J per kg per day per decade of speed-up
+    /// Heat the cover of other bodies passes to a body: a layer of `m` kg/m² over it passes
+    /// `shelter / m` W per K and m² of its own surface (not of its light-capture area, which is
+    /// open to the air above), W kg/(m⁴ K); that part of the body's heat to its surface goes
+    /// through it in series. Thicker cover insulates more; bare ground adds nothing. 220 gives a
+    /// 30 kg member (52 W of upkeep, 30 W/K) under 10 kg/m² of cover 3.4 K more warmth than bare
+    /// ground (thick walls give 3.3 K), and a 1 kg plant member (capture area 2 m²) almost none.
+    pub shelter: f64,
+    /// Upkeep of catalysts, J per kg per day per decade² of speed-up: it grows as the square of
+    /// each catalyst's decades (a speed-up of 10^15 costs 225 units, of 10^2.6 only 6.8), so a
+    /// body that wants a far faster reaction pays far more. Life's enzymes cost by their amount,
+    /// which goes with the speed-up itself, not its logarithm; chemistry 0 cannot use that yet
+    /// (its light reaction needs 10^15), so this is a stand-in until chemistry is rescaled (M7).
+    /// 15 makes the starting light-eaters (genes 15 and 2) pay what a cost of 200 per decade did.
     pub c_cat: f64,
     /// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg)
     pub c_strength: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
     /// Cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1), J per kg
+    /// of a member of `m_ref` kg: a member of `m` kg pays `c_brain` x `m_ref` x (`m` / `m_ref`)^0.25
+    /// J (`Physics::think`)
     pub c_brain: f64,
+    /// Mass of the member for which a brain's cost is listed per kg, kg. The cost of a decision
+    /// goes with the brain and only weakly with the body: a 30 kg member pays 2.3 times what a
+    /// 1 kg member pays for the same brain (13 times less per kg), not 30 times
+    pub m_ref: f64,
     /// Cost of one decision per hidden unit, per memory number, per body perceived and per square
-    /// cell of sight, J per kg
+    /// cell of sight, J per kg of a member of `m_ref` kg
     pub c_hidden: f64,
     pub c_memory: f64,
     pub c_seen: f64,
@@ -138,6 +156,10 @@ pub struct Physics {
     pub walk_wear: f64,
     /// Most a body can take per day of its interval, as a share of its own mass
     pub take: f64,
+    /// Area a body works per day per kg of its mass, m²/(kg day): it takes no more per day than
+    /// the mass per m² of what it takes there times this times its mass (a 30 kg body works 300
+    /// m² in 10 days), so thin cover is hard to find
+    pub sweep: f64,
     /// Energy to handle one kg taken or put, J
     pub c_handle: f64,
     /// Spread of the shape of a part made, and of the signal, around their means
@@ -184,7 +206,10 @@ pub struct Physics {
     pub deep: f64,
     pub afloat: f64,
     // Copy
-    /// Energy to make one kg of child, J
+    /// Energy to make one kg of child, J. Growth in life keeps 10 to 20% of the energy it eats, so
+    /// a kg of body costs about 10^7 J; 2 x 10^6 is a first step. A body must be able to release
+    /// it within one interval (gas exchange limits that): a starting eater copying at 63 kg
+    /// gives 19 kg to a child, 3.8 x 10^7 J, and can release 1.2 x 10^8 J in 9 days at 288 K.
     pub c_copy: f64,
     /// Chance that a child starts a new lineage with a changed base, and the size of that change
     pub new_lineage: f64,
@@ -215,6 +240,14 @@ pub struct Physics {
     pub hold: f64,
 }
 
+impl Physics {
+    /// Energy of one decision of a brain whose cost is `c` J per kg of a member of `m_ref` kg
+    /// (`body::Lineage::cost`), for a member of `m` kg, J: weakly more for a bigger body.
+    pub fn think(&self, c: f64, m: f64) -> f64 {
+        c * self.m_ref * (m / self.m_ref).powf(0.25)
+    }
+}
+
 impl Default for Physics {
     fn default() -> Self {
         Physics {
@@ -222,10 +255,12 @@ impl Default for Physics {
             light_depth: 10.0,
             gas_depth: 1.0,
             wet_depth: 0.01,
-            c_cat: 2e2,
+            shelter: 220.0,
+            c_cat: 15.0,
             c_strength: 1e5,
             c_leaf: 2e3,
             c_brain: 1e5,
+            m_ref: 1.0,
             c_hidden: 5e3,
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
@@ -239,6 +274,7 @@ impl Default for Physics {
             rho_body: 1e3,
             walk_wear: 3e-5,
             take: 0.05,
+            sweep: 1.0,
             c_handle: 1e3,
             shape_noise: 0.5,
             signal_noise: 0.3,
@@ -262,7 +298,7 @@ impl Default for Physics {
             dig: 0.01,
             deep: 0.5,
             afloat: 0.2,
-            c_copy: 5e5,
+            c_copy: 2e6,
             new_lineage: 0.001,
             base_noise: 0.03,
             row_chance: 0.3,

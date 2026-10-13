@@ -283,3 +283,38 @@ fn a_body_that_gives_all_it_holds_dies_at_once() {
     assert!(w.events.iter().any(|e| matches!(e.kind, EventKind::Gave { .. })), "nothing was given");
     assert!(!w.life.bodies[g].alive, "the giver lives on");
 }
+
+/// Dense cover of other bodies shelters a body's heat like walls: a conductance in series with the
+/// body's own, so a body under 10 kg/m² of cover ends warmer over the ground than one on bare
+/// ground (its upkeep warms it more).
+#[test]
+fn cover_keeps_a_body_warm() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    pcore::step(&mut w);
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
+    let bs = &w.life.bodies;
+    let slot = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
+    let i = bs[slot].cell as usize;
+    // It rests, so it stays where it is.
+    let b = &mut w.life.bodies[slot];
+    b.adj.fill(-3.0);
+    b.adj[0] = 3.0;
+    let mut covered = w.clone();
+    // Cover: a node of light-eaters, 10 kg/m² over the cell.
+    let mut c = covered.life.alive().find(|b| pcore::body::light_cat(&w.chem, &b.genes) > 5.0).expect("a light-eater").clone();
+    let f = 10.0 * w.grid.area() / c.mass(&w.chem);
+    c.store.iter_mut().for_each(|a| *a *= f);
+    c.e *= f;
+    c.count = c.n() * f;
+    c.cell = i as u32;
+    c.adj.fill(-3.0);
+    c.adj[0] = 3.0;
+    covered.life.add(c, covered.day, 1);
+    let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];
+    pcore::step(&mut w);
+    pcore::step(&mut covered);
+    assert!(w.life.bodies[slot].alive && covered.life.bodies[slot].alive);
+    println!("above the ground: bare {} K, under cover {} K", temp(&w), temp(&covered));
+    assert!(temp(&covered) > temp(&w) + 1.0, "bare {} K, under cover {} K above the ground", temp(&w), temp(&covered));
+}
