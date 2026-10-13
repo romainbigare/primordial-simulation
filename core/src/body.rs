@@ -619,7 +619,17 @@ impl Life {
     }
     /// Body `b` (taken out of its slot) now has these genes and born rows; its group follows.
     pub fn reborn(&mut self, b: &mut Body, genes: Vec<f32>, rows: Vec<f32>) {
-        let g = if rows == self.genomes[b.genome as usize].rows { b.genome } else { self.new_genome(rows) };
+        if rows == self.genomes[b.genome as usize].rows {
+            // The same born rows (a member split off a node and back): of its group only the
+            // forgetting rate changes (counting the rows out and in again only rounded the
+            // group's rows, and cost two passes over them).
+            let old = b.forget();
+            (b.genes, b.k) = (genes, Consts::default());
+            let gr = &mut self.groups[b.group as usize];
+            gr.forget = gr.forget + b.forget() - old;
+            return;
+        }
+        let g = self.new_genome(rows);
         let new = Body { cell: b.cell, genome: g, genes, ..Default::default() };
         self.genomes[g as usize].bodies += 1;
         self.enrol(b.group, &new, 1);
