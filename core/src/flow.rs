@@ -8,6 +8,7 @@
 //! books matter lifted or dropped in the gravity ledger, so elements and energy are kept.
 
 pub(crate) mod air;
+pub use air::{column, glow};
 
 use crate::grid::{DIRS, FORWARD};
 use crate::World;
@@ -68,12 +69,12 @@ struct Sp {
 /// | `sed`, `sed_e`, `mob` | mol carried, J carried, m³ mobile | L (`sed`, `sed_e`); C (`mob`) | L; C |
 /// | `air_of`, `near`, `wt`, `per` | ground cell to air nodes and weights, share | `tables` (on load) | S, Rad, X, `lerp` |
 /// | `tl` | K, air touching the ground | Rad | X |
-/// | `seen` | [drop/m, air height, absorbing share, cloud reflectance, air K] | S (X sets `[3]`) | Rad |
+/// | `seen`, `lay` | [drop/m, air height, absorbing share, cloud reflectance, air K]; K below the ground's air, per layer | S (X sets `[3]`) | Rad |
 /// | `ta0` | K, air at the last S | S | Rad |
 /// | `cloud`, `snap` | [mol, mol × reflectance]; mol per gas | X | X |
 /// | `cells`, `za`, `vol` | count, m, m³ | `tables`; S | S, W |
 /// | `nt`, `capa`, `mass` | mol, J/K, kg | S; X, W (moves) | X, W, Rad |
-/// | `fabs`, `gam`, `zair`, `ta` | share, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
+/// | `fabs`, `gam`, `zair`, `ta` | optical depth, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
 /// | `node_tmp` | reused: J/K (S), J (Rad), reflectance (X), Pa (W) | S, Rad, X, W | the same part |
 /// | `warmth`, `grad` | K at equal height, K per node | W | W |
 /// | `cond`, `hk`, `split` | may condense, m, share (per gas) | S | X, W |
@@ -159,6 +160,10 @@ pub struct Scratch {
     /// the air's mass, heat-absorbing share, sunlight reflected by condensate in the air,
     /// air temperature; and the temperature of each air node then.
     seen: Vec<[f64; 5]>,
+    /// Per ground cell, from the last full step: how much colder than the air at the ground each
+    /// layer of the air is that sends heat radiation [down, up] (`air::column`).
+    #[serde(default)]
+    lay: Vec<[[f64; air::LAYERS]; 2]>,
     ta0: Vec<f64>,
     /// Per air node: condensed in the last full step, mol, and × its reflectance.
     #[serde(skip)]
@@ -166,7 +171,7 @@ pub struct Scratch {
     #[serde(skip)]
     snap: Vec<f64>,
     // Air nodes: ground cells (a table), mean ground height, volume, amount, heat capacity, mass,
-    // heat-absorbing share, temperature drop per metre, mean height of the air's mass,
+    // optical depth, temperature drop per metre, mean height of the air's mass,
     // temperature, pressure, warmth at equal height and its gradient.
     #[serde(skip)]
     cells: Vec<f64>,
@@ -248,8 +253,9 @@ pub fn step(w: &mut World, dt: f64) {
     (s.pending, s.pending_liq) = (s.pending + dt, s.pending_liq + dt);
     let day = 86_400.0;
     let (air_due, liq_due) = (first || s.pending >= w.cfg.air_days as f64 * day - 1.0, first || s.pending_liq >= w.cfg.flow_days as f64 * day - 1.0);
-    // The state of ground and air is rebuilt at liquid steps (and when a refresh changed what is present).
-    let full = liq_due || std::mem::take(&mut s.stale);
+    // The state of ground and air is rebuilt at liquid steps (and when a refresh changed what is
+    // present, or a snapshot from before 13 October 2026 has no air layers).
+    let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.grid.n();
     ground_state(w, &mut s, full);
     air::state(w, &mut s, full);
     air::radiation(w, &mut s, dt);

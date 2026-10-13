@@ -1,5 +1,6 @@
 # Chemistry 0. Numbers only. m g/mol, cp J/(mol K), melt/boil K, rho kg/m3 [solid, liquid],
-# hard/str 0..1, refl [[solid rgb], [liquid rgb]], ir m2/mol, sol, cond W/(m K), hf kJ/mol.
+# hard/str 0..1, refl [[solid rgb], [liquid rgb]], ir m2/mol, sat mol/m2 (column past which the
+# optical depth grows as the square root of the amount; none: always in proportion), sol, cond W/(m K), hf kJ/mol.
 elements = 9
 
 [[s]] # 0
@@ -12,7 +13,8 @@ rho = [917, 1000]
 hard = 0.1
 str = 0.05
 refl = [[0.85,0.88,0.92],[0.05,0.07,0.10]]
-ir = 0.0007
+ir = 0.0022
+sat = 100
 sol = 1.0
 cond = 2.2
 hf = -286
@@ -59,7 +61,8 @@ rho = [1560, 1100]
 hard = 0.05
 str = 0.02
 refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
-ir = 0.003
+ir = 0.0114
+sat = 10
 sol = 0.03
 cond = 0.02
 hf = -393.5
@@ -74,7 +77,8 @@ rho = [500, 423]
 hard = 0.0
 str = 0.0
 refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
-ir = 0.1
+ir = 0.25
+sat = 0.1
 sol = 0.01
 cond = 0.03
 hf = -74.8

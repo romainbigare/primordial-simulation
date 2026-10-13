@@ -58,3 +58,21 @@ fn warm_air_spreads() {
     let (de, dq) = drift(&warm, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }
+
+/// More heat-absorbing gas keeps warming the ground: under 240 W/m² of sunlight, with the air
+/// following the ground by the lapse rate, the balance at optical depth 17 is clearly warmer than
+/// at 9 (two seeds' late worlds; one slab at the air's mean temperature gave both the same).
+#[test]
+fn more_gas_warms_with_no_ceiling() {
+    let ground = |x: f64| {
+        let (mut lo, mut hi) = (150.0, 500.0);
+        for _ in 0..60 {
+            let t: f64 = (lo + hi) / 2.0;
+            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]);
+            (lo, hi) = if up > 240.0 { (lo, t) } else { (t, hi) };
+        }
+        lo
+    };
+    let (t1, t9, t17) = (ground(1.5), ground(9.0), ground(17.0));
+    assert!(t9 > t1 + 20.0 && t17 > t9 + 3.0, "{t1} {t9} {t17}");
+}

@@ -35,6 +35,10 @@ pub struct Substance {
     pub refl: [[f32; 3]; 2],
     /// Absorption of outgoing heat radiation per column amount (m²/mol), gas only
     pub ir_abs: f64,
+    /// Column amount past which the absorption grows only as the square root of the amount
+    /// (the gas's bands fill up, a stand-in for the logarithm of real gases), mol/m²; 0: never
+    #[serde(default)]
+    pub ir_sat: f64,
     /// Solubility in liquids (mol fraction that can dissolve)
     pub solubility: f64,
     /// Heat conductivity of the solid, W/(m K)
@@ -104,6 +108,12 @@ impl Chemistry {
     pub fn t_sat(&self, k: usize, x: f64) -> f64 {
         let (tb, l) = (self.subs[k].boil, self.subs[k].lv);
         1.0 / (1.0 / tb - R_GAS * x.max(1e-30).ln() / l)
+    }
+
+    /// Optical depth to outgoing heat radiation of a column of `c` mol/m² of substance `k`.
+    pub fn depth(&self, k: usize, c: f64) -> f64 {
+        let s = &self.subs[k];
+        s.ir_abs * if s.ir_sat > 0.0 && c > s.ir_sat { (s.ir_sat * c).sqrt() } else { c }
     }
 
     /// Enthalpy change of one reaction unit, J (positive takes energy).
