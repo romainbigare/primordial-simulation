@@ -127,8 +127,8 @@ pub struct Physics {
     /// how far it goes, the catalyst is kept whether light comes or not, so a light-eater pays for
     /// all it could fix and is pushed to keep only what its light and gas can feed. 1.67 x 10^6
     /// makes the starting light-eaters pay what the convex cost before made them pay (15 x (15² +
-    /// 2²) = 3,435 J/kg/day): their light gene (15 with k 10^-9, Ea 5,800 K) gives 10^15 x 10^-9 x
-    /// e^-20 = 2.06 x 10^-3 /s, their burn gene (2; k 4,300, Ea 7,760 K) 10^2 x 4,300 x e^-26.76 =
+    /// 2²) = 3,435 J/kg/day): their light gene (12 with k 10^-6, Ea 5,800 K; 15 with 10^-9 before)
+    /// gives 10^12 x 10^-6 x e^-20 = 2.06 x 10^-3 /s, their burn gene (2; k 4,300, Ea 7,760 K) 10^2 x 4,300 x e^-26.76 =
     /// 1.0 x 10^-6 /s; 3,435 / 2.062 x 10^-3 = 1.67 x 10^6. The starting eaters' burn gene (2.6:
     /// 4.1 x 10^-6 /s) then costs 6.8 J/kg/day (101 before), and burning 7 times faster (+0.86
     /// decades, the cold tolerance of 290 to 270 K) 49.6 (+43, against +78 before).
