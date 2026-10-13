@@ -86,3 +86,22 @@ fn hot_node_reacts_in_the_next_step() {
         assert!(w.ground[rich * n + i] < 999.0, "tick {tick}: amount left {}", w.ground[rich * n + i]);
     }
 }
+
+/// A reaction is first order in its scarce input: a trace of the methane-like gas (4) in plenty of
+/// the oxygen-like gas (2) loses the same share of itself in the same time whatever its amount.
+#[test]
+fn scarce_gas_goes_first_order() {
+    let (chem, _) = worldgen::chemistry0();
+    let mut rc = Reactor::new(&chem);
+    let mut lost = |a: f64| {
+        let mut n = vec![0.0; chem.ns()];
+        n[2] = 1e6;
+        n[4] = a;
+        let mut e = 300.0 * 1e12; // huge heat capacity: temperature stays put
+        rc.react(&chem, &mut n, None, &mut e, 1e12, None, 0.0, 3e4);
+        1.0 - n[4] / a
+    };
+    let (few, many) = (lost(1.0), lost(100.0));
+    assert!(few > 0.1 && few < 0.9, "share lost {few}");
+    assert!((many - few).abs() < 0.01 * few, "1 mol lost {few}, 100 mol lost {many}");
+}

@@ -1094,7 +1094,8 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
 /// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`
 /// J, and the energy released. Each goes at most as far as Change's rate at the body's
 /// temperature takes it over `days`: catalyst · k · exp(−Ea/T) · the activity of its gases (their
-/// share of the air), on its scarcest input (its own stores, the air exchanged). So a cold body
+/// share of the air to their `nu`, the scarcest input's to `nu − 1`), per unit of its scarcest
+/// input (its own stores, the air exchanged): the same law as `change`. So a cold body
 /// releases little: the cold cost is the rate, not a rule.
 fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64; 64], f64) {
     let (chem, i) = (&w.chem, b.cell as usize);
@@ -1117,9 +1118,9 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
         if got >= cost || !breathes(chem, r, t) {
             continue;
         }
-        let act: f64 = rx.inputs.iter().filter(|p| gas(p.0 as usize)).map(|&(k, nu)| (air[k as usize * na + j] / tot).powi(nu as i32)).product();
+        let (lim, who) = crate::change::scarce(&rx.inputs, |k| have[k]);
+        let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, nu))| (air[k as usize * na + j] / tot).powi(nu as i32 - (q == who) as i32)).product();
         let rate = b.k.cat[r] * rx.k * (-rx.ea / t).exp() * act;
-        let lim = rx.inputs.iter().map(|&(k, nu)| have[k as usize] / nu as f64).fold(f64::MAX, f64::min);
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];
         for &(k, nu) in &rx.inputs {

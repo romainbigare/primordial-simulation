@@ -1,6 +1,6 @@
 # Handover: Emergent World, version 2
 
-**Written:** 10 October 2026. **Revised:** 11 October 2026 (chemistry 0; shared group brains; word-ban fix; honest speed targets; budgets as goals; M3 check point). 12 October 2026 (after the M3 check point review: real-sized bodies, no hard density limit, fix list before M4, reports kept in `docs/reports/`).
+**Written:** 10 October 2026. **Revised:** 11 October 2026 (chemistry 0; shared group brains; word-ban fix; honest speed targets; budgets as goals; M3 check point). 12 October 2026 (after the M3 check point review: real-sized bodies, no hard density limit, fix list before M4, reports kept in `docs/reports/`). 13 October 2026 (reaction rate first order in the scarce input).
 **For:** a new AI agent (or engineer) who will start building version 2 from an empty project.
 **From:** a design conversation between the project owner and Claude, after a review of version 1, an earlier attempt with the same goal. You do not have version 1. Everything useful from it is written in this document.
 
@@ -96,6 +96,7 @@ What went wrong:
 | Actors | Individual bodies where it matters. Groups of similar bodies merged into population nodes elsewhere (Section 7) |
 | Body scale (12 Oct 2026) | Bodies are **real-sized**: an individual weighs what a real living thing weighs (grams to tonnes, set by its genes and selection). Plant cover holds real mass per m² (about 1 to 50 kg/m²). **No hard-coded limit on bodies per cell**: density is an outcome of light, cover, crowding and food. Speed comes from population nodes (Section 7.1, light-eaters first) and better algorithms, never from giant bodies |
 | Catalyst upkeep (13 Oct 2026) | The upkeep of a body's catalysts is **convex in decades**: `c_cat` × the sum of the squares of its catalyst genes (log10 speed-up), not the sum. Why: a flat cost per decade made cold tolerance almost free (five more decades cost under 2% of upkeep), so nothing held a kind to its climate. In life an enzyme costs by its amount, which goes with the speed-up itself; chemistry 0 cannot use that, because its light reaction needs a speed-up of 10^15 (its uncatalysed rate is near zero). So this is a stand-in. **Until chemistry is rescaled at M7** (when it is generated anyway), keep it convex. The starting light-eaters pay what they paid before (`c_cat` 15) |
+| Reaction rate (13 Oct 2026) | A reaction is **first order in its scarce input** (the one that runs out first), from 13 October 2026. Before, that input counted twice (once in the amount that runs out, once in its share), so a trace gas in the air lasted millions of years instead of years (methane-like gas: about 2 million years against about 4) and piled up and warmed the world. Now the rate per unit of the scarce input uses the shares of the other inputs only (Section 6.2). The same law is used in Change and in how bodies burn their stores |
 | World chemistry | One fixed Earth-like "chemistry 0" through M6 (numbers only, no names in core). Random chemistry per world from M7 (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
 | Visuals | **2D map, no 3D**: colour-coded pixels for land plus small axonometric sprites. Earth view (default) with a switch to true view |
@@ -261,10 +262,14 @@ When the structures (for example plants) are worn away, the cost falls.
 **Substances react inside nodes, faster when hot, by the world's chemistry table.**
 
 ```
-rate[r] = k[r] · exp(−Ea[r] / T) · Π (a[input]^ν) · catalyst[r] · light[r]
-da[k]/dt = Σ_r (out[k,r] − in[k,r]) · rate[r]
-dE/dt   = −Σ_r ΔH[r] · rate[r]
+rate[r] = k[r] · exp(−Ea[r] / T) · Π over the other inputs (share[input]^ν) · catalyst[r] · light[r]
+          (per unit of the scarce input, the one that runs out first)
+extent[r] = scarce amount per ν · (1 − exp(−rate[r] · time))
+da[k]/dt ≈ Σ_r (out[k,r] − in[k,r]) · rate[r] · scarce amount per ν
+dE/dt   = −Σ_r ΔH[r] · rate[r] · scarce amount per ν
 ```
+
+- `share` is the amount's share of its phase (gas or liquid); a solid is a phase of its own (share 1). The scarce input counts once through its own amount, and its share is left out, except `share^(ν−1)` when its `ν` is above 1 (so it counts `ν` times in all, as mass action says). The reaction is **first order in its scarce input**: a trace gas in plenty of the other goes at the same rate per unit whatever its amount. If two inputs tie, the first one listed is the scarce one. A body that burns stores (Section 6.4) uses the same law.
 
 - `catalyst[r]` is 1 in the open world. Inside a body, the body's genes can raise it for a few chosen reactions (Section 6.4). **This is metabolism.** "Eating plants" means "my genes speed up the reaction that breaks down what plants store". Keeping a catalyst costs energy each step.
 - `light[r]` is used only by light-driven reactions. They take absorbed light energy instead of heat.
