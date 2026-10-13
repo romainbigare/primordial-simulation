@@ -286,7 +286,9 @@ pub struct Physics {
 
 impl Physics {
     /// Energy of one decision of a brain whose cost is `c` J per kg of a member of `m_ref` kg
-    /// (`body::Lineage::cost`), for a member of `m` kg, J: weakly more for a bigger body.
+    /// (`body::Lineage::cost`), for a member of `m` kg, J: weakly more for a bigger body. Paid per
+    /// decision, not per day (a speed incentive kept on purpose: it pushes bodies toward long
+    /// intervals, plan 7.3; handover 6.5).
     pub fn think(&self, c: f64, m: f64) -> f64 {
         c * self.m_ref * (m / self.m_ref).powf(0.25)
     }
