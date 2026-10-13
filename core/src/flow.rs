@@ -56,7 +56,7 @@ struct Sp {
 /// | `loose`, `fixed`, `vary`, `bedk`, `gas` | substance lists | R (`loose`, `vary` also X, L) | all |
 /// | `fix` | m³ (volume, volume × reflectance) | R | `surface` |
 /// | `bed` | [J/K skin, m³, reflectance, W/(m K)] | R (L wears `[1]`) | G, Rad (via `alb`), C, Law 2 |
-/// | `cap` | J/K | G, X, L, C (moves of heat capacity) | G, Rad, X, L, C |
+/// | `cap` | J/K | G (every step), X, L, C (moves of heat capacity) | G, Rad, X, L, C |
 /// | `tg` | K | G | all, Law 2, bodies (`temps`) |
 /// | `pk`, `phi` | substance, share | G | `molten`, Rad |
 /// | `hold` | [J held, J low, J high, stage] | G, L (`[0]`), `lift` (marks stale) | G, L |
@@ -453,23 +453,24 @@ fn space(w: &World, s: &mut Scratch) {
 /// full steps the amounts change little: only nodes whose phases change (on or off a
 /// melting plateau, or past a melting point) get a new surface.
 fn ground_state(w: &World, s: &mut Scratch, full: bool) {
+    // Heat capacity from the amounts now, at every step: bodies and Law 2 also move loose matter
+    // (with its heat) between liquid steps, and a node read with the capacity it had before
+    // would seem far too hot or cold (then evaporation, say, takes heat it does not hold).
     let n = w.grid.n();
-    if full {
-        for i in 0..n {
-            s.cap[i] = s.bed[i][0];
-        }
-        for &k in &s.loose {
-            let cp = s.sp[k].cp;
-            for (c, &a) in s.cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
-                *c += a * cp;
-            }
+    let mut cap: Vec<f64> = s.bed.iter().map(|b| b[0]).collect();
+    for &k in &s.loose {
+        let cp = s.sp[k].cp;
+        for (c, &a) in cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
+            *c += a * cp;
         }
     }
     // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting
     // point (a plateau) until all of that substance has frozen or melted.
     for i in 0..n {
+        let same = (cap[i] - s.cap[i]).abs() <= 1e-9 * cap[i];
+        s.cap[i] = cap[i];
         let (c, e, [held, lo, hi, was]) = (s.cap[i].max(1.0), w.e_ground[i], s.hold[i]);
-        if !full && e >= lo && e < hi {
+        if !full && same && e >= lo && e < hi {
             s.tg[i] = (e - held) / c;
             continue;
         }
