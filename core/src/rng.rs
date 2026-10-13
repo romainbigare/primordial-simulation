@@ -21,6 +21,7 @@ pub enum Purpose {
     Learn,
     Bond,
     Chem,
+    Split,
 }
 
 pub struct Rng(u64);

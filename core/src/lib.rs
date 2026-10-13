@@ -73,9 +73,10 @@ pub struct Config {
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
     pub creep: f64,
     /// A speed shortcut, not a law (plan 7.1): most body nodes (individuals or population nodes) a
-    /// cell keeps at each month's start; past it the most alike merge (`body::crowd`). It bounds
-    /// only how many nodes represent the members, never how many members there are. It must give
-    /// the same patterns as individuals (to be checked at M4).
+    /// cell keeps at each month's start; past it the most alike merge (`body::crowd`), and below
+    /// it a node too varied may split (`copy::split`). It bounds only how many nodes represent the
+    /// members, never how many members there are. It must give the same patterns as individuals
+    /// (to be checked at M4).
     #[serde(default = "four")]
     pub crowd: usize,
     /// Bodies that stay near each other share one brain's rows (for speed). When false each
@@ -196,7 +197,9 @@ pub struct Physics {
     pub new_noise: f32,
     /// A member holding this many times its copy mass copies whether its brain draws it or not
     pub full: f64,
-    /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
+    /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge,
+    /// and children join them (`copy::alike`). A node splits when its two halves would differ by
+    /// more, in a gene or in its born rows (in row steps, `copy::split`)
     pub alike: f32,
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it, m: [soft solid, liquid, loose]
@@ -400,6 +403,10 @@ pub struct Diag {
     pub decisions: f64,
     #[serde(skip)]
     pub greedy: f64,
+    /// Population nodes split since the start: in two (`copy::split`), and one member off to act
+    /// alone (`copy::one`)
+    #[serde(default)]
+    pub splits: [f64; 2],
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -108,6 +108,13 @@ pub struct Body {
     /// mol of each substance
     pub store: Vec<f64>,
     pub genes: Vec<f32>,
+    /// How a node's members differ (plan 7.1): the variance of their genes around `genes`, per
+    /// gene, in gene units squared (empty: none), and of their born brain rows around the node's,
+    /// the same for every row (`copy`)
+    #[serde(default)]
+    pub spread: Vec<f32>,
+    #[serde(default)]
+    pub row_spread: f32,
     /// The brain rows it was born with (genes too), in `Life::genomes`
     pub genome: u32,
     /// Key stores (safe minimum > 0) that were liquid at birth, one bit per substance
@@ -655,12 +662,16 @@ pub fn survey(w: &mut World) {
 /// The speed shortcut of plan 7.1, not a law: it coarsens only how members are represented (as
 /// population nodes), never how many there are or where, and must give the same patterns as
 /// individuals (to be checked at M4). Monthly, in each cell, among the bodies that hold and are
-/// inside nothing: a node joins the first larger one of its lineage or alike in genes
-/// (`copy::alike`); then, while more than `cfg.crowd` remain, the two most alike (squared
-/// distance of their genes in mutation steps, `copy::steps`) merge, the smaller into the larger.
-/// So individuals stay individuals while their cell is not over `crowd`. Stores and heat add up,
-/// genes and born rows become the means by count, the born rows carried over to the larger's
-/// brain where its sizes differ (`copy::merge`); lineage, brain group and memory are the larger's.
+/// inside nothing: a node joins the first larger one alike in genes (`copy::alike`; never for
+/// being of the same lineage, so variants of one lineage stay apart); then, while more than
+/// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
+/// `copy::steps`) merge, the smaller into the larger. So individuals stay individuals while their
+/// cell is not over `crowd`. Stores and heat add up, genes and born rows become the means by
+/// count and the spread of both is kept in the merged node's (`copy::join`), the born rows carried
+/// over to the larger's brain where its sizes differ (`copy::merge`); lineage, brain group and
+/// memory are the larger's. A node that grew too varied splits again at its next update
+/// (`copy::split`), so between two months its halves meet selection apart: the one that fits
+/// grows, and a later merge pulls the mean toward it.
 fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.grid.n() {
@@ -674,7 +685,7 @@ fn crowd(w: &mut World) {
         for x in 0..list.len() {
             let a = &b[list[x].1];
             if a.n() > 1.0 {
-                head[x] = (0..x).find(|&y| head[y] == y && (b[list[y].1].lineage == a.lineage || crate::copy::alike(&lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes))).unwrap_or(x);
+                head[x] = (0..x).find(|&y| head[y] == y && crate::copy::alike(&lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
             }
         }
         for x in (0..list.len()).filter(|&x| head[x] != x) {
@@ -766,6 +777,7 @@ pub fn day(w: &mut World) {
                     die(w, s, b, LACK);
                     continue;
                 }
+                crate::copy::split(w, s, &mut b);
                 b.vis = b.visible(&w.chem);
                 w.life.due[((w.day + b.interval()) % RING) as usize].push((slot, gen));
                 w.life.bodies[s] = b;

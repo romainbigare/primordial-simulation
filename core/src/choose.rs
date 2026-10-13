@@ -6,11 +6,12 @@
 //! plus a few numbers of its own, scores every action; one is drawn by those scores, and the
 //! body emits a signal and writes its memory. Actions are physical: move, take from the node or
 //! a body, put to the node or a body, watch a body (copy part of its brain), copy, rest, and the
-//! actions of Bond (`bond`): form a part, hold, let go, join, break, enter. Each costs energy
-//! paid by the body's own reactions; if it cannot pay, it fails. Copying is drawn first, by its
-//! own chance. At its next decision the brain learns from the change of the body's own
-//! well-being (a policy gradient whose baseline is the brain's own estimate of how well-being
-//! will go).
+//! actions of Bond (`bond`): form a part, hold, let go, join, break, enter (a population node
+//! perceives parts as one of its members would, and does these through one member split off,
+//! `copy::one`). Each costs energy paid by the body's own reactions; if it cannot pay, it fails.
+//! Copying is drawn first, by its own chance. At its next decision the brain learns from the
+//! change of the body's own well-being (a policy gradient whose baseline is the brain's own
+//! estimate of how well-being will go).
 //!
 //! Bodies that stay near each other share their brain's rows (the mean of the rows they were
 //! born with, plus what the group learned): a body that strays from its group's centre takes a
@@ -104,10 +105,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             }
         }
     }
-    // Parts perceived in its cell (not the one it holds), from a random one on. A node (count >
-    // 1) does no actions of Bond: holding, forming and entering need a single body (a limit of
-    // the speed shortcut).
-    let (held, list) = (bond::held(w, b), if b.n() > 1.0 { &[][..] } else { &w.parts.at[i][..] });
+    // Parts perceived in its cell (not the one it holds), from a random one on. A node perceives
+    // them as one of its members would.
+    let (held, list) = (bond::held(w, b), &w.parts.at[i][..]);
     let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
     for q in 0..list.len() {
         let p = list[(off + q) % list.len()] as usize;
@@ -182,7 +182,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             }
         }
     }
-    let (o0, mut fo, vol) = (FIXED + 8 + VERBS * MAX_SEEN, [0f32; PARTS * bond::NO], bond::volume(&w.chem, b));
+    let (o0, mut fo, vol) = (FIXED + 8 + VERBS * MAX_SEEN, [0f32; PARTS * bond::NO], bond::volume(&w.chem, b) / b.n());
     for (q, &p) in parts[..np].iter().enumerate() {
         let fq = &mut fo[q * bond::NO..(q + 1) * bond::NO];
         fq.copy_from_slice(&bond::features(w, b, p, pm));
@@ -191,9 +191,12 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             logit[o0 + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq) + b.adj[FIXED + 1 + VERBS + v];
         }
     }
-    // Letting go needs something held or walls around; joining to the ground, a held part.
-    if b.n() > 1.0 {
+    // Letting go needs something held or walls around; joining to the ground, a held part. A node
+    // does the actions of Bond through one member split off (below): with less than two members
+    // it has none to spare.
+    if b.n() > 1.0 && b.count < 2.0 {
         logit[4..FIXED].fill(f32::NEG_INFINITY);
+        logit[o0..].fill(f32::NEG_INFINITY);
     }
     if held.is_none() {
         logit[6] = f32::NEG_INFINITY;
@@ -276,6 +279,18 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     }
     b.wb = wb;
 
+    // A node does an action of Bond through one member, split off as an individual that acts
+    // (plan 7.1). If it then holds or is inside something it lives on as one (`body::crowd` never
+    // merges it); else it has no reason to stay apart and goes back into the node at once, with
+    // what it got, as the next month's merge would take it back.
+    let (me, mut one) = if b.n() > 1.0 && ((4..FIXED).contains(&a) || a >= o0) {
+        let s = copy::one(w, b, &mut rng);
+        (s, Some(std::mem::take(&mut w.life.bodies[s])))
+    } else {
+        (slot, None)
+    };
+    let node = b;
+    let (b, slot) = (one.as_mut().unwrap_or(&mut *node), me);
     match a {
         0 => {}
         1 => {
@@ -296,6 +311,15 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
                 1 => give(w, slot, b, seen[q].0),
                 _ => watch(w, b, seen[q].0),
             }
+        }
+    }
+    if let Some(mut o) = one {
+        o.vis = o.visible(&w.chem);
+        w.life.bodies[me] = o;
+        if w.life.bodies[me].hold == 0 && w.life.bodies[me].inside == 0 {
+            let (o, rows) = (w.life.bodies[me].clone(), w.life.born(node).to_vec());
+            w.life.remove(me);
+            copy::take_in(w, node, o, &rows);
         }
     }
 }
