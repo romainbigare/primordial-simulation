@@ -346,6 +346,8 @@ Add v2 and v3 only when the world is ready for them (Section 9.4).
 
 There is no "farm", "trade", "build house" or "attack" action. Those are patterns of the actions above. Attacking is "take from another body" or "break bonds in another body". Trading is "put near another body" followed by "take" in return.
 
+**Putting to a body (13 Oct 2026, review 3, M2):** a gift is at most what the receiver could take by its own size in the time (`take` × interval × its mass), and a node gives as one member (1/count of its spare). Before, the cap was the giver's mass, so a node of millions gave a 1 kg member all its spare, rain filled it to its keep level, and members of thousands of tonnes grew.
+
 **Learning:**
 - **Within a life:** the brain changes to raise the body's own well-being. Well-being means energy and key stores staying above the minimums. Do not hand-shape rewards for specific behaviours.
 - **Across lives:** evolution (Law 4) changes how the brain starts and how it learns.

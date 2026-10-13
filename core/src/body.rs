@@ -262,7 +262,10 @@ impl Body {
         (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase(k, t) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
     }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
-    /// body's mass it may make up (below 0.95). Liquid caught, taken or put stops there.
+    /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
+    /// taken or put stops there. It bounds the shares of the stores, not the size: what comes in
+    /// at an update goes with the body's own mass (takes and gifts, `phys.take`; rain, its capture
+    /// area), and a member past `phys.full` times its copy mass copies at its update (`copy`).
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let f = self.gene(Layout::of(chem).keep + k).clamp(0.0, 0.95);
         let mm = chem.subs[k].molar_mass;
