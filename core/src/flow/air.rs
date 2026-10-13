@@ -175,11 +175,16 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         // what passes the clouds. What they absorb warms the surface now (they hand on all of it
         // as heat) but for the share their light reactions store (as they did at their last
         // update, `Life::keep`): that is set aside, and each takes its share when it updates
-        // (`body::live`).
+        // (`body::live`). Taller members shade smaller ones: each body's mark moves by what its
+        // shade gives it more or less than the cell's mean per m² of capture area (`body::shade`).
         let (a, mut cover, mut caught, mut kept) = (canopy[i] as f64, 0.0, 0.0, 0.0);
         if a > 0.0 {
             cover = -(-a).exp_m1();
-            light[i] += q * (1.0 - c) * cover * dt / a;
+            let dl = q * (1.0 - c) * cover * dt / a;
+            light[i] += dl;
+            for &b in &life.at[i] {
+                life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&f| f) - 1.0) * dl;
+            }
             caught = cover * life.absorb.get(i).map_or(0.0, |&x| x as f64);
             kept = q * (1.0 - c) * caught * life.keep.get(i).map_or(0.0, |&x| x as f64);
         }

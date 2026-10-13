@@ -107,7 +107,8 @@ pub struct Body {
     pub born: u64,
     /// Day of the last update
     pub last: u64,
-    /// The cell's cumulative light at the last update, J/m²
+    /// The cell's cumulative light at the last update, J/m², moved since by what its shade gave
+    /// it more or less than the cell's mean (`Life::shade`): it caught `light - mark` per m²
     pub mark: f64,
     /// Thermal energy, J
     pub e: f64,
@@ -343,9 +344,13 @@ pub struct Life {
     /// and light-capture area are the totals)
     pub sum: Vec<[f64; 7]>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area
-    /// that they absorb (1 - their reflectance, weighted by capture area)
+    /// that they absorb (1 - their reflectance, weighted by the light each catches)
     #[serde(skip)]
     pub absorb: Vec<f32>,
+    /// Per body slot, from the last survey: its light per m² of capture area over its cell's
+    /// mean (`World::light`), by the shade of the taller members above it (`shade`)
+    #[serde(skip)]
+    pub shade: Vec<f64>,
     /// Per cell, from the last survey: the share of that absorbed light set aside for what its
     /// bodies' light reactions store (`World::keep_of`, weighted by the light each absorbs)
     #[serde(skip)]
@@ -662,6 +667,7 @@ pub fn survey(w: &mut World) {
     if monthly {
         crowd(w);
     }
+    shade(w);
     let keep = |s: usize, g: u32| w.keep_of(s, g) as f64;
     // Per cell: light absorbed per J reaching the capture area, the share of it set aside, and
     // what its bodies can claim of the set-aside light at their updates (at most: walls aside).
@@ -674,7 +680,8 @@ pub fn survey(w: &mut World) {
             *x += v as f64 * m;
         }
         let a = b.vis[1] as f64 * m * (1.0 - (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0);
-        (abs[i], kept[i], claim[i]) = (abs[i] + a, kept[i] + a * k, claim[i] + a * k * (w.light[i] - b.mark));
+        let s = a * w.life.shade[slot];
+        (abs[i], kept[i], claim[i]) = (abs[i] + s, kept[i] + s * k, claim[i] + a * k * (w.light[i] - b.mark));
     }
     let World { life, grid, canopy, light_pool, e_ground, .. } = w;
     life.sum = sum;
@@ -707,6 +714,32 @@ pub fn survey(w: &mut World) {
         w.life.seen = (0..n * ns).map(|x| 0.2 * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
     }
     choose::cells(w);
+}
+
+/// Light passes through the bodies of a cell from the tallest member down: a member's height is
+/// `(mass / rho_body)^(1/3)` (a body has no shape yet), so the order is that of member mass, and
+/// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
+/// `1 - exp(-x)` of what reaches it, so a big member shades a small one and size pays. Together
+/// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
+/// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
+fn shade(w: &mut World) {
+    let g = |x: f64| if x > 1e-9 { -(-x).exp_m1() / x } else { 1.0 - 0.5 * x };
+    let (Life { bodies, at, shade, .. }, area) = (&mut w.life, w.grid.area());
+    shade.resize(bodies.len(), 1.0);
+    let mut l: Vec<(f32, f64, usize)> = Vec::new();
+    for s in at.iter() {
+        l.clear();
+        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.vis[0], b.vis[1] as f64 * b.n() / area, s)));
+        l.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
+        while k < l.len() {
+            let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
+            let x: f64 = l[k..e].iter().map(|x| x.1).sum();
+            let f = (-above).exp() * g(x) / all;
+            l[k..e].iter().for_each(|y| shade[y.2] = f);
+            (above, k) = (above + x, e);
+        }
+    }
 }
 
 /// The speed shortcut of plan 7.1, not a law: it coarsens only how members are represented (as
