@@ -564,13 +564,13 @@ pub fn regrow(w: &mut World, dt: f64) {
     }
 }
 
-/// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all.
-pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64) -> Vec<f64> {
+/// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all, for a
+/// body of `mass` kg.
+pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, mass: f64) -> Vec<f64> {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let from = |k: usize| from(k).max(0.0);
     let up = |k: usize| if from(k) > 0.0 { b.gene(lay.upt + k).max(0.0) } else { 0.0 };
     let sum: f64 = (0..chem.ns()).map(up).sum();
-    let mass = b.mass(chem);
     let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
     (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect()
 }
@@ -601,7 +601,8 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
     let tg = w.life.env[i][0];
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
-    let m = wanted(w, b, free, reach(w, b, free) * b.interval() as f64 * b.mass(&w.chem));
+    let mass = b.mass(&w.chem);
+    let m = wanted(w, b, free, reach(w, b, free) * b.interval() as f64 * mass, mass);
     if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m), b.interval() as f64) {
         return;
     }
@@ -664,7 +665,7 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
     let lever = bond::lever(w, b, mb);
     let (fb, fo) = (b.gene(STRENGTH) * lever * mb / b.n(), o.gene(STRENGTH) * bond::lever(w, o, mo) * mo / o.n());
     let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
-    let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * mb);
+    let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * mb, mb);
     let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / w.cfg.phys.rho_pass;
     let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
     if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m) * resist, b.interval() as f64) || away {

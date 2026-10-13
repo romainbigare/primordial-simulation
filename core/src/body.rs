@@ -1061,7 +1061,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     };
     let gc = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
     let rad = |t: f64| crate::flow::air::SIGMA * ab * nb * (t * t + tg * tg) * (t + tg);
-    let (c0, t0) = (b.heat_cap(chem), b.e / b.heat_cap(chem));
+    let c0 = b.heat_cap(chem);
+    let t0 = b.e / c0;
     let g = gc + rad(t0);
 
     // Light caught since the last update (through the openings of walls around it), less what
