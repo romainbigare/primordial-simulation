@@ -156,10 +156,8 @@ pub struct Consts {
     pub liq: f64,
     pub heat: f64,
     pub leaf: f64,
-    /// Catalyst factor of each reaction (1 when off), and the sum of the squares of the speed-ups
-    /// (decades), which upkeep charges
+    /// Catalyst factor of each reaction (1 when off)
     pub cat: Vec<f64>,
-    pub cats: f64,
     pub interval: u64,
     /// Catalysed reactions that release heat, with the heat per unit, J
     pub burn: Vec<(usize, f64)>,
@@ -222,12 +220,11 @@ impl Body {
         }
         let cat = Layout::of(chem).cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
-        let cats = (0..chem.reactions.len()).map(|r| self.gene(cat + r).max(0.0).powi(2)).sum();
         let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0).map(|r| (r, -chem.dh(r))).collect();
         let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
-        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, cats, interval: self.interval(), burn, minln, upt };
+        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt };
     }
     /// Visible traits of one member; the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
@@ -1135,16 +1132,18 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     None
 }
 
-/// Upkeep over `days` of a body of `mass` kg, J: of catalysts (convex in decades of speed-up, as
-/// the square, see `Physics::c_cat`), strength and capture area by the day, of learning and
-/// signalling, and of one decision (per member, by the brain's cost and weakly the member's mass,
-/// `Physics::think`). Needs `prepare`.
+/// Upkeep over `days` of a body of `mass` kg, J: of catalysts (by their capacity, the catalysed
+/// rate per unit of input at `Physics::t_cat` summed over the genes that are on, see
+/// `Physics::c_cat`), strength and capture area by the day, of learning and signalling, and of one
+/// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`).
+/// Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
     let mind = p.c_learn * b.learn_rate() as f64 + p.c_signal * sig;
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p));
-    days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
+    let cats: f64 = w.chem.reactions.iter().zip(&b.k.cat).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
+    days * (mass * (p.c_cat * cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
