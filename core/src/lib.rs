@@ -636,7 +636,9 @@ impl World {
     /// `take_heat` for heat that leaves with matter of heat capacity `c` J/K (still counted in
     /// the node): only the heat capacity that stays must be left above `T_FLOOR`.
     pub fn take_heat_with(&mut self, i: usize, q: f64, c: f64) -> f64 {
-        let cap = self.heat_cap_ground(i) - c;
+        // Only a take needs the capacity (a walk over the node's substances): a body taking from
+        // the ground asks once per substance, mostly for nothing.
+        let cap = if q > 0.0 { self.heat_cap_ground(i) - c } else { 0.0 };
         draw(&mut self.e_ground[i], &mut self.ledger, cap, q)
     }
     pub fn t_ground(&self, i: usize) -> f64 {
