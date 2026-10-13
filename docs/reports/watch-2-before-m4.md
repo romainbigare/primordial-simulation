@@ -94,8 +94,8 @@ series (the resume overwrote it; that tape bug is fixed too).
 | Ground temperature (start 288 K) | 287.3 K | 295.4 K | 295.2 K |
 | Absorbing gases (start 1.46) | 1.2 | 9.4 | 17.5 |
 | Land edges worn | 34% | 2% | 13% |
-| Busiest 2% of cells carry | 42% of crossings | see analysis | 93% |
-| Seconds per year (mean) | 23.7 | 23.2 | 17.7 |
+| Busiest 2% of cells carry | 42% of crossings | 100% (few movers) | 93% |
+| Seconds per year (mean) | 23.7 | 16.9 | 17.7 |
 
 Energy drift at year 300 was 3.4×10⁻¹³ or less, elements 5.4×10⁻¹⁵ or less. "Heat not given" (heat a
 cell could not give, counted in the books) was 0 in seed 1 and about 10¹⁶ J in seeds 5 and 7. That is
@@ -125,10 +125,10 @@ Each picture has five panels: map, temperature, rain, life (green plants, red an
 | Climate bands | weak | North-south difference 3 to 4.5 K (26 K at the start). Unchanged: decision 1 of the last report is still open. |
 | Climate change | **yes, from life** | Seeds 5 and 7: life burns a charcoal-like solid; carbon gas ×17 and ×37; about +7 K. Seed 1: the carbon gas fell about 160 times instead; the ground stayed at 287 K. See below. |
 | Light-eaters spread | **yes** | 76 / 91 / 92% of land at year 300. |
-| Plant cover survives the eaters | **yes** (new) | Median cover near 0 for 1 / few / 0 years after the eaters came. Before: 40 to 65 years. |
+| Plant cover survives the eaters | **yes** (new) | Median cover near 0 for 1 / 2 / 0 years after the eaters came. Before: 40 to 65 years. Plant members still dip (by 70% in seed 5 around year 80) and come back. |
 | Neutral eaters live | **yes** (new) | Alive at year 300 in 3 of 3 seeds. Before: dead in 8 of 8 runs. |
-| Eaters of eaters | yes in seed 1, weak in 7 | 10% / under 1% / 2% of animal bodies take mostly from animals. In seed 7, 11-14% of animal deaths are "taken". |
-| Kinds differ by climate | no | 1 to 3 kinds; never 3 for long. |
+| Eaters of eaters | yes in seed 1, weak in 5 and 7 | 10% / 2% / 2% of animal bodies take mostly from animals. 2% / 6% / 14% of animal deaths are "taken". |
+| Kinds differ by climate | weak | 1 / 3 / 1 kinds at year 300. Seed 5 had 3 kinds in 19 of its last 100 years; the others never had 3 for long. |
 | Populations rise, fall, cycle | rise and fall | Seed 7: 15 swings over 26% in 300 years, but irregular (no rhythm). |
 | Extinctions | lineages yes | 90 to 99% of brain lineages died out. |
 | Trails | a few routes | Seed 7: the busiest 2% of cells carry 93% of crossings, and the same cells stay busy (79% overlap year to year). Seed 1: 42%. Before: 10 to 38%. |
@@ -138,7 +138,7 @@ Each picture has five panels: map, temperature, rain, life (green plants, red an
 | Giving and exchange | giving yes; exchange a little (seed 1) | Seed 1: up to 1,826 pairs give both ways. |
 | Held objects as tools | a trace | Holding a part makes a take 2.5 times bigger, but only 0.01 to 0.1% of takes use one. |
 | Shelters in cold | a trace | At most 1.5% of animal body-months in the cold are spent inside. |
-| Floating structures | yes, small | Seed 1: up to 42 things afloat, 12 moves afloat in a year. |
+| Floating structures | yes, small | Up to 42 / 6 / 12 things afloat; up to 12 moves afloat in a year (seed 1). |
 
 ### The climate change, in simple words
 
@@ -179,7 +179,7 @@ stayed cool. The same laws gave two different histories.
 
 | | Before (last report) | Now |
 |---|---|---|
-| Seconds per simulated year, mean | 10.5 to 15.7 | 17.7 to 23.7 |
+| Seconds per simulated year, mean | 10.5 to 15.7 | 16.9 to 23.7 |
 | Body updates per year at year 300 | not measured | about 1.3 million |
 | Microseconds per update | not measured | 14 to 21 |
 | Bodies' share of the time | 93 to 95% | about 90% |
@@ -211,8 +211,8 @@ Whole repository: about 8,400 lines of Rust plus 1,137 lines of tests.
 
 ## Current problems
 
-1. **Few kinds.** Nodes can now evolve and split, but at most 3 kinds live at once, and never for
-   long.
+1. **Few kinds.** Nodes can now evolve and split, but at most 3 kinds live at once (seed 5 at the
+   end; the others never for long).
 2. **No seasonal travel.** Animals live where it stays warm. The area limit on eating did not make
    them move with the seasons.
 3. **Tools and shelters are only a trace.** Holding a part pays (takes are 2.5 times bigger), but it
