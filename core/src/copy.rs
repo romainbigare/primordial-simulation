@@ -16,9 +16,9 @@
 //! genes and rows are the node's plus noise of its spread and the change over their number, and
 //! they keep the variance left among them (`vary`). There they join the first node alike in genes
 //! with a brain of the same sizes, whatever its lineage (means by count, the spread pooled,
-//! `join`), or start a node. An individual's children are a new
-//! body, in a neighbour cell by the same chance; if more than one, they join a node there as a
-//! node's do. Only individuals' children start new lineages.
+//! `join`), or start a node. An individual's children stay together, in a neighbour cell with
+//! that chance (else in its own); there they join an alike node as a node's do, else they are a
+//! new body. Only individuals' children start new lineages.
 //!
 //! A node whose halves would no longer be alike splits in two (`split`), so selection acts
 //! between them; a node does the actions of Bond through one member split off as an individual
@@ -222,11 +222,11 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             c.group = w.life.new_group(c.lineage, rows.clone().unwrap_or_else(|| w.life.born(b).to_vec()));
         }
     }
-    // Children of a node, or more than one child of an individual, join a node there alike in
-    // genes with a brain of the same sizes (of any lineage: being of the same one is no reason).
+    // Children (of a node or of an individual, one or many) join a node there alike in genes
+    // with a brain of the same sizes (of any lineage: being of the same one is no reason).
     let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| (x.shape, x.seen, x.sight));
     let joins = |o: &Body| o.alive && o.n() > 1.0 && shape(o.lineage) == shape(c.lineage) && alike(&lay, w.cfg.phys.alike, &o.genes, &c.genes);
-    if (node || m > 1.0) && c.lineage == b.lineage {
+    if c.lineage == b.lineage {
         if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| joins(&w.life.bodies[s])) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             join(w, t, c, &rows);
