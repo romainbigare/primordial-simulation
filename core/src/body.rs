@@ -420,13 +420,17 @@ impl Lineage {
         self.shape.h == 0
     }
     /// Energy one decision takes, J per kg of a member of `Physics::m_ref` kg (`Physics::think`
-    /// gives it for a member of another mass); none without a brain.
-    pub fn cost(&self, p: &crate::Physics) -> f64 {
+    /// gives it for a member of another mass); none without a brain. It goes with the body's own
+    /// size genes, not the lineage's rounded sizes it thinks with (they differ by less than a
+    /// unit): so a smaller brain pays less at once, and selection can lead a node's sizes down,
+    /// to none, a unit at a time (review 3, Q2; with the lineage's sizes nothing selected a size
+    /// gene until it had moved a whole unit by chance).
+    pub fn cost(&self, p: &crate::Physics, genes: &[f32]) -> f64 {
         if self.none() {
             return 0.0;
         }
-        let sq = |x: usize| (x * x) as f64;
-        p.c_hidden * self.shape.h as f64 + p.c_memory * self.shape.mem as f64 + p.c_seen * self.seen as f64 + p.c_sight * sq(self.sight)
+        let g = |k: usize| genes[k].max(0.0) as f64;
+        p.c_hidden * g(HIDDEN) + p.c_memory * g(MEMORY) + p.c_seen * g(SEEN) + p.c_sight * g(SIGHT).powi(2)
     }
 }
 
@@ -1238,7 +1242,7 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
-    let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p));
+    let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p, &b.genes));
     let cats: f64 = w.chem.reactions.iter().zip(&b.k.cat).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
     let cats = cats * (1.0 + (b.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
     days * (mass * (p.c_cat * cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
