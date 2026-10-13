@@ -719,11 +719,11 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         s.sed_e[i] = 0.0;
     }
     w.ledger.gravity += heat;
-    crate::choose::regrow(w, dt);
 }
 
 /// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers
-/// more; heat conducts between neighbouring ground nodes.
+/// more; heat conducts between neighbouring ground nodes; bodies spread back into the ground
+/// cleared along edges (`choose::regrow`, here only, so it closes at the documented speed).
 fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, area, g, cell) = (w.grid.n(), s.area, w.cfg.gravity, w.grid.cell_m);
     let (tmin, _) = range(&s.tg);
