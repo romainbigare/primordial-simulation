@@ -56,10 +56,10 @@ struct Sp {
 /// | `loose`, `fixed`, `vary`, `bedk`, `gas` | substance lists | R (`loose`, `vary` also X, L) | all |
 /// | `fix` | m³ (volume, volume × reflectance) | R | `surface` |
 /// | `bed` | [J/K skin, m³, reflectance, W/(m K)] | R (L wears `[1]`) | G, Rad (via `alb`), C, Law 2 |
-/// | `cap` | J/K | G, X, L, C (moves of heat capacity) | G, Rad, X, L, C |
+/// | `cap` | J/K | G (every step), X, L, C (moves of heat capacity) | G, Rad, X, L, C |
 /// | `tg` | K | G | all, Law 2, bodies (`temps`) |
 /// | `pk`, `phi` | substance, share | G | `molten`, Rad |
-/// | `hold` | [J held, J low, J high, stage] | G, `lift` (marks stale) | G |
+/// | `hold` | [J held, J low, J high, stage] | G, L (`[0]`), `lift` (marks stale) | G, L |
 /// | `z`, `head` | m (solid surface, liquid surface) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
 /// | `alb`, `rc` | reflectance, m² K/W | `surface` | Rad |
 /// | `rain` | mol, condensed this call | X | X (to `diag.rain`) |
@@ -453,23 +453,24 @@ fn space(w: &World, s: &mut Scratch) {
 /// full steps the amounts change little: only nodes whose phases change (on or off a
 /// melting plateau, or past a melting point) get a new surface.
 fn ground_state(w: &World, s: &mut Scratch, full: bool) {
+    // Heat capacity from the amounts now, at every step: bodies and Law 2 also move loose matter
+    // (with its heat) between liquid steps, and a node read with the capacity it had before
+    // would seem far too hot or cold (then evaporation, say, takes heat it does not hold).
     let n = w.grid.n();
-    if full {
-        for i in 0..n {
-            s.cap[i] = s.bed[i][0];
-        }
-        for &k in &s.loose {
-            let cp = s.sp[k].cp;
-            for (c, &a) in s.cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
-                *c += a * cp;
-            }
+    let mut cap: Vec<f64> = s.bed.iter().map(|b| b[0]).collect();
+    for &k in &s.loose {
+        let cp = s.sp[k].cp;
+        for (c, &a) in cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
+            *c += a * cp;
         }
     }
     // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting
     // point (a plateau) until all of that substance has frozen or melted.
     for i in 0..n {
+        let same = (cap[i] - s.cap[i]).abs() <= 1e-9 * cap[i];
+        s.cap[i] = cap[i];
         let (c, e, [held, lo, hi, was]) = (s.cap[i].max(1.0), w.e_ground[i], s.hold[i]);
-        if !full && e >= lo && e < hi {
+        if !full && same && e >= lo && e < hi {
             s.tg[i] = (e - held) / c;
             continue;
         }
@@ -598,8 +599,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             }
         }
         // What leaves carries the node's heat at its temperature now: radiation and evaporation
-        // earlier in this call may have cooled it below `tg` (liquid that came in from above
-        // brought its fusion enthalpy, so the mean only seems warmer then).
+        // earlier in this call may have cooled it below `tg`, and liquid that came in from above
+        // mixed in at its own temperature (its fusion enthalpy is counted held as it moves, so
+        // a hot node that a flood of cooler liquid crosses does not send it on at the old
+        // temperature, more heat than it holds).
         let tcur = t.min((w.e_ground[i] - s.hold[i][0]) / s.cap[i].max(1.0)).max(0.0);
         let (mut qsum, mut power, mut out) = (0.0, 0.0, 0.0);
         if lvol > 0.0 && cnt > 0 {
@@ -616,11 +619,13 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 let e = w.take_heat_with(i, want, m * p.cp);
                 let m = if want > 0.0 { m * crate::share(e, want) } else { m };
                 (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
+                s.hold[i][0] -= if s.pk[i] != k { m * p.lf } else { 0.0 };
                 settle(s, k, i, -m);
                 out += m;
                 for (&(j, dh), &q) in nb[..cnt].iter().zip(&q).filter(|p| *p.1 > 0.0) {
                     let (m, e) = (m * q * inv, e * q * inv);
                     (w.ground[k * n + j], s.cap[j], w.e_ground[j]) = (w.ground[k * n + j] + m, s.cap[j] + m * p.cp, w.e_ground[j] + e);
+                    s.hold[j][0] += if s.pk[j] != k { m * p.lf } else { 0.0 };
                     settle(s, k, j, m);
                     power += m * p.mm * g * dh;
                 }
