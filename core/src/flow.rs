@@ -7,7 +7,7 @@
 //! Every move takes from one node exactly what it gives to another, with its heat, and
 //! books matter lifted or dropped in the gravity ledger, so elements and energy are kept.
 
-mod air;
+pub(crate) mod air;
 
 use crate::grid::{DIRS, FORWARD};
 use crate::World;

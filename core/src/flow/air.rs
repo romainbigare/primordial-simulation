@@ -6,7 +6,8 @@ use crate::chem::R_GAS;
 use crate::World;
 use std::f64::consts::{LN_2, PI, TAU};
 
-const SIGMA: f64 = 5.670e-8;
+/// Stefan-Boltzmann constant, W/(m² K⁴): every surface emits σT⁴ (emissivity 1).
+pub(crate) const SIGMA: f64 = 5.670e-8;
 /// Share of the pressure difference between two air nodes evened out per call.
 const EVEN: f64 = 0.25;
 /// Most of a node's amount the overturning may exchange over one edge per call.

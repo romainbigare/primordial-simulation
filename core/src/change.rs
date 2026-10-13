@@ -531,17 +531,24 @@ pub fn step(w: &mut World, dt: f64) {
             let fused: f64 = (0..ns).filter(|&k| chem.subs[k].melt <= t).map(|k| amt[k] * chem.subs[k].lf).sum();
             let mut e = w.e_ground[i] - fused;
             rc.react(chem, &mut amt, Some(&mut pool), &mut e, bed[i][0], None, 0.0, ticks as f64 * dt);
-            w.e_ground[i] = e + fused;
             // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas
             // taken back from the air returns it); gas the ground cannot pay for stays behind.
-            let (mut pay, mut back) = (0.0, 0.0);
+            // Gas taken from the air brings its heat at the air's temperature, and gas sent leaves
+            // with its share of the node's heat by heat capacity (at the node's temperature).
+            let (mut pay, mut back, mut c_out, mut q_in) = (0.0, 0.0, 0.0, 0.0);
             for k in 0..ns {
-                let d = pool[k] - pool0[k];
+                let (d, cp) = (pool[k] - pool0[k], chem.subs[k].cp);
                 (pay, back) = (pay + d.max(0.0) * held[k], back - d.min(0.0) * held[k]);
+                (c_out, q_in) = (c_out + d.max(0.0) * cp, q_in - d.min(0.0) * cp * ta[j]);
             }
-            w.e_ground[i] += back;
+            let c_r = bed[i][0] + (0..ns).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
+            let q_out = e.max(0.0) * c_out / (c_r + c_out).max(1e-9);
+            w.e_ground[i] = e + fused + back + q_in - q_out;
+            w.e_air[j] += q_out - q_in;
             let cap = w.heat_cap_ground(i);
             let paid = if pay > 0.0 { crate::share(crate::draw(&mut w.e_ground[i], &mut w.ledger, cap, pay), pay) } else { 1.0 };
+            // The heat of the gas that stays behind stays with it.
+            (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
             for k in 0..ns {
                 let d = pool[k] - pool0[k];
                 let sent = if d > 0.0 { d * paid } else { d };

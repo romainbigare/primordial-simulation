@@ -935,20 +935,29 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // layer of `cover` kg/m² passes `phys.shelter` / `cover` W per K and m² of surface; bare ground
     // adds none. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the cover) with
     // 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8
-    // W/K, and 1.5 W/K stays open: 10.3 W/K in all, so its 52 W of upkeep warm it 5.0 K (1.7 K
-    // bare), 3.4 K more, as much as thick walls give (3.3 K). A 1 kg plant member (surface 0.06
+    // W/K, and 1.5 W/K stays open: 10.3 W/K in all (13.8 with what it radiates, below), so its
+    // 52 W of upkeep warm it 3.8 K (1.6 K bare), 2.2 K more. A 1 kg plant member (surface 0.06
     // m², capture area 2 m²: 3% under the cover) keeps 475 of its 490 W/K open; its 14 W/K under
     // 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
+    // In parallel, it radiates like every surface (σT⁴, `flow::air::radiation`) to the surface it
+    // stands on, exchanging σ (T² + tg²)(T + tg) W per K and m² of its own surface: 6 W/K per
+    // m² at 300 K (3.5 W/K for the 30 kg member, beside its 30), 1700 at 3000 K. Cover and walls
+    // do not block it: they are matter about as warm as the surface, which takes up what the
+    // body radiates and passes it on. Taken at its temperature at the start of the update (and
+    // at the end, if it ends warmer).
+    let (m1, nb) = (mass / b.n(), b.n());
+    let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
     let g0 = b.conductance(cfg.phys.heat_mass, mass);
     let g0 = if cover > 0.0 {
-        let (m1, n) = (mass / b.n(), b.n());
-        let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
         let s = ab / (ab + m1 * b.k.leaf);
-        g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * n * ab))
+        g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * nb * ab))
     } else {
         g0
     };
-    let g = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
+    let gc = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
+    let rad = |t: f64| crate::flow::air::SIGMA * ab * nb * (t * t + tg * tg) * (t + tg);
+    let (c0, t0) = (b.heat_cap(chem), b.e / b.heat_cap(chem));
+    let g = gc + rad(t0);
 
     // Light caught since the last update (through the openings of walls around it), less what
     // the body reflects; liquid over the body absorbs its share first. Its energy already
@@ -982,8 +991,6 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // its reactions release and cools with what they take, and they cannot take more heat than
     // the body and that store hold. Those that breathe ran on demand (upkeep, actions) and go
     // here at the open world's rate.
-    let c0 = b.heat_cap(chem);
-    let t0 = b.e / c0;
     let fixed = g * dt * tg / t0.max(1.0);
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
@@ -1099,9 +1106,10 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // with its share of the heat.
     let (mass3, c) = b.mass_cap(chem);
     if c > 0.0 {
-        let (r, ct) = (heat.max(-g * dt * tg), c + c_out);
-        let teq = tg + r / dt / g;
-        let e1 = ct * (teq + ((b.e + heat - r) / ct - teq) * (-g * dt / ct).exp());
+        let (r, ct, e0) = (heat.max(-g * dt * tg), c + c_out, b.e + heat - heat.max(-g * dt * tg));
+        let relax = |g: f64| ct * (tg + r / dt / g + (e0 / ct - tg - r / dt / g) * (-g * dt / ct).exp());
+        let e1 = relax(g);
+        let e1 = if e1 > ct * t0 { relax(gc + rad(e1 / ct)) } else { e1 };
         // The ground pays the difference (the light is already in it, but for what was set aside
         // and taken); if it cannot, the body ends colder.
         let give = e1 - b.e - heat + lit - took;
