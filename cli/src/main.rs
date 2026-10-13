@@ -30,7 +30,9 @@ fn main() {
             w.cfg.flow_days = args.get("--flow-days", w.cfg.flow_days);
             w.cfg.regrow = args.get("--regrow", w.cfg.regrow);
             w.cfg.crowd = args.get("--crowd", w.cfg.crowd);
-            w.cfg.split_rows = args.0.iter().any(|a| a == "--split-rows");
+            // A null run (no learning, no imitation, brain rows frozen) to compare a seed with; a row split is rows changing.
+            w.cfg.null = args.has("--null");
+            w.cfg.split_rows = args.has("--split-rows") && !w.cfg.null;
             w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
             // Watch runs keep the moisture path at 3 days: the rivers stay whole (`Config::air_days`).
             w.cfg.exchange_days = args.get("--exchange-days", 3u32.min(w.cfg.flow_days).max(w.cfg.air_days));
@@ -51,7 +53,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--split-rows] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--split-rows] [--null (learning and imitation off, brain rows frozen: the run to compare a seed with)] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -76,6 +78,8 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     // What is placed and how: neutral brains sprayed with mutation, unless asked for the old
     // hand-set biases (`--plant-bias`, `--eater-bias`) or another number of rounds (`--spray`) or size of spray (`--spray-size` on the row biases, `--spray-genes` on the genes).
     let clever = a.get("--clever-year", -1i64);
+    // Every report says whether this is the real run or its null run (a resumed run keeps the snapshot's).
+    println!("config: seed {}, {}x{}, {}", w.seed, w.grid.w, w.grid.h, if w.cfg.null { "NULL RUN (learning off, imitation off, brain rows frozen)" } else { "real run" });
     let how = worldgen::life::Seeding { hand: [a.has("--plant-bias"), a.has("--eater-bias")], rounds: a.get("--spray", 20u32), size: a.get("--spray-size", 0.2f32), genes: a.get("--spray-genes", 3.0f32) };
     for y in y0 + 1..=y0 + years {
         // First light-eaters; once they have spread, eaters among them.

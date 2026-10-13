@@ -160,3 +160,27 @@ fn resume_into_the_same_folder_continues_the_tape() {
         assert_eq!(col.as_array().unwrap().len(), 5);
     }
 }
+
+/// A null run: with life about and copies made, nobody learns (the bodies' own adjustments stay
+/// zero) and every born row is a mean of the starting ones (inside their range, as a node's rows
+/// are the means of its members'); in the real run of the same world they are neither.
+#[test]
+fn null_run_freezes_the_brain_rows() {
+    let go = |null: bool| {
+        let mut w = world();
+        w.cfg.null = null;
+        worldgen::life::seed(&mut w, 0);
+        worldgen::life::seed(&mut w, 1);
+        let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();
+        let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();
+        run(&mut w, 24);
+        let out = |r: &Vec<f32>| r.len() != lo.len() || r.iter().enumerate().any(|(k, &x)| x < lo[k] - 1e-5 || x > hi[k] + 1e-5);
+        let new = w.life.genomes.iter().filter(|g| !g.rows.is_empty() && out(&g.rows)).count();
+        let moved = w.life.alive().filter(|b| b.adj.iter().any(|&x| x != 0.0)).count();
+        (new, moved, w.life.updates)
+    };
+    let (real, null) = (go(false), go(true));
+    assert!(null.2 > 100 && real.2 > 100, "life ran: {real:?} {null:?}");
+    assert!(real.0 > 0 && real.1 > 0, "the real run learns and mutates rows: {real:?}");
+    assert_eq!((null.0, null.1), (0, 0), "the null run does not: {null:?}");
+}

@@ -1054,6 +1054,8 @@ War, epidemics, addiction, hunger and displacement may emerge. Present them:
 
 A list of interesting patterns to look for in long runs. **Each one is something that may emerge, never something to build.** For each, an equally valid different outcome is listed. A world that only ever produces the familiar story is a warning sign that something was tuned too much.
 
+**Null run (13 October 2026, review 3 M6):** neutral brains draw every action by chance, so many "yes" verdicts (gifts, watching reaching most groups, busy crossing cells) are what chance predicts. Run the same seed with `ew run --null` (`Config::null`: learning off, a watch is drawn and counted but moves no rows, born rows and brain bases never mutate or split; genes still mutate and evolve). The config line printed at the start and the series column `null` say which run it is. An item counts as emerged only where the real run beats the null run clearly, on the same columns (`gave`, `watched`, `watched_groups`, `kinds`...). The column `learned` is not zero in a null run (it also moves when members of a group die or leave), so read it as a floor.
+
 | Might emerge | Equally valid other outcome |
 |---|---|
 | Plants changed by tending (early farming) | tending is abandoned; selection favours storage or taste instead of yield |

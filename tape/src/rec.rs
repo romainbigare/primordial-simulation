@@ -401,7 +401,7 @@ impl Recorder {
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let tot = check::totals(w);
         let land_liquid: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| c.f.depth[i]).sum::<f64>() * w.grid.area();
-        let mut row = vec![("year".to_string(), "yr", w.year())];
+        let mut row = vec![("year".to_string(), "yr", w.year()), ("null".to_string(), "1", w.cfg.null as u8 as f64)];
         row.extend(tot.elems.iter().enumerate().map(|(j, &v)| (format!("elem_{j}"), "mol", v)));
         row.extend([
             ("energy".to_string(), "J", tot.thermal + tot.chemical),
