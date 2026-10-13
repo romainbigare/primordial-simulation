@@ -7,3 +7,5 @@ folder with the same name as the report.
   not saved here. From now on every report is saved in this folder.
 - `review-m0-m3.md`: the review of Part 1 (M0 to M3), 12 October 2026, with the list of fixes
   done before M4.
+- `watch-pre-m4.md`: the fix list done, and three 300-year runs, 13 October 2026. Pictures and
+  the full analysis in `watch-pre-m4/`.
