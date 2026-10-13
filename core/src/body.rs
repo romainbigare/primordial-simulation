@@ -29,7 +29,7 @@ pub const STRENGTH: usize = 4;
 pub const CHILD: usize = 5;
 /// Mass needed before copying, log10 kg
 pub const COPY_MASS: usize = 6;
-/// Days between updates, log10
+/// Days between updates, log10 (kept between 5 and 360 days)
 pub const INTERVAL: usize = 7;
 /// Mutation size, log10
 pub const MUT: usize = 8;
@@ -62,10 +62,11 @@ pub const KNOWN: usize = 4;
 
 const DAY: f64 = 86_400.0;
 /// Updates are kept in a ring of this many days (more than the longest interval).
-const RING: u64 = 64;
-/// Shortest and longest interval between updates, days (the shortest is a speed safeguard).
+const RING: u64 = 384;
+/// Shortest and longest interval between updates, days (the shortest is a speed safeguard; the
+/// longest is one year, so a body that has nothing to decide can update once a year).
 const MIN_INTERVAL: f64 = 5.0;
-const MAX_INTERVAL: f64 = 60.0;
+const MAX_INTERVAL: f64 = 360.0;
 
 /// Where the genes of each kind start, for a chemistry.
 #[derive(Clone, Copy)]
@@ -510,7 +511,7 @@ impl Life {
         let gr = &mut self.groups[g as usize];
         (gr.sx, gr.sy) = (gr.sx + d * x, gr.sy + d * y);
     }
-    /// Place a new body on `day`; it first updates `delay` days later (1..=60).
+    /// Place a new body on `day`; it first updates `delay` days later (1..=360).
     pub fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
         let slot = match self.free.pop() {
             Some(s) => s as usize,
@@ -603,6 +604,14 @@ pub fn survey(w: &mut World) {
     let n = w.grid.n();
     if w.life.at.len() != n {
         (w.life.at, w.life.due, w.life.gw) = (vec![Vec::new(); n], vec![Vec::new(); RING as usize], w.grid.w as u32);
+    }
+    if w.life.due.len() as u64 != RING {
+        // A snapshot with a shorter ring: file each update again on the day it is due.
+        let m = w.life.due.len() as u64;
+        let old = std::mem::replace(&mut w.life.due, vec![Vec::new(); RING as usize]);
+        for (s, v) in old.into_iter().enumerate() {
+            w.life.due[((w.day + (s as u64 + m - w.day % m) % m) % RING) as usize].extend(v);
+        }
     }
     if w.canopy.len() != n {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
