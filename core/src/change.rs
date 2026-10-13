@@ -35,6 +35,11 @@ const FAR: f64 = 0.05;
 /// step (heat, share of the others), and lumping it over `LAZY` steps is exact for a first-order
 /// decay at a fixed temperature (a speed schedule, as the others are).
 const TRACE: f64 = 1e-6;
+/// Gas a ground node holds itself (left by its reactions, or dissolved in its liquid) lets it
+/// react every step only when it is more than this share of the air's gas over it: less changes
+/// the warmth its reactions need by about a tenth of a kelvin, and it reacts at its turn anyway
+/// (dissolved gases are mostly under 1% of the air's; a speed schedule, as the others are).
+const OWN: f64 = 0.01;
 const BLOCK: usize = 64;
 /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
 pub(crate) const LIGHT_YIELD: f64 = 0.05;
@@ -437,12 +442,13 @@ pub fn step(w: &mut World, dt: f64) {
     let mut most: Vec<(f64, usize)> = (0..ns).map(|k| (col(k).iter().step_by(61).sum::<f64>(), k)).collect();
     most.sort_by(|a, b| b.0.total_cmp(&a.0));
     let most: Vec<usize> = most.iter().take(3).map(|m| m.1).collect();
+    let own_gas = |k: usize, i: usize| col(k)[i] > OWN * share * w.air[k * na + air_of[i] as usize];
     let fits = |c: &Cand, i: usize, t: f64| {
         let held = |all: f64| c.held.iter().all(|&(k, boil)| t >= boil || col(k)[i] > TRACE * all);
         if t < c.hot || !held(col(most[0])[i]) {
             return false;
         }
-        let (j, own) = (air_of[i] as usize, c.gas.iter().any(|&(k, _)| col(k)[i] > 0.0));
+        let (j, own) = (air_of[i] as usize, c.gas.iter().any(|&(k, _)| own_gas(k, i)));
         if !own && (t < c.low || (!c.gas.is_empty() && t < need(c, j))) {
             return false;
         }
@@ -485,8 +491,8 @@ pub fn step(w: &mut World, dt: f64) {
                 *g = t >= c.low;
             }
             for &(k, _) in &c.gas {
-                for (g, &a) in gas.iter_mut().zip(col(k)) {
-                    *g |= a > 0.0;
+                for (i, g) in gas.iter_mut().enumerate() {
+                    *g |= own_gas(k, i);
                 }
             }
             for (o, &g) in ok.iter_mut().zip(&gas) {

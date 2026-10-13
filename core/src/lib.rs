@@ -60,6 +60,12 @@ pub struct Config {
     pub sensible: f64,
     /// Transfer speed of evaporation, m/s
     pub evap: f64,
+    /// Transfer speed of a dissolving gas on the liquid's side of its surface (in series with
+    /// `evap` on the air's side), m/s. 5e-5 (4 m a day) is the order measured for slightly
+    /// soluble gases over open liquid in wind; a column 800 m deep (all mixed as one layer)
+    /// then follows the air in about half a year.
+    #[serde(default = "dissolve")]
+    pub dissolve: f64,
     /// Overturning air speed per K of warmth difference between neighbouring air nodes, m/s
     pub wind: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
@@ -329,6 +335,9 @@ impl Default for Physics {
 fn yes() -> bool {
     true
 }
+fn dissolve() -> f64 {
+    5e-5
+}
 fn regrow() -> f64 {
     1e-9
 }
@@ -355,6 +364,7 @@ impl Default for Config {
             gravity: 9.81,
             sensible: 10.0,
             evap: 0.006,
+            dissolve: 5e-5,
             wind: 0.25,
             mix: 2e4,
             cloud: 1.2e-2,

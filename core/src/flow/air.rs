@@ -1,7 +1,7 @@
 //! Flow in and through the air: radiation, contact heat, evaporation and condensation,
 //! and gas between air nodes.
 
-use super::{range, settle, Scratch, NONE};
+use super::{range, settle, wet, Scratch, NONE};
 use crate::chem::R_GAS;
 use crate::World;
 use std::f64::consts::{LN_2, PI, TAU};
@@ -257,11 +257,13 @@ impl Sat {
 /// Evaporation by vapour pressure (the ground's saturation pressure against the partial
 /// pressure near the ground), gases leaving the ground; then condensation where the air a
 /// ground cell sees holds more than it can at its temperature (colder on higher ground), so
-/// what the air cannot hold rains out within the call.
+/// what the air cannot hold rains out within the call; then gases that cannot condense on the
+/// ground dissolve in its liquid (`dissolve`, a slow process: with the trace gases).
 pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
     let ((tmin, tmax), tl) = (range(&s.tg), range(&s.tl));
     let (lo, hi) = (tmin.min(tl.0), tmax.max(tl.1));
+    let henry: Vec<(usize, usize)> = s.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
     // The gases that leave the ground or may condense, their saturation pressures, and their
     // evaporation per unit vapour pressure deficit; each pass sees the air as it was before it.
     // A trace gas moves only every `TRACE_TURN`-th call, for all the time since.
@@ -274,7 +276,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     let act: Vec<(usize, usize, bool, Sat, f64)> = (0..s.gas.len())
         .filter_map(|gi| {
             let k = s.gas[gi];
-            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0;
+            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0 && !henry.iter().any(|h| h.1 == k);
             let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
             ((up || s.cond[gi]) && (turn || !trace)).then(|| (gi, k, up, Sat::new(w, k, lo, hi), w.cfg.evap * area * if trace { since } else { dt } / R_GAS))
         })
@@ -358,6 +360,9 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             rained[x] = true;
         }
     }
+    if turn {
+        lifted += dissolve(w, s, since, &henry, (tmin, tmax));
+    }
     w.ledger.gravity -= lifted;
     for (&(_, k, ..), _) in act.iter().zip(&rained).filter(|(_, &r)| r) {
         if !s.loose.contains(&k) {
@@ -379,6 +384,67 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
         w.diag.rain[i] += (r - w.diag.rain[i]) * ema;
         s.rain[i] = 0.0;
     }
+}
+
+/// Gases that cannot condense on the ground (`henry`: index in `gas`, substance) dissolve in the
+/// liquid standing on each ground node toward the share Henry's law gives (`Chemistry::henry`, by
+/// the node's temperature and the gas's partial pressure near the ground), and come out as the
+/// liquid warms, thins or freezes or the gas thins. They cross the surface through the air's film
+/// (`evap`, as evaporation) and the liquid's (`dissolve`, over its whole depth: the liquid
+/// counts as one mixed layer, a known limit) in series, solved exactly over the step toward the
+/// balance of node and column. Dissolving frees the vaporisation enthalpy into the node (the heat
+/// of solution, as condensing) and the gas brings its heat; coming out takes them back, as
+/// evaporating. Dissolved gas moves with the liquid (`liquid`), may feed ground reactions (Law 2),
+/// and goes back to the air only here.
+/// Returns the energy spent lifting gas, J.
+fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) -> f64 {
+    let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
+    let solv: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && s.sp[k].boil > tmin).collect();
+    let mut lifted = 0.0;
+    for i in 0..n {
+        let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
+        let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.ground[k * n + i] * wet(s, k, i), v + w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
+        for &(gi, k) in henry {
+            let (a, sp) = (w.ground[k * n + i], s.sp[k]);
+            if l <= 0.0 && a <= 0.0 {
+                continue;
+            }
+            // The column over the cell, the height it fills near the ground, mol dissolved per mol
+            // of it at balance, and the time to reach balance through the two films.
+            let (col, hk) = (lerp(s, &w.air[k * na..(k + 1) * na], i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
+            let b = l * w.chem.henry(k, t, R_GAS * tl / (area * hk));
+            let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
+            let m = (b * (a + col) / (1.0 + b) - a) * -(-dt * (1.0 + b) / tau).exp_m1();
+            let m = if m >= 0.0 {
+                m.min(w.air[k * na + j])
+            } else {
+                // Coming out cools the node, no further than the boiling point; it pays what it can.
+                let q = (-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv));
+                let want = q * (sp.cp * t + sp.lf + sp.lv);
+                -q * if want > 0.0 { crate::share(crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - q * sp.cp, want), want) } else { 0.0 }
+            };
+            if m == 0.0 {
+                continue;
+            }
+            let (heat, lift) = (m * sp.cp * if m > 0.0 { w.e_air[j] / s.capa[j] } else { t }, m * g * sp.mm * (s.head[i] - s.zair[j]));
+            w.e_air[j] -= heat + if m < 0.0 { lift } else { 0.0 };
+            if m > 0.0 {
+                w.e_ground[i] += heat + m * (sp.lf + sp.lv) - lift;
+            }
+            w.ground[k * n + i] += m;
+            w.air[k * na + j] -= m;
+            (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] + m * sp.cp, s.capa[j] - m * sp.cp, s.nt[j] - m, s.mass[j] - m * sp.mm);
+            lifted += lift;
+        }
+    }
+    for &(_, k) in henry {
+        if !s.loose.contains(&k) && (0..n).any(|i| w.ground[k * n + i] > 0.0) {
+            s.loose.push(k);
+            let at = s.vary.partition_point(|&x| s.sp[x].melt < s.sp[k].melt);
+            s.vary.insert(at, k);
+        }
+    }
+    lifted
 }
 
 /// Solve x' + (out − in) = x along a line of nodes, in place, where edge p (between nodes

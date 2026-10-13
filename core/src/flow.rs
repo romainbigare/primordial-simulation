@@ -548,7 +548,8 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let (n, area, g) = (w.grid.n(), s.area, w.cfg.gravity);
     let inv = DIRS.map(|d| 1.0 / w.grid.dist(d));
     let (tmin, tmax) = range(&s.tg);
-    let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && s.sp[k].boil > tmin).collect();
+    // (With the gases dissolved in it, which are gas at every node: `air::dissolve`.)
+    let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && (s.sp[k].boil > tmin || w.chem.subs[k].solubility > 0.0)).collect();
     let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin).collect();
     let ns = sol.len();
     s.sed.resize(n * ns, 0.0);
@@ -594,8 +595,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         }
         let mut lvol = 0.0;
         for (a, &k) in wa.iter_mut().zip(&liq) {
-            *a = w.ground[k * n + i] * wet(s, k, i);
-            lvol += *a * s.sp[k].v[1];
+            // Dissolved gas moves with the liquid and adds no volume.
+            let gas = s.sp[k].boil <= tmin;
+            *a = w.ground[k * n + i] * if gas { 1.0 } else { wet(s, k, i) };
+            lvol += if gas { 0.0 } else { *a * s.sp[k].v[1] };
         }
         // Neighbours much less steep than the steepest get nothing.
         for c in 0..cnt {
@@ -622,7 +625,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
                 // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
                 let want = m * (p.cp * tcur + p.lf);
-                let e = w.take_heat_with(i, want, m * p.cp);
+                let e = crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * p.cp, want);
                 let m = if want > 0.0 { m * crate::share(e, want) } else { m };
                 (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
                 s.hold[i][0] -= if s.pk[i] != k { m * p.lf } else { 0.0 };
