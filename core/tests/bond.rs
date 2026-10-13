@@ -83,3 +83,24 @@ fn walls_keep_a_body_warm() {
     assert!(w.life.bodies[slot].alive && inside.life.bodies[slot].alive);
     assert!(temp(&inside) > temp(&w) + 1.0, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
 }
+
+#[test]
+fn a_small_body_can_make_parts_and_a_cell_holds_many() {
+    let (mut w, i) = world();
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
+    // An eater of 30 kg: a tenth of its mass is 3 kg, under the 10 kg a part once needed.
+    let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
+    let mut b = std::mem::take(&mut w.life.bodies[slot]);
+    b.cell = i as u32;
+    for _ in 0..8 {
+        // Fed again each time (its matter and heat are not booked here), so that it has solids
+        // above its minimums to spare.
+        let t = b.temp(&w.chem);
+        (0..b.store.len()).filter(|&k| w.chem.phase(k, t) == pcore::chem::Phase::Solid).for_each(|k| b.store[k] *= 2.0);
+        b.e = b.heat_cap(&w.chem) * t;
+        bond::form(&mut w, slot, &mut b, [0.0, 0.5]);
+        b.hold = 0;
+    }
+    assert!(w.parts.at[i].len() > 6, "{} parts in the cell", w.parts.at[i].len());
+}

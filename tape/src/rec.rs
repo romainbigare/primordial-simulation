@@ -26,10 +26,11 @@ struct Social {
     /// Of the puts, those by bodies that are not light-eaters (still alive at the month's end)
     gave_eaters: f64,
     pairs: BTreeSet<(u64, u64)>,
-    /// Cell of each body at the last month (for movement by month)
-    last: BTreeMap<u64, u32>,
-    /// Per lineage and context (cold, hurt, low): counts of (context, signal quarter)
-    sig: BTreeMap<u32, [[[f64; 4]; 2]; 3]>,
+    /// Per body slot: its generation and cell at the last month, for the bodies that are not
+    /// light-eaters (for movement by month); generation u32::MAX: none
+    last: Vec<(u32, u32)>,
+    /// By lineage, per context (cold, hurt, low): counts of (context, signal quarter)
+    sig: Vec<[[[f64; 4]; 2]; 3]>,
     /// Top traffic cells at the last decade
     top: Vec<usize>,
     persist: f64,
@@ -68,9 +69,9 @@ impl Social {
 
 /// Mutual information (bits) between a binary context and the signal quarter, given lineage,
 /// less its small-sample bias.
-fn info(sig: &BTreeMap<u32, [[[f64; 4]; 2]; 3]>, c: usize) -> f64 {
+fn info(sig: &[[[[f64; 4]; 2]; 3]], c: usize) -> f64 {
     let (mut sum, mut all) = (0.0, 0.0);
-    for t in sig.values() {
+    for t in sig {
         let j = &t[c];
         let n: f64 = j.iter().flatten().sum();
         if n < 20.0 {
@@ -249,27 +250,29 @@ impl Recorder {
     fn month(&mut self, w: &World) {
         let (chem, gw, s) = (&w.chem, w.grid.w as u32, &mut self.social);
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
-        let mut last = BTreeMap::new();
+        let mut last = vec![(u32::MAX, 0); w.life.bodies.len()];
         for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-            let id = b.id(slot);
-            last.insert(id, b.cell);
             let i = b.cell as usize;
             let t = w.life.env.get(i).map_or(285.0, |e| e[0]);
             let ctx = [t < 283.0, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0];
             let q = (b.sig[0] > 0.0) as usize * 2 + (b.sig[1] > 0.0) as usize;
-            let tab = s.sig.entry(b.lineage).or_insert([[[0.0; 4]; 2]; 3]);
+            if s.sig.len() <= b.lineage as usize {
+                s.sig.resize(b.lineage as usize + 1, Default::default());
+            }
+            let tab = &mut s.sig[b.lineage as usize];
             for (c, &on) in ctx.iter().enumerate() {
                 tab[c][on as usize][q] += 1.0;
             }
             if crate::light_eater(chem, &b.genes) {
                 continue;
             }
+            last[slot] = (b.gen, b.cell);
             let ins = pcore::bond::room(w, b).is_some();
             let c = &mut s.inside[(t >= 278.0) as usize];
             (c[0], c[1], inside, tm) = (c[0] + 1.0, c[1] + ins as u8 as f64, inside + ins as u8 as f64, tm + t);
             let z = w.life.env.get(i).map_or(0.0, |e| e[2]);
-            let (dy, dz) = match s.last.get(&id) {
-                Some(&c) => ((b.cell / gw) as f64 - (c / gw) as f64, z - w.life.env.get(c as usize).map_or(z, |e| e[2])),
+            let (dy, dz) = match s.last.get(slot).filter(|l| l.0 == b.gen) {
+                Some(&(_, c)) => ((b.cell / gw) as f64 - (c / gw) as f64, z - w.life.env.get(c as usize).map_or(z, |e| e[2])),
                 None => (0.0, 0.0),
             };
             n += 1.0;
@@ -491,10 +494,19 @@ impl Recorder {
         (s.made, s.broken, s.failed, s.inside, s.intake) = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();
-        // Mole fraction in the air of each heat-absorbing gas.
+        // Mole fraction in the air of each heat-absorbing gas (`air_<substance>`; `absorber` above is
+        // their total absorption, so the one that rises shows in these numbers).
         let (na, ns) = (w.grid.na(), w.chem.ns());
         let air: f64 = w.air.iter().sum();
         row.extend((0..ns).filter(|&k| w.chem.subs[k].ir_abs > 0.0).map(|k| (format!("air_{k}"), "1", w.air[k * na..(k + 1) * na].iter().sum::<f64>() / air)));
+        // Mean catalyst gene (log10 speed-up; below 0 counts as off, 0) of each reaction over the
+        // live bodies, by members: which reactions life speeds up (`cat_<reaction>`).
+        let (nr, cat) = (w.chem.reactions.len(), pcore::body::Layout::of(&w.chem).cat);
+        let mut g = vec![0.0; nr];
+        for b in life.alive() {
+            g.iter_mut().enumerate().for_each(|(r, x)| *x += b.genes[cat + r].max(0.0) as f64 * b.n());
+        }
+        row.extend(g.iter().enumerate().map(|(r, &x)| (format!("cat_{r}"), "log10", x / (members[0] + members[1]).max(1.0))));
         (self.births, self.deaths, self.deaths_a, self.split, self.updates) = (0.0, [0.0; 5], [0.0; 5], [[0.0; 2]; 2], life.updates);
         if self.series.is_empty() {
             self.series = row.iter().map(|r| (r.0.clone(), r.1, vec![])).collect();
