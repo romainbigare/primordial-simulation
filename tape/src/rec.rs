@@ -2,13 +2,13 @@
 
 use crate::layers::{frame, Ctx, COVER_MIN, LAYERS};
 use crate::measure;
-use flate2::{write::GzEncoder, Compression};
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pcore::check;
 use pcore::event::{Event, EventKind};
 use pcore::World;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{self, BufWriter, Write};
+use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
 type Column = (String, &'static str, Vec<f64>);
@@ -147,10 +147,56 @@ impl Recorder {
         }
     }
 
-    /// Treat substances already present as known (for a run resumed from a snapshot).
-    pub fn skip_existing(&mut self, w: &mut World) {
+    /// Start a run resumed from a snapshot: treat substances already present as known, and load
+    /// what an earlier run wrote to `dir` (series, months, frames, events) up to the snapshot's
+    /// day, so the files go on from there. What it wrote after that day is dropped (a resume
+    /// from an earlier snapshot replays it). A `dir` without a tape starts the tape empty.
+    pub fn resume(&mut self, w: &mut World, dir: impl AsRef<Path>) -> io::Result<()> {
         self.detect(w);
         w.events.clear();
+        self.updates = w.life.updates;
+        let dir = dir.as_ref();
+        let Ok(f) = std::fs::File::open(dir.join("world.ewf.gz")) else { return Ok(()) };
+        let bad = |e: &str| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {e}", dir.display()));
+        let mut raw = vec![];
+        GzDecoder::new(f).read_to_end(&mut raw)?;
+        let n = raw.get(4..8).map_or(0, |b| u32::from_le_bytes(b.try_into().unwrap()) as usize);
+        let head = raw.get(8..8 + n).filter(|_| raw.starts_with(b"EWF1")).ok_or_else(|| bad("not a tape"))?;
+        let g: serde_json::Value = serde_json::from_slice(head)?;
+        let dpy = w.days_per_year();
+        if [g["w"].as_u64(), g["h"].as_u64(), g["seed"].as_u64(), g["days_per_year"].as_u64()] != [self.meta.0 as u64, self.meta.1 as u64, self.meta.3, dpy].map(Some) {
+            return Err(bad("the tape is of another world"));
+        }
+        // Frames and events carry their day: keep those up to the snapshot's day.
+        let list = |k: &str| g[k].as_array().cloned().unwrap_or_default();
+        let day = |e: &serde_json::Value| e["day"].as_u64().unwrap_or(u64::MAX);
+        let (frames, events) = (list("frames"), list("events"));
+        let frame = self.meta.0 * self.meta.1 * LAYERS.len();
+        if raw.len() - 8 - n != frame * frames.len() {
+            return Err(bad("the frames do not fit the tape's size"));
+        }
+        self.frames = frames.iter().map(day).take_while(|&d| d <= w.day).collect();
+        self.bytes = raw[8 + n..8 + n + frame * self.frames.len()].to_vec();
+        self.log = events.iter().take_while(|e| day(e) <= w.day).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
+        // Series: the rows of years up to this one (a null is a NaN that was written).
+        let years = g["series"]["year"].as_array().map_or(0, |a| a.iter().take_while(|y| y.as_f64().is_some_and(|y| y <= w.year())).count());
+        let cols = g["series"].as_object().into_iter().flatten();
+        self.series = cols.map(|(k, v)| (k.clone(), "", v.as_array().unwrap()[..years].iter().map(|x| x.as_f64().unwrap_or(f64::NAN)).collect())).collect();
+        // Months: the header must be ours, then the rows up to this month.
+        let (dpm, mpy) = (w.cfg.days_per_month as u64, w.cfg.months_per_year as u64);
+        let now = (w.day / dpy, (w.day / dpm) % mpy);
+        let old = std::fs::read_to_string(dir.join("months.csv")).unwrap_or_default();
+        let mut lines = old.lines();
+        if lines.next().is_some_and(|h| h != self.social.months.trim_end()) {
+            return Err(bad("months.csv has other columns"));
+        }
+        for l in lines.take_while(|l| {
+            let mut f = l.split(',').map(|v| v.parse::<u64>().unwrap_or(u64::MAX));
+            (f.next().unwrap_or(0), f.next().unwrap_or(0)) <= now
+        }) {
+            self.social.months += &(l.to_string() + "\n");
+        }
+        Ok(())
     }
 
     /// A substance with a non-zero amount anywhere that was zero everywhere before.
@@ -237,10 +283,11 @@ impl Recorder {
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
-        if yearly {
+        // A resumed run finds the snapshot's own row and frame already in the tape it loaded.
+        if yearly && self.series.iter().find(|c| c.0 == "year").and_then(|c| c.2.last()) != Some(&w.year()) {
             self.push_series(&c);
         }
-        if framed {
+        if framed && self.frames.last() != Some(&w.day) {
             self.frames.push(w.day);
             frame(&c, &mut self.bytes);
         }
@@ -285,7 +332,11 @@ impl Recorder {
         let (y, m) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
         let mean = sum.map(|v| v / n.max(1.0));
         let [sp, sy] = std::mem::take(&mut s.spent);
-        s.months += &format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2},{sp:.0},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0), sy / sp.max(1e-9));
+        let row = format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2},{sp:.0},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0), sy / sp.max(1e-9));
+        // (A resumed run has this month's row already, from the tape it loaded.)
+        if s.months.lines().next_back().is_none_or(|l| !l.starts_with(&format!("{y},{m},"))) {
+            s.months += &row;
+        }
     }
 
     /// How far learning has moved the brains from their start, how often the best-scored
@@ -508,10 +559,14 @@ impl Recorder {
         }
         row.extend(g.iter().enumerate().map(|(r, &x)| (format!("cat_{r}"), "log10", x / (members[0] + members[1]).max(1.0))));
         (self.births, self.deaths, self.deaths_a, self.split, self.updates) = (0.0, [0.0; 5], [0.0; 5], [[0.0; 2]; 2], life.updates);
-        if self.series.is_empty() {
-            self.series = row.iter().map(|r| (r.0.clone(), r.1, vec![])).collect();
+        // The columns of a tape loaded by `resume` may come in another order, or differ (gaps are NaN).
+        if self.series.iter().map(|c| &c.0).ne(row.iter().map(|r| &r.0)) {
+            let rows = self.series.first().map_or(0, |c| c.2.len());
+            let old = std::mem::take(&mut self.series);
+            self.series = row.iter().map(|r| (r.0.clone(), r.1, old.iter().find(|c| c.0 == r.0).map_or(vec![f64::NAN; rows], |c| c.2.clone()))).collect();
         }
         for (col, r) in self.series.iter_mut().zip(row) {
+            col.1 = r.1;
             col.2.push(r.2);
         }
     }

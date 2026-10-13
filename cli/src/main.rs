@@ -62,7 +62,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     std::fs::create_dir_all(&out).expect("create out dir");
     let mut rec = Recorder::new(&w, a.get("--frames-every", 10u64), a.get("--monthly-years", 2u64));
     if resumed {
-        rec.skip_existing(&mut w);
+        rec.resume(&mut w, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
     }
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     let (y0, snap_every) = (w.day / w.days_per_year(), 10);
