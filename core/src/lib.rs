@@ -502,7 +502,12 @@ impl World {
     /// pass on only the returned amount (evaporate less, carry less), so energy stays exact.
     /// A negative `q` gives heat to the node and is returned whole.
     pub fn take_heat(&mut self, i: usize, q: f64) -> f64 {
-        let cap = self.heat_cap_ground(i);
+        self.take_heat_with(i, q, 0.0)
+    }
+    /// `take_heat` for heat that leaves with matter of heat capacity `c` J/K (still counted in
+    /// the node): only the heat capacity that stays must be left above `T_FLOOR`.
+    pub fn take_heat_with(&mut self, i: usize, q: f64, c: f64) -> f64 {
+        let cap = self.heat_cap_ground(i) - c;
         draw(&mut self.e_ground[i], &mut self.ledger, cap, q)
     }
     pub fn t_ground(&self, i: usize) -> f64 {
