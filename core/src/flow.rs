@@ -59,7 +59,7 @@ struct Sp {
 /// | `cap` | J/K | G, X, L, C (moves of heat capacity) | G, Rad, X, L, C |
 /// | `tg` | K | G | all, Law 2, bodies (`temps`) |
 /// | `pk`, `phi` | substance, share | G | `molten`, Rad |
-/// | `hold` | [J held, J low, J high, stage] | G, `lift` (marks stale) | G |
+/// | `hold` | [J held, J low, J high, stage] | G, L (`[0]`), `lift` (marks stale) | G, L |
 /// | `z`, `head` | m (solid surface, liquid surface) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
 /// | `alb`, `rc` | reflectance, m² K/W | `surface` | Rad |
 /// | `rain` | mol, condensed this call | X | X (to `diag.rain`) |
@@ -598,8 +598,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             }
         }
         // What leaves carries the node's heat at its temperature now: radiation and evaporation
-        // earlier in this call may have cooled it below `tg` (liquid that came in from above
-        // brought its fusion enthalpy, so the mean only seems warmer then).
+        // earlier in this call may have cooled it below `tg`, and liquid that came in from above
+        // mixed in at its own temperature (its fusion enthalpy is counted held as it moves, so
+        // a hot node that a flood of cooler liquid crosses does not send it on at the old
+        // temperature, more heat than it holds).
         let tcur = t.min((w.e_ground[i] - s.hold[i][0]) / s.cap[i].max(1.0)).max(0.0);
         let (mut qsum, mut power, mut out) = (0.0, 0.0, 0.0);
         if lvol > 0.0 && cnt > 0 {
@@ -616,11 +618,13 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 let e = w.take_heat_with(i, want, m * p.cp);
                 let m = if want > 0.0 { m * crate::share(e, want) } else { m };
                 (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
+                s.hold[i][0] -= if s.pk[i] != k { m * p.lf } else { 0.0 };
                 settle(s, k, i, -m);
                 out += m;
                 for (&(j, dh), &q) in nb[..cnt].iter().zip(&q).filter(|p| *p.1 > 0.0) {
                     let (m, e) = (m * q * inv, e * q * inv);
                     (w.ground[k * n + j], s.cap[j], w.e_ground[j]) = (w.ground[k * n + j] + m, s.cap[j] + m * p.cp, w.e_ground[j] + e);
+                    s.hold[j][0] += if s.pk[j] != k { m * p.lf } else { 0.0 };
                     settle(s, k, j, m);
                     power += m * p.mm * g * dh;
                 }
