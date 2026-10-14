@@ -51,7 +51,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::LEAF => (0.3, -4.0, 1.0),
         body::STRENGTH => (0.1, 0.0, 1.0),
         body::CHILD => (0.05, 0.05, 0.5),
-        body::COPY_MASS => (0.2, -3.0, 4.0),
+        body::COPY_MASS => (0.2, -3.0, 6.0),
         body::INTERVAL => (0.2, 0.7, 2.556),
         body::MUT => (0.2, -3.0, 0.0),
         body::LEARN => (0.2, -4.0, 0.0),
@@ -220,8 +220,12 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // what it pays, it can still release its upkeep `u` over an interval at today's rate `r`
     // (first order in the fuel): (f - paid) r / f >= u. (Sparing past `full` too, a body short of
     // fuel for its size never copied, and grew to 10^5 kg.) It has the children the store covers:
-    // a node a share of them, an individual whole ones; the rest later.
-    let (owe, days) = (w.cfg.phys.c_copy * s * mass, b.interval() as f64);
+    // a node a share of them, an individual whole ones; the rest later. The work is for what the
+    // children are built of: the liquid they carry is only moved (counted, a member of mostly
+    // liquid could not pay for a child, never copied and swelled to 30 times its copy mass).
+    let t = b.temp(&w.chem);
+    let wet: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == crate::chem::Phase::Liquid).map(|k| b.store[k] * w.chem.subs[k].molar_mass).sum();
+    let (owe, days) = (w.cfg.phys.c_copy * s * (mass - wet).max(0.0), b.interval() as f64);
     let more = if owe > b.paid {
         let r = 0.999 * body::release(w, b, days);
         let spare = if m1 >= full { r } else { b.fuel(&w.chem, b.temp(&w.chem)) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300)) };

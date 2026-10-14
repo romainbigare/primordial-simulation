@@ -251,7 +251,8 @@ pub struct Physics {
     pub deep: f64,
     pub afloat: f64,
     // Copy
-    /// Energy to make one kg of child, J. Growth in life keeps 10 to 20% of the energy it eats, so
+    /// Energy to make one kg of child, J, of what it is built of (not the liquid it carries, which
+    /// is only moved: 14 Oct 2026). Growth in life keeps 10 to 20% of the energy it eats, so
     /// a kg of body costs about 10^7 J. A body pays it into its child store across updates as
     /// fast as its reactions release it (`Body::paid`, review 3, P6), so it need not release it
     /// in one interval: a starting eater copying at 63 kg gives 19 kg to a child, 1.9 x 10^8 J,

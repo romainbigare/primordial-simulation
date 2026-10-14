@@ -414,11 +414,13 @@ fn a_heavy_individual_copies_over_several_updates() {
     use pcore::event::EventKind;
     use pcore::{body, brain, change, choose, flow};
     let mut w = worldgen::new_world(1, 16, 16);
+    w.cfg.phys.c_copy *= 5.0;
     pcore::step(&mut w);
     let n = w.grid.n();
     let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
     // A starting eater whose brain only rests, ten times as heavy: 300 kg, 2.4 times `full`, so it
-    // owes 5.6 children and 2.1 x 10^9 J, more than its reactions can release in one interval (it
+    // owes 5.6 children; at 5 times the copy cost (only what the children are built of costs,
+    // not the liquid they carry) that is more than its reactions can release in one interval (it
     // does not eat).
     let shape = choose::shape(w.chem.ns(), 12, 6);
     let mut rest = [-8.0; brain::FIXED];
@@ -511,7 +513,8 @@ fn a_body_past_full_takes_by_its_body_not_by_what_it_holds() {
     };
     let (light, heavy) = (took(10.0), took(100.0));
     println!("taken in an update: {light:.3} kg holding 300 kg, {heavy:.3} kg holding 3000 kg");
-    assert!(light > 0.0 && (heavy / light - 1.0).abs() < 1e-6, "{light} kg, then {heavy} kg");
+    // The same but for what copying at the update changed first (the old code took 80 and 675 kg).
+    assert!(light > 0.0 && (heavy / light - 1.0).abs() < 0.1, "{light} kg, then {heavy} kg");
 }
 
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
