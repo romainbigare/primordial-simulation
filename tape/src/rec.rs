@@ -107,13 +107,28 @@ pub struct Recorder {
     /// Members born and died by cause since the last yearly row; born and died, of light-eaters
     /// and of the others
     births: f64,
-    deaths: [f64; 5],
+    deaths: [f64; 6],
     /// Members of the others (not light-eaters) died by cause since the last yearly row
-    deaths_a: [f64; 5],
+    deaths_a: [f64; 6],
     split: [[f64; 2]; 2],
     /// Body updates counted at the last yearly row
     updates: u64,
     social: Social,
+}
+
+/// Years a member of `b` lives at its upkeep now (`body::live`): `e_life` x 10^`REPAIR` per kg
+/// over its upkeep per kg.
+fn life_years(w: &World, b: &pcore::body::Body) -> f64 {
+    let mut x = pcore::body::Body::default();
+    let b = if b.k.cat.is_empty() {
+        x.clone_from(b);
+        x.prepare(&w.chem, &w.cfg.phys);
+        &x
+    } else {
+        b
+    };
+    let (m, d) = (b.mass(&w.chem), b.interval() as f64);
+    w.cfg.phys.e_life * b.dec(pcore::body::REPAIR) * m * d / pcore::body::upkeep(w, b, d, m).max(1e-300) / w.days_per_year() as f64
 }
 
 fn describe(e: &Event) -> String {
@@ -139,8 +154,8 @@ impl Recorder {
             series: vec![],
             log: vec![],
             births: 0.0,
-            deaths: [0.0; 5],
-            deaths_a: [0.0; 5],
+            deaths: [0.0; 6],
+            deaths_a: [0.0; 6],
             split: [[0.0; 2]; 2],
             updates: 0,
             social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile,spent,spent_y\n".into(), ..Default::default() },
@@ -227,9 +242,9 @@ impl Recorder {
                     self.split[0][(cat < measure::LIGHT_EATER) as usize] += e.value;
                 }
                 EventKind::Died { cause, cat } => {
-                    self.deaths[(cause as usize).min(4)] += e.value;
+                    self.deaths[(cause as usize).min(5)] += e.value;
                     if cat < measure::LIGHT_EATER {
-                        self.deaths_a[(cause as usize).min(4)] += e.value;
+                        self.deaths_a[(cause as usize).min(5)] += e.value;
                         if cause == pcore::body::SPENT {
                             let s = &mut self.social.spent;
                             (s[0], s[1]) = (s[0] + e.value, s[1] + e.value * (e.node / w.grid.w as u32) as f64);
@@ -391,17 +406,18 @@ impl Recorder {
         let w = c.w;
         // Members (the sum of counts) of light-eaters and of the others; nodes and individuals of the others.
         let (mut members, mut nodes) = ([0.0; 2], 0.0);
-        // Bodies and members by the starting kind they descend from (`Lineage::root`). The columns `root_<k>_*` are for every
-        // k up to the largest seen so far (also in the columns of a resumed tape), so a kind that died out reads 0.
-        let mut by_root: Vec<[f64; 2]> = vec![[0.0; 2]; self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count()];
+        // Bodies and members by the starting kind they descend from (`Lineage::root`), and the members' mean life (years at
+        // their upkeep now) and repair gene. The columns `root_<k>_*` are for every k up to the largest seen so far (also in
+        // the columns of a resumed tape), so a kind that died out reads 0.
+        let mut by_root: Vec<[f64; 4]> = vec![[0.0; 4]; self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count()];
         for b in life.alive() {
             if let Some(l) = &life.brains[b.lineage as usize] {
                 let k = l.root as usize;
                 if k >= by_root.len() {
-                    by_root.resize(k + 1, [0.0; 2]);
+                    by_root.resize(k + 1, [0.0; 4]);
                 }
-                by_root[k][0] += b.n();
-                by_root[k][1] += 1.0;
+                let r = &mut by_root[k];
+                (r[0], r[1], r[2], r[3]) = (r[0] + b.n(), r[1] + 1.0, r[2] + b.n() * life_years(w, b), r[3] + b.n() * b.gene(pcore::body::REPAIR));
             }
             members[!crate::light_eater(&w.chem, &b.genes) as usize] += b.n();
             nodes += (!crate::light_eater(&w.chem, &b.genes) && b.n() > 1.0) as u8 as f64;
@@ -450,9 +466,13 @@ impl Recorder {
             ("a_spent".to_string(), "1/yr", self.deaths_a[2]),
             ("a_taken".to_string(), "1/yr", self.deaths_a[3]),
             ("a_broken".to_string(), "1/yr", self.deaths_a[4]),
+            ("a_age".to_string(), "1/yr", self.deaths_a[5]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
-        row.extend(by_root.iter().enumerate().flat_map(|(k, v)| [(format!("root_{k}_members"), "1", v[0]), (format!("root_{k}_bodies"), "1", v[1])]));
+        let per = |v: &[f64; 4], x: f64| if v[0] > 0.0 { x / v[0] } else { f64::NAN };
+        row.extend(by_root.iter().enumerate().flat_map(|(k, v)| {
+            [(format!("root_{k}_members"), "1", v[0]), (format!("root_{k}_bodies"), "1", v[1]), (format!("root_{k}_life"), "yr", per(v, v[2])), (format!("root_{k}_repair"), "1", per(v, v[3]))]
+        }));
         row.extend(self.learning(w));
         row.extend(self.variety(w));
         // Traffic: share of crossings on the top 2% cells, their overlap with the top cells a
@@ -487,6 +507,7 @@ impl Recorder {
         let widest = s.spread.values().map(|v| v.len()).max().unwrap_or(0) as f64;
         row.extend([
             ("died_broken".to_string(), "1/yr", self.deaths[4]),
+            ("died_age".to_string(), "1/yr", self.deaths[5]),
             ("crossings".to_string(), "1/yr", all),
             ("traffic_top2".to_string(), "1", on_top / all.max(1.0)),
             ("traffic_persist".to_string(), "1", s.persist),
@@ -571,7 +592,7 @@ impl Recorder {
             g.iter_mut().enumerate().for_each(|(r, x)| *x += b.genes[cat + r].max(0.0) as f64 * b.n());
         }
         row.extend(g.iter().enumerate().map(|(r, &x)| (format!("cat_{r}"), "log10", x / (members[0] + members[1]).max(1.0))));
-        (self.births, self.deaths, self.deaths_a, self.split, self.updates) = (0.0, [0.0; 5], [0.0; 5], [[0.0; 2]; 2], life.updates);
+        (self.births, self.deaths, self.deaths_a, self.split, self.updates) = (0.0, [0.0; 6], [0.0; 6], [[0.0; 2]; 2], life.updates);
         // The columns of a tape loaded by `resume` may come in another order, or differ (gaps are NaN).
         if self.series.iter().map(|c| &c.0).ne(row.iter().map(|r| &r.0)) {
             let rows = self.series.first().map_or(0, |c| c.2.len());

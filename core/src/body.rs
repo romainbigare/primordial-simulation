@@ -53,7 +53,10 @@ pub const DISPERSE: usize = 15;
 /// Temperature above which its catalysts lose their shape, K: their speed-up falls off within a
 /// few K (`change::denature`). A firmer catalyst costs more upkeep (`Physics::t_firm`)
 pub const DENATURE: usize = 16;
-pub const NSCALAR: usize = 17;
+/// Repair, log10: a body wears out when the energy its upkeep turned over reaches
+/// `Physics::e_life` x 10^gene per kg; each unit costs `Physics::c_repair` more upkeep (`upkeep`)
+pub const REPAIR: usize = 17;
+pub const NSCALAR: usize = 18;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -63,6 +66,8 @@ pub const SPENT: u8 = 2;
 pub const TAKEN: u8 = 3;
 /// Bonds broken by bodies moving through its cell.
 pub const BROKEN: u8 = 4;
+/// Worn out by living (`Body::wear`).
+pub const AGE: u8 = 5;
 /// Others a body remembers.
 pub const KNOWN: usize = 4;
 
@@ -153,6 +158,11 @@ pub struct Body {
     /// energy held: lost at death, shared out and added up as members split and join.
     #[serde(default)]
     pub paid: f64,
+    /// An individual's wear, 0 at birth: the energy its upkeep turned over per kg, over what it
+    /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
+    /// has none: its members are of all ages (`live`).
+    #[serde(default)]
+    pub wear: f64,
     /// Numbers that follow from the genes (rebuilt when missing)
     #[serde(skip)]
     pub k: Consts,
@@ -1036,15 +1046,27 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if short > 1e-9 && !node {
         return Some(SPENT);
     }
+    // Living wears a body (14 Oct 2026): by the energy its upkeep turns over per kg, over what it
+    // can turn over in its life (`Physics::e_life`), so a body that lives fast wears fast. An
+    // individual dies of age when its wear reaches 1. A node's members are of all ages: this share
+    // of them dies now (the death rate of members who each live that long, so the same mean life).
+    let worn = upkeep / (mass * w.cfg.phys.e_life * b.dec(REPAIR));
     let upkeep = b.e - e0;
     b.e = e0;
-    if short > 1e-9 {
-        let dead: Vec<f64> = b.store.iter().map(|a| a * short).collect();
-        if !thin(w, b, short, &dead, SPENT) {
-            b.e += upkeep;
-            return Some(SPENT);
+    for (f, cause) in [(short, SPENT), (if node { worn.min(1.0) } else { 0.0 }, AGE)] {
+        if f > 1e-9 {
+            let dead: Vec<f64> = b.store.iter().map(|a| a * f).collect();
+            if !thin(w, b, f, &dead, cause) {
+                b.e += upkeep;
+                return Some(cause);
+            }
+            mass = b.mass(&w.chem);
         }
-        mass = b.mass(&w.chem);
+    }
+    b.wear += if node { 0.0 } else { worn };
+    if b.wear >= 1.0 {
+        b.e += upkeep;
+        return Some(AGE);
     }
 
     // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks
@@ -1282,14 +1304,16 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength and
 /// capture area by the day, of learning and signalling, and of one
 /// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`);
-/// a body with no brain pays none of the last three.
+/// a body with no brain pays none of the last three. All of it times (1 + `c_repair`)^`REPAIR`:
+/// a longer life costs more upkeep, a shorter one less.
 /// Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p, &b.genes));
-    days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n()
+    let u = days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
+    u * (1.0 + p.c_repair).powf(b.gene(REPAIR))
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
