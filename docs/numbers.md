@@ -88,7 +88,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `c_move` | J per kg per m | energy to move one kg one metre on the flat | review 5 lists it as tuned. Walking costs 2 to 5 J per kg per m in life (a person walking about 3, unchecked), so 3 is inside the real order | tuned |
+| `c_move` | J per kg per m, for a 30 kg member; others pay it x (m1 / 30 kg)^-0.32 | energy to move one kg one metre on the flat | the real cost of transport, 10.7 m^-0.32 J per kg per m (Taylor et al. 1982, from running, walking and flying animals), which is 3.6 at 30 kg; 3 fits a 30 kg body. The mass law is `Physics::walk` (14 Oct 2026, review 6 finding 2; before, 3 for every size) | anchored |
 | `rho_pass` | kg/m² | body mass per area that doubles the cost of entering a cell | none found | tuned, first guess |
 | `lane` | m | width of the passage a mover clears through bodies | the width of a body or a trail, about 1 m | anchored |
 | `layer` | m | the bodies of a cell must fit in a layer this thick over it | a tall plant, about 10 m; a ceiling far above real cover (a forest holds under 100 kg/m², this allows 10,000) | anchored |

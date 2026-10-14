@@ -448,7 +448,8 @@ pub fn regroup(w: &mut World) {
     }
 }
 
-/// Move to a neighbour: cost by mass (with the structure it carries), distance, climb, and the
+/// Move to a neighbour: cost by mass (with the structure it carries) at the real cost of transport
+/// per kg and m, `Physics::walk` (more per kg for a small member), distance, climb, and the
 /// body mass per area already there; less, and no climb, into deep liquid while held up by what
 /// it carries. The movers must fit in the free space over the cell (`phys.layer`). The part spent
 /// pushing through bodies breaks their bonds (`wear`). A body that strays from its group's
@@ -464,7 +465,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = resist(w, i, d, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
-    let cost = mass * (w.cfg.phys.c_move * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
+    let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
     if !body::pay(w, b, cost, b.interval() as f64) {
         return;
     }

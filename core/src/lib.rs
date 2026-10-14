@@ -230,7 +230,11 @@ pub struct Physics {
     /// selection would lift a short life to gene 0 for free).
     pub c_repair: f64,
     // Choose
-    /// Energy to move one kg one metre on the flat, J
+    /// Energy to move one kg one metre on the flat, J, for a member of `MOVE_REF` (30 kg); other
+    /// members pay it times (m1 / 30 kg)^`MOVE_EXP` (`Physics::walk`, 14 Oct 2026, review 6
+    /// finding 2). The real cost of transport is about 10.7 m^-0.32 J per kg per m (Taylor et al.
+    /// 1982, running, walking and flying animals alike): 3.6 at 30 kg, so 3 fits a founder; 18.5
+    /// at 0.18 kg, 1.4 at 600 kg. Flat, a small body moved at the cost of a big one per kg
     pub c_move: f64,
     /// Body mass per area that doubles the cost of entering a cell, kg/m² (and of handling what is
     /// taken from a body there)
@@ -359,7 +363,20 @@ impl Physics {
     pub fn think(&self, c: f64, m: f64) -> f64 {
         c * self.m_ref * (m / self.m_ref).powf(0.25)
     }
+    /// Energy to move one kg one metre on the flat for a member of `m1` kg, J: `c_move` at 30 kg,
+    /// and (m1 / 30)^-0.32 times that otherwise, the real cost of transport (Taylor et al. 1982,
+    /// 10.7 m1^-0.32 J per kg per m), so what a body pays to move goes with its mass^0.68.
+    /// Climbing is not in it: that is the weight lifted (`Config::gravity`).
+    pub fn walk(&self, m1: f64) -> f64 {
+        self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
+    }
 }
+
+/// The mass at which `Physics::c_move` is the cost of moving a kg a metre, kg: the 30 kg founders
+/// (10.7 x 30^-0.32 = 3.6 J, near `c_move` 3).
+pub const MOVE_REF: f64 = 30.0;
+/// The exponent of the cost of transport per kg and m against the mover's mass (Taylor et al. 1982)
+pub const MOVE_EXP: f64 = -0.32;
 
 impl Default for Physics {
     fn default() -> Self {
