@@ -156,9 +156,11 @@ pub struct Physics {
     /// 30 kg member (52 W of upkeep, 30 W/K) under 10 kg/m² of cover 3.4 K more warmth than bare
     /// ground (thick walls give 3.3 K), and a 1 kg plant member (capture area 2 m²) almost none.
     pub shelter: f64,
-    /// Upkeep of catalysts, J per kg^0.75 per day per unit of capacity (1/s): per `equiv`, anchored
-    /// at the 30 kg founders, who pay what they paid (the figures below are per kg of a 30 kg
-    /// member; the constant is that x 30^0.25 = 2.34, 14 Oct 2026, review 6, finding 2). A body pays for the amount
+    /// Upkeep of catalysts, J per kg of body per day per unit of capacity (1/s): per kg of the body,
+    /// `Body::size`, mass^1.0 (14 Oct 2026: body size by an energy ceiling, see
+    /// `body::upkeep`; it was per kg^0.75 from review 6, finding 2, and per kg before), anchored at
+    /// the 30 kg founders, who pay what they paid (the figures below are per kg of a 30 kg member,
+    /// which is 70% body: the constant is that / 0.7 = 2.14 x 10^9). A body pays for the amount
     /// of its catalysts, which is what they can do: their capacity, the catalysed rate per unit of
     /// input at `t_cat`, `c_cat` x the sum over its catalyst genes that are on of 10^gene x k x
     /// exp(-Ea / `t_cat`). One constant serves every reaction, as it prices what the body can do,
@@ -186,17 +188,21 @@ pub struct Physics {
     /// catalysts cost three times as much
     pub t_firm: f64,
     pub c_firm: f64,
-    /// Upkeep of strength, J per kg-equivalent per day at strength 1: per kg^0.75 at the 1 kg
-    /// reference (`Body::equiv`, as what a body takes and builds; charged per kg until 14 Oct 2026,
-    /// review 6, finding 2). Anchored at the 30 kg founders, who pay what they paid: 10^5 per kg
-    /// there (about 1 W/kg) x 30^0.25 = 2.34 x 10^5 per kg^0.75
+    /// Upkeep of strength, J per kg of body per day at strength 1: per kg of the body (`Body::size`),
+    /// mass^1.0 (14 Oct 2026, see `body::upkeep`; per kg^0.75 from review 6,
+    /// finding 2, per kg of the whole mass before). Anchored at the 30 kg founders, who pay what
+    /// they paid: 10^5 per kg there (about 1 W/kg), their body 70% of their mass: 10^5 / 0.7 =
+    /// 1.43 x 10^5 per kg of body
     pub c_strength: f64,
-    /// Upkeep every body pays whatever its genes, J per day for a member of `m_ref` (1 kg),
-    /// times (member mass / `m_ref`)^`intake_exp` (`body::upkeep`, 14 Oct 2026, review 5):
-    /// resting metabolism, about 3.4 m^0.75 W (Kleiber), 2 x 10^4 J per kg per day or 0.23 W/kg at
-    /// 1 kg. Before, strength was the only cost of having a body and a kind with strength 0 lived
-    /// eight times cheaper (8 kJ per kg per day against 66 for an eater). A 1 kg plant pays 20 of
-    /// its 38.5 kJ per kg per day with it and keeps 46 of income; a 20 g body pays 53
+    /// Upkeep every body pays whatever its genes, J per kg of body per day (`body::upkeep`, 14 Oct
+    /// 2026): the cost of keeping tissue alive, resting metabolism (Kleiber, about 3.4 m^0.75 W).
+    /// Per kg^0.75 of the whole mass (2 x 10^4 for a 1 kg member, review 5) until the decision
+    /// of 14 Oct 2026 (body size by an energy ceiling): now by the kg of the body, so it is set so a
+    /// 30 kg founder (21 kg of body) pays what it paid, 2 x 10^4 x 30^0.75 / 21 = 12,208: 0.14 W per
+    /// kg of body. Kleiber's whole value for a 30 kg member is 3.4 x 30^0.75 = 44 W, 1.45 W per kg
+    /// of it (2.1 per kg of its body); this is 1/15 of it, as before (the rest being strength and
+    /// catalysts here). Before review 5, strength was the only cost of having a body and a kind
+    /// with strength 0 lived eight times cheaper
     pub c_basal: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
@@ -218,11 +224,12 @@ pub struct Physics {
     pub c_memory: f64,
     pub c_seen: f64,
     pub c_sight: f64,
-    /// Upkeep of learning, J per kg^0.75 per day at learning rate 1 (per `equiv`, anchored at the
-    /// 30 kg founders: 3 x 10^4 per kg there x 30^0.25 = 7.0 x 10^4)
+    /// Upkeep of learning, J per kg of body per day at learning rate 1 (mass^1.0, 14 Oct 2026,
+    /// see `body::upkeep`; anchored at the 30 kg founders, 70% body: 3 x 10^4 per kg there / 0.7 =
+    /// 4.3 x 10^4)
     pub c_learn: f64,
-    /// Cost of signalling, J per kg^0.75 per day at signal size 1 (per `equiv`, anchored at the
-    /// 30 kg founders: 200 per kg there x 30^0.25 = 468)
+    /// Cost of signalling, J per kg of body per day at signal size 1 (mass^1.0, as `c_learn`;
+    /// anchored at the 30 kg founders: 200 per kg there / 0.7 = 286)
     pub c_signal: f64,
     /// Energy a kg of body can turn over in its upkeep before it is worn out, at a `REPAIR` gene of
     /// 0, J/kg (`body::live`): it lives 10^gene times this over its upkeep per kg. 10^9 is the
@@ -267,12 +274,14 @@ pub struct Physics {
     /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::equiv`:
     /// per member its mass to the power `intake_exp`), and no more than it can use (`choose::sate`)
     pub take: f64,
-    /// What a member takes, sweeps and receives as a gift, what it can build in a day (`c_build`),
-    /// what it pays to be (`c_basal`) and the leaf it spreads go with its mass to this power,
-    /// about the 0.75 of intake and metabolism in life (`Body::equiv`). Here every cost went
-    /// with mass, so with 1 nothing scaled against size and selection pushed the copy-mass gene to
-    /// its wall (eaters of 9 to 15 t that barely copy, review 4, finding 5); with 0.75 a 10 t member
-    /// takes 180 times a 10 kg one, not 1,000. A free number chosen for that reason, not a rule.
+    /// What a member takes, sweeps and receives as a gift, what it can build in a day (`c_build`)
+    /// and the leaf it spreads (the supply) go with its mass to this power, about the 0.75 of
+    /// intake and metabolism in life (`Body::equiv`). The cost of keeping tissue goes with the
+    /// body's mass^1.0 (14 Oct 2026, `body::upkeep`), so growth stops where the two meet. Here
+    /// every cost went with mass, so with 1 nothing scaled against size and selection pushed the
+    /// copy-mass gene to its wall (eaters of 9 to 15 t that barely copy, review 4, finding 5); with
+    /// 0.75 a 10 t member takes 180 times a 10 kg one, not 1,000. A free number chosen for that
+    /// reason, not a rule.
     pub intake_exp: f64,
     /// Area a body works per day per kg of its mass that works, m²/(kg day): it takes no more per day than
     /// the mass per m² of what it takes there times this times its mass (a 30 kg body works 300
@@ -408,13 +417,13 @@ impl Default for Physics {
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
-            c_cat: 3.5105e9,
+            c_cat: 2.1429e9,
             t_cat: T_SURF,
             unfold: 3.0,
             t_firm: 320.0,
             c_firm: 20.0,
-            c_strength: 2.3403e5,
-            c_basal: 2e4,
+            c_strength: 1.4286e5,
+            c_basal: 12208.0,
             c_leaf: 2e3,
             c_brain: 1e5,
             m_ref: 1.0,
@@ -422,8 +431,8 @@ impl Default for Physics {
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
             c_sight: 1.5e4,
-            c_learn: 7.021e4,
-            c_signal: 4.6807e2,
+            c_learn: 4.2857e4,
+            c_signal: 285.71,
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,

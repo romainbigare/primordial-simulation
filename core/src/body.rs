@@ -455,8 +455,9 @@ impl Body {
     /// Mass-equivalent a body's size is counted by, kg (in place of the mass, for what goes with
     /// mass^0.75 in life): per member `m_ref` times its `mass` over `m_ref`, to the power
     /// `intake_exp` (0.75), times the count. What it takes, sweeps and receives as a gift, what it
-    /// can build (`c_build`), what it pays to be (`c_basal`) and its leaf (`visible`, `open_area`:
-    /// of its body, `size`) go by it. A member of `m_ref` (1 kg) is 1 kg; one of
+    /// can build (`c_build`) and its leaf (`visible`, `open_area`:
+    /// of its body, `size`) go by it: the supply. What it pays to be does not (mass^1.0 of its
+    /// body, `body::upkeep`, 14 Oct 2026). A member of `m_ref` (1 kg) is 1 kg; one of
     /// 30 kg 12.8 kg-equivalents, 2.3 times less per kg; of 10 t 1,778, so it takes 180 times what
     /// a 10 kg one (10^0.75 = 5.6) does, not 1,000. Light, rain, liquid and gas go by area. How
     /// much of what it takes it can use is `choose::sate`, not a size: a member takes by all its mass,
@@ -1578,28 +1579,36 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     None
 }
 
-/// Upkeep over `days` of a body of `mass` kg, J: basal, which every body pays whatever its genes
-/// (`Physics::c_basal` per member by its `equiv`, mass^0.75), of catalysts (by their capacity, the catalysed
-/// rate per unit of input at `Physics::t_cat` summed over the genes that are on, see
-/// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength,
-/// learning and signalling (all four by the `equiv` too, per kg-equivalent: mass^0.75, as what a
-/// body takes and builds; by the kg until 14 Oct 2026), capture area by the day, and of one
-/// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`);
-/// a body with no brain pays none of the last three. Repair is a share `c_repair` of it at
-/// `REPAIR` 0 and doubles with each unit of the gene: all of it times 1 - c + c 2^`REPAIR`, so a
-/// longer life costs more upkeep, a shorter one less, but never less than the rest (`Physics::c_repair`).
-/// Needs `prepare`.
+/// Upkeep over `days` of a body of `mass` kg, J: the cost of keeping tissue, by the kg of the body
+/// itself (`Body::built`: its matter and the liquid it keeps with it, as if it held all it keeps,
+/// not the fuel it stores nor the brood), mass^1.0: basal, which every body pays whatever its genes (`Physics::c_basal`), catalysts
+/// (by their capacity, the catalysed rate per unit of input at `Physics::t_cat` summed over the genes
+/// that are on, see `Physics::c_cat`, dearer if they keep their shape when warmer,
+/// `Physics::t_firm`), strength, learning and signalling; capture area by the day; and one decision
+/// (per member, by the brain's cost and weakly the member's mass, `Physics::think`, mass^0.25);
+/// a body with no brain pays none of the learning, signal and decision. Repair is a share `c_repair`
+/// of it at `REPAIR` 0 and doubles with each unit of the gene: all of it times 1 - c + c
+/// 2^`REPAIR`, so a longer life costs more upkeep, a shorter one less, but never less than the rest
+/// (`Physics::c_repair`).
+///
+/// **Why mass^1.0 while what a body takes and builds goes with mass^0.75** (14 Oct 2026, the growth law of
+/// West, Brown and Enquist 2001, ontogenetic growth): supply (`Body::equiv`: intake, the
+/// `c_build` allowance, leaf) grows more slowly than the tissue it must keep, so a body grows until
+/// keeping what it has takes all it can supply and there is nothing left to build with
+/// (`copy::grow` builds from the spare after upkeep): its size is set by its own costs, not by a cap.
+/// Across kinds, adult costs then follow Kleiber's mass^0.75 by themselves. (Review 6 had moved these
+/// costs to mass^0.75 because every animal evolved small; the main cause then was nodes mixing kinds,
+/// since fixed.) Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p, &b.genes));
-    // what goes with the body goes with its whole mass to the power 0.75, like what it takes and
-    // builds: per kg-equivalent (`equiv` over `m_ref`), not per kg (14 Oct 2026, review 6, finding 2;
-    // charged by the kg, a small body had twice the surplus per joule of upkeep of a big one)
-    let eq = b.equiv(p, mass) / p.m_ref;
-    let basal = p.c_basal * eq;
-    let u = days * (basal + eq * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
+    // The cost of keeping tissue goes with the kg of the body (`Body::built`: not the fuel it
+    // stores, nor the liquid it lacks, which dormancy counts below), supply with the mass to the
+    // power 0.75 (see above): storing fuel is cheap, building and keeping tissue is dear.
+    let tissue = b.built(&w.chem);
+    let u = days * (tissue * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
     // Everything it pays is chemistry, which runs in its liquid: a dry body pays almost nothing (and,
     // as wear grows with what it pays, hardly ages): all of it, the decision's cost too, times its
     // activity (14 Oct 2026, review 7 fix 6).

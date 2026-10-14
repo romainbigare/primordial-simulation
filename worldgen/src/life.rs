@@ -156,7 +156,9 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// held by what they find to eat). At gene 0 they would live 25 to 1,700 years: the strength gene
 /// sets most of an eater's upkeep and a small member's brain costs it much per kg, so the eaters
 /// of remains (strength 0) would live longest. A gene below 0 costs less upkeep
-/// (`Physics::c_repair`): evolution sets it from there.
+/// (`Physics::c_repair`): evolution sets it from there. (Not set again for the upkeep by the kg of the
+/// body, 14 Oct 2026: a 30 kg founder pays what it paid, a member of another mass pays more or less
+/// per kg and so lives a different time.)
 ///
 /// The roster has rungs from the first day, each derived from the two old rows by scaling their
 /// numbers and keeping what lets a kind live: light-eaters keep the light catalyst (12) and the
@@ -165,7 +167,7 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// at long intervals; the exchange genes are per kg and the heat gene goes with mass^(2/3), so a
 /// small body loses heat faster per kg and a big one slower (`Body::conductance`). What one body
 /// can take from another is set by its force against the other's (`choose::take_body`: the
-/// strength gene times the mass), and upkeep charges the gene by the kg-equivalent (mass^0.75, since 14 Oct 2026): the "eaters of
+/// strength gene times the mass), and upkeep charges the gene by the kg of the body (mass^1.0, since 14 Oct 2026, the energy ceiling; mass^0.75 from review 6): the "eaters of
 /// light-eaters" have genes of 0.3 to 0.5 (the light-eaters have 0.05), the "eaters of eaters" 0.6
 /// to 0.6 and 100 to 600 kg (the eaters have 0.6 and 30 kg: three to twenty times their force), and the "eaters of
 /// remains" none (0: they lose every fight, pay no upkeep for it, and work the ground). The gene
