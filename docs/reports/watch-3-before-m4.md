@@ -14,7 +14,9 @@ What changed in the world:
 - **Genes no longer move without a reason.** In the old runs, plants carried genes for burning
   charcoal, copper and lime at 2 to 9 decades with nothing to select them. Now these genes stay at
   0 for 300 years in all three seeds. The plants' light gene goes *down* a little (11.9 to 11.1 in
-  seed 7), because a catalyst now has a real price.
+  seed 7), because a catalyst now has a real price. (Wrong, review 4: that column is a mean over
+  plants and eaters, whose light gene is off and counts as 0; the fall is the eaters' share, not a
+  plant gene. See the correction in `watch-4-before-m4.md`.)
 - **The carbon gas no longer crashes early.** It falls from 390 to about 230 parts per million in
   the first 20 years, then comes back to 350 to 370 (seeds 1 and 7). Before, it fell to 3 parts per
   million by year 20 and the plants starved.

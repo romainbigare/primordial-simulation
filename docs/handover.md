@@ -892,6 +892,36 @@ Do not drift into Part 2 without this decision.
 
 Use it only to **choose worlds and tune free physics numbers**. Never use it to add rules.
 
+### 13.2 Notes for M4 from review 4 (14 Oct 2026)
+
+Review 4 (`docs/reports/review-4-before-m4.md`) found the island stable and ready for M4. These are
+the things it found missing, not wrong. Keep them in mind when M4 starts; do not build them before.
+
+- **No people-like kind is expected from M4 itself.** Three things stand in the way: nothing on the
+  island pays for a tool, a shelter or a bigger brain (predation is 0 to 4% of what eaters eat, dug
+  rock feeds nobody, the land spans 7 to 10 K so walls save nothing); there is no planning
+  (`choose::act` scores the next action only; 6.5 placed planning at M2 or M3 and it is not built);
+  and, until 14 Oct 2026, brain size could not evolve in nodes (fixed, 7.1). M4's planet gives cold,
+  seasons and climate bands, the reasons for shelters, stores and travel. The intelligence step is
+  the check point's option 2 (planning and longer memory, 13.1), after M4, and it may fail (15).
+- **Lives are about a month.** Deaths a year are 12 to 14 times the standing members (plants and
+  animals alike), whatever the repair gene would allow (5 to 25 years). It is a boom and starve
+  churn: most members die of hunger or are eaten within weeks. Not a bug, and not unphysical
+  (plankton live like this), but a lifespan, a generation time, a culture or a memory of
+  individuals needs lives of years. The owner decides at M4 whether to move it; the free numbers
+  that set it are in Copy and Choose (the `CHILD` gene's floor 0.05, `full` 2, the brain's copy
+  logit), not in a new law. The first M4 report prints the realized life per starting kind.
+- **The carbon cycle has no source.** Rock weathering (chemistry 0, reaction 18) takes carbon gas
+  out at about 10⁻⁸ a year and nothing puts it back. Fine for 300 years on an island; a 10,000-year
+  planet needs a source (the "volcano" god action is the same physics) and a bigger store (sea
+  chemistry, for which chemistry 0 has no reaction).
+- **The methane-like gas lives by temperature.** Its burning in the air (reaction 8) gives it a
+  life of about 4 months at 280 K and about 6 years at 255 K: the air's mean temperature decides.
+  Harmless now; if a warm world ever has a methane story, look here first.
+- **Size is cheap.** Until 14 Oct 2026 nothing scaled against size, so the copy-mass gene ran to
+  whatever wall it had. Intake now goes with mass^0.75 (Section 4); bone-like structure costs
+  (about m^1.3) and longer generations of big bodies are not modelled.
+
 ---
 
 ## 14. Rules of work

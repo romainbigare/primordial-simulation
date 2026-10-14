@@ -3,6 +3,30 @@
 14 October 2026. Code: `main` at 444dabf. Before this: `watch-3-before-m4.md`. Full numbers:
 `watch-4-before-m4/analysis.md`.
 
+## Correction after review 4 (14 October 2026)
+
+Review 4 found two things this report read wrong. The numbers are right; what we said they mean is
+not.
+
+1. **The plants' light gene did not fall.** The column `cat_0` (the light gene) is a mean over
+   *all* live members, plants and eaters, and the eaters' light gene is off, which counts as 0. So
+   the more eaters, the lower `cat_0`, with no plant gene moving. At year 300 the eaters are 14.9%
+   of members in seed 1, 3.6% in seed 5 and 7.3% in seed 7; 9.0 x (1 - that share) gives 7.68, 8.69
+   and 8.35, and the column says 7.73, 8.59 and 8.34. The plants' light gene stayed at 9 for 300
+   years. That is the right result: at 9 they fix 97% of the carbon gas they breathe in an update,
+   at 7.7 they would fix 16% and starve. Report 3's "the plants' light gene goes down a little,
+   because a catalyst now has a real price" was the same mistake. The burn gene (`cat_1`) is mixed
+   the same way: with the plants' share held fixed, its rise from 2.09 to 2.23 in seed 1 means the
+   eaters' burn gene went from 2.6 to about 3.5, a real selection for faster digestion against the
+   enzyme cost. The series now has the genes per starting kind (`root_<k>_*`, handover 8.3), so
+   this cannot happen again.
+2. **A member lives about one month, not 5 to 25 years.** The "expected life" columns are what the
+   repair gene would give if nothing else killed a body. The life members really live is the
+   standing members over the deaths a year: 27 days in seed 1 (1.5 x 10¹² deaths a year, 1.1 x 10¹¹
+   members), 26 in seed 5, 30 in seed 7. Most members die of hunger or are eaten within weeks; age
+   is 1 to 2% of deaths. So "lives evolve" below means the repair gene evolves, not the life lived.
+   The series now prints the realized life per starting kind (`root_<k>_life_real`).
+
 ## Short answer
 
 The owner asked for three changes after watch report 3. All three are built, and we ran the three
