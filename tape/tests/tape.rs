@@ -102,6 +102,45 @@ fn yearly_series_names_gases_and_catalysts() {
     assert_eq!(head.iter().filter(|h| h.starts_with("cat_")).count(), w.chem.reactions.len());
 }
 
+/// The per-kind columns (`root_<k>_*`) are in the series, deaths and births of the kinds add up to
+/// the totals of the year, and the land's seasonal swing is there and not negative.
+#[test]
+fn yearly_series_has_the_measures_per_starting_kind() {
+    let dir = tmp("per_kind");
+    let mut w = world();
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    let mut rec = tape::Recorder::new(&w, 0, 0);
+    rec.record_month(&mut w);
+    for _ in 0..3 * w.cfg.months_per_year {
+        run(&mut w, 1);
+        rec.record_month(&mut w);
+    }
+    rec.finish(&dir).unwrap();
+    let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
+    let mut lines = csv.lines();
+    let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+    let rows: Vec<Vec<f64>> = lines.map(|l| l.split(',').map(|v| v.parse().unwrap()).collect()).collect();
+    assert_eq!(rows.len(), 4);
+    let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
+    let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
+    assert!(!kinds.is_empty());
+    for name in ["births", "life_real", "mass", "copy_mass", "gas", "leaf", "copy_log", "interval", "hidden", "died_age"] {
+        assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
+    }
+    for r in &rows {
+        for (kind_col, total) in [("died_lack", "died_lack"), ("died_phase", "died_phase"), ("died_spent", "died_spent"), ("died_taken", "died_taken"), ("died_broken", "died_broken"), ("died_age", "died_age"), ("births", "births")] {
+            let sum: f64 = kinds.iter().map(|k| col(&format!("root_{k}_{kind_col}"), r)).sum();
+            let all = col(total, r);
+            assert!((sum - all).abs() <= 1e-9 * all.max(1.0), "{total}: kinds {sum} total {all}");
+        }
+    }
+    let last = rows.last().unwrap();
+    assert!(col("t_land_swing", last) >= 0.0 && col("t_land_summer", last) >= col("t_land_winter", last));
+    // A catalyst gene on in a kind keeps its columns, with the share of members that carry it.
+    assert!(head.iter().any(|h| h.starts_with("root_0_cat_") && h.ends_with("_on")));
+}
+
 /// What a tape folder holds: the viewer file's header and frame bytes, the series rows (as text)
 /// and the (year, month) of each months.csv row.
 fn read_tape(dir: &std::path::Path) -> (serde_json::Value, usize, Vec<String>, Vec<(u64, u64)>) {

@@ -554,6 +554,10 @@ impl Life {
     pub fn brainless(&self, b: &Body) -> bool {
         self.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).is_some_and(|l| l.none())
     }
+    /// The starting kind body `b` descends from (`Lineage::root`); `u32::MAX` if its lineage is gone.
+    pub fn root(&self, b: &Body) -> u32 {
+        self.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(u32::MAX, |l| l.root)
+    }
     /// The rows body `b` was born with.
     pub fn born(&self, b: &Body) -> &[f32] {
         &self.genomes[b.genome as usize].rows
@@ -973,8 +977,8 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
         w.ground[k * n + i] += a;
     }
     w.e_ground[i] += b.e;
-    let cat = light_cat(&w.chem, &b.genes);
-    w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat }, node: b.cell, value: b.count });
+    let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
+    w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
     w.life.bodies[slot] = b;
     w.life.remove(slot);
 }
@@ -995,8 +999,8 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
     b.e -= q;
     w.e_ground[i] += q;
     if b.n() > 1.0 && f > 0.0 {
-        let cat = light_cat(chem, &b.genes);
-        w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat }, node: b.cell, value: b.count * f });
+        let (cat, root) = (light_cat(chem, &b.genes), w.life.root(b));
+        w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count * f });
         b.count *= 1.0 - f;
     }
     b.count >= 1.0

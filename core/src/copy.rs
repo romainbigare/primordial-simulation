@@ -244,8 +244,8 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         return false;
     }
     b.paid = (b.paid - owe * births / (n * k)).max(0.0);
-    let cat = body::light_cat(&w.chem, &b.genes);
-    w.events.push(Event { day: w.day, kind: EventKind::Born { cat }, node: i as u32, value: births });
+    let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
+    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: i as u32, value: births });
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
     // less than one member); an individual's go together, by that chance.
     let (node, d) = (n > 1.0, b.gene(body::DISPERSE).clamp(0.0, 1.0));

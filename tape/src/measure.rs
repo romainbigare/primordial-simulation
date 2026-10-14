@@ -37,7 +37,10 @@ const SCALE: [f32; FIXED] = [1.0, 0.3, 0.25, 1.0, 4.0];
 const CAT_SCALE: f32 = 4.0;
 const UPT_SCALE: f32 = 1.0;
 /// Most kinds looked for; most bodies clustered (an even sample of the live bodies); rounds of
-/// the clustering.
+/// the clustering. So `kinds` is a floor, not a count: it never says more than `MAX_K`, and it says
+/// less when two kinds lie closer than `SEP` radii or one has under `MIN_SHARE` of the bodies (a
+/// roster run with six starting kinds alive can read 1). In roster runs read the number of kinds
+/// from the per-root survival (`root_<k>_members` above 0).
 const MAX_K: usize = 6;
 const SAMPLE: usize = 2000;
 const ROUNDS: usize = 20;
