@@ -138,7 +138,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `row_chance` | chance per child | a child's born brain rows change | none found | tuned, first guess |
 | `row_noise` | none | step of that change per generation | none found | tuned, first guess |
 | `new_noise` | none | spread of the weights a bigger brain adds | none found | tuned, first guess |
-| `alike` | mutation steps | nodes whose genes differ by at most this merge; a node splits when its halves differ by more; nodes and children join and merge only within this many steps of the copy-mass gene in the size of a member's body (0.2 decades a step: a factor 6.3 at 4; size classes, 14 Oct 2026, so a child far smaller than its parent node starts a node of its own) | run: speed-tool threshold, 4 steps (review 3, M3); to be checked against individuals at M4 | tuned |
+| `alike` | mutation steps | nodes whose genes differ by at most this merge; a node splits when its halves differ by more; nodes and children join and merge only within this many steps of the copy-mass gene in the size of a member's body (0.2 decades a step: a factor 6.3 at 4; size classes, 14 Oct 2026) and in the same maturity state (both mature or both immature, so children gather in young nodes of their own) | run: speed-tool threshold, 4 steps (review 3, M3); to be checked against individuals at M4 | tuned |
 
 ### Flow, as ground cover and moving liquid feel it
 
