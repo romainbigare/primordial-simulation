@@ -178,6 +178,7 @@ fn crowded_individuals_merge_into_a_node() {
     pcore::body::survey(&mut w);
     let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
     assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
+    assert_eq!(w.diag.wide, 0.0, "alike bodies merged and some were counted wide");
     pcore::step(&mut w);
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
@@ -204,6 +205,8 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     let before: f64 = here(&w).iter().sum();
     pcore::body::survey(&mut w);
     let after = here(&w);
+    // Copy masses 0.3 apart are 1.5 steps apart each (`alike` is 4): merges of the ends are wide, and every unlike merge (past twice `crowd` nodes) is wide too.
+    assert!(w.diag.wide > 0.0 && w.diag.unlike <= w.diag.wide, "wide {} unlike {}", w.diag.wide, w.diag.unlike);
     assert!(after.len() <= w.cfg.crowd, "{} nodes left", after.len());
     assert!((after.iter().sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
@@ -478,14 +481,21 @@ fn a_heavy_individual_copies_over_several_updates() {
 /// energy-rich solid only the heat of its upkeep over an interval, whatever `c_build`: never less
 /// (a hard stop below upkeep starved the eaters, 13 Oct: burning leaves its liquid product in the
 /// body), and no more, as its store already releases what it can use. A starting eater (below
-/// `full`) takes more than that: it eats as its intake allows. Matter and energy are kept exactly.
+/// `full`) takes more than that: it eats as its intake allows. A body past `full` whose store is
+/// below the target (upkeep plus building over the share its reactions release, less what it
+/// holds) is asked directly: `choose::sate` leaves what the formula says, more with a higher
+/// `c_build`, and never more than its size takes in the time (review 6, findings 10 and 13).
+/// Matter and energy are kept exactly.
 #[test]
 fn a_body_takes_no_more_than_it_can_use() {
     use pcore::body::{Lineage, DISPERSE};
     use pcore::event::EventKind;
     use pcore::{brain, choose};
-    // Burnable kg taken in an update, the heat of the upkeep and build it may use, and the size cap, kg.
-    let took = |times: f64, c_build: f64| {
+    // Burnable kg taken in an update, the heat of the upkeep and build it may use, the size cap and
+    // the target `choose::sate` is meant to give (all kg), for a body of `times` x 30 kg that keeps
+    // the share `keep` of its fuel. With `direct`, instead of an update, `sate` is asked about
+    // twice the size cap of the fuel and the first number is what it leaves.
+    let took = |times: f64, c_build: f64, keep: f64, direct: bool| {
         let mut w = worldgen::new_world(1, 16, 16);
         w.cfg.phys.c_build = c_build;
         pcore::step(&mut w);
@@ -512,10 +522,24 @@ fn a_body_takes_no_more_than_it_can_use() {
             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
         }
         (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0);
+        // Less of the fuel (the rest taken out as an edit).
+        let out = (1.0 - keep) * b.store[rich];
+        w.chem.add_elems(rich, -out, &mut w.ledger.imposed_elems);
+        (w.ledger.imposed_energy, b.store[rich]) = (w.ledger.imposed_energy - out * w.chem.subs[rich].hf, b.store[rich] - out);
         b.prepare(&w.chem, &w.cfg.phys);
         let (p, days, mass) = (w.cfg.phys, b.interval() as f64, b.mass(&w.chem));
         let (equiv, joule_per_kg) = (b.equiv(&p, mass), -w.chem.dh(burn) / w.chem.reactions[burn].inputs.iter().find(|x| x.0 as usize == rich).unwrap().1 as f64 / w.chem.subs[rich].molar_mass);
-        let can = pcore::body::upkeep(&w, &b, days, mass) + p.c_build * equiv / p.m_ref * days;
+        let (up, build) = (pcore::body::upkeep(&w, &b, days, mass), p.c_build * equiv / p.m_ref * days);
+        let can = up + build;
+        // (up + build) x fuel / release - fuel, never under the upkeep, never over what its size takes.
+        let (fuel, release) = (b.fuel(&w.chem, b.temp(&w.chem)), pcore::body::release(&w, &b, days));
+        let target = ((can * fuel / release - fuel).max(up)).min(p.take * days * equiv * joule_per_kg) / joule_per_kg;
+        if direct {
+            let mut m = vec![0.0; w.chem.ns()];
+            m[rich] = 2.0 * p.take * days * equiv / w.chem.subs[rich].molar_mass;
+            choose::sate(&w, &b, &mut m, days, mass);
+            return (m[rich] * w.chem.subs[rich].molar_mass, can / joule_per_kg, p.take * days * equiv, target);
+        }
         let s = w.life.add(b, w.day, 1);
         let (t0, l0, id) = (pcore::check::totals(&w), w.ledger.clone(), w.life.bodies[s].id(s));
         pcore::body::survey(&mut w);
@@ -526,17 +550,31 @@ fn a_body_takes_no_more_than_it_can_use() {
         let (de, dq) = pcore::check::drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
         let burnt: f64 = w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, burn, .. } = e.kind { (by == id).then_some(burn as f64) } else { None }).sum();
-        (burnt, can / joule_per_kg, p.take * days * equiv)
+        (burnt, can / joule_per_kg, p.take * days * equiv, target)
     };
     for times in [10.0, 100.0] {
-        let ((with, _, cap), (without, upkeep, _)) = (took(times, 3e4), took(times, 0.0));
+        let ((with, _, cap, _), (without, upkeep, _, _)) = (took(times, 3e4, 1.0, false), took(times, 0.0, 1.0, false));
         println!("{times} x 30 kg: takes {with:.3} kg of fuel (upkeep {upkeep:.3}, size cap {cap:.3}), with no building {without:.3}");
         assert!(upkeep < cap, "the size cap {cap} is not above its upkeep {upkeep}");
         assert!((with / upkeep - 1.0).abs() < 0.02 && (without / upkeep - 1.0).abs() < 0.02, "{with} and {without} of {upkeep} kg");
     }
-    let (young, can, _) = took(1.0, 3e4);
+    let (young, can, _, _) = took(1.0, 3e4, 1.0, false);
     println!("a starting eater takes {young:.3} kg of fuel (upkeep and build {can:.3})");
     assert!(young > can, "below full a body eats as its intake allows: {young} of {can} kg");
+    // Past `full` with a store below the target, upkeep and build over the share its reactions
+    // release in an interval, less what it holds: the target rises with `c_build`, between the
+    // upkeep's worth and what its size takes (here a store of 17% of the fuel).
+    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.17, true)).collect();
+    println!("sate asked for twice the size cap, store 17%: (left, upkeep+build, cap, target) {sated:?}");
+    for &(left, _, cap, target) in &sated {
+        assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
+        assert!(target < cap, "the size cap {cap} binds, the case shows nothing");
+    }
+    assert!(sated[0].0 > sated[0].1 * 1.2, "below the line of the upkeep it should take more than the upkeep's worth: {sated:?}");
+    assert!(sated[1].0 > sated[0].0 * 1.1 && sated[2].0 > sated[1].0 * 1.1, "it takes no more with a higher c_build: {sated:?}");
+    // With a store of 3% of the fuel the target is far over the size cap: the cap is what it takes.
+    let (left, _, cap, _) = took(10.0, 3e4, 0.03, true);
+    assert!((left / cap - 1.0).abs() < 1e-6, "sate left {left} kg of the {cap} kg its size takes");
 }
 
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
@@ -669,7 +707,7 @@ fn equiv_goes_with_mass_to_the_power() {
 /// Building takes time (14 Oct 2026, review 5): a body pays into its child store at most
 /// `c_build` x (member mass / `m_ref`)^`intake_exp` x members x the days of its interval,
 /// whatever its reactions could release. An eater of 300 kg that owes many children (as in
-/// `a_heavy_individual_copies_over_several_updates`) adds to its store 1e4 x 300^0.75 J a day, and
+/// `a_heavy_individual_copies_over_several_updates`) adds to its store `c_build` x 300^0.75 J a day, and
 /// a body of half the mass adds 2^0.75 times less.
 #[test]
 fn a_body_builds_at_most_c_build_times_mass_to_the_power_a_day() {
@@ -723,6 +761,55 @@ fn a_body_builds_at_most_c_build_times_mass_to_the_power_a_day() {
         assert!(added <= cap * 1.05 && added >= cap * 0.9, "added {added:e} J, cap {cap:e}");
     }
     assert!((big[0].0 / small[0].0 / 2f64.powf(0.75) - 1.0).abs() < 0.05, "a body twice as heavy builds 2^0.75 times faster");
+}
+
+
+/// The pay-day cap (review 6, finding 6): `body::live` copies a member past `full` and then the
+/// brain's copy (`choose::act`) calls `copy::copy` again in the same update; building takes time,
+/// so the two together pay no more than one interval's allowance, `c_build` x `equiv` / `m_ref` x
+/// the days of its interval, and the second pays nothing. An update on a later day pays again, and
+/// a body that has not paid for a long time still gets one interval's worth, not the days since.
+#[test]
+fn two_copies_in_one_update_pay_one_intervals_allowance() {
+    use pcore::body::{Lineage, DISPERSE, STRENGTH};
+    use pcore::{brain, choose};
+    let mut w = worldgen::new_world(1, 16, 16);
+    w.cfg.phys.c_copy *= 100.0;
+    pcore::step(&mut w);
+    let n = w.grid.n();
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let mut rest = [-8.0; brain::FIXED];
+    rest[0] = 8.0;
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+    // Ten times a starting eater: it owes far more than one interval's allowance (the cap binds).
+    let times = 10.0;
+    for k in 0..w.chem.ns() {
+        w.chem.add_elems(k, (times - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
+        (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
+    }
+    (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[STRENGTH]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 0.0);
+    let s = w.life.add(b, w.day, 1);
+    pcore::body::survey(&mut w);
+    w.day += 400;
+    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    b.prepare(&w.chem, &w.cfg.phys);
+    let cap = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, b.mass(&w.chem)) / w.cfg.phys.m_ref * b.interval() as f64;
+    // Never paid, 400 days gone: one interval's worth, no more.
+    assert!(!pcore::copy::copy(&mut w, s, &mut b), "no child is finished yet");
+    let first = b.paid;
+    assert!(first > 0.9 * cap && first <= cap * 1.0001, "the first call paid {first:e} J of {cap:e}");
+    // The second call in the same update: nothing more.
+    pcore::copy::copy(&mut w, s, &mut b);
+    assert_eq!(b.paid, first, "the second call paid {:e} J more", b.paid - first);
+    // The next interval pays again.
+    w.day += b.interval();
+    pcore::copy::copy(&mut w, s, &mut b);
+    assert!(b.paid > 1.8 * first && b.paid <= 2.0001 * cap.max(first), "{:e} J after two intervals, one is {first:e}", b.paid);
+    assert_eq!(pcore::check::broken(&w), None);
 }
 
 

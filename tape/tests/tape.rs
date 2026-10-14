@@ -145,7 +145,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
         assert!(m == 0.0 && kg == 0.0 || (kg - m * mean).abs() <= 1e-9 * kg, "root_{k}_kg {kg} members {m} mean {mean}");
     }
     assert!(kinds.contains(&(col("mass_max_root", last) as usize)));
-    assert!(col("merged_unlike", last) >= 0.0);
+    assert!(col("merged_unlike", last) >= 0.0 && col("merged_wide", last) >= col("merged_unlike", last));
     // The run's numbers are written beside the series.
     let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("physics.json")).unwrap()).unwrap();
     assert_eq!(doc["physics"]["alike"].as_f64().map(|x| x as f32), Some(w.cfg.phys.alike));

@@ -49,6 +49,8 @@ struct Social {
     decisions: [f64; 2],
     /// Members the monthly merge joined however unlike this year (the core's tally, `Diag::unlike`)
     unlike: f64,
+    /// Members that joined a node unlike it by more than `alike` steps in some gene this year (`Diag::wide`)
+    wide: f64,
     months: String,
     /// Members of the others that died of SPENT this month, and the sum of their rows (y)
     spent: [f64; 2],
@@ -363,6 +365,7 @@ impl Recorder {
         if yearly {
             self.social.decisions = [std::mem::take(&mut w.diag.decisions), std::mem::take(&mut w.diag.greedy)];
             self.social.unlike = std::mem::take(&mut w.diag.unlike);
+            self.social.wide = std::mem::take(&mut w.diag.wide);
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -598,6 +601,8 @@ impl Recorder {
         row.extend(self.variety(w));
         // Members the monthly merge joined however unlike in the year (the safeguard past twice `crowd`, `body::crowd`).
         row.push(("merged_unlike".to_string(), "1/yr", self.social.unlike));
+        // Members that joined a node (merged monthly, or children joining) whose means differ by more than `alike` steps in some gene.
+        row.push(("merged_wide".to_string(), "1/yr", self.social.wide));
         // Traffic: share of crossings on the top 2% cells, their overlap with the top cells a
         // decade ago, and the body mass per area there and on other land.
         let (traffic, gn) = (&w.diag.traffic, w.grid.n());

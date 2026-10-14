@@ -593,8 +593,9 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
 /// upkeep's worth, so a body never stops short of what it burns (burning leaves its liquid
 /// product in the body, 13 Oct 2026); a body with no fuel takes what it reaches.
 /// Before, a body past `full` took at the rate of `full` and swelled when it could not pay for
-/// its children (review 3, M2), and a body below it took three to six times what it used.
-pub(crate) fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
+/// its children (review 3, M2), and a body below it took three to six times what it used. The
+/// target is capped at what the body could take by its size in the time (review 6, finding 13).
+pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
     let (p, t) = (&w.cfg.phys, b.temp(&w.chem));
     let heat = |k: usize| if w.chem.phase(k, t) == Phase::Gas { 0.0 } else { b.k.burn.iter().filter_map(|&(r, e)| w.chem.reactions[r].inputs.iter().find(|x| x.0 as usize == k).map(|x| e / x.1 as f64)).fold(0.0, f64::max) };
     let got: f64 = m.iter().enumerate().map(|(k, a)| a * heat(k)).sum();
@@ -608,7 +609,12 @@ pub(crate) fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
     if fuel <= 0.0 || rel <= 0.0 {
         return;
     }
-    let can = ((up + p.c_build * b.equiv(p, mass) / p.m_ref * days) * fuel / rel - fuel).max(up);
+    // `rel` is small for a large `fuel` when gas or catalysts, not the fuel, limit the burning
+    // (under liquid, unfolded): the target then grows without bound. A body takes no more than
+    // its size allows (`Physics::take` x days x `equiv`, the cap of every take) whatever it could
+    // use, so `can` stops at the heat of that much of the best fuel taken (review 6, finding 13).
+    let best = m.iter().enumerate().filter(|&(_, &a)| a > 0.0).map(|(k, _)| heat(k) / w.chem.subs[k].molar_mass).fold(0.0, f64::max);
+    let can = ((up + p.c_build * b.equiv(p, mass) / p.m_ref * days) * fuel / rel - fuel).min(p.take * days * b.equiv(p, mass) * best).max(up);
     if got > can {
         m.iter_mut().enumerate().filter(|&(k, _)| heat(k) > 0.0).for_each(|(_, a)| *a *= can / got);
     }

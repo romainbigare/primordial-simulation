@@ -474,6 +474,7 @@ web/        WebAssembly bindings, Web Worker, 2D map viewer (TypeScript)
     - `root_<k>_kg` (kg) is the kind's whole mass: its members times the mean member's mass (`root_<k>_mass`), printed next to `root_<k>_members`. Read who took over by this column, not by members: a node of 10^8 small bodies and one big tree weigh very differently from how they count.
     - `mass_max_root` is the starting kind (`Lineage::root`, the same `<k>`) of the heaviest member, the one `mass_max` reports (`nan` with no live body). If two members weigh the same, the one later in the list of bodies is named.
     - `merged_unlike` (members a year) is how many members the monthly merge joined however unlike, the safeguard of 7.1 that works past twice `Config::crowd` nodes in a cell. It counts the members of the smaller node of each such pair. It is a plain counter in the core (`Diag::unlike`, not saved, so snapshots keep their format) and changes nothing in the run. If it is more than a few per cent of the animals' members in a year, the ceiling is too low or the join rule too strict. The yearly line of `ew run` prints it too ("merged unlike N/yr").
+    - `merged_wide` (members a year, 15 Oct 2026, review 6, finding 7) is how many members joined a node whose means differ from it by more than `Physics::alike` steps in some gene (`copy::alike` on the means): through the monthly merge (`body::crowd`, which below twice `crowd` joins only alike nodes but past it the most alike pairs however unlike, and the pairs "within each other's spread") or as children (`copy::copy`, which join a node within its spread, up to 2 standard deviations beyond `alike`). `merged_unlike` sees only the merges past twice `crowd`, so 0 there said little about the join rules; every unlike merge is wide, so `merged_wide` is never below `merged_unlike`. A plain counter in the core (`Diag::wide`, not saved) and changes nothing in the run. The yearly line of `ew run` prints it ("wide N/yr"). Read it next to `merged_unlike`.
   - **`physics.json`** is written next to `series.csv`: the run's `Physics` (key `physics`) and `Config` (key `config`, without its `phys`) as they were when the recorder was made, one field a line, keys sorted. A resumed run writes the numbers of its snapshot. Two runs' numbers are compared with `ew numbers OLD NEW`, where each is a run's directory or a `physics.json`. It prints a table of the fields that differ, `name`, `old`, `new` (names like `physics.alike` or `config.crowd`; a field only one file has reads `-`), or "the numbers are the same". A report's "what we built" table can quote it, so no number changes without the reader seeing it. Example, two roster runs at seed 1, one with `--crowd 1 --sun 1.02`:
 
     ```
@@ -952,6 +953,17 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   ordinary eaters' children joined the 48-unit nodes within a year (likeness left the brain sizes
   out), so the big brain was averaged down to 12, not tested. Since review 5 likeness counts the
   sizes by whole units (7.1), so the test can be run as meant.
+  **Made fair (15 Oct 2026, review 6, finding 3):** the old test placed a kind with hand-set biases against
+  neutral eaters, and a control with the same biases did as well. `--clever-year N` now calls
+  `worldgen::life::seed_clever`: it copies `--clever-n` (300) living ordinary eaters (genes, born rows, the
+  store of one member, booked as an edit) twice into the same cells, one set with the big brain (48 hidden,
+  12 memory, 6 seen, sight 3; base and rows carried over by `rebase`/`rerow`; root 2), one with its sizes
+  unchanged (the control; root `KINDS.len()` = 11), and prints a seeding line. No hand-set biases. The old
+  row 2 of `KINDS` stays for the numbering. **Doubt:** the control has the ordinary eaters' genes, so its
+  nodes and its children are alike to theirs and so, it seems (births of the root are counted at the parent, its members are not), join them (7.1), and its root runs out (seed 1, 64 x 64,
+  placed at year 40: 4 members at year 50, none at 55) while the big-brain kind, whose sizes are never alike
+  to theirs, keeps its nodes apart; read the big-brain kind against the ordinary eaters (root 1), and keep in
+  mind that kinds that cannot merge also differ in how their nodes pool.
 - **The roster world lost small plants, not plants (review 5).** Its plant mass is as large as the
   normal run's; the big slow kind won by shade. Since review 5 every animal kind evolves small
   instead (eaters 63 kg to 0.2 kg in 100 years, watch report 6): intake, building and basal upkeep

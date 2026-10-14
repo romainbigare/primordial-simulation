@@ -247,14 +247,17 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let more = if owe > b.paid {
         let r = 0.999 * body::release(w, b, days);
         let spare = if m1 >= full { r } else { b.fuel(&w.chem, b.temp(&w.chem)) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300)) };
-        // Building takes time (14 Oct 2026, review 5): never more than `c_build` x its `equiv` x the days.
-        let build = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, mass) / w.cfg.phys.m_ref * days;
+        // Building takes time (14 Oct 2026, review 5): never more than `c_build` x its `equiv` x the
+        // days. The days since it last paid, at most its interval (review 6, finding 6): a body that
+        // copies past `full` at its update (`body::live`) and again by its brain's choice (`choose::act`)
+        // in the same update pays once.
+        let build = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, mass) / w.cfg.phys.m_ref * days.min(b.paid_day.map_or(days, |d| w.day.saturating_sub(d) as f64));
         (owe - b.paid).min(spare).min(r).min(build)
     } else {
         0.0
     };
     if more > 0.0 && body::pay(w, b, more, days) {
-        b.paid += more;
+        (b.paid, b.paid_day) = (b.paid + more, Some(w.day));
     }
     let p = if owe > 0.0 { (b.paid / owe).min(1.0) } else { 1.0 };
     let (i, births) = (b.cell as usize, if n > 1.0 { n * k * p } else { (k * p + 1e-9).floor() });
@@ -450,6 +453,11 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 /// genes stay in the spread, not only in the mean.
 pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
+    // A tally for the tape: the members joined whose means are not alike (the monthly merge only
+    // joins alike nodes below twice `crowd`; children join within their spreads).
+    if !alike(&Layout::of(&w.chem), w.cfg.phys.alike, &o.genes, &c.genes) {
+        w.diag.wide += c.n();
+    }
     take_in(w, &mut o, c, Some(rows));
     w.life.bodies[t] = o;
 }
@@ -472,7 +480,7 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
     }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     // A node has no wear: its members are of all ages (`body::live`).
-    (o.e, o.count, o.paid, o.wear) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0);
+    (o.e, o.count, o.paid, o.wear, o.paid_day) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0, o.paid_day.max(c.paid_day));
     o.vis = o.visible(&w.chem, &w.cfg.phys);
 }
 

@@ -37,7 +37,7 @@ fn main() {
             // The detailed form to check the nodes against: animals are all individuals (light-eaters stay nodes).
             w.cfg.nodes = !args.has("--individuals");
             w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
-            // Watch runs keep the moisture path at 3 days: the rivers stay whole (`Config::air_days`).
+            // Watch runs keep the moisture path at 3 days, the default of `Config::exchange_days` (the rivers stay whole, `Config::air_days`); kept a multiple of `air_days` and no more than `flow_days` when those are set.
             w.cfg.exchange_days = args.get("--exchange-days", 3u32.min(w.cfg.flow_days).max(w.cfg.air_days));
             let absorber = args.get("--absorber", 1.0);
             let na = w.grid.na();
@@ -57,7 +57,7 @@ fn main() {
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--roster (place the ten kinds of worldgen::life::ROSTER, each at its year after the first life, instead of the two: light-eaters first, eaters of remains at +10, eaters of light-eaters at +20, eaters of eaters at +24)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--split-rows] [--individuals (animals are never nodes: children placed as individuals, no merge, no split; light-eaters stay nodes)] [--null (learning and imitation off, brain rows frozen: the run to compare a seed with)] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew numbers OLD NEW (the fields of Physics and Config that differ between two runs: name, old, new; each a run's directory or its physics.json)\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--roster (place the ten kinds of worldgen::life::ROSTER, each at its year after the first life, instead of the two: light-eaters first, eaters of remains at +10, eaters of light-eaters at +20, eaters of eaters at +24)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--split-rows] [--individuals (animals are never nodes: children placed as individuals, no merge, no split; light-eaters stay nodes)] [--null (learning and imitation off, brain rows frozen: the run to compare a seed with)] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (copies of N living eaters, --clever-n (300), twice: one set with a big brain, one with the brain unchanged, each its own kind)]\n  ew chem [--seed N]\n  ew numbers OLD NEW (the fields of Physics and Config that differ between two runs: name, old, new; each a run's directory or its physics.json)\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -85,15 +85,19 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     // Every report says whether this is the real run or its null run (a resumed run keeps the snapshot's).
     println!("config: seed {}, {}x{}, {}, nodes {}", w.seed, w.grid.w, w.grid.h, if w.cfg.null { "NULL RUN (learning off, imitation off, brain rows frozen)" } else { "real run" }, if w.cfg.nodes { "on (animals may be nodes)" } else { "OFF (--individuals: animals are individuals, light-eaters nodes)" });
     let how = worldgen::life::Seeding { hand: [a.has("--plant-bias"), a.has("--eater-bias")], rounds: a.get("--spray", 20u32), size: a.get("--spray-size", 0.2f32), genes: a.get("--spray-genes", 3.0f32) };
-    // What is placed and when: the two starting kinds, or with `--roster` the ten of `worldgen::life::ROSTER`; then the clever lineage if asked.
+    // What is placed and when: the two starting kinds, or with `--roster` the ten of `worldgen::life::ROSTER`; the big-brain test (`seed_clever`) at its own year.
     let kinds: Vec<usize> = if a.has("--roster") { worldgen::life::ROSTER.to_vec() } else { vec![0, 1] };
-    let plan: Vec<(usize, i64)> = kinds.iter().map(|&k| (k, life_year + worldgen::life::KINDS[k].year)).chain([(2, clever)]).collect();
+    let plan: Vec<(usize, i64)> = kinds.iter().map(|&k| (k, life_year + worldgen::life::KINDS[k].year)).collect();
     for y in y0 + 1..=y0 + years {
         // First light-eaters; once they have spread, the others (each kind at its own year after the first life).
         for &(kind, at) in &plan {
-            if (life_year >= 0 || kind == 2) && at >= 0 && y as i64 - 1 == at {
+            if life_year >= 0 && at >= 0 && y as i64 - 1 == at {
                 println!("{}", worldgen::life::seed_with(&mut w, kind, &how));
             }
+        }
+        // The big-brain test: copies of living eaters, with the big brain and with the brain unchanged (a control).
+        if clever >= 0 && y as i64 - 1 == clever {
+            println!("{}", worldgen::life::seed_clever(&mut w, a.get("--clever-n", 300usize)));
         }
         for _ in 0..w.cfg.months_per_year {
             let mut t = Instant::now();
@@ -125,7 +129,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             let us = part[2].as_secs_f64() * 1e6 / (w.life.updates - upd).max(1) as f64;
             let ms_tape = tape.as_secs_f64() * 1000.0 / (y - since) as f64;
             (since, upd) = (y, w.life.updates);
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), merged unlike {:.0}/yr, gifts {}/yr, watches {}/yr", w.ledger.clamped_heat, w.life.at.iter().map(|v| v.len()).max().unwrap_or(0), m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count(), w.diag.splits[0], w.diag.splits[1], rec.last("kinds"), rec.last("kinds_members"), rec.last("merged_unlike"), rec.last("gave"), rec.last("watched"));
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), merged unlike {:.0}/yr, wide {:.0}/yr, gifts {}/yr, watches {}/yr", w.ledger.clamped_heat, w.life.at.iter().map(|v| v.len()).max().unwrap_or(0), m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count(), w.diag.splits[0], w.diag.splits[1], rec.last("kinds"), rec.last("kinds_members"), rec.last("merged_unlike"), rec.last("merged_wide"), rec.last("gave"), rec.last("watched"));
             busy += part.iter().sum::<Duration>() + tape;
             (part, tape) = ([Duration::ZERO; 4], Duration::ZERO);
             render::save(&w, &format!("{out}/year{y:04}.png"));

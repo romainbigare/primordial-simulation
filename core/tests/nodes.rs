@@ -426,16 +426,21 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
 
 /// With `Config::nodes` off, more than `crowd` alike animals in one cell stay individuals at the
 /// month's start (with nodes on they merge, `crowded_individuals_merge_into_a_node`), and over
-/// three years of the whole world no animal becomes a node; light-eaters still are nodes. Matter
-/// and energy are kept exactly.
+/// three years of the whole world no animal becomes a node; light-eaters still are nodes. The
+/// animals are the hand-set eaters (`Seeding::old`, which find what they eat), so that some live and breed
+/// through the window: the check is empty when none do (review 6, finding 10: with the default
+/// neutral start 7, 2, 1, 1, 1 and then 0 animals were alive at months 6 to 36). Matter and
+/// energy are kept exactly.
 #[test]
 fn individuals_mode_merges_no_animal() {
+    use pcore::event::EventKind;
     let mut w = worldgen::new_world(1, 32, 32);
     w.cfg.nodes = false;
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
     pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    let old = worldgen::life::Seeding::old();
+    worldgen::life::seed_with(&mut w, 0, &old);
+    worldgen::life::seed_with(&mut w, 1, &old);
     let animal = |w: &pcore::World, b: &Body| !pcore::body::light_eater(&w.chem, &b.genes);
     assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal was placed as a node");
     let a = w.life.alive().find(|b| animal(&w, b)).expect("an animal");
@@ -448,10 +453,19 @@ fn individuals_mode_merges_no_animal() {
     let n = here(&w);
     pcore::body::survey(&mut w);
     assert_eq!(here(&w), n, "animals merged");
+    // Animals alive at the end of each month, and animals born in the window (members).
+    let (mut alive, mut born) = (Vec::new(), 0.0);
+    w.events.clear();
     for _ in 0..36 {
         pcore::step(&mut w);
         assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal became a node");
+        born += w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { cat, .. } if cat < pcore::body::LIGHT_EATER)).map(|e| e.value).sum::<f64>();
+        w.events.clear();
+        alive.push(w.life.alive().filter(|b| animal(&w, b)).count());
     }
+    println!("animals alive at the end of each month: {alive:?}; born in the window {born}");
+    assert!(alive.last().is_some_and(|&a| a > 0), "no animal was alive at the end: {alive:?}");
+    assert!(born > 0.0, "no animal was born in the window: {alive:?}");
     assert!(w.life.alive().any(|b| !animal(&w, b) && b.count > 1.0), "no light-eater node");
     assert_eq!(check::broken(&w), None);
     let (de, dq) = check::drift(&w, &t0, &l0);
