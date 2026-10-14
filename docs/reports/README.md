@@ -35,3 +35,10 @@ folder with the same name as the report.
   intake with mass^0.75; speed rows), with 100-year checks at 64 x 64: lives of 50 to 90 days, the
   big-brain test diluted by joining, and the roster world losing its plants with old and new laws
   alike, 14 October 2026. Chart and pictures in `watch-5-before-m4/`.
+- `review-5-before-m4.md`: the fifth review, 14 October 2026, on watch report 5's two open
+  problems, from the code and the numbers only (nothing run): lives are short because births are
+  fast (a member's real life is one over its birth rate, and nothing makes building a body take
+  time); the roster did not lose its plants but its small plants (the big kind won by shade; by
+  mass the plants are as before), the giants are the plant-size runaway (leaf and height go with
+  the whole mass) and the tiny eaters of remains live at an eighth of the cost because strength 0
+  costs nothing; three free numbers to add before the 300-year runs.
