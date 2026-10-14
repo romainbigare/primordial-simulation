@@ -111,7 +111,7 @@ fn info(sig: &[[[[f64; 4]; 2]; 3]], c: usize) -> f64 {
 }
 
 /// Sums over the live members of one starting kind (`Recorder::push_series`): members, bodies, member-years of life,
-/// mass (kg), member-copy-mass (kg), the genes of `GENES` (by members), and per catalyst gene the sum over the members
+/// mass (kg), body matter (kg), body (kg, `Body::size`), member-copy-mass (kg), the genes of `GENES` (by members), and per catalyst gene the sum over the members
 /// that carry it on and the members that do.
 #[derive(Clone)]
 struct Root {
@@ -119,6 +119,8 @@ struct Root {
     bodies: f64,
     life: f64,
     mass: f64,
+    matter: f64,
+    body: f64,
     copy_mass: f64,
     genes: [f64; 6],
     cat: Vec<(f64, f64)>,
@@ -126,7 +128,7 @@ struct Root {
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, copy_mass: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -508,6 +510,8 @@ impl Recorder {
                 r.bodies += 1.0;
                 r.life += n * life_years(w, b);
                 r.mass += b.mass(&w.chem);
+                r.matter += w.chem.matter().map_or(0.0, |m| b.store[m] * w.chem.subs[m].molar_mass);
+                r.body += b.size(&w.chem);
                 r.copy_mass += n * b.dec(pcore::body::COPY_MASS);
                 for (x, g) in r.genes.iter_mut().zip(GENES) {
                     *x += n * b.gene(g);
@@ -570,7 +574,8 @@ impl Recorder {
         ]);
         // Per starting kind: members, bodies, the members' mean life at their upkeep now (years) and repair gene (the
         // old four), then what happened in the year (members born and died by cause, `life_real`: the standing members
-        // over the year over the deaths in it, years), and the means by members: mass (kg), copy mass (kg), the genes
+        // over the year over the deaths in it, years), and the means by members: mass (kg), copy mass (kg, the gene: the body it copies
+        // at), `matter` (the share of the members' mass that is body matter, 14 Oct 2026), `body` (kg, `Body::size`), the genes
         // (log10, except `hidden`, units) and, for each catalyst gene on in some member of the kind so far, its mean over
         // the members that carry it on (log10) and the share of members that carry it on.
         let ever: BTreeSet<(usize, usize)> = self.series.iter().filter_map(|c| c.0.strip_prefix("root_")?.split_once("_cat_")).filter_map(|(k, r)| Some((k.parse().ok()?, r.parse().ok()?))).collect();
@@ -587,6 +592,8 @@ impl Recorder {
                 (c("life_real"), "yr", if d.iter().sum::<f64>() > 0.0 { stand / d.iter().sum::<f64>() } else { f64::NAN }),
                 (c("mass"), "kg", per(v.mass)),
                 (c("copy_mass"), "kg", per(v.copy_mass)),
+                (c("matter"), "1", if v.mass > 0.0 { v.matter / v.mass } else { f64::NAN }),
+                (c("body"), "kg", per(v.body)),
             ]);
             row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
