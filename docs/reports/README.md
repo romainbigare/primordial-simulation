@@ -65,3 +65,7 @@ folder with the same name as the report.
   number labels; a fair big-brain test): eaters keep 45 to 65 kg and live 0.4 to 0.9 years, the big
   hunters survive; the "built mass" law did not work (all animals died, as body and fuel store are
   one here) and is kept as a patch, 14 October 2026.
+- `watch-8-before-m4.md`: body matter split from food storage (the owner's decision): a body
+  builds its matter from sugar within its allowance, eaters digest what they take, size is the body,
+  stores are carried by the body and a full store is the satiety; eaters live 0.81 to 0.94 years,
+  21 of 21 roster kinds live; the owner's question on building costs per kind, 14 October 2026.
