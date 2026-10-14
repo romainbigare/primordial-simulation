@@ -296,12 +296,24 @@ impl Body {
     /// genes set), times the count. What a member holds past that is held matter, not body: it
     /// takes, sweeps, soaks up, catches (light and rain, on its capture area) and receives no more
     /// than at full (`phys.take`, `phys.sweep`, the liquid exchange, `LEAF`, gifts), and copies
-    /// what it can pay for (`copy`).
+    /// what it can pay for (`copy`). What a member takes, sweeps and receives goes with this to the
+    /// power `phys.intake_exp` (`intake`); light, rain, liquid and gas go by area.
     /// With all of this going with its whole mass, a body that could not pay for its children
     /// took more the more it held and grew without end (members of 10^7 kg, 95% liquid, at year
     /// 100 of a 128x128 world, review 3, M2).
     pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
         mass.min(p.full * self.dec(COPY_MASS) * self.n())
+    }
+    /// Mass-equivalent that a body takes, sweeps and receives as a gift by (kg, in place of `work`):
+    /// per member `intake_ref` times its mass that works over `intake_ref`, to the power
+    /// `intake_exp` (0.75), times the count. A member of `intake_ref` (1 kg) takes as before (`take`
+    /// per kg per day); one of 30 kg 30^0.75 = 12.8 kg-equivalents, 2.3 times less per kg; of 10 t,
+    /// 1,778, so it takes 180 times what a 10 kg one (10^0.75 = 5.6) does, not 1,000. Past `full`
+    /// times its copy mass a member takes at the rate of `full`, as with `work`. Light, rain and
+    /// liquid go by area, not by this.
+    pub fn intake(&self, p: &crate::Physics, mass: f64) -> f64 {
+        let n = self.n();
+        n * p.intake_ref * (self.work(p, mass) / n / p.intake_ref).powf(p.intake_exp)
     }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
     /// (its mass that works times `LEAF`, as `visible` and the light code count it) plus its skin,
