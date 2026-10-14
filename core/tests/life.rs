@@ -178,6 +178,7 @@ fn crowded_individuals_merge_into_a_node() {
     pcore::body::survey(&mut w);
     let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
     assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
+    assert_eq!(w.diag.wide, 0.0, "alike bodies merged and some were counted wide");
     pcore::step(&mut w);
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
@@ -204,6 +205,8 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     let before: f64 = here(&w).iter().sum();
     pcore::body::survey(&mut w);
     let after = here(&w);
+    // Copy masses 0.3 apart are 1.5 steps apart each (`alike` is 4): merges of the ends are wide, and every unlike merge (past twice `crowd` nodes) is wide too.
+    assert!(w.diag.wide > 0.0 && w.diag.unlike <= w.diag.wide, "wide {} unlike {}", w.diag.wide, w.diag.unlike);
     assert!(after.len() <= w.cfg.crowd, "{} nodes left", after.len());
     assert!((after.iter().sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);

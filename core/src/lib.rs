@@ -580,6 +580,12 @@ pub struct Diag {
     /// it (not saved, so a saved state keeps its format).
     #[serde(skip)]
     pub unlike: f64,
+    /// Members that joined a node (the monthly merge, `body::crowd`, and a child's join, `copy::copy`)
+    /// whose means differ from the node's by more than `Physics::alike` steps in some gene
+    /// (`copy::alike`), since the shell last read them: the wider event `unlike` does not see
+    /// (review 6, finding 7). A count only, not saved.
+    #[serde(skip)]
+    pub wide: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

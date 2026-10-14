@@ -453,6 +453,11 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 /// genes stay in the spread, not only in the mean.
 pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
+    // A tally for the tape: the members joined whose means are not alike (the monthly merge only
+    // joins alike nodes below twice `crowd`; children join within their spreads).
+    if !alike(&Layout::of(&w.chem), w.cfg.phys.alike, &o.genes, &c.genes) {
+        w.diag.wide += c.n();
+    }
     take_in(w, &mut o, c, Some(rows));
     w.life.bodies[t] = o;
 }
