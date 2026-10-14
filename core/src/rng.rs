@@ -22,6 +22,8 @@ pub enum Purpose {
     Bond,
     Chem,
     Split,
+    /// Whether a frozen individual dies (`body::live`)
+    Frost,
 }
 
 pub struct Rng(u64);

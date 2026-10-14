@@ -68,6 +68,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::LEAF => (0.3, -4.0, 1.0),
         body::STRENGTH => (0.1, 0.0, 1.0),
         body::CHILD => (0.05, 0.05, 0.5),
+        body::WET => (0.05, -3.0, 0.5),
         body::COPY_MASS => (0.2, -3.0, 6.0),
         body::INTERVAL => (0.2, 0.7, 2.556),
         body::MUT => (0.2, -3.0, 0.0),
@@ -264,7 +265,8 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
         return false;
     }
     let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
-    let room = p.c_build * b.equiv(p, mass) / p.m_ref * days.min(ivl);
+    // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
+    let room = p.c_build * b.equiv(p, mass) / p.m_ref * days.min(ivl) * b.activity(chem, p);
     let r = 0.999 * body::release(w, b, ivl);
     if room <= 0.0 || r <= 0.0 {
         return false;
@@ -387,6 +389,7 @@ pub fn near(chem: &crate::chem::Chemistry, full: f64, a: &Body, b: &Body) -> boo
 fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f64, node: bool, alone: bool, id: u64, r: &mut Rng) {
     let lay = Layout::of(&w.chem);
     let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, r);
+    let wet_share = (share * 10f64.powf(b.gene(body::WET))).min(1.0);
     let mut c = Body {
         cell: cell as u32,
         count: m,
@@ -394,8 +397,10 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f6
         parent: id,
         born: w.day,
         mark: w.light[cell],
+        // A child gets the share of every store but the key liquid, which it gets 10^`WET` times that
+        // (at most all of it): a child of a parent whose `WET` is below 0 is dry, and nearly dormant.
         e: b.e * share,
-        store: b.store.iter().map(|a| a * share).collect(),
+        store: b.store.iter().enumerate().map(|(k, a)| a * if b.wet >> k & 1 == 1 { wet_share } else { share }).collect(),
         genes,
         spread,
         genome: b.genome,
@@ -404,6 +409,12 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f6
         wet: b.wet,
         ..Default::default()
     };
+    // With a share of the liquid unlike that of the rest, the child's heat is that of its parent's
+    // temperature on the heat capacity it got, so it starts as warm as its parent (a dry child would
+    // else be much hotter, a wet one colder); the parent keeps the rest.
+    if wet_share != share {
+        c.e = b.e * c.heat_cap(&w.chem) / b.heat_cap(&w.chem).max(1e-9);
+    }
     b.e -= c.e;
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;
@@ -465,7 +476,9 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f6
     own(w, b, &mut c);
     // Its key liquids first: `visible` reads the body (`Body::size`) through them. (Set together in
     // one tuple, the leaf of a newborn was that of its matter alone until its first update.)
-    c.wet = c.key_liquids(&w.chem);
+    // (A parent that survived a freezing (`body::live`) is still wet in the sense of its key liquids: its
+    // child's are kept though it is born frozen.)
+    c.wet = c.key_liquids(&w.chem) | (b.wet & c.key_mask(&w.chem));
     c.vis = c.visible(&w.chem, &w.cfg.phys);
     let delay = c.interval();
     let s = w.life.add(c, w.day, delay);

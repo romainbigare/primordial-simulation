@@ -138,12 +138,16 @@ struct Root {
     past_copy: f64,
     past_full: f64,
     genes: [f64; 6],
+    /// Activity (`Body::activity`) summed over the members, the members below 0.5, and the `WET` gene by members
+    act: f64,
+    dry: f64,
+    wet: f64,
     cat: Vec<(f64, f64)>,
 }
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, past_full: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, past_full: 0.0, genes: [0.0; 6], act: 0.0, dry: 0.0, wet: 0.0, cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -546,6 +550,8 @@ impl Recorder {
                 let grown = b.built(&w.chem) / n / b.dec(pcore::body::COPY_MASS);
                 r.past_copy += n * (grown >= 1.0) as u8 as f64;
                 r.past_full += n * (grown >= w.cfg.phys.full) as u8 as f64;
+                let a = b.activity(&w.chem, &w.cfg.phys);
+                (r.act, r.dry, r.wet) = (r.act + n * a, r.dry + n * (a < 0.5) as u8 as f64, r.wet + n * b.gene(pcore::body::WET));
                 for (x, g) in r.genes.iter_mut().zip(GENES) {
                     *x += n * b.gene(g);
                 }
@@ -635,6 +641,10 @@ impl Recorder {
                 (c("died_adult"), "1/yr", adult),
                 (c("life_adult"), "yr", if adult > 0.0 { stand_adult / adult } else { f64::NAN }),
                 (c("moves"), "1/yr", if stand > 0.0 { st.moves.get(k).copied().unwrap_or(0.0) / stand } else { f64::NAN }),
+                // 14 Oct 2026: the mean activity of the members (`Body::activity`), the share of them below 0.5, and the `WET` gene.
+                (c("activity"), "1", per(v.act)),
+                (c("dry"), "1", per(v.dry)),
+                (c("wet_gene"), "log10", per(v.wet)),
             ]);
             row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
