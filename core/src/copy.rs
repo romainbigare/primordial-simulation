@@ -64,6 +64,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::SIGHT => (0.07, 1.0, 4.0),
         body::DISPERSE => (0.05, 0.0, 1.0),
         body::DENATURE => (5.0, 250.0, 450.0),
+        body::REPAIR => (0.2, -3.0, 3.0),
         g if g < lay.min => (0.3, -6.0, 18.0),
         g if g < lay.upt => (0.05, -1.0, 0.9),
         g if g < lay.keep => (0.2, -4.0, 2.0),
@@ -435,7 +436,8 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: &[f32]) {
     let (genes, born) = (mix(&o.genes, &c.genes), mix(born, rows));
     w.life.reborn(o, genes, born);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
-    (o.e, o.count, o.paid) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid);
+    // A node has no wear: its members are of all ages (`body::live`).
+    (o.e, o.count, o.paid, o.wear) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0);
     o.vis = o.visible(&w.chem, w.cfg.phys.full);
 }
 
@@ -532,7 +534,8 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 /// body can (plan 7.1): its genes the node's plus noise of their spread (shrunk near a wall, so
 /// it is never clamped, as in `vary`), a share 1/count of its stores and heat (`part`). The
 /// node's genes and spread become those of the others (so the member going back, `take_in`,
-/// gives them back). Placed; returns its slot.
+/// gives them back). Its wear is drawn uniform in [0, 1): members who each live as long are of
+/// all ages evenly, so members split off die at the rate the node's members die (`body::live`). Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     let (mut c, mut genes) = (part(b, 1.0 / b.count), b.genes.clone());
@@ -547,7 +550,7 @@ pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     }
     let rows = w.life.born(b).to_vec();
     w.life.reborn(b, genes, rows);
-    (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
+    (c.count, c.spread, c.row_spread, c.wear) = (1.0, Vec::new(), 0.0, r.f64());
     own(w, b, &mut c);
     w.diag.splits[1] += 1.0;
     let delay = c.interval();

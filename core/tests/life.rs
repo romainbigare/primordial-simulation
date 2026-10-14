@@ -560,3 +560,65 @@ fn a_body_with_no_brain_lives_and_copies() {
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// Living wears a body (14 Oct 2026): an individual dies of age when the energy its upkeep turned
+/// over per kg reaches `e_life` x 10^REPAIR, and a node of the same members loses that share of
+/// them at each update, so its members' mean life is the same. More repair: a longer life (8 times
+/// per unit) at a higher upkeep (1.25 times per unit). Matter and energy are kept exactly.
+#[test]
+fn bodies_die_of_age_by_their_rate_of_living() {
+    use pcore::body::{Lineage, AGE, DISPERSE, REPAIR, STRENGTH};
+    use pcore::event::EventKind;
+    use pcore::{brain, choose};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
+    // Starting eaters (30 kg, under their copy mass) whose brain only rests, weak so their stores last.
+    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let mut rest = [-8.0; brain::FIXED];
+    rest[0] = 8.0;
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let l = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });
+    let make = |w: &mut pcore::World, i: usize, repair: f32, count: f64| {
+        let g = w.life.new_genome(rows.clone());
+        let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
+        (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR]) = (0.0, 0.0, repair);
+        // A node of `count` such members (its matter and energy booked as an edit).
+        for k in 0..w.chem.ns() {
+            w.chem.add_elems(k, (count - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
+            (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (count - 1.0) * b.store[k] * w.chem.subs[k].hf, count * b.store[k]);
+        }
+        (w.ledger.imposed_energy, b.e, b.count) = (w.ledger.imposed_energy + (count - 1.0) * b.e, count * b.e, count);
+        b.prepare(&w.chem, &w.cfg.phys);
+        let (d, m) = (b.interval() as f64, b.mass(&w.chem));
+        let u = pcore::body::upkeep(w, &b, d, m) / (d * m);
+        (w.life.add(b, w.day, 1), u)
+    };
+    let (_, ua) = make(&mut w, land[0], 0.0, 1.0);
+    let (_, ub) = make(&mut w, land[land.len() / 2], 0.5, 1.0);
+    let (c, uc) = make(&mut w, land[land.len() - 1], 0.0, 1000.0);
+    assert!((ub / ua - 1.25f64.sqrt()).abs() < 1e-9 && (uc / ua - 1.0).abs() < 1e-9, "upkeep per kg {ua} {ub} {uc}");
+    // A life of 60 days at gene 0 (its upkeep per kg now), 8^0.5 times that at 0.5.
+    let life = 60.0;
+    w.cfg.phys.e_life = life * ua;
+    let (t0, l0, start, n0) = (pcore::check::totals(&w), w.ledger.clone(), w.day, w.life.bodies[c].count);
+    for _ in 0..8 {
+        pcore::step(&mut w);
+    }
+    let aged = |w: &pcore::World| w.events.iter().filter(|e| matches!(e.kind, EventKind::Died { cause: AGE, .. })).map(|e| (e.day - start, e.value)).collect::<Vec<_>>();
+    // The individuals' deaths (one member each) and the node's (a share of its members).
+    let (ones, node): (Vec<_>, Vec<_>) = aged(&w).into_iter().partition(|x| x.1 == 1.0);
+    // The node's mean life: the days its members lived over those who died (it loses a share at
+    // update; it may die of other causes later, so only its age deaths count).
+    let (mut n, mut t, mut lived) = (n0, 0, 0.0);
+    for &(day, dead) in &node {
+        (lived, n, t) = (lived + n * (day - t) as f64, n - dead, day);
+    }
+    let dc = lived / (n0 - n);
+    println!("lives, days: individuals {ones:?} at genes 0 and 0.5 (predicted {life} and {:.0}); node {dc:.1} ({:.0} of {n0} members died of age)", life * 8f64.sqrt(), n0 - n);
+    assert!(ones.len() == 2 && (ones[0].0 as f64 / life - 1.0).abs() < 0.1 && (ones[1].0 as f64 / (life * 8f64.sqrt()) - 1.0).abs() < 0.1, "lives {ones:?}");
+    assert!(node.len() >= 6 && (dc / ones[0].0 as f64 - 1.0).abs() < 0.1, "node: mean life {dc} days against {ones:?}");
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}

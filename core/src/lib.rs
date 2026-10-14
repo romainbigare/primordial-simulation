@@ -185,6 +185,18 @@ pub struct Physics {
     pub c_learn: f64,
     /// Cost of signalling, J per kg per day at signal size 1
     pub c_signal: f64,
+    /// Energy a kg of body can turn over in its upkeep before it is worn out, at a `REPAIR` gene of
+    /// 0, J/kg (`body::live`): it lives 10^gene times this over its upkeep per kg. 10^9 is the
+    /// rate-of-living number of real life (Rubner, 1908): many kinds that move turn over about
+    /// 1,000 kJ per gram of body in a life, whatever their size, as small ones live fast and short
+    /// and big ones slow and long. A starting eater (30 kg, 64 kJ/kg/day) lives 43 years at gene 0, 19 at its -0.4
+    pub e_life: f64,
+    /// Upkeep of repair: each unit of the `REPAIR` gene (ten times the energy per kg) multiplies the upkeep by
+    /// 1 + `c_repair` (less upkeep below 0), so a life is (10 / 1.25)^gene = 8^gene times longer and
+    /// every value of the gene has a cost (with no saving below 0, selection would lift a short life to gene 0 for
+    /// free). 0.25: remaking a body's own matter (mostly its catalysts) takes 20 to 30% of resting
+    /// upkeep in real life, so a tenfold repair costs about that share again
+    pub c_repair: f64,
     // Choose
     /// Energy to move one kg one metre on the flat, J
     pub c_move: f64,
@@ -322,6 +334,8 @@ impl Default for Physics {
             c_sight: 1.5e4,
             c_learn: 3e4,
             c_signal: 2e2,
+            e_life: 1e9,
+            c_repair: 0.25,
             c_move: 3.0,
             rho_pass: 5.0,
             lane: 1.0,

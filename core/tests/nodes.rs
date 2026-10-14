@@ -178,6 +178,8 @@ fn a_node_acts_on_bonds_through_one_member() {
         let hold = case < 2;
         let mut w = worldgen::new_world(1, 16, 16);
         pcore::step(&mut w);
+        // (no member dies of age here, so the node's count is exact)
+        w.cfg.phys.e_life = 1e30;
         let (t0, l0) = (check::totals(&w), w.ledger.clone());
         let (n, ns) = (w.grid.n(), w.chem.ns());
         let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
