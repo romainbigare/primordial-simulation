@@ -5,6 +5,11 @@ version.workspace = true
 
 [dependencies]
 serde.workspace = true
+rayon = { version = "1", optional = true }
+
+[features]
+# Work that is independent per cell or line runs on threads, with the same results (`par`). Not for wasm.
+threads = ["dep:rayon"]
 
 [dev-dependencies]
 worldgen = { path = "../worldgen" }

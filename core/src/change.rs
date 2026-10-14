@@ -579,23 +579,40 @@ pub fn step(w: &mut World, dt: f64) {
         }
         slow[i] = if due { [tick, tick + next as u32, 0] } else { [last, slow[i][1], fasts + 1] };
     }
-    // Air.
-    for j in 0..na {
+    // Air: each node on its own, so from the amounts before the loop (in parallel with the
+    // `threads` feature) into a row [reacted, heat, amounts], then applied in order.
+    let mut rows = vec![0.0; na * (ns + 2)];
+    let (air_now, e_now) = (&w.air, &w.e_air);
+    crate::par::rows(&mut rows, ns + 2, || None, |st: &mut Option<(Reactor, Vec<f64>)>, j, row| {
         let t = ta[j];
-        for k in 0..ns {
-            amt[k] = w.air[k * na + j];
+        let lazy = j % LAZY as usize == turn && !cold(t, in_air[j]);
+        if !air_maybe[j] && !lazy {
+            return;
         }
-        let time = if air_maybe[j] && rc.fastest(chem, &amt, t) * dt >= FAR {
+        let (rc, amt) = st.get_or_insert_with(|| (Reactor::new(chem), vec![0.0; ns]));
+        for k in 0..ns {
+            amt[k] = air_now[k * na + j];
+        }
+        let time = if air_maybe[j] && rc.fastest(chem, amt, t) * dt >= FAR {
             dt
-        } else if j % LAZY as usize == turn && !cold(t, in_air[j]) {
+        } else if lazy {
             dt * LAZY as f64
         } else {
-            continue;
+            return;
         };
-        rc.react(chem, &mut amt, None, &mut w.e_air[j], 0.0, None, 0.0, time);
+        let mut e = e_now[j];
+        rc.react(chem, amt, None, &mut e, 0.0, None, 0.0, time);
         for k in 0..ns {
-            w.e_air[j] -= (amt[k] - w.air[k * na + j]) * held[k];
-            w.air[k * na + j] = amt[k];
+            e -= (amt[k] - air_now[k * na + j]) * held[k];
+        }
+        row[0] = 1.0;
+        row[1] = e;
+        row[2..].copy_from_slice(amt);
+    });
+    for (j, row) in rows.chunks(ns + 2).enumerate().filter(|(_, r)| r[0] != 0.0) {
+        w.e_air[j] = row[1];
+        for k in 0..ns {
+            w.air[k * na + j] = row[2 + k];
         }
     }
     s.slow = slow;

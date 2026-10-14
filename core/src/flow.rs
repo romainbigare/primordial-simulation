@@ -78,12 +78,9 @@ struct Sp {
 /// | `node_tmp` | reused: J/K (S), J (Rad), reflectance (X), Pa (W) | S, Rad, X, W | the same part |
 /// | `warmth`, `grad` | K at equal height, K per node | W | W |
 /// | `cond`, `hk`, `split` | may condense, m, share (per gas) | S | X, W |
-/// | `push` | [mix, overturn, even] mol/s per edge | W | W |
-/// | `to_next`, `to_prev` | edge coefficients, × dt / amount | W | W (`thomas`) |
-/// | `line_x`, `line_c` | line amounts (heat or gas), solver space | W | W |
-/// | `line_gas`, `line_flux` | solved amounts, edge flux per gas, mol | W | W |
-/// | `halves` | [lower, upper] half amounts, mol | W | W |
-/// | `mflux`, `nt_new` | kg per edge, mol | W | W |
+/// | `nt_new` | mol, amounts after the pushes of a direction | W | W |
+/// | `rad` | a row of numbers per ground cell | Rad | Rad |
+/// | `lanes` | a row of fluxes per line of air nodes | W | W |
 /// | `trace` | s, calls | X | X |
 /// | `slow` | [tick last, tick next, count] | Law 2 | Law 2 |
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -195,27 +192,14 @@ pub struct Scratch {
     cond: Vec<bool>,
     hk: Vec<f64>,
     split: Vec<f64>,
-    // One line of air nodes: pushes [mix, overturn, even] per edge, and solver space.
-    #[serde(skip)]
-    push: Vec<[f64; 3]>,
-    #[serde(skip)]
-    to_next: Vec<f64>,
-    #[serde(skip)]
-    to_prev: Vec<f64>,
-    #[serde(skip)]
-    line_x: Vec<f64>,
-    #[serde(skip)]
-    line_c: Vec<f64>,
-    #[serde(skip)]
-    mflux: Vec<f64>,
-    #[serde(skip)]
-    halves: Vec<[f64; 2]>,
-    #[serde(skip)]
-    line_gas: Vec<f64>,
-    #[serde(skip)]
-    line_flux: Vec<f64>,
+    // Amounts of air nodes after the pushes of a direction, mol; the rows of numbers that each
+    // ground cell (`air::radiation`) and each line of air nodes (`air::wind`) make in a call.
     #[serde(skip)]
     nt_new: Vec<f64>,
+    #[serde(skip)]
+    rad: Vec<f64>,
+    #[serde(skip)]
+    lanes: Vec<f64>,
     /// Time since trace gases last evaporated and condensed, s, and the calls since.
     trace: [f64; 2],
     /// Law 2 (`change`): per ground node, the tick it last reacted slowly, the tick it next does,

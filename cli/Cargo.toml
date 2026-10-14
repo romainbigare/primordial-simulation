@@ -12,3 +12,7 @@ pcore = { path = "../core" }
 worldgen = { path = "../worldgen" }
 tape = { path = "../tape" }
 png = "0.17"
+
+[features]
+# Flow and Change on threads (the same results as without).
+threads = ["pcore/threads"]

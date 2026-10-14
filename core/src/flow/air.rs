@@ -163,65 +163,82 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
     s.node_tmp.fill(0.0);
-    let suns = (0..grid.h).map(|y| insolation(cfg.sun, grid.lat(y, cfg.lat_south, cfg.lat_north).to_radians(), decl));
-    for (i, q) in suns.flat_map(|q| std::iter::repeat_n(q, grid.w)).enumerate() {
+    let suns: Vec<f64> = (0..grid.h).map(|y| insolation(cfg.sun, grid.lat(y, cfg.lat_south, cfg.lat_north).to_radians(), decl)).collect();
+    // Each cell's numbers (they depend on no other cell) in a row: [air temperature at the ground,
+    // light it gets, light set aside, shortwave in, heat it gains, heat it gives its air node, heat
+    // it sends to space, heat it could not pay]. Then they are applied in the order of the cells.
+    let mut rows = std::mem::take(&mut s.rad);
+    rows.resize(n * 8, 0.0);
+    let (sc, e_ground_now, canopy_now) = (&*s, &*e_ground, &*canopy);
+    crate::par::rows(&mut rows, 8, || (), |_, i, row| {
+        let q = suns[i / grid.w];
         // The air this cell sees, and its temperature where it touches the ground.
-        let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
-        let ta = ta + s.ta[j] - s.ta0[j];
-        let tl = (ta - gam * (s.head[i] - zair)).max(1.0);
-        let (down, emit) = (glow(f, tl, &s.lay[i][0]), glow(f, tl, &s.lay[i][1]));
-        s.tl[i] = tl;
+        let ([gam, zair, f, c, ta], t, j) = (sc.seen[i], sc.tg[i], sc.air_of[i] as usize);
+        let ta = ta + sc.ta[j] - sc.ta0[j];
+        let tl = (ta - gam * (sc.head[i] - zair)).max(1.0);
+        let (down, emit) = (glow(f, tl, &sc.lay[i][0]), glow(f, tl, &sc.lay[i][1]));
         // Bodies with light-capture area `a` per ground area intercept a share 1 - exp(-a) of
         // what passes the clouds. What they absorb warms the surface now (they hand on all of it
         // as heat) but for the share their light reactions store (as they did at their last
         // update, `Life::keep`): that is set aside, and each takes its share when it updates
         // (`body::live`). Taller members shade smaller ones: each body's mark moves by what its
         // shade gives it more or less than the cell's mean per m² of capture area (`body::shade`).
-        let (a, mut cover, mut caught, mut kept) = (canopy[i] as f64, 0.0, 0.0, 0.0);
+        let (a, mut cover, mut caught, mut kept, mut dl) = (canopy_now[i] as f64, 0.0, 0.0, 0.0, 0.0);
         if a > 0.0 {
             cover = -(-a).exp_m1();
-            let dl = q * (1.0 - c) * cover * dt / a;
-            light[i] += dl;
-            for &b in &life.at[i] {
-                life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&f| f) - 1.0) * dl;
-            }
+            dl = q * (1.0 - c) * cover * dt / a;
             caught = cover * life.absorb.get(i).map_or(0.0, |&x| x as f64);
             kept = q * (1.0 - c) * caught * life.keep.get(i).map_or(0.0, |&x| x as f64);
         }
-        let sw = q * (1.0 - c) * ((1.0 - cover) * (1.0 - s.alb[i]) + caught) - kept;
-        light_pool[i] += adt * kept;
-        sun += adt * kept;
+        let sw = q * (1.0 - c) * ((1.0 - cover) * (1.0 - sc.alb[i]) + caught) - kept;
         // The surface temperature, implicit: heat reaches the surface from the node through
         // its heat capacity over the step (none on a melting plateau, which holds the node
         // still) in series with the conduction of any soft solid cover.
         let t3 = SIGMA * t * t * t;
         let surface = |r: f64| if r > 0.0 { (t / r + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (1.0 / r + 4.0 * t3 + cfg.sensible) } else { t };
         let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), cfg.sensible * (ts - tl));
-        let mut ts = surface(if s.pk[i] != NONE { 0.0 } else { adt / s.cap[i] } + s.rc[i]);
+        let mut ts = surface(if sc.pk[i] != NONE { 0.0 } else { adt / sc.cap[i] } + sc.rc[i]);
         // A plateau holds the node only while its fusion enthalpy lasts: a step that would
         // freeze (or melt) more than the node holds takes it off the plateau, so its heat
         // capacity holds it back like any node's.
-        if s.pk[i] != NONE {
-            let ((up, hs), lat) = (flux(ts), ground[s.pk[i] * n + i] * s.sp[s.pk[i]].lf);
+        if sc.pk[i] != NONE {
+            let ((up, hs), lat) = (flux(ts), ground[sc.pk[i] * n + i] * sc.sp[sc.pk[i]].lf);
             let net = adt * (sw + down - up - hs);
-            if net < -s.phi[i] * lat || net > (1.0 - s.phi[i]) * lat {
-                ts = surface(adt / s.cap[i] + s.rc[i]);
+            if net < -sc.phi[i] * lat || net > (1.0 - sc.phi[i]) * lat {
+                ts = surface(adt / sc.cap[i] + sc.rc[i]);
             }
         }
         let (mut up, mut hs) = flux(ts);
         // A node can pay only what it holds above `T_FLOOR`; if a step would take more, it
         // emits and conducts less in proportion (as `World::take_heat`).
-        let (room, lose) = (crate::heat_above_floor(e_ground[i], s.cap[i]), adt * (up + hs));
+        let (room, lose, mut clamped) = (crate::heat_above_floor(e_ground_now[i], sc.cap[i]), adt * (up + hs), 0.0);
         if lose > room + adt * (sw + down) {
             let lam = (room + adt * (sw + down)) / lose;
-            ledger.clamped_heat += lose * (1.0 - lam);
+            clamped = lose * (1.0 - lam);
             (up, hs) = (up * lam, hs * lam);
         }
-        e_ground[i] += adt * (sw + down - up - hs);
-        s.node_tmp[j] += adt * (f * up + hs - down - emit);
+        *<&mut [f64; 8]>::try_from(row).unwrap() = [tl, dl, kept, sw, adt * (sw + down - up - hs), adt * (f * up + hs - down - emit), adt * ((1.0 - f) * up + emit), clamped];
+    });
+    for (i, row) in rows.chunks_exact(8).enumerate() {
+        let &[tl, dl, kept, sw, gain, to_air, to_space, clamped] = <&[f64; 8]>::try_from(row).unwrap();
+        s.tl[i] = tl;
+        if canopy[i] as f64 > 0.0 {
+            light[i] += dl;
+            for &b in &life.at[i] {
+                life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&f| f) - 1.0) * dl;
+            }
+        }
+        light_pool[i] += adt * kept;
+        sun += adt * kept;
+        if clamped != 0.0 {
+            ledger.clamped_heat += clamped;
+        }
+        e_ground[i] += gain;
+        s.node_tmp[s.air_of[i] as usize] += to_air;
         sun += adt * sw;
-        out += adt * ((1.0 - f) * up + emit);
+        out += to_space;
     }
+    s.rad = rows;
     for j in 0..na {
         e_air[j] += s.node_tmp[j];
         s.ta[j] = e_air[j] / s.capa[j];
@@ -468,22 +485,32 @@ fn thomas(al: &[f64], be: &[f64], x: &mut [f64], c: &mut [f64]) {
     }
 }
 
+/// Work space of the solver for one line of air nodes.
+#[derive(Default)]
+struct Lane {
+    push: Vec<[f64; 3]>,
+    halves: Vec<[f64; 2]>,
+    to_next: Vec<f64>,
+    to_prev: Vec<f64>,
+    x: Vec<f64>,
+    c: Vec<f64>,
+    gas: Vec<f64>,
+}
+
 /// Gas between neighbouring air nodes, by three pushes on each edge: the pressure of the
 /// whole column (p = nRT/V) drives gas from high to low; the warmth difference at equal
 /// height turns the columns over (the lower half flows to the warmer node and the upper half
 /// back, both turned sideways by rotation; condensable gases crowd in the lower half); and
 /// eddies mix the two columns. Solved implicitly along lines (east-west, then north-south),
 /// so any speed is stable; the edge fluxes of the solution are applied to both nodes.
+/// The lines of one direction share no node, so each is solved from the amounts before the
+/// step (in parallel, with the `threads` feature) into a row of numbers, [flux of each gas,
+/// of heat, mass lifted, kg moved] per edge; the rows are applied in the order of the lines.
 pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
     let World { cfg, grid, air, e_air, ledger, .. } = w;
     let (na, aw, ah, ng, g) = (grid.na(), grid.aw(), grid.ah(), s.gas.len(), cfg.gravity);
-    let (side, len_max) = (grid.cell_m * grid.air_scale as f64, aw.max(ah));
-    for v in [&mut s.to_next, &mut s.to_prev, &mut s.line_x, &mut s.line_c, &mut s.mflux] {
-        v.resize(len_max, 0.0);
-    }
-    (s.push, s.halves) = (vec![[0.0; 3]; len_max], vec![[0.0; 2]; len_max]);
-    s.line_gas.resize(ng * len_max, 0.0);
-    s.line_flux.resize(ng * len_max, 0.0);
+    let side = grid.cell_m * grid.air_scale as f64;
+    let mut rows = std::mem::take(&mut s.lanes);
     let mut lift = 0.0;
     for dir in 0..2 {
         s.nt_new.clone_from(&s.nt);
@@ -500,100 +527,119 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
         }
         let (lines, len) = if dir == 0 { (ah, aw) } else { (aw, ah) };
         let node = |line: usize, p: usize| if dir == 0 { line * aw + p } else { p * aw + line };
-        for line in 0..lines {
+        let (flux, heat, lifted, moved, width) = (0, ng * len, (ng + 1) * len, (ng + 2) * len, (ng + 3) * len);
+        rows.resize(lines * width, 0.0);
+        let (sc, air_now, e_now) = (&*s, &*air, &*e_air);
+        crate::par::rows(&mut rows, width, Lane::default, |ln, line, row| {
+            ln.push.resize(len, [0.0; 3]);
+            ln.halves.resize(len, [0.0; 2]);
+            for v in [&mut ln.to_next, &mut ln.to_prev, &mut ln.x, &mut ln.c] {
+                v.resize(len, 0.0);
+            }
+            ln.gas.resize(ng * len, 0.0);
             for p in 0..len - 1 {
                 let (a, b) = (node(line, p), node(line, p + 1));
-                let rho = (s.nt[a] / s.vol[a] + s.nt[b] / s.vol[b]) / 2.0;
-                let depth = cfg.air_top_m - (s.za[a] + s.za[b]) / 2.0;
-                let row = if dir == 0 { line * grid.air_scale + grid.air_scale / 2 } else { (p + 1) * grid.air_scale };
-                let turn = cfg.rotation * grid.lat(row.min(grid.h - 1), cfg.lat_south, cfg.lat_north).to_radians().sin();
-                let across = (s.grad[a][1 - dir] + s.grad[b][1 - dir]) / 2.0;
-                let cap = OVER * s.nt[a].min(s.nt[b]) / dt;
-                let over = (cfg.wind * (s.warmth[b] - s.warmth[a] + turn * across) * rho * side * depth / 2.0).clamp(-cap, cap);
-                let even = EVEN * (s.node_tmp[a] - s.node_tmp[b]) / (s.node_tmp[a] / s.nt[a] + s.node_tmp[b] / s.nt[b]) / dt;
-                s.push[p] = [cfg.mix * rho * depth, over, even];
-                s.mflux[p] = 0.0;
+                let rho = (sc.nt[a] / sc.vol[a] + sc.nt[b] / sc.vol[b]) / 2.0;
+                let depth = cfg.air_top_m - (sc.za[a] + sc.za[b]) / 2.0;
+                let lat_row = if dir == 0 { line * grid.air_scale + grid.air_scale / 2 } else { (p + 1) * grid.air_scale };
+                let turn = cfg.rotation * grid.lat(lat_row.min(grid.h - 1), cfg.lat_south, cfg.lat_north).to_radians().sin();
+                let across = (sc.grad[a][1 - dir] + sc.grad[b][1 - dir]) / 2.0;
+                let cap = OVER * sc.nt[a].min(sc.nt[b]) / dt;
+                let over = (cfg.wind * (sc.warmth[b] - sc.warmth[a] + turn * across) * rho * side * depth / 2.0).clamp(-cap, cap);
+                let even = EVEN * (sc.node_tmp[a] - sc.node_tmp[b]) / (sc.node_tmp[a] / sc.nt[a] + sc.node_tmp[b] / sc.nt[b]) / dt;
+                ln.push[p] = [cfg.mix * rho * depth, over, even];
             }
             // Gases, split into lower and upper halves by the amounts before the step. The
             // overturning moves as much up as down, so any net amount left over on an edge
             // beyond the pressure push is handed back by the node that gained it.
             for p in 0..len {
-                s.halves[p] = [0.0; 2];
+                ln.halves[p] = [0.0; 2];
                 for t in 0..ng {
                     let j = node(line, p);
-                    let a = air[s.gas[t] * na + j];
-                    let u = a * s.split[t * na + j];
-                    s.halves[p][0] += a - u;
-                    s.halves[p][1] += u;
+                    let a = air_now[sc.gas[t] * na + j];
+                    let u = a * sc.split[t * na + j];
+                    ln.halves[p][0] += a - u;
+                    ln.halves[p][1] += u;
                 }
             }
             for t in 0..ng {
                 for p in 0..len - 1 {
                     let (a, b) = (node(line, p), node(line, p + 1));
-                    let [mix, over, even] = s.push[p];
+                    let [mix, over, even] = ln.push[p];
                     let (fp, fm, ep, em) = (over.max(0.0), (-over).max(0.0), even.max(0.0), (-even).max(0.0));
-                    let ([la, ua], [lb, ub]) = (s.halves[p], s.halves[p + 1]);
-                    let (sa, sb) = (s.split[t * na + a], s.split[t * na + b]);
-                    s.to_next[p] = dt * ((mix + ep) / s.nt[a] + fp * (1.0 - sa) / la + fm * sa / ua);
-                    s.to_prev[p] = dt * ((mix + em) / s.nt[b] + fp * sb / ub + fm * (1.0 - sb) / lb);
+                    let ([la, ua], [lb, ub]) = (ln.halves[p], ln.halves[p + 1]);
+                    let (sa, sb) = (sc.split[t * na + a], sc.split[t * na + b]);
+                    ln.to_next[p] = dt * ((mix + ep) / sc.nt[a] + fp * (1.0 - sa) / la + fm * sa / ua);
+                    ln.to_prev[p] = dt * ((mix + em) / sc.nt[b] + fp * sb / ub + fm * (1.0 - sb) / lb);
                 }
-                let k = s.gas[t];
+                let k = sc.gas[t];
                 for p in 0..len {
-                    s.line_x[p] = air[k * na + node(line, p)];
+                    ln.x[p] = air_now[k * na + node(line, p)];
                 }
-                thomas(&s.to_next[..len - 1], &s.to_prev[..len - 1], &mut s.line_x[..len], &mut s.line_c[..len]);
-                s.line_gas[t * len..(t + 1) * len].copy_from_slice(&s.line_x[..len]);
+                thomas(&ln.to_next[..len - 1], &ln.to_prev[..len - 1], &mut ln.x[..len], &mut ln.c[..len]);
+                ln.gas[t * len..(t + 1) * len].copy_from_slice(&ln.x[..len]);
                 for p in 0..len - 1 {
-                    s.line_flux[t * len + p] = s.to_next[p] * s.line_x[p] - s.to_prev[p] * s.line_x[p + 1];
+                    row[flux + t * len + p] = ln.to_next[p] * ln.x[p] - ln.to_prev[p] * ln.x[p + 1];
                 }
             }
             for p in 0..len {
-                s.line_x[p] = (0..ng).map(|t| s.line_gas[t * len + p]).sum();
+                ln.x[p] = (0..ng).map(|t| ln.gas[t * len + p]).sum();
             }
             for p in 0..len - 1 {
-                let (a, b, even) = (node(line, p), node(line, p + 1), s.push[p][2]);
-                let want = dt * (even.max(0.0) * s.line_x[p] / s.nt[a] - (-even).max(0.0) * s.line_x[p + 1] / s.nt[b]);
-                let extra = (0..ng).map(|t| s.line_flux[t * len + p]).sum::<f64>() - want;
+                let (a, b, even) = (node(line, p), node(line, p + 1), ln.push[p][2]);
+                let want = dt * (even.max(0.0) * ln.x[p] / sc.nt[a] - (-even).max(0.0) * ln.x[p + 1] / sc.nt[b]);
+                let extra = (0..ng).map(|t| row[flux + t * len + p]).sum::<f64>() - want;
                 let src = if extra > 0.0 { p + 1 } else { p };
                 for t in 0..ng {
-                    s.line_flux[t * len + p] -= extra * s.line_gas[t * len + src] / s.line_x[src];
+                    row[flux + t * len + p] -= extra * ln.gas[t * len + src] / ln.x[src];
                 }
             }
-            for t in 0..ng {
-                let (k, sp) = (s.gas[t], s.sp[s.gas[t]]);
-                for p in 0..len - 1 {
-                    let (a, b, f) = (node(line, p), node(line, p + 1), s.line_flux[t * len + p]);
-                    air[k * na + a] -= f;
-                    air[k * na + b] += f;
-                    (s.nt_new[a], s.nt_new[b]) = (s.nt_new[a] - f, s.nt_new[b] + f);
-                    (s.capa[a], s.capa[b]) = (s.capa[a] - f * sp.cp, s.capa[b] + f * sp.cp);
-                    (s.mass[a], s.mass[b]) = (s.mass[a] - f * sp.mm, s.mass[b] + f * sp.mm);
-                    s.mflux[p] += f * sp.mm;
+            for p in 0..len - 1 {
+                row[moved + p] = 0.0;
+                for t in 0..ng {
+                    row[moved + p] += row[flux + t * len + p] * sc.sp[sc.gas[t]].mm;
                 }
             }
             // Heat moves with the gas, per mol its node's mean; mass moved up or down is
             // lifted by the heat of the node it enters.
             for p in 0..len - 1 {
-                let (a, b, [mix, over, even]) = (node(line, p), node(line, p + 1), s.push[p]);
-                s.to_next[p] = dt * (mix + over.abs() + even.max(0.0)) / s.nt[a];
-                s.to_prev[p] = dt * (mix + over.abs() + (-even).max(0.0)) / s.nt[b];
+                let (a, b, [mix, over, even]) = (node(line, p), node(line, p + 1), ln.push[p]);
+                ln.to_next[p] = dt * (mix + over.abs() + even.max(0.0)) / sc.nt[a];
+                ln.to_prev[p] = dt * (mix + over.abs() + (-even).max(0.0)) / sc.nt[b];
             }
             for p in 0..len {
-                s.line_x[p] = e_air[node(line, p)];
+                ln.x[p] = e_now[node(line, p)];
             }
-            thomas(&s.to_next[..len - 1], &s.to_prev[..len - 1], &mut s.line_x[..len], &mut s.line_c[..len]);
+            thomas(&ln.to_next[..len - 1], &ln.to_prev[..len - 1], &mut ln.x[..len], &mut ln.c[..len]);
             for p in 0..len - 1 {
                 let (a, b) = (node(line, p), node(line, p + 1));
-                let f = s.to_next[p] * s.line_x[p] - s.to_prev[p] * s.line_x[p + 1];
+                row[heat + p] = ln.to_next[p] * ln.x[p] - ln.to_prev[p] * ln.x[p + 1];
+                row[lifted + p] = g * row[moved + p] * (sc.zair[b] - sc.zair[a]);
+            }
+        });
+        for (line, row) in rows.chunks(width).enumerate() {
+            for t in 0..ng {
+                let (k, sp) = (s.gas[t], s.sp[s.gas[t]]);
+                for p in 0..len - 1 {
+                    let (a, b, f) = (node(line, p), node(line, p + 1), row[flux + t * len + p]);
+                    air[k * na + a] -= f;
+                    air[k * na + b] += f;
+                    (s.nt_new[a], s.nt_new[b]) = (s.nt_new[a] - f, s.nt_new[b] + f);
+                    (s.capa[a], s.capa[b]) = (s.capa[a] - f * sp.cp, s.capa[b] + f * sp.cp);
+                    (s.mass[a], s.mass[b]) = (s.mass[a] - f * sp.mm, s.mass[b] + f * sp.mm);
+                }
+            }
+            for p in 0..len - 1 {
+                let (a, b, f, l) = (node(line, p), node(line, p + 1), row[heat + p], row[lifted + p]);
                 e_air[a] -= f;
                 e_air[b] += f;
-                let l = g * s.mflux[p] * (s.zair[b] - s.zair[a]);
-                e_air[if s.mflux[p] > 0.0 { b } else { a }] -= l;
+                e_air[if row[moved + p] > 0.0 { b } else { a }] -= l;
                 lift += l;
             }
         }
         s.nt.clone_from(&s.nt_new);
     }
+    s.lanes = rows;
     ledger.gravity -= lift;
     for &k in &s.gas {
         for x in &mut air[k * na..(k + 1) * na] {

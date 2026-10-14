@@ -11,6 +11,7 @@ pub mod copy;
 pub mod event;
 pub mod flow;
 pub mod grid;
+pub mod par;
 pub mod rng;
 
 use chem::Chemistry;
