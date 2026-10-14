@@ -139,6 +139,18 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     assert!(col("t_land_swing", last) >= 0.0 && col("t_land_summer", last) >= col("t_land_winter", last));
     // A catalyst gene on in a kind keeps its columns, with the share of members that carry it.
     assert!(head.iter().any(|h| h.starts_with("root_0_cat_") && h.ends_with("_on")));
+    // The kind's mass in kg is its members times its mean member's mass; the heaviest member has a kind; the merge tally is there.
+    for k in &kinds {
+        let (m, mean, kg) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_kg"), last));
+        assert!(m == 0.0 && kg == 0.0 || (kg - m * mean).abs() <= 1e-9 * kg, "root_{k}_kg {kg} members {m} mean {mean}");
+    }
+    assert!(kinds.contains(&(col("mass_max_root", last) as usize)));
+    assert!(col("merged_unlike", last) >= 0.0);
+    // The run's numbers are written beside the series.
+    let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("physics.json")).unwrap()).unwrap();
+    assert_eq!(doc["physics"]["alike"].as_f64().map(|x| x as f32), Some(w.cfg.phys.alike));
+    assert_eq!(doc["config"]["crowd"].as_u64(), Some(w.cfg.crowd as u64));
+    assert!(doc["config"].get("phys").is_none());
 }
 
 /// What a tape folder holds: the viewer file's header and frame bytes, the series rows (as text)

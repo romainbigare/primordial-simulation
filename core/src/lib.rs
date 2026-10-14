@@ -543,6 +543,11 @@ pub struct Diag {
     /// alone (`copy::one`)
     #[serde(default)]
     pub splits: [f64; 2],
+    /// Members merged by the monthly merge however unlike (the safeguard past twice `Config::crowd`
+    /// nodes in a cell, `body::crowd`), since the shell last read them. A count only: nothing reads
+    /// it (not saved, so a saved state keeps its format).
+    #[serde(skip)]
+    pub unlike: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

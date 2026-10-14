@@ -1,6 +1,7 @@
 //! Headless runs, pictures and the history tape.
 
 mod chem;
+mod numbers;
 mod render;
 
 use pcore::World;
@@ -48,12 +49,13 @@ fn main() {
             drive(w, &args, false);
         }
         "chem" => chem::run(&args.0),
+        "numbers" => numbers::run(&args.0),
         "resume" => {
             let from = args.get("--from", String::new());
             drive(tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}")), &args, true);
         }
         _ => println!(
-            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--roster (place the ten kinds of worldgen::life::ROSTER, each at its year after the first life, instead of the two: light-eaters first, eaters of remains at +10, eaters of light-eaters at +20, eaters of eaters at +24)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--split-rows] [--null (learning and imitation off, brain rows frozen: the run to compare a seed with)] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
+            "usage:\n  ew run [--seed N] [--size N] [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N] [--life-year N (-1: none)] [--roster (place the ten kinds of worldgen::life::ROSTER, each at its year after the first life, instead of the two: light-eaters first, eaters of remains at +10, eaters of light-eaters at +20, eaters of eaters at +24)] [--flow-days N] [--air-days N] [--exchange-days N (3)] [--own-brains] [--crowd N] [--split-rows] [--null (learning and imitation off, brain rows frozen: the run to compare a seed with)] [--spray ROUNDS (20)] [--spray-size ROW BIAS STEP (0.2)] [--spray-genes TIMES THE GENE STEP (3)] [--plant-bias] [--eater-bias] [--clever-year N (a lineage with a big brain)]\n  ew chem [--seed N]\n  ew numbers OLD NEW (the fields of Physics and Config that differ between two runs: name, old, new; each a run's directory or its physics.json)\n  ew resume --from SNAPSHOT [--years N] [--every N] [--out DIR] [--frames-every N] [--monthly-years N]"
         ),
     }
 }
@@ -121,7 +123,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             let us = part[2].as_secs_f64() * 1e6 / (w.life.updates - upd).max(1) as f64;
             let ms_tape = tape.as_secs_f64() * 1000.0 / (y - since) as f64;
             (since, upd) = (y, w.life.updates);
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), gifts {}/yr, watches {}/yr", w.ledger.clamped_heat, w.life.at.iter().map(|v| v.len()).max().unwrap_or(0), m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count(), w.diag.splits[0], w.diag.splits[1], rec.last("kinds"), rec.last("kinds_members"), rec.last("gave"), rec.last("watched"));
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), merged unlike {:.0}/yr, gifts {}/yr, watches {}/yr", w.ledger.clamped_heat, w.life.at.iter().map(|v| v.len()).max().unwrap_or(0), m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count(), w.diag.splits[0], w.diag.splits[1], rec.last("kinds"), rec.last("kinds_members"), rec.last("merged_unlike"), rec.last("gave"), rec.last("watched"));
             busy += part.iter().sum::<Duration>() + tape;
             (part, tape) = ([Duration::ZERO; 4], Duration::ZERO);
             render::save(&w, &format!("{out}/year{y:04}.png"));
