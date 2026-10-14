@@ -24,7 +24,10 @@ const OFF: f32 = -4.0;
 
 /// A flat, warm world: every cell a copy of one dry land cell, the strip added on top.
 fn scene(seed: u64) -> (World, usize) {
-    let (chem, init) = worldgen::chemistry0();
+    let (mut chem, init) = worldgen::chemistry0();
+    // The scene tests Choose alone: its bodies do not grow (a chemistry with no body matter, so no
+    // building work: growth would take a quarter of the body's fuel before it can learn anything).
+    chem.build = None;
     // The body is one of 30 kg: its brain costs what the scene was made with (a decision costs a
     // member of `m_ref` kg `c_brain` per kg; a body of that mass pays it per kg as before), and
     // so does copying (at 10^7 J/kg, 13 Oct 2026, the scene's body, whose brain costs 30 times

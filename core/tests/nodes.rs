@@ -235,6 +235,8 @@ fn a_node_acts_on_bonds_through_one_member() {
         let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
         let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
         b.spread = vec![0.01; b.genes.len()];
+        // (their mass stays: no liquid soaked up from the ground, which would add a third to it)
+        b.genes[pcore::body::LIQ] = -4.0;
         if case == 0 {
             // (copying at 100 kg, so they do not copy instead)
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 2.0, b.count / 40.0);
@@ -389,10 +391,10 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         node.e *= 5.0;
         w.life.bodies[s].genes[DISPERSE] = 0.0;
         let t = w.life.add(node, w.day, 1);
-        // One child: its copy mass is just under its mass.
+        // One child: its copy mass is just under its body (matter and the liquid it keeps, `Body::size`).
         let (at, before) = (live(&w).len(), held(&w));
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.genes[COPY_MASS] = (0.9 * b.mass(&w.chem) as f32).log10();
+        b.genes[COPY_MASS] = (0.9 * b.size(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         w.day += 1;
         assert!(copy::copy(&mut w, s, &mut b), "no child");
@@ -405,10 +407,10 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
             continue;
         }
         assert!(kids.len() == 1 && w.life.bodies[t].count == 5.0 && w.life.bodies[kids[0]].count == 1.0, "the child joined a node");
-        // Many children at once: the member holds 3.5 times `full` copy masses.
+        // Many children at once: the member's body is 3.5 times `full` copy masses.
         let (at, before) = (live(&w).len(), held(&w));
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.genes[COPY_MASS] = ((b.mass(&w.chem) / (3.5 * w.cfg.phys.full)) as f32).log10();
+        b.genes[COPY_MASS] = ((b.size(&w.chem) / (3.5 * w.cfg.phys.full)) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         w.day += 1;
         assert!(copy::copy(&mut w, s, &mut b), "no children");

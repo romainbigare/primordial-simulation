@@ -125,7 +125,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
     assert!(!kinds.is_empty());
-    for name in ["births", "life_real", "mass", "copy_mass", "gas", "leaf", "copy_log", "interval", "hidden", "died_age"] {
+    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age"] {
         assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
     }
     for r in &rows {
@@ -143,6 +143,12 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     for k in &kinds {
         let (m, mean, kg) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_kg"), last));
         assert!(m == 0.0 && kg == 0.0 || (kg - m * mean).abs() <= 1e-9 * kg, "root_{k}_kg {kg} members {m} mean {mean}");
+    }
+    // The body matter (14 Oct 2026): its share of a kind's mass is between 0 and 1, and the mean body of a member (matter and the
+    // liquid it keeps with it) is no more than the mean member's mass.
+    for k in &kinds {
+        let (m, mean, matter, body) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_matter"), last), col(&format!("root_{k}_body"), last));
+        assert!(m == 0.0 || (matter > 0.0 && matter < 1.0 && body > 0.0 && body <= mean * (1.0 + 1e-9)), "root_{k}: matter {matter}, body {body}, mass {mean}");
     }
     assert!(kinds.contains(&(col("mass_max_root", last) as usize)));
     assert!(col("merged_unlike", last) >= 0.0 && col("merged_wide", last) >= col("merged_unlike", last));
