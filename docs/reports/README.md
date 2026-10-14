@@ -19,3 +19,6 @@ folder with the same name as the report.
   physics, the chemistry and the world concepts after the second fix list, with the owner's two
   questions (a roster of starting kinds; plants without a brain), a speed profile, and the list of
   15 items to do before M4.
+- `watch-3-before-m4.md`: the third fix list done (all 16 items of review 3), three bugs found by
+  the long runs and fixed, three 300-year runs at 128 x 128, null runs and roster runs at 64 x 64,
+  14 October 2026. Chart, pictures and the full numbers in `watch-3-before-m4/`.
