@@ -294,26 +294,29 @@ impl Body {
     }
     /// Mass that works, kg: each member's mass up to `phys.full` times its copy mass (the size its
     /// genes set), times the count. What a member holds past that is held matter, not body: it
-    /// takes, sweeps, soaks up, catches (light and rain, on its capture area) and receives no more
-    /// than at full (`phys.take`, `phys.sweep`, the liquid exchange, `LEAF`, gifts), and copies
-    /// what it can pay for (`copy`). What a member takes, sweeps and receives goes with this to the
-    /// power `phys.intake_exp` (`intake`); light, rain, liquid and gas go by area.
+    /// soaks up, catches (light and rain, on its capture area, `LEAF`) and exchanges liquid no more
+    /// than at full, and copies what it can pay for (`copy`). What it takes, sweeps and receives
+    /// goes by its whole mass (`equiv`), as far as it can use it (`choose::sate`, since 14 Oct 2026;
+    /// before, by this mass).
     /// With all of this going with its whole mass, a body that could not pay for its children
     /// took more the more it held and grew without end (members of 10^7 kg, 95% liquid, at year
     /// 100 of a 128x128 world, review 3, M2).
     pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
         mass.min(p.full * self.dec(COPY_MASS) * self.n())
     }
-    /// Mass-equivalent that a body takes, sweeps and receives as a gift by (kg, in place of `work`):
-    /// per member `intake_ref` times its mass that works over `intake_ref`, to the power
-    /// `intake_exp` (0.75), times the count. A member of `intake_ref` (1 kg) takes as before (`take`
-    /// per kg per day); one of 30 kg 30^0.75 = 12.8 kg-equivalents, 2.3 times less per kg; of 10 t,
-    /// 1,778, so it takes 180 times what a 10 kg one (10^0.75 = 5.6) does, not 1,000. Past `full`
-    /// times its copy mass a member takes at the rate of `full`, as with `work`. Light, rain and
-    /// liquid go by area, not by this.
-    pub fn intake(&self, p: &crate::Physics, mass: f64) -> f64 {
+    /// Mass-equivalent a body's size is counted by, kg (in place of the mass, for what goes with
+    /// mass^0.75 in life): per member `intake_ref` times its `mass` over `intake_ref`, to the power
+    /// `intake_exp` (0.75), times the count. What it takes, sweeps and receives as a gift, what it
+    /// can build (`c_build`), what it pays to be (`c_basal`) and its leaf (`visible`, `open_area`:
+    /// of the mass that works, `work`) go by it. A member of `intake_ref` (1 kg) is 1 kg; one of
+    /// 30 kg 12.8 kg-equivalents, 2.3 times less per kg; of 10 t 1,778, so it takes 180 times what
+    /// a 10 kg one (10^0.75 = 5.6) does, not 1,000. Light, rain, liquid and gas go by area. How
+    /// much of what it takes it can use is `choose::sate`, not a size: past `full` times its copy
+    /// mass a member takes by all its mass, as far as it can use it (14 Oct 2026, review 5; before,
+    /// at the rate of `full`).
+    pub fn equiv(&self, p: &crate::Physics, mass: f64) -> f64 {
         let n = self.n();
-        n * p.intake_ref * (self.work(p, mass) / n / p.intake_ref).powf(p.intake_exp)
+        n * p.intake_ref * (mass / n / p.intake_ref).powf(p.intake_exp)
     }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
     /// (its mass that works times `LEAF`, as `visible` and the light code count it) plus its skin,

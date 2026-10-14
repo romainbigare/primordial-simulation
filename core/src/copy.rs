@@ -224,14 +224,18 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // fuel for its size never copied, and grew to 10^5 kg.) It has the children the store covers:
     // a node a share of them, an individual whole ones; the rest later. The work is for what the
     // children are built of: the liquid they carry is only moved (counted, a member of mostly
-    // liquid could not pay for a child, never copied and swelled to 30 times its copy mass).
+    // liquid could not pay for a child, never copied and swelled to 30 times its copy mass). And
+    // building takes time: at most `c_build` x mass^0.75 a day, so a child takes months to build
+    // for a 1 kg body and years for a 2,000 t one (`Physics::c_build`), whatever its reactions release.
     let t = b.temp(&w.chem);
     let wet: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == crate::chem::Phase::Liquid).map(|k| b.store[k] * w.chem.subs[k].molar_mass).sum();
     let (owe, days) = (w.cfg.phys.c_copy * s * (mass - wet).max(0.0), b.interval() as f64);
     let more = if owe > b.paid {
         let r = 0.999 * body::release(w, b, days);
         let spare = if m1 >= full { r } else { b.fuel(&w.chem, b.temp(&w.chem)) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300)) };
-        (owe - b.paid).min(spare).min(r)
+        // Building takes time (14 Oct 2026, review 5): never more than `c_build` x its `equiv` x the days.
+        let build = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, mass) / w.cfg.phys.intake_ref * days;
+        (owe - b.paid).min(spare).min(r).min(build)
     } else {
         0.0
     };
