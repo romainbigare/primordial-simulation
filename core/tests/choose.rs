@@ -28,7 +28,10 @@ fn scene(seed: u64) -> (World, usize) {
     // so does copying (at 10^7 J/kg, 13 Oct 2026, the scene's body, whose brain costs 30 times
     // what a 1 kg member's does, starves soon after its first child: 22 decisions on average
     // against 98, before it can learn).
-    let phys = pcore::Physics { m_ref: 30.0, c_copy: 2e6, ..Default::default() };
+    // `m_ref` is also the mass at which `take` and `sweep` are per kg; ref^0.25 x m^0.75 is what a
+    // member takes, so scaling both by 30^-0.25 keeps what the 1 kg reference gave.
+    let d = pcore::Physics::default();
+    let phys = pcore::Physics { m_ref: 30.0, c_copy: 2e6, take: d.take * 30f64.powf(-0.25), sweep: d.sweep * 30f64.powf(-0.25), ..d };
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, phys, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);

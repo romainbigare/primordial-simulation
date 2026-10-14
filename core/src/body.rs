@@ -28,7 +28,8 @@ pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;
 /// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
-/// `Physics::heat_mass` kg; it goes with mass^(2/3) (`Body::conductance`)
+/// `Physics::m_ref` kg (1 kg since 15 Oct 2026; 30 kg before, so every kind's gene is
+/// log10(30^(1/3)) = 0.492 higher); it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
 /// Light-capture area, log10 m²/kg of its mass that works (`Body::work`)
 pub const LEAF: usize = 3;
@@ -232,9 +233,9 @@ impl Body {
     }
     /// Heat conductance to the surface, W/K: through each member's surface, which grows as
     /// mass^(2/3), so a small body cools faster per kg than a big one. Needs `prepare`.
-    pub fn conductance(&self, heat_mass: f64, mass: f64) -> f64 {
+    pub fn conductance(&self, m_ref: f64, mass: f64) -> f64 {
         let n = self.n();
-        self.k.heat * n * heat_mass.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
+        self.k.heat * n * m_ref.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
     }
     pub fn interval(&self) -> u64 {
         if self.k.interval > 0 {
@@ -305,15 +306,15 @@ impl Body {
         mass.min(p.full * self.dec(COPY_MASS) * self.n())
     }
     /// Mass-equivalent that a body takes, sweeps and receives as a gift by (kg, in place of `work`):
-    /// per member `intake_ref` times its mass that works over `intake_ref`, to the power
-    /// `intake_exp` (0.75), times the count. A member of `intake_ref` (1 kg) takes as before (`take`
+    /// per member `m_ref` times its mass that works over `m_ref`, to the power
+    /// `intake_exp` (0.75), times the count. A member of `m_ref` (1 kg) takes as before (`take`
     /// per kg per day); one of 30 kg 30^0.75 = 12.8 kg-equivalents, 2.3 times less per kg; of 10 t,
     /// 1,778, so it takes 180 times what a 10 kg one (10^0.75 = 5.6) does, not 1,000. Past `full`
     /// times its copy mass a member takes at the rate of `full`, as with `work`. Light, rain and
     /// liquid go by area, not by this.
     pub fn intake(&self, p: &crate::Physics, mass: f64) -> f64 {
         let n = self.n();
-        n * p.intake_ref * (self.work(p, mass) / n / p.intake_ref).powf(p.intake_exp)
+        n * p.m_ref * (self.work(p, mass) / n / p.m_ref).powf(p.intake_exp)
     }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
     /// (its mass that works times `LEAF`, as `visible` and the light code count it) plus its skin,
@@ -1145,7 +1146,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // at the end, if it ends warmer).
     let (m1, nb, wk) = (mass / b.n(), b.n(), b.work(&cfg.phys, mass) / mass);
     let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
-    let g0 = b.conductance(cfg.phys.heat_mass, mass);
+    let g0 = b.conductance(cfg.phys.m_ref, mass);
     let g0 = if cover > 0.0 {
         let s = ab / (ab + wk * m1 * b.k.leaf);
         g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * nb * ab))

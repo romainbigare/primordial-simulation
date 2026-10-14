@@ -124,8 +124,6 @@ pub struct Config {
 #[serde(default)]
 pub struct Physics {
     // Change and Flow, as bodies feel them
-    /// Member mass at which the heat gene is the conductance per kg (the starting eaters' mass), kg
-    pub heat_mass: f64,
     /// Liquid thickness over a body that holds back 63% of the light reaching it, m
     pub light_depth: f64,
     /// Liquid thickness over a body that cuts its gas exchange by a factor e, m
@@ -175,9 +173,13 @@ pub struct Physics {
     /// of a member of `m_ref` kg: a member of `m` kg pays `c_brain` x `m_ref` x (`m` / `m_ref`)^0.25
     /// J (`Physics::think`)
     pub c_brain: f64,
-    /// Mass of the member for which a brain's cost is listed per kg, kg. The cost of a decision
-    /// goes with the brain and only weakly with the body: a 30 kg member pays 2.3 times what a
-    /// 1 kg member pays for the same brain (13 times less per kg), not 30 times
+    /// The one reference mass, kg: the member at which a per-kg number is per kg. The brain's cost
+    /// is listed per kg of a member of this mass (the cost of a decision goes with the brain and
+    /// only weakly with the body: a 30 kg member pays 2.3 times what a 1 kg member pays for the
+    /// same brain, 13 times less per kg, not 30 times); `take` and `sweep` are per kg of a member
+    /// of this mass (above it a member takes less per kg, `Body::intake`); the heat gene is the
+    /// conductance per kg of a member of this mass (`Body::conductance`). Three reference masses
+    /// for one idea were made one (15 Oct 2026, review 5)
     pub m_ref: f64,
     /// Cost of one decision per hidden unit, per memory number, per body perceived and per square
     /// cell of sight, J per kg of a member of `m_ref` kg
@@ -226,9 +228,6 @@ pub struct Physics {
     /// its wall (eaters of 9 to 15 t that barely copy, review 4, finding 5); with 0.75 a 10 t member
     /// takes 180 times a 10 kg one, not 1,000. A free number chosen for that reason, not a rule.
     pub intake_exp: f64,
-    /// Member mass at which `take` and `sweep` are per kg (above this a member takes less per kg
-    /// and below it more), kg
-    pub intake_ref: f64,
     /// Area a body works per day per kg of its mass that works, m²/(kg day): it takes no more per day than
     /// the mass per m² of what it takes there times this times its mass (a 30 kg body works 300
     /// m² in 10 days), so thin cover is hard to find
@@ -330,13 +329,12 @@ impl Physics {
 impl Default for Physics {
     fn default() -> Self {
         Physics {
-            heat_mass: 30.0,
             light_depth: 10.0,
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
             c_cat: 1.5e9,
-            t_cat: 290.0,
+            t_cat: T_SURF,
             unfold: 3.0,
             t_firm: 320.0,
             c_firm: 20.0,
@@ -361,7 +359,6 @@ impl Default for Physics {
             take: 0.05,
             sweep: 1.0,
             intake_exp: 0.75,
-            intake_ref: 1.0,
             c_handle: 1e3,
             shape_noise: 0.5,
             signal_noise: 0.3,
@@ -478,6 +475,10 @@ pub struct Ledger {
     #[serde(default)]
     pub clamped_heat: f64,
 }
+
+/// A typical surface temperature, K: where the upkeep of catalysts is measured (`Physics::t_cat`)
+/// and where the starting kinds and the richness checks look at the phase of a substance.
+pub const T_SURF: f64 = 290.0;
 
 /// The coldest a ground node may be taken by drawing heat from it, K.
 pub const T_FLOOR: f64 = 3.0;
