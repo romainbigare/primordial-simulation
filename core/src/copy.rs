@@ -15,11 +15,11 @@
 //! by their share of a generation's change (`widen`). A share of them (the `DISPERSE` gene; none
 //! if less than one member) starts in a random neighbour cell, drawn from the node: their mean
 //! genes and rows are the node's plus noise of its spread and the change over their number, and
-//! they keep the variance left among them (`vary`). There they join the first node alike in genes
-//! with a brain of the same sizes, whatever its lineage (means by count, the spread pooled,
-//! `join`), or start a node. An individual's children stay together, in a neighbour cell with
-//! that chance (else in its own); there they join an alike node as a node's do, else they are a
-//! new body. Only individuals' children start new lineages; a node whose mean brain-size genes
+//! they keep the variance left among them (`vary`). There they join the first node they belong
+//! to, alike in genes within its spread and theirs (`within`), whatever its lineage and brain
+//! sizes (means by count, the spread pooled, `join`), or start a node. An individual's children
+//! stay together, in a neighbour cell with that chance (else in its own); there they join a node
+//! as a node's do, else they are a new body. Only individuals' children start new lineages; a node whose mean brain-size genes
 //! are a whole unit away from its lineage's sizes moves itself to a new lineage with them, its
 //! brain and what its group learned carried over (`resize`, at its update).
 //!
@@ -73,8 +73,29 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
 
 /// Genes no more than `limit` mutation steps apart in each gene (genes that are off count as 0;
 /// the sizes of brain and senses are not compared, as `merge` carries a brain over to other sizes).
+/// Nodes merge each month only if their means are alike (`body::crowd`), as a split's halves are
+/// tested (`split`): so the halves stay apart for selection until they grow alike again.
 pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
     a.iter().zip(b).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= limit)
+}
+
+/// Standard deviations of spread (of a node and of the children joining it) that the means of
+/// children may lie from a node's beyond `phys.alike` steps and still belong to it (`within`).
+/// Two: a lone child of a node held at the split threshold (2.7 steps) is then within its node in
+/// a gene but for a chance of 1 in 1,000 (4 + 2 x 2.7 steps against its 2.9), so it nearly always
+/// joins it whatever the number of genes; with `alike` alone the chance was 1 in 6 per gene, and
+/// with about a hundred genes nearly every small group started a node of its own (review 3, M3).
+/// A larger factor would let children join a node of another kind as wide.
+const WITHIN: f32 = 2.0;
+
+/// Children `c` (one or a group drawn from a node, with the spread left among them) belong to
+/// node `o`: in each gene their mean is within `limit` steps of its mean plus `WITHIN` standard
+/// deviations of both spreads together (each gene alone, so kinds that differ in a few genes
+/// stay apart). A node's children differ from its mean by its spread over their number, so
+/// with `alike` alone a group of a few rarely joined even the node it was drawn from.
+fn within(lay: &Layout, limit: f32, o: &Body, c: &Body) -> bool {
+    let s = |b: &Body, g: usize| b.spread.get(g).map_or(0.0, |&v| v.max(0.0));
+    o.genes.iter().zip(&c.genes).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= limit + WITHIN * (s(o, g) + s(c, g)).sqrt() / range(lay, g).0)
 }
 
 /// A gene in mutation steps (off as 0; the sizes of brain and senses as 0): two bodies are as
@@ -289,13 +310,20 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             c.group = w.life.new_group(c.lineage, rows.clone().unwrap_or_else(|| w.life.born(b).to_vec()));
         }
     }
-    // Children (of a node or of an individual, one or many) join a node there alike in genes
-    // with a brain of the same sizes (of any lineage: being of the same one is no reason).
-    let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| (x.shape, x.seen, x.sight));
-    let joins = |o: &Body| o.alive && o.n() > 1.0 && shape(o.lineage) == shape(c.lineage) && alike(&lay, w.cfg.phys.alike, &o.genes, &c.genes);
+    // Children (of a node or of an individual, one or many) join the first node there they
+    // belong to (`within`; of any lineage: being of the same one is no reason), their rows carried
+    // over to its brain's sizes where they differ, as the month's merge would (`merge`; joining
+    // only a node of the same sizes, groups that met only nodes of other sizes started half the
+    // new nodes of one 128x128 world at year 100). Children that started a new lineage stay
+    // apart.
+    let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape);
     if c.lineage == b.lineage {
-        if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| joins(&w.life.bodies[s])) {
+        if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() > 1.0 && within(&lay, w.cfg.phys.alike, &w.life.bodies[s], &c)) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
+            let rows = match (shape(c.lineage), shape(w.life.bodies[t].lineage)) {
+                (Some(x), Some(y)) if x != y => brain::rerow(&rows, x, y, &mut r, w.cfg.phys.new_noise),
+                _ => rows,
+            };
             join(w, t, c, &rows);
             return true;
         }
@@ -428,8 +456,10 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// The rows, whose spread is one number for all, split all at once along a random direction of
 /// signs; the new half gets a genome of its own. Selection then acts between the halves until
 /// the next month's merge (`body::crowd`): the one that fits grows, the other shrinks. Halves of
-/// a gene are not alike, so the merge leaves them apart (it merges only alike nodes) until they
-/// grow alike again; halves of the rows are alike (likeness is in genes), so it takes them back,
+/// a gene are not alike, so the merge leaves them apart (it merges only nodes whose means are
+/// alike, not within their spreads as children join, `within`: each half lies within the other's
+/// spread, so a merge by spread would take them back every month) until they grow alike again;
+/// halves of the rows are alike (likeness is in genes), so it takes them back,
 /// the mean moved toward the one that grew, and the node splits again while its rows still differ
 /// that much: a monthly round of selection. A node splits only while its cell keeps a free place
 /// after it (fewer than `cfg.crowd` - 1 bodies): a node held at `most` in its neutral genes is

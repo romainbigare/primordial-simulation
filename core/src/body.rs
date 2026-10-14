@@ -808,14 +808,17 @@ fn shade(w: &mut World) {
 /// The speed shortcut of plan 7.1, not a law: it coarsens only how members are represented (as
 /// population nodes), never how many there are or where, and must give the same patterns as
 /// individuals (to be checked at M4). Monthly, in each cell, among the bodies that hold and are
-/// inside nothing: a node joins the first larger one alike in genes (`copy::alike`; never for
+/// inside nothing: a node joins the first larger one alike in genes (`copy::alike`, on the means
+/// only, as a split tests its halves, so a split's halves stay apart for selection: a test within
+/// their spreads, as children join, `copy::within`, would merge them back every month; never for
 /// being of the same lineage, so variants of one lineage stay apart); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
 /// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are not
 /// merged (merging them blended a new kind into the nearest one every month, review 3, M3),
 /// unless the cell holds more than twice `crowd`: then the most alike merge however unlike, down
 /// to that. That is a numerical safeguard, not a law: with about a hundred genes, variants of
-/// individuals and immigrants are often unlike in one gene, and with no ceiling one 64x64 world
+/// individuals and immigrants are often unlike in one gene (fewer since children join the node
+/// whose spread they lie in, `copy::within`), and with no ceiling one 64x64 world
 /// gathered about 146,000 bodies in one cell within a few years. So individuals stay individuals
 /// while their cell is not over `crowd`, and kinds stay apart up to twice that. Stores and heat add up, genes and born rows become the means by
 /// count and the spread of both is kept in the merged node's (`copy::join`), the born rows carried

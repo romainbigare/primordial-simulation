@@ -85,7 +85,8 @@ pub struct Config {
     /// A speed shortcut, not a law (plan 7.1): past this many body nodes (individuals or
     /// population nodes) in a cell at a month's start, its most alike pairs merge, but only pairs
     /// that are alike (`body::crowd`), so a cell may keep more nodes of unlike kinds, up to twice
-    /// this (past it the most alike merge however unlike, a safeguard); a node splits only while
+    /// this (past it the most alike merge however unlike, a safeguard; children join the node they
+    /// belong to, within its spread, `copy::within`, so few new nodes start); a node splits only while
     /// its cell has fewer than this minus one (`copy::split`). It never bounds how many members
     /// there are. It must give the same patterns as individuals (to be checked at M4).
     #[serde(default = "four")]
@@ -268,9 +269,10 @@ pub struct Physics {
     /// A member holding this many times its copy mass copies at its update whatever its brain
     /// does (`body::live`: physics); the brain's copy action copies only before that
     pub full: f64,
-    /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge,
-    /// and children join them (`copy::alike`). A node splits when its two halves would differ by
-    /// more, in a gene or in its born rows (in row steps, `copy::split`)
+    /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
+    /// (`copy::alike`). A node splits when its two halves would differ by more, in a gene or in
+    /// its born rows (in row steps, `copy::split`). Children join a node within this many steps
+    /// plus two standard deviations of its spread and theirs (`copy::within`)
     pub alike: f32,
     // Flow, as ground cover and moving liquid feel it
     /// Thickness of a layer that hides half of what lies below it, m: [soft solid, liquid, loose]
