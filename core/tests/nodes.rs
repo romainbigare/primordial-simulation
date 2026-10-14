@@ -1,6 +1,6 @@
 //! Population nodes (plan 7.1): how their members differ, how they split, how they act on bonds.
 
-use pcore::body::{Body, Layout, Lineage, COPY_MASS, DISPERSE, HIDDEN, MUT, STRENGTH};
+use pcore::body::{Body, Layout, Lineage, COPY_MASS, DISPERSE, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, check, choose, copy};
 
@@ -53,69 +53,107 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
-/// Without selection the node math moves no gene (review 3, M1). Every member has one child and
-/// dies at the same rate, whatever its genes (no copy cost, members far past their copy mass but
-/// never `full`), so a gene's mean over all members may move only by the noise of the children
-/// that leave. Light-eater nodes with a fast mutation (their spreads reach the split threshold)
-/// copy, split, send children to join or start nodes in neighbour cells, and merge each month,
-/// for 1,000 updates: every gene's mean stays within a mutation step of its start, in cells over
-/// `crowd` and not.
+/// Light-eater nodes with a fast mutation (their spreads reach the split threshold) and members
+/// of 100 kg that copy from 0.1 kg (no copy cost, never `full`) copy, split, move to the lineage
+/// their brain sizes ask for, send children to join or start nodes in neighbour cells, and merge
+/// each month, for `updates` updates of 10 days (`wide`: from spreads held at the split threshold). Every member has one child per update, and then
+/// a share `live(b)` of each body's members lives on (0.5: as many die as were born). Returns the
+/// mean genes by members at the start and at the end.
+fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f64) -> (pcore::World, Vec<f64>, Vec<f64>) {
+    let mut w = worldgen::new_world(1, 4, 4);
+    pcore::step(&mut w);
+    (w.cfg.crowd, w.cfg.phys.c_copy, w.cfg.phys.full) = (crowd, 0.0, 1e12);
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    let len = Layout::of(&w.chem).len;
+    let b0 = &w.life.bodies[live(&w)[0]];
+    let (per, e1) = (b0.store.iter().map(|a| 100.0 * a / b0.count).collect::<Vec<f64>>(), 100.0 * b0.e / b0.count);
+    for s in live(&w) {
+        (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT]) = (-1.0, -0.8);
+        if wide {
+            // (the first children that stay bring every spread down to the split threshold)
+            w.life.bodies[s].spread = vec![1e9; len];
+        }
+    }
+    let mean = |w: &pcore::World| {
+        let (mut g, mut n) = (vec![0.0f64; len], 0.0);
+        for b in w.life.alive() {
+            g.iter_mut().zip(&b.genes).for_each(|(x, &y)| *x += y as f64 * b.n());
+            n += b.n();
+        }
+        g.iter().map(|x| x / n).collect::<Vec<f64>>()
+    };
+    let m0 = mean(&w);
+    for _ in 0..updates {
+        w.day += 10;
+        if w.day % w.cfg.days_per_month as u64 == 0 {
+            pcore::body::survey(&mut w);
+        }
+        // In a random order, so no body is first by its slot.
+        let (mut order, mut r) = (live(&w), Rng::new(1, w.day, 0, Purpose::Body));
+        for k in (1..order.len()).rev() {
+            order.swap(k, r.below(k + 1));
+        }
+        for s in order {
+            let mut b = std::mem::take(&mut w.life.bodies[s]);
+            (b.store, b.e) = (per.iter().map(|a| a * b.count).collect(), e1 * b.count);
+            b.prepare(&w.chem, &w.cfg.phys);
+            copy::copy(&mut w, s, &mut b);
+            copy::resize(&mut w, s, &mut b);
+            copy::split(&mut w, s, &mut b);
+            w.life.bodies[s] = b;
+        }
+        for s in live(&w) {
+            let f = live_on(&w.life.bodies[s]);
+            w.life.bodies[s].count *= f;
+        }
+        w.events.clear();
+    }
+    let m1 = mean(&w);
+    (w, m0, m1)
+}
+
+/// Without selection the node math moves no gene (review 3, M1), the brain's sizes included
+/// (review 4, finding 1: they now split too): every body's members live on alike, so a gene's
+/// mean over all members may move only by the noise of the children that leave. Over 1,000
+/// updates every gene's mean stays within a mutation step of its start, in cells over `crowd`
+/// and not.
 #[test]
 fn genes_do_not_drift_without_selection() {
     for crowd in [1, 64] {
-        let mut w = worldgen::new_world(1, 4, 4);
-        pcore::step(&mut w);
-        (w.cfg.crowd, w.cfg.phys.c_copy, w.cfg.phys.full) = (crowd, 0.0, 1e12);
-        worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-        let lay = Layout::of(&w.chem);
-        // Members of 100 kg (stores of the start, per member) that copy from 0.1 kg.
-        let b0 = &w.life.bodies[live(&w)[0]];
-        let (per, e1) = (b0.store.iter().map(|a| 100.0 * a / b0.count).collect::<Vec<f64>>(), 100.0 * b0.e / b0.count);
-        for s in live(&w) {
-            (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT]) = (-1.0, -0.8);
+        let w0 = worldgen::new_world(1, 4, 4);
+        let lay = Layout::of(&w0.chem);
+        // Gene steps (from `steps` of all ones: 1 / step; the brain's sizes, which `steps` leaves
+        // out of likeness, by their own steps).
+        let mut inv = copy::steps(&lay, &vec![1.0; lay.len]);
+        for (g, step) in [(HIDDEN, 0.3), (MEMORY, 0.15), (SEEN, 0.1), (SIGHT, 0.07)] {
+            inv[g] = 1.0 / step;
         }
-        // Gene steps (from `steps` of all ones: 1 / step; the brain's sizes are not counted).
-        let inv = copy::steps(&lay, &vec![1.0; lay.len]);
-        let mean = |w: &pcore::World| {
-            let (mut g, mut n) = (vec![0.0f64; lay.len], 0.0);
-            for b in w.life.alive() {
-                g.iter_mut().zip(&b.genes).for_each(|(x, &y)| *x += y as f64 * b.n());
-                n += b.n();
-            }
-            g.iter().map(|x| x / n).collect::<Vec<f64>>()
-        };
-        let m0 = mean(&w);
-        let (n0, splits0) = (live(&w).len(), w.diag.splits[0]);
-        for _ in 0..1000 {
-            w.day += 10;
-            if w.day % w.cfg.days_per_month as u64 == 0 {
-                pcore::body::survey(&mut w);
-            }
-            // In a random order, so no body is first by its slot.
-            let (mut order, mut r) = (live(&w), Rng::new(1, w.day, 0, Purpose::Body));
-            for k in (1..order.len()).rev() {
-                order.swap(k, r.below(k + 1));
-            }
-            for s in order {
-                let mut b = std::mem::take(&mut w.life.bodies[s]);
-                (b.store, b.e) = (per.iter().map(|a| a * b.count).collect(), e1 * b.count);
-                b.prepare(&w.chem, &w.cfg.phys);
-                copy::copy(&mut w, s, &mut b);
-                copy::split(&mut w, s, &mut b);
-                w.life.bodies[s] = b;
-            }
-            // As many die as were born, the same share of every body.
-            for s in live(&w) {
-                w.life.bodies[s].count *= 0.5;
-            }
-            w.events.clear();
-        }
-        let m1 = mean(&w);
+        let (w, m0, m1) = churn(crowd, 1000, false, |_| 0.5);
         let worst = (0..lay.len).filter(|&g| inv[g] > 0.0).map(|g| ((m1[g] - m0[g]) * inv[g] as f64).abs()).fold(0.0, f64::max);
-        println!("crowd {crowd}: bodies {n0} -> {}, splits {}, largest move {worst:.3} steps", live(&w).len(), w.diag.splits[0] - splits0);
-        assert!(crowd < 4 || w.diag.splits[0] - splits0 > 10.0, "too few splits");
+        println!("crowd {crowd}: bodies {}, splits {}, largest move {worst:.3} steps", live(&w).len(), w.diag.splits[0]);
+        assert!(crowd < 4 || w.diag.splits[0] > 10.0, "too few splits");
         assert!(worst < 1.0, "a gene moved {worst} steps without selection");
     }
+}
+
+/// With selection a node's brain size moves (review 4, finding 1): from spreads held at the split
+/// threshold, members live on a little less the more hidden units their genes ask for (5% per unit
+/// and update, as if they paid for a brain they do not use), and nothing else differs. Within
+/// 1,000 updates the mean of the hidden-units gene falls by more than a unit (12 to 10.9) and the
+/// nodes move to a lineage with fewer hidden units. Before, a node never split along a size gene,
+/// so its mean stayed at 12 whatever the selection. Slow, as a split exposes one gene at a time (a
+/// random pick among the widest): about 3% of what selection on the whole spread would move (0.07
+/// units in 300 updates at 1% per unit, against 0.01 x 0.655 x 300 = 2).
+#[test]
+fn selection_moves_a_nodes_brain_size() {
+    let w0 = worldgen::new_world(1, 4, 4);
+    let h0 = 12.0;
+    let (w, m0, m1) = churn(64, 1000, true, |b| 0.5 * (1.0 - 0.05 * (b.genes[HIDDEN] as f64 - h0)));
+    let smaller = w.life.alive().filter(|b| w.life.brains[b.lineage as usize].as_ref().is_some_and(|l| (l.shape.h as f64) < h0)).count();
+    println!("hidden {:.2} -> {:.2}, bodies of a smaller lineage {smaller} of {}", m0[HIDDEN], m1[HIDDEN], live(&w).len());
+    assert!((m0[HIDDEN] - h0).abs() < 0.1 && Layout::of(&w0.chem).len == m0.len());
+    assert!(m1[HIDDEN] < m0[HIDDEN] - 1.0, "hidden gene {:.2} -> {:.2}: selection did not move it", m0[HIDDEN], m1[HIDDEN]);
+    assert!(smaller > 0, "no node moved to a smaller brain");
 }
 
 /// Children that leave a varied node join the node of their own kind in the next cell (review 3,

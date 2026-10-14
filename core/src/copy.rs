@@ -100,7 +100,8 @@ fn within(lay: &Layout, limit: f32, o: &Body, c: &Body) -> bool {
 }
 
 /// A gene in mutation steps (off as 0; the sizes of brain and senses as 0): two bodies are as
-/// alike as their genes are near in these (`alike`, `body::crowd`).
+/// alike as their genes are near in these (`alike`, `body::crowd`). A split measures the sizes in
+/// their steps (`split`), so selection can move them in a node.
 fn step(lay: &Layout, g: usize, x: f32) -> f32 {
     if (body::HIDDEN..=body::SIGHT).contains(&g) { 0.0 } else { (if g < lay.cat { x } else { x.max(0.0) }) / range(lay, g).0 }
 }
@@ -456,8 +457,8 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// At its update, a node whose members differ so much that its two halves would not be alike
 /// splits in two (plan 7.1). The halves of a normal spread have means `d = sqrt(2/π)` standard
 /// deviations from the mean, so it splits when the halves' gap passes `phys.alike` steps along
-/// the gene where it is widest, as `step` counts it (so not along a gene that is off in both
-/// halves, nor the brain's sizes), or, with `cfg.split_rows`, of the born rows in row steps (the
+/// the gene where it is widest, in its steps (so not along a gene that is off in both halves; the
+/// brain's sizes count here, though not in likeness), or, with `cfg.split_rows`, of the born rows in row steps (the
 /// step of a changed child); among genes as wide (a spread held at `most` is as wide in every
 /// gene), a keyed random pick. `d` is shrunk to the room left to the gene's walls, so the mean is
 /// kept exactly (clamped halves moved it away from the wall, review 3, M1). Each half has half the
@@ -471,7 +472,13 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// spread, so a merge by spread would take them back every month) until they grow alike again;
 /// halves of the rows are alike (likeness is in genes), so it takes them back,
 /// the mean moved toward the one that grew, and the node splits again while its rows still differ
-/// that much: a monthly round of selection. A node splits only while its cell keeps a free place
+/// that much: a monthly round of selection. Halves of a brain size are alike too (likeness leaves
+/// the sizes out, `alike`), so they go the same round, each paying for its own size (`Lineage::cost`
+/// goes with the body's genes), and a mean that reaches a whole unit from its lineage's size moves
+/// the node to a lineage of that size (`resize`). Before (review 4, finding 1) a node never split
+/// along a size, nothing else selects a gene inside a node, and a merge only mixes means that all
+/// started at 12: the size genes were frozen in nodes (`hidden` 12 for 300 years in every run), so
+/// a brain could neither grow nor, in light-eaters, shrink to none. A node splits only while its cell keeps a free place
 /// after it (fewer than `cfg.crowd` - 1 bodies): a node held at `most` in its neutral genes is
 /// past the threshold at every update, and its halves (unlike, so never merged back) split again,
 /// so with no such limit the nodes of a cell doubled at each update (one 64x64 world reached
@@ -488,7 +495,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     let half = |g: usize| {
         let ((u, lo, hi), m) = (range(&lay, g), b.genes[g]);
         let d = (FRAC_2_PI * b.spread[g].max(0.0)).sqrt().min(m - lo).min(hi - m).max(0.0);
-        let (x, y) = if (body::HIDDEN..=body::SIGHT).contains(&g) { (0.0, 0.0) } else if g < lay.cat { (m + d, m - d) } else { ((m + d).max(0.0), (m - d).max(0.0)) };
+        let (x, y) = if g < lay.cat { (m + d, m - d) } else { ((m + d).max(0.0), (m - d).max(0.0)) };
         (d, x / u - y / u)
     };
     let rows = if w.cfg.split_rows { 2.0 * (FRAC_2_PI * b.row_spread).sqrt() / row } else { 0.0 };
