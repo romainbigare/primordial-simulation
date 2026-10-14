@@ -45,3 +45,11 @@ folder with the same name as the report.
   the copy mass, the missing thing is time); fixes for two drifts from the philosophy (free numbers
   chosen for outcomes: a numbers table with a tuned budget; the node makes biology: an individuals
   mode and the nodes-against-individuals check as M4's first job).
+- `review-5-before-m4.md`: the fifth review, 14 October 2026: lives are short because births are
+  fast (nothing makes building a body take time), the roster lost small plants, not plants, and two
+  drifts from the handover (free numbers set for outcomes; the population node making biology).
+- `watch-6-before-m4.md`: review 5's list done (build rate, basal upkeep, leaf with mass^0.75,
+  brain sizes in likeness, numbers table, physics.json, individuals mode), with two changes from the
+  review (satiety only past `full`; `c_build` at 3 x 10^4, as at 10^4 the starting eaters died), and
+  100-year checks at 64 x 64: lives of 3 to 6 months, every animal kind evolving small, the big-brain
+  kind keeping its brain and holding its own, the individuals check not yet possible, 14 October 2026.

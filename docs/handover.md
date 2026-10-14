@@ -952,10 +952,15 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   ordinary eaters' children joined the 48-unit nodes within a year (likeness left the brain sizes
   out), so the big brain was averaged down to 12, not tested. Since review 5 likeness counts the
   sizes by whole units (7.1), so the test can be run as meant.
-- **The roster world loses its plants (watch report 5).** At 64 x 64 over 100 years, with the old
-  and the new laws alike, the plants fall from about 4 x 10¹⁰ members to a few 10⁸, tiny eaters of
-  remains (tens of grams) take over, and members of thousands of tonnes appear. Find out why, with
-  the per-kind columns, before the first M4 roster report.
+- **The roster world lost small plants, not plants (review 5).** Its plant mass is as large as the
+  normal run's; the big slow kind won by shade. Since review 5 every animal kind evolves small
+  instead (eaters 63 kg to 0.2 kg in 100 years, watch report 6): intake, building and basal upkeep
+  all go with mass^0.75, and `take` (5% of body mass a day, tuned) feeds a small body enough to pay
+  its brain. Look at `take` before M4's first roster report.
+- **The nodes-against-individuals check needs a small world (watch report 6).** As individuals the
+  animals of a 48 x 48 world were 69,135 bodies by year 25, and at 32 x 32 the starting eaters die
+  in both modes. Design a test world where animals stay near 10^5 members, then run the check
+  (7.1) as M4's first job.
 
 ---
 
