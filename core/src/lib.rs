@@ -115,6 +115,15 @@ pub struct Config {
     /// review 5): the nodes are a speed shortcut and must give the same patterns.
     #[serde(default = "yes")]
     pub nodes: bool,
+    /// Satiety at every size (`choose::sate`), the decision after watch report 7: a body takes no
+    /// more of what it burns than its upkeep plus what it can build and the fuel it converts to do
+    /// it, whatever its size. False (the default): only a member whose body is past `phys.full`
+    /// times its copy mass is held to that, one below it eats as its intake allows (the rule chosen
+    /// for a run of review 5, which stays: with satiety at every size all the animals of six
+    /// 64x64 runs (seeds 1 to 3, normal and roster) died in their first year, since a body decides
+    /// on only a few of its updates and cannot eat more than its upkeep at each, `ew run --sate-all`).
+    #[serde(default)]
+    pub sate_all: bool,
     /// A null run, to be compared with the real run of the same seed: no learning, no imitation
     /// (a watch is drawn and counted but moves no rows), and the brains' born rows and bases never
     /// change at a copy (`copy_phys`); genes still mutate and evolve. What a neutral brain does
@@ -508,6 +517,7 @@ impl Default for Config {
             share_brains: true,
             split_rows: false,
             nodes: true,
+            sate_all: false,
             null: false,
             phys: Physics::default(),
         }
