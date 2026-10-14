@@ -118,6 +118,52 @@ fn genes_do_not_drift_without_selection() {
     }
 }
 
+/// Children that leave a varied node join the node of their own kind in the next cell (review 3,
+/// M3): pairs of children drawn from a node held at the split threshold in every gene (2.7 steps),
+/// sent to a cell whose node has the same genes and spread, join it nearly always, as they lie
+/// within its spread. With the means within `alike` steps alone (the pair's mean differs from the
+/// node's by 2 steps in each gene) about half of them started a node of their own (108 of 200
+/// joined), and cells filled up with variants of one kind.
+#[test]
+fn dispersing_children_of_a_varied_node_join_their_kind() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    (w.cfg.phys.c_copy, w.cfg.crowd) = (0.0, 64);
+    let lay = Layout::of(&w.chem);
+    // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`copy::most`).
+    let inv = copy::steps(&lay, &vec![1.0; lay.len]);
+    let a = w.cfg.phys.alike;
+    let spread: Vec<f32> = inv.iter().map(|&x| if x > 0.0 { (a * a * std::f32::consts::FRAC_PI_8 + 1.0) / (x * x) } else { 0.0 }).collect();
+    let s = live(&w).into_iter().find(|&s| {
+        let i = w.life.bodies[s].cell as usize;
+        pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
+    }).expect("a node with nodes all around");
+    // Members of 1 kg copying at 0.6 kg (not past `full`), all children leave.
+    let mut genes = w.life.bodies[s].genes.clone();
+    (genes[COPY_MASS], genes[DISPERSE]) = (0.6f32.log10(), 1.0);
+    for t in live(&w) {
+        (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
+        w.life.bodies[t].k = Default::default();
+    }
+    // A node of two members: two children.
+    let b = w.life.bodies[s].clone();
+    let per: Vec<f64> = b.store.iter().map(|x| x / b.count).collect();
+    let (mut joined, mut tries) = (0, 0);
+    for _ in 0..200 {
+        let mut c = b.clone();
+        (c.count, c.store, c.e) = (2.0, per.iter().map(|x| 2.0 * x).collect(), 2.0 * b.e / b.count);
+        c.prepare(&w.chem, &w.cfg.phys);
+        let n0 = live(&w).len();
+        w.day += 1;
+        assert!(copy::copy(&mut w, s, &mut c), "no children");
+        (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);
+        w.events.clear();
+    }
+    println!("pairs of children that joined the node of their kind: {joined} of {tries}");
+    assert!(joined as f64 >= 0.95 * tries as f64, "{joined} of {tries} joined");
+}
+
 /// A node whose brain draws an action of Bond splits one member off as an individual of its
 /// lineage, with its share of the stores, to act. One that holds a part after (its brain only
 /// holds parts, and its force bears the part's weight) lives on; one that holds nothing (too weak

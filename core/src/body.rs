@@ -23,7 +23,7 @@ pub const LIQ: usize = 1;
 /// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
 /// `Physics::heat_mass` kg; it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
-/// Light-capture area, log10 m²/kg
+/// Light-capture area, log10 m²/kg of its mass that works (`Body::work`)
 pub const LEAF: usize = 3;
 /// Strength, 0..1
 pub const STRENGTH: usize = 4;
@@ -242,8 +242,9 @@ impl Body {
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
     }
-    /// Visible traits of one member; the colour is the reflectance of the stores by volume.
-    pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
+    /// Visible traits of one member; the colour is the reflectance of the stores by volume. Its
+    /// light-capture area goes with its mass up to `full` times its copy mass (`work`).
+    pub fn visible(&self, chem: &Chemistry, full: f64) -> [f32; 6] {
         let (m, cap) = self.mass_cap(chem);
         let m1 = m / self.n();
         let t = self.e / cap.max(1e-9);
@@ -258,7 +259,7 @@ impl Body {
                 }
             }
         }
-        let leaf = m1 * self.dec(LEAF);
+        let leaf = m1.min(full * self.dec(COPY_MASS)) * self.dec(LEAF);
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Learning rate of its brain within its life (0 when off).
@@ -274,11 +275,22 @@ impl Body {
         let (t, lay) = (self.temp(chem), Layout::of(chem));
         (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase(k, t) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
     }
+    /// Mass that works, kg: each member's mass up to `phys.full` times its copy mass (the size its
+    /// genes set), times the count. What a member holds past that is held matter, not body: it
+    /// takes, sweeps, soaks up, catches (light and rain, on its capture area) and receives no more
+    /// than at full (`phys.take`, `phys.sweep`, the liquid exchange, `LEAF`, gifts), and copies
+    /// what it can pay for (`copy`).
+    /// With all of this going with its whole mass, a body that could not pay for its children
+    /// took more the more it held and grew without end (members of 10^7 kg, 95% liquid, at year
+    /// 100 of a 128x128 world, review 3, M2).
+    pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
+        mass.min(p.full * self.dec(COPY_MASS) * self.n())
+    }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
     /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
     /// taken or put stops there. It bounds the shares of the stores, not the size: what comes in
-    /// at an update goes with the body's own mass (takes and gifts, `phys.take`; rain, its capture
-    /// area), and a member past `phys.full` times its copy mass copies at its update (`copy`).
+    /// at an update goes with the mass that works (`work`), and a member past `phys.full` times
+    /// its copy mass copies at its update (`copy`).
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let f = self.gene(Layout::of(chem).keep + k).clamp(0.0, 0.95);
         let mm = chem.subs[k].molar_mass;
@@ -796,14 +808,17 @@ fn shade(w: &mut World) {
 /// The speed shortcut of plan 7.1, not a law: it coarsens only how members are represented (as
 /// population nodes), never how many there are or where, and must give the same patterns as
 /// individuals (to be checked at M4). Monthly, in each cell, among the bodies that hold and are
-/// inside nothing: a node joins the first larger one alike in genes (`copy::alike`; never for
+/// inside nothing: a node joins the first larger one alike in genes (`copy::alike`, on the means
+/// only, as a split tests its halves, so a split's halves stay apart for selection: a test within
+/// their spreads, as children join, `copy::within`, would merge them back every month; never for
 /// being of the same lineage, so variants of one lineage stay apart); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
 /// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are not
 /// merged (merging them blended a new kind into the nearest one every month, review 3, M3),
 /// unless the cell holds more than twice `crowd`: then the most alike merge however unlike, down
 /// to that. That is a numerical safeguard, not a law: with about a hundred genes, variants of
-/// individuals and immigrants are often unlike in one gene, and with no ceiling one 64x64 world
+/// individuals and immigrants are often unlike in one gene (fewer since children join the node
+/// whose spread they lie in, `copy::within`), and with no ceiling one 64x64 world
 /// gathered about 146,000 bodies in one cell within a few years. So individuals stay individuals
 /// while their cell is not over `crowd`, and kinds stay apart up to twice that. Stores and heat add up, genes and born rows become the means by
 /// count and the spread of both is kept in the merged node's (`copy::join`), the born rows carried
@@ -926,7 +941,7 @@ pub fn day(w: &mut World) {
                 }
                 crate::copy::resize(w, s, &mut b);
                 crate::copy::split(w, s, &mut b);
-                b.vis = b.visible(&w.chem);
+                b.vis = b.visible(&w.chem, w.cfg.phys.full);
                 w.life.due[((w.day + b.interval()) % RING) as usize].push((slot, gen));
                 w.life.bodies[s] = b;
             }
@@ -1058,11 +1073,11 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // do not block it: they are matter about as warm as the surface, which takes up what the
     // body radiates and passes it on. Taken at its temperature at the start of the update (and
     // at the end, if it ends warmer).
-    let (m1, nb) = (mass / b.n(), b.n());
+    let (m1, nb, wk) = (mass / b.n(), b.n(), b.work(&cfg.phys, mass) / mass);
     let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
     let g0 = b.conductance(cfg.phys.heat_mass, mass);
     let g0 = if cover > 0.0 {
-        let s = ab / (ab + m1 * b.k.leaf);
+        let s = ab / (ab + wk * m1 * b.k.leaf);
         g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * nb * ab))
     } else {
         g0
@@ -1079,7 +1094,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // what light reactions store: so up to `MAX_INTERVAL` days of sunlight neither reach the
     // ground in one go nor are drawn back from it in one go.
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
-    let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
+    let got = wk * mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
     b.mark = light[i];
     let reach = (-depth / cfg.phys.light_depth).exp();
     let lit = got * reach;
@@ -1190,14 +1205,14 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     }
 
     // Liquids standing on the ground soak in by solubility, faster where the ground is wet,
-    // up to the level the body keeps.
+    // up to the level the body keeps, through the mass that works (`wk`).
     let wet = depth / (depth + cfg.phys.wet_depth);
     let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
     if in_ground > 0.0 {
         let _ = cap!();
     }
-    let rate = -(-b.k.liq * days).exp_m1() * wet;
+    let rate = -(-b.k.liq * days).exp_m1() * wet * wk;
     let mass2 = if moved { b.mass(chem) } else { mass1 };
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
         let x = ground[k * n + i] / in_ground;
