@@ -445,7 +445,10 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: &[f32]) {
 /// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the
 /// heat and of the child store; lineage, group, genome, memory as the node's; holding nothing, inside nothing.
 fn part(b: &mut Body, f: f64) -> Body {
-    let mut c = Body { count: f * b.count, e: f * b.e, paid: f * b.paid, trace: Vec::new(), k: body::Consts::default(), hold: 0, inside: 0, ..b.clone() };
+    // (The trace and the constants are not the part's: set aside, not cloned.)
+    let (trace, k) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k));
+    let mut c = Body { count: f * b.count, e: f * b.e, paid: f * b.paid, hold: 0, inside: 0, ..b.clone() };
+    (b.trace, b.k) = (trace, k);
     for (a, x) in b.store.iter_mut().zip(c.store.iter_mut()) {
         *x = f * *a;
         *a -= *x;

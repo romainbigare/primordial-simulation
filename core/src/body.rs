@@ -943,6 +943,8 @@ pub struct Tmp {
     /// (counted up to 2); the catalyst factors of the reactions that run on their own
     pub spare: f64,
     cat: Vec<f64>,
+    /// The amounts of a share of its members that die (`thin`)
+    dead: Vec<f64>,
     /// Mass and heat capacity of the body as `live` left it (valid until its stores change)
     pub mass: f64,
     pub cap: f64,
@@ -1038,15 +1040,16 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
 /// mean), so the survivors keep those stores and the dead take their share of the rest. The
 /// share that dies is the least that lifts every key store to its safe minimum; false if that
 /// is all of them.
-fn starve(w: &mut World, b: &mut Body, m: f64) -> bool {
+fn starve(w: &mut World, b: &mut Body, m: f64, dead: &mut Vec<f64>) -> bool {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
-    let short: Vec<usize> = (0..chem.ns()).filter(|&k| x(k) < b.gene(lay.min + k) * m).collect();
-    let kept: f64 = short.iter().map(|&k| x(k)).sum();
-    let live = short.iter().map(|&k| (x(k) / b.gene(lay.min + k) - kept) / (m - kept).max(1e-30)).fold(1.0, f64::min);
+    let short = |&k: &usize| x(k) < b.gene(lay.min + k) * m;
+    let kept: f64 = (0..chem.ns()).filter(short).map(x).sum();
+    let live = (0..chem.ns()).filter(short).map(|k| (x(k) / b.gene(lay.min + k) - kept) / (m - kept).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);
-    let dead: Vec<f64> = (0..chem.ns()).map(|k| if short.contains(&k) { 0.0 } else { b.store[k] * f }).collect();
-    f < 1.0 && thin(w, b, f, &dead, LACK) && !b.lacking(&w.chem)
+    dead.clear();
+    dead.extend((0..chem.ns()).map(|k| if short(&k) { 0.0 } else { b.store[k] * f }));
+    f < 1.0 && thin(w, b, f, dead, LACK) && !b.lacking(&w.chem)
 }
 
 /// Flow and Change on one body since its last update. Returns a death cause.
@@ -1087,8 +1090,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     b.e = e0;
     for (f, cause) in [(short, SPENT), (if node { worn.min(1.0) } else { 0.0 }, AGE)] {
         if f > 1e-9 {
-            let dead: Vec<f64> = b.store.iter().map(|a| a * f).collect();
-            if !thin(w, b, f, &dead, cause) {
+            tmp.dead.clear();
+            tmp.dead.extend(b.store.iter().map(|a| a * f));
+            if !thin(w, b, f, &tmp.dead, cause) {
                 b.e += upkeep;
                 return Some(cause);
             }
@@ -1311,7 +1315,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 
     let (mut mass3, mut c) = (mass3, c);
     if b.lacking_at(&w.chem, mass3) {
-        if !(b.n() > 1.0 && mass3 >= 1e-3 * b.n() && starve(w, b, mass3)) {
+        if !(b.n() > 1.0 && mass3 >= 1e-3 * b.n() && starve(w, b, mass3, &mut tmp.dead)) {
             return Some(LACK);
         }
         (mass3, c) = b.mass_cap(&w.chem);
