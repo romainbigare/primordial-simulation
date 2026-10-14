@@ -99,7 +99,7 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// 1.393 -> 1.324, 2.456 -> 2.478; 600 kg: 4.868 -> 4.390, 2.691 -> 2.736.
 ///
 /// The `HEAT` genes (the third scalar) are W per K and kg of a member of `Physics::m_ref` = 1 kg
-/// since 15 Oct 2026 (before, of 30 kg: conductance = gene x 30^(1/3) x m^(2/3) per member). The
+/// since 14 Oct 2026 (before, of 30 kg: conductance = gene x 30^(1/3) x m^(2/3) per member). The
 /// same conductance at any mass needs a gene 30^(1/3) = 3.107 times higher, log10 = +0.492, in
 /// every kind (a member of m kg: old g x 30^(1/3) x m^(2/3) = new g x 1 x m^(2/3)): light-eaters,
 /// small fast and big slow 2.2 to 2.692; eaters and clever eaters, small fast eaters of

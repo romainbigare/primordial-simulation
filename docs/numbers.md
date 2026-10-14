@@ -1,6 +1,6 @@
 # The numbers of the world: what each one is, what it is anchored to, and how far to trust it
 
-**Written:** 15 October 2026 (review 5, row 6; handover 3 and 14.3). **Keep it true:** a test (`core/tests/numbers.rs`) fails when a field of `Physics` or `Config` has no row here, or a row names a field that does not exist. A new number cannot be added without saying what it is.
+**Written:** 14 October 2026 (review 5, row 6; handover 3 and 14.3), marks revised the same day by review 6 (finding 9). **Keep it true:** a test (`core/tests/numbers.rs`) fails when a field of `Physics` or `Config` has no row here, or a row names a field that does not exist. A new number cannot be added without saying what it is.
 
 ## How to read this table
 
@@ -74,7 +74,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `c_strength` | J per kg^0.75 per day at strength 1 (at the 1 kg reference, `Body::equiv`) | upkeep of strength | about 1 W/kg at 30 kg; a 30 kg mammal rests at about 45 W (Kleiber, report 4), so this is the order. Per kg^0.75 like `c_basal`, intake and building (14 Oct 2026, review 6 finding 2), anchored at the 30 kg founders: 1e5 x 30^0.25 = 2.34e5 | anchored |
 | `c_leaf` | J per m² per day | upkeep of light-capture area | run: so the starting plants pay what they paid before. A leaf's own breathing is about 4e4 J per m² per day (1 µmol of carbon gas per m² per s, my arithmetic), 20 times more | tuned |
 | `c_brain` | J per kg of a member of `m_ref` kg, per decision | cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1) | none found; kept as a speed incentive on purpose: it pushes bodies toward long intervals (plan 7.3, handover 6.5). The four numbers below split it | tuned |
-| `m_ref` | kg | the one reference mass: the member at which a per-kg number is per kg (brain cost, `take`, `sweep`, the heat gene) | a unit, not a size: 1 kg. Three reference masses (`m_ref`, `intake_ref`, `heat_mass`) were made one on 15 Oct 2026 | anchored |
+| `m_ref` | kg | the one reference mass: the member at which a per-kg number is per kg (brain cost, `take`, `sweep`, the heat gene) | a unit, not a size: 1 kg. Three reference masses (`m_ref`, `intake_ref`, `heat_mass`) were made one on 14 Oct 2026 | anchored |
 | `c_hidden` | J per kg of a member of `m_ref` kg, per decision | cost per hidden unit | derived: a share of `c_brain` (12 x 5e3 = 6e4 of 1e5) | tuned, first guess |
 | `c_memory` | the same | cost per memory number | derived: a share of `c_brain` (6 x 5e3/3 = 1e4) | tuned, first guess |
 | `c_seen` | the same | cost per body perceived | derived: a share of `c_brain` (3 x 5e3 = 1.5e4) | tuned, first guess |
@@ -94,7 +94,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `layer` | m | the bodies of a cell must fit in a layer this thick over it | a tall plant, about 10 m; a ceiling far above real cover (a forest holds under 100 kg/m², this allows 10,000) | anchored |
 | `rho_body` | kg/m³ | density of bodies | living matter is about the density of liquid, 1,000 | physical |
 | `walk_wear` | kg/J | body mass broken per J a mover dissipates against it, times (strength + 0.1) | none found; review 2: do not tune it to force trails | tuned, first guess |
-| `take` | share per day | most a body can take per day of the mass it takes by, per kg at `m_ref` | run: set for eaters to live (review 5, drift 1). The result is a 57 kg eater taking 1.04 kg a day, 1.8% of its mass, inside the real order of 1 to 5% | tuned |
+| `take` | share per day | most a body can take per day of the mass it takes by, per kg at `m_ref` | a 57 kg eater (20.8 kg-equivalents) takes at most 1.04 kg a day, 1.8% of its mass (5% of its kg-equivalents; 5% of the mass of a 1 kg member). Real food intake is 1 to 5% of body mass a day, and this is about 2.7 times Kleiber's resting need for that eater (1.04 kg of sugar at 15.6 MJ/kg is 16 MJ a day against 3.4 m^0.75 W = 6.1 MJ), a real appetite. Review 5 (drift 1) listed it as tuned; review 6 (finding 2) showed that it does not decide which size wins (the costs by the kg did, `c_strength`, `c_cat`, `c_learn`, `c_signal` now by kg^0.75) | anchored |
 | `intake_exp` | none | what a member takes, sweeps and receives goes with its mass that works to this power | Kleiber: 0.75, the exponent of intake and metabolism in life | anchored |
 | `sweep` | m² per kg per day | area a body works per day per kg of its mass that works, at `m_ref` | run: set for eaters to live (review 5, drift 1). A 30 kg body works 300 m² in 10 days | tuned |
 | `c_handle` | J per kg | energy to handle one kg taken or put | none found; review 5 lists it as tuned | tuned |
@@ -136,7 +136,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `row_chance` | chance per child | a child's born brain rows change | none found | tuned, first guess |
 | `row_noise` | none | step of that change per generation | none found | tuned, first guess |
 | `new_noise` | none | spread of the weights a bigger brain adds | none found | tuned, first guess |
-| `full` | times the copy mass | a member holding this many times its copy mass copies whatever its brain does; it also caps the mass that works | run: "copies at twice its copy mass", set so bodies cannot grow without end (review 3, M2). It goes away with satiety (review 5 row 1) | tuned |
+| `full` | times the copy mass | a member holding this many times its copy mass copies whatever its brain does (the copy trigger); it caps the mass that works; and it gates satiety: only a member past it takes no more than it can use (`choose::sate`) | run: "copies at twice its copy mass", set so bodies cannot grow without end (review 3, M2). It did not go away with satiety (review 5 row 1): the number still decides when a body copies and, since 14 Oct 2026, from where satiety acts (a rule chosen for a run, see below) | tuned |
 | `alike` | mutation steps | nodes whose genes differ by at most this merge; a node splits when its halves differ by more | run: speed-tool threshold, 4 steps (review 3, M3); to be checked against individuals at M4 | tuned |
 
 ### Flow, as ground cover and moving liquid feel it
@@ -154,7 +154,18 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
 | `c_build` | J per day per kg^0.75 | most a body pays into its child store per day: the rate at which it can build a child | the growth of young in life, 1,500 to 30,000 (von Bertalanffy; review 5, row 1). 1e4, review 5's value. It was 3e4 for part of 14 Oct, raised so the neutral-brained founder eaters of seeds 1 and 2 bred faster than they starved (a law set to win a start; review 6, finding 1); that start is now hand-set (`ew run`) and the number is back. Tuned because runs chose it within the anchor | tuned |
-| `c_basal` | J per day per kg^0.75 | basal upkeep every body pays, strength and catalysts on top (2e4) | resting metabolism (Kleiber; its whole value is about 3e5 J per day per kg^0.75, of which this is the part every body pays, the rest being `c_strength` and `c_cat`; review 5, row 2) | anchored |
+| `c_basal` | J per day per kg^0.75 | basal upkeep every body pays, strength and catalysts on top (2e4) | resting metabolism (Kleiber; its whole value is about 3e5 J per day per kg^0.75, of which this is the part every body pays, the rest being `c_strength` and `c_cat`; review 5, row 2). It is 1/15 of Kleiber's whole value, which review 5 chose so that a 1 kg plant keeps a spare of over twice its upkeep: a number set for a run, so marked tuned (review 6, finding 9). With the costs by kg^0.75 (14 Oct 2026) a 1 kg plant keeps 85 kJ/kg/day of income against 46 of upkeep, 1.8 times | tuned |
+
+## Rules chosen for a run
+
+These are not numbers of the world and not rows of `Physics` or `Config`, but they were picked so a run came out a certain way (handover 2, lesson 3; review 6, finding 9), so they are listed here and counted like tuned numbers. **Each must not grow in number: four today, held by a test (`core/tests/numbers.rs`).** A new one replaces one of these or is not added. Where one is also a row above (the kept copy logits and the roster's stores are in the table of constants, marked tuned), the tuned count already has it.
+
+| rule | what it does | chosen for (run, date) | where |
+|---|---|---|---|
+| satiety only past `full` | a member below `full` times its copy mass takes as its intake allows; only one past it takes no more than its reactions can use over the interval | 14 Oct 2026, reviews 5 and 6: with satiety at every size all 416 starting eaters died in their first year of seed 1 | `choose::sate` |
+| the kept copy logits `H_LIGHT` and `H_EATER` | the one brain bias kept in a neutral start: the body's own chance to copy (-1.0 for light-eaters, -1.6 for eaters); they set the plants' births, since almost no plant member is past `full` (review 6, finding 4) | keeps the pace of generations; a neutral 0 would make every body that holds its copy mass copy on half of its decisions | `worldgen::life` |
+| the hand-set eater start (the default for animal kinds in `ew run` and `--roster`) | animals are placed with the hand-set biases (`Seeding::hand[1]`), not neutral brains; `--neutral-eaters` for the old start; plants stay neutral | 14 Oct 2026, review 6, finding 1: 97 to 99% of neutral-brained founder eaters died in their first year, a lottery that `c_build` had been raised to win; the bottleneck is now 25 to 77 founder bodies instead of 2 to 14 | `cli/src/main.rs`, `worldgen::life::Seeding` |
+| the roster's stores (`Kind::store`: 30% of mass, 60% for the two big slow eater kinds) | the fuel a starting member holds | seed 1, 64x64 roster: 100 days of store held 6 or 7 decisions of a neutral brain and the 150 kg and 600 kg kinds were gone by years 30 and 35; 200 days kept them (`life.rs`) | `worldgen::life::KINDS` |
 
 ## Constants outside the structs that act like free numbers
 
@@ -162,27 +173,28 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `copy::WITHIN` | standard deviations | children may lie this far beyond a node's `alike` and still join it (and nodes of a full cell merge) | run: 0.5 (15 Oct 2026; 2 before, which let nodes at the spread's cap join kinds up to 11.6 steps apart, so the roster's animal kinds blended into one small kind); a pair of children of a node held at the split threshold still joins it 199 times in 200. Speed-tool threshold: copying is asexual, so kinds never mix in individuals | tuned |
+| `copy::WITHIN` | standard deviations | children may lie this far beyond a node's `alike` and still join it (and nodes of a full cell merge) | run: 0.5 (14 Oct 2026; 2 before, which let nodes at the spread's cap join kinds up to 11.6 steps apart, so the roster's animal kinds blended into one small kind); a pair of children of a node held at the split threshold still joins it 199 times in 200. Speed-tool threshold: copying is asexual, so kinds never mix in individuals | tuned |
 | `body::MIN_INTERVAL` | days | the shortest time between updates | a speed safeguard (5 days) | tuned |
 | `body::MAX_INTERVAL` | days | the longest time between updates | one year | anchored |
 | `worldgen::life::T_SURF` and `richness::T_SURF` | K | typical surface temperature, where the starting kinds' reactions and the richness checks look at phases | the same as `t_cat` (290 K): one constant, `pcore::T_SURF` | anchored |
+| `MOVE_REF` (30 kg) and `MOVE_EXP` (-0.32) in `core/src/lib.rs` | kg; none | the mass at which `c_move` is the cost of moving, and the exponent of the real cost of transport against the mover's mass (`Physics::walk`) | Taylor et al. 1982: 10.7 m^-0.32 J per kg per m, 3.6 at 30 kg (14 Oct 2026, review 6 finding 2) | anchored |
 | the kept copy logit, `H_LIGHT` and `H_EATER` in `life.rs` (-1.0 and -1.6) | logit | the one brain bias kept at the start: the body's own chance to copy | run: it keeps the pace of generations; a neutral 0 would make every body that holds the mass copy on half of its decisions (said in `life.rs`). A behaviour, not a size | tuned |
 | `Kind::store` of the roster (0.3; 0.6 for the two big slow eater kinds) | share of mass | the energy-rich solid a starting member holds as fuel | run: seed 1, 64x64 roster, 100 days of store held 6 or 7 decisions of a neutral brain and the 150 and 600 kg kinds were all gone by year 30 and 35; 200 days kept them (`life.rs`) | tuned |
 | the roster's intervals, copy masses and strengths (`INTERVAL`, `COPY_MASS` and `STRENGTH` genes in `KINDS`) | days, log10 kg, share | when each kind updates, where it copies, how strong it is | run: set so each kind lives its first years (600 kg members at 40 days and strength 0.95 were all dead within 6 months). Initial conditions, not laws, but they are numbers a run came out of | tuned |
 | the year each kind is placed (`Kind::year`: 0, 10, 20, 24) | years | when the starting kinds are placed after the first life | run: once what they eat has spread (`life.rs`) | tuned |
-| `Seeding::default` (20 rounds, row-bias step 0.2, genes x3) | none | how much a neutral start is sprayed with mutation | run: one generation's step is too small for selection to pick from in the time available (review 2, problem 2) | tuned |
+| `Seeding::default` (20 rounds, row-bias step 0.2, genes x3) | none | how much a start is sprayed with mutation | run: one generation's step is too small for selection to pick from in the time available (review 2, problem 2). The hand-set start, the default for animals in `ew run` since 14 Oct 2026, takes one generation's step for rows and genes | tuned |
 
 ## Counts
 
-By hand and by script on 15 Oct 2026. The 98 rows of `Config` and `Physics` are their 98 fields (with `c_build` and `c_basal`, added the same day by review 5).
+By hand and by script on 14 Oct 2026. The 98 rows of `Config` and `Physics` are their 98 fields. Review 6 (finding 9) moved four marks: `c_build` and `c_basal` from anchored to tuned (set for a run), `c_move` and `take` from tuned to anchored (a real cost of transport; a real appetite), so the count of tuned rows is the same.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 29 | 27 fields, `c_build` and `c_basal` |
-| tuned (run or reason named) | 20, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `c_move`, `take`, `sweep`, `c_handle`, `full`; outside: the kept copy logit, the roster's stores, intervals and years, the spray of the start) |
+| anchored | 29, and 3 outside the structs | 29 fields (among them `c_move` and `take`) and the constants `MAX_INTERVAL`, `T_SURF` and `MOVE_REF`/`MOVE_EXP` |
+| tuned (run or reason named) | 20, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `full`, `c_build`, `c_basal`; outside: the kept copy logit, the roster's stores, intervals and years, the spray of the start) |
 | tuned, first guess | 40 | 36 free numbers (`wind`, `cloud`, `carry`, `wear`, `creep`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `walk_wear`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 4 | `share_brains`, `split_rows`, `null`, `nodes` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 67 (60 in the structs, 7 outside). The test holds that count at 67 or below (handover 14.3).
+Rows marked tuned in all: 67 (60 in the structs, 7 outside). The test holds that count at 67 or below (handover 14.3). Rules chosen for a run: 4, held by the test too.

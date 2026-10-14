@@ -201,7 +201,7 @@ pub struct Physics {
     /// same brain, 13 times less per kg, not 30 times); `take` and `sweep` are per kg of a member
     /// of this mass (above it a member takes less per kg, `Body::intake`); the heat gene is the
     /// conductance per kg of a member of this mass (`Body::conductance`). Three reference masses
-    /// for one idea were made one (15 Oct 2026, review 5)
+    /// for one idea were made one (14 Oct 2026, review 5)
     pub m_ref: f64,
     /// Cost of one decision per hidden unit, per memory number, per body perceived and per square
     /// cell of sight, J per kg of a member of `m_ref` kg

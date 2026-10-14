@@ -28,7 +28,7 @@ pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;
 /// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
-/// `Physics::m_ref` kg (1 kg since 15 Oct 2026; 30 kg before, so every kind's gene is
+/// `Physics::m_ref` kg (1 kg since 14 Oct 2026; 30 kg before, so every kind's gene is
 /// log10(30^(1/3)) = 0.492 higher); it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
 /// Light-capture area, log10 m² per kg-equivalent of its mass that works (`Body::work`, `Body::equiv`:

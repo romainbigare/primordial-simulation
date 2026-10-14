@@ -87,7 +87,7 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
 
 /// Standard deviations of spread (of a node and of the children joining it) that the means of
 /// children may lie from a node's beyond `phys.alike` steps and still belong to it (`within`).
-/// A half (15 Oct 2026; two before). Copying is asexual: in individuals the genes of two kinds
+/// A half (14 Oct 2026; two before). Copying is asexual: in individuals the genes of two kinds
 /// never mix, so a node, which only saves time, must not mix them either. With two, a node and
 /// a group of children both at the spread's cap (2.7 steps each) took anything within
 /// 4 + 2 x sqrt(2 x 7.3) = 11.6 steps in every gene, and the monthly merge of a full cell
@@ -102,7 +102,7 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
 /// threshold still joins it 199 times in 200 (`tests/nodes.rs`). Kinds less than 6 steps apart in
 /// every gene still blend. With `alike` alone (0) a lone child left its own node 1 time in 6 per
 /// gene, the bodies of a 64x64 roster world tripled, the safeguard merge past twice `crowd` mixed
-/// the kinds again and the eaters ended at 0.3 to 2 kg (review 3, M3; 15 Oct 2026).
+/// the kinds again and the eaters ended at 0.3 to 2 kg (review 3, M3; 14 Oct 2026).
 pub const WITHIN: f32 = 0.5;
 
 /// Children `c` (one or a group drawn from a node, with the spread left among them) belong to

@@ -71,6 +71,27 @@ fn every_row_has_one_name_and_a_known_mark() {
     }
 }
 
+/// Rules chosen for a run (review 6, finding 9): what was picked so a run came out a certain way
+/// and is not a number of `Physics` or `Config`. The table "Rules chosen for a run" lists them; it
+/// may not grow (handover 14.3).
+const RULES_BUDGET: usize = 4;
+
+#[test]
+fn the_rules_chosen_for_a_run_stay_within_their_budget() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/numbers.md");
+    let text = std::fs::read_to_string(&path).expect("docs/numbers.md");
+    let (mut on, mut n) = (false, 0);
+    for line in text.lines() {
+        if let Some(h) = line.strip_prefix("## ") {
+            on = h.trim() == "Rules chosen for a run";
+        } else if on && line.starts_with("| ") && !line.starts_with("| rule |") && !line.starts_with("|---") {
+            n += 1;
+        }
+    }
+    assert!(n > 0, "the table of rules chosen for a run is missing");
+    assert!(n <= RULES_BUDGET, "{n} rules chosen for a run; the budget is {RULES_BUDGET} (handover 14.3)");
+}
+
 #[test]
 fn the_tuned_numbers_stay_within_their_budget() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/numbers.md");
