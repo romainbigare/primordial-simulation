@@ -159,11 +159,10 @@ Some numbers in this file were found by reading doc comments and reports, not by
 
 ## Rules chosen for a run
 
-These are not numbers of the world and not rows of `Physics` or `Config`, but they were picked so a run came out a certain way (handover 2, lesson 3; review 6, finding 9), so they are listed here and counted like tuned numbers. **Each must not grow in number: three today, held by a test (`core/tests/numbers.rs`).** A new one replaces one of these or is not added. Where one is also a row above (the kept copy logits and the roster's stores are in the table of constants, marked tuned), the tuned count already has it.
+These are not numbers of the world and not rows of `Physics` or `Config`, but they were picked so a run came out a certain way (handover 2, lesson 3; review 6, finding 9), so they are listed here and counted like tuned numbers. **Each must not grow in number: two today, held by a test (`core/tests/numbers.rs`).** A new one replaces one of these or is not added. Where one is also a row above (the kept copy logits and the roster's stores are in the table of constants, marked tuned), the tuned count already has it.
 
 | rule | what it does | chosen for (run, date) | where |
 |---|---|---|---|
-| the kept copy logits `H_LIGHT` and `H_EATER` | the one brain bias kept in a neutral start: the body's own chance to copy (-1.0 for light-eaters, -1.6 for eaters); they set the plants' births, since almost no plant member is past `full` (review 6, finding 4) | keeps the pace of generations; a neutral 0 would make every body that holds its copy mass copy on half of its decisions | `worldgen::life` |
 | the hand-set eater start (the default for animal kinds in `ew run` and `--roster`) | animals are placed with the hand-set biases (`Seeding::hand[1]`), not neutral brains; `--neutral-eaters` for the old start; plants stay neutral | 14 Oct 2026, review 6, finding 1: 97 to 99% of neutral-brained founder eaters died in their first year, a lottery that `c_build` had been raised to win; the bottleneck is now 25 to 77 founder bodies instead of 2 to 14 | `cli/src/main.rs`, `worldgen::life::Seeding` |
 | the roster's stores (`Kind::store`: 30% of mass, 60% for the two big slow eater kinds) | the fuel a starting member holds | seed 1, 64x64 roster: 100 days of store held 6 or 7 decisions of a neutral brain and the 150 kg and 600 kg kinds were gone by years 30 and 35; 200 days kept them (`life.rs`) | `worldgen::life::KINDS` |
 
@@ -208,4 +207,4 @@ By hand and by script on 14 Oct 2026. The 99 rows of `Config` and `Physics` are 
 | switch | 4 | `share_brains`, `split_rows`, `null`, `nodes` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 67 (60 in the structs, 7 outside). The test holds that count at 67 or below (handover 14.3). Rules chosen for a run: 3, held by the test too (satiety only past `full` went on 14 Oct 2026: a store bounded by the body is the satiety, handover 4).
+Rows marked tuned in all: 67 (60 in the structs, 7 outside). The test holds that count at 67 or below (handover 14.3). Rules chosen for a run: 2, held by the test too (satiety only past `full` went on 14 Oct 2026: a store bounded by the body is the satiety, handover 4; the kept copy logits went the same day: bodies copy by physics only, `choose::COPY_BY_CHOICE`, review 7).

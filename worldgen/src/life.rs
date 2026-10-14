@@ -508,6 +508,8 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
         chem.add_elems(k, a, &mut ledger.imposed_elems);
         ledger.imposed_energy += a * chem.subs[k].hf;
     }
-    (b.wet, b.vis) = (b.key_liquids(chem), b.visible(chem, &w.cfg.phys));
+    // Its key liquids first: `visible` reads the body (`Body::size`) through them.
+    b.wet = b.key_liquids(chem);
+    b.vis = b.visible(chem, &w.cfg.phys);
     Some(b)
 }

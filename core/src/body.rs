@@ -326,6 +326,14 @@ impl Body {
         let (liquid, h) = self.wet_h(chem);
         (matter / (1.0 - h)).min(matter + liquid)
     }
+    /// The body its matter makes, kg (all members): its matter over 1 - `h`, as if it held all the
+    /// liquid it keeps (`size` without the cap of the liquid it holds now). What growth builds to
+    /// (`copy::grow`), and so what the copy trigger at `full` reads (`live`). Without body matter: `size`.
+    pub fn built(&self, chem: &Chemistry) -> f64 {
+        let Some(m) = chem.matter() else { return self.size(chem) };
+        let (_, h) = self.wet_h(chem);
+        self.store[m] * chem.subs[m].molar_mass / (1.0 - h)
+    }
     /// The key liquids it holds, kg (all members), and the most share of its mass it keeps of any
     /// of them (its keep gene, 0..0.95).
     pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
@@ -998,7 +1006,7 @@ fn crowd(w: &mut World) {
         for x in 0..list.len() {
             let a = &b[list[x].1];
             if a.n() > 1.0 {
-                head[x] = (0..x).find(|&y| head[y] == y && crate::copy::alike(&lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
+                head[x] = (0..x).find(|&y| head[y] == y && crate::copy::alike(&lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes) && (!crate::copy::COHORTS || crate::copy::near(&w.chem, w.cfg.phys.full, &b[list[y].1], a))).unwrap_or(x);
             }
         }
         for x in (0..list.len()).filter(|&x| head[x] != x) {
@@ -1015,11 +1023,12 @@ fn crowd(w: &mut World) {
         // or not, then its squared distance in steps. The halves of a split are not touched:
         // a node splits only while its cell is under `max` (`copy::split`).
         let (m, lim) = (left.len(), w.cfg.phys.alike);
-        let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]));
-        let mut v: Vec<(Vec<f32>, Vec<f32>)> = left.iter().map(|&s| steps(w, s)).collect();
-        let dist = |p: &(Vec<f32>, Vec<f32>), q: &(Vec<f32>, Vec<f32>)| {
+        let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]), (w.life.bodies[s].size(&w.chem) / w.life.bodies[s].n()).max(1e-30).ln());
+        let mut v: Vec<(Vec<f32>, Vec<f32>, f64)> = left.iter().map(|&s| steps(w, s)).collect();
+        let lnfull = w.cfg.phys.full.ln();
+        let dist = |p: &(Vec<f32>, Vec<f32>, f64), q: &(Vec<f32>, Vec<f32>, f64)| {
             let gap = |g: usize| (p.0[g] - q.0[g]).abs() > lim + crate::copy::WITHIN * (p.1[g] + q.1[g]).sqrt();
-            ((0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
+            ((0..p.0.len()).any(gap) || (crate::copy::COHORTS && (p.2 - q.2).abs() > lnfull), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
         };
         let mut d = vec![(true, f32::INFINITY); m * m];
         for p in 0..m {
@@ -1460,7 +1469,11 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if crate::copy::grow(w, b, days) {
         (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
     }
-    if b.size(&w.chem) / b.n() >= (1.0 - 1e-9) * w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
+    // The trigger reads the body its matter makes (`built`), what growth controls: the liquid that
+    // goes with new matter comes later by soaking and rain, toward its level but never quite to it
+    // (each update closes a share of the gap), so a body whose growth was done sat a few parts in
+    // ten thousand below `full` by `size` and never copied by this path.
+    if b.built(&w.chem) / b.n() >= (1.0 - 1e-9) * w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
         (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
     }
     None

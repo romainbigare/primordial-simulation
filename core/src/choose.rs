@@ -69,6 +69,15 @@ fn sector(sight: usize) -> Sector {
     s
 }
 
+/// Whether a body may also copy by its brain's own chance before it is full (the kept copy logit,
+/// `worldgen::life`). Off: a body copies only when it has built `full` times its copy mass
+/// (`body::live`), so no brain bias sets how often anything is born. With it on, almost no plant
+/// member ever reached `full` and all their births came from that chance (review 6, finding 4;
+/// the plant review of 14 Oct 2026); with it off and the trigger reading the body built
+/// (`Body::built`) plants and eaters lived on seeds 1 to 3 (64x64, 60 years). An experiment
+/// switch until this is decided (handover 4).
+pub const COPY_BY_CHOICE: bool = false;
+
 pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (i, ns) = (b.cell as usize, w.chem.ns());
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
@@ -210,8 +219,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
 
     // Copy by its own chance (set by evolution and imitation, never learned) while a member's body
     // is less than `phys.full` times its copy mass (past it, it copied at its update, `body::live`);
-    // else draw one of the other actions by its score.
-    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) && b.size(&w.chem) / b.n() < w.cfg.phys.full * b.dec(body::COPY_MASS);
+    // else draw one of the other actions by its score. Off (`COPY_BY_CHOICE`): copying is physics
+    // only, when the body is built (`body::live`), and the brain's copy row is not read.
+    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) && b.size(&w.chem) / b.n() < w.cfg.phys.full * b.dec(body::COPY_MASS) && COPY_BY_CHOICE;
     logit[1] = f32::NEG_INFINITY;
     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
     let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });

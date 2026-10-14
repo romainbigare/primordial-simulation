@@ -1,6 +1,7 @@
-//! Law 4: Copy. A body whose members have enough mass pays the work of copying into its child
-//! store as far as its reactions can release it now, and makes the children it covers, a child
-//! per member: a share of each of its stores and of its heat, and its genes plus small noise
+//! Law 4: Copy. A body whose members have built the body of their copy mass makes children, a
+//! child per member (more past `full`): a share of each of its stores and of its heat (the `CHILD`
+//! gene; in a node, children who stay are new members and the node's mean simply falls, so the
+//! gene acts there only on those who leave), and its genes plus small noise
 //! (now and then a change of the brain rows it was born with, else it shares its parent's); it
 //! starts in its parent's brain group (or, if brains are not shared, in a group of its own with
 //! what its parent learned). A child whose brain-size genes are a whole unit away from its
@@ -341,6 +342,21 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         Some(j) => (j, m),
         None => (i, 0.0),
     };
+    // Children whose bodies are unlike their parents' (more than `full` apart: a child of share
+    // `s / k` against the parent's `1 - s`) are not the same members: they leave the node as a
+    // group of their own, those that disperse to their cell and the rest to the parent's, where
+    // they join a node of their size or start one (`within`, `near`). So a node holds members of
+    // one size, and a small child is shaded by its big parents (`body::shade`).
+    let full = w.cfg.phys.full;
+    let (child, parent) = (s / k, 1.0 - s);
+    if node && COHORTS && (child > full * parent || parent > full * child) {
+        if m > 0.0 {
+            emit(w, slot, b, cell, m, s * m / (n * k), node, alone, id, &mut r);
+        }
+        let stay = births - m;
+        emit(w, slot, b, i, stay, s * stay / (n * k), node, alone, id, &mut r);
+        return true;
+    }
     if node {
         b.count += births - m;
         widen(&lay, &w.cfg.copy_phys(), b, ((births - m) / b.n()) as f32);
@@ -349,8 +365,27 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         }
     }
     // Each child gets share `s / k` of a member's stores.
-    let share = s * m / (n * k);
-    let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, &mut r);
+    emit(w, slot, b, cell, m, s * m / (n * k), node, alone, id, &mut r);
+    true
+}
+
+/// Children unlike their parents in size leave the node (`copy`), and nodes join only members of
+/// their size (`near`). An experiment switch.
+pub const COHORTS: bool = false;
+
+/// Members of `a` and `b` are alike in size: their bodies (`Body::size` per member) within a
+/// factor `full` of each other (a node holds members of about one size, `copy`).
+pub fn near(chem: &crate::chem::Chemistry, full: f64, a: &Body, b: &Body) -> bool {
+    let (x, y) = (a.size(chem) / a.n(), b.size(chem) / b.n());
+    x <= full * y && y <= full * x
+}
+
+/// `m` children of `b` (a share `share` of its stores and heat) start in `cell`: they join a node
+/// there they belong to, or start a body.
+#[allow(clippy::too_many_arguments)]
+fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f64, node: bool, alone: bool, id: u64, r: &mut Rng) {
+    let lay = Layout::of(&w.chem);
+    let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, r);
     let mut c = Body {
         cell: cell as u32,
         count: m,
@@ -365,6 +400,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         genome: b.genome,
         group: b.group,
         near: u32::MAX,
+        wet: b.wet,
         ..Default::default()
     };
     b.e -= c.e;
@@ -382,19 +418,19 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     c.row_spread = var * (1.0 - 1.0 / mm);
     let mut rows = (sd > 0.0).then(|| {
         let mut v = w.life.born(b).to_vec();
-        shake(&mut v, &mut r, sd);
+        shake(&mut v, r, sd);
         v
     });
     // A node's children start no new lineage: a change of the brain's base in one child is lost in
     // the mean of many (the laws in average form, plan 7.1); a node whose mean sizes moved moves
     // itself (`resize`).
     if let Some(lin) = w.life.brains[b.lineage as usize].as_ref().filter(|_| !node) {
-        let fresh = if let Some(l) = resized(lin, &c.genes, w.chem.ns(), &mut r, w.cfg.phys.new_noise) {
-            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, l.shape, &mut r, w.cfg.phys.new_noise));
+        let fresh = if let Some(l) = resized(lin, &c.genes, w.chem.ns(), r, w.cfg.phys.new_noise) {
+            rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, l.shape, r, w.cfg.phys.new_noise));
             Some(l)
         } else if r.f64() < w.cfg.phys.new_lineage {
             let mut l = lin.clone();
-            shake(&mut l.base, &mut r, p.base_noise);
+            shake(&mut l.base, r, p.base_noise);
             Some(l)
         } else {
             None
@@ -412,21 +448,24 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // apart.
     let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape);
     if c.lineage == b.lineage && !alone {
-        if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() > 1.0 && within(&lay, w.cfg.phys.alike, &w.life.bodies[s], &c)) {
+        if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() > 1.0 && within(&lay, w.cfg.phys.alike, &w.life.bodies[s], &c) && (!COHORTS || near(&w.chem, w.cfg.phys.full, &w.life.bodies[s], &c))) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             let rows = match (shape(c.lineage), shape(w.life.bodies[t].lineage)) {
-                (Some(x), Some(y)) if x != y => brain::rerow(&rows, x, y, &mut r, w.cfg.phys.new_noise),
+                (Some(x), Some(y)) if x != y => brain::rerow(&rows, x, y, r, w.cfg.phys.new_noise),
                 _ => rows,
             };
             join(w, t, c, &rows);
-            return true;
+            return;
         }
     }
     if let Some(v) = rows {
         c.genome = w.life.new_genome(v);
     }
     own(w, b, &mut c);
-    (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem, &w.cfg.phys));
+    // Its key liquids first: `visible` reads the body (`Body::size`) through them. (Set together in
+    // one tuple, the leaf of a newborn was that of its matter alone until its first update.)
+    c.wet = c.key_liquids(&w.chem);
+    c.vis = c.visible(&w.chem, &w.cfg.phys);
     let delay = c.interval();
     let s = w.life.add(c, w.day, delay);
     w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
@@ -440,7 +479,6 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         let c = &mut w.life.bodies[s];
         (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
     }
-    true
 }
 
 /// Without shared brains a body born or split from `b` starts a group of its own: its born rows
