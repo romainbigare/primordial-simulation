@@ -632,6 +632,10 @@ pub struct Diag {
     /// (review 6, finding 7). A count only, not saved.
     #[serde(skip)]
     pub wide: f64,
+    /// Members that moved to a neighbour cell since the shell last read them, by starting kind
+    /// (`Lineage::root`): a node moving counts all its members (`choose::go`). A count only, not saved.
+    #[serde(skip)]
+    pub moves: Vec<f64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

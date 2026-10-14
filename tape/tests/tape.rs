@@ -125,7 +125,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
     assert!(!kinds.is_empty());
-    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age"] {
+    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age", "past_copy", "past_full", "died_young", "died_adult", "life_adult", "moves"] {
         assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
     }
     for r in &rows {
@@ -133,6 +133,16 @@ fn yearly_series_has_the_measures_per_starting_kind() {
             let sum: f64 = kinds.iter().map(|k| col(&format!("root_{k}_{kind_col}"), r)).sum();
             let all = col(total, r);
             assert!((sum - all).abs() <= 1e-9 * all.max(1.0), "{total}: kinds {sum} total {all}");
+        }
+        // Deaths split by the life stage of the body: young and adult add up to all the deaths of the kind.
+        for k in &kinds {
+            let all: f64 = ["lack", "phase", "spent", "taken", "broken", "age"].iter().map(|c| col(&format!("root_{k}_died_{c}"), r)).sum();
+            let (young, adult) = (col(&format!("root_{k}_died_young"), r), col(&format!("root_{k}_died_adult"), r));
+            if all.is_nan() {
+                continue;
+            }
+            assert!((young + adult - all).abs() <= 1e-9 * all.max(1.0), "root_{k}: young {young} adult {adult} all {all}");
+            assert!(young >= 0.0 && adult >= 0.0);
         }
     }
     let last = rows.last().unwrap();
@@ -149,6 +159,23 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     for k in &kinds {
         let (m, mean, matter, body) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_matter"), last), col(&format!("root_{k}_body"), last));
         assert!(m == 0.0 || (matter > 0.0 && matter < 1.0 && body > 0.0 && body <= mean * (1.0 + 1e-9)), "root_{k}: matter {matter}, body {body}, mass {mean}");
+    }
+    // The shares of members past their copy mass and past `full` times it, and the moves a member makes a year.
+    for k in &kinds {
+        let (m, copy, full, moves) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_past_copy"), last), col(&format!("root_{k}_past_full"), last), col(&format!("root_{k}_moves"), last));
+        assert!(m == 0.0 || ((0.0..=1.0).contains(&copy) && (0.0..=copy).contains(&full) && moves >= 0.0), "root_{k}: past copy {copy}, past full {full}, moves {moves}");
+    }
+    // months.csv carries the births of each kind by month; the twelve months before the last yearly row add up to its births.
+    let months = std::fs::read_to_string(dir.join("months.csv")).unwrap();
+    let mut ml = months.lines();
+    let mh: Vec<&str> = ml.next().unwrap().split(',').collect();
+    let mrows: Vec<Vec<&str>> = ml.map(|l| l.split(',').collect()).collect();
+    assert!(mrows.iter().all(|r| r.len() == mh.len()));
+    for k in &kinds {
+        let at = mh.iter().position(|h| *h == format!("root_{k}_births")).unwrap_or_else(|| panic!("months.csv has no births of kind {k}"));
+        let sum: f64 = mrows[mrows.len() - 12..].iter().map(|r| r[at].parse::<f64>().unwrap()).sum();
+        let year = col(&format!("root_{k}_births"), last);
+        assert!((sum - year).abs() <= 1e-9 * year.max(1.0), "root_{k}: months {sum} year {year}");
     }
     assert!(kinds.contains(&(col("mass_max_root", last) as usize)));
     assert!(col("merged_unlike", last) >= 0.0 && col("merged_wide", last) >= col("merged_unlike", last));
