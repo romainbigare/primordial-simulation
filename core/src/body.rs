@@ -334,6 +334,12 @@ impl Body {
         let (_, h) = self.wet_h(chem);
         self.store[m] * chem.subs[m].molar_mass / (1.0 - h)
     }
+    /// Whether the mean member's body (`built`) is at or past its copy mass (the size its genes
+    /// set, `COPY_MASS`): grown, as far as copying goes. A tally label; a node mixes ages, so
+    /// its mean member says only what most of it is.
+    pub fn adult(&self, chem: &Chemistry) -> bool {
+        self.built(chem) / self.n() >= self.dec(COPY_MASS)
+    }
     /// The key liquids it holds, kg (all members), and the most share of its mass it keeps of any
     /// of them (its keep gene, 0..0.95).
     pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
@@ -1137,8 +1143,8 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
         w.ground[k * n + i] += a;
     }
     w.e_ground[i] += b.e;
-    let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
-    w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
+    let (cat, root, adult) = (light_cat(&w.chem, &b.genes), w.life.root(&b), b.adult(&w.chem));
+    w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root, adult }, node: b.cell, value: b.count });
     w.life.bodies[slot] = b;
     w.life.remove(slot);
 }
@@ -1149,6 +1155,8 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
 /// (the caller lets the node die).
 pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> bool {
     let (n, i, chem) = (w.grid.n(), b.cell as usize, &w.chem);
+    // Whether the members who die were grown, judged before their matter leaves the node.
+    let adult = b.adult(chem);
     let cap = b.heat_cap(chem).max(1e-9);
     let q = b.e * dead.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / cap;
     for (k, &a) in dead.iter().enumerate() {
@@ -1160,7 +1168,7 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
     w.e_ground[i] += q;
     if b.n() > 1.0 && f > 0.0 {
         let (cat, root) = (light_cat(chem, &b.genes), w.life.root(b));
-        w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count * f });
+        w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root, adult }, node: b.cell, value: b.count * f });
         b.count *= 1.0 - f;
     }
     b.count >= 1.0

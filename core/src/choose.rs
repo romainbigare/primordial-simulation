@@ -480,6 +480,11 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
         return;
     }
     bond::moved(w, b, carried, j, mb);
+    let root = w.life.root(b) as usize;
+    if root != u32::MAX as usize {
+        w.diag.moves.resize(w.diag.moves.len().max(root + 1), 0.0);
+        w.diag.moves[root] += b.n();
+    }
     w.parts.tally.afloat += afloat as u8 as f64;
     w.life.relocate(slot, b.group, i, j);
     b.cell = j as u32;

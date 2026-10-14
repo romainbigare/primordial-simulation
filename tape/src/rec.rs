@@ -51,7 +51,14 @@ struct Social {
     unlike: f64,
     /// Members that joined a node unlike it by more than `alike` steps in some gene this year (`Diag::wide`)
     wide: f64,
+    /// Members that moved to a neighbouring cell in the year, by starting kind (the core's tally, `Diag::moves`)
+    moves: Vec<f64>,
     months: String,
+    /// Members born in each month by starting kind, one row per row of `months` (after its
+    /// header), written as the last columns of `months.csv` (`root_<k>_births`)
+    month_births: Vec<Vec<f64>>,
+    /// Members born by kind since the last month (the row to come)
+    births_now: Vec<f64>,
     /// Members of the others that died of SPENT this month, and the sum of their rows (y)
     spent: [f64; 2],
     /// Bonds made this year by kind (held, joined, anchored); broken by bodies; failed by load
@@ -67,7 +74,12 @@ struct Social {
     /// are this over `stand_months`) and the months counted
     root_births: Vec<f64>,
     root_deaths: Vec<[f64; 6]>,
+    /// Members died while their body was below / at or past their copy mass (`Died::adult`)
+    root_young: Vec<f64>,
+    root_adult: Vec<f64>,
     root_stand: Vec<f64>,
+    /// Like `root_stand`, the members whose body is at or past their copy mass (`Body::adult`)
+    root_stand_adult: Vec<f64>,
     stand_months: f64,
     /// Mean ground temperature over land (K) at the end of each month since the last yearly row;
     /// land is what the tape counts as land everywhere: solid surface above 0 m (the cells are
@@ -111,7 +123,8 @@ fn info(sig: &[[[[f64; 4]; 2]; 3]], c: usize) -> f64 {
 }
 
 /// Sums over the live members of one starting kind (`Recorder::push_series`): members, bodies, member-years of life,
-/// mass (kg), body matter (kg), body (kg, `Body::size`), member-copy-mass (kg), the genes of `GENES` (by members), and per catalyst gene the sum over the members
+/// mass (kg), body matter (kg), body (kg, `Body::size`), member-copy-mass (kg), the members whose body (`Body::built`) is
+/// past their copy mass and past `full` times it, the genes of `GENES` (by members), and per catalyst gene the sum over the members
 /// that carry it on and the members that do.
 #[derive(Clone)]
 struct Root {
@@ -122,13 +135,15 @@ struct Root {
     matter: f64,
     body: f64,
     copy_mass: f64,
+    past_copy: f64,
+    past_full: f64,
     genes: [f64; 6],
     cat: Vec<(f64, f64)>,
 }
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, past_full: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -136,6 +151,8 @@ impl Root {
 /// `root_<k>_repair`, so it comes last here and is printed in its old place.
 const GENES: [usize; 6] = [pcore::body::GAS, pcore::body::LEAF, pcore::body::COPY_MASS, pcore::body::INTERVAL, pcore::body::HIDDEN, pcore::body::REPAIR];
 const GENE_NAMES: [&str; 5] = ["gas", "leaf", "copy_log", "interval", "hidden"];
+/// The first columns of `months.csv`; `root_<k>_births` for each starting kind follow.
+const MONTHS: &str = "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile,spent,spent_y";
 /// Death causes in the order of the core's constants (`LACK` .. `AGE`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
 
@@ -218,7 +235,7 @@ impl Recorder {
             split: [[0.0; 2]; 2],
             updates: 0,
             physics: physics_json(w),
-            social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile,spent,spent_y\n".into(), ..Default::default() },
+            social: Social { months: format!("{MONTHS}\n"), ..Default::default() },
         }
     }
 
@@ -263,14 +280,18 @@ impl Recorder {
         let now = (w.day / dpy, (w.day / dpm) % mpy);
         let old = std::fs::read_to_string(dir.join("months.csv")).unwrap_or_default();
         let mut lines = old.lines();
-        if lines.next().is_some_and(|h| h != self.social.months.trim_end()) {
+        if lines.next().is_some_and(|h| !h.starts_with(MONTHS)) {
             return Err(bad("months.csv has other columns"));
         }
         for l in lines.take_while(|l| {
             let mut f = l.split(',').map(|v| v.parse::<u64>().unwrap_or(u64::MAX));
             (f.next().unwrap_or(0), f.next().unwrap_or(0)) <= now
         }) {
-            self.social.months += &(l.to_string() + "\n");
+            // The columns of `MONTHS`, then the births of each kind (an older file has none).
+            let at = l.match_indices(',').nth(MONTHS.matches(',').count()).map_or(l.len(), |p| p.0);
+            let (head, births) = l.split_at(at);
+            self.social.months += &(head.to_string() + "\n");
+            self.social.month_births.push(births.split(',').skip(1).map(|v| v.parse().unwrap_or(0.0)).collect());
         }
         Ok(())
     }
@@ -301,18 +322,22 @@ impl Recorder {
                 EventKind::Born { cat, root } => {
                     self.births += e.value;
                     if root != u32::MAX {
-                        let v = &mut self.social.root_births;
-                        v.resize(v.len().max(root as usize + 1), 0.0);
-                        v[root as usize] += e.value;
+                        for v in [&mut self.social.root_births, &mut self.social.births_now] {
+                            v.resize(v.len().max(root as usize + 1), 0.0);
+                            v[root as usize] += e.value;
+                        }
                     }
                     self.split[0][(cat < measure::LIGHT_EATER) as usize] += e.value;
                 }
-                EventKind::Died { cause, cat, root } => {
+                EventKind::Died { cause, cat, root, adult } => {
                     self.deaths[(cause as usize).min(5)] += e.value;
                     if root != u32::MAX {
                         let v = &mut self.social.root_deaths;
                         v.resize(v.len().max(root as usize + 1), [0.0; 6]);
                         v[root as usize][(cause as usize).min(5)] += e.value;
+                        let v = if adult { &mut self.social.root_adult } else { &mut self.social.root_young };
+                        v.resize(v.len().max(root as usize + 1), 0.0);
+                        v[root as usize] += e.value;
                     }
                     if cat < measure::LIGHT_EATER {
                         self.deaths_a[(cause as usize).min(5)] += e.value;
@@ -368,6 +393,7 @@ impl Recorder {
             self.social.decisions = [std::mem::take(&mut w.diag.decisions), std::mem::take(&mut w.diag.greedy)];
             self.social.unlike = std::mem::take(&mut w.diag.unlike);
             self.social.wide = std::mem::take(&mut w.diag.wide);
+            self.social.moves = std::mem::take(&mut w.diag.moves);
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -392,6 +418,8 @@ impl Recorder {
             if let Some(l) = &w.life.brains[b.lineage as usize] {
                 s.root_stand.resize(s.root_stand.len().max(l.root as usize + 1), 0.0);
                 s.root_stand[l.root as usize] += b.n();
+                s.root_stand_adult.resize(s.root_stand.len(), 0.0);
+                s.root_stand_adult[l.root as usize] += b.n() * b.adult(chem) as u8 as f64;
             }
             let t = w.life.env.get(i).map_or(285.0, |e| e[0]);
             let ctx = [t < 283.0, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0];
@@ -432,8 +460,10 @@ impl Recorder {
         let [sp, sy] = std::mem::take(&mut s.spent);
         let row = format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2},{sp:.0},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0), sy / sp.max(1e-9));
         // (A resumed run has this month's row already, from the tape it loaded.)
+        let births = std::mem::take(&mut s.births_now);
         if s.months.lines().next_back().is_none_or(|l| !l.starts_with(&format!("{y},{m},"))) {
             s.months += &row;
+            s.month_births.push(births);
         }
     }
 
@@ -497,7 +527,7 @@ impl Recorder {
         // resumed tape), so a kind that died out reads 0 (its means NaN).
         let nr = w.chem.reactions.len();
         let seen = self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count();
-        let mut by_root: Vec<Root> = vec![Root::new(nr); seen.max(self.social.root_births.len()).max(self.social.root_deaths.len())];
+        let mut by_root: Vec<Root> = vec![Root::new(nr); seen.max(self.social.root_births.len()).max(self.social.root_deaths.len()).max(self.social.moves.len())];
         let cat = pcore::body::Layout::of(&w.chem).cat;
         for b in life.alive() {
             if let Some(l) = &life.brains[b.lineage as usize] {
@@ -513,6 +543,9 @@ impl Recorder {
                 r.matter += w.chem.matter().map_or(0.0, |m| b.store[m] * w.chem.subs[m].molar_mass);
                 r.body += b.size(&w.chem);
                 r.copy_mass += n * b.dec(pcore::body::COPY_MASS);
+                let grown = b.built(&w.chem) / n / b.dec(pcore::body::COPY_MASS);
+                r.past_copy += n * (grown >= 1.0) as u8 as f64;
+                r.past_full += n * (grown >= w.cfg.phys.full) as u8 as f64;
                 for (x, g) in r.genes.iter_mut().zip(GENES) {
                     *x += n * b.gene(g);
                 }
@@ -584,6 +617,8 @@ impl Recorder {
             let per = |x: f64| if v.members > 0.0 { x / v.members } else { f64::NAN };
             let d = dths.get(k).copied().unwrap_or_default();
             let stand = st.root_stand.get(k).copied().unwrap_or(0.0) / st.stand_months.max(1.0);
+            let stand_adult = st.root_stand_adult.get(k).copied().unwrap_or(0.0) / st.stand_months.max(1.0);
+            let (young, adult) = (st.root_young.get(k).copied().unwrap_or(0.0), st.root_adult.get(k).copied().unwrap_or(0.0));
             let c = |n: &str| format!("root_{k}_{n}");
             row.extend([(c("members"), "1", v.members), (c("kg"), "kg", v.mass), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[5]))]);
             row.extend(CAUSES.iter().zip(d).map(|(n, x)| (c(&format!("died_{n}")), "1/yr", x)));
@@ -594,6 +629,12 @@ impl Recorder {
                 (c("copy_mass"), "kg", per(v.copy_mass)),
                 (c("matter"), "1", if v.mass > 0.0 { v.matter / v.mass } else { f64::NAN }),
                 (c("body"), "kg", per(v.body)),
+                (c("past_copy"), "1", per(v.past_copy)),
+                (c("past_full"), "1", per(v.past_full)),
+                (c("died_young"), "1/yr", young),
+                (c("died_adult"), "1/yr", adult),
+                (c("life_adult"), "yr", if adult > 0.0 { stand_adult / adult } else { f64::NAN }),
+                (c("moves"), "1/yr", if stand > 0.0 { st.moves.get(k).copied().unwrap_or(0.0) / stand } else { f64::NAN }),
             ]);
             row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
@@ -713,6 +754,7 @@ impl Recorder {
         ]);
         (s.made, s.broken, s.failed, s.inside, s.intake) = Default::default();
         (s.root_births, s.root_deaths, s.root_stand, s.stand_months, s.t_land) = Default::default();
+        (s.root_young, s.root_adult, s.root_stand_adult, s.moves) = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();
         // Mole fraction in the air of each heat-absorbing gas (`air_<substance>`; `absorber` above is
@@ -774,7 +816,13 @@ impl Recorder {
             csv += &format!("\n{}", self.series.iter().map(|c| c.2[row].to_string()).collect::<Vec<_>>().join(","));
         }
         std::fs::write(dir.join("physics.json"), &self.physics)?;
-        std::fs::write(dir.join("months.csv"), &self.social.months)?;
+        // One births column per starting kind seen in any month (a month before a kind's first birth reads 0).
+        let nk = self.social.month_births.iter().map(Vec::len).max().unwrap_or(0);
+        let mut months = self.social.months.lines().next().unwrap_or(MONTHS).to_string() + &(0..nk).map(|k| format!(",root_{k}_births")).collect::<String>();
+        for (l, b) in self.social.months.lines().skip(1).zip(&self.social.month_births) {
+            months += &format!("\n{l}{}", (0..nk).map(|k| format!(",{}", b.get(k).copied().unwrap_or(0.0))).collect::<String>());
+        }
+        std::fs::write(dir.join("months.csv"), months + "\n")?;
         std::fs::write(dir.join("series.csv"), csv + "\n")
     }
 }
