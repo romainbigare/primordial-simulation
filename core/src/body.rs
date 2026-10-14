@@ -30,7 +30,8 @@ pub const LIQ: usize = 1;
 /// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
 /// `Physics::heat_mass` kg; it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
-/// Light-capture area, log10 m²/kg of its mass that works (`Body::work`)
+/// Light-capture area, log10 m² per kg-equivalent of its mass that works (`Body::work`, `Body::equiv`:
+/// mass^0.75 from `Physics::intake_ref`, 14 Oct 2026; per kg of a 1 kg member)
 pub const LEAF: usize = 3;
 /// Strength, 0..1
 pub const STRENGTH: usize = 4;
@@ -260,8 +261,9 @@ impl Body {
         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
     }
     /// Visible traits of one member; the colour is the reflectance of the stores by volume. Its
-    /// light-capture area goes with its mass up to `full` times its copy mass (`work`).
-    pub fn visible(&self, chem: &Chemistry, full: f64) -> [f32; 6] {
+    /// light-capture area is `LEAF` per kg-equivalent of its mass up to `full` times its copy mass
+    /// (`work`, `equiv`: mass^0.75).
+    pub fn visible(&self, chem: &Chemistry, p: &crate::Physics) -> [f32; 6] {
         let (m, cap) = self.mass_cap(chem);
         let m1 = m / self.n();
         let t = self.e / cap.max(1e-9);
@@ -276,7 +278,7 @@ impl Body {
                 }
             }
         }
-        let leaf = m1.min(full * self.dec(COPY_MASS)) * self.dec(LEAF);
+        let leaf = self.equiv(p, self.work(p, m)) / self.n() * self.dec(LEAF);
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Learning rate of its brain within its life (0 when off).
@@ -319,13 +321,14 @@ impl Body {
         n * p.intake_ref * (mass / n / p.intake_ref).powf(p.intake_exp)
     }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
-    /// (its mass that works times `LEAF`, as `visible` and the light code count it) plus its skin,
-    /// 6 (m1 / `rho_body`)^(2/3), as the surface of walls and the cover; times the count. A 1 kg
-    /// plant of 2 m² per kg: 2.06 m²; a 30 kg eater with 0.03 m² of capture area: 0.61 m². Needs
-    /// `prepare`. The `GAS` gene is the air exchanged per m² of it per day.
+    /// (`LEAF` per kg-equivalent of its mass that works, as `visible` and the light code count it)
+    /// plus its skin, 6 (m1 / `rho_body`)^(2/3), as the surface of walls and the cover; times the
+    /// count. A 1 kg plant of 2 m² per kg: 2.06 m²; a 30 kg eater with 0.03 m² of capture area per
+    /// kg-equivalent (12.8): 0.38 + 0.58 m². Needs `prepare`. The `GAS` gene is the air exchanged
+    /// per m² of it per day.
     pub fn open_area(&self, p: &crate::Physics, mass: f64) -> f64 {
         let m1 = mass / self.n();
-        self.work(p, mass) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
+        self.equiv(p, self.work(p, mass)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
     }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
     /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
@@ -996,7 +999,7 @@ pub fn day(w: &mut World) {
                 }
                 crate::copy::resize(w, s, &mut b);
                 crate::copy::split(w, s, &mut b);
-                b.vis = b.visible(&w.chem, w.cfg.phys.full);
+                b.vis = b.visible(&w.chem, &w.cfg.phys);
                 w.life.due[((w.day + b.interval()) % RING) as usize].push((slot, gen));
                 w.life.bodies[s] = b;
             }
@@ -1143,10 +1146,12 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // body radiates and passes it on. Taken at its temperature at the start of the update (and
     // at the end, if it ends warmer).
     let (m1, nb, wk) = (mass / b.n(), b.n(), b.work(&cfg.phys, mass) / mass);
+    // Its light-capture area, all members' (`visible`): of the mass that works, by mass^0.75.
+    let leaf = b.equiv(&cfg.phys, b.work(&cfg.phys, mass)) * b.k.leaf;
     let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
     let g0 = b.conductance(cfg.phys.heat_mass, mass);
     let g0 = if cover > 0.0 {
-        let s = ab / (ab + wk * m1 * b.k.leaf);
+        let s = ab / (ab + leaf / nb);
         g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * nb * ab))
     } else {
         g0
@@ -1163,7 +1168,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // what light reactions store: so up to `MAX_INTERVAL` days of sunlight neither reach the
     // ground in one go nor are drawn back from it in one go.
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
-    let got = wk * mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
+    let got = leaf * (light[i] - b.mark) * (1.0 - refl) * open;
     b.mark = light[i];
     let reach = (-depth / cfg.phys.light_depth).exp();
     let lit = got * reach;

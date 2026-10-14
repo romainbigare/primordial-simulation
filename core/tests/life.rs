@@ -382,8 +382,11 @@ fn a_tall_member_shades_a_short_one() {
     b.store.iter_mut().for_each(|a| *a *= f);
     (b.e, b.count) = (b.e * f, b.n() * f);
     let mut tall = b.clone();
+    // Leaf goes with mass^0.75 (14 Oct 2026): 100 times fewer members of 100 times the mass have
+    // 100^-0.25 of the leaf, so the tall one's LEAF gene is raised by 0.5 to make the areas equal.
     (tall.count, tall.genes[pcore::body::COPY_MASS], tall.k) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0, Default::default());
-    (b.vis, tall.vis) = (b.visible(&w.chem, w.cfg.phys.full), tall.visible(&w.chem, w.cfg.phys.full));
+    tall.genes[pcore::body::LEAF] += 0.5;
+    (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg.phys), tall.visible(&w.chem, &w.cfg.phys));
     let slots = [w.life.add(tall, w.day, 1), short];
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     pcore::body::survey(&mut w);
@@ -756,4 +759,38 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
     let mut n = b.clone();
     n.count = 5.0;
     assert!((basal(&mut w, &n, 500.0) / (5.0 * hundred) - 1.0).abs() < 1e-9, "a node pays for each member");
+}
+
+/// Leaf goes with mass^0.75 like intake (14 Oct 2026, review 5): the same `LEAF` gene gives a
+/// member of 1 kg 10^LEAF m² per kg, a member of 1,000 kg 1000^0.75 times that in all (178 m², not
+/// 1,000), so 5.6 times less per kg; a node counts its members; and past `full` times the copy
+/// mass what a member holds adds no leaf. The open surface follows (plus its skin).
+#[test]
+fn leaf_area_per_kg_falls_with_mass() {
+    use pcore::body::{Body, COPY_MASS, LEAF};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let (chem, p) = (w.chem.clone(), w.cfg.phys);
+    // A member of `kg` that copies at 10^6 kg (so it all works), 0.5 m² of leaf per kg of 1 kg.
+    let member = |count: f64, kg: f64, copy: f32| {
+        let mut b = Body { count, genes: vec![0.0; pcore::body::Layout::of(&chem).len], store: vec![0.0; chem.ns()], ..Default::default() };
+        (b.genes[LEAF], b.genes[COPY_MASS]) = (0.5f32.log10(), copy);
+        // Fill the stores of the first substance up to `kg` per member.
+        b.store[0] = count * kg / chem.subs[0].molar_mass;
+        b.prepare(&chem, &p);
+        b
+    };
+    let leaf = |b: &Body| b.visible(&chem, &p)[1] as f64;
+    let (one, tonne) = (member(1.0, 1.0, 6.0), member(1.0, 1000.0, 6.0));
+    println!("leaf of a member: 1 kg {:.3} m², 1,000 kg {:.3} m²", leaf(&one), leaf(&tonne));
+    assert!((leaf(&one) - 0.5).abs() < 1e-6, "1 kg: {}", leaf(&one));
+    assert!((leaf(&tonne) / leaf(&one) / 1000f64.powf(0.75) - 1.0).abs() < 1e-6, "1,000 kg: {}", leaf(&tonne));
+    assert!((leaf(&tonne) / 1000.0 / (leaf(&one) / 1.0) - 1000f64.powf(-0.25)).abs() < 1e-6, "per kg it falls");
+    // A node of 10 members of 1,000 kg: the open surface is 10 members' leaf plus their skin.
+    let node = member(10.0, 1000.0, 6.0);
+    let (m, skin) = (node.mass(&chem), 10.0 * 6.0 * (1000.0 / p.rho_body).powf(2.0 / 3.0));
+    assert!((node.open_area(&p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * skin, "open area {}", node.open_area(&p, m));
+    // Past full (2 x 10^1 = 20 kg) a member's extra mass adds no leaf: 20 kg and 2,000 kg alike.
+    let (at, past) = (member(1.0, 20.0, 1.0), member(1.0, 2000.0, 1.0));
+    assert!((leaf(&at) - leaf(&past)).abs() < 1e-9 && (leaf(&at) / 0.5 - 20f64.powf(0.75)).abs() < 1e-6, "past full: {} and {}", leaf(&at), leaf(&past));
 }
