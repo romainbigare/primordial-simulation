@@ -13,3 +13,4 @@ threads = ["dep:rayon"]
 
 [dev-dependencies]
 worldgen = { path = "../worldgen" }
+serde_json = "1"
