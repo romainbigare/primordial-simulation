@@ -595,7 +595,7 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
 /// Before, a body past `full` took at the rate of `full` and swelled when it could not pay for
 /// its children (review 3, M2), and a body below it took three to six times what it used. The
 /// target is capped at what the body could take by its size in the time (review 6, finding 13).
-pub(crate) fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
+pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
     let (p, t) = (&w.cfg.phys, b.temp(&w.chem));
     let heat = |k: usize| if w.chem.phase(k, t) == Phase::Gas { 0.0 } else { b.k.burn.iter().filter_map(|&(r, e)| w.chem.reactions[r].inputs.iter().find(|x| x.0 as usize == k).map(|x| e / x.1 as f64)).fold(0.0, f64::max) };
     let got: f64 = m.iter().enumerate().map(|(k, a)| a * heat(k)).sum();

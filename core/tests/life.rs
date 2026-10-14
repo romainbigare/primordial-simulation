@@ -478,14 +478,21 @@ fn a_heavy_individual_copies_over_several_updates() {
 /// energy-rich solid only the heat of its upkeep over an interval, whatever `c_build`: never less
 /// (a hard stop below upkeep starved the eaters, 13 Oct: burning leaves its liquid product in the
 /// body), and no more, as its store already releases what it can use. A starting eater (below
-/// `full`) takes more than that: it eats as its intake allows. Matter and energy are kept exactly.
+/// `full`) takes more than that: it eats as its intake allows. A body past `full` whose store is
+/// below the target (upkeep plus building over the share its reactions release, less what it
+/// holds) is asked directly: `choose::sate` leaves what the formula says, more with a higher
+/// `c_build`, and never more than its size takes in the time (review 6, findings 10 and 13).
+/// Matter and energy are kept exactly.
 #[test]
 fn a_body_takes_no_more_than_it_can_use() {
     use pcore::body::{Lineage, DISPERSE};
     use pcore::event::EventKind;
     use pcore::{brain, choose};
-    // Burnable kg taken in an update, the heat of the upkeep and build it may use, and the size cap, kg.
-    let took = |times: f64, c_build: f64| {
+    // Burnable kg taken in an update, the heat of the upkeep and build it may use, the size cap and
+    // the target `choose::sate` is meant to give (all kg), for a body of `times` x 30 kg that keeps
+    // the share `keep` of its fuel. With `direct`, instead of an update, `sate` is asked about
+    // twice the size cap of the fuel and the first number is what it leaves.
+    let took = |times: f64, c_build: f64, keep: f64, direct: bool| {
         let mut w = worldgen::new_world(1, 16, 16);
         w.cfg.phys.c_build = c_build;
         pcore::step(&mut w);
@@ -512,10 +519,24 @@ fn a_body_takes_no_more_than_it_can_use() {
             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
         }
         (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0);
+        // Less of the fuel (the rest taken out as an edit).
+        let out = (1.0 - keep) * b.store[rich];
+        w.chem.add_elems(rich, -out, &mut w.ledger.imposed_elems);
+        (w.ledger.imposed_energy, b.store[rich]) = (w.ledger.imposed_energy - out * w.chem.subs[rich].hf, b.store[rich] - out);
         b.prepare(&w.chem, &w.cfg.phys);
         let (p, days, mass) = (w.cfg.phys, b.interval() as f64, b.mass(&w.chem));
         let (equiv, joule_per_kg) = (b.equiv(&p, mass), -w.chem.dh(burn) / w.chem.reactions[burn].inputs.iter().find(|x| x.0 as usize == rich).unwrap().1 as f64 / w.chem.subs[rich].molar_mass);
-        let can = pcore::body::upkeep(&w, &b, days, mass) + p.c_build * equiv / p.m_ref * days;
+        let (up, build) = (pcore::body::upkeep(&w, &b, days, mass), p.c_build * equiv / p.m_ref * days);
+        let can = up + build;
+        // (up + build) x fuel / release - fuel, never under the upkeep, never over what its size takes.
+        let (fuel, release) = (b.fuel(&w.chem, b.temp(&w.chem)), pcore::body::release(&w, &b, days));
+        let target = ((can * fuel / release - fuel).max(up)).min(p.take * days * equiv * joule_per_kg) / joule_per_kg;
+        if direct {
+            let mut m = vec![0.0; w.chem.ns()];
+            m[rich] = 2.0 * p.take * days * equiv / w.chem.subs[rich].molar_mass;
+            choose::sate(&w, &b, &mut m, days, mass);
+            return (m[rich] * w.chem.subs[rich].molar_mass, can / joule_per_kg, p.take * days * equiv, target);
+        }
         let s = w.life.add(b, w.day, 1);
         let (t0, l0, id) = (pcore::check::totals(&w), w.ledger.clone(), w.life.bodies[s].id(s));
         pcore::body::survey(&mut w);
@@ -526,17 +547,31 @@ fn a_body_takes_no_more_than_it_can_use() {
         let (de, dq) = pcore::check::drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
         let burnt: f64 = w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, burn, .. } = e.kind { (by == id).then_some(burn as f64) } else { None }).sum();
-        (burnt, can / joule_per_kg, p.take * days * equiv)
+        (burnt, can / joule_per_kg, p.take * days * equiv, target)
     };
     for times in [10.0, 100.0] {
-        let ((with, _, cap), (without, upkeep, _)) = (took(times, 3e4), took(times, 0.0));
+        let ((with, _, cap, _), (without, upkeep, _, _)) = (took(times, 3e4, 1.0, false), took(times, 0.0, 1.0, false));
         println!("{times} x 30 kg: takes {with:.3} kg of fuel (upkeep {upkeep:.3}, size cap {cap:.3}), with no building {without:.3}");
         assert!(upkeep < cap, "the size cap {cap} is not above its upkeep {upkeep}");
         assert!((with / upkeep - 1.0).abs() < 0.02 && (without / upkeep - 1.0).abs() < 0.02, "{with} and {without} of {upkeep} kg");
     }
-    let (young, can, _) = took(1.0, 3e4);
+    let (young, can, _, _) = took(1.0, 3e4, 1.0, false);
     println!("a starting eater takes {young:.3} kg of fuel (upkeep and build {can:.3})");
     assert!(young > can, "below full a body eats as its intake allows: {young} of {can} kg");
+    // Past `full` with a store below the target, upkeep and build over the share its reactions
+    // release in an interval, less what it holds: the target rises with `c_build`, between the
+    // upkeep's worth and what its size takes (here a store of 17% of the fuel).
+    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.17, true)).collect();
+    println!("sate asked for twice the size cap, store 17%: (left, upkeep+build, cap, target) {sated:?}");
+    for &(left, _, cap, target) in &sated {
+        assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
+        assert!(target < cap, "the size cap {cap} binds, the case shows nothing");
+    }
+    assert!(sated[0].0 > sated[0].1 * 1.2, "below the line of the upkeep it should take more than the upkeep's worth: {sated:?}");
+    assert!(sated[1].0 > sated[0].0 * 1.1 && sated[2].0 > sated[1].0 * 1.1, "it takes no more with a higher c_build: {sated:?}");
+    // With a store of 3% of the fuel the target is far over the size cap: the cap is what it takes.
+    let (left, _, cap, _) = took(10.0, 3e4, 0.03, true);
+    assert!((left / cap - 1.0).abs() < 1e-6, "sate left {left} kg of the {cap} kg its size takes");
 }
 
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
