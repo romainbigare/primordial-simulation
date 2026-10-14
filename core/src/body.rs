@@ -54,7 +54,7 @@ pub const DISPERSE: usize = 15;
 /// few K (`change::denature`). A firmer catalyst costs more upkeep (`Physics::t_firm`)
 pub const DENATURE: usize = 16;
 /// Repair, log10: a body wears out when the energy its upkeep turned over reaches
-/// `Physics::e_life` x 10^gene per kg; each unit costs `Physics::c_repair` more upkeep (`upkeep`)
+/// `Physics::e_life` x 10^gene per kg; each unit doubles the repair share `Physics::c_repair` of upkeep (`upkeep`)
 pub const REPAIR: usize = 17;
 pub const NSCALAR: usize = 18;
 
@@ -1304,8 +1304,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength and
 /// capture area by the day, of learning and signalling, and of one
 /// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`);
-/// a body with no brain pays none of the last three. All of it times (1 + `c_repair`)^`REPAIR`:
-/// a longer life costs more upkeep, a shorter one less.
+/// a body with no brain pays none of the last three. Repair is a share `c_repair` of it at
+/// `REPAIR` 0 and doubles with each unit of the gene: all of it times 1 - c + c 2^`REPAIR`, so a
+/// longer life costs more upkeep, a shorter one less, but never less than the rest (`Physics::c_repair`).
 /// Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
@@ -1313,7 +1314,7 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p, &b.genes));
     let u = days * (mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
-    u * (1.0 + p.c_repair).powf(b.gene(REPAIR))
+    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR)))
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.

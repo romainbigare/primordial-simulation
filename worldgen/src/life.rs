@@ -82,9 +82,9 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 ///
 /// The `REPAIR` genes (the last scalar) are set so the kinds start with a range of lives, short
 /// for small fast ones and long for big slow ones (years, at the starting mass and interval, by
-/// the upkeep per kg): light-eaters 20 (1 kg), 2 (0.05 kg), 100 (20 kg); eaters 19 (30 kg, and
-/// the clever ones); eaters of remains 3 (1 kg) and 21 (15 kg); eaters of light-eaters 3 (3 kg)
-/// and 34 (150 kg); eaters of eaters 15 (100 kg) and 49 (600 kg). At gene 0 they would live 25 to
+/// the upkeep per kg): light-eaters 18 (1 kg), 2 (0.05 kg), 97 (20 kg); eaters 18 (30 kg, and
+/// the clever ones); eaters of remains 2.5 (1 kg) and 17 (15 kg); eaters of light-eaters 2.6 (3 kg)
+/// and 34 (150 kg); eaters of eaters 14 (100 kg) and 49 (600 kg). At gene 0 they would live 25 to
 /// 1,700 years: the strength gene sets most of an eater's upkeep and a small member's brain costs
 /// it much per kg, so the eaters of remains (strength 0) would live longest. A gene below 0 costs
 /// less upkeep (`Physics::c_repair`): evolution sets it from there.

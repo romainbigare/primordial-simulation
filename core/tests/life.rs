@@ -564,7 +564,7 @@ fn a_body_with_no_brain_lives_and_copies() {
 /// Living wears a body (14 Oct 2026): an individual dies of age when the energy its upkeep turned
 /// over per kg reaches `e_life` x 10^REPAIR, and a node of the same members loses that share of
 /// them at each update, so its members' mean life is the same. More repair: a longer life (8 times
-/// per unit) at a higher upkeep (1.25 times per unit). Matter and energy are kept exactly.
+/// per unit) at a higher upkeep (the repair share, a quarter at gene 0, doubles per unit). Matter and energy are kept exactly.
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
     use pcore::body::{Lineage, AGE, DISPERSE, REPAIR, STRENGTH};
@@ -598,9 +598,9 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let (_, ua) = make(&mut w, land[0], 0.0, 1.0);
     let (_, ub) = make(&mut w, land[land.len() / 2], 0.5, 1.0);
     let (c, uc) = make(&mut w, land[land.len() - 1], 0.0, 1000.0);
-    assert!((ub / ua - 1.25f64.sqrt()).abs() < 1e-9 && (uc / ua - 1.0).abs() < 1e-9, "upkeep per kg {ua} {ub} {uc}");
-    // A life of 60 days at gene 0 (its upkeep per kg now), 8^0.5 times that at 0.5.
-    let life = 60.0;
+    assert!((ub / ua - (0.75 + 0.25 * 2f64.sqrt())).abs() < 1e-9 && (uc / ua - 1.0).abs() < 1e-9, "upkeep per kg {ua} {ub} {uc}");
+    // A life of 60 days at gene 0 (its upkeep per kg now), 10^0.5 / (0.75 + 0.25 x 2^0.5) times that at 0.5.
+    let (life, x) = (60.0, 10f64.sqrt() / (0.75 + 0.25 * 2f64.sqrt()));
     w.cfg.phys.e_life = life * ua;
     let (t0, l0, start, n0) = (pcore::check::totals(&w), w.ledger.clone(), w.day, w.life.bodies[c].count);
     for _ in 0..8 {
@@ -616,8 +616,8 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         (lived, n, t) = (lived + n * (day - t) as f64, n - dead, day);
     }
     let dc = lived / (n0 - n);
-    println!("lives, days: individuals {ones:?} at genes 0 and 0.5 (predicted {life} and {:.0}); node {dc:.1} ({:.0} of {n0} members died of age)", life * 8f64.sqrt(), n0 - n);
-    assert!(ones.len() == 2 && (ones[0].0 as f64 / life - 1.0).abs() < 0.1 && (ones[1].0 as f64 / (life * 8f64.sqrt()) - 1.0).abs() < 0.1, "lives {ones:?}");
+    println!("lives, days: individuals {ones:?} at genes 0 and 0.5 (predicted {life} and {:.0}); node {dc:.1} ({:.0} of {n0} members died of age)", life * x, n0 - n);
+    assert!(ones.len() == 2 && (ones[0].0 as f64 / life - 1.0).abs() < 0.1 && (ones[1].0 as f64 / (life * x) - 1.0).abs() < 0.1, "lives {ones:?}");
     assert!(node.len() >= 6 && (dc / ones[0].0 as f64 - 1.0).abs() < 0.1, "node: mean life {dc} days against {ones:?}");
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");

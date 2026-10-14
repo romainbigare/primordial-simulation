@@ -191,11 +191,13 @@ pub struct Physics {
     /// 1,000 kJ per gram of body in a life, whatever their size, as small ones live fast and short
     /// and big ones slow and long. A starting eater (30 kg, 64 kJ/kg/day) lives 43 years at gene 0, 19 at its -0.4
     pub e_life: f64,
-    /// Upkeep of repair: each unit of the `REPAIR` gene (ten times the energy per kg) multiplies the upkeep by
-    /// 1 + `c_repair` (less upkeep below 0), so a life is (10 / 1.25)^gene = 8^gene times longer and
-    /// every value of the gene has a cost (with no saving below 0, selection would lift a short life to gene 0 for
-    /// free). 0.25: remaking a body's own matter (mostly its catalysts) takes 20 to 30% of resting
-    /// upkeep in real life, so a tenfold repair costs about that share again
+    /// Share of upkeep that is repair at `REPAIR` 0; each unit of the gene (ten times the energy per
+    /// kg before wearing out) doubles that share (upkeep x (1 - c + c 2^gene)), so at gene 0 a life
+    /// 8 times longer costs 25% more upkeep, and less repair saves upkeep but never more than this
+    /// share: remaking a body's own matter (mostly its catalysts) takes 20 to 30% of resting upkeep
+    /// in real life (14 Oct 2026; first as (1 + c)^gene, which let a short life save up to half its
+    /// upkeep, more than repair costs). Every value of the gene has a cost (with no saving below 0,
+    /// selection would lift a short life to gene 0 for free).
     pub c_repair: f64,
     // Choose
     /// Energy to move one kg one metre on the flat, J
