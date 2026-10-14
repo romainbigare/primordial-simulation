@@ -167,6 +167,13 @@ pub struct Physics {
     pub c_firm: f64,
     /// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg)
     pub c_strength: f64,
+    /// Upkeep every body pays whatever its genes, J per day for a member of `m_ref` (1 kg),
+    /// times (member mass / `m_ref`)^`intake_exp` (`body::upkeep`, 14 Oct 2026, review 5):
+    /// resting metabolism, about 3.4 m^0.75 W (Kleiber), 2 x 10^4 J per kg per day or 0.23 W/kg at
+    /// 1 kg. Before, strength was the only cost of having a body and a kind with strength 0 lived
+    /// eight times cheaper (8 kJ per kg per day against 66 for an eater). A 1 kg plant pays 20 of
+    /// its 38.5 kJ per kg per day with it and keeps 46 of income; a 20 g body pays 53
+    pub c_basal: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
     /// Cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1), J per kg
@@ -218,12 +225,12 @@ pub struct Physics {
     pub rho_body: f64,
     /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J
     pub walk_wear: f64,
-    /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::intake`:
-    /// per member its mass that works, up to `full` times its copy mass, to the power `intake_exp`;
-    /// what it holds past that takes nothing)
+    /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::equiv`:
+    /// per member its mass to the power `intake_exp`), and no more than it can use (`choose::sate`)
     pub take: f64,
-    /// What a member takes, sweeps and receives as a gift goes with its mass that works to this
-    /// power, about the 0.75 of intake and metabolism in life (`Body::intake`). Here every cost goes
+    /// What a member takes, sweeps and receives as a gift, what it can build in a day (`c_build`),
+    /// what it pays to be (`c_basal`) and the leaf it spreads go with its mass to this power,
+    /// about the 0.75 of intake and metabolism in life (`Body::equiv`). Here every cost went
     /// with mass, so with 1 nothing scaled against size and selection pushed the copy-mass gene to
     /// its wall (eaters of 9 to 15 t that barely copy, review 4, finding 5); with 0.75 a 10 t member
     /// takes 180 times a 10 kg one, not 1,000. A free number chosen for that reason, not a rule.
@@ -285,6 +292,17 @@ pub struct Physics {
     /// in one interval: a starting eater copying at 63 kg gives 19 kg to a child, 1.9 x 10^8 J,
     /// and can release 1.2 x 10^8 J in 9 days at 288 K (2 x 10^6 until 13 Oct 2026, when it had to).
     pub c_copy: f64,
+    /// Most work a body can put into its children per day, J, for a member of `m_ref` (1 kg);
+    /// a member of `m` kg pays at most this x (`m` / `m_ref`)^`intake_exp` x days (`Body::equiv`,
+    /// `copy::copy`): building a body takes time, small ones grow fast and big ones slowly
+    /// (14 Oct 2026, review 5). Anchored to the growth of young in life: a 1 kg animal makes about
+    /// 1 kg of dry young a year (2.7 x 10^4 J a day at `c_copy`), a 50 kg one about 1 kg a year
+    /// (1,450 per kg^0.75), a 1 t one about 10 kg (1,500): anchored to 1,500 to 30,000, and set at
+    /// the top because at 10^4 the starting eaters (neutral brains) of seeds 1 and 2 died out:
+    /// they starve within weeks and must breed faster than that until they learn (handover 4). A
+    /// 57 kg eater (20.8 kg^0.75) then needs 82 days for a child of 17 kg. A grown body also takes
+    /// in no more than its reactions can use, its upkeep plus this (`choose::sate`)
+    pub c_build: f64,
     /// Chance that a child starts a new lineage with a changed base, and the size of that change
     pub new_lineage: f64,
     pub base_noise: f32,
@@ -339,6 +357,7 @@ impl Default for Physics {
             t_firm: 320.0,
             c_firm: 20.0,
             c_strength: 1e5,
+            c_basal: 2e4,
             c_leaf: 2e3,
             c_brain: 1e5,
             m_ref: 1.0,
@@ -383,6 +402,7 @@ impl Default for Physics {
             deep: 0.5,
             afloat: 0.2,
             c_copy: 1e7,
+            c_build: 3e4,
             new_lineage: 0.001,
             base_noise: 0.03,
             row_chance: 0.3,

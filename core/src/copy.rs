@@ -233,14 +233,18 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // fuel for its size never copied, and grew to 10^5 kg.) It has the children the store covers:
     // a node a share of them, an individual whole ones; the rest later. The work is for what the
     // children are built of: the liquid they carry is only moved (counted, a member of mostly
-    // liquid could not pay for a child, never copied and swelled to 30 times its copy mass).
+    // liquid could not pay for a child, never copied and swelled to 30 times its copy mass). And
+    // building takes time: at most `c_build` x mass^0.75 a day, so a child takes months to build
+    // for a 1 kg body and years for a 2,000 t one (`Physics::c_build`), whatever its reactions release.
     let t = b.temp(&w.chem);
     let wet: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == crate::chem::Phase::Liquid).map(|k| b.store[k] * w.chem.subs[k].molar_mass).sum();
     let (owe, days) = (w.cfg.phys.c_copy * s * (mass - wet).max(0.0), b.interval() as f64);
     let more = if owe > b.paid {
         let r = 0.999 * body::release(w, b, days);
         let spare = if m1 >= full { r } else { b.fuel(&w.chem, b.temp(&w.chem)) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300)) };
-        (owe - b.paid).min(spare).min(r)
+        // Building takes time (14 Oct 2026, review 5): never more than `c_build` x its `equiv` x the days.
+        let build = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, mass) / w.cfg.phys.m_ref * days;
+        (owe - b.paid).min(spare).min(r).min(build)
     } else {
         0.0
     };
@@ -351,7 +355,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         c.genome = w.life.new_genome(v);
     }
     own(w, b, &mut c);
-    (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem, w.cfg.phys.full));
+    (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem, &w.cfg.phys));
     let delay = c.interval();
     let s = w.life.add(c, w.day, delay);
     w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
@@ -452,7 +456,7 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     // A node has no wear: its members are of all ages (`body::live`).
     (o.e, o.count, o.paid, o.wear) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0);
-    o.vis = o.visible(&w.chem, w.cfg.phys.full);
+    o.vis = o.visible(&w.chem, &w.cfg.phys);
 }
 
 /// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the

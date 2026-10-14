@@ -148,12 +148,12 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `still` | m | liquid does not move for a smaller head difference | none found; a film of a centimetre does not run on rough ground (unchecked) | tuned, first guess |
 | `hold` | kg/m² | body mass per area that halves what moving liquid can carry off a cell and how fast its loose solids creep | none found | tuned, first guess |
 
-### Added by review 5 (rows written ahead; the fields come with row 1 and row 2)
+### Added by review 5 (rows 1 and 2, 14 Oct 2026)
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `c_build` | J per day per kg^0.75 | most a body pays into its child store per day: the rate at which it can build a child | the growth of young in life (review 5, row 1) | anchored |
-| `c_basal` | J per day per kg^0.75 | basal upkeep every body pays, strength and catalysts on top | resting metabolism (Kleiber; its whole value is about 3e5 J per day per kg^0.75, of which this is the part every body pays, the rest being `c_strength` and `c_cat`; review 5, row 2) | anchored |
+| `c_build` | J per day per kg^0.75 | most a body pays into its child store per day: the rate at which it can build a child | the growth of young in life, 1,500 to 30,000 (von Bertalanffy; review 5, row 1). Set at 3e4, the top of that range, not the review's 1e4: at 1e4 the starting eaters (neutral brains) of seeds 1 and 2 died out (handover 4). Chosen within the anchor for the start to work | anchored |
+| `c_basal` | J per day per kg^0.75 | basal upkeep every body pays, strength and catalysts on top (2e4) | resting metabolism (Kleiber; its whole value is about 3e5 J per day per kg^0.75, of which this is the part every body pays, the rest being `c_strength` and `c_cat`; review 5, row 2) | anchored |
 
 ## Constants outside the structs that act like free numbers
 
@@ -173,7 +173,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 
 ## Counts
 
-By hand and by script on 15 Oct 2026. The 97 rows of `Config` and `Physics` are the 95 fields there are, and the two rows written ahead (`c_build`, `c_basal`).
+By hand and by script on 15 Oct 2026. The 97 rows of `Config` and `Physics` are their 97 fields (with `c_build` and `c_basal`, added the same day by review 5).
 
 | mark | rows | which |
 |---|---|---|

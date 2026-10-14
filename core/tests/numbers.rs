@@ -7,7 +7,7 @@ use std::path::Path;
 
 /// Fields that rows are written for ahead of the change that adds them (review 5, rows 1 and 2).
 /// Remove a name from here when its field exists: then a stale row for it is an error again.
-const AHEAD: [&str; 2] = ["c_build", "c_basal"];
+const AHEAD: [&str; 0] = [];
 
 /// Rows marked tuned in the whole file (handover 14.3): it may not grow. A new number must be
 /// physical or anchored, or replace a tuned one. Lower this when a tuned number is anchored or
