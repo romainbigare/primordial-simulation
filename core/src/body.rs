@@ -305,15 +305,15 @@ impl Body {
         mass.min(p.full * self.dec(COPY_MASS) * self.n())
     }
     /// Mass-equivalent that a body takes, sweeps and receives as a gift by (kg, in place of `work`):
-    /// per member `intake_ref` times its mass that works over `intake_ref`, to the power
-    /// `intake_exp` (0.75), times the count. A member of `intake_ref` (1 kg) takes as before (`take`
+    /// per member `m_ref` times its mass that works over `m_ref`, to the power
+    /// `intake_exp` (0.75), times the count. A member of `m_ref` (1 kg) takes as before (`take`
     /// per kg per day); one of 30 kg 30^0.75 = 12.8 kg-equivalents, 2.3 times less per kg; of 10 t,
     /// 1,778, so it takes 180 times what a 10 kg one (10^0.75 = 5.6) does, not 1,000. Past `full`
     /// times its copy mass a member takes at the rate of `full`, as with `work`. Light, rain and
     /// liquid go by area, not by this.
     pub fn intake(&self, p: &crate::Physics, mass: f64) -> f64 {
         let n = self.n();
-        n * p.intake_ref * (self.work(p, mass) / n / p.intake_ref).powf(p.intake_exp)
+        n * p.m_ref * (self.work(p, mass) / n / p.m_ref).powf(p.intake_exp)
     }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
     /// (its mass that works times `LEAF`, as `visible` and the light code count it) plus its skin,
