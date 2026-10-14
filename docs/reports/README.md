@@ -41,4 +41,7 @@ folder with the same name as the report.
   time); the roster did not lose its plants but its small plants (the big kind won by shade; by
   mass the plants are as before), the giants are the plant-size runaway (leaf and height go with
   the whole mass) and the tiny eaters of remains live at an eighth of the cost because strength 0
-  costs nothing; three free numbers to add before the 300-year runs.
+  costs nothing; three free numbers to add before the 300-year runs; no maturity range (maturity is
+  the copy mass, the missing thing is time); fixes for two drifts from the philosophy (free numbers
+  chosen for outcomes: a numbers table with a tuned budget; the node makes biology: an individuals
+  mode and the nodes-against-individuals check as M4's first job).

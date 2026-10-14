@@ -248,22 +248,136 @@ If 1 fails (the plant mass really is a hundred times down), section 2's first re
 the plants' deaths by cause (`root_4_died_*`) say what killed them. If 2 fails, the spores pay
 their brain somehow I did not see, and `root_5_life` against `root_5_life_real` will say how.
 
+## 3. A maturity range? No
+
+The owner asked whether to add a range of sexual maturity (an age or a size between which a body
+may copy). No. Maturity already exists in the laws as a size: the copy-mass gene, and the
+child-share gene beside it, and selection moves both now (the size runaway was that). In life,
+maturity is mostly a size too. What is missing is not a threshold but time: building a body is
+instant here. An age range would be a rule written at the level of the result ("animals mature at
+two years"), like the sowing windows of version 1 (handover 2, lesson 2); you can list all its uses
+in advance, and it has one. The build rate of section 1 is the cause instead: one number inside
+law 4 ("the parent must have the materials and the energy", and now the time), and age at
+maturity, generation time, lifespan and recovery after a crash follow from mass and food. Nothing
+is written down.
+
+## 4. Two drifts from the handover's philosophy, with fixes
+
+Reading the code against handover sections 2 and 3, the physics side keeps the philosophy well:
+five laws in five files, no Earth words in the core, nothing made or lost, no "eat" action, honest
+reports, null runs, and results that came out by themselves (rivers, a stable climate, a food
+chain, decomposers, shade and size selection). Two things drift. Each gets a fix that is small and
+keeps results the same, so they can go in now.
+
+### Drift 1: free numbers pile up, and each is chosen for an outcome
+
+`Physics` holds about sixty numbers. Since review 3 it gained the catalyst capacity, the unfolding
+temperature, repair, the life energy, the intake exponent and its reference mass, and this review
+asks for two more. The handover allows free numbers (6.0: "a free number to tune"; M7 varies them),
+but many were set the way version 1's realism was (handover 2, lesson 3): "so the starting plants
+pay what they paid before", "so the eaters live", "so the big slow kinds survive a neutral brain".
+A number set for a result is a rule in a smaller coat. The fixes:
+
+1. **Every number names its fact.** A short table, `docs/numbers.md`, one row per field of
+   `Physics` and `Config`: the unit; the fact of matter or energy it is (a capacity, a cost, a
+   conductance, a rate, a reference mass); the real-world size it is anchored to, with the source
+   in a few words (Kleiber, Rubner, Henry, a leaf's 24 g per m² per day); and one of three marks:
+   **physical** (a measured size, used as measured), **anchored** (a real order of magnitude,
+   chosen within it), **tuned** (set so a run came out a certain way, with the run named). A test
+   in `core/tests` reads the table and fails when a field of `Physics` has no row, so no number can
+   be added without saying what it is. Half a day; most rows exist already as doc comments.
+2. **A budget for tuned numbers, like the code budgets (14.3).** Today's tuned ones, as I read
+   them: `full` (2: "copies at twice its copy mass"), the kept copy logit (-1, a behaviour, said so
+   in `life.rs`), `take` and `sweep` (0.05 and 1: set for eaters to live), `crowd`, `alike`,
+   `WITHIN` (speed-tool thresholds), `shelter`, `c_leaf`, `c_handle`, `c_move`, and the roster's
+   stores and intervals. Say the number (about twelve) in the handover, and the rule: it may not
+   grow. A new number must be physical or anchored, or it replaces a tuned one. The two numbers of
+   this review are anchored (`c_build` to the growth of young in life, `c_basal` to resting
+   metabolism); `full` and the "past `full` it takes at the rate of `full`" rule go away with
+   satiety, so the count falls by one.
+3. **Fewer numbers where one fact is written twice.** `m_ref`, `intake_ref` and `heat_mass` are
+   three reference masses for one idea (the member at which a per-kg number is per kg); make them
+   one, at 1 kg, and scale `HEAT` as the others are. `t_cat` (290 K) is `worldgen::life::T_SURF`
+   again. `c_hidden`, `c_memory`, `c_seen` and `c_sight` already derive from `c_brain`; say so in
+   the table rather than list four. About five numbers fewer, results unchanged (the scaling of
+   `HEAT` needs the starting kinds' gene reset, as the gas gene was).
+4. **Every run prints its numbers, every report prints what changed.** The recorder writes
+   `physics.json` (the `Physics` and `Config` of the run) next to `series.csv`; a report's "what we
+   built" table is then the diff of that file against the last report's. Today a number can
+   change in a commit message and nowhere a reader of the reports sees it (the gas gene reset,
+   the 60% stores, the intake exponent all did). An hour.
+5. **The M7 world search varies only the tuned and anchored numbers, within their anchors**, and
+   never the physical ones. Write that in the table's header now, so the search is designed from
+   the table, not from the struct.
+
+### Drift 2: the population node makes biology, and its check was never run
+
+The node is a speed tool (handover 7.1: "it must give the same patterns as the detailed form"). It
+now has about six hundred lines of rules of its own: when a node splits, when two merge, which
+genes count as alike, who joins whom, a split-off member for Bond actions, a merge "however
+unlike" past twice `crowd`, no split in a full cell. Three times those rules changed the biology:
+genes drifted (review 3), brain size froze (review 4), a placed brain was diluted (report 5). The
+check that the handover demands (nodes against individuals, before M4 builds on them) has never
+been run, and today it cannot be: there is no way to run the animals as individuals. The fixes:
+
+1. **An individuals mode, so the check can run.** `Config::nodes` (default true;
+   `--individuals`): when false, an animal's children are placed as individuals and never join a
+   node (`copy::copy` skips `within`), the monthly `body::crowd` merges nothing, and nothing
+   splits. Light-eaters stay nodes in both modes (one node per cell is how they are placed, and
+   4 x 10⁵ members of 1 kg per cell cannot be individuals; the handover says light-eaters first).
+   About twenty lines, all guards. Then the check: seed 1 and seed 5 at 32 x 32 for 100 years, both
+   modes, the same columns (`root_<k>_kg`, `_life_real`, `_mass`, `_copy_log`, `_interval`, the
+   catalyst genes, the eaters' food shares, `kinds`). "The same patterns" said before the run, not
+   after: biomass and real life within a factor of two, the gene means moving the same way, the
+   same kind winning. Where they differ, the node rule that differs is the bug, not the biology.
+   Three days with the runs. **This is M4's first job**, before coarse regions.
+2. **The safeguard that writes biology gets counted.** The merge "however unlike" past twice
+   `crowd` blends two kinds into one node whose spread then forgets which genes went together
+   (handover 7.1's known limit). It may be rare or common; nobody knows. A series column,
+   `merged_unlike` (members a year merged that way), and a line in each report. If it is more
+   than a few per cent of the animals' members in a year, the ceiling is too low or the join rule
+   too strict, and that is a speed-tool setting to raise, never a result to keep. An hour.
+3. **Likeness counts the brain-size genes with a step of one unit** (section 2's note). A 48-unit
+   brain and a 12-unit one are not one kind and must not merge or be joined; two halves of a split,
+   0.3 units apart, still are. One line in `copy::step`, and the big-brain test can be run as it
+   was meant.
+4. **A node can be opened.** Handover 7.1 asks for "split it back into individuals when the player
+   looks closely"; it is not built, and the check in fix 1 wants it too (to compare a node's
+   members with real individuals, draw them from its spread). `copy::one` already draws one
+   member; a `copy::open(node, n)` that draws `n` is the same code in a loop. A day. It is also
+   what M6's close view will need.
+5. **Each node rule is a setting, printed and varied.** `crowd`, `alike`, `WITHIN`, the twice-crowd
+   ceiling and the split-only-with-room rule are in the numbers table (drift 1) as tuned, and the
+   first M4 report runs one seed at `crowd` 4 and 8 and in individuals mode, side by side. A speed
+   tool may change the speed; it may not change which kind wins, how long it lives or what it
+   eats. If it does, that is the finding.
+
+### What does not change
+
+The node as a design stays (one count, mean genes, a spread, one brain; conservation exact), the
+group brain stays, the roster stays as a reported start. The ageing law stays; it was added for
+its result, which is the one thing the handover says not to do, but it is harmless, and with the
+build rate bodies will live long enough for it to act, so it earns its place then.
+
 ## The list, in order
 
 S is under a day, M a few days.
 
 | # | Do | Size | Section |
 |---|---|---|---|
-| 1 | `c_build`: a body pays into its child store at most `c_build` x mass^0.75 a day (10⁴ J a day per kg^0.75); with it, a body takes no more than its upkeep plus what it can build over the interval (satiety), in place of "past `full` it takes at the rate of `full`" | S | 1 |
+| 1 | `c_build`: a body pays into its child store at most `c_build` x mass^0.75 a day (10⁴ J a day per kg^0.75); with it, a body takes no more than its upkeep plus what it can build over the interval (satiety), in place of "past `full` it takes at the rate of `full`" | S | 1, 3 |
 | 2 | `c_basal`: a basal upkeep every body pays per kg (or per kg^0.75 from 1 kg), 2 x 10⁴ J per kg per day, strength on top; re-check the starting kinds' lives and the plants' spare | S | 2 |
 | 3 | Leaf area with the same mass^0.75 as intake (`visible`, `open_area`) | S | 2 |
-| 4 | Tape: `root_<k>_kg`, `mass_max_root`; reports read who took over by mass | S | 2 |
-| 5 | Likeness counts the brain-size genes with a step of one unit (the owner's call); then the big-brain test again | S | 2 |
-| 6 | Check the four predictions above on the tapes of report 5; then seed 1 at 64 x 64 for 100 years, normal and roster, and read `root_<k>_life_real`, `root_<k>_kg` and the heaviest member's kind | M | all |
-| 7 | The three 300-year seeds at 128 x 128, then M4 | | |
+| 4 | Tape: `root_<k>_kg`, `mass_max_root`, `merged_unlike`; the recorder writes `physics.json`; reports read who took over by mass and print the diff of the numbers | S | 2, 4 |
+| 5 | Likeness counts the brain-size genes with a step of one unit; then the big-brain test again | S | 2, 4 |
+| 6 | `docs/numbers.md` with every number's fact, anchor and mark, and the test that no field of `Physics` is without a row; the tuned budget in the handover; one reference mass instead of three | S | 4 |
+| 7 | Check the four predictions above on the tapes of report 5; then seed 1 at 64 x 64 for 100 years, normal and roster, and read `root_<k>_life_real`, `root_<k>_kg` and the heaviest member's kind | M | 1, 2 |
+| 8 | `Config::nodes` (`--individuals`) and `copy::open`; the nodes-against-individuals check on two seeds at 32 x 32 for 100 years, with "the same patterns" defined before the run; one seed at `crowd` 4 and 8 beside it | M | 4 |
+| 9 | The three 300-year seeds at 128 x 128, then M4 (coarse regions only after row 8 passes) | | |
 
 Rows 1 to 3 are three free numbers and about thirty lines; they change what the results mean
-(lives, sizes, who lives on what), so run them before the 300-year seeds, not after.
+(lives, sizes, who lives on what), so run them before the 300-year seeds, not after. Rows 4 to 6
+keep every result the same. Row 8 is the handover's own condition for M4.
 
 ## What this review did not check
 
