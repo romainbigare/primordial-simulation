@@ -7,7 +7,7 @@
 //! no more work (14 Oct 2026, reproduction by surplus); satiety is off by default (a store is bounded by
 //! the body, `Body::level`); dead body matter on the ground oxidises at the rate chemistry 0 sets.
 
-use pcore::body::{Body, Layout, ALLOC, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH};
+use pcore::body::{Body, Layout, ALLOC, CHILD, COPY_MASS, DISPERSE, GAS, HEAT, LIQ, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::{body, brain, change, choose, copy, flow, World};
 
@@ -1028,4 +1028,79 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     w.life.bodies[s] = b;
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// Body size by an energy ceiling, not a cap (14 Oct 2026): what a body takes goes with its mass^0.75
+/// (`Body::equiv`) and the cost of keeping its tissue with its body^1.0 (`body::upkeep`), so growth,
+/// which builds only from the spare after upkeep (`copy::grow`), stops where the two meet, a size the
+/// body's own costs set. An eater (ALLOC 0: it builds only for itself, nothing is given to children;
+/// strength 1; building fast, so that the allowance never binds; its liquid put back to the ground) in
+/// a place with all the fuel it can take, at every update. With tissue dear enough that the ceiling is
+/// near (costs 1.7 times the starting ones: about 60 kg) it levels off (under a quarter more body
+/// between the 100th and the 300th day) and in its last 100 days takes about what it pays to keep what
+/// it has (within 5 to 10%); with the costs of the start, a ceiling many times higher, it is still
+/// growing fast (more than twice the relative growth) and ends larger. (The bodies of this test die
+/// of a cold season when held at the ceiling for a year: 360 days are run.)
+#[test]
+fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
+    use pcore::event::EventKind;
+    let run = |cost: f64| {
+        let (mut w, i) = start();
+        let r = roles(&w);
+        // Building never binds; the costs of keeping tissue are `cost` times the starting ones.
+        w.cfg.phys.c_build = 1e7;
+        for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {
+            *c *= cost;
+        }
+        let mut b = eater(&mut w, i, 3, 0.0);
+        // A body that is wet (soaking), breathes freely and sheds its heat, so that only its energy limits it.
+        (b.genes[STRENGTH], b.genes[ALLOC], b.genes[LIQ], b.genes[GAS], b.genes[HEAT]) = (1.0, 0.0, -1.0, 3.0, 3.0);
+        let (s, b0) = out(&mut w, b);
+        w.life.bodies[s] = b0;
+        let (n, area) = (w.grid.n(), w.grid.area());
+        let joule = -w.chem.dh(r.burn) / w.chem.reactions[r.burn].inputs.iter().find(|x| x.0 as usize == r.rich).unwrap().1 as f64 / w.chem.subs[r.rich].molar_mass;
+        let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
+        for day in 0..360usize {
+            // Fuel and liquid in plenty: 100 kg per m² of each on the cell at every update (booked as an edit).
+            for k in [r.rich, r.liquid] {
+                let (t, a) = (w.t_ground(i), (100.0 * area / w.chem.subs[k].molar_mass - w.g(k, i)).max(0.0));
+                w.ground[k * n + i] += a;
+                w.chem.add_elems(k, a, &mut w.ledger.imposed_elems);
+                let e = w.energy_ground(i, t);
+                (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[k].hf, e);
+            }
+            self::day(&mut w);
+            assert!(w.life.bodies[s].alive, "the body died on day {day}");
+            let b = &mut w.life.bodies[s];
+            // What its burning made and it holds above the level it keeps goes back to the ground (a body that decides to put it
+            // out, or breathes it out; this one only takes).
+            let (mass, t) = (b.mass(&w.chem), b.temp(&w.chem));
+            let over = (b.store[r.liquid] - b.level(&w.chem, r.liquid, mass)).max(0.0);
+            let q = over * w.chem.subs[r.liquid].cp * t;
+            (w.ground[r.liquid * n + i], b.store[r.liquid], w.e_ground[i], b.e) = (w.ground[r.liquid * n + i] + over, b.store[r.liquid] - over, w.e_ground[i] + q, b.e - q);
+            takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, burn, .. } = e.kind { burn as f64 * joule } else { 0.0 }).sum();
+            let mut b = w.life.bodies[s].clone();
+            b.prepare(&w.chem, &w.cfg.phys);
+            ups[day] = body::upkeep(&w, &b, 1.0, b.mass(&w.chem));
+            if day % 50 == 49 {
+                built.push(b.built(&w.chem));
+            }
+        }
+        let ratio = takes[260..].iter().sum::<f64>() / ups[260..].iter().sum::<f64>();
+        println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
+        (built, ratio)
+    };
+    let (full, r_full) = run(1.7);
+    let (cheap, r_cheap) = run(1.0);
+    let n = full.len();
+    // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).
+    let rel = |x: &[f64]| x[5] / x[1] - 1.0;
+    // Growth slows toward a size: the body with the dearer tissue is near it, the other far from it.
+    assert!(rel(&full) < 0.25 && rel(&cheap) > 2.0 * rel(&full), "growth: {:.3} of the body between the 100th and the 300th day against {:.3} with cheaper tissue", rel(&full), rel(&cheap));
+    // What it takes over what it pays to keep what it has falls toward 1 as it grows (supply goes with mass^0.75,
+    // upkeep with the body): at the end it is within 10% of 1, for the body with dear tissue, and the other, far from its
+    // ceiling, more.
+    assert!(r_full > 0.95 && r_full < 1.1 && r_cheap > r_full, "took / upkeep at the end {r_full} and {r_cheap} with cheaper tissue");
+    // Cheaper tissue, a larger body in the same time.
+    assert!(cheap[n - 1] > 1.5 * full[n - 1], "a body with cheaper tissue grows larger: {} against {}", cheap[n - 1], full[n - 1]);
 }

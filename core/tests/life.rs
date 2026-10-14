@@ -511,10 +511,11 @@ fn a_body_takes_no_more_than_it_can_use() {
     }
     // With a store below the target, upkeep and build over the share its reactions
     // release in an interval, less what it holds: the target rises with `c_build`, between the
-    // upkeep's worth and what its size takes (here a store of 27% of the fuel: 15.5%
-    // before the body held matter and fuel apart, 17% before strength and catalysts went by mass^0.75).
-    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.27, true)).collect();
-    println!("sate asked for twice the size cap, store 27%: (left, upkeep+build, cap, target) {sated:?}");
+    // upkeep's worth and what its size takes (here a store of 29.5% of the fuel: 15.5%
+    // before the body held matter and fuel apart, 17% before strength and catalysts went by mass^0.75,
+    // 27% before they went by the kg of the body, 14 Oct 2026: the window is narrow, a few points of store).
+    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 6e4].iter().map(|&c| took(10.0, c, 0.295, true)).collect();
+    println!("sate asked for twice the size cap, store 29.5%: (left, upkeep+build, cap, target) {sated:?}");
     for &(left, _, cap, target) in &sated {
         assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
         assert!(target < cap, "the size cap {cap} binds, the case shows nothing");
@@ -637,7 +638,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
-/// What a member takes, can build and pays to be goes with its mass to the power `intake_exp`
+/// What a member takes and can build goes with its mass to the power `intake_exp`
 /// (14 Oct 2026, review 4, finding 5): 1 kg counts as 1 kg, 10 t takes 180 times what 10 kg does
 /// (not 1,000), and a node of n members counts n times a member. It counts by all its mass (satiety
 /// stops what it takes, `a_body_takes_no_more_than_it_can_use`).
@@ -658,10 +659,11 @@ fn equiv_goes_with_mass_to_the_power() {
     assert!(m.equiv(&p, 2000.0) > m.equiv(&p, 20.0), "it counts by all its mass");
 }
 
-/// Every body pays a basal upkeep (14 Oct 2026, review 5): `c_basal` per day for a member of the
-/// reference mass, times (member mass / reference)^0.75, per member, strength on top. A kind with
-/// strength 0 (the eaters of remains) used to pay none of the body cost; now a 1 kg one pays
-/// `c_basal` a day and a 100 kg one 100^0.75 = 31.6 times that, 3.2 times less per kg.
+/// Every body pays a basal upkeep (14 Oct 2026, review 5): `c_basal` per day and kg of its body
+/// (since 14 Oct 2026, the energy ceiling: mass^1.0, not the mass^0.75 of review 5; the cost of keeping
+/// tissue), strength on top. A kind with strength 0 (the eaters of remains) used to pay none of the
+/// body cost; now a body of 1 kg pays `c_basal` a day and one of 100 kg a hundred times that, the same
+/// per kg.
 #[test]
 fn a_body_with_no_strength_pays_a_basal_upkeep() {
     use pcore::body::{REPAIR, STRENGTH};
@@ -677,23 +679,79 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
     assert_eq!(b.genes[STRENGTH], 0.0);
     b.genes[REPAIR] = 0.0;
     b.prepare(&w.chem, &w.cfg.phys);
-    let (days, mass) = (10.0, b.mass(&w.chem));
-    let basal = |w: &mut pcore::World, b: &pcore::body::Body, m: f64| {
-        let with = pcore::body::upkeep(w, b, days, m);
+    let days = 10.0;
+    // The body `f` times as big (all its stores), alone or as a node of `n` such members.
+    let sized = |f: f64, n: f64| {
+        let mut x = b.clone();
+        x.count = n;
+        x.store.iter_mut().for_each(|a| *a *= f * n);
+        x
+    };
+    let basal = |w: &mut pcore::World, x: &pcore::body::Body| {
+        let m = x.mass(&w.chem);
+        let with = pcore::body::upkeep(w, x, days, m);
         let p0 = w.cfg.phys;
         w.cfg.phys.c_basal = 0.0;
-        let without = pcore::body::upkeep(w, b, days, m);
+        let without = pcore::body::upkeep(w, x, days, m);
         w.cfg.phys = p0;
         (with - without) / days
     };
-    let (one, hundred) = (basal(&mut w, &b, 1.0), basal(&mut w, &b, 100.0));
-    println!("basal upkeep of a 1 kg member {one:.4e} J/day, of 100 kg {hundred:.4e}, member of {mass} kg");
-    assert!((one / w.cfg.phys.c_basal - 1.0).abs() < 1e-9, "1 kg pays c_basal: {one}");
-    assert!((hundred / one / 100f64.powf(0.75) - 1.0).abs() < 1e-9, "100 kg pays 100^0.75 times that: {}", hundred / one);
+    let (one, hundred) = (sized(1.0, 1.0), sized(100.0, 1.0));
+    let (e1, e100) = (basal(&mut w, &one), basal(&mut w, &hundred));
+    let (k1, k100) = (one.built(&w.chem), hundred.built(&w.chem));
+    println!("basal upkeep of a member of {} kg ({k1:.3} kg of body) {e1:.4e} J/day, of {} kg ({k100:.3}) {e100:.4e}", one.mass(&w.chem), hundred.mass(&w.chem));
+    assert!((e1 / k1 / w.cfg.phys.c_basal - 1.0).abs() < 1e-9, "it pays c_basal per kg of body: {}", e1 / k1);
+    assert!((e100 / e1 / 100.0 - 1.0).abs() < 1e-9, "100 times the body pays 100 times as much, the same per kg: {}", e100 / e1);
     // A node of 5 members pays 5 times a member's.
-    let mut n = b.clone();
-    n.count = 5.0;
-    assert!((basal(&mut w, &n, 500.0) / (5.0 * hundred) - 1.0).abs() < 1e-9, "a node pays for each member");
+    assert!((basal(&mut w, &sized(100.0, 5.0)) / (5.0 * e100) - 1.0).abs() < 1e-9, "a node pays for each member");
+}
+
+/// The cost of keeping tissue goes with the kg of the body, mass^1.0, at every mass (14 Oct 2026, the energy
+/// ceiling; the supply of a body goes with mass^0.75, `equiv_goes_with_mass_to_the_power`): the same
+/// genes, a body 1, 10, 100 and 10,000 times the size pay upkeep in proportion to their body, so per kg
+/// of body the same, with basal, catalysts, strength and learning all in it. The brain's decision
+/// (mass^0.25 per member) and the leaf (by area) are left out here (set to nothing), and fuel is no
+/// body: the same body holding three times the fuel pays the same.
+#[test]
+fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
+    use pcore::body::{LEARN, REPAIR, STRENGTH};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
+    let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let (l, g) = (w.life.new_lineage(pcore::body::Lineage { shape, seen: 3, sight: 1, base, root: 1 }), w.life.new_genome(rows));
+    // A starting eater: strength 0.6, a burning catalyst, learning on.
+    let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+    (b.genes[STRENGTH], b.genes[LEARN], b.genes[REPAIR]) = (0.6, -1.0, 0.0);
+    b.prepare(&w.chem, &w.cfg.phys);
+    let p = &mut w.cfg.phys;
+    (p.c_brain, p.c_hidden, p.c_memory, p.c_seen, p.c_sight, p.c_leaf) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+    let days = 10.0;
+    let up = |w: &pcore::World, x: &pcore::body::Body| pcore::body::upkeep(w, x, days, x.mass(&w.chem));
+    let per_kg: Vec<f64> = [1.0, 10.0, 100.0, 1e4]
+        .iter()
+        .map(|&f| {
+            let mut x = b.clone();
+            x.store.iter_mut().for_each(|a| *a *= f);
+            up(&w, &x) / x.built(&w.chem)
+        })
+        .collect();
+    println!("upkeep per day and kg of body at 21 kg x 1, 10, 100, 10,000: {:?}", per_kg.iter().map(|u| u / days).collect::<Vec<_>>());
+    assert!(per_kg[0] > 0.0);
+    for u in &per_kg {
+        assert!((u / per_kg[0] - 1.0).abs() < 1e-9, "upkeep per kg of body differs with size: {per_kg:?}");
+    }
+    // Strength, catalysts, learning and basal are each in it, by the kg of body.
+    let p = w.cfg.phys;
+    let want = days * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + p.c_learn * b.learn_rate() as f64);
+    assert!((per_kg[0] / want - 1.0).abs() < 1e-9, "per kg of body {} against the costs summed {want}", per_kg[0]);
+    // Fuel is no body: three times the fuel, the same upkeep.
+    let mut fat = b.clone();
+    fat.store[rich] *= 3.0;
+    assert!((up(&w, &fat) / up(&w, &b) - 1.0).abs() < 1e-9, "stored fuel adds to the upkeep: {} and {}", up(&w, &fat), up(&w, &b));
 }
 
 /// Leaf goes with mass^0.75 like intake (14 Oct 2026, review 5): the same `LEAF` gene gives a

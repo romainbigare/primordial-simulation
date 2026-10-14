@@ -38,7 +38,23 @@ fn scene(seed: u64) -> (World, usize) {
     let d = pcore::Physics::default();
     // `c_build` stays 3e4, what the scene was made with (the default is 1e4 since 14 Oct 2026, review
     // 6: with it the effect is 2.5 points over chance against 0.5, just under the margin the test asks).
-    let phys = pcore::Physics { m_ref: 30.0, c_copy: 2e6, c_build: 3e4, take: d.take * 30f64.powf(-0.25), sweep: d.sweep * 30f64.powf(-0.25), ..d };
+    // The costs of keeping tissue are per kg of the body since 14 Oct 2026 (the energy ceiling,
+    // `body::upkeep`); they were per kg-equivalent, which for this body of 30 kg at `m_ref` 30 kg was
+    // one unit. This chemistry has no body matter, so all its 30 kg are body: each cost is what the
+    // scene paid (the constants of before that day), over 30.
+    let phys = pcore::Physics {
+        m_ref: 30.0,
+        c_copy: 2e6,
+        c_build: 3e4,
+        take: d.take * 30f64.powf(-0.25),
+        sweep: d.sweep * 30f64.powf(-0.25),
+        c_basal: 2e4 / 30.0,
+        c_cat: 3.5105e9 / 30.0,
+        c_strength: 2.3403e5 / 30.0,
+        c_learn: 7.021e4 / 30.0,
+        c_signal: 4.6807e2 / 30.0,
+        ..d
+    };
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, phys, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);
