@@ -420,22 +420,26 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 /// genes stay in the spread, not only in the mean.
 pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
-    take_in(w, &mut o, c, rows);
+    take_in(w, &mut o, c, Some(rows));
     w.life.bodies[t] = o;
 }
 
-/// `join` into body `o`, taken out of its slot.
-pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: &[f32]) {
+/// `join` into body `o`, taken out of its slot. `rows` are the born rows of `c`; none: those of `o`
+/// (a member split off `o` coming back), which leaves its rows and its group's as they are.
+pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.n() / (o.n() + c.n())) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
     let s = |b: &Body, g: usize| b.spread.get(g).copied().unwrap_or(0.0);
     o.spread = (0..o.genes.len()).map(|g| pool(s(o, g), s(&c, g), (c.genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
     let born = w.life.born(o);
-    let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
+    let gap = rows.map_or(0.0, |rows| born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32);
     o.row_spread = pool(o.row_spread, c.row_spread, gap, row_step(p, 10f32.powf(o.genes[body::MUT])));
-    let (genes, born) = (mix(&o.genes, &c.genes), mix(born, rows));
-    w.life.reborn(o, genes, born);
+    let genes = mix(&o.genes, &c.genes);
+    match rows {
+        Some(rows) => w.life.reborn(o, genes, mix(born, rows)),
+        None => w.life.regene(o, genes),
+    }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     // A node has no wear: its members are of all ages (`body::live`).
     (o.e, o.count, o.paid, o.wear) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0);
@@ -548,7 +552,10 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 /// all ages evenly, so members split off die at the rate the node's members die (`body::live`). Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
+    // (The member keeps no spread: it is left out of the clone.)
+    let spread = std::mem::take(&mut b.spread);
     let (mut c, mut genes) = (part(b, 1.0 / b.count), b.genes.clone());
+    b.spread = spread;
     for (g, x) in c.genes.iter_mut().enumerate() {
         let ((_, lo, hi), v) = (range(&lay, g), b.spread.get(g).map_or(0.0, |s| s.max(0.0)));
         *x += v.sqrt().min((*x - lo).min(hi - *x).max(0.0) / REACH) * noise(r);
@@ -558,8 +565,7 @@ pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
             *s = ((n * v - d * d * n / (n - 1.0)) / (n - 1.0)).max(0.0);
         }
     }
-    let rows = w.life.born(b).to_vec();
-    w.life.reborn(b, genes, rows);
+    w.life.regene(b, genes);
     (c.count, c.spread, c.row_spread, c.wear) = (1.0, Vec::new(), 0.0, r.f64());
     own(w, b, &mut c);
     w.diag.splits[1] += 1.0;

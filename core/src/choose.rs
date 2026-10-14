@@ -320,9 +320,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         o.vis = o.visible(&w.chem, w.cfg.phys.full);
         w.life.bodies[me] = o;
         if w.life.bodies[me].hold == 0 && w.life.bodies[me].inside == 0 {
-            let (o, rows) = (w.life.bodies[me].clone(), w.life.born(node).to_vec());
+            let o = w.life.bodies[me].clone();
             w.life.remove(me);
-            copy::take_in(w, node, o, &rows);
+            copy::take_in(w, node, o, None);
         }
     }
 }

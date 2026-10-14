@@ -678,14 +678,7 @@ impl Life {
     /// Body `b` (taken out of its slot) now has these genes and born rows; its group follows.
     pub fn reborn(&mut self, b: &mut Body, genes: Vec<f32>, rows: Vec<f32>) {
         if rows == self.genomes[b.genome as usize].rows {
-            // The same born rows (a member split off a node and back): of its group only the
-            // forgetting rate changes (counting the rows out and in again only rounded the
-            // group's rows, and cost two passes over them).
-            let old = b.forget();
-            (b.genes, b.k) = (genes, Consts::default());
-            let gr = &mut self.groups[b.group as usize];
-            gr.forget = gr.forget + b.forget() - old;
-            return;
+            return self.regene(b, genes);
         }
         let g = self.new_genome(rows);
         let new = Body { cell: b.cell, genome: g, genes, ..Default::default() };
@@ -694,6 +687,15 @@ impl Life {
         self.enrol(b.group, b, -1);
         self.unref(b.genome);
         (b.genome, b.genes, b.k) = (g, new.genes, Consts::default());
+    }
+    /// Body `b` (taken out of its slot) has these genes and the born rows it had (a member split
+    /// off a node and back): of its group only the forgetting rate changes (counting the rows
+    /// out and in again only rounded the group's rows, and cost two passes over them).
+    pub fn regene(&mut self, b: &mut Body, genes: Vec<f32>) {
+        let old = b.forget();
+        (b.genes, b.k) = (genes, Consts::default());
+        let gr = &mut self.groups[b.group as usize];
+        gr.forget = gr.forget + b.forget() - old;
     }
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in group `group`
     /// (new, for it); its old lineage, group and born rows lose it.
