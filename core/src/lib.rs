@@ -144,13 +144,16 @@ pub struct Physics {
     /// exp(-Ea / `t_cat`). One constant serves every reaction, as it prices what the body can do,
     /// not how slow the bare reaction was. A light reaction counts the same way: light only caps
     /// how far it goes, the catalyst is kept whether light comes or not, so a light-eater pays for
-    /// all it could fix and is pushed to keep only what its light and gas can feed. 1.67 x 10^6
-    /// makes the starting light-eaters pay what the convex cost before made them pay (15 x (15² +
-    /// 2²) = 3,435 J/kg/day): their light gene (12 with k 10^-6, Ea 5,800 K; 15 with 10^-9 before)
-    /// gives 10^12 x 10^-6 x e^-20 = 2.06 x 10^-3 /s, their burn gene (2; k 4,300, Ea 7,760 K) 10^2 x 4,300 x e^-26.76 =
-    /// 1.0 x 10^-6 /s; 3,435 / 2.062 x 10^-3 = 1.67 x 10^6. The starting eaters' burn gene (2.6:
-    /// 4.1 x 10^-6 /s) then costs 6.8 J/kg/day (101 before), and burning 7 times faster (+0.86
-    /// decades, the cold tolerance of 290 to 270 K) 49.6 (+43, against +78 before).
+    /// all it could fix and is pushed to keep only what its light and gas can feed. 1.5 x 10^9
+    /// (14 Oct 2026): keeping its enzymes costs a resting animal about 10 to 25% of its upkeep in
+    /// life, so the starting eaters' burn gene (2.6; k 4,300, Ea 7,760 K: 10^2.6 x 4,300 x
+    /// e^-26.76 = 4.1 x 10^-6 /s) costs 6,200 J/kg/day, a tenth of their upkeep (mostly strength,
+    /// 60,000), and burning 2.4 times faster to live 9 K colder (288 to 279 K) costs 14% more
+    /// upkeep. The starting light-eaters keep the light gene they need (9; k 10^-6, Ea 5,800 K:
+    /// 2.1 x 10^-6 /s, 3,100 J/kg/day, what they paid before for a gene of 12). Before it was
+    /// 1.67 x 10^6, set so light-eaters with a gene of 12, about 1,000 times more light catalyst
+    /// than they need, paid what an older cost made them pay: so every catalyst was about 1,000
+    /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing.
     pub c_cat: f64,
     /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature)
     pub t_cat: f64,
@@ -321,7 +324,7 @@ impl Default for Physics {
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
-            c_cat: 1.67e6,
+            c_cat: 1.5e9,
             t_cat: 290.0,
             unfold: 3.0,
             t_firm: 320.0,
