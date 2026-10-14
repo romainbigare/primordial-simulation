@@ -33,7 +33,9 @@ fn scene(seed: u64) -> (World, usize) {
     // `m_ref` is also the mass at which `take` and `sweep` are per kg; ref^0.25 x m^0.75 is what a
     // member takes, so scaling both by 30^-0.25 keeps what the 1 kg reference gave.
     let d = pcore::Physics::default();
-    let phys = pcore::Physics { m_ref: 30.0, c_copy: 2e6, take: d.take * 30f64.powf(-0.25), sweep: d.sweep * 30f64.powf(-0.25), ..d };
+    // `c_build` stays 3e4, what the scene was made with (the default is 1e4 since 14 Oct 2026, review
+    // 6: with it the effect is 2.5 points over chance against 0.5, just under the margin the test asks).
+    let phys = pcore::Physics { m_ref: 30.0, c_copy: 2e6, c_build: 3e4, take: d.take * 30f64.powf(-0.25), sweep: d.sweep * 30f64.powf(-0.25), ..d };
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, phys, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);

@@ -484,7 +484,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
             let i = b.cell as usize;
             let used: f64 = w.life.at[i].iter().map(|&o| &w.life.bodies[o as usize]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| volume(&w.chem, o)).sum();
             let s = w.parts.parts[r].s;
-            if s.encl > 0.0 && s.space >= used + volume(&w.chem, b) && body::pay(w, b, w.cfg.phys.c_move * mb * w.parts.parts[p].size[0] as f64, days) {
+            if s.encl > 0.0 && s.space >= used + volume(&w.chem, b) && body::pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
                 b.inside = w.parts.parts[p].id(p);
             }
         }

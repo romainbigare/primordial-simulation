@@ -565,9 +565,10 @@ fn a_body_takes_no_more_than_it_can_use() {
     assert!(young > can, "below full a body eats as its intake allows: {young} of {can} kg");
     // Past `full` with a store below the target, upkeep and build over the share its reactions
     // release in an interval, less what it holds: the target rises with `c_build`, between the
-    // upkeep's worth and what its size takes (here a store of 17% of the fuel).
-    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.17, true)).collect();
-    println!("sate asked for twice the size cap, store 17%: (left, upkeep+build, cap, target) {sated:?}");
+    // upkeep's worth and what its size takes (here a store of 15.5% of the fuel: 17%
+    // before strength and catalysts went by mass^0.75, which lowered the upkeep of this 300 kg member).
+    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.155, true)).collect();
+    println!("sate asked for twice the size cap, store 15.5%: (left, upkeep+build, cap, target) {sated:?}");
     for &(left, _, cap, target) in &sated {
         assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
         assert!(target < cap, "the size cap {cap} binds, the case shows nothing");
@@ -885,4 +886,18 @@ fn leaf_area_per_kg_falls_with_mass() {
     // Past full (2 x 10^1 = 20 kg) a member's extra mass adds no leaf: 20 kg and 2,000 kg alike.
     let (at, past) = (member(1.0, 20.0, 1.0), member(1.0, 2000.0, 1.0));
     assert!((leaf(&at) - leaf(&past)).abs() < 1e-9 && (leaf(&at) / 0.5 - 20f64.powf(0.75)).abs() < 1e-6, "past full: {} and {}", leaf(&at), leaf(&past));
+}
+
+/// Moving costs the real cost of transport (14 Oct 2026, review 6, finding 2): per kg and m a 30 kg
+/// member pays `c_move`, a smaller one more and a bigger one less, as m^-0.32 (Taylor et al.), so a
+/// metre costs a member of 100 times the mass 100^0.68 = 23 times as much, not 100 times.
+#[test]
+fn moving_costs_the_real_cost_of_transport() {
+    let p = pcore::Physics::default();
+    assert_eq!(p.walk(30.0), p.c_move, "a 30 kg member pays c_move");
+    let (small, big) = (p.walk(0.3) * 0.3, p.walk(30.0) * 30.0);
+    assert!((big / small - 100f64.powf(0.68)).abs() < 1e-9, "100 times the mass, {} times the cost of a metre", big / small);
+    assert!((p.walk(0.18) / p.walk(44.0) - (0.18f64 / 44.0).powf(-0.32)).abs() < 1e-9);
+    // The real figure, 10.7 m^-0.32 J per kg per m, at 30 kg is 3.6: c_move 3 is the same order.
+    assert!(p.c_move > 0.7 * 10.7 * 30f64.powf(-0.32) && p.c_move < 1.0 * 10.7 * 30f64.powf(-0.32));
 }
