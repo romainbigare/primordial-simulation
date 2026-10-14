@@ -30,6 +30,9 @@ pub struct Kind {
     per: usize,
     /// Chance per land cell
     chance: f64,
+    /// Share of a member's mass placed as the energy-rich solid (the rest is the liquid): its fuel
+    /// at the start, which lasts 85 days x 0.6 / strength at 0.3 (more at a higher share)
+    store: f64,
     /// Hand-set brain biases (the old start, used only with `Seeding::hand`; by default only the
     /// copy logit is used)
     hand: Hand,
@@ -80,6 +83,16 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// upkeep has turned over `Physics::e_life` x 10^`REPAIR` per kg (14 Oct 2026). Kinds are initial
 /// conditions, not laws; a bigger table is a bigger start, never a rule.
 ///
+/// The `GAS` genes (the first scalar) are mol of air per m² of open surface per day since 14 Oct
+/// 2026 (`Body::open_area`: capture area plus skin). Each is the old per-kg gene (2.5 for
+/// light-eaters, 0.6 for the others, 0.9 for the small fast eaters of light-eaters) plus
+/// log10(member mass / area per member at the start), so a kind breathes at its start what it did
+/// per kg; area = min(m, 2 x copy mass) x 10^LEAF + 6 (m / 1000)^(2/3), m²: light-eaters 1 kg:
+/// 1.995 + 0.060 = 2.055, gene 2.187; small fast 0.05 kg: 0.199 + 0.008, 1.883; big slow 20 kg:
+/// 10.02 + 0.44, 2.781; eaters 30 kg: 0.030 + 0.579 = 0.609, 2.292; eaters of remains 1 kg:
+/// 0.061, 1.815; 15 kg: 0.380, 2.196; eaters of light-eaters 3 kg: 0.128, 2.271; 150 kg: 1.844,
+/// 2.510; eaters of eaters 100 kg: 1.393, 2.456; 600 kg: 4.868, 2.691.
+///
 /// The `REPAIR` genes (the last scalar) are set so the kinds start with a range of lives, short
 /// for small fast ones and long for big slow ones (years, at the starting mass and interval, by
 /// the upkeep per kg): light-eaters 18 (1 kg), 2 (0.05 kg), 97 (20 kg); eaters 18 (30 kg, and
@@ -106,25 +119,32 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// intervals and a high gene is out of store before it has decided twice: 600 kg members at 40
 /// days and strength 0.95 were all dead within 6 months). Eaters of eaters and big eaters are
 /// placed in hundreds (chance 0.15 of a cell) for that reason: most of a neutral start starves.
+/// The two big slow eater kinds (150 kg every 16 days, 600 kg every 14 days; strength 0.5) start
+/// with 60% of their mass as the energy-rich solid, not 30% (`Kind::store`: an initial condition,
+/// the seeding line says it): 100 days of store held 6 or 7 decisions of a neutral brain and they
+/// were all gone by year 30 in a 64x64 roster run (seed 1: of 209 of the 150 kg kind placed at
+/// year 22, 3 bodies left at year 24 and none at 30; of 220 of the 600 kg kind placed at year 26,
+/// 1 left at 28 and none at 35); with 200 days, the 150 kg kind had 7 bodies at year 24, 73 at 30
+/// and 92 at 40 (1.5 million members in nodes), and the 600 kg kind kept 3 to year 40.
 pub const KINDS: [Kind; 11] = [
-    Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [2.5, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -1.0], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, hand: H_LIGHT },
-    Kind { name: "eaters", year: 20, anywhere: false, scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, hand: H_EATER },
-    Kind { name: "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)", year: 0, anywhere: false, scalars: [0.6, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, hand: H_EATER },
+    Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [2.187, 0.0, 2.2, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -1.0], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, store: 0.3, hand: H_LIGHT },
+    Kind { name: "eaters", year: 20, anywhere: false, scalars: [2.292, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+    Kind { name: "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)", year: 0, anywhere: false, scalars: [2.292, -0.5, 0.0, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, store: 0.3, hand: H_EATER },
     // Light-eaters, small and fast: members of 0.05 kg copying at 0.1 kg every 10 days, children spread wide.
-    Kind { name: "small fast light-eaters", year: 0, anywhere: true, scalars: [2.5, 0.0, 2.2, 0.6, 0.05, 0.3, -1.0, 1.0, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.2], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 0.05, cover: 0.05, per: 1, chance: 0.6, hand: H_LIGHT },
+    Kind { name: "small fast light-eaters", year: 0, anywhere: true, scalars: [1.883, 0.0, 2.2, 0.6, 0.05, 0.3, -1.0, 1.0, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.2], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 0.05, cover: 0.05, per: 1, chance: 0.6, store: 0.3, hand: H_LIGHT },
     // Light-eaters, big and slow: members of 20 kg copying at 40 kg every 60 days, less capture area per kg, children stay.
-    Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [2.5, 0.0, 2.2, -0.3, 0.05, 0.3, 1.6, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 20.0, cover: 0.3, per: 1, chance: 0.4, hand: H_LIGHT },
+    Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [2.781, 0.0, 2.2, -0.3, 0.05, 0.3, 1.6, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 20.0, cover: 0.3, per: 1, chance: 0.4, store: 0.3, hand: H_LIGHT },
     // Eaters of remains on the ground: weak (0.05 and 0.1) (the burning catalyst of the others: a quicker one costs too much), the solid first.
-    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [0.6, -0.5, 1.0, -3.0, 0.0, 0.3, 0.4, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, hand: H_EATER },
-    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [0.6, -0.5, 0.3, -3.0, 0.0, 0.3, 1.48, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, hand: H_EATER },
+    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 1.0, -3.0, 0.0, 0.3, 0.4, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.196, -0.5, 0.3, -3.0, 0.0, 0.3, 1.48, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },
     // Eaters of light-eaters, small and fast: 3 kg copying at 6 kg every 7 days, strength 0.3 (the light-eaters have 0.05, the eaters 0.6).
-    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [0.9, -0.5, 0.0, -3.0, 0.3, 0.3, 0.78, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, hand: H_EATER },
+    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.271, -0.5, 0.0, -3.0, 0.3, 0.3, 0.78, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
     // Eaters of light-eaters, big and slow: 150 kg copying at 300 kg every 16 days, strength 0.5.
-    Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [0.6, -0.5, -0.3, -3.0, 0.5, 0.3, 2.48, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, hand: H_EATER },
+    Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [2.51, -0.5, -0.3, -3.0, 0.5, 0.3, 2.48, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
     // Eaters of eaters (stronger in force than the eaters, whose strength gene is 0.6: the force is the gene times the mass), placed once the eaters have spread:
     // 100 kg copying at 200 kg every 7 days, strength 0.6; 600 kg copying at 1200 kg every 14 days, strength 0.5. A bigger brain (16 hidden, 8 memory, 4 seen, sight 2), learning on.
-    Kind { name: "strong fast eaters of eaters", year: 24, anywhere: false, scalars: [0.6, -0.5, -0.3, -3.0, 0.6, 0.3, 2.3, 0.85, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.1, 320.0, -0.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 100.0, cover: 0.0, per: 1, chance: 0.15, hand: H_EATER },
-    Kind { name: "strong big slow eaters of eaters", year: 24, anywhere: false, scalars: [0.6, -0.5, -0.5, -3.0, 0.5, 0.3, 3.08, 1.15, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.05, 320.0, 0.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 600.0, cover: 0.0, per: 1, chance: 0.15, hand: H_EATER },
+    Kind { name: "strong fast eaters of eaters", year: 24, anywhere: false, scalars: [2.456, -0.5, -0.3, -3.0, 0.6, 0.3, 2.3, 0.85, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.1, 320.0, -0.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 100.0, cover: 0.0, per: 1, chance: 0.15, store: 0.3, hand: H_EATER },
+    Kind { name: "strong big slow eaters of eaters", year: 24, anywhere: false, scalars: [2.691, -0.5, -0.5, -3.0, 0.5, 0.3, 3.08, 1.15, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.05, 320.0, 0.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 600.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
 ];
 
 /// The roster of `ew run --roster`: ten kinds with rungs from the first day (rows of `KINDS`,
@@ -248,7 +268,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         }
     }
     let sc = &kind.scalars;
-    let name = format!("{} (members of {} kg copying at {:.3} kg, every {:.0} days, strength {}, repair {})", kind.name, kind.mass, 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH], sc[body::REPAIR]);
+    let name = format!("{} (members of {} kg copying at {:.3} kg, every {:.0} days, strength {}, repair {}, starting store {:.0}% of mass as the energy-rich solid)", kind.name, kind.mass, 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH], sc[body::REPAIR], 100.0 * kind.store);
     let brain = if hand { "hand-set brain biases (old start)" } else { "neutral brain (action biases 0, copy logit kept)" };
     let (m, n) = (tb.2 / placed.max(1) as f64, placed.max(1) as f64);
     let spray = if how.rounds == 0 {
@@ -306,8 +326,8 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     genes[body::MUT] -= gmul.log10();
     let count = if kind.cover > 0.0 { kind.cover * w.grid.area() / kind.mass } else { 1.0 };
     let mut store = vec![0.0; ns];
-    store[liquid] = 0.7 * count * kind.mass / chem.subs[liquid].molar_mass;
-    store[rich] = 0.3 * count * kind.mass / chem.subs[rich].molar_mass;
+    store[liquid] = (1.0 - kind.store) * count * kind.mass / chem.subs[liquid].molar_mass;
+    store[rich] = kind.store * count * kind.mass / chem.subs[rich].molar_mass;
     let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
     b.e = b.heat_cap(chem) * t;
     ledger.imposed_energy += b.e;

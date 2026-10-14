@@ -16,7 +16,14 @@ use serde::{Deserialize, Serialize};
 // Scalar genes, then one per reaction (catalyst, log10 speed-up) and three per substance
 // (safe minimum as a share of mass; take selectivity; most share of mass kept). Below zero a
 // gene is off.
-/// Gas exchange, log10 mol of air per kg per day
+/// Gas exchange, log10 mol of air per m² of the surface open to the air (`Body::open_area`) per
+/// day. Before (14 Oct 2026) it was per kg: a plant breathed 316 mol of air per kg per day, which
+/// at 300 ppm of carbon gas is 2.8 g of sugar per kg per day, ten times less than a real leaf
+/// (24 g per m² per day, so about 33 g per kg for 2 m²/kg), while the same plant caught 40 times
+/// more light than that carbon gas could use. Shade then cost it nothing and height could not
+/// pay (review 4, finding 4). Through the surface, capture area pays twice (light and gas), so a
+/// plant that grows its area gains on both and a taller plant that shades the rest gains more:
+/// the balance of gain and cost that makes a tall plant exists.
 pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;
@@ -289,12 +296,33 @@ impl Body {
     /// genes set), times the count. What a member holds past that is held matter, not body: it
     /// takes, sweeps, soaks up, catches (light and rain, on its capture area) and receives no more
     /// than at full (`phys.take`, `phys.sweep`, the liquid exchange, `LEAF`, gifts), and copies
-    /// what it can pay for (`copy`).
+    /// what it can pay for (`copy`). What a member takes, sweeps and receives goes with this to the
+    /// power `phys.intake_exp` (`intake`); light, rain, liquid and gas go by area.
     /// With all of this going with its whole mass, a body that could not pay for its children
     /// took more the more it held and grew without end (members of 10^7 kg, 95% liquid, at year
     /// 100 of a 128x128 world, review 3, M2).
     pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
         mass.min(p.full * self.dec(COPY_MASS) * self.n())
+    }
+    /// Mass-equivalent that a body takes, sweeps and receives as a gift by (kg, in place of `work`):
+    /// per member `intake_ref` times its mass that works over `intake_ref`, to the power
+    /// `intake_exp` (0.75), times the count. A member of `intake_ref` (1 kg) takes as before (`take`
+    /// per kg per day); one of 30 kg 30^0.75 = 12.8 kg-equivalents, 2.3 times less per kg; of 10 t,
+    /// 1,778, so it takes 180 times what a 10 kg one (10^0.75 = 5.6) does, not 1,000. Past `full`
+    /// times its copy mass a member takes at the rate of `full`, as with `work`. Light, rain and
+    /// liquid go by area, not by this.
+    pub fn intake(&self, p: &crate::Physics, mass: f64) -> f64 {
+        let n = self.n();
+        n * p.intake_ref * (self.work(p, mass) / n / p.intake_ref).powf(p.intake_exp)
+    }
+    /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
+    /// (its mass that works times `LEAF`, as `visible` and the light code count it) plus its skin,
+    /// 6 (m1 / `rho_body`)^(2/3), as the surface of walls and the cover; times the count. A 1 kg
+    /// plant of 2 m² per kg: 2.06 m²; a 30 kg eater with 0.03 m² of capture area: 0.61 m². Needs
+    /// `prepare`. The `GAS` gene is the air exchanged per m² of it per day.
+    pub fn open_area(&self, p: &crate::Physics, mass: f64) -> f64 {
+        let m1 = mass / self.n();
+        self.work(p, mass) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
     }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
     /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
@@ -1135,7 +1163,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // The air the body exchanges gas with in this time (mol), from its air node; liquid over
     // the body slows it.
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let reach_mol = b.k.gas * mass * days * (-depth / cfg.phys.gas_depth).exp();
+    let reach_mol = b.k.gas * b.open_area(&cfg.phys, mass) * days * (-depth / cfg.phys.gas_depth).exp();
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..ns {
@@ -1367,7 +1395,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (b.k.gas * mass * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
+    let share = (b.k.gas * b.open_area(&w.cfg.phys, mass) * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
     let t = b.e / cap.max(1e-9);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; 64];

@@ -215,9 +215,19 @@ pub struct Physics {
     pub rho_body: f64,
     /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J
     pub walk_wear: f64,
-    /// Most a body can take per day of its interval, as a share of its mass that works (up to
-    /// `full` times its copy mass per member, `Body::work`: what it holds past that takes nothing)
+    /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::intake`:
+    /// per member its mass that works, up to `full` times its copy mass, to the power `intake_exp`;
+    /// what it holds past that takes nothing)
     pub take: f64,
+    /// What a member takes, sweeps and receives as a gift goes with its mass that works to this
+    /// power, about the 0.75 of intake and metabolism in life (`Body::intake`). Here every cost goes
+    /// with mass, so with 1 nothing scaled against size and selection pushed the copy-mass gene to
+    /// its wall (eaters of 9 to 15 t that barely copy, review 4, finding 5); with 0.75 a 10 t member
+    /// takes 180 times a 10 kg one, not 1,000. A free number chosen for that reason, not a rule.
+    pub intake_exp: f64,
+    /// Member mass at which `take` and `sweep` are per kg (above this a member takes less per kg
+    /// and below it more), kg
+    pub intake_ref: f64,
     /// Area a body works per day per kg of its mass that works, m²/(kg day): it takes no more per day than
     /// the mass per m² of what it takes there times this times its mass (a 30 kg body works 300
     /// m² in 10 days), so thin cover is hard to find
@@ -349,6 +359,8 @@ impl Default for Physics {
             walk_wear: 3e-5,
             take: 0.05,
             sweep: 1.0,
+            intake_exp: 0.75,
+            intake_ref: 1.0,
             c_handle: 1e3,
             shape_noise: 0.5,
             signal_noise: 0.3,
