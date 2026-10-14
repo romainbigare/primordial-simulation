@@ -318,11 +318,14 @@ pub struct Physics {
     /// `copy::copy`): building a body takes time, small ones grow fast and big ones slowly
     /// (14 Oct 2026, review 5). Anchored to the growth of young in life: a 1 kg animal makes about
     /// 1 kg of dry young a year (2.7 x 10^4 J a day at `c_copy`), a 50 kg one about 1 kg a year
-    /// (1,450 per kg^0.75), a 1 t one about 10 kg (1,500): anchored to 1,500 to 30,000, and set at
-    /// the top because at 10^4 the starting eaters (neutral brains) of seeds 1 and 2 died out:
-    /// they starve within weeks and must breed faster than that until they learn (handover 4). A
-    /// 57 kg eater (20.8 kg^0.75) then needs 82 days for a child of 17 kg. A grown body also takes
-    /// in no more than its reactions can use, its upkeep plus this (`choose::sate`)
+    /// (1,450 per kg^0.75), a 1 t one about 10 kg (1,500): anchored to 1,500 to 30,000. 10^4,
+    /// review 5's value. It was 3 x 10^4 for part of 14 Oct, raised only so the starting eaters
+    /// (neutral brains, which starve within weeks) bred faster than they starved: a start decided a
+    /// law, which makes every life 3 times shorter (review 6, finding 1). The start is now hand-set
+    /// instead (`ew run`: the eater biases) and no law is set for a start. A 57 kg eater
+    /// (20.8 kg^0.75) then needs 245 days for a child of 17 kg. A grown body also takes in no more
+    /// than its reactions can use, its upkeep plus this (`choose::sate`). Marked tuned in
+    /// `docs/numbers.md`: it was chosen within its range by what runs did
     pub c_build: f64,
     /// Chance that a child starts a new lineage with a changed base, and the size of that change
     pub new_lineage: f64,
@@ -436,7 +439,7 @@ impl Default for Physics {
             deep: 0.5,
             afloat: 0.2,
             c_copy: 1e7,
-            c_build: 3e4,
+            c_build: 1e4,
             new_lineage: 0.001,
             base_noise: 0.03,
             row_chance: 0.3,

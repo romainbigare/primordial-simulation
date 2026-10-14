@@ -30,8 +30,9 @@ pub struct Kind {
     /// Share of a member's mass placed as the energy-rich solid (the rest is the liquid): its fuel
     /// at the start, which lasts 85 days x 0.6 / strength at 0.3 (more at a higher share)
     store: f64,
-    /// Hand-set brain biases (the old start, used only with `Seeding::hand`; by default only the
-    /// copy logit is used)
+    /// Hand-set brain biases (used for the animal kinds by `ew run` since 14 Oct 2026, and for
+    /// the plants with `--plant-bias`, through `Seeding::hand`; `Seeding::default` keeps only the
+    /// copy logit)
     hand: Hand,
 }
 
@@ -186,7 +187,10 @@ pub const ROSTER: [usize; 10] = [3, 0, 4, 5, 6, 7, 1, 8, 9, 10];
 /// Hand-set starts (`hand`) keep the step of one generation for everything.
 #[derive(Clone, Copy, Debug)]
 pub struct Seeding {
-    /// Restore the old hand-set brain biases, per kind (light-eaters, eaters), for comparison.
+    /// Hand-set brain biases, per kind (light-eaters, animals). `Seeding::default` is neutral for
+    /// both (the tests of the laws place bodies that way); `ew run` sets the animals' since 14 Oct
+    /// 2026 (review 6, finding 1: 97 to 99% of neutral-brained founder eaters die in their first
+    /// year, so neutral animal founders are a lottery; `--neutral-eaters` for the old start).
     pub hand: [bool; 2],
     /// Rounds of mutation given to every body placed (0: all bodies of a kind are the same).
     pub rounds: u32,
@@ -282,7 +286,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     }
     let sc = &kind.scalars;
     let name = format!("{} (members of {} kg copying at {:.3} kg, every {:.0} days, strength {}, repair {}, starting store {:.0}% of mass as the energy-rich solid)", kind.name, kind.mass, 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH], sc[body::REPAIR], 100.0 * kind.store);
-    let brain = if hand { "hand-set brain biases (old start)" } else { "neutral brain (action biases 0, copy logit kept)" };
+    let brain = if hand { "hand-set brain biases (initial condition)" } else { "neutral brain (action biases 0, copy logit kept)" };
     let (m, n) = (tb.2 / placed.max(1) as f64, placed.max(1) as f64);
     let spray = if how.rounds == 0 {
         String::new()

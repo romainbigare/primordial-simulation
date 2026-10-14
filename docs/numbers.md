@@ -153,7 +153,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `c_build` | J per day per kg^0.75 | most a body pays into its child store per day: the rate at which it can build a child | the growth of young in life, 1,500 to 30,000 (von Bertalanffy; review 5, row 1). Set at 3e4, the top of that range, not the review's 1e4: at 1e4 the starting eaters (neutral brains) of seeds 1 and 2 died out (handover 4). Chosen within the anchor for the start to work | anchored |
+| `c_build` | J per day per kg^0.75 | most a body pays into its child store per day: the rate at which it can build a child | the growth of young in life, 1,500 to 30,000 (von Bertalanffy; review 5, row 1). 1e4, review 5's value. It was 3e4 for part of 14 Oct, raised so the neutral-brained founder eaters of seeds 1 and 2 bred faster than they starved (a law set to win a start; review 6, finding 1); that start is now hand-set (`ew run`) and the number is back. Tuned because runs chose it within the anchor | tuned |
 | `c_basal` | J per day per kg^0.75 | basal upkeep every body pays, strength and catalysts on top (2e4) | resting metabolism (Kleiber; its whole value is about 3e5 J per day per kg^0.75, of which this is the part every body pays, the rest being `c_strength` and `c_cat`; review 5, row 2) | anchored |
 
 ## Constants outside the structs that act like free numbers
