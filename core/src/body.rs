@@ -10,6 +10,7 @@ use crate::brain::{ln, Shape, Thought, FIXED, OVERBS, SIG, VERBS};
 use crate::change::Reactor;
 use crate::chem::{Chemistry, Phase, P_REF};
 use crate::event::{Event, EventKind};
+use crate::rng::{Purpose, Rng};
 use crate::{bond, choose, World};
 use serde::{Deserialize, Serialize};
 
@@ -1492,8 +1493,30 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let chem = &w.chem;
     (tmp.mass, tmp.cap) = (mass3, c);
     let t = b.e / c.max(1e-9);
-    if (0..ns).any(|k| b.wet >> k & 1 == 1 && chem.phase(k, t) != Phase::Liquid) {
+    // A key liquid that boiled kills the body. One that froze kills the share of it that is free
+    // liquid to freeze: the frozen share of its key liquid (all of it, the body being at one
+    // temperature) times its activity, as a dry body holds little liquid to freeze (14 Oct 2026,
+    // review 7 fix 6). A node loses that share of its members, with their stores (`thin`); an
+    // individual dies with that chance.
+    let key = |k: usize| b.wet >> k & 1 == 1;
+    if (0..ns).any(|k| key(k) && chem.phase(k, t) == Phase::Gas) {
         return Some(PHASE);
+    }
+    if (0..ns).any(|k| key(k) && chem.phase(k, t) != Phase::Liquid) {
+        let f = b.activity(chem, &w.cfg.phys);
+        if f >= 1.0 - 1e-9 {
+            return Some(PHASE);
+        }
+        if b.n() > 1.0 {
+            tmp.dead.clear();
+            tmp.dead.extend(b.store.iter().map(|a| a * f));
+            if !thin(w, b, f, &tmp.dead, PHASE) {
+                return Some(PHASE);
+            }
+            (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
+        } else if Rng::new(w.seed, w.day, b.id(slot), Purpose::Frost).f64() < f {
+            return Some(PHASE);
+        }
     }
     // Growth is building body matter (14 Oct 2026, decision after watch report 7): a member
     // below `phys.full` times its copy mass of body makes matter of the energy-rich solid, paid by
