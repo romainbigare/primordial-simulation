@@ -411,6 +411,16 @@ pub fn light_cat(chem: &Chemistry, genes: &[f32]) -> f32 {
     chem.reactions.iter().enumerate().filter(|(_, rx)| rx.light).map(|(r, _)| genes[NSCALAR + r]).fold(0.0, f32::max)
 }
 
+/// A body whose light reactions are sped up at least this much (log10) is a light-eater (5 with
+/// chemistry 0's light reaction at k 10^-6 is what 8 was at k 10^-9). The tape counts by this, and
+/// so does `Config::nodes`: the others are the animals.
+pub const LIGHT_EATER: f32 = 5.0;
+
+/// Does a body of these genes live on light (the rest are animals, `Config::nodes`)?
+pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
+    light_cat(chem, genes) >= LIGHT_EATER
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Life {
     pub bodies: Vec<Body>,
@@ -876,7 +886,8 @@ fn shade(w: &mut World) {
 /// over to the larger's brain where its sizes differ (`copy::merge`); lineage, brain group and
 /// memory are the larger's. A node that grew too varied splits again at its next update
 /// (`copy::split`), so between two months its halves meet selection apart: the one that fits
-/// grows, and a later merge pulls the mean toward it.
+/// grows, and a later merge pulls the mean toward it. With `cfg.nodes` off it leaves animals out of
+/// the list: they never merge and never count toward `crowd`.
 fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.grid.n() {
@@ -884,7 +895,7 @@ fn crowd(w: &mut World) {
             continue;
         }
         let b = &w.life.bodies;
-        let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold == 0 && b[s].inside == 0).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
+        let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold == 0 && b[s].inside == 0 && (w.cfg.nodes || light_eater(&w.chem, &b[s].genes))).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
         list.sort_unstable();
         let mut head: Vec<usize> = (0..list.len()).collect();
         for x in 0..list.len() {

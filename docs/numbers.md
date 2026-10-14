@@ -51,6 +51,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `creep` | m/s per unit slope, times 1/hardness | loose solids creeping down a slope | none found; 1e-6 m/s is 30 m a year at a slope of 1, far above soil creep in life (mm to cm a year, unchecked) | tuned, first guess |
 | `crowd` | nodes per cell | speed-tool setting: past this many body nodes in a cell, the most alike merge | run: speed; it must give the same patterns as individuals (to be checked at M4, review 5 row 8) | tuned |
 | `share_brains` | on/off | bodies that stay near each other share one brain's rows | a setting, to check that sharing gives the same patterns | switch |
+| `nodes` | on/off | animals live in population nodes (on) or only as individuals (off, `--individuals`) | a setting, for the check that nodes give the same patterns as individuals (handover 7.1, review 5 row 8) | switch |
 | `split_rows` | on/off | a node also splits along its born rows | an experiment, off: 2 to 2.5 times slower for no gain, doc comment | switch |
 | `null` | on/off | a null run: no learning, no imitation, brain rows frozen | the run to compare a seed with (review 3, M6) | switch |
 | `phys` | (a `Physics`) | holds the numbers below | | container |
@@ -173,7 +174,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 
 ## Counts
 
-By hand and by script on 15 Oct 2026. The 97 rows of `Config` and `Physics` are their 97 fields (with `c_build` and `c_basal`, added the same day by review 5).
+By hand and by script on 15 Oct 2026. The 98 rows of `Config` and `Physics` are their 98 fields (with `c_build` and `c_basal`, added the same day by review 5).
 
 | mark | rows | which |
 |---|---|---|
@@ -181,7 +182,7 @@ By hand and by script on 15 Oct 2026. The 97 rows of `Config` and `Physics` are 
 | anchored | 29 | 27 fields, `c_build` and `c_basal` |
 | tuned (run or reason named) | 20, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `c_move`, `take`, `sweep`, `c_handle`, `full`; outside: the kept copy logit, the roster's stores, intervals and years, the spray of the start) |
 | tuned, first guess | 40 | 36 free numbers (`wind`, `cloud`, `carry`, `wear`, `creep`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `walk_wear`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
-| switch | 3 | `share_brains`, `split_rows`, `null` |
+| switch | 4 | `share_brains`, `split_rows`, `null`, `nodes` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 67 (60 in the structs, 7 outside). The test holds that count at 67 or below (handover 14.3).
