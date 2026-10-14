@@ -1,6 +1,6 @@
 //! Population nodes (plan 7.1): how their members differ, how they split, how they act on bonds.
 
-use pcore::body::{Body, Layout, Lineage, COPY_MASS, DISPERSE, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
+use pcore::body::{Body, Layout, Lineage, COPY_MASS, DISPERSE, GAS, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, check, choose, copy};
 
@@ -294,6 +294,165 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     for _ in 0..2 {
         pcore::step(&mut w);
     }
+    assert_eq!(check::broken(&w), None);
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// Totals over all live bodies: members, each store, heat (`same` compares the stores and heat; a copy makes members).
+fn held(w: &pcore::World) -> (f64, Vec<f64>, f64) {
+    let (mut n, mut store, mut e) = (0.0, vec![0.0; w.chem.ns()], 0.0);
+    for b in w.life.alive() {
+        n += b.n();
+        e += b.e;
+        store.iter_mut().zip(&b.store).for_each(|(s, x)| *s += x);
+    }
+    (n, store, e)
+}
+
+fn same(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
+    assert!((a.2 - b.2).abs() <= 1e-9 * a.2.abs().max(1.0), "heat {} then {}", a.2, b.2);
+    for (k, (x, y)) in a.1.iter().zip(&b.1).enumerate() {
+        assert!((x - y).abs() <= 1e-9 * x.abs().max(1.0), "store {k}: {x} then {y}");
+    }
+}
+
+/// `open` draws members of a node as individuals (plan 7.1, "split it back into individuals when
+/// the player looks closely"): they are in the node's cell, of count 1, with a wear in [0, 1), and
+/// members, stores and heat are kept exactly; the node keeps its place with the members left; the
+/// genes of the drawn are the node's plus noise of its spread (their mean near the node's, within
+/// four standard errors, and as wide as the spread) and the mean of all members, drawn and left,
+/// is the node's, as before.
+#[test]
+fn opening_a_node_draws_members_and_keeps_everything() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    pcore::step(&mut w);
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1000.0).expect("a node");
+    // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene.
+    let (lay, genes0) = (Layout::of(&w.chem), w.life.bodies[s].genes.clone());
+    let cat = lay.cat + 1;
+    let wide = [(COPY_MASS, 0.04f64), (GAS, 0.09), (cat, 0.09)];
+    w.life.bodies[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
+    let (before, count0, cell) = (held(&w), w.life.bodies[s].count, w.life.bodies[s].cell);
+    let n = 400;
+    let drawn = copy::open(&mut w, s, n);
+    assert_eq!(drawn.len(), n);
+    same(&before, &held(&w));
+    assert!((held(&w).0 - before.0).abs() <= 1e-9 * before.0, "members {} then {}", before.0, held(&w).0);
+    let node = &w.life.bodies[s];
+    assert!((node.count + n as f64 - count0).abs() < 1e-6 && node.count >= 1.0 && node.alive);
+    let mut mean = vec![0.0f64; lay.len];
+    for &m in &drawn {
+        let b = &w.life.bodies[m];
+        assert!(b.alive && b.count == 1.0 && b.cell == cell && b.spread.is_empty() && (0.0..1.0).contains(&b.wear));
+        mean.iter_mut().zip(&b.genes).for_each(|(x, &y)| *x += y as f64 / n as f64);
+    }
+    for (g, var) in wide {
+        let (se, off) = ((var / n as f64).sqrt(), mean[g] - genes0[g] as f64);
+        assert!(off.abs() < 4.0 * se, "gene {g}: drawn mean {} against {} (standard error {se})", mean[g], genes0[g]);
+        let sd = (drawn.iter().map(|&m| (w.life.bodies[m].genes[g] as f64 - mean[g]).powi(2)).sum::<f64>() / n as f64).sqrt();
+        assert!(sd > 0.8 * var.sqrt() && sd < 1.2 * var.sqrt(), "gene {g}: spread {sd}, wanted {}", var.sqrt());
+    }
+    // The mean of all members, by count, is what it was.
+    for g in 0..lay.len {
+        let all = (mean[g] * n as f64 + node.genes[g] as f64 * node.count) / count0;
+        assert!((all - genes0[g] as f64).abs() < 1e-4 * (1.0 + genes0[g].abs() as f64), "gene {g}: mean of all {all} against {}", genes0[g]);
+    }
+    // A node keeps one member: asked for more than it has, it gives all but one.
+    let rest = w.life.bodies[s].count.floor() as usize;
+    assert_eq!(copy::open(&mut w, s, rest + 5).len(), rest - 1);
+    assert!(w.life.bodies[s].count < 2.0);
+    assert_eq!(check::broken(&w), None);
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// With `Config::nodes` off an animal's children are individuals: a child joins no node, even
+/// when one of its own kind is in its cell (with nodes on it joins it), and a member far past
+/// `full`, which has many children at once, has that many individuals, not a node of them.
+/// Members, stores and heat are kept exactly.
+#[test]
+fn individuals_mode_children_of_an_animal_are_individuals() {
+    for nodes in [true, false] {
+        let mut w = worldgen::new_world(1, 32, 32);
+        pcore::step(&mut w);
+        worldgen::life::seed(&mut w, 0);
+        worldgen::life::seed(&mut w, 1);
+        (w.cfg.nodes, w.cfg.phys.c_copy) = (nodes, 0.0);
+        let s = live(&w).into_iter().find(|&s| !pcore::body::light_eater(&w.chem, &w.life.bodies[s].genes)).expect("an animal");
+        // A node of its own kind beside it, in its cell; its children stay in their cell.
+        let mut node = w.life.bodies[s].clone();
+        (node.count, node.genes[DISPERSE]) = (5.0, 0.0);
+        node.store.iter_mut().for_each(|x| *x *= 5.0);
+        node.e *= 5.0;
+        w.life.bodies[s].genes[DISPERSE] = 0.0;
+        let t = w.life.add(node, w.day, 1);
+        // One child: its copy mass is just under its mass.
+        let (at, before) = (live(&w).len(), held(&w));
+        let mut b = std::mem::take(&mut w.life.bodies[s]);
+        b.genes[COPY_MASS] = (0.9 * b.mass(&w.chem) as f32).log10();
+        b.prepare(&w.chem, &w.cfg.phys);
+        w.day += 1;
+        assert!(copy::copy(&mut w, s, &mut b), "no child");
+        w.life.bodies[s] = b;
+        let kids: Vec<usize> = live(&w).into_iter().skip(at).collect();
+        println!("nodes {nodes}: bodies added {}, node of the kind now {}", kids.len(), w.life.bodies[t].count);
+        same(&before, &held(&w));
+        if nodes {
+            assert!(kids.is_empty() && w.life.bodies[t].count > 5.0, "the child did not join the node of its kind");
+            continue;
+        }
+        assert!(kids.len() == 1 && w.life.bodies[t].count == 5.0 && w.life.bodies[kids[0]].count == 1.0, "the child joined a node");
+        // Many children at once: the member holds 3.5 times `full` copy masses.
+        let (at, before) = (live(&w).len(), held(&w));
+        let mut b = std::mem::take(&mut w.life.bodies[s]);
+        b.genes[COPY_MASS] = ((b.mass(&w.chem) / (3.5 * w.cfg.phys.full)) as f32).log10();
+        b.prepare(&w.chem, &w.cfg.phys);
+        w.day += 1;
+        assert!(copy::copy(&mut w, s, &mut b), "no children");
+        w.life.bodies[s] = b;
+        let kids: Vec<usize> = live(&w).into_iter().skip(at).collect();
+        println!("many at once: {} children", kids.len());
+        same(&before, &held(&w));
+        assert!(kids.len() >= 3, "{} children", kids.len());
+        for k in kids {
+            let c = &w.life.bodies[k];
+            assert!(c.alive && c.count == 1.0 && c.spread.is_empty() && c.wear == 0.0, "child {k}: count {}", c.count);
+        }
+    }
+}
+
+/// With `Config::nodes` off, more than `crowd` alike animals in one cell stay individuals at the
+/// month's start (with nodes on they merge, `crowded_individuals_merge_into_a_node`), and over
+/// three years of the whole world no animal becomes a node; light-eaters still are nodes. Matter
+/// and energy are kept exactly.
+#[test]
+fn individuals_mode_merges_no_animal() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    w.cfg.nodes = false;
+    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
+    let animal = |w: &pcore::World, b: &Body| !pcore::body::light_eater(&w.chem, &b.genes);
+    assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal was placed as a node");
+    let a = w.life.alive().find(|b| animal(&w, b)).expect("an animal");
+    let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
+    let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i && animal(w, b)).count();
+    while here(&w) < w.cfg.crowd + 4 {
+        let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
+        w.life.add(b, w.day, 1);
+    }
+    let n = here(&w);
+    pcore::body::survey(&mut w);
+    assert_eq!(here(&w), n, "animals merged");
+    for _ in 0..36 {
+        pcore::step(&mut w);
+        assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal became a node");
+    }
+    assert!(w.life.alive().any(|b| !animal(&w, b) && b.count > 1.0), "no light-eater node");
     assert_eq!(check::broken(&w), None);
     let (de, dq) = check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");

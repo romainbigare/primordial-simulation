@@ -105,6 +105,14 @@ pub struct Config {
     /// and pooled.
     #[serde(default)]
     pub split_rows: bool,
+    /// Whether animals (bodies that are not light-eaters, `body::light_eater`) may be population
+    /// nodes. True (the default): as before. False (`ew run --individuals`): an animal's children
+    /// are placed as individuals and never join a node (`copy::copy`), the month's `body::crowd`
+    /// merges no animal and none splits (`copy::split`); light-eaters stay nodes (one node per
+    /// cell is how they are placed). The detailed form the nodes are checked against (plan 7.1,
+    /// review 5): the nodes are a speed tool and must give the same patterns.
+    #[serde(default = "yes")]
+    pub nodes: bool,
     /// A null run, to be compared with the real run of the same seed: no learning, no imitation
     /// (a watch is drawn and counted but moves no rows), and the brains' born rows and bases never
     /// change at a copy (`copy_phys`); genes still mutate and evolve. What a neutral brain does
@@ -445,6 +453,7 @@ impl Default for Config {
             crowd: 4,
             share_brains: true,
             split_rows: false,
+            nodes: true,
             null: false,
             phys: Physics::default(),
         }

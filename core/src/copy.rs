@@ -25,7 +25,12 @@
 //!
 //! A node whose halves would no longer be alike splits in two (`split`), so selection acts
 //! between them; a node does the actions of Bond through one member split off as an individual
-//! (`one`, from `choose::act`). Members, stores and heat are kept exactly in every split and join.
+//! (`one`, from `choose::act`), and `open` draws several members as individuals at once (the
+//! close view of a node). Members, stores and heat are kept exactly in every split and join.
+//!
+//! With `Config::nodes` off the animals (bodies that are not light-eaters, `body::light_eater`) are
+//! never nodes: an animal's children start as individuals and join nothing (`copy`), and none
+//! splits (`split`); `body::crowd` leaves them alone. Light-eaters are as before.
 
 use crate::body::{self, Body, Layout, Lineage};
 use crate::{brain, choose};
@@ -249,6 +254,8 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
     // less than one member); an individual's go together, by that chance.
     let (node, d) = (n > 1.0, b.gene(body::DISPERSE).clamp(0.0, 1.0));
+    // An animal with `Config::nodes` off: its children join no node and are all individuals.
+    let alone = !w.cfg.nodes && !body::light_eater(&w.chem, &b.genes);
     let m = if node { if d * births >= 1.0 { d * births } else { 0.0 } } else { (r.f64() < d) as u8 as f64 };
     let to = if m > 0.0 { w.grid.step(i, DIRS[r.below(8)]) } else { None };
     let (cell, m) = match to {
@@ -327,7 +334,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // new nodes of one 128x128 world at year 100). Children that started a new lineage stay
     // apart.
     let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape);
-    if c.lineage == b.lineage {
+    if c.lineage == b.lineage && !alone {
         if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() > 1.0 && within(&lay, w.cfg.phys.alike, &w.life.bodies[s], &c)) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             let rows = match (shape(c.lineage), shape(w.life.bodies[t].lineage)) {
@@ -346,6 +353,16 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let delay = c.interval();
     let s = w.life.add(c, w.day, delay);
     w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
+    // Several children together (a member far past `full` has more than one): drawn from the group
+    // as individuals, newborn (wear 0), the last one the group's body itself.
+    if alone && w.life.bodies[s].count > 1.5 {
+        let k = w.life.bodies[s].count.round() as usize - 1;
+        for m in open(w, s, k) {
+            w.life.bodies[m].wear = 0.0;
+        }
+        let c = &mut w.life.bodies[s];
+        (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
+    }
     true
 }
 
@@ -495,6 +512,9 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
         return;
     }
+    if !w.cfg.nodes && !body::light_eater(&w.chem, &b.genes) {
+        return;
+    }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
     let row = row_step(p, 10f32.powf(b.genes[body::MUT]));
     // Per gene the halves' shift from the mean (within the walls) and their gap in steps (as
@@ -551,6 +571,39 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 /// gives them back). Its wear is drawn uniform in [0, 1): members who each live as long are of
 /// all ages evenly, so members split off die at the rate the node's members die (`body::live`). Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
+    w.diag.splits[1] += 1.0;
+    draw(w, b, r)
+}
+
+/// `n` members of the node in `slot` as individuals, each drawn as `one` draws a member (genes
+/// from the node's spread, a share of its stores and heat, wear uniform), placed in the node's
+/// cell: the close view of a node, where the player sees its members (plan 7.1, "split it back
+/// into individuals when the player looks closely"), and what the check of nodes against
+/// individuals compares. Each draw leaves the others' genes, so the mean of all is kept. The node
+/// keeps at least one member (draws stop when it has fewer than two); members, matter and energy
+/// are kept exactly. Returns the members' slots.
+pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
+    let mut b = std::mem::take(&mut w.life.bodies[slot]);
+    let (mut r, keep) = (Rng::new(w.seed, w.day, !b.id(slot), Purpose::Split), w.keep_of(slot, b.gen));
+    let mut out = Vec::with_capacity(n);
+    for _ in 0..n {
+        // (A count a rounding away from a whole number is that number.)
+        if (b.count - b.count.round()).abs() < 1e-9 {
+            b.count = b.count.round();
+        }
+        if b.count < 2.0 {
+            break;
+        }
+        let s = draw(w, &mut b, &mut r);
+        w.set_keep(s, w.life.bodies[s].gen, keep);
+        out.push(s);
+    }
+    w.life.bodies[slot] = b;
+    out
+}
+
+/// One member drawn from node `b` (see `one`, which counts it as a split).
+fn draw(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
     let spread = std::mem::take(&mut b.spread);
@@ -568,7 +621,6 @@ pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     w.life.regene(b, genes);
     (c.count, c.spread, c.row_spread, c.wear) = (1.0, Vec::new(), 0.0, r.f64());
     own(w, b, &mut c);
-    w.diag.splits[1] += 1.0;
     let delay = c.interval();
     w.life.add(c, w.day, delay)
 }
