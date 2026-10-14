@@ -669,7 +669,7 @@ fn equiv_goes_with_mass_to_the_power() {
 /// Building takes time (14 Oct 2026, review 5): a body pays into its child store at most
 /// `c_build` x (member mass / `m_ref`)^`intake_exp` x members x the days of its interval,
 /// whatever its reactions could release. An eater of 300 kg that owes many children (as in
-/// `a_heavy_individual_copies_over_several_updates`) adds to its store 1e4 x 300^0.75 J a day, and
+/// `a_heavy_individual_copies_over_several_updates`) adds to its store `c_build` x 300^0.75 J a day, and
 /// a body of half the mass adds 2^0.75 times less.
 #[test]
 fn a_body_builds_at_most_c_build_times_mass_to_the_power_a_day() {
@@ -723,6 +723,55 @@ fn a_body_builds_at_most_c_build_times_mass_to_the_power_a_day() {
         assert!(added <= cap * 1.05 && added >= cap * 0.9, "added {added:e} J, cap {cap:e}");
     }
     assert!((big[0].0 / small[0].0 / 2f64.powf(0.75) - 1.0).abs() < 0.05, "a body twice as heavy builds 2^0.75 times faster");
+}
+
+
+/// The pay-day cap (review 6, finding 6): `body::live` copies a member past `full` and then the
+/// brain's copy (`choose::act`) calls `copy::copy` again in the same update; building takes time,
+/// so the two together pay no more than one interval's allowance, `c_build` x `equiv` / `m_ref` x
+/// the days of its interval, and the second pays nothing. An update on a later day pays again, and
+/// a body that has not paid for a long time still gets one interval's worth, not the days since.
+#[test]
+fn two_copies_in_one_update_pay_one_intervals_allowance() {
+    use pcore::body::{Lineage, DISPERSE, STRENGTH};
+    use pcore::{brain, choose};
+    let mut w = worldgen::new_world(1, 16, 16);
+    w.cfg.phys.c_copy *= 100.0;
+    pcore::step(&mut w);
+    let n = w.grid.n();
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let mut rest = [-8.0; brain::FIXED];
+    rest[0] = 8.0;
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+    // Ten times a starting eater: it owes far more than one interval's allowance (the cap binds).
+    let times = 10.0;
+    for k in 0..w.chem.ns() {
+        w.chem.add_elems(k, (times - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
+        (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
+    }
+    (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[STRENGTH]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 0.0);
+    let s = w.life.add(b, w.day, 1);
+    pcore::body::survey(&mut w);
+    w.day += 400;
+    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    b.prepare(&w.chem, &w.cfg.phys);
+    let cap = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, b.mass(&w.chem)) / w.cfg.phys.m_ref * b.interval() as f64;
+    // Never paid, 400 days gone: one interval's worth, no more.
+    assert!(!pcore::copy::copy(&mut w, s, &mut b), "no child is finished yet");
+    let first = b.paid;
+    assert!(first > 0.9 * cap && first <= cap * 1.0001, "the first call paid {first:e} J of {cap:e}");
+    // The second call in the same update: nothing more.
+    pcore::copy::copy(&mut w, s, &mut b);
+    assert_eq!(b.paid, first, "the second call paid {:e} J more", b.paid - first);
+    // The next interval pays again.
+    w.day += b.interval();
+    pcore::copy::copy(&mut w, s, &mut b);
+    assert!(b.paid > 1.8 * first && b.paid <= 2.0001 * cap.max(first), "{:e} J after two intervals, one is {first:e}", b.paid);
+    assert_eq!(pcore::check::broken(&w), None);
 }
 
 

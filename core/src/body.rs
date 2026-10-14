@@ -167,6 +167,10 @@ pub struct Body {
     /// energy held: lost at death, shared out and added up as members split and join.
     #[serde(default)]
     pub paid: f64,
+    /// The day work was last paid into the child store (none: never), so that building takes
+    /// time once per day however often a body copies in one update (`copy::copy`, review 6, finding 6).
+    #[serde(default)]
+    pub paid_day: Option<u64>,
     /// An individual's wear, 0 at birth: the energy its upkeep turned over per kg, over what it
     /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
     /// has none: its members are of all ages (`live`).
