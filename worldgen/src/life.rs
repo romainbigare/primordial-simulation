@@ -193,7 +193,9 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// **Eaters digest body matter.** An animal kind (its light gene below `body::LIGHT_EATER`) gets the
 /// catalyst gene of the reaction that burns body matter equal to its gene for the energy-rich solid,
 /// and an uptake of the matter equal to its uptake of the solid (`matter_roles`); light-eaters have
-/// neither (catalysts cost by capacity, so a plant does not carry it). Both evolve from there.
+/// neither (catalysts cost by capacity, so a plant does not carry it). Both evolve from there. A body
+/// without the catalyst takes no matter, and what it takes is broken into the solid as it comes in
+/// (`Body::digest`).
 pub const KINDS: [Kind; 11] = [
     Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [2.187, 0.0, 2.692, 0.416, 0.05, 0.3, 0.145, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -1.0], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, store: 0.3, hand: H_LIGHT },
     Kind { name: "eaters", year: 20, anywhere: false, scalars: [2.304, -0.5, 0.492, -2.884, 0.6, 0.3, 1.645, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },

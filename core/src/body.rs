@@ -340,6 +340,40 @@ impl Body {
         let mm = chem.subs[bl.outputs[0].0 as usize].molar_mass * bl.outputs[0].1 as f64;
         bl.inputs.iter().map(|&(k, nu)| nu as f64 * self.heat_of(chem, k as usize, t)).sum::<f64>() / mm
     }
+    /// Can it digest body matter: does it burn it (its catalyst for the reaction that burns the matter
+    /// is on)? A body that cannot takes none in (`choose::wanted`). Read from the genes, so it holds
+    /// for a body that has not updated yet (a child).
+    pub fn digests(&self, chem: &Chemistry) -> bool {
+        let (m, cat) = (chem.matter(), Layout::of(chem).cat);
+        m.is_some_and(|m| (0..chem.reactions.len()).any(|r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)))
+    }
+    /// Digestion (14 Oct 2026): `taken` mol of body matter that this body took in from outside (the
+    /// ground, another body, a part, a gift) are broken into its units as they come in, the reverse
+    /// of growth (`Chemistry::build`): 1 of matter + 1 of liquid -> 6 of the energy-rich solid, element
+    /// exact and thermoneutral in chemistry 0. So it enters as fuel, never as body; the body
+    /// builds its own matter from that, at the cost of work (`copy::grow`). The liquid comes from the
+    /// body's own store; with less of it than the matter (a body near death) the rest of the matter
+    /// stays matter. Only what was taken is broken down, never the matter the body already had.
+    /// Returns the units of growth reversed.
+    pub fn digest(&mut self, chem: &Chemistry, taken: f64) -> f64 {
+        let Some(bl) = chem.build.as_ref() else { return 0.0 };
+        let m = bl.outputs[0].0 as usize;
+        let mut x = (taken / bl.outputs[0].1 as f64).min(self.store[m] / bl.outputs[0].1 as f64);
+        for &(k, nu) in &bl.outputs[1..] {
+            x = x.min(self.store[k as usize] / nu as f64);
+        }
+        if x <= 0.0 {
+            return 0.0;
+        }
+        for &(k, nu) in &bl.outputs {
+            self.store[k as usize] = (self.store[k as usize] - nu as f64 * x).max(0.0);
+        }
+        for &(k, nu) in &bl.inputs {
+            self.store[k as usize] += nu as f64 * x;
+        }
+        self.e -= -chem.dh_build() * x;
+        x
+    }
     /// Energy a mole of `k` gives its body's catalysed reactions at temperature `t` (J; 0 for a gas
     /// or what none of its reactions burns): the best over `Consts::burn`. Needs `prepare`.
     pub fn heat_of(&self, chem: &Chemistry, k: usize, t: f64) -> f64 {

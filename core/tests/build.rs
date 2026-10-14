@@ -539,3 +539,64 @@ fn satiety_by_default_holds_past_full_only() {
     let (young_all, _) = left(&w, 2.0);
     assert!(young_all < 0.2 * cap && (young_all / grown - 1.0).abs() < 0.5, "satiety at every size holds the young: {young_all}");
 }
+
+/// Digestion: body matter that a body takes in from outside is broken into the energy-rich solid as
+/// it comes in (1 of matter + 1 of liquid -> 6 of the solid, the reverse of growth), so it enters as
+/// fuel, never as body, and the body builds its own matter from it at the cost of work. Elements and
+/// energy are kept exactly. A body whose catalyst for burning matter is off takes none.
+#[test]
+fn matter_taken_from_outside_is_digested_into_the_solid() {
+    let take_from_ground = |digests: bool| {
+        let (mut w, i) = start();
+        let r = roles(&w);
+        w.cfg.phys.c_handle = 0.0;
+        w.cfg.phys.c_build = 0.0;
+        // 3 kg of body matter per m² on its ground (booked as an edit).
+        let (t, a, n) = (w.t_ground(i), 3.0 * w.grid.area() / w.chem.subs[r.matter].molar_mass, w.grid.n());
+        w.ground[r.matter * n + i] += a;
+        w.chem.add_elems(r.matter, a, &mut w.ledger.imposed_elems);
+        let e = w.energy_ground(i, t);
+        (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[r.matter].hf, e);
+        let mut b = eater(&mut w, i, 3, 6.0);
+        let lay = Layout::of(&w.chem);
+        let (_, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
+        if !digests {
+            b.genes[lay.cat + burn_matter] = -1.0;
+        }
+        // Only matter on the ground to take: it takes neither the liquid nor the solid.
+        (b.genes[lay.upt + r.liquid], b.genes[lay.upt + r.rich]) = (-0.1, -0.1);
+        let (rich0, matter0, size0) = (b.store[r.rich], b.store[r.matter], b.size(&w.chem));
+        let s = w.life.add(b, w.day, 1);
+        let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+        let on_ground0 = w.ground[r.matter * n + i];
+        for _ in 0..10 {
+            day(&mut w);
+        }
+        let b = &w.life.bodies[s];
+        assert_eq!(pcore::check::broken(&w), None);
+        let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        (b.store[r.rich] - rich0, b.store[r.matter] - matter0, on_ground0 - w.ground[r.matter * n + i], b.size(&w.chem) - size0)
+    };
+    let (rich, matter, taken, size) = take_from_ground(true);
+    println!("an eater took {taken:.2} mol of matter from the ground: solid +{rich:.2} mol, its own matter {matter:+.3} mol, body {size:+.3} kg");
+    assert!(taken > 0.5, "it took none");
+    // The solid rose by 6 per mol taken (less what it burnt in ten days); its own matter did not rise.
+    assert!(rich > 3.0 * taken, "solid +{rich} mol for {taken} mol of matter");
+    assert!(matter <= 1e-9 && size <= 1e-9, "matter entered as body: {matter} mol, body {size} kg");
+    let (_, _, none, _) = take_from_ground(false);
+    assert!(none < 1e-12, "a body that cannot burn matter took {none} mol of it");
+    // The reverse of growth, exactly, called directly.
+    let (mut w, i) = start();
+    let r = roles(&w);
+    let mut b = eater(&mut w, i, 0, 6.0);
+    add(&mut w, &mut b, r.matter, 1.62);
+    let (s, mut b) = out(&mut w, b);
+    let (t0, l0, before) = (pcore::check::totals(&w), w.ledger.clone(), b.store.clone());
+    let x = b.digest(&w.chem, 10.0);
+    assert!((x - 10.0).abs() < 1e-12);
+    assert!((before[r.matter] - b.store[r.matter] - 10.0).abs() < 1e-9 && (b.store[r.rich] - before[r.rich] - 60.0).abs() < 1e-9 && (before[r.liquid] - b.store[r.liquid] - 10.0).abs() < 1e-9);
+    w.life.bodies[s] = b;
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
+}

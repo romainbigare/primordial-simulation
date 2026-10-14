@@ -565,12 +565,18 @@ pub fn regrow(w: &mut World, dt: f64) {
     }
 }
 
+/// Can the body take in substance `k` at temperature `t`: body matter only if it digests it
+/// (`Body::digests`); a body without the catalyst takes none (14 Oct 2026).
+fn can_take(chem: &crate::chem::Chemistry, b: &Body, k: usize) -> bool {
+    chem.matter() != Some(k) || b.digests(chem)
+}
+
 /// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all, for a
 /// body of `mass` kg, and no more than it can use in `days` (`sate`).
 pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, mass: f64, days: f64) -> Vec<f64> {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let from = |k: usize| from(k).max(0.0);
-    let up = |k: usize| if from(k) > 0.0 { b.gene(lay.upt + k).max(0.0) } else { 0.0 };
+    let up = |k: usize| if from(k) > 0.0 && can_take(chem, b, k) { b.gene(lay.upt + k).max(0.0) } else { 0.0 };
     let sum: f64 = (0..chem.ns()).map(up).sum();
     let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect();
@@ -642,7 +648,7 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
 /// it takes by its uptake: the mass per m² of the cell of those substances. So a thin cover is
 /// as hard to find as it is thin, whatever the body could carry.
 fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
-    let dens: f64 = b.k.upt.iter().map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.grid.area();
+    let dens: f64 = b.k.upt.iter().filter(|&&(k, _)| can_take(&w.chem, b, k)).map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.grid.area();
     w.cfg.phys.take.min(w.cfg.phys.sweep * dens)
 }
 
@@ -660,6 +666,7 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     }
     let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), 0.0] };
     w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: kg(w, &m) });
+    let mut matter = 0.0;
     for (k, &a) in m.iter().enumerate() {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let q = a * (w.chem.subs[k].cp * tg + body::fused(&w.chem, k, tg));
@@ -668,7 +675,11 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
         w.ground[k * n + i] -= a;
         b.store[k] += a;
         b.e += took;
+        if Some(k) == w.chem.matter() {
+            matter = a;
+        }
     }
+    b.digest(&w.chem, matter);
 }
 
 /// Release stores above the level the body keeps (`Body::level`), to the cell's ground.
@@ -730,6 +741,7 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
     let f = if node { m.iter().zip(&o.store).map(|(a, s)| if *s > 0.0 { a / s } else { 0.0 }).fold(0.0, f64::max) } else { 0.0 };
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
     transfer(w, &mut o, b, &m);
+    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
     let got = kg(w, &m);
     let t = &mut w.parts.tally.take[(lever > 1.0) as usize];
     (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
@@ -757,7 +769,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
     let mo = o.mass(chem);
     let share = (w.cfg.phys.take * b.interval() as f64 * o.equiv(&w.cfg.phys, mo) / all.max(1e-9)).min(1.0 / b.n());
-    let mut m: Vec<f64> = (0..chem.ns()).map(|k| (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0))).collect();
+    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if can_take(chem, o, k) { (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0)) } else { 0.0 }).collect();
     sate(w, o, &mut m, b.interval() as f64, mo);
     let got = kg(w, &m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
@@ -767,6 +779,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
     let mut o = std::mem::take(&mut w.life.bodies[s]);
     transfer(w, b, &mut o, &m);
+    o.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
     o.note(b.id(slot), (10.0 * got / mo) as f32);
     o.vis = o.visible(&w.chem, &w.cfg.phys);
     w.events.push(Event { day: w.day, kind: EventKind::Gave { from: b.id(slot), to: o.id(s) }, node: b.cell, value: got });
