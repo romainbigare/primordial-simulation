@@ -123,12 +123,16 @@ struct Root {
     body: f64,
     copy_mass: f64,
     genes: [f64; 6],
+    /// Activity (`Body::activity`) summed over the members, the members below 0.5, and the `WET` gene by members
+    act: f64,
+    dry: f64,
+    wet: f64,
     cat: Vec<(f64, f64)>,
 }
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, genes: [0.0; 6], act: 0.0, dry: 0.0, wet: 0.0, cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -513,6 +517,8 @@ impl Recorder {
                 r.matter += w.chem.matter().map_or(0.0, |m| b.store[m] * w.chem.subs[m].molar_mass);
                 r.body += b.size(&w.chem);
                 r.copy_mass += n * b.dec(pcore::body::COPY_MASS);
+                let a = b.activity(&w.chem, &w.cfg.phys);
+                (r.act, r.dry, r.wet) = (r.act + n * a, r.dry + n * (a < 0.5) as u8 as f64, r.wet + n * b.gene(pcore::body::WET));
                 for (x, g) in r.genes.iter_mut().zip(GENES) {
                     *x += n * b.gene(g);
                 }
@@ -594,6 +600,10 @@ impl Recorder {
                 (c("copy_mass"), "kg", per(v.copy_mass)),
                 (c("matter"), "1", if v.mass > 0.0 { v.matter / v.mass } else { f64::NAN }),
                 (c("body"), "kg", per(v.body)),
+                // 14 Oct 2026: the mean activity of the members (`Body::activity`), the share of them below 0.5, and the `WET` gene.
+                (c("activity"), "1", per(v.act)),
+                (c("dry"), "1", per(v.dry)),
+                (c("wet_gene"), "log10", per(v.wet)),
             ]);
             row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
