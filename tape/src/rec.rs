@@ -47,6 +47,8 @@ struct Social {
     took: Vec<(u32, [f32; 2])>,
     /// Decisions drawn this year, and those where the action drawn had the top score
     decisions: [f64; 2],
+    /// Members the monthly merge joined however unlike this year (the core's tally, `Diag::unlike`)
+    unlike: f64,
     months: String,
     /// Members of the others that died of SPENT this month, and the sum of their rows (y)
     spent: [f64; 2],
@@ -152,6 +154,8 @@ pub struct Recorder {
     split: [[f64; 2]; 2],
     /// Body updates counted at the last yearly row
     updates: u64,
+    /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
+    physics: String,
     social: Social,
 }
 
@@ -168,6 +172,18 @@ fn life_years(w: &World, b: &pcore::body::Body) -> f64 {
     };
     let (m, d) = (b.mass(&w.chem), b.interval() as f64);
     w.cfg.phys.e_life * b.dec(pcore::body::REPAIR) * m * d / pcore::body::upkeep(w, b, d, m).max(1e-300) / w.days_per_year() as f64
+}
+
+/// The run's numbers: `{"physics": {..}, "config": {..}}`, every field of `Physics` and of `Config`
+/// (the config without its `phys`), keys sorted, one line each, so two runs' files can be
+/// compared with a diff or `ew numbers`.
+fn physics_json(w: &World) -> String {
+    let mut cfg = serde_json::to_value(&w.cfg).unwrap_or_default();
+    if let Some(o) = cfg.as_object_mut() {
+        o.remove("phys");
+    }
+    let doc = json!({"physics": w.cfg.phys, "config": cfg});
+    serde_json::to_string_pretty(&doc).unwrap_or_default() + "\n"
 }
 
 fn describe(e: &Event) -> String {
@@ -197,6 +213,7 @@ impl Recorder {
             deaths_a: [0.0; 6],
             split: [[0.0; 2]; 2],
             updates: 0,
+            physics: physics_json(w),
             social: Social { months: "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile,spent,spent_y\n".into(), ..Default::default() },
         }
     }
@@ -207,6 +224,7 @@ impl Recorder {
     /// from an earlier snapshot replays it). A `dir` without a tape starts the tape empty.
     pub fn resume(&mut self, w: &mut World, dir: impl AsRef<Path>) -> io::Result<()> {
         self.detect(w);
+        self.physics = physics_json(w);
         w.events.clear();
         self.updates = w.life.updates;
         let dir = dir.as_ref();
@@ -344,6 +362,7 @@ impl Recorder {
         }
         if yearly {
             self.social.decisions = [std::mem::take(&mut w.diag.decisions), std::mem::take(&mut w.diag.greedy)];
+            self.social.unlike = std::mem::take(&mut w.diag.unlike);
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -432,11 +451,13 @@ impl Recorder {
     /// Kinds of live bodies by their genes and diet (see `measure::kinds`: `kinds` counts each body once, `kinds_members` each member), the mass range of their members
     /// (kg), and the share of what a kind took from other bodies that came from bodies that are
     /// not light-eaters: for the kind with most bodies, and the highest of any kind.
-    fn variety(&self, w: &World) -> [(String, &'static str, f64); 7] {
+    fn variety(&self, w: &World) -> [(String, &'static str, f64); 8] {
         let (of, k) = measure::kinds(w);
         let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();
-        let mut mass: Vec<f64> = live.iter().map(|(_, b)| b.mass(&w.chem) / b.n()).collect();
-        mass.sort_by(|a, b| a.total_cmp(b));
+        // Each member's mass with the starting kind of its lineage (NaN: none), the heaviest last.
+        let mut heavy: Vec<(f64, f64)> = live.iter().map(|(_, b)| (b.mass(&w.chem) / b.n(), w.life.brains[b.lineage as usize].as_ref().map_or(f64::NAN, |l| l.root as f64))).collect();
+        heavy.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mass: Vec<f64> = heavy.iter().map(|m| m.0).collect();
         let at = |q: usize| mass.get(q).copied().unwrap_or(f64::NAN);
         let (mut cnt, mut took) = (vec![0usize; k], vec![[0f64; 2]; k]);
         for (&j, (i, b)) in of.iter().zip(&live) {
@@ -453,6 +474,7 @@ impl Recorder {
             ("mass_min".to_string(), "kg", at(0)),
             ("mass_median".to_string(), "kg", at(mass.len() / 2)),
             ("mass_max".to_string(), "kg", at(mass.len().wrapping_sub(1))),
+            ("mass_max_root".to_string(), "1", heavy.last().map_or(f64::NAN, |m| m.1)),
             ("trophic_max".to_string(), "1", big.map_or(f64::NAN, share)),
             ("trophic_high".to_string(), "1", high),
         ]
@@ -555,7 +577,7 @@ impl Recorder {
             let d = dths.get(k).copied().unwrap_or_default();
             let stand = st.root_stand.get(k).copied().unwrap_or(0.0) / st.stand_months.max(1.0);
             let c = |n: &str| format!("root_{k}_{n}");
-            row.extend([(c("members"), "1", v.members), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[5]))]);
+            row.extend([(c("members"), "1", v.members), (c("kg"), "kg", v.mass), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[5]))]);
             row.extend(CAUSES.iter().zip(d).map(|(n, x)| (c(&format!("died_{n}")), "1/yr", x)));
             row.extend([
                 (c("births"), "1/yr", births.get(k).copied().unwrap_or(0.0)),
@@ -574,6 +596,8 @@ impl Recorder {
         row.extend([("t_land_summer".to_string(), "K", hot), ("t_land_winter".to_string(), "K", cold), ("t_land_swing".to_string(), "K", hot - cold)]);
         row.extend(self.learning(w));
         row.extend(self.variety(w));
+        // Members the monthly merge joined however unlike in the year (the safeguard past twice `crowd`, `body::crowd`).
+        row.push(("merged_unlike".to_string(), "1/yr", self.social.unlike));
         // Traffic: share of crossings on the top 2% cells, their overlap with the top cells a
         // decade ago, and the body mass per area there and on other land.
         let (traffic, gn) = (&w.diag.traffic, w.grid.n());
@@ -737,6 +761,7 @@ impl Recorder {
         for row in 0..self.series.first().map_or(0, |c| c.2.len()) {
             csv += &format!("\n{}", self.series.iter().map(|c| c.2[row].to_string()).collect::<Vec<_>>().join(","));
         }
+        std::fs::write(dir.join("physics.json"), &self.physics)?;
         std::fs::write(dir.join("months.csv"), &self.social.months)?;
         std::fs::write(dir.join("series.csv"), csv + "\n")
     }
