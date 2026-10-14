@@ -275,6 +275,10 @@ fn a_body_that_gives_all_it_holds_dies_at_once() {
     giver.genes[INTERVAL] = 2.5;
     let mut taker = worldgen::life::make(&mut w, 1, i, rl, rg).expect("body");
     taker.genes[lay.keep..].fill(0.95);
+    // (Body matter given is digested into the solid, so it fills the taker's room for the solid
+    // (`choose::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
+    let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+    taker.genes[lay.keep + rich] = 2.0;
     let g = w.life.add(giver, w.day, 1);
     w.life.add(taker, w.day, 1);
     let dt = w.cfg.phys_days as f64 * 86_400.0;

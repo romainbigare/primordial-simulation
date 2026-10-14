@@ -590,8 +590,33 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
     let sum: f64 = (0..chem.ns()).map(up).sum();
     let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect();
+    digest_room(chem, b, &mut m, mass);
     sate(w, b, &mut m, days, mass);
     m
+}
+
+/// Body matter taken in is digested into what it was built of as it comes in (`Body::digest`), so
+/// it fills the room of those stores (`Body::level`), not its own: amounts `m` (mol) for a body of
+/// `mass` kg are cut together until what is taken of the solid and what the matter becomes fit
+/// the room of the solid. Before, the matter was held only to its own room (a share of the whole
+/// mass: its keep gene 0.9 gave nine times the mass), so an eater filled its store of the solid past
+/// its level, its mass grew, and with it the room, without end (seeds 1 to 3, 64x64, year 60: the
+/// heaviest eaters held 3 times the solid their level allows, and 10 to 1,000 times with slower
+/// building).
+pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64], mass: f64) {
+    let (Some(bl), Some(km)) = (chem.build.as_ref(), chem.matter()) else { return };
+    if m[km] <= 0.0 {
+        return;
+    }
+    let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
+    let per = bl.outputs[0].1 as f64;
+    let f = bl.inputs.iter().map(|&(k, nu)| room(k as usize) / (m[k as usize] + nu as f64 / per * m[km]).max(1e-300)).fold(1.0, f64::min);
+    if f < 1.0 {
+        for &(k, _) in &bl.inputs {
+            m[k as usize] *= f;
+        }
+        m[km] *= f;
+    }
 }
 
 /// Satiety (14 Oct 2026, review 5), **off unless `Config::sate_all`** (`ew run --sate-all`): a body
@@ -779,6 +804,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let mo = o.mass(chem);
     let share = (w.cfg.phys.take * b.interval() as f64 * o.equiv(&w.cfg.phys, mo) / all.max(1e-9)).min(1.0 / b.n());
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if can_take(chem, o, k) { (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0)) } else { 0.0 }).collect();
+    digest_room(chem, o, &mut m, mo);
     sate(w, o, &mut m, b.interval() as f64, mo);
     let got = kg(w, &m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {

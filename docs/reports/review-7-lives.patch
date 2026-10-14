@@ -1,0 +1,246 @@
+diff --git a/core/src/body.rs b/core/src/body.rs
+index 6f41bc5..d64235a 100644
+--- a/core/src/body.rs
++++ b/core/src/body.rs
+@@ -497,7 +497,15 @@ impl Body {
+     pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
+         // (A safe minimum is a share of the body, not of the whole mass: a body is not killed by holding fuel.)
+         let (lay, size) = (Layout::of(chem), self.size(chem));
+-        self.empty_at(m) || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
++        self.empty_at(m) || (0..chem.ns()).any(|k| !self.burns(chem, k) && self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
++    }
++    /// Does it burn substance `k` (an input that is not a gas of one of its reactions that release
++    /// heat, `Consts::burn`)? A store it burns is fuel: a body short of fuel dies when it cannot pay
++    /// its upkeep (`SPENT`), not when the store is below its safe minimum, which is then only the
++    /// floor that growth and giving keep (`copy::grow`, `choose::give`): a reserve, not a death line.
++    /// False before `prepare`.
++    pub fn burns(&self, chem: &Chemistry, k: usize) -> bool {
++        self.k.burn.iter().any(|&(r, _)| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k && chem.phase(k, crate::T_SURF) != Phase::Gas))
+     }
+ }
+ 
+@@ -1166,7 +1174,7 @@ fn starve(w: &mut World, b: &mut Body, _m: f64, dead: &mut Vec<f64>) -> bool {
+     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
+     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
+     let size = b.size(chem);
+-    let short = |&k: &usize| x(k) < b.gene(lay.min + k) * size;
++    let short = |&k: &usize| !b.burns(chem, k) && x(k) < b.gene(lay.min + k) * size;
+     let live = (0..chem.ns()).filter(short).map(|k| x(k) / (b.gene(lay.min + k) * size).max(1e-30)).fold(1.0, f64::min);
+     let f = 1.0 - live.max(0.0);
+     dead.clear();
+diff --git a/core/src/choose.rs b/core/src/choose.rs
+index d224c2b..db8f1c9 100644
+--- a/core/src/choose.rs
++++ b/core/src/choose.rs
+@@ -580,10 +580,35 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64,
+     let sum: f64 = (0..chem.ns()).map(up).sum();
+     let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
+     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect();
++    digest_room(chem, b, &mut m, mass);
+     sate(w, b, &mut m, days, mass);
+     m
+ }
+ 
++/// Body matter taken in is digested into what it was built of as it comes in (`Body::digest`), so
++/// it fills the room of those stores (`Body::level`), not its own: amounts `m` (mol) for a body of
++/// `mass` kg are cut together until what is taken of the solid and what the matter becomes fit
++/// the room of the solid. Before, the matter was held only to its own room (a share of the whole
++/// mass: its keep gene 0.9 gave nine times the mass), so an eater filled its store of the solid past
++/// its level, its mass grew, and with it the room, without end (seeds 1 to 3, 64x64, year 60: the
++/// heaviest eaters held 3 times the solid their level allows, and 10 to 1,000 times with slower
++/// building).
++pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64], mass: f64) {
++    let (Some(bl), Some(km)) = (chem.build.as_ref(), chem.matter()) else { return };
++    if m[km] <= 0.0 {
++        return;
++    }
++    let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
++    let per = bl.outputs[0].1 as f64;
++    let f = bl.inputs.iter().map(|&(k, nu)| room(k as usize) / (m[k as usize] + nu as f64 / per * m[km]).max(1e-300)).fold(1.0, f64::min);
++    if f < 1.0 {
++        for &(k, _) in &bl.inputs {
++            m[k as usize] *= f;
++        }
++        m[km] *= f;
++    }
++}
++
+ /// Satiety (14 Oct 2026, review 5), **off unless `Config::sate_all`** (`ew run --sate-all`): a body
+ /// takes no more of what it burns than its reactions can use over `days`, counted by the heat of
+ /// the amounts `m` (mol) it burns (`Consts::burn`): its upkeep plus what it can build in the
+@@ -769,6 +794,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
+     let mo = o.mass(chem);
+     let share = (w.cfg.phys.take * b.interval() as f64 * o.equiv(&w.cfg.phys, mo) / all.max(1e-9)).min(1.0 / b.n());
+     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if can_take(chem, o, k) { (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0)) } else { 0.0 }).collect();
++    digest_room(chem, o, &mut m, mo);
+     sate(w, o, &mut m, b.interval() as f64, mo);
+     let got = kg(w, &m);
+     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
+diff --git a/core/src/copy.rs b/core/src/copy.rs
+index 869741b..0df73b0 100644
+--- a/core/src/copy.rs
++++ b/core/src/copy.rs
+@@ -1,6 +1,6 @@
+-//! Law 4: Copy. A body whose members have enough mass pays the work of copying into its child
+-//! store as far as its reactions can release it now, and makes the children it covers, a child
+-//! per member: a share of each of its stores and of its heat, and its genes plus small noise
++//! Law 4: Copy. A body whose members have the body of their copy mass (`Body::size`) makes
++//! children, a child per member, of matter it already built (`grow`, below; no work is owed for a
++//! child): a share of each of its stores and of its heat, and its genes plus small noise
+ //! (now and then a change of the brain rows it was born with, else it shares its parent's); it
+ //! starts in its parent's brain group (or, if brains are not shared, in a group of its own with
+ //! what its parent learned). A child whose brain-size genes are a whole unit away from its
+diff --git a/core/tests/build.rs b/core/tests/build.rs
+index a5d0c75..c74c4c3 100644
+--- a/core/tests/build.rs
++++ b/core/tests/build.rs
+@@ -263,6 +263,9 @@ fn growth_is_limited_by_what_the_body_can_spare() {
+     for keep in [0.0, 0.08, 0.15, 1.0] {
+         let mut w = w.clone();
+         let mut b = eater(&mut w, i, 0, 6.0);
++        // (This measures the spare rule: the solid's minimum, the reserve growth keeps, is set to
++        // the 0.02 of the body it was before the starting kinds got 0.25, so it does not bind.)
++        b.genes[Layout::of(&w.chem).min + r.rich] = 0.02;
+         let out_kg = (1.0 - keep) * kg(&w, &b, r.rich);
+         add(&mut w, &mut b, r.rich, -out_kg);
+         let (s, mut b) = out(&mut w, b);
+@@ -337,6 +340,42 @@ fn storing_the_solid_costs_no_build() {
+     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+ }
+ 
++/// Body matter taken from outside is digested into the energy-rich solid as it comes in, so it fills
++/// the room of the solid (`Body::level`): an eater on ground covered in body matter carries no more of
++/// the solid than its keep gene allows per kg of its body. Before (14 Oct 2026, the review of lives)
++/// the matter was held only to its own room, nine times the mass, and an eater's solid rose past its
++/// level and its mass with it (the heaviest eaters of seeds 1 to 3 held 3 times their level at year 60).
++#[test]
++fn digested_matter_fills_the_room_of_the_solid() {
++    let (mut w, i) = start();
++    let r = roles(&w);
++    (w.cfg.phys.c_handle, w.cfg.phys.c_build) = (0.0, 0.0);
++    // Ten kg of body matter per m² on its ground (booked as an edit).
++    let (t, a, n) = (w.t_ground(i), 10.0 * w.grid.area() / w.chem.subs[r.matter].molar_mass, w.grid.n());
++    w.ground[r.matter * n + i] += a;
++    w.chem.add_elems(r.matter, a, &mut w.ledger.imposed_elems);
++    let e = w.energy_ground(i, t);
++    (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[r.matter].hf, e);
++    let b = eater(&mut w, i, 3, 6.0);
++    let keep = b.gene(Layout::of(&w.chem).keep + r.rich);
++    let s = w.life.add(b, w.day, 1);
++    let (mut took, mut most) = (0.0, 0.0f64);
++    for _ in 0..60 {
++        day(&mut w);
++        took += w.events.iter().filter_map(|e| if let pcore::event::EventKind::Took { burn, .. } = e.kind { Some(burn as f64) } else { None }).sum::<f64>();
++        w.events.clear();
++        let b = &w.life.bodies[s];
++        if b.alive {
++            most = most.max(kg(&w, b, r.rich) / b.size(&w.chem));
++        }
++    }
++    println!("took {took:.2} kg; the most of the solid it held: {most:.3} kg per kg of body (keep gene {keep:.2})");
++    assert!(took > 1.0, "it took nothing: {took}");
++    // (Within 2%: digesting uses the body's liquid, so its body may shrink a little after the room is found.)
++    assert!(most <= keep * 1.02, "the solid rose past its level: {most} kg per kg of body, keep {keep}");
++    assert_eq!(pcore::check::broken(&w), None);
++}
++
+ /// A child gets a share of every store, body matter included, which its parent built and paid for,
+ /// and costs it no more work: a copy needs only the matter to exist, so it happens with a copy cost
+ /// nobody could pay and no allowance, and no heat is paid to the ground. The parent keeps the rest
+@@ -350,7 +389,10 @@ fn a_child_gets_matter_without_the_parent_paying_again() {
+     // (A copy cost nobody could pay, no allowance: under the old law this was no child.)
+     (w.cfg.phys.c_copy, w.cfg.phys.c_build) = (1e18, 0.0);
+     // A body of 21 kg copying at 20 kg (full 40 kg): it gives the share CHILD of every store.
+-    let b = eater(&mut w, i, 0, 20f32.log10());
++    let mut b = eater(&mut w, i, 0, 20f32.log10());
++    // (The rebuilding below is measured against the allowance: the solid's minimum, the reserve
++    // growth keeps, is set to the 0.02 of the body it was before the starting kinds got 0.25.)
++    b.genes[Layout::of(&w.chem).min + r.rich] = 0.02;
+     let share = b.gene(body::CHILD).clamp(0.05, 0.5);
+     let (s, mut b) = out(&mut w, b);
+     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+diff --git a/core/tests/life.rs b/core/tests/life.rs
+index 99d448d..be16ee3 100644
+--- a/core/tests/life.rs
++++ b/core/tests/life.rs
+@@ -275,6 +275,10 @@ fn a_body_that_gives_all_it_holds_dies_at_once() {
+     giver.genes[INTERVAL] = 2.5;
+     let mut taker = worldgen::life::make(&mut w, 1, i, rl, rg).expect("body");
+     taker.genes[lay.keep..].fill(0.95);
++    // (Body matter given is digested into the solid, so it fills the taker's room for the solid
++    // (`choose::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
++    let rich = worldgen::life::roles(&w.chem).expect("roles").1;
++    taker.genes[lay.keep + rich] = 2.0;
+     let g = w.life.add(giver, w.day, 1);
+     w.life.add(taker, w.day, 1);
+     let dt = w.cfg.phys_days as f64 * 86_400.0;
+diff --git a/worldgen/src/life.rs b/worldgen/src/life.rs
+index cd25bf8..d0bcb73 100644
+--- a/worldgen/src/life.rs
++++ b/worldgen/src/life.rs
+@@ -133,12 +133,19 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
+ ///
+ /// The `REPAIR` genes (the last scalar) are set so the kinds start with a range of lives, short
+ /// for small fast ones and long for big slow ones (years, at the starting mass and interval, by
+-/// the upkeep per kg): light-eaters 18 (1 kg), 2 (0.05 kg), 97 (20 kg); eaters 18 (30 kg, and
+-/// the clever ones); eaters of remains 2.5 (1 kg) and 17 (15 kg); eaters of light-eaters 2.6 (3 kg)
+-/// and 34 (150 kg); eaters of eaters 14 (100 kg) and 49 (600 kg). At gene 0 they would live 25 to
+-/// 1,700 years: the strength gene sets most of an eater's upkeep and a small member's brain costs
+-/// it much per kg, so the eaters of remains (strength 0) would live longest. A gene below 0 costs
+-/// less upkeep (`Physics::c_repair`): evolution sets it from there.
++/// the upkeep per kg). These were set before basal upkeep (review 5) and the costs by mass^0.75
++/// (review 6), which raised the upkeep per kg of small bodies, so measured one year after
++/// placement (tape `root_<k>_life`, 64x64 roster, seeds 1 to 3, 14 Oct 2026) the lives were:
++/// light-eaters 5.9 to 7.7 (1 kg; 18 was meant) and 39 to 52 (20 kg; 97); eaters 19; eaters of
++/// remains 0.65 to 0.77 (1 kg; 2.5) and 1.2 to 1.3 (15 kg; 17); small fast eaters of light-eaters
++/// 1.0 to 1.4 (3 kg; 2.6), 150 kg 37 to 42, eaters of eaters 18 (100 kg) and 77 to 80 (600 kg). Age
++/// was then 49 to 65% of the deaths of the three small animal kinds. Their genes are set again
++/// (new = old + log10(meant / measured): -2.1 -> -1.48, -2.1 -> -0.89, -1.5 -> -1.06, for 3, 21 and 3
++/// years), which took age to 10 to 25% of their deaths (their real lives hardly moved: they are
++/// held by what they find to eat). At gene 0 they would live 25 to 1,700 years: the strength gene
++/// sets most of an eater's upkeep and a small member's brain costs it much per kg, so the eaters
++/// of remains (strength 0) would live longest. A gene below 0 costs less upkeep
++/// (`Physics::c_repair`): evolution sets it from there.
+ ///
+ /// The roster has rungs from the first day, each derived from the two old rows by scaling their
+ /// numbers and keeping what lets a kind live: light-eaters keep the light catalyst (12) and the
+@@ -188,8 +195,14 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
+ /// carries 0.3 / 0.7 = 0.43 kg of the solid per kg of body, under the keep gene 0.9, and its liquid
+ /// is the share 0.75 of the body (3 x its matter), exactly its keep; a 60% kind carries 0.6 / 0.4 =
+ /// 1.5, so its keep gene for the solid is 1.1 x 1.5 = 1.65 (the solid's gene is `max(0.9, 1.1 x
+-/// store / (1 - store))`). Minimums: the liquid 0.3 and the solid 0.02 of the body, as they were of
+-/// the mass (the liquid is 0.75 of the body, the solid 0.43).
++/// store / (1 - store))`). Minimums: the liquid 0.3 and the solid 0.25 of the body (the liquid is
++/// 0.75 of the body, the solid 0.43). The solid's minimum is a reserve, not a death line: a body
++/// burns the solid, so it dies of hunger when it cannot pay its upkeep (`body::SPENT`), and the
++/// minimum is the floor growth and giving keep (`Body::burns`). 0.25 of the body is about three
++/// updates of upkeep (a 1 kg light-eater: 0.25 x 15.6 MJ = 3.9 MJ against 1.1 MJ an update of 20
++/// days; a 35 kg eater: 0.25 x 35 x 15.6 = 136 MJ against 46 MJ an update of 10 days). It was 0.02,
++/// and growth spent the rest, so a body held one update of upkeep it could release (review 6,
++/// review of lives, 14 Oct 2026). An initial condition: the gene evolves.
+ ///
+ /// **Eaters digest body matter.** An animal kind (its light gene below `body::LIGHT_EATER`) gets the
+ /// catalyst gene of the reaction that burns body matter equal to its gene for the energy-rich solid,
+@@ -206,10 +219,10 @@ pub const KINDS: [Kind; 11] = [
+     // Light-eaters, big and slow: members of 20 kg copying at 40 kg every 60 days, less capture area per kg, children stay.
+     Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [3.086, 0.0, 2.692, -0.184, 0.05, 0.3, 1.445, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 20.0, cover: 0.3, per: 1, chance: 0.4, store: 0.3, hand: H_LIGHT },
+     // Eaters of remains on the ground: weak (0.05 and 0.1) (the burning catalyst of the others: a quicker one costs too much), the solid first.
+-    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 1.492, -2.884, 0.0, 0.3, 0.245, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+-    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.205, -0.5, 0.792, -2.884, 0.0, 0.3, 1.325, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },
++    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 1.492, -2.884, 0.0, 0.3, 0.245, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.48], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
++    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.205, -0.5, 0.792, -2.884, 0.0, 0.3, 1.325, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -0.89], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },
+     // Eaters of light-eaters, small and fast: 3 kg copying at 6 kg every 7 days, strength 0.3 (the light-eaters have 0.05, the eaters 0.6).
+-    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.273, -0.5, 0.492, -2.884, 0.3, 0.3, 0.625, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
++    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.273, -0.5, 0.492, -2.884, 0.3, 0.3, 0.625, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.06], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+     // Eaters of light-eaters, big and slow: 150 kg copying at 300 kg every 16 days, strength 0.5.
+     Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [2.536, -0.5, 0.192, -2.702, 0.5, 0.3, 2.082, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
+     // Eaters of eaters (stronger in force than the eaters, whose strength gene is 0.6: the force is the gene times the mass), placed once the eaters have spread:
+@@ -472,7 +485,7 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
+     genes[lay.cat..lay.min].fill(-1.0);
+     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
+     (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1]);
+-    (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.02);
++    (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.25);
+     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
+     // Animals digest body matter as they digest the solid, and take it (14 Oct 2026): light-eaters do not.
+     let matter = matter_roles(chem);

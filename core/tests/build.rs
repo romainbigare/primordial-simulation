@@ -263,6 +263,9 @@ fn growth_is_limited_by_what_the_body_can_spare() {
     for keep in [0.0, 0.08, 0.15, 1.0] {
         let mut w = w.clone();
         let mut b = eater(&mut w, i, 0, 6.0);
+        // (This measures the spare rule: the solid's minimum, the reserve growth keeps, is set to
+        // the 0.02 of the body it was before the starting kinds got 0.25, so it does not bind.)
+        b.genes[Layout::of(&w.chem).min + r.rich] = 0.02;
         let out_kg = (1.0 - keep) * kg(&w, &b, r.rich);
         add(&mut w, &mut b, r.rich, -out_kg);
         let (s, mut b) = out(&mut w, b);
@@ -337,6 +340,42 @@ fn storing_the_solid_costs_no_build() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
+/// Body matter taken from outside is digested into the energy-rich solid as it comes in, so it fills
+/// the room of the solid (`Body::level`): an eater on ground covered in body matter carries no more of
+/// the solid than its keep gene allows per kg of its body. Before (14 Oct 2026, the review of lives)
+/// the matter was held only to its own room, nine times the mass, and an eater's solid rose past its
+/// level and its mass with it (the heaviest eaters of seeds 1 to 3 held 3 times their level at year 60).
+#[test]
+fn digested_matter_fills_the_room_of_the_solid() {
+    let (mut w, i) = start();
+    let r = roles(&w);
+    (w.cfg.phys.c_handle, w.cfg.phys.c_build) = (0.0, 0.0);
+    // Ten kg of body matter per m² on its ground (booked as an edit).
+    let (t, a, n) = (w.t_ground(i), 10.0 * w.grid.area() / w.chem.subs[r.matter].molar_mass, w.grid.n());
+    w.ground[r.matter * n + i] += a;
+    w.chem.add_elems(r.matter, a, &mut w.ledger.imposed_elems);
+    let e = w.energy_ground(i, t);
+    (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[r.matter].hf, e);
+    let b = eater(&mut w, i, 3, 6.0);
+    let keep = b.gene(Layout::of(&w.chem).keep + r.rich);
+    let s = w.life.add(b, w.day, 1);
+    let (mut took, mut most) = (0.0, 0.0f64);
+    for _ in 0..60 {
+        day(&mut w);
+        took += w.events.iter().filter_map(|e| if let pcore::event::EventKind::Took { burn, .. } = e.kind { Some(burn as f64) } else { None }).sum::<f64>();
+        w.events.clear();
+        let b = &w.life.bodies[s];
+        if b.alive {
+            most = most.max(kg(&w, b, r.rich) / b.size(&w.chem));
+        }
+    }
+    println!("took {took:.2} kg; the most of the solid it held: {most:.3} kg per kg of body (keep gene {keep:.2})");
+    assert!(took > 1.0, "it took nothing: {took}");
+    // (Within 2%: digesting uses the body's liquid, so its body may shrink a little after the room is found.)
+    assert!(most <= keep * 1.02, "the solid rose past its level: {most} kg per kg of body, keep {keep}");
+    assert_eq!(pcore::check::broken(&w), None);
+}
+
 /// A child gets a share of every store, body matter included, which its parent built and paid for,
 /// and costs it no more work: a copy needs only the matter to exist, so it happens with a copy cost
 /// nobody could pay and no allowance, and no heat is paid to the ground. The parent keeps the rest
@@ -350,7 +389,10 @@ fn a_child_gets_matter_without_the_parent_paying_again() {
     // (A copy cost nobody could pay, no allowance: under the old law this was no child.)
     (w.cfg.phys.c_copy, w.cfg.phys.c_build) = (1e18, 0.0);
     // A body of 21 kg copying at 20 kg (full 40 kg): it gives the share CHILD of every store.
-    let b = eater(&mut w, i, 0, 20f32.log10());
+    let mut b = eater(&mut w, i, 0, 20f32.log10());
+    // (The rebuilding below is measured against the allowance: the solid's minimum, the reserve
+    // growth keeps, is set to the 0.02 of the body it was before the starting kinds got 0.25.)
+    b.genes[Layout::of(&w.chem).min + r.rich] = 0.02;
     let share = b.gene(body::CHILD).clamp(0.05, 0.5);
     let (s, mut b) = out(&mut w, b);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());

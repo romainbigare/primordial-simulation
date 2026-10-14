@@ -133,12 +133,19 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 ///
 /// The `REPAIR` genes (the last scalar) are set so the kinds start with a range of lives, short
 /// for small fast ones and long for big slow ones (years, at the starting mass and interval, by
-/// the upkeep per kg): light-eaters 18 (1 kg), 2 (0.05 kg), 97 (20 kg); eaters 18 (30 kg, and
-/// the clever ones); eaters of remains 2.5 (1 kg) and 17 (15 kg); eaters of light-eaters 2.6 (3 kg)
-/// and 34 (150 kg); eaters of eaters 14 (100 kg) and 49 (600 kg). At gene 0 they would live 25 to
-/// 1,700 years: the strength gene sets most of an eater's upkeep and a small member's brain costs
-/// it much per kg, so the eaters of remains (strength 0) would live longest. A gene below 0 costs
-/// less upkeep (`Physics::c_repair`): evolution sets it from there.
+/// the upkeep per kg). These were set before basal upkeep (review 5) and the costs by mass^0.75
+/// (review 6), which raised the upkeep per kg of small bodies, so measured one year after
+/// placement (tape `root_<k>_life`, 64x64 roster, seeds 1 to 3, 14 Oct 2026) the lives were:
+/// light-eaters 5.9 to 7.7 (1 kg; 18 was meant) and 39 to 52 (20 kg; 97); eaters 19; eaters of
+/// remains 0.65 to 0.77 (1 kg; 2.5) and 1.2 to 1.3 (15 kg; 17); small fast eaters of light-eaters
+/// 1.0 to 1.4 (3 kg; 2.6), 150 kg 37 to 42, eaters of eaters 18 (100 kg) and 77 to 80 (600 kg). Age
+/// was then 49 to 65% of the deaths of the three small animal kinds. Their genes are set again
+/// (new = old + log10(meant / measured): -2.1 -> -1.48, -2.1 -> -0.89, -1.5 -> -1.06, for 3, 21 and 3
+/// years), which took age to 10 to 25% of their deaths (their real lives hardly moved: they are
+/// held by what they find to eat). At gene 0 they would live 25 to 1,700 years: the strength gene
+/// sets most of an eater's upkeep and a small member's brain costs it much per kg, so the eaters
+/// of remains (strength 0) would live longest. A gene below 0 costs less upkeep
+/// (`Physics::c_repair`): evolution sets it from there.
 ///
 /// The roster has rungs from the first day, each derived from the two old rows by scaling their
 /// numbers and keeping what lets a kind live: light-eaters keep the light catalyst (12) and the
@@ -188,8 +195,14 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// carries 0.3 / 0.7 = 0.43 kg of the solid per kg of body, under the keep gene 0.9, and its liquid
 /// is the share 0.75 of the body (3 x its matter), exactly its keep; a 60% kind carries 0.6 / 0.4 =
 /// 1.5, so its keep gene for the solid is 1.1 x 1.5 = 1.65 (the solid's gene is `max(0.9, 1.1 x
-/// store / (1 - store))`). Minimums: the liquid 0.3 and the solid 0.02 of the body, as they were of
-/// the mass (the liquid is 0.75 of the body, the solid 0.43).
+/// store / (1 - store))`). Minimums: the liquid 0.3 and the solid 0.25 of the body (the liquid is
+/// 0.75 of the body, the solid 0.43). The solid's minimum is a reserve, not a death line: a body
+/// burns the solid, so it dies of hunger when it cannot pay its upkeep (`body::SPENT`), and the
+/// minimum is the floor growth and giving keep (`Body::burns`). 0.25 of the body is about three
+/// updates of upkeep (a 1 kg light-eater: 0.25 x 15.6 MJ = 3.9 MJ against 1.1 MJ an update of 20
+/// days; a 35 kg eater: 0.25 x 35 x 15.6 = 136 MJ against 46 MJ an update of 10 days). It was 0.02,
+/// and growth spent the rest, so a body held one update of upkeep it could release (review 6,
+/// review of lives, 14 Oct 2026). An initial condition: the gene evolves.
 ///
 /// **Eaters digest body matter.** An animal kind (its light gene below `body::LIGHT_EATER`) gets the
 /// catalyst gene of the reaction that burns body matter equal to its gene for the energy-rich solid,
@@ -206,10 +219,10 @@ pub const KINDS: [Kind; 11] = [
     // Light-eaters, big and slow: members of 20 kg copying at 40 kg every 60 days, less capture area per kg, children stay.
     Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [3.086, 0.0, 2.692, -0.184, 0.05, 0.3, 1.445, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 20.0, cover: 0.3, per: 1, chance: 0.4, store: 0.3, hand: H_LIGHT },
     // Eaters of remains on the ground: weak (0.05 and 0.1) (the burning catalyst of the others: a quicker one costs too much), the solid first.
-    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 1.492, -2.884, 0.0, 0.3, 0.245, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
-    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.205, -0.5, 0.792, -2.884, 0.0, 0.3, 1.325, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },
+    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 1.492, -2.884, 0.0, 0.3, 0.245, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.48], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.205, -0.5, 0.792, -2.884, 0.0, 0.3, 1.325, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -0.89], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },
     // Eaters of light-eaters, small and fast: 3 kg copying at 6 kg every 7 days, strength 0.3 (the light-eaters have 0.05, the eaters 0.6).
-    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.273, -0.5, 0.492, -2.884, 0.3, 0.3, 0.625, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.273, -0.5, 0.492, -2.884, 0.3, 0.3, 0.625, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.06], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
     // Eaters of light-eaters, big and slow: 150 kg copying at 300 kg every 16 days, strength 0.5.
     Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [2.536, -0.5, 0.192, -2.702, 0.5, 0.3, 2.082, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
     // Eaters of eaters (stronger in force than the eaters, whose strength gene is 0.6: the force is the gene times the mass), placed once the eaters have spread:
@@ -472,7 +485,7 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     genes[lay.cat..lay.min].fill(-1.0);
     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
     (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1]);
-    (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.02);
+    (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.25);
     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
     // Animals digest body matter as they digest the solid, and take it (14 Oct 2026): light-eaters do not.
     let matter = matter_roles(chem);

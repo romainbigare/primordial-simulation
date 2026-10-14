@@ -1,5 +1,6 @@
 //! Law 4: Copy. A body whose members have built the body of their copy mass makes children, a
-//! child per member (more past `full`): a share of each of its stores and of its heat (the `CHILD`
+//! child per member (more past `full`), of matter it already built (`grow`, below; no work is owed for a
+//! child): a share of each of its stores and of its heat (the `CHILD`
 //! gene; in a node, children who stay are new members and the node's mean simply falls, so the
 //! gene acts there only on those who leave), and its genes plus small noise
 //! (now and then a change of the brain rows it was born with, else it shares its parent's); it

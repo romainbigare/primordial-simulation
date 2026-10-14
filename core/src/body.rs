@@ -505,7 +505,15 @@ impl Body {
     pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
         // (A safe minimum is a share of the body, not of the whole mass: a body is not killed by holding fuel.)
         let (lay, size) = (Layout::of(chem), self.size(chem));
-        self.empty_at(m) || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
+        self.empty_at(m) || (0..chem.ns()).any(|k| !self.burns(chem, k) && self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
+    }
+    /// Does it burn substance `k` (an input that is not a gas of one of its reactions that release
+    /// heat, `Consts::burn`)? A store it burns is fuel: a body short of fuel dies when it cannot pay
+    /// its upkeep (`SPENT`), not when the store is below its safe minimum, which is then only the
+    /// floor that growth and giving keep (`copy::grow`, `choose::give`): a reserve, not a death line.
+    /// False before `prepare`.
+    pub fn burns(&self, chem: &Chemistry, k: usize) -> bool {
+        self.k.burn.iter().any(|&(r, _)| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k && chem.phase(k, crate::T_SURF) != Phase::Gas))
     }
 }
 
@@ -1175,7 +1183,7 @@ fn starve(w: &mut World, b: &mut Body, _m: f64, dead: &mut Vec<f64>) -> bool {
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
     let size = b.size(chem);
-    let short = |&k: &usize| x(k) < b.gene(lay.min + k) * size;
+    let short = |&k: &usize| !b.burns(chem, k) && x(k) < b.gene(lay.min + k) * size;
     let live = (0..chem.ns()).filter(short).map(|k| x(k) / (b.gene(lay.min + k) * size).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);
     dead.clear();
