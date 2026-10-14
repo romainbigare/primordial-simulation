@@ -1057,6 +1057,22 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   Order: after the reports on plant reproduction and lifespans are validated, partial damage
   first, then 1 to 5. Disease (bodies inside bodies) waits until after M4.
 
+- **Body size by an energy ceiling, not a cap (queued, the owner's decision, 14 Oct 2026).** With
+  reproduction by surplus, a body that keeps part of its building grows without end (eaters of
+  1.7 t). Use the real growth law (von Bertalanffy; West et al. 2001): supply grows with mass^0.75
+  (intake, building), but the cost of keeping tissue (basal, strength, catalysts, learning) grows
+  with mass^1.0, so growth stops where maintenance meets supply, at a size each kind's own costs
+  set; across kinds, adult costs then follow Kleiber's mass^0.75 by themselves. Re-anchor the costs
+  so a 30 kg founder pays what it pays now; the brain's cost per decision stays mass^0.25. Watch:
+  costs by the kg against income by kg^0.75 once made small bodies win (review 6; the main cause
+  then was nodes mixing kinds, since fixed); and with `take` about 10 times upkeep the ceiling may
+  sit near 10 t (real sustained intake is about 5 to 7 times resting cost): report, do not tune.
+- **Breeding seasons must emerge (the owner's decision, 14 Oct 2026).** No calendar rule, ever.
+  Bodies copy only from the surplus they build (review 7), so less winter light, dry periods
+  (dormancy) and cold (the cost of living follows temperature, queued) cut the surplus and stop
+  breeding by themselves. The monthly births per kind (`months.csv`) show whether a season appears;
+  the island's mild winter (285 K, no frost) will give weak seasons until M4's planet.
+
 ---
 
 ## 14. Rules of work
