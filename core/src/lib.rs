@@ -47,7 +47,9 @@ pub struct Config {
     /// 3/6/15: 776 (+185 ms); 3/3/15: 1405 (+400 ms); 3/3/3: 1369 (+850 ms).
     /// Liquid at 15 days loses nothing against 3 days once the moisture path runs every 3.
     pub air_days: u32,
-    /// Evaporation and condensation (rain) run every `exchange_days` days (a multiple of `air_days`)
+    /// Evaporation and condensation (rain) run every `exchange_days` days (a multiple of `air_days`).
+    /// The default is 3, the row `ew` runs (3/3/15); it was 9 here while the shell set 3, so tests
+    /// and any driver using the default ran the other rain path (review 6, finding 11).
     pub exchange_days: u32,
     /// Liquid and creep move every `flow_days` days (a multiple of `air_days`)
     pub flow_days: u32,
@@ -452,7 +454,7 @@ impl Default for Config {
             months_per_year: 12,
             phys_days: 3,
             air_days: 3,
-            exchange_days: 9,
+            exchange_days: 3,
             flow_days: 15,
             skin_m: 2.0,
             air_top_m: 10_000.0,

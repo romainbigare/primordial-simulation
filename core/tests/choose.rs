@@ -15,7 +15,9 @@ const H: usize = 8;
 const STRIP: usize = 6;
 const RICH: f64 = 20.0;
 const DECISIONS: usize = 200;
-const SEEDS: u64 = 200;
+/// 800 seeds, not 200, since the default `exchange_days` is 3, the row `ew` runs: the effect on the moves is
+/// about 3 points over chance, not 5, and 200 seeds could not tell it from the body that does not learn.
+const SEEDS: u64 = 800;
 /// Learning rate genes (log10): on, and off.
 const ON: f32 = -1.0;
 const OFF: f32 = -4.0;
@@ -136,11 +138,11 @@ fn body_learns_to_move_toward_what_it_can_take() {
          off: on the strip {strip_off:.3}, toward {toward_off:.3} (chance {chance_off:.3}), {n_off} decisions, {m_off} moves"
     );
     eprintln!("{report}");
-    // It ends up on the strip clearly more often than a body that does not learn (about 0.69
-    // against 0.47 here; the one that does not learn mostly starves within 20 decisions).
+    // It ends up on the strip clearly more often than a body that does not learn (about 0.86
+    // against 0.43 here; the one that does not learn mostly starves within 20 decisions).
     assert!(strip_on > strip_off + 0.07, "{report}");
     // Its moves go toward richer cells more often than chance, and more than those of a body
-    // that does not learn (about 5 points over chance against 3 here; it was 14 to 16 points
+    // that does not learn (about 3 points over chance against 1 here; it was 14 to 16 points
     // while bodies grew without bound: a body of real size that has eaten its fill copies, and
     // gains no well-being by eating more). Moving pays only through a take at a later decision;
     // it is learned because each row of the brain steps by its own size, so the row for the

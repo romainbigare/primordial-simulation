@@ -34,7 +34,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `months_per_year` | months | the calendar | the same | anchored |
 | `phys_days` | days | speed-tool setting: how often ground and air physics run | run: the table of channel cells against schedules in the doc comment (seed 5, 50 years, 128x128) | tuned |
 | `air_days` | days | speed-tool setting: how often air moves between nodes | the same table: 3 days loses nothing against 15 once the moisture path runs every 3 | tuned |
-| `exchange_days` | days | speed-tool setting: how often evaporation and rain run | the same table | tuned |
+| `exchange_days` | days | speed-tool setting: how often evaporation and rain run | the same table; the default is 3 (the 3/3/15 row: 1405 channel cells), what `ew` runs; it was 9 (484 cells) while the shell set 3, so tests ran another rain path (review 6, finding 11) | tuned |
 | `flow_days` | days | speed-tool setting: how often liquid and creep move | the same table | tuned |
 | `skin_m` | m | depth of ground that exchanges heat with the surface | the depth the yearly swing reaches in soil is 2 to 4 m (my arithmetic, unchecked) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |

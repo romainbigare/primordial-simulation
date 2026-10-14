@@ -37,7 +37,7 @@ fn main() {
             // The detailed form to check the nodes against: animals are all individuals (light-eaters stay nodes).
             w.cfg.nodes = !args.has("--individuals");
             w.cfg.air_days = args.get("--air-days", w.cfg.air_days.min(w.cfg.flow_days));
-            // Watch runs keep the moisture path at 3 days: the rivers stay whole (`Config::air_days`).
+            // Watch runs keep the moisture path at 3 days, the default of `Config::exchange_days` (the rivers stay whole, `Config::air_days`); kept a multiple of `air_days` and no more than `flow_days` when those are set.
             w.cfg.exchange_days = args.get("--exchange-days", 3u32.min(w.cfg.flow_days).max(w.cfg.air_days));
             let absorber = args.get("--absorber", 1.0);
             let na = w.grid.na();
