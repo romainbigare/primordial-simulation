@@ -719,3 +719,41 @@ fn a_body_builds_at_most_c_build_times_mass_to_the_power_a_day() {
     assert!((big[0].0 / small[0].0 / 2f64.powf(0.75) - 1.0).abs() < 0.05, "a body twice as heavy builds 2^0.75 times faster");
 }
 
+
+/// Every body pays a basal upkeep (14 Oct 2026, review 5): `c_basal` per day for a member of the
+/// reference mass, times (member mass / reference)^0.75, per member, strength on top. A kind with
+/// strength 0 (the eaters of remains) used to pay none of the body cost; now a 1 kg one pays
+/// `c_basal` a day and a 100 kg one 100^0.75 = 31.6 times that, 3.2 times less per kg.
+#[test]
+fn a_body_with_no_strength_pays_a_basal_upkeep() {
+    use pcore::body::{REPAIR, STRENGTH};
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
+    let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let (l, g) = (w.life.new_lineage(pcore::body::Lineage { shape, seen: 3, sight: 1, base, root: 5 }), w.life.new_genome(rows));
+    // Eaters of remains (kind 5: strength 0, 1 kg); repair 0 so the factor is 1.
+    let mut b = worldgen::life::make(&mut w, 5, i, l, g).expect("body");
+    assert_eq!(b.genes[STRENGTH], 0.0);
+    b.genes[REPAIR] = 0.0;
+    b.prepare(&w.chem, &w.cfg.phys);
+    let (days, mass) = (10.0, b.mass(&w.chem));
+    let basal = |w: &mut pcore::World, b: &pcore::body::Body, m: f64| {
+        let with = pcore::body::upkeep(w, b, days, m);
+        let p0 = w.cfg.phys;
+        w.cfg.phys.c_basal = 0.0;
+        let without = pcore::body::upkeep(w, b, days, m);
+        w.cfg.phys = p0;
+        (with - without) / days
+    };
+    let (one, hundred) = (basal(&mut w, &b, 1.0), basal(&mut w, &b, 100.0));
+    println!("basal upkeep of a 1 kg member {one:.4e} J/day, of 100 kg {hundred:.4e}, member of {mass} kg");
+    assert!((one / w.cfg.phys.c_basal - 1.0).abs() < 1e-9, "1 kg pays c_basal: {one}");
+    assert!((hundred / one / 100f64.powf(0.75) - 1.0).abs() < 1e-9, "100 kg pays 100^0.75 times that: {}", hundred / one);
+    // A node of 5 members pays 5 times a member's.
+    let mut n = b.clone();
+    n.count = 5.0;
+    assert!((basal(&mut w, &n, 500.0) / (5.0 * hundred) - 1.0).abs() < 1e-9, "a node pays for each member");
+}
