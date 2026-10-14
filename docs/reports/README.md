@@ -30,3 +30,8 @@ folder with the same name as the report.
   evolve its brain size; the catalyst columns mix the kinds, so the "light gene fell" story is an
   artifact; a member lives about a month, which no column shows), what is still missing for trees
   and for a tool-using kind, and the speed gains in reach.
+- `watch-5-before-m4.md`: review 4's list done (brain size can change in nodes; per-kind columns
+  and the seasons in the series; report 4's gene story corrected; gas exchange through the surface;
+  intake with mass^0.75; speed rows), with 100-year checks at 64 x 64: lives of 50 to 90 days, the
+  big-brain test diluted by joining, and the roster world losing its plants with old and new laws
+  alike, 14 October 2026. Chart and pictures in `watch-5-before-m4/`.
