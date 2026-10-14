@@ -87,12 +87,23 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
 
 /// Standard deviations of spread (of a node and of the children joining it) that the means of
 /// children may lie from a node's beyond `phys.alike` steps and still belong to it (`within`).
-/// Two: a lone child of a node held at the split threshold (2.7 steps) is then within its node in
-/// a gene but for a chance of 1 in 1,000 (4 + 2 x 2.7 steps against its 2.9), so it nearly always
-/// joins it whatever the number of genes; with `alike` alone the chance was 1 in 6 per gene, and
-/// with about a hundred genes nearly every small group started a node of its own (review 3, M3).
-/// A larger factor would let children join a node of another kind as wide.
-pub const WITHIN: f32 = 2.0;
+/// A half (15 Oct 2026; two before). Copying is asexual: in individuals the genes of two kinds
+/// never mix, so a node, which only saves time, must not mix them either. With two, a node and
+/// a group of children both at the spread's cap (2.7 steps each) took anything within
+/// 4 + 2 x sqrt(2 x 7.3) = 11.6 steps in every gene, and the monthly merge of a full cell
+/// (`body::crowd`) the same: the eaters (strength 0.6) and the eaters of remains (strength 0, 6
+/// steps away; copy mass 1.6 to 9 steps away) were one kind for the nodes, and the children of
+/// the most numerous, smallest kind swamped the others' nodes (a 64x64 roster world, seed 1: the
+/// eaters' copy mass 51 kg at year 26, 3 kg at year 30; at year 100 the four animal kinds had the
+/// same gene means and copy masses of tens of grams). With a half the bound is 5.9 steps and the
+/// kinds mostly stay apart: at year 60 the eaters held 51 to 55 kg on seeds 2, 3 and 4 (0.04 to
+/// 51 kg with two), and 12.5 kg on seed 1, where the 111 placed eaters still took the eaters of
+/// remains' genes in their first two years. A pair of children of a node held at the split
+/// threshold still joins it 199 times in 200 (`tests/nodes.rs`). Kinds less than 6 steps apart in
+/// every gene still blend. With `alike` alone (0) a lone child left its own node 1 time in 6 per
+/// gene, the bodies of a 64x64 roster world tripled, the safeguard merge past twice `crowd` mixed
+/// the kinds again and the eaters ended at 0.3 to 2 kg (review 3, M3; 15 Oct 2026).
+pub const WITHIN: f32 = 0.5;
 
 /// Children `c` (one or a group drawn from a node, with the spread left among them) belong to
 /// node `o`: in each gene their mean is within `limit` steps of its mean plus `WITHIN` standard

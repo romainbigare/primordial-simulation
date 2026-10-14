@@ -162,7 +162,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `copy::WITHIN` | standard deviations | children may lie this far beyond a node's `alike` and still join it | run: 2 gives a lone child of a node held at the split threshold a 1 in 1,000 chance of being left out, whatever the number of genes (review 3, M3). Speed-tool threshold | tuned |
+| `copy::WITHIN` | standard deviations | children may lie this far beyond a node's `alike` and still join it (and nodes of a full cell merge) | run: 0.5 (15 Oct 2026; 2 before, which let nodes at the spread's cap join kinds up to 11.6 steps apart, so the roster's animal kinds blended into one small kind); a pair of children of a node held at the split threshold still joins it 199 times in 200. Speed-tool threshold: copying is asexual, so kinds never mix in individuals | tuned |
 | `body::MIN_INTERVAL` | days | the shortest time between updates | a speed safeguard (5 days) | tuned |
 | `body::MAX_INTERVAL` | days | the longest time between updates | one year | anchored |
 | `worldgen::life::T_SURF` and `richness::T_SURF` | K | typical surface temperature, where the starting kinds' reactions and the richness checks look at phases | the same as `t_cat` (290 K): one constant, `pcore::T_SURF` | anchored |
