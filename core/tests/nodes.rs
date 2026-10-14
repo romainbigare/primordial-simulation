@@ -1,8 +1,16 @@
 //! Population nodes (plan 7.1): how their members differ, how they split, how they act on bonds.
 
-use pcore::body::{Body, Layout, Lineage, COPY_MASS, DISPERSE, GAS, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
+use pcore::body::{Body, Layout, Lineage, CHILD, COPY_MASS, DISPERSE, GAS, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, check, choose, copy};
+
+/// Set aside a brood of `k` children for `b` (all its members together) out of the matter it holds: what
+/// `copy::grow` would have put there (14 Oct 2026: a body makes children from its brood).
+fn brood(w: &pcore::World, b: &mut Body, k: f64) {
+    let (chem, m) = (&w.chem, w.chem.matter().expect("body matter"));
+    let (_, h) = b.wet_h(chem);
+    b.brood = k * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - h) / chem.subs[m].molar_mass;
+}
 
 /// Slots of the live bodies.
 fn live(w: &pcore::World) -> Vec<usize> {
@@ -20,10 +28,11 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
-    // Members copy now (a low copy mass) and all children stay.
-    (b.genes[COPY_MASS], b.genes[DISPERSE]) = (-1.0, 0.0);
+    // Members are mature (a low copy mass), each has a child and all children stay.
+    (b.genes[COPY_MASS], b.genes[DISPERSE]) = (-0.4, 0.0);
     b.prepare(&w.chem, &w.cfg.phys);
     let n0 = b.count;
+    brood(&w, &mut b, n0);
     assert!(b.spread.is_empty() && copy::copy(&mut w, s, &mut b) && b.count > n0, "no children");
     let (f, size) = (((b.count - n0) / b.count) as f32, 10f32.powf(b.genes[MUT]));
     let want = f * (w.cfg.phys.row_noise * size).powi(2);
@@ -54,7 +63,9 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
 }
 
 /// Light-eater nodes with a fast mutation (their spreads reach the split threshold) and members
-/// of 100 kg that copy from 0.1 kg (no copy cost, never `full`) copy, split, move to the lineage
+/// of 100 kg (a body of 70 kg) that are mature from 28 kg, with children of 14 kg (no copy cost; the copy-mass and child
+/// genes are set again at each update so that every node is mature, and its children are of its size class, whatever
+/// its other genes: no selection by when a body may reproduce) copy, split, move to the lineage
 /// their brain sizes ask for, send children to join or start nodes in neighbour cells, and merge
 /// each month, for `updates` updates of 10 days (`wide`: from spreads held at the split threshold). Every member has one child per update, and then
 /// a share `live(b)` of each body's members lives on (0.5: as many die as were born). Returns the
@@ -62,13 +73,13 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
 fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f64) -> (pcore::World, Vec<f64>, Vec<f64>) {
     let mut w = worldgen::new_world(1, 4, 4);
     pcore::step(&mut w);
-    (w.cfg.crowd, w.cfg.phys.c_copy, w.cfg.phys.full) = (crowd, 0.0, 1e12);
+    (w.cfg.crowd, w.cfg.phys.c_copy) = (crowd, 0.0);
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     let len = Layout::of(&w.chem).len;
     let b0 = &w.life.bodies[live(&w)[0]];
     let (per, e1) = (b0.store.iter().map(|a| 100.0 * a / b0.count).collect::<Vec<f64>>(), 100.0 * b0.e / b0.count);
     for s in live(&w) {
-        (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT]) = (-1.0, -0.8);
+        (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT], w.life.bodies[s].genes[CHILD]) = (1.45, -0.8, -0.301_03);
         if wide {
             // (the first children that stay bring every spread down to the split threshold)
             w.life.bodies[s].spread = vec![1e9; len];
@@ -97,6 +108,10 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             let mut b = std::mem::take(&mut w.life.bodies[s]);
             (b.store, b.e) = (per.iter().map(|a| a * b.count).collect(), e1 * b.count);
             b.prepare(&w.chem, &w.cfg.phys);
+            // Mature with a body of twice its copy mass after the brood, children half the copy mass: of its size class.
+            let (body, n) = (b.built(&w.chem) / b.n(), b.count);
+            (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -0.301_03, 0.0);
+            brood(&w, &mut b, n);
             copy::copy(&mut w, s, &mut b);
             copy::resize(&mut w, s, &mut b);
             copy::split(&mut w, s, &mut b);
@@ -128,9 +143,12 @@ fn genes_do_not_drift_without_selection() {
         for (g, step) in [(HIDDEN, 0.3), (MEMORY, 0.15), (SEEN, 0.1), (SIGHT, 0.07)] {
             inv[g] = 1.0 / step;
         }
+        // (The copy mass and the child's size are set again at each update, see `churn`: not measured.)
+        (inv[COPY_MASS], inv[CHILD]) = (0.0, 0.0);
         let (w, m0, m1) = churn(crowd, 1000, false, |_| 0.5);
         let worst = (0..lay.len).filter(|&g| inv[g] > 0.0).map(|g| ((m1[g] - m0[g]) * inv[g] as f64).abs()).fold(0.0, f64::max);
-        println!("crowd {crowd}: bodies {}, splits {}, largest move {worst:.3} steps", live(&w).len(), w.diag.splits[0]);
+        let which = (0..lay.len).filter(|&g| inv[g] > 0.0).max_by(|&a, &b| ((m1[a] - m0[a]) * inv[a] as f64).abs().total_cmp(&((m1[b] - m0[b]) * inv[b] as f64).abs())).unwrap();
+        println!("crowd {crowd}: bodies {}, splits {}, largest move {worst:.3} steps (gene {which}: {} -> {})", live(&w).len(), w.diag.splits[0], m0[which], m1[which]);
         assert!(crowd < 4 || w.diag.splits[0] > 10.0, "too few splits");
         assert!(worst < 1.0, "a gene moved {worst} steps without selection");
     }
@@ -177,9 +195,9 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         let i = w.life.bodies[s].cell as usize;
         pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
     }).expect("a node with nodes all around");
-    // Members of 1 kg copying at 0.6 kg (not past `full`), all children leave.
+    // Members of 1 kg (a body of 0.7 kg) mature from 0.45 kg, all children leave.
     let mut genes = w.life.bodies[s].genes.clone();
-    (genes[COPY_MASS], genes[DISPERSE]) = (0.6f32.log10(), 1.0);
+    (genes[COPY_MASS], genes[DISPERSE]) = (0.45f32.log10(), 1.0);
     for t in live(&w) {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
         w.life.bodies[t].k = Default::default();
@@ -192,6 +210,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         let mut c = b.clone();
         (c.count, c.store, c.e) = (2.0, per.iter().map(|x| 2.0 * x).collect(), 2.0 * b.e / b.count);
         c.prepare(&w.chem, &w.cfg.phys);
+        brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();
         w.day += 1;
         assert!(copy::copy(&mut w, s, &mut c), "no children");
@@ -372,8 +391,8 @@ fn opening_a_node_draws_members_and_keeps_everything() {
 }
 
 /// With `Config::nodes` off an animal's children are individuals: a child joins no node, even
-/// when one of its own kind is in its cell (with nodes on it joins it), and a member far past
-/// `full`, which has many children at once, has that many individuals, not a node of them.
+/// when one of its own kind is in its cell (with nodes on it joins it), and a member whose brood
+/// covers many children has that many individuals, not a node of them.
 /// Members, stores and heat are kept exactly.
 #[test]
 fn individuals_mode_children_of_an_animal_are_individuals() {
@@ -391,11 +410,13 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         node.e *= 5.0;
         w.life.bodies[s].genes[DISPERSE] = 0.0;
         let t = w.life.add(node, w.day, 1);
-        // One child: its copy mass is just under its body (matter and the liquid it keeps, `Body::size`).
+        // One child: its parent is mature (its copy mass is 0.7 of its body, `Body::size`), the child
+        // 0.3 of that.
         let (at, before) = (live(&w).len(), held(&w));
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.genes[COPY_MASS] = (0.9 * b.size(&w.chem) as f32).log10();
+        b.genes[COPY_MASS] = (0.7 * b.size(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
+        brood(&w, &mut b, 1.0);
         w.day += 1;
         assert!(copy::copy(&mut w, s, &mut b), "no child");
         w.life.bodies[s] = b;
@@ -407,11 +428,12 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
             continue;
         }
         assert!(kids.len() == 1 && w.life.bodies[t].count == 5.0 && w.life.bodies[kids[0]].count == 1.0, "the child joined a node");
-        // Many children at once: the member's body is 3.5 times `full` copy masses.
+        // Many children at once: its brood covers 3.5 of them.
         let (at, before) = (live(&w).len(), held(&w));
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.genes[COPY_MASS] = ((b.size(&w.chem) / (3.5 * w.cfg.phys.full)) as f32).log10();
+        b.genes[COPY_MASS] = (0.3 * b.size(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
+        brood(&w, &mut b, 3.5);
         w.day += 1;
         assert!(copy::copy(&mut w, s, &mut b), "no children");
         w.life.bodies[s] = b;

@@ -223,8 +223,9 @@ fn crowd_bounds_the_nodes_of_a_cell() {
 fn cold_bodies_release_too_little() {
     let mut w = worldgen::new_world(1, 32, 32);
     pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    // (The starting bodies unsprayed: a sprayed one can be anything, and the first found is a lottery.)
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
     for kind in [true, false] {
         let mut b = w.life.alive().find(|b| (pcore::body::light_cat(&w.chem, &b.genes) > 5.0) == kind).expect("a body").clone();
         b.prepare(&w.chem, &w.cfg.phys);
@@ -526,8 +527,8 @@ fn a_body_takes_no_more_than_it_can_use() {
 }
 
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
-/// decision and pays nothing for a brain, but lives its physics at its updates and copies when
-/// full (W3). Matter and energy are kept exactly.
+/// decision and pays nothing for a brain, but lives its physics at its updates and has offspring from its
+/// brood (W3). Matter and energy are kept exactly.
 #[test]
 fn a_body_with_no_brain_lives_and_copies() {
     use pcore::body::{Lineage, COPY_MASS, HIDDEN};
@@ -543,7 +544,7 @@ fn a_body_with_no_brain_lives_and_copies() {
     let rows = base.split_off(shape.base());
     assert!(base.is_empty());
     let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
-    // A light-eater node whose members have a body (0.7 kg of the 1 kg) of more than `full` times their copy mass (0.25 kg).
+    // A light-eater node whose members are mature: a body (0.7 kg of the 1 kg) of more than their copy mass (0.25 kg).
     let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
     (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.6);
     let (n0, s) = (b.count, w.life.add(b, w.day, 1));
@@ -563,7 +564,9 @@ fn a_body_with_no_brain_lives_and_copies() {
     let b = &w.life.bodies[s];
     let born: f64 = w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum();
     println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.life.updates - u, b.count);
-    assert!(b.alive && w.life.updates - u >= 2 && born > 0.0 && b.count > n0, "no children: {born}");
+    // (Its children are small against its members, 0.075 kg against 0.7: another size class, so they are nodes of their own.)
+    let all: f64 = w.life.alive().map(|x| x.n()).sum();
+    assert!(b.alive && w.life.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
     assert!(w.diag.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
@@ -636,8 +639,8 @@ fn bodies_die_of_age_by_their_rate_of_living() {
 
 /// What a member takes, can build and pays to be goes with its mass to the power `intake_exp`
 /// (14 Oct 2026, review 4, finding 5): 1 kg counts as 1 kg, 10 t takes 180 times what 10 kg does
-/// (not 1,000), and a node of n members counts n times a member. Past `full` times its copy mass
-/// it counts by all its mass (satiety stops what it takes, `a_body_takes_no_more_than_it_can_use`).
+/// (not 1,000), and a node of n members counts n times a member. It counts by all its mass (satiety
+/// stops what it takes, `a_body_takes_no_more_than_it_can_use`).
 #[test]
 fn equiv_goes_with_mass_to_the_power() {
     use pcore::body::{Body, COPY_MASS};
@@ -652,7 +655,7 @@ fn equiv_goes_with_mass_to_the_power() {
     assert!((take(1e4) / take(10.0) - 177.8).abs() < 0.1, "10 t takes 180 times 10 kg: {}", take(1e4) / take(10.0));
     assert!((member(4.0, 6.0).equiv(&p, 4.0 * 30.0) / take(30.0) - 4.0).abs() < 1e-9, "a node counts n members' worth");
     let m = member(1.0, 1.0);
-    assert!(m.equiv(&p, 2000.0) > m.equiv(&p, 20.0), "past full (20 kg) it counts by all its mass");
+    assert!(m.equiv(&p, 2000.0) > m.equiv(&p, 20.0), "it counts by all its mass");
 }
 
 /// Every body pays a basal upkeep (14 Oct 2026, review 5): `c_basal` per day for a member of the
@@ -695,15 +698,15 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
 
 /// Leaf goes with mass^0.75 like intake (14 Oct 2026, review 5): the same `LEAF` gene gives a
 /// member of 1 kg 10^LEAF m² per kg, a member of 1,000 kg 1000^0.75 times that in all (178 m², not
-/// 1,000), so 5.6 times less per kg; a node counts its members; and past `full` times the copy
-/// mass what a member holds adds no leaf. The open surface follows (plus its skin).
+/// 1,000), so 5.6 times less per kg; a node counts its members; and the fuel a member holds adds no
+/// leaf (it goes by the body, with no cap). The open surface follows (plus its skin).
 #[test]
 fn leaf_area_per_kg_falls_with_mass() {
     use pcore::body::{Body, COPY_MASS, LEAF};
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     let (chem, p) = (w.chem.clone(), w.cfg.phys);
-    // A member of `kg` that copies at 10^6 kg (so it all works), 0.5 m² of leaf per kg of 1 kg.
+    // A member of `kg` (that copies at 10^`copy` kg), 0.5 m² of leaf per kg of 1 kg.
     let member = |count: f64, kg: f64, copy: f32| {
         let mut b = Body { count, genes: vec![0.0; pcore::body::Layout::of(&chem).len], store: vec![0.0; chem.ns()], ..Default::default() };
         (b.genes[LEAF], b.genes[COPY_MASS]) = (0.5f32.log10(), copy);
@@ -723,9 +726,10 @@ fn leaf_area_per_kg_falls_with_mass() {
     let node = member(10.0, 1000.0, 6.0);
     let (m, skin) = (node.mass(&chem), 10.0 * 6.0 * (1000.0 / p.rho_body).powf(2.0 / 3.0));
     assert!((node.open_area(&chem, &p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * skin, "open area {}", node.open_area(&chem, &p, m));
-    // Past full (2 x 10^1 = 20 kg) a member's extra mass adds no leaf: 20 kg and 2,000 kg alike.
-    let (at, past) = (member(1.0, 20.0, 1.0), member(1.0, 2000.0, 1.0));
-    assert!((leaf(&at) - leaf(&past)).abs() < 1e-9 && (leaf(&at) / 0.5 - 20f64.powf(0.75)).abs() < 1e-6, "past full: {} and {}", leaf(&at), leaf(&past));
+    // Nothing caps the mass that works (14 Oct 2026: a body is mature from its copy mass but keeps growing, and leaf goes by all of
+    // its body): a member of 10 kg (its copy mass) and one of 1,000 kg have leaf in the ratio of their bodies to the power 0.75.
+    let (at, past) = (member(1.0, 10.0, 1.0), member(1.0, 1000.0, 1.0));
+    assert!((leaf(&past) / leaf(&at) / 100f64.powf(0.75) - 1.0).abs() < 1e-5 && (leaf(&at) / 0.5 / 10f64.powf(0.75) - 1.0).abs() < 1e-5, "past maturity: {} and {}", leaf(&at), leaf(&past));
 }
 
 /// Moving costs the real cost of transport (14 Oct 2026, review 6, finding 2): per kg and m a 30 kg

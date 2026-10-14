@@ -125,7 +125,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
     assert!(!kinds.is_empty());
-    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age", "past_copy", "past_full", "died_young", "died_adult", "life_adult", "moves"] {
+    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age", "past_copy", "alloc", "child", "brood", "died_young", "died_adult", "life_adult", "moves"] {
         assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
     }
     for r in &rows {
@@ -160,10 +160,14 @@ fn yearly_series_has_the_measures_per_starting_kind() {
         let (m, mean, matter, body) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_matter"), last), col(&format!("root_{k}_body"), last));
         assert!(m == 0.0 || (matter > 0.0 && matter < 1.0 && body > 0.0 && body <= mean * (1.0 + 1e-9)), "root_{k}: matter {matter}, body {body}, mass {mean}");
     }
-    // The shares of members past their copy mass and past `full` times it, and the moves a member makes a year.
+    // The share of members past their copy mass (mature), the moves a member makes a year, and the genes of reproduction
+    // (14 Oct 2026): the share of building that goes to offspring, a child's body as log10 of its share of the copy mass,
+    // and the brood as a share of the members' mass.
     for k in &kinds {
-        let (m, copy, full, moves) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_past_copy"), last), col(&format!("root_{k}_past_full"), last), col(&format!("root_{k}_moves"), last));
-        assert!(m == 0.0 || ((0.0..=1.0).contains(&copy) && (0.0..=copy).contains(&full) && moves >= 0.0), "root_{k}: past copy {copy}, past full {full}, moves {moves}");
+        let (m, copy, moves) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_past_copy"), last), col(&format!("root_{k}_moves"), last));
+        let (alloc, child, brood) = (col(&format!("root_{k}_alloc"), last), col(&format!("root_{k}_child"), last), col(&format!("root_{k}_brood"), last));
+        assert!(m == 0.0 || ((0.0..=1.0).contains(&copy) && moves >= 0.0), "root_{k}: past copy {copy}, moves {moves}");
+        assert!(m == 0.0 || ((0.0..=1.0).contains(&alloc) && (-6.0..=-0.3).contains(&child) && (0.0..1.0).contains(&brood)), "root_{k}: alloc {alloc}, child {child}, brood {brood}");
     }
     // months.csv carries the births of each kind by month; the twelve months before the last yearly row add up to its births.
     let months = std::fs::read_to_string(dir.join("months.csv")).unwrap();
