@@ -8,7 +8,16 @@ struct File {
     elements: usize,
     s: Vec<S>,
     r: Vec<R>,
+    #[serde(default)]
+    build: Option<B>,
     init: Init,
+}
+
+/// Growth: what bodies make of what they hold (`pcore::chem::Chemistry::build`).
+#[derive(Deserialize)]
+struct B {
+    i: Vec<[u16; 2]>,
+    o: Vec<[u16; 2]>,
 }
 
 #[derive(Deserialize)]
@@ -61,6 +70,8 @@ pub struct Init {
 pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
     let f: File = toml::from_str(text).map_err(|e| e.to_string())?;
     let pair = |v: &[[u16; 2]]| v.iter().map(|p| (p[0], p[1])).collect();
+    let mut air = vec![0.0; f.s.len()];
+    f.init.air.iter().for_each(|&(k, x)| air[k] = x);
     let chem = Chemistry {
         n_elements: f.elements,
         subs: f
@@ -90,6 +101,8 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             .into_iter()
             .map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light })
             .collect(),
+        build: f.build.map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false }),
+        air,
     };
     chem.validate()?;
     Ok((chem, f.init))

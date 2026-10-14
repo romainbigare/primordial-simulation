@@ -73,6 +73,17 @@ pub struct Chemistry {
     pub n_elements: usize,
     pub subs: Vec<Substance>,
     pub reactions: Vec<Reaction>,
+    /// How bodies grow (14 Oct 2026): a conversion of stores into body matter, balanced in
+    /// elements like a reaction, with no rate (it is not a reaction of the open world: Copy runs
+    /// it, paid by work, `copy::grow`). Its first output is the body matter; the others are
+    /// what is left over. None: bodies have no matter apart from their stores (`Body::size` is
+    /// their mass, and they do not grow).
+    #[serde(default)]
+    pub build: Option<Reaction>,
+    /// Mole fractions of the starting air, per substance (empty: none known). The cost of a
+    /// catalyst counts the gases of a reaction beyond first order at these shares (`Body::prepare`).
+    #[serde(default)]
+    pub air: Vec<f64>,
 }
 
 impl Chemistry {
@@ -136,6 +147,19 @@ impl Chemistry {
         sum(&rx.outputs) - sum(&rx.inputs)
     }
 
+    /// Enthalpy change of one unit of growth, J (positive takes energy): 0 in
+    /// chemistry 0, where 6 of the energy-rich solid make 1 of matter and 1 of liquid (hf of the
+    /// matter = 6 hf of the solid less hf of the liquid).
+    pub fn dh_build(&self) -> f64 {
+        let sum = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].hf).sum::<f64>();
+        self.build.as_ref().map_or(0.0, |b| sum(&b.outputs) - sum(&b.inputs))
+    }
+
+    /// The body matter: the first output of growth (`build`), if bodies grow.
+    pub fn matter(&self) -> Option<usize> {
+        self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
+    }
+
     /// Element counts of a reaction side.
     fn side_elems(&self, v: &[(u16, u16)]) -> Vec<u32> {
         let mut e = vec![0u32; self.n_elements];
@@ -157,6 +181,14 @@ impl Chemistry {
         for (r, rx) in self.reactions.iter().enumerate() {
             if self.side_elems(&rx.inputs) != self.side_elems(&rx.outputs) {
                 return Err(format!("reaction {r} does not balance"));
+            }
+        }
+        if let Some(b) = &self.build {
+            if self.side_elems(&b.inputs) != self.side_elems(&b.outputs) {
+                return Err("growth does not balance".into());
+            }
+            if b.outputs.is_empty() || b.inputs.is_empty() {
+                return Err("growth needs inputs and a body matter".into());
             }
         }
         Ok(())

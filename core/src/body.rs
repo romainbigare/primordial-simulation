@@ -260,14 +260,22 @@ impl Body {
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
         // By capacity: the catalysed rate per unit of input at `t_cat`, over the genes that are on
-        // (`Physics::c_cat`), dearer if they keep their shape when warmer (`Physics::t_firm`).
-        let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp()).sum();
+        // (`Physics::c_cat`), dearer if they keep their shape when warmer (`Physics::t_firm`). A gas
+        // counted beyond first order (its `nu` above 1: mass action) counts at its share of the open
+        // air (`Chemistry::air`) to the power `nu` - 1: the first order is the supply, as the scarce
+        // input counts once in the rate (`change`). Without it burning body matter (6 of the gas,
+        // 0.21^6 = 8.6e-5 of its bare rate in the open) would cost 1,800 times what burning the
+        // energy-rich solid does for the same speed-up, and no body could keep the enzyme.
+        let open = |rx: &crate::chem::Reaction| -> f64 {
+            rx.inputs.iter().filter(|q| q.1 > 1 && chem.phase(q.0 as usize, p.t_cat) == Phase::Gas).map(|&(k, nu)| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(nu as i32 - 1)).product()
+        };
+        let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp() * open(rx)).sum();
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
     }
     /// Visible traits of one member; the colour is the reflectance of the stores by volume. Its
-    /// light-capture area is `LEAF` per kg-equivalent of its mass up to `full` times its copy mass
-    /// (`work`, `equiv`: mass^0.75).
+    /// light-capture area is `LEAF` per kg-equivalent of its body (`size`) up to `full` times its
+    /// copy mass (`work`, `equiv`: mass^0.75).
     pub fn visible(&self, chem: &Chemistry, p: &crate::Physics) -> [f32; 6] {
         let (m, cap) = self.mass_cap(chem);
         let m1 = m / self.n();

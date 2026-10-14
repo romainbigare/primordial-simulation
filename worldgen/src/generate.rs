@@ -165,7 +165,10 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         let (k, ea) = if light { (1e-9, 5800.0 * noise(&mut r, 0.1)) } else { (k, t_start * (k / 1e-6).ln() + dh.max(0.0) / R_GAS) };
         reactions.push(Reaction { inputs: a, outputs: b, k, ea, light });
     }
-    let chem = Chemistry { n_elements: ne, subs, reactions };
+    // (No growth in a random chemistry yet: its bodies are their mass, `Chemistry::build`.)
+    let mut air = vec![0.0; ns];
+    init.air.iter().for_each(|&(k, x)| air[k] = x);
+    let chem = Chemistry { n_elements: ne, subs, reactions, build: None, air };
     debug_assert!(chem.validate().is_ok());
     (chem, init)
 }

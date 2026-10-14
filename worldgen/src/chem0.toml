@@ -339,6 +339,24 @@ sol = 1.7e-5
 cond = 0.03
 hf = -110.5
 
+# 22: body matter, what bodies are built of: 6 of 5 (CH2O) less one of 0, C6H10O5, so that 6 of 5 -> 1 of 22 + 1 of 0
+# is thermoneutral (hf = 6 x -212 - -286 = -986: it holds the energy of the 6 it was made of; burning it gives
+# 2805 kJ/mol = 17.3 MJ/kg, against 15.6 for 5). A high melting point: it chars before it melts. Reflectance as 5's.
+[[s]] # 22
+e = [10,6,0,5,0,0,0,0,0]
+m = 162.0
+cp = 200
+melt = 1500
+boil = 3000
+rho = [1500, 1300]
+hard = 0.2
+str = 0.3
+refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
+ir = 0.0
+sol = 0.0
+cond = 0.2
+hf = -986
+
 # Reactions: i/o = [[substance, count]], k 1/s, ea K.
 [[r]] # 0
 i = [[3,1],[0,1]]
@@ -466,6 +484,21 @@ i = [[17,2],[2,1]]
 o = [[16,2]]
 k = 0.1
 ea = 8000
+
+# 21: burning body matter, C6H10O5 + 6 O2 -> 6 CO2 + 5 H2O (as 1, for 22). Open world: first order in the matter, the
+# oxygen to its 6th power (mass action), 0.21^6 = 8.6e-5, so for 5% of it a year at 290 K (rate 1.63e-9 /s) k exp(-ea/290)
+# = 1.63e-9 / 8.6e-5 = 1.9e-5 /s; ea 9000 K (7760 for 1: structure resists), k = 1.9e-5 x exp(9000/290) = 5.7e8.
+# (Reaction 1 at 290 K: 4.3e3 exp(-7760/290) x 0.21 = 2.2e-9 /s, 6.6% a year.)
+[[r]] # 21
+i = [[22,1],[2,6]]
+o = [[3,6],[0,5]]
+k = 5.7e8
+ea = 9000
+
+# Growth, which is not a reaction of the open world: what bodies make of the energy-rich solid, paid by work (Copy): [inputs], [outputs]; the first output is the matter that builds bodies.
+[build]
+i = [[5,6]]
+o = [[22,1],[0,1]]
 
 # Starting world: [substance, fraction].
 [init]
