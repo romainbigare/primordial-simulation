@@ -577,12 +577,21 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
     m
 }
 
-/// Satiety (14 Oct 2026, review 5): a body takes no more than its reactions can use over `days`,
+/// Satiety (14 Oct 2026, review 5): a member past `full` times its copy mass (grown, and paying
+/// for children no faster than `c_build`) takes no more than its reactions can use over `days`,
 /// its upkeep plus the most it can build (`Physics::c_build` x its `equiv` / `intake_ref` x days),
-/// counted by the heat of the amounts `m` (mol) it burns (`Consts::burn`). The substances it
-/// burns are cut to that together; the others (liquid, which comes by area and stops at the
-/// level the body keeps) are not counted. Never less than the upkeep's worth, so a body never
-/// stops short of what it burns (burning leaves its liquid product in the body, 13 Oct 2026).
+/// counted by the heat of the amounts `m` (mol) it burns (`Consts::burn`). Its reactions release
+/// a share of what it holds over the interval (first order in the fuel, `release`), not all of
+/// it, so what they can use is a store: it fills its fuel until that share of it covers its
+/// upkeep and building (`can` / share, less what it holds). With the bare `can` (upkeep plus 6%
+/// for an eater) the store sat at the line where the body dies and every starting eater died in
+/// its first year; and below `full` a body eats as its intake allows: a body takes on only some of
+/// its decisions, so a meal must last it several intervals, and with satiety at every size the
+/// starting eaters still all died (seed 1, 64x64). Past `full` it is what keeps a body that cannot
+/// pay for its children from swelling (review 3, M2). The substances it burns are cut to that together; the others (liquid, which
+/// comes by area and stops at the level the body keeps) are not counted. Never less than the
+/// upkeep's worth, so a body never stops short of what it burns (burning leaves its liquid
+/// product in the body, 13 Oct 2026); a body with no fuel takes what it reaches.
 /// Before, a body past `full` took at the rate of `full` and swelled when it could not pay for
 /// its children (review 3, M2), and a body below it took three to six times what it used.
 pub(crate) fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
@@ -592,7 +601,14 @@ pub(crate) fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
     if got <= 0.0 {
         return;
     }
-    let can = body::upkeep(w, b, days, mass) + p.c_build * b.equiv(p, mass) / p.intake_ref * days;
+    if mass / b.n() < p.full * b.dec(body::COPY_MASS) {
+        return;
+    }
+    let (up, fuel, rel) = (body::upkeep(w, b, days, mass), b.fuel(&w.chem, t), body::release(w, b, days));
+    if fuel <= 0.0 || rel <= 0.0 {
+        return;
+    }
+    let can = ((up + p.c_build * b.equiv(p, mass) / p.intake_ref * days) * fuel / rel - fuel).max(up);
     if got > can {
         m.iter_mut().enumerate().filter(|&(k, _)| heat(k) > 0.0).for_each(|(_, a)| *a *= can / got);
     }

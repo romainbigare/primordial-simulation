@@ -471,13 +471,14 @@ fn a_heavy_individual_copies_over_several_updates() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
-/// A body takes no more than it can use (14 Oct 2026, review 5: satiety, in place of "past `full`
-/// it takes at the rate of `full`", which review 3's M2 added so that a body that could not pay for
-/// its children did not swell on what it held): an eater of 10 or 100 times the mass of a starting
-/// one, on the ground's energy-rich solid, takes the heat of its upkeep over an interval plus the most it can
-/// build (`c_build`), whatever it holds, and with no building allowed exactly its upkeep: never
-/// less (a hard stop below upkeep starved the eaters, 13 Oct: burning leaves its liquid product in
-/// the body). The size cap (`take` x interval x `equiv`) is above both. Matter and energy are kept exactly.
+/// A grown body takes no more than it can use (14 Oct 2026, review 5: satiety, in place of "past
+/// `full` it takes at the rate of `full`", which review 3's M2 added so that a body that could not
+/// pay for its children did not swell on what it held): an eater of 10 or 100 times the mass of a
+/// starting one, past `full` and holding fuel enough for many intervals, takes on the ground's
+/// energy-rich solid only the heat of its upkeep over an interval, whatever `c_build`: never less
+/// (a hard stop below upkeep starved the eaters, 13 Oct: burning leaves its liquid product in the
+/// body), and no more, as its store already releases what it can use. A starting eater (below
+/// `full`) takes more than that: it eats as its intake allows. Matter and energy are kept exactly.
 #[test]
 fn a_body_takes_no_more_than_it_can_use() {
     use pcore::body::{Lineage, DISPERSE};
@@ -528,12 +529,14 @@ fn a_body_takes_no_more_than_it_can_use() {
         (burnt, can / joule_per_kg, p.take * days * equiv)
     };
     for times in [10.0, 100.0] {
-        let ((with, can, cap), (without, upkeep, _)) = (took(times, 1e4), took(times, 0.0));
-        println!("{times} x 30 kg: takes {with:.3} kg of fuel (may use {can:.3}, size cap {cap:.3}), with no building {without:.3} (upkeep {upkeep:.3})");
-        assert!(with > 0.0 && can < cap, "the size cap {cap} is not above what it can use {can}");
-        assert!((with / can - 1.0).abs() < 0.02 && (without / upkeep - 1.0).abs() < 0.02, "{with} of {can} kg, {without} of {upkeep} kg");
-        assert!(without < with, "building adds to what it takes");
+        let ((with, _, cap), (without, upkeep, _)) = (took(times, 3e4), took(times, 0.0));
+        println!("{times} x 30 kg: takes {with:.3} kg of fuel (upkeep {upkeep:.3}, size cap {cap:.3}), with no building {without:.3}");
+        assert!(upkeep < cap, "the size cap {cap} is not above its upkeep {upkeep}");
+        assert!((with / upkeep - 1.0).abs() < 0.02 && (without / upkeep - 1.0).abs() < 0.02, "{with} and {without} of {upkeep} kg");
     }
+    let (young, can, _) = took(1.0, 3e4);
+    println!("a starting eater takes {young:.3} kg of fuel (upkeep and build {can:.3})");
+    assert!(young > can, "below full a body eats as its intake allows: {young} of {can} kg");
 }
 
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
