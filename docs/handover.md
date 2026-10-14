@@ -931,6 +931,15 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
 - **Size is cheap.** Until 14 Oct 2026 nothing scaled against size, so the copy-mass gene ran to
   whatever wall it had. Intake now goes with mass^0.75 (Section 4); bone-like structure costs
   (about m^1.3) and longer generations of big bodies are not modelled.
+- **The big-brain test needs the kind kept apart (watch report 5).** With `--clever-year`, the
+  ordinary eaters' children joined the 48-unit nodes within a year (a child joins any node it is
+  like, and likeness leaves the brain sizes out), so the big brain was averaged down to 12, not
+  tested. To test it, children could join only nodes of their own brain size, or the kind could be
+  placed alone. That changes how nodes work, so the owner decides.
+- **The roster world loses its plants (watch report 5).** At 64 x 64 over 100 years, with the old
+  and the new laws alike, the plants fall from about 4 x 10¹⁰ members to a few 10⁸, tiny eaters of
+  remains (tens of grams) take over, and members of thousands of tonnes appear. Find out why, with
+  the per-kind columns, before the first M4 roster report.
 
 ---
 

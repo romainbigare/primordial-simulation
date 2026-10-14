@@ -195,6 +195,8 @@ So review 4's speed table was too hopeful. The biggest items left are the air ex
 
 ## What next
 
+Code size: `core` is 7,173 lines (budget 8,000 through M7).
+
 Review 4's list is done. Before M4, run the three 300-year seeds once at 128 x 128 to check rows
 4 and 7 at full length: the copy-mass wall, the carbon gas, and whether the plants start to drop
 their brains. Then go to M4 as planned. Do not expect a people-like kind from M4 itself (handover
