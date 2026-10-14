@@ -16,8 +16,8 @@
 //! if less than one member) starts in a random neighbour cell, drawn from the node: their mean
 //! genes and rows are the node's plus noise of its spread and the change over their number, and
 //! they keep the variance left among them (`vary`). There they join the first node they belong
-//! to, alike in genes within its spread and theirs (`within`), whatever its lineage and brain
-//! sizes (means by count, the spread pooled, `join`), or start a node. An individual's children
+//! to, alike in genes within its spread and theirs (`within`; brain sizes within a few whole
+//! units), whatever its lineage (means by count, the spread pooled, `join`), or start a node. An individual's children
 //! stay together, in a neighbour cell with that chance (else in its own); there they join a node
 //! as a node's do, else they are a new body. Only individuals' children start new lineages; a node whose mean brain-size genes
 //! are a whole unit away from its lineage's sizes moves itself to a new lineage with them, its
@@ -72,8 +72,8 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     }
 }
 
-/// Genes no more than `limit` mutation steps apart in each gene (genes that are off count as 0;
-/// the sizes of brain and senses are not compared, as `merge` carries a brain over to other sizes).
+/// Genes no more than `limit` steps apart in each gene (`step`: genes that are off count as 0, the
+/// sizes of brain and senses by whole units).
 /// Nodes merge each month only if their means are alike (`body::crowd`), as a split's halves are
 /// tested (`split`): so the halves stay apart for selection until they grow alike again.
 pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
@@ -96,21 +96,30 @@ pub const WITHIN: f32 = 2.0;
 /// with `alike` alone a group of a few rarely joined even the node it was drawn from.
 fn within(lay: &Layout, limit: f32, o: &Body, c: &Body) -> bool {
     let s = |b: &Body, g: usize| b.spread.get(g).map_or(0.0, |&v| v.max(0.0));
-    o.genes.iter().zip(&c.genes).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= limit + WITHIN * (s(o, g) + s(c, g)).sqrt() / range(lay, g).0)
+    o.genes.iter().zip(&c.genes).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= limit + WITHIN * (s(o, g) + s(c, g)).sqrt() / like(lay, g))
 }
 
-/// A gene in mutation steps (off as 0; the sizes of brain and senses as 0): two bodies are as
-/// alike as their genes are near in these (`alike`, `body::crowd`). A split measures the sizes in
-/// their steps (`split`), so selection can move them in a node.
+/// The step gene `g` is measured in for likeness: its mutation step, but a whole unit for the
+/// sizes of brain and senses. Their mutation steps (0.07 to 0.3) would make a split's halves
+/// (1.3 units apart) unlike, and not counting them at all let ordinary eaters' children join a
+/// placed 48-unit kind and average its brain to 12 within a year (watch report 5, review 5): in
+/// whole units a 48-unit brain and a 12-unit one are not one kind, the halves of a split are.
+fn like(lay: &Layout, g: usize) -> f32 {
+    if (body::HIDDEN..=body::SIGHT).contains(&g) { 1.0 } else { range(lay, g).0 }
+}
+
+/// A gene in steps of `like` (off as 0): two bodies are as alike as their genes are near in these
+/// (`alike`, `within`, `body::crowd`). A split measures the sizes in their mutation steps
+/// (`split`), so selection can move them in a node.
 fn step(lay: &Layout, g: usize, x: f32) -> f32 {
-    if (body::HIDDEN..=body::SIGHT).contains(&g) { 0.0 } else { (if g < lay.cat { x } else { x.max(0.0) }) / range(lay, g).0 }
+    (if g < lay.cat { x } else { x.max(0.0) }) / like(lay, g)
 }
 pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
     a.iter().enumerate().map(|(g, &x)| step(lay, g, x)).collect()
 }
-/// A body's spread per gene in mutation steps squared (none for the sizes of brain and senses).
+/// A body's spread per gene in steps of `like`, squared.
 pub fn spread_steps(lay: &Layout, b: &Body) -> Vec<f32> {
-    (0..b.genes.len()).map(|g| if (body::HIDDEN..=body::SIGHT).contains(&g) { 0.0 } else { b.spread.get(g).map_or(0.0, |&v| v.max(0.0)) / range(lay, g).0.powi(2) }).collect()
+    (0..b.genes.len()).map(|g| b.spread.get(g).map_or(0.0, |&v| v.max(0.0)) / like(lay, g).powi(2)).collect()
 }
 
 /// Parent genes plus noise, kept in range.
@@ -465,7 +474,7 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// splits in two (plan 7.1). The halves of a normal spread have means `d = sqrt(2/π)` standard
 /// deviations from the mean, so it splits when the halves' gap passes `phys.alike` steps along
 /// the gene where it is widest, in its steps (so not along a gene that is off in both halves; the
-/// brain's sizes count here, though not in likeness), or, with `cfg.split_rows`, of the born rows in row steps (the
+/// brain's sizes count here in their mutation steps, in likeness by whole units), or, with `cfg.split_rows`, of the born rows in row steps (the
 /// step of a changed child); among genes as wide (a spread held at `most` is as wide in every
 /// gene), a keyed random pick. `d` is shrunk to the room left to the gene's walls, so the mean is
 /// kept exactly (clamped halves moved it away from the wall, review 3, M1). Each half has half the
@@ -479,8 +488,8 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// spread, so a merge by spread would take them back every month) until they grow alike again;
 /// halves of the rows are alike (likeness is in genes), so it takes them back,
 /// the mean moved toward the one that grew, and the node splits again while its rows still differ
-/// that much: a monthly round of selection. Halves of a brain size are alike too (likeness leaves
-/// the sizes out, `alike`), so they go the same round, each paying for its own size (`Lineage::cost`
+/// that much: a monthly round of selection. Halves of a brain size are alike too (likeness counts
+/// the sizes by whole units, `like`), so they go the same round, each paying for its own size (`Lineage::cost`
 /// goes with the body's genes), and a mean that reaches a whole unit from its lineage's size moves
 /// the node to a lineage of that size (`resize`). Before (review 4, finding 1) a node never split
 /// along a size, nothing else selects a gene inside a node, and a merge only mixes means that all
