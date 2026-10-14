@@ -23,7 +23,7 @@ pub const LIQ: usize = 1;
 /// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
 /// `Physics::heat_mass` kg; it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
-/// Light-capture area, log10 m²/kg
+/// Light-capture area, log10 m²/kg of its mass that works (`Body::work`)
 pub const LEAF: usize = 3;
 /// Strength, 0..1
 pub const STRENGTH: usize = 4;
@@ -242,8 +242,9 @@ impl Body {
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
     }
-    /// Visible traits of one member; the colour is the reflectance of the stores by volume.
-    pub fn visible(&self, chem: &Chemistry) -> [f32; 6] {
+    /// Visible traits of one member; the colour is the reflectance of the stores by volume. Its
+    /// light-capture area goes with its mass up to `full` times its copy mass (`work`).
+    pub fn visible(&self, chem: &Chemistry, full: f64) -> [f32; 6] {
         let (m, cap) = self.mass_cap(chem);
         let m1 = m / self.n();
         let t = self.e / cap.max(1e-9);
@@ -258,7 +259,7 @@ impl Body {
                 }
             }
         }
-        let leaf = m1 * self.dec(LEAF);
+        let leaf = m1.min(full * self.dec(COPY_MASS)) * self.dec(LEAF);
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Learning rate of its brain within its life (0 when off).
@@ -276,8 +277,9 @@ impl Body {
     }
     /// Mass that works, kg: each member's mass up to `phys.full` times its copy mass (the size its
     /// genes set), times the count. What a member holds past that is held matter, not body: it
-    /// takes, sweeps, soaks up, catches and receives no more than at full (`phys.take`,
-    /// `phys.sweep`, the liquid exchange, rain, gifts), and copies what it can pay for (`copy`).
+    /// takes, sweeps, soaks up, catches (light and rain, on its capture area) and receives no more
+    /// than at full (`phys.take`, `phys.sweep`, the liquid exchange, `LEAF`, gifts), and copies
+    /// what it can pay for (`copy`).
     /// With all of this going with its whole mass, a body that could not pay for its children
     /// took more the more it held and grew without end (members of 10^7 kg, 95% liquid, at year
     /// 100 of a 128x128 world, review 3, M2).
@@ -936,7 +938,7 @@ pub fn day(w: &mut World) {
                 }
                 crate::copy::resize(w, s, &mut b);
                 crate::copy::split(w, s, &mut b);
-                b.vis = b.visible(&w.chem);
+                b.vis = b.visible(&w.chem, w.cfg.phys.full);
                 w.life.due[((w.day + b.interval()) % RING) as usize].push((slot, gen));
                 w.life.bodies[s] = b;
             }
@@ -1068,11 +1070,11 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // do not block it: they are matter about as warm as the surface, which takes up what the
     // body radiates and passes it on. Taken at its temperature at the start of the update (and
     // at the end, if it ends warmer).
-    let (m1, nb) = (mass / b.n(), b.n());
+    let (m1, nb, wk) = (mass / b.n(), b.n(), b.work(&cfg.phys, mass) / mass);
     let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
     let g0 = b.conductance(cfg.phys.heat_mass, mass);
     let g0 = if cover > 0.0 {
-        let s = ab / (ab + m1 * b.k.leaf);
+        let s = ab / (ab + wk * m1 * b.k.leaf);
         g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * nb * ab))
     } else {
         g0
@@ -1089,7 +1091,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // what light reactions store: so up to `MAX_INTERVAL` days of sunlight neither reach the
     // ground in one go nor are drawn back from it in one go.
     let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
-    let got = mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
+    let got = wk * mass * b.k.leaf * (light[i] - b.mark) * (1.0 - refl) * open;
     b.mark = light[i];
     let reach = (-depth / cfg.phys.light_depth).exp();
     let lit = got * reach;
@@ -1166,9 +1168,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // condensing point: through the same conductance as the heat below (cover and walls in
     // series), and once for all the liquids (what one spent is owed by the next), so the heat
     // step never needs more than the surface gives and the body never ends below that point.
-    // Matter comes in as far as its mass works (`Body::work`): share `wk` of it.
-    let wk = b.work(&cfg.phys, mass) / mass;
-    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open * wk;
+    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
     let vap_tot: f64 = tmp.pool.iter().sum();

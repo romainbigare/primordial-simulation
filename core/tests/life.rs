@@ -382,7 +382,7 @@ fn a_tall_member_shades_a_short_one() {
     (b.e, b.count) = (b.e * f, b.n() * f);
     let mut tall = b.clone();
     (tall.count, tall.genes[pcore::body::COPY_MASS], tall.k) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0, Default::default());
-    (b.vis, tall.vis) = (b.visible(&w.chem), tall.visible(&w.chem));
+    (b.vis, tall.vis) = (b.visible(&w.chem, w.cfg.phys.full), tall.visible(&w.chem, w.cfg.phys.full));
     let slots = [w.life.add(tall, w.day, 1), short];
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     pcore::body::survey(&mut w);

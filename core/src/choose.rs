@@ -317,7 +317,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
     }
     if let Some(mut o) = one {
-        o.vis = o.visible(&w.chem);
+        o.vis = o.visible(&w.chem, w.cfg.phys.full);
         w.life.bodies[me] = o;
         if w.life.bodies[me].hold == 0 && w.life.bodies[me].inside == 0 {
             let (o, rows) = (w.life.bodies[me].clone(), w.life.born(node).to_vec());
@@ -519,7 +519,7 @@ fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
         if !left || (o.n() <= 1.0 && (o.mass(&w.chem) < 0.5 * m || o.lacking(&w.chem))) {
             body::die(w, s, o, BROKEN);
         } else {
-            o.vis = o.visible(&w.chem);
+            o.vis = o.visible(&w.chem, w.cfg.phys.full);
             w.life.bodies[s] = o;
         }
     }
@@ -687,7 +687,7 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
         body::die(w, s, o, TAKEN);
     } else {
         o.note(b.id(slot), -(10.0 * got / mo) as f32);
-        o.vis = o.visible(&w.chem);
+        o.vis = o.visible(&w.chem, w.cfg.phys.full);
         w.life.bodies[s] = o;
     }
 }
@@ -715,7 +715,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let mut o = std::mem::take(&mut w.life.bodies[s]);
     transfer(w, b, &mut o, &m);
     o.note(b.id(slot), (10.0 * got / mo) as f32);
-    o.vis = o.visible(&w.chem);
+    o.vis = o.visible(&w.chem, w.cfg.phys.full);
     w.events.push(Event { day: w.day, kind: EventKind::Gave { from: b.id(slot), to: o.id(s) }, node: b.cell, value: got });
     w.life.bodies[s] = o;
 }
@@ -727,7 +727,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
 /// light-capture area, strength), as a body can only copy what its own body can do.
 fn watch(w: &mut World, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
-    let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem)));
+    let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem, w.cfg.phys.full)));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / 0.2).powi(2))).exp();
     let alike = if w.cfg.null { 0.0 } else { w.cfg.phys.blend * alike };

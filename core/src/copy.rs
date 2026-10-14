@@ -304,7 +304,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         c.genome = w.life.new_genome(v);
     }
     own(w, b, &mut c);
-    (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem));
+    (c.wet, c.vis) = (c.key_liquids(&w.chem), c.visible(&w.chem, w.cfg.phys.full));
     let delay = c.interval();
     let s = w.life.add(c, w.day, delay);
     w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
@@ -400,7 +400,7 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: &[f32]) {
     w.life.reborn(o, genes, born);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     (o.e, o.count, o.paid) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid);
-    o.vis = o.visible(&w.chem);
+    o.vis = o.visible(&w.chem, w.cfg.phys.full);
 }
 
 /// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the
