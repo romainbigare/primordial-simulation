@@ -306,26 +306,32 @@ pub struct Physics {
     pub deep: f64,
     pub afloat: f64,
     // Copy
-    /// Energy to make one kg of child, J, of what it is built of (not the liquid it carries, which
-    /// is only moved: 14 Oct 2026). Growth in life keeps 10 to 20% of the energy it eats, so
-    /// a kg of body costs about 10^7 J. A body pays it into its child store across updates as
-    /// fast as its reactions release it (`Body::paid`, review 3, P6), so it need not release it
-    /// in one interval: a starting eater copying at 63 kg gives 19 kg to a child, 1.9 x 10^8 J,
-    /// and can release 1.2 x 10^8 J in 9 days at 288 K (2 x 10^6 until 13 Oct 2026, when it had to).
+    /// Energy to make one kg of body matter, J: the work of building (14 Oct 2026, decision after
+    /// watch report 7; before, per kg of the dry mass of a child, from 13 Oct 2026, paid into a
+    /// child store). A member below `full` times its copy mass of body makes matter of the
+    /// energy-rich solid and pays this in work per kg made, through `body::pay` (`copy::grow`);
+    /// storing fuel costs none, and a child costs its parent no work: it is given matter its parent
+    /// built. Growth in life keeps 10 to 20% of the energy it eats, so a kg of body costs about 10^7 J;
+    /// with the 1.11 kg of the solid converted besides (6 x 30 g for 162 g, 17.3 MJ) a kg of matter
+    /// takes 27.3 MJ of fuel in all, 62% efficient.
     pub c_copy: f64,
-    /// Most work a body can put into its children per day, J, for a member of `m_ref` (1 kg);
+    /// Most work a body can put into building body matter per day, J, for a member of `m_ref` (1 kg);
     /// a member of `m` kg pays at most this x (`m` / `m_ref`)^`intake_exp` x days (`Body::equiv`,
-    /// `copy::copy`): building a body takes time, small ones grow fast and big ones slowly
-    /// (14 Oct 2026, review 5). Anchored to the growth of young in life: a 1 kg animal makes about
-    /// 1 kg of dry young a year (2.7 x 10^4 J a day at `c_copy`), a 50 kg one about 1 kg a year
-    /// (1,450 per kg^0.75), a 1 t one about 10 kg (1,500): anchored to 1,500 to 30,000. 10^4,
-    /// review 5's value. It was 3 x 10^4 for part of 14 Oct, raised only so the starting eaters
-    /// (neutral brains, which starve within weeks) bred faster than they starved: a start decided a
-    /// law, which makes every life 3 times shorter (review 6, finding 1). The start is now hand-set
-    /// instead (`ew run`: the eater biases) and no law is set for a start. A 57 kg eater
-    /// (20.8 kg^0.75) then needs 245 days for a child of 17 kg. A grown body also takes in no more
-    /// than its reactions can use, its upkeep plus this (`choose::sate`). Marked tuned in
-    /// `docs/numbers.md`: it was chosen within its range by what runs did
+    /// `copy::grow`): building a body takes time, small ones grow fast and big ones slowly
+    /// (14 Oct 2026, review 5; the work was for children until the decision after watch report 7, and
+    /// growth was free; it is for growth now, and a child is born of matter already built). Anchored
+    /// to the growth of young in life: a 1 kg animal makes about 1 kg of dry young a year (2.7 x 10^4
+    /// J a day at `c_copy`), a 50 kg one about 1 kg a year (1,450 per kg^0.75), a 1 t one about 10 kg
+    /// (1,500): anchored to 1,500 to 30,000. 10^4, review 5's value; it was 3 x 10^4 for part of 14 Oct,
+    /// raised only so the starting eaters (neutral brains, which starve within weeks) bred faster
+    /// than they starved: a start decided a law, which makes every life 3 times shorter (review 6,
+    /// finding 1). The start is now hand-set instead (`ew run`: the eater biases) and no law is set
+    /// for a start. Charged on body matter only (17% of a plant's mass) it lets a 1 kg plant make
+    /// 0.37 kg of matter, about 1.5 kg of body, a year; on all of the dry mass (the fuel it stored
+    /// too) it was 10 to 100 times too slow for plants and every animal died (watch report 7). A
+    /// grown body also takes in no more than its reactions can use, its upkeep plus this and the
+    /// fuel converted (`choose::sate`). Marked tuned in `docs/numbers.md`: it was chosen within its
+    /// range by what runs did
     pub c_build: f64,
     /// Chance that a child starts a new lineage with a changed base, and the size of that change
     pub new_lineage: f64,
@@ -336,8 +342,10 @@ pub struct Physics {
     pub row_noise: f32,
     /// Spread of the weights a bigger brain adds
     pub new_noise: f32,
-    /// A member holding this many times its copy mass copies at its update whatever its brain
-    /// does (`body::live`: physics); the brain's copy action copies only before that
+    /// A member whose body (`Body::size`: its matter and the liquid it keeps with it, not its fuel)
+    /// is this many times its copy mass copies at its update whatever its brain does
+    /// (`body::live`: physics); the brain's copy action copies only before that. Growth builds a
+    /// body up to it (`copy::grow`), and it caps the mass that works (`Body::work`)
     pub full: f64,
     /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
     /// (`copy::alike`). A node splits when its two halves would differ by more, in a gene or in

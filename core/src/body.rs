@@ -162,15 +162,6 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
-    /// Child store: the work already done toward its next children, J (`copy::copy`). The energy
-    /// paid left the body as heat when it was paid (`pay`), so this is a count of work done, not
-    /// energy held: lost at death, shared out and added up as members split and join.
-    #[serde(default)]
-    pub paid: f64,
-    /// The day work was last paid into the child store (none: never), so that building takes
-    /// time once per day however often a body copies in one update (`copy::copy`, review 6, finding 6).
-    #[serde(default)]
-    pub paid_day: Option<u64>,
     /// An individual's wear, 0 at birth: the energy its upkeep turned over per kg, over what it
     /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
     /// has none: its members are of all ages (`live`).
@@ -291,7 +282,7 @@ impl Body {
                 }
             }
         }
-        let leaf = self.equiv(p, self.work(p, m)) / self.n() * self.dec(LEAF);
+        let leaf = self.equiv(p, self.work(p, self.size(chem))) / self.n() * self.dec(LEAF);
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Learning rate of its brain within its life (0 when off).
@@ -307,17 +298,55 @@ impl Body {
         let (t, lay) = (self.temp(chem), Layout::of(chem));
         (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase(k, t) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
     }
-    /// Mass that works, kg: each member's mass up to `phys.full` times its copy mass (the size its
-    /// genes set), times the count. What a member holds past that is held matter, not body: it
-    /// soaks up, catches (light and rain, on its capture area, `LEAF`) and exchanges liquid no more
-    /// than at full, and copies what it can pay for (`copy`). What it takes, sweeps and receives
-    /// goes by its whole mass (`equiv`), as far as it can use it (`choose::sate`, since 14 Oct 2026;
-    /// before, by this mass).
+    /// Mass that works, kg: each member's body (`size`, not its whole mass) up to `phys.full` times its
+    /// copy mass (the size its genes set), times the count. What a member holds past that is held
+    /// matter, not body: it soaks up, catches (light and rain, on its capture area, `LEAF`) and
+    /// exchanges liquid no more than at full, and copies what it can pay for (`copy`). What it
+    /// takes, sweeps and receives goes by its whole mass (`equiv`), as far as it can use it
+    /// (`choose::sate`, since 14 Oct 2026; before, by this mass).
     /// With all of this going with its whole mass, a body that could not pay for its children
     /// took more the more it held and grew without end (members of 10^7 kg, 95% liquid, at year
     /// 100 of a 128x128 world, review 3, M2).
-    pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
-        mass.min(p.full * self.dec(COPY_MASS) * self.n())
+    pub fn work(&self, p: &crate::Physics, size: f64) -> f64 {
+        size.min(p.full * self.dec(COPY_MASS) * self.n())
+    }
+    /// The body, kg (all members): its body matter and the liquid it holds with it. The matter is
+    /// `Chemistry::matter` (what growth makes, `copy::grow`); the liquid is the key liquid it keeps,
+    /// `h` the most share of its mass it keeps of it (the keep gene, below 0.95, `level`), so a body
+    /// is its matter over 1 - `h`, and no more than its matter and all its liquid (a body short of
+    /// liquid is as big as it is wet). The fuel it stores (the energy-rich solid, fat, whatever it
+    /// burns) and liquid held past `h` are not body (14 Oct 2026, decision after watch
+    /// report 7: a body's dry mass here was mostly its sugar store, so building work was charged on
+    /// stored fuel and every animal died). The copy trigger, the mass that works (`work`) and the
+    /// height order of `shade` go by it; intake, upkeep and heat by the whole mass. A chemistry with
+    /// no body matter (`Chemistry::build`): the whole mass.
+    pub fn size(&self, chem: &Chemistry) -> f64 {
+        let Some(m) = chem.matter() else { return self.mass(chem) };
+        let matter = self.store[m] * chem.subs[m].molar_mass;
+        let (liquid, h) = self.wet_h(chem);
+        (matter / (1.0 - h)).min(matter + liquid)
+    }
+    /// The key liquids it holds, kg (all members), and the most share of its mass it keeps of any
+    /// of them (its keep gene, 0..0.95).
+    pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
+        let keep = Layout::of(chem).keep;
+        (0..chem.ns()).filter(|&k| self.wet >> k & 1 == 1).fold((0.0, 0.0), |(l, h), k| (l + self.store[k] * chem.subs[k].molar_mass, h.max(self.gene(keep + k).clamp(0.0, 0.95))))
+    }
+    /// The fuel growth converts into one kg of body matter, J (what its catalysed reactions would
+    /// release from the inputs of `Chemistry::build`; 0 where bodies do not grow): 1.11 kg of the
+    /// energy-rich solid, 17.3 MJ, in chemistry 0 for a body that burns it. Needs `prepare`.
+    pub fn build_fuel(&self, chem: &Chemistry, t: f64) -> f64 {
+        let Some(bl) = chem.build.as_ref() else { return 0.0 };
+        let mm = chem.subs[bl.outputs[0].0 as usize].molar_mass * bl.outputs[0].1 as f64;
+        bl.inputs.iter().map(|&(k, nu)| nu as f64 * self.heat_of(chem, k as usize, t)).sum::<f64>() / mm
+    }
+    /// Energy a mole of `k` gives its body's catalysed reactions at temperature `t` (J; 0 for a gas
+    /// or what none of its reactions burns): the best over `Consts::burn`. Needs `prepare`.
+    pub fn heat_of(&self, chem: &Chemistry, k: usize, t: f64) -> f64 {
+        if chem.phase(k, t) == Phase::Gas {
+            return 0.0;
+        }
+        self.k.burn.iter().filter_map(|&(r, e)| chem.reactions[r].inputs.iter().find(|x| x.0 as usize == k).map(|x| e / x.1 as f64)).fold(0.0, f64::max)
     }
     /// Mass-equivalent a body's size is counted by, kg (in place of the mass, for what goes with
     /// mass^0.75 in life): per member `m_ref` times its `mass` over `m_ref`, to the power
@@ -339,9 +368,9 @@ impl Body {
     /// count. A 1 kg plant of 2 m² per kg: 2.06 m²; a 30 kg eater with 0.03 m² of capture area per
     /// kg-equivalent (12.8): 0.38 + 0.58 m². Needs `prepare`. The `GAS` gene is the air exchanged
     /// per m² of it per day.
-    pub fn open_area(&self, p: &crate::Physics, mass: f64) -> f64 {
+    pub fn open_area(&self, chem: &Chemistry, p: &crate::Physics, mass: f64) -> f64 {
         let m1 = mass / self.n();
-        self.equiv(p, self.work(p, mass)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
+        self.equiv(p, self.work(p, self.size(chem))) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
     }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
     /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
@@ -853,19 +882,20 @@ pub fn survey(w: &mut World) {
 }
 
 /// Light passes through the bodies of a cell from the tallest member down: a member's height is
-/// `(mass / rho_body)^(1/3)` (a body has no shape yet), so the order is that of member mass, and
+/// `(body / rho_body)^(1/3)` (a body has no shape yet; its body, `Body::size`, not its fuel or
+/// the liquid it holds, 14 Oct 2026), so the order is that of member body mass, and
 /// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
 /// `1 - exp(-x)` of what reaches it, so a big member shades a small one and size pays. Together
 /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
 /// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
 fn shade(w: &mut World) {
     let g = |x: f64| if x > 1e-9 { -(-x).exp_m1() / x } else { 1.0 - 0.5 * x };
-    let (Life { bodies, at, shade, .. }, area) = (&mut w.life, w.grid.area());
+    let (Life { bodies, at, shade, .. }, area, chem) = (&mut w.life, w.grid.area(), &w.chem);
     shade.resize(bodies.len(), 1.0);
     let mut l: Vec<(f32, f64, usize)> = Vec::new();
     for s in at.iter() {
         l.clear();
-        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.vis[0], b.vis[1] as f64 * b.n() / area, s)));
+        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| ((b.size(chem) / b.n()) as f32, b.vis[1] as f64 * b.n() / area, s)));
         l.sort_by(|a, b| b.0.total_cmp(&a.0));
         let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
         while k < l.len() {
@@ -1173,9 +1203,10 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // do not block it: they are matter about as warm as the surface, which takes up what the
     // body radiates and passes it on. Taken at its temperature at the start of the update (and
     // at the end, if it ends warmer).
-    let (m1, nb, wk) = (mass / b.n(), b.n(), b.work(&cfg.phys, mass) / mass);
-    // Its light-capture area, all members' (`visible`): of the mass that works, by mass^0.75.
-    let leaf = b.equiv(&cfg.phys, b.work(&cfg.phys, mass)) * b.k.leaf;
+    let work = b.work(&cfg.phys, b.size(chem));
+    let (m1, nb, wk) = (mass / b.n(), b.n(), work / mass);
+    // Its light-capture area, all members' (`visible`): of the mass that works (its body), by mass^0.75.
+    let leaf = b.equiv(&cfg.phys, work) * b.k.leaf;
     let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
     let g0 = b.conductance(cfg.phys.m_ref, mass);
     let g0 = if cover > 0.0 {
@@ -1205,7 +1236,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // The air the body exchanges gas with in this time (mol), from its air node; liquid over
     // the body slows it.
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let reach_mol = b.k.gas * b.open_area(&cfg.phys, mass) * days * (-depth / cfg.phys.gas_depth).exp();
+    let reach_mol = b.k.gas * b.open_area(chem, &cfg.phys, mass) * days * (-depth / cfg.phys.gas_depth).exp();
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..ns {
@@ -1364,10 +1395,16 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if (0..ns).any(|k| b.wet >> k & 1 == 1 && chem.phase(k, t) != Phase::Liquid) {
         return Some(PHASE);
     }
-    // Copying when full is physics, not a choice (review 3, W3): a member past `phys.full` times
-    // its copy mass copies at its update whatever its brain does (the brain's copy action is for
-    // copying before that), so a body that decides rarely still copies when full.
-    if mass3 / b.n() >= w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
+    // Growth is building body matter (14 Oct 2026, decision after watch report 7): a member
+    // below `phys.full` times its copy mass of body makes matter of the energy-rich solid, paid by
+    // work, as far as its allowance goes (`copy::grow`). Then copying when full is physics, not a
+    // choice (review 3, W3): a member whose body is past that copies at its update whatever its
+    // brain does (the brain's copy action is for copying before that), so a body that decides
+    // rarely still copies when full.
+    if crate::copy::grow(w, b, days) {
+        (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
+    }
+    if b.size(&w.chem) / b.n() >= (1.0 - 1e-9) * w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
         (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
     }
     None
@@ -1444,7 +1481,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (b.k.gas * b.open_area(&w.cfg.phys, mass) * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
+    let share = (b.k.gas * b.open_area(chem, &w.cfg.phys, mass) * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
     let t = b.e / cap.max(1e-9);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; 64];

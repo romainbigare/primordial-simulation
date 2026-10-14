@@ -6,8 +6,18 @@
 //! what its parent learned). A child whose brain-size genes are a whole unit away from its
 //! lineage's sizes starts a new lineage (and group) with the new sizes, its brain carried over
 //! where the sizes overlap; rarely the base of its lineage's brain is copied with small noise,
-//! which starts a new lineage too. A member past `phys.full` times its copy mass has as many
-//! children as it grew past that, at its update whatever its brain does (`body::live`).
+//! which starts a new lineage too. A member whose body (`Body::size`: its matter and the liquid it
+//! holds with it, not its fuel) is past `phys.full` times its copy mass has as many children as it
+//! grew past that, at its update whatever its brain does (`body::live`).
+//!
+//! Growth is building (14 Oct 2026, decision after watch report 7): a member below that size
+//! turns the energy-rich solid into body matter (`Chemistry::build`) and pays `c_copy` per kg of
+//! matter made in work (`grow`), as far as its allowance goes (`c_build`), its reactions can spare
+//! and its stores reach. Storing fuel costs no building work. A child is given a share of every
+//! store, body matter included, which its parent built and paid for, so a child costs its parent
+//! no further work: it needs only the matter to exist, and children come as fast as parents rebuild
+//! what they gave (there is no child store). Before, a child owed `c_copy` per kg of its dry mass,
+//! paid into a child store, and a body grew by eating for nothing.
 //!
 //! A population node (count > 1) keeps how its members differ (plan 7.1): its spread, the
 //! variance of their genes around its genes, per gene, and of their born rows around its rows
@@ -225,57 +235,97 @@ pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
     }
 }
 
+/// Growth is building body matter (14 Oct 2026, decision after watch report 7). A member
+/// whose body is below `phys.full` times its copy mass makes the matter that lacks (`Chemistry::build`:
+/// 6 of the energy-rich solid make 1 of matter and 1 of liquid, element-exact and thermoneutral in
+/// chemistry 0) and pays `c_copy` per kg of matter made, through `body::pay` (the work leaves as
+/// heat, as a child's did), as far as: (1) its allowance, `c_build` x its `equiv` / `m_ref` x the days
+/// of its interval (building takes time, review 5); (2) its spare: after what is paid and what is
+/// converted leave its fuel, its reactions must still release its upkeep over an interval at today's
+/// rate (the rule of copying before `full`); (3) what its reactions can release now; (4) the stores
+/// it converts, which must also cover the fuel the work burns. Storing fuel costs no building work.
+/// The matter is part of the body at once; the liquid that goes with it comes by soaking (`live`).
+/// A kg of matter costs `c_copy` of work and 1.11 kg of the solid converted (6 x 30 g for 162 g)
+/// besides, 1.75 kg of it with the fuel the work burns (62% efficient, as growth in life). Returns
+/// whether it built.
+pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
+    let (chem, p) = (&w.chem, &w.cfg.phys);
+    let Some(bl) = chem.build.as_ref() else { return false };
+    let m = bl.outputs[0].0 as usize;
+    // (A unit of growth makes `nu0` mol of matter; chemistry 0: 1.)
+    let (n, nu0, mm) = (b.n(), bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
+    let full = p.full * b.dec(body::COPY_MASS) * n;
+    // The matter that makes its body full: the body is its matter over 1 - h (`Body::size`).
+    let (_, h) = b.wet_h(chem);
+    let want = full * (1.0 - h) - b.store[m] * mm;
+    if want <= 1e-9 * full {
+        return false;
+    }
+    let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
+    let room = p.c_build * b.equiv(p, mass) / p.m_ref * days.min(ivl);
+    let r = 0.999 * body::release(w, b, ivl);
+    if room <= 0.0 || r <= 0.0 {
+        return false;
+    }
+    // The fuel it spares: what is paid and the solid converted leave its fuel, less the matter's own
+    // fuel if it burns that too. Per kg of matter made, J.
+    let (ins, outs) = (&bl.inputs, &bl.outputs);
+    let per_kg = p.c_copy + b.build_fuel(chem, t) - b.heat_of(chem, m, t) / mm;
+    let spare = b.fuel(chem, t) * (1.0 - body::upkeep(w, b, ivl, mass) / r);
+    // The stores it converts must also cover the fuel the work burns (each input that burns), and
+    // leave the safe minimum of each (a body is not built of its last fuel: below its minimum it dies).
+    let lay = Layout::of(chem);
+    let reach = ins.iter().map(|&(k, nu)| {
+        let heat = b.heat_of(chem, k as usize, t);
+        let floor = b.gene(lay.min + k as usize).max(0.0) * mass / chem.subs[k as usize].molar_mass;
+        (b.store[k as usize] - floor).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
+    });
+    let kg = want.min(room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300)).min(reach.fold(f64::MAX, f64::min));
+    if kg <= 1e-12 * full {
+        return false;
+    }
+    // (The minimum of each input, mol.)
+    let floors: Vec<f64> = ins.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * mass / chem.subs[k as usize].molar_mass).collect();
+    let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_build(), p.c_copy * kg);
+    if !body::pay(w, b, cost, ivl) {
+        return false;
+    }
+    // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.
+    let ext = ins.iter().zip(&floors).fold(kg / (mm * nu0), |e, (&(k, nu), f)| e.min((b.store[k as usize] - f).max(0.0) / nu as f64));
+    for &(k, nu) in &ins {
+        // (A store used up to its last mol is zero, not a rounding below it.)
+        b.store[k as usize] = (b.store[k as usize] - nu as f64 * ext).max(0.0);
+    }
+    for &(k, nu) in &outs {
+        b.store[k as usize] += nu as f64 * ext;
+    }
+    b.e -= dh * ext;
+    true
+}
+
+/// A member (an individual, or the members of a node alike) copies. It gives a share of every store,
+/// body matter included, and of its heat to children, which its parent built: no further work is
+/// owed (`grow` paid for the matter, 14 Oct 2026). It needs a body (`Body::size`) of its copy mass,
+/// and a body past `phys.full` times it gives all it grew past that.
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let lay = Layout::of(&w.chem);
-    let (mass, n, mc) = (b.mass(&w.chem), b.n(), b.dec(body::COPY_MASS));
-    if mass < mc * n {
+    let (size, n, mc) = (b.size(&w.chem), b.n(), b.dec(body::COPY_MASS));
+    if size < mc * n {
         return false;
     }
     let id = b.id(slot);
     let mut r = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     let frac = b.gene(body::CHILD).clamp(0.05, 0.5);
     // A member past `phys.full` times its copy mass gives all it grew past that to children of the
-    // size it would give at that mass: share `s` of its stores, `k` children.
-    let (m1, full) = (mass / n, w.cfg.phys.full * mc);
+    // size it would give at that mass: share `s` of its stores, `k` children. So a parent past
+    // `full` (its excess, fed by what it ate) gives its excess body, and one below it splits off a
+    // share `s` of its body: children cannot come faster than bodies are built or eaten.
+    let (m1, full) = (size / n, w.cfg.phys.full * mc);
     let (s, k) = if m1 > full { (1.0 - (1.0 - frac) * full / m1, (m1 / full - 1.0 + frac) / frac) } else { (frac, 1.0) };
-    // The work of making them, `c_copy` per kg given, is paid into the child store (`Body::paid`)
-    // as far as its reactions can release it now (review 3, P6): copying is a process, so a body
-    // need not release a child's whole cost in one interval, nor a member far past `full` all
-    // its children's at once (all or nothing, it could never pay and grew without end, M2). Past
-    // `full` it must (physics, `body::live`); before, by its brain's choice, it pays only what it
-    // can spare: its fuel `f` (what its reactions could release from its stores) as far as, less
-    // what it pays, it can still release its upkeep `u` over an interval at today's rate `r`
-    // (first order in the fuel): (f - paid) r / f >= u. (Sparing past `full` too, a body short of
-    // fuel for its size never copied, and grew to 10^5 kg.) It has the children the store covers:
-    // a node a share of them, an individual whole ones; the rest later. The work is for what the
-    // children are built of: the liquid they carry is only moved (counted, a member of mostly
-    // liquid could not pay for a child, never copied and swelled to 30 times its copy mass). And
-    // building takes time: at most `c_build` x mass^0.75 a day, so a child takes months to build
-    // for a 1 kg body and years for a 2,000 t one (`Physics::c_build`), whatever its reactions release.
-    let t = b.temp(&w.chem);
-    let wet: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == crate::chem::Phase::Liquid).map(|k| b.store[k] * w.chem.subs[k].molar_mass).sum();
-    let (owe, days) = (w.cfg.phys.c_copy * s * (mass - wet).max(0.0), b.interval() as f64);
-    let more = if owe > b.paid {
-        let r = 0.999 * body::release(w, b, days);
-        let spare = if m1 >= full { r } else { b.fuel(&w.chem, b.temp(&w.chem)) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300)) };
-        // Building takes time (14 Oct 2026, review 5): never more than `c_build` x its `equiv` x the
-        // days. The days since it last paid, at most its interval (review 6, finding 6): a body that
-        // copies past `full` at its update (`body::live`) and again by its brain's choice (`choose::act`)
-        // in the same update pays once.
-        let build = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, mass) / w.cfg.phys.m_ref * days.min(b.paid_day.map_or(days, |d| w.day.saturating_sub(d) as f64));
-        (owe - b.paid).min(spare).min(r).min(build)
-    } else {
-        0.0
-    };
-    if more > 0.0 && body::pay(w, b, more, days) {
-        (b.paid, b.paid_day) = (b.paid + more, Some(w.day));
-    }
-    let p = if owe > 0.0 { (b.paid / owe).min(1.0) } else { 1.0 };
-    let (i, births) = (b.cell as usize, if n > 1.0 { n * k * p } else { (k * p + 1e-9).floor() });
+    let (i, births) = (b.cell as usize, if n > 1.0 { n * k } else { (k + 1e-9).floor() });
     if births <= 0.0 {
         return false;
     }
-    b.paid = (b.paid - owe * births / (n * k)).max(0.0);
     let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
     w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: i as u32, value: births });
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
@@ -297,8 +347,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
             return true;
         }
     }
-    // Each child gets share `s / k` of a member's stores (a node's children were 1 / p too big
-    // when it paid for a share p of them).
+    // Each child gets share `s / k` of a member's stores.
     let share = s * m / (n * k);
     let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, &mut r);
     let mut c = Body {
@@ -458,7 +507,7 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 }
 
 /// Members `c` (not placed, born with `rows`, in the shape of `t`'s brain) join body `t`:
-/// stores, heat and child stores add up; genes and born rows become the means by count, and the spread what
+/// stores and heat add up; genes and born rows become the means by count, and the spread what
 /// both held around the new mean (each one's spread plus its gap from the new mean squared, by
 /// count; for the rows the gap squared is the mean over rows; up to `most`), so the smaller one's
 /// genes stay in the spread, not only in the mean.
@@ -491,22 +540,22 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
     }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     // A node has no wear: its members are of all ages (`body::live`).
-    (o.e, o.count, o.paid, o.wear, o.paid_day) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0, o.paid_day.max(c.paid_day));
+    (o.e, o.count, o.wear) = (o.e + c.e, o.n() + c.n(), 0.0);
     o.vis = o.visible(&w.chem, &w.cfg.phys);
 }
 
-/// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the
-/// heat and of the child store; lineage, group, genome, memory as the node's; holding nothing, inside nothing.
+/// Share `f` of node `b`'s members as a new body (not placed): that share of each store and of the
+/// heat; lineage, group, genome, memory as the node's; holding nothing, inside nothing.
 fn part(b: &mut Body, f: f64) -> Body {
     // (The trace and the constants are not the part's: set aside, not cloned.)
     let (trace, k) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k));
-    let mut c = Body { count: f * b.count, e: f * b.e, paid: f * b.paid, hold: 0, inside: 0, ..b.clone() };
+    let mut c = Body { count: f * b.count, e: f * b.e, hold: 0, inside: 0, ..b.clone() };
     (b.trace, b.k) = (trace, k);
     for (a, x) in b.store.iter_mut().zip(c.store.iter_mut()) {
         *x = f * *a;
         *a -= *x;
     }
-    (b.e, b.count, b.paid) = (b.e - c.e, b.count - c.count, b.paid - c.paid);
+    (b.e, b.count) = (b.e - c.e, b.count - c.count);
     c
 }
 
