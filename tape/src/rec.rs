@@ -58,6 +58,18 @@ struct Social {
     inside: [[f64; 2]; 2],
     /// What bodies did with parts this year (from the core's tally)
     tally: pcore::bond::Tally,
+    /// By starting kind (`Lineage::root`) since the last yearly row: members born, members died by
+    /// cause (the causes of `Recorder::deaths`), members summed over the months (standing members
+    /// are this over `stand_months`) and the months counted
+    root_births: Vec<f64>,
+    root_deaths: Vec<[f64; 6]>,
+    root_stand: Vec<f64>,
+    stand_months: f64,
+    /// Mean ground temperature over land (K) at the end of each month since the last yearly row;
+    /// land is what the tape counts as land everywhere: solid surface above 0 m (the cells are
+    /// listed at the first month of a year, `land`)
+    t_land: Vec<f64>,
+    land: Vec<u32>,
 }
 
 impl Social {
@@ -93,6 +105,33 @@ fn info(sig: &[[[[f64; 4]; 2]; 3]], c: usize) -> f64 {
     }
     sum / all.max(1.0)
 }
+
+/// Sums over the live members of one starting kind (`Recorder::push_series`): members, bodies, member-years of life,
+/// mass (kg), member-copy-mass (kg), the genes of `GENES` (by members), and per catalyst gene the sum over the members
+/// that carry it on and the members that do.
+#[derive(Clone)]
+struct Root {
+    members: f64,
+    bodies: f64,
+    life: f64,
+    mass: f64,
+    copy_mass: f64,
+    genes: [f64; 6],
+    cat: Vec<(f64, f64)>,
+}
+
+impl Root {
+    fn new(nr: usize) -> Self {
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, copy_mass: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
+    }
+}
+
+/// The genes averaged per starting kind, and their column names (`root_<k>_<name>`); the repair gene is the old
+/// `root_<k>_repair`, so it comes last here and is printed in its old place.
+const GENES: [usize; 6] = [pcore::body::GAS, pcore::body::LEAF, pcore::body::COPY_MASS, pcore::body::INTERVAL, pcore::body::HIDDEN, pcore::body::REPAIR];
+const GENE_NAMES: [&str; 5] = ["gas", "leaf", "copy_log", "interval", "hidden"];
+/// Death causes in the order of the core's constants (`LACK` .. `AGE`).
+const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
 
 pub struct Recorder {
     /// Meta: width, height, cell size, seed, days per year
@@ -237,12 +276,22 @@ impl Recorder {
         let events: Vec<Event> = w.events.drain(..).collect();
         for e in events {
             match e.kind {
-                EventKind::Born { cat } => {
+                EventKind::Born { cat, root } => {
                     self.births += e.value;
+                    if root != u32::MAX {
+                        let v = &mut self.social.root_births;
+                        v.resize(v.len().max(root as usize + 1), 0.0);
+                        v[root as usize] += e.value;
+                    }
                     self.split[0][(cat < measure::LIGHT_EATER) as usize] += e.value;
                 }
-                EventKind::Died { cause, cat } => {
+                EventKind::Died { cause, cat, root } => {
                     self.deaths[(cause as usize).min(5)] += e.value;
+                    if root != u32::MAX {
+                        let v = &mut self.social.root_deaths;
+                        v.resize(v.len().max(root as usize + 1), [0.0; 6]);
+                        v[root as usize][(cause as usize).min(5)] += e.value;
+                    }
                     if cat < measure::LIGHT_EATER {
                         self.deaths_a[(cause as usize).min(5)] += e.value;
                         if cause == pcore::body::SPENT {
@@ -313,8 +362,13 @@ impl Recorder {
         let (chem, gw, s) = (&w.chem, w.grid.w as u32, &mut self.social);
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
         let mut last = vec![(u32::MAX, 0); w.life.bodies.len()];
+        s.stand_months += 1.0;
         for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let i = b.cell as usize;
+            if let Some(l) = &w.life.brains[b.lineage as usize] {
+                s.root_stand.resize(s.root_stand.len().max(l.root as usize + 1), 0.0);
+                s.root_stand[l.root as usize] += b.n();
+            }
             let t = w.life.env.get(i).map_or(285.0, |e| e[0]);
             let ctx = [t < 283.0, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0];
             let q = (b.sig[0] > 0.0) as usize * 2 + (b.sig[1] > 0.0) as usize;
@@ -343,6 +397,11 @@ impl Recorder {
             }
         }
         s.last = last;
+        // The land's mean ground temperature this month (the land is listed again each year).
+        if s.t_land.is_empty() {
+            s.land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).map(|i| i as u32).collect();
+        }
+        s.t_land.push(s.land.iter().map(|&i| w.thaw(i as usize).0).sum::<f64>() / s.land.len().max(1) as f64);
         let dpm = w.cfg.days_per_month as u64;
         let (y, m) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
         let mean = sum.map(|v| v / n.max(1.0));
@@ -406,18 +465,33 @@ impl Recorder {
         let w = c.w;
         // Members (the sum of counts) of light-eaters and of the others; nodes and individuals of the others.
         let (mut members, mut nodes) = ([0.0; 2], 0.0);
-        // Bodies and members by the starting kind they descend from (`Lineage::root`), and the members' mean life (years at
-        // their upkeep now) and repair gene. The columns `root_<k>_*` are for every k up to the largest seen so far (also in
-        // the columns of a resumed tape), so a kind that died out reads 0.
-        let mut by_root: Vec<[f64; 4]> = vec![[0.0; 4]; self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count()];
+        // Bodies and members by the starting kind they descend from (`Lineage::root`), with the sums for their means by
+        // members (`Root`). The columns `root_<k>_*` are for every k up to the largest seen so far (also in the columns of a
+        // resumed tape), so a kind that died out reads 0 (its means NaN).
+        let nr = w.chem.reactions.len();
+        let seen = self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count();
+        let mut by_root: Vec<Root> = vec![Root::new(nr); seen.max(self.social.root_births.len()).max(self.social.root_deaths.len())];
+        let cat = pcore::body::Layout::of(&w.chem).cat;
         for b in life.alive() {
             if let Some(l) = &life.brains[b.lineage as usize] {
                 let k = l.root as usize;
                 if k >= by_root.len() {
-                    by_root.resize(k + 1, [0.0; 4]);
+                    by_root.resize(k + 1, Root::new(nr));
                 }
-                let r = &mut by_root[k];
-                (r[0], r[1], r[2], r[3]) = (r[0] + b.n(), r[1] + 1.0, r[2] + b.n() * life_years(w, b), r[3] + b.n() * b.gene(pcore::body::REPAIR));
+                let (r, n) = (&mut by_root[k], b.n());
+                r.members += n;
+                r.bodies += 1.0;
+                r.life += n * life_years(w, b);
+                r.mass += b.mass(&w.chem);
+                r.copy_mass += n * b.dec(pcore::body::COPY_MASS);
+                for (x, g) in r.genes.iter_mut().zip(GENES) {
+                    *x += n * b.gene(g);
+                }
+                for (x, &g) in r.cat.iter_mut().zip(&b.genes[cat..cat + nr]) {
+                    if g >= 0.0 {
+                        (x.0, x.1) = (x.0 + n * g as f64, x.1 + n);
+                    }
+                }
             }
             members[!crate::light_eater(&w.chem, &b.genes) as usize] += b.n();
             nodes += (!crate::light_eater(&w.chem, &b.genes) && b.n() > 1.0) as u8 as f64;
@@ -469,10 +543,35 @@ impl Recorder {
             ("a_age".to_string(), "1/yr", self.deaths_a[5]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
-        let per = |v: &[f64; 4], x: f64| if v[0] > 0.0 { x / v[0] } else { f64::NAN };
-        row.extend(by_root.iter().enumerate().flat_map(|(k, v)| {
-            [(format!("root_{k}_members"), "1", v[0]), (format!("root_{k}_bodies"), "1", v[1]), (format!("root_{k}_life"), "yr", per(v, v[2])), (format!("root_{k}_repair"), "1", per(v, v[3]))]
-        }));
+        // Per starting kind: members, bodies, the members' mean life at their upkeep now (years) and repair gene (the
+        // old four), then what happened in the year (members born and died by cause, `life_real`: the standing members
+        // over the year over the deaths in it, years), and the means by members: mass (kg), copy mass (kg), the genes
+        // (log10, except `hidden`, units) and, for each catalyst gene on in some member of the kind so far, its mean over
+        // the members that carry it on (log10) and the share of members that carry it on.
+        let ever: BTreeSet<(usize, usize)> = self.series.iter().filter_map(|c| c.0.strip_prefix("root_")?.split_once("_cat_")).filter_map(|(k, r)| Some((k.parse().ok()?, r.parse().ok()?))).collect();
+        let (st, dths, births) = (&self.social, &self.social.root_deaths, &self.social.root_births);
+        for (k, v) in by_root.iter().enumerate() {
+            let per = |x: f64| if v.members > 0.0 { x / v.members } else { f64::NAN };
+            let d = dths.get(k).copied().unwrap_or_default();
+            let stand = st.root_stand.get(k).copied().unwrap_or(0.0) / st.stand_months.max(1.0);
+            let c = |n: &str| format!("root_{k}_{n}");
+            row.extend([(c("members"), "1", v.members), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[5]))]);
+            row.extend(CAUSES.iter().zip(d).map(|(n, x)| (c(&format!("died_{n}")), "1/yr", x)));
+            row.extend([
+                (c("births"), "1/yr", births.get(k).copied().unwrap_or(0.0)),
+                (c("life_real"), "yr", if d.iter().sum::<f64>() > 0.0 { stand / d.iter().sum::<f64>() } else { f64::NAN }),
+                (c("mass"), "kg", per(v.mass)),
+                (c("copy_mass"), "kg", per(v.copy_mass)),
+            ]);
+            row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
+            for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
+                row.push((c(&format!("cat_{r}")), "log10", if v.cat[r].1 > 0.0 { v.cat[r].0 / v.cat[r].1 } else { f64::NAN }));
+                row.push((c(&format!("cat_{r}_on")), "1", per(v.cat[r].1)));
+            }
+        }
+        // The land's ground temperature in the warmest and the coldest month of the year, and the swing between them.
+        let (hot, cold) = (self.social.t_land.iter().copied().fold(f64::NAN, f64::max), self.social.t_land.iter().copied().fold(f64::NAN, f64::min));
+        row.extend([("t_land_summer".to_string(), "K", hot), ("t_land_winter".to_string(), "K", cold), ("t_land_swing".to_string(), "K", hot - cold)]);
         row.extend(self.learning(w));
         row.extend(self.variety(w));
         // Traffic: share of crossings on the top 2% cells, their overlap with the top cells a
@@ -577,6 +676,7 @@ impl Recorder {
             ("dig_held_yield".to_string(), "1", mean(t.dig[1])),
         ]);
         (s.made, s.broken, s.failed, s.inside, s.intake) = Default::default();
+        (s.root_births, s.root_deaths, s.root_stand, s.stand_months, s.t_land) = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();
         // Mole fraction in the air of each heat-absorbing gas (`air_<substance>`; `absorber` above is
