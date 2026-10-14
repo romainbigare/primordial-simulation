@@ -47,7 +47,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     match g {
         body::GAS => (0.3, -1.0, 5.0),
         body::LIQ => (0.3, -4.0, 1.0),
-        body::HEAT => (0.3, -3.0, 3.0),
+        body::HEAT => (0.3, -2.5, 3.5),
         body::LEAF => (0.3, -4.0, 1.0),
         body::STRENGTH => (0.1, 0.0, 1.0),
         body::CHILD => (0.05, 0.05, 0.5),

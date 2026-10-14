@@ -124,8 +124,6 @@ pub struct Config {
 #[serde(default)]
 pub struct Physics {
     // Change and Flow, as bodies feel them
-    /// Member mass at which the heat gene is the conductance per kg (the starting eaters' mass), kg
-    pub heat_mass: f64,
     /// Liquid thickness over a body that holds back 63% of the light reaching it, m
     pub light_depth: f64,
     /// Liquid thickness over a body that cuts its gas exchange by a factor e, m
@@ -331,7 +329,6 @@ impl Physics {
 impl Default for Physics {
     fn default() -> Self {
         Physics {
-            heat_mass: 30.0,
             light_depth: 10.0,
             gas_depth: 1.0,
             wet_depth: 0.01,
