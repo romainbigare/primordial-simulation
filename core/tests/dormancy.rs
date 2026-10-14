@@ -3,7 +3,7 @@
 //! `Physics::dormancy`); upkeep and the cost of a decision, the speed-up of catalysts, building and
 //! the share a freezing kills go with it. A child may get less liquid than its parent (`WET`).
 
-use pcore::body::{Body, Lineage, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
+use pcore::body::{Body, Lineage, CHILD, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, choose, World};
@@ -221,9 +221,12 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
         let (t0, l0) = (pcore::check::totals(&s.w), s.w.ledger.clone());
                 let mut b = s.eater(0, false);
         (b.genes[WET], b.genes[DISPERSE], b.genes[STRENGTH]) = (wet, 0.0, 0.0);
-        // A body of twice its copy mass, so it has children now.
+        // A mature body (a body of 21 kg, its copy mass 1.6 kg) with a brood of three children.
         b.genes[COPY_MASS] = 0.2;
         b.prepare(&s.w.chem, &s.w.cfg.phys);
+        let m = s.w.chem.matter().expect("body matter");
+        let (_, h) = b.wet_h(&s.w.chem);
+        b.brood = 3.0 * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - h) / s.w.chem.subs[m].molar_mass;
         let (before, t) = (b.store.clone(), b.temp(&s.w.chem));
         let (slot, id) = {
             let slot = s.w.life.add(b, s.w.day, 1);

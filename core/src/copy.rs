@@ -1,30 +1,36 @@
-//! Law 4: Copy. A body whose members have built the body of their copy mass makes children, a
-//! child per member (more past `full`), of matter it already built (`grow`, below; no work is owed for a
-//! child): a share of each of its stores and of its heat (the `CHILD`
-//! gene; in a node, children who stay are new members and the node's mean simply falls, so the
-//! gene acts there only on those who leave), and its genes plus small noise
-//! (now and then a change of the brain rows it was born with, else it shares its parent's); it
-//! starts in its parent's brain group (or, if brains are not shared, in a group of its own with
-//! what its parent learned). A child whose brain-size genes are a whole unit away from its
-//! lineage's sizes starts a new lineage (and group) with the new sizes, its brain carried over
-//! where the sizes overlap; rarely the base of its lineage's brain is copied with small noise,
-//! which starts a new lineage too. A member whose body (`Body::size`: its matter and the liquid it
-//! holds with it, not its fuel) is past `phys.full` times its copy mass has as many children as it
-//! grew past that, at its update whatever its brain does (`body::live`).
+//! Law 4: Copy. Reproduction is a share of a surplus (14 Oct 2026, the decision to reproduce by surplus; before, a body
+//! copied when its body reached twice its copy mass, giving a share of every store: no organism splits
+//! in half at full size). A body is mature when its body (`Body::built` per member) is at or past its
+//! copy mass, the size of maturity. A mature body splits what it builds in an update (`grow`) into the
+//! share `ALLOC` for offspring, held as a brood (`Body::brood`, matter built and paid for, not yet
+//! body), and the rest for its own growth; an immature one grows. Whenever the brood covers the matter
+//! of a child, a child is made (`copy`): its body is 10^`CHILD` of its parent's copy mass (seeds and
+//! eggs far smaller than their parents, calves near half), of matter from the brood, with provisions of
+//! fuel and liquid in the proportion its parent's body holds them (the key liquid times 10^`WET`), its
+//! share of the heat, and its genes plus small noise (now and then a change of the brain rows it was born
+//! with, else it shares its parent's); it starts in its parent's brain group (or, if brains are not
+//! shared, in a group of its own with what its parent learned). The parent keeps its body. A child whose
+//! brain-size genes are a whole unit away from its lineage's sizes starts a new lineage (and group) with
+//! the new sizes, its brain carried over where the sizes overlap; rarely the base of its lineage's brain
+//! is copied with small noise, which starts a new lineage too. It happens at the body's update whatever
+//! its brain does (`body::live`).
 //!
-//! Growth is building (14 Oct 2026, decision after watch report 7): a member below that size
+//! Growth is building (14 Oct 2026, decision after watch report 7): a member
 //! turns the energy-rich solid into body matter (`Chemistry::build`) and pays `c_copy` per kg of
 //! matter made in work (`grow`), as far as its allowance goes (`c_build`), its reactions can spare
-//! and its stores reach. Storing fuel costs no building work. A child is given a share of every
-//! store, body matter included, which its parent built and paid for, so a child costs its parent
-//! no further work: it needs only the matter to exist, and children come as fast as parents rebuild
-//! what they gave (there is no child store). Before, a child owed `c_copy` per kg of its dry mass,
-//! paid into a child store, and a body grew by eating for nothing.
+//! and its stores reach. Storing fuel costs no building work. A child costs its parent no further
+//! work: the matter it is given was built and paid for as brood (there is no child store).
 //!
 //! A population node (count > 1) keeps how its members differ (plan 7.1): its spread, the
 //! variance of their genes around its genes, per gene, and of their born rows around its rows
-//! (one number for all rows). Its children that stay are new members of it and widen the spread
-//! by their share of a generation's change (`widen`). A share of them (the `DISPERSE` gene; none
+//! (one number for all rows). Its children never join it while it is mature (they are below their
+//! copy mass, and a mature node's mean must stay at or past maturity for its members to reproduce): they
+//! form a group of their own, with the variance left among them (`vary`), who join the first immature
+//! node of their kind and size class where they start (`near`, `emit`), or start one; a young node joins
+//! and merges with the adult only once mature (the monthly merge, `body::crowd`). A child is of another
+//! size class than a node when its body differs from the node's mean member by more than `alike` steps
+//! of the copy-mass gene (`alike_size`).
+//! A share of a node's children (the `DISPERSE` gene; none
 //! if less than one member) starts in a random neighbour cell, drawn from the node: their mean
 //! genes and rows are the node's plus noise of its spread and the change over their number, and
 //! they keep the variance left among them (`vary`). There they join the first node they belong
@@ -55,6 +61,9 @@ use std::f32::consts::{FRAC_2_PI, FRAC_PI_8};
 /// Reach of the noise `noise` draws (a sum of four uniforms, centred and scaled): 2·sqrt(3).
 const REACH: f32 = 3.464_101_6;
 
+/// log10 of one half: the largest child, a share of its parent's copy mass (`body::CHILD`).
+const LOG_HALF: f32 = -0.301_029_995_7;
+
 /// Mutation step (times the body's mutation size) and range of a gene. Catalysts, safe minimums
 /// and uptake are off below 0 (they cost nothing and do nothing there), and their ranges go 20
 /// steps below 0, so an off gene wanders as far as the noise of a node's spread reaches (about 10
@@ -67,8 +76,9 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::HEAT => (0.3, -2.5, 3.5),
         body::LEAF => (0.3, -4.0, 1.0),
         body::STRENGTH => (0.1, 0.0, 1.0),
-        body::CHILD => (0.05, 0.05, 0.5),
+        body::CHILD => (0.1, -6.0, LOG_HALF),
         body::WET => (0.05, -3.0, 0.5),
+        body::ALLOC => (0.05, 0.0, 1.0),
         body::COPY_MASS => (0.2, -3.0, 6.0),
         body::INTERVAL => (0.2, 0.7, 2.556),
         body::MUT => (0.2, -3.0, 0.0),
@@ -198,20 +208,6 @@ pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: 
     (genes, left)
 }
 
-/// A share `f` of a node's members are new, born of it with a generation's change (they stay):
-/// its spread grows by `f` times that change's variance (variances add), up to `most`. Per gene,
-/// its mutation's (`vary`); for the rows, a share `row_chance` of children changed by a step of
-/// `row_noise` × size / sqrt(row_chance).
-fn widen(lay: &Layout, p: &Physics, b: &mut Body, f: f32) {
-    let size = 10f32.powf(b.genes[body::MUT]);
-    b.spread.resize(b.genes.len(), 0.0);
-    for (g, s) in b.spread.iter_mut().enumerate() {
-        let step = range(lay, g).0;
-        *s = (*s + f * (step * size).powi(2)).min(most(step, p.alike));
-    }
-    b.row_spread = (b.row_spread + f * (p.row_noise * size).powi(2)).min(most(row_step(p, size), p.alike));
-}
-
 /// The step of a node's born rows: that of a child whose rows changed, for mutation size `size`.
 fn row_step(p: &Physics, size: f32) -> f32 {
     p.row_noise * size / (p.row_chance as f32).sqrt()
@@ -238,32 +234,33 @@ pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
     }
 }
 
-/// Growth is building body matter (14 Oct 2026, decision after watch report 7). A member
-/// whose body is below `phys.full` times its copy mass makes the matter that lacks (`Chemistry::build`:
-/// 6 of the energy-rich solid make 1 of matter and 1 of liquid, element-exact and thermoneutral in
-/// chemistry 0) and pays `c_copy` per kg of matter made, through `body::pay` (the work leaves as
-/// heat, as a child's did), as far as: (1) its allowance, `c_build` x its `equiv` / `m_ref` x the days
-/// of its interval (building takes time, review 5); (2) its spare: after what is paid and what is
-/// converted leave its fuel, its reactions must still release its upkeep over an interval at today's
-/// rate (the rule of copying before `full`); (3) what its reactions can release now; (4) the stores
-/// it converts, which must also cover the fuel the work burns. Storing fuel costs no building work.
-/// The matter is part of the body at once; the liquid that goes with it comes by soaking (`live`).
-/// A kg of matter costs `c_copy` of work and 1.11 kg of the solid converted (6 x 30 g for 162 g)
-/// besides, 1.75 kg of it with the fuel the work burns (62% efficient, as growth in life). Returns
-/// whether it built.
+/// Growth is building body matter (14 Oct 2026, decision after watch report 7), and past the size
+/// of maturity a share of it is offspring (14 Oct 2026, the decision to reproduce by surplus). A member makes
+/// matter (`Chemistry::build`: 6 of the energy-rich solid make 1 of matter and 1 of liquid,
+/// element-exact and thermoneutral in chemistry 0) and pays `c_copy` per kg of matter made, through
+/// `body::pay` (the work leaves as heat), as far as: (1) its allowance, `c_build` x its `equiv` /
+/// `m_ref` x the days of its interval x its activity (building takes time, review 5); (2) its spare:
+/// after what is paid and what is converted leave its fuel, its reactions must still release its
+/// upkeep over an interval at today's rate; (3) what its reactions can release now; (4) the stores it
+/// converts, which must also cover the fuel the work burns. Storing fuel costs no building work. There
+/// is no size at which it stops: a body below its copy mass (the size of maturity) puts all it builds
+/// into its own growth, up to that size; of what it builds past it a share `ALLOC` goes into the
+/// brood (`Body::brood`, matter held back for offspring, not yet body) and the rest into its own
+/// growth, so with `ALLOC` 1 it stops at maturity and with less it grows all its life. The liquid that
+/// goes with new matter comes by soaking (`live`). A kg of matter costs `c_copy` of work and 1.11 kg
+/// of the solid converted (6 x 30 g for 162 g) besides, 1.75 kg of it with the fuel the work burns
+/// (62% efficient, as growth in life). Returns whether it built.
 pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let (chem, p) = (&w.chem, &w.cfg.phys);
     let Some(bl) = chem.build.as_ref() else { return false };
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of matter; chemistry 0: 1.)
     let (n, nu0, mm) = (b.n(), bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
-    let full = p.full * b.dec(body::COPY_MASS) * n;
-    // The matter that makes its body full: the body is its matter over 1 - h (`Body::size`).
+    b.brood = b.brooded(chem);
+    // The matter a body of the size of maturity is made of: the body is its matter over 1 - h (`Body::size`).
     let (_, h) = b.wet_h(chem);
-    let want = full * (1.0 - h) - b.store[m] * mm;
-    if want <= 1e-9 * full {
-        return false;
-    }
+    let full = b.dec(body::COPY_MASS) * n * (1.0 - h);
+    let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
     // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
     let room = p.c_build * b.equiv(p, mass) / p.m_ref * days.min(ivl) * b.activity(chem, p);
@@ -279,18 +276,16 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     // The stores it converts must also cover the fuel the work burns (each input that burns), and
     // leave the safe minimum of each (a body is not built of its last fuel: below its minimum it dies).
     let lay = Layout::of(chem);
-    let reach = ins.iter().map(|&(k, nu)| {
-        let heat = b.heat_of(chem, k as usize, t);
-        let floor = b.gene(lay.min + k as usize).max(0.0) * b.size(chem) / chem.subs[k as usize].molar_mass;
-        (b.store[k as usize] - floor).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
-    });
-    let kg = want.min(room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300)).min(reach.fold(f64::MAX, f64::min));
-    if kg <= 1e-12 * full {
-        return false;
-    }
-    // (The minimum of each input, mol.)
     let size = b.size(chem);
     let floors: Vec<f64> = ins.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
+    let reach = ins.iter().zip(&floors).map(|(&(k, nu), f)| {
+        let heat = b.heat_of(chem, k as usize, t);
+        (b.store[k as usize] - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
+    });
+    let kg = (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300)).min(reach.fold(f64::MAX, f64::min));
+    if kg <= 1e-12 * full.max(1e-30) {
+        return false;
+    }
     let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_build(), p.c_copy * kg);
     if !body::pay(w, b, cost, ivl) {
         return false;
@@ -305,37 +300,48 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
         b.store[k as usize] += nu as f64 * ext;
     }
     b.e -= dh * ext;
+    // What it made: up to what its maturity lacks it is body, of the rest the share `ALLOC` is brood.
+    let made = nu0 * ext * mm;
+    b.brood += (made - made.min(needs)) * b.gene(body::ALLOC).clamp(0.0, 1.0) / mm;
     true
 }
 
-/// A member (an individual, or the members of a node alike) copies. It gives a share of every store,
-/// body matter included, and of its heat to children, which its parent built: no further work is
-/// owed (`grow` paid for the matter, 14 Oct 2026). It needs a body (`Body::size`) of its copy mass,
-/// and a body past `phys.full` times it gives all it grew past that.
+/// A mature body makes offspring from its brood (14 Oct 2026, the decision to reproduce by surplus; before, a
+/// body copied when its body reached `full` times its copy mass, giving a share of every store). A
+/// child has a body of 10^`CHILD` of its parent's copy mass: matter of 1 - h of that (`Body::size`),
+/// taken from the brood, and provisions of every other store, in the proportion the parent's body
+/// holds them to its matter (the key liquid times 10^`WET`, at most what the parent holds), with its
+/// share of the heat. A child is made whenever the brood covers one: an individual has whole children,
+/// a node (members who all do the same) fractional members, as many as the brood makes. The parent
+/// keeps its body: what it gives is brood and provisions. A body that is not mature (`Body::adult`)
+/// makes none (its brood waits). Children are always immature (below their parents' copy mass), so
+/// they never join their parent node, which is mature: they join a node of their kind and size class
+/// that is immature too, in their parent's cell or, if they disperse, a neighbour's, or start one
+/// (`emit`), and a node's mean never falls under maturity for its own children (`near`).
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
-    let lay = Layout::of(&w.chem);
-    let (size, n, mc) = (b.size(&w.chem), b.n(), b.dec(body::COPY_MASS));
-    if size < mc * n {
+    let (chem, n, mc) = (&w.chem, b.n(), b.dec(body::COPY_MASS));
+    let Some(mi) = chem.matter() else { return false };
+    if !b.adult(chem) {
+        return false;
+    }
+    let mm = chem.subs[mi].molar_mass;
+    let (_, h) = b.wet_h(chem);
+    b.brood = b.brooded(chem);
+    // A child's body (kg) and its matter (mol); the births the brood covers.
+    let body = 10f64.powf(b.gene(body::CHILD).clamp(-6.0, LOG_HALF as f64)) * mc;
+    let kid = Kid { body, matter: body * (1.0 - h) / mm };
+    let k = b.brood / kid.matter;
+    let node = n > 1.0;
+    let births = if node { k } else { (k + 1e-9).floor() };
+    if births <= 0.0 {
         return false;
     }
     let id = b.id(slot);
     let mut r = Rng::new(w.seed, w.day, id, Purpose::Mutate);
-    let frac = b.gene(body::CHILD).clamp(0.05, 0.5);
-    // A member past `phys.full` times its copy mass gives all it grew past that to children of the
-    // size it would give at that mass: share `s` of its stores, `k` children. So a parent past
-    // `full` (its excess, fed by what it ate) gives its excess body, and one below it splits off a
-    // share `s` of its body: children cannot come faster than bodies are built or eaten.
-    let (m1, full) = (size / n, w.cfg.phys.full * mc);
-    let (s, k) = if m1 > full { (1.0 - (1.0 - frac) * full / m1, (m1 / full - 1.0 + frac) / frac) } else { (frac, 1.0) };
-    let (i, births) = (b.cell as usize, if n > 1.0 { n * k } else { (k + 1e-9).floor() });
-    if births <= 0.0 {
-        return false;
-    }
-    let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
-    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: i as u32, value: births });
+    let i = b.cell as usize;
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
     // less than one member); an individual's go together, by that chance.
-    let (node, d) = (n > 1.0, b.gene(body::DISPERSE).clamp(0.0, 1.0));
+    let d = b.gene(body::DISPERSE).clamp(0.0, 1.0);
     // An animal with `Config::nodes` off: its children join no node and are all individuals.
     let alone = !w.cfg.nodes && !body::light_eater(&w.chem, &b.genes);
     let m = if node { if d * births >= 1.0 { d * births } else { 0.0 } } else { (r.f64() < d) as u8 as f64 };
@@ -345,51 +351,66 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         Some(j) => (j, m),
         None => (i, 0.0),
     };
-    // Children whose bodies are unlike their parents' (more than `full` apart: a child of share
-    // `s / k` against the parent's `1 - s`) are not the same members: they leave the node as a
-    // group of their own, those that disperse to their cell and the rest to the parent's, where
-    // they join a node of their size or start one (`within`, `near`). So a node holds members of
-    // one size, and a small child is shaded by its big parents (`body::shade`).
-    let full = w.cfg.phys.full;
-    let (child, parent) = (s / k, 1.0 - s);
-    if node && COHORTS && (child > full * parent || parent > full * child) {
-        if m > 0.0 {
-            emit(w, slot, b, cell, m, s * m / (n * k), node, alone, id, &mut r);
-        }
-        let stay = births - m;
-        emit(w, slot, b, i, stay, s * stay / (n * k), node, alone, id, &mut r);
-        return true;
+    let mut made = false;
+    if m > 0.0 {
+        made |= emit(w, slot, b, cell, m, &kid, node, alone, id, &mut r);
     }
-    if node {
-        b.count += births - m;
-        widen(&lay, &w.cfg.copy_phys(), b, ((births - m) / b.n()) as f32);
-        if m == 0.0 {
-            return true;
-        }
+    // A node's children who stay: a group of their own (less than one member waits in the brood
+    // unless there is a node of theirs to join).
+    if node && births - m > 0.0 {
+        made |= emit(w, slot, b, i, births - m, &kid, node, alone, id, &mut r);
     }
-    // Each child gets share `s / k` of a member's stores.
-    emit(w, slot, b, cell, m, s * m / (n * k), node, alone, id, &mut r);
-    true
+    made
 }
 
-/// Children unlike their parents in size leave the node (`copy`), and nodes join only members of
-/// their size (`near`). An experiment switch.
-pub const COHORTS: bool = false;
-
-/// Members of `a` and `b` are alike in size: their bodies (`Body::size` per member) within a
-/// factor `full` of each other (a node holds members of about one size, `copy`).
-pub fn near(chem: &crate::chem::Chemistry, full: f64, a: &Body, b: &Body) -> bool {
-    let (x, y) = (a.size(chem) / a.n(), b.size(chem) / b.n());
-    x <= full * y && y <= full * x
+/// A child's body, kg, and its matter, mol (its body is that over 1 - h).
+struct Kid {
+    body: f64,
+    matter: f64,
 }
 
-/// `m` children of `b` (a share `share` of its stores and heat) start in `cell`: they join a node
-/// there they belong to, or start a body.
+/// The step of the copy-mass gene that sizes are alike in (`alike_size`, `near`).
+pub fn size_step(lay: &Layout) -> f32 {
+    like(lay, body::COPY_MASS)
+}
+
+/// log10 of a member's body (`Body::built` per member): what size classes compare.
+pub fn member_log(chem: &crate::chem::Chemistry, b: &Body) -> f64 {
+    (b.built(chem) / b.n()).max(1e-30).log10()
+}
+
+/// Two member bodies (kg) are in one size class: within `alike` steps of the copy-mass gene of each
+/// other, in log10 (0.2 decades a step: with `alike` 4 about a factor 6.3). A node holds members of
+/// one size class: a child far smaller than its parent node's mean member starts a node of its own
+/// (`copy`), and nodes join and merge only within a class (`near`, `body::crowd`), so young and adult
+/// nodes stay apart until the young have grown.
+pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
+    (x.max(1e-30).log10() - y.max(1e-30).log10()).abs() <= (alike * size_step(lay)) as f64 + 1e-9
+}
+
+/// Bodies `a` and `b` are in one class: alike in size (their members' bodies, `Body::built` per member,
+/// `alike_size`) and in maturity (both mature, `Body::adult`, or both not: a node's mean must stay at or
+/// past its copy mass for its members to reproduce, so the young join and merge with the young until
+/// they have grown).
+pub fn near(lay: &Layout, chem: &crate::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
+    a.adult(chem) == b.adult(chem) && alike_size(lay, alike, a.built(chem) / a.n(), b.built(chem) / b.n())
+}
+
+/// `m` children of `b` (each as `kid` says: its matter taken from the brood, provisions of every other
+/// store in the proportion the parent's body holds them to its matter, its share of the heat) start in
+/// `cell`: they join a node there they belong to (in genes, in size and immature, as they are: `near`),
+/// or start a body. Less than one member of a node's children that has no node to join waits in the
+/// brood (nothing is made; false).
 #[allow(clippy::too_many_arguments)]
-fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f64, node: bool, alone: bool, id: u64, r: &mut Rng) {
+fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid, node: bool, alone: bool, id: u64, r: &mut Rng) -> bool {
     let lay = Layout::of(&w.chem);
     let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, r);
-    let wet_share = (share * 10f64.powf(b.gene(body::WET))).min(1.0);
+    let mi = w.chem.matter().unwrap_or(0);
+    // The matter of all m children, and their provisions as a share of the parent's body matter; of the
+    // key liquid 10^`WET` times that (a child of a parent whose `WET` is below 0 is dry, and nearly dormant).
+    let take = (m * kid.matter).min(b.store[mi]);
+    let prov = take / (b.store[mi] - b.brooded(&w.chem)).max(1e-300);
+    let wet_prov = prov * 10f64.powf(b.gene(body::WET));
     let mut c = Body {
         cell: cell as u32,
         count: m,
@@ -397,10 +418,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f6
         parent: id,
         born: w.day,
         mark: w.light[cell],
-        // A child gets the share of every store but the key liquid, which it gets 10^`WET` times that
-        // (at most all of it): a child of a parent whose `WET` is below 0 is dry, and nearly dormant.
-        e: b.e * share,
-        store: b.store.iter().enumerate().map(|(k, a)| a * if b.wet >> k & 1 == 1 { wet_share } else { share }).collect(),
+        store: b.store.iter().enumerate().map(|(k, a)| if k == mi { take } else { a * if b.wet >> k & 1 == 1 { wet_prov } else { prov }.min(1.0) }).collect(),
         genes,
         spread,
         genome: b.genome,
@@ -409,16 +427,25 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f6
         wet: b.wet,
         ..Default::default()
     };
-    // With a share of the liquid unlike that of the rest, the child's heat is that of its parent's
-    // temperature on the heat capacity it got, so it starts as warm as its parent (a dry child would
-    // else be much hotter, a wet one colder); the parent keeps the rest.
-    if wet_share != share {
-        c.e = b.e * c.heat_cap(&w.chem) / b.heat_cap(&w.chem).max(1e-9);
+    // The node a child joins: of its genes (`within`), of its size and immature (children are below
+    // their parents' copy mass, and a mature node must keep its mean there).
+    let target = |w: &World, c: &Body| w.life.at[cell].iter().map(|&s| s as usize).find(|&s| {
+        let t = &w.life.bodies[s];
+        t.alive && t.n() > 1.0 && !t.adult(&w.chem) && within(&lay, w.cfg.phys.alike, t, c) && alike_size(&lay, w.cfg.phys.alike, kid.body, t.built(&w.chem) / t.n())
+    });
+    if node && m < 1.0 && (alone || target(w, &c).is_none()) {
+        return false;
     }
+    let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
+    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: b.cell, value: m });
+    // Its heat is that of its parent's temperature on the heat capacity it got, so it starts as warm
+    // as its parent (a dry child would else be much hotter, a wet one colder); the parent keeps the rest.
+    c.e = b.e * c.heat_cap(&w.chem) / b.heat_cap(&w.chem).max(1e-9);
     b.e -= c.e;
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;
     }
+    b.brood = (b.brood - take).max(0.0);
     // Born rows: a share `row_chance` of children change theirs by a step (bigger by 1 /
     // sqrt(row_chance)), else share their parent's. Children drawn from a node whose rows differ,
     // or a group of them, get the mean of the group drawn (noise of that variance and the
@@ -460,14 +487,14 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f6
     // apart.
     let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape);
     if c.lineage == b.lineage && !alone {
-        if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() > 1.0 && within(&lay, w.cfg.phys.alike, &w.life.bodies[s], &c) && (!COHORTS || near(&w.chem, w.cfg.phys.full, &w.life.bodies[s], &c))) {
+        if let Some(t) = target(w, &c) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             let rows = match (shape(c.lineage), shape(w.life.bodies[t].lineage)) {
                 (Some(x), Some(y)) if x != y => brain::rerow(&rows, x, y, r, w.cfg.phys.new_noise),
                 _ => rows,
             };
             join(w, t, c, &rows);
-            return;
+            return true;
         }
     }
     if let Some(v) = rows {
@@ -493,6 +520,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, share: f6
         let c = &mut w.life.bodies[s];
         (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
     }
+    true
 }
 
 /// Without shared brains a body born or split from `b` starts a group of its own: its born rows
@@ -592,6 +620,8 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
         None => w.life.regene(o, genes),
     }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
+    // The brood adds up like the stores it is part of.
+    o.brood += c.brood;
     // A node has no wear: its members are of all ages (`body::live`).
     (o.e, o.count, o.wear) = (o.e + c.e, o.n() + c.n(), 0.0);
     o.vis = o.visible(&w.chem, &w.cfg.phys);
@@ -602,13 +632,13 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
 fn part(b: &mut Body, f: f64) -> Body {
     // (The trace and the constants are not the part's: set aside, not cloned.)
     let (trace, k) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k));
-    let mut c = Body { count: f * b.count, e: f * b.e, hold: 0, inside: 0, ..b.clone() };
+    let mut c = Body { count: f * b.count, e: f * b.e, brood: f * b.brood, hold: 0, inside: 0, ..b.clone() };
     (b.trace, b.k) = (trace, k);
     for (a, x) in b.store.iter_mut().zip(c.store.iter_mut()) {
         *x = f * *a;
         *a -= *x;
     }
-    (b.e, b.count) = (b.e - c.e, b.count - c.count);
+    (b.e, b.count, b.brood) = (b.e - c.e, b.count - c.count, b.brood - c.brood);
     c
 }
 

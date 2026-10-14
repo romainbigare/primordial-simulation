@@ -12,7 +12,7 @@ const AHEAD: [&str; 0] = [];
 /// Rows marked tuned in the whole file (handover 14.3): it may not grow. A new number must be
 /// physical or anchored, or replace a tuned one. Lower this when a tuned number is anchored or
 /// removed; do not raise it without asking (handover 14.3).
-const TUNED_BUDGET: usize = 67;
+const TUNED_BUDGET: usize = 66;
 
 const MARKS: [&str; 5] = ["physical", "anchored", "tuned", "switch", "container"];
 

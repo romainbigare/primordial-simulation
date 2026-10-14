@@ -121,8 +121,7 @@ pub struct Config {
     /// allows (`Physics::take`) and what it carries is bounded by its body (`Body::level`: the keep
     /// genes are kg of a store per kg of body, 14 Oct 2026), so a full store is the satiety. With
     /// the keep genes a share of the whole mass, satiety at every size killed all the animals of
-    /// six 64x64 runs in their first year, and only its gate at `full` kept them (review 5's rule,
-    /// which went).
+    /// six 64x64 runs in their first year (a gate at a size kept them: review 5's rule, which went).
     #[serde(default)]
     pub sate_all: bool,
     /// A null run, to be compared with the real run of the same seed: no learning, no imitation
@@ -327,10 +326,9 @@ pub struct Physics {
     // Copy
     /// Energy to make one kg of body matter, J: the work of building (14 Oct 2026, decision after
     /// watch report 7; before, per kg of the dry mass of a child, from 13 Oct 2026, paid into a
-    /// child store). A member below `full` times its copy mass of body makes matter of the
-    /// energy-rich solid and pays this in work per kg made, through `body::pay` (`copy::grow`);
-    /// storing fuel costs none, and a child costs its parent no work: it is given matter its parent
-    /// built. Growth in life keeps 10 to 20% of the energy it eats, so a kg of body costs about 10^7 J;
+    /// child store). A member makes matter of the energy-rich solid and pays this in work per kg
+    /// made, through `body::pay` (`copy::grow`); storing fuel costs none, and a child costs its parent
+    /// no work: it is given matter its parent built (its brood, 14 Oct 2026). Growth in life keeps 10 to 20% of the energy it eats, so a kg of body costs about 10^7 J;
     /// with the 1.11 kg of the solid converted besides (6 x 30 g for 162 g, 17.3 MJ) a kg of matter
     /// takes 27.3 MJ of fuel in all, 62% efficient.
     pub c_copy: f64,
@@ -361,11 +359,6 @@ pub struct Physics {
     pub row_noise: f32,
     /// Spread of the weights a bigger brain adds
     pub new_noise: f32,
-    /// A member whose body (`Body::size`: its matter and the liquid it keeps with it, not its fuel)
-    /// is this many times its copy mass copies at its update whatever its brain does
-    /// (`body::live`: physics); the brain's copy action copies only before that. Growth builds a
-    /// body up to it (`copy::grow`), and it caps the mass that works (`Body::work`)
-    pub full: f64,
     /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
     /// (`copy::alike`). A node splits when its two halves would differ by more, in a gene or in
     /// its born rows (in row steps, `copy::split`). Children join a node within this many steps
@@ -473,7 +466,6 @@ impl Default for Physics {
             row_chance: 0.3,
             row_noise: 0.3,
             new_noise: 0.1,
-            full: 2.0,
             alike: 4.0,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
