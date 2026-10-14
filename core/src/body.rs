@@ -334,6 +334,37 @@ impl Body {
         let (_, h) = self.wet_h(chem);
         self.store[m] * chem.subs[m].molar_mass / (1.0 - h)
     }
+    /// Activity, 0..1 (14 Oct 2026, review 7 fix 6, a refinement of Change): a
+    /// body's chemistry runs in its liquid, so it runs in proportion to the key liquid the body holds
+    /// over the level it keeps, to the power `Physics::dormancy`: min(1, l / l*)^n, l the key liquids
+    /// it holds, l* what `level` keeps of them (h / (1 - h) of its matter). A body that holds all it
+    /// keeps (or more) has 1; a dry one is nearly dormant (n = 5.7: a third of the liquid is 512
+    /// times less). The ratio is the mean over the members of a node. A body with no key liquid (the
+    /// genes keep none), or none that it keeps a level of (no matter, or h = 0), has nothing to dry:
+    /// 1. Upkeep and its decisions' cost (`body::upkeep`), the speed-up of its catalysts
+    /// (`catalyst`) and its building (`copy::grow`) go with it; so does the share of a freezing that
+    /// kills (`body::live`).
+    pub fn activity(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
+        if self.wet == 0 || chem.matter().is_none() {
+            return 1.0;
+        }
+        let (mut have, mut keep) = (0.0, 0.0);
+        for k in (0..chem.ns()).filter(|&k| self.wet >> k & 1 == 1) {
+            let mm = chem.subs[k].molar_mass;
+            have += self.store[k] * mm;
+            keep += self.level(chem, k, 0.0) * mm;
+        }
+        if keep <= 0.0 {
+            return 1.0;
+        }
+        (have / keep).min(1.0).max(0.0).powf(p.dormancy)
+    }
+    /// A catalyst's factor `f` (the speed-up of a reaction) at activity `a`: 1 + (f - 1) a. A dry
+    /// body's enzymes do not work, but the bare reaction still runs (14 Oct 2026).
+    #[inline]
+    pub fn catalyst(f: f64, a: f64) -> f64 {
+        1.0 + (f - 1.0) * a
+    }
     /// The key liquids it holds, kg (all members), and the most share of its mass it keeps of any
     /// of them (its keep gene, 0..0.95).
     pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
@@ -1321,7 +1352,11 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let fixed = g * dt * tg / t0.max(1.0);
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
-    tmp.cat.clone_from(&b.k.cat);
+    // The catalysts work as far as the body is wet (`Body::activity`): factor 1 + (f - 1) a. A dry
+    // plant's light reaction slows with the rest.
+    let act = b.activity(chem, &cfg.phys);
+    tmp.cat.clear();
+    tmp.cat.extend(b.k.cat.iter().map(|&f| Body::catalyst(f, act)));
     for &(r, _) in b.k.burn.iter().filter(|p| breathes(chem, p.0, t0)) {
         tmp.cat[r] = 1.0;
     }
@@ -1501,7 +1536,10 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let eq = b.equiv(p, mass) / p.m_ref;
     let basal = p.c_basal * eq;
     let u = days * (basal + eq * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
-    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR)))
+    // Everything it pays is chemistry, which runs in its liquid: a dry body pays almost nothing (and,
+    // as wear grows with what it pays, hardly ages): all of it, the decision's cost too, times its
+    // activity (14 Oct 2026, review 7 fix 6).
+    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * b.activity(&w.chem, p)
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
@@ -1552,6 +1590,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
     let share = (b.k.gas * b.open_area(chem, &w.cfg.phys, mass) * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
     let t = b.e / cap.max(1e-9);
+    let dry = b.activity(chem, &w.cfg.phys);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; 64];
     for &(r, _) in &b.k.burn {
@@ -1568,7 +1607,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
         }
         let (lim, who) = crate::change::scarce(&rx.inputs, |k| have[k]);
         let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, nu))| (air[k as usize * na + j] / tot).powi(nu as i32 - (q == who) as i32)).product();
-        let rate = crate::change::denature(b.k.cat[r], t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.k * (-rx.ea / t).exp() * act;
+        let rate = crate::change::denature(Body::catalyst(b.k.cat[r], dry), t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.k * (-rx.ea / t).exp() * act;
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];
         for &(k, nu) in &rx.inputs {

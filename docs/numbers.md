@@ -84,6 +84,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `c_signal` | J per kg^0.75 per day at signal size 1 | cost of signalling | none found; per kg^0.75 since 14 Oct 2026, anchored in size at the 30 kg founders (200 x 30^0.25 = 468) | tuned, first guess |
 | `e_life` | J per kg | energy a kg of body turns over in its upkeep before it is worn out, at a repair gene of 0 | Rubner 1908: many kinds that move turn over about 1,000 kJ per gram of body in a life | anchored |
 | `c_repair` | share | share of upkeep that is repair at repair 0 | remaking a body's own matter takes 20 to 30% of resting upkeep in life | anchored |
+| `dormancy` | none | how steeply a body's activity falls as it dries: activity = min(1, l / l*)^n, l the key liquid it holds, l* the level it keeps (`Body::activity`); upkeep, the speed-up of catalysts, building and the share a freezing kills go with it (14 Oct 2026, review 7 fix 6, the owner's decision) | Harrington's rule for seeds (from memory): seed life about doubles for each 1% less moisture between about 14% and 5%, so a 3-fold drop in moisture is 2^9 = 512 times less activity, n = ln 512 / ln 3 = 6.24 / 1.10 = 5.7 (14/5 = 2.8 gives 6.1). Moisture as a share of the whole seed is not quite liquid over matter, but at these low values they differ by a few percent. The `WET` gene (the child's share of the key liquid, range -3 to 0.5, step 0.05 like `CHILD`'s) is a gene, not a row | anchored |
 
 ### Choose
 
@@ -196,12 +197,12 @@ Chemistry 0 (`worldgen/src/chem0.toml`) is data, not a struct of numbers, and is
 
 ## Counts
 
-By hand and by script on 14 Oct 2026. The 99 rows of `Config` and `Physics` are their 99 fields (`sate_all`, a switch, is the new one, 14 Oct 2026). Review 6 (finding 9) moved four marks: `c_build` and `c_basal` from anchored to tuned (set for a run), `c_move` and `take` from tuned to anchored (a real cost of transport; a real appetite), so the count of tuned rows is the same.
+By hand and by script on 14 Oct 2026. The 100 rows of `Config` and `Physics` are their 100 fields (`dormancy`, anchored, is the new one, 14 Oct 2026; `sate_all` before it). Review 6 (finding 9) moved four marks: `c_build` and `c_basal` from anchored to tuned (set for a run), `c_move` and `take` from tuned to anchored (a real cost of transport; a real appetite), so the count of tuned rows is the same.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 29, and 3 outside the structs | 29 fields (among them `c_move` and `take`) and the constants `MAX_INTERVAL`, `T_SURF` and `MOVE_REF`/`MOVE_EXP` |
+| anchored | 30, and 3 outside the structs | 30 fields (among them `c_move`, `take` and `dormancy`) and the constants `MAX_INTERVAL`, `T_SURF` and `MOVE_REF`/`MOVE_EXP` |
 | tuned (run or reason named) | 20, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `full`, `c_build`, `c_basal`; outside: the kept copy logit, the roster's stores, intervals and years, the spray of the start) |
 | tuned, first guess | 40 | 36 free numbers (`wind`, `cloud`, `carry`, `wear`, `creep`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `walk_wear`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 4 | `share_brains`, `split_rows`, `null`, `nodes` |

@@ -239,6 +239,15 @@ pub struct Physics {
     /// upkeep, more than repair costs). Every value of the gene has a cost (with no saving below 0,
     /// selection would lift a short life to gene 0 for free).
     pub c_repair: f64,
+    /// How steeply activity falls as a body dries (14 Oct 2026, review 7 fix 6): a body's
+    /// chemistry runs in its liquid, so its activity is
+    /// min(1, l / l*)^`dormancy` with l the key liquid it holds and l* the level it keeps
+    /// (`Body::activity`). Anchored to the longevity of seeds (Harrington's rule, from memory: seed
+    /// life about doubles for each 1% less moisture between about 14% and 5%): a 3-fold drop in
+    /// moisture gives about 2^9 = 512 times less activity, so n = ln 512 / ln 3 = 6.24 / 1.10 = 5.7
+    /// (14/5 = 2.8 gives 6.1). Upkeep, the speed-up of catalysts, growth and the cost of a decision
+    /// go with it (`body::upkeep`, `body::plan`, `copy::grow`, `body::live`)
+    pub dormancy: f64,
     // Choose
     /// Energy to move one kg one metre on the flat, J, for a member of `MOVE_REF` (30 kg); other
     /// members pay it times (m1 / 30 kg)^`MOVE_EXP` (`Physics::walk`, 14 Oct 2026, review 6
@@ -424,6 +433,7 @@ impl Default for Physics {
             c_signal: 4.6807e2,
             e_life: 1e9,
             c_repair: 0.25,
+            dormancy: 5.7,
             c_move: 3.0,
             rho_pass: 5.0,
             lane: 1.0,
