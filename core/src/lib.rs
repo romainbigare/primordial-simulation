@@ -110,7 +110,7 @@ pub struct Config {
     /// are placed as individuals and never join a node (`copy::copy`), the month's `body::crowd`
     /// merges no animal and none splits (`copy::split`); light-eaters stay nodes (one node per
     /// cell is how they are placed). The detailed form the nodes are checked against (plan 7.1,
-    /// review 5): the nodes are a speed tool and must give the same patterns.
+    /// review 5): the nodes are a speed shortcut and must give the same patterns.
     #[serde(default = "yes")]
     pub nodes: bool,
     /// A null run, to be compared with the real run of the same seed: no learning, no imitation
