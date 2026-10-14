@@ -122,7 +122,7 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
 /// at long intervals; the exchange genes are per kg and the heat gene goes with mass^(2/3), so a
 /// small body loses heat faster per kg and a big one slower (`Body::conductance`). What one body
 /// can take from another is set by its force against the other's (`choose::take_body`: the
-/// strength gene times the mass), and upkeep charges the gene by the kg: the "eaters of
+/// strength gene times the mass), and upkeep charges the gene by the kg-equivalent (mass^0.75, since 14 Oct 2026): the "eaters of
 /// light-eaters" have genes of 0.3 to 0.5 (the light-eaters have 0.05), the "eaters of eaters" 0.6
 /// to 0.6 and 100 to 600 kg (the eaters have 0.6 and 30 kg: three to twenty times their force), and the "eaters of
 /// remains" none (0: they lose every fight, pay no upkeep for it, and work the ground). The gene

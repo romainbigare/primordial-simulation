@@ -565,9 +565,10 @@ fn a_body_takes_no_more_than_it_can_use() {
     assert!(young > can, "below full a body eats as its intake allows: {young} of {can} kg");
     // Past `full` with a store below the target, upkeep and build over the share its reactions
     // release in an interval, less what it holds: the target rises with `c_build`, between the
-    // upkeep's worth and what its size takes (here a store of 17% of the fuel).
-    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.17, true)).collect();
-    println!("sate asked for twice the size cap, store 17%: (left, upkeep+build, cap, target) {sated:?}");
+    // upkeep's worth and what its size takes (here a store of 15.5% of the fuel: 17%
+    // before strength and catalysts went by mass^0.75, which lowered the upkeep of this 300 kg member).
+    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.155, true)).collect();
+    println!("sate asked for twice the size cap, store 15.5%: (left, upkeep+build, cap, target) {sated:?}");
     for &(left, _, cap, target) in &sated {
         assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
         assert!(target < cap, "the size cap {cap} binds, the case shows nothing");

@@ -147,7 +147,9 @@ pub struct Physics {
     /// 30 kg member (52 W of upkeep, 30 W/K) under 10 kg/m² of cover 3.4 K more warmth than bare
     /// ground (thick walls give 3.3 K), and a 1 kg plant member (capture area 2 m²) almost none.
     pub shelter: f64,
-    /// Upkeep of catalysts, J per kg per day per unit of capacity (1/s). A body pays for the amount
+    /// Upkeep of catalysts, J per kg^0.75 per day per unit of capacity (1/s): per `equiv`, anchored
+    /// at the 30 kg founders, who pay what they paid (the figures below are per kg of a 30 kg
+    /// member; the constant is that x 30^0.25 = 2.34, 14 Oct 2026, review 6, finding 2). A body pays for the amount
     /// of its catalysts, which is what they can do: their capacity, the catalysed rate per unit of
     /// input at `t_cat`, `c_cat` x the sum over its catalyst genes that are on of 10^gene x k x
     /// exp(-Ea / `t_cat`). One constant serves every reaction, as it prices what the body can do,
@@ -175,7 +177,10 @@ pub struct Physics {
     /// catalysts cost three times as much
     pub t_firm: f64,
     pub c_firm: f64,
-    /// Upkeep of strength, J per kg per day at strength 1 (about 1 W/kg)
+    /// Upkeep of strength, J per kg-equivalent per day at strength 1: per kg^0.75 at the 1 kg
+    /// reference (`Body::equiv`, as what a body takes and builds; charged per kg until 14 Oct 2026,
+    /// review 6, finding 2). Anchored at the 30 kg founders, who pay what they paid: 10^5 per kg
+    /// there (about 1 W/kg) x 30^0.25 = 2.34 x 10^5 per kg^0.75
     pub c_strength: f64,
     /// Upkeep every body pays whatever its genes, J per day for a member of `m_ref` (1 kg),
     /// times (member mass / `m_ref`)^`intake_exp` (`body::upkeep`, 14 Oct 2026, review 5):
@@ -204,9 +209,11 @@ pub struct Physics {
     pub c_memory: f64,
     pub c_seen: f64,
     pub c_sight: f64,
-    /// Upkeep of learning, J per kg per day at learning rate 1
+    /// Upkeep of learning, J per kg^0.75 per day at learning rate 1 (per `equiv`, anchored at the
+    /// 30 kg founders: 3 x 10^4 per kg there x 30^0.25 = 7.0 x 10^4)
     pub c_learn: f64,
-    /// Cost of signalling, J per kg per day at signal size 1
+    /// Cost of signalling, J per kg^0.75 per day at signal size 1 (per `equiv`, anchored at the
+    /// 30 kg founders: 200 per kg there x 30^0.25 = 468)
     pub c_signal: f64,
     /// Energy a kg of body can turn over in its upkeep before it is worn out, at a `REPAIR` gene of
     /// 0, J/kg (`body::live`): it lives 10^gene times this over its upkeep per kg. 10^9 is the
@@ -361,12 +368,12 @@ impl Default for Physics {
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
-            c_cat: 1.5e9,
+            c_cat: 3.5105e9,
             t_cat: T_SURF,
             unfold: 3.0,
             t_firm: 320.0,
             c_firm: 20.0,
-            c_strength: 1e5,
+            c_strength: 2.3403e5,
             c_basal: 2e4,
             c_leaf: 2e3,
             c_brain: 1e5,
@@ -375,8 +382,8 @@ impl Default for Physics {
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
             c_sight: 1.5e4,
-            c_learn: 3e4,
-            c_signal: 2e2,
+            c_learn: 7.021e4,
+            c_signal: 4.6807e2,
             e_life: 1e9,
             c_repair: 0.25,
             c_move: 3.0,

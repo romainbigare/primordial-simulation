@@ -1368,8 +1368,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// Upkeep over `days` of a body of `mass` kg, J: basal, which every body pays whatever its genes
 /// (`Physics::c_basal` per member by its `equiv`, mass^0.75), of catalysts (by their capacity, the catalysed
 /// rate per unit of input at `Physics::t_cat` summed over the genes that are on, see
-/// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength and
-/// capture area by the day, of learning and signalling, and of one
+/// `Physics::c_cat`, dearer if they keep their shape when warmer, `Physics::t_firm`), strength,
+/// learning and signalling (all four by the `equiv` too, per kg-equivalent: mass^0.75, as what a
+/// body takes and builds; by the kg until 14 Oct 2026), capture area by the day, and of one
 /// decision (per member, by the brain's cost and weakly the member's mass, `Physics::think`);
 /// a body with no brain pays none of the last three. Repair is a share `c_repair` of it at
 /// `REPAIR` 0 and doubles with each unit of the gene: all of it times 1 - c + c 2^`REPAIR`, so a
@@ -1380,8 +1381,12 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
     let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p, &b.genes));
-    let basal = p.c_basal * b.equiv(p, mass) / p.m_ref;
-    let u = days * (basal + mass * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
+    // what goes with the body goes with its whole mass to the power 0.75, like what it takes and
+    // builds: per kg-equivalent (`equiv` over `m_ref`), not per kg (14 Oct 2026, review 6, finding 2;
+    // charged by the kg, a small body had twice the surplus per joule of upkeep of a big one)
+    let eq = b.equiv(p, mass) / p.m_ref;
+    let basal = p.c_basal * eq;
+    let u = days * (basal + eq * (p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
     u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR)))
 }
 

@@ -66,12 +66,12 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `gas_depth` | m | liquid thickness over a body that cuts its gas exchange by a factor e | none found; a gas moves 10^4 times slower in liquid than in air, so 1 m is generous (my arithmetic) | tuned, first guess |
 | `wet_depth` | m | standing liquid depth at which the ground counts as half wet | a film or puddle of about 1 cm | anchored |
 | `shelter` | W kg/(m⁴ K) | heat the cover of other bodies passes to a body (layer of m kg/m² passes shelter/m W per K and m²) | run: 220 gives a 30 kg member under 10 kg/m² of cover 3.4 K more warmth, as thick walls give 3.3 K (`body.rs`) | tuned |
-| `c_cat` | J per kg per day per unit of capacity (1/s) | upkeep of catalysts: a body pays for what its catalysts can do | keeping enzymes costs a resting animal 10 to 25% of its upkeep, doc comment (14 Oct 2026) | anchored |
+| `c_cat` | J per kg^0.75 per day per unit of capacity (1/s) | upkeep of catalysts: a body pays for what its catalysts can do | keeping enzymes costs a resting animal 10 to 25% of its upkeep, doc comment (14 Oct 2026). Per kg^0.75 (`Body::equiv`) since the same day (review 6 finding 2), anchored at the 30 kg founders: 1.5e9 x 30^0.25 = 3.51e9 | anchored |
 | `t_cat` | K | the temperature at which upkeep measures catalyst capacity | a typical surface temperature; the same as `worldgen::life::T_SURF`, which now reads this (one constant, `pcore::T_SURF`) | anchored |
 | `unfold` | K | width over which catalysts lose their shape above their gene | life's enzymes unfold within a few K | anchored |
 | `t_firm` | K | catalysts that keep their shape up to here cost no more | about where life's enzymes fail, 320 K | anchored |
 | `c_firm` | K | each this many K more of the firmness gene adds the upkeep once more | none found; at 360 K catalysts cost three times as much | tuned, first guess |
-| `c_strength` | J per kg per day at strength 1 | upkeep of strength | about 1 W/kg; a 30 kg mammal rests at about 45 W (Kleiber, report 4), so this is the order | anchored |
+| `c_strength` | J per kg^0.75 per day at strength 1 (at the 1 kg reference, `Body::equiv`) | upkeep of strength | about 1 W/kg at 30 kg; a 30 kg mammal rests at about 45 W (Kleiber, report 4), so this is the order. Per kg^0.75 like `c_basal`, intake and building (14 Oct 2026, review 6 finding 2), anchored at the 30 kg founders: 1e5 x 30^0.25 = 2.34e5 | anchored |
 | `c_leaf` | J per m² per day | upkeep of light-capture area | run: so the starting plants pay what they paid before. A leaf's own breathing is about 4e4 J per m² per day (1 µmol of carbon gas per m² per s, my arithmetic), 20 times more | tuned |
 | `c_brain` | J per kg of a member of `m_ref` kg, per decision | cost of one decision of the starting brain (12 hidden, 6 memory, 3 seen, sight 1) | none found; kept as a speed incentive on purpose: it pushes bodies toward long intervals (plan 7.3, handover 6.5). The four numbers below split it | tuned |
 | `m_ref` | kg | the one reference mass: the member at which a per-kg number is per kg (brain cost, `take`, `sweep`, the heat gene) | a unit, not a size: 1 kg. Three reference masses (`m_ref`, `intake_ref`, `heat_mass`) were made one on 15 Oct 2026 | anchored |
@@ -79,8 +79,8 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `c_memory` | the same | cost per memory number | derived: a share of `c_brain` (6 x 5e3/3 = 1e4) | tuned, first guess |
 | `c_seen` | the same | cost per body perceived | derived: a share of `c_brain` (3 x 5e3 = 1.5e4) | tuned, first guess |
 | `c_sight` | the same | cost per square cell of sight | derived: a share of `c_brain` (1 x 1.5e4) | tuned, first guess |
-| `c_learn` | J per kg per day at learning rate 1 | upkeep of learning | none found | tuned, first guess |
-| `c_signal` | J per kg per day at signal size 1 | cost of signalling | none found | tuned, first guess |
+| `c_learn` | J per kg^0.75 per day at learning rate 1 | upkeep of learning | none found; per kg^0.75 since 14 Oct 2026, anchored in size at the 30 kg founders (3e4 x 30^0.25 = 7.02e4) | tuned, first guess |
+| `c_signal` | J per kg^0.75 per day at signal size 1 | cost of signalling | none found; per kg^0.75 since 14 Oct 2026, anchored in size at the 30 kg founders (200 x 30^0.25 = 468) | tuned, first guess |
 | `e_life` | J per kg | energy a kg of body turns over in its upkeep before it is worn out, at a repair gene of 0 | Rubner 1908: many kinds that move turn over about 1,000 kJ per gram of body in a life | anchored |
 | `c_repair` | share | share of upkeep that is repair at repair 0 | remaking a body's own matter takes 20 to 30% of resting upkeep in life | anchored |
 
