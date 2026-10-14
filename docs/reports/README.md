@@ -69,3 +69,8 @@ folder with the same name as the report.
   builds its matter from sugar within its allowance, eaters digest what they take, size is the body,
   stores are carried by the body and a full store is the satiety; eaters live 0.81 to 0.94 years,
   21 of 21 roster kinds live; the owner's question on building costs per kind, 14 October 2026.
+- `review-7-plants.md` and `review-7-lives.md` (with their patches): two Opus reviews with runs,
+  14 October 2026. Plants: copying when full never fired, so plant births came from the brain's
+  hand-set copy chance; fixed, and bodies copy by physics only. Lives: digested matter passed the
+  store limit, a fuel minimum was a death line, stale repair genes; fixed; plants now live 0.62 to
+  0.68 years and eaters 0.94 to 1.15; no new law needed; what to compare with in real life.
