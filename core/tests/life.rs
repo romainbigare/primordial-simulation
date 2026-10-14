@@ -468,7 +468,11 @@ fn a_heavy_individual_copies_over_several_updates() {
 /// What a body takes goes with its body, not with what it holds (review 3, M2): an eater past
 /// `full` times its copy mass takes from the ground what a member at `full` would, whether it holds
 /// 2.4 or 24 times that (with its whole mass working, a body that could not pay for its children
-/// took more the more it held, and grew to 10^7 kg). Matter and energy are kept exactly.
+/// took more the more it held, and grew to 10^7 kg). Neither takes more than that rate, and the
+/// one that is still past `full` after copying takes exactly it (14 Oct 2026: gas goes through the
+/// surface, so a 3,000 kg body breathes less per kg, copies less in one update and ends heavier
+/// than a 300 kg one, so the two are no longer equal, but the cap is the thing). Matter and energy
+/// are kept exactly.
 #[test]
 fn a_body_past_full_takes_by_its_body_not_by_what_it_holds() {
     use pcore::body::{Lineage, DISPERSE};
@@ -500,6 +504,7 @@ fn a_body_past_full_takes_by_its_body_not_by_what_it_holds() {
             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
         }
         (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0);
+        let cap = w.cfg.phys.take * b.interval() as f64 * b.work(&w.cfg.phys, f64::MAX);
         let s = w.life.add(b, w.day, 1);
         let (t0, l0, id) = (pcore::check::totals(&w), w.ledger.clone(), w.life.bodies[s].id(s));
         pcore::body::survey(&mut w);
@@ -509,12 +514,13 @@ fn a_body_past_full_takes_by_its_body_not_by_what_it_holds() {
         assert_eq!(pcore::check::broken(&w), None);
         let (de, dq) = pcore::check::drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
-        w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>()
+        (w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>(), cap)
     };
-    let (light, heavy) = (took(10.0), took(100.0));
-    println!("taken in an update: {light:.3} kg holding 300 kg, {heavy:.3} kg holding 3000 kg");
-    // The same but for what copying at the update changed first (the old code took 80 and 675 kg).
-    assert!(light > 0.0 && (heavy / light - 1.0).abs() < 0.1, "{light} kg, then {heavy} kg");
+    let ((light, cap), (heavy, _)) = (took(10.0), took(100.0));
+    println!("taken in an update: {light:.3} kg holding 300 kg, {heavy:.3} kg holding 3000 kg, at most {cap:.3} kg");
+    // Never more than a member at `full` takes, whatever it holds (the old code took 80 and 675 kg).
+    assert!(light > 0.0 && light <= cap * 1.001 && heavy <= cap * 1.001, "{light} kg, then {heavy} kg, at most {cap}");
+    assert!((heavy / cap - 1.0).abs() < 1e-6, "still past full after copying: it takes at the rate of full: {heavy} of {cap} kg");
 }
 
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no

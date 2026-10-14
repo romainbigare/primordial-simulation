@@ -16,7 +16,14 @@ use serde::{Deserialize, Serialize};
 // Scalar genes, then one per reaction (catalyst, log10 speed-up) and three per substance
 // (safe minimum as a share of mass; take selectivity; most share of mass kept). Below zero a
 // gene is off.
-/// Gas exchange, log10 mol of air per kg per day
+/// Gas exchange, log10 mol of air per m² of the surface open to the air (`Body::open_area`) per
+/// day. Before (14 Oct 2026) it was per kg: a plant breathed 316 mol of air per kg per day, which
+/// at 300 ppm of carbon gas is 2.8 g of sugar per kg per day, ten times less than a real leaf
+/// (24 g per m² per day, so about 33 g per kg for 2 m²/kg), while the same plant caught 40 times
+/// more light than that carbon gas could use. Shade then cost it nothing and height could not
+/// pay (review 4, finding 4). Through the surface, capture area pays twice (light and gas), so a
+/// plant that grows its area gains on both and a taller plant that shades the rest gains more:
+/// the balance of gain and cost that makes a tall plant exists.
 pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;
@@ -295,6 +302,15 @@ impl Body {
     /// 100 of a 128x128 world, review 3, M2).
     pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
         mass.min(p.full * self.dec(COPY_MASS) * self.n())
+    }
+    /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
+    /// (its mass that works times `LEAF`, as `visible` and the light code count it) plus its skin,
+    /// 6 (m1 / `rho_body`)^(2/3), as the surface of walls and the cover; times the count. A 1 kg
+    /// plant of 2 m² per kg: 2.06 m²; a 30 kg eater with 0.03 m² of capture area: 0.61 m². Needs
+    /// `prepare`. The `GAS` gene is the air exchanged per m² of it per day.
+    pub fn open_area(&self, p: &crate::Physics, mass: f64) -> f64 {
+        let m1 = mass / self.n();
+        self.work(p, mass) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
     }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
     /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
@@ -1131,7 +1147,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // The air the body exchanges gas with in this time (mol), from its air node; liquid over
     // the body slows it.
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let reach_mol = b.k.gas * mass * days * (-depth / cfg.phys.gas_depth).exp();
+    let reach_mol = b.k.gas * b.open_area(&cfg.phys, mass) * days * (-depth / cfg.phys.gas_depth).exp();
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..ns {
@@ -1363,7 +1379,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (b.k.gas * mass * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
+    let share = (b.k.gas * b.open_area(&w.cfg.phys, mass) * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
     let t = b.e / cap.max(1e-9);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; 64];
