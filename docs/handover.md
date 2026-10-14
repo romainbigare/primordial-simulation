@@ -953,6 +953,17 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   ordinary eaters' children joined the 48-unit nodes within a year (likeness left the brain sizes
   out), so the big brain was averaged down to 12, not tested. Since review 5 likeness counts the
   sizes by whole units (7.1), so the test can be run as meant.
+  **Made fair (15 Oct 2026, review 6, finding 3):** the old test placed a kind with hand-set biases against
+  neutral eaters, and a control with the same biases did as well. `--clever-year N` now calls
+  `worldgen::life::seed_clever`: it copies `--clever-n` (300) living ordinary eaters (genes, born rows, the
+  store of one member, booked as an edit) twice into the same cells, one set with the big brain (48 hidden,
+  12 memory, 6 seen, sight 3; base and rows carried over by `rebase`/`rerow`; root 2), one with its sizes
+  unchanged (the control; root `KINDS.len()` = 11), and prints a seeding line. No hand-set biases. The old
+  row 2 of `KINDS` stays for the numbering. **Doubt:** the control has the ordinary eaters' genes, so its
+  nodes and its children are alike to theirs and so, it seems (births of the root are counted at the parent, its members are not), join them (7.1), and its root runs out (seed 1, 64 x 64,
+  placed at year 40: 4 members at year 50, none at 55) while the big-brain kind, whose sizes are never alike
+  to theirs, keeps its nodes apart; read the big-brain kind against the ordinary eaters (root 1), and keep in
+  mind that kinds that cannot merge also differ in how their nodes pool.
 - **The roster world lost small plants, not plants (review 5).** Its plant mass is as large as the
   normal run's; the big slow kind won by shade. Since review 5 every animal kind evolves small
   instead (eaters 63 kg to 0.2 kg in 100 years, watch report 6): intake, building and basal upkeep
