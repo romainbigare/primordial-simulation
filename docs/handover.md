@@ -981,6 +981,15 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   in both modes. Design a test world where animals stay near 10^5 members, then run the check
   (7.1) as M4's first job.
 
+- **Growth is free, and the fix needs a body-matter substance (watch report 7).** A child grows to
+  adult size by eating and pays nothing for it, and satiety acts only past `full` (a rule chosen for
+  a run). The law "a body is built, not just filled" (growth paid from the `c_build` allowance,
+  satiety at every size, size by built dry mass) killed every animal kind and cut the plants 5 to 30
+  times, because a body's dry mass here is mostly its fuel store: building work was charged on
+  stored sugar, and `c_build` (anchored to animals' young) is 10 to 100 times slower than plants
+  grow. It needs a body-matter substance in chemistry 0, apart from the fuel store; the owner
+  decides. The code is kept as `docs/reports/watch-7-before-m4/built-mass-not-merged.patch`.
+
 ---
 
 ## 14. Rules of work

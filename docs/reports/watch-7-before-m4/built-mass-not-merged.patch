@@ -1,0 +1,1249 @@
+diff --git a/core/src/body.rs b/core/src/body.rs
+index 72c3276..3aac86c 100644
+--- a/core/src/body.rs
++++ b/core/src/body.rs
+@@ -171,6 +171,17 @@ pub struct Body {
+     /// time once per day however often a body copies in one update (`copy::copy`, review 6, finding 6).
+     #[serde(default)]
+     pub paid_day: Option<u64>,
++    /// What is left of today's building allowance (J) after a payment on `paid_day`, so growth and
++    /// children share one allowance in an update (`copy::allowance`).
++    #[serde(default)]
++    pub build_left: f64,
++    /// Dry mass the body has paid to build, kg per member (a node's: the mean over its members):
++    /// what is not liquid at its temperature and was made by work, `c_copy` per kg (`copy::grow`,
++    /// the work its parent did for it at birth). Dry mass above it is stores (fuel it may burn),
++    /// not body; dry mass below it is a body emptied by burning, refilled for nothing
++    /// (`choose::sate`). Size is this: copy mass, leaf and height go by it (review 6, finding 5).
++    #[serde(default)]
++    pub built: f64,
+     /// An individual's wear, 0 at birth: the energy its upkeep turned over per kg, over what it
+     /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
+     /// has none: its members are of all ages (`live`).
+@@ -266,8 +277,8 @@ impl Body {
+         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
+     }
+     /// Visible traits of one member; the colour is the reflectance of the stores by volume. Its
+-    /// light-capture area is `LEAF` per kg-equivalent of its mass up to `full` times its copy mass
+-    /// (`work`, `equiv`: mass^0.75).
++    /// light-capture area is `LEAF` per kg-equivalent of its built dry mass up to `full` times its
++    /// copy mass (`lit_mass`, `equiv`: mass^0.75).
+     pub fn visible(&self, chem: &Chemistry, p: &crate::Physics) -> [f32; 6] {
+         let (m, cap) = self.mass_cap(chem);
+         let m1 = m / self.n();
+@@ -283,7 +294,7 @@ impl Body {
+                 }
+             }
+         }
+-        let leaf = self.equiv(p, self.work(p, m)) / self.n() * self.dec(LEAF);
++        let leaf = self.equiv(p, self.lit_mass(p)) / self.n() * self.dec(LEAF);
+         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
+     }
+     /// Learning rate of its brain within its life (0 when off).
+@@ -311,6 +322,27 @@ impl Body {
+     pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
+         mass.min(p.full * self.dec(COPY_MASS) * self.n())
+     }
++    /// Dry mass, kg (all members): the mass of what is not liquid at its temperature, which is what
++    /// work builds (`copy::grow`, `copy::copy`: the liquid a body holds is only moved).
++    pub fn dry(&self, chem: &Chemistry) -> f64 {
++        let (m, cap) = self.mass_cap(chem);
++        let t = self.e / cap.max(1e-9);
++        m - self.store.iter().zip(&chem.subs).enumerate().filter(|(k, _)| chem.phase(*k, t) == Phase::Liquid).map(|(_, (a, s))| a * s.molar_mass).sum::<f64>()
++    }
++    /// Mass of the body that sets its size, kg (all members): the built dry mass of each, up to `full`
++    /// times its copy mass. Leaf (`visible`, `open_area`, the light caught in `live`) goes by its
++    /// `equiv`, height (`shade`) by `built`. Before (14 Oct 2026, review 6, finding 12) it was the
++    /// whole mass that works, so a plant that filled with liquid spread leaf and grew tall for nothing.
++    pub fn lit_mass(&self, p: &crate::Physics) -> f64 {
++        self.n() * self.built.min(p.full * self.dec(COPY_MASS))
++    }
++    /// Mass of fuel the reactions burn per J they release, kg: the largest, over the reactions that
++    /// release heat, of the solid inputs' mass per unit over the heat per unit. What paying `c_copy`
++    /// per kg of body takes out of the dry mass. Needs `prepare`.
++    pub fn burnt_per_j(&self, chem: &Chemistry, t: f64) -> f64 {
++        let per = |&(r, q): &(usize, f64)| chem.reactions[r].inputs.iter().filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas).map(|&(k, nu)| nu as f64 * chem.subs[k as usize].molar_mass).sum::<f64>() / q;
++        self.k.burn.iter().map(per).fold(0.0, f64::max)
++    }
+     /// Mass-equivalent a body's size is counted by, kg (in place of the mass, for what goes with
+     /// mass^0.75 in life): per member `m_ref` times its `mass` over `m_ref`, to the power
+     /// `intake_exp` (0.75), times the count. What it takes, sweeps and receives as a gift, what it
+@@ -330,10 +362,10 @@ impl Body {
+     /// plus its skin, 6 (m1 / `rho_body`)^(2/3), as the surface of walls and the cover; times the
+     /// count. A 1 kg plant of 2 m² per kg: 2.06 m²; a 30 kg eater with 0.03 m² of capture area per
+     /// kg-equivalent (12.8): 0.38 + 0.58 m². Needs `prepare`. The `GAS` gene is the air exchanged
+-    /// per m² of it per day.
++    /// per m² of it per day. The leaf is of the built dry mass (`lit_mass`), the skin of the whole.
+     pub fn open_area(&self, p: &crate::Physics, mass: f64) -> f64 {
+         let m1 = mass / self.n();
+-        self.equiv(p, self.work(p, mass)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
++        self.equiv(p, self.lit_mass(p)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
+     }
+     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
+     /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
+@@ -845,8 +877,9 @@ pub fn survey(w: &mut World) {
+ }
+ 
+ /// Light passes through the bodies of a cell from the tallest member down: a member's height is
+-/// `(mass / rho_body)^(1/3)` (a body has no shape yet), so the order is that of member mass, and
+-/// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
++/// `(built / rho_body)^(1/3)` (a body has no shape yet; the dry mass it has built, 14 Oct 2026,
++/// review 6, finding 12: a plant swollen with liquid is not taller), so the order is that of
++/// member built mass, and bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
+ /// `1 - exp(-x)` of what reaches it, so a big member shades a small one and size pays. Together
+ /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
+ /// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
+@@ -857,7 +890,7 @@ fn shade(w: &mut World) {
+     let mut l: Vec<(f32, f64, usize)> = Vec::new();
+     for s in at.iter() {
+         l.clear();
+-        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.vis[0], b.vis[1] as f64 * b.n() / area, s)));
++        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.built as f32, b.vis[1] as f64 * b.n() / area, s)));
+         l.sort_by(|a, b| b.0.total_cmp(&a.0));
+         let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
+         while k < l.len() {
+@@ -1060,6 +1093,9 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
+         let (cat, root) = (light_cat(chem, &b.genes), w.life.root(b));
+         w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count * f });
+         b.count *= 1.0 - f;
++    } else if f > 0.0 {
++        // An individual that loses a share of itself loses that share of its built body.
++        b.built *= 1.0 - f.min(1.0);
+     }
+     b.count >= 1.0
+ }
+@@ -1166,8 +1202,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
+     // body radiates and passes it on. Taken at its temperature at the start of the update (and
+     // at the end, if it ends warmer).
+     let (m1, nb, wk) = (mass / b.n(), b.n(), b.work(&cfg.phys, mass) / mass);
+-    // Its light-capture area, all members' (`visible`): of the mass that works, by mass^0.75.
+-    let leaf = b.equiv(&cfg.phys, b.work(&cfg.phys, mass)) * b.k.leaf;
++    // Its light-capture area, all members' (`visible`): of the built dry mass, by mass^0.75.
++    let leaf = b.equiv(&cfg.phys, b.lit_mass(&cfg.phys)) * b.k.leaf;
+     let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
+     let g0 = b.conductance(cfg.phys.m_ref, mass);
+     let g0 = if cover > 0.0 {
+@@ -1356,10 +1392,16 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
+     if (0..ns).any(|k| b.wet >> k & 1 == 1 && chem.phase(k, t) != Phase::Liquid) {
+         return Some(PHASE);
+     }
+-    // Copying when full is physics, not a choice (review 3, W3): a member past `phys.full` times
+-    // its copy mass copies at its update whatever its brain does (the brain's copy action is for
+-    // copying before that), so a body that decides rarely still copies when full.
+-    if mass3 / b.n() >= w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
++    // Copying when full is physics, not a choice (review 3, W3): a member whose built dry mass is
++    // past `phys.full` times its copy mass copies at its update whatever its brain does (the
++    // brain's copy action is for copying before that), so a body that decides rarely still copies
++    // when full.
++    // Growth is building (14 Oct 2026, review 6, finding 5): dry mass above what the body has built
++    // is built as far as its allowance goes, before its children (`copy::grow`).
++    if crate::copy::grow(w, b) {
++        (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
++    }
++    if b.built >= w.cfg.phys.full * b.dec(COPY_MASS) && crate::copy::copy(w, slot, b) {
+         (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
+     }
+     None
+diff --git a/core/src/choose.rs b/core/src/choose.rs
+index 169c040..04d99d2 100644
+--- a/core/src/choose.rs
++++ b/core/src/choose.rs
+@@ -208,10 +208,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
+         }
+     }
+ 
+-    // Copy by its own chance (set by evolution and imitation, never learned) while a member holds
++    // Copy by its own chance (set by evolution and imitation, never learned) while a member has built
+     // less than `phys.full` times its copy mass (past it, it copied at its update, `body::live`);
+     // else draw one of the other actions by its score.
+-    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) && pm < w.cfg.phys.full * b.dec(body::COPY_MASS);
++    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) && b.built < w.cfg.phys.full * b.dec(body::COPY_MASS);
+     logit[1] = f32::NEG_INFINITY;
+     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
+     let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
+@@ -578,24 +578,26 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64,
+     m
+ }
+ 
+-/// Satiety (14 Oct 2026, review 5): a member past `full` times its copy mass (grown, and paying
+-/// for children no faster than `c_build`) takes no more than its reactions can use over `days`,
+-/// its upkeep plus the most it can build (`Physics::c_build` x its `equiv` / `m_ref` x days),
+-/// counted by the heat of the amounts `m` (mol) it burns (`Consts::burn`). Its reactions release
+-/// a share of what it holds over the interval (first order in the fuel, `release`), not all of
+-/// it, so what they can use is a store: it fills its fuel until that share of it covers its
+-/// upkeep and building (`can` / share, less what it holds). With the bare `can` (upkeep plus 6%
+-/// for an eater) the store sat at the line where the body dies and every starting eater died in
+-/// its first year; and below `full` a body eats as its intake allows: a body takes on only some of
+-/// its decisions, so a meal must last it several intervals, and with satiety at every size the
+-/// starting eaters still all died (seed 1, 64x64). Past `full` it is what keeps a body that cannot
+-/// pay for its children from swelling (review 3, M2). The substances it burns are cut to that together; the others (liquid, which
+-/// comes by area and stops at the level the body keeps) are not counted. Never less than the
+-/// upkeep's worth, so a body never stops short of what it burns (burning leaves its liquid
+-/// product in the body, 13 Oct 2026); a body with no fuel takes what it reaches.
+-/// Before, a body past `full` took at the rate of `full` and swelled when it could not pay for
+-/// its children (review 3, M2), and a body below it took three to six times what it used. The
+-/// target is capped at what the body could take by its size in the time (review 6, finding 13).
++/// Satiety, at every size (14 Oct 2026, review 5; the gate at `full` went on 14 Oct 2026, review 6,
++/// finding 5): a body takes no more of what it burns than it can use over `days`, counted by the
++/// heat of the amounts `m` (mol) it burns (`Consts::burn`): its upkeep and what it burns to build
++/// (`Physics::c_build` x its `equiv` / `m_ref` x days), over the share its reactions release (they
++/// release a share of what it holds over the interval, first order in the fuel, `release`, so
++/// what they can use is a store: it fills its fuel until that share covers them, less what it
++/// holds); or, if more, refilling its dry mass up to the body it has built (`Body::built`: a
++/// body emptied by burning, refilled for nothing, and a starved one a fat store again); and the
++/// dry mass it can build in the interval, the allowance over `c_copy`, in kg of the best fuel it
++/// takes. Growth is building (`copy::grow`), so a growing body takes what it builds and no more:
++/// before, it took as its intake allowed below `full`, because its growth was not counted
++/// (with satiety at every size all 416 starting eaters died in their first year: the target was
++/// its upkeep plus 6%, its store sat at the line it dies at, and a meal must last several
++/// intervals, a body deciding on only some of its updates; now a store that has been burnt down
++/// is refilled to the body, a reserve of intervals). The substances it burns are cut to that
++/// together; the others (liquid, which comes by area and stops at the level the body keeps) are
++/// not counted. Never less than the upkeep's worth, so a body never stops short of what it
++/// burns (burning leaves its liquid product in the body, 13 Oct 2026); a body with no fuel takes
++/// what it reaches. The target is capped at what the body could take by its size in the time
++/// (review 6, finding 13).
+ pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
+     let (p, t) = (&w.cfg.phys, b.temp(&w.chem));
+     let heat = |k: usize| if w.chem.phase(k, t) == Phase::Gas { 0.0 } else { b.k.burn.iter().filter_map(|&(r, e)| w.chem.reactions[r].inputs.iter().find(|x| x.0 as usize == k).map(|x| e / x.1 as f64)).fold(0.0, f64::max) };
+@@ -603,9 +605,6 @@ pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
+     if got <= 0.0 {
+         return;
+     }
+-    if mass / b.n() < p.full * b.dec(body::COPY_MASS) {
+-        return;
+-    }
+     let (up, fuel, rel) = (body::upkeep(w, b, days, mass), b.fuel(&w.chem, t), body::release(w, b, days));
+     if fuel <= 0.0 || rel <= 0.0 {
+         return;
+@@ -615,7 +614,10 @@ pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
+     // its size allows (`Physics::take` x days x `equiv`, the cap of every take) whatever it could
+     // use, so `can` stops at the heat of that much of the best fuel taken (review 6, finding 13).
+     let best = m.iter().enumerate().filter(|&(_, &a)| a > 0.0).map(|(k, _)| heat(k) / w.chem.subs[k].molar_mass).fold(0.0, f64::max);
+-    let can = ((up + p.c_build * b.equiv(p, mass) / p.m_ref * days) * fuel / rel - fuel).min(p.take * days * b.equiv(p, mass) * best).max(up);
++    let (eq, n) = (b.equiv(p, mass), b.n());
++    let build = p.c_build * eq / p.m_ref * days;
++    let (refill, grow) = ((b.built * n - b.dry(&w.chem)).max(0.0), build / p.c_copy);
++    let can = (((up + build) * fuel / rel - fuel).max(refill * best) + grow * best).min(p.take * days * eq * best).max(up);
+     if got > can {
+         m.iter_mut().enumerate().filter(|&(k, _)| heat(k) > 0.0).for_each(|(_, a)| *a *= can / got);
+     }
+diff --git a/core/src/copy.rs b/core/src/copy.rs
+index be15e16..3a0c6dd 100644
+--- a/core/src/copy.rs
++++ b/core/src/copy.rs
+@@ -6,8 +6,13 @@
+ //! what its parent learned). A child whose brain-size genes are a whole unit away from its
+ //! lineage's sizes starts a new lineage (and group) with the new sizes, its brain carried over
+ //! where the sizes overlap; rarely the base of its lineage's brain is copied with small noise,
+-//! which starts a new lineage too. A member past `phys.full` times its copy mass has as many
+-//! children as it grew past that, at its update whatever its brain does (`body::live`).
++//! which starts a new lineage too. A member whose built dry mass (`Body::built`) is past
++//! `phys.full` times its copy mass has as many children as it grew past that, at its update
++//! whatever its brain does (`body::live`). A body is built, not just filled (14 Oct 2026, review 6,
++//! finding 5): the dry mass it has paid `c_copy` per kg to make is its size, the growth of its
++//! own dry mass is paid for before its children (`grow`) from the same `c_build` allowance
++//! (`allowance`), a child is given built mass the parent paid for, and the built mass is a mean
++//! per member that is pooled by count where stores are.
+ //!
+ //! A population node (count > 1) keeps how its members differ (plan 7.1): its spread, the
+ //! variance of their genes around its genes, per gene, and of their born rows around its rows
+@@ -225,18 +230,70 @@ pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
+     }
+ }
+ 
++/// What a body may still pay into building today, J: `c_build` x its `equiv` / `m_ref` x the days
++/// since it last paid, at most its interval (building takes time, 14 Oct 2026, review 5; once per
++/// day however often a body builds in one update, review 6, finding 6). Growth (`grow`) and the
++/// children (`copy`) share it: on the day it paid, what is left of it (`Body::build_left`).
++pub fn allowance(w: &World, b: &Body, mass: f64) -> f64 {
++    let (p, days) = (&w.cfg.phys, b.interval() as f64);
++    match b.paid_day {
++        Some(d) if d == w.day => b.build_left.max(0.0),
++        d => p.c_build * b.equiv(p, mass) / p.m_ref * days.min(d.map_or(days, |d| w.day.saturating_sub(d) as f64)),
++    }
++}
++
++/// `x` J of the allowance `room` were paid today (the rest is left for the other builder).
++fn spend(w: &World, b: &mut Body, x: f64, room: f64) {
++    (b.paid_day, b.build_left) = (Some(w.day), (room - x).max(0.0));
++}
++
++/// Growth is building (14 Oct 2026, review 6, finding 5): a member whose dry mass is above what it
++/// has built builds the difference as far as it can, `c_copy` per kg like the children (the
++/// matter is already in its stores; the work is what makes it body), from the same allowance
++/// (`allowance`, `c_build`), first, before its children. The work burns fuel, so the dry mass
++/// that becomes body is what is above `built` less what the work burns (`Body::burnt_per_j`): a
++/// kg built costs `c_copy` of fuel energy and the fuel's mass too. It builds only what it can
++/// spare: after paying, its reactions must still release its upkeep over an interval (as a body
++/// copying before `full`, `copy`), and nothing when they cannot. What it does not build stays
++/// stores (fuel it may burn), not body. A body below `built` is a body emptied by burning:
++/// refilling it costs nothing. Returns whether it built.
++pub fn grow(w: &mut World, b: &mut Body) -> bool {
++    let (chem, c_copy) = (&w.chem, w.cfg.phys.c_copy);
++    let (mass, n) = (b.mass(chem), b.n());
++    let above = b.dry(chem) - b.built * n;
++    if above <= 1e-12 * mass {
++        return false;
++    }
++    let (days, t) = (b.interval() as f64, b.temp(chem));
++    // Burning x J of fuel takes `burnt` kg x x out of the dry mass, so what is built, d kg for
++    // `c_copy` d J, leaves (1 + c_copy burnt) d kg of the dry mass above `built`.
++    let burnt = b.burnt_per_j(chem, t);
++    let room = allowance(w, b, mass);
++    let r = 0.999 * body::release(w, b, days);
++    let spare = b.fuel(chem, t) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300));
++    let x = (c_copy * above / (1.0 + c_copy * burnt)).min(room).min(spare).min(r);
++    if x <= 0.0 || !body::pay(w, b, x, days) {
++        return false;
++    }
++    spend(w, b, x, room);
++    // (Clamped to the dry mass left: the work burns what is above `built`, never the body.)
++    b.built += (x / c_copy).min((b.dry(&w.chem) / n - b.built).max(0.0) * n) / n;
++    true
++}
++
+ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
+     let lay = Layout::of(&w.chem);
+-    let (mass, n, mc) = (b.mass(&w.chem), b.n(), b.dec(body::COPY_MASS));
+-    if mass < mc * n {
++    let (mass, n, mc, built) = (b.mass(&w.chem), b.n(), b.dec(body::COPY_MASS), b.built);
++    if built < mc {
+         return false;
+     }
+     let id = b.id(slot);
+     let mut r = Rng::new(w.seed, w.day, id, Purpose::Mutate);
+     let frac = b.gene(body::CHILD).clamp(0.05, 0.5);
+-    // A member past `phys.full` times its copy mass gives all it grew past that to children of the
+-    // size it would give at that mass: share `s` of its stores, `k` children.
+-    let (m1, full) = (mass / n, w.cfg.phys.full * mc);
++    // A member whose built dry mass is past `phys.full` times its copy mass gives all it grew past
++    // that to children of the size it would give at that mass: share `s` of its stores, `k` children.
++    // (By built mass since 14 Oct 2026, review 6, finding 5; by the whole mass before.)
++    let (m1, full) = (built, w.cfg.phys.full * mc);
+     let (s, k) = if m1 > full { (1.0 - (1.0 - frac) * full / m1, (m1 / full - 1.0 + frac) / frac) } else { (frac, 1.0) };
+     // The work of making them, `c_copy` per kg given, is paid into the child store (`Body::paid`)
+     // as far as its reactions can release it now (review 3, P6): copying is a process, so a body
+@@ -251,25 +308,30 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
+     // children are built of: the liquid they carry is only moved (counted, a member of mostly
+     // liquid could not pay for a child, never copied and swelled to 30 times its copy mass). And
+     // building takes time: at most `c_build` x mass^0.75 a day, so a child takes months to build
+-    // for a 1 kg body and years for a 2,000 t one (`Physics::c_build`), whatever its reactions release.
++    // for a 1 kg body and years for a 2,000 t one (`Physics::c_build`), whatever its reactions
++    // release, from what growth left of the allowance (`grow`, `allowance`).
+     let t = b.temp(&w.chem);
+     let wet: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == crate::chem::Phase::Liquid).map(|k| b.store[k] * w.chem.subs[k].molar_mass).sum();
+     let (owe, days) = (w.cfg.phys.c_copy * s * (mass - wet).max(0.0), b.interval() as f64);
+     let more = if owe > b.paid {
+         let r = 0.999 * body::release(w, b, days);
+         let spare = if m1 >= full { r } else { b.fuel(&w.chem, b.temp(&w.chem)) * (1.0 - body::upkeep(w, b, days, mass) / r.max(1e-300)) };
+-        // Building takes time (14 Oct 2026, review 5): never more than `c_build` x its `equiv` x the
+-        // days. The days since it last paid, at most its interval (review 6, finding 6): a body that
+-        // copies past `full` at its update (`body::live`) and again by its brain's choice (`choose::act`)
+-        // in the same update pays once.
+-        let build = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, mass) / w.cfg.phys.m_ref * days.min(b.paid_day.map_or(days, |d| w.day.saturating_sub(d) as f64));
+-        (owe - b.paid).min(spare).min(r).min(build)
++        // Building takes time (14 Oct 2026, review 5): never more than the allowance, `c_build` x its
++        // `equiv` x the days since it last paid, at most its interval (review 6, finding 6): a body
++        // that copies past `full` at its update (`body::live`) and again by its brain's choice
++        // (`choose::act`) in the same update pays once. Growth took its part first.
++        let room = allowance(w, b, mass);
++        let x = (owe - b.paid).min(spare).min(r).min(room);
++        if x > 0.0 && body::pay(w, b, x, days) {
++            spend(w, b, x, room);
++            x
++        } else {
++            0.0
++        }
+     } else {
+         0.0
+     };
+-    if more > 0.0 && body::pay(w, b, more, days) {
+-        (b.paid, b.paid_day) = (b.paid + more, Some(w.day));
+-    }
++    b.paid += more;
+     let p = if owe > 0.0 { (b.paid / owe).min(1.0) } else { 1.0 };
+     let (i, births) = (b.cell as usize, if n > 1.0 { n * k * p } else { (k * p + 1e-9).floor() });
+     if births <= 0.0 {
+@@ -290,6 +352,13 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
+         Some(j) => (j, m),
+         None => (i, 0.0),
+     };
++    // Each child is given share `s / k` of a member's stores and the dry mass in it, which its
++    // parent paid for (`owe`): the child's built mass is that. The parent gave away that share of
++    // its built body, each child costing it `s / k` of a member's built mass; the children that
++    // stay in a node are new members of it (their dry mass stays in its pool), so its mean built
++    // mass per member is pooled by count.
++    let (g, dry_m, stay) = (s / k, b.dry(&w.chem) / n, if node { births - m } else { 0.0 });
++    b.built = ((n * b.built - births * g * b.built + stay * g * dry_m) / (n + stay)).max(0.0);
+     if node {
+         b.count += births - m;
+         widen(&lay, &w.cfg.copy_phys(), b, ((births - m) / b.n()) as f32);
+@@ -321,6 +390,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
+     for (a, x) in b.store.iter_mut().zip(&c.store) {
+         *a -= x;
+     }
++    c.built = c.dry(&w.chem) / m;
+     // Born rows: a share `row_chance` of children change theirs by a step (bigger by 1 /
+     // sqrt(row_chance)), else share their parent's. Children drawn from a node whose rows differ,
+     // or a group of them, get the mean of the group drawn (noise of that variance and the
+@@ -458,7 +528,7 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
+ }
+ 
+ /// Members `c` (not placed, born with `rows`, in the shape of `t`'s brain) join body `t`:
+-/// stores, heat and child stores add up; genes and born rows become the means by count, and the spread what
++/// stores, heat and child stores add up, built mass is the mean by count; genes and born rows become the means by count, and the spread what
+ /// both held around the new mean (each one's spread plus its gap from the new mean squared, by
+ /// count; for the rows the gap squared is the mean over rows; up to `most`), so the smaller one's
+ /// genes stay in the spread, not only in the mean.
+@@ -490,8 +560,16 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
+         None => w.life.regene(o, genes),
+     }
+     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
++    // Built mass per member is pooled by count where stores are; the allowance left of the day of
++    // the later payment (of both, if the same day) adds up.
++    o.built = (o.built * o.n() + c.built * c.n()) / (o.n() + c.n());
++    (o.build_left, o.paid_day) = match (o.paid_day, c.paid_day) {
++        (x, y) if x == y => (o.build_left + c.build_left, x),
++        (x, y) if x > y => (o.build_left, x),
++        (_, y) => (c.build_left, y),
++    };
+     // A node has no wear: its members are of all ages (`body::live`).
+-    (o.e, o.count, o.paid, o.wear, o.paid_day) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0, o.paid_day.max(c.paid_day));
++    (o.e, o.count, o.paid, o.wear) = (o.e + c.e, o.n() + c.n(), o.paid + c.paid, 0.0);
+     o.vis = o.visible(&w.chem, &w.cfg.phys);
+ }
+ 
+@@ -500,13 +578,13 @@ pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
+ fn part(b: &mut Body, f: f64) -> Body {
+     // (The trace and the constants are not the part's: set aside, not cloned.)
+     let (trace, k) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k));
+-    let mut c = Body { count: f * b.count, e: f * b.e, paid: f * b.paid, hold: 0, inside: 0, ..b.clone() };
++    let mut c = Body { count: f * b.count, e: f * b.e, paid: f * b.paid, build_left: f * b.build_left, hold: 0, inside: 0, ..b.clone() };
+     (b.trace, b.k) = (trace, k);
+     for (a, x) in b.store.iter_mut().zip(c.store.iter_mut()) {
+         *x = f * *a;
+         *a -= *x;
+     }
+-    (b.e, b.count, b.paid) = (b.e - c.e, b.count - c.count, b.paid - c.paid);
++    (b.e, b.count, b.paid, b.build_left) = (b.e - c.e, b.count - c.count, b.paid - c.paid, b.build_left - c.build_left);
+     c
+ }
+ 
+diff --git a/core/src/lib.rs b/core/src/lib.rs
+index a39e3bc..dc50c06 100644
+--- a/core/src/lib.rs
++++ b/core/src/lib.rs
+@@ -313,10 +313,13 @@ pub struct Physics {
+     /// in one interval: a starting eater copying at 63 kg gives 19 kg to a child, 1.9 x 10^8 J,
+     /// and can release 1.2 x 10^8 J in 9 days at 288 K (2 x 10^6 until 13 Oct 2026, when it had to).
+     pub c_copy: f64,
+-    /// Most work a body can put into its children per day, J, for a member of `m_ref` (1 kg);
++    /// Most work a body can put into building per day, J, for a member of `m_ref` (1 kg);
+     /// a member of `m` kg pays at most this x (`m` / `m_ref`)^`intake_exp` x days (`Body::equiv`,
+-    /// `copy::copy`): building a body takes time, small ones grow fast and big ones slowly
+-    /// (14 Oct 2026, review 5). Anchored to the growth of young in life: a 1 kg animal makes about
++    /// `copy::allowance`): building a body takes time, small ones grow fast and big ones slowly
++    /// (14 Oct 2026, review 5). Since 14 Oct 2026 (review 6, finding 5) the growth of a body's own
++    /// dry mass is building too (`copy::grow`, `c_copy` per kg, first), and its children are paid
++    /// from what is left of the same allowance (`copy::copy`); before, only the child's share was
++    /// limited and about 70% of an adult body was built for nothing. Anchored to the growth of young in life: a 1 kg animal makes about
+     /// 1 kg of dry young a year (2.7 x 10^4 J a day at `c_copy`), a 50 kg one about 1 kg a year
+     /// (1,450 per kg^0.75), a 1 t one about 10 kg (1,500): anchored to 1,500 to 30,000. 10^4,
+     /// review 5's value. It was 3 x 10^4 for part of 14 Oct, raised only so the starting eaters
+@@ -336,8 +339,10 @@ pub struct Physics {
+     pub row_noise: f32,
+     /// Spread of the weights a bigger brain adds
+     pub new_noise: f32,
+-    /// A member holding this many times its copy mass copies at its update whatever its brain
+-    /// does (`body::live`: physics); the brain's copy action copies only before that
++    /// A member whose built dry mass (`Body::built`) is this many times its copy mass copies at its
++    /// update whatever its brain does (`body::live`: physics); the brain's copy action copies only
++    /// before that. It also caps the built mass that sets leaf, and the mass that works (liquid
++    /// soaking). By built mass since 14 Oct 2026 (review 6, finding 5); by the whole mass before
+     pub full: f64,
+     /// Nodes in one cell whose genes differ by at most this many mutation steps in each merge
+     /// (`copy::alike`). A node splits when its two halves would differ by more, in a gene or in
+diff --git a/core/tests/build.rs b/core/tests/build.rs
+new file mode 100644
+index 0000000..b1f973b
+--- /dev/null
++++ b/core/tests/build.rs
+@@ -0,0 +1,269 @@
++//! A body is built, not just filled (14 Oct 2026, review 6, findings 5 and 12): size is the dry
++//! mass a body has paid to build (`Body::built`, kg per member). Growth is building (`copy::grow`,
++//! `c_copy` per kg from the `c_build` allowance, before the children), a child is given built mass
++//! its parent paid for, a body emptied by burning refills for nothing, a body copies when its
++//! built mass is full, and satiety holds at every size.
++
++use pcore::body::{Body, COPY_MASS, DISPERSE, STRENGTH};
++use pcore::rng::{Purpose, Rng};
++use pcore::{body, brain, change, choose, copy, flow, World};
++
++/// A land cell with dry ground.
++fn dry_land(w: &World) -> usize {
++    (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land")
++}
++
++/// A starting eater (30 kg, 9 kg of it built dry mass) of a brain that only does fixed action `act`
++/// (0 rests, 3 takes from the ground), weak (strength 0), staying where it is, copying at 10^6 kg.
++fn eater(w: &mut World, i: usize, act: usize) -> Body {
++    let shape = choose::shape(w.chem.ns(), 12, 6);
++    let mut fixed = [-8.0; brain::FIXED];
++    fixed[act] = 8.0;
++    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
++    let rows = base.split_off(shape.base());
++    let (l, g) = (w.life.new_lineage(body::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
++    let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
++    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS]) = (0.0, 0.0, 6.0);
++    b
++}
++
++/// A body `f` times the size (stores and heat; booked as an edit), still built.
++fn scale(w: &mut World, b: &mut Body, f: f64) {
++    for k in 0..w.chem.ns() {
++        w.chem.add_elems(k, (f - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
++        w.ledger.imposed_energy += (f - 1.0) * b.store[k] * w.chem.subs[k].hf;
++        b.store[k] *= f;
++    }
++    w.ledger.imposed_energy += (f - 1.0) * b.e;
++    b.e *= f;
++    b.built = b.dry(&w.chem) / b.n();
++}
++
++/// `kg` of substance `k` added to a body at its temperature (booked as an edit), or taken out if
++/// negative. Its built mass is as it was.
++fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
++    let (a, t) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem));
++    w.chem.add_elems(k, a, &mut w.ledger.imposed_elems);
++    w.ledger.imposed_energy += a * (w.chem.subs[k].hf + w.chem.subs[k].cp * t);
++    b.store[k] += a;
++    b.e += a * w.chem.subs[k].cp * t;
++}
++
++/// One day: the flow and change steps when due, then the bodies due.
++fn day(w: &mut World) {
++    let dt = w.cfg.phys_days as f64 * 86_400.0;
++    if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
++        body::survey(w);
++        flow::step(w, dt);
++        change::step(w, dt);
++    }
++    w.events.clear();
++    body::day(w);
++    w.day += 1;
++}
++
++fn start() -> (World, usize, usize, usize) {
++    let mut w = worldgen::new_world(1, 16, 16);
++    pcore::step(&mut w);
++    let i = dry_land(&w);
++    let (_, rich, liquid, _) = worldgen::life::roles(&w.chem).expect("roles");
++    (w, i, rich, liquid)
++}
++
++/// Growth is building: a child of 13 kg (3.9 kg of it built) holding 5 kg of dry mass more than it
++/// has built turns it into body at most `c_build` x `equiv` / `m_ref` x the days of its interval
++/// over `c_copy` kg of dry body a day (a quarter of the allowance of a grown one, not free), and
++/// at that rate while it has the dry mass to build, from its fuel, so its built mass never passes
++/// its dry mass. Matter and energy are kept exactly over the updates.
++#[test]
++fn a_child_builds_its_body_at_most_c_build_times_equiv_over_c_copy_a_day() {
++    let (mut w, i, rich, _) = start();
++    let mut b = eater(&mut w, i, 0);
++    scale(&mut w, &mut b, 13.0 / 30.0);
++    add(&mut w, &mut b, rich, 5.0);
++    let (built0, p) = (b.built, w.cfg.phys);
++    let s = w.life.add(b, w.day, 1);
++    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
++    let (mut log, mut last, mut total) = (Vec::new(), (built0, w.day), 0.0);
++    for _ in 0..60 {
++        day(&mut w);
++        let b = &mut w.life.bodies[s];
++        assert!(b.alive, "the child died");
++        if b.last == w.day - 1 && w.day - 1 > last.1 {
++            b.prepare(&w.chem, &p);
++            // (A body that has not paid yet has the allowance of its whole interval.)
++            let since = if log.is_empty() { b.interval() } else { (w.day - 1 - last.1).min(b.interval()) };
++            let cap = p.c_build * b.equiv(&p, b.mass(&w.chem)) / p.m_ref * since as f64 / p.c_copy;
++            let grew = b.built - last.0;
++            log.push((grew, cap));
++            assert!(grew <= cap * 1.05, "built {grew:e} kg in an update, the allowance is {cap:e} kg");
++            assert!(b.built <= b.dry(&w.chem) * (1.0 + 1e-9), "built {} kg of {} kg of dry mass", b.built, b.dry(&w.chem));
++            total += grew;
++            last = (b.built, w.day - 1);
++        }
++    }
++    println!("built per update, kg, with the allowance: {log:?}");
++    let days = (last.1 - 1) as f64;
++    let first = p.c_build * w.life.bodies[s].equiv(&p, 13.0) / p.m_ref * days / p.c_copy;
++    assert!(log.len() >= 5 && log.iter().filter(|x| x.0 > 0.8 * x.1).count() >= log.len() * 3 / 4, "the allowance does not bind: {log:?}");
++    assert!(total > 0.0 && total <= 2.0 * first, "built {total} kg in {days} days, the allowance of 13 kg is {first} kg");
++    // Years, not days: the 14 kg of dry body between a child of 13 kg and an adult of 60 kg (30% dry) takes years at this rate.
++    let years = 14.0 / (total / days * 365.0);
++    assert!(years > 1.0, "{years} years to build 14 kg of dry body");
++    assert_eq!(pcore::check::broken(&w), None);
++    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
++    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
++}
++
++/// A body emptied by burning refills for nothing: an eater at half the dry mass it has built, on
++/// ground with the energy-rich solid, takes it back to the body it has built without paying any
++/// building (`Body::paid_day` stays unset and its built mass unchanged while its dry mass is below
++/// it), and a starved body is not a smaller one. Matter and energy are kept exactly.
++#[test]
++fn a_starved_body_refills_to_its_built_mass_at_no_build_cost() {
++    let (mut w, i, rich, _) = start();
++    // A kg of the energy-rich solid per m² on its ground (booked as an edit).
++    let (t, a) = (w.t_ground(i), w.grid.area() / w.chem.subs[rich].molar_mass);
++    let n = w.grid.n();
++    w.ground[rich * n + i] += a;
++    w.chem.add_elems(rich, a, &mut w.ledger.imposed_elems);
++    let e = w.energy_ground(i, t);
++    (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[rich].hf, e);
++    let mut b = eater(&mut w, i, 3);
++    let built = b.built;
++    let half = 0.5 * b.dry(&w.chem);
++    add(&mut w, &mut b, rich, -half);
++    assert!(b.dry(&w.chem) < 0.55 * built && b.built == built);
++    let s = w.life.add(b, w.day, 1);
++    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
++    let mut refilled = 0;
++    for _ in 0..200 {
++        let b = &w.life.bodies[s];
++        let below = b.alive && b.dry(&w.chem) < 0.97 * b.built;
++        let (before, paid) = (b.built, b.paid_day);
++        day(&mut w);
++        let b = &w.life.bodies[s];
++        assert!(b.alive, "the body starved");
++        if below {
++            // (An update that starts below the body it has built builds nothing.)
++            assert!(b.built == before && b.paid_day == paid, "built {} kg from {before} kg, paid on {:?}", b.built, b.paid_day);
++        }
++        refilled += (b.dry(&w.chem) >= 0.97 * b.built) as u32;
++        if refilled >= 3 {
++            break;
++        }
++    }
++    let b = &w.life.bodies[s];
++    println!("built {} kg of {built} kg, dry {} kg, paid on {:?}", b.built, b.dry(&w.chem), b.paid_day);
++    assert!(refilled >= 3, "it never refilled: dry {} of {} kg", b.dry(&w.chem), b.built);
++    assert!(b.built == built && b.paid_day.is_none(), "refilling cost building: built {} kg of {built}, paid on {:?}", b.built, b.paid_day);
++    assert_eq!(pcore::check::broken(&w), None);
++    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
++    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
++}
++
++/// Satiety holds at every size and for a growing body (14 Oct 2026, review 6, finding 5): asked for
++/// twice what its size can take, a body that holds more dry mass than it has built (a child with
++/// stores to build) of 0.1, 1, 10 or 100 times a starting eater's mass is left with its upkeep's
++/// worth of fuel, or the dry mass it can build in the interval if that is more, and never the
++/// size cap. Before, a body below `full` times its copy mass was left everything its size allowed.
++#[test]
++fn satiety_caps_a_growing_body_at_every_size() {
++    let (mut w, i, rich, _) = start();
++    let (_, _, _, burn) = worldgen::life::roles(&w.chem).expect("roles");
++    let joule_per_kg = -w.chem.dh(burn) / w.chem.reactions[burn].inputs.iter().find(|x| x.0 as usize == rich).unwrap().1 as f64 / w.chem.subs[rich].molar_mass;
++    for times in [0.1, 1.0, 10.0, 100.0] {
++        let mut b = eater(&mut w, i, 0);
++        scale(&mut w, &mut b, times);
++        // A third more dry mass than it has built.
++        let extra = b.dry(&w.chem) / 3.0;
++        add(&mut w, &mut b, rich, extra);
++        assert!(b.dry(&w.chem) > 1.3 * b.built * b.n());
++        b.prepare(&w.chem, &w.cfg.phys);
++        let (p, days, mass) = (w.cfg.phys, b.interval() as f64, b.mass(&w.chem));
++        let (equiv, up) = (b.equiv(&p, mass), body::upkeep(&w, &b, days, mass));
++        let (cap, grow) = (p.take * days * equiv, p.c_build * equiv / p.m_ref * days / p.c_copy);
++        let mut m = vec![0.0; w.chem.ns()];
++        m[rich] = 2.0 * cap / w.chem.subs[rich].molar_mass;
++        choose::sate(&w, &b, &mut m, days, mass);
++        let left = m[rich] * w.chem.subs[rich].molar_mass;
++        let want = (up / joule_per_kg).max(grow);
++        println!("{times} x 30 kg: left {left:.3} kg of {:.3} asked; upkeep {:.3} kg, build {grow:.3} kg, size cap {cap:.3} kg", 2.0 * cap, up / joule_per_kg);
++        assert!(left < cap && (left / want - 1.0).abs() < 1e-6, "left {left} kg, the upkeep's worth or the build is {want} kg, the size cap {cap} kg");
++    }
++}
++
++/// A body copies when its built dry mass is full, not its whole mass (14 Oct 2026): an eater of
++/// 300 kg, mostly liquid, that has built less than its copy mass does not copy and pays nothing
++/// toward a child however much it holds; one that has built its copy mass does, though it weighs
++/// 30 kg. A child is given the dry mass its parent paid `c_copy` for as the body it has built, and
++/// its parent's built mass falls by the share it gave away: an individual that gives the share `s`
++/// of its stores keeps (1 - s) of its built mass. Matter and energy are kept exactly.
++#[test]
++fn a_body_copies_when_its_built_mass_is_full_and_gives_its_children_built_mass() {
++    let (mut w, i, _, liquid) = start();
++    // 270 kg more liquid on a body of 9 kg built: 300 kg in all, copy mass 10 kg of built dry mass.
++    let mut heavy = eater(&mut w, i, 0);
++    add(&mut w, &mut heavy, liquid, 270.0);
++    heavy.genes[COPY_MASS] = 10f32.log10();
++    heavy.prepare(&w.chem, &w.cfg.phys);
++    assert!(heavy.mass(&w.chem) > 10.0 * 10.0 && heavy.built < 10.0);
++    let hs = w.life.add(heavy, w.day, 1);
++    let mut heavy = std::mem::take(&mut w.life.bodies[hs]);
++    w.day += 1;
++    let (paid, day0) = (heavy.paid, heavy.paid_day);
++    assert!(!copy::copy(&mut w, hs, &mut heavy) && heavy.paid == paid && heavy.paid_day == day0, "copied with {} kg built of 10 kg", heavy.built);
++    w.life.bodies[hs] = heavy;
++    // A body of 30 kg that has built 9 kg of dry mass, copy mass 8 kg: it pays toward a child, and
++    // with a copy cost small enough to pay in one interval it has the child at once.
++    let mut b = eater(&mut w, i, 0);
++    b.genes[COPY_MASS] = 8f32.log10();
++    b.prepare(&w.chem, &w.cfg.phys);
++    w.cfg.phys.c_copy = 1e3;
++    let (share, built, dry) = (b.gene(body::CHILD).clamp(0.05, 0.5), b.built, b.dry(&w.chem));
++    let slot = w.life.add(b, w.day, 1);
++    let mut b = std::mem::take(&mut w.life.bodies[slot]);
++    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
++    w.day += 400;
++    assert!(copy::copy(&mut w, slot, &mut b), "a body that has built its copy mass has no child");
++    let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| w.life.bodies[k].alive && w.life.bodies[k].parent == b.id(slot)).collect();
++    assert_eq!(kids.len(), 1, "children {}", kids.len());
++    let c = &w.life.bodies[kids[0]];
++    println!("parent built {} kg of {built}; child built {} kg, dry {} kg, mass {} kg", b.built, c.built, c.dry(&w.chem), c.mass(&w.chem));
++    // The child's built mass is the dry mass it was given; the parent's falls by the share given.
++    assert!((c.built / c.dry(&w.chem) - 1.0).abs() < 1e-9, "child built {} kg of {} kg", c.built, c.dry(&w.chem));
++    assert!((c.built / (share * dry) - 1.0).abs() < 1e-3, "the child was given {} kg of dry mass, {} kg built", share * dry, c.built);
++    assert!((b.built / (built * (1.0 - share)) - 1.0).abs() < 1e-9, "parent built {} kg, was {built} kg, gave {share}", b.built);
++    w.life.bodies[slot] = b;
++    assert_eq!(pcore::check::broken(&w), None);
++    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
++    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
++}
++
++/// Built mass goes where stores go: it is the mean over a node's members, pooled by count when
++/// bodies join (`copy::take_in`, `merge`), kept by a split (`part`) and given, per member, to the
++/// members drawn from a node (`copy::open`).
++#[test]
++fn built_mass_is_pooled_by_count_and_kept_by_splits() {
++    let (mut w, i, rich, _) = start();
++    let _ = rich;
++    let mut a = eater(&mut w, i, 0);
++    a.count = 3.0;
++    a.store.iter_mut().for_each(|x| *x *= 3.0);
++    a.e *= 3.0;
++    let mut c = a.clone();
++    (c.count, c.built) = (1.0, 6.0);
++    c.store.iter_mut().for_each(|x| *x /= 3.0);
++    c.e /= 3.0;
++    a.built = 10.0;
++    let (sa, sc) = (w.life.add(a, w.day, 1), w.life.add(c, w.day, 1));
++    copy::merge(&mut w, sc, sa);
++    let n = &w.life.bodies[sa];
++    assert!((n.built - (3.0 * 10.0 + 6.0) / 4.0).abs() < 1e-9, "pooled {} kg, the mean is 9 kg", n.built);
++    let drawn = copy::open(&mut w, sa, 2);
++    assert_eq!(drawn.len(), 2);
++    for d in drawn {
++        assert!((w.life.bodies[d].built - 9.0).abs() < 1e-9, "a member drawn has {} kg built", w.life.bodies[d].built);
++    }
++    assert!((w.life.bodies[sa].built - 9.0).abs() < 1e-9, "the node has {} kg built", w.life.bodies[sa].built);
++}
+diff --git a/core/tests/life.rs b/core/tests/life.rs
+index 037e60f..28c3758 100644
+--- a/core/tests/life.rs
++++ b/core/tests/life.rs
+@@ -389,7 +389,8 @@ fn a_tall_member_shades_a_short_one() {
+     let mut tall = b.clone();
+     // Leaf goes with mass^0.75 (14 Oct 2026): 100 times fewer members of 100 times the mass have
+     // 100^-0.25 of the leaf, so the tall one's LEAF gene is raised by 0.5 to make the areas equal.
+-    (tall.count, tall.genes[pcore::body::COPY_MASS], tall.k) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0, Default::default());
++    // (Built mass per member is 100 times too, and height and leaf go by it, 14 Oct 2026.)
++    (tall.count, tall.genes[pcore::body::COPY_MASS], tall.built, tall.k) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0, 100.0 * b.built, Default::default());
+     tall.genes[pcore::body::LEAF] += 0.5;
+     (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg.phys), tall.visible(&w.chem, &w.cfg.phys));
+     let slots = [w.life.add(tall, w.day, 1), short];
+@@ -445,6 +446,8 @@ fn a_heavy_individual_copies_over_several_updates() {
+         (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + 9.0 * b.store[k] * w.chem.subs[k].hf, 10.0 * b.store[k]);
+     }
+     (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + 9.0 * b.e, 10.0 * b.e, 0.0);
++    // (A grown body: its dry mass is built, 14 Oct 2026.)
++    b.built = b.dry(&w.chem) / b.n();
+     // Weak (strength costs most of its upkeep), so it lives on its stores a while.
+     b.genes[pcore::body::STRENGTH] = 0.0;
+     let (s, start) = (w.life.add(b, w.day, 1), w.day);
+@@ -476,18 +479,17 @@ fn a_heavy_individual_copies_over_several_updates() {
+     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+ }
+ 
+-/// A grown body takes no more than it can use (14 Oct 2026, review 5: satiety, in place of "past
+-/// `full` it takes at the rate of `full`", which review 3's M2 added so that a body that could not
+-/// pay for its children did not swell on what it held): an eater of 10 or 100 times the mass of a
+-/// starting one, past `full` and holding fuel enough for many intervals, takes on the ground's
+-/// energy-rich solid only the heat of its upkeep over an interval, whatever `c_build`: never less
+-/// (a hard stop below upkeep starved the eaters, 13 Oct: burning leaves its liquid product in the
+-/// body), and no more, as its store already releases what it can use. A starting eater (below
+-/// `full`) takes more than that: it eats as its intake allows. A body past `full` whose store is
+-/// below the target (upkeep plus building over the share its reactions release, less what it
+-/// holds) is asked directly: `choose::sate` leaves what the formula says, more with a higher
+-/// `c_build`, and never more than its size takes in the time (review 6, findings 10 and 13).
+-/// Matter and energy are kept exactly.
++/// A body takes no more than it can use, at every size (14 Oct 2026, review 5: satiety; review 6,
++/// finding 5: not only past `full`, since growth is building now). A starting eater, one of 10 and
++/// one of 100 times its mass, each holding the body it has built and fuel enough for many
++/// intervals, takes on the ground's energy-rich solid only the heat of its upkeep over an interval,
++/// whatever `c_build`: never less (a hard stop below upkeep starved the eaters, 13 Oct: burning
++/// leaves its liquid product in the body), and no more, as its store already releases what it can
++/// use (the dry mass it can build in the interval, `c_build` / `c_copy` of it, is a small part of
++/// the upkeep's heat here). A body whose fuel is below the body it has built asks for more, to
++/// refill it, for nothing, and for what it can build: `choose::sate` leaves what the formula says,
++/// more with a higher `c_build`, and never more than its size takes in the time (review 6,
++/// findings 10 and 13). Matter and energy are kept exactly.
+ #[test]
+ fn a_body_takes_no_more_than_it_can_use() {
+     use pcore::body::{Lineage, DISPERSE};
+@@ -524,7 +526,9 @@ fn a_body_takes_no_more_than_it_can_use() {
+             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
+         }
+         (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0);
+-        // Less of the fuel (the rest taken out as an edit).
++        // A grown body (its dry mass built, 14 Oct 2026), then less of the fuel (the rest taken out
++        // as an edit): the body it has built is emptied by burning.
++        b.built = b.dry(&w.chem) / b.n();
+         let out = (1.0 - keep) * b.store[rich];
+         w.chem.add_elems(rich, -out, &mut w.ledger.imposed_elems);
+         (w.ledger.imposed_energy, b.store[rich]) = (w.ledger.imposed_energy - out * w.chem.subs[rich].hf, b.store[rich] - out);
+@@ -533,9 +537,13 @@ fn a_body_takes_no_more_than_it_can_use() {
+         let (equiv, joule_per_kg) = (b.equiv(&p, mass), -w.chem.dh(burn) / w.chem.reactions[burn].inputs.iter().find(|x| x.0 as usize == rich).unwrap().1 as f64 / w.chem.subs[rich].molar_mass);
+         let (up, build) = (pcore::body::upkeep(&w, &b, days, mass), p.c_build * equiv / p.m_ref * days);
+         let can = up + build;
+-        // (up + build) x fuel / release - fuel, never under the upkeep, never over what its size takes.
++        // The target of `sate`, in J of fuel: the store that releases (up + build) in an interval
++        // less what it holds, or the refill of the body it has built, whichever is more; plus the
++        // dry mass it can build (the allowance over `c_copy`, kg of fuel); never under the upkeep,
++        // never over what its size takes.
+         let (fuel, release) = (b.fuel(&w.chem, b.temp(&w.chem)), pcore::body::release(&w, &b, days));
+-        let target = ((can * fuel / release - fuel).max(up)).min(p.take * days * equiv * joule_per_kg) / joule_per_kg;
++        let refill = (b.built * b.n() - b.dry(&w.chem)).max(0.0) * joule_per_kg;
++        let target = (((can * fuel / release - fuel).max(refill) + build / p.c_copy * joule_per_kg).max(up)).min(p.take * days * equiv * joule_per_kg) / joule_per_kg;
+         if direct {
+             let mut m = vec![0.0; w.chem.ns()];
+             m[rich] = 2.0 * p.take * days * equiv / w.chem.subs[rich].molar_mass;
+@@ -554,28 +562,24 @@ fn a_body_takes_no_more_than_it_can_use() {
+         let burnt: f64 = w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, burn, .. } = e.kind { (by == id).then_some(burn as f64) } else { None }).sum();
+         (burnt, can / joule_per_kg, p.take * days * equiv, target)
+     };
+-    for times in [10.0, 100.0] {
++    for times in [1.0, 10.0, 100.0] {
+         let ((with, _, cap, _), (without, upkeep, _, _)) = (took(times, 3e4, 1.0, false), took(times, 0.0, 1.0, false));
+         println!("{times} x 30 kg: takes {with:.3} kg of fuel (upkeep {upkeep:.3}, size cap {cap:.3}), with no building {without:.3}");
+         assert!(upkeep < cap, "the size cap {cap} is not above its upkeep {upkeep}");
+-        assert!((with / upkeep - 1.0).abs() < 0.02 && (without / upkeep - 1.0).abs() < 0.02, "{with} and {without} of {upkeep} kg");
++        assert!((with / upkeep - 1.0).abs() < 0.04 && (without / upkeep - 1.0).abs() < 0.04, "{with} and {without} of {upkeep} kg");
+     }
+-    let (young, can, _, _) = took(1.0, 3e4, 1.0, false);
+-    println!("a starting eater takes {young:.3} kg of fuel (upkeep and build {can:.3})");
+-    assert!(young > can, "below full a body eats as its intake allows: {young} of {can} kg");
+-    // Past `full` with a store below the target, upkeep and build over the share its reactions
+-    // release in an interval, less what it holds: the target rises with `c_build`, between the
+-    // upkeep's worth and what its size takes (here a store of 15.5% of the fuel: 17%
+-    // before strength and catalysts went by mass^0.75, which lowered the upkeep of this 300 kg member).
+-    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.155, true)).collect();
+-    println!("sate asked for twice the size cap, store 15.5%: (left, upkeep+build, cap, target) {sated:?}");
++    // A store below the body it has built (80% of the fuel left: it asks to refill it) takes the
++    // refill, and the dry mass it can build (here 18 kg for 14 kg of upkeep's worth, then more
++    // with a higher `c_build`, between the upkeep's worth and what its size takes).
++    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 1e5].iter().map(|&c| took(10.0, c, 0.8, true)).collect();
++    println!("sate asked for twice the size cap, store 80%: (left, upkeep+build, cap, target) {sated:?}");
+     for &(left, _, cap, target) in &sated {
+         assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
+         assert!(target < cap, "the size cap {cap} binds, the case shows nothing");
+     }
+-    assert!(sated[0].0 > sated[0].1 * 1.2, "below the line of the upkeep it should take more than the upkeep's worth: {sated:?}");
+-    assert!(sated[1].0 > sated[0].0 * 1.1 && sated[2].0 > sated[1].0 * 1.1, "it takes no more with a higher c_build: {sated:?}");
+-    // With a store of 3% of the fuel the target is far over the size cap: the cap is what it takes.
++    assert!(sated[0].0 > sated[0].1 * 1.1, "below the body it has built it should take more than the upkeep's worth: {sated:?}");
++    assert!(sated[1].0 > sated[0].0 * 1.05 && sated[2].0 > sated[1].0 * 1.1, "it takes no more with a higher c_build: {sated:?}");
++    // With a store of 3% of the fuel the refill is far over the size cap: the cap is what it takes.
+     let (left, _, cap, _) = took(10.0, 3e4, 0.03, true);
+     assert!((left / cap - 1.0).abs() < 1e-6, "sate left {left} kg of the {cap} kg its size takes");
+ }
+@@ -598,9 +602,10 @@ fn a_body_with_no_brain_lives_and_copies() {
+     let rows = base.split_off(shape.base());
+     assert!(base.is_empty());
+     let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+-    // A light-eater node whose members (1 kg) hold more than `full` times their copy mass (0.4 kg).
++    // A light-eater node whose members have built (0.3 kg of dry mass in 1 kg) more than `full`
++    // times their copy mass (0.13 kg).
+     let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
+-    (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.4);
++    (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.9);
+     let (n0, s) = (b.count, w.life.add(b, w.day, 1));
+     // It pays nothing for a brain, however costly brains are.
+     let mut x = w.life.bodies[s].clone();
+@@ -735,6 +740,7 @@ fn a_body_builds_at_most_c_build_times_mass_to_the_power_a_day() {
+             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
+         }
+         (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[STRENGTH]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 0.0);
++        b.built = b.dry(&w.chem) / b.n();
+         let s = w.life.add(b, w.day, 1);
+         let (mut log, mut last, dt) = (Vec::new(), 0.0, w.cfg.phys_days as f64 * 86_400.0);
+         for _ in 0..60 {
+@@ -795,6 +801,7 @@ fn two_copies_in_one_update_pay_one_intervals_allowance() {
+         (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
+     }
+     (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[STRENGTH]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 0.0);
++    b.built = b.dry(&w.chem) / b.n();
+     let s = w.life.add(b, w.day, 1);
+     pcore::body::survey(&mut w);
+     w.day += 400;
+@@ -857,7 +864,8 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
+ /// Leaf goes with mass^0.75 like intake (14 Oct 2026, review 5): the same `LEAF` gene gives a
+ /// member of 1 kg 10^LEAF m² per kg, a member of 1,000 kg 1000^0.75 times that in all (178 m², not
+ /// 1,000), so 5.6 times less per kg; a node counts its members; and past `full` times the copy
+-/// mass what a member holds adds no leaf. The open surface follows (plus its skin).
++/// mass what a member has built adds no leaf (14 Oct 2026: the leaf goes by the built dry mass, not
++/// the whole mass). The open surface follows (plus its skin).
+ #[test]
+ fn leaf_area_per_kg_falls_with_mass() {
+     use pcore::body::{Body, COPY_MASS, LEAF};
+@@ -868,8 +876,10 @@ fn leaf_area_per_kg_falls_with_mass() {
+     let member = |count: f64, kg: f64, copy: f32| {
+         let mut b = Body { count, genes: vec![0.0; pcore::body::Layout::of(&chem).len], store: vec![0.0; chem.ns()], ..Default::default() };
+         (b.genes[LEAF], b.genes[COPY_MASS]) = (0.5f32.log10(), copy);
+-        // Fill the stores of the first substance up to `kg` per member.
++        // Fill the stores of the first substance up to `kg` per member (all built: at 0 K nothing
++        // is liquid).
+         b.store[0] = count * kg / chem.subs[0].molar_mass;
++        b.built = kg;
+         b.prepare(&chem, &p);
+         b
+     };
+diff --git a/core/tests/nodes.rs b/core/tests/nodes.rs
+index 8ea4ca1..41691e8 100644
+--- a/core/tests/nodes.rs
++++ b/core/tests/nodes.rs
+@@ -177,9 +177,10 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
+         let i = w.life.bodies[s].cell as usize;
+         pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
+     }).expect("a node with nodes all around");
+-    // Members of 1 kg copying at 0.6 kg (not past `full`), all children leave.
++    // Members of 1 kg (0.3 kg of it built) copying at 0.18 kg of built mass (not past `full`: 0.36),
++    // all children leave.
+     let mut genes = w.life.bodies[s].genes.clone();
+-    (genes[COPY_MASS], genes[DISPERSE]) = (0.6f32.log10(), 1.0);
++    (genes[COPY_MASS], genes[DISPERSE]) = (0.18f32.log10(), 1.0);
+     for t in live(&w) {
+         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
+         w.life.bodies[t].k = Default::default();
+@@ -389,10 +390,10 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
+         node.e *= 5.0;
+         w.life.bodies[s].genes[DISPERSE] = 0.0;
+         let t = w.life.add(node, w.day, 1);
+-        // One child: its copy mass is just under its mass.
++        // One child: its copy mass is just under its built mass.
+         let (at, before) = (live(&w).len(), held(&w));
+         let mut b = std::mem::take(&mut w.life.bodies[s]);
+-        b.genes[COPY_MASS] = (0.9 * b.mass(&w.chem) as f32).log10();
++        b.genes[COPY_MASS] = (0.9 * b.built as f32).log10();
+         b.prepare(&w.chem, &w.cfg.phys);
+         w.day += 1;
+         assert!(copy::copy(&mut w, s, &mut b), "no child");
+@@ -405,10 +406,10 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
+             continue;
+         }
+         assert!(kids.len() == 1 && w.life.bodies[t].count == 5.0 && w.life.bodies[kids[0]].count == 1.0, "the child joined a node");
+-        // Many children at once: the member holds 3.5 times `full` copy masses.
++        // Many children at once: the member has built 3.5 times `full` copy masses.
+         let (at, before) = (live(&w).len(), held(&w));
+         let mut b = std::mem::take(&mut w.life.bodies[s]);
+-        b.genes[COPY_MASS] = ((b.mass(&w.chem) / (3.5 * w.cfg.phys.full)) as f32).log10();
++        b.genes[COPY_MASS] = ((b.built / (3.5 * w.cfg.phys.full)) as f32).log10();
+         b.prepare(&w.chem, &w.cfg.phys);
+         w.day += 1;
+         assert!(copy::copy(&mut w, s, &mut b), "no children");
+@@ -426,10 +427,13 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
+ 
+ /// With `Config::nodes` off, more than `crowd` alike animals in one cell stay individuals at the
+ /// month's start (with nodes on they merge, `crowded_individuals_merge_into_a_node`), and over
+-/// three years of the whole world no animal becomes a node; light-eaters still are nodes. The
+-/// animals are the hand-set eaters (`Seeding::old`, which find what they eat), so that some live and breed
+-/// through the window: the check is empty when none do (review 6, finding 10: with the default
+-/// neutral start 7, 2, 1, 1, 1 and then 0 animals were alive at months 6 to 36). Matter and
++/// a year of the whole world no animal becomes a node; light-eaters still are nodes. The
++/// animals are the hand-set eaters (`Seeding::old`, which find what they eat) and copy at half
++/// what they have built, so that some live and breed through the window: the check is empty when
++/// none do (review 6, finding 10: with the default neutral start 7, 2, 1, 1, 1 and then 0 animals
++/// were alive at months 6 to 36). The window was three years until 14 Oct 2026 (review 6, finding
++/// 5): with satiety at every size and growth counted as building the placed eaters starve within
++/// 21 months in this world (200 alive at month 1, 6 at month 12, 0 at month 22). Matter and
+ /// energy are kept exactly.
+ #[test]
+ fn individuals_mode_merges_no_animal() {
+@@ -453,10 +457,18 @@ fn individuals_mode_merges_no_animal() {
+     let n = here(&w);
+     pcore::body::survey(&mut w);
+     assert_eq!(here(&w), n, "animals merged");
++    // They copy at half the dry mass they have built (14 Oct 2026: a placed body copies at 2.1
++    // times what it has built, and growing there takes years at `c_build`), so that some are born
++    // within the window.
++    for b in w.life.bodies.iter_mut().filter(|b| b.alive) {
++        if !pcore::body::light_eater(&w.chem, &b.genes) {
++            b.genes[COPY_MASS] = (0.5 * b.built as f32).log10();
++        }
++    }
+     // Animals alive at the end of each month, and animals born in the window (members).
+     let (mut alive, mut born) = (Vec::new(), 0.0);
+     w.events.clear();
+-    for _ in 0..36 {
++    for _ in 0..12 {
+         pcore::step(&mut w);
+         assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal became a node");
+         born += w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { cat, .. } if cat < pcore::body::LIGHT_EATER)).map(|e| e.value).sum::<f64>();
+diff --git a/core/tests/numbers.rs b/core/tests/numbers.rs
+index be7ab93..4ae1cd8 100644
+--- a/core/tests/numbers.rs
++++ b/core/tests/numbers.rs
+@@ -74,7 +74,7 @@ fn every_row_has_one_name_and_a_known_mark() {
+ /// Rules chosen for a run (review 6, finding 9): what was picked so a run came out a certain way
+ /// and is not a number of `Physics` or `Config`. The table "Rules chosen for a run" lists them; it
+ /// may not grow (handover 14.3).
+-const RULES_BUDGET: usize = 4;
++const RULES_BUDGET: usize = 3;
+ 
+ #[test]
+ fn the_rules_chosen_for_a_run_stay_within_their_budget() {
+diff --git a/docs/handover.md b/docs/handover.md
+index b894aef..cd4650b 100644
+--- a/docs/handover.md
++++ b/docs/handover.md
+@@ -98,13 +98,14 @@ What went wrong:
+ | Catalyst upkeep (13 Oct 2026, revised 13 and 14 Oct 2026) | A body pays for its catalysts **by their capacity**, the amount of enzyme: `c_cat` × the sum, over its catalyst genes that are on, of 10^gene × k × exp(−Ea / 290 K), the catalysed rate per unit of input at a typical surface temperature (`Physics::t_cat`). One constant serves every reaction, because it prices what the body can do, not how slow the bare reaction was; a light reaction counts the same way (light only caps how far it goes). It replaces (13 Oct 2026, review 3) the convex stand-in of round 2 (`c_cat` × the sum of the squares of the genes), because one constant cannot serve a speed-up of 10^15 (light) and one of 10^2 (burning) under the convex form: cold tolerance (7 times faster burning) cost an eater 0.1% of its upkeep, and a charcoal gene of 16 almost nothing. By capacity, 7 times faster costs 7 times the enzyme. **Price (14 Oct 2026, owner's choice of the most realistic option):** `c_cat` 1.5 × 10^9 J per kg per day per 1/s, so the starting eaters' enzymes cost a tenth of their upkeep (6,200 J/kg/day; in life a resting animal spends 10 to 25% of its energy keeping its proteins), and the starting light-eaters keep the light gene they need (9, not 12), at what they paid before (3,100 J/kg/day). Living 9 K colder then costs an eater 14% more upkeep. Before, `c_cat` 1.67 × 10^6 was set from light-eaters that held about 1,000 times more light catalyst than they needed, so every catalyst was about 1,000 times too cheap (an eater's: 4 J/kg/day of 60,000) and cold tolerance had no price. Kinds by climate also need climate: the island spans only 7 to 10 K over most of its land; real climate bands come with the planet (M4) |
+ | Reaction rate (13 Oct 2026) | A reaction is **first order in its scarce input** (the one that runs out first), from 13 October 2026. Before, that input counted twice (once in the amount that runs out, once in its share), so a trace gas in the air lasted millions of years instead of years (methane-like gas: about 2 million years against about 4) and piled up and warmed the world. Now the rate per unit of the scarce input uses the shares of the other inputs only (Section 6.2). The same law is used in Change and in how bodies burn their stores |
+ | Ageing (14 Oct 2026) | **Bodies die of age by a law, not a rule** (review 3, W2; the owner's decision). Living wears a body: its wear grows by the energy its upkeep turns over per kg, over `Physics::e_life` × 10^`REPAIR` (`e_life` = 10^9 J/kg, the rate-of-living number of real life: many animals turn over about 1,000 kJ per gram in a life, whatever their size). An individual dies of age (cause `AGE`) when its wear reaches 1, so a body that lives fast (high upkeep per kg: a small member's brain costs much per kg, strength costs by the kg) wears fast. Repair is a gene with a cost: upkeep × (1 − c + c × 2^`REPAIR`), `c_repair` = c = 0.25, the share of upkeep that is repair at gene 0 (remaking a body's own matter takes 20 to 30% of resting upkeep in real life), so at gene 0 each unit of the gene gives an 8 times longer life for 25% more upkeep, and less repair saves upkeep but never more than that share (not "free below 0", which would let selection lift a short life to 0 at no cost). So evolution chooses long or short lives against the other ways a body dies. The starting kinds' `REPAIR` genes are an initial condition set for a range of lives: about 2 to 100 years for light-eaters, 2.5 to 49 for the others (Section 7.1). Nodes: see Section 7.1. First runs (seed 3, 64x64): age is 2% of the light-eaters' deaths and 0.5 to 6% of the others' (most still die of `SPENT` or are taken); no kind died out of age; the eaters of remains, placed with lives of 3 years, evolved longer ones (`REPAIR` -2.1 to -1.1, lives 3 to 8.5 years in 50 years), which they did not with no age deaths |
+-| Gas exchange through the open surface (14 Oct 2026, review 4 row 4) | A body breathes through the surface it has open to the air, not through its mass. Per member that surface is its light-capture area (the `LEAF` gene per kg-equivalent of its mass up to `full` times its copy mass, mass^0.75 since 14 Oct 2026, see the leaf row below: the area light uses) plus its skin, 6 (m1 / ρ)^(2/3) m² (m1 the member's mass, ρ = `rho_body` 1,000 kg/m³, the density that gives height in `body::shade`), times the member count (`Body::open_area`). The `GAS` gene is now mol of air per m² of that surface per day (10^gene); the liquid-depth factor and the cap of half the air node stay. Why: the gene was per kg, so a plant took 316 mol of air per kg per day, which at 300 ppm is 2.8 g of sugar per kg per day, 10 times less than a real leaf (24 g of carbon gas per m² per day, about 33 g per kg for 2 m² per kg), while it caught 40 times more light than that gas could use. Light was in excess, shade cost nothing, and height could not pay (review 4, finding 4). Through the surface, capture area pays twice (light and gas): a plant that spreads more area gains on both, and a taller one that shades the rest gains more, so the balance of gain and cost that makes a tall plant exists. The starting kinds' `GAS` genes were reset so each breathes at its starting mass what it did per kg: new = old + log10(member mass / area per member) (a 1 kg light-eater of 2.06 m²: 2.5 to 2.19; a 30 kg eater of 0.61 m², nearly all skin: 0.6 to 2.29; all eleven in the comment of `worldgen::life::KINDS`). **First run (seed 1, 64x64, `ew run`, 60 years, against the run before):** the light-eaters raised their capture area from 2.0 to 6.7 m² per member (`LEAF` gene 0.23 to 0.60) and lowered `GAS` from 2.86 to 2.42, since area now buys gas; their members fell from 7.7 × 10^10 to 3.2 × 10^10 (nodes 957 to 1,522) at a mean member of 1.7 kg (1.2 before), the heaviest 12 kg (4.3 before); the eaters' members rose from 9.3 × 10^7 to 1.4 × 10^8 and their heaviest member fell from 308 to 205 kg; carbon gas 233 to 241 ppm, ground 289.8 to 290.1 K; the year took 3.1 s against 2.8 s (both timed while other runs shared the machine; alone, the run before took 2.16 s and the run with this and the intake law 2.24 s). Height pays a little, not yet a forest (the heaviest plant member is 12 kg) |
++| Gas exchange through the open surface (14 Oct 2026, review 4 row 4) | (Its leaf is of the built dry mass since 14 Oct 2026, row "A body is built, not just filled"; the starting `GAS` genes did not change, the leaf at placement being what it was.) A body breathes through the surface it has open to the air, not through its mass. Per member that surface is its light-capture area (the `LEAF` gene per kg-equivalent of its mass up to `full` times its copy mass, mass^0.75 since 14 Oct 2026, see the leaf row below: the area light uses) plus its skin, 6 (m1 / ρ)^(2/3) m² (m1 the member's mass, ρ = `rho_body` 1,000 kg/m³, the density that gives height in `body::shade`), times the member count (`Body::open_area`). The `GAS` gene is now mol of air per m² of that surface per day (10^gene); the liquid-depth factor and the cap of half the air node stay. Why: the gene was per kg, so a plant took 316 mol of air per kg per day, which at 300 ppm is 2.8 g of sugar per kg per day, 10 times less than a real leaf (24 g of carbon gas per m² per day, about 33 g per kg for 2 m² per kg), while it caught 40 times more light than that gas could use. Light was in excess, shade cost nothing, and height could not pay (review 4, finding 4). Through the surface, capture area pays twice (light and gas): a plant that spreads more area gains on both, and a taller one that shades the rest gains more, so the balance of gain and cost that makes a tall plant exists. The starting kinds' `GAS` genes were reset so each breathes at its starting mass what it did per kg: new = old + log10(member mass / area per member) (a 1 kg light-eater of 2.06 m²: 2.5 to 2.19; a 30 kg eater of 0.61 m², nearly all skin: 0.6 to 2.29; all eleven in the comment of `worldgen::life::KINDS`). **First run (seed 1, 64x64, `ew run`, 60 years, against the run before):** the light-eaters raised their capture area from 2.0 to 6.7 m² per member (`LEAF` gene 0.23 to 0.60) and lowered `GAS` from 2.86 to 2.42, since area now buys gas; their members fell from 7.7 × 10^10 to 3.2 × 10^10 (nodes 957 to 1,522) at a mean member of 1.7 kg (1.2 before), the heaviest 12 kg (4.3 before); the eaters' members rose from 9.3 × 10^7 to 1.4 × 10^8 and their heaviest member fell from 308 to 205 kg; carbon gas 233 to 241 ppm, ground 289.8 to 290.1 K; the year took 3.1 s against 2.8 s (both timed while other runs shared the machine; alone, the run before took 2.16 s and the run with this and the intake law 2.24 s). Height pays a little, not yet a forest (the heaviest plant member is 12 kg) |
+ | Intake and sweep go with mass^0.75 per member (14 Oct 2026, review 4 row 7) | What a member takes (from the ground, a body or a part), sweeps and receives as a gift goes with its mass that works to the power `Physics::intake_exp` = 0.75, from a reference of `m_ref` = 1 kg (`Body::intake`: per member `m_ref` × (min(m1, `full` × copy mass) / `m_ref`)^0.75, times the count; `phys.take` and `phys.sweep` keep their meaning for a 1 kg member). (Changed later the same day, review 5 row 1: the mass is the member's whole mass, `Body::equiv`; 14 Oct 2026: `m_ref` is also the mass of the brain's cost and of the heat gene, three reference masses made one, and what it can use is cut by satiety, see the next row; before, a member past `full` times its copy mass took at the rate of `full`.) Light, rain, liquid and gas do **not** use it: they go by area. Why: in life, intake, metabolism and locomotion go with about m^0.75; here every cost goes with mass (what is taken, what is swept, strength, catalysts), so nothing scaled against size, and selection pushed the copy-mass gene to its wall (review 4, finding 5: eaters of 9 to 15 t that barely copy). Now a 10 t member takes 180 times what a 10 kg one does, not 1,000, and a 30 kg eater takes 30^0.25 = 2.3 times less per kg (a 150 kg one 3.5 times, a 600 kg one 4.9 times; a 0.05 kg one 2.1 times more). **The exponent is a free number, chosen for that reason, not a rule** (Section 4 has no law behind it; change it if a run asks). **First run (seed 1, 64x64, `ew run`, 60 years; before this and the gas law, then with both):** the starting eaters live: 1,204 eater nodes, 7.0 × 10^7 members at year 60 (1,358 and 9.3 × 10^7 before), the heaviest 189 kg (308), mean member 58 kg (65), copy-mass gene 1.70 (1.71); light-eaters 3.7 × 10^10 members (7.7 × 10^10), heaviest 28 kg (4.3); carbon gas 180 ppm (233), ground 289.5 K (289.8); 2.24 s a year against 2.16. Sixty years are too few to see the wall the copy-mass gene reached over 300 years (9 to 15 t): the check that matters is a long run, and it is not done |
+-| Building takes time; a grown body takes no more than it can use (14 Oct 2026, review 5 row 1) | `Physics::c_build` = 10^4 J per day for a member of the reference mass (1 kg). A body pays into its child store (`Body::paid`, `copy::copy`, the only place that pays into it) at most `c_build` × (member mass / 1 kg)^0.75 × members × the days of its interval at each update (`Body::equiv`). **Satiety** (`choose::sate`, for every take from the ground, a body or a part, and for the receiver of a gift): a member past `full` times its copy mass takes no more of what it burns than its reactions can use over the interval: it fills its fuel store until the share of it that its reactions release in the interval (first order in the fuel) covers its upkeep plus what it can build, counted by the heat of what it takes (`Consts::burn`); liquid is not counted (it comes by area and stops at the level the body keeps); never less than its upkeep's worth (13 Oct 2026). It replaces "past `full` it takes at the rate of `full`" in `Body::intake` (now `equiv`, by the whole mass). Below `full` a body eats as its intake allows. Why: nothing made building a body take time. A body turned every spare joule into children as fast as it ate, and ate three to six times its upkeep, so a member lived one over its birth rate: 51 days for a 57 kg eater, 80 to 90 for a plant (watch report 5). In life the growth of young goes with mass^0.75 (von Bertalanffy): a 1 kg animal makes about 1 kg of dry young a year (2.7 × 10^4 J a day at `c_copy`), a 50 kg one about 1 kg (1,450 per kg^0.75), a 1 t one about 10 kg (1,500): `c_build` is anchored to 1,500 to 30,000. **10^4 (review 5's value), with the start hand-set (14 Oct 2026, review 6, finding 1).** It was 3 × 10^4, the top of the range, for part of 14 Oct, and satiety was cut back to the sizes past `full`, both because of the first runs (seed 1, 64x64): with 10^4 and satiety at every size all 416 starting eaters died in their first year (an eater's allowance was its upkeep plus 6%, its store sat at the line it dies at, and a body takes on only some of its decisions, so a meal must last several intervals); with satiety past `full` only, seeds 1 and 2 still lost all their eaters and seed 3 kept them; at 3 × 10^4 seeds 1 and 2 kept them. The founders had neutral brains and starve within weeks, so a small group lived only if it bred faster than it starved until it learned: 97 to 99% of the placed eaters died in their first year, and everything after descended from 2 to 14 founders. Review 6 (finding 1) showed that the number was set to win that lottery, and that it made every life 3 times shorter (a 57 kg eater needs 82 days for a child at 3 × 10^4, 245 at 10^4; a measured life was 0.25 years). **The start is hand-set instead, because neutral founders are a lottery, and no law is set for a start any more:** `ew run` and `ew run --roster` place every animal kind with the hand-set eater biases (`Seeding::hand[1]`; `--neutral-eaters` for the neutral start, `--plant-bias` for hand-set plants, which start neutral; the config line of every run says which start it had). With them and 10^4 the fewest founder bodies were 25 to 77 (review 6, 64x64, seeds 1 to 3) against 2 to 14 at 3 × 10^4. The number is anchored (1,500 to 30,000) and marked tuned in `docs/numbers.md` as a choice within the anchor that runs once decided. A 57 kg eater (20.8 kg^0.75) then needs about 245 days for a 17 kg child (51 MJ of work). A plant's child costs only what is not liquid (14 Oct), so a 2.4 kg plant member owes about 8 × 10^5 J per child, about two weeks of its build: the law barely slows plants. The CHILD gene lets a kind choose small frequent children or large rare ones. This is the cause that stands for a maturity range (review 5, section 3) |
++| Building takes time; a grown body takes no more than it can use (14 Oct 2026, review 5 row 1) | (Changed later on 14 Oct 2026, review 6 finding 5, row "A body is built, not just filled" below: the growth of a body's own dry mass is building too, from the same allowance, and satiety holds at every size, so "a member past `full`" and "below `full` a body eats as its intake allows" no longer hold; the rest is as written then.) `Physics::c_build` = 10^4 J per day for a member of the reference mass (1 kg). A body pays into its child store (`Body::paid`, `copy::copy`, the only place that pays into it) at most `c_build` × (member mass / 1 kg)^0.75 × members × the days of its interval at each update (`Body::equiv`). **Satiety** (`choose::sate`, for every take from the ground, a body or a part, and for the receiver of a gift): a member past `full` times its copy mass takes no more of what it burns than its reactions can use over the interval: it fills its fuel store until the share of it that its reactions release in the interval (first order in the fuel) covers its upkeep plus what it can build, counted by the heat of what it takes (`Consts::burn`); liquid is not counted (it comes by area and stops at the level the body keeps); never less than its upkeep's worth (13 Oct 2026). It replaces "past `full` it takes at the rate of `full`" in `Body::intake` (now `equiv`, by the whole mass). Below `full` a body eats as its intake allows. Why: nothing made building a body take time. A body turned every spare joule into children as fast as it ate, and ate three to six times its upkeep, so a member lived one over its birth rate: 51 days for a 57 kg eater, 80 to 90 for a plant (watch report 5). In life the growth of young goes with mass^0.75 (von Bertalanffy): a 1 kg animal makes about 1 kg of dry young a year (2.7 × 10^4 J a day at `c_copy`), a 50 kg one about 1 kg (1,450 per kg^0.75), a 1 t one about 10 kg (1,500): `c_build` is anchored to 1,500 to 30,000. **10^4 (review 5's value), with the start hand-set (14 Oct 2026, review 6, finding 1).** It was 3 × 10^4, the top of the range, for part of 14 Oct, and satiety was cut back to the sizes past `full`, both because of the first runs (seed 1, 64x64): with 10^4 and satiety at every size all 416 starting eaters died in their first year (an eater's allowance was its upkeep plus 6%, its store sat at the line it dies at, and a body takes on only some of its decisions, so a meal must last several intervals); with satiety past `full` only, seeds 1 and 2 still lost all their eaters and seed 3 kept them; at 3 × 10^4 seeds 1 and 2 kept them. The founders had neutral brains and starve within weeks, so a small group lived only if it bred faster than it starved until it learned: 97 to 99% of the placed eaters died in their first year, and everything after descended from 2 to 14 founders. Review 6 (finding 1) showed that the number was set to win that lottery, and that it made every life 3 times shorter (a 57 kg eater needs 82 days for a child at 3 × 10^4, 245 at 10^4; a measured life was 0.25 years). **The start is hand-set instead, because neutral founders are a lottery, and no law is set for a start any more:** `ew run` and `ew run --roster` place every animal kind with the hand-set eater biases (`Seeding::hand[1]`; `--neutral-eaters` for the neutral start, `--plant-bias` for hand-set plants, which start neutral; the config line of every run says which start it had). With them and 10^4 the fewest founder bodies were 25 to 77 (review 6, 64x64, seeds 1 to 3) against 2 to 14 at 3 × 10^4. The number is anchored (1,500 to 30,000) and marked tuned in `docs/numbers.md` as a choice within the anchor that runs once decided. A 57 kg eater (20.8 kg^0.75) then needs about 245 days for a 17 kg child (51 MJ of work). A plant's child costs only what is not liquid (14 Oct), so a 2.4 kg plant member owes about 8 × 10^5 J per child, about two weeks of its build: the law barely slows plants. The CHILD gene lets a kind choose small frequent children or large rare ones. This is the cause that stands for a maturity range (review 5, section 3) |
+ | Basal upkeep (14 Oct 2026, review 5 row 2) | `Physics::c_basal` = 2 × 10^4 J per day for a member of the reference mass (1 kg), times (member mass / `m_ref`)^`intake_exp`, per member: every body pays it, strength and the rest on top, in `body::upkeep` before the repair factor. Anchored to resting metabolism, about 3.4 m^0.75 W (Kleiber), 0.23 W/kg at 1 kg. Why: strength was the only cost of having a body, so a kind with strength 0 (the eaters of remains) lived eight times cheaper (8 kJ per kg per day against 66 for an eater) and could drop strength for free. Now a 1 kg plant pays 34 kJ per kg per day of upkeep (18 more than before) against about 85 of income, a 20 g body pays 53 kJ per kg of basal alone, a 1 kg eater of remains 30 (14 before), a 15 kg one 14.5 (6), a 30 kg eater 74 (66), a 600 kg one 66 (62) |
+-| Leaf goes with mass^0.75 (14 Oct 2026, review 5 row 3) | A member's light-capture area, and so its open surface for gas and the light and rain it catches, is the `LEAF` gene per kg-equivalent of its mass that works (`Body::equiv` of `Body::work`: 1 kg × (mass / 1 kg)^0.75 per member), not per kg (`Body::visible`, `Body::open_area`, `body::live`). Why: one giant per cell was the best plant: a 2,000 t member held 10^6 m² of leaf (a quarter of its cell), shaded everything and earned three times its upkeep (review 5, section 2). In life leaf and crown go with about mass^0.75 (a 1,200 t tree carries about 10^4 m² of leaf, not 10^6). Now a 1,000 kg member has 178 m² at 0.5 m²/kg of 1 kg, not 500, and a bigger plant catches less per kg while its upkeep stays per kg, so the size where selection stops is set by shade against area per kg and not by the wall of the copy-mass gene. The starting kinds' `GAS` genes were set again the same way as on 14 Oct (new = old + log10(old area / new area)): small fast light-eaters 1.883 to 1.567, big slow 2.781 to 3.086, eaters 2.292 to 2.304, big eaters of remains 2.196 to 2.205, small fast eaters of light-eaters 2.271 to 2.273, 150 kg 2.510 to 2.536, 100 kg 2.456 to 2.478, 600 kg 2.691 to 2.736 (the 1 kg kinds are unchanged); the arithmetic is in the comment of `worldgen::life::KINDS`. The `LEAF` gene of a kind that is not 1 kg gives less area than before, e.g. the big slow light-eaters (20 kg) 0.24 m² per kg against 0.50 |
++| Leaf goes with mass^0.75 (14 Oct 2026, review 5 row 3) | (Of the built dry mass since 14 Oct 2026, row "A body is built, not just filled": read "mass that works" as `Body::lit_mass`, the built dry mass up to `full` times the copy mass.) A member's light-capture area, and so its open surface for gas and the light and rain it catches, is the `LEAF` gene per kg-equivalent of its mass that works (`Body::equiv` of `Body::work`: 1 kg × (mass / 1 kg)^0.75 per member), not per kg (`Body::visible`, `Body::open_area`, `body::live`). Why: one giant per cell was the best plant: a 2,000 t member held 10^6 m² of leaf (a quarter of its cell), shaded everything and earned three times its upkeep (review 5, section 2). In life leaf and crown go with about mass^0.75 (a 1,200 t tree carries about 10^4 m² of leaf, not 10^6). Now a 1,000 kg member has 178 m² at 0.5 m²/kg of 1 kg, not 500, and a bigger plant catches less per kg while its upkeep stays per kg, so the size where selection stops is set by shade against area per kg and not by the wall of the copy-mass gene. The starting kinds' `GAS` genes were set again the same way as on 14 Oct (new = old + log10(old area / new area)): small fast light-eaters 1.883 to 1.567, big slow 2.781 to 3.086, eaters 2.292 to 2.304, big eaters of remains 2.196 to 2.205, small fast eaters of light-eaters 2.271 to 2.273, 150 kg 2.510 to 2.536, 100 kg 2.456 to 2.478, 600 kg 2.691 to 2.736 (the 1 kg kinds are unchanged); the arithmetic is in the comment of `worldgen::life::KINDS`. The `LEAF` gene of a kind that is not 1 kg gives less area than before, e.g. the big slow light-eaters (20 kg) 0.24 m² per kg against 0.50 |
+ | Strength, catalysts, learning and signal go with mass^0.75 (14 Oct 2026, review 6 finding 2) | `body::upkeep` charges these four by `Body::equiv` / `m_ref` (kg-equivalents, mass^0.75), like basal, intake and building, not by the kg. Why: income, building and basal went with mass^0.75 and most of the upkeep with mass, so the ratio of what a body can take to what it pays rose as it shrank (review 6: 6.7 for 0.18 kg against 3.3 for 44 kg), and every animal kind evolved small; the cause was the unit of the costs, not `take`. The four are re-anchored at the 30 kg founders, who pay what they paid: `c_strength`, `c_cat`, `c_learn`, `c_signal` x 30^0.25 = 2.3403 (now 2.34 x 10^5, 3.51 x 10^9, 7.02 x 10^4, 468 per kg^0.75). Upkeep per kg per day of a starting eater (strength 0.6) is now 357 kJ at 0.1 kg (151 before), 180 at 1 kg (93), 74 at 30 kg (74), 35 at 600 kg (69); of a 1 kg light-eater 46 kJ (35) against an income of about 85. Only the brain (per decision, mass^0.25) and the leaf term are as they were |
+ | Moving costs the real cost of transport (14 Oct 2026, review 6 finding 2) | A move costs `Physics::walk(m1)` J per kg and m (`choose::go`, entering a part in `bond::act`): `c_move` x (m1 / 30 kg)^-0.32, m1 the member's mass. Real cost of transport is about 10.7 m^-0.32 J per kg per m (Taylor et al. 1982): 3.6 at 30 kg (so `c_move` 3 fits the founders and they pay what they paid), 18.5 at 0.18 kg (flat 3 charged a small body a sixth of it) and 1.4 at 600 kg. A metre now costs a member 100 times heavier 23 times more, not 100. `c_move` is anchored to this and no longer counts as tuned. Climbing is the weight lifted and is unchanged |
++| A body is built, not just filled (14 Oct 2026, review 6 findings 5 and 12) | Size is the dry mass a body has paid to build: `Body::built`, kg per member (the mean over a node's members; saved, `serde(default)`), where dry is what is not liquid at its temperature. Placed bodies are grown (built = their dry mass at placement; nothing is booked); a child is given the dry mass its parent paid `c_copy` for (`owe`), and the parent's built falls with the share it gave (an individual that gives the share s keeps (1 - s) of it; a node's children that stay are new members with the dry mass given, so its mean is pooled by count); built is pooled by count where stores are (`copy::take_in`, merge), kept by `split`, `part`, `one` and `open`, and an individual that loses a share of itself (`thin`) loses that share of it. **Growth is building** (`copy::grow`, at each update in `body::live`, before copying when full): a member whose dry mass is above `built` builds the difference as far as it can, at `c_copy` per kg out of the same `c_build` allowance as its children (`copy::allowance`: `c_build` x `equiv` x the days since `paid_day`, at most an interval; on the day it paid, what is left of it, `Body::build_left`, so the allowance is never paid twice in one update), growth first and the children from what is left. The work burns fuel, so one kg built takes `c_copy` x (kg of fuel per J burnt) more of the dry mass above `built` with it (about 1.6 kg for one built); it builds only what it can spare (after paying, its reactions must still release its upkeep over an interval, as a body copying before `full`); dry mass above `built` that is not paid stays as stores (fuel it may burn), not body; dry mass below it is a body emptied by burning, and refilling it costs nothing. **Size is built mass:** the copy trigger (`copy::copy`: `built` >= the copy mass, the shares s and k, `body::live`'s copy when full at `full` x copy mass, the brain's copy chance), the leaf (`Body::visible`, `open_area`, the light caught in `live`: the `equiv` of built up to `full` x copy mass, `Body::lit_mass`) and the order of heights for shade (`body::shade`, by built; only the order matters) go by it. Liquid gives no size any more (finding 12). Intake (take, sweep, gifts) and upkeep still go by the whole mass. **Satiety at every size** (`choose::sate`; the gate at `full` and the rule chosen for a run "satiety only past `full`" are gone, the rules budget is 3): a body takes no more of what it burns than the larger of (a) the share of its fuel its reactions release that covers its upkeep and its building over an interval, less what it holds, and (b) refilling its dry mass up to `built`, plus the dry mass it can build in the interval (the allowance over `c_copy`, in kg of the best fuel it takes), counted by heat; never less than its upkeep's worth, never over what its size takes. **The starting kinds' genes were reset** so each copies at the same total mass and has the same leaf at placement: with d the dry share of its placed member (`Kind::store`, 0.3, or 0.6 for the two big slow eater kinds), COPY_MASS + log10(d) (-0.523, -0.222) and LEAF - 0.75 log10(d) (+0.392, +0.166); all eleven rows are in the comment of `worldgen::life::KINDS`. `GAS` did not change (the area is the same). The arithmetic: an eater child of about 13 kg growing to 60 kg at 30% dry builds 14 kg of dry mass, 1.4 x 10^8 J, at `c_build` x m^0.75 = 6.8 x 10^4 J a day at 13 kg and 2.2 x 10^5 at 60 kg: about 3 years (tested: a 13 kg child builds 0.13 kg of dry mass per 10 days, the allowance exactly); a 1 kg plant member with 0.3 kg dry needs 300 days to build the 0.3 kg to its copy mass and as long again for a child's share. Why: building a body cost nothing but the parent's share, so 70% of every adult body was built free and at no limited rate, `c_build` bound only the share given at birth (a kind could evade it by giving smaller children), satiety had to stop at `full` because a growing body below it must eat more than upkeep plus building, and liquid gave free size (plants 90% liquid, members 2 to 4 times their copy mass). **First runs (64x64, `ew run` seeds 1 to 3 and `--roster` seeds 1 to 3, 60 years, years 56 to 60, against the same seeds on the commit before):** (1) the light-eaters live, slowly: 0.29 to 0.43 births per member a year (0.9 to 6.4 before), real life 2.1 to 4 years (0.2 to 0.9), 20 to 32% dry (they were about 90% liquid), 5 to 17 times fewer members and 5 to 20 times less mass (3.8 x 10^8 to 1.5 x 10^9 members, 1.4 x 10^9 to 7 x 10^9 kg, against 2.1 x 10^9 to 2.2 x 10^10 members, 7.5 x 10^9 to 5 x 10^10 kg), a plateau by year 60 (seed 1 to year 150: 1.3 to 2.2 x 10^9 kg, carbon gas stays 378 ppm, 254 before), and the big slow light-eaters (20 kg, roster) live 4 to 16 years at 64 to 117 kg of which 21 to 38% is dry. (2) **Every animal kind dies out in all six runs but one or two members of the 600 kg eaters of eaters (roster seeds 1 to 3, no births):** of 112, 108 and 150 placed eaters (normal seeds 1 to 3) 2, 3 and 4 are alive a year later (530, 440, 530 placed and 82, 104, 164 left before), 108, 105 and 145 of the deaths in that year are `SPENT` (seed 1: in the first 2 to 3 months), and not one is born. The bottleneck (fewest eater bodies after placement) is 2 (seed 1), 1 (seed 2), 4 (seed 3); roster 3, 2, 2. Causes found by experiment (not committed; seed 1 to 3, 60 years): the plants are 30 times less (seed 1, year 22: 5 x 10^8 kg against 1.6 x 10^10 before), the founders' intake is the area they sweep times the fuel per m^2 of what they eat, so they starve before they find a meal; the survivors do not grow (dry mass stays 6 to 8 kg under the 9 kg built, for years) and their mass swells from 30 to 55 to 85 kg with the liquid that burning leaves in them (a kg of fuel burnt leaves 0.6 kg of liquid and nothing sends it out), so their upkeep, which goes by the whole mass, rises 2 to 3 times while their dry mass is flat. Keeping the old gate on satiety (eaters take as their intake allows below `full` x copy mass) leaves 10, 23 and 20 eater bodies a year after placement (2, 3 and 4 with the law) but none at years 56 to 60 all the same; placing the eaters at year 62 instead of 22 (152, 122 and 202 placed; plants 40 years older): 1, 11 and 18 are left a year later and none at year 65; sending the liquid above a body's keep level back to the ground (a body's own exchange toward its level, not a rule for a result) keeps 11 to 24 founders to 1 year, and a few to year 38 to 40, but they build little (7 to 11 kg of built mass over 18 years, against a copy mass of 19 kg), so they die of age without a birth. So the law as written needs a surplus of fuel that these founders do not have in this world. Speed: 0.42 to 0.43 s a year normal, 0.46 to 0.51 roster (1.0 to 1.2 and 2.0 to 2.5 before), as the bodies are fewer. **Not decided here:** what lets animals build (a start with more plants, a smaller `c_build` x `c_copy`, upkeep by the built mass, or the liquid a body sheds): the orchestrator decides. |
+ | World chemistry | One fixed Earth-like "chemistry 0" through M6 (numbers only, no names in core). Random chemistry per world from M7 (Section 6.0). Changed 13 Oct 2026 (review 3, C1/C2): pure carbon burning with the oxidising gas has a barrier of 20,000 K (was 11,000), and its partial burning (to the gas that frees solids from ore) one of 22,000 K (was 12,500, which left that path open at 452 K), so it ignites at about 790 K and lasts geological times in the open at 290 K (before: tens of thousands of years, and life fed on it); the light reaction's `k` is 10^-6 (was 10^-9), so the light-eaters' gene is 12, not 15 (same capacity; the open-world rate stays about 10^-7 a year) |
+ | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
+ | Visuals | **2D map, no 3D**: colour-coded pixels for land plus small axonometric sprites. Earth view (default) with a switch to true view |
+@@ -323,7 +324,8 @@ Add v2 and v3 only when the world is ready for them (Section 9.4).
+   - Two-parent copying (mixing two sets of genes) is an option. It is generic, and it speeds up evolution.
+   - **Copy cost and the child store (13 Oct 2026, review 3, P6 and M2):** a kg of child costs `c_copy` = 10^7 J of work (life keeps 10 to 20% of what it eats as growth; it was 2 × 10^6 because a body had to release the whole cost in one interval). Copying is now a process: at each update a body that copies pays into its *child store* (`Body::paid`) what its reactions can release now (before `full`, by its brain's choice, only what it can spare: after paying, they must still release its upkeep over an interval at today's rate; past `full` it must, or a body short of fuel for its size never copied and grew to 10^5 kg), and has as many children as the store covers: an individual whole children, a node a share of its members; the rest later. Before, an individual paid all or nothing, so a member far past `full` (309 children owed) could never pay and grew without end (members of 10^5 to 10^6 kg). The paid energy left the body as heat when it was paid, so the store is only a count of work done: lost at death, split and added up with members; the energy ledger is untouched. A body paying a large cost keeps the heat that holds it at its temperature (what its reactions made holds more heat; before, it cooled by 13 K and its reactions slowed). Old snapshots do not load (a new saved field).
+   - **Building takes time (14 Oct 2026, review 5):** a body pays into its child store at most `c_build` × (member mass)^0.75 × members × the days of its interval whatever its reactions could release, so a child takes months to build for a 1 kg body and years for a big one (Section 4).
+-  - **Copying when full is physics (13 Oct 2026, review 3, W3):** a member past `full` (2) times its copy mass copies at its update whatever its brain does (`body::live`); the brain's copy action only copies before that. Before, a body copied only at a decision, so the decision interval was also the reproduction interval and could not lengthen.
++  - **A body is built, not just filled (14 Oct 2026, review 6, findings 5 and 12):** the dry mass (what is not liquid) a body has paid `c_copy` per kg to make is its size, `Body::built`, kg per member. A child is given the dry mass its parent paid for as its built mass; a placed body is grown. Growth is building: at each update, before copying when full, a member whose dry mass is above `built` builds the difference at `c_copy` per kg from the same `c_build` allowance, first, its children from what is left (one allowance a day, `copy::allowance`); dry mass above `built` that is not paid stays as stores, not body, and dry mass below it is a body emptied by burning, refilled for nothing. So a child of 13 kg needs about 3 years to build the 14 kg of dry body between it and an adult of 60 kg (30% dry). The copy mass is the built dry mass at which a body copies, leaf and height go by built mass (liquid gives no size), and satiety holds at every size (Section 4, the build row).
++  - **Copying when full is physics (13 Oct 2026, review 3, W3):** a member whose built dry mass is past `full` (2) times its copy mass copies at its update (before 14 Oct 2026: a member past it by its whole mass) whatever its brain does (`body::live`); the brain's copy action only copies before that. Before, a body copied only at a decision, so the decision interval was also the reproduction interval and could not lengthen.
+   - **What comes in goes with the body, not with what it holds (13 Oct 2026, review 3, M2):** a member takes (from the ground, a body or a part), sweeps, soaks up liquid, catches light and rain (its capture area) and receives gifts only as far as its mass up to `full` times its copy mass would (`Body::work`); what it holds past that is held matter, not body, and does no work, but costs upkeep, so a body that holds more than it can pay for starves. Why: when all of it went with the whole mass, a body that could not pay for its children took more the more it held. In a 128x128 world (seed 1) members of up to 1.7 × 10^7 kg (20 to 95% liquid, the rest loose solids, inside walls) grew from year 25 on, mostly by soaking liquid up to their keep level and by taking from the ground. Resumed from year 100 with this law, they shrank or died within a year: the heaviest member two years later was 3.7 × 10^4 kg (a node whose copy-mass gene is at 6,700 kg), against 2.9 × 10^7 without it. What a member takes, sweeps and receives as a gift then goes with that mass to the power 0.75 (`Body::intake`, 14 Oct 2026, Section 4); light, rain, liquid and gas go by area. Until 14 Oct 2026 eaters past `full` still took at the rate of `full`, so they could always eat what they burned (a hard "no intake past `full`" starved them: burning leaves its liquid product in the body); since review 5 a body takes by its whole mass^0.75 and no more than its upkeep plus what it can build (satiety, `choose::sate`), which keeps that lesson (the upkeep's worth always comes in) and replaces the cap at `full`. The work of making a child (`c_copy` per kg) is for what it is built of, not the liquid it carries (14 Oct 2026): before, a light-eater with a copy mass of several tonnes, mostly liquid, could not pay for a child, never copied and swelled to 15 to 30 times its copy mass (up to 621 t, watch report 3); the copy-mass gene's range goes up to 10^6 kg (was 10^4, where selection for height had pushed it to the wall).
+ - **Imitation.** A body that watches another body can copy part of its brain, its learned behaviour. This costs time and attention. It is how culture, skills and designs spread.
+ - **Matter is never copied for free.** Copying a body costs real substances (Law 1 and Law 2 still hold). Copying behaviour costs time.
+diff --git a/docs/numbers.md b/docs/numbers.md
+index 2321fff..e3884c8 100644
+--- a/docs/numbers.md
++++ b/docs/numbers.md
+@@ -95,7 +95,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
+ | `rho_body` | kg/m³ | density of bodies | living matter is about the density of liquid, 1,000 | physical |
+ | `walk_wear` | kg/J | body mass broken per J a mover dissipates against it, times (strength + 0.1) | none found; review 2: do not tune it to force trails | tuned, first guess |
+ | `take` | share per day | most a body can take per day of the mass it takes by, per kg at `m_ref` | a 57 kg eater (20.8 kg-equivalents) takes at most 1.04 kg a day, 1.8% of its mass (5% of its kg-equivalents; 5% of the mass of a 1 kg member). Real food intake is 1 to 5% of body mass a day, and this is about 2.7 times Kleiber's resting need for that eater (1.04 kg of sugar at 15.6 MJ/kg is 16 MJ a day against 3.4 m^0.75 W = 6.1 MJ), a real appetite. Review 5 (drift 1) listed it as tuned; review 6 (finding 2) showed that it does not decide which size wins (the costs by the kg did, `c_strength`, `c_cat`, `c_learn`, `c_signal` now by kg^0.75) | anchored |
+-| `intake_exp` | none | what a member takes, sweeps and receives goes with its mass that works to this power | Kleiber: 0.75, the exponent of intake and metabolism in life | anchored |
++| `intake_exp` | none | what a member takes, sweeps and receives goes with its mass to this power (and what it can build, what it pays to be, its leaf by built mass) | Kleiber: 0.75, the exponent of intake and metabolism in life | anchored |
+ | `sweep` | m² per kg per day | area a body works per day per kg of its mass that works, at `m_ref` | run: set for eaters to live (review 5, drift 1). A 30 kg body works 300 m² in 10 days | tuned |
+ | `c_handle` | J per kg | energy to handle one kg taken or put | none found; review 5 lists it as tuned | tuned |
+ | `shape_noise` | none | spread of the shape of a part made, around its mean | none found | tuned, first guess |
+@@ -130,13 +130,13 @@ Some numbers in this file were found by reading doc comments and reports, not by
+ 
+ | name | unit | fact | anchor (source) | mark |
+ |---|---|---|---|---|
+-| `c_copy` | J per kg | energy to make one kg of child, of what it is built of | growth in life keeps 10 to 20% of the energy it eats, so a kg of body costs about 1e7 J, doc comment | anchored |
++| `c_copy` | J per kg | energy to make one kg of body, of what it is built of (dry mass, not liquid): paid for a child's dry mass at birth and for the dry mass a body builds as it grows (`Body::built`) | growth in life keeps 10 to 20% of the energy it eats, so a kg of body costs about 1e7 J, doc comment | anchored |
+ | `new_lineage` | chance per child | a child starts a new lineage with a changed base | none found | tuned, first guess |
+ | `base_noise` | none | size of that change | none found | tuned, first guess |
+ | `row_chance` | chance per child | a child's born brain rows change | none found | tuned, first guess |
+ | `row_noise` | none | step of that change per generation | none found | tuned, first guess |
+ | `new_noise` | none | spread of the weights a bigger brain adds | none found | tuned, first guess |
+-| `full` | times the copy mass | a member holding this many times its copy mass copies whatever its brain does (the copy trigger); it caps the mass that works; and it gates satiety: only a member past it takes no more than it can use (`choose::sate`) | run: "copies at twice its copy mass", set so bodies cannot grow without end (review 3, M2). It did not go away with satiety (review 5 row 1): the number still decides when a body copies and, since 14 Oct 2026, from where satiety acts (a rule chosen for a run, see below) | tuned |
++| `full` | times the copy mass | a member whose built dry mass is this many times its copy mass copies whatever its brain does (the copy trigger, by built mass since 14 Oct 2026); it caps the built mass that sets leaf and the mass that works (liquid soak) | run: "copies at twice its copy mass", set so bodies cannot grow without end (review 3, M2). Since review 6 (finding 5) it is only the copy trigger and these caps: satiety no longer starts from it (one law at every size, so the rule chosen for a run "satiety only past `full`" is gone) | tuned |
+ | `alike` | mutation steps | nodes whose genes differ by at most this merge; a node splits when its halves differ by more | run: speed-tool threshold, 4 steps (review 3, M3); to be checked against individuals at M4 | tuned |
+ 
+ ### Flow, as ground cover and moving liquid feel it
+@@ -153,16 +153,15 @@ Some numbers in this file were found by reading doc comments and reports, not by
+ 
+ | name | unit | fact | anchor (source) | mark |
+ |---|---|---|---|---|
+-| `c_build` | J per day per kg^0.75 | most a body pays into its child store per day: the rate at which it can build a child | the growth of young in life, 1,500 to 30,000 (von Bertalanffy; review 5, row 1). 1e4, review 5's value. It was 3e4 for part of 14 Oct, raised so the neutral-brained founder eaters of seeds 1 and 2 bred faster than they starved (a law set to win a start; review 6, finding 1); that start is now hand-set (`ew run`) and the number is back. Tuned because runs chose it within the anchor | tuned |
++| `c_build` | J per day per kg^0.75 | most a body pays into building per day: growth of its own dry mass first, then its children (one allowance, `copy::allowance`; 14 Oct 2026, review 6, finding 5: before, only the child's share was limited and about 70% of an adult body was built free) | the growth of young in life, 1,500 to 30,000 (von Bertalanffy; review 5, row 1). 1e4, review 5's value. It was 3e4 for part of 14 Oct, raised so the neutral-brained founder eaters of seeds 1 and 2 bred faster than they starved (a law set to win a start; review 6, finding 1); that start is now hand-set (`ew run`) and the number is back. An eater child of 13 kg growing to 60 kg at 30% dry builds about 14 kg of dry mass (1.4e8 J) at 1e4 x m^0.75 a day: one to three years. Tuned because runs chose it within the anchor | tuned |
+ | `c_basal` | J per day per kg^0.75 | basal upkeep every body pays, strength and catalysts on top (2e4) | resting metabolism (Kleiber; its whole value is about 3e5 J per day per kg^0.75, of which this is the part every body pays, the rest being `c_strength` and `c_cat`; review 5, row 2). It is 1/15 of Kleiber's whole value, which review 5 chose so that a 1 kg plant keeps a spare of over twice its upkeep: a number set for a run, so marked tuned (review 6, finding 9). With the costs by kg^0.75 (14 Oct 2026) a 1 kg plant keeps 85 kJ/kg/day of income against 46 of upkeep, 1.8 times | tuned |
+ 
+ ## Rules chosen for a run
+ 
+-These are not numbers of the world and not rows of `Physics` or `Config`, but they were picked so a run came out a certain way (handover 2, lesson 3; review 6, finding 9), so they are listed here and counted like tuned numbers. **Each must not grow in number: four today, held by a test (`core/tests/numbers.rs`).** A new one replaces one of these or is not added. Where one is also a row above (the kept copy logits and the roster's stores are in the table of constants, marked tuned), the tuned count already has it.
++These are not numbers of the world and not rows of `Physics` or `Config`, but they were picked so a run came out a certain way (handover 2, lesson 3; review 6, finding 9), so they are listed here and counted like tuned numbers. **Each must not grow in number: three today, held by a test (`core/tests/numbers.rs`).** A new one replaces one of these or is not added. Where one is also a row above (the kept copy logits and the roster's stores are in the table of constants, marked tuned), the tuned count already has it.
+ 
+ | rule | what it does | chosen for (run, date) | where |
+ |---|---|---|---|
+-| satiety only past `full` | a member below `full` times its copy mass takes as its intake allows; only one past it takes no more than its reactions can use over the interval | 14 Oct 2026, reviews 5 and 6: with satiety at every size all 416 starting eaters died in their first year of seed 1 | `choose::sate` |
+ | the kept copy logits `H_LIGHT` and `H_EATER` | the one brain bias kept in a neutral start: the body's own chance to copy (-1.0 for light-eaters, -1.6 for eaters); they set the plants' births, since almost no plant member is past `full` (review 6, finding 4) | keeps the pace of generations; a neutral 0 would make every body that holds its copy mass copy on half of its decisions | `worldgen::life` |
+ | the hand-set eater start (the default for animal kinds in `ew run` and `--roster`) | animals are placed with the hand-set biases (`Seeding::hand[1]`), not neutral brains; `--neutral-eaters` for the old start; plants stay neutral | 14 Oct 2026, review 6, finding 1: 97 to 99% of neutral-brained founder eaters died in their first year, a lottery that `c_build` had been raised to win; the bottleneck is now 25 to 77 founder bodies instead of 2 to 14 | `cli/src/main.rs`, `worldgen::life::Seeding` |
+ | the roster's stores (`Kind::store`: 30% of mass, 60% for the two big slow eater kinds) | the fuel a starting member holds | seed 1, 64x64 roster: 100 days of store held 6 or 7 decisions of a neutral brain and the 150 kg and 600 kg kinds were gone by years 30 and 35; 200 days kept them (`life.rs`) | `worldgen::life::KINDS` |
+@@ -180,7 +179,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
+ | `MOVE_REF` (30 kg) and `MOVE_EXP` (-0.32) in `core/src/lib.rs` | kg; none | the mass at which `c_move` is the cost of moving, and the exponent of the real cost of transport against the mover's mass (`Physics::walk`) | Taylor et al. 1982: 10.7 m^-0.32 J per kg per m, 3.6 at 30 kg (14 Oct 2026, review 6 finding 2) | anchored |
+ | the kept copy logit, `H_LIGHT` and `H_EATER` in `life.rs` (-1.0 and -1.6) | logit | the one brain bias kept at the start: the body's own chance to copy | run: it keeps the pace of generations; a neutral 0 would make every body that holds the mass copy on half of its decisions (said in `life.rs`). A behaviour, not a size | tuned |
+ | `Kind::store` of the roster (0.3; 0.6 for the two big slow eater kinds) | share of mass | the energy-rich solid a starting member holds as fuel | run: seed 1, 64x64 roster, 100 days of store held 6 or 7 decisions of a neutral brain and the 150 and 600 kg kinds were all gone by year 30 and 35; 200 days kept them (`life.rs`) | tuned |
+-| the roster's intervals, copy masses and strengths (`INTERVAL`, `COPY_MASS` and `STRENGTH` genes in `KINDS`) | days, log10 kg, share | when each kind updates, where it copies, how strong it is | run: set so each kind lives its first years (600 kg members at 40 days and strength 0.95 were all dead within 6 months). Initial conditions, not laws, but they are numbers a run came out of | tuned |
++| the roster's intervals, copy masses and strengths (`INTERVAL`, `COPY_MASS` and `STRENGTH` genes in `KINDS`) | days, log10 kg, share | when each kind updates, where it copies, how strong it is | run: set so each kind lives its first years (600 kg members at 40 days and strength 0.95 were all dead within 6 months). Initial conditions, not laws, but they are numbers a run came out of. The copy-mass genes are the built dry mass a member copies at since 14 Oct 2026 (review 6, finding 5): each was set again by log10 of the dry share of its placed member (0.3, or 0.6) so it copies at the same total mass, and the `LEAF` genes by -0.75 log10 of it so the leaf at placement is the same (arithmetic in `worldgen::life::KINDS`) | tuned |
+ | the year each kind is placed (`Kind::year`: 0, 10, 20, 24) | years | when the starting kinds are placed after the first life | run: once what they eat has spread (`life.rs`) | tuned |
+ | `Seeding::default` (20 rounds, row-bias step 0.2, genes x3) | none | how much a start is sprayed with mutation | run: one generation's step is too small for selection to pick from in the time available (review 2, problem 2). The hand-set start, the default for animals in `ew run` since 14 Oct 2026, takes one generation's step for rows and genes | tuned |
+ 
+@@ -197,4 +196,4 @@ By hand and by script on 14 Oct 2026. The 98 rows of `Config` and `Physics` are
+ | switch | 4 | `share_brains`, `split_rows`, `null`, `nodes` |
+ | container | 1 | `phys` |
+ 
+-Rows marked tuned in all: 67 (60 in the structs, 7 outside). The test holds that count at 67 or below (handover 14.3). Rules chosen for a run: 4, held by the test too.
++Rows marked tuned in all: 67 (60 in the structs, 7 outside). The test holds that count at 67 or below (handover 14.3). Rules chosen for a run: 3, held by the test too (the fourth, "satiety only past `full`", went on 14 Oct 2026 with review 6, finding 5: satiety is one law at every size).
+diff --git a/tape/src/rec.rs b/tape/src/rec.rs
+index e026b95..73e7aa0 100644
+--- a/tape/src/rec.rs
++++ b/tape/src/rec.rs
+@@ -111,7 +111,7 @@ fn info(sig: &[[[[f64; 4]; 2]; 3]], c: usize) -> f64 {
+ }
+ 
+ /// Sums over the live members of one starting kind (`Recorder::push_series`): members, bodies, member-years of life,
+-/// mass (kg), member-copy-mass (kg), the genes of `GENES` (by members), and per catalyst gene the sum over the members
++/// mass (kg), member-copy-mass (kg), built dry mass (kg, per member times members), dry mass (kg), the genes of `GENES` (by members), and per catalyst gene the sum over the members
+ /// that carry it on and the members that do.
+ #[derive(Clone)]
+ struct Root {
+@@ -120,13 +120,15 @@ struct Root {
+     life: f64,
+     mass: f64,
+     copy_mass: f64,
++    built: f64,
++    dry: f64,
+     genes: [f64; 6],
+     cat: Vec<(f64, f64)>,
+ }
+ 
+ impl Root {
+     fn new(nr: usize) -> Self {
+-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, copy_mass: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
++        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, copy_mass: 0.0, built: 0.0, dry: 0.0, genes: [0.0; 6], cat: vec![(0.0, 0.0); nr] }
+     }
+ }
+ 
+@@ -509,6 +511,8 @@ impl Recorder {
+                 r.life += n * life_years(w, b);
+                 r.mass += b.mass(&w.chem);
+                 r.copy_mass += n * b.dec(pcore::body::COPY_MASS);
++                r.built += n * b.built;
++                r.dry += b.dry(&w.chem);
+                 for (x, g) in r.genes.iter_mut().zip(GENES) {
+                     *x += n * b.gene(g);
+                 }
+@@ -570,7 +574,8 @@ impl Recorder {
+         ]);
+         // Per starting kind: members, bodies, the members' mean life at their upkeep now (years) and repair gene (the
+         // old four), then what happened in the year (members born and died by cause, `life_real`: the standing members
+-        // over the year over the deaths in it, years), and the means by members: mass (kg), copy mass (kg), the genes
++        // over the year over the deaths in it, years), and the means by members: mass (kg), copy mass (kg, the gene: the built dry
++        // mass it copies at), built dry mass (kg) and dry mass (kg), the genes
+         // (log10, except `hidden`, units) and, for each catalyst gene on in some member of the kind so far, its mean over
+         // the members that carry it on (log10) and the share of members that carry it on.
+         let ever: BTreeSet<(usize, usize)> = self.series.iter().filter_map(|c| c.0.strip_prefix("root_")?.split_once("_cat_")).filter_map(|(k, r)| Some((k.parse().ok()?, r.parse().ok()?))).collect();
+@@ -587,6 +592,8 @@ impl Recorder {
+                 (c("life_real"), "yr", if d.iter().sum::<f64>() > 0.0 { stand / d.iter().sum::<f64>() } else { f64::NAN }),
+                 (c("mass"), "kg", per(v.mass)),
+                 (c("copy_mass"), "kg", per(v.copy_mass)),
++                (c("built"), "kg", per(v.built)),
++                (c("dry"), "kg", per(v.dry)),
+             ]);
+             row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
+             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
+diff --git a/worldgen/src/life.rs b/worldgen/src/life.rs
+index f8e2099..6379168 100644
+--- a/worldgen/src/life.rs
++++ b/worldgen/src/life.rs
+@@ -116,6 +116,23 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
+ /// it much per kg, so the eaters of remains (strength 0) would live longest. A gene below 0 costs
+ /// less upkeep (`Physics::c_repair`): evolution sets it from there.
+ ///
++/// The `COPY_MASS` and `LEAF` genes (the seventh and fourth scalar) were set again on 14 Oct 2026
++/// for built dry mass (review 6, finding 5): size is the dry mass a body has paid to build
++/// (`Body::built`), and a placed body is grown, its built mass its dry mass, the share `Kind::store`
++/// of its mass (the rest is the liquid; 0.3, 0.6 for the two big slow eater kinds). With d that
++/// share, each kind copies at the same total mass as before: new COPY_MASS = old + log10(d)
++/// (copying at built mass d x m is copying at a mass m while it keeps its share), and has at
++/// placement the leaf area it had: area = (built / 1 kg)^0.75 x 10^LEAF now, (m / 1 kg)^0.75 x
++/// 10^LEAF before, so new LEAF = old - 0.75 log10(d); the open surface and the GAS genes are
++/// then unchanged. d = 0.3 (log10 -0.523): COPY_MASS - 0.523, LEAF + 0.392. d = 0.6 (log10 -0.222):
++/// COPY_MASS - 0.222, LEAF + 0.166. Light-eaters: copy -0.223 (0.3), leaf 0.692 (0.3). Small fast
++/// light-eaters: -1.523, 0.992. Big slow light-eaters: 1.077, 0.092. Eaters and clever eaters: 1.277,
++/// -2.608. Small eaters of remains: -0.123, -2.608. Big eaters of remains: 0.957, -2.608. Small
++/// fast eaters of light-eaters: 0.257, -2.608. Big slow eaters of light-eaters (d 0.6): 2.258,
++/// -2.834. Strong fast eaters of eaters: 1.777, -2.608. Strong big slow eaters of eaters (d 0.6):
++/// 2.858, -2.834. Only what the kinds do from then on differs: a body that fills with liquid no
++/// longer grows in size by it.
++///
+ /// The roster has rungs from the first day, each derived from the two old rows by scaling their
+ /// numbers and keeping what lets a kind live: light-eaters keep the light catalyst (12) and the
+ /// exchange genes, the others the burning catalyst (2.6: catalysts cost by capacity, an eater's about a tenth of its upkeep, 14 Oct 2026) and an uptake of the liquid and
+@@ -141,24 +158,24 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
+ /// 1 left at 28 and none at 35); with 200 days, the 150 kg kind had 7 bodies at year 24, 73 at 30
+ /// and 92 at 40 (1.5 million members in nodes), and the 600 kg kind kept 3 to year 40.
+ pub const KINDS: [Kind; 11] = [
+-    Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [2.187, 0.0, 2.692, 0.3, 0.05, 0.3, 0.3, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -1.0], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, store: 0.3, hand: H_LIGHT },
+-    Kind { name: "eaters", year: 20, anywhere: false, scalars: [2.304, -0.5, 0.492, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+-    Kind { name: "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)", year: 0, anywhere: false, scalars: [2.304, -0.5, 0.492, -3.0, 0.6, 0.3, 1.8, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, store: 0.3, hand: H_EATER },
++    Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [2.187, 0.0, 2.692, 0.692, 0.05, 0.3, -0.223, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -1.0], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 1.0, cover: 0.1, per: 1, chance: 1.0, store: 0.3, hand: H_LIGHT },
++    Kind { name: "eaters", year: 20, anywhere: false, scalars: [2.304, -0.5, 0.492, -2.608, 0.6, 0.3, 1.277, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
++    Kind { name: "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)", year: 0, anywhere: false, scalars: [2.304, -0.5, 0.492, -2.608, 0.6, 0.3, 1.277, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1, 320.0, -0.4], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 30.0, cover: 0.0, per: 1, chance: 0.3, store: 0.3, hand: H_EATER },
+     // Light-eaters, small and fast: members of 0.05 kg copying at 0.1 kg every 10 days, children spread wide.
+-    Kind { name: "small fast light-eaters", year: 0, anywhere: true, scalars: [1.567, 0.0, 2.692, 0.6, 0.05, 0.3, -1.0, 1.0, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.2], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 0.05, cover: 0.05, per: 1, chance: 0.6, store: 0.3, hand: H_LIGHT },
++    Kind { name: "small fast light-eaters", year: 0, anywhere: true, scalars: [1.567, 0.0, 2.692, 0.992, 0.05, 0.3, -1.523, 1.0, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.2], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 0.05, cover: 0.05, per: 1, chance: 0.6, store: 0.3, hand: H_LIGHT },
+     // Light-eaters, big and slow: members of 20 kg copying at 40 kg every 60 days, less capture area per kg, children stay.
+-    Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [3.086, 0.0, 2.692, -0.3, 0.05, 0.3, 1.6, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 20.0, cover: 0.3, per: 1, chance: 0.4, store: 0.3, hand: H_LIGHT },
++    Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [3.086, 0.0, 2.692, 0.092, 0.05, 0.3, 1.077, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5], cat: [9.0, 2.0], upt: [0.0, 0.0], mass: 20.0, cover: 0.3, per: 1, chance: 0.4, store: 0.3, hand: H_LIGHT },
+     // Eaters of remains on the ground: weak (0.05 and 0.1) (the burning catalyst of the others: a quicker one costs too much), the solid first.
+-    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 1.492, -3.0, 0.0, 0.3, 0.4, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+-    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.205, -0.5, 0.792, -3.0, 0.0, 0.3, 1.48, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },
++    Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 1.492, -2.608, 0.0, 0.3, -0.123, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.2, 1.0], mass: 1.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
++    Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.205, -0.5, 0.792, -2.608, 0.0, 0.3, 0.957, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -2.1], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 15.0, cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },
+     // Eaters of light-eaters, small and fast: 3 kg copying at 6 kg every 7 days, strength 0.3 (the light-eaters have 0.05, the eaters 0.6).
+-    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.273, -0.5, 0.492, -3.0, 0.3, 0.3, 0.78, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
++    Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.273, -0.5, 0.492, -2.608, 0.3, 0.3, 0.257, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
+     // Eaters of light-eaters, big and slow: 150 kg copying at 300 kg every 16 days, strength 0.5.
+-    Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [2.536, -0.5, 0.192, -3.0, 0.5, 0.3, 2.48, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
++    Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [2.536, -0.5, 0.192, -2.834, 0.5, 0.3, 2.258, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
+     // Eaters of eaters (stronger in force than the eaters, whose strength gene is 0.6: the force is the gene times the mass), placed once the eaters have spread:
+     // 100 kg copying at 200 kg every 7 days, strength 0.6; 600 kg copying at 1200 kg every 14 days, strength 0.5. A bigger brain (16 hidden, 8 memory, 4 seen, sight 2), learning on.
+-    Kind { name: "strong fast eaters of eaters", year: 24, anywhere: false, scalars: [2.478, -0.5, 0.192, -3.0, 0.6, 0.3, 2.3, 0.85, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.1, 320.0, -0.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 100.0, cover: 0.0, per: 1, chance: 0.15, store: 0.3, hand: H_EATER },
+-    Kind { name: "strong big slow eaters of eaters", year: 24, anywhere: false, scalars: [2.736, -0.5, -0.008, -3.0, 0.5, 0.3, 3.08, 1.15, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.05, 320.0, 0.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 600.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
++    Kind { name: "strong fast eaters of eaters", year: 24, anywhere: false, scalars: [2.478, -0.5, 0.192, -2.608, 0.6, 0.3, 1.777, 0.85, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.1, 320.0, -0.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 100.0, cover: 0.0, per: 1, chance: 0.15, store: 0.3, hand: H_EATER },
++    Kind { name: "strong big slow eaters of eaters", year: 24, anywhere: false, scalars: [2.736, -0.5, -0.008, -2.834, 0.5, 0.3, 2.858, 1.15, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.05, 320.0, 0.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 600.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
+ ];
+ 
+ /// The roster of `ew run --roster`: ten kinds with rungs from the first day (rows of `KINDS`,
+@@ -347,7 +364,7 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
+         last = s;
+         let b = &w.life.bodies[s];
+         let (cell, lin, m) = (b.cell as usize, b.lineage, b.n());
+-        let (genes, born, wear, wet) = (b.genes.clone(), w.life.born(b).to_vec(), if m > 1.0 { 0.0 } else { b.wear }, b.wet);
++        let (genes, born, wear, wet, built) = (b.genes.clone(), w.life.born(b).to_vec(), if m > 1.0 { 0.0 } else { b.wear }, b.wet, b.built);
+         let (store, e): (Vec<f64>, f64) = (b.store.iter().map(|a| a / m).collect(), b.e / m);
+         let src_lin = w.life.brains[lin as usize].clone().expect("lineage");
+         if !made.iter().any(|x| x.0 == lin) {
+@@ -369,7 +386,7 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
+             }
+             let group = w.life.new_group(lineage, rows.clone());
+             let genome = w.life.new_genome(rows);
+-            let mut b = Body { cell: cell as u32, count: 1.0, lineage, group, near: u32::MAX, mark: w.light[cell], e, store: store.clone(), genes: g, genome, wear, wet, born: w.day, ..Default::default() };
++            let mut b = Body { cell: cell as u32, count: 1.0, lineage, group, near: u32::MAX, mark: w.light[cell], e, store: store.clone(), genes: g, genome, wear, wet, built, born: w.day, ..Default::default() };
+             b.vis = b.visible(&w.chem, &w.cfg.phys);
+             // New matter and energy, booked like an edit (as `make_with`).
+             w.ledger.imposed_energy += b.e;
+@@ -431,6 +448,8 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
+     store[rich] = kind.store * count * kind.mass / chem.subs[rich].molar_mass;
+     let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
+     b.e = b.heat_cap(chem) * t;
++    // A placed body is grown: its dry mass is built (nothing is booked for it).
++    b.built = b.dry(chem) / count;
+     ledger.imposed_energy += b.e;
+     for (k, &a) in b.store.iter().enumerate() {
+         chem.add_elems(k, a, &mut ledger.imposed_elems);
