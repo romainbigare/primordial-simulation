@@ -22,3 +22,6 @@ folder with the same name as the report.
 - `watch-3-before-m4.md`: the third fix list done (all 16 items of review 3), three bugs found by
   the long runs and fixed, three 300-year runs at 128 x 128, null runs and roster runs at 64 x 64,
   14 October 2026. Chart, pictures and the full numbers in `watch-3-before-m4/`.
+- `watch-4-before-m4.md`: the owner's three changes after report 3 (a child costs what it is built
+  of, not its liquid; bodies die of age by their rate of living, with a repair gene; enzymes cost a
+  tenth of an eater's upkeep), three 300-year runs, null and roster runs, 14 October 2026.
