@@ -197,9 +197,10 @@ pub struct Physics {
     pub rho_body: f64,
     /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J
     pub walk_wear: f64,
-    /// Most a body can take per day of its interval, as a share of its own mass
+    /// Most a body can take per day of its interval, as a share of its mass that works (up to
+    /// `full` times its copy mass per member, `Body::work`: what it holds past that takes nothing)
     pub take: f64,
-    /// Area a body works per day per kg of its mass, m²/(kg day): it takes no more per day than
+    /// Area a body works per day per kg of its mass that works, m²/(kg day): it takes no more per day than
     /// the mass per m² of what it takes there times this times its mass (a 30 kg body works 300
     /// m² in 10 days), so thin cover is hard to find
     pub sweep: f64,

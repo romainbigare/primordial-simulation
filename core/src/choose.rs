@@ -595,14 +595,14 @@ fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
     w.cfg.phys.take.min(w.cfg.phys.sweep * dens)
 }
 
-/// Take loose solids and liquids from the cell's ground, as `reach` allows (a node's members
-/// each work their own area: the mass is the node's total).
+/// Take loose solids and liquids from the cell's ground, as `reach` allows for the mass that
+/// works (`Body::work`; a node's members each work their own area: it is the node's total).
 fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
     let tg = w.life.env[i][0];
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
     let mass = b.mass(&w.chem);
-    let m = wanted(w, b, free, reach(w, b, free) * b.interval() as f64 * mass, mass);
+    let m = wanted(w, b, free, reach(w, b, free) * b.interval() as f64 * b.work(&w.cfg.phys, mass), mass);
     if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m), b.interval() as f64) {
         return;
     }
@@ -650,7 +650,7 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
     to.e += q;
 }
 
-/// Take from another body in the cell, by uptake selectivity, as much as the body's mass and
+/// Take from another body in the cell, by uptake selectivity, as much as the mass that works and
 /// its force against the other's allow (a member's force: strength x what a held part adds x
 /// its mass, as `bond::force`), and its room. The quicker body acts first: one that decides
 /// more often than the taker has acted again within part of the taker's interval and gets away
@@ -665,7 +665,7 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
     let lever = bond::lever(w, b, mb);
     let (fb, fo) = (b.gene(STRENGTH) * lever * mb / b.n(), o.gene(STRENGTH) * bond::lever(w, o, mo) * mo / o.n());
     let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
-    let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * mb, mb);
+    let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * b.work(&w.cfg.phys, mb), mb);
     let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / w.cfg.phys.rho_pass;
     let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
     if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m) * resist, b.interval() as f64) || away {
@@ -694,7 +694,7 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
 
 /// Put to another body in the cell: from the stores held above twice their safe minimum, by their
 /// shares, up to what the other could take by its own size in the time (`phys.take` x interval x
-/// its mass), as far as it has room. A node gives as one member: a share 1/count of its spare (its
+/// its mass that works, `Body::work`), as far as it has room. A node gives as one member: a share 1/count of its spare (its
 /// members cannot all reach one body). Before (review 3, M2) the cap was the giver's mass, so a
 /// node of 10^7 members could give its whole spare to a 1 kg member, which rain then filled to
 /// its keep level, and members of thousands of tonnes grew. It remembers this for the giver.
@@ -704,7 +704,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
     let mo = o.mass(chem);
-    let share = (w.cfg.phys.take * b.interval() as f64 * mo / all.max(1e-9)).min(1.0 / b.n());
+    let share = (w.cfg.phys.take * b.interval() as f64 * o.work(&w.cfg.phys, mo) / all.max(1e-9)).min(1.0 / b.n());
     let m: Vec<f64> = (0..chem.ns()).map(|k| (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0))).collect();
     let got = kg(w, &m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {

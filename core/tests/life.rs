@@ -463,6 +463,57 @@ fn a_heavy_individual_copies_over_several_updates() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
+/// What a body takes goes with its body, not with what it holds (review 3, M2): an eater past
+/// `full` times its copy mass takes from the ground what a member at `full` would, whether it holds
+/// 2.4 or 24 times that (with its whole mass working, a body that could not pay for its children
+/// took more the more it held, and grew to 10^7 kg). Matter and energy are kept exactly.
+#[test]
+fn a_body_past_full_takes_by_its_body_not_by_what_it_holds() {
+    use pcore::body::{Lineage, DISPERSE};
+    use pcore::event::EventKind;
+    use pcore::{brain, choose};
+    let took = |times: f64| {
+        let mut w = worldgen::new_world(1, 16, 16);
+        pcore::step(&mut w);
+        let n = w.grid.n();
+        let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+        // A kg of the energy-rich solid per m² on its ground (booked as an edit).
+        let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");
+        let (t, a) = (w.t_ground(i), w.grid.area() / w.chem.subs[rich].molar_mass);
+        w.ground[rich * n + i] += a;
+        w.chem.add_elems(rich, a, &mut w.ledger.imposed_elems);
+        let e = w.energy_ground(i, t);
+        (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[rich].hf, e);
+        // A starting eater (30 kg, copying at 63) whose brain only takes from the ground, `times`
+        // as heavy.
+        let shape = choose::shape(w.chem.ns(), 12, 6);
+        let mut fixed = [-8.0; brain::FIXED];
+        fixed[3] = 8.0;
+        let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+        let rows = base.split_off(shape.base());
+        let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+        let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+        for k in 0..w.chem.ns() {
+            w.chem.add_elems(k, (times - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
+            (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
+        }
+        (w.ledger.imposed_energy, b.e, b.genes[DISPERSE]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0);
+        let s = w.life.add(b, w.day, 1);
+        let (t0, l0, id) = (pcore::check::totals(&w), w.ledger.clone(), w.life.bodies[s].id(s));
+        pcore::body::survey(&mut w);
+        w.day += 1;
+        w.events.clear();
+        pcore::body::day(&mut w);
+        assert_eq!(pcore::check::broken(&w), None);
+        let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>()
+    };
+    let (light, heavy) = (took(10.0), took(100.0));
+    println!("taken in an update: {light:.3} kg holding 300 kg, {heavy:.3} kg holding 3000 kg");
+    assert!(light > 0.0 && (heavy / light - 1.0).abs() < 1e-6, "{light} kg, then {heavy} kg");
+}
+
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
 /// decision and pays nothing for a brain, but lives its physics at its updates and copies when
 /// full (W3). Matter and energy are kept exactly.

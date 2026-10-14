@@ -274,11 +274,21 @@ impl Body {
         let (t, lay) = (self.temp(chem), Layout::of(chem));
         (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase(k, t) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
     }
+    /// Mass that works, kg: each member's mass up to `phys.full` times its copy mass (the size its
+    /// genes set), times the count. What a member holds past that is held matter, not body: it
+    /// takes, sweeps, soaks up, catches and receives no more than at full (`phys.take`,
+    /// `phys.sweep`, the liquid exchange, rain, gifts), and copies what it can pay for (`copy`).
+    /// With all of this going with its whole mass, a body that could not pay for its children
+    /// took more the more it held and grew without end (members of 10^7 kg, 95% liquid, at year
+    /// 100 of a 128x128 world, review 3, M2).
+    pub fn work(&self, p: &crate::Physics, mass: f64) -> f64 {
+        mass.min(p.full * self.dec(COPY_MASS) * self.n())
+    }
     /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
     /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
     /// taken or put stops there. It bounds the shares of the stores, not the size: what comes in
-    /// at an update goes with the body's own mass (takes and gifts, `phys.take`; rain, its capture
-    /// area), and a member past `phys.full` times its copy mass copies at its update (`copy`).
+    /// at an update goes with the mass that works (`work`), and a member past `phys.full` times
+    /// its copy mass copies at its update (`copy`).
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let f = self.gene(Layout::of(chem).keep + k).clamp(0.0, 0.95);
         let mm = chem.subs[k].molar_mass;
@@ -1156,7 +1166,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // condensing point: through the same conductance as the heat below (cover and walls in
     // series), and once for all the liquids (what one spent is owed by the next), so the heat
     // step never needs more than the surface gives and the body never ends below that point.
-    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open;
+    // Matter comes in as far as its mass works (`Body::work`): share `wk` of it.
+    let wk = b.work(&cfg.phys, mass) / mass;
+    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open * wk;
     tmp.pool.clear();
     tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
     let vap_tot: f64 = tmp.pool.iter().sum();
@@ -1190,14 +1202,14 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     }
 
     // Liquids standing on the ground soak in by solubility, faster where the ground is wet,
-    // up to the level the body keeps.
+    // up to the level the body keeps, through the mass that works (`wk`).
     let wet = depth / (depth + cfg.phys.wet_depth);
     let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
     if in_ground > 0.0 {
         let _ = cap!();
     }
-    let rate = -(-b.k.liq * days).exp_m1() * wet;
+    let rate = -(-b.k.liq * days).exp_m1() * wet * wk;
     let mass2 = if moved { b.mass(chem) } else { mass1 };
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
         let x = ground[k * n + i] / in_ground;
