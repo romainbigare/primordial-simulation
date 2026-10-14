@@ -1011,6 +1011,18 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   `docs/reports/watch-7-before-m4/built-mass-not-merged.patch` (a body's dry mass as its size:
   not used).
 
+- **Partial damage and healing (planned, the owner agreed, 14 Oct 2026).** Fire, grazing and
+  pushing through a cell already kill part of a population node, and an attack takes part of a
+  single body's stores. But an attack takes food store, not body, so a bitten animal is hungrier,
+  not hurt; and abilities (force) go with the whole mass, so losing body matter barely weakens it.
+  Plan, inside Bond and Copy, no new law: (1) the energy of an attack, of being pushed through or
+  of heat breaks body matter first (it is what holds a body together) and spills the stores it
+  held; (2) force, and what goes with size, read the body (`Body::size`), not the whole mass; (3)
+  healing is growth: the lost matter is rebuilt at `c_copy` within `c_build`, so a hurt body is
+  weak for weeks and may starve or be taken while it heals; (4) in a node, a bite smaller than a
+  member takes part of every member's matter (grazing), a larger one whole members. To be built
+  after the reports on plant reproduction and lifespans.
+
 ---
 
 ## 14. Rules of work
