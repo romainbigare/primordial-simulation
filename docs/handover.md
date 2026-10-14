@@ -1023,6 +1023,27 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   member takes part of every member's matter (grazing), a larger one whole members. To be built
   after the reports on plant reproduction and lifespans.
 
+- **Five more mechanics, queued with partial damage (the owner agreed, 14 Oct 2026).** Each is
+  physics that makes things possible, not an outcome:
+  1. **The cost of living follows temperature.** Today upkeep is the same at every temperature,
+     while the reactions that pay it slow in the cold, so a cold month starves bodies. Upkeep goes
+     by the same rate law as the reactions (about twice per 10 K), so dormancy, slower lives in
+     the cold and kinds by climate can emerge.
+  2. **The heat a body makes stays in it** and leaves through its surface (`HEAT`, cover, walls),
+     instead of going straight to the ground. Warm big bodies, insulation and shelters then have a
+     physical reason.
+  3. **Two-parent copying.** A child takes each gene from one of two nearby, alike parents, plus
+     noise (Copy, 6.4 lists it as an option). This brings faster adaptation, and kinds become the
+     groups that mix.
+  4. **A soil nutrient.** Body matter needs a little of a mineral from the ground, given back when
+     dead matter rots; erosion and rivers move it, so fertility differs from place to place.
+  5. **Natural fire starts.** A rare spark of heat comes with strong weather (a stand-in for
+     lightning), so fires happen without the player. It is a new energy source, booked like the
+     sun.
+
+  Order: after the reports on plant reproduction and lifespans are validated, partial damage
+  first, then 1 to 5. Disease (bodies inside bodies) waits until after M4.
+
 ---
 
 ## 14. Rules of work
