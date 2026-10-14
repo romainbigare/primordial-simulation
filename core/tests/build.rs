@@ -451,8 +451,9 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 
-    // A node of five such members: the brood of 7.3 children makes 7.3 members, who stay (their size is within a factor
-    // 6.3 of the members'), the node's stores unchanged.
+    // A node of five such members: the brood of 7.3 children makes 7.3 members, who are immature and so do not join their
+    // mature parents but start a young node of their own; the parents' stores and members stay what they were but for what
+    // they gave, and the mean member of the node is what it was.
     let (mut w, i) = start();
     w.cfg.phys.c_copy = 1e18;
     let mut n = eater(&mut w, i, 0, 10f32.log10());
@@ -462,13 +463,101 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     // A child is a body of half the copy mass: 5 kg, matter 1.25 kg.
     n.brood = 7.3 * 5.0 * (1.0 - h) / mm;
     let (s, mut n) = out(&mut w, n);
-    let (before, count0) = (n.store.clone(), n.count);
+    let (before, count0, built0) = (n.store.clone(), n.count, n.built(&w.chem) / n.n());
     assert!(n.adult(&w.chem), "the node is mature: built {} kg a member", n.built(&w.chem) / n.n());
     w.day += 1;
+    let at = w.life.alive().count();
     assert!(copy::copy(&mut w, s, &mut n));
-    assert!((n.count - count0 - 7.3).abs() < 1e-6, "the node grew by {} members, the brood covers 7.3", n.count - count0);
-    assert!(n.store == before && n.brood == 0.0, "the stores changed or the brood is left");
-    println!("node: {count0} -> {} members, a member's body {:.2} kg", n.count, n.built(&w.chem) / n.n());
+    w.life.bodies[s] = std::mem::take(&mut n);
+    let n = &w.life.bodies[s];
+    let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
+    assert_eq!((kids.len(), w.life.alive().count()), (1, at + 2), "the children are a node of their own");
+    let c = &w.life.bodies[kids[0]];
+    assert!((c.count - 7.3).abs() < 1e-6 && !c.adult(&w.chem), "{} young members", c.count);
+    assert_eq!(n.count, count0, "the parent node took its children in");
+    assert!(n.brood == 0.0 && (n.built(&w.chem) / n.n() - built0).abs() < 1e-9 * built0, "the brood is left or the mean member fell: {built0} -> {}", n.built(&w.chem) / n.n());
+    let given = c.store[r.matter];
+    assert!((given - 7.3 * 1.25 / mm).abs() < 1e-6 * given && (before[r.matter] - n.store[r.matter] - given).abs() < 1e-9 * given);
+    println!("node: {count0} members of {built0:.2} kg; children {} members of {:.2} kg", c.count, c.built(&w.chem) / c.n());
+}
+
+/// A mature node's children never lower its mean under maturity: they gather in a young node of their own
+/// (the second brood joins the first), and the young node merges into the adult only once it is mature
+/// itself (`copy::near`: the same size class and both mature, or both immature). Grown to the size of the
+/// adults' class but under the size of maturity, the young stay apart at the month's merge; mature, they join.
+/// Members, matter and energy are kept.
+#[test]
+fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
+    let (mut w, i) = start();
+    let r = roles(&w);
+    w.cfg.phys.c_copy = 1e18;
+    let mut n = eater(&mut w, i, 0, 10f32.log10());
+    // Children of 0.3 of the copy mass: 3 kg a body, a quarter of that matter (h 0.75).
+    (n.genes[CHILD], n.genes[DISPERSE]) = (0.3f32.log10(), 0.0);
+    scale(&mut w, &mut n, 5.0);
+    n.count = 5.0;
+    let (mm, h) = (w.chem.subs[r.matter].molar_mass, 0.75);
+    let child_mol = 3.0 * (1.0 - h) / mm;
+    let s = w.life.add(n, w.day, 1);
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    w.day += 1;
+    body::survey(&mut w);
+    let lay = Layout::of(&w.chem);
+    let mut built0 = 0.0;
+    for round in 0..3 {
+        let mut n = std::mem::take(&mut w.life.bodies[s]);
+        n.prepare(&w.chem, &w.cfg.phys);
+        // A brood of 4 children for the members together (each mature, 3.2 kg of matter more than it needs)
+        n.brood = 4.0 * child_mol;
+        if round == 0 {
+            built0 = (n.built(&w.chem) / n.n()).max(10.0);
+        }
+        assert!(n.adult(&w.chem), "round {round}: the node is mature: {} kg", n.built(&w.chem) / n.n());
+        let before = n.built(&w.chem) / n.n();
+        assert!(copy::copy(&mut w, s, &mut n), "round {round}: no children");
+        assert_eq!(n.count, 5.0);
+        // The mean member of the node is what it was, and mature.
+        assert!(n.adult(&w.chem) && (n.built(&w.chem) / n.n() - before).abs() < 1e-9 * before, "round {round}: the mean member fell: {before} -> {}", n.built(&w.chem) / n.n());
+        w.life.bodies[s] = n;
+        w.day += 1;
+    }
+    // All three broods are in one young node.
+    let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
+    assert_eq!(kids.len(), 1, "the children are {} nodes", kids.len());
+    let k = kids[0];
+    assert!((w.life.bodies[k].count - 12.0).abs() < 1e-4 && !w.life.bodies[k].adult(&w.chem), "young: {} members", w.life.bodies[k].count);
+    let _ = built0;
+    let month = w.cfg.days_per_month as u64;
+    // A month's merge: alike in genes and in size class (3 kg and the parents' about 20), but the young are immature.
+    w.day = (w.day / month + 1) * month;
+    body::survey(&mut w);
+    assert_eq!(w.life.alive().count(), 2, "the young merged into the mature node");
+    // Grown to 8 kg a member (under the copy mass 10 kg, within the size class of the parents' 20): still apart.
+    let grow_to = |w: &mut World, k: usize, body: f64| {
+        let want = (body * (1.0 - h) * w.life.bodies[k].count - w.life.bodies[k].store[r.matter] * mm).max(0.0);
+        let mut c = std::mem::take(&mut w.life.bodies[k]);
+        add(w, &mut c, r.matter, want);
+        add(w, &mut c, r.liquid, 3.0 * want);
+        c.prepare(&w.chem, &w.cfg.phys);
+        w.life.bodies[k] = c;
+    };
+    grow_to(&mut w, k, 8.0);
+    assert!(!w.life.bodies[k].adult(&w.chem) && copy::alike_size(&lay, w.cfg.phys.alike, 8.0, w.life.bodies[s].built(&w.chem) / 5.0));
+    assert!(!copy::near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]));
+    w.day += month;
+    body::survey(&mut w);
+    assert_eq!(w.life.alive().count(), 2, "an immature node merged into a mature one");
+    // Mature (11 kg), it joins.
+    grow_to(&mut w, k, 11.0);
+    assert!(w.life.bodies[k].adult(&w.chem));
+    w.day += month;
+    body::survey(&mut w);
+    assert_eq!(w.life.alive().count(), 1, "the mature young did not merge in");
+    let all: f64 = w.life.alive().map(|b| b.n()).sum();
+    assert!((all - 17.0).abs() < 1e-4, "members {all}");
+    assert_eq!(pcore::check::broken(&w), None);
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
 /// A mature body splits what it builds in an update by `ALLOC`: the share to its brood, the rest its own
@@ -577,7 +666,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     scale(&mut w, &mut n, 5.0);
     n.count = 5.0;
     let (mm, h) = (w.chem.subs[r.matter].molar_mass, 0.75);
-    // A brood of 12.6 children of 0.1 kg (matter 0.025 kg each): 12 are born.
+    // A brood of 12.6 children of 0.1 kg (matter 0.025 kg each): 12.6 members are born, as a young node.
     let child_mol = 0.1 * (1.0 - h) / mm;
     n.brood = 12.6 * child_mol;
     let s = w.life.add(n, w.day, 1);
@@ -591,14 +680,14 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     assert!(n.adult(&w.chem), "the node is mature: a member's body is {parent_body} kg");
     assert!(copy::copy(&mut w, s, &mut n), "no children");
     assert_eq!(n.count, 5.0, "the node took its children in");
-    assert!((n.brood - 0.6 * child_mol).abs() < 1e-9 * child_mol, "the brood left is {} child(ren)", n.brood / child_mol);
+    assert!(n.brood < 1e-9 * child_mol, "the brood left is {} child(ren)", n.brood / child_mol);
     w.life.bodies[s] = n;
     let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
     assert_eq!(kids.len(), 1, "one node of children: {}", kids.len());
     let k = kids[0];
     let c = &w.life.bodies[k];
     println!("a node of {} members, a body of {parent_body:.2} kg each; its children: {} members of {:.3} kg", w.life.bodies[s].count, c.count, c.built(&w.chem) / c.n());
-    assert_eq!(c.count, 12.0);
+    assert!((c.count - 12.6).abs() < 1e-9);
     assert!((c.store[r.matter] * mm / c.n() / (1.0 - h) - 0.1).abs() < 1e-9, "a child's body is not 10^CHILD x the copy mass");
     let lay = Layout::of(&w.chem);
     assert!(!copy::near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "a child of 0.1 kg is of the size class of members of {parent_body} kg");
@@ -609,18 +698,18 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     assert_eq!(w.life.alive().count(), 2, "the young and the old merged");
     // The young grow: matter and the liquid it keeps with it added (an edit, booked) up to the members' size, and the next
     // month's merge takes them back.
-    let want = (parent_body * (1.0 - h) * 12.0 - w.life.bodies[k].store[r.matter] * mm).max(0.0);
+    let want = (parent_body * (1.0 - h) * 12.6 - w.life.bodies[k].store[r.matter] * mm).max(0.0);
     let mut c = std::mem::take(&mut w.life.bodies[k]);
     add(&mut w, &mut c, r.matter, want);
     add(&mut w, &mut c, r.liquid, 3.0 * want);
     c.prepare(&w.chem, &w.cfg.phys);
     w.life.bodies[k] = c;
-    assert!(copy::near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "grown to {} kg a member, not yet of the size class", w.life.bodies[k].built(&w.chem) / 12.0);
+    assert!(copy::near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "grown to {} kg a member, not yet of the size class", w.life.bodies[k].built(&w.chem) / 12.6);
     w.day += month;
     body::survey(&mut w);
     assert_eq!(w.life.alive().count(), 1, "the grown young did not merge back");
     let all: f64 = w.life.alive().map(|b| b.n()).sum();
-    assert_eq!(all, 17.0, "members {all}");
+    assert!((all - 17.6).abs() < 1e-9, "members {all}");
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");

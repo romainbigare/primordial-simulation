@@ -1047,8 +1047,8 @@ fn shade(w: &mut World) {
 /// only, as a split tests its halves, so a split's halves stay apart for selection: a test within
 /// their spreads, as children join, `copy::within`, would merge them back every month; never for
 /// being of the same lineage, so variants of one lineage stay apart) and of its size (member bodies
-/// within `alike` steps of the copy-mass gene, `copy::near`: young and adult nodes stay apart until
-/// the young have grown to adult size); then, while more than
+/// within `alike` steps of the copy-mass gene, and both mature or both immature, `copy::near`: young and
+/// adult nodes stay apart until the young have grown to adult size); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
 /// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are not
 /// merged (merging them blended a new kind into the nearest one every month, review 3, M3),
@@ -1094,12 +1094,12 @@ fn crowd(w: &mut World) {
         // or not, then its squared distance in steps. The halves of a split are not touched:
         // a node splits only while its cell is under `max` (`copy::split`).
         let (m, lim) = (left.len(), w.cfg.phys.alike);
-        let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]), crate::copy::member_log(&w.chem, &w.life.bodies[s]));
-        let mut v: Vec<(Vec<f32>, Vec<f32>, f64)> = left.iter().map(|&s| steps(w, s)).collect();
+        let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]), (crate::copy::member_log(&w.chem, &w.life.bodies[s]), w.life.bodies[s].adult(&w.chem)));
+        let mut v: Vec<(Vec<f32>, Vec<f32>, (f64, bool))> = left.iter().map(|&s| steps(w, s)).collect();
         let reach = lim as f64 * crate::copy::size_step(&lay) as f64;
-        let dist = |p: &(Vec<f32>, Vec<f32>, f64), q: &(Vec<f32>, Vec<f32>, f64)| {
+        let dist = |p: &(Vec<f32>, Vec<f32>, (f64, bool)), q: &(Vec<f32>, Vec<f32>, (f64, bool))| {
             let gap = |g: usize| (p.0[g] - q.0[g]).abs() > lim + crate::copy::WITHIN * (p.1[g] + q.1[g]).sqrt();
-            ((0..p.0.len()).any(gap) || (p.2 - q.2).abs() > reach, p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
+            ((0..p.0.len()).any(gap) || (p.2 .0 - q.2 .0).abs() > reach || p.2 .1 != q.2 .1, p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
         };
         let mut d = vec![(true, f32::INFINITY); m * m];
         for p in 0..m {

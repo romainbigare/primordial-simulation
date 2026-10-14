@@ -23,11 +23,14 @@
 //!
 //! A population node (count > 1) keeps how its members differ (plan 7.1): its spread, the
 //! variance of their genes around its genes, per gene, and of their born rows around its rows
-//! (one number for all rows). Its children that stay are new members of it and widen the spread
-//! by their share of a generation's change (`widen`), unless they are of another size class: a child
-//! whose body differs from the node's mean member by more than `alike` steps of the copy-mass gene
-//! (`alike_size`) joins another node of its kind of its size, in its cell or the neighbour's, or starts
-//! one of its own (`near`), as the monthly merge (`body::crowd`) joins nodes of one size class only. A share of them (the `DISPERSE` gene; none
+//! (one number for all rows). Its children never join it while it is mature (they are below their
+//! copy mass, and a mature node's mean must stay at or past maturity for its members to reproduce): they
+//! form a group of their own, with the variance left among them (`vary`), who join the first immature
+//! node of their kind and size class where they start (`near`, `emit`), or start one; a young node joins
+//! and merges with the adult only once mature (the monthly merge, `body::crowd`). A child is of another
+//! size class than a node when its body differs from the node's mean member by more than `alike` steps
+//! of the copy-mass gene (`alike_size`).
+//! A share of a node's children (the `DISPERSE` gene; none
 //! if less than one member) starts in a random neighbour cell, drawn from the node: their mean
 //! genes and rows are the node's plus noise of its spread and the change over their number, and
 //! they keep the variance left among them (`vary`). There they join the first node they belong
@@ -205,20 +208,6 @@ pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: 
     (genes, left)
 }
 
-/// A share `f` of a node's members are new, born of it with a generation's change (they stay):
-/// its spread grows by `f` times that change's variance (variances add), up to `most`. Per gene,
-/// its mutation's (`vary`); for the rows, a share `row_chance` of children changed by a step of
-/// `row_noise` × size / sqrt(row_chance).
-fn widen(lay: &Layout, p: &Physics, b: &mut Body, f: f32) {
-    let size = 10f32.powf(b.genes[body::MUT]);
-    b.spread.resize(b.genes.len(), 0.0);
-    for (g, s) in b.spread.iter_mut().enumerate() {
-        let step = range(lay, g).0;
-        *s = (*s + f * (step * size).powi(2)).min(most(step, p.alike));
-    }
-    b.row_spread = (b.row_spread + f * (p.row_noise * size).powi(2)).min(most(row_step(p, size), p.alike));
-}
-
 /// The step of a node's born rows: that of a child whose rows changed, for mutation size `size`.
 fn row_step(p: &Physics, size: f32) -> f32 {
     p.row_noise * size / (p.row_chance as f32).sqrt()
@@ -325,67 +314,53 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
 /// share of the heat. A child is made whenever the brood covers one: an individual has whole children,
 /// a node (members who all do the same) fractional members, as many as the brood makes. The parent
 /// keeps its body: what it gives is brood and provisions. A body that is not mature (`Body::adult`)
-/// makes none (its brood waits).
+/// makes none (its brood waits). Children are always immature (below their parents' copy mass), so
+/// they never join their parent node, which is mature: they join a node of their kind and size class
+/// that is immature too, in their parent's cell or, if they disperse, a neighbour's, or start one
+/// (`emit`), and a node's mean never falls under maturity for its own children (`near`).
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
-    let (lay, chem) = (Layout::of(&w.chem), &w.chem);
+    let (chem, n, mc) = (&w.chem, b.n(), b.dec(body::COPY_MASS));
     let Some(mi) = chem.matter() else { return false };
     if !b.adult(chem) {
         return false;
     }
-    let (n, mc, mm) = (b.n(), b.dec(body::COPY_MASS), chem.subs[mi].molar_mass);
+    let mm = chem.subs[mi].molar_mass;
     let (_, h) = b.wet_h(chem);
     b.brood = b.brooded(chem);
     // A child's body (kg) and its matter (mol); the births the brood covers.
     let body = 10f64.powf(b.gene(body::CHILD).clamp(-6.0, LOG_HALF as f64)) * mc;
     let kid = Kid { body, matter: body * (1.0 - h) / mm };
     let k = b.brood / kid.matter;
-    // Children far from their parents' size (more than `alike` steps of the copy-mass gene) are
-    // not members of the parent's node: they start nodes of their own, in whole children.
     let node = n > 1.0;
-    let apart = node && !alike_size(&lay, w.cfg.phys.alike, body, b.built(chem) / n);
-    let births = if node && !apart { k } else { (k + 1e-9).floor() };
+    let births = if node { k } else { (k + 1e-9).floor() };
     if births <= 0.0 {
         return false;
     }
     let id = b.id(slot);
     let mut r = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     let i = b.cell as usize;
-    let (cat, root) = (body::light_cat(chem, &b.genes), w.life.root(b));
-    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: i as u32, value: births });
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
-    // less than one member; whole children if they are apart); an individual's go together, by that chance.
+    // less than one member); an individual's go together, by that chance.
     let d = b.gene(body::DISPERSE).clamp(0.0, 1.0);
     // An animal with `Config::nodes` off: its children join no node and are all individuals.
     let alone = !w.cfg.nodes && !body::light_eater(&w.chem, &b.genes);
     let m = if node { if d * births >= 1.0 { d * births } else { 0.0 } } else { (r.f64() < d) as u8 as f64 };
-    let m = if apart { m.floor() } else { m };
     let to = if m > 0.0 { w.grid.step(i, DIRS[r.below(8)]) } else { None };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),
         Some(j) => (j, m),
         None => (i, 0.0),
     };
-    if node && !apart {
-        // The children who stay are new members of the node, made of its brood (the node's mean falls).
-        b.count += births - m;
-        widen(&lay, &w.cfg.copy_phys(), b, ((births - m) / b.n()) as f32);
-        if m > 0.0 {
-            emit(w, slot, b, cell, m, &kid, node, alone, id, &mut r);
-        }
-        b.brood = 0.0;
-    } else if apart {
-        // A group of their own: those who disperse to their cell and the rest to the parent's, where
-        // they join a node of their size or start one (`near`).
-        if m > 0.0 {
-            emit(w, slot, b, cell, m, &kid, node, alone, id, &mut r);
-        }
-        if births - m > 0.0 {
-            emit(w, slot, b, i, births - m, &kid, node, alone, id, &mut r);
-        }
-    } else {
-        emit(w, slot, b, cell, m, &kid, node, alone, id, &mut r);
+    let mut made = false;
+    if m > 0.0 {
+        made |= emit(w, slot, b, cell, m, &kid, node, alone, id, &mut r);
     }
-    true
+    // A node's children who stay: a group of their own (less than one member waits in the brood
+    // unless there is a node of theirs to join).
+    if node && births - m > 0.0 {
+        made |= emit(w, slot, b, i, births - m, &kid, node, alone, id, &mut r);
+    }
+    made
 }
 
 /// A child's body, kg, and its matter, mol (its body is that over 1 - h).
@@ -413,16 +388,21 @@ pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
     (x.max(1e-30).log10() - y.max(1e-30).log10()).abs() <= (alike * size_step(lay)) as f64 + 1e-9
 }
 
-/// Bodies `a` and `b` are alike in size: their members' bodies (`Body::built` per member).
+/// Bodies `a` and `b` are in one class: alike in size (their members' bodies, `Body::built` per member,
+/// `alike_size`) and in maturity (both mature, `Body::adult`, or both not: a node's mean must stay at or
+/// past its copy mass for its members to reproduce, so the young join and merge with the young until
+/// they have grown).
 pub fn near(lay: &Layout, chem: &crate::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
-    alike_size(lay, alike, a.built(chem) / a.n(), b.built(chem) / b.n())
+    a.adult(chem) == b.adult(chem) && alike_size(lay, alike, a.built(chem) / a.n(), b.built(chem) / b.n())
 }
 
 /// `m` children of `b` (each as `kid` says: its matter taken from the brood, provisions of every other
 /// store in the proportion the parent's body holds them to its matter, its share of the heat) start in
-/// `cell`: they join a node there they belong to (in genes and in size), or start a body.
+/// `cell`: they join a node there they belong to (in genes, in size and immature, as they are: `near`),
+/// or start a body. Less than one member of a node's children that has no node to join waits in the
+/// brood (nothing is made; false).
 #[allow(clippy::too_many_arguments)]
-fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid, node: bool, alone: bool, id: u64, r: &mut Rng) {
+fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid, node: bool, alone: bool, id: u64, r: &mut Rng) -> bool {
     let lay = Layout::of(&w.chem);
     let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, r);
     let mi = w.chem.matter().unwrap_or(0);
@@ -447,6 +427,17 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
         wet: b.wet,
         ..Default::default()
     };
+    // The node a child joins: of its genes (`within`), of its size and immature (children are below
+    // their parents' copy mass, and a mature node must keep its mean there).
+    let target = |w: &World, c: &Body| w.life.at[cell].iter().map(|&s| s as usize).find(|&s| {
+        let t = &w.life.bodies[s];
+        t.alive && t.n() > 1.0 && !t.adult(&w.chem) && within(&lay, w.cfg.phys.alike, t, c) && alike_size(&lay, w.cfg.phys.alike, kid.body, t.built(&w.chem) / t.n())
+    });
+    if node && m < 1.0 && (alone || target(w, &c).is_none()) {
+        return false;
+    }
+    let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
+    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: b.cell, value: m });
     // Its heat is that of its parent's temperature on the heat capacity it got, so it starts as warm
     // as its parent (a dry child would else be much hotter, a wet one colder); the parent keeps the rest.
     c.e = b.e * c.heat_cap(&w.chem) / b.heat_cap(&w.chem).max(1e-9);
@@ -496,14 +487,14 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
     // apart.
     let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape);
     if c.lineage == b.lineage && !alone {
-        if let Some(t) = w.life.at[cell].iter().map(|&s| s as usize).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() > 1.0 && within(&lay, w.cfg.phys.alike, &w.life.bodies[s], &c) && alike_size(&lay, w.cfg.phys.alike, kid.body, w.life.bodies[s].built(&w.chem) / w.life.bodies[s].n())) {
+        if let Some(t) = target(w, &c) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             let rows = match (shape(c.lineage), shape(w.life.bodies[t].lineage)) {
                 (Some(x), Some(y)) if x != y => brain::rerow(&rows, x, y, r, w.cfg.phys.new_noise),
                 _ => rows,
             };
             join(w, t, c, &rows);
-            return;
+            return true;
         }
     }
     if let Some(v) = rows {
@@ -529,6 +520,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
         let c = &mut w.life.bodies[s];
         (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
     }
+    true
 }
 
 /// Without shared brains a body born or split from `b` starts a group of its own: its born rows

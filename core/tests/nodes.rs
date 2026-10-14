@@ -17,9 +17,10 @@ fn live(w: &pcore::World) -> Vec<usize> {
     (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).collect()
 }
 
-/// A node's children that stay widen its spread by their share of the mutation's variance; a node
-/// whose members differ so much that its halves would not be alike splits in two along that gene,
-/// keeping its members, stores, heat and pooled spread.
+/// A mature node's children start a node of their own (they are immature, `copy::near`) that carries the variance left
+/// among them; when they have grown and join their parents' node (the month's merge, `copy::merge`) its spread
+/// is widened by it; a node whose members differ so much that its halves would not be alike splits in
+/// two along that gene, keeping its members, stores, heat and pooled spread.
 #[test]
 fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 32, 32);
@@ -28,15 +29,24 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
-    // Members are mature (a low copy mass), each has a child and all children stay.
+    // Members are mature (a low copy mass), each has a child and all children stay in the cell.
     (b.genes[COPY_MASS], b.genes[DISPERSE]) = (-0.4, 0.0);
     b.prepare(&w.chem, &w.cfg.phys);
     let n0 = b.count;
     brood(&w, &mut b, n0);
-    assert!(b.spread.is_empty() && copy::copy(&mut w, s, &mut b) && b.count > n0, "no children");
-    let (f, size) = (((b.count - n0) / b.count) as f32, 10f32.powf(b.genes[MUT]));
-    let want = f * (w.cfg.phys.row_noise * size).powi(2);
-    assert!(b.spread.iter().all(|&v| v > 0.0) && (b.row_spread - want).abs() <= 1e-5 * want, "{} vs {want}", b.row_spread);
+    let before = live(&w);
+    assert!(b.spread.is_empty() && copy::copy(&mut w, s, &mut b), "no children");
+    assert_eq!(b.count, n0, "the children joined their mature parents");
+    w.life.bodies[s] = b;
+    let kids: Vec<usize> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
+    assert_eq!(kids.len(), 1, "the children are one node of their own");
+    let c = &w.life.bodies[kids[0]];
+    assert!((c.count - n0).abs() < 1e-6 * n0 && !c.adult(&w.chem), "{} young members", c.count);
+    assert!(c.spread.iter().all(|&v| v >= 0.0) && c.spread.iter().any(|&v| v > 0.0) && c.row_spread > 0.0, "children keep no spread");
+    // Grown, they join the node (as the month's merge does): its spread is widened.
+    copy::merge(&mut w, kids[0], s);
+    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    assert!(b.count > 1.5 * n0 && b.spread.iter().any(|&v| v > 0.0) && b.row_spread > 0.0, "the merge widened nothing");
 
     // Copy mass spread over 5 mutation steps (0.2 each): the halves are 2 sqrt(2/pi) 5 = 8 apart.
     b.spread[COPY_MASS] = 1.0;
@@ -112,10 +122,17 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             let (body, n) = (b.built(&w.chem) / b.n(), b.count);
             (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -0.301_03, 0.0);
             brood(&w, &mut b, n);
+            let (before, id) = (live(&w), b.id(s));
             copy::copy(&mut w, s, &mut b);
             copy::resize(&mut w, s, &mut b);
             copy::split(&mut w, s, &mut b);
             w.life.bodies[s] = b;
+            // The children are young nodes of their own (immature, `copy::near`); here they grow up at once, and the month's
+            // merge would take them back into their parent's node: they do now, so the update's node math is the same.
+            let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life.bodies[*k].parent == id).collect();
+            for k in kids {
+                copy::merge(&mut w, k, s);
+            }
         }
         for s in live(&w) {
             let f = live_on(&w.life.bodies[s]);
@@ -201,6 +218,12 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     for t in live(&w) {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
         w.life.bodies[t].k = Default::default();
+        // The nodes around are immature (half the matter: a member's body 0.35 kg under its copy mass 0.45), as nodes of
+        // children are: a child joins no mature node (`copy::near`).
+        if t != s {
+            let m = w.chem.matter().expect("matter");
+            w.life.bodies[t].store[m] *= 0.5;
+        }
     }
     // A node of two members: two children.
     let b = w.life.bodies[s].clone();
