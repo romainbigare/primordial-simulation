@@ -66,7 +66,13 @@ pub const DENATURE: usize = 16;
 /// Repair, log10: a body wears out when the energy its upkeep turned over reaches
 /// `Physics::e_life` x 10^gene per kg; each unit doubles the repair share `Physics::c_repair` of upkeep (`upkeep`)
 pub const REPAIR: usize = 17;
-pub const NSCALAR: usize = 18;
+/// The child's share of the key liquid, log10 of the factor on the `CHILD` share (14 Oct 2026, review 7
+/// fix 6): a child gets the `CHILD` share of every store but the key liquid, and `CHILD` x
+/// 10^`WET` of that (at most all of it), so a body can make dry children (below 0) that are
+/// nearly dormant (`Body::activity`) and wait until they soak liquid up. At 0 a child gets the
+/// same share of everything, as before
+pub const WET: usize = 18;
+pub const NSCALAR: usize = 19;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -293,6 +299,11 @@ impl Body {
     /// Share of what its group learned that it would let fade each month (0 when off).
     pub fn forget(&self) -> f32 {
         if self.genes[FORGET] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[FORGET]) }
+    }
+    /// Key stores (safe minimum above 0), one bit per substance.
+    pub fn key_mask(&self, chem: &Chemistry) -> u64 {
+        let lay = Layout::of(chem);
+        (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0).fold(0, |m, k| m | 1 << k)
     }
     /// Key stores that are liquid now.
     pub fn key_liquids(&self, chem: &Chemistry) -> u64 {
