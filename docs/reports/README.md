@@ -53,3 +53,7 @@ folder with the same name as the report.
   review (satiety only past `full`; `c_build` at 3 x 10^4, as at 10^4 the starting eaters died), and
   100-year checks at 64 x 64: lives of 3 to 6 months, every animal kind evolving small, the big-brain
   kind keeping its brain and holding its own, the individuals check not yet possible, 14 October 2026.
+- `review-6-adversarial.md`: an adversarial review after watch report 6, 14 October 2026, with
+  runs from a scratch driver: the eaters' start is a lottery and two laws were bent to win it,
+  "small wins" comes from costs by the kg against income by kg^0.75, the big-brain verdict was the
+  hand-set start, the node sets the plants' life, and 14 fixes in order.
