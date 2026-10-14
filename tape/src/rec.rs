@@ -551,8 +551,7 @@ impl Recorder {
                 r.matter += w.chem.matter().map_or(0.0, |m| b.store[m] * w.chem.subs[m].molar_mass);
                 r.body += b.size(&w.chem);
                 r.copy_mass += n * b.dec(pcore::body::COPY_MASS);
-                let grown = b.built(&w.chem) / n / b.dec(pcore::body::COPY_MASS);
-                r.past_copy += n * (grown >= 1.0) as u8 as f64;
+                r.past_copy += n * b.adult(&w.chem) as u8 as f64;
                 (r.alloc, r.child) = (r.alloc + n * b.gene(pcore::body::ALLOC), r.child + n * b.gene(pcore::body::CHILD));
                 r.brood += b.brooded(&w.chem) * w.chem.matter().map_or(0.0, |m| w.chem.subs[m].molar_mass);
                 let a = b.activity(&w.chem, &w.cfg.phys);
