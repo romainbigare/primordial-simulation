@@ -334,7 +334,7 @@ impl Default for Physics {
             wet_depth: 0.01,
             shelter: 220.0,
             c_cat: 1.5e9,
-            t_cat: 290.0,
+            t_cat: T_SURF,
             unfold: 3.0,
             t_firm: 320.0,
             c_firm: 20.0,
@@ -475,6 +475,10 @@ pub struct Ledger {
     #[serde(default)]
     pub clamped_heat: f64,
 }
+
+/// A typical surface temperature, K: where the upkeep of catalysts is measured (`Physics::t_cat`)
+/// and where the starting kinds and the richness checks look at the phase of a substance.
+pub const T_SURF: f64 = 290.0;
 
 /// The coldest a ground node may be taken by drawing heat from it, K.
 pub const T_FLOOR: f64 = 3.0;

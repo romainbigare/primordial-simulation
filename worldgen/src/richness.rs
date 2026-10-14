@@ -3,9 +3,8 @@
 
 use crate::Init;
 use pcore::chem::{Chemistry, Phase, Reaction};
+use pcore::T_SURF;
 
-/// A typical surface temperature, K.
-const T_SURF: f64 = 290.0;
 /// Smallest mole fraction that counts as abundant.
 const ABUNDANT: f64 = 0.01;
 

@@ -6,10 +6,7 @@
 use pcore::body::{self, Body, Layout, Lineage};
 use pcore::chem::{Chemistry, Phase};
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, World};
-
-/// Typical surface temperature, K.
-const T_SURF: f64 = 290.0;
+use pcore::{brain, choose, World, T_SURF};
 
 /// One row of the table of starting kinds: the genes it starts with and where and how many are placed.
 pub struct Kind {
