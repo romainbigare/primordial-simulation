@@ -83,7 +83,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         g if g < lay.min => (0.3, -6.0, 18.0),
         g if g < lay.upt => (0.05, -1.0, 0.9),
         g if g < lay.keep => (0.2, -4.0, 2.0),
-        _ => (0.2, -0.5, 2.0),
+        _ => (0.2, -0.5, 6.0),
     }
 }
 
@@ -277,7 +277,7 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let lay = Layout::of(chem);
     let reach = ins.iter().map(|&(k, nu)| {
         let heat = b.heat_of(chem, k as usize, t);
-        let floor = b.gene(lay.min + k as usize).max(0.0) * mass / chem.subs[k as usize].molar_mass;
+        let floor = b.gene(lay.min + k as usize).max(0.0) * b.size(chem) / chem.subs[k as usize].molar_mass;
         (b.store[k as usize] - floor).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
     });
     let kg = want.min(room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300)).min(reach.fold(f64::MAX, f64::min));
@@ -285,7 +285,8 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
         return false;
     }
     // (The minimum of each input, mol.)
-    let floors: Vec<f64> = ins.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * mass / chem.subs[k as usize].molar_mass).collect();
+    let size = b.size(chem);
+    let floors: Vec<f64> = ins.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
     let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_build(), p.c_copy * kg);
     if !body::pay(w, b, cost, ivl) {
         return false;

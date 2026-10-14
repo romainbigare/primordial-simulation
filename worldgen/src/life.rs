@@ -68,21 +68,16 @@ pub fn matter_roles(chem: &Chemistry) -> Option<(usize, usize)> {
     Some((m, burn))
 }
 
-/// The least share of a member's mass placed as liquid: the safe minimum of the liquid is 30% of the
-/// mass, and a body that keeps 75% of its body as liquid (the keep gene) with 60% of its mass as fuel
-/// would sit on that line (0.75 x 40% = 30%).
-const MIN_WET: f64 = 0.36;
-
 /// How a placed member's mass is shared: (fuel, liquid, body matter), shares of the mass, for a
 /// fuel share `store` and the keep gene `h` of the liquid. The body (the rest) is liquid in the
-/// share `h` and matter in 1 - `h` (`Body::size`: matter over 1 - `h`), but for the liquid being at
-/// least `MIN_WET`. Without body matter in the chemistry the rest is liquid.
+/// share `h` and matter in 1 - `h` (`Body::size`: matter over 1 - `h`). Without body matter in the
+/// chemistry the rest is liquid.
 pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
     let body = 1.0 - store;
     if !matter {
         return (store, body, 0.0);
     }
-    let liquid = (h.clamp(0.0, 0.95) * body).max(MIN_WET).min(body);
+    let liquid = h.clamp(0.0, 0.95) * body;
     (store, liquid, body - liquid)
 }
 
@@ -173,22 +168,28 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// **Body and store (14 Oct 2026, decision after watch report 7).** A member is placed as
 /// fuel (`Kind::store` of its mass, the energy-rich solid) and a body, which is body matter and the
 /// liquid it keeps with it in the share of its liquid keep gene (0.75, `Body::size`): the body is
-/// matter over 1 - 0.75, so of the 70% that is not fuel, 52.5% is liquid and 17.5% matter (`split`).
-/// The two big slow kinds (store 60%) keep 40% for the body, of which liquid 36%, not 30%, since
-/// the safe minimum of the liquid is 30% of the mass (`MIN_WET`: 0.75 x 40% = 30% sat on the line
-/// they die at): 36% liquid, 4% matter, a body of 16% of the mass. Copy mass and leaf now go by the
-/// body, so the genes are set so that each kind copies at the same total mass and has the same
-/// leaf area at placement as before. With b the body's share of the mass at placement (0.7; 0.16
-/// for the big slow store-60% kinds): copy mass new = old x b, so the gene rises by log10 b
-/// (-0.155; -0.796); leaf area per member = (body / 1 kg)^0.75 x 10^LEAF, so LEAF new = old - 0.75
-/// log10 b (+0.116; +0.597). The area is the same at placement, so the `GAS` genes (per m² of the
+/// matter over 1 - 0.75, so of the 70% that is not fuel, 52.5% is liquid and 17.5% matter (`split`);
+/// of the 40% that is not fuel in the two big slow kinds (store 60%), 30% liquid and 10% matter.
+/// Copy mass and leaf now go by the body, so the genes are set so that each kind copies at the same
+/// total mass and has the same leaf area at placement as before. With b the body's share of the mass
+/// at placement (0.7; 0.4 for the store-60% kinds): copy mass new = old x b, so the gene rises by
+/// log10 b (-0.155; -0.398); leaf area per member = (body / 1 kg)^0.75 x 10^LEAF, so LEAF new = old -
+/// 0.75 log10 b (+0.116; +0.299). The area is the same at placement, so the `GAS` genes (per m² of the
 /// area and the skin, which goes by the whole mass) stay. Copy mass, gene old -> new (kg old ->
 /// new): light-eaters 0.3 -> 0.145 (2.0 -> 1.4), small fast -1.0 -> -1.155 (0.1 -> 0.07), big slow
 /// 1.6 -> 1.445 (40 -> 28); eaters 1.8 -> 1.645 (63 -> 44); eaters of remains 0.4 -> 0.245 (2.5 ->
 /// 1.8) and 1.48 -> 1.325 (30 -> 21); eaters of light-eaters 0.78 -> 0.625 (6.0 -> 4.2) and 2.48 ->
-/// 1.684 (302 -> 48); eaters of eaters 2.3 -> 2.145 (200 -> 140) and 3.08 -> 2.284 (1,202 -> 192).
+/// 2.082 (302 -> 121); eaters of eaters 2.3 -> 2.145 (200 -> 140) and 3.08 -> 2.682 (1,202 -> 481).
 /// Leaf: light-eaters 0.3 -> 0.416, small fast 0.6 -> 0.716, big slow -0.3 -> -0.184, animals -3.0
-/// -> -2.884 (store 30%) or -2.403 (store 60%).
+/// -> -2.884 (store 30%) or -2.702 (store 60%).
+///
+/// **What a body carries is bounded by its body** (`Body::level`, the keep genes, and the safe
+/// minimums, the min genes, are kg per kg of body, not of the whole mass). At placement a 30% kind
+/// carries 0.3 / 0.7 = 0.43 kg of the solid per kg of body, under the keep gene 0.9, and its liquid
+/// is the share 0.75 of the body (3 x its matter), exactly its keep; a 60% kind carries 0.6 / 0.4 =
+/// 1.5, so its keep gene for the solid is 1.1 x 1.5 = 1.65 (the solid's gene is `max(0.9, 1.1 x
+/// store / (1 - store))`). Minimums: the liquid 0.3 and the solid 0.02 of the body, as they were of
+/// the mass (the liquid is 0.75 of the body, the solid 0.43).
 ///
 /// **Eaters digest body matter.** An animal kind (its light gene below `body::LIGHT_EATER`) gets the
 /// catalyst gene of the reaction that burns body matter equal to its gene for the energy-rich solid,
@@ -210,11 +211,11 @@ pub const KINDS: [Kind; 11] = [
     // Eaters of light-eaters, small and fast: 3 kg copying at 6 kg every 7 days, strength 0.3 (the light-eaters have 0.05, the eaters 0.6).
     Kind { name: "small fast eaters of light-eaters", year: 20, anywhere: false, scalars: [2.273, -0.5, 0.492, -2.884, 0.3, 0.3, 0.625, 0.85, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -1.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 3.0, cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
     // Eaters of light-eaters, big and slow: 150 kg copying at 300 kg every 16 days, strength 0.5.
-    Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [2.536, -0.5, 0.192, -2.403, 0.5, 0.3, 1.684, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
+    Kind { name: "big slow eaters of light-eaters", year: 20, anywhere: false, scalars: [2.536, -0.5, 0.192, -2.702, 0.5, 0.3, 2.082, 1.2, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.2], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 150.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
     // Eaters of eaters (stronger in force than the eaters, whose strength gene is 0.6: the force is the gene times the mass), placed once the eaters have spread:
     // 100 kg copying at 200 kg every 7 days, strength 0.6; 600 kg copying at 1200 kg every 14 days, strength 0.5. A bigger brain (16 hidden, 8 memory, 4 seen, sight 2), learning on.
     Kind { name: "strong fast eaters of eaters", year: 24, anywhere: false, scalars: [2.478, -0.5, 0.192, -2.884, 0.6, 0.3, 2.145, 0.85, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.1, 320.0, -0.5], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 100.0, cover: 0.0, per: 1, chance: 0.15, store: 0.3, hand: H_EATER },
-    Kind { name: "strong big slow eaters of eaters", year: 24, anywhere: false, scalars: [2.736, -0.5, -0.008, -2.403, 0.5, 0.3, 2.284, 1.15, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.05, 320.0, 0.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 600.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
+    Kind { name: "strong big slow eaters of eaters", year: 24, anywhere: false, scalars: [2.736, -0.5, -0.008, -2.702, 0.5, 0.3, 2.682, 1.15, -1.2, -0.7, -4.0, 16.0, 8.0, 4.0, 2.0, 0.05, 320.0, 0.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], mass: 600.0, cover: 0.0, per: 1, chance: 0.15, store: 0.6, hand: H_EATER },
 ];
 
 /// The roster of `ew run --roster`: ten kinds with rungs from the first day (rows of `KINDS`,
@@ -478,8 +479,12 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     if let Some((m, r)) = matter.filter(|_| kind.cat[0] < body::LIGHT_EATER) {
         (genes[lay.cat + r], genes[lay.upt + m]) = (kind.cat[1], kind.upt[1]);
     }
+    // What a body carries of each store is kg per kg of its body (`Body::level`, 14 Oct 2026): 0.9 of
+    // the solid, or what it is placed with and a tenth more if that is more (a kind of 60% fuel and a
+    // body of 40% carries 1.5 kg of the solid per kg of body: keep 1.65); the liquid is the share 0.75.
     genes[lay.keep..].fill(0.9);
     genes[lay.keep + liquid] = 0.75;
+    genes[lay.keep + rich] = 0.9f32.max((1.1 * kind.store / (1.0 - kind.store)) as f32);
     let mut rg = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();

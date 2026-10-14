@@ -406,15 +406,35 @@ impl Body {
         let m1 = mass / self.n();
         self.equiv(p, self.work(p, self.size(chem))) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
     }
-    /// Most of substance `k` the body holds, mol: its keep gene is the largest share of the
-    /// body's mass it may make up (below 0.95; above it the gene does nothing). Liquid caught,
-    /// taken or put stops there. It bounds the shares of the stores, not the size: what comes in
-    /// at an update goes with the mass that works (`work`), and a member past `phys.full` times
-    /// its copy mass copies at its update (`copy`).
+    /// Most of substance `k` the body holds, mol (14 Oct 2026: stores are carried by the body).
+    /// Its keep gene is how much of it the body carries: for a key liquid the largest share of the
+    /// body it may make up, `h` (below 0.95), so it holds `h` / (1 - `h`) of its matter and its body
+    /// is its matter over 1 - `h` (`size`); for every other substance but body matter, fuel and the
+    /// rest, kg of it per kg of its body (`size`; 0.9 at the start, more for a kind placed with more
+    /// fuel than that). Before it was a share of the whole mass for each store alone, so several
+    /// stores together had no bound, and an eater swelled to 2 t with 2% of its mass matter (watch
+    /// report 8). Body matter itself is bounded as before, a share of the whole mass. Liquid caught,
+    /// taken or put stops there. It bounds the stores, not the size: what comes in at an update goes
+    /// with the mass that works (`work`), and a member past `phys.full` times its copy mass copies at
+    /// its update (`copy`). `mass` is the whole mass, for matter and for a chemistry with none.
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
-        let f = self.gene(Layout::of(chem).keep + k).clamp(0.0, 0.95);
         let mm = chem.subs[k].molar_mass;
-        (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
+        let f = self.gene(Layout::of(chem).keep + k);
+        let old = |f: f64| {
+            let f = f.clamp(0.0, 0.95);
+            (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
+        };
+        match chem.matter() {
+            Some(m) if k != m => {
+                if self.wet >> k & 1 == 1 {
+                    let f = f.clamp(0.0, 0.95);
+                    f / (1.0 - f) * self.store[m] * chem.subs[m].molar_mass / mm
+                } else {
+                    f.max(0.0) * self.size(chem) / mm
+                }
+            }
+            _ => old(f),
+        }
     }
     /// Well-being at temperature `t`: the energy its catalysed reactions could release from a
     /// member's stores (log, in decisions' worth: `think` is what one decision of the starting
@@ -423,8 +443,8 @@ impl Body {
     /// margin, which is the log of its share over its minimum, counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
     /// the same margin form), and its key liquids to freezing or boiling (within 5 K). Needs
     /// `prepare`.
-    pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, mass: f64, t: f64, spare: f64) -> f32 {
-        let lay = Layout::of(chem);
+    pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, _mass: f64, t: f64, spare: f64) -> f32 {
+        let (lay, mass) = (Layout::of(chem), self.size(chem));
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
@@ -475,8 +495,9 @@ impl Body {
     }
     /// `lacking` when the mass `m` is known.
     pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
-        let lay = Layout::of(chem);
-        self.empty_at(m) || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * m)
+        // (A safe minimum is a share of the body, not of the whole mass: a body is not killed by holding fuel.)
+        let (lay, size) = (Layout::of(chem), self.size(chem));
+        self.empty_at(m) || (0..chem.ns()).any(|k| self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
     }
 }
 
@@ -1140,12 +1161,13 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
 /// mean), so the survivors keep those stores and the dead take their share of the rest. The
 /// share that dies is the least that lifts every key store to its safe minimum; false if that
 /// is all of them.
-fn starve(w: &mut World, b: &mut Body, m: f64, dead: &mut Vec<f64>) -> bool {
+fn starve(w: &mut World, b: &mut Body, _m: f64, dead: &mut Vec<f64>) -> bool {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
-    let short = |&k: &usize| x(k) < b.gene(lay.min + k) * m;
-    let kept: f64 = (0..chem.ns()).filter(short).map(x).sum();
-    let live = (0..chem.ns()).filter(short).map(|k| (x(k) / b.gene(lay.min + k) - kept) / (m - kept).max(1e-30)).fold(1.0, f64::min);
+    // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
+    let size = b.size(chem);
+    let short = |&k: &usize| x(k) < b.gene(lay.min + k) * size;
+    let live = (0..chem.ns()).filter(short).map(|k| x(k) / (b.gene(lay.min + k) * size).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);
     dead.clear();
     dead.extend((0..chem.ns()).map(|k| if short(&k) { 0.0 } else { b.store[k] * f }));

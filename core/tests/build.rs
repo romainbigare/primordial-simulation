@@ -2,8 +2,8 @@
 //! matter and the liquid it keeps with it (`Body::size`), not the fuel it stores; growth turns the
 //! energy-rich solid into matter and costs `c_copy` per kg of matter in work, from the `c_build`
 //! allowance and what the body can spare (`copy::grow`); storing fuel costs nothing; a child is
-//! given a share of every store, matter included, and costs its parent no more work; satiety holds
-//! at every size; dead body matter on the ground oxidises at the rate chemistry 0 sets.
+//! given a share of every store, matter included, and costs its parent no more work; satiety is off
+//! by default (a store is bounded by the body, `Body::level`); dead body matter on the ground oxidises at the rate chemistry 0 sets.
 
 use pcore::body::{Body, Layout, COPY_MASS, DISPERSE, LIQ, STRENGTH};
 use pcore::rng::{Purpose, Rng};
@@ -507,12 +507,13 @@ fn dead_body_matter_oxidises_at_the_set_rate() {
     assert!(c_matter > 0.5 * c_solid && c_matter < 1.0 * c_solid, "{c_matter} and {c_solid}");
 }
 
-/// By default satiety holds past `full` only: a body whose body (matter and the liquid it keeps) is
-/// below `full` times its copy mass is left everything it is asked to take, up to its size cap, and
-/// one past it is held to its upkeep and what it builds. With `Config::sate_all` the young one is
-/// held too. (With satiety at every size all the animals of the 64x64 runs died in their first year.)
+/// By default there is no satiety (14 Oct 2026, after watch report 8): a body is left everything it
+/// is asked to take, up to its size cap, young or past `full`; what it carries is bounded by its
+/// body (`Body::level`, below), so a full store is the satiety. With `Config::sate_all` it is held
+/// to its upkeep and what it builds at every size. (With satiety at every size and the keep genes a
+/// share of the whole mass, all the animals of the 64x64 runs died in their first year.)
 #[test]
-fn satiety_by_default_holds_past_full_only() {
+fn no_satiety_by_default_and_every_size_with_the_switch() {
     let (mut w, i) = start();
     let r = roles(&w);
     let left = |w: &World, copy: f32| {
@@ -532,12 +533,95 @@ fn satiety_by_default_holds_past_full_only() {
     // A body of 21 kg: copy mass 100 kg (below full, 200 kg) or 5 kg (past full, 10 kg).
     let (young, cap) = left(&w, 2.0);
     let (grown, _) = left(&w, 5f32.log10());
-    println!("below full: left {young:.3} kg of {:.3} asked; past full: {grown:.3} kg (size cap {cap:.3} kg)", 2.0 * cap);
-    assert!((young / (2.0 * cap) - 1.0).abs() < 1e-9, "a young body is held: {young} of {}", 2.0 * cap);
-    assert!(grown < 0.2 * cap, "a body past full is not held: {grown} of {cap}");
+    println!("no satiety: left {young:.3} kg of {:.3} asked below full, {grown:.3} kg past it (size cap {cap:.3} kg)", 2.0 * cap);
+    assert!((young / (2.0 * cap) - 1.0).abs() < 1e-9 && (grown / (2.0 * cap) - 1.0).abs() < 1e-9, "a body is held: {young} and {grown} of {}", 2.0 * cap);
     w.cfg.sate_all = true;
     let (young_all, _) = left(&w, 2.0);
-    assert!(young_all < 0.2 * cap && (young_all / grown - 1.0).abs() < 0.5, "satiety at every size holds the young: {young_all}");
+    let (grown_all, _) = left(&w, 5f32.log10());
+    assert!(young_all < 0.2 * cap && grown_all < 0.2 * cap, "satiety at every size holds the young and the grown: {young_all}, {grown_all}");
+}
+
+/// What a body carries is bounded by its body, not its whole mass (14 Oct 2026, after watch report
+/// 8): the keep gene of the liquid is the share of the body it makes up (so it holds h / (1 - h) of
+/// its matter), the keep gene of any other store (not body matter) is kg of it per kg of body
+/// (`Body::size`). So more fuel does not raise the level of the liquid or of another store, and a
+/// body that takes without limit stops at them: left on ground full of the solid and the liquid it
+/// never holds more than its keep genes times its body, however long it takes.
+#[test]
+fn a_body_cannot_store_more_than_keep_times_body() {
+    let (mut w, i) = start();
+    let r = roles(&w);
+    let lay = Layout::of(&w.chem);
+    let mut b = eater(&mut w, i, 3, 6.0);
+    let (mm_rich, mm_liq) = (w.chem.subs[r.rich].molar_mass, w.chem.subs[r.liquid].molar_mass);
+    let (keep_rich, h) = (b.genes[lay.keep + r.rich] as f64, b.genes[lay.keep + r.liquid] as f64);
+    let mass = b.mass(&w.chem);
+    let size = b.size(&w.chem);
+    // The levels: the solid keep x body, the liquid h / (1 - h) x matter.
+    let (lv_rich, lv_liq) = (b.level(&w.chem, r.rich, mass) * mm_rich, b.level(&w.chem, r.liquid, mass) * mm_liq);
+    println!("body {size:.2} kg of {mass:.2}: solid level {lv_rich:.2} kg (keep {keep_rich:.2}), liquid level {lv_liq:.2} kg (h {h:.2})");
+    assert!((lv_rich / (keep_rich * size) - 1.0).abs() < 1e-9, "{lv_rich} of {keep_rich} x {size}");
+    assert!((lv_liq / (h / (1.0 - h) * kg(&w, &b, r.matter)) - 1.0).abs() < 1e-9, "{lv_liq}");
+    // More fuel does not raise the other levels, nor the size; scaling the whole body raises all.
+    add(&mut w, &mut b, r.rich, 100.0);
+    assert!((b.level(&w.chem, r.rich, b.mass(&w.chem)) * mm_rich / lv_rich - 1.0).abs() < 1e-9 && (b.size(&w.chem) / size - 1.0).abs() < 1e-9);
+    add(&mut w, &mut b, r.rich, -100.0);
+    let mut big = b.clone();
+    scale(&mut w, &mut big, 4.0);
+    assert!((big.level(&w.chem, r.rich, big.mass(&w.chem)) * mm_rich / lv_rich - 4.0).abs() < 1e-9);
+    // A long take from ground rich in both: the stores stop at their levels.
+    w.cfg.phys.c_handle = 0.0;
+    w.cfg.phys.c_build = 0.0;
+    let n = w.grid.n();
+    let t = w.t_ground(i);
+    let (a_rich, a_liq) = (50.0 * w.grid.area() / mm_rich, 50.0 * w.grid.area() / mm_liq);
+    for (k, a) in [(r.rich, a_rich), (r.liquid, a_liq)] {
+        w.ground[k * n + i] += a;
+        w.chem.add_elems(k, a, &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy += a * w.chem.subs[k].hf;
+    }
+    let e = w.energy_ground(i, t);
+    (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i], e);
+    let rich0 = b.store[r.rich];
+    let s = w.life.add(b, w.day, 1);
+    let (mut top_rich, mut top_liq) = (0.0f64, 0.0f64);
+    for _ in 0..120 {
+        day(&mut w);
+        let b = &w.life.bodies[s];
+        let mass = b.mass(&w.chem);
+        let (x_rich, x_liq) = (b.store[r.rich] * mm_rich / (b.level(&w.chem, r.rich, mass) * mm_rich).max(1e-30), b.store[r.liquid] * mm_liq / (b.level(&w.chem, r.liquid, mass) * mm_liq).max(1e-30));
+        top_rich = top_rich.max(x_rich);
+        top_liq = top_liq.max(x_liq);
+    }
+    let b = &w.life.bodies[s];
+    println!("after 120 days: solid {:.2} kg (was {:.2}), at most {top_rich:.3} of its level; liquid at most {top_liq:.3} of its level; body {:.2} kg, mass {:.2} kg", kg(&w, b, r.rich), rich0 * mm_rich, b.size(&w.chem), b.mass(&w.chem));
+    assert!(b.store[r.rich] > rich0, "it took none of the solid");
+    // (The liquid starts at its level, and burning the solid leaves liquid in the body, so it
+    // goes a little past; taking without limit would take it to many times that.)
+    assert!(top_rich < 1.0 + 1e-6 && top_liq < 1.1, "past its level: solid {top_rich}, liquid {top_liq}");
+    assert!(b.mass(&w.chem) < 3.0 * b.size(&w.chem), "mass {} for a body of {}", b.mass(&w.chem), b.size(&w.chem));
+}
+
+/// The safe minimums (the min genes) are shares of the body, so a body is not killed by holding
+/// fuel: a starting eater of 30 kg (body 21 kg, solid 9 kg, liquid 15.75 kg) with a minimum for the
+/// liquid of 0.7 of its body (14.7 kg, under the 15.75 it has) is short of it when it is 0.7 of its
+/// whole mass (21 kg), and still is not after it takes in 100 kg of the solid.
+#[test]
+fn the_safe_minimum_is_a_share_of_the_body() {
+    let (mut w, i) = start();
+    let r = roles(&w);
+    let lay = Layout::of(&w.chem);
+    let mut b = eater(&mut w, i, 0, 6.0);
+    b.genes[lay.min + r.liquid] = 0.7;
+    let (size, mass) = (b.size(&w.chem), b.mass(&w.chem));
+    println!("body {size:.2} kg of {mass:.2}: liquid {:.2} kg against a minimum of {:.2} kg", kg(&w, &b, r.liquid), 0.7 * size);
+    assert!(kg(&w, &b, r.liquid) > 0.7 * size && kg(&w, &b, r.liquid) < 0.7 * mass, "the setup");
+    assert!(!b.lacking_at(&w.chem, mass), "lacking a minimum that is met");
+    add(&mut w, &mut b, r.rich, 100.0);
+    assert!(!b.lacking_at(&w.chem, b.mass(&w.chem)), "killed by holding fuel");
+    // And a minimum above what it holds still counts: 0.8 of the body is 16.8 kg of the liquid.
+    b.genes[lay.min + r.liquid] = 0.8;
+    assert!(b.lacking_at(&w.chem, b.mass(&w.chem)));
 }
 
 /// Digestion: body matter that a body takes in from outside is broken into the energy-rich solid as

@@ -527,7 +527,8 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
 /// its hollow as far as there is room, solids onto its walls; at most half of each store.
 fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let (chem, lay, t) = (&w.chem, Layout::of(&w.chem), b.temp(&w.chem));
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Gas { 0.0 } else { (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * mb / chem.subs[k].molar_mass).max(0.0) }).collect();
+    let size = b.size(chem);
+    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Gas { 0.0 } else { (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass).max(0.0) }).collect();
     let all = kg(w, &spare);
     if all <= 0.0 {
         return;
@@ -562,7 +563,8 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
 pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
     let (chem, lay, mb, t) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem), b.temp(&w.chem));
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Solid { (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * mb / chem.subs[k].molar_mass).max(0.0) } else { 0.0 }).collect();
+    let size = b.size(chem);
+    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Solid { (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass).max(0.0) } else { 0.0 }).collect();
     let all = kg(w, &spare);
     let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
     let wall: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * f).min(0.5 * s)).collect();

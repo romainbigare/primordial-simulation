@@ -584,35 +584,33 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
     m
 }
 
-/// Satiety (14 Oct 2026, review 5; the decision after watch report 7 asked for it at every size,
-/// `Config::sate_all`, and the gate at `full` stayed, see below): a body takes no more of what it
-/// burns than its reactions can use over `days`, counted by the heat of the amounts `m` (mol) it
-/// burns (`Consts::burn`): its upkeep plus what it can build in the interval, which is the work
-/// (`Physics::c_build` x its `equiv` / `m_ref` x days) and the energy-rich solid converted into the
-/// matter that work makes (`Body::build_fuel` per kg, `c_copy` of work a kg: 2.7 J of fuel for each
-/// J of work in chemistry 0). Its reactions release a share of what it holds over the interval
-/// (first order in the fuel, `release`), not all of it, so what they can use is a store: it refills
-/// its fuel until that share of it covers that (`need` / share, less what it holds). The substances
-/// it burns are cut to that together; the others (liquid, which comes by area and stops at the
-/// level the body keeps) are not counted. Never less than the upkeep's worth, so a body never stops
-/// short of what it burns (burning leaves its liquid product in the body, 13 Oct 2026); a body with
-/// no fuel takes what it reaches. The target is capped at what the body could take by its size in
-/// the time (review 6, finding 13).
+/// Satiety (14 Oct 2026, review 5), **off unless `Config::sate_all`** (`ew run --sate-all`): a body
+/// takes no more of what it burns than its reactions can use over `days`, counted by the heat of
+/// the amounts `m` (mol) it burns (`Consts::burn`): its upkeep plus what it can build in the
+/// interval, which is the work (`Physics::c_build` x its `equiv` / `m_ref` x days) and the
+/// energy-rich solid converted into the matter that work makes (`Body::build_fuel` per kg, `c_copy`
+/// of work a kg: 2.7 J of fuel for each J of work in chemistry 0). Its reactions release a share of
+/// what it holds over the interval (first order in the fuel, `release`), not all of it, so what
+/// they can use is a store: it refills its fuel until that share of it covers that (`need` / share,
+/// less what it holds). The substances it burns are cut to that together; the others (liquid, which
+/// comes by area and stops at the level the body keeps) are not counted. Never less than the
+/// upkeep's worth, so a body never stops short of what it burns (burning leaves its liquid product
+/// in the body, 13 Oct 2026); a body with no fuel takes what it reaches. The target is capped at
+/// what the body could take by its size in the time (review 6, finding 13).
 ///
-/// **The gate.** Only a member whose body (`Body::size`) is past `phys.full` times its copy mass is
-/// held to that, unless `Config::sate_all`: below it a body eats as its intake allows. At every size
-/// (the decision's version) all the animals of six 64x64 runs died in their first year (seeds 1 to
-/// 3, normal and roster): a body takes on only some of its decisions and can take no more than
-/// its upkeep at each, so its store falls faster than it is refilled, and the 234 starting eaters
-/// of seed 1 had taken 1.0 kg each in the first ten days against 3.0 with the gate. It is the
-/// failure review 5 found with the bare upkeep (all 416
-/// starting eaters dead in their first year, a meal must last several intervals), and the building
-/// term, which was to be that reserve, is too small beside the upkeep for a body of 30 kg.
+/// **Why it is off.** What a body takes is bounded by its intake (`Physics::take`) and by what it
+/// can carry: `Body::level` is a share of its body, so a full store is the satiety (14 Oct 2026, after
+/// watch report 8). Satiety on top of that only starves: asked for at every size (the decision after
+/// watch report 7), with the keep genes a share of the whole mass, all the animals of six 64x64
+/// runs died in their first year (a body takes on only some of its decisions and can take no more
+/// than its upkeep at each, so its store falls faster than it is refilled; 234 starting eaters of
+/// seed 1 took 1.0 kg each in ten days against 3.0 without it); held past `full` only it kept them
+/// (review 5's rule, which went). The need is cut to the best fuel taken, so the cap is the body's.
 pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
     let (p, t) = (&w.cfg.phys, b.temp(&w.chem));
     let heat = |k: usize| b.heat_of(&w.chem, k, t);
     let got: f64 = m.iter().enumerate().map(|(k, a)| a * heat(k)).sum();
-    if got <= 0.0 || (!w.cfg.sate_all && b.size(&w.chem) / b.n() < p.full * b.dec(body::COPY_MASS)) {
+    if got <= 0.0 || !w.cfg.sate_all {
         return;
     }
     let (up, fuel, rel) = (body::upkeep(w, b, days, mass), b.fuel(&w.chem, t), body::release(w, b, days));
@@ -763,8 +761,9 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
 /// node of 10^7 members could give its whole spare to a 1 kg member, which rain then filled to
 /// its keep level, and members of thousands of tonnes grew. It remembers this for the giver.
 fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
-    let (chem, lay, mb) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem));
-    let spare = |k: usize| (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * mb / chem.subs[k].molar_mass).max(0.0);
+    let (chem, lay) = (&w.chem, Layout::of(&w.chem));
+    let size = b.size(chem);
+    let spare = |k: usize| (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass).max(0.0);
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
     let mo = o.mass(chem);

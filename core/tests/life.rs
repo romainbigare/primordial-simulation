@@ -126,6 +126,8 @@ fn own_brains_keep_one_body_per_group() {
 fn hot_cover_burns() {
     let run = |hot: bool| {
         let mut w = worldgen::new_world(1, 32, 32);
+        // (No growth: building body matter takes the solid too, and this is about the burning.)
+        w.cfg.phys.c_build = 0.0;
         pcore::step(&mut w);
         worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
         let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");

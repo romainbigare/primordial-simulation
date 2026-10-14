@@ -115,13 +115,14 @@ pub struct Config {
     /// review 5): the nodes are a speed shortcut and must give the same patterns.
     #[serde(default = "yes")]
     pub nodes: bool,
-    /// Satiety at every size (`choose::sate`), the decision after watch report 7: a body takes no
-    /// more of what it burns than its upkeep plus what it can build and the fuel it converts to do
-    /// it, whatever its size. False (the default): only a member whose body is past `phys.full`
-    /// times its copy mass is held to that, one below it eats as its intake allows (the rule chosen
-    /// for a run of review 5, which stays: with satiety at every size all the animals of six
-    /// 64x64 runs (seeds 1 to 3, normal and roster) died in their first year, since a body decides
-    /// on only a few of its updates and cannot eat more than its upkeep at each, `ew run --sate-all`).
+    /// Satiety (`choose::sate`; `ew run --sate-all`): a body takes no more of what it burns than its
+    /// upkeep plus what it can build and the fuel it converts to do it, whatever its size, the
+    /// decision after watch report 7. False (the default): no satiety; a body takes as its intake
+    /// allows (`Physics::take`) and what it carries is bounded by its body (`Body::level`: the keep
+    /// genes are kg of a store per kg of body, 14 Oct 2026), so a full store is the satiety. With
+    /// the keep genes a share of the whole mass, satiety at every size killed all the animals of
+    /// six 64x64 runs in their first year, and only its gate at `full` kept them (review 5's rule,
+    /// which went).
     #[serde(default)]
     pub sate_all: bool,
     /// A null run, to be compared with the real run of the same seed: no learning, no imitation
