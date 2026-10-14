@@ -25,3 +25,8 @@ folder with the same name as the report.
 - `watch-4-before-m4.md`: the owner's three changes after report 3 (a child costs what it is built
   of, not its liquid; bodies die of age by their rate of living, with a repair gene; enzymes cost a
   tenth of an eater's upkeep), three 300-year runs, null and roster runs, 14 October 2026.
+- `review-4-before-m4.md`: the fourth review, 14 October 2026, from the code and the reports only
+  (nothing run): the world is stable and can go to M4 after three small items (a node cannot
+  evolve its brain size; the catalyst columns mix the kinds, so the "light gene fell" story is an
+  artifact; a member lives about a month, which no column shows), what is still missing for trees
+  and for a tool-using kind, and the speed gains in reach.
