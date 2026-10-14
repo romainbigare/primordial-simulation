@@ -57,3 +57,6 @@ folder with the same name as the report.
   runs from a scratch driver: the eaters' start is a lottery and two laws were bent to win it,
   "small wins" comes from costs by the kg against income by kg^0.75, the big-brain verdict was the
   hand-set start, the node sets the plants' life, and 14 fixes in order.
+- `review-6-life-size.md`: the second part of review 6, with experiments: lives are one over the
+  birth rate, and animals shrank because nodes mixed kinds (`WITHIN` 2), the start kept small
+  founders, and costs by the kg met income by kg^0.75; tables in `review-6-life-size/`.
