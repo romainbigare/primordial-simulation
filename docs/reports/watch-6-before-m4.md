@@ -4,6 +4,29 @@
 `watch-6-before-m4/`. All runs are 64 x 64, seed 1, 100 years: short checks. The three 300-year
 runs (review 5, row 9) were not run in this round.
 
+## Correction after review 6 (14 October 2026)
+
+An adversarial review (`review-6-adversarial.md`) checked this report against its own data. These
+claims were wrong:
+
+1. **The big-brain test proves nothing yet.** 216 big-brain eaters were placed, not 404 (404 was
+   report 5's number). They were placed with the old hand-set brain biases, while the ordinary
+   eaters start with neutral brains. A control kind of 12 units with the same hand-set start did
+   as well or better (3.40 x 10⁹ kg against 3.20 x 10⁹ at year 60). The start won, not the brain.
+   The test is being rebuilt with a control that differs only in brain size.
+2. **The eaters did not live shorter "because they evolved smaller".** In the normal run their copy
+   mass hardly moved (26 to 23 kg). Their life fell as their numbers grew (2.2 to 4.0 x 10⁷), the
+   same way it did in report 5 at a fixed 57 kg.
+3. **Not every animal kind shrank.** Three roster kinds (the 150 kg, 100 kg and 600 kg ones) died
+   within 1 to 3 years of being placed, and the table left them out.
+4. **"3 times faster" was the machine, not the laws.** Flow, whose code did not change, also went
+   from 1,079 to 296 ms a year. The two runs had different loads on the machine.
+5. **The starting eaters are a lottery.** 97 to 99% of the placed eaters die in their first year,
+   and the kind lives through 2 to 14 bodies. `c_build` was set at 3 x 10⁴ to pass that bottleneck
+   on seeds 1 and 2, and that makes lives about 3 times shorter than at 10⁴. Setting a law for how
+   a start comes out is what handover 2 warns against. It is being redone.
+6. The eaters of remains went down to 75 to 83 g, not 50 to 60 g.
+
 ## Short answer
 
 Rows 1 to 8 of review 5's list are built. Two of them do not work as the review wrote them, and
