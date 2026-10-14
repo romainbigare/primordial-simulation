@@ -850,12 +850,18 @@ fn crowd(w: &mut World) {
             continue;
         }
         // The most alike pair first (ties: the earlier, larger ones), until `max` are left or no
-        // pair is alike (`copy::alike`, here in steps); past twice `max`, unlike pairs too (the
-        // most alike of them first). A pair's key: unlike or not, then its squared distance.
+        // pair is alike: here each within the other's spread, as children join a node
+        // (`copy::within`), so variants of one kind that a split did not make go back together;
+        // past twice `max`, unlike pairs too (the most alike of them first). A pair's key: unlike
+        // or not, then its squared distance in steps. The halves of a split are not touched:
+        // a node splits only while its cell is under `max` (`copy::split`).
         let (m, lim) = (left.len(), w.cfg.phys.alike);
-        let steps = |w: &World, s: usize| crate::copy::steps(&lay, &w.life.bodies[s].genes);
-        let mut v: Vec<Vec<f32>> = left.iter().map(|&s| steps(w, s)).collect();
-        let dist = |p: &[f32], q: &[f32]| p.iter().zip(q).fold((false, 0.0f32), |(u, d), (x, y)| (u || (x - y).abs() > lim, d + (x - y) * (x - y)));
+        let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]));
+        let mut v: Vec<(Vec<f32>, Vec<f32>)> = left.iter().map(|&s| steps(w, s)).collect();
+        let dist = |p: &(Vec<f32>, Vec<f32>), q: &(Vec<f32>, Vec<f32>)| {
+            let gap = |g: usize| (p.0[g] - q.0[g]).abs() > lim + crate::copy::WITHIN * (p.1[g] + q.1[g]).sqrt();
+            ((0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
+        };
         let mut d = vec![(true, f32::INFINITY); m * m];
         for p in 0..m {
             for q in p + 1..m {

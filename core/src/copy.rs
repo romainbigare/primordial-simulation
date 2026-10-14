@@ -86,7 +86,7 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
 /// joins it whatever the number of genes; with `alike` alone the chance was 1 in 6 per gene, and
 /// with about a hundred genes nearly every small group started a node of its own (review 3, M3).
 /// A larger factor would let children join a node of another kind as wide.
-const WITHIN: f32 = 2.0;
+pub const WITHIN: f32 = 2.0;
 
 /// Children `c` (one or a group drawn from a node, with the spread left among them) belong to
 /// node `o`: in each gene their mean is within `limit` steps of its mean plus `WITHIN` standard
@@ -105,6 +105,10 @@ fn step(lay: &Layout, g: usize, x: f32) -> f32 {
 }
 pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
     a.iter().enumerate().map(|(g, &x)| step(lay, g, x)).collect()
+}
+/// A body's spread per gene in mutation steps squared (none for the sizes of brain and senses).
+pub fn spread_steps(lay: &Layout, b: &Body) -> Vec<f32> {
+    (0..b.genes.len()).map(|g| if (body::HIDDEN..=body::SIGHT).contains(&g) { 0.0 } else { b.spread.get(g).map_or(0.0, |&v| v.max(0.0)) / range(lay, g).0.powi(2) }).collect()
 }
 
 /// Parent genes plus noise, kept in range.
