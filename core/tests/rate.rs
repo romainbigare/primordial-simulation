@@ -124,3 +124,27 @@ fn the_light_shift_is_the_founders_gas_over_their_liquid() {
     let x = (reach / b.store[LIQ]).log10();
     assert!((x - worldgen::life::LIGHT_X as f64).abs() < 0.01, "a founder exchanges 10^{x} times its liquid");
 }
+
+/// A salt held far past its balance (an eater's rock salt: 4.35 mol in 1,250 mol of liquid at 305 K) falls out at the pace
+/// of its rate law, its share squared, over a long step too: after 10 days what is left is the integral of that law,
+/// 1 / sqrt(1 + 2 z) of it (4.5%), and the same in one call or ten. (It was 0: the rate was held over the step.)
+#[test]
+fn a_salt_past_its_balance_falls_out_by_its_rate_law_over_a_long_step() {
+    let (chem, _) = worldgen::chemistry0();
+    let mut rc = Reactor::new(&chem);
+    let mut left = |calls: usize| {
+        let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
+        (n[LIQ], n[SALT]) = (1250.0, 4.35);
+        (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
+        let mut e = 305.0 * 1e7;
+        for _ in 0..calls {
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e7, None, 0.0, 10.0 * DAY / calls as f64);
+        }
+        n[SALT]
+    };
+    let rx = &chem.reactions[23];
+    let z = rx.k * (-rx.ea / 305.0f64).exp() * (4.35f64 / 1250.0).powi(2) * 10.0 * DAY;
+    let (one, ten, law) = (left(1), left(10), 4.35 / (1.0 + 2.0 * z).sqrt());
+    println!("salt left after 10 days: one call {one:.4}, ten calls {ten:.4}, the rate law {law:.4} mol");
+    assert!((0.9..1.25).contains(&(one / law)) && (one / ten - 1.0).abs() < 0.05, "one call {one}, ten calls {ten}, the law {law}");
+}

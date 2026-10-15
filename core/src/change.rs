@@ -162,11 +162,9 @@ pub(crate) fn frac(z: f64) -> f64 {
     if z < 1e-3 { z * (1.0 - 0.5 * z) } else { -(-z).exp_m1() }
 }
 
-/// The share of its scarcest input a reaction uses in a time over which it would use `z` of it at its starting rate, when
-/// its rate per unit of that input goes with the power `p` of what is left of it: 1 - (1 + p z)^(-1/p), the exact
-/// integral of dx/dt = -k x^(1 + p) (`frac` for p 0). (16 Oct 2026: a rate that goes with an input's share to its order
-/// was held at its starting value over the step, so a salt held far past its balance, its share squared, fell out
-/// to the last mol in one step, exp(-250) of it, where the rate law leaves 1 / sqrt(1 + 500), 4.5%.)
+/// The share of its scarcest input a reaction uses where it would use `z` at its starting rate, its rate per unit going
+/// with the power `p` of what is left: 1 - (1 + p z)^(-1/p), the integral of dx/dt = -k x^(1 + p) (16 Oct 2026; it was
+/// `frac`, the rate held over the step, so a salt far past its balance fell out to its last mol, exp(-250), not to 4.5%).
 #[inline]
 fn gone(z: f64, p: f64) -> f64 {
     if p <= 0.0 || z < 1e-3 { frac(z) } else { -(-(p * z).ln_1p() / p).exp_m1() }
@@ -353,8 +351,7 @@ impl Reactor {
                     self.kap[r] = kap;
                     self.lim[r] = lim;
                     any = true;
-                    // (In a liquid or a gas the rate per unit of the scarcest input goes with its share to its order less 1:
-                    // its order, less the 1 of the unit, as far as it is not most of its phase.)
+                    // (In a liquid or a gas that power is its order less 1, as far as it is not most of its phase.)
                     let k = rx.inputs[q].0 as usize;
                     self.pw[r] = if self.ph[k] > 0 { (rx.order(q) as f64 - 1.0) * (1.0 - self.av[k] / tot[self.ph[k] as usize]) } else { 0.0 };
                     self.far[r] = gone(kap * left, self.pw[r]);
