@@ -1260,19 +1260,22 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
 /// in a node, `f` of one member or more (`f` times the count at least 1) takes whole members, the
 /// ones that die (`thin`); less takes part of every member's matter, so the node's mean body falls
 /// and its members live. An individual always lives on smaller (its caller decides when it is too
-/// little to live, `Body::built`). `matter0` is the body matter, kg, it had before the hit, to
-/// count what the survivors lost (`Diag::hurt`). False if less than one member is left.
-pub fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter0: f64) -> bool {
+/// little to live). `matter0` is the body matter, kg, it had before the hit. Returns `None` if less
+/// than one member is left, else the body matter, kg, torn off members who live on (0 when members
+/// died), which the caller counts with `hurt` once it knows the body lives.
+pub fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter0: f64) -> Option<f64> {
     let whole = b.n() > 1.0 && f * b.n() >= 1.0;
     let alive = thin(w, b, if whole { f } else { 0.0 }, dead, cause);
-    if alive && !whole {
-        let root = w.life.root(b) as usize;
-        if root != u32::MAX as usize {
-            w.diag.hurt.resize(w.diag.hurt.len().max(root + 1), 0.0);
-            w.diag.hurt[root] += (matter0 - b.matter_kg(&w.chem)).max(0.0);
-        }
+    alive.then(|| if whole { 0.0 } else { (matter0 - b.matter_kg(&w.chem)).max(0.0) })
+}
+
+/// Count `kg` of body matter torn off a body that lived on (`tear`) for its starting kind (`Diag::hurt`).
+pub fn hurt(w: &mut World, b: &Body, kg: f64) {
+    let root = w.life.root(b) as usize;
+    if kg > 0.0 && root != u32::MAX as usize {
+        w.diag.hurt.resize(w.diag.hurt.len().max(root + 1), 0.0);
+        w.diag.hurt[root] += kg;
     }
-    alive
 }
 
 /// A node short of key stores: the members poorest in them die (members differ around the
