@@ -179,23 +179,29 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
     assert!(a > 0.0 && (c / a / 2.0 - 1.0).abs() < 0.03, "{a} K and {c} K");
 }
 
-/// A day of a world whose ground is held at `t` K in the cells `cells` (an edit): the flow and change steps when due, then
+/// Days of a world whose ground is held at `temps[k]` K in the cell `cells[k]` (an edit): the flow and change steps when due, then
 /// the bodies due.
+fn held_days(w: &mut World, cells: &[usize], temps: &[f64], days: usize) {
+    for _ in 0..days {
+        for (&i, &t) in cells.iter().zip(temps) {
+            let e = w.energy_ground(i, t);
+            w.ledger.imposed_energy += e - w.e_ground[i];
+            w.e_ground[i] = e;
+        }
+        if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
+            let dt = w.cfg.phys_days as f64 * 86_400.0;
+            pcore::body::survey(w);
+            pcore::flow::step(w, dt);
+            pcore::change::step(w, dt);
+        }
+        w.events.clear();
+        pcore::body::day(w);
+        w.day += 1;
+    }
+}
+
 fn held_day(w: &mut World, cells: &[usize], t: f64) {
-    for &i in cells {
-        let e = w.energy_ground(i, t);
-        w.ledger.imposed_energy += e - w.e_ground[i];
-        w.e_ground[i] = e;
-    }
-    if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
-        let dt = w.cfg.phys_days as f64 * 86_400.0;
-        pcore::body::survey(w);
-        pcore::flow::step(w, dt);
-        pcore::change::step(w, dt);
-    }
-    w.events.clear();
-    pcore::body::day(w);
-    w.day += 1;
+    held_days(w, cells, &vec![t; cells.len()], 1);
 }
 
 /// A resting body in a cell whose ground is held settles at the temperature where the heat its upkeep makes is the heat its
@@ -268,4 +274,81 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// The whole tempo of a body goes with its temperature, not only what it pays to live (15 Oct 2026, after A made upkeep alone
+/// follow it, which left summer upkeep 2.4 times with the same intake): what it can take per day (`take`, the sweep, gifts)
+/// and the `c_build` allowance per day are by `Body::supply`, which goes by the same factor as upkeep, `Body::pace`. Not
+/// the light, nor the catalysed reactions (they follow T by their own rate), nor the cost of a metre.
+#[test]
+fn what_a_body_takes_and_builds_per_day_scales_with_upkeep() {
+    let mut s = set();
+    let b = s.eater(0);
+    let (w, p) = (&s.w, s.w.cfg.phys);
+    let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
+    let (s0, u0) = (b.supply(&w.chem, &p), pcore::body::upkeep(w, &b, days, mass));
+    for t in [250.0, 270.0, 285.0, 300.0, 310.0] {
+        let x = at(w, &b, t);
+        let (take, build, up) = (p.take * days * x.supply(&w.chem, &p), p.c_build * x.supply(&w.chem, &p) / p.m_ref * days, pcore::body::upkeep(w, &x, days, mass));
+        let (take0, build0) = (p.take * days * s0, p.c_build * s0 / p.m_ref * days);
+        println!("{t} K: take x {:.4}, build x {:.4}, upkeep x {:.4}", take / take0, build / build0, up / u0);
+        assert!((take / take0 / (up / u0) - 1.0).abs() < 1e-9 && (build / build0 / (up / u0) - 1.0).abs() < 1e-9);
+    }
+}
+
+/// The kg a body takes from the ground at its decision goes by the same factor: two bodies alike, at 280 K and at 300 K
+/// (their temperature when they decide), take in the ratio of their paces and upkeep, the sweep and satiety being out of the way.
+#[test]
+fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
+    use pcore::event::EventKind;
+    let mut s = set();
+    s.w.cfg.phys.sweep = 1e12;
+    s.w.cfg.phys.c_build = 0.0;
+    // A starting eater whose brain only takes from the ground.
+    let shape = choose::shape(s.w.chem.ns(), 12, 6);
+    let mut fixed = [-8.0; brain::FIXED];
+    fixed[3] = 8.0;
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    s.rows = base.split_off(shape.base());
+    s.lineage = s.w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 1 });
+    let rich = worldgen::life::roles(&s.w.chem).expect("roles").1;
+    let mut took = vec![];
+    let mut ups = vec![];
+    let mut paces = vec![];
+    for (n, t) in [280.0, 300.0].into_iter().enumerate() {
+        let mut b = s.eater(n);
+        let w = &mut s.w;
+        // Little fuel, so that it has room to take; at the temperature `t`; a kg of the solid per m² (booked) on its cell.
+        let out = 0.8 * b.store[rich];
+        w.chem.add_elems(rich, -out, &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy -= out * w.chem.subs[rich].hf;
+        b.store[rich] -= out;
+        let e = t * b.heat_cap(&w.chem);
+        w.ledger.imposed_energy += e - b.e;
+        b.e = e;
+        let (i, tg, nn) = (b.cell as usize, w.t_ground(b.cell as usize), w.grid.n());
+        let a = 100.0 * w.grid.area() / w.chem.subs[rich].molar_mass;
+        w.ground[rich * nn + i] += a;
+        w.chem.add_elems(rich, a, &mut w.ledger.imposed_elems);
+        let en = w.energy_ground(i, tg);
+        w.ledger.imposed_energy += a * w.chem.subs[rich].hf + en - w.e_ground[i];
+        w.e_ground[i] = en;
+        let slot = w.life.add(b, w.day, 1);
+        pcore::body::survey(w);
+        w.day += 1;
+        let mut b = std::mem::take(&mut w.life.bodies[slot]);
+        b.prepare(&w.chem, &w.cfg.phys);
+        let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
+        let (up, pace) = (pcore::body::upkeep(w, &b, days, mass), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
+        w.events.clear();
+        pcore::choose::act(w, slot, &mut b, &mut pcore::body::Tmp::default());
+        let id = b.id(slot);
+        took.push(w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>());
+        (ups.push(up), paces.push(pace));
+        w.life.bodies[slot] = b;
+    }
+    println!("took {took:?} kg at 280 K and 300 K; pace {paces:?}; upkeep {ups:?}");
+    assert!(took[0] > 0.0 && took[1] > 0.0);
+    assert!((took[1] / took[0] / (paces[1] / paces[0]) - 1.0).abs() < 0.01, "taken {took:?}, pace {paces:?}");
+    assert!((took[1] / took[0] / (ups[1] / ups[0]) - 1.0).abs() < 0.01, "taken {took:?}, upkeep {ups:?}");
 }

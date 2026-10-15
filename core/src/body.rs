@@ -496,9 +496,13 @@ impl Body {
     /// (`Body::built`), not of the whole mass (14 Oct 2026, the energy ceiling): the fuel it stores
     /// is carried, not working tissue, so it raises neither what the body can take nor what it
     /// pays to keep (`body::upkeep`, by the same body). Intake (`take`, sweep, gifts), the `c_build`
-    /// allowance (`copy::grow`) and satiety go by it; the leaf by the body too (`visible`).
+    /// allowance (`copy::grow`) and satiety go by it; the leaf by the body too (`visible`). **And by the pace of
+    /// the body's temperature** (`Body::pace`, 15 Oct 2026, the coordinator's call after A): the whole tempo of a body
+    /// goes with exp(-Ea/T) (metabolic theory of ecology: metabolism, feeding and growth rates), so what it can take and
+    /// build per day goes by the same factor as what it pays to live. Light (a flux), the catalysed reactions (which follow
+    /// T by their own rate) and the cost of a metre are not in it.
     pub fn supply(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
-        self.equiv(p, self.built(chem))
+        self.equiv(p, self.built(chem)) * self.pace(chem, p, self.temp(chem))
     }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
     /// (`LEAF` per kg-equivalent of its body, as `visible` and the light code count it)
