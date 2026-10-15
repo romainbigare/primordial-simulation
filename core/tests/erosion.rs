@@ -6,12 +6,13 @@
 use pcore::chem::Phase;
 use pcore::World;
 
-/// Thickness of rock-making solids (those that melt above 1000 K) in the loose ground of cell `i` and bed below it, m, and the
-/// mean softness (1 / (hardness + 0.05)) of the loose ones, by volume.
+/// Thickness of rock-making solids (those that melt above 1000 K, but body matter, which chars before it melts) in the loose ground
+/// of cell `i` and bed below it, m, and the mean softness (1 / (hardness + 0.05)) of the loose ones, by volume. Counting the dead
+/// matter that piles up on the land once life starts made the first decade of a run look slow (0.02 mm a year or less, not 0.08).
 fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
     let (n, area) = (w.grid.n(), w.grid.area());
     let (mut loose, mut bed, mut soft) = (0.0, 0.0, 0.0);
-    for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0) {
+    for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0 && Some(k) != w.chem.matter()) {
         let v = w.chem.molar_volume(k, Phase::Solid);
         loose += w.ground[k * n + i] * v / area;
         bed += w.bed[k * n + i] * v / area;

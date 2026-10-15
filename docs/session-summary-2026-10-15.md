@@ -153,7 +153,8 @@ Things that are open and not built:
 - **The body heat test** now allows a 15% error. A 13% gap has no known cause.
 - **The roster's big animals** (100 to 600 kg) die out in most runs.
 - **Eater numbers swing up to 1,000 times** between almost identical runs.
-- **Erosion is very slow in the first 10 years,** with no known cause.
+- **Erosion is very slow in the first 10 years:** closed. The measure counted dead body matter piling up on the land as rock;
+  without it the land loses 0.07 to 0.085 mm a year from the first year (handover, "Erosion at real rates").
 - **The sea floor uses the air's oxygen,** and the sea's carbon reaction takes gas from the whole air
   column, not from the water.
 - **Review 7 items not built:** the "held liquid is a cheap shortcut to size" fix (R4), `c_build`
@@ -170,7 +171,7 @@ Things that are open and not built:
    carbon settles.
 2. **The small-cell world** for the nodes-against-individuals check, with plants included.
 3. **Fix the open problems** that the runs confirm: the fixing cost, the heat-test gap, the roster's
-   big animals, the slow first decade of erosion.
+   big animals.
 4. **A simplify pass on the core** to get back under 8,000 lines, or accept the extra 7% with a
    reason.
 5. **Check the real figures from memory** (erosion, porosity, fixing share, calcium share) against
