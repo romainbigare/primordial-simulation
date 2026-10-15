@@ -71,6 +71,27 @@ const LOG_HALF: f32 = -0.301_029_995_7;
 /// step is 0.3 decades, so nodes alike within `phys.alike` steps differ by a factor 16 at most.
 fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     match g {
+        g if g < body::NSCALAR => SCALARS[g],
+        g if g < lay.min => (0.3, -6.0, 18.0),
+        g if g < lay.upt => (0.05, -1.0, 0.9),
+        g if g < lay.keep => (0.2, -4.0, 2.0),
+        _ => (0.2, -0.5, 6.0),
+    }
+}
+
+/// `range` of the scalar genes as a table: it is asked a hundred times in each likeness test and
+/// each draw of children, and a look-up is cheaper than the match.
+const SCALARS: [(f32, f32, f32); body::NSCALAR] = {
+    let (mut t, mut g) = ([(0.0, 0.0, 0.0); body::NSCALAR], 0);
+    while g < body::NSCALAR {
+        t[g] = scalar(g);
+        g += 1;
+    }
+    t
+};
+
+const fn scalar(g: usize) -> (f32, f32, f32) {
+    match g {
         body::GAS => (0.3, -1.0, 5.0),
         body::LIQ => (0.3, -4.0, 1.0),
         body::HEAT => (0.3, -2.5, 3.5),
@@ -93,10 +114,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::DISPERSE => (0.05, 0.0, 1.0),
         body::DENATURE => (5.0, 250.0, 450.0),
         body::REPAIR => (0.2, -3.0, 3.0),
-        g if g < lay.min => (0.3, -6.0, 18.0),
-        g if g < lay.upt => (0.05, -1.0, 0.9),
-        g if g < lay.keep => (0.2, -4.0, 2.0),
-        _ => (0.2, -0.5, 6.0),
+        _ => (0.3, -6.0, 18.0),
     }
 }
 
@@ -219,10 +237,12 @@ fn row_step(p: &Physics, size: f32) -> f32 {
 pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
     const B: u64 = 0x00ff_00ff_00ff_00ff;
     let k = size * 3f32.sqrt() / 256.0;
-    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits.
+    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits (the first
+    // and the third lane of `a + (a >> 16)`).
     let sums = |u: u64| {
         let a = (u & B) + (u >> 8 & B);
-        [((a & 0xffff) + (a >> 16 & 0xffff)) as f32 - 510.0, ((a >> 32 & 0xffff) + (a >> 48)) as f32 - 510.0]
+        let t = a + (a >> 16);
+        [(t & 0xffff) as f32 - 510.0, (t >> 32 & 0xffff) as f32 - 510.0]
     };
     let mut pairs = w.chunks_exact_mut(2);
     for p in &mut pairs {
@@ -374,9 +394,11 @@ pub fn size_step(lay: &Layout) -> f32 {
     like(lay, body::COPY_MASS)
 }
 
-/// log10 of a member's body (`Body::built` per member): what size classes compare.
-pub fn member_log(chem: &crate::chem::Chemistry, b: &Body) -> f64 {
-    (b.built(chem) / b.n()).max(1e-30).log10()
+/// A body's class for `near`: log10 of its member's body (`Body::built` per member), which size
+/// classes compare, and whether it is mature. Taken once per body where it meets many (`body::crowd`).
+pub fn class(chem: &crate::chem::Chemistry, b: &Body) -> (f64, bool) {
+    let x = b.member_body(chem);
+    (x.max(1e-30).log10(), b.mature(x))
 }
 
 /// Two member bodies (kg) are in one size class: within `alike` steps of the copy-mass gene of each
@@ -385,7 +407,12 @@ pub fn member_log(chem: &crate::chem::Chemistry, b: &Body) -> f64 {
 /// (`copy`), and nodes join and merge only within a class (`near`, `body::crowd`), so young and adult
 /// nodes stay apart until the young have grown.
 pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
-    (x.max(1e-30).log10() - y.max(1e-30).log10()).abs() <= (alike * size_step(lay)) as f64 + 1e-9
+    alike_log(lay, alike, x.max(1e-30).log10(), y.max(1e-30).log10())
+}
+
+/// `alike_size` of two bodies given as log10 (`class`).
+pub fn alike_log(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
+    (x - y).abs() <= (alike * size_step(lay)) as f64 + 1e-9
 }
 
 /// Bodies `a` and `b` are in one class: alike in size (their members' bodies, `Body::built` per member,
@@ -393,7 +420,8 @@ pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
 /// past its copy mass for its members to reproduce, so the young join and merge with the young until
 /// they have grown).
 pub fn near(lay: &Layout, chem: &crate::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
-    a.adult(chem) == b.adult(chem) && alike_size(lay, alike, a.built(chem) / a.n(), b.built(chem) / b.n())
+    let (x, y) = (class(chem, a), class(chem, b));
+    x.1 == y.1 && alike_log(lay, alike, x.0, y.0)
 }
 
 /// `m` children of `b` (each as `kid` says: its matter taken from the brood, provisions of every other
@@ -427,14 +455,25 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
         wet: b.wet,
         ..Default::default()
     };
-    // The node a child joins: of its genes (`within`), of its size and immature (children are below
-    // their parents' copy mass, and a mature node must keep its mean there).
+    // The node a child joins: of its size and immature (children are below their parents' copy
+    // mass, and a mature node must keep its mean there), and of its genes (`within`, tested last:
+    // it reads a hundred genes).
     let target = |w: &World, c: &Body| w.life.at[cell].iter().map(|&s| s as usize).find(|&s| {
         let t = &w.life.bodies[s];
-        t.alive && t.n() > 1.0 && !t.adult(&w.chem) && within(&lay, w.cfg.phys.alike, t, c) && alike_size(&lay, w.cfg.phys.alike, kid.body, t.built(&w.chem) / t.n())
+        if !t.alive || t.n() <= 1.0 {
+            return false;
+        }
+        let x = t.member_body(&w.chem);
+        !t.mature(x) && alike_size(&lay, w.cfg.phys.alike, kid.body, x) && within(&lay, w.cfg.phys.alike, t, c)
     });
-    if node && m < 1.0 && (alone || target(w, &c).is_none()) {
-        return false;
+    // Nothing between here and the join changes the nodes of the cell or the child's genes, so a
+    // search made now holds for the join.
+    let mut hit = None;
+    if node && m < 1.0 {
+        hit = if alone { None } else { target(w, &c) };
+        if hit.is_none() {
+            return false;
+        }
     }
     let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
     w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: b.cell, value: m });
@@ -487,7 +526,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
     // apart.
     let shape = |l: u32| w.life.brains[l as usize].as_ref().map(|x| x.shape);
     if c.lineage == b.lineage && !alone {
-        if let Some(t) = target(w, &c) {
+        if let Some(t) = hit.or_else(|| target(w, &c)) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             let rows = match (shape(c.lineage), shape(w.life.bodies[t].lineage)) {
                 (Some(x), Some(y)) if x != y => brain::rerow(&rows, x, y, r, w.cfg.phys.new_noise),
