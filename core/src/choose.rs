@@ -840,8 +840,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     life.bodies[s].prepare(chem, &cfg.phys);
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     // (Its body matter is its body and its brood, not a store: it gives none of it. A key liquid it gives only past its
-    // level, the liquid of its living body. 16 Oct 2026: before, both were spare to twice their safe minimum, and the
-    // roster's 600 kg founders gave 0.7 to 3 t of their own body a month.)
+    // level, the liquid of its living body. 16 Oct 2026: before, both were spare to twice their safe minimum.)
     let (size, mass) = (b.size(chem), b.mass(chem));
     let keep = |k: usize| if b.wet >> k & 1 == 1 { b.level(chem, k, mass) } else { 0.0 };
     let spare = |k: usize| if chem.matter() == Some(k) { 0.0 } else { (b.store[k] - keep(k).max(2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
