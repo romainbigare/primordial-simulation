@@ -184,6 +184,7 @@ fn a_cell_at_balance_does_not_react_every_step() {
         w.day += 3;
         changes += (0..n).filter(|&i| w.ground[SALT * n + i] != before[i]).count();
     }
+    eprintln!("{changes} changes of salt in 39 steps over {wet} cells");
     assert!(wet > 100, "{wet} cells hold salt");
     assert!(changes <= 3 * wet, "{changes} changes of salt in 39 steps over {wet} cells");
     assert!(changes >= wet / 2, "{changes} changes: the cells do react at their turn");
