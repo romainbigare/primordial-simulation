@@ -50,6 +50,12 @@ const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.
 /// lower, so its burning and the cost of its enzymes (both go with k x 10^gene) are what they were.
 pub const LITTER_X: f32 = 0.602;
 
+/// log10 of how much more light catalyst a founder light-eater needs for the same light reaction under the smooth rate of Law 2
+/// (15 Oct 2026, a study, `docs/reports/law2-smooth-rate.md`): the reaction's contact is the body's liquid, not the gas it
+/// exchanges in its interval, and a founder (1 kg, a 20-day interval) exchanges 217 times its liquid (log10 2.34). Its gene of
+/// the light reaction is that much higher, so its own light reaction goes as it did.
+pub const LIGHT_X: f32 = 2.34;
+
 /// The share of the starting light-eaters that carry the gene of the reaction that fixes the air's nitrogen into the mineral
 /// growth is built of (`fixing`), an initial condition and not a law (15 Oct 2026, the decision "some fixing founders"),
 /// chosen before any run: one in ten. Plants that fix nitrogen with a partner are about 7% of the flowering species (the legumes,
@@ -562,7 +568,8 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     let mut genes = vec![-0.1f32; lay.len];
     genes[lay.cat..lay.min].fill(-1.0);
     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
-    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1] - LITTER_X);
+    let light = if kind.cat[0] >= body::LIGHT_EATER { kind.cat[0] + LIGHT_X } else { kind.cat[0] };
+    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (light, kind.cat[1] - LITTER_X);
     (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.25);
     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
     // Animals digest body matter as they digest the solid, and take it (14 Oct 2026): light-eaters do not.

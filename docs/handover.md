@@ -295,12 +295,15 @@ When the structures (for example plants) are worn away, the cost falls.
 **Substances react inside nodes, faster when hot, by the world's chemistry table.**
 
 ```
-rate[r] = k[r] · exp(−Ea[r] / T) · Π over the other inputs (share[input]^ν) · catalyst[r] · light[r]
-          (per unit of the scarce input, the one that runs out first)
-extent[r] = scarce amount per ν · (1 − exp(−rate[r] · time))
-da[k]/dt ≈ Σ_r (out[k,r] − in[k,r]) · rate[r] · scarce amount per ν
-dE/dt   = −Σ_r ΔH[r] · rate[r] · scarce amount per ν
+rate[r] = k[r] · exp(−Ea[r] / T) · contact[r] · Π over all inputs (share[input]^order) · catalyst[r] · light[r]
+          (reaction units per second; contact = the least, over the inputs, of the amount of the input's phase per ν)
+lim[r]    = the least, over the inputs, of the input's amount per ν (the scarce input)
+extent[r] = lim[r] · (1 − exp(−rate[r] / lim[r] · time))
+da[k]/dt ≈ Σ_r (out[k,r] − in[k,r]) · rate[r]
+dE/dt   = −Σ_r ΔH[r] · rate[r]
 ```
+
+- **Mass action with the contact of the phases (study branch `law2-smooth-rate`, 15 Oct 2026, proposed and not decided; `docs/reports/law2-smooth-rate.md`).** Before, the rate was per unit of the scarce input with the other inputs' shares, so it jumped when another input became the scarcest (by the ratio of their shares: about 3,000 times for reaction 22 on land where the rock ran short). Now `contact` is what `lim` would be were each input all of its phase: a reaction within one phase goes with that phase (as before), one between a solid and the air goes with the solid (a surface), never faster than the smaller phase allows. No jump; first order in a trace input still. The bullets below describe the law of `main`.
 
 - **Rate orders (15 Oct 2026).** A reaction may give the power its rate law takes of an input's share apart from the input's count (`Reaction::ord`, the data's `ord`, in the order of the inputs; the count when it says nothing): the stoichiometry of a big molecule is not a collision of 40 molecules. Reaction 21 burns C40H66N2O34 with 40 O2 and takes the oxygen-like gas to its 6th power, as the 6-unit matter did, so its rate in the open is what the data says (0.2 a year at 290 K with the litter `k` 2.28e9; 5% and 5.7e8 when this was built); with the count, 40, `k` would be 6.3e31 (so the rate with all gas at 1 would be absurd), the speed tool of `change::step` reads `k` to say which nodes can react at a step, and the law of nodes ran 10 times slower (444 ms a year against 33, seed 1, 64x64). The scarce input's power is its order less 1, as before with its count.
 - `share` is the amount's share of its phase (gas or liquid); a solid is a phase of its own (share 1). The scarce input counts once through its own amount, and its share is left out, except `share^(ν−1)` when its `ν` is above 1 (so it counts `ν` times in all, as mass action says). The reaction is **first order in its scarce input**: a trace gas in plenty of the other goes at the same rate per unit whatever its amount. If two inputs tie, the first one listed is the scarce one. A body that burns stores (Section 6.4) uses the same law.

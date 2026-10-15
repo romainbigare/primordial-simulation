@@ -278,15 +278,12 @@ impl Body {
         let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
-        // By capacity: the catalysed rate per unit of input at `t_cat`, over the genes that are on
-        // (`Physics::c_cat`), dearer if they keep their shape when warmer (`Physics::t_firm`). A gas
-        // counted beyond first order (its `nu` above 1: mass action) counts at its share of the open
-        // air (`Chemistry::air`) to the power `nu` - 1: the first order is the supply, as the scarce
-        // input counts once in the rate (`change`). Without it burning body matter (6 of the gas,
-        // 0.21^6 = 8.6e-5 of its bare rate in the open) would cost 1,800 times what burning the
-        // energy-rich solid does for the same speed-up, and no body could keep the enzyme.
+        // By capacity: the catalysed rate per unit of the contact of its phases (`change`) at
+        // `t_cat`, over the genes that are on (`Physics::c_cat`), dearer if they keep their shape
+        // when warmer (`Physics::t_firm`): its gases at their share of the open air
+        // (`Chemistry::air`) to their order, as mass action counts them.
         let open = |rx: &crate::chem::Reaction| -> f64 {
-            rx.inputs.iter().enumerate().filter(|(q, x)| rx.order(*q) > 1 && chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32 - 1)).product()
+            rx.inputs.iter().enumerate().filter(|(_, x)| chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
         };
         let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp() * open(rx)).sum();
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
@@ -1834,10 +1831,9 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
 
 /// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`
 /// J, and the energy released. Each goes at most as far as Change's rate at the body's
-/// temperature takes it over `days`: catalyst (as far as it keeps its shape at T) · k · exp(−Ea/T) · the activity of its gases (their
-/// share of the air to their `nu`, the scarcest input's to `nu − 1`), per unit of its scarcest
-/// input (its own stores, the air exchanged): the same law as `change`. So a cold body
-/// releases little: the cold cost is the rate, not a rule.
+/// temperature takes it over `days`: the same law as `change` (`change::pace`), its gases the air
+/// it exchanges at the air's shares, its other inputs its own stores, each a phase of its own. So
+/// a cold body releases little: the cold cost is the rate, not a rule.
 fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64; 64], f64) {
     let (chem, i) = (&w.chem, b.cell as usize);
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
@@ -1860,8 +1856,11 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
         if got >= cost || !breathes(chem, r, t) {
             continue;
         }
-        let (lim, who) = crate::change::scarce(&rx.inputs, |k| have[k]);
-        let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, _))| (air[k as usize * na + j] / tot).powi((rx.order(q) as i32 - (q == who) as i32).max(0))).product();
+        let lim = crate::change::scarce(&rx.inputs, |k| have[k]).0;
+        if lim <= 0.0 {
+            continue;
+        }
+        let act = crate::change::pace(rx, lim, |k| have[k], |k| if gas(k) { have[k] * tot / air[k * na + j] } else { have[k] });
         let rate = crate::change::denature(Body::catalyst(b.k.cat[r], dry), t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.k * (-rx.ea / t).exp() * act;
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];

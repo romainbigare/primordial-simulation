@@ -14,11 +14,12 @@ const MOL_PER_M3: f64 = 1000.0 / 0.018;
 const AIR_COLUMN: f64 = 101_325.0 / (9.81 * 0.0288);
 const DAY: f64 = 86_400.0;
 
-/// One m2 of a liquid column `depth` m deep over plenty of rock, with the gas of the air over it.
+/// One m2 of a liquid column `depth` m deep over the rock of the start's loose ground (a tenth of
+/// 1 m by volume, 2,710 mol: the rate goes with it, Law 2's contact), with the gas of the air over it.
 fn column(chem: &Chemistry, depth: f64, ppm: f64) -> (Vec<f64>, Vec<f64>) {
     let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
     n[LIQ] = depth * MOL_PER_M3;
-    n[ROCK] = 1e4;
+    n[ROCK] = 0.1 / chem.molar_volume(ROCK, pcore::chem::Phase::Solid);
     (gas[1], gas[2], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, ppm * 1e-6 * AIR_COLUMN);
     (n, gas)
 }
@@ -72,18 +73,21 @@ fn the_two_reactions_close_elements_and_energy() {
 }
 
 /// The balance holds what the real carbonate chemistry says at the anchor (1 mol per m3 of the
-/// liquid, 500 m deep, 400 ppm, 288 K), goes with the gas to the power 1/3 and falls with warmth
-/// as the reaction heat says (dH / R = 4,847 K, the salt as the cube root of the constant).
+/// liquid, 500 m deep, 400 ppm, 288 K). The salt cubed, over the rock it left (the reaction's
+/// contact, Law 2), goes with the gas and falls with warmth as the reaction heat says (dH / R =
+/// 4,847 K): the real law, [Ca][HCO3]^2 = K pCO2, with the rock in it.
 #[test]
 fn the_balance_is_the_anchored_one_and_moves_as_the_law_says() {
     let (chem, _) = worldgen::chemistry0();
-    let s = at_balance(&chem, 500.0, 400.0, 288.0) / 500.0;
-    assert!((0.9..1.1).contains(&s), "{s} mol per m3 at the anchor");
-    let twice = at_balance(&chem, 500.0, 800.0, 288.0) / (s * 500.0);
-    assert!((twice - 2f64.powf(1.0 / 3.0)).abs() < 0.01, "twice the gas: x{twice}");
-    let warm = at_balance(&chem, 500.0, 400.0, 298.0) / (s * 500.0);
-    let law = (-(-(chem.dh(22) / 8.314) * (1.0 / 288.0 - 1.0 / 298.0)) / 3.0).exp();
-    assert!((warm / law - 1.0).abs() < 0.02, "10 K warmer: x{warm}, the law says x{law}");
+    let rock = column(&chem, 500.0, 400.0).0[ROCK];
+    let held = |salt: f64| salt.powi(3) / (rock - salt);
+    let s = at_balance(&chem, 500.0, 400.0, 288.0);
+    assert!((0.9..1.1).contains(&(s / 500.0)), "{} mol per m3 at the anchor", s / 500.0);
+    let twice = held(at_balance(&chem, 500.0, 800.0, 288.0)) / held(s);
+    assert!((twice - 2.0).abs() < 0.02, "twice the gas: x{twice}");
+    let warm = held(at_balance(&chem, 500.0, 400.0, 298.0)) / held(s);
+    let law = ((chem.dh(22) / 8.314) * (1.0 / 288.0 - 1.0 / 298.0)).exp();
+    assert!((warm / law - 1.0).abs() < 0.03, "10 K warmer: x{warm}, the law says x{law}");
 }
 
 /// The store goes with the liquid, not with the gas over it: a cell with no liquid holds none; a
@@ -105,7 +109,8 @@ fn a_dry_cell_holds_none_and_a_deeper_column_holds_more() {
 }
 
 /// A long run of the two reactions in lumps of 120 days (the pace of a calm cell), the air held at
-/// 400 ppm, settles to the amount `balance` gives, from none and from twice as much.
+/// 400 ppm, settles to the amount `balance` gives, from none and from twice as much (made of the
+/// same rock, so the same calcium in all).
 #[test]
 fn a_long_run_settles_to_the_balance() {
     let (chem, _) = worldgen::chemistry0();
@@ -113,7 +118,7 @@ fn a_long_run_settles_to_the_balance() {
     let mut rc = Reactor::new(&chem);
     for start in [0.0, 2.0 * want] {
         let (mut n, gas0) = column(&chem, 500.0, 400.0);
-        n[SALT] = start;
+        (n[SALT], n[ROCK]) = (start, n[ROCK] - start);
         let mut e = 288.0 * 1e15;
         for _ in 0..(60 * 3) {
             let mut gas = gas0.clone();

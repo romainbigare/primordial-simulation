@@ -90,8 +90,10 @@ fn balances(c: &Chemistry, init: &worldgen::Init) {
                 .map(|&t| {
                     let mut n = vec![0.0; ns];
                     n[init.low] = depth / c.molar_volume(init.low, pcore::chem::Phase::Liquid);
+                    // The loose ground of the start: 1 m of it, by volume (`worldgen::terrain`).
+                    let all: f64 = init.loose.iter().map(|p| p.1).sum();
                     for &(k, share) in &init.loose {
-                        n[k] = 1e4 * share;
+                        n[k] = share / all / c.molar_volume(k, pcore::chem::Phase::Solid);
                     }
                     let x = rc.balance(c, &mut n, &gas, t).iter().find(|p| p.0 == u).map_or(0.0, |p| p.1);
                     format!("{t:.0} K: {x:8.1} mol/m2 ({:.3} mol/m3)", x / depth)

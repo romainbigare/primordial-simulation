@@ -557,7 +557,11 @@ ea = 9000
 #   the balance moves with warmth as dH says (the liquid holds less when warm).
 # - k of 22: a deep liquid takes the air's gas at the Earth's gross exchange between air and its liquid cover, 80 of 589 PgC a year
 #   (Ciais et al. 2013) over the 71% of the planet that the liquid covers: 0.19 a year per unit of the gas over it at 288 K
-#   (6.0e-9 /s): k exp(-2800 / 288) = 6.0e-9, k = 1.0e-4.
+#   (6.0e-9 /s). By mass action (Law 2) the contact of the rock, the air and the liquid is the rock, the smallest: the rate per
+#   unit of the gas is k exp(-2800 / T) x (the liquid's share) x the rock / the air over the cell. The anchor's floor is the loose
+#   ground of the start, 1 m of it a tenth rock by volume (2,710 mol/m2), less the 500 mol/m2 the salt took at 500 m: 2,210 mol/m2
+#   under 3.59e5 mol/m2 of air (the column at 101 kPa). k = 6.0e-9 exp(2800 / 288) x 3.59e5 / 2210 = 1.62e-2 (1.0e-4 when the
+#   rate went per unit of the scarce gas whatever the rock).
 # - k of 23: set so the balance at 288 K, 400 ppm of the gas and a liquid 500 m deep (the depth of this map's low ground:
 #   median 660 m, mean 540 m) is 1.0 mol of salt per m3 of liquid (2.0 mol/m3 of dissolved carbon, the measured amount in
 #   the liquid cover of the Earth; pure calcite and gas give 0.6). The balance is S^3 = (k22 / k23) exp(4847 / T) x (the gas over the cell) x
@@ -566,7 +570,7 @@ ea = 9000
 [[r]] # 22
 i = [[10,1],[3,1],[0,1]]
 o = [[23,1]]
-k = 1.0e-4
+k = 1.62e-2
 ea = 2800
 
 [[r]] # 23

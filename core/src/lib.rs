@@ -182,7 +182,10 @@ pub struct Physics {
     /// 2.1 x 10^-6 /s, 3,100 J/kg/day, what they paid before for a gene of 12). Before it was
     /// 1.67 x 10^6, set so light-eaters with a gene of 12, about 1,000 times more light catalyst
     /// than they need, paid what an older cost made them pay: so every catalyst was about 1,000
-    /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing.
+    /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing. (15 Oct 2026,
+    /// the smooth rate of Law 2, a study: the capacity counts every gas of a reaction at its share of
+    /// the open air to its order, as mass action does, so burning's capacity is 0.21 of what it was
+    /// and the constant is 2.14 x 10^9 / 0.21 = 1.02 x 10^10: the founders pay what they paid.)
     pub c_cat: f64,
     /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature), and
     /// where the costs are anchored: a body's upkeep is what the costs say at this temperature and goes
@@ -438,7 +441,7 @@ impl Default for Physics {
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
-            c_cat: 2.1429e9,
+            c_cat: 1.0204e10,
             t_cat: T_SURF,
             unfold: 3.0,
             t_firm: 320.0,

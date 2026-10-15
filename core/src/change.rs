@@ -1,13 +1,16 @@
 //! Law 2: Change. Substances react inside nodes, faster when hot.
 //!
-//! A reaction goes as far as `lim × (1 − exp(−rate × time))`, where `lim` is the amount of its
-//! scarcest input per `nu` (the first of the least) and `rate` is per unit of that input:
-//! catalyst · k · exp(−Ea/T) · the product, over the other inputs in a gas or a liquid, of their
-//! share of the phase to their `nu` (the scarcest one to `nu − 1`: `lim` already counts it
-//! once, so it counts `nu` times in all, as mass action says). So the reaction is first order in
-//! its scarce input (a trace gas in plenty of the other goes at the same rate per unit whatever
-//! its amount), not second order. A solid is a phase of its own (share 1). A body's catalysts
-//! work only below the temperature where they lose their shape (`denature`).
+//! Mass action: a reaction runs at catalyst · k · exp(−Ea/T) · `e` · the product, over its inputs,
+//! of their share of their phase to their order (`Reaction::order`; a solid is a phase of its own,
+//! share 1), in reaction units a second. `e` is the contact of its phases: what `lim` would be
+//! were each input all of its phase (the least, over the inputs, of its phase's amount per `nu`).
+//! So a reaction within one phase goes with that phase, and one between a solid and the air with
+//! the solid, as a surface would. In a step it goes as far as `lim × (1 − exp(−rate / lim ×
+//! time))`, `lim` the amount of its scarcest input per `nu`: never past it, exact for a first-order
+//! decay. The rate has no jump when another input becomes the scarcest, and is first order in a
+//! trace input (a trace gas in plenty of the other goes at the same rate per unit whatever its
+//! amount). A body's catalysts work only below the temperature where they lose their shape
+//! (`denature`).
 
 use crate::World;
 use crate::chem::{Chemistry, Reaction};
@@ -128,6 +131,19 @@ fn per(a: f64, nu: u16) -> f64 {
     }
 }
 
+/// The rate of a reaction per unit of `lim` (its scarcest input per `nu`, above 0) before
+/// catalyst · k · exp(−Ea/T): the product of its inputs' shares to their order, times `e / lim`.
+/// `a(k)` is the amount of an input and `whole(k)` that of its phase (its own for a solid).
+#[inline]
+pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
+    let (mut x, mut e) = (1.0, f64::MAX);
+    for (q, &(k, nu)) in rx.inputs.iter().enumerate() {
+        let (a, n) = (a(k as usize), whole(k as usize));
+        (x, e) = (x * pow(a / n, rx.order(q)), e.min(per(n, nu)));
+    }
+    x * e / lim
+}
+
 /// Catalyst factor `f` at `t` of a catalyst that loses its shape above `td` K, over a width of
 /// `wk` K. A catalyst lowers the reaction's barrier (a speed-up `f` is a lowering of ln f × T);
 /// losing its shape loses the lowering, so the share it keeps, 1 / (1 + exp((t − td) / wk)), is
@@ -195,7 +211,7 @@ impl Reactor {
             let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
             let k = rx.inputs[who].0 as usize;
             if lim > 0.0 && (self.ph[k] == 0 || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
-                best = best.max(rx.k * (-rx.ea / t).exp() * self.share(rx, who, &tot));
+                best = best.max(rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot));
             }
         }
         best
@@ -205,7 +221,7 @@ impl Reactor {
     /// node at `t`, from the chemistry's own rate constants and barriers, with the gas around the
     /// node (`gas`) held as it is. Of each pair the substance the first makes, if the node holds
     /// none of it, is set to the amount at which the two take it and give it at the same rate,
-    /// and the other inputs of the first (those that are not gas) are lessened by what it holds.
+    /// with the other inputs of the first (those that are not gas) lessened by what it holds.
     /// Returns the substances set and their amounts. A node without an input of the first (no
     /// liquid, say) holds none: its rate is nothing at every amount.
     pub fn balance(&mut self, chem: &Chemistry, n: &mut [f64], gas: &[f64], t: f64) -> Vec<(usize, f64)> {
@@ -215,19 +231,22 @@ impl Reactor {
                 continue;
             }
             let (made, took) = (chem.reactions[f].outputs[0].1 as f64, m as f64 * chem.reactions[f].outputs[0].1 as f64);
+            let used: Vec<(usize, f64, f64)> = (chem.reactions[f].inputs.iter()).filter(|p| chem.phase(p.0 as usize, t) != crate::chem::Phase::Gas).map(|&(k, c)| (k as usize, n[k as usize], c as f64 / made)).collect();
             // The rate of change of `u`, mol/s, with `x` of it in the node: positive below the balance.
             let net = |rc: &mut Self, n: &mut [f64], x: f64| {
                 n[u] = x;
+                for &(k, a, c) in &used {
+                    n[k] = (a - c * x).max(0.0);
+                }
                 let tot = rc.phases(n, Some(gas), t);
                 let eps = |rc: &Self, r: usize| {
                     let rx = &chem.reactions[r];
-                    let (lim, who) = scarce(&rx.inputs, |k| rc.av[k]);
-                    if lim > 0.0 { lim * rx.k * (-rx.ea / t).exp() * rc.share(rx, who, &tot) } else { 0.0 }
+                    let lim = scarce(&rx.inputs, |k| rc.av[k]).0;
+                    if lim > 0.0 { lim * rx.k * (-rx.ea / t).exp() * rc.pace(rx, lim, &tot) } else { 0.0 }
                 };
                 made * eps(rc, f) - took * eps(rc, b)
             };
             if net(self, n, 0.0) <= 0.0 {
-                n[u] = 0.0;
                 continue;
             }
             let (mut lo, mut hi) = (0.0, 1.0);
@@ -239,28 +258,15 @@ impl Reactor {
                 if net(self, n, mid) > 0.0 { lo = mid } else { hi = mid }
             }
             let x = 0.5 * (lo + hi);
-            n[u] = x;
-            for &(k, c) in &chem.reactions[f].inputs {
-                if chem.phase(k as usize, t) != crate::chem::Phase::Gas {
-                    n[k as usize] = (n[k as usize] - c as f64 * x / made).max(0.0);
-                }
-            }
+            net(self, n, x);
             out.push((u, x));
         }
         out
     }
 
-    /// The product, over the inputs of `rx` in a gas or a liquid, of their share of the phase to
-    /// their `nu`; the scarcest input (place `who`) to `nu - 1`.
-    fn share(&self, rx: &Reaction, who: usize, tot: &[f64; 3]) -> f64 {
-        let mut x = 1.0;
-        for (q, &(k, _)) in rx.inputs.iter().enumerate() {
-            let (k, p) = (k as usize, self.ph[k as usize] as usize);
-            if p > 0 {
-                x *= pow(self.av[k] / tot[p], rx.order(q).saturating_sub((q == who) as u16));
-            }
-        }
-        x
+    /// `pace` of `rx` with the amounts and phases of the last `phases`.
+    fn pace(&self, rx: &Reaction, lim: f64, tot: &[f64; 3]) -> f64 {
+        pace(rx, lim, |k| self.av[k], |k| if self.ph[k] > 0 { tot[self.ph[k] as usize] } else { self.av[k] })
     }
 
     /// Phase and available amount of each substance at `t` (the node's, plus for a gas the gas
@@ -328,9 +334,9 @@ impl Reactor {
                 if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (uses_light && light <= 0.0) {
                     continue;
                 }
-                let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
+                let lim = scarce(&rx.inputs, |k| self.av[k]).0;
                 if lim > 0.0 {
-                    let kap = cr * rx.k * (-rx.ea / t).exp() * self.share(rx, who, &tot);
+                    let kap = cr * rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot);
                     self.kap[r] = kap;
                     self.lim[r] = lim;
                     any = true;
@@ -408,7 +414,8 @@ impl Reactor {
 /// node, `need` for those gases at the most activity they can have there (their share of the
 /// air's gas), once asked for (NaN before). `shared`: the inputs that are not gas and count more
 /// than once, which in a liquid go by their share of it (a node holding little of one, a trace of
-/// its liquid, cannot go far however fast the rate constant is).
+/// its liquid, cannot go far however fast the rate constant is); `held` with their boiling points,
+/// counts and orders, `gnu` the largest count of a gas input.
 struct Cand {
     ea: f64,
     kdt: f64,
@@ -416,7 +423,8 @@ struct Cand {
     low: f64,
     need_bits: u64,
     gas: Vec<(usize, u16)>,
-    held: Vec<(usize, f64)>,
+    held: Vec<(usize, f64, u16, u16)>,
+    gnu: f64,
     shared: Vec<(usize, u16)>,
     need: Vec<std::cell::Cell<f64>>,
 }
@@ -500,7 +508,8 @@ pub fn step(w: &mut World, dt: f64) {
     let act = |a: f64, d: f64| if d > 0.0 { (a / d).min(1.0) } else { 1.0 };
     // The most activity the rate per unit of the scarcest input can have from gases with shares
     // `f`, whichever input that is: all shares to `nu`, or one power of one of them left out (not
-    // of a trace: it does not make the node react every step, see `TRACE`).
+    // of a trace: it does not make the node react every step, see `TRACE`). A bound: `pace` is
+    // never more, as `e / lim` is at most the scarcest input's phase over its amount.
     let up = |gas: &[(usize, u16)], f: &dyn Fn(usize) -> f64| {
         (0..=gas.len()).filter(|&d| d == gas.len() || f(gas[d].0) >= TRACE).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu.saturating_sub((q == d) as u16))).product::<f64>()).fold(0.0, f64::max)
     };
@@ -510,8 +519,10 @@ pub fn step(w: &mut World, dt: f64) {
             let rx = &chem.reactions[r];
             let (gas, held): (Vec<_>, Vec<_>) = rx.inputs.iter().enumerate().map(|(q, p)| (p.0 as usize, rx.order(q))).partition(|p| chem.subs[p.0].boil <= tlo);
             let shared = held.iter().copied().filter(|g| g.1 > 1).collect();
-            let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil)).collect();
-            let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, shared, need: vec![std::cell::Cell::new(f64::NAN); na] };
+            let count = |k: usize| rx.inputs.iter().find(|p| p.0 as usize == k).map_or(1, |p| p.1);
+            let gnu = gas.iter().map(|g| count(g.0)).max().unwrap_or(1) as f64;
+            let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil, count(g.0), g.1)).collect();
+            let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, gnu, shared, need: vec![std::cell::Cell::new(f64::NAN); na] };
             c.low = c.warm(c.kdt * up(&c.gas, &|k| most_act[k])).max(hot);
             c
         })
@@ -535,7 +546,7 @@ pub fn step(w: &mut World, dt: f64) {
     let liquids: Vec<usize> = (0..ns).filter(|&k| chem.subs[k].melt <= gmax && chem.subs[k].boil > gmin).collect();
     let own_gas = |k: usize, i: usize| col(k)[i] > OWN * share * w.air[k * na + air_of[i] as usize];
     let fits = |c: &Cand, i: usize, t: f64| {
-        let held = |all: f64| c.held.iter().all(|&(k, boil)| t >= boil || col(k)[i] > TRACE * all);
+        let held = |all: f64| c.held.iter().all(|&(k, boil, _, _)| t >= boil || col(k)[i] > TRACE * all);
         if t < c.hot || !held(col(most[0])[i]) {
             return false;
         }
@@ -560,7 +571,22 @@ pub fn step(w: &mut World, dt: f64) {
         if (own || vapour > 0.0) && t < c.warm(c.kdt * up(&c.gas, &|k| act(col(k)[i] / share + w.air[k * na + j], d))) {
             return false;
         }
-        held(most.iter().map(|&k| col(k)[i]).sum::<f64>() + c.held.iter().filter(|h| !most.contains(&h.0)).map(|&(k, _)| col(k)[i]).sum::<f64>())
+        // The contact of the phases (`pace`): with a gas the scarce input, the reaction goes no faster
+        // than the least the node holds of its other inputs (per count; a liquid by all the liquid)
+        // over the gas over it, times the gas's count; with another input scarce, all shares count.
+        let airy: Vec<(usize, u16)> = c.gas.iter().copied().chain(c.held.iter().filter(|h| t >= h.1).map(|h| (h.0, h.3))).collect();
+        if !airy.is_empty() && c.held.iter().any(|h| t < h.1) {
+            let liquid = |k: usize| chem.subs[k].melt <= t && t < chem.subs[k].boil;
+            let wet = || liquids.iter().filter(|&&k| liquid(k)).map(|&k| col(k)[i]).sum::<f64>();
+            let hold = (c.held.iter().filter(|h| t < h.1)).map(|&(k, _, nu, _)| (if liquid(k) { wet() } else { col(k)[i] }) / nu as f64).fold(f64::MAX, f64::min);
+            let gnu = c.held.iter().filter(|h| t >= h.1).fold(c.gnu, |m, h| m.max(h.2 as f64));
+            let x = |k: usize| act(col(k)[i] / share + w.air[k * na + j], d);
+            let full: f64 = airy.iter().map(|&(k, o)| pow(x(k), o)).product();
+            if t < c.warm(c.kdt * full.max((gnu * hold / (d * share)).min(1.0) * up(&airy, &x))) {
+                return false;
+            }
+        }
+        held(most.iter().map(|&k| col(k)[i]).sum::<f64>() + c.held.iter().filter(|h| !most.contains(&h.0)).map(|h| col(h.0)[i]).sum::<f64>())
     };
     let (mut maybe, mut ok, mut gas) = (vec![false; n], vec![false; n], vec![false; n]);
     let mut warm: Option<Vec<u32>> = None;
@@ -583,7 +609,7 @@ pub fn step(w: &mut World, dt: f64) {
         for (o, &t) in ok.iter_mut().zip(tg) {
             *o = t >= c.hot;
         }
-        for &(k, boil) in &c.held {
+        for &(k, boil, _, _) in &c.held {
             for ((o, &t), (&a, &b)) in ok.iter_mut().zip(tg).zip(col(k).iter().zip(col(most[0]))) {
                 *o &= t >= boil || a > TRACE * b;
             }
