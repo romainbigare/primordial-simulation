@@ -18,28 +18,21 @@ use serde::{Deserialize, Serialize};
 // (safe minimum as a share of mass; take selectivity; most share of mass kept). Below zero a
 // gene is off.
 /// Gas exchange, log10 mol of air per m² of the surface open to the air (`Body::open_area`) per
-/// day. Before (14 Oct 2026) it was per kg: a plant breathed 316 mol of air per kg per day, which
-/// at 300 ppm of carbon gas is 2.8 g of sugar per kg per day, ten times less than a real leaf
-/// (24 g per m² per day, so about 33 g per kg for 2 m²/kg), while the same plant caught 40 times
-/// more light than that carbon gas could use. Shade then cost it nothing and height could not
-/// pay (review 4, finding 4). Through the surface, capture area pays twice (light and gas), so a
-/// plant that grows its area gains on both and a taller plant that shades the rest gains more:
-/// the balance of gain and cost that makes a tall plant exists.
+/// day. Through the surface, capture area pays twice (light and gas), so a plant that grows its
+/// area gains on both and a taller plant that shades the rest gains more.
 pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;
 /// Heat conductance to the surface through the body's surface, log10 W/(K kg) for a member of
-/// `Physics::m_ref` kg (1 kg since 14 Oct 2026; 30 kg before, so every kind's gene is
-/// log10(30^(1/3)) = 0.492 higher); it goes with mass^(2/3) (`Body::conductance`)
+/// `Physics::m_ref` kg; it goes with mass^(2/3) (`Body::conductance`)
 pub const HEAT: usize = 2;
 /// Light-capture area, log10 m² per kg-equivalent of its body (`Body::size`, `Body::equiv`:
-/// mass^0.75 from `Physics::m_ref`, 14 Oct 2026; per kg of a 1 kg member)
+/// mass^0.75 from `Physics::m_ref`)
 pub const LEAF: usize = 3;
 /// Strength, 0..1
 pub const STRENGTH: usize = 4;
 /// A child's body, log10 of its share of its parent's copy mass (`COPY_MASS`): seeds and eggs at
-/// -6, calves at -0.3 (14 Oct 2026, the decision to reproduce by surplus; before, the share of each store given to a
-/// child, 0.05 to 0.5). A child is made whenever the brood (`Body::brood`) covers its matter
+/// -6, calves at -0.3. A child is made whenever the brood (`Body::brood`) covers its matter
 pub const CHILD: usize = 5;
 /// Mass needed before copying, log10 kg
 pub const COPY_MASS: usize = 6;
@@ -68,14 +61,13 @@ pub const DENATURE: usize = 16;
 /// Repair, log10: a body wears out when the energy its upkeep turned over reaches
 /// `Physics::e_life` x 10^gene per kg; each unit doubles the repair share `Physics::c_repair` of upkeep (`upkeep`)
 pub const REPAIR: usize = 17;
-/// The child's share of the key liquid, log10 of the factor on its provisions (14 Oct 2026, review 7
-/// fix 6): a child gets provisions of every store but body matter in the parent's proportion to its
-/// matter, and of the key liquid 10^`WET` times that (at most what the parent holds), so a body can make
-/// dry children (below 0) that are nearly dormant (`Body::activity`) and wait until they soak liquid
-/// up. At 0 a child gets the same share of everything
+/// The child's share of the key liquid, log10 of the factor on its provisions: a child gets
+/// provisions of every store but body matter in the parent's proportion to its matter, and of the
+/// key liquid 10^`WET` times that (at most what the parent holds), so a body can make dry children
+/// (below 0) that are nearly dormant (`Body::activity`) and wait until they soak liquid up
 pub const WET: usize = 18;
 /// Share of what a mature body builds in an update that goes to offspring (the brood), 0..1; the rest
-/// is its own growth (14 Oct 2026, the decision to reproduce by surplus). With 1 it stops growing at maturity
+/// is its own growth. With 1 it stops growing at maturity
 pub const ALLOC: usize = 19;
 pub const NSCALAR: usize = 20;
 
@@ -184,9 +176,8 @@ pub struct Body {
     /// has none: its members are of all ages (`live`).
     #[serde(default)]
     pub wear: f64,
-    /// Numbers that follow from the genes (rebuilt when missing). Saved with the body: a body not updated since
-    /// it was made has none yet, and others read them (`burns`, `pace`, `visible`), so a world loaded from a
-    /// snapshot went on differently from the one it was saved from (found by two-parent copying, 15 Oct 2026).
+    /// Numbers that follow from the genes (rebuilt when missing). Saved with the body: a body not
+    /// updated since it was made has none yet, and others read them (`burns`, `pace`, `visible`).
     pub k: Consts,
 }
 
@@ -341,13 +332,10 @@ impl Body {
     /// `brooded`, which is not yet a body); the liquid is the key liquid it keeps,
     /// `h` the most share of its mass it keeps of it (the keep gene, below 0.95, `level`), so a body
     /// is its matter over 1 - `h`, and no more than its matter and all its liquid (a body short of
-    /// liquid is as big as it is wet). The fuel it stores (the energy-rich solid, fat, whatever it
-    /// burns) and liquid held past `h` are not body (14 Oct 2026, decision after watch
-    /// report 7: a body's dry mass here was mostly its sugar store, so building work was charged on
-    /// stored fuel and every animal died). The light it catches and the gas it breathes (its leaf,
-    /// `visible`, `open_area`), the height order of `shade` and the safe minimums go by it;
-    /// intake, upkeep and heat by the whole mass. A chemistry with no body matter
-    /// (`Chemistry::build`): the whole mass.
+    /// liquid is as big as it is wet). The fuel it stores and liquid held past `h` are not body.
+    /// The light it catches and the gas it breathes (its leaf, `visible`, `open_area`), the height
+    /// order of `shade` and the safe minimums go by it; intake, upkeep and heat by the whole mass.
+    /// A chemistry with no body matter (`Chemistry::build`): the whole mass.
     pub fn size(&self, chem: &Chemistry) -> f64 {
         if chem.matter().is_none() {
             return self.mass(chem);
@@ -360,12 +348,8 @@ impl Body {
     /// tissue, `WET_TISSUE`: matter over 1 - `WET_TISSUE`, whatever liquid it keeps or holds. What growth builds to
     /// (`copy::grow`), what maturity reads (`adult`) and a child is counted in (`copy::copy`), and what a body takes,
     /// builds, pays to keep, wears, pushes with and catches light with go by. Without body matter: `size`.
-    /// **R4, 15 Oct 2026 (decided):** it was matter over 1 - `h`, the liquid keep gene, so liquid gave free capability:
-    /// a body that kept more liquid was a bigger body for the same matter (more intake, leaf, force, a cheaper maturity
-    /// and cheaper children), and selection took `h` from 0.75 to the cap 0.95 in plants and small animals within 30
-    /// to 60 years (a body 20 times its matter). Now what needs living matter goes by the matter; the liquid a body
-    /// keeps is still where its chemistry runs (`activity`, the contact of its reactions), its heat and its volume
-    /// (`size`: height in shade).
+    /// The liquid a body keeps is where its chemistry runs (`activity`), its heat and its volume
+    /// (`size`: height in shade), and gives no free capability.
     pub fn built(&self, chem: &Chemistry) -> f64 {
         if chem.matter().is_none() {
             return self.size(chem);
@@ -387,13 +371,12 @@ impl Body {
     pub fn mature(&self, member: f64) -> bool {
         member >= (1.0 - 1e-9) * self.dec(COPY_MASS)
     }
-    /// Activity, 0..1 (14 Oct 2026, review 7 fix 6, a refinement of Change): a
-    /// body's chemistry runs in its liquid, so it runs in proportion to the key liquid the body holds
-    /// over the level it keeps, to the power `Physics::dormancy`: min(1, l / l*)^n, l the key liquids
-    /// it holds, l* what `level` keeps of them (h / (1 - h) of its matter). A body that holds all it
-    /// keeps (or more) has 1; a dry one is nearly dormant (n = 5.7: a third of the liquid is 512
-    /// times less). The ratio is the mean over the members of a node. A body with no key liquid (the
-    /// genes keep none), or none that it keeps a level of (no matter, or h = 0), has nothing to dry:
+    /// Activity, 0..1: a body's chemistry runs in its liquid, so it runs in proportion to the key
+    /// liquid the body holds over the level it keeps, to the power `Physics::dormancy`:
+    /// min(1, l / l*)^n, l the key liquids it holds, l* what `level` keeps of them (h / (1 - h) of
+    /// its matter). A body that holds all it keeps (or more) has 1; a dry one is nearly dormant
+    /// (n = 5.7: a third of the liquid is 512 times less). The ratio is the mean over the members
+    /// of a node. A body with no key liquid, or none that it keeps a level of, has nothing to dry:
     /// 1. Upkeep and its decisions' cost (`body::upkeep`), the speed-up of its catalysts
     /// (`catalyst`) and its building (`copy::grow`) go with it; so does the share of a freezing that
     /// kills (`body::live`).
@@ -413,7 +396,7 @@ impl Body {
         (have / keep).min(1.0).max(0.0).powf(p.dormancy)
     }
     /// A catalyst's factor `f` (the speed-up of a reaction) at activity `a`: 1 + (f - 1) a. A dry
-    /// body's enzymes do not work, but the bare reaction still runs (14 Oct 2026).
+    /// body's enzymes do not work, but the bare reaction still runs.
     #[inline]
     pub fn catalyst(f: f64, a: f64) -> f64 {
         1.0 + (f - 1.0) * a
@@ -447,7 +430,7 @@ impl Body {
         let (m, cat) = (chem.matter(), Layout::of(chem).cat);
         m.is_some_and(|m| (0..chem.reactions.len()).any(|r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)))
     }
-    /// Digestion (14 Oct 2026): `taken` mol of body matter that this body took in from outside (the
+    /// Digestion: `taken` mol of body matter that this body took in from outside (the
     /// ground, another body, a part, a gift) are broken into its units as they come in, the reverse
     /// of growth (`Chemistry::build`): 1 of matter + 1 of liquid -> 6 of the energy-rich solid, element
     /// exact and thermoneutral in chemistry 0. So it enters as fuel, never as body; the body
@@ -485,26 +468,24 @@ impl Body {
     /// Mass-equivalent a body's size is counted by, kg (in place of the mass, for what goes with
     /// mass^0.75 in life): per member `m_ref` times its `mass` over `m_ref`, to the power
     /// `intake_exp` (0.75), times the count. What it takes, sweeps and receives as a gift, what it
-    /// can build (`c_build`) and its leaf (`visible`, `open_area`:
-    /// of its body, `size`) go by it: the supply. What it pays to be does not (mass^1.0 of its
-    /// body, `body::upkeep`, 14 Oct 2026). A member of `m_ref` (1 kg) is 1 kg; one of
-    /// 30 kg 12.8 kg-equivalents, 2.3 times less per kg; of 10 t 1,778, so it takes 180 times what
-    /// a 10 kg one (10^0.75 = 5.6) does, not 1,000. Light, rain, liquid and gas go by area. How
-    /// much of what it takes it can use is `choose::sate`, not a size: a member takes by all its mass,
-    /// as far as it can use it (14 Oct 2026, review 5).
+    /// can build (`c_build`) and its leaf (`visible`, `open_area`) go by it: the supply. What it
+    /// pays to be does not (mass^1.0 of its body, `body::upkeep`). A member of `m_ref` (1 kg) is
+    /// 1 kg; one of 30 kg 12.8 kg-equivalents, 2.3 times less per kg; of 10 t 1,778, so it takes 180
+    /// times what a 10 kg one (10^0.75 = 5.6) does, not 1,000. Light, rain, liquid and gas go by
+    /// area. How much of what it takes it can use is `choose::sate`, not a size.
     pub fn equiv(&self, p: &crate::Physics, mass: f64) -> f64 {
         let n = self.n();
         n * p.m_ref * (mass / n / p.m_ref).powf(p.intake_exp)
     }
     /// What a body can take and build, in kg-equivalents: `equiv` of the body that is built
-    /// (`Body::built`), not of the whole mass (14 Oct 2026, the energy ceiling): the fuel it stores
-    /// is carried, not working tissue, so it raises neither what the body can take nor what it
-    /// pays to keep (`body::upkeep`, by the same body). Intake (`take`, sweep, gifts), the `c_build`
-    /// allowance (`copy::grow`) and satiety go by it; the leaf by the body too (`visible`). **And by the pace of
-    /// the body's temperature** (`Body::pace`, 15 Oct 2026, the coordinator's call after A): the whole tempo of a body
-    /// goes with exp(-Ea/T) (metabolic theory of ecology: metabolism, feeding and growth rates), so what it can take and
-    /// build per day goes by the same factor as what it pays to live. Light (a flux), the catalysed reactions (which follow
-    /// T by their own rate) and the cost of a metre are not in it.
+    /// (`Body::built`), not of the whole mass: the fuel it stores is carried, not working tissue,
+    /// so it raises neither what the body can take nor what it pays to keep (`body::upkeep`).
+    /// Intake (`take`, sweep, gifts), the `c_build` allowance (`copy::grow`) and satiety go by it;
+    /// the leaf by the body too (`visible`). **And by the pace of the body's temperature**
+    /// (`Body::pace`): the whole tempo of a body goes with exp(-Ea/T) (metabolic theory of
+    /// ecology), so what it can take and build per day goes by the same factor as what it pays to
+    /// live. Light (a flux), the catalysed reactions (which follow T by their own rate) and the
+    /// cost of a metre are not in it.
     pub fn supply(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
         self.equiv(p, self.built(chem)) * self.pace(chem, p, self.temp(chem))
     }
@@ -518,17 +499,14 @@ impl Body {
         let m1 = mass / self.n();
         self.equiv(p, self.built(chem)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
     }
-    /// Most of substance `k` the body holds, mol (14 Oct 2026: stores are carried by the body).
-    /// Its keep gene is how much of it the body carries: for a key liquid the largest share of the
-    /// body it may make up, `h` (below 0.95), so it holds `h` / (1 - `h`) of its matter and its body
-    /// is its matter over 1 - `h` (`size`); for every other substance but body matter, fuel and the
-    /// rest, kg of it per kg of its body (`size`; 0.9 at the start, more for a kind placed with more
-    /// fuel than that). Before it was a share of the whole mass for each store alone, so several
-    /// stores together had no bound, and an eater swelled to 2 t with 2% of its mass matter (watch
-    /// report 8). Body matter itself is bounded as before, a share of the whole mass. Liquid caught,
-    /// taken or put stops there; the liquid a body keeps is that of its body matter, not of the brood
-    /// (14 Oct 2026). It bounds the stores, not the size. `mass` is the whole mass, for matter and for a
-    /// chemistry with none.
+    /// Most of substance `k` the body holds, mol. Its keep gene is how much of it the body
+    /// carries: for a key liquid the largest share of the body it may make up, `h` (below 0.95),
+    /// so it holds `h` / (1 - `h`) of its matter and its body is its matter over 1 - `h`
+    /// (`size`); for every other substance but body matter, kg of it per kg of its body (`size`;
+    /// 0.9 at the start, more for a kind placed with more fuel than that). Body matter itself is
+    /// a share of the whole mass. Liquid caught, taken or put stops there; the liquid a body
+    /// keeps is that of its body matter, not of the brood. It bounds the stores, not the size.
+    /// `mass` is the whole mass, for matter and for a chemistry with none.
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let mm = chem.subs[k].molar_mass;
         let f = self.gene(Layout::of(chem).keep + k);
@@ -555,7 +533,7 @@ impl Body {
     /// margin, which is the log of its share over its minimum, counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
     /// the same margin form), and its key liquids to freezing or boiling (within 5 K). Needs
     /// `prepare`.
-    pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, _mass: f64, t: f64, spare: f64) -> f32 {
+    pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass) = (Layout::of(chem), self.size(chem));
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
@@ -627,14 +605,13 @@ pub fn light_cat(chem: &Chemistry, genes: &[f32]) -> f32 {
     chem.reactions.iter().enumerate().filter(|(_, rx)| rx.light).map(|(r, _)| genes[NSCALAR + r]).fold(0.0, f32::max)
 }
 
-/// A body whose light reactions are sped up at least this much (log10) is a light-eater (5 with
-/// chemistry 0's light reaction at k 10^-6 is what 8 was at k 10^-9). The tape counts by this, and
-/// so does `Config::nodes`: the others are the animals.
+/// A body whose light reactions are sped up at least this much (log10) is a light-eater. The
+/// tape counts by this, and so does `Config::nodes`: the others are the animals.
 pub const LIGHT_EATER: f32 = 5.0;
 
-/// The liquid share of living tissue (15 Oct 2026, R4): a kg of body matter makes 1 / (1 - this) kg of working body
+/// The liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of working body
 /// (`Body::built`). Anchored: the liquid of living tissue, about 0.7 to 0.75 in animals' lean tissue and 0.8 to 0.9 in
-/// herbs (from memory); the founders keep 0.75 (`worldgen::life`), so they are what they were.
+/// herbs (from memory); the founders keep 0.75 (`worldgen::life`).
 pub const WET_TISSUE: f64 = 0.75;
 
 /// Does a body of these genes live on light (the rest are animals, `Config::nodes`)?
@@ -711,9 +688,9 @@ pub struct Lineage {
 }
 
 impl Lineage {
-    /// A brain of no hidden units is no brain (zero is a size, review 3, Q2): its bodies take no
-    /// decisions and pay nothing for a brain (no decision, learning or signal); their update is
-    /// their physics only (`body::day`). A lineage gets there by evolution, as it saves the cost.
+    /// A brain of no hidden units is no brain (zero is a size): its bodies take no decisions and
+    /// pay nothing for a brain (no decision, learning or signal); their update is their physics
+    /// only (`body::day`). A lineage gets there by evolution, as it saves the cost.
     pub fn none(&self) -> bool {
         self.shape.h == 0
     }
@@ -721,8 +698,7 @@ impl Lineage {
     /// gives it for a member of another mass); none without a brain. It goes with the body's own
     /// size genes, not the lineage's rounded sizes it thinks with (they differ by less than a
     /// unit): so a smaller brain pays less at once, and selection can lead a node's sizes down,
-    /// to none, a unit at a time (review 3, Q2; with the lineage's sizes nothing selected a size
-    /// gene until it had moved a whole unit by chance).
+    /// to none, a unit at a time.
     pub fn cost(&self, p: &crate::Physics, genes: &[f32]) -> f64 {
         if self.none() {
             return 0.0;
@@ -995,7 +971,7 @@ pub fn fused(chem: &Chemistry, k: usize, t: f64) -> f64 {
 }
 
 /// Temperature (as of the last flow step), depth of the liquid that stands (what the pores of the loose ground
-/// do not hold, 15 Oct 2026: `flow::liquid`) and surface height of a ground cell.
+/// do not hold, `flow::liquid`) and surface height of a ground cell.
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     let t = w.scratch.temps().0.get(i).copied().unwrap_or_else(|| w.t_ground(i));
     let (mut z, mut d, mut loose) = (0.0, 0.0, 0.0);
@@ -1092,7 +1068,7 @@ pub fn survey(w: &mut World) {
 
 /// Light passes through the bodies of a cell from the tallest member down: a member's height is
 /// `(body / rho_body)^(1/3)` (a body has no shape yet; its body, `Body::size`, not its fuel or
-/// the liquid it holds, 14 Oct 2026), so the order is that of member body mass, and
+/// the liquid it holds), so the order is that of member body mass, and
 /// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
 /// `1 - exp(-x)` of what reaches it, so a big member shades a small one and size pays. Together
 /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
@@ -1118,29 +1094,21 @@ fn shade(w: &mut World) {
 }
 
 /// The speed shortcut of plan 7.1, not a law: it coarsens only how members are represented (as
-/// population nodes), never how many there are or where, and must give the same patterns as
-/// individuals (to be checked at M4). Monthly, in each cell, among the bodies that hold and are
-/// inside nothing: a node joins the first larger one alike in genes (`copy::alike`, on the means
-/// only, as a split tests its halves, so a split's halves stay apart for selection: a test within
-/// their spreads, as children join, `copy::within`, would merge them back every month; never for
-/// being of the same lineage, so variants of one lineage stay apart) and of its size (member bodies
-/// within `alike` steps of the copy-mass gene, and both mature or both immature, `copy::near`: young and
-/// adult nodes stay apart until the young have grown to adult size); then, while more than
+/// population nodes), never how many there are or where. Monthly, in each cell, among the bodies
+/// that hold and are inside nothing: a node joins the first larger one alike in genes
+/// (`copy::alike`, on the means only, so a split's halves stay apart for selection; never for
+/// being of the same lineage) and of its size (member bodies within `alike` steps of the
+/// copy-mass gene, and both mature or both immature, `copy::near`); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
 /// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are not
-/// merged (merging them blended a new kind into the nearest one every month, review 3, M3),
-/// unless the cell holds more than twice `crowd`: then the most alike merge however unlike, down
-/// to that. That is a numerical safeguard, not a law: with about a hundred genes, variants of
-/// individuals and immigrants are often unlike in one gene (fewer since children join the node
-/// whose spread they lie in, `copy::within`), and with no ceiling one 64x64 world
-/// gathered about 146,000 bodies in one cell within a few years. So individuals stay individuals
-/// while their cell is not over `crowd`, and kinds stay apart up to twice that. Stores and heat add up, genes and born rows become the means by
-/// count and the spread of both is kept in the merged node's (`copy::join`), the born rows carried
-/// over to the larger's brain where its sizes differ (`copy::merge`); lineage, brain group and
-/// memory are the larger's. A node that grew too varied splits again at its next update
-/// (`copy::split`), so between two months its halves meet selection apart: the one that fits
-/// grows, and a later merge pulls the mean toward it. With `cfg.nodes` off it leaves animals out of
-/// the list: they never merge and never count toward `crowd`.
+/// merged, unless the cell holds more than twice `crowd`: then the most alike merge however
+/// unlike, down to that, a numerical safeguard (with no ceiling one 64x64 world gathered about
+/// 146,000 bodies in one cell within a few years). Stores and heat add up, genes and born rows
+/// become the means by count and the spread of both is kept in the merged node's (`copy::join`),
+/// the born rows carried over to the larger's brain where its sizes differ (`copy::merge`);
+/// lineage, brain group and memory are the larger's. A node that grew too varied splits again at
+/// its next update (`copy::split`). With `cfg.nodes` off it leaves animals out of the list: they
+/// never merge and never count toward `crowd`.
 fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.grid.n() {
@@ -1169,10 +1137,8 @@ fn crowd(w: &mut World) {
         }
         // The most alike pair first (ties: the earlier, larger ones), until `max` are left or no
         // pair is alike: here each within the other's spread, as children join a node
-        // (`copy::within`), so variants of one kind that a split did not make go back together;
-        // past twice `max`, unlike pairs too (the most alike of them first). A pair's key: unlike
-        // or not, then its squared distance in steps. The halves of a split are not touched:
-        // a node splits only while its cell is under `max` (`copy::split`).
+        // (`copy::within`); past twice `max`, unlike pairs too (the most alike of them first). A
+        // pair's key: unlike or not, then its squared distance in steps.
         let (m, lim) = (left.len(), w.cfg.phys.alike);
         let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]), crate::copy::class(&w.chem, &w.life.bodies[s]));
         let mut v: Vec<(Vec<f32>, Vec<f32>, (f64, bool))> = left.iter().map(|&s| steps(w, s)).collect();
@@ -1324,7 +1290,7 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
     b.count >= 1.0
 }
 
-/// A hit tears a share `f` of a body (15 Oct 2026, partial damage): the energy of a bite, of being
+/// A hit tears a share `f` of a body (partial damage): the energy of a bite, of being
 /// pushed through, breaks body matter first, which is what holds a body together, and spills the
 /// stores that matter held (`dead`, mol of each, with their share of the heat, as `thin`). The torn
 /// share is of the body (`Body::built`), so what the hit weighs against one member's body decides:
@@ -1353,7 +1319,7 @@ pub fn hurt(w: &mut World, b: &Body, kg: f64) {
 /// mean), so the survivors keep those stores and the dead take their share of the rest. The
 /// share that dies is the least that lifts every key store to its safe minimum; false if that
 /// is all of them.
-fn starve(w: &mut World, b: &mut Body, _m: f64, dead: &mut Vec<f64>) -> bool {
+fn starve(w: &mut World, b: &mut Body, dead: &mut Vec<f64>) -> bool {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
@@ -1378,10 +1344,9 @@ fn cover_of(w: &World, b: &Body) -> f64 {
 /// area, and only the share of its own surface goes through the cover: a layer of `cover` kg/m² passes
 /// `phys.shelter` / `cover` W per K and m² of surface, in series; bare ground adds none. Walls around it add their
 /// conductance (its share of it) in series. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the
-/// cover) with 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8 W/K, and
-/// 1.5 W/K stays open: 10.3 W/K in all (13.8 with what it radiates), so its 52 W of upkeep warm it 3.8 K (1.6 K
-/// bare), 2.2 K more. A 1 kg plant member (surface 0.06 m², capture area 2 m²: 3% under the cover) keeps 475 of its
-/// 490 W/K open; its 14 W/K under 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
+/// cover) with 10 kg/m² of cover gets 10.3 W/K in all (13.8 with what it radiates), so its 52 W of upkeep warm it
+/// 3.8 K (1.6 K bare). A 1 kg plant member (surface 0.06 m², capture area 2 m²: 3% under the cover) keeps 475 of
+/// its 490 W/K open: the cover changes its 490 W/K to 476.
 fn surface(chem: &Chemistry, p: &crate::Physics, b: &Body, mass: f64, cover: f64, walls: Option<(f64, f64)>) -> (f64, f64) {
     let (m1, nb) = (mass / b.n(), b.n());
     let leaf = b.equiv(p, b.built(chem)) * b.k.leaf;
@@ -1440,15 +1405,14 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if short > 1e-9 && !node {
         return Some(SPENT);
     }
-    // Living wears a body (14 Oct 2026): by the energy its upkeep turns over per kg, over what it
-    // can turn over in its life (`Physics::e_life`), so a body that lives fast wears fast. An
-    // individual dies of age when its wear reaches 1. A node's members are of all ages: this share
-    // of them dies now (the death rate of members who each live that long, so the same mean life).
-    // (Over the body that is built, the tissue that wears, not the fuel it carries; 14 Oct 2026.)
+    // Living wears a body: by the energy its upkeep turns over per kg of the body that is built (the
+    // tissue that wears, not the fuel it carries), over what it can turn over in its life
+    // (`Physics::e_life`), so a body that lives fast wears fast. An individual dies of age when its
+    // wear reaches 1. A node's members are of all ages: this share of them dies now (the death
+    // rate of members who each live that long, so the same mean life).
     let worn = upkeep / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so the
-    // body keeps its temperature as its stores change (as in `pay`, and for its reactions below; 15 Oct 2026: before, its new
-    // liquid came in cold and its other reactions ran 3%, 9 K, colder than the body).
+    // body keeps its temperature as its stores change (as in `pay`, and for its reactions below).
     let kept = e0 / cap.max(1e-9) * b.heat_cap(&w.chem);
     let upkeep = b.e - kept;
     b.e = kept;
@@ -1650,11 +1614,12 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         b.e += d * per;
         heat += d * f;
     }
-    // Roots take what is dissolved in the soil (15 Oct 2026): the salts that live in the liquid of the ground (liquid at the cell's
-    // warmth but for the common liquid itself, whose soaking is above) that its uptake genes are on for, from the loose ground of its cell, up to the
-    // room its level leaves, at the rate it soaks liquids (without the wetness of the surface: soil holds moisture the
-    // surface does not show, which the world does not model), through the mass that works, and no more than half of what
-    // there is (the bodies of a cell share it).
+    // Roots take what is dissolved in the soil: the salts that live in the liquid of the ground
+    // (liquid at the cell's warmth but for the common liquid itself, whose soaking is above) that
+    // its uptake genes are on for, from the loose ground of its cell, up to the room its level
+    // leaves, at the rate it soaks liquids (without the wetness of the surface: soil holds
+    // moisture the surface does not show), through the mass that works, and no more than half of
+    // what there is (the bodies of a cell share it).
     let soak = -(-b.k.liq * days).exp_m1() * wk;
     for &(k, u) in &b.k.upt {
         if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase(k, tg) != Phase::Liquid || ground[k * n + i] <= 0.0 {
@@ -1691,7 +1656,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 
     let (mut mass3, mut c) = (mass3, c);
     if b.lacking_at(&w.chem, mass3) {
-        if !(b.n() > 1.0 && mass3 >= 1e-3 * b.n() && starve(w, b, mass3, &mut tmp.dead)) {
+        if !(b.n() > 1.0 && mass3 >= 1e-3 * b.n() && starve(w, b, &mut tmp.dead)) {
             return Some(LACK);
         }
         (mass3, c) = b.mass_cap(&w.chem);
@@ -1701,9 +1666,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let t = b.e / c.max(1e-9);
     // A key liquid that boiled kills the body. One that froze kills the share of it that is free
     // liquid to freeze: the frozen share of its key liquid (all of it, the body being at one
-    // temperature) times its activity, as a dry body holds little liquid to freeze (14 Oct 2026,
-    // review 7 fix 6). A node loses that share of its members, with their stores (`thin`); an
-    // individual dies with that chance.
+    // temperature) times its activity, as a dry body holds little liquid to freeze. A node loses
+    // that share of its members, with their stores (`thin`); an individual dies with that chance.
     let key = |k: usize| b.wet >> k & 1 == 1;
     if (0..ns).any(|k| key(k) && chem.phase(k, t) == Phase::Gas) {
         return Some(PHASE);
@@ -1724,11 +1688,11 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
             return Some(PHASE);
         }
     }
-    // Growth is building body matter (14 Oct 2026, decision after watch report 7): a member
-    // makes matter of the energy-rich solid, paid by work, as far as its allowance goes
-    // (`copy::grow`). Below the size of maturity (its copy mass) all of it is its own growth; past
-    // it a share `ALLOC` goes into the brood, matter held for offspring (14 Oct 2026). Then offspring are made whenever the brood covers a child, by physics and not by
-    // choice (review 3, W3): at its update whatever its brain does (`copy::copy`).
+    // Growth is building body matter: a member makes matter of the energy-rich solid, paid by
+    // work, as far as its allowance goes (`copy::grow`). Below the size of maturity (its copy
+    // mass) all of it is its own growth; past it a share `ALLOC` goes into the brood, matter held
+    // for offspring. Offspring are made whenever the brood covers a child, by physics and not by
+    // choice: at its update whatever its brain does (`copy::copy`).
     if crate::copy::grow(w, b, days) {
         (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
     }
@@ -1739,10 +1703,10 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     None
 }
 
-/// A body is not a quarry (15 Oct 2026): of what it holds besides its liquid, matter, gases and the fuel it burns, the minerals
+/// A body is not a quarry: of what it holds besides its liquid, matter, gases and the fuel it burns, the minerals
 /// (`Chemistry::minerals`) go back to the ground past the level it keeps (`Body::level`), and anything else (a solid left by a salt
 /// it held breaking down) all of it, with its share of the heat. Digestion (`Body::digest`) and its own burning of matter give it more
-/// than it builds with and it has no other way out: an eater that kept it would grow without end and, its room full, stop taking
+/// than it builds with: an eater that kept it would grow without end and, its room full, stop taking
 /// matter. A plant takes only up to the level (`choose::wanted`), so for it the minerals shed nothing.
 fn shed(w: &mut World, b: &mut Body) {
     let (i, n, mass, minerals) = (b.cell as usize, w.grid.n(), b.mass(&w.chem), w.chem.minerals());
@@ -1771,28 +1735,23 @@ fn shed(w: &mut World, b: &mut Body) {
 /// 2^`REPAIR`, so a longer life costs more upkeep, a shorter one less, but never less than the rest
 /// (`Physics::c_repair`).
 ///
-/// **Why mass^1.0 while what a body takes and builds goes with mass^0.75** (14 Oct 2026, the growth law of
+/// **Why mass^1.0 while what a body takes and builds goes with mass^0.75** (the growth law of
 /// West, Brown and Enquist 2001, ontogenetic growth): supply (`Body::equiv`: intake, the
 /// `c_build` allowance, leaf) grows more slowly than the tissue it must keep, so a body grows until
 /// keeping what it has takes all it can supply and there is nothing left to build with
 /// (`copy::grow` builds from the spare after upkeep): its size is set by its own costs, not by a cap.
-/// **Across kinds by the size the kind grows to** (15 Oct 2026, decided; `docs/reports/big-animals.md`): the
+/// **Across kinds by the size the kind grows to** (`docs/reports/big-animals.md`): the
 /// cost per kg of tissue is the kind's own, times (copy mass / `m_ref`)^(`intake_exp` - 1), the copy mass being the
-/// size its genes mature at (`COPY_MASS`). Inside one body nothing changes (its cost goes by its kg as it grows, the
-/// ceiling stays); across kinds an adult pays Kleiber's mass^0.75, as real adults do (in the growth law the
-/// maintenance per kg is a trait of the kind, smaller in a bigger one). Before, every kind paid the same per kg, so a
-/// kind's adult upkeep went with mass^1.0 against an intake of mass^0.75, and the roster's 600 kg founders could take
-/// only 1.9 times their upkeep (a 30 kg eater 3.2) and starved. No new number. (Review 6 had moved these
-/// costs to mass^0.75 because every animal evolved small; the main cause then was nodes mixing kinds,
-/// since fixed.) The mass is the body that is built, not the whole mass: storing fuel is cheap, tissue
-/// dear (decision of 14 Oct 2026 on body matter); and not `size`, which stops at the liquid held
-/// now, a lack that dormancy (`activity`, below) already counts.
+/// size its genes mature at (`COPY_MASS`). Inside one body its cost goes by its kg as it grows;
+/// across kinds an adult pays Kleiber's mass^0.75, as real adults do. The mass is the body that
+/// is built, not the whole mass: storing fuel is cheap, tissue dear; and not `size`, which stops
+/// at the liquid held now, a lack that dormancy (`activity`, below) already counts.
 ///
-/// **It follows the body's temperature** (15 Oct 2026, decided 14 Oct): the whole of it times
+/// **It follows the body's temperature**: the whole of it times
 /// `Body::pace`, the rate law of the reactions that pay it, exp(-Ea (1/T - 1/T_ref)), T the body's temperature,
-/// Ea the barrier of its main burning reaction, T_ref = `Physics::t_cat` where the costs are anchored. No new
-/// number. A cold body pays less and, as wear goes with upkeep, ages slower (dormancy in the cold); a warm one
-/// pays more (the review of 14 Oct found summer upkeep doubling at 299 K). Needs `prepare`.
+/// Ea the barrier of its main burning reaction, T_ref = `Physics::t_cat` where the costs are anchored.
+/// A cold body pays less and, as wear goes with upkeep, ages slower (dormancy in the cold); a warm one
+/// pays more. Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
@@ -1801,14 +1760,13 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     // The cost of keeping tissue goes with the kg of the body (`Body::built`: not the fuel it
     // stores, nor the liquid it lacks, which dormancy counts below), supply with the mass to the
     // power 0.75 (see above): storing fuel is cheap, building and keeping tissue is dear.
-    // And per kg by the size the kind matures at, to the power -0.25 (Kleiber across kinds, 15 Oct 2026).
+    // And per kg by the size the kind matures at, to the power -0.25 (Kleiber across kinds).
     let tissue = b.built(&w.chem) * (b.dec(COPY_MASS) / p.m_ref).powf(p.intake_exp - 1.0);
     let u = days * (tissue * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
     // Everything it pays is chemistry, which runs in its liquid: a dry body pays almost nothing (and,
     // as wear grows with what it pays, hardly ages): all of it, the decision's cost too, times its
-    // activity (14 Oct 2026, review 7 fix 6).
-    // And it runs at the pace of the body's temperature, by the same rate law as the reactions that pay
-    // it (15 Oct 2026): a cold body pays less and wears slower, a warm one more (`Body::pace`).
+    // activity. And it runs at the pace of the body's temperature, by the same rate law as the
+    // reactions that pay it (`Body::pace`).
     u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * b.activity(&w.chem, p) * b.pace(&w.chem, p, b.temp(&w.chem))
 }
 
@@ -1835,15 +1793,14 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     let (mass, cap) = b.mass_cap(&w.chem);
     let t0 = b.e / cap.max(1e-9);
     let paid = pay_at(w, b, cost, days, mass, cap, false) == 0.0;
-    // The heat released stays in the body and leaves through its surface (15 Oct 2026, decided 14 Oct; before, it
-    // all went to the ground within the action): by the conductance of its genes, cover and walls and what it radiates
-    // (`surface`, `radiated`), which is the same as in its update (`live`). Its time constant (heat capacity over
-    // conductance, hours for a body of kilograms) is far under the days to its next update, so what it makes warms it
-    // as a steady rate: spread over the interval to the next update, the heat Q warms it by Q / (g dt) K for that time.
-    // The body keeps that warmth (the mean over the interval of a pulse that decays with the time constant,
-    // Q (1 - exp(-x)) / x, x = g dt / heat capacity: all of it if the time constant is the longer) and the rest goes to the
-    // ground, as its update will do with the warmth it finds. Its update (`live`) reads the temperature it left it at.
-    // A cost that leaves it colder than it was is not held back.
+    // The heat released stays in the body and leaves through its surface: by the conductance of its
+    // genes, cover and walls and what it radiates (`surface`, `radiated`), as in its update (`live`).
+    // Its time constant (heat capacity over conductance, hours for a body of kilograms) is far under
+    // the days to its next update, so what it makes warms it at a steady rate: spread over the
+    // interval to the next update, the heat Q warms it by Q / (g dt) K for that time. The body keeps
+    // that warmth (the mean over the interval of a pulse that decays with the time constant,
+    // Q (1 - exp(-x)) / x, x = g dt / heat capacity: all of it if the time constant is the longer)
+    // and the rest goes to the ground. A cost that leaves it colder than it was is not held back.
     let (keep, i) = (t0 * b.heat_cap(&w.chem), b.cell as usize);
     if b.e > keep {
         let cap = b.heat_cap(&w.chem);

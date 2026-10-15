@@ -28,9 +28,8 @@ pub struct Config {
     pub tilt: f64,
     /// Latitude of the map's south and north edges, degrees. The island (128 cells of 2 km) spans
     /// what 256 km spans on the planet, 2.3°, so its climate bands come from height and the
-    /// liquid, not latitude (wide latitudes with air that mixes across the map in weeks gave
-    /// bands that could not last). Centred at 32°, where the yearly sunlight is the mean the
-    /// map had over 5° to 55°, so the starting ground stays near 287 K (40° gave 279 K).
+    /// liquid, not latitude. Centred at 32°, where the yearly sunlight keeps the starting
+    /// ground near 287 K.
     pub lat_south: f64,
     pub lat_north: f64,
     /// Strength of the deflection of moving air by planet rotation (0 = none)
@@ -41,15 +40,11 @@ pub struct Config {
     pub phys_days: u32,
     /// Gas moves between air nodes (wind) every `air_days` days (radiation every `phys_days`).
     /// How often the moisture path runs sets how much rain reaches land, hence the flowing channels
-    /// (seed 5, 50 years, 128x128, no life; channel cells = dry land with liquid flux over 9e3 mol/s; extra
-    /// cost is ms per simulated year over 15/15/15):
-    /// air/exchange/flow 15/15/15: 240 channel cells (0 ms); 3/9/15: 484 (+120 ms);
-    /// 3/6/15: 776 (+185 ms); 3/3/15: 1405 (+400 ms); 3/3/3: 1369 (+850 ms).
-    /// Liquid at 15 days loses nothing against 3 days once the moisture path runs every 3.
+    /// (seed 5, 50 years, 128x128, no life; channel cells = dry land with liquid flux over 9e3 mol/s):
+    /// air/exchange/flow 15/15/15: 240 channel cells; 3/9/15: 484; 3/6/15: 776; 3/3/15: 1405 (+400 ms
+    /// a year); 3/3/3: 1369 (+850 ms).
     pub air_days: u32,
     /// Evaporation and condensation (rain) run every `exchange_days` days (a multiple of `air_days`).
-    /// The default is 3, the row `ew` runs (3/3/15); it was 9 here while the shell set 3, so tests
-    /// and any driver using the default ran the other rain path (review 6, finding 11).
     pub exchange_days: u32,
     /// Liquid and creep move every `flow_days` days (a multiple of `air_days`)
     pub flow_days: u32,
@@ -86,56 +81,40 @@ pub struct Config {
     /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s (anchored: a hillslope diffusivity, `docs/numbers.md`)
     pub creep: f64,
     /// A speed shortcut, not a law (plan 7.1): past this many body nodes (individuals or
-    /// population nodes) in a cell at a month's start, its most alike pairs merge, but only pairs
-    /// that are alike (`body::crowd`), so a cell may keep more nodes of unlike kinds, up to twice
-    /// this (past it the most alike merge however unlike, a safeguard; children join the node they
-    /// belong to, within its spread, `copy::within`, so few new nodes start); a node splits only while
-    /// its cell has fewer than this minus one (`copy::split`). It never bounds how many members
-    /// there are. It must give the same patterns as individuals (to be checked at M4).
+    /// population nodes) in a cell at a month's start, its most alike pairs merge (`body::crowd`),
+    /// so a cell may keep more nodes of unlike kinds, up to twice this (past it the most alike
+    /// merge however unlike, a safeguard); a node splits only while its cell has fewer than this
+    /// minus one (`copy::split`). It never bounds how many members there are.
     #[serde(default = "four")]
     pub crowd: usize,
     /// Bodies that stay near each other share one brain's rows (for speed). When false each
-    /// body keeps its own rows: a child starts with its parent's (its own born rows plus what
-    /// the parent learned) and no body joins another's group. To check that sharing gives the
-    /// same patterns as one brain per body.
+    /// body keeps its own rows: a child starts with its parent's and no body joins another's group.
     #[serde(default = "yes")]
     pub share_brains: bool,
     /// A node also splits along its born rows (`copy::split`), an experiment. Off by default:
-    /// row halves are alike in genes, so the next month's merge takes them back and the pooled
-    /// variance makes them split again; measured 2 to 2.5 times slower at 64x64 for a monthly
-    /// round of selection on behaviour. The rows' spread is still carried, sampled by children
-    /// and pooled.
+    /// the next month's merge takes the halves back (measured 2 to 2.5 times slower at 64x64).
     #[serde(default)]
     pub split_rows: bool,
     /// Whether animals (bodies that are not light-eaters, `body::light_eater`) may be population
-    /// nodes. True (the default): as before. False (`ew run --individuals`): an animal's children
-    /// are placed as individuals and never join a node (`copy::copy`), the month's `body::crowd`
-    /// merges no animal and none splits (`copy::split`); light-eaters stay nodes (one node per
-    /// cell is how they are placed). The detailed form the nodes are checked against (plan 7.1,
-    /// review 5): the nodes are a speed shortcut and must give the same patterns.
+    /// nodes. False (`ew run --individuals`): an animal's children are placed as individuals and
+    /// never join a node (`copy::copy`), `body::crowd` merges no animal and none splits
+    /// (`copy::split`). The detailed form the nodes are checked against.
     #[serde(default = "yes")]
     pub nodes: bool,
-    /// Two-parent copying (15 Oct 2026, `copy::partner`). True (the default): a mature body's children
-    /// have a second parent when a mature, alike body is in its cell, each gene from one of the two.
-    /// False (`ew run --no-mix`): every child is a copy of one parent, as before; for the check that
-    /// nodes keep the mean of their genes without selection (`tests/nodes.rs`: a partner not chosen
-    /// by the other pulls the mean over members), and to measure what mixing changes.
+    /// Two-parent copying (`copy::partner`). True: a mature body's children have a second parent
+    /// when a mature, alike body is in its cell, each gene from one of the two. False
+    /// (`ew run --no-mix`): every child is a copy of one parent.
     #[serde(default = "yes")]
     pub two_parents: bool,
     /// Satiety (`choose::sate`; `ew run --sate-all`): a body takes no more of what it burns than its
-    /// upkeep plus what it can build and the fuel it converts to do it, whatever its size, the
-    /// decision after watch report 7. False (the default): no satiety; a body takes as its intake
-    /// allows (`Physics::take`) and what it carries is bounded by its body (`Body::level`: the keep
-    /// genes are kg of a store per kg of body, 14 Oct 2026), so a full store is the satiety. With
-    /// the keep genes a share of the whole mass, satiety at every size killed all the animals of
-    /// six 64x64 runs in their first year (a gate at a size kept them: review 5's rule, which went).
+    /// upkeep plus what it can build and the fuel it converts to do it, whatever its size. False
+    /// (the default): a body takes as its intake allows (`Physics::take`) and what it carries is
+    /// bounded by its body (`Body::level`), so a full store is the satiety.
     #[serde(default)]
     pub sate_all: bool,
     /// A null run, to be compared with the real run of the same seed: no learning, no imitation
     /// (a watch is drawn and counted but moves no rows), and the brains' born rows and bases never
-    /// change at a copy (`copy_phys`); genes still mutate and evolve. What a neutral brain does
-    /// by chance is then seen without selection or learning acting on it: an item has emerged
-    /// only where the real run beats the null run clearly (review 3, M6).
+    /// change at a copy (`copy_phys`); genes still mutate and evolve.
     #[serde(default)]
     pub null: bool,
     /// The tuned numbers of the laws of bodies (M7's world search varies them).
@@ -143,9 +122,9 @@ pub struct Config {
     pub phys: Physics,
 }
 
-/// Free physics numbers of the laws of bodies, grouped by the law that reads them. Each has the
-/// value it was tuned to; none is a rule, all are sizes of costs, strengths and spreads.
-/// Numerical safeguards, speed schedules and fixed sizes stay consts in the code.
+/// Free physics numbers of the laws of bodies, grouped by the law that reads them; none is a
+/// rule, all are sizes of costs, strengths and spreads. Numerical safeguards, speed schedules and
+/// fixed sizes stay consts in the code.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Physics {
@@ -163,37 +142,23 @@ pub struct Physics {
     /// 30 kg member (52 W of upkeep, 30 W/K) under 10 kg/m² of cover 3.4 K more warmth than bare
     /// ground (thick walls give 3.3 K), and a 1 kg plant member (capture area 2 m²) almost none.
     pub shelter: f64,
-    /// Upkeep of catalysts, J per kg of body per day per unit of capacity (1/s): per kg of the body,
-    /// `Body::size`, mass^1.0 (14 Oct 2026: body size by an energy ceiling, see
-    /// `body::upkeep`; it was per kg^0.75 from review 6, finding 2, and per kg before), anchored at
-    /// the 30 kg founders, who pay what they paid (the figures below are per kg of a 30 kg member,
-    /// which is 70% body: the constant is that / 0.7 = 2.14 x 10^9). A body pays for the amount
-    /// of its catalysts, which is what they can do: their capacity, the catalysed rate per unit of
-    /// input at `t_cat`, `c_cat` x the sum over its catalyst genes that are on of 10^gene x k x
-    /// exp(-Ea / `t_cat`). One constant serves every reaction, as it prices what the body can do,
-    /// not how slow the bare reaction was. A light reaction counts the same way: light only caps
-    /// how far it goes, the catalyst is kept whether light comes or not, so a light-eater pays for
-    /// all it could fix and is pushed to keep only what its light and gas can feed. 1.5 x 10^9
-    /// (14 Oct 2026): keeping its enzymes costs a resting animal about 10 to 25% of its upkeep in
-    /// life, so the starting eaters' burn gene (2.6; k 4,300, Ea 7,760 K: 10^2.6 x 4,300 x
-    /// e^-26.76 = 4.1 x 10^-6 /s) costs 6,200 J/kg/day, a tenth of their upkeep (mostly strength,
-    /// 60,000), and burning 2.4 times faster to live 9 K colder (288 to 279 K) costs 14% more
-    /// upkeep. The starting light-eaters keep the light gene they need (9; k 10^-6, Ea 5,800 K:
-    /// 2.1 x 10^-6 /s, 3,100 J/kg/day, what they paid before for a gene of 12). Before it was
-    /// 1.67 x 10^6, set so light-eaters with a gene of 12, about 1,000 times more light catalyst
-    /// than they need, paid what an older cost made them pay: so every catalyst was about 1,000
-    /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing. (15 Oct 2026,
-    /// the smooth rate of Law 2, adopted: the capacity counts every gas of a reaction at its share of
-    /// the open air to its order, as mass action does, so burning's capacity is 0.21 of what it was
-    /// and the constant is 2.14 x 10^9 / 0.21 = 1.02 x 10^10: the founders pay what they paid.)
-    /// (15 Oct 2026, Kleiber across kinds, `body::upkeep`: the five costs of tissue are per kg of body of a kind that
-    /// matures at `m_ref`, times (copy mass / `m_ref`)^-0.25; this one and `c_strength`, `c_learn`, `c_signal` are x
-    /// 44.16^0.25 = 2.578, so the eater founder, maturing at 44.16 kg, pays what it paid: 2.63 x 10^10.)
+    /// Upkeep of catalysts, J per kg of body (`Body::size`) per day per unit of capacity (1/s)
+    /// (`body::upkeep`). A body pays for the amount of its catalysts, which is what they can do:
+    /// their capacity, the catalysed rate per unit of input at `t_cat`, `c_cat` x the sum over its
+    /// catalyst genes that are on of 10^gene x k x exp(-Ea / `t_cat`). One constant serves every
+    /// reaction. A light reaction counts the same way: the catalyst is kept whether light comes or
+    /// not, so a light-eater is pushed to keep only what its light and gas can feed. Keeping
+    /// enzymes costs a resting animal about 10 to 25% of its upkeep in life: the starting eaters'
+    /// burn gene (2.6; k 4,300, Ea 7,760 K: 4.1 x 10^-6 /s) costs 6,200 J/kg/day, a tenth of their
+    /// upkeep. The capacity counts every gas of a reaction at its share of the open air to its
+    /// order (mass action). The five costs of tissue are per kg of body of a kind that matures at
+    /// `m_ref`, times (copy mass / `m_ref`)^-0.25 (Kleiber); this one and `c_strength`, `c_learn`,
+    /// `c_signal` carry a factor 44.16^0.25 = 2.578 so the eater founder, maturing at 44.16 kg,
+    /// pays 2.63 x 10^10.
     pub c_cat: f64,
     /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature), and
     /// where the costs are anchored: a body's upkeep is what the costs say at this temperature and goes
-    /// by the rate law of its main burning reaction from it, exp(-Ea (1/T - 1/`t_cat`)) (15 Oct 2026,
-    /// `Body::pace`)
+    /// by the rate law of its main burning reaction from it, exp(-Ea (1/T - 1/`t_cat`)) (`Body::pace`)
     pub t_cat: f64,
     /// Width over which catalysts lose their shape above their `DENATURE` gene, K: life's enzymes
     /// unfold within a few K; smooth, so the reaction solver never meets a jump (`change::denature`)
@@ -204,24 +169,15 @@ pub struct Physics {
     /// catalysts cost three times as much
     pub t_firm: f64,
     pub c_firm: f64,
-    /// Upkeep of strength, J per kg of body per day at strength 1: per kg of the body (`Body::size`),
-    /// mass^1.0 (14 Oct 2026, see `body::upkeep`; per kg^0.75 from review 6,
-    /// finding 2, per kg of the whole mass before). Anchored at the 30 kg founders, who pay what
-    /// they paid: 10^5 per kg there (about 1 W/kg), their body 70% of their mass: 10^5 / 0.7 =
-    /// 1.43 x 10^5 per kg of body; x 2.578 since the costs go across kinds by the copy mass (`c_cat`): 3.68 x 10^5
+    /// Upkeep of strength, J per kg of body (`Body::size`) per day at strength 1 (`body::upkeep`).
+    /// Anchored at the 30 kg founders: 10^5 per kg of the whole there (about 1 W/kg), their body 70%
+    /// of their mass: 1.43 x 10^5 per kg of body; x 2.578 (see `c_cat`): 3.68 x 10^5
     pub c_strength: f64,
-    /// Upkeep every body pays whatever its genes, J per kg of body per day (`body::upkeep`, 14 Oct
-    /// 2026): the cost of keeping tissue alive, resting metabolism (Kleiber, about 3.4 m^0.75 W).
-    /// Per kg^0.75 of the whole mass (2 x 10^4 for a 1 kg member, review 5) until the decision
-    /// of 14 Oct 2026 (body size by an energy ceiling): now by the kg of the body, so it is set so a
-    /// 30 kg founder (21 kg of body) pays what it paid, 2 x 10^4 x 30^0.75 / 21 = 12,208: 0.14 W per
-    /// kg of body. Kleiber's whole value for a 30 kg member is 3.4 x 30^0.75 = 44 W, 1.45 W per kg
-    /// of it (2.1 per kg of its body); this is 1/15 of it, as before (the rest being strength and
-    /// catalysts here). Before review 5, strength was the only cost of having a body and a kind
-    /// with strength 0 lived eight times cheaper. **2 x 10^4 since 15 Oct 2026** (Kleiber across kinds, `body::upkeep`):
-    /// per kg of body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25, so an adult pays 2 x 10^4 x
-    /// m^0.75, review 5's value and Kleiber's shape again (1/15 of Kleiber's whole value; the eater founder pays
-    /// 7,758 per kg of body, not 12,208)
+    /// Upkeep every body pays whatever its genes, J per kg of body per day (`body::upkeep`): the
+    /// cost of keeping tissue alive, resting metabolism (Kleiber, about 3.4 m^0.75 W). Per kg of
+    /// body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25, so an adult pays
+    /// 2 x 10^4 x m^0.75, Kleiber's shape (1/15 of his whole value; the rest is strength and
+    /// catalysts here). The eater founder pays 7,758 per kg of body.
     pub c_basal: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
@@ -235,7 +191,7 @@ pub struct Physics {
     /// same brain, 13 times less per kg, not 30 times); `take` and `sweep` are per kg of a member
     /// of this mass (above it a member takes less per kg, `Body::intake`); the heat gene is the
     /// conductance per kg of a member of this mass (`Body::conductance`). Three reference masses
-    /// for one idea were made one (14 Oct 2026, review 5)
+    /// for one idea were made one
     pub m_ref: f64,
     /// Cost of one decision per hidden unit, per memory number, per body perceived and per square
     /// cell of sight, J per kg of a member of `m_ref` kg
@@ -243,12 +199,12 @@ pub struct Physics {
     pub c_memory: f64,
     pub c_seen: f64,
     pub c_sight: f64,
-    /// Upkeep of learning, J per kg of body per day at learning rate 1 (mass^1.0, 14 Oct 2026,
-    /// see `body::upkeep`; anchored at the 30 kg founders, 70% body: 3 x 10^4 per kg there / 0.7 =
-    /// 4.3 x 10^4; x 2.578 since the costs go across kinds by the copy mass, `c_cat`: 1.10 x 10^5)
+    /// Upkeep of learning, J per kg of body per day at learning rate 1 (`body::upkeep`; anchored
+    /// at the 30 kg founders, 70% body: 3 x 10^4 per kg there / 0.7 = 4.3 x 10^4; x 2.578, see
+    /// `c_cat`: 1.10 x 10^5)
     pub c_learn: f64,
-    /// Cost of signalling, J per kg of body per day at signal size 1 (mass^1.0, as `c_learn`;
-    /// anchored at the 30 kg founders: 200 per kg there / 0.7 = 286; x 2.578, as `c_cat`: 737)
+    /// Cost of signalling, J per kg of body per day at signal size 1 (as `c_learn`; anchored at
+    /// the 30 kg founders: 200 per kg there / 0.7 = 286; x 2.578: 737)
     pub c_signal: f64,
     /// Energy a kg of body can turn over in its upkeep before it is worn out, at a `REPAIR` gene of
     /// 0, J/kg (`body::live`): it lives 10^gene times this over its upkeep per kg. 10^9 is the
@@ -260,12 +216,11 @@ pub struct Physics {
     /// kg before wearing out) doubles that share (upkeep x (1 - c + c 2^gene)), so at gene 0 a life
     /// 8 times longer costs 25% more upkeep, and less repair saves upkeep but never more than this
     /// share: remaking a body's own matter (mostly its catalysts) takes 20 to 30% of resting upkeep
-    /// in real life (14 Oct 2026; first as (1 + c)^gene, which let a short life save up to half its
-    /// upkeep, more than repair costs). Every value of the gene has a cost (with no saving below 0,
-    /// selection would lift a short life to gene 0 for free).
+    /// in real life. Every value of the gene has a cost (with no saving below 0, selection would
+    /// lift a short life to gene 0 for free).
     pub c_repair: f64,
-    /// How steeply activity falls as a body dries (14 Oct 2026, review 7 fix 6): a body's
-    /// chemistry runs in its liquid, so its activity is
+    /// How steeply activity falls as a body dries: a body's chemistry runs in its liquid, so its
+    /// activity is
     /// min(1, l / l*)^`dormancy` with l the key liquid it holds and l* the level it keeps
     /// (`Body::activity`). Anchored to the longevity of seeds (Harrington's rule, from memory: seed
     /// life about doubles for each 1% less moisture between about 14% and 5%): a 3-fold drop in
@@ -275,10 +230,9 @@ pub struct Physics {
     pub dormancy: f64,
     // Choose
     /// Energy to move one kg one metre on the flat, J, for a member of `MOVE_REF` (30 kg); other
-    /// members pay it times (m1 / 30 kg)^`MOVE_EXP` (`Physics::walk`, 14 Oct 2026, review 6
-    /// finding 2). The real cost of transport is about 10.7 m^-0.32 J per kg per m (Taylor et al.
-    /// 1982, running, walking and flying animals alike): 3.6 at 30 kg, so 3 fits a founder; 18.5
-    /// at 0.18 kg, 1.4 at 600 kg. Flat, a small body moved at the cost of a big one per kg
+    /// members pay it times (m1 / 30 kg)^`MOVE_EXP` (`Physics::walk`). The real cost of transport
+    /// is about 10.7 m^-0.32 J per kg per m (Taylor et al. 1982, running, walking and flying
+    /// animals alike): 3.6 at 30 kg, so 3 fits a founder; 18.5 at 0.18 kg, 1.4 at 600 kg
     pub c_move: f64,
     /// Body mass per area that doubles the cost of entering a cell, kg/m² (and of handling what is
     /// taken from a body there)
@@ -296,12 +250,10 @@ pub struct Physics {
     pub take: f64,
     /// What a member takes, sweeps and receives as a gift, what it can build in a day (`c_build`)
     /// and the leaf it spreads (the supply) go with the mass of its body (`Body::supply`) to this
-    /// power, about the 0.75 of intake and metabolism in life (`Body::equiv`). The cost of keeping tissue goes with the
-    /// body's mass^1.0 (14 Oct 2026, `body::upkeep`), so growth stops where the two meet. Here
-    /// every cost went with mass, so with 1 nothing scaled against size and selection pushed the
-    /// copy-mass gene to its wall (eaters of 9 to 15 t that barely copy, review 4, finding 5); with
-    /// 0.75 a 10 t member takes 180 times a 10 kg one, not 1,000. A free number chosen for that
-    /// reason, not a rule.
+    /// power, about the 0.75 of intake and metabolism in life (`Body::equiv`). The cost of keeping
+    /// tissue goes with the body's mass^1.0 (`body::upkeep`), so growth stops where the two meet
+    /// (with 1 nothing scaled against size and selection pushed the copy-mass gene to its wall).
+    /// A free number chosen for that reason, not a rule.
     pub intake_exp: f64,
     /// Area a body works per day per kg of its mass that works, m²/(kg day): it takes no more per day than
     /// the mass per m² of what it takes there times this times its mass (a 30 kg body works 300
@@ -353,31 +305,22 @@ pub struct Physics {
     pub deep: f64,
     pub afloat: f64,
     // Copy
-    /// Energy to make one kg of body matter, J: the work of building (14 Oct 2026, decision after
-    /// watch report 7; before, per kg of the dry mass of a child, from 13 Oct 2026, paid into a
-    /// child store). A member makes matter of the energy-rich solid and pays this in work per kg
-    /// made, through `body::pay` (`copy::grow`); storing fuel costs none, and a child costs its parent
-    /// no work: it is given matter its parent built (its brood, 14 Oct 2026). Growth in life keeps 10 to 20% of the energy it eats, so a kg of body costs about 10^7 J;
-    /// with the 1.11 kg of the solid converted besides (6 x 30 g for 162 g, 17.3 MJ) a kg of matter
-    /// takes 27.3 MJ of fuel in all, 62% efficient.
+    /// Energy to make one kg of body matter, J: the work of building. A member makes matter of the
+    /// energy-rich solid and pays this in work per kg made, through `body::pay` (`copy::grow`);
+    /// storing fuel costs none, and a child costs its parent no work: it is given matter its parent
+    /// built (its brood). Growth in life keeps 10 to 20% of the energy it eats, so a kg of body
+    /// costs about 10^7 J; with the 1.11 kg of the solid converted besides (6 x 30 g for 162 g,
+    /// 17.3 MJ) a kg of matter takes 27.3 MJ of fuel in all, 62% efficient.
     pub c_copy: f64,
     /// Most work a body can put into building body matter per day, J, for a member of `m_ref` (1 kg);
     /// a member of body `m` kg pays at most this x (`m` / `m_ref`)^`intake_exp` x days (`Body::supply`,
-    /// `copy::grow`): building a body takes time, small ones grow fast and big ones slowly
-    /// (14 Oct 2026, review 5; the work was for children until the decision after watch report 7, and
-    /// growth was free; it is for growth now, and a child is born of matter already built). Anchored
+    /// `copy::grow`): building a body takes time, small ones grow fast and big ones slowly. Anchored
     /// to the growth of young in life: a 1 kg animal makes about 1 kg of dry young a year (2.7 x 10^4
     /// J a day at `c_copy`), a 50 kg one about 1 kg a year (1,450 per kg^0.75), a 1 t one about 10 kg
-    /// (1,500): anchored to 1,500 to 30,000. 10^4, review 5's value; it was 3 x 10^4 for part of 14 Oct,
-    /// raised only so the starting eaters (neutral brains, which starve within weeks) bred faster
-    /// than they starved: a start decided a law, which makes every life 3 times shorter (review 6,
-    /// finding 1). The start is now hand-set instead (`ew run`: the eater biases) and no law is set
-    /// for a start. Charged on body matter only (17% of a plant's mass) it lets a 1 kg plant make
-    /// 0.37 kg of matter, about 1.5 kg of body, a year; on all of the dry mass (the fuel it stored
-    /// too) it was 10 to 100 times too slow for plants and every animal died (watch report 7). A
-    /// grown body also takes in no more than its reactions can use, its upkeep plus this and the
-    /// fuel converted (`choose::sate`). Marked tuned in `docs/numbers.md`: it was chosen within its
-    /// range by what runs did
+    /// (1,500): anchored to 1,500 to 30,000. Charged on body matter only (17% of a plant's mass) it
+    /// lets a 1 kg plant make 0.37 kg of matter, about 1.5 kg of body, a year. A grown body also
+    /// takes in no more than its reactions can use, its upkeep plus this and the fuel converted
+    /// (`choose::sate`). Marked tuned in `docs/numbers.md`: chosen within its range by what runs did
     pub c_build: f64,
     /// Chance that a child starts a new lineage with a changed base, and the size of that change
     pub new_lineage: f64,
@@ -405,17 +348,16 @@ pub struct Physics {
     /// Body mass per area that halves what moving liquid can carry off a cell and how fast its
     /// loose solids creep, kg/m²
     pub hold: f64,
-    /// Share of the volume of the loose ground that is pore space (15 Oct 2026): the liquid of a cell soaks into the
+    /// Share of the volume of the loose ground that is pore space: the liquid of a cell soaks into the
     /// pores up to this share of the volume of its loose solids, and only the liquid over that stands and runs off
     /// (`flow::liquid`). Grains packed at random leave 0.36 (the random close packing of spheres, Scott 1960) to 0.44 (the
     /// loose packing); sands 0.35 to 0.45, loams 0.4 to 0.5. 0.4 (from memory, unchecked)
     pub porosity: f64,
-    /// Hydraulic conductivity of the loose ground, m/s (15 Oct 2026): Darcy's law, the pore liquid of a cell flows to a
+    /// Hydraulic conductivity of the loose ground, m/s: Darcy's law, the pore liquid of a cell flows to a
     /// neighbour at q = `seep` x the slope of the liquid head, through the thickness of ground it fills (`flow::liquid`).
-    /// A loam passes 1.3 cm an hour, 3.6e-6 m/s (Rawls et al. 1992 teaching table; sand 5.8e-5, clay about 2e-7).
-    /// It was 1e-6 until 15 Oct 2026: the sum from 1.3 cm an hour was wrong
+    /// A loam passes 1.3 cm an hour, 3.6e-6 m/s (Rawls et al. 1992 teaching table; sand 5.8e-5, clay about 2e-7)
     pub seep: f64,
-    /// Drainage (15 Oct 2026, `flow::drain`): share of its pores the loose ground holds against gravity (its field
+    /// Drainage (`flow::drain`): share of its pores the loose ground holds against gravity (its field
     /// capacity); the rest sinks, at `seep` at the most, into the store of the bed below. A loam holds 0.25 to 0.32 of
     /// its volume at field capacity in 0.47 of pores (Saxton and Rawls 2006, as tabled by the Minnesota stormwater
     /// manual): 0.6
@@ -682,14 +624,12 @@ pub struct Diag {
     #[serde(default)]
     pub splits: [f64; 2],
     /// Members merged by the monthly merge however unlike (the safeguard past twice `Config::crowd`
-    /// nodes in a cell, `body::crowd`), since the shell last read them. A count only: nothing reads
-    /// it (not saved, so a saved state keeps its format).
+    /// nodes in a cell, `body::crowd`), since the shell last read them. A count only, not saved.
     #[serde(skip)]
     pub unlike: f64,
     /// Members that joined a node (the monthly merge, `body::crowd`, and a child's join, `copy::copy`)
     /// whose means differ from the node's by more than `Physics::alike` steps in some gene
-    /// (`copy::alike`), since the shell last read them: the wider event `unlike` does not see
-    /// (review 6, finding 7). A count only, not saved.
+    /// (`copy::alike`), since the shell last read them. A count only, not saved.
     #[serde(skip)]
     pub wide: f64,
     /// Members that moved to a neighbour cell since the shell last read them, by starting kind
@@ -700,7 +640,7 @@ pub struct Diag {
     /// trampled, `body::tear`), since the shell last read it, by starting kind. A count only, not saved.
     #[serde(skip)]
     pub hurt: Vec<f64>,
-    /// Members that could build body matter in an update (15 Oct 2026), by starting kind, as [tried, held back by any mineral, by
+    /// Members that could build body matter in an update, by starting kind, as [tried, held back by any mineral, by
     /// the first, by the second...]: held back are those whose store of a mineral (`Chemistry::minerals`) bound what they built,
     /// below what their fuels, their allowance and their spare allowed (`copy::grow`). A count only, not saved.
     #[serde(skip)]
@@ -827,11 +767,7 @@ impl World {
         }
         ((e - held) / c, None)
     }
-    /// Heat ground node `i` can give before it falls to `T_FLOOR`, J.
-    pub fn heat_room(&self, i: usize) -> f64 {
-        heat_above_floor(self.e_ground[i], self.heat_cap_ground(i))
-    }
-    /// Take up to `q` J from ground node `i`, never more than `heat_room`, and return what was
+    /// Take up to `q` J from ground node `i`, never more than it holds above `T_FLOOR`, and return what was
     /// really taken. The shortfall is counted in `ledger.clamped_heat`. Whoever wanted `q` must
     /// pass on only the returned amount (evaporate less, carry less), so energy stays exact.
     /// A negative `q` gives heat to the node and is returned whole.
@@ -877,17 +813,6 @@ impl World {
             v += (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, t, pl))) * mv;
         }
         self.base_z + v / self.grid.area()
-    }
-    /// Depth of liquid standing on a ground cell, m.
-    pub fn liquid_depth(&self, i: usize) -> f64 {
-        let (t, pl) = self.thaw(i);
-        let mut v = 0.0;
-        for k in 0..self.chem.ns() {
-            if t < self.chem.subs[k].boil {
-                v += self.g(k, i) * self.molten(k, t, pl) * self.chem.molar_volume(k, chem::Phase::Liquid);
-            }
-        }
-        v / self.grid.area()
     }
 }
 
