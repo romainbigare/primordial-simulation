@@ -327,6 +327,12 @@ fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
     let (mut w, i) = start();
     let r = roles(&w);
     w.cfg.phys.c_build = 0.0;
+    // Upkeep goes with the body's temperature (15 Oct 2026), about 100 times as much at 350 K as at 290 K: a body
+    // that paid it would die of `SPENT` on the first days. This test is about what the heat does to the matter, so
+    // the costs of keeping tissue are put to nothing.
+    for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal, &mut w.cfg.phys.c_leaf, &mut w.cfg.phys.c_brain] {
+        *c = 0.0;
+    }
     let b = eater(&mut w, i, 6.0, 0.0);
     let s = place(&mut w, b);
     let (t0, l0) = (check::totals(&w), w.ledger.clone());

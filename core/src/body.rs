@@ -250,6 +250,16 @@ impl Body {
         let n = self.n();
         self.k.heat * n * m_ref.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
     }
+    /// How fast the body's chemistry runs at its temperature `t` against `Physics::t_cat`, where the
+    /// costs are anchored: the rate law of Change, exp(-Ea (1/t - 1/t_cat)), Ea the barrier of its main
+    /// burning reaction (the first of `Consts::burn`), 1 for a body that burns nothing. About 2.5 per
+    /// 10 K for the solid's 7,760 K at 290 K. Needs `prepare`.
+    pub fn pace(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
+        match self.k.burn.first() {
+            Some(&(r, _)) => (-chem.reactions[r].ea * (1.0 / t.max(1.0) - 1.0 / p.t_cat)).exp(),
+            None => 1.0,
+        }
+    }
     pub fn interval(&self) -> u64 {
         if self.k.interval > 0 {
             return self.k.interval;
@@ -1677,7 +1687,13 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// costs to mass^0.75 because every animal evolved small; the main cause then was nodes mixing kinds,
 /// since fixed.) The mass is the body that is built, not the whole mass: storing fuel is cheap, tissue
 /// dear (decision of 14 Oct 2026 on body matter); and not `size`, which stops at the liquid held
-/// now, a lack that dormancy (`activity`, below) already counts. Needs `prepare`.
+/// now, a lack that dormancy (`activity`, below) already counts.
+///
+/// **It follows the body's temperature** (15 Oct 2026, decided 14 Oct): the whole of it times
+/// `Body::pace`, the rate law of the reactions that pay it, exp(-Ea (1/T - 1/T_ref)), T the body's temperature,
+/// Ea the barrier of its main burning reaction, T_ref = `Physics::t_cat` where the costs are anchored. No new
+/// number. A cold body pays less and, as wear goes with upkeep, ages slower (dormancy in the cold); a warm one
+/// pays more (the review of 14 Oct found summer upkeep doubling at 299 K). Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
@@ -1691,7 +1707,9 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     // Everything it pays is chemistry, which runs in its liquid: a dry body pays almost nothing (and,
     // as wear grows with what it pays, hardly ages): all of it, the decision's cost too, times its
     // activity (14 Oct 2026, review 7 fix 6).
-    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * b.activity(&w.chem, p)
+    // And it runs at the pace of the body's temperature, by the same rate law as the reactions that pay it
+    // (15 Oct 2026): a cold body pays less and wears slower, a warm one more (`Body::pace`).
+    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * b.activity(&w.chem, p) * b.pace(&w.chem, p, b.temp(&w.chem))
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
