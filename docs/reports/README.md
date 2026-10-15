@@ -74,3 +74,4 @@ folder with the same name as the report.
   hand-set copy chance; fixed, and bodies copy by physics only. Lives: digested matter passed the
   store limit, a fuel minimum was a death line, stale repair genes; fixed; plants now live 0.62 to
   0.68 years and eaters 0.94 to 1.15; no new law needed; what to compare with in real life.
+- `review-8-carbon.md` (with its two patches) and `sea-carbon.md`: why the carbon gas kept falling (the air was the only free store; the sea held 4% of it), and the fix the owner asked for, 15 October 2026: a salt that exists only dissolved and two reactions, the sea starts at balance with the air, from the reaction rates. The air ends 30 to 90 ppm higher than with the reactions off; life neither collapses nor clearly improves; the store goes with the depth to the power 2/3, not 1.

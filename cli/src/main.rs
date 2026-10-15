@@ -93,6 +93,18 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     let how = worldgen::life::Seeding { hand: [a.has("--plant-bias"), !a.has("--neutral-eaters") || a.has("--eater-bias")], rounds: a.get("--spray", 20u32), size: a.get("--spray-size", 0.2f32), genes: a.get("--spray-genes", 3.0f32) };
     // Every report says whether this is the real run or its null run (a resumed run keeps the snapshot's), and which start the animals and the plants had.
     println!("config: seed {}, {}x{}, {}, nodes {}, two parents {}, start: animals {}, plants {}", w.seed, w.grid.w, w.grid.h, if w.cfg.null { "NULL RUN (learning off, imitation off, brain rows frozen)" } else { "real run" }, if w.cfg.nodes { "on (animals may be nodes)" } else { "OFF (--individuals: animals are individuals, light-eaters nodes)" }, if w.cfg.two_parents { "on (a mature alike body of the cell is a second parent)" } else { "OFF (--no-mix: one parent)" }, if how.hand[1] { "HAND-SET eater biases (default; --neutral-eaters for neutral brains)" } else { "NEUTRAL brains (--neutral-eaters)" }, if how.hand[0] { "hand-set biases (--plant-bias)" } else { "neutral brains (default)" });
+    // The liquid's store at the start, set at balance with the air (`Reactor::balance`): what each reversible pair makes, in the ground, and the gas it holds over the air's.
+    if !resumed {
+        let (n, na) = (w.grid.n(), w.grid.na());
+        for (f, _, _, u) in pcore::change::reversible(&w.chem) {
+            let held: f64 = w.ground[u * n..(u + 1) * n].iter().sum();
+            let cells = w.ground[u * n..(u + 1) * n].iter().filter(|&&x| x > 0.0).count();
+            if let Some(&(g, c)) = w.chem.reactions[f].inputs.iter().find(|p| w.chem.phase(p.0 as usize, 290.0) == pcore::chem::Phase::Gas) {
+                let air: f64 = w.air[g as usize * na..(g as usize + 1) * na].iter().sum();
+                println!("start: substance {u} held at balance with the air in {cells} of {n} cells, {held:.3e} mol, {:.2} times the air's substance {g} ({air:.3e} mol)", held * c as f64 / air);
+            }
+        }
+    }
     // What is placed and when: the two starting kinds, or with `--roster` the ten of `worldgen::life::ROSTER`; the big-brain test (`seed_clever`) at its own year.
     let kinds: Vec<usize> = if a.has("--roster") { worldgen::life::ROSTER.to_vec() } else { vec![0, 1] };
     let plan: Vec<(usize, i64)> = kinds.iter().map(|&k| (k, life_year + worldgen::life::KINDS[k].year)).collect();

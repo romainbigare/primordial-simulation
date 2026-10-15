@@ -92,6 +92,8 @@ The island behaves like Earth would with no ocean store.
   balanced at 400.
 - **It is crude:** linear, and the whole sea depth counts as one layer. It should be built properly,
   not merged as is.
+- **Built (15 October 2026):** see `sea-carbon.md` (one salt, two reactions, the sea starts at balance
+  from the reaction rates).
 
 ## Doubts
 
