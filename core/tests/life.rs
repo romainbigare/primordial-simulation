@@ -489,6 +489,8 @@ fn a_body_takes_no_more_than_it_can_use() {
         let rows = base.split_off(shape.base());
         let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
         let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+        // (A founder is placed as an adult since 15 Oct 2026, 63 kg: `times` a 30 kg one.)
+        let times = times * 30.0 / b.mass(&w.chem);
         for k in 0..w.chem.ns() {
             w.chem.add_elems(k, (times - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);
@@ -496,7 +498,7 @@ fn a_body_takes_no_more_than_it_can_use() {
         // (An eater of the energy-rich solid only: it does not burn body matter, which would be fuel too.)
         let (matter, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
         (b.genes[pcore::body::Layout::of(&w.chem).cat + burn_matter], b.genes[pcore::body::Layout::of(&w.chem).upt + matter]) = (-1.0, -0.1);
-        (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[pcore::body::COPY_MASS], b.genes[pcore::body::LIQ]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 6.0, -4.0);
+        (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[pcore::body::ALLOC], b.genes[pcore::body::LIQ]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 0.0, -4.0);
         // Less of the fuel (the rest taken out as an edit).
         // (At the temperature it had: its upkeep goes with it, 15 Oct 2026.)
         let (out, t) = ((1.0 - keep) * b.store[rich], b.temp(&w.chem));
@@ -805,7 +807,9 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
     let (e1, e100) = (basal(&mut w, &one), basal(&mut w, &hundred));
     let (k1, k100) = (one.built(&w.chem), hundred.built(&w.chem));
     println!("basal upkeep of a member of {} kg ({k1:.3} kg of body) {e1:.4e} J/day, of {} kg ({k100:.3}) {e100:.4e}", one.mass(&w.chem), hundred.mass(&w.chem));
-    assert!((e1 / k1 / w.cfg.phys.c_basal - 1.0).abs() < 1e-9, "it pays c_basal per kg of body: {}", e1 / k1);
+    // (Per kg of body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25: Kleiber across kinds, 15 Oct 2026.)
+    let kind = (b.dec(pcore::body::COPY_MASS) / w.cfg.phys.m_ref).powf(w.cfg.phys.intake_exp - 1.0);
+    assert!((e1 / k1 / w.cfg.phys.c_basal / kind - 1.0).abs() < 1e-9, "it pays c_basal per kg of body: {}", e1 / k1);
     assert!((e100 / e1 / 100.0 - 1.0).abs() < 1e-9, "100 times the body pays 100 times as much, the same per kg: {}", e100 / e1);
     // A node of 5 members pays 5 times a member's.
     assert!((basal(&mut w, &sized(100.0, 5.0)) / (5.0 * e100) - 1.0).abs() < 1e-9, "a node pays for each member");
@@ -854,8 +858,14 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     }
     // Strength, catalysts, learning and basal are each in it, by the kg of body (at the temperature the costs are anchored to).
     let p = w.cfg.phys;
-    let want = days * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + p.c_learn * b.learn_rate() as f64);
+    let kind = (b.dec(pcore::body::COPY_MASS) / p.m_ref).powf(p.intake_exp - 1.0);
+    let want = days * kind * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + p.c_learn * b.learn_rate() as f64);
     assert!((per_kg[0] / want - 1.0).abs() < 1e-9, "per kg of body {} against the costs summed {want}", per_kg[0]);
+    // Across kinds by the size a kind matures at (Kleiber, 15 Oct 2026): the same body of a kind that matures 16 times
+    // larger pays half as much per kg.
+    let mut big = b.clone();
+    big.genes[pcore::body::COPY_MASS] += 16f32.log10();
+    assert!((up(&w, &big) / up(&w, &b) - 0.5).abs() < 1e-6, "a kind 16 times larger pays {} of the upkeep per kg", up(&w, &big) / up(&w, &b));
     // Fuel is no body: three times the fuel, the same upkeep.
     let mut fat = b.clone();
     fat.store[rich] *= 3.0;
@@ -877,9 +887,9 @@ fn leaf_area_per_kg_falls_with_mass() {
     let member = |count: f64, kg: f64, copy: f32| {
         let mut b = Body { count, genes: vec![0.0; pcore::body::Layout::of(&chem).len], store: vec![0.0; chem.ns()], ..Default::default() };
         (b.genes[LEAF], b.genes[COPY_MASS]) = (0.5f32.log10(), copy);
-        // Body matter up to `kg` per member (no key liquid: the body is its matter).
+        // Body matter for a living body of `kg` per member (`Body::built`: matter over 1 - `WET_TISSUE`; no key liquid).
         let m = chem.matter().expect("body matter");
-        b.store[m] = count * kg / chem.subs[m].molar_mass;
+        b.store[m] = count * kg * (1.0 - pcore::body::WET_TISSUE) / chem.subs[m].molar_mass;
         b.prepare(&chem, &p);
         b
     };
@@ -891,8 +901,9 @@ fn leaf_area_per_kg_falls_with_mass() {
     assert!((leaf(&tonne) / 1000.0 / (leaf(&one) / 1.0) - 1000f64.powf(-0.25)).abs() < 1e-6, "per kg it falls");
     // A node of 10 members of 1,000 kg: the open surface is 10 members' leaf plus their skin.
     let node = member(10.0, 1000.0, 6.0);
-    let (m, skin) = (node.mass(&chem), 10.0 * 6.0 * (1000.0 / p.rho_body).powf(2.0 / 3.0));
-    assert!((node.open_area(&chem, &p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * skin, "open area {}", node.open_area(&chem, &p, m));
+    let m = node.mass(&chem);
+    let skin = 10.0 * 6.0 * (m / 10.0 / p.rho_body).powf(2.0 / 3.0);
+    assert!((node.open_area(&chem, &p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * (10.0 * leaf(&tonne) + skin), "open area {}", node.open_area(&chem, &p, m));
     // Nothing caps the mass that works (14 Oct 2026: a body is mature from its copy mass but keeps growing, and leaf goes by all of
     // its body): a member of 10 kg (its copy mass) and one of 1,000 kg have leaf in the ratio of their bodies to the power 0.75.
     let (at, past) = (member(1.0, 10.0, 1.0), member(1.0, 1000.0, 1.0));

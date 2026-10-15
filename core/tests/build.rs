@@ -41,6 +41,9 @@ fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
     let rows = base.split_off(shape.base());
     let (l, g) = (w.life.new_lineage(body::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
+    // (A founder is placed as an adult since 15 Oct 2026, 63 kg: these tests read a 30 kg one.)
+    let m = b.mass(&w.chem);
+    scale(w, &mut b, 30.0 / m);
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
     b
 }
@@ -628,7 +631,12 @@ fn a_mature_body_splits_its_building_by_alloc() {
     assert_eq!(brood_i, 0.0, "an immature body made brood");
     assert!((grown_i - made).abs() < 1e-9 * made, "an immature body's building is all its own growth: {grown_i} of {made}");
     // Copy mass such that the body (matter 5.25 kg) lacks 0.2 made of the matter of maturity: needs 0.2 x made.
-    let mc = (5.25 + 0.2 * made) / (1.0 - 0.75);
+    let matter0 = {
+        let (mut w, i) = start();
+        let b = eater(&mut w, i, 0, 1.0);
+        b.matter_kg(&w.chem)
+    };
+    let mc = (matter0 + 0.2 * made) / (1.0 - 0.75);
     let (m2, brood2, grown2) = build(mc.log10() as f32, 0.5);
     assert!((m2 - made).abs() < 1e-9 * made);
     assert!((grown2 - (0.2 * made + 0.5 * 0.8 * made)).abs() < 1e-6 * made && (brood2 - 0.5 * 0.8 * made).abs() < 1e-6 * made, "crossing maturity: body {grown2}, brood {brood2} of {made}");
@@ -1100,6 +1108,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         let mut b = eater(&mut w, i, 3, 0.0);
         // A body that is wet (soaking), breathes freely and sheds its heat, so that only its energy limits it.
         (b.genes[STRENGTH], b.genes[ALLOC], b.genes[LIQ], b.genes[GAS], b.genes[HEAT]) = (1.0, 0.0, -1.0, 3.0, 3.0);
+        // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber, 15 Oct 2026).
+        b.genes[COPY_MASS] = 1.645;
         let (s, b0) = out(&mut w, b);
         w.life.bodies[s] = b0;
         let (n, area) = (w.grid.n(), w.grid.area());
@@ -1144,7 +1154,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).
     let rel = |x: &[f64]| x[5] / x[1] - 1.0;
     // Growth slows toward a size: the body with the dearer tissue is near it, the other far from it.
-    assert!(rel(&full) < 0.25 && rel(&cheap) > 2.0 * rel(&full), "growth: {:.3} of the body between the 100th and the 300th day against {:.3} with cheaper tissue", rel(&full), rel(&cheap));
+    // (1.5 times since 15 Oct 2026, Kleiber across kinds: 0.40 against 0.21; it was 2 times.)
+    assert!(rel(&full) < 0.25 && rel(&cheap) > 1.5 * rel(&full), "growth: {:.3} of the body between the 100th and the 300th day against {:.3} with cheaper tissue", rel(&full), rel(&cheap));
     // What it takes over what it pays to keep what it has falls toward 1 as it grows (supply goes with mass^0.75,
     // upkeep with the body): at the end it is within 10% of 1, for the body with dear tissue, and the other, far from its
     // ceiling, more.

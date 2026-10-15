@@ -186,6 +186,9 @@ pub struct Physics {
     /// the smooth rate of Law 2, adopted: the capacity counts every gas of a reaction at its share of
     /// the open air to its order, as mass action does, so burning's capacity is 0.21 of what it was
     /// and the constant is 2.14 x 10^9 / 0.21 = 1.02 x 10^10: the founders pay what they paid.)
+    /// (15 Oct 2026, Kleiber across kinds, `body::upkeep`: the five costs of tissue are per kg of body of a kind that
+    /// matures at `m_ref`, times (copy mass / `m_ref`)^-0.25; this one and `c_strength`, `c_learn`, `c_signal` are x
+    /// 44.16^0.25 = 2.578, so the eater founder, maturing at 44.16 kg, pays what it paid: 2.63 x 10^10.)
     pub c_cat: f64,
     /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature), and
     /// where the costs are anchored: a body's upkeep is what the costs say at this temperature and goes
@@ -205,7 +208,7 @@ pub struct Physics {
     /// mass^1.0 (14 Oct 2026, see `body::upkeep`; per kg^0.75 from review 6,
     /// finding 2, per kg of the whole mass before). Anchored at the 30 kg founders, who pay what
     /// they paid: 10^5 per kg there (about 1 W/kg), their body 70% of their mass: 10^5 / 0.7 =
-    /// 1.43 x 10^5 per kg of body
+    /// 1.43 x 10^5 per kg of body; x 2.578 since the costs go across kinds by the copy mass (`c_cat`): 3.68 x 10^5
     pub c_strength: f64,
     /// Upkeep every body pays whatever its genes, J per kg of body per day (`body::upkeep`, 14 Oct
     /// 2026): the cost of keeping tissue alive, resting metabolism (Kleiber, about 3.4 m^0.75 W).
@@ -215,7 +218,10 @@ pub struct Physics {
     /// kg of body. Kleiber's whole value for a 30 kg member is 3.4 x 30^0.75 = 44 W, 1.45 W per kg
     /// of it (2.1 per kg of its body); this is 1/15 of it, as before (the rest being strength and
     /// catalysts here). Before review 5, strength was the only cost of having a body and a kind
-    /// with strength 0 lived eight times cheaper
+    /// with strength 0 lived eight times cheaper. **2 x 10^4 since 15 Oct 2026** (Kleiber across kinds, `body::upkeep`):
+    /// per kg of body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25, so an adult pays 2 x 10^4 x
+    /// m^0.75, review 5's value and Kleiber's shape again (1/15 of Kleiber's whole value; the eater founder pays
+    /// 7,758 per kg of body, not 12,208)
     pub c_basal: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
@@ -239,10 +245,10 @@ pub struct Physics {
     pub c_sight: f64,
     /// Upkeep of learning, J per kg of body per day at learning rate 1 (mass^1.0, 14 Oct 2026,
     /// see `body::upkeep`; anchored at the 30 kg founders, 70% body: 3 x 10^4 per kg there / 0.7 =
-    /// 4.3 x 10^4)
+    /// 4.3 x 10^4; x 2.578 since the costs go across kinds by the copy mass, `c_cat`: 1.10 x 10^5)
     pub c_learn: f64,
     /// Cost of signalling, J per kg of body per day at signal size 1 (mass^1.0, as `c_learn`;
-    /// anchored at the 30 kg founders: 200 per kg there / 0.7 = 286)
+    /// anchored at the 30 kg founders: 200 per kg there / 0.7 = 286; x 2.578, as `c_cat`: 737)
     pub c_signal: f64,
     /// Energy a kg of body can turn over in its upkeep before it is worn out, at a `REPAIR` gene of
     /// 0, J/kg (`body::live`): it lives 10^gene times this over its upkeep per kg. 10^9 is the
@@ -453,13 +459,13 @@ impl Default for Physics {
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
-            c_cat: 1.0204e10,
+            c_cat: 2.6306e10,
             t_cat: T_SURF,
             unfold: 3.0,
             t_firm: 320.0,
             c_firm: 20.0,
-            c_strength: 1.4286e5,
-            c_basal: 12208.0,
+            c_strength: 3.683e5,
+            c_basal: 2e4,
             c_leaf: 2e3,
             c_brain: 1e5,
             m_ref: 1.0,
@@ -467,8 +473,8 @@ impl Default for Physics {
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
             c_sight: 1.5e4,
-            c_learn: 4.2857e4,
-            c_signal: 285.71,
+            c_learn: 1.1049e5,
+            c_signal: 736.6,
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,

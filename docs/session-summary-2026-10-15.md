@@ -130,7 +130,7 @@ row for each change) and in `docs/reports/`.
 
 | | start of session | now |
 |---|---|---|
-| tuned numbers | 67 (when first counted, review 5) | 63 |
+| tuned numbers | 67 (when first counted, review 5) | 62 |
 | rules chosen for a run | 4 (when first counted, review 6) | 3 |
 | core lines (goal 8,000 through M7) | 7,029 | 8,576 (7% over) |
 | plants: adult life (seeds 1 to 3, 60 years) | about 1 to 2 months (all members) | about 0.8 to 1.2 years |
@@ -153,7 +153,11 @@ Things that are open and not built:
 - **The body heat test:** closed. Found and fixed: the body's
   reactions ran 9 K too cold after its upkeep, and the test left out the latent heat of the liquid the burning makes.
   Within 2% again.
-- **The roster's big animals** (100 to 600 kg) die out in most runs.
+- **The roster's big animals** (100 to 600 kg) died out in most runs: **mostly closed.** Their founders starved: across kinds a
+  big kind paid the same per kg as a small one. Built (the owner agreed): Kleiber across kinds, founders placed as adults, and R4
+  (handover, "Why the roster's big animals die"). The 150 kg and 600 kg kinds now live 60 years on seeds 1 to 3, the 100 kg on 2;
+  the 600 kg kind is few (1 to 120 bodies). Normal eaters are 2 to 5 times lighter, plants 16 to 38%. Open: bodies give away
+  their own matter in gifts (`choose::give`).
 - **Eater numbers swing up to 1,000 times** between almost identical runs.
 - **Erosion is very slow in the first 10 years:** closed. The measure counted dead body matter piling up on the land as rock;
   without it the land loses 0.07 to 0.085 mm a year from the first year (handover, "Erosion at real rates").
@@ -164,8 +168,8 @@ Things that are open and not built:
   way, `seep` was corrected (3.6e-6, a wrong sum) and drainage into the ground below the loose layer was built
   (merged). The land is still too wet: real land drains into channels a few hundred metres apart inside a 2 km cell.
   The 2/3 power of the sea's store comes from the pair's contacts, not from the gas source: still open.
-- **Review 7 items not built:** the "held liquid is a cheap shortcut to size" fix (R4), `c_build`
-  toward its anchor (R6), and liquid made in a body above its limit drains out (R11). Plants that
+- **Review 7 items:** R4 (the liquid shortcut) is built (the living body is matter over 1 - 0.75); R5 was done by the energy
+  ceiling; R6 is not built: `c_build` is anchored at 1e4 to real P/B instead (tuned 63 -> 62). Liquid made in a body above its limit drains out (R11): not landed. Plants that
   walk (fix 7) is closed: moving needs force, plants move under 0.1 times a year (was 8 to 11).
   R11 was built and measured: it kills the eaters on all three seeds, because the rock salt in a body
   decays faster when it is less diluted. It is not landed; it waits for the owner (handover, Section 4).

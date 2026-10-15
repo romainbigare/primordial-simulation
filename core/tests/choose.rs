@@ -104,6 +104,14 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });
     let (start, genome) = (w.grid.idx(STRIP - 1, H / 2), w.life.new_genome(rows));
     let mut b = worldgen::life::make(&mut w, 1, start, lineage, genome).expect("body");
+    // (A founder is placed as an adult since 15 Oct 2026, 63 kg: this scene is set for a 30 kg one; booked as an edit.)
+    let f = 30.0 / b.mass(&w.chem);
+    for k in 0..w.chem.ns() {
+        w.chem.add_elems(k, (f - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy += (f - 1.0) * b.store[k] * w.chem.subs[k].hf;
+        b.store[k] *= f;
+    }
+    (w.ledger.imposed_energy, b.e) = (w.ledger.imposed_energy + (f - 1.0) * b.e, f * b.e);
     // (The founders' burning gene as it was with the old rates of the open air, see `scene`.)
     let (_, _, _, burn) = worldgen::life::roles(&w.chem).expect("roles");
     b.genes[pcore::body::Layout::of(&w.chem).cat + burn] += worldgen::life::LITTER_X;
