@@ -406,8 +406,8 @@ pub struct Physics {
     pub porosity: f64,
     /// Hydraulic conductivity of the loose ground, m/s (15 Oct 2026): Darcy's law, the pore liquid of a cell flows to a
     /// neighbour at q = `seep` x the slope of the liquid head, through the thickness of ground it fills (`flow::liquid`).
-    /// A loam passes about 1e-6 m/s (1.3 cm an hour, Rawls et al. 1982: sand 6e-5, loam 4e-6, clay 2e-7; from memory,
-    /// unchecked)
+    /// A loam passes 1.3 cm an hour, 3.6e-6 m/s (Rawls et al. 1992 teaching table; sand 5.8e-5, clay about 2e-7).
+    /// It was 1e-6 until 15 Oct 2026: the sum from 1.3 cm an hour was wrong
     pub seep: f64,
 }
 
@@ -506,7 +506,7 @@ impl Default for Physics {
             still: 0.01,
             hold: 2.0,
             porosity: 0.4,
-            seep: 1e-6,
+            seep: 3.6e-6,
         }
     }
 }

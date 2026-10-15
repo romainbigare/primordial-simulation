@@ -130,13 +130,14 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     assert!(((full - none) / want2 - 1.0).abs() < 0.05, "gained {} m³, Darcy says {want2}", full - none);
 }
 
-/// The rate is physical: 1e-6 m/s through a metre of ground at a slope of 1 in 1000 moves a cubic metre in a few weeks
-/// across a kilometre of width, nowhere near enough to move the liquid of a cell (1.6 million m³ of pores) across it.
+/// The rate is physical: `seep` (a loam, 3.6e-6 m/s) through a metre of ground at a slope of 1 in 1000 moves a few
+/// cubic metres a week across a kilometre of width, nowhere near enough to move the liquid of a cell (1.6 million m³ of
+/// pores) across it: about 0.014% a year.
 #[test]
 fn pore_liquid_barely_moves_across_a_cell() {
     let w = worldgen::new_world(3, 16, 16);
     let (k, slope, thick) = (w.cfg.phys.seep, 1e-3, 1.0);
     let per_year = k * thick * w.grid.cell_m * slope * 365.0 * 86_400.0;
     let pores = w.cfg.phys.porosity * 1.0 * w.grid.area();
-    assert!(per_year / pores < 1e-4, "{per_year} m³ a year against {pores} m³ of pores");
+    assert!(per_year / pores < 1e-3, "{per_year} m³ a year against {pores} m³ of pores");
 }
