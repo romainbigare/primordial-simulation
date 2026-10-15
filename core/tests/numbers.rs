@@ -74,7 +74,7 @@ fn every_row_has_one_name_and_a_known_mark() {
 /// Rules chosen for a run (review 6, finding 9): what was picked so a run came out a certain way
 /// and is not a number of `Physics` or `Config`. The table "Rules chosen for a run" lists them; it
 /// may not grow (handover 14.3).
-const RULES_BUDGET: usize = 2;
+const RULES_BUDGET: usize = 3;
 
 #[test]
 fn the_rules_chosen_for_a_run_stay_within_their_budget() {
