@@ -237,10 +237,12 @@ fn row_step(p: &Physics, size: f32) -> f32 {
 pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
     const B: u64 = 0x00ff_00ff_00ff_00ff;
     let k = size * 3f32.sqrt() / 256.0;
-    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits.
+    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits (the first
+    // and the third lane of `a + (a >> 16)`).
     let sums = |u: u64| {
         let a = (u & B) + (u >> 8 & B);
-        [((a & 0xffff) + (a >> 16 & 0xffff)) as f32 - 510.0, ((a >> 32 & 0xffff) + (a >> 48)) as f32 - 510.0]
+        let t = a + (a >> 16);
+        [(t & 0xffff) as f32 - 510.0, (t >> 32 & 0xffff) as f32 - 510.0]
     };
     let mut pairs = w.chunks_exact_mut(2);
     for p in &mut pairs {
