@@ -407,8 +407,16 @@ impl Body {
     /// The key liquids it holds, kg (all members), and the most share of its mass it keeps of any
     /// of them (its keep gene, 0..0.95).
     pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
-        let keep = Layout::of(chem).keep;
-        (0..chem.ns()).filter(|&k| self.wet >> k & 1 == 1).fold((0.0, 0.0), |(l, h), k| (l + self.store[k] * chem.subs[k].molar_mass, h.max(self.gene(keep + k).clamp(0.0, 0.95))))
+        let (keep, ns) = (Layout::of(chem).keep, chem.ns());
+        // The key liquids are a few of the substances: visit the bits set, lowest first.
+        let mut bits = if ns < 64 { self.wet & ((1 << ns) - 1) } else { self.wet };
+        let (mut liquid, mut h) = (0.0f64, 0.0f64);
+        while bits != 0 {
+            let k = bits.trailing_zeros() as usize;
+            bits &= bits - 1;
+            (liquid, h) = (liquid + self.store[k] * chem.subs[k].molar_mass, h.max(self.gene(keep + k).clamp(0.0, 0.95)));
+        }
+        (liquid, h)
     }
     /// The fuel growth converts into one kg of body matter, J (what its catalysed reactions would
     /// release from the inputs of `Chemistry::build`; 0 where bodies do not grow): 1.11 kg of the
