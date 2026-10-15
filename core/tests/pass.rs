@@ -1,6 +1,6 @@
 //! Edges remember use: a body going back and forth through cover between two cells clears the
 //! ground along their edge (it gets cheaper to cross), and the cover grows back over years
-//! once the moving stops.
+//! once the moving stops. A body too weak to give the push of a mover does not move.
 
 use pcore::body::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
@@ -41,6 +41,12 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     body::survey(&mut w);
     assert!((choose::eased(&w, a, 0) - 1.0).abs() < 1e-9);
     let (rich, mut crossed) = (worldgen::life::roles(&w.chem).expect("roles").1, 0);
+    // Moving needs force (review 7 fix 7): with the strength of the starting plants (0.05: a force of 0.025 of its weight)
+    // the mover cannot give the push of a mover (`bump`, 0.05 of its weight) and stays; with its own (0.6) it goes, below.
+    let mut weak = w.life.bodies[slot].clone();
+    weak.genes[body::STRENGTH] = 0.05;
+    choose::go(&mut w, slot, &mut weak, 0, b);
+    assert_eq!(weak.cell as usize, a, "a body too weak to push walked");
     for t in 0..5000 {
         // Fuel for the trip is given each time (the scene is not about eating),
         // given with its heat at the body's temperature, so the body does not cool.

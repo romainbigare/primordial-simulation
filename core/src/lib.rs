@@ -338,7 +338,7 @@ pub struct Physics {
     pub lever: f64,
     /// Force of a body of strength 1, as a share of its weight
     pub grip: f64,
-    /// Push of a body moving through a cell on each structure there, as a share of its weight
+    /// Push of a body moving through a cell on each structure there, as a share of its weight; its own force must give it to move
     pub bump: f64,
     /// Most bonded ground a body breaks per day of its interval, as a share of its mass
     pub dig: f64,

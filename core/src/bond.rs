@@ -352,7 +352,7 @@ pub fn lever(w: &World, b: &Body) -> f64 {
 /// itself). Force goes with the body that is built (`Body::built`: its matter and the liquid it keeps with
 /// it, not the fuel it stores nor the matter it holds for offspring), not the whole mass (15 Oct 2026,
 /// partial damage): a hurt body is weaker, and carrying fuel adds no strength.
-fn bears(w: &World, b: &Body) -> f64 {
+pub(crate) fn bears(w: &World, b: &Body) -> f64 {
     b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip
 }
 
