@@ -75,15 +75,15 @@ pub struct Config {
     pub mix: f64,
     /// Condensation in the air at which its droplets cover half the sky, mol/(m² s)
     pub cloud: f64,
-    /// Loose solid volume moving liquid can carry per J it dissipates, m³/J
+    /// Loose solid volume moving liquid carries off per J it dissipates, m³/J (anchored: the sediment of running liquid per J of its runoff, `docs/numbers.md`)
     pub carry: f64,
-    /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J
+    /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J (anchored: the same measured ratio, `docs/numbers.md`)
     pub wear: f64,
     /// Speed at which bodies spread back into ground cleared along an edge, from each side, when
     /// the cover is dense (scaled down by `cover / phys.rho_pass` below that), m/s.
     #[serde(default = "regrow")]
     pub regrow: f64,
-    /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
+    /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s (anchored: a hillslope diffusivity, `docs/numbers.md`)
     pub creep: f64,
     /// A speed shortcut, not a law (plan 7.1): past this many body nodes (individuals or
     /// population nodes) in a cell at a month's start, its most alike pairs merge, but only pairs
@@ -544,9 +544,9 @@ impl Default for Config {
             wind: 0.25,
             mix: 2e4,
             cloud: 1.2e-2,
-            carry: 1e-7,
-            wear: 3e-9,
-            creep: 1e-6,
+            carry: 2e-11,
+            wear: 1.4e-11,
+            creep: 6.3e-11,
             regrow: 1e-9,
             crowd: 4,
             share_brains: true,

@@ -8,6 +8,12 @@ years 56 to 60 unless said otherwise.
 
 ## Short answer
 
+**Update, after the owner's decision to anchor erosion (section "Erosion anchored" below):** with `carry`,
+`wear` and `creep` set to real sizes, the rock element holds back 0 to 7% of the plants' building (it was 53 to
+62%), the lime stays on the land (median 2,690 mol/m2 at year 10, 2,570 to 2,600 at year 60), the eaters live in
+all three seeds, and the island loses 0.003 to 0.07 mm of ground a year (it lost 7 to 12 mm). The older
+text below describes the run with the first-guess erosion.
+
 - **Body matter now holds the rock element** (element 5 of chemistry 0), one atom in every
   molecule of matter. Growth takes it from substance 23, the salt that lives only dissolved in
   liquid. Roots take it up the way they take the nitrogen mineral (24). Digestion gives it back.
@@ -356,6 +362,145 @@ in all three seeds (also seed 2, 2.2e7 members), and plants are heavier than in 
 The rock nutrient therefore does not limit life when the lime stays on the slopes. It limits it here
 because of the world's fast erosion. I did not retune anything. The owner may want to anchor `carry`,
 `wear` and `creep` (the rows say "none found"): that is a change to how fast valleys form.
+
+## Erosion anchored
+
+The coordinator asked for this after the follow-up, and the owner agreed: `carry`, `wear` and `creep`
+become real sizes and leave the tuned numbers. The Law 2 jump (reaction 22 going 6,000 times slower
+below 110 mol/m2 of lime) is another study. I did not touch `change.rs`.
+
+### The three numbers
+
+| number | what it does in the code | before | now | where it comes from |
+|---|---|---|---|---|
+| `creep` | creeping solids move a volume of creep x softness x thickness x slope per width and time, so the flux is D x slope with D = creep x softness x thickness | 1e-6 m/s (D = 48 m2/yr) | **6.3e-11 m/s (D = 3e-3 m2/yr)** | Hillslope soil diffusivity: 1e-3 to 1e-2 m2/yr (Roering et al. 1999, Oregon, 3 to 5e-3; Fernandes and Dietrich 1997; Hanks 2000; **from memory**). I took 3e-3, the middle in the logarithm. The starting loose ground is 1.00 m thick and has softness 1.53 (a test measures it) |
+| `carry` | the volume running liquid carries off a cell is carry x the J it dissipates | 1e-7 m3/J | **2e-11 m3/J** | The Earth's rivers carry 15 to 20 Gt of sediment a year (Milliman and Syvitski 1992; **from memory**), 7e9 m3. Their runoff, 4e13 m3 a year, falls a mean 840 m: 3.4e20 J. So 2e-11 m3 per J (1 to 3e-11) |
+| `wear` | the bed breaks wear x (volume share / bond strength) per J | 3e-9 | **1.4e-11** | The same ratio, 2e-11 m3/J, for the starting bed: its shares over strengths add to 1.39, so 2e-11 / 1.39 |
+
+Two things to know. (1) The most a flow can carry is more than its yield. Bagnold's relation (volume =
+e x energy / (L x 1,650 x 9.81 x 0.63), e = 0.1, L = 2 km, from memory) gives 5e-9 m3/J, 250 times the
+yield. I took the yield, because this model has loose ground everywhere and nothing that holds it. With the
+capacity, a flow strips loose ground at about 8 mm a year. A real river carries far less than it could,
+because its load is bound. (2) The old numbers were 5,000 times (`carry`), 200 times (`wear`) and
+16,000 times (`creep`) the new ones. All three are in `docs/numbers.md` as **anchored**, and the tuned count
+fell from 66 to 63 (`TUNED_BUDGET` in `core/tests/numbers.rs`). `hide`, `still`, `split` and `hold` are
+settings of the routing and of the cover, not rates of erosion. They stay tuned.
+
+### Check, not tune: how fast does the island lose ground?
+
+I measured the rock-making solids (the loose ground and the bed) that leave the land cells, from the
+snapshots, as a depth over the land. Mean since the start, mm a year:
+
+| | year 10 | year 30 | year 60 |
+|---|---|---|---|
+| first-guess numbers, seed 1 | 9.6 | 7.9 (year 20: 8.5) | - |
+| first-guess numbers (main), seed 2, seed 3 | 12.3, 11.8 | - | 6.7, 6.8 |
+| **anchored, seed 1** | 0.007 | 0.023 | 0.044 |
+| **anchored, seed 2** | 0.014 | 0.007 | 0.033 |
+| **anchored, seed 3** | 0.003 | 0.021 | 0.045 |
+
+The rate in the late decades is higher than in the first: seed 1 lost 0.007 mm a year in years 0 to 10, about 0.03 in
+years 10 to 30 and about 0.065 in years 30 to 60. So **the island lands at 0.003 to 0.07 mm a year: inside the
+real range of 0.01 to 1 mm a year from year 10 on, and below it in the first decade of seeds 1 and 3**. The
+Earth's mean is about 0.05. I did not look at why the first decade is slow. The lowest and highest cells (the surface
+change per cell, 99th percentile and the maximum): 0.3 to 0.4 and 0.4 to 0.7 mm a year. The mountains (2,200 to 2,500 m)
+do not reach the few mm a year of the fastest real ones. The first-guess numbers gave 90 to 150 mm a year at the 99th percentile and up to 240 at the maximum.
+
+A small island (a 32x32 map, 10 years, a test in `core/tests/erosion.rs`) loses 0.1 mm a year.
+
+### What it does to the rock nutrient and to life (64x64, 60 years, years 56 to 60)
+
+Main (03123d8) > rock nutrient with the first-guess erosion > rock nutrient with the anchored erosion.
+
+| plants | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|
+| members | 3.0e10 > 2.5e10 > 3.7e10 | 4.0e10 > 1.8e10 > 2.3e10 | 4.4e10 > 3.2e10 > 4.8e10 |
+| kg | 3.15e10 > 3.09e10 > 4.27e10 | 4.52e10 > 4.66e10 > 7.72e10 | 4.25e10 > 3.64e10 > 4.92e10 |
+| bodies | 3,365 > 2,926 > 2,586 | 3,046 > 4,747 > 3,628 | 3,519 > 3,114 > 3,004 |
+| matter share | 5.8 > 4.7 > 6.2% | 4.9 > 4.1 > 4.2% | 5.3 > 5.1 > 5.6% |
+| life real / adult (y) | .46/.89 > .69/1.19 > .61/1.16 | .41/.78 > .53/.77 > .72/1.13 | .38/.90 > .56/1.07 > .46/1.01 |
+| deaths, % (last column) | spent 63, taken 1, broken 26, age 9 | spent 55, taken 3, broken 29, age 12 | spent 67, taken 1, broken 26, age 6 |
+| births by month, % (last column) | 8 7 8 10 12 10 9 9 7 8 7 6 | 7 6 6 8 9 10 10 10 9 9 8 7 | 9 7 9 10 11 10 8 8 8 7 7 6 |
+| held back by any mineral / nitrogen / rock salt (last two columns) | main: nitrogen only .52; old .66/.10/.63; new **.05/.05/.00** | main .19; old .61/.13/.56; new **.59/.57/.07** | main .42; old .58/.10/.53; new **.11/.11/.01** |
+| share with the fixing gene, year 60 | 62 > 54 > 63% | 74 > 35 > 15% | 69 > 47 > 55% |
+
+| eaters | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|
+| members | 3.6e7 > 9.5e6 > 5.7e6 | 1.95e5 > 4 > 1.15e7 | 2.8e7 > 5.4e6 > 7.9e6 |
+| kg | 2.9e9 > 6.1e8 > 6.5e8 | 2.5e7 > 197 > 7.9e8 | 1.4e9 > 2.6e8 > 6.8e8 |
+| bodies | 2,291 > 1,411 > 1,162 | 158 > 0 > 775 | 1,009 > 401 > 1,043 |
+| life real / adult (y) | .74/1.13 > 1.29/2.47 > 1.89/2.21 | 1.32/1.34 > 1.18/2.73 > 1.05/1.65 | .54/1.34 > .79/1.36 > 1.43/1.97 |
+| deaths, % (last column) | spent 32, taken 2, broken 29, age 37 | spent 49, taken 5, broken 18, age 27 | spent 34, taken 2, broken 31, age 33 |
+| births by month, % (last column) | 5 3 4 5 7 10 13 13 13 11 9 7 | 6 4 4 7 10 13 12 11 11 8 7 7 | 6 4 4 5 8 12 14 13 11 10 8 7 |
+| held back by the rock salt (last column) | .02 | .23 | .04 |
+
+What I see:
+
+- **The rock nutrient no longer limits plants** (0 to 7% of the attempts; it was 53 to 62%). The
+  lime stays where it was, and the salt forms on the land.
+- **Eaters live in all three seeds** (5.7e6 to 1.2e7 members, 6.5 to 7.9e8 kg). They are lighter than main's in seeds 1 and 3
+  (a fifth and a half of main's kg), and much heavier in seed 2 (main's eaters hang by a thread there).
+- **Plants are heavier than in main** (+36%, +71%, +16% in kg). Their number of members is higher in seeds 1 and 3 and lower in seed 2.
+- **Nitrogen binds in seed 2** (57% of the attempts; main 19%). The plants of that seed are the heaviest (7.7e10 kg), and the
+  nitrogen mineral of the land's ground is lower (0.25 kg/m2 at year 60; main 0.72). The fixers fall to 15% there.
+  This is an effect of the heavy plants, not of the rock element (the rock salt holds back 7%).
+- Seeds still differ a lot, as in main. Four runs cannot say more.
+
+**Roster (seed 1, members, main > rock nutrient with anchored erosion):** light-eaters 1.0e10 > 4.8e9; small fast light-eaters
+7.4e9 > 8.5e9; big slow light-eaters 2.7e9 > 6.4e9; eaters none > 6.8e5; small eaters of remains 5.0e9 > 3.3e9; big eaters of
+remains 6.4e7 > none; small fast eaters of light-eaters 4.2e8 > 1.1e9; big slow eaters of light-eaters none > 365.
+Carbon gas at year 60: 304 > 292. The rock salt holds back 0 to 7% of the plants and 5 to 14% of the animals.
+
+**Salt 23 on land, kg/m2, years 1, 3, 10, 30, 60** (main, first-guess erosion, seed 1: .53 .73 .82 1.33 1.48): anchored seed 1: .53 .80 .96 1.50
+1.84; seed 2: .51 .77 .90 1.20 1.48; seed 3: .52 .70 .66 .88 1.15. The sea: 79.6 to 66.5, 77.5 to 61.5, 74.5 to 62.3.
+
+**Lime on land, mol/m2: the 10th percent, the median, the 90th percent of the land cells**
+
+| | main, year 10 | main, year 60 | anchored, year 10 | anchored, year 60 |
+|---|---|---|---|---|
+| seed 1 | 59, 1,715, 6,471 | 27, 103, 11,127 | 2,648, 2,687, 2,721 | 2,349, 2,569, 2,793 |
+| seed 2 | 70, 2,189, 5,428 | 27, 146, 9,643 | 2,646, 2,689, 2,717 | 2,433, 2,605, 2,776 |
+| seed 3 | 76, 2,236, 6,373 | 33, 191, 9,868 | 2,644, 2,691, 2,722 | 2,363, 2,593, 2,791 |
+
+The start is 2,700. The land cells with under 0.001 mol/m2 of the salt: main 18% (year 10) and 58% (year 60) in seed 1, 12% and 42%
+in seed 2, 15% and 35% in seed 3; anchored 0 to 1% in all.
+
+**Carbon gas, ppm, years 10 to 60** (main > anchored):
+
+| | 10 | 20 | 30 | 40 | 50 | 60 |
+|---|---|---|---|---|---|---|
+| seed 1, main | 266 | 282 | 294 | 305 | 326 | 338 |
+| seed 1, anchored | 275 | 276 | 283 | 283 | 284 | 293 |
+| seed 2, main | 246 | 264 | 279 | 283 | 285 | 286 |
+| seed 2, anchored | 280 | 272 | 266 | 264 | 251 | 248 |
+| seed 3, main | 268 | 286 | 297 | 306 | 311 | 323 |
+| seed 3, anchored | 276 | 281 | 286 | 287 | 291 | 297 |
+| roster, main | 263 | 248 | 303 | 308 | 307 | 304 |
+| roster, anchored | 254 | 233 | 233 | 270 | 287 | 292 |
+
+The air ends lower than main's in all four runs (more plant mass, as above).
+
+**Speed** (seed 1, 30 years, two runs at once on 4 cores): main 3.35 s a year, anchored 3.22; 52.0 and 51.0 us a body update;
+2,722 bodies against 3,146 at year 30. No cost.
+
+### Tests
+
+New: `core/tests/erosion.rs` (3): the starting loose ground has the diffusivity 3e-3 m2/yr (1.00 m thick, softness 1.53); `carry` is
+the measured yield per J (within a fifth) and the starting bed breaks at the same; a 32x32 island loses 0.1 mm a year of rock, between
+0.003 and 1. No older test assumed the fast erosion: all passed unchanged. `cargo test --release --workspace` passes.
+`TUNED_BUDGET` is 63.
+
+### What I am not sure of (erosion)
+
+1. **The sources are from memory.** The ranges are right to my knowledge, the exact figures need a check.
+2. **`carry` is the yield, not the capacity** (above). A reader could choose the capacity; it would strip the loose ground fast.
+3. **The first decade is slow** (0.003 to 0.014 mm a year) and later decades are 5 to 10 times faster. I do not know why.
+4. **`carry` depends on the cell size** (Bagnold's L). The yield anchor does not, but the model's stream power does: at another
+   cell size the check must be done again.
+5. **The island keeps its shape.** With real erosion, rivers carve almost nothing in 60 years, as in real life. If the owner wants
+   valleys to show in a run, that needs a longer run, not bigger numbers.
+6. **The Law 2 jump is still there.** With the lime kept on the land it no longer matters in these runs, but a cell that loses its lime still
+   forms its salt 6,000 times slower.
 
 ## Speed
 
