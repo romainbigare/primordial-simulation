@@ -19,6 +19,9 @@ use serde::{Deserialize, Serialize};
 /// Moving liquid does work on its bed (carrying, wear) once in this many months (seven,
 /// so the season sampled turns over the years).
 const WORK_MONTHS: u64 = 7;
+/// A solid with a solubility dissolves in the liquid and moves with it if it melts above the warmest ground, or this
+/// (K) if that is warmer: a hot node does not make a salt in every other node a liquid.
+const SALT_MELT: f64 = 350.0;
 /// The slow-changing ground and the substances present are rechecked this often, months.
 const REFRESH_MONTHS: u64 = 3;
 
@@ -555,9 +558,13 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let (n, area, g) = (w.grid.n(), s.area, w.cfg.gravity);
     let inv = DIRS.map(|d| 1.0 / w.grid.dist(d));
     let (tmin, tmax) = range(&s.tg);
-    // (With the gases dissolved in it, which are gas at every node: `air::dissolve`.)
-    let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && (s.sp[k].boil > tmin || w.chem.subs[k].solubility > 0.0)).collect();
-    let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin).collect();
+    // (With the gases dissolved in it, which are gas at every node: `air::dissolve`.) And the solids that dissolve
+    // in it (`solute`, 15 Oct 2026), which are not carried as sediment.
+    let hot = tmax.min(SALT_MELT);
+    let solute = |k: usize| w.chem.subs[k].solubility > 0.0 && s.sp[k].melt > hot;
+    let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| solute(k) || (s.sp[k].melt <= tmax && (s.sp[k].boil > tmin || w.chem.subs[k].solubility > 0.0))).collect();
+    let dis: Vec<bool> = liq.iter().map(|&k| solute(k)).collect();
+    let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin && !solute(k)).collect();
     let ns = sol.len();
     s.sed.resize(n * ns, 0.0);
     // Highest head first (heads to 0.1 m, then by cell). The order is kept between refreshes:
@@ -602,12 +609,20 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             w.diag.liquid_flux[i] *= 1.0 - ema;
             continue;
         }
-        let mut lvol = 0.0;
-        for (a, &k) in wa.iter_mut().zip(&liq) {
+        let (mut lvol, mut lmol) = (0.0, 0.0);
+        for ((a, &k), &d) in wa.iter_mut().zip(&liq).zip(&dis) {
             // Dissolved gas moves with the liquid and adds no volume.
             let gas = s.sp[k].boil <= tmin;
-            *a = w.ground[k * n + i] * if gas { 1.0 } else { wet(s, k, i) };
-            lvol += if gas { 0.0 } else { *a * s.sp[k].v[1] };
+            *a = if d { 0.0 } else { w.ground[k * n + i] * if gas { 1.0 } else { wet(s, k, i) } };
+            lvol += if gas || d { 0.0 } else { *a * s.sp[k].v[1] };
+            lmol += if gas || d { 0.0 } else { *a };
+        }
+        // A solid that dissolves in the liquid there is dissolved up to its solubility (the mole fraction of the
+        // solution), the rest stays on the ground; it moves with the liquid as a gas dissolved in it does, in the
+        // share of the liquid that leaves, and what the liquid cannot hold waits for it to come back (15 Oct 2026).
+        for ((a, &k), _) in wa.iter_mut().zip(&liq).zip(&dis).filter(|p| *p.1) {
+            let x = w.chem.subs[k].solubility.min(0.99);
+            *a = w.ground[k * n + i].min(x / (1.0 - x) * lmol);
         }
         // Neighbours much less steep than the steepest get nothing.
         for c in 0..cnt {
@@ -666,9 +681,12 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         }
         if lvol > 0.0 && cnt > 0 {
             let qsum: f64 = q[..cnt].iter().sum();
+            // (A dissolved solid is in the liquid of the pores too, so it leaves with the share of all the liquid that runs off.)
             let (part, inv) = ((qsum / lvol).min(1.0), 1.0 / qsum);
-            for (&a, &k) in wa.iter().zip(&liq).filter(|p| *p.0 > 0.0) {
-                let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
+            for (q0, (&a, &k)) in wa.iter().zip(&liq).enumerate().filter(|p| *p.1.0 > 0.0) {
+                let (mut p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
+                // (A dissolved solid is not molten: no fusion enthalpy goes with it.)
+                p.lf *= !dis[q0] as u8 as f64;
                 // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
                 let want = m * (p.cp * tcur + p.lf);
                 let e = crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * p.cp, want);
@@ -786,8 +804,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
 /// cleared along edges (`choose::regrow`, here only, so it closes at the documented speed).
 fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, area, g, cell) = (w.grid.n(), s.area, w.cfg.gravity, w.grid.cell_m);
-    let (tmin, _) = range(&s.tg);
-    let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin).collect();
+    let (tmin, tmax) = range(&s.tg);
+    // (Not the solids that dissolve in the liquid, which move with it: `liquid`.)
+    let hot = tmax.min(SALT_MELT);
+    let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin && !(w.chem.subs[k].solubility > 0.0 && s.sp[k].melt > hot)).collect();
     let soft: Vec<f64> = (0..w.chem.ns()).map(|k| 1.0 / (w.chem.subs[k].hardness + 0.05)).collect();
     s.mob.fill(0.0);
     for &k in &sol {

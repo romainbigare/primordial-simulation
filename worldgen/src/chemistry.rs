@@ -50,6 +50,9 @@ struct R {
     ea: f64,
     #[serde(default)]
     light: bool,
+    /// The power of each input's share in the rate law, where it is not its count (`Reaction::ord`)
+    #[serde(default)]
+    ord: Vec<u16>,
 }
 
 /// How a chemistry fills a new world: lists of (substance, fraction).
@@ -65,6 +68,10 @@ pub struct Init {
     pub loose: Vec<(usize, f64)>,
     /// Extra volume fractions found in patches
     pub deposits: Vec<(usize, f64)>,
+    /// Amounts in the loose ground of every land cell when life starts, mol per m² (15 Oct 2026: the nitrogen mineral of the
+    /// soil; none where a chemistry has no such substance), `Chemistry::soil`
+    #[serde(default)]
+    pub soil: Vec<(usize, f64)>,
 }
 
 pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
@@ -99,10 +106,11 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
         reactions: f
             .r
             .into_iter()
-            .map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light })
+            .map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord })
             .collect(),
-        build: f.build.map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false }),
+        build: f.build.map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }),
         air,
+        soil: f.init.soil.clone(),
     };
     chem.validate()?;
     Ok((chem, f.init))

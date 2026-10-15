@@ -103,6 +103,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         bed: pick(&[0.7, 0.2, 0.1]),
         loose: pick(&[0.5, 0.4, 0.08, 0.02]),
         deposits: pick(&[0.03, 0.01, 0.005, 0.02]),
+        soil: Vec::new(),
     };
     let abundant: Vec<usize> = [&init.bed, &init.loose, &init.deposits, &init.air].iter().flat_map(|v| v.iter().map(|p| p.0)).chain([low]).collect();
 
@@ -163,12 +164,12 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         let top = if burn { 700.0 } else { 1500.0 };
         let t_start = 340.0 * (top / 340.0f64).powf(r.f64());
         let (k, ea) = if light { (1e-9, 5800.0 * noise(&mut r, 0.1)) } else { (k, t_start * (k / 1e-6).ln() + dh.max(0.0) / R_GAS) };
-        reactions.push(Reaction { inputs: a, outputs: b, k, ea, light });
+        reactions.push(Reaction { inputs: a, outputs: b, k, ea, light, ord: Vec::new() });
     }
     // (No growth in a random chemistry yet: its bodies are their mass, `Chemistry::build`.)
     let mut air = vec![0.0; ns];
     init.air.iter().for_each(|&(k, x)| air[k] = x);
-    let chem = Chemistry { n_elements: ne, subs, reactions, build: None, air };
+    let chem = Chemistry { n_elements: ne, subs, reactions, build: None, air, soil: Vec::new() };
     debug_assert!(chem.validate().is_ok());
     (chem, init)
 }

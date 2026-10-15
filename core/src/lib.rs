@@ -675,6 +675,11 @@ pub struct Diag {
     /// trampled, `body::tear`), since the shell last read it, by starting kind. A count only, not saved.
     #[serde(skip)]
     pub hurt: Vec<f64>,
+    /// Members that could build body matter in an update (15 Oct 2026), by starting kind, as [held back, tried]: the first
+    /// those whose store of a substance they do not burn (the nitrogen mineral) bound what they built, below what their other
+    /// stores, their allowance and their spare allowed (`copy::grow`). A count only, not saved.
+    #[serde(skip)]
+    pub nlim: Vec<[f64; 2]>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -97,6 +97,10 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     let kinds: Vec<usize> = if a.has("--roster") { worldgen::life::ROSTER.to_vec() } else { vec![0, 1] };
     let plan: Vec<(usize, i64)> = kinds.iter().map(|&k| (k, life_year + worldgen::life::KINDS[k].year)).collect();
     for y in y0 + 1..=y0 + years {
+        // The soil gets its mineral when life starts (`worldgen::life::soil`).
+        if life_year >= 0 && y as i64 - 1 == life_year {
+            println!("{}", worldgen::life::soil(&mut w));
+        }
         // First light-eaters; once they have spread, the others (each kind at its own year after the first life).
         for &(kind, at) in &plan {
             if life_year >= 0 && at >= 0 && y as i64 - 1 == at {

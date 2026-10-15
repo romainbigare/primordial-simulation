@@ -55,6 +55,8 @@ struct Social {
     moves: Vec<f64>,
     /// Body matter, kg, hits tore off members who lived on in the year, by starting kind (the core's tally, `Diag::hurt`)
     hurt: Vec<f64>,
+    /// Members that could build in the year, by starting kind: [held back by the nitrogen mineral, tried] (the core's tally, `Diag::nlim`)
+    nlim: Vec<[f64; 2]>,
     months: String,
     /// Members born in each month by starting kind, one row per row of `months` (after its
     /// header), written as the last columns of `months.csv` (`root_<k>_births`)
@@ -156,12 +158,14 @@ struct Root {
     wet: f64,
     /// The members' temperature above their ground's (`Body::temp`), K, summed by members
     warm: f64,
+    /// The nitrogen mineral their stores hold, kg (15 Oct 2026)
+    mineral: f64,
     cat: Vec<(f64, f64)>,
 }
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 6], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 6], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, mineral: 0.0, cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -424,6 +428,7 @@ impl Recorder {
             self.social.wide = std::mem::take(&mut w.diag.wide);
             self.social.moves = std::mem::take(&mut w.diag.moves);
             self.social.hurt = std::mem::take(&mut w.diag.hurt);
+            self.social.nlim = std::mem::take(&mut w.diag.nlim);
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -558,8 +563,9 @@ impl Recorder {
         // resumed tape), so a kind that died out reads 0 (its means NaN).
         let nr = w.chem.reactions.len();
         let seen = self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count();
-        let mut by_root: Vec<Root> = vec![Root::new(nr); seen.max(self.social.root_births.len()).max(self.social.root_deaths.len()).max(self.social.moves.len()).max(self.social.hurt.len())];
+        let mut by_root: Vec<Root> = vec![Root::new(nr); seen.max(self.social.root_births.len()).max(self.social.root_deaths.len()).max(self.social.moves.len()).max(self.social.hurt.len()).max(self.social.nlim.len())];
         let cat = pcore::body::Layout::of(&w.chem).cat;
+        let mineral = w.chem.mineral();
         for b in life.alive() {
             if let Some(l) = &life.brains[b.lineage as usize] {
                 let k = l.root as usize;
@@ -580,6 +586,7 @@ impl Recorder {
                 let a = b.activity(&w.chem, &w.cfg.phys);
                 (r.act, r.dry, r.wet) = (r.act + n * a, r.dry + n * (a < 0.5) as u8 as f64, r.wet + n * b.gene(pcore::body::WET));
                 r.warm += n * (b.temp(&w.chem) - c.f.t[b.cell as usize]);
+                r.mineral += mineral.map_or(0.0, |(k, _)| b.store[k] * w.chem.subs[k].molar_mass);
                 for (x, g) in r.genes.iter_mut().zip(GENES) {
                     *x += n * b.gene(g);
                 }
@@ -601,6 +608,33 @@ impl Recorder {
         let land_liquid: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| c.f.depth[i]).sum::<f64>() * w.grid.area();
         let mut row = vec![("year".to_string(), "yr", w.year()), ("null".to_string(), "1", w.cfg.null as u8 as f64)];
         row.extend(tot.elems.iter().enumerate().map(|(j, &v)| (format!("elem_{j}"), "mol", v)));
+        // 15 Oct 2026, the nitrogen mineral (`Chemistry::mineral`): its mass in the ground per m² of land and of sea (kg/m2; the
+        // nitrogen is 0.35 of it in chemistry 0), and where the nitrogen is in all, in 10^9 mol of the mineral (2 mol of nitrogen
+        // each, matter counted at its share): the ground of land and of the sea, dead matter on the ground of each, and the bodies.
+        if let Some((mk, per)) = w.chem.mineral() {
+            let (gn, area, mm) = (w.grid.n(), w.grid.area(), w.chem.subs[mk].molar_mass);
+            let matter = w.chem.matter();
+            let mut t = [[0.0f64; 2]; 3];
+            let mut cells = [0.0f64; 2];
+            for i in 0..gn {
+                let sea = (c.f.z[i] <= 0.0) as usize;
+                cells[sea] += 1.0;
+                t[0][sea] += w.ground[mk * gn + i];
+                t[1][sea] += matter.map_or(0.0, |m| w.ground[m * gn + i]) * per;
+            }
+            for b in life.alive() {
+                t[2][0] += b.store[mk] + matter.map_or(0.0, |m| b.store[m]) * per;
+            }
+            row.extend([
+                ("n_land".to_string(), "kg/m2", t[0][0] * mm / (cells[0].max(1.0) * area)),
+                ("n_sea".to_string(), "kg/m2", t[0][1] * mm / (cells[1].max(1.0) * area)),
+                ("n_dead_land".to_string(), "1e9 mol", t[1][0] / 1e9),
+                ("n_dead_sea".to_string(), "1e9 mol", t[1][1] / 1e9),
+                ("n_bodies".to_string(), "1e9 mol", t[2][0] / 1e9),
+                ("n_ground_land".to_string(), "1e9 mol", t[0][0] / 1e9),
+                ("n_ground_sea".to_string(), "1e9 mol", t[0][1] / 1e9),
+            ]);
+        }
         row.extend([
             ("energy".to_string(), "J", tot.thermal + tot.chemical),
             ("t_ground".to_string(), "K", mean(&c.f.t)),
@@ -684,6 +718,10 @@ impl Recorder {
                 (c("alloc"), "1", per(v.alloc)),
                 (c("child"), "log10", per(v.child)),
                 (c("brood"), "1", if v.mass > 0.0 { v.brood / v.mass } else { f64::NAN }),
+                // 15 Oct 2026 (the nitrogen mineral): the share of the building attempts of the year (members that could build,
+                // `copy::grow`) that the store of the mineral held back, and the mineral their stores hold per kg of body.
+                (c("nlim"), "1", st.nlim.get(k).map_or(f64::NAN, |x| if x[1] > 0.0 { x[0] / x[1] } else { f64::NAN })),
+                (c("nstore"), "1", if v.body > 0.0 { v.mineral / v.body } else { f64::NAN }),
             ]);
             row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
@@ -805,6 +843,7 @@ impl Recorder {
         (s.root_births, s.root_deaths, s.root_stand, s.stand_months, s.t_land) = Default::default();
         s.root_mixed = Default::default();
         (s.root_young, s.root_adult, s.root_stand_adult, s.moves, s.hurt) = Default::default();
+        s.nlim = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();
         // Mole fraction in the air of each heat-absorbing gas (`air_<substance>`; `absorber` above is

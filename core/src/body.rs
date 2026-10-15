@@ -286,7 +286,7 @@ impl Body {
         // 0.21^6 = 8.6e-5 of its bare rate in the open) would cost 1,800 times what burning the
         // energy-rich solid does for the same speed-up, and no body could keep the enzyme.
         let open = |rx: &crate::chem::Reaction| -> f64 {
-            rx.inputs.iter().filter(|q| q.1 > 1 && chem.phase(q.0 as usize, p.t_cat) == Phase::Gas).map(|&(k, nu)| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(nu as i32 - 1)).product()
+            rx.inputs.iter().enumerate().filter(|(q, x)| rx.order(*q) > 1 && chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32 - 1)).product()
         };
         let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp() * open(rx)).sum();
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
@@ -1635,6 +1635,23 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         b.e += d * per;
         heat += d * f;
     }
+    // Roots take what is dissolved in the soil (15 Oct 2026): the solids that dissolve in the liquid (`Chemistry` solubility
+    // above 0, melting above the ground's warmth) that its uptake genes are on for, from the loose ground of its cell, up to the
+    // room its level leaves, at the rate it soaks liquids (without the wetness of the surface: soil holds moisture the
+    // surface does not show, which the world does not model), through the mass that works, and no more than half of what
+    // there is (the bodies of a cell share it).
+    let soak = -(-b.k.liq * days).exp_m1() * wk;
+    for &(k, u) in &b.k.upt {
+        if u <= 0.0 || chem.subs[k].solubility <= 0.0 || chem.phase(k, tg) != Phase::Solid || ground[k * n + i] <= 0.0 {
+            continue;
+        }
+        let d = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(0.5 * ground[k * n + i]);
+        let want = d * chem.subs[k].cp * tg;
+        let d = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
+        b.store[k] += d;
+        ground[k * n + i] -= d;
+        b.e += d * chem.subs[k].cp * tg;
+    }
 
     // Heat to the surface the body stands on (which radiates it and warms the air): T relaxes
     // toward the ground's temperature plus the warming of the heat released, over the time.
@@ -1703,7 +1720,27 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if b.brood > 0.0 && crate::copy::copy(w, slot, b) {
         (tmp.mass, tmp.cap) = b.mass_cap(&w.chem);
     }
+    shed(w, b);
     None
+}
+
+/// What a body makes its matter of besides what it burns (the nitrogen mineral, `Chemistry::build`), held past the level it
+/// keeps (`Body::level`), goes back to the ground at its update with its share of the heat (15 Oct 2026). Digestion
+/// (`Body::digest`) and the body's own burning of matter (reaction 21) give it more than it builds with, and it has no other
+/// way out: an eater that kept it would grow without end and, with the room of that store full, stop taking matter. A plant
+/// takes only up to the level (`choose::wanted`), so for it nothing is shed.
+fn shed(w: &mut World, b: &mut Body) {
+    let Some((k, _)) = w.chem.mineral() else { return };
+    let (i, n, mass) = (b.cell as usize, w.grid.n(), b.mass(&w.chem));
+    let over = b.store[k] - b.level(&w.chem, k, mass);
+    if over <= 0.0 {
+        return;
+    }
+    let q = b.e * over * w.chem.subs[k].cp / b.heat_cap(&w.chem).max(1e-9);
+    b.store[k] -= over;
+    w.ground[k * n + i] += over;
+    b.e -= q;
+    w.e_ground[i] += q;
 }
 
 /// Upkeep over `days` of a body of `mass` kg, J: the cost of keeping tissue, by the kg of the body
@@ -1824,7 +1861,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
             continue;
         }
         let (lim, who) = crate::change::scarce(&rx.inputs, |k| have[k]);
-        let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, nu))| (air[k as usize * na + j] / tot).powi(nu as i32 - (q == who) as i32)).product();
+        let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, _))| (air[k as usize * na + j] / tot).powi((rx.order(q) as i32 - (q == who) as i32).max(0))).product();
         let rate = crate::change::denature(Body::catalyst(b.k.cat[r], dry), t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.k * (-rx.ea / t).exp() * act;
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];

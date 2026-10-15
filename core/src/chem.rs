@@ -66,6 +66,19 @@ pub struct Reaction {
     pub ea: f64,
     /// Takes absorbed light instead of heat
     pub light: bool,
+    /// The power each input's share enters the rate law at, in the order of `inputs` (15 Oct 2026); empty: the counts of
+    /// `inputs`, as mass action says for one step. A reaction of a big molecule is not one meeting of 40 molecules: the
+    /// law of its rate keeps the power it was measured at (`order`), whatever it takes in all.
+    #[serde(default)]
+    pub ord: Vec<u16>,
+}
+
+impl Reaction {
+    /// The power of the share of input `q` in the rate law (`ord`, else its count).
+    #[inline]
+    pub fn order(&self, q: usize) -> u16 {
+        self.ord.get(q).copied().unwrap_or(self.inputs[q].1)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -84,6 +97,10 @@ pub struct Chemistry {
     /// catalyst counts the gases of a reaction beyond first order at these shares (`Body::prepare`).
     #[serde(default)]
     pub air: Vec<f64>,
+    /// What the loose ground of every land cell is given when life starts (15 Oct 2026), mol per m² per substance: the
+    /// nitrogen mineral of the soil, 0.357 mol (10 g of nitrogen) in chemistry 0 (`worldgen::life::soil`). Empty: none.
+    #[serde(default)]
+    pub soil: Vec<(usize, f64)>,
 }
 
 impl Chemistry {
@@ -158,6 +175,17 @@ impl Chemistry {
     /// The body matter: the first output of growth (`build`), if bodies grow.
     pub fn matter(&self) -> Option<usize> {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
+    }
+
+    /// What growth (`build`) makes body matter of besides the fuel (15 Oct 2026: the nitrogen mineral of the ground): its
+    /// substance and the mol of it a mol of matter is made of. It is the input that no reaction of the chemistry burns
+    /// (releases heat from with a gas, as a fuel burns), so a body takes it from the ground or what it eats and does not burn
+    /// it. None where bodies do not grow or grow from one fuel.
+    pub fn mineral(&self) -> Option<(usize, f64)> {
+        let bl = self.build.as_ref()?;
+        let gas = |k: u16| self.phase(k as usize, crate::T_SURF) == Phase::Gas;
+        let burns = |k: u16| self.reactions.iter().enumerate().any(|(r, rx)| self.dh(r) < 0.0 && rx.inputs.iter().any(|p| p.0 == k) && rx.inputs.iter().any(|p| gas(p.0)));
+        bl.inputs.iter().find(|p| !burns(p.0)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64))
     }
 
     /// Element counts of a reaction side.

@@ -439,11 +439,29 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let lay = Layout::of(chem);
     let size = b.size(chem);
     let floors: Vec<f64> = ins.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
-    let reach = ins.iter().zip(&floors).map(|(&(k, nu), f)| {
+    let reach: Vec<f64> = ins.iter().zip(&floors).map(|(&(k, nu), f)| {
         let heat = b.heat_of(chem, k as usize, t);
         (b.store[k as usize] - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
-    });
-    let kg = (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300)).min(reach.fold(f64::MAX, f64::min));
+    }).collect();
+    let free = (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
+    let kg = free.min(reach.iter().copied().fold(f64::MAX, f64::min));
+    // Counted for the tape (15 Oct 2026): a body that could build (all its other stores, its allowance and its spare allow
+    // it) and the store of what it does not burn, the nitrogen mineral, was what held it back.
+    let (fuels, others): (Vec<f64>, Vec<f64>) = {
+        let mineral = chem.mineral().map(|m| m.0);
+        let (a, b2): (Vec<_>, Vec<_>) = ins.iter().zip(&reach).partition(|(&(k, _), _)| Some(k as usize) != mineral);
+        (a.iter().map(|x| *x.1).collect(), b2.iter().map(|x| *x.1).collect())
+    };
+    let able = free.min(fuels.iter().copied().fold(f64::MAX, f64::min));
+    if !others.is_empty() && able > 1e-12 * full.max(1e-30) {
+        let root = w.life.root(b) as usize;
+        if root != u32::MAX as usize {
+            w.diag.nlim.resize(w.diag.nlim.len().max(root + 1), [0.0; 2]);
+            let held = others.iter().copied().fold(f64::MAX, f64::min) < able;
+            w.diag.nlim[root][0] += n * held as u8 as f64;
+            w.diag.nlim[root][1] += n;
+        }
+    }
     if kg <= 1e-12 * full.max(1e-30) {
         return false;
     }

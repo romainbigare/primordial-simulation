@@ -303,6 +303,32 @@ impl Default for Seeding {
     }
 }
 
+/// Give the loose ground of every land cell the soil of the chemistry (`Chemistry::soil`, mol per m²: the nitrogen
+/// mineral in chemistry 0, 10 g of nitrogen per m²) at this moment, which is when life starts (15 Oct 2026): booked as new
+/// matter and energy like an edit, at the cell's own temperature. Land under more than half a metre of liquid (a basin of
+/// standing liquid; the cells no body is placed on) is no soil and gets none. It is not placed at year 0: the first years of
+/// a world are the liquid's, before any body, and rain washes a dissolved mineral from the slopes into the basins and the
+/// low ground in the first year. Returns what was placed, in one line.
+pub fn soil(w: &mut World) -> String {
+    let (n, area) = (w.grid.n(), w.grid.area());
+    // (The liquid that stands, not what the pores of the ground hold: `body::env_of`.)
+    let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0 && body::env_of(w, i)[1] <= 0.5).collect();
+    let mut said = Vec::new();
+    for q in 0..w.chem.soil.len() {
+        let (s, per) = w.chem.soil[q];
+        let a = per * area;
+        for &i in &land {
+            let e = a * w.chem.subs[s].cp * w.t_ground(i);
+            w.ground[s * n + i] += a;
+            w.e_ground[i] += e;
+            w.chem.add_elems(s, a, &mut w.ledger.imposed_elems);
+            w.ledger.imposed_energy += e + a * w.chem.subs[s].hf;
+        }
+        said.push(format!("{per:.3} mol per m2 of substance {s} ({:.1} g per m2, {:.3e} kg in all)", per * w.chem.subs[s].molar_mass * 1000.0, a * land.len() as f64 * w.chem.subs[s].molar_mass));
+    }
+    format!("year {:.1}: soil on {} land cells (not under standing liquid): {}", w.year(), land.len(), said.join(", "))
+}
+
 /// Place bodies of starting kind `which` (a row of `KINDS`: 0 light-eaters on land, 1 eaters where bodies already
 /// are, 2 the clever lineage where bodies already are, 3 and on the roster) as a neutral ancestor sprayed with 20 rounds of mutation (`Seeding::default`).
 pub fn seed(w: &mut World, which: usize) -> String {
@@ -532,6 +558,18 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     store[liquid] = liq * count * kind.mass / chem.subs[liquid].molar_mass;
     if let Some((m, _)) = matter {
         store[m] = mat * count * kind.mass / chem.subs[m].molar_mass;
+    }
+    // The mineral growth also needs (15 Oct 2026): a member is placed holding what its matter was made of, so it can build a
+    // matter's worth again (the child it gives a share of every store); it keeps up to twice that per kg of its body, and a
+    // light-eater takes it from the ground (an animal has it from the matter it digests). The keep is a share of the body
+    // (`Body::level`): the body is the matter over 1 - h.
+    if let (Some((k, per)), Some((m, _))) = (chem.mineral(), matter) {
+        store[k] = store[m] * per;
+        let h = genes[lay.keep + liquid].clamp(0.0, 0.95) as f64;
+        genes[lay.keep + k] = (2.0 * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
+        if kind.cat[0] >= body::LIGHT_EATER {
+            genes[lay.upt + k] = 1.0;
+        }
     }
     let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
     b.e = b.heat_cap(chem) * t;

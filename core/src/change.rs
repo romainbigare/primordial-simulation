@@ -182,10 +182,10 @@ impl Reactor {
     /// their `nu`; the scarcest input (place `who`) to `nu - 1`.
     fn share(&self, rx: &Reaction, who: usize, tot: &[f64; 3]) -> f64 {
         let mut x = 1.0;
-        for (q, &(k, nu)) in rx.inputs.iter().enumerate() {
+        for (q, &(k, _)) in rx.inputs.iter().enumerate() {
             let (k, p) = (k as usize, self.ph[k as usize] as usize);
             if p > 0 {
-                x *= pow(self.av[k] / tot[p], nu - (q == who) as u16);
+                x *= pow(self.av[k] / tot[p], rx.order(q).saturating_sub((q == who) as u16));
             }
         }
         x
@@ -427,13 +427,13 @@ pub fn step(w: &mut World, dt: f64) {
     // `f`, whichever input that is: all shares to `nu`, or one power of one of them left out (not
     // of a trace: it does not make the node react every step, see `TRACE`).
     let up = |gas: &[(usize, u16)], f: &dyn Fn(usize) -> f64| {
-        (0..=gas.len()).filter(|&d| d == gas.len() || f(gas[d].0) >= TRACE).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu - (q == d) as u16)).product::<f64>()).fold(0.0, f64::max)
+        (0..=gas.len()).filter(|&d| d == gas.len() || f(gas[d].0) >= TRACE).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu.saturating_sub((q == d) as u16))).product::<f64>()).fold(0.0, f64::max)
     };
     let most_act: Vec<f64> = (0..ns).map(|k| if chem.subs[k].boil <= tlo { (0..na).fold(0.0, |m, j| act(w.air[k * na + j], pool_lo[j]).max(m)) } else { 1.0 }).collect();
     let cand: Vec<Cand> = (fast.iter())
         .map(|&&(r, need_bits, _, hot)| {
             let rx = &chem.reactions[r];
-            let (gas, held): (Vec<_>, Vec<_>) = rx.inputs.iter().map(|p| (p.0 as usize, p.1)).partition(|p| chem.subs[p.0].boil <= tlo);
+            let (gas, held): (Vec<_>, Vec<_>) = rx.inputs.iter().enumerate().map(|(q, p)| (p.0 as usize, rx.order(q))).partition(|p| chem.subs[p.0].boil <= tlo);
             let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil)).collect();
             let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, need: vec![std::cell::Cell::new(f64::NAN); na] };
             c.low = c.warm(c.kdt * up(&c.gas, &|k| most_act[k])).max(hot);
