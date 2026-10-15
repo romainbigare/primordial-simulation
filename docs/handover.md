@@ -1024,11 +1024,20 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   store of one member, booked as an edit) twice into the same cells, one set with the big brain (48 hidden,
   12 memory, 6 seen, sight 3; base and rows carried over by `rebase`/`rerow`; root 2), one with its sizes
   unchanged (the control; root `KINDS.len()` = 11), and prints a seeding line. No hand-set biases. The old
-  row 2 of `KINDS` stays for the numbering. **Doubt:** the control has the ordinary eaters' genes, so its
-  nodes and its children are alike to theirs and so, it seems (births of the root are counted at the parent, its members are not), join them (7.1), and its root runs out (seed 1, 64 x 64,
-  placed at year 40: 4 members at year 50, none at 55) while the big-brain kind, whose sizes are never alike
-  to theirs, keeps its nodes apart; read the big-brain kind against the ordinary eaters (root 1), and keep in
-  mind that kinds that cannot merge also differ in how their nodes pool.
+  row 2 of `KINDS` stays for the numbering.
+  **Result (15 Oct 2026; 64 x 64, 60 years, `--clever-year 40`, seeds 1 to 3; 300 copies of 112 to 116 kg members):
+  the test cannot tell.** (1) The control is gone in the first year, on all three seeds: 2 members of root 11 at
+  year 41, none by year 47, with no births and almost no deaths on seeds 1 and 2. So the "doubt" was right (read from zero births and deaths, not watched): it joins the
+  ordinary eaters' nodes, and the matched control does not exist. (2) Against the ordinary eaters (root 1; 1.3 to 2 x 10^5 members at year 40)
+  the big brain (root 2) starts about 500 times fewer and pays first: years 41 to 50 it dies of `SPENT` at 0.06 to 0.11 per member
+  a year (root 1: 0.01 to 0.07) and is born at 0.12 to 0.17 (root 1: 0.39 to 0.42); members drop to 36 to 45 kg. Years 51 to 60 it
+  has caught up and is ahead: births 0.36 / 0.40 / 0.43 per member (root 1: 0.29 / 0.30 / 0.29), deaths 0.159 / 0.154 / 0.150
+  (0.148 / 0.179 / 0.151), so it grows 0.28 / 0.30 / 0.33 a year over years 41 to 60 against 0.23 / 0.18 / 0.23, and holds
+  5.9 x 10^4 / 1.1 x 10^5 / 1.7 x 10^5 members (8 x 10^6 / 1.5 x 10^7 / 2.3 x 10^7 kg) at year 60 against 1.3 / 0.74 / 1.6 x 10^7 members for root 1.
+  (3) The brain-size gene does not move: root 2 stays at 48.000 +- 0.003 hidden units, root 1 at 12.0, so nothing here shows
+  selection for or against the size. Both roots are still growing at year 60 and the island is not full, and a root that starts small
+  has more food per member, so the edge may be room, not brain. A big brain may pay; this test cannot say so. It would need a
+  control that does not merge (the same brain size, kept apart) and a start as large as root 1, or a full island.
 - **The roster world lost small plants, not plants (review 5).** Its plant mass is as large as the
   normal run's; the big slow kind won by shade. Since review 5 every animal kind evolves small
   instead (eaters 63 kg to 0.2 kg in 100 years, watch report 6). Review 6 found two causes, not
