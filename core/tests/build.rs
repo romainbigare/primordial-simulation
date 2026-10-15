@@ -343,8 +343,8 @@ fn storing_the_solid_costs_no_build() {
     let b = &w.life.bodies[s];
     println!("took {took:.3} kg: solid {rich0:.3} -> {:.3} kg, matter {matter0:.3} -> {:.3} kg", kg(&w, b, r.rich), kg(&w, b, r.matter));
     assert!(took > 0.5 && kg(&w, b, r.rich) > rich0, "it stored nothing: took {took} kg, solid {rich0} -> {}", kg(&w, b, r.rich));
-    // (Matter does not rise; it oxidises in the open at 5% a year, here a month: 0.4%.)
-    assert!(kg(&w, b, r.matter) <= matter0 && kg(&w, b, r.matter) > 0.99 * matter0, "matter changed with no allowance: {matter0} -> {}", kg(&w, b, r.matter));
+    // (Matter does not rise; it oxidises in the open at 0.2 a year, here a month: 1.5%.)
+    assert!(kg(&w, b, r.matter) <= matter0 && kg(&w, b, r.matter) > 0.97 * matter0, "matter changed with no allowance: {matter0} -> {}", kg(&w, b, r.matter));
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
@@ -811,10 +811,11 @@ fn satiety_caps_every_size_and_counts_the_matter_built() {
     }
 }
 
-/// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 5% of it a
-/// year at 290 K in the starting air (a little slower than the energy-rich solid's 6.6%: structure
-/// resists), by mass action of the oxygen-like gas to the 6th power (0.21^6 = 8.6e-5) over a rate
-/// constant of 1.9e-5 /s at 290 K.
+/// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 0.2 of it a
+/// year at 290 K in the starting air (18.6% lost in a year; a little slower than the energy-rich
+/// solid's 0.27 a year, 24%: structure resists; both are litter decay constants, forest floor
+/// 0.25 a year), by mass action of the oxygen-like gas to the 6th power (0.21^6 = 8.6e-5) over a
+/// rate constant of 7.6e-5 /s at 290 K.
 #[test]
 fn dead_body_matter_oxidises_at_the_set_rate() {
     let (chem, init) = worldgen::chemistry0();
@@ -834,8 +835,8 @@ fn dead_body_matter_oxidises_at_the_set_rate() {
     };
     let (matter, solid) = (lost(m), lost(rich));
     println!("a year at 290 K in the starting air: body matter {:.2}% oxidised, the energy-rich solid {:.2}%", 100.0 * matter, 100.0 * solid);
-    assert!(matter > 0.045 && matter < 0.055, "{matter}");
-    assert!(solid > 0.06 && solid < 0.075 && matter < solid, "{solid}");
+    assert!(matter > 0.17 && matter < 0.205, "{matter}");
+    assert!(solid > 0.22 && solid < 0.26 && matter < solid, "{solid}");
     // It burns: 2805 kJ a mol, the heat of 6 of the solid, and balances in elements (validated on load).
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)).expect("a burning reaction");
     assert!((chem.dh(burn) / -2805e3 - 1.0).abs() < 1e-9 && chem.validate().is_ok());

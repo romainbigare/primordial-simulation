@@ -22,7 +22,8 @@ fn hot_reacts_faster() {
         n[5] = 1000.0;
         gas[2] = 1e6;
         let mut e = t * 1e12; // huge heat capacity: temperature stays put
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e12, None, 0.0, 1e5);
+        // (2.5e4 s: with the solid's litter constant 4 times higher, 1e5 s burns the hot node out and the ratio cannot show.)
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e12, None, 0.0, 2.5e4);
         1000.0 - n[5]
     };
     let (cold, hot) = (used(300.0), used(450.0));
