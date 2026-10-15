@@ -184,13 +184,14 @@ pub struct Body {
     /// has none: its members are of all ages (`live`).
     #[serde(default)]
     pub wear: f64,
-    /// Numbers that follow from the genes (rebuilt when missing)
-    #[serde(skip)]
+    /// Numbers that follow from the genes (rebuilt when missing). Saved with the body: a body not updated since
+    /// it was made has none yet, and others read them (`burns`, `pace`, `visible`), so a world loaded from a
+    /// snapshot went on differently from the one it was saved from (found by two-parent copying, 15 Oct 2026).
     pub k: Consts,
 }
 
 /// Numbers that follow from a body's genes, kept to save time.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Consts {
     /// 10 to the power of the gas, liquid, heat and light-capture genes
     pub gas: f64,
