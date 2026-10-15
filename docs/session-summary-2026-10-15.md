@@ -150,7 +150,9 @@ Things that were decided to wait:
 Things that are open and not built:
 
 - **Nitrogen fixing is too cheap:** closed. It now burns 14 units of fuel per N2 (6 g C per g N, Layzell 1979), and its heat pays no upkeep (handover, "Fixing costs what it costs"). Fixers and the flood of the mineral barely changed; product inhibition would be a new rule (the owner decides).
-- **The body heat test** now allows a 15% error. A 13% gap has no known cause.
+- **The body heat test:** closed. Found and fixed: the body's
+  reactions ran 9 K too cold after its upkeep, and the test left out the latent heat of the liquid the burning makes.
+  Within 2% again.
 - **The roster's big animals** (100 to 600 kg) die out in most runs.
 - **Eater numbers swing up to 1,000 times** between almost identical runs.
 - **Erosion is very slow in the first 10 years:** closed. The measure counted dead body matter piling up on the land as rock;

@@ -1435,8 +1435,12 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // of them dies now (the death rate of members who each live that long, so the same mean life).
     // (Over the body that is built, the tissue that wears, not the fuel it carries; 14 Oct 2026.)
     let worn = upkeep / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
-    let upkeep = b.e - e0;
-    b.e = e0;
+    // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so the
+    // body keeps its temperature as its stores change (as in `pay`, and for its reactions below; 15 Oct 2026: before, its new
+    // liquid came in cold and its other reactions ran 3%, 9 K, colder than the body).
+    let kept = e0 / cap.max(1e-9) * b.heat_cap(&w.chem);
+    let upkeep = b.e - kept;
+    b.e = kept;
     for (f, cause) in [(short, SPENT), (if node { worn.min(1.0) } else { 0.0 }, AGE)] {
         if f > 1e-9 {
             tmp.dead.clear();
@@ -1532,7 +1536,10 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let ta = e_air[j] / (0..ns).map(|k| air[k * na + j] * chem.subs[k].cp).sum::<f64>().max(1.0);
     let den = (&tmp.cat[..], b.gene(DENATURE), cfg.phys.unfold);
     let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(den), lit, dt);
-    let mut heat = e - e_start + lit - used + upkeep;
+    // (Their products, too, take their heat at the body's temperature from what they release.)
+    let c1 = b.heat_cap(chem);
+    let mut heat = e - t0 * (fixed + c1) + lit - used + upkeep;
+    b.e = t0 * c1;
     let (mut pay, mut q_in, mut c_out) = (0.0, 0.0, 0.0);
     for k in 0..ns {
         let d = tmp.pool[k] - tmp.pool0[k];

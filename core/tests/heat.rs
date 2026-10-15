@@ -252,41 +252,57 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     }
     let mut rises = [0.0; 2];
     for (n, &slot) in slots.iter().enumerate() {
-        let mut b = w.life.bodies[slot].clone();
-        assert!(b.alive, "it lives");
-        b.prepare(&w.chem, &w.cfg.phys);
-        let (i, mass, days) = (b.cell as usize, b.mass(&w.chem), b.interval() as f64);
-        let tg = w.scratch.temps().0[i];
-        // The temperature where heat made = heat lost: the upkeep over the interval is all released as heat (a tenth of it goes
-        // as the latent heat of the gas they breathe out).
-        let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w, &b, mass, t) * days * 86_400.0;
-        // (And the heat of the bare burning of its stores, which the open air does to them at any temperature: since the litter
-        // constants of 15 Oct 2026 the solid and the matter burn 4 times faster uncatalysed, 24% and 19% a year at 290 K, so it
-        // is about a sixth of what it makes, where it was a twenty-fifth.)
-        let bare = |t: f64| {
-            let (mut rc, ns) = (pcore::change::Reactor::new(&w.chem), w.chem.ns());
-            let mut n = b.store.clone();
-            let mut gas: Vec<f64> = w.chem.air.iter().enumerate().map(|(k, x)| if k == 1 || k == 2 { x * 1e12 } else { 0.0 }).collect();
-            let chem_e = |n: &[f64], g: &[f64]| (0..ns).map(|k| (n[k] + g[k]) * w.chem.subs[k].hf).sum::<f64>();
-            let (c0, mut e) = (chem_e(&n, &gas), t * 1e18);
-            rc.react(&w.chem, &mut n, Some(&mut gas), &mut e, 1e18, None, 0.0, days * 86_400.0);
-            c0 - chem_e(&n, &gas)
+        // The world and the body as its next update finds them, and the body as that update leaves it.
+        let next = w.life.bodies[slot].last + w.life.bodies[slot].interval();
+        while w.day < next {
+            held_day(w, &cells, t_cat);
+        }
+        let (w0, mut b) = (w.clone(), w.life.bodies[slot].clone());
+        held_day(w, &cells, t_cat);
+        assert!(w.life.bodies[slot].alive, "it lives");
+        let w0 = &w0;
+        b.prepare(&w0.chem, &w0.cfg.phys);
+        let (i, mass, days) = (b.cell as usize, b.mass(&w0.chem), b.interval() as f64);
+        let (tg, chem) = (w0.scratch.temps().0[i], &w0.chem);
+        let (ns, na, j) = (chem.ns(), w0.grid.na(), w0.grid.air_of(i));
+        // The temperature where heat made = heat lost. The heat made is what its reactions release at that temperature to their
+        // products where they go: the gases to the air with their latent heat, the rest held at its temperature (each mol of `k`
+        // holds `h`). Its upkeep burns its fuel (`body::pay`), and the open air burns its stores bare at any temperature (since
+        // the litter constants of 15 Oct 2026, a sixth of what it makes). The liquid that makes, which it keeps none of, leaves:
+        // as vapour, with its latent heat, as far as the air it exchanges takes it up to its vapour pressure, and the rest to the
+        // ground as liquid with its heat (`body::shed`).
+        let h = |k: usize, t: f64| {
+            let (s, gas) = (&chem.subs[k], chem.phase(k, t) == pcore::chem::Phase::Gas);
+            s.hf + if gas { s.lf + s.lv } else { s.cp * t }
         };
-        let made = |t: f64| 0.95 * (pcore::body::upkeep(w, &at(w, &b, t), days, mass) + bare(t));
+        let gas: Vec<f64> = chem.air.iter().enumerate().map(|(k, x)| if k == 1 || k == 2 { x * 1e12 } else { 0.0 }).collect();
+        let made = |t: f64| {
+            let (x, mut w2) = (at(w0, &b, t), w0.clone());
+            let mut y = x.clone();
+            assert!(pcore::body::pay(&mut w2, &mut y, pcore::body::upkeep(w0, &x, days, mass), days));
+            let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem));
+            rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * 86_400.0);
+            let air = |k: usize| w0.air[k * na + j] - w2.air[k * na + j] + gas[k] - g[k];
+            let wet = y.store[liquid] - x.store[liquid];
+            let x_air = w0.air[liquid * na + j] / (0..ns).map(|k| w0.air[k * na + j]).sum::<f64>();
+            let vapour = wet.min((chem.p_sat(liquid, t) / pcore::chem::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
+            (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * (chem.subs[liquid].lf + chem.subs[liquid].lv)
+        };
+        let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, &b, mass, t) * days * 86_400.0;
         let (mut lo, mut hi) = (tg, tg + 3.0);
         for _ in 0..80 {
             let mid = 0.5 * (lo + hi);
             if lost(mid) < made(mid) { lo = mid } else { hi = mid }
         }
         let want = 0.5 * (lo + hi) - tg;
-        rises[n] = b.temp(&w.chem) - tg;
+        rises[n] = w.life.bodies[slot].temp(chem) - tg;
         println!("{:.0} kg: {:.3} K above the ground ({tg:.2} K); heat made = heat lost at {want:.3} K", mass, rises[n]);
-        // (Within 12%: it was 10% when the matter burned for 17.3 MJ/kg and the ground was dry; the balance here is 8 to 10%, the heat of
-        // the bare burning of the body's stores being a rough count; 15 Oct 2026, the nitrogen mineral and liquid in the pores.)
-        // (Within 15% since the smooth rate of Law 2 met the rock nutrient, 15 Oct 2026: the 11 kg body stands 0.443 K above the ground
-        // against 0.509 by this count, 13% under; each alone was within 2%. The cause is not found: the bare burning counted here
-        // and in the body match by the law, and the body releases 9 times its upkeep.)
-        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.15, "{} K above the ground, the heat balance says {want} K", rises[n]);
+        // (Within 2%, 0.2% and 0.5% here: what is left is the update's steps, the body's mass at its start against its mean. It was
+        // 13% under, held within 15%, after the smooth rate of Law 2 met the rock nutrient, from two errors (each change alone had
+        // been within 2%, not measured again here): `body::live` ran its reactions after its upkeep 9 K below the body, its new liquid coming in with no heat (the
+        // bare burning gave 4.9e5 J where 1.1e6 is due, 9% of the heat; fixed, 15 Oct 2026), and this count took 0.95 of the
+        // heat where the latent heat of the liquid the burning makes takes 8% more.)
+        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.02,"{} K above the ground, the heat balance says {want} K", rises[n]);
     }
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
