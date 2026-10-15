@@ -1121,6 +1121,7 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
   `take` not tuned, as asked); what limits animals is `c_build`, and the plants of one seed climb to
   their ceiling (about 700 kg).
 - **Review 7, the last two items (15 Oct 2026).** Plants walking (fix 7): done, moving needs force (Section 4). Liquid above the level drains out (R11): measured and built, but it kills the eaters through the rock salt's decay in the body, so it is not landed (same row). Open: the owner's.
+- **How to read the eaters (15 Oct 2026).** The 1,000-times swing between seeds was the founders' bottleneck (a lag of 5 to 15 years before take-off), gone with adult founders: on main 1c7e5d1 eaters at year 60 are 4.1e8 to 1.75e9 kg over seeds 1 to 9. They still grow 0.2 a year at year 60, so report log10 kg at year 60 with the growth rate over years 30 to 60, three seeds at least; under 2 times is noise.
 - **Breeding seasons must emerge (the owner's decision, 14 Oct 2026).** No calendar rule, ever.
   Bodies copy only from the surplus they build (review 7), so less winter light, dry periods
   (dormancy) and cold (the cost of living follows temperature, queued) cut the surplus and stop
