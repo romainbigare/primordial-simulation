@@ -460,7 +460,9 @@ pub fn regroup(w: &mut World) {
 /// per kg and m, `Physics::walk` (more per kg for a small member), distance, climb, and the
 /// body mass per area already there; less, and no climb, into deep liquid while held up by what
 /// it carries. The movers must fit in the free space over the cell (`phys.layer`). The part spent
-/// pushing through bodies breaks their bonds (`wear`). A body that strays from its group's
+/// pushing through bodies breaks their bonds (`wear`). What it moves is the whole mass it
+/// carries, fuel too (the cost and the push on structures are of that mass); what it can carry
+/// and hold goes by its force, of its body (`bond::carry`, `Body::built`; 15 Oct 2026). A body that strays from its group's
 /// centre leaves with a copy of its rows. A node moves as one: all its members go (they drew
 /// the same action), and it stays one node.
 pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
@@ -468,7 +470,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.grid.area() {
         return;
     }
-    let carried = bond::carry(w, b, mb);
+    let carried = bond::carry(w, b);
     let afloat = carried.is_some() && bond::afloat(w, b, j, mb);
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = resist(w, i, d, j);
@@ -751,7 +753,7 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 
 /// Take from another body in the cell, by uptake selectivity, as much as its mass (`Body::equiv`),
 /// what it can use (`sate`) and its force against the other's allow (a member's force: strength x what a held part adds x
-/// its mass, as `bond::force`), and its room. The quicker body acts first: one that decides
+/// its body, `Body::built`, as `bond::force`: a hurt body is weaker), and its room. The quicker body acts first: one that decides
 /// more often than the taker has acted again within part of the taker's interval and gets away
 /// with chance 1 - its interval / the taker's (the taker has paid). The other dies if it loses
 /// half its mass or falls below a safe minimum (a node loses the members eaten); else it
@@ -761,8 +763,8 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
-    let lever = bond::lever(w, b, mb);
-    let (fb, fo) = (b.gene(STRENGTH) * lever * mb / b.n(), o.gene(STRENGTH) * bond::lever(w, o, mo) * mo / o.n());
+    let lever = bond::lever(w, b);
+    let (fb, fo) = (b.gene(STRENGTH) * lever * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
     let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mb, b.interval() as f64);
     let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / w.cfg.phys.rho_pass;
