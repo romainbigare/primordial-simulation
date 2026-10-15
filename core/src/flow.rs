@@ -1,7 +1,9 @@
 //! Law 1: Flow. Stuff moves along edges from high push to low push, with loss.
 //!
-//! Ground nodes (here): liquid runs down its head in one ordered sweep; the head it loses
-//! heats the ground and does work, carrying loose solids and breaking weak bonds; loose
+//! Ground nodes (here): liquid soaks into the pores of the loose ground up to their volume (the
+//! porosity times the volume of the loose solids) and what is over that stands and runs down its
+//! head in one ordered sweep; the water in the pores flows to neighbours by Darcy's law; the head
+//! it loses heats the ground and does work, carrying loose solids and breaking weak bonds; loose
 //! solids creep downhill and heat conducts. Air nodes (`air`): radiation, contact heat,
 //! evaporation and condensation, and gas moved by pressure, overturning and mixing.
 //! Every move takes from one node exactly what it gives to another, with its heat, and
@@ -61,7 +63,8 @@ struct Sp {
 /// | `tg` | K | G | all, Law 2, bodies (`temps`) |
 /// | `pk`, `phi` | substance, share | G | `molten`, Rad |
 /// | `hold` | [J held, J low, J high, stage] | G, L (`[0]`), `lift` (marks stale) | G, L |
-/// | `z`, `head` | m (solid surface, liquid surface) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
+/// | `z`, `head` | m (solid surface, surface of all the liquid, pores filled first) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
+/// | `pd` | m (liquid the pores of the loose ground hold, over the cell's area) | `surface` | L |
 /// | `alb`, `rc` | reflectance, m² K/W | `surface` | Rad |
 /// | `rain` | mol, condensed this call | X | X (to `diag.rain`) |
 /// | `order` | cell keys by head | L | L |
@@ -125,6 +128,10 @@ pub struct Scratch {
     hold: Vec<[f64; 4]>,
     z: Vec<f64>,
     head: Vec<f64>,
+    /// Pore space of the loose ground, as a depth of liquid over the cell (the porosity times the
+    /// volume of its loose solids over the area): the first liquid of a cell fills it.
+    #[serde(default)]
+    pd: Vec<f64>,
     alb: Vec<f64>,
     /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
     rc: Vec<f64>,
@@ -379,7 +386,7 @@ fn refresh(w: &World, s: &mut Scratch) {
         return;
     }
     (s.pk, s.phi, s.hold) = (vec![NONE; n], vec![0.0; n], vec![[0.0, 0.0, f64::MIN, 0.0]; n]);
-    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.alb, &mut s.rc, &mut s.tl] {
+    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
         *v = vec![0.0; n];
     }
     for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {
@@ -521,6 +528,22 @@ fn surface(w: &World, s: &mut Scratch, i: usize) {
         }
     }
     (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, a + seen * s.bed[i][2]);
+    s.pd[i] = w.cfg.phys.porosity * (l[0] + l[4]) / area;
+}
+
+/// Head of the liquid that stands on node `i` (the solid surface when none does), m: the liquid
+/// over what the pores hold.
+#[inline]
+fn stand(s: &Scratch, i: usize) -> f64 {
+    (s.head[i] - s.pd[i]).max(s.z[i])
+}
+
+/// Head of the water table of node `i`, m (Darcy's law reads it): in a node whose pores are not
+/// full, the bottom of its loose ground plus the depth they fill; else the head that stands.
+#[inline]
+fn table(s: &Scratch, i: usize, por: f64) -> f64 {
+    let full = s.head[i] - s.z[i] >= s.pd[i];
+    if full { s.head[i] - s.pd[i] } else { s.z[i] - s.pd[i] / por + (s.head[i] - s.z[i]) / por }
 }
 
 /// Liquid by head, as one ordered sweep from the highest head down: each node passes liquid
@@ -540,7 +563,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     // Highest head first (heads to 0.1 m, then by cell). The order is kept between refreshes:
     // any order is safe, it only sets how far liquid gets in one call.
     if s.order.len() != n {
-        s.order = s.head.iter().enumerate().map(|(i, &h)| (((2e4 - h).max(0.0) * 10.0) as u64) << 20 | i as u64).collect();
+        s.order = (0..n).map(|i| (((2e4 - stand(s, i)).max(0.0) * 10.0) as u64) << 20 | i as u64).collect();
         s.order.sort_unstable();
     }
     s.done.fill(false);
@@ -549,10 +572,12 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let mut wa = vec![0.0; liq.len()];
     for r in 0..n {
         let i = (s.order[r] & 0xf_ffff) as usize;
-        let (t, hd, zi) = (s.tg[i], s.head[i], s.z[i]);
+        let (t, hd, zi) = (s.tg[i], stand(s, i), s.z[i]);
         s.done[i] = true;
-        // The head above the surface is the liquid standing here.
-        if hd <= zi && work <= 0.0 {
+        // The head above the surface is the liquid standing here, and liquid in the pores is not at rest
+        // either: it flows by Darcy's law (`seep`).
+        let damp = s.pd[i] > 0.0 && s.head[i] > zi;
+        if hd <= zi && !damp && work <= 0.0 {
             w.diag.liquid_flux[i] *= 1.0 - ema;
             continue;
         }
@@ -562,10 +587,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         let (mut nb, mut q, mut room) = ([(0usize, 0.0f64); 8], [0.0f64; 8], [0.0f64; 8]);
         let (mut cnt, mut wsum, mut rmax, mut qmax) = (0, 0.0, 0.0f64, 0.0f64);
         for (d, &j) in s.nbr[i].iter().enumerate() {
-            if j == u32::MAX {
+            if j == u32::MAX || hd <= zi {
                 continue;
             }
-            let (j, hj) = (j as usize, s.head[j as usize]);
+            let (j, hj) = (j as usize, stand(s, j as usize));
             let (dh, r) = (hd - hj, if s.done[j as usize] { 0.5 * (hd - hj) } else { hd - hj.max(zi) });
             if dh > w.cfg.phys.still && r > 0.0 {
                 (nb[cnt], room[cnt], q[cnt]) = ((j, dh), r, dh * inv[d]);
@@ -573,7 +598,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 cnt += 1;
             }
         }
-        if cnt == 0 && work <= 0.0 {
+        if cnt == 0 && !damp && work <= 0.0 {
             w.diag.liquid_flux[i] *= 1.0 - ema;
             continue;
         }
@@ -597,14 +622,51 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // a hot node that a flood of cooler liquid crosses does not send it on at the old
         // temperature, more heat than it holds).
         let tcur = t.min((w.e_ground[i] - s.hold[i][0]) / s.cap[i].max(1.0)).max(0.0);
-        let (mut qsum, mut power, mut out) = (0.0, 0.0, 0.0);
+        let (mut power, mut out) = (0.0, 0.0);
+        // Only the liquid over the pores runs off (`qs`, the load it carries goes with it alone); each
+        // neighbour's drop in head, for the power lost.
+        let (mut fall, mut qs, mut qss) = ([0.0; 8], [0.0; 8], 0.0);
         if lvol > 0.0 && cnt > 0 {
-            let x = lvol.min(area * rmax) / wsum;
+            let x = (lvol - s.pd[i] * area).max(0.0).min(area * rmax) / wsum;
             for c in 0..cnt {
                 q[c] = (x * q[c]).min(area * room[c]);
-                qsum += q[c];
+                (fall[c], qs[c]) = (nb[c].1, q[c]);
+                qss += q[c];
             }
-            let (part, inv) = (qsum / lvol, 1.0 / qsum);
+        }
+        // The pore water flows on by Darcy's law: through the thickness of ground the water table fills, at
+        // `seep` times the slope of its head (to the neighbour with the lower table, no more than half way to a
+        // level table), with the same liquid and heat as the standing liquid.
+        if lvol > 0.0 && damp {
+            let por = w.cfg.phys.porosity;
+            let ti = table(s, i, por);
+            for (d, &j) in s.nbr[i].iter().enumerate() {
+                if j == u32::MAX {
+                    continue;
+                }
+                let j = j as usize;
+                let dh = ti - table(s, j, por);
+                let b = ti - (s.z[i] - s.pd[i] / por).max(s.z[j] - s.pd[j] / por);
+                if dh <= w.cfg.phys.still || b <= 0.0 {
+                    continue;
+                }
+                let (si, sj) = (area * if s.head[i] - zi >= s.pd[i] { 1.0 } else { por }, area * if s.head[j] - s.z[j] >= s.pd[j] { 1.0 } else { por });
+                let v = (w.cfg.phys.seep * b * w.grid.cell_m * dh / w.grid.dist(DIRS[d]) * dt).min(0.5 * dh / (1.0 / si + 1.0 / sj));
+                if v <= 0.0 {
+                    continue;
+                }
+                let c = (0..cnt).find(|&c| nb[c].0 == j).unwrap_or_else(|| {
+                    (nb[cnt], q[cnt], fall[cnt]) = ((j, 0.0), 0.0, 0.0);
+                    cnt += 1;
+                    cnt - 1
+                });
+                fall[c] = (fall[c] * q[c] + dh * v) / (q[c] + v);
+                q[c] += v;
+            }
+        }
+        if lvol > 0.0 && cnt > 0 {
+            let qsum: f64 = q[..cnt].iter().sum();
+            let (part, inv) = ((qsum / lvol).min(1.0), 1.0 / qsum);
             for (&a, &k) in wa.iter().zip(&liq).filter(|p| *p.0 > 0.0) {
                 let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
                 // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
@@ -615,7 +677,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 s.hold[i][0] -= if s.pk[i] != k { m * p.lf } else { 0.0 };
                 settle(s, k, i, -m);
                 out += m;
-                for (&(j, dh), &q) in nb[..cnt].iter().zip(&q).filter(|p| *p.1 > 0.0) {
+                for ((&(j, _), &dh), &q) in nb[..cnt].iter().zip(&fall).zip(&q).filter(|p| *p.1 > 0.0) {
                     let (m, e) = (m * q * inv, e * q * inv);
                     (w.ground[k * n + j], s.cap[j], w.e_ground[j]) = (w.ground[k * n + j] + m, s.cap[j] + m * p.cp, w.e_ground[j] + e);
                     s.hold[j][0] += if s.pk[j] != k { m * p.lf } else { 0.0 };
@@ -634,14 +696,14 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // The work, on the bed below the liquid left standing (which hides it): drop
         // what is over capacity (all of it where nothing flows on), else pick up loose solids
         // and break bonded ground; pass the load on with the flow.
-        let bedwork = power * work * w.cfg.phys.hide[1] / (w.cfg.phys.hide[1] + (lvol - qsum).max(0.0) / area);
+        let bedwork = power * work * w.cfg.phys.hide[1] / (w.cfg.phys.hide[1] + (lvol - s.pd[i] * area - qss).max(0.0) / area);
         let load: f64 = sol.iter().enumerate().map(|(si, &k)| s.sed[i * ns + si] * s.sp[k].v[0]).sum();
         let capv = w.cfg.carry * bedwork * held(w, i);
         if load <= 0.0 && capv < 1.0 {
             continue;
         }
-        if load > capv || qsum <= 0.0 {
-            let f = if qsum > 0.0 { 1.0 - capv / load } else { 1.0 };
+        if load > capv || qss <= 0.0 {
+            let f = if qss > 0.0 { 1.0 - capv / load } else { 1.0 };
             for (si, &k) in sol.iter().enumerate() {
                 let m = s.sed[i * ns + si] * f;
                 s.sed[i * ns + si] -= m;
@@ -686,11 +748,11 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 }
             }
         }
-        if qsum <= 0.0 {
+        if qss <= 0.0 {
             continue;
         }
-        for (&(j, dh), &q) in nb[..cnt].iter().zip(&q).filter(|p| *p.1 > 0.0) {
-            let (f, mut mass) = (q / qsum, 0.0);
+        for (&(j, dh), &q) in nb[..cnt].iter().zip(&qs).filter(|p| *p.1 > 0.0) {
+            let (f, mut mass) = (q / qss, 0.0);
             for (si, &k) in sol.iter().enumerate() {
                 let m = s.sed[i * ns + si] * f;
                 if m <= 0.0 {

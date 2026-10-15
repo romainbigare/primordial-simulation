@@ -986,19 +986,24 @@ pub fn fused(chem: &Chemistry, k: usize, t: f64) -> f64 {
     if t >= chem.subs[k].melt { chem.subs[k].lf } else { 0.0 }
 }
 
-/// Temperature (as of the last flow step), liquid depth and surface height of a ground cell.
+/// Temperature (as of the last flow step), depth of the liquid that stands (what the pores of the loose ground
+/// do not hold, 15 Oct 2026: `flow::liquid`) and surface height of a ground cell.
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     let t = w.scratch.temps().0.get(i).copied().unwrap_or_else(|| w.t_ground(i));
-    let (mut z, mut d) = (0.0, 0.0);
+    let (mut z, mut d, mut loose) = (0.0, 0.0, 0.0);
     for k in 0..w.chem.ns() {
         z += w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
         match w.chem.phase(k, t) {
-            Phase::Solid => z += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid),
+            Phase::Solid => {
+                loose += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid);
+                z += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid);
+            }
             Phase::Liquid => d += w.g(k, i) * w.chem.molar_volume(k, Phase::Liquid),
             Phase::Gas => {}
         }
     }
-    [t, d / w.grid.area(), w.base_z + z / w.grid.area()]
+    let area = w.grid.area();
+    [t, (d - w.cfg.phys.porosity * loose).max(0.0) / area, w.base_z + z / area]
 }
 
 /// Before each physics step: what each cell holds (sums of visible traits), its bodies'
@@ -1405,7 +1410,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // a cell that turned hot).
     let [tg, depth, _] = w.life.env[i];
     let tg = w.scratch.temps().0.get(i).copied().unwrap_or(tg);
-    let (depth, walls) = (bond::depth(w, b, depth), bond::walls_around(w, b));
+    let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::walls_around(w, b));
     let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
     let days = w.day.saturating_sub(b.last).max(1) as f64;
@@ -1602,7 +1607,14 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 
     // Liquids standing on the ground soak in by solubility, faster where the ground is wet,
     // up to the level the body keeps, through the mass that works (`wk`).
-    let wet = depth / (depth + cfg.phys.wet_depth);
+    // (The liquid in the pores of the ground is soaked up like the liquid that stands: whatever the cell holds of it
+    // counts for the wetness, but a body afloat on standing liquid reaches the ground through none.)
+    let held = if stands && depth == 0.0 {
+        0.0
+    } else {
+        (0..ns).filter(|&k| chem.phase(k, tg) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / grid.area()
+    };
+    let wet = held / (held + cfg.phys.wet_depth);
     let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
     if in_ground > 0.0 {
