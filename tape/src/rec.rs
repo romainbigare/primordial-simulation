@@ -61,6 +61,10 @@ struct Social {
     month_births: Vec<Vec<f64>>,
     /// Members born by kind since the last month (the row to come)
     births_now: Vec<f64>,
+    /// Like `month_births`, the members that died in each month by starting kind and cause (`CAUSES`; index
+    /// kind x 6 + cause), written after the births as `root_<k>_died_<cause>` (15 Oct 2026), and the row to come
+    month_deaths: Vec<Vec<f64>>,
+    deaths_now: Vec<f64>,
     /// Members of the others that died of SPENT this month, and the sum of their rows (y)
     spent: [f64; 2],
     /// Bonds made this year by kind (held, joined, anchored); broken by bodies; failed by load
@@ -148,12 +152,14 @@ struct Root {
     act: f64,
     dry: f64,
     wet: f64,
+    /// The members' temperature above their ground's (`Body::temp`), K, summed by members
+    warm: f64,
     cat: Vec<(f64, f64)>,
 }
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 6], act: 0.0, dry: 0.0, wet: 0.0, cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 6], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -290,18 +296,23 @@ impl Recorder {
         let now = (w.day / dpy, (w.day / dpm) % mpy);
         let old = std::fs::read_to_string(dir.join("months.csv")).unwrap_or_default();
         let mut lines = old.lines();
-        if lines.next().is_some_and(|h| !h.starts_with(MONTHS)) {
+        let head = lines.next();
+        if head.is_some_and(|h| !h.starts_with(MONTHS)) {
             return Err(bad("months.csv has other columns"));
         }
+        // The kinds with a births column (an older file has none, nor deaths).
+        let nb = head.map_or(0, |h| h.split(',').filter(|c| c.ends_with("_births")).count());
         for l in lines.take_while(|l| {
             let mut f = l.split(',').map(|v| v.parse::<u64>().unwrap_or(u64::MAX));
             (f.next().unwrap_or(0), f.next().unwrap_or(0)) <= now
         }) {
             // The columns of `MONTHS`, then the births of each kind (an older file has none).
             let at = l.match_indices(',').nth(MONTHS.matches(',').count()).map_or(l.len(), |p| p.0);
-            let (head, births) = l.split_at(at);
+            let (head, rest) = l.split_at(at);
             self.social.months += &(head.to_string() + "\n");
-            self.social.month_births.push(births.split(',').skip(1).map(|v| v.parse().unwrap_or(0.0)).collect());
+            let v: Vec<f64> = rest.split(',').skip(1).map(|v| v.parse().unwrap_or(0.0)).collect();
+            self.social.month_births.push(v[..nb.min(v.len())].to_vec());
+            self.social.month_deaths.push(v[nb.min(v.len())..].to_vec());
         }
         Ok(())
     }
@@ -345,6 +356,9 @@ impl Recorder {
                         let v = &mut self.social.root_deaths;
                         v.resize(v.len().max(root as usize + 1), [0.0; 6]);
                         v[root as usize][(cause as usize).min(5)] += e.value;
+                        let v = &mut self.social.deaths_now;
+                        v.resize(v.len().max(6 * (root as usize + 1)), 0.0);
+                        v[6 * root as usize + (cause as usize).min(5)] += e.value;
                         let v = if adult { &mut self.social.root_adult } else { &mut self.social.root_young };
                         v.resize(v.len().max(root as usize + 1), 0.0);
                         v[root as usize] += e.value;
@@ -471,10 +485,11 @@ impl Recorder {
         let [sp, sy] = std::mem::take(&mut s.spent);
         let row = format!("{y},{m},{n},{:.3},{:.1},{:.4},{:.3},{inside},{:.2},{sp:.0},{:.2}\n", mean[0], mean[1], mean[2], mean[3], tm / n.max(1.0), sy / sp.max(1e-9));
         // (A resumed run has this month's row already, from the tape it loaded.)
-        let births = std::mem::take(&mut s.births_now);
+        let (births, deaths) = (std::mem::take(&mut s.births_now), std::mem::take(&mut s.deaths_now));
         if s.months.lines().next_back().is_none_or(|l| !l.starts_with(&format!("{y},{m},"))) {
             s.months += &row;
             s.month_births.push(births);
+            s.month_deaths.push(deaths);
         }
     }
 
@@ -559,6 +574,7 @@ impl Recorder {
                 r.brood += b.brooded(&w.chem) * w.chem.matter().map_or(0.0, |m| w.chem.subs[m].molar_mass);
                 let a = b.activity(&w.chem, &w.cfg.phys);
                 (r.act, r.dry, r.wet) = (r.act + n * a, r.dry + n * (a < 0.5) as u8 as f64, r.wet + n * b.gene(pcore::body::WET));
+                r.warm += n * (b.temp(&w.chem) - c.f.t[b.cell as usize]);
                 for (x, g) in r.genes.iter_mut().zip(GENES) {
                     *x += n * b.gene(g);
                 }
@@ -654,6 +670,8 @@ impl Recorder {
                 (c("activity"), "1", per(v.act)),
                 (c("dry"), "1", per(v.dry)),
                 (c("wet_gene"), "log10", per(v.wet)),
+                // 15 Oct 2026: how much warmer the members are than the ground they stand on (`Body::temp` less the cell's), K, mean by members.
+                (c("temp"), "K", per(v.warm)),
                 // 14 Oct 2026: the genes of reproduction (means by members: the share of building that goes to offspring, and a
                 // child's body as log10 of its share of the copy mass) and the brood as a share of the members' mass.
                 (c("alloc"), "1", per(v.alloc)),
@@ -841,10 +859,12 @@ impl Recorder {
         }
         std::fs::write(dir.join("physics.json"), &self.physics)?;
         // One births column per starting kind seen in any month (a month before a kind's first birth reads 0).
-        let nk = self.social.month_births.iter().map(Vec::len).max().unwrap_or(0);
+        let nk = self.social.month_births.iter().map(Vec::len).chain(self.social.month_deaths.iter().map(|d| d.len().div_ceil(6))).max().unwrap_or(0);
         let mut months = self.social.months.lines().next().unwrap_or(MONTHS).to_string() + &(0..nk).map(|k| format!(",root_{k}_births")).collect::<String>();
-        for (l, b) in self.social.months.lines().skip(1).zip(&self.social.month_births) {
+        months += &(0..nk).flat_map(|k| CAUSES.iter().map(move |c| format!(",root_{k}_died_{c}"))).collect::<String>();
+        for ((l, b), d) in self.social.months.lines().skip(1).zip(&self.social.month_births).zip(&self.social.month_deaths) {
             months += &format!("\n{l}{}", (0..nk).map(|k| format!(",{}", b.get(k).copied().unwrap_or(0.0))).collect::<String>());
+            months += &(0..6 * nk).map(|q| format!(",{}", d.get(q).copied().unwrap_or(0.0))).collect::<String>();
         }
         std::fs::write(dir.join("months.csv"), months + "\n")?;
         std::fs::write(dir.join("series.csv"), csv + "\n")

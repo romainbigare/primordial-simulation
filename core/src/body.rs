@@ -250,6 +250,16 @@ impl Body {
         let n = self.n();
         self.k.heat * n * m_ref.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
     }
+    /// How fast the body's chemistry runs at its temperature `t` against `Physics::t_cat`, where the
+    /// costs are anchored: the rate law of Change, exp(-Ea (1/t - 1/t_cat)), Ea the barrier of its main
+    /// burning reaction (the first of `Consts::burn`), 1 for a body that burns nothing. About 2.5 per
+    /// 10 K for the solid's 7,760 K at 290 K. Needs `prepare`.
+    pub fn pace(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
+        match self.k.burn.first() {
+            Some(&(r, _)) => (-chem.reactions[r].ea * (1.0 / t.max(1.0) - 1.0 / p.t_cat)).exp(),
+            None => 1.0,
+        }
+    }
     pub fn interval(&self) -> u64 {
         if self.k.interval > 0 {
             return self.k.interval;
@@ -486,9 +496,13 @@ impl Body {
     /// (`Body::built`), not of the whole mass (14 Oct 2026, the energy ceiling): the fuel it stores
     /// is carried, not working tissue, so it raises neither what the body can take nor what it
     /// pays to keep (`body::upkeep`, by the same body). Intake (`take`, sweep, gifts), the `c_build`
-    /// allowance (`copy::grow`) and satiety go by it; the leaf by the body too (`visible`).
+    /// allowance (`copy::grow`) and satiety go by it; the leaf by the body too (`visible`). **And by the pace of
+    /// the body's temperature** (`Body::pace`, 15 Oct 2026, the coordinator's call after A): the whole tempo of a body
+    /// goes with exp(-Ea/T) (metabolic theory of ecology: metabolism, feeding and growth rates), so what it can take and
+    /// build per day goes by the same factor as what it pays to live. Light (a flux), the catalysed reactions (which follow
+    /// T by their own rate) and the cost of a metre are not in it.
     pub fn supply(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
-        self.equiv(p, self.built(chem))
+        self.equiv(p, self.built(chem)) * self.pace(chem, p, self.temp(chem))
     }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
     /// (`LEAF` per kg-equivalent of its body, as `visible` and the light code count it)
@@ -1339,6 +1353,51 @@ fn starve(w: &mut World, b: &mut Body, _m: f64, dead: &mut Vec<f64>) -> bool {
 }
 
 /// Flow and Change on one body since its last update. Returns a death cause.
+/// The cover of other bodies over a body's cell, kg/m²: the mass of the others per ground area.
+fn cover_of(w: &World, b: &Body) -> f64 {
+    (w.life.sum[b.cell as usize][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.grid.area()
+}
+
+/// A body's heat conductance to the surface it stands on by contact, W/K, and the area it radiates from, m²
+/// (its own surface, 6 (m1 / `rho_body`)^(2/3) per member, as the space of walls). Its own conductance
+/// (`Body::conductance`: the `HEAT` gene, mass^(2/3)) splits in the shares of that area and its light-capture
+/// area, and only the share of its own surface goes through the cover: a layer of `cover` kg/m² passes
+/// `phys.shelter` / `cover` W per K and m² of surface, in series; bare ground adds none. Walls around it add their
+/// conductance (its share of it) in series. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the
+/// cover) with 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8 W/K, and
+/// 1.5 W/K stays open: 10.3 W/K in all (13.8 with what it radiates), so its 52 W of upkeep warm it 3.8 K (1.6 K
+/// bare), 2.2 K more. A 1 kg plant member (surface 0.06 m², capture area 2 m²: 3% under the cover) keeps 475 of its
+/// 490 W/K open; its 14 W/K under 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
+fn surface(chem: &Chemistry, p: &crate::Physics, b: &Body, mass: f64, cover: f64, walls: Option<(f64, f64)>) -> (f64, f64) {
+    let (m1, nb) = (mass / b.n(), b.n());
+    let leaf = b.equiv(p, b.size(chem)) * b.k.leaf;
+    let ab = 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0);
+    let g0 = b.conductance(p.m_ref, mass);
+    let g0 = if cover > 0.0 {
+        let s = ab / (ab + leaf / nb);
+        g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (p.shelter * nb * ab))
+    } else {
+        g0
+    };
+    (walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1)), ab * nb)
+}
+
+/// The heat conductance by which a body of `mass` kg at the temperature `t` loses heat to the ground it stands on,
+/// W/K: by contact (its `HEAT` gene, cover and walls, `surface`) and by radiation (`radiated`). The ground's
+/// temperature is that of the last flow step, as in its update.
+pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
+    let i = b.cell as usize;
+    let tg = w.scratch.temps().0.get(i).copied().unwrap_or(w.life.env[i][0]);
+    let (gc, area) = surface(&w.chem, &w.cfg.phys, b, mass, cover_of(w, b), bond::walls_around(w, b));
+    gc + radiated(area, t, tg)
+}
+
+/// Heat conductance of radiation between a surface of `area` m² at `t` and the ground at `tg`, W/K: σ (T² + tg²)
+/// (T + tg) per m², as every surface radiates (σT⁴, emissivity 1, `flow::air::radiation`).
+fn radiated(area: f64, t: f64, tg: f64) -> f64 {
+    crate::flow::air::SIGMA * area * (t * t + tg * tg) * (t + tg)
+}
+
 fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tmp) -> Option<u8> {
     let i = b.cell as usize;
     // The ground's temperature as of the last flow step (the monthly survey's is too old to feel
@@ -1346,7 +1405,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let [tg, depth, _] = w.life.env[i];
     let tg = w.scratch.temps().0.get(i).copied().unwrap_or(tg);
     let (depth, walls) = (bond::depth(w, b, depth), bond::walls_around(w, b));
-    let cover = (w.life.sum[i][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.grid.area();
+    let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
     let days = w.day.saturating_sub(b.last).max(1) as f64;
     let (mut mass, cap) = b.mass_cap(&w.chem);
@@ -1405,39 +1464,17 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let (ns, n, na, j) = (chem.ns(), grid.n(), grid.na(), grid.air_of(i));
     let dt = days * DAY;
 
-    // Its conductance to the surface it stands on, W/K (for its reactions, evaporation and the
-    // heat below). Walls around it add their conductance (its share of it) in series. So does the cover of the
-    // other bodies in its cell, but only for the part of its surface that lies under the cover:
-    // its light-capture area is open to the air above (it is part of the canopy), so the body's
-    // conductance splits in the shares of the two areas, and only the share of its own surface
-    // (6 (mass / `rho_body`)^(2/3) per member, as the space of walls) goes through the cover. A
-    // layer of `cover` kg/m² passes `phys.shelter` / `cover` W per K and m² of surface; bare ground
-    // adds none. A member of 30 kg (surface 0.58 m², capture area 0.03 m²: 95% under the cover) with
-    // 10 kg/m² of cover gets 0.58 x 220 / 10 = 12.8 W/K in series with 28.5 of its 30 W/K = 8.8
-    // W/K, and 1.5 W/K stays open: 10.3 W/K in all (13.8 with what it radiates, below), so its
-    // 52 W of upkeep warm it 3.8 K (1.6 K bare), 2.2 K more. A 1 kg plant member (surface 0.06
-    // m², capture area 2 m²: 3% under the cover) keeps 475 of its 490 W/K open; its 14 W/K under
-    // 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
-    // In parallel, it radiates like every surface (σT⁴, `flow::air::radiation`) to the surface it
-    // stands on, exchanging σ (T² + tg²)(T + tg) W per K and m² of its own surface: 6 W/K per
-    // m² at 300 K (3.5 W/K for the 30 kg member, beside its 30), 1700 at 3000 K. Cover and walls
-    // do not block it: they are matter about as warm as the surface, which takes up what the
-    // body radiates and passes it on. Taken at its temperature at the start of the update (and
-    // at the end, if it ends warmer).
+    // Its conductance to the surface it stands on, W/K (for its reactions, evaporation and the heat below):
+    // by contact with walls and cover (`surface`) and in parallel by radiation, like every surface: 6 W/K per m² of its
+    // own surface at 300 K (3.5 W/K for a 30 kg member, beside its 30), 1700 at 3000 K. Cover and walls do not
+    // block radiation: they are matter about as warm as the surface, which takes up what the body radiates and
+    // passes it on. Taken at its temperature at the start of the update (and at the end, if it ends warmer).
     let work = b.size(chem);
-    let (m1, nb, wk) = (mass / b.n(), b.n(), work / mass);
+    let wk = work / mass;
     // Its light-capture area, all members' (`visible`): of its body, by mass^0.75.
     let leaf = b.equiv(&cfg.phys, work) * b.k.leaf;
-    let ab = 6.0 * (m1 / cfg.phys.rho_body).powf(2.0 / 3.0);
-    let g0 = b.conductance(cfg.phys.m_ref, mass);
-    let g0 = if cover > 0.0 {
-        let s = ab / (ab + leaf / nb);
-        g0 * (1.0 - s) + 1.0 / (1.0 / (g0 * s) + cover / (cfg.phys.shelter * nb * ab))
-    } else {
-        g0
-    };
-    let gc = walls.map_or(g0, |x| 1.0 / (1.0 / g0 + 1.0 / x.1));
-    let rad = |t: f64| crate::flow::air::SIGMA * ab * nb * (t * t + tg * tg) * (t + tg);
+    let (gc, area) = surface(chem, &cfg.phys, b, mass, cover, walls);
+    let rad = |t: f64| radiated(area, t, tg);
     let c0 = b.heat_cap(chem);
     let t0 = b.e / c0;
     let g = gc + rad(t0);
@@ -1677,7 +1714,13 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// costs to mass^0.75 because every animal evolved small; the main cause then was nodes mixing kinds,
 /// since fixed.) The mass is the body that is built, not the whole mass: storing fuel is cheap, tissue
 /// dear (decision of 14 Oct 2026 on body matter); and not `size`, which stops at the liquid held
-/// now, a lack that dormancy (`activity`, below) already counts. Needs `prepare`.
+/// now, a lack that dormancy (`activity`, below) already counts.
+///
+/// **It follows the body's temperature** (15 Oct 2026, decided 14 Oct): the whole of it times
+/// `Body::pace`, the rate law of the reactions that pay it, exp(-Ea (1/T - 1/T_ref)), T the body's temperature,
+/// Ea the barrier of its main burning reaction, T_ref = `Physics::t_cat` where the costs are anchored. No new
+/// number. A cold body pays less and, as wear goes with upkeep, ages slower (dormancy in the cold); a warm one
+/// pays more (the review of 14 Oct found summer upkeep doubling at 299 K). Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
@@ -1691,7 +1734,9 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     // Everything it pays is chemistry, which runs in its liquid: a dry body pays almost nothing (and,
     // as wear grows with what it pays, hardly ages): all of it, the decision's cost too, times its
     // activity (14 Oct 2026, review 7 fix 6).
-    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * b.activity(&w.chem, p)
+    // And it runs at the pace of the body's temperature, by the same rate law as the reactions that pay
+    // it (15 Oct 2026): a cold body pays less and wears slower, a warm one more (`Body::pace`).
+    u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * b.activity(&w.chem, p) * b.pace(&w.chem, p, b.temp(&w.chem))
 }
 
 /// Reaction `r` takes an input that is gas at `t`: it breathes, so it runs on demand.
@@ -1717,14 +1762,22 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     let (mass, cap) = b.mass_cap(&w.chem);
     let t0 = b.e / cap.max(1e-9);
     let paid = pay_at(w, b, cost, days, mass, cap, false) == 0.0;
-    // The heat released leaves the body for its cell's ground within the action (a body's heat
-    // relaxes within seconds), so a costly action does not leave it hot; but for what keeps it at
-    // its temperature as what its reactions made holds more heat (a large cost, such as a child's,
-    // left it cold, and slow).
-    let keep = t0 * b.heat_cap(&w.chem);
+    // The heat released stays in the body and leaves through its surface (15 Oct 2026, decided 14 Oct; before, it
+    // all went to the ground within the action): by the conductance of its genes, cover and walls and what it radiates
+    // (`surface`, `radiated`), which is the same as in its update (`live`). Its time constant (heat capacity over
+    // conductance, hours for a body of kilograms) is far under the days to its next update, so what it makes warms it
+    // as a steady rate: spread over the interval to the next update, the heat Q warms it by Q / (g dt) K for that time.
+    // The body keeps that warmth (the mean over the interval of a pulse that decays with the time constant,
+    // Q (1 - exp(-x)) / x, x = g dt / heat capacity: all of it if the time constant is the longer) and the rest goes to the
+    // ground, as its update will do with the warmth it finds. Its update (`live`) reads the temperature it left it at.
+    // A cost that leaves it colder than it was is not held back.
+    let (keep, i) = (t0 * b.heat_cap(&w.chem), b.cell as usize);
     if b.e > keep {
-        w.e_ground[b.cell as usize] += b.e - keep;
-        b.e = keep;
+        let cap = b.heat_cap(&w.chem);
+        let x = conductance_to_ground(w, b, mass, t0) * b.interval() as f64 * DAY / cap.max(1e-9);
+        let held = if x < 1e-9 { 1.0 } else { -(-x).exp_m1() / x };
+        w.e_ground[i] += (b.e - keep) * (1.0 - held);
+        b.e = keep + (b.e - keep) * held;
     }
     paid
 }

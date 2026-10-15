@@ -1046,6 +1046,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     use pcore::event::EventKind;
     let run = |cost: f64| {
         let (mut w, i) = start();
+        w.cfg.tilt = 0.0;
         let r = roles(&w);
         // Building never binds; the costs of keeping tissue are `cost` times the starting ones.
         w.cfg.phys.c_build = 1e7;

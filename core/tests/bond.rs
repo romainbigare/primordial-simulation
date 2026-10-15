@@ -73,6 +73,8 @@ fn walls_keep_a_body_warm() {
     let t = b.temp(&w.chem);
     b.e += 0.3 * b.store[k] * w.chem.subs[k].cp * t;
     b.store[k] *= 1.3;
+    // (It does not grow: a warm body builds faster, the pace of its temperature, and would burn the fuel of its month.)
+    w.cfg.phys.c_build = 0.0;
     let mut inside = w.clone();
     inside.life.bodies[slot].inside = inside.parts.parts[parts[0]].id(parts[0]);
     let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];

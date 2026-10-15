@@ -177,7 +177,10 @@ pub struct Physics {
     /// than they need, paid what an older cost made them pay: so every catalyst was about 1,000
     /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing.
     pub c_cat: f64,
-    /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature)
+    /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature), and
+    /// where the costs are anchored: a body's upkeep is what the costs say at this temperature and goes
+    /// by the rate law of its main burning reaction from it, exp(-Ea (1/T - 1/`t_cat`)) (15 Oct 2026,
+    /// `Body::pace`)
     pub t_cat: f64,
     /// Width over which catalysts lose their shape above their `DENATURE` gene, K: life's enzymes
     /// unfold within a few K; smooth, so the reaction solver never meets a jump (`change::denature`)

@@ -217,10 +217,14 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
-/// Cold costs energy: what a starting body's reactions can release over its interval, against
-/// its upkeep, falls with its temperature by Change's rate. Warm bodies can pay; cold ones not.
+/// The cost of living follows temperature (15 Oct 2026): what a starting body's reactions can release over
+/// its interval falls with its temperature by Change's rate, and so does its upkeep, by the same law, so
+/// the cold does not leave it short (before, upkeep was the same at every temperature and the cold bodies
+/// could not pay: release over upkeep fell from 4.9 at 290 K to 0.01 at 250 K for an eater). In the warmth
+/// upkeep rises faster than what the body can release (catalysts, the air it breathes), so a warm body
+/// has less to spare.
 #[test]
-fn cold_bodies_release_too_little() {
+fn cold_bodies_release_and_pay_less() {
     let mut w = worldgen::new_world(1, 32, 32);
     pcore::step(&mut w);
     // (The starting bodies unsprayed: a sprayed one can be anything, and the first found is a lottery.)
@@ -229,15 +233,21 @@ fn cold_bodies_release_too_little() {
     for kind in [true, false] {
         let mut b = w.life.alive().find(|b| (pcore::body::light_cat(&w.chem, &b.genes) > 5.0) == kind).expect("a body").clone();
         b.prepare(&w.chem, &w.cfg.phys);
-        let ratio = |t: f64| {
+        let at = |t: f64| {
             let mut b = b.clone();
             b.e = b.heat_cap(&w.chem) * t;
             let days = b.interval() as f64;
-            pcore::body::release(&w, &b, days) / pcore::body::upkeep(&w, &b, days, b.mass(&w.chem))
+            let (rel, up) = (pcore::body::release(&w, &b, days), pcore::body::upkeep(&w, &b, days, b.mass(&w.chem)));
+            (rel, up, rel / up)
         };
-        let r = [250.0, 270.0, 280.0, 290.0, 300.0].map(ratio);
-        println!("light-capturing {kind}: release / upkeep at 250, 270, 280, 290, 300 K: {r:.3?}");
-        assert!(r[0] < 1.0 && r[3] > 1.0, "{r:?}");
+        let t = [250.0, 270.0, 280.0, 290.0, 300.0];
+        let r = t.map(at);
+        println!("light-capturing {kind}: release / upkeep at 250, 270, 280, 290, 300 K: {:.3?}", r.map(|x| x.2));
+        // Both rise with the temperature, the upkeep by 50 times or more (72 for the 7,760 K of burning the solid) between 250 K and 290 K
+        // (2.5 per 10 K); the cold does not leave the body short, the warmth leaves it less to spare.
+        assert!(r.windows(2).all(|p| p[1].0 > p[0].0 && p[1].1 > p[0].1), "{r:?}");
+        assert!(r[3].1 > 50.0 * r[0].1, "{r:?}");
+        assert!(r[0].2 > 1.0 && r[4].2 > 1.0 && r[4].2 < r[0].2, "{r:?}");
     }
 }
 
@@ -474,9 +484,12 @@ fn a_body_takes_no_more_than_it_can_use() {
         (b.genes[pcore::body::Layout::of(&w.chem).cat + burn_matter], b.genes[pcore::body::Layout::of(&w.chem).upt + matter]) = (-1.0, -0.1);
         (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[pcore::body::COPY_MASS], b.genes[pcore::body::LIQ]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 6.0, -4.0);
         // Less of the fuel (the rest taken out as an edit).
-        let out = (1.0 - keep) * b.store[rich];
+        // (At the temperature it had: its upkeep goes with it, 15 Oct 2026.)
+        let (out, t) = ((1.0 - keep) * b.store[rich], b.temp(&w.chem));
         w.chem.add_elems(rich, -out, &mut w.ledger.imposed_elems);
         (w.ledger.imposed_energy, b.store[rich]) = (w.ledger.imposed_energy - out * w.chem.subs[rich].hf, b.store[rich] - out);
+        let e = t * b.heat_cap(&w.chem);
+        (w.ledger.imposed_energy, b.e) = (w.ledger.imposed_energy + e - b.e, e);
         b.prepare(&w.chem, &w.cfg.phys);
         let (p, days, mass) = (w.cfg.phys, b.interval() as f64, b.mass(&w.chem));
         let (equiv, joule_per_kg) = (b.supply(&w.chem, &p), -w.chem.dh(burn) / w.chem.reactions[burn].inputs.iter().find(|x| x.0 as usize == rich).unwrap().1 as f64 / w.chem.subs[rich].molar_mass);
@@ -501,6 +514,9 @@ fn a_body_takes_no_more_than_it_can_use() {
         let (de, dq) = pcore::check::drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
         let burnt: f64 = w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, burn, .. } = e.kind { (by == id).then_some(burn as f64) } else { None }).sum();
+        // (Its upkeep goes with its temperature, which its update has settled by the time it takes: so the upkeep after.)
+        let after = &w.life.bodies[s];
+        let can = pcore::body::upkeep(&w, after, days, after.mass(&w.chem)) + build;
         (burnt, can / joule_per_kg, p.take * days * equiv, target)
     };
     // (Up to 30 times a starting eater, 900 kg: at 100 times upkeep, by the body, is above what it can take in an
@@ -513,19 +529,20 @@ fn a_body_takes_no_more_than_it_can_use() {
     }
     // With a store below the target, upkeep and build over the share its reactions
     // release in an interval, less what it holds: the target rises with `c_build`, between the
-    // upkeep's worth and what its size takes (here a store of 29.5% of the fuel: 15.5%
+    // upkeep's worth and what its size takes (here a store of 10% of the fuel: 15.5%
     // before the body held matter and fuel apart, 17% before strength and catalysts went by mass^0.75,
-    // 27% before they went by the kg of the body, 14 Oct 2026: the window is narrow, a few points of store).
-    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 6e4].iter().map(|&c| took(10.0, c, 0.295, true)).collect();
-    println!("sate asked for twice the size cap, store 29.5%: (left, upkeep+build, cap, target) {sated:?}");
+    // 27% before they went by the kg of the body, 29.5% before upkeep went with the temperature, 15 Oct
+    // 2026: the window is narrow, a few points of store; the body keeps its temperature when the fuel is taken out).
+    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 6e4].iter().map(|&c| took(10.0, c, 0.1, true)).collect();
+    println!("sate asked for twice the size cap, store 10%: (left, upkeep+build, cap, target) {sated:?}");
     for &(left, _, cap, target) in &sated {
         assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
         assert!(target < cap, "the size cap {cap} binds, the case shows nothing");
     }
     assert!(sated[0].0 > sated[0].1 * 1.2, "below the line of the upkeep it should take more than the upkeep's worth: {sated:?}");
     assert!(sated[1].0 > sated[0].0 * 1.1 && sated[2].0 > sated[1].0 * 1.1, "it takes no more with a higher c_build: {sated:?}");
-    // With a store of 3% of the fuel the target is far over the size cap: the cap is what it takes.
-    let (left, _, cap, _) = took(10.0, 3e4, 0.03, true);
+    // With a store of 0.1% of the fuel the target is far over the size cap: the cap is what it takes.
+    let (left, _, cap, _) = took(10.0, 3e4, 0.001, true);
     assert!((left / cap - 1.0).abs() < 1e-6, "sate left {left} kg of the {cap} kg its size takes");
 }
 
@@ -588,8 +605,14 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // Bodies that neither grow nor soak liquid up (their mass, which the wear goes by, stays): no
     // building work, and no liquid exchange with the ground (14 Oct 2026: growth is building).
     w.cfg.phys.c_build = 0.0;
+    // Upkeep goes with the temperature (15 Oct 2026): the bodies stand on ground held at the temperature the costs
+    // are anchored to (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of
+    // high ground (rain does not flood it) with other air nodes (a node would take the air an individual breathes).
     pcore::step(&mut w);
-    let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
+    let mut land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
+    land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
+    let air = w.grid.air_of(land[0]);
+    let cells = [land[0], *land.iter().find(|&&i| w.grid.air_of(i) != air).expect("another air node")];
     // Starting eaters (30 kg, under their copy mass) whose brain only rests, weak so their stores last.
     let shape = choose::shape(w.chem.ns(), 12, 6);
     let mut rest = [-8.0; brain::FIXED];
@@ -601,7 +624,12 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         let g = w.life.new_genome(rows.clone());
         let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
         (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ]) = (0.0, 0.0, repair, -4.0);
-        // A node of `count` such members (its matter and energy booked as an edit).
+        // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel (the
+        // two months they settle and the long life of one of them cost more than the 9 kg a starting eater holds).
+        let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+        b.store[rich] *= 3.0;
+        w.chem.add_elems(rich, 2.0 * b.store[rich] / 3.0, &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy += 2.0 * b.store[rich] / 3.0 * w.chem.subs[rich].hf;
         for k in 0..w.chem.ns() {
             w.chem.add_elems(k, (count - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (count - 1.0) * b.store[k] * w.chem.subs[k].hf, count * b.store[k]);
@@ -612,20 +640,60 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         let u = pcore::body::upkeep(w, &b, d, m) / (d * b.built(&w.chem));
         (w.life.add(b, w.day, 1), u)
     };
-    let (_, ua) = make(&mut w, land[0], 0.0, 1.0);
-    let (_, ub) = make(&mut w, land[land.len() / 2], 0.5, 1.0);
-    let (c, uc) = make(&mut w, land[land.len() - 1], 0.0, 1000.0);
-    assert!((ub / ua - (0.75 + 0.25 * 2f64.sqrt())).abs() < 1e-9 && (uc / ua - 1.0).abs() < 1e-9, "upkeep per kg {ua} {ub} {uc}");
-    // A life of 60 days at gene 0 (its upkeep per kg now), 10^0.5 / (0.75 + 0.25 x 2^0.5) times that at 0.5.
-    let (life, x) = (60.0, 10f64.sqrt() / (0.75 + 0.25 * 2f64.sqrt()));
-    w.cfg.phys.e_life = life * ua;
-    let (t0, l0, start, n0) = (pcore::check::totals(&w), w.ledger.clone(), w.day, w.life.bodies[c].count);
-    for _ in 0..8 {
-        pcore::step(&mut w);
+    let (sa, _) = make(&mut w, cells[0], 0.0, 1.0);
+    let (sb, _) = make(&mut w, cells[0], 0.5, 1.0);
+    let (c, _) = make(&mut w, cells[1], 0.0, 1000.0);
+    // A day: the ground held, the flow and change steps when due, then the bodies due; the age deaths of the day.
+    let t_cat = w.cfg.phys.t_cat;
+    let day = |w: &mut pcore::World, deaths: &mut Vec<(u64, f64)>| {
+        for &i in &cells {
+            let e = w.energy_ground(i, t_cat);
+            w.ledger.imposed_energy += e - w.e_ground[i];
+            w.e_ground[i] = e;
+        }
+        if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
+            let dt = w.cfg.phys_days as f64 * 86_400.0;
+            pcore::body::survey(w);
+            pcore::flow::step(w, dt);
+            pcore::change::step(w, dt);
+        }
+        w.events.clear();
+        pcore::body::day(w);
+        deaths.extend(w.events.iter().filter(|e| matches!(e.kind, EventKind::Died { cause: AGE, .. })).map(|e| (e.day, e.value)));
+        w.day += 1;
+    };
+    // Two months for the bodies to settle at the temperature their heat and the ground give them (an individual does
+    // not age: `e_life` is large), then their upkeep per kg of body and day, their wear put back to nothing.
+    let mut settle = Vec::new();
+    for _ in 0..60 {
+        day(&mut w, &mut settle);
     }
-    let aged = |w: &pcore::World| w.events.iter().filter(|e| matches!(e.kind, EventKind::Died { cause: AGE, .. })).map(|e| (e.day - start, e.value)).collect::<Vec<_>>();
+    assert!(w.life.bodies[sa].alive && w.life.bodies[sb].alive, "a body died while settling");
+    let per_kg = |w: &mut pcore::World, s: usize| {
+        let mut b = std::mem::take(&mut w.life.bodies[s]);
+        b.prepare(&w.chem, &w.cfg.phys);
+        let (d, m) = (b.interval() as f64, b.mass(&w.chem));
+        let u = pcore::body::upkeep(w, &b, d, m) / (d * b.built(&w.chem));
+        let act = b.activity(&w.chem, &w.cfg.phys);
+        b.wear = 0.0;
+        w.life.bodies[s] = b;
+        (u, act)
+    };
+    let ((ua, aa), (ub, ab), (uc, ac)) = (per_kg(&mut w, sa), per_kg(&mut w, sb), per_kg(&mut w, c));
+    println!("upkeep per kg of body and day: {ua:.1}, {ub:.1}, {uc:.1} J");
+    // (The repair gene costs 0.75 + 0.25 x 2^0.5 times as much at 0.5; the second body makes a little more heat, so it is a little warmer.)
+    assert!(((ub / ab) / (ua / aa) / (0.75 + 0.25 * 2f64.sqrt()) - 1.0).abs() < 0.03 && ((uc / ac) / (ua / aa) - 1.0).abs() < 0.07, "upkeep per kg {ua} {ub} {uc}, activity {aa} {ab} {ac}");
+    // A life of 60 days at gene 0 (its upkeep per kg now), 10^0.5 ua / ub (10^0.5 / (0.75 + 0.25 x 2^0.5)) times that at 0.5.
+    let (life, x) = (40.0, 10f64.sqrt() * ua / ub);
+    w.cfg.phys.e_life = life * ua;
+    // (Lives are counted from the last update of the first individual: wear counts from there.)
+    let (t0, l0, start, n0) = (pcore::check::totals(&w), w.ledger.clone(), w.life.bodies[sa].last, w.life.bodies[c].count);
+    let mut deaths = Vec::new();
+    for _ in 0..240 {
+        day(&mut w, &mut deaths);
+    }
     // The individuals' deaths (one member each) and the node's (a share of its members).
-    let (ones, node): (Vec<_>, Vec<_>) = aged(&w).into_iter().partition(|x| x.1 == 1.0);
+    let (ones, node): (Vec<_>, Vec<_>) = deaths.into_iter().map(|(d, v)| (d - start, v)).partition(|x| x.1 == 1.0);
     // The node's mean life: the days its members lived over those who died (it loses a share at
     // update; it may die of other causes later, so only its age deaths count).
     let (mut n, mut t, mut lived) = (n0, 0, 0.0);
@@ -635,7 +703,8 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let dc = lived / (n0 - n);
     println!("lives, days: individuals {ones:?} at genes 0 and 0.5 (predicted {life} and {:.0}); node {dc:.1} ({:.0} of {n0} members died of age)", life * x, n0 - n);
     assert!(ones.len() == 2 && (ones[0].0 as f64 / life - 1.0).abs() < 0.1 && (ones[1].0 as f64 / (life * x) - 1.0).abs() < 0.1, "lives {ones:?}");
-    assert!(node.len() >= 6 && (dc / ones[0].0 as f64 - 1.0).abs() < 0.1, "node: mean life {dc} days against {ones:?}");
+    // (The node's members live the same time as an individual would at their own upkeep, `ua / uc` times as long.)
+    assert!(node.len() >= 6 && (dc / (life * ua / uc) - 1.0).abs() < 0.1, "node: mean life {dc} days against {} predicted", life * ua / uc);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
@@ -698,10 +767,13 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
     b.prepare(&w.chem, &w.cfg.phys);
     let days = 10.0;
     // The body `f` times as big (all its stores), alone or as a node of `n` such members.
+    let (chem, t_cat) = (w.chem.clone(), w.cfg.phys.t_cat);
     let sized = |f: f64, n: f64| {
         let mut x = b.clone();
         x.count = n;
         x.store.iter_mut().for_each(|a| *a *= f * n);
+        // (At the temperature the costs are anchored to, where upkeep is what the costs say, 15 Oct 2026.)
+        x.e = x.heat_cap(&chem) * t_cat;
         x
     };
     let basal = |w: &mut pcore::World, x: &pcore::body::Body| {
@@ -743,6 +815,8 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
     (b.genes[STRENGTH], b.genes[LEARN], b.genes[REPAIR]) = (0.6, -1.0, 0.0);
     b.prepare(&w.chem, &w.cfg.phys);
+    // At the temperature the costs are anchored to, where upkeep is what the costs say (15 Oct 2026).
+    b.e = b.heat_cap(&w.chem) * w.cfg.phys.t_cat;
     let p = &mut w.cfg.phys;
     (p.c_brain, p.c_hidden, p.c_memory, p.c_seen, p.c_sight, p.c_leaf) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     let rich = worldgen::life::roles(&w.chem).expect("roles").1;
@@ -753,6 +827,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
         .map(|&f| {
             let mut x = b.clone();
             x.store.iter_mut().for_each(|a| *a *= f);
+            x.e = x.heat_cap(&w.chem) * w.cfg.phys.t_cat;
             up(&w, &x) / x.built(&w.chem)
         })
         .collect();
@@ -761,13 +836,14 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     for u in &per_kg {
         assert!((u / per_kg[0] - 1.0).abs() < 1e-9, "upkeep per kg of body differs with size: {per_kg:?}");
     }
-    // Strength, catalysts, learning and basal are each in it, by the kg of body.
+    // Strength, catalysts, learning and basal are each in it, by the kg of body (at the temperature the costs are anchored to).
     let p = w.cfg.phys;
     let want = days * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + p.c_learn * b.learn_rate() as f64);
     assert!((per_kg[0] / want - 1.0).abs() < 1e-9, "per kg of body {} against the costs summed {want}", per_kg[0]);
     // Fuel is no body: three times the fuel, the same upkeep.
     let mut fat = b.clone();
     fat.store[rich] *= 3.0;
+    fat.e = fat.heat_cap(&w.chem) * w.cfg.phys.t_cat;
     assert!((up(&w, &fat) / up(&w, &b) - 1.0).abs() < 1e-9, "stored fuel adds to the upkeep: {} and {}", up(&w, &fat), up(&w, &b));
 }
 
