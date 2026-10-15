@@ -92,7 +92,8 @@ fn put(w: &mut World, k: usize, i: usize, amount: f64) {
 /// All of substance `k` in the world's ground and bodies, mol.
 fn total(w: &World, k: usize) -> f64 {
     let n = w.grid.n();
-    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.life.alive().map(|b| b.store[k]).sum::<f64>()
+    // (With the store of the bed under the ground, where drained liquid takes what is dissolved in it.)
+    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
 }
 
 /// What the chemistry says: the matter holds one nitrogen to 20 carbon (120 and 6 in its formula unit, three times the unit it was) and

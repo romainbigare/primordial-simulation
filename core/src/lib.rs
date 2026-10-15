@@ -344,7 +344,7 @@ pub struct Physics {
     pub lever: f64,
     /// Force of a body of strength 1, as a share of its weight
     pub grip: f64,
-    /// Push of a body moving through a cell on each structure there, as a share of its weight
+    /// Push of a body moving through a cell on each structure there, as a share of its weight; its own force must give it to move
     pub bump: f64,
     /// Most bonded ground a body breaks per day of its interval, as a share of its mass
     pub dig: f64,
@@ -412,9 +412,21 @@ pub struct Physics {
     pub porosity: f64,
     /// Hydraulic conductivity of the loose ground, m/s (15 Oct 2026): Darcy's law, the pore liquid of a cell flows to a
     /// neighbour at q = `seep` x the slope of the liquid head, through the thickness of ground it fills (`flow::liquid`).
-    /// A loam passes about 1e-6 m/s (1.3 cm an hour, Rawls et al. 1982: sand 6e-5, loam 4e-6, clay 2e-7; from memory,
-    /// unchecked)
+    /// A loam passes 1.3 cm an hour, 3.6e-6 m/s (Rawls et al. 1992 teaching table; sand 5.8e-5, clay about 2e-7).
+    /// It was 1e-6 until 15 Oct 2026: the sum from 1.3 cm an hour was wrong
     pub seep: f64,
+    /// Drainage (15 Oct 2026, `flow::drain`): share of its pores the loose ground holds against gravity (its field
+    /// capacity); the rest sinks, at `seep` at the most, into the store of the bed below. A loam holds 0.25 to 0.32 of
+    /// its volume at field capacity in 0.47 of pores (Saxton and Rawls 2006, as tabled by the Minnesota stormwater
+    /// manual): 0.6
+    pub field: f64,
+    /// The store under the loose ground: the weathered and fractured zone of the bed, `bed_depth` m deep, of which
+    /// `bed_porosity` is pore space that drains (its specific yield), and through which its liquid flows by Darcy's law
+    /// at `bed_seep`, m/s, through the depth it fills. Weathered basement: 10 to 60 m deep, yield 0.01 to 0.05 (from
+    /// memory), transmissivity 4 to 50 m2 a day (saprolite, Western Australia): 30 m, 0.02, 3e-6 (7.8 m2 a day full)
+    pub bed_depth: f64,
+    pub bed_porosity: f64,
+    pub bed_seep: f64,
 }
 
 impl Physics {
@@ -512,7 +524,11 @@ impl Default for Physics {
             still: 0.01,
             hold: 2.0,
             porosity: 0.4,
-            seep: 1e-6,
+            seep: 3.6e-6,
+            field: 0.6,
+            bed_depth: 30.0,
+            bed_porosity: 0.02,
+            bed_seep: 3e-6,
         }
     }
 }
@@ -743,6 +759,12 @@ pub struct World {
     /// share of the light it absorbs aside.
     #[serde(default)]
     pub light_keep: Vec<(u32, f32)>,
+    /// Liquid (with what is dissolved in it) in the store of the bed under each ground node, [k * n + i], mol, and its
+    /// thermal energy with the fusion enthalpy of what is molten, J (`flow::drain`; empty until first used)
+    #[serde(default)]
+    pub deep: Vec<f64>,
+    #[serde(default)]
+    pub e_deep: Vec<f64>,
 }
 
 impl World {

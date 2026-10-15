@@ -158,10 +158,17 @@ Things that are open and not built:
 - **Erosion is very slow in the first 10 years:** closed. The measure counted dead body matter piling up on the land as rock;
   without it the land loses 0.07 to 0.085 mm a year from the first year (handover, "Erosion at real rates").
 - **The sea floor uses the air's oxygen,** and the sea's carbon reaction takes gas from the whole air
-  column, not from the water.
+  column, not from the water. **Built, not merged** (`docs/reports/sea-floor-film-not-merged.patch`): ground under
+  standing liquid reacts with the dissolved gas through the liquid's film. It is right physics, but 52 to 70% of the
+  land stays waterlogged, so it slows rotting on most of the land and moves the carbon gas by +23 to -65 ppm. On the
+  way, `seep` was corrected (3.6e-6, a wrong sum) and drainage into the ground below the loose layer was built
+  (merged). The land is still too wet: real land drains into channels a few hundred metres apart inside a 2 km cell.
+  The 2/3 power of the sea's store comes from the pair's contacts, not from the gas source: still open.
 - **Review 7 items not built:** the "held liquid is a cheap shortcut to size" fix (R4), `c_build`
-  toward its anchor (R6), liquid made in a body above its limit drains out (R11), and plants that
-  walk (fix 7).
+  toward its anchor (R6), and liquid made in a body above its limit drains out (R11). Plants that
+  walk (fix 7) is closed: moving needs force, plants move under 0.1 times a year (was 8 to 11).
+  R11 was built and measured: it kills the eaters on all three seeds, because the rock salt in a body
+  decays faster when it is less diluted. It is not landed; it waits for the owner (handover, Section 4).
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
 - **The big-brain test:** no verdict yet.
 - **All results are 60 years, 64 x 64.** The 300-year runs were never made.

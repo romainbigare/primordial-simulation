@@ -321,7 +321,7 @@ fn yearly_series_counts_the_nitrogen_mineral() {
     assert_eq!(col("min0_sea", first), 0.0);
     // (The rock salt: where the liquid lies on the lime, and the sea holds it from the start at balance with the air.)
     assert!(col("min1_sea", first) > 1.0 && col("min1_land", first) >= 0.0);
-    let all = |r: &Vec<f64>| ["min0_ground_land", "min0_ground_sea", "min0_dead_land", "min0_dead_sea", "min0_bodies"].iter().map(|c| col(c, r)).sum::<f64>();
+    let all = |r: &Vec<f64>| ["min0_ground_land", "min0_ground_sea", "min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>();
     for r in &rows {
         assert!((all(r) / all(first) - 1.0).abs() < 1e-6, "the nitrogen in all: {} against {}", all(r), all(first));
         let (nlim, nstore) = (col("root_0_nlim", r), col("root_0_nstore0", r));

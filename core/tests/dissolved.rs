@@ -208,7 +208,7 @@ fn the_salt_runs_with_the_liquid_and_stays_when_the_liquid_leaves() {
     let (liquid, salt) = (3.0 * pores, 1e5);
     (w.ground[LIQ * n + top], w.ground[SALT * n + top]) = (liquid, salt);
     w.e_ground[top] = w.energy_ground(top, t);
-    let all = |w: &pcore::World, k: usize| w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.air[k * na..(k + 1) * na].iter().sum::<f64>();
+    let all = |w: &pcore::World, k: usize| w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.air[k * na..(k + 1) * na].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>());
     let (salt0, liq0) = (all(&w, SALT), all(&w, LIQ));
     pcore::flow::step(&mut w, 3.0 * DAY);
     let (left_liq, left_salt) = (w.ground[LIQ * n + top], w.ground[SALT * n + top]);
