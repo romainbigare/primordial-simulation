@@ -71,9 +71,7 @@ fn sector(sight: usize) -> Sector {
 
 /// Whether a body may also copy by its brain's own chance (the kept copy logit, `worldgen::life`).
 /// Off: a body makes children only from its brood, when it has one (`copy::copy`, `body::live`),
-/// so no brain bias sets how often anything is born. With it on, almost no plant member ever
-/// reached its full size and all their births came from that chance (review 6, finding 4; the plant
-/// review of 14 Oct 2026). An experiment switch until this is decided (handover 4).
+/// so no brain bias sets how often anything is born (handover 4).
 pub const COPY_BY_CHOICE: bool = false;
 
 pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
@@ -83,7 +81,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (mass, env, temp) = (t.mass, w.life.env[i], b.e / t.cap.max(1e-9));
     // A brain perceives sizes per member.
     let pm = mass / b.n();
-    let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(body::COPY_MASS)), mass, temp, t.spare);
+    let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(body::COPY_MASS)), temp, t.spare);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, base, nseen, sight) = (lin.shape, &lin.base, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
@@ -462,7 +460,7 @@ pub fn regroup(w: &mut World) {
 /// it carries. The movers must fit in the free space over the cell (`phys.layer`). The part spent
 /// pushing through bodies breaks their body matter (`wear`). What it moves is the whole mass it
 /// carries, fuel too (the cost and the push on structures are of that mass); what it can carry
-/// and hold goes by its force, of its body (`bond::carry`, `Body::built`; 15 Oct 2026). A body that strays from its group's
+/// and hold goes by its force, of its body (`bond::carry`, `Body::built`). A body that strays from its group's
 /// centre leaves with a copy of its rows. A node moves as one: all its members go (they drew
 /// the same action), and it stays one node.
 pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
@@ -475,7 +473,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = resist(w, i, d, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
-    // Moving needs force (15 Oct 2026, review 7 fix 7): a mover pushes on what it passes with `bump` of its weight
+    // Moving needs force: a mover pushes on what it passes with `bump` of its weight
     // (`bond::moved`), so it must push that much itself, by its own force (`bond::bears`, of its built body).
     if bond::bears(w, b) < w.cfg.phys.bump * mass * w.cfg.gravity {
         return;
@@ -517,10 +515,10 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     }
 }
 
-/// Energy dissipated pushing through the bodies of cell `j` breaks their body matter (15 Oct 2026,
-/// partial damage; before, a share of every store evenly): each loses the share `f` of its body
-/// (`Physics::walk_wear` kg per J over the mass in the cell, less when stronger: as before, so no
-/// number moves) and the stores that matter held spill in the same share (`body::tear`). A node
+/// Energy dissipated pushing through the bodies of cell `j` breaks their body matter (partial
+/// damage): each loses the share `f` of its body (`Physics::walk_wear` kg per J over the mass in
+/// the cell, less when stronger) and the stores that matter held spill in the same share
+/// (`body::tear`). A node
 /// loses members when the share is one member's body or more, and else every member loses part of
 /// its matter; an individual lives on smaller (it dies when half of its body is broken, or a store
 /// falls under its safe minimum). What breaks off goes to the ground as loose amounts, with its
@@ -591,7 +589,7 @@ pub fn regrow(w: &mut World, dt: f64) {
 }
 
 /// Can the body take in substance `k` at temperature `t`: body matter only if it digests it
-/// (`Body::digests`); a body without the catalyst takes none (14 Oct 2026).
+/// (`Body::digests`); a body without the catalyst takes none.
 fn can_take(chem: &crate::chem::Chemistry, b: &Body, k: usize) -> bool {
     chem.matter() != Some(k) || b.digests(chem)
 }
@@ -613,11 +611,8 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
 /// Body matter taken in is digested into what it was built of as it comes in (`Body::digest`), so
 /// it fills the room of those stores (`Body::level`), not its own: amounts `m` (mol) for a body of
 /// `mass` kg are cut together until what is taken of the solid and what the matter becomes fit
-/// the room of the solid. Before, the matter was held only to its own room (a share of the whole
-/// mass: its keep gene 0.9 gave nine times the mass), so an eater filled its store of the solid past
-/// its level, its mass grew, and with it the room, without end (seeds 1 to 3, 64x64, year 60: the
-/// heaviest eaters held 3 times the solid their level allows, and 10 to 1,000 times with slower
-/// building).
+/// the room of the solid (held only to its own room, an eater would fill its store of the solid
+/// past its level, its mass would grow, and with it the room, without end).
 pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64], mass: f64) {
     let (Some(bl), Some(km)) = (chem.build.as_ref(), chem.matter()) else { return };
     if m[km] <= 0.0 {
@@ -637,7 +632,7 @@ pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64]
     }
 }
 
-/// Satiety (14 Oct 2026, review 5), **off unless `Config::sate_all`** (`ew run --sate-all`): a body
+/// Satiety, **off unless `Config::sate_all`** (`ew run --sate-all`): a body
 /// takes no more of what it burns than its reactions can use over `days`, counted by the heat of
 /// the amounts `m` (mol) it burns (`Consts::burn`): its upkeep plus what it can build in the
 /// interval, which is the work (`Physics::c_build` x its `equiv` / `m_ref` x days) and the
@@ -647,18 +642,14 @@ pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64]
 /// they can use is a store: it refills its fuel until that share of it covers that (`need` / share,
 /// less what it holds). The substances it burns are cut to that together; the others (liquid, which
 /// comes by area and stops at the level the body keeps) are not counted. Never less than the
-/// upkeep's worth, so a body never stops short of what it burns (burning leaves its liquid product
-/// in the body, 13 Oct 2026); a body with no fuel takes what it reaches. The target is capped at
-/// what the body could take by its size in the time (review 6, finding 13).
+/// upkeep's worth, so a body never stops short of what it burns; a body with no fuel takes what
+/// it reaches. The target is capped at what the body could take by its size in the time.
 ///
 /// **Why it is off.** What a body takes is bounded by its intake (`Physics::take`) and by what it
-/// can carry: `Body::level` is a share of its body, so a full store is the satiety (14 Oct 2026, after
-/// watch report 8). Satiety on top of that only starves: asked for at every size (the decision after
-/// watch report 7), with the keep genes a share of the whole mass, all the animals of six 64x64
-/// runs died in their first year (a body takes on only some of its decisions and can take no more
-/// than its upkeep at each, so its store falls faster than it is refilled; 234 starting eaters of
-/// seed 1 took 1.0 kg each in ten days against 3.0 without it); a gate at a size kept them
-/// (review 5's rule, which went). The need is cut to the best fuel taken, so the cap is the body's.
+/// can carry: `Body::level` is a share of its body, so a full store is the satiety. Satiety on top
+/// of that only starves: a body takes on only some of its decisions and can take no more than its
+/// upkeep at each, so its store falls faster than it is refilled (234 starting eaters of seed 1
+/// took 1.0 kg each in ten days against 3.0 without it).
 pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
     let (p, t) = (&w.cfg.phys, b.temp(&w.chem));
     let heat = |k: usize| b.heat_of(&w.chem, k, t);
@@ -673,7 +664,7 @@ pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
     // `rel` is small for a large `fuel` when gas or catalysts, not the fuel, limit the burning
     // (under liquid, unfolded): the target then grows without bound. A body takes no more than
     // its size allows (`Physics::take` x days x `equiv`, the cap of every take) whatever it could
-    // use, so `can` stops at the heat of that much of the best fuel taken (review 6, finding 13).
+    // use, so `can` stops at the heat of that much of the best fuel taken.
     let best = m.iter().enumerate().filter(|&(_, &a)| a > 0.0).map(|(k, _)| heat(k) / w.chem.subs[k].molar_mass).fold(0.0, f64::max);
     let work = p.c_build * b.supply(&w.chem, p) / p.m_ref * days;
     let need = up + work * (1.0 + b.build_fuel(&w.chem, t) / p.c_copy);
@@ -772,17 +763,16 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 /// a node (its members lie spread over the cell) the taker also reaches only the area it works (`reach`);
 /// an individual it perceives is already found, so only the other caps hold for it.
 ///
-/// **A bite breaks body matter (15 Oct 2026, partial damage).** The kg taken tear that share of the
+/// **A bite breaks body matter (partial damage).** The kg taken tear that share of the
 /// other's body (`Body::built`), `f`, or the share of its body matter the taker ate if that is more
 /// (matter eaten is body torn): its body matter and the stores that matter held, in proportion
 /// (`body::tear`). The taker keeps what it took (digested, `Body::digest`); what is torn off and not
 /// taken goes to the ground as dead matter. An individual lives on smaller (its force falls with its
 /// body; it rebuilds the matter as it grows, `copy::grow`) and dies when half of its body or more is torn
-/// (the line was mass under half, which the cap of half of each store the taker takes could never
-/// reach) or a store falls below its safe minimum. In a node the size of the bite decides: one
+/// or a store falls below its safe minimum. In a node the size of the bite decides: one
 /// of less than a member's body (the kg taken over the node's body, times the members, under 1) grazes,
 /// every member loses that share of its matter, the node's mean body falls and its members live; one
-/// of a member's body or more takes whole members, as before: the share of them is the largest share
+/// of a member's body or more takes whole members: the share of them is the largest share
 /// taken of any store, and what the taker does not take of them goes to the ground.
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
@@ -802,7 +792,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let (built0, matter0, got) = (o.built(&w.chem), o.matter_kg(&w.chem), kg(w, &m));
     let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / o.store[k] } else { 0.0 });
     let weight = got / built0.max(1e-30);
-    // A bite of one member's body or more takes whole members, as before: the share of the node that
+    // A bite of one member's body or more takes whole members: the share of the node that
     // holds the largest share taken of any of its stores (what the taker does not take of them goes to
     // the ground); less grazes every member.
     let eats_members = o.n() > 1.0 && weight * o.n() >= 1.0;
@@ -826,21 +816,18 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
 }
 
 /// Put to another body in the cell: from the stores held above twice their safe minimum (never its matter, nor a key
-/// liquid below its level), by their
-/// shares, up to what the other could take by its own size in the time (`phys.take` x interval x
-/// its mass, `Body::equiv`, and use, `sate`), as far as it has room. A node gives as one member: a share 1/count of its spare (its
-/// members cannot all reach one body). Before (review 3, M2) the cap was the giver's mass, so a
-/// node of 10^7 members could give its whole spare to a 1 kg member, which rain then filled to
-/// its keep level, and members of thousands of tonnes grew. It remembers this for the giver.
+/// liquid below its level), by their shares, up to what the other could take by its own size in the time
+/// (`phys.take` x interval x its mass, `Body::equiv`, and use, `sate`), as far as it has room. A node gives as one
+/// member: a share 1/count of its spare (its members cannot all reach one body). It remembers this for the giver.
 fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     // The receiver's numbers (`supply` goes by its pace, `can_take` by its genes' catalysts) need `prepare`: a body of a
     // world just loaded has not had its update yet, so without this a gift to it differs from the same gift in the run
-    // that was not saved (found 15 Oct 2026: the snapshot round trip test failed once reaction 21 burned 4 times faster).
+    // that was not saved.
     let World { chem, cfg, life, .. } = &mut *w;
     life.bodies[s].prepare(chem, &cfg.phys);
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     // (Its body matter is its body and its brood, not a store: it gives none of it. A key liquid it gives only past its
-    // level, the liquid of its living body. 15 Oct 2026: before, both were spare to twice their safe minimum.)
+    // level, the liquid of its living body.)
     let (size, mass) = (b.size(chem), b.mass(chem));
     let keep = |k: usize| if b.wet >> k & 1 == 1 { b.level(chem, k, mass) } else { 0.0 };
     let spare = |k: usize| if chem.matter() == Some(k) { 0.0 } else { (b.store[k] - keep(k).max(2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
@@ -868,8 +855,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
 
 /// Watch another body (it costs the turn): the group's rows move part of the way toward the
 /// rows of the other's group if their brains have the same sizes (the share split over the
-/// group's members), and the
-/// body's own adjustment toward the other's; less the less alike the two bodies are (size,
+/// group's members), and the body's own adjustment toward the other's; less the less alike the two bodies are (size,
 /// light-capture area, strength), as a body can only copy what its own body can do.
 fn watch(w: &mut World, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
