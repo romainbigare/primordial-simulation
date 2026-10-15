@@ -510,20 +510,16 @@ impl Body {
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let mm = chem.subs[k].molar_mass;
         let f = self.gene(Layout::of(chem).keep + k);
-        let old = |f: f64| {
-            let f = f.clamp(0.0, 0.95);
-            (f / (1.0 - f) * (mass - self.store[k] * mm) / mm).max(0.0)
-        };
+        let share = |f: f64| f.clamp(0.0, 0.95) / (1.0 - f.clamp(0.0, 0.95));
         match chem.matter() {
             Some(m) if k != m => {
                 if self.wet >> k & 1 == 1 {
-                    let f = f.clamp(0.0, 0.95);
-                    f / (1.0 - f) * self.matter_kg(chem) / mm
+                    share(f) * self.matter_kg(chem) / mm
                 } else {
                     f.max(0.0) * self.built(chem) / mm
                 }
             }
-            _ => old(f),
+            _ => (share(f) * (mass - self.store[k] * mm) / mm).max(0.0),
         }
     }
     /// Well-being at temperature `t`: the energy its catalysed reactions could release from a

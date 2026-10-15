@@ -1,66 +1,44 @@
 //! Law 4: Copy. Reproduction is a share of a surplus. A body is mature when its body (`Body::built`
-//! per member) is at or past its copy mass, the size of maturity. A mature body splits what it
-//! builds in an update (`grow`) into the share `ALLOC` for offspring, held as a brood
-//! (`Body::brood`, matter built and paid for, not yet body), and the rest for its own growth; an
-//! immature one grows. Whenever the brood covers the matter of a child, a child is made (`copy`):
-//! its body is 10^`CHILD` of its parent's copy mass (seeds and eggs far smaller than their
-//! parents, calves near half), of matter from the brood, with provisions of fuel and liquid in the
-//! proportion its parent's body holds them (the key liquid times 10^`WET`), its share of the heat,
-//! and its genes plus small noise (now and then a change of the brain rows it was born with, else
-//! it shares its parent's); it starts in its parent's brain group (or, if brains are not shared,
-//! in a group of its own with what its parent learned). The parent keeps its body. A child whose
-//! brain-size genes are a whole unit away from its lineage's sizes starts a new lineage (and
-//! group) with the new sizes, its brain carried over where the sizes overlap; rarely the base of
-//! its lineage's brain is copied with small noise, which starts a new lineage too. It happens at
-//! the body's update whatever its brain does (`body::live`).
+//! per member) is at or past its copy mass. A mature body puts the share `ALLOC` of what it builds
+//! in an update (`grow`) into a brood (`Body::brood`, matter built and paid for, not yet body), and
+//! the rest into its own growth; an immature one grows. Whenever the brood covers the matter of a
+//! child, a child is made (`copy`) at the body's update, whatever its brain does (`body::live`): a
+//! body of 10^`CHILD` of its parent's copy mass, of matter from the brood, with provisions of
+//! fuel and liquid in the proportion its parent's body holds them (the key liquid times 10^`WET`),
+//! its share of the heat, and its genes plus small noise (now and then a change of the brain rows
+//! it was born with, else it shares its parent's). It starts in its parent's brain group (or, if
+//! brains are not shared, in a group of its own with what its parent learned). A child whose
+//! brain-size genes are a whole unit away from its lineage's sizes starts a new lineage with the
+//! new sizes, its brain carried over where the sizes overlap; rarely the base of its lineage's
+//! brain is copied with small noise, which starts a new lineage too.
 //!
-//! Two parents (`partner`, `mix`, `mix_rows`): when a mature body makes children it looks in its
-//! cell for a partner, another mature body (an individual or a node) alike to it (`alike`: every
-//! gene within `phys.alike` steps of the means, brain and senses by whole units), the most alike,
-//! a keyed pick among equals, never itself. Each gene of the children is then one parent's, each
-//! gene a draw of its own, and each born brain row too (a row is one reader of the hidden layer,
-//! so it is kept whole; the partner's rows are carried over if its brain has other sizes); the
-//! generation's mutation is added as for one parent. The chance of the partner's is its share of
-//! the members of both (a half for two individuals), so the mean of all members is kept as a
-//! merge keeps it; the spread of a node's children is pooled as a merge pools it. With no partner
-//! the children are copies of one parent. The partner gives and loses nothing: its genes are
-//! information. Bodies that are not alike never mix, so kinds that are apart stay apart.
-//! `Config::two_parents` off: one parent always.
+//! Two parents (`partner`, `mix`, `mix_rows`): a mature body looks in its cell for a partner, a
+//! mature body alike to it (`alike`), and each gene and each born brain row of the children is
+//! one parent's (a row is one reader of the hidden layer, so it is kept whole); the generation's
+//! mutation is added as for one parent. The chance of the partner's is its share of the members
+//! of both, so the mean of all members is kept as a merge keeps it. The partner gives and loses
+//! nothing. Bodies that are not alike never mix. `Config::two_parents` off: one parent always.
 //!
 //! Growth is building: a member turns the energy-rich solid into body matter
 //! (`Chemistry::build`) and pays `c_copy` per kg of matter made in work (`grow`), as far as its
-//! allowance goes (`c_build`), its reactions can spare and its stores reach. Storing fuel costs no
-//! building work. A child costs its parent no further work: the matter it is given was built and
-//! paid for as brood.
+//! allowance (`c_build`), its reactions and its stores reach. Storing fuel costs no building work.
 //!
 //! A population node (count > 1) keeps how its members differ (plan 7.1): its spread, the
 //! variance of their genes around its genes, per gene, and of their born rows around its rows
-//! (one number for all rows). Its children never join it while it is mature (they are below their
-//! copy mass, and a mature node's mean must stay at or past maturity for its members to
-//! reproduce): they form a group of their own, with the variance left among them (`vary`), who
-//! join the first immature node of their kind and size class where they start (`near`, `emit`),
-//! or start one; a young node joins and merges with the adult only once mature (the monthly
-//! merge, `body::crowd`). A child is of another size class than a node when its body differs from
-//! the node's mean member by more than `alike` steps of the copy-mass gene (`alike_size`). A share
-//! of a node's children (the `DISPERSE` gene; none if less than one member) starts in a random
-//! neighbour cell, drawn from the node: their mean genes and rows are the node's plus noise of its
-//! spread and the change over their number, and they keep the variance left among them (`vary`).
-//! There they join the first node they belong to, alike in genes within its spread and theirs
-//! (`within`; brain sizes within a few whole units), whatever its lineage (means by count, the
-//! spread pooled, `join`), or start a node. An individual's children stay together, in a
-//! neighbour cell with that chance (else in its own); there they join a node as a node's do, else
-//! they are a new body. Only individuals' children start new lineages; a node whose mean
-//! brain-size genes are a whole unit away from its lineage's sizes moves itself to a new lineage
-//! with them, its brain and what its group learned carried over (`resize`, at its update).
-//!
-//! A node whose halves would no longer be alike splits in two (`split`), so selection acts
-//! between them; a node does the actions of Bond through one member split off as an individual
-//! (`one`, from `choose::act`), and `open` draws several members as individuals at once (the
-//! close view of a node). Members, stores and heat are kept exactly in every split and join.
+//! (one number for all rows). Its children never join it while it is mature (a mature node's mean
+//! must stay at or past maturity for its members to reproduce): they join the first immature node
+//! of their kind and size class where they start (`near`, `within`, `emit`), or start one; a young
+//! node joins and merges with the adult only once mature (`body::crowd`). A share of a node's
+//! children (the `DISPERSE` gene) starts in a random neighbour cell. An individual's children
+//! stay together, in a neighbour cell with that chance. Only individuals' children start new
+//! lineages; a node whose mean brain-size genes are a whole unit away from its lineage's sizes
+//! moves itself to a new lineage (`resize`). A node whose halves would no longer be alike splits
+//! in two (`split`), so selection acts between them; it does the actions of Bond through one
+//! member split off (`one`, from `choose::act`); `open` draws several members as individuals at
+//! once. Members, stores and heat are kept exactly in every split and join.
 //!
 //! With `Config::nodes` off the animals (bodies that are not light-eaters, `body::light_eater`)
-//! are never nodes: an animal's children start as individuals and join nothing (`copy`), and none
-//! splits (`split`); `body::crowd` leaves them alone.
+//! are never nodes: their children start as individuals and join nothing, and none splits.
 
 use crate::body::{self, Body, Layout, Lineage};
 use crate::{brain, choose};
@@ -469,19 +447,16 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     true
 }
 
-/// A mature body makes offspring from its brood. A
-/// child has a body of 10^`CHILD` of its parent's copy mass: matter of 1 - h of that (`Body::size`),
-/// taken from the brood, and provisions of every other store, in the proportion the parent's body
-/// holds them to its matter (the key liquid times 10^`WET`, at most what the parent holds), with its
-/// share of the heat. A child is made whenever the brood covers one: an individual has whole children,
-/// a node (members who all do the same) fractional members, as many as the brood makes. The parent
-/// keeps its body: what it gives is brood and provisions. Their genes and born rows are one parent's or a partner's
-/// (`partner`: a mature alike body of the cell, if there is one; the same partner for all the children of the call).
-/// A body that is not mature (`Body::adult`)
-/// makes none (its brood waits). Children are always immature (below their parents' copy mass), so
-/// they never join their parent node, which is mature: they join a node of their kind and size class
-/// that is immature too, in their parent's cell or, if they disperse, a neighbour's, or start one
-/// (`emit`), and a node's mean never falls under maturity for its own children (`near`).
+/// A mature body makes offspring from its brood. A child has a body of 10^`CHILD` of its parent's
+/// copy mass: matter of 1 - h of that (`Body::size`), taken from the brood, and provisions of
+/// every other store, in the proportion the parent's body holds them to its matter (the key
+/// liquid times 10^`WET`, at most what the parent holds), with its share of the heat. A child is
+/// made whenever the brood covers one: an individual has whole children, a node (members who all
+/// do the same) fractional members, as many as the brood makes. Their genes and born rows are one
+/// parent's or a partner's (`partner`; the same partner for all the children of the call). A body
+/// that is not mature (`Body::adult`) makes none. Children are always immature, so they never
+/// join their parent node, which is mature: they join a node of their kind and size class that is
+/// immature too, in their parent's cell or, if they disperse, a neighbour's, or start one (`emit`).
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.dec(body::COPY_MASS));
     let Some(mi) = chem.matter() else { return false };
