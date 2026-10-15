@@ -1598,7 +1598,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// (`copy::grow` builds from the spare after upkeep): its size is set by its own costs, not by a cap.
 /// Across kinds, adult costs then follow Kleiber's mass^0.75 by themselves. (Review 6 had moved these
 /// costs to mass^0.75 because every animal evolved small; the main cause then was nodes mixing kinds,
-/// since fixed.) Needs `prepare`.
+/// since fixed.) The mass is the body that is built, not the whole mass: storing fuel is cheap, tissue
+/// dear (decision of 14 Oct 2026 on body matter); and not `size`, which stops at the liquid held
+/// now, a lack that dormancy (`activity`, below) already counts. Needs `prepare`.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
