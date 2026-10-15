@@ -158,7 +158,15 @@ Things that are open and not built:
   (handover, "Why the roster's big animals die"). The 150 kg and 600 kg kinds now live 60 years on seeds 1 to 3, the 100 kg on 2;
   the 600 kg kind is few (1 to 120 bodies). Normal eaters are 2 to 5 times lighter, plants 16 to 38%. Open: bodies give away
   their own matter in gifts (`choose::give`).
-- **Eater numbers swing up to 1,000 times** between almost identical runs.
+- **Eater numbers swing up to 1,000 times** between almost identical runs: **closed, no longer true on main 1c7e5d1.**
+  Eaters at year 60 over seeds 1 to 9: 4.1e8 to 1.75e9 kg (4.3 times; log10 sd 0.20), at year 30 3.1e5 to 8.6e5.
+  Seed 1 with `--spray 19`, `--spray 21`, `--life-year 3`, `--fixers 0.11`: 1.2e9 to 1.7e9 (seed 1 itself 1.2e9).
+  The old swing was the founding bottleneck: on 03123d8 (the report's main) 50 to 80% of the founders died in two
+  years, and the run took off after 5 to 15 years, or never (seed 5 died out); then it grew 0.45 a year, so the lag
+  alone gave 1,000 times. Adult founders breed at once: members are 3 to 6 times the founders by year 24 on every
+  seed. No cycle: eaters still grow 0.18 to 0.23 a year in years 45 to 60 (doubling in about 3.5 years), no deaths of
+  lack, under 5% eaten, at 1 to 6% of the plants' mass. So year 60 measures how fast they grow, not a level. Reports: give log10 kg
+  at year 60 and the growth rate over years 30 to 60, three seeds at least; under 2 times is noise.
 - **Erosion is very slow in the first 10 years:** closed. The measure counted dead body matter piling up on the land as rock;
   without it the land loses 0.07 to 0.085 mm a year from the first year (handover, "Erosion at real rates").
 - **The sea floor uses the air's oxygen,** and the sea's carbon reaction takes gas from the whole air
