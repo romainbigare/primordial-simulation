@@ -1,0 +1,158 @@
+diff --git a/core/tests/build.rs b/core/tests/build.rs
+index c7ef68b..dfe6115 100644
+--- a/core/tests/build.rs
++++ b/core/tests/build.rs
+@@ -343,8 +343,8 @@ fn storing_the_solid_costs_no_build() {
+     let b = &w.life.bodies[s];
+     println!("took {took:.3} kg: solid {rich0:.3} -> {:.3} kg, matter {matter0:.3} -> {:.3} kg", kg(&w, b, r.rich), kg(&w, b, r.matter));
+     assert!(took > 0.5 && kg(&w, b, r.rich) > rich0, "it stored nothing: took {took} kg, solid {rich0} -> {}", kg(&w, b, r.rich));
+-    // (Matter does not rise; it oxidises in the open at 5% a year, here a month: 0.4%.)
+-    assert!(kg(&w, b, r.matter) <= matter0 && kg(&w, b, r.matter) > 0.99 * matter0, "matter changed with no allowance: {matter0} -> {}", kg(&w, b, r.matter));
++    // (Matter does not rise; it oxidises in the open at 0.2 a year, here a month: 1.5%.)
++    assert!(kg(&w, b, r.matter) <= matter0 && kg(&w, b, r.matter) > 0.97 * matter0, "matter changed with no allowance: {matter0} -> {}", kg(&w, b, r.matter));
+     assert_eq!(pcore::check::broken(&w), None);
+     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+@@ -811,10 +811,11 @@ fn satiety_caps_every_size_and_counts_the_matter_built() {
+     }
+ }
+ 
+-/// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 5% of it a
+-/// year at 290 K in the starting air (a little slower than the energy-rich solid's 6.6%: structure
+-/// resists), by mass action of the oxygen-like gas to the 6th power (0.21^6 = 8.6e-5) over a rate
+-/// constant of 1.9e-5 /s at 290 K.
++/// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 0.2 of it a
++/// year at 290 K in the starting air (18.6% lost in a year; a little slower than the energy-rich
++/// solid's 0.27 a year, 24%: structure resists; both are litter decay constants, forest floor
++/// 0.25 a year), by mass action of the oxygen-like gas to the 6th power (0.21^6 = 8.6e-5) over a
++/// rate constant of 7.6e-5 /s at 290 K.
+ #[test]
+ fn dead_body_matter_oxidises_at_the_set_rate() {
+     let (chem, init) = worldgen::chemistry0();
+@@ -834,8 +835,8 @@ fn dead_body_matter_oxidises_at_the_set_rate() {
+     };
+     let (matter, solid) = (lost(m), lost(rich));
+     println!("a year at 290 K in the starting air: body matter {:.2}% oxidised, the energy-rich solid {:.2}%", 100.0 * matter, 100.0 * solid);
+-    assert!(matter > 0.045 && matter < 0.055, "{matter}");
+-    assert!(solid > 0.06 && solid < 0.075 && matter < solid, "{solid}");
++    assert!(matter > 0.17 && matter < 0.205, "{matter}");
++    assert!(solid > 0.22 && solid < 0.26 && matter < solid, "{solid}");
+     // It burns: 2805 kJ a mol, the heat of 6 of the solid, and balances in elements (validated on load).
+     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)).expect("a burning reaction");
+     assert!((chem.dh(burn) / -2805e3 - 1.0).abs() < 1e-9 && chem.validate().is_ok());
+diff --git a/core/tests/change.rs b/core/tests/change.rs
+index 783afc1..948a68e 100644
+--- a/core/tests/change.rs
++++ b/core/tests/change.rs
+@@ -22,7 +22,8 @@ fn hot_reacts_faster() {
+         n[5] = 1000.0;
+         gas[2] = 1e6;
+         let mut e = t * 1e12; // huge heat capacity: temperature stays put
+-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e12, None, 0.0, 1e5);
++        // (2.5e4 s: with the solid's litter constant 4 times higher, 1e5 s burns the hot node out and the ratio cannot show.)
++        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e12, None, 0.0, 2.5e4);
+         1000.0 - n[5]
+     };
+     let (cold, hot) = (used(300.0), used(450.0));
+diff --git a/core/tests/dormancy.rs b/core/tests/dormancy.rs
+index 03dd689..71260d3 100644
+--- a/core/tests/dormancy.rs
++++ b/core/tests/dormancy.rs
+@@ -272,7 +272,8 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
+     assert!(n_dry > 0 && n_wet > 0);
+     assert!(a_wet > 0.3 && a_dry < 0.01, "activity at birth: {a_wet} against {a_dry}");
+     assert!(alive_dry == n_dry && act_dry < 0.01, "dry children wait: {alive_dry} of {n_dry} alive, activity {act_dry}");
+-    assert!(fuel_dry > 0.995 && fuel_wet < 0.95, "a dry child pays almost nothing to be: it keeps {fuel_dry} of its fuel in a month, a wet one {fuel_wet}");
++    // (0.995 before the solid rotted at 0.27 a year in the open, 1.1% a month with no enzyme: a dry child keeps all but that.)
++    assert!(fuel_dry > 0.985 && fuel_wet < 0.95, "a dry child pays almost nothing to be: it keeps {fuel_dry} of its fuel in a month, a wet one {fuel_wet}");
+     // (Over 0.3 before the upkeep went by the kg of the body, 0.28 after it: what is asked is that it wakes, by
+     // orders of magnitude.)
+     assert!(wake > 0.2 && wake > 100.0 * act_dry, "a dry child that soaks liquid wakes: activity {wake}");
+diff --git a/docs/numbers.md b/docs/numbers.md
+index a6f57f6..b2ac381 100644
+--- a/docs/numbers.md
++++ b/docs/numbers.md
+@@ -191,7 +191,8 @@ Chemistry 0 (`worldgen/src/chem0.toml`) is data, not a struct of numbers, and is
+ |---|---|---|---|
+ | substance 22, body matter | C6H10O5 (162 g/mol), hf -986 kJ/mol, 1,500 kg/m³, melts at 1,500 K | what bodies are built of; 6 of the energy-rich solid (CH2O) make 1 of it and 1 of the liquid, thermoneutral: hf = 6 x -212 - -286, so it holds the energy of what it was made of; burning it gives 2,805 kJ/mol, 17.3 MJ/kg (the solid: 15.6; real cellulose 17.5) | its density 1,500 and its 17.3 MJ/kg are those of cellulose |
+ | `Chemistry::build`, growth | 6 of the solid -> 1 of body matter + 1 of the liquid; no rate (it is not a reaction of the open world) | what `copy::grow` runs, paid by `c_copy` of work per kg of matter | chemistry data |
+-| reaction 21, burning body matter | C6H10O5 + 6 O2 -> 6 CO2 + 5 H2O, k 5.7e8 /s, Ea 9,000 K | **the open-world decay of dead body matter: 5% a year at 290 K**, a little slower than the energy-rich solid's 6.6% (structure resists; its Ea is 7,760 K): rate 1.63e-9 /s = k exp(-Ea / 290) x 0.21^6 (mass action, the oxygen-like gas to its 6th power), so k exp(-Ea / 290) = 1.9e-5 /s, k = 1.9e-5 x exp(9000 / 290) = 5.7e8. A test holds it between 4.5 and 5.5% | dead wood and litter last decades in the open; bodies speed it up with a catalyst gene |
++| reaction 1, burning the energy-rich solid | CH2O + O2 -> CO2 + H2O, k 1.72e4 /s (was 4.3e3), Ea 7,760 K | **the open-world decay of dead plant matter: 0.27 a year at 290 K (24% of it in a year; was 0.068, 6.6%)**: rate 8.7e-9 /s = k exp(-Ea / 290) x 0.21. The founders' burning genes are lower by log10 4 = 0.602 (`worldgen::life::LITTER_X`), so a body's own burning and the price of its enzyme (k x 10^gene) are unchanged | litter decay constants (Olson 1963: forest floor 0.25 a year, leaves 0.3 to 1, wood 0.02 to 0.1). The 6.6% was 4 times slower than any litter; seed 3 (64x64, 60 years) kept 54% of the island's carbon in dead solid and the carbon gas fell to 44 ppm (handover 13.2, carbon cycle, 15 Oct 2026) |
++| reaction 21, burning body matter | C6H10O5 + 6 O2 -> 6 CO2 + 5 H2O, k 2.28e9 /s (was 5.7e8), Ea 9,000 K | **the open-world decay of dead body matter: 0.2 a year at 290 K (18.6% in a year; was 5%)**, a little slower than the energy-rich solid's 0.27 (structure resists; its Ea is 7,760 K): rate 6.5e-9 /s = k exp(-Ea / 290) x 0.21^6 (mass action, the oxygen-like gas to its 6th power), so k exp(-Ea / 290) = 7.6e-5 /s, k = 7.6e-5 x exp(9000 / 290) = 2.28e9. A test holds it between 17 and 20.5% | the litter of plants that live a month, not dead wood: forest floor 0.25 a year, leaves 0.3 to 1, wood 0.02 to 0.1 (Olson 1963); bodies speed it up with a catalyst gene |
+ | `Chemistry::air`, the cost of catalysts | the starting air's mole fractions | the cost of a catalyst (`Body::prepare`) counts a gas of a reaction beyond first order at its share to the power `nu` - 1 | without it the 6th power of the oxygen-like gas makes the enzyme for burning body matter cost 1,800 times that for the solid for the same speed-up (its rate constant is 1.9e-5 /s against 1.0e-8); with it, 0.75 times. Reactions of order 1 in every gas (the light reaction, burning the solid) are unchanged |
+ 
+ ## Counts
+diff --git a/worldgen/src/chem0.toml b/worldgen/src/chem0.toml
+index c9aeec8..cb7e4af 100644
+--- a/worldgen/src/chem0.toml
++++ b/worldgen/src/chem0.toml
+@@ -365,10 +365,15 @@ k = 1e-6
+ ea = 5800
+ light = true
+ 
++# 1: burning the energy-rich solid. In the open this is also how dead plant matter rots, so its rate at 290 K is a
++# litter decay constant: k exp(-ea/290) x 0.21 = 8.7e-9 /s = 0.27 a year (24% of it a year), the forest-floor figure
++# (Olson 1963: 0.25 a year for temperate deciduous litter; leaves 0.3 to 1, wood 0.02 to 0.1). It was 4.3e3, 0.068 a
++# year (6.6%): 4 times slower than any litter. Inside bodies the founders' genes are 4 times lower (log10 4 = 0.602,
++# worldgen::life::LITTER_X) so a body's own burning, and the price of its enzyme, are what they were.
+ [[r]] # 1
+ i = [[5,1],[2,1]]
+ o = [[3,1],[0,1]]
+-k = 4.3e3
++k = 1.72e4
+ ea = 7760
+ 
+ [[r]] # 2
+@@ -486,13 +491,15 @@ k = 0.1
+ ea = 8000
+ 
+ # 21: burning body matter, C6H10O5 + 6 O2 -> 6 CO2 + 5 H2O (as 1, for 22). Open world: first order in the matter, the
+-# oxygen to its 6th power (mass action), 0.21^6 = 8.6e-5, so for 5% of it a year at 290 K (rate 1.63e-9 /s) k exp(-ea/290)
+-# = 1.63e-9 / 8.6e-5 = 1.9e-5 /s; ea 9000 K (7760 for 1: structure resists), k = 1.9e-5 x exp(9000/290) = 5.7e8.
+-# (Reaction 1 at 290 K: 4.3e3 exp(-7760/290) x 0.21 = 2.2e-9 /s, 6.6% a year.)
++# oxygen to its 6th power (mass action), 0.21^6 = 8.6e-5, so for 0.2 of it a year at 290 K (rate 6.5e-9 /s, 18.6% lost
++# in a year) k exp(-ea/290) = 6.5e-9 / 8.6e-5 = 7.6e-5 /s; ea 9000 K (7760 for 1: structure resists), k = 7.6e-5 x
++# exp(9000/290) = 2.28e9. The litter constant of 1 (0.27 a year), a little lower for the tissue that resists. It was 5%
++# a year (k 5.7e8): wood, not the litter of plants that live a month (Olson 1963 k = 0.02 to 0.1 for wood, 0.25 for
++# the forest floor, 0.3 to 1 for leaves).
+ [[r]] # 21
+ i = [[22,1],[2,6]]
+ o = [[3,6],[0,5]]
+-k = 5.7e8
++k = 2.28e9
+ ea = 9000
+ 
+ # Growth, which is not a reaction of the open world: what bodies make of the energy-rich solid, paid by work (Copy): [inputs], [outputs]; the first output is the matter that builds bodies.
+diff --git a/worldgen/src/life.rs b/worldgen/src/life.rs
+index 86bd917..2d2fe28 100644
+--- a/worldgen/src/life.rs
++++ b/worldgen/src/life.rs
+@@ -44,6 +44,12 @@ type Hand = ([f32; brain::FIXED], f32, [f32; brain::VERBS + brain::OVERBS]);
+ const H_LIGHT: Hand = ([2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], -4.0, [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0]);
+ const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
+ 
++/// log10 of how much faster the open world burns the energy-rich solid, and body matter, than it did when the
++/// founders' `cat` numbers below were set (chemistry 0, reactions 1 and 21: k 4.3e3 -> 1.72e4 and 5.7e8 -> 2.28e9,
++/// litter constants of 0.27 and 0.2 a year instead of 0.068 and 0.051). A founder's burning genes are that much
++/// lower, so its burning and the price of its enzymes (both go with k x 10^gene) are what they were.
++pub const LITTER_X: f32 = 0.602;
++
+ /// Light reaction, energy-rich solid, liquid, burning reaction.
+ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
+     let at = |k: u16| chem.phase(k as usize, T_SURF);
+@@ -497,13 +503,13 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
+     let mut genes = vec![-0.1f32; lay.len];
+     genes[lay.cat..lay.min].fill(-1.0);
+     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
+-    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1]);
++    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1] - LITTER_X);
+     (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.25);
+     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
+     // Animals digest body matter as they digest the solid, and take it (14 Oct 2026): light-eaters do not.
+     let matter = matter_roles(chem);
+     if let Some((m, r)) = matter.filter(|_| kind.cat[0] < body::LIGHT_EATER) {
+-        (genes[lay.cat + r], genes[lay.upt + m]) = (kind.cat[1], kind.upt[1]);
++        (genes[lay.cat + r], genes[lay.upt + m]) = (kind.cat[1] - LITTER_X, kind.upt[1]);
+     }
+     // What a body carries of each store is kg per kg of its body (`Body::level`, 14 Oct 2026): 0.9 of
+     // the solid, or what it is placed with and a tenth more if that is more (a kind of 60% fuel and a
