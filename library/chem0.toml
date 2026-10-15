@@ -4,13 +4,12 @@ substances = [
   "water", "nitrogen", "oxygen", "carbon dioxide", "methane", "sugar / plant matter",
   "fat / oil", "charcoal / coal", "sand / quartz", "common rock", "limestone", "quicklime",
   "slaked lime", "iron ore", "iron", "steel", "copper ore", "copper", "tin ore", "tin",
-  "bronze", "carbon monoxide", "body matter (tissue)",
-  "(placeholder: the sea's carbonate store takes this number)", "nitrogen mineral (a nitrate-ammonium fertiliser salt)",
+  "bronze", "carbon monoxide", "body matter (tissue)", "calcium bicarbonate (dissolved)", "nitrogen mineral (a nitrate-ammonium fertiliser salt)",
 ]
 reactions = [
   "light to sugar", "burning sugar", "burning fat", "fat making", "charring", "burning charcoal",
   "burning carbon monoxide", "partial burning charcoal", "burning methane", "rotting to methane",
   "iron smelting", "copper smelting", "tin smelting", "bronze making", "steel making",
   "lime burning", "lime slaking", "mortar setting", "rock weathering", "rusting", "copper tarnish",
-  "burning body matter", "(placeholder)", "(placeholder)", "nitrogen fixation", "fertiliser salt breaking down hot",
+  "burning body matter", "limestone dissolving", "limestone settling", "nitrogen fixation", "fertiliser salt breaking down hot",
 ]

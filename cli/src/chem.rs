@@ -61,8 +61,43 @@ pub fn run(args: &[String]) {
             c.dh(r) / 1000.0
         );
     }
+    balances(&c, &init);
     println!("\nrichness:");
     for (what, ok) in worldgen::richness(&c, &init) {
         println!("  {} {what}", if ok { "pass" } else { "FAIL" });
+    }
+}
+
+/// For each pair of reactions that undo each other: what the first makes, per m2 of a column of
+/// the starting liquid, at balance with the starting air (`Reactor::balance`, from the chemistry's
+/// own rate constants and barriers), for three depths and three temperatures. Amounts in mol.
+fn balances(c: &Chemistry, init: &worldgen::Init) {
+    let pairs = pcore::change::reversible(c);
+    if pairs.is_empty() {
+        return;
+    }
+    let (ns, g) = (c.ns(), pcore::Config::default().gravity);
+    let atot: f64 = init.air.iter().map(|p| p.1).sum();
+    let m_air: f64 = init.air.iter().map(|&(k, f)| f / atot * c.subs[k].molar_mass).sum();
+    let column = 101_325.0 / (g * m_air);
+    let gas: Vec<f64> = (0..ns).map(|k| init.air.iter().find(|p| p.0 == k).map_or(0.0, |p| p.1 / atot * column)).collect();
+    println!("\nbalance with the starting air ({column:.0} mol/m2 of air over a cell), per m2 of cell and per m3 of liquid:");
+    let mut rc = pcore::change::Reactor::new(c);
+    for (f, b, _, u) in pairs {
+        for depth in [10.0, 100.0, 500.0] {
+            let cols: Vec<String> = [278.0, 288.0, 298.0]
+                .iter()
+                .map(|&t| {
+                    let mut n = vec![0.0; ns];
+                    n[init.low] = depth / c.molar_volume(init.low, pcore::chem::Phase::Liquid);
+                    for &(k, share) in &init.loose {
+                        n[k] = 1e4 * share;
+                    }
+                    let x = rc.balance(c, &mut n, &gas, t).iter().find(|p| p.0 == u).map_or(0.0, |p| p.1);
+                    format!("{t:.0} K: {x:8.1} mol/m2 ({:.3} mol/m3)", x / depth)
+                })
+                .collect();
+            println!("  {f} <-> {b}: substance {u}, liquid {depth:>4.0} m deep:  {}", cols.join("   "));
+        }
     }
 }

@@ -81,6 +81,29 @@ fn pow(f: f64, nu: u16) -> f64 {
     }
 }
 
+/// Pairs of reactions that undo each other, as (first, back, m, substance): the first makes one
+/// substance, the back takes `m` times as much of it and gives `m` times what the first took.
+pub fn reversible(chem: &Chemistry) -> Vec<(usize, usize, u16, usize)> {
+    let mut out = Vec::new();
+    for (f, rf) in chem.reactions.iter().enumerate().filter(|(_, r)| !r.light && r.outputs.len() == 1) {
+        let (u, made) = rf.outputs[0];
+        for (b, rb) in chem.reactions.iter().enumerate().filter(|(b, r)| *b != f && !r.light && r.inputs.len() == 1 && r.inputs[0].0 == u) {
+            let m = rb.inputs[0].1 / made;
+            let scaled = |v: &[(u16, u16)]| {
+                let mut v: Vec<_> = v.iter().map(|&(k, c)| (k, c * m)).collect();
+                v.sort_unstable();
+                v
+            };
+            let mut back = rb.outputs.clone();
+            back.sort_unstable();
+            if m >= 1 && m * made == rb.inputs[0].1 && back == scaled(&rf.inputs) {
+                out.push((f, b, m, u as usize));
+            }
+        }
+    }
+    out
+}
+
 /// The input that runs out first: its amount per `nu` (reaction units) and its place in `inputs`
 /// (the first of the least). `a` gives the amount of a substance.
 #[inline]
@@ -176,6 +199,55 @@ impl Reactor {
             }
         }
         best
+    }
+
+    /// The amounts at which pairs of reactions that undo each other (`reversible`) balance in one
+    /// node at `t`, from the chemistry's own rate constants and barriers, with the gas around the
+    /// node (`gas`) held as it is. Of each pair the substance the first makes, if the node holds
+    /// none of it, is set to the amount at which the two take it and give it at the same rate,
+    /// and the other inputs of the first (those that are not gas) are lessened by what it holds.
+    /// Returns the substances set and their amounts. A node without an input of the first (no
+    /// liquid, say) holds none: its rate is nothing at every amount.
+    pub fn balance(&mut self, chem: &Chemistry, n: &mut [f64], gas: &[f64], t: f64) -> Vec<(usize, f64)> {
+        let mut out = Vec::new();
+        for (f, b, m, u) in reversible(chem) {
+            if n[u] > 0.0 || gas[u] > 0.0 {
+                continue;
+            }
+            let (made, took) = (chem.reactions[f].outputs[0].1 as f64, m as f64 * chem.reactions[f].outputs[0].1 as f64);
+            // The rate of change of `u`, mol/s, with `x` of it in the node: positive below the balance.
+            let net = |rc: &mut Self, n: &mut [f64], x: f64| {
+                n[u] = x;
+                let tot = rc.phases(n, Some(gas), t);
+                let eps = |rc: &Self, r: usize| {
+                    let rx = &chem.reactions[r];
+                    let (lim, who) = scarce(&rx.inputs, |k| rc.av[k]);
+                    if lim > 0.0 { lim * rx.k * (-rx.ea / t).exp() * rc.share(rx, who, &tot) } else { 0.0 }
+                };
+                made * eps(rc, f) - took * eps(rc, b)
+            };
+            if net(self, n, 0.0) <= 0.0 {
+                n[u] = 0.0;
+                continue;
+            }
+            let (mut lo, mut hi) = (0.0, 1.0);
+            while net(self, n, hi) > 0.0 && hi < 1e30 {
+                (lo, hi) = (hi, hi * 2.0);
+            }
+            for _ in 0..200 {
+                let mid = 0.5 * (lo + hi);
+                if net(self, n, mid) > 0.0 { lo = mid } else { hi = mid }
+            }
+            let x = 0.5 * (lo + hi);
+            n[u] = x;
+            for &(k, c) in &chem.reactions[f].inputs {
+                if chem.phase(k as usize, t) != crate::chem::Phase::Gas {
+                    n[k as usize] = (n[k as usize] - c as f64 * x / made).max(0.0);
+                }
+            }
+            out.push((u, x));
+        }
+        out
     }
 
     /// The product, over the inputs of `rx` in a gas or a liquid, of their share of the phase to
@@ -334,7 +406,9 @@ impl Reactor {
 /// with their boiling points, and its rate constant over the step relative to going far. It
 /// needs at least `hot` (all activities 1), and `low` for the gases of any air node; per air
 /// node, `need` for those gases at the most activity they can have there (their share of the
-/// air's gas), once asked for (NaN before).
+/// air's gas), once asked for (NaN before). `shared`: the inputs that are not gas and count more
+/// than once, which in a liquid go by their share of it (a node holding little of one, a trace of
+/// its liquid, cannot go far however fast the rate constant is).
 struct Cand {
     ea: f64,
     kdt: f64,
@@ -343,6 +417,7 @@ struct Cand {
     need_bits: u64,
     gas: Vec<(usize, u16)>,
     held: Vec<(usize, f64)>,
+    shared: Vec<(usize, u16)>,
     need: Vec<std::cell::Cell<f64>>,
 }
 
@@ -434,8 +509,9 @@ pub fn step(w: &mut World, dt: f64) {
         .map(|&&(r, need_bits, _, hot)| {
             let rx = &chem.reactions[r];
             let (gas, held): (Vec<_>, Vec<_>) = rx.inputs.iter().enumerate().map(|(q, p)| (p.0 as usize, rx.order(q))).partition(|p| chem.subs[p.0].boil <= tlo);
+            let shared = held.iter().copied().filter(|g| g.1 > 1).collect();
             let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil)).collect();
-            let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, need: vec![std::cell::Cell::new(f64::NAN); na] };
+            let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, shared, need: vec![std::cell::Cell::new(f64::NAN); na] };
             c.low = c.warm(c.kdt * up(&c.gas, &|k| most_act[k])).max(hot);
             c
         })
@@ -454,11 +530,25 @@ pub fn step(w: &mut World, dt: f64) {
     let mut most: Vec<(f64, usize)> = (0..ns).map(|k| (col(k).iter().step_by(61).sum::<f64>(), k)).collect();
     most.sort_by(|a, b| b.0.total_cmp(&a.0));
     let most: Vec<usize> = most.iter().take(3).map(|m| m.1).collect();
+    // The substances that are liquid at some ground node.
+    let gmin = tg.iter().fold(f64::MAX, |a, &t| a.min(t));
+    let liquids: Vec<usize> = (0..ns).filter(|&k| chem.subs[k].melt <= gmax && chem.subs[k].boil > gmin).collect();
     let own_gas = |k: usize, i: usize| col(k)[i] > OWN * share * w.air[k * na + air_of[i] as usize];
     let fits = |c: &Cand, i: usize, t: f64| {
         let held = |all: f64| c.held.iter().all(|&(k, boil)| t >= boil || col(k)[i] > TRACE * all);
         if t < c.hot || !held(col(most[0])[i]) {
             return false;
+        }
+        // An input that counts more than once, in a liquid, goes by its share of the liquid to the
+        // power `nu - 1` (the first of the least is the scarce one, the others to `nu`: never more):
+        // a node holding a trace of it in its liquid does not react every step.
+        if !c.shared.is_empty() {
+            let liquid = |k: usize| chem.subs[k].melt <= t && t < chem.subs[k].boil;
+            let all: f64 = liquids.iter().filter(|&&k| liquid(k)).map(|&k| col(k)[i]).sum();
+            let x: f64 = (c.shared.iter().filter(|p| liquid(p.0))).map(|&(k, nu)| pow(col(k)[i] / all, nu - 1)).product();
+            if t < c.warm(c.kdt * x) {
+                return false;
+            }
         }
         let (j, own) = (air_of[i] as usize, c.gas.iter().any(|&(k, _)| own_gas(k, i)));
         if !own && (t < c.low || (!c.gas.is_empty() && t < need(c, j))) {

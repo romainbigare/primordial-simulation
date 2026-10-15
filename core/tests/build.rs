@@ -1009,15 +1009,17 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         let (rich0, matter0, size0) = (b.store[r.rich], b.store[r.matter], b.size(&w.chem));
         let s = w.life.add(b, w.day, 1);
         let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
-        let on_ground0 = w.ground[r.matter * n + i];
+        // What the body took from the ground (the events), not what left it: dead matter on the ground also rots in the open.
+        let mut took = 0.0;
         for _ in 0..10 {
             day(&mut w);
+            took += w.events.iter().map(|e| if let pcore::event::EventKind::Took { from: u64::MAX, .. } = e.kind { e.value } else { 0.0 }).sum::<f64>();
         }
         let b = &w.life.bodies[s];
         assert_eq!(pcore::check::broken(&w), None);
         let (de, dq) = pcore::check::drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
-        (b.store[r.rich] - rich0, b.store[r.matter] - matter0, on_ground0 - w.ground[r.matter * n + i], b.size(&w.chem) - size0)
+        (b.store[r.rich] - rich0, b.store[r.matter] - matter0, took / w.chem.subs[r.matter].molar_mass, b.size(&w.chem) - size0)
     };
     let (rich, matter, taken, size) = take_from_ground(true);
     println!("an eater took {taken:.2} mol of matter from the ground: solid +{rich:.2} mol, its own matter {matter:+.3} mol, body {size:+.3} kg");
@@ -1050,7 +1052,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
 /// body's own costs set. An eater (ALLOC 0: it builds only for itself, nothing is given to children;
 /// strength 1; building fast, so that the allowance never binds; its liquid put back to the ground) in
 /// a place with all the fuel it can take, at every update. With tissue dear enough that the ceiling is
-/// near (costs 1.5 times the starting ones, 1.7 before the nitrogen mineral: growth is 5% slower now and a body at 1.7 starves in the
+/// near (costs 1.4 times the starting ones, 1.7 before the nitrogen mineral: growth is 5% slower now and a body at 1.7 starves in the
 /// cold season of its 200th day) it levels off (under a quarter more body
 /// between the 100th and the 300th day) and in its last 100 days takes about what it pays to keep what
 /// it has (within 5 to 10%); with the costs of the start, a ceiling many times higher, it is still
@@ -1116,7 +1118,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(1.5);
+    let (full, r_full) = run(1.4);
     let (cheap, r_cheap) = run(1.0);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).

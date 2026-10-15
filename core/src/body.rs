@@ -1635,14 +1635,14 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         b.e += d * per;
         heat += d * f;
     }
-    // Roots take what is dissolved in the soil (15 Oct 2026): the solids that dissolve in the liquid (`Chemistry` solubility
-    // above 0, melting above the ground's warmth) that its uptake genes are on for, from the loose ground of its cell, up to the
+    // Roots take what is dissolved in the soil (15 Oct 2026): the salts that live in the liquid of the ground (liquid at the cell's
+    // warmth but for the common liquid itself, whose soaking is above) that its uptake genes are on for, from the loose ground of its cell, up to the
     // room its level leaves, at the rate it soaks liquids (without the wetness of the surface: soil holds moisture the
     // surface does not show, which the world does not model), through the mass that works, and no more than half of what
     // there is (the bodies of a cell share it).
     let soak = -(-b.k.liq * days).exp_m1() * wk;
     for &(k, u) in &b.k.upt {
-        if u <= 0.0 || chem.subs[k].solubility <= 0.0 || chem.phase(k, tg) != Phase::Solid || ground[k * n + i] <= 0.0 {
+        if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase(k, tg) != Phase::Liquid || ground[k * n + i] <= 0.0 {
             continue;
         }
         let d = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(0.5 * ground[k * n + i]);

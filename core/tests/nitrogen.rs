@@ -111,8 +111,8 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     assert!(chem.dh(fix) > 0.0 && chem.dh(fix) < 0.1 * unit, "{} J", chem.dh(fix));
     assert!(chem.reactions[fix].inputs.iter().any(|p| p.0 as usize == rich), "the fixing reaction takes no fuel");
     assert!(((chem.dh(fix) + unit) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", chem.dh(fix) + unit);
-    // The mineral is a solid that dissolves; nothing burns it in a gas, and hot it breaks down into the air's nitrogen gas (exothermic).
-    assert!(chem.subs[mineral].melt > 400.0 && chem.subs[mineral].solubility > 0.1);
+    // The mineral is a salt that lives dissolved in the liquid (a liquid that never boils); nothing burns it in a gas, and hot it breaks down into the air's nitrogen gas (exothermic).
+    assert!(chem.phase(mineral, 290.0) == pcore::chem::Phase::Liquid && chem.subs[mineral].boil > 2000.0, "a salt that lives in the liquid and never boils");
     let uses: Vec<usize> = (0..chem.reactions.len()).filter(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == mineral)).collect();
     assert_eq!(uses.len(), 1);
     assert!(chem.dh(uses[0]) < 0.0 && chem.reactions[uses[0]].outputs.iter().any(|p| p.0 == 1) && !chem.reactions[uses[0]].inputs.iter().any(|p| chem.phase(p.0 as usize, 290.0) == pcore::chem::Phase::Gas));

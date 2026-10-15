@@ -126,8 +126,11 @@ fn own_brains_keep_one_body_per_group() {
 fn hot_cover_burns() {
     let run = |hot: bool| {
         let mut w = worldgen::new_world(1, 32, 32);
-        // (No growth: building body matter takes the solid too, and this is about the burning.)
+        // (No growth: building body matter takes the solid too, and this is about the burning. And no body can pay to move: with liquid
+        // in the pores of the ground the cells they feel are not the dry ones of before, and a node that walks out of the hot cell
+        // does not burn.)
         w.cfg.phys.c_build = 0.0;
+        w.cfg.phys.c_move = 1e12;
         pcore::step(&mut w);
         worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
         let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");

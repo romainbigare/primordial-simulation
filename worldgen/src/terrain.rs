@@ -1,6 +1,7 @@
 //! Terrain: an island with mountains, and the starting state of ground, low liquid and air.
 
 use crate::chemistry::{chemistry0, Init};
+use pcore::change::Reactor;
 use pcore::chem::{Chemistry, Phase};
 use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
@@ -166,6 +167,23 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         let y = (j / world.grid.aw()) * world.grid.air_scale + world.grid.air_scale / 2;
         let t = t_at(&world, y.min(h - 1), zmean[j]);
         world.e_air[j] = world.heat_cap_air(j) * t;
+    }
+    // The liquid starts at balance with the air: of each pair of reactions that undo each other, the
+    // substance the first makes is set, in each cell, to the amount at which the pair goes at equal
+    // rates at the cell's temperature and the air's start (`Reactor::balance`: from the chemistry's
+    // own rate constants and barriers). A cell with no liquid holds none. The air stays as it is.
+    let mut rc = Reactor::new(&world.chem);
+    let share = 1.0 / (world.grid.air_scale * world.grid.air_scale) as f64;
+    for i in 0..n {
+        let (t, j) = (world.t_ground(i), world.grid.air_of(i));
+        let mut amt: Vec<f64> = (0..ns).map(|k| world.ground[k * n + i]).collect();
+        let gas: Vec<f64> = (0..ns).map(|k| world.air[k * na + j] * share).collect();
+        if !rc.balance(&world.chem, &mut amt, &gas, t).is_empty() {
+            for k in 0..ns {
+                world.ground[k * n + i] = amt[k];
+            }
+            world.e_ground[i] = world.energy_ground(i, t);
+        }
     }
     world
 }

@@ -360,39 +360,44 @@ sol = 0.0
 cond = 0.2
 hf = -6271
 
-# 23: PLACEHOLDER, an inert solid that is nowhere in the world and in no reaction: the number is kept for the carbonate store of the low ground
-# that another branch adds as substance 23 (with reactions 22 and 23); the merge replaces this entry. Nothing reads it.
+# 23: a salt that exists only dissolved in the liquid, Ca(HCO3)2 (162 g/mol; the real compound is calcium bicarbonate): it
+# holds the liquid's carbon beyond the free gas. CaCO3 + CO2 + H2O -> Ca(HCO3)2, dH -40.3 kJ/mol (Ca2+(aq) -542.8 and
+# HCO3-(aq) -692.0 kJ/mol: hf = -542.8 - 2 x 692.0 = -1926.8; the others -1207, -393.5, -286). It melts at 271 K, the
+# freezing point of a salty liquid, so it is liquid where the liquid is; it never boils (3000 K), so evaporation leaves it
+# behind. Heat capacity as its parts (Kopp's rule: 82 + 37 + 75 = 194), so dH does not change with temperature. Its liquid
+# density is set to the volume it adds to the liquid, about 30 cm3/mol (the partial molar volume of the dissolved ions, rough).
 [[s]] # 23
-e = [0,0,0,0,0,0,0,0,0]
-m = 100.0
-cp = 100
-melt = 1500
+e = [2,2,0,6,0,1,0,0,0]
+m = 162.1
+cp = 194
+melt = 271
 boil = 3000
-rho = [2000, 1800]
-hard = 0.5
-str = 0.5
-refl = [[0.5,0.5,0.5],[0.5,0.5,0.5]]
+rho = [2000, 5400]
+hard = 0.0
+str = 0.0
+refl = [[0.5,0.5,0.5],[0.05,0.07,0.10]]
 ir = 0.0
 sol = 0.0
-cond = 1.0
-hf = 0
+cond = 0.6
+hf = -1926.8
 
 # 24: the nitrogen mineral of the ground, N2H4O3 (a salt of the two forms of fixed nitrogen), the only way into body matter
-# for the nitrogen that is in the air as 1 (22 is built of it, 24 -> 22). A solid that dissolves in the common liquid (sol:
-# mole fraction at saturation, 0.3 for the real salt, 190 g in 100 g of the liquid) and moves with it (Flow). Melts at 443 K;
-# the boiling point is a stand-in, it breaks down before it boils. hf -365 kJ/mol.
+# for the nitrogen that is in the air as 1 (22 is built of it, 24 -> 22). Like 23 it is a salt that lives dissolved in the liquid
+# of the ground: written as a liquid (it melts at 255 K, the freezing point of its solution, so it is liquid where the liquid is) that
+# never boils (3000 K; it breaks down hot, 25), so Flow carries it with the liquid by its share and evaporation leaves it behind.
+# hf -365 kJ/mol, cp 140, about 55 cm3/mol of the liquid.
 [[s]] # 24
 e = [4,0,2,3,0,0,0,0,0]
 m = 80.0
 cp = 140
-melt = 443
-boil = 1200
+melt = 255
+boil = 3000
 rho = [1725, 1450]
 hard = 0.1
 str = 0.05
 refl = [[0.85,0.85,0.85],[0.6,0.6,0.6]]
 ir = 0.0
-sol = 0.3
+sol = 0.0
 cond = 0.6
 hf = -365
 lf = 5.9
@@ -543,19 +548,33 @@ ord = [1,6]
 k = 2.28e9
 ea = 9000
 
-# 22 and 23: PLACEHOLDERS (k 0: they do nothing), kept for the carbonate store of the low ground that another branch adds as reactions 22 and 23;
-# the merge replaces them. The nitrogen reactions follow as 24 and 25.
+# 22 and 23: the liquid's store of carbon, CaCO3 + CO2 + H2O <-> Ca(HCO3)2 both ways. Plain mass action. The way back is
+# written for three of the salt (3 Ca(HCO3)2 -> 3 CaCO3 + 3 CO2 + 3 H2O) because the real way back takes one Ca2+ and two
+# HCO3-, three particles whose shares in the liquid multiply: its rate per unit of the salt goes with the salt's share of
+# the liquid to the power 3 - 1 = 2. So the liquid holds salt in proportion to its own amount (to the power 2/3; a dry cell
+# holds none) and to the cube root of the gas over it (the real law, [Ca2+][HCO3-]^2 = K pCO2, gives the cube root too).
+# - Ea: 22 is gas transfer, 1.4 times faster per 10 K -> 2,800 K. 23 is 2,800 + dH/R = 2,800 + 40.3e3/8.314 = 7,647 K, so
+#   the balance moves with warmth as dH says (the liquid holds less when warm).
+# - k of 22: a deep liquid takes the air's gas at the Earth's gross exchange between air and its liquid cover, 80 of 589 PgC a year
+#   (Ciais et al. 2013) over the 71% of the planet that the liquid covers: 0.19 a year per unit of the gas over it at 288 K
+#   (6.0e-9 /s): k exp(-2800 / 288) = 6.0e-9, k = 1.0e-4.
+# - k of 23: set so the balance at 288 K, 400 ppm of the gas and a liquid 500 m deep (the depth of this map's low ground:
+#   median 660 m, mean 540 m) is 1.0 mol of salt per m3 of liquid (2.0 mol/m3 of dissolved carbon, the measured amount in
+#   the liquid cover of the Earth; pure calcite and gas give 0.6). The balance is S^3 = (k22 / k23) exp(4847 / T) x (the gas over the cell) x
+#   (the liquid)^2, so k23 exp(-7647 / 288) = k22 exp(-2800 / 288) x 144 x (2.78e7)^2 / 500^3 = 5.36 /s, k = 1.8e12.
+#   Worldgen finds the balance of each cell from these two (`pcore::change::Reactor::balance`).
 [[r]] # 22
-i = [[23,1]]
+i = [[10,1],[3,1],[0,1]]
 o = [[23,1]]
-k = 0.0
-ea = 1000
+k = 1.0e-4
+ea = 2800
 
 [[r]] # 23
-i = [[23,1]]
-o = [[23,1]]
-k = 0.0
-ea = 1000
+i = [[23,3]]
+o = [[10,3],[3,3],[0,3]]
+k = 1.8e12
+ea = 7647
+
 
 # 24: fixing the air's nitrogen into the mineral, paid by the fuel: N2 + H2O + CH2O + O2 -> N2H4O3 + CO. It is the reaction that takes
 # energy, N2 + 2 H2O + CO2 -> N2H4O3 + CO, dH = -365 + -110.5 - (2 x -286 + -393.5) = +490 kJ per mol of 1 (real nitrogenase spends
