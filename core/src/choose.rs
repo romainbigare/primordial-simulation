@@ -767,14 +767,15 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 /// **A bite breaks body matter (15 Oct 2026, partial damage).** The kg taken tear that share of the
 /// other's body (`Body::built`), `f`, or the share of its body matter the taker ate if that is more
 /// (matter eaten is body torn): its body matter and the stores that matter held, in proportion
-/// (`body::tear`). The taker keeps what it took (digested, `Body::digest`); what is
-/// torn off and not taken goes to the ground as dead matter. An individual lives on smaller (its
-/// force falls with its body; it rebuilds the matter as it grows, `copy::grow`) and dies when half of
-/// its body or more is torn (the line was mass under half, which the cap of half of each store the taker
-/// takes could never reach) or a store falls below its safe minimum. A node loses members
-/// when the bite is one member's body or more (the members eaten: their share is what the bite weighs
-/// of the node's body; before, the largest share taken of any store), and else every member
-/// loses a share of its matter (grazing): the node's mean body falls and its members live.
+/// (`body::tear`). The taker keeps what it took (digested, `Body::digest`); what is torn off and not
+/// taken goes to the ground as dead matter. An individual lives on smaller (its force falls with its
+/// body; it rebuilds the matter as it grows, `copy::grow`) and dies when half of its body or more is torn
+/// (the line was mass under half, which the cap of half of each store the taker takes could never
+/// reach) or a store falls below its safe minimum. In a node the size of the bite decides: one
+/// of less than a member's body (the kg taken over the node's body, times the members, under 1) grazes,
+/// every member loses that share of its matter, the node's mean body falls and its members live; one
+/// of a member's body or more takes whole members, as before: the share of them is the largest share
+/// taken of any store, and what the taker does not take of them goes to the ground.
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
@@ -792,7 +793,12 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     // took of them (a taker that takes more of a store than the share holds takes it from the rest).
     let (built0, matter0, got) = (o.built(&w.chem), o.matter_kg(&w.chem), kg(w, &m));
     let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / o.store[k] } else { 0.0 });
-    let f = (got / built0.max(1e-30)).max(eaten).min(1.0);
+    let weight = got / built0.max(1e-30);
+    // A bite of one member's body or more takes whole members, as before: the share of the node that
+    // holds the largest share taken of any of its stores (what the taker does not take of them goes to
+    // the ground); less grazes every member.
+    let eats_members = o.n() > 1.0 && weight * o.n() >= 1.0;
+    let f = if eats_members { o.store.iter().zip(&m).map(|(s, a)| if *s > 0.0 { a / s } else { 0.0 }).fold(weight, f64::max) } else { weight.max(eaten) }.min(1.0);
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
     transfer(w, &mut o, b, &m);
     b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));

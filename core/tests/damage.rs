@@ -225,8 +225,8 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
     drift_ok(&w, &t0, &l0);
 }
 
-/// A bite of one member's body or more takes whole members: the count falls by the share of the node's body that the
-/// bite weighed, the survivors keep their bodies.
+/// A bite of one member's body or more takes whole members: the count falls by the share of the node that was eaten (the
+/// body falls by the same share), the survivors keep their bodies.
 #[test]
 fn a_big_bite_takes_whole_members() {
     let (mut w, i) = start();
