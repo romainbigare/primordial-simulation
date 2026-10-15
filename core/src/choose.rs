@@ -456,7 +456,7 @@ pub fn regroup(w: &mut World) {
     }
 }
 
-/// Move to a neighbour: cost by mass (with the structure it carries) at the real cost of transport
+/// Move to a neighbour, if its force gives the push a mover makes (`Physics::bump` of what it moves): cost by mass (with the structure it carries) at the real cost of transport
 /// per kg and m, `Physics::walk` (more per kg for a small member), distance, climb, and the
 /// body mass per area already there; less, and no climb, into deep liquid while held up by what
 /// it carries. The movers must fit in the free space over the cell (`phys.layer`). The part spent
@@ -475,6 +475,11 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = resist(w, i, d, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
+    // Moving needs force (15 Oct 2026, review 7 fix 7): a mover pushes on what it passes with `bump` of its weight
+    // (`bond::moved`), so it must push that much itself, by its own force (`bond::bears`, of its built body).
+    if bond::bears(w, b) < w.cfg.phys.bump * mass * w.cfg.gravity {
+        return;
+    }
     let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
     if !body::pay(w, b, cost, b.interval() as f64) {
         return;

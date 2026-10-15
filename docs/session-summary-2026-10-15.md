@@ -160,8 +160,10 @@ Things that are open and not built:
 - **The sea floor uses the air's oxygen,** and the sea's carbon reaction takes gas from the whole air
   column, not from the water.
 - **Review 7 items not built:** the "held liquid is a cheap shortcut to size" fix (R4), `c_build`
-  toward its anchor (R6), liquid made in a body above its limit drains out (R11), and plants that
-  walk (fix 7).
+  toward its anchor (R6), and liquid made in a body above its limit drains out (R11). Plants that
+  walk (fix 7) is closed: moving needs force, plants move under 0.1 times a year (was 8 to 11).
+  R11 was built and measured: it kills the eaters on all three seeds, because the rock salt in a body
+  decays faster when it is less diluted. It is not landed; it waits for the owner (handover, Section 4).
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
 - **The big-brain test:** no verdict yet.
 - **All results are 60 years, 64 x 64.** The 300-year runs were never made.

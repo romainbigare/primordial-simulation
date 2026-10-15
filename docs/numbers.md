@@ -124,7 +124,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `min_kg` | kg | walls lighter than this fall apart | none found | tuned, first guess |
 | `lever` | none | a held part multiplies a body's force by 1 + lever x hardness x ... | none found | tuned, first guess |
 | `grip` | share of weight | force of a body of strength 1 | none found; animals push and pull about their own weight (unchecked) | tuned, first guess |
-| `bump` | share of weight | push of a body moving through a cell on each structure there | none found | tuned, first guess |
+| `bump` | share of weight | push of a body moving through a cell on each structure there; since 15 Oct 2026 also the push its own force must give for it to move (`choose::go`) | none found; the starting plants (strength 0.05, force 0.025 of their weight) stay put at 0.05 and would walk at 0.025 | tuned, first guess |
 | `dig` | share per day | most bonded ground a body breaks per day of its interval, as a share of its mass | none found | tuned, first guess |
 | `deep` | m | liquid deeper than this is crossed afloat by a body holding a structure the liquid holds up | none found | tuned, first guess |
 | `afloat` | share | the cost of crossing afloat, as a share of the cost of walking | none found | tuned, first guess |
