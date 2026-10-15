@@ -489,6 +489,8 @@ fn a_body_takes_no_more_than_it_can_use() {
         let rows = base.split_off(shape.base());
         let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
         let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+        // (A founder is placed as an adult since 15 Oct 2026, 63 kg: `times` a 30 kg one.)
+        let times = times * 30.0 / b.mass(&w.chem);
         for k in 0..w.chem.ns() {
             w.chem.add_elems(k, (times - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
             (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (times - 1.0) * b.store[k] * w.chem.subs[k].hf, times * b.store[k]);

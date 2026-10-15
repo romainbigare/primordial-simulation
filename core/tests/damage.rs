@@ -45,6 +45,9 @@ fn eater(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
     let rows = base.split_off(shape.base());
     let (l, g) = (w.life.new_lineage(body::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
+    // (A founder is placed as an adult since 15 Oct 2026, 63 kg: these tests read a 30 kg one.)
+    let m = b.mass(&w.chem);
+    scale(w, &mut b, 30.0 / m);
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, strength, copy, -4.0);
     b
 }

@@ -217,13 +217,13 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         let i = w.life.bodies[s].cell as usize;
         pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
     }).expect("a node with nodes all around");
-    // Members of 1 kg (a body of 0.7 kg) mature from 0.45 kg, all children leave.
+    // Members mature from 0.65 of their body, all children leave.
     let mut genes = w.life.bodies[s].genes.clone();
-    (genes[COPY_MASS], genes[DISPERSE]) = (0.45f32.log10(), 1.0);
+    (genes[COPY_MASS], genes[DISPERSE]) = ((0.65 * w.life.bodies[s].member_body(&w.chem) as f32).log10(), 1.0);
     for t in live(&w) {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
         w.life.bodies[t].k = Default::default();
-        // The nodes around are immature (half the matter: a member's body 0.35 kg under its copy mass 0.45), as nodes of
+        // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes of
         // children are: a child joins no mature node (`copy::near`).
         if t != s {
             let m = w.chem.matter().expect("matter");
@@ -435,6 +435,8 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         let mut node = w.life.bodies[s].clone();
         (node.count, node.genes[DISPERSE]) = (5.0, 0.0);
         node.store.iter_mut().for_each(|x| *x *= 5.0);
+        // Young (half the matter: founders are adults since 15 Oct 2026), as a node children join is.
+        node.store[w.chem.matter().expect("matter")] *= 0.5;
         node.e *= 5.0;
         w.life.bodies[s].genes[DISPERSE] = 0.0;
         let t = w.life.add(node, w.day, 1);
