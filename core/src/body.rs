@@ -363,7 +363,15 @@ impl Body {
     /// builds into offspring, `copy::copy` makes them). A node mixes ages, so its mean member says
     /// only what most of it is.
     pub fn adult(&self, chem: &Chemistry) -> bool {
-        self.built(chem) / self.n() >= (1.0 - 1e-9) * self.dec(COPY_MASS)
+        self.mature(self.member_body(chem))
+    }
+    /// The body of the mean member, kg (`built` per member).
+    pub fn member_body(&self, chem: &Chemistry) -> f64 {
+        self.built(chem) / self.n()
+    }
+    /// A member body (`member_body`) is at or past the copy mass (`adult`).
+    pub fn mature(&self, member: f64) -> bool {
+        member >= (1.0 - 1e-9) * self.dec(COPY_MASS)
     }
     /// Activity, 0..1 (14 Oct 2026, review 7 fix 6, a refinement of Change): a
     /// body's chemistry runs in its liquid, so it runs in proportion to the key liquid the body holds
@@ -1074,10 +1082,13 @@ fn crowd(w: &mut World) {
         let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold == 0 && b[s].inside == 0 && (w.cfg.nodes || light_eater(&w.chem, &b[s].genes))).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
         list.sort_unstable();
         let mut head: Vec<usize> = (0..list.len()).collect();
+        // Each one's class once (`copy::near`), tested before the hundred genes.
+        let class: Vec<(f64, bool)> = list.iter().map(|&(_, s)| crate::copy::class(&w.chem, &b[s])).collect();
         for x in 0..list.len() {
             let a = &b[list[x].1];
             if a.n() > 1.0 {
-                head[x] = (0..x).find(|&y| head[y] == y && crate::copy::alike(&lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes) && crate::copy::near(&lay, &w.chem, w.cfg.phys.alike, &b[list[y].1], a)).unwrap_or(x);
+                let lim = w.cfg.phys.alike;
+                head[x] = (0..x).find(|&y| head[y] == y && class[y].1 == class[x].1 && crate::copy::alike_log(&lay, lim, class[y].0, class[x].0) && crate::copy::alike(&lay, lim, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
             }
         }
         for x in (0..list.len()).filter(|&x| head[x] != x) {
@@ -1094,12 +1105,12 @@ fn crowd(w: &mut World) {
         // or not, then its squared distance in steps. The halves of a split are not touched:
         // a node splits only while its cell is under `max` (`copy::split`).
         let (m, lim) = (left.len(), w.cfg.phys.alike);
-        let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]), (crate::copy::member_log(&w.chem, &w.life.bodies[s]), w.life.bodies[s].adult(&w.chem)));
+        let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]), crate::copy::class(&w.chem, &w.life.bodies[s]));
         let mut v: Vec<(Vec<f32>, Vec<f32>, (f64, bool))> = left.iter().map(|&s| steps(w, s)).collect();
         let reach = lim as f64 * crate::copy::size_step(&lay) as f64;
         let dist = |p: &(Vec<f32>, Vec<f32>, (f64, bool)), q: &(Vec<f32>, Vec<f32>, (f64, bool))| {
             let gap = |g: usize| (p.0[g] - q.0[g]).abs() > lim + crate::copy::WITHIN * (p.1[g] + q.1[g]).sqrt();
-            ((0..p.0.len()).any(gap) || (p.2 .0 - q.2 .0).abs() > reach || p.2 .1 != q.2 .1, p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
+            (p.2 .1 != q.2 .1 || (p.2 .0 - q.2 .0).abs() > reach || (0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
         };
         let mut d = vec![(true, f32::INFINITY); m * m];
         for p in 0..m {
