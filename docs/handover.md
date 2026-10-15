@@ -1075,7 +1075,8 @@ the things it found missing, not wrong. Keep them in mind when M4 starts; do not
      dead matter rots; erosion and rivers move it, so fertility differs from place to place.
   5. **Natural fire starts.** A rare spark of heat comes with strong weather (a stand-in for
      lightning), so fires happen without the player. It is a new energy source, booked like the
-     sun.
+     sun. **Waits for M4 (the owner's decision, 15 Oct 2026).** It will need a "burning share of
+     a cell" law (a fire front), built with M4's weather.
 
   Order: after the reports on plant reproduction and lifespans are validated, partial damage
   first, then 1 to 5. Disease (bodies inside bodies) waits until after M4.
