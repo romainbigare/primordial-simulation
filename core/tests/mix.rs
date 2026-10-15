@@ -301,7 +301,8 @@ fn a_nodes_mixed_children_have_the_pooled_spread() {
         assert!(a.adult(&w.chem) && w.life.bodies[sb].adult(&w.chem));
         w.events.clear();
         assert!(copy::copy(&mut w, s, &mut a));
-        assert_eq!(mixed(&w).0, 2000.0);
+        // (The brood over the child's matter, a float: 1999.9999999999998 with the matter of 3,456 g a mol, 2000 with the one before.)
+        assert!((mixed(&w).0 - 2000.0).abs() < 1e-9 * 2000.0, "{} children", mixed(&w).0);
         let c = w.life.bodies.iter().find(|c| c.alive && c.parent == a.id(s)).expect("the children").clone();
         assert!((c.count - 2000.0).abs() < 1e-6 * 2000.0, "{} members", c.count);
         for g in lay.cat..lay.min {

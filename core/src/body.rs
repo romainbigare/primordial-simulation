@@ -1724,23 +1724,24 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     None
 }
 
-/// What a body makes its matter of besides what it burns (the nitrogen mineral, `Chemistry::build`), held past the level it
-/// keeps (`Body::level`), goes back to the ground at its update with its share of the heat (15 Oct 2026). Digestion
-/// (`Body::digest`) and the body's own burning of matter (reaction 21) give it more than it builds with, and it has no other
-/// way out: an eater that kept it would grow without end and, with the room of that store full, stop taking matter. A plant
-/// takes only up to the level (`choose::wanted`), so for it nothing is shed.
+/// A body is not a quarry (15 Oct 2026): of what it holds besides its liquid, matter, gases and the fuel it burns, the minerals
+/// (`Chemistry::minerals`) go back to the ground past the level it keeps (`Body::level`), and anything else (a solid left by a salt
+/// it held breaking down) all of it, with its share of the heat. Digestion (`Body::digest`) and its own burning of matter give it more
+/// than it builds with and it has no other way out: an eater that kept it would grow without end and, its room full, stop taking
+/// matter. A plant takes only up to the level (`choose::wanted`), so for it the minerals shed nothing.
 fn shed(w: &mut World, b: &mut Body) {
-    let Some((k, _)) = w.chem.mineral() else { return };
-    let (i, n, mass) = (b.cell as usize, w.grid.n(), b.mass(&w.chem));
-    let over = b.store[k] - b.level(&w.chem, k, mass);
-    if over <= 0.0 {
-        return;
+    let (i, n, mass, minerals) = (b.cell as usize, w.grid.n(), b.mass(&w.chem), w.chem.minerals());
+    for k in 0..w.chem.ns() {
+        let over = b.store[k] - if minerals.iter().any(|m| m.0 == k) { b.level(&w.chem, k, mass) } else { 0.0 };
+        if over <= 0.0 || w.chem.phase(k, crate::T_SURF) == Phase::Gas || w.chem.matter() == Some(k) || b.wet >> k & 1 == 1 || b.burns(&w.chem, k) {
+            continue;
+        }
+        let q = b.e * over * w.chem.subs[k].cp / b.heat_cap(&w.chem).max(1e-9);
+        b.store[k] -= over;
+        w.ground[k * n + i] += over;
+        b.e -= q;
+        w.e_ground[i] += q;
     }
-    let q = b.e * over * w.chem.subs[k].cp / b.heat_cap(&w.chem).max(1e-9);
-    b.store[k] -= over;
-    w.ground[k * n + i] += over;
-    b.e -= q;
-    w.e_ground[i] += q;
 }
 
 /// Upkeep over `days` of a body of `mass` kg, J: the cost of keeping tissue, by the kg of the body

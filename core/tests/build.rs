@@ -66,6 +66,25 @@ fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
     b.e += a * w.chem.subs[k].cp * t;
 }
 
+/// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly all fuel; soaking at least a tenth a day, `body::live`), and the ground of its cell
+/// given a hundred times the level it keeps of each (booked as an edit): what a test that builds for many days needs to be
+/// free of the minerals. (The rock salt falls out of the liquid inside a body within days, so a store given from outside
+/// is gone by the next update; roots give it at the update, just before the body builds.)
+fn feed_minerals(w: &mut World, s: usize) {
+    let (i, n, lay) = (w.life.bodies[s].cell as usize, w.grid.n(), Layout::of(&w.chem));
+    for (mk, _) in w.chem.minerals() {
+        let b = &mut w.life.bodies[s];
+        (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
+        b.k.cat.clear();
+        let a = (100.0 * b.level(&w.chem, mk, b.mass(&w.chem)) - w.ground[mk * n + i]).max(0.0);
+        let t = w.t_ground(i);
+        w.ground[mk * n + i] += a;
+        w.chem.add_elems(mk, a, &mut w.ledger.imposed_elems);
+        let e = w.energy_ground(i, t);
+        (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[mk].hf, e);
+    }
+}
+
 /// One day: the flow and change steps when due, then the bodies due.
 fn day(w: &mut World) {
     let dt = w.cfg.phys_days as f64 * 86_400.0;
@@ -178,12 +197,12 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     assert!(w.life.shade[sb] > 1.2 * w.life.shade[sa], "the body of more matter is the taller: shade {} against {}", w.life.shade[sb], w.life.shade[sa]);
 }
 
-/// Growth makes body matter of the energy-rich solid and the nitrogen mineral, 40 of the solid and 1 of the mineral for 1
-/// of matter and 9 of liquid (15 Oct 2026; 6 of the solid for 1 of matter and 1 of liquid before), and
-/// pays `c_copy` per kg of matter made in work that burns the solid (the fuel's heat leaves the
+/// Growth makes body matter of the energy-rich solid, the nitrogen mineral and the rock salt, 118 of the solid, 3 of the mineral and 1 of
+/// the salt for 1 of matter and 27 of liquid (15 Oct 2026; 40, 1 and none for 1 and 9 before the rock salt, 6 of the solid for 1 of matter
+/// and 1 of liquid before the mineral), and pays `c_copy` per kg of matter made in work that burns the solid (the fuel's heat leaves the
 /// body for the ground): elements and energy are kept exactly, and the stores change as the
-/// chemistry says: matter up by x, the solid down by 40 x and by what the work burnt, the mineral down by x, the liquid up
-/// by 9 x and by the liquid the burning made.
+/// chemistry says: matter up by x, the solid down by 118 x and by what the work burnt, each mineral down by its count times x, the liquid up
+/// by 27 x and by the liquid the burning made.
 #[test]
 fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let (mut w, i) = start();
@@ -193,12 +212,12 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let (_, mut b) = out(&mut w, b);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     let (matter0, rich0, liquid0, e0) = (b.store[r.matter], b.store[r.rich], b.store[r.liquid], w.e_ground.iter().sum::<f64>());
-    let (mineral, per) = w.chem.mineral().expect("a mineral");
-    let mineral0 = b.store[mineral];
+    let minerals = w.chem.minerals();
+    let mineral0: Vec<f64> = minerals.iter().map(|m| b.store[m.0]).collect();
     // (Counts of the chemistry's growth: the solid in, the liquid out.)
     let bl = w.chem.build.as_ref().expect("growth");
     let (n_rich, n_liquid) = (bl.inputs.iter().find(|p| p.0 as usize == r.rich).expect("the solid").1 as f64, bl.outputs.iter().find(|p| p.0 as usize == r.liquid).expect("the liquid").1 as f64);
-    assert!(n_rich == 40.0 && n_liquid == 9.0 && per == 1.0);
+    assert!(n_rich == 118.0 && n_liquid == 27.0 && minerals.iter().map(|m| m.1).collect::<Vec<_>>() == [3.0, 1.0]);
     let days = b.interval() as f64;
     assert!(copy::grow(&mut w, &mut b, days), "it did not grow");
     let (x, c_copy) = (b.store[r.matter] - matter0, w.cfg.phys.c_copy);
@@ -206,16 +225,19 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     // The work: c_copy per kg of matter, burnt as the solid is (heat per mol of the burning reaction).
     let burnt = c_copy * x * w.chem.subs[r.matter].molar_mass / -w.chem.dh(r.burn);
     let (dsolid, dliquid) = (rich0 - b.store[r.rich], b.store[r.liquid] - liquid0);
-    let dmineral = mineral0 - b.store[mineral];
-    println!("matter made {x:.4} mol ({:.3} kg), solid down {dsolid:.4} mol (40 x = {:.4}, burnt {burnt:.4}), mineral down {dmineral:.4}, liquid up {dliquid:.4}", x * w.chem.subs[r.matter].molar_mass, 40.0 * x);
-    assert!((dsolid / (n_rich * x + burnt) - 1.0).abs() < 1e-6, "the solid fell by {dsolid}, 40 x + burnt = {}", n_rich * x + burnt);
-    assert!((dmineral / (per * x) - 1.0).abs() < 1e-9, "the mineral fell by {dmineral}, x = {x}");
+    let dmineral: Vec<f64> = minerals.iter().zip(&mineral0).map(|(m, a)| a - b.store[m.0]).collect();
+    println!("matter made {x:.4} mol ({:.3} kg), solid down {dsolid:.4} mol (118 x = {:.4}, burnt {burnt:.4}), minerals down {dmineral:.4?}, liquid up {dliquid:.4}", x * w.chem.subs[r.matter].molar_mass, 118.0 * x);
+    assert!((dsolid / (n_rich * x + burnt) - 1.0).abs() < 1e-6, "the solid fell by {dsolid}, 118 x + burnt = {}", n_rich * x + burnt);
+    for (m, d) in minerals.iter().zip(&dmineral) {
+        assert!((d / (m.1 * x) - 1.0).abs() < 1e-9, "substance {} fell by {d}, x = {x}", m.0);
+    }
     // (The burning of the solid for the work makes liquid too, as its reaction says.)
     let burn_liquid = w.chem.reactions[r.burn].outputs.iter().find(|p| p.0 as usize == r.liquid).map_or(0.0, |p| p.1 as f64);
-    assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, 9 x + burnt = {}", n_liquid * x + burn_liquid * burnt);
-    // The work left the body as heat for the ground: that heat is the burnt solid's.
+    assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, 27 x + burnt = {}", n_liquid * x + burn_liquid * burnt);
+    // The work left the body as heat for the ground: that heat is the burnt solid's, less the share the body keeps while it leaves
+    // (4.7% before the rock salt and 5.1% after it, the body holding a little more of the heat: the old bound of 5% was at the edge).
     let heat = w.e_ground.iter().sum::<f64>() - e0;
-    assert!(heat > 0.0 && (heat / (burnt * -w.chem.dh(r.burn)) - 1.0).abs() < 0.05, "heat to the ground {heat:e} J, the work {:e} J", burnt * -w.chem.dh(r.burn));
+    assert!(heat > 0.0 && (heat / (burnt * -w.chem.dh(r.burn)) - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {:e} J", burnt * -w.chem.dh(r.burn));
     // Growth is thermoneutral: the matter holds the energy of the solid it was made of.
     assert!(w.chem.dh_build().abs() < 1.0, "growth takes {} J", w.chem.dh_build());
     w.life.bodies[0] = b;
@@ -642,6 +664,7 @@ fn an_immature_body_never_reproduces() {
     let s = w.life.add(b, w.day, 1);
     let (mut grown_up, mut born_before, mut born) = (None, 0.0, 0.0);
     for d in 0..400 {
+        feed_minerals(&mut w, s);
         day(&mut w);
         let b = &w.life.bodies[s];
         if !b.alive {
@@ -825,8 +848,9 @@ fn satiety_caps_every_size_and_counts_the_matter_built() {
 /// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 0.2 of it a
 /// year at 290 K in the starting air (18.6% lost in a year; a little slower than the energy-rich
 /// solid's 0.27 a year, 24%: structure resists; both are litter decay constants, forest floor
-/// 0.25 a year), by the oxygen-like gas to the 6th power (the power of the rate law, `Reaction::ord`; the matter takes 40 of
-/// it in all, 0.21^6 = 8.6e-5) over a rate constant of 7.6e-5 /s at 290 K.
+/// 0.25 a year), by the oxygen-like gas to the 6th power (the power of the rate law, `Reaction::ord`; the matter takes 118 of
+/// it in all, 0.21^6 = 8.6e-5) over a rate constant of 7.6e-5 /s at 290 K. The rate is per mol of matter, so it did not change when the
+/// unit of matter grew three times (15 Oct 2026).
 #[test]
 fn dead_body_matter_oxidises_at_the_set_rate() {
     let (chem, init) = worldgen::chemistry0();
@@ -848,9 +872,10 @@ fn dead_body_matter_oxidises_at_the_set_rate() {
     println!("a year at 290 K in the starting air: body matter {:.2}% oxidised, the energy-rich solid {:.2}%", 100.0 * matter, 100.0 * solid);
     assert!(matter > 0.17 && matter < 0.205, "{matter}");
     assert!(solid > 0.22 && solid < 0.26 && matter < solid, "{solid}");
-    // It burns: 18,700 kJ a mol (16.7 MJ a kg, the heat of 40 of the solid less the mineral's), and balances in elements (validated on load).
+    // It burns: 55,124.7 kJ a mol (15.9 MJ a kg, a little over the solid's 15.6, which the matter was made of without a gain of heat;
+    // 16.7 before the rock salt, whose carbon is already burnt and which leaves as lime), and balances in elements (validated on load).
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)).expect("a burning reaction");
-    assert!((chem.dh(burn) / -18700e3 - 1.0).abs() < 1e-9 && chem.validate().is_ok());
+    assert!((chem.dh(burn) / -55124.7e3 - 1.0).abs() < 1e-6 && chem.validate().is_ok(), "{}", chem.dh(burn));
     // Bodies catalyse it and pay for the enzyme as for the solid's: the same speed-up costs about
     // three quarters as much (the rate constants over the open rates, the air beyond first order).
     let cost = |r: usize| {
@@ -1033,14 +1058,16 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     let (mut w, i) = start();
     let r = roles(&w);
     let mut b = eater(&mut w, i, 0, 6.0);
-    add(&mut w, &mut b, r.matter, 11.18);
-    let (mineral, _) = w.chem.mineral().expect("a mineral");
+    add(&mut w, &mut b, r.matter, 34.56);
     let (s, mut b) = out(&mut w, b);
     let (t0, l0, before) = (pcore::check::totals(&w), w.ledger.clone(), b.store.clone());
     let x = b.digest(&w.chem, 10.0);
     assert!((x - 10.0).abs() < 1e-12);
-    // 10 of matter and 90 of liquid become 400 of the solid and 10 of the mineral.
-    assert!((before[r.matter] - b.store[r.matter] - 10.0).abs() < 1e-9 && (b.store[r.rich] - before[r.rich] - 400.0).abs() < 1e-9 && (before[r.liquid] - b.store[r.liquid] - 90.0).abs() < 1e-9 && (b.store[mineral] - before[mineral] - 10.0).abs() < 1e-9);
+    // 10 of matter and 270 of liquid become 1,180 of the solid, 30 of the nitrogen mineral and 10 of the rock salt.
+    assert!((before[r.matter] - b.store[r.matter] - 10.0).abs() < 1e-9 && (b.store[r.rich] - before[r.rich] - 1180.0).abs() < 1e-9 && (before[r.liquid] - b.store[r.liquid] - 270.0).abs() < 1e-9);
+    for (mineral, per) in w.chem.minerals() {
+        assert!((b.store[mineral] - before[mineral] - 10.0 * per).abs() < 1e-9, "substance {mineral}");
+    }
     w.life.bodies[s] = b;
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
@@ -1052,7 +1079,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
 /// body's own costs set. An eater (ALLOC 0: it builds only for itself, nothing is given to children;
 /// strength 1; building fast, so that the allowance never binds; its liquid put back to the ground) in
 /// a place with all the fuel it can take, at every update. With tissue dear enough that the ceiling is
-/// near (costs 1.4 times the starting ones, 1.7 before the nitrogen mineral: growth is 5% slower now and a body at 1.7 starves in the
+/// near (costs 1.4 times the starting ones, 1.7 before the nitrogen mineral: growth was 5% slower then and a body at 1.7 starved in the
 /// cold season of its 200th day) it levels off (under a quarter more body
 /// between the 100th and the 300th day) and in its last 100 days takes about what it pays to keep what
 /// it has (within 5 to 10%); with the costs of the start, a ceiling many times higher, it is still
@@ -1087,16 +1114,9 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
                 let e = w.energy_ground(i, t);
                 (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[k].hf, e);
             }
-            // And the nitrogen mineral growth is built of (15 Oct 2026): this is a test of the energy ceiling, so the body's store of it
-            // is kept at the level it keeps (an eater has it only from the matter it digests, and here eats none).
-            let (mk, _) = w.chem.mineral().expect("a mineral");
-            let (mass, t) = (w.life.bodies[s].mass(&w.chem), w.life.bodies[s].temp(&w.chem));
-            let a = (w.life.bodies[s].level(&w.chem, mk, mass) - w.life.bodies[s].store[mk]).max(0.0);
-            let q = a * w.chem.subs[mk].cp * t;
-            w.life.bodies[s].store[mk] += a;
-            w.life.bodies[s].e += q;
-            w.chem.add_elems(mk, a, &mut w.ledger.imposed_elems);
-            w.ledger.imposed_energy += q + a * w.chem.subs[mk].hf;
+            // And the minerals growth is built of (15 Oct 2026): this is a test of the energy ceiling, so its roots find them in plenty
+            // (an eater has them only from the matter it digests, and here eats none).
+            feed_minerals(&mut w, s);
             self::day(&mut w);
             assert!(w.life.bodies[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
             let b = &mut w.life.bodies[s];

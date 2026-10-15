@@ -289,10 +289,10 @@ fn null_run_freezes_the_brain_rows() {
     assert_eq!((null.0, null.1), (0, 0), "the null run does not: {null:?}");
 }
 
-/// The nitrogen mineral (15 Oct 2026): the series has the mineral in the ground per m² of land and of sea, and where the nitrogen
-/// is (ground of land and sea, dead matter on each, the bodies), which together stay what the soil gave the world (no body
-/// fixes, and nothing burns hot); and per kind the share of building the mineral held back (between 0 and 1) and the mineral
-/// in the stores per kg of body.
+/// The minerals (15 Oct 2026, the rock salt 15 Oct): the series has each mineral (`min0_`, the nitrogen mineral, and `min1_`, the rock
+/// salt) in the ground per m² of land and of sea, and where the nitrogen is (ground of land and sea, dead matter on each, the
+/// bodies), which together stay what the soil gave the world (no body fixes, and nothing burns hot); and per kind the share of
+/// building any mineral held back (`nlim`, between 0 and 1), each one (`nlim0`, `nlim1`) and each in the stores per kg of body.
 #[test]
 fn yearly_series_counts_the_nitrogen_mineral() {
     let dir = tmp("nitrogen");
@@ -317,14 +317,19 @@ fn yearly_series_counts_the_nitrogen_mineral() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     // The soil: 0.357 mol of the salt (80 g) in a m2 is 28.6 g; the cells under standing liquid have none.
     let first = &rows[0];
-    assert!(col("n_land", first) > 0.015 && col("n_land", first) <= 0.0286 + 1e-6, "{}", col("n_land", first));
-    assert_eq!(col("n_sea", first), 0.0);
-    let all = |r: &Vec<f64>| ["n_ground_land", "n_ground_sea", "n_dead_land", "n_dead_sea", "n_bodies"].iter().map(|c| col(c, r)).sum::<f64>();
+    assert!(col("min0_land", first) > 0.015 && col("min0_land", first) <= 0.0286 + 1e-6, "{}", col("min0_land", first));
+    assert_eq!(col("min0_sea", first), 0.0);
+    // (The rock salt: where the liquid lies on the lime, and the sea holds it from the start at balance with the air.)
+    assert!(col("min1_sea", first) > 1.0 && col("min1_land", first) >= 0.0);
+    let all = |r: &Vec<f64>| ["min0_ground_land", "min0_ground_sea", "min0_dead_land", "min0_dead_sea", "min0_bodies"].iter().map(|c| col(c, r)).sum::<f64>();
     for r in &rows {
         assert!((all(r) / all(first) - 1.0).abs() < 1e-6, "the nitrogen in all: {} against {}", all(r), all(first));
-        let (nlim, nstore) = (col("root_0_nlim", r), col("root_0_nstore", r));
+        let (nlim, nstore) = (col("root_0_nlim", r), col("root_0_nstore0", r));
         assert!(nlim.is_nan() || (0.0..=1.0).contains(&nlim), "nlim {nlim}");
         assert!(nstore.is_nan() || (nstore >= 0.0 && nstore < 1.0), "nstore {nstore}");
+        // Held back by any mineral is held back by one of them (at least the larger of the two, at most their sum).
+        let (n0, n1) = (col("root_0_nlim0", r), col("root_0_nlim1", r));
+        assert!(nlim.is_nan() || (nlim >= n0.max(n1) - 1e-9 && nlim <= n0 + n1 + 1e-9), "nlim {nlim} of {n0} and {n1}");
     }
-    assert!(col("n_land", &rows[2]) > 0.0 && col("n_dead_land", &rows[2]) > 0.0 && col("n_bodies", &rows[2]) > 0.0);
+    assert!(col("min0_land", &rows[2]) > 0.0 && col("min0_dead_land", &rows[2]) > 0.0 && col("min0_bodies", &rows[2]) > 0.0);
 }

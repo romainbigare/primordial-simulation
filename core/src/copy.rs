@@ -445,22 +445,20 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     }).collect();
     let free = (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
     let kg = free.min(reach.iter().copied().fold(f64::MAX, f64::min));
-    // Counted for the tape (15 Oct 2026): a body that could build (all its other stores, its allowance and its spare allow
-    // it) and the store of what it does not burn, the nitrogen mineral, was what held it back.
-    let (fuels, others): (Vec<f64>, Vec<f64>) = {
-        let mineral = chem.mineral().map(|m| m.0);
-        let (a, b2): (Vec<_>, Vec<_>) = ins.iter().zip(&reach).partition(|(&(k, _), _)| Some(k as usize) != mineral);
-        (a.iter().map(|x| *x.1).collect(), b2.iter().map(|x| *x.1).collect())
-    };
-    let able = free.min(fuels.iter().copied().fold(f64::MAX, f64::min));
-    if !others.is_empty() && able > 1e-12 * full.max(1e-30) {
-        let root = w.life.root(b) as usize;
-        if root != u32::MAX as usize {
-            w.diag.nlim.resize(w.diag.nlim.len().max(root + 1), [0.0; 2]);
-            let held = others.iter().copied().fold(f64::MAX, f64::min) < able;
-            w.diag.nlim[root][0] += n * held as u8 as f64;
-            w.diag.nlim[root][1] += n;
-        }
+    // Counted for the tape (15 Oct 2026): a body that could build (all its fuels, its allowance and its spare allow it) and the
+    // minerals' stores that held it back (any of them, each).
+    let minerals = chem.minerals();
+    let place = |k: u16| minerals.iter().position(|m| m.0 == k as usize);
+    let able = free.min(ins.iter().zip(&reach).filter(|(x, _)| place(x.0).is_none()).map(|x| *x.1).fold(f64::MAX, f64::min));
+    let root = if minerals.is_empty() || able <= 1e-12 * full.max(1e-30) { u32::MAX } else { w.life.root(b) } as usize;
+    if root != u32::MAX as usize {
+        let held: Vec<bool> = (0..minerals.len()).map(|q| ins.iter().zip(&reach).any(|(x, &r)| place(x.0) == Some(q) && r < able)).collect();
+        w.diag.nlim.resize(w.diag.nlim.len().max(root + 1), Vec::new());
+        let t = &mut w.diag.nlim[root];
+        t.resize(2 + minerals.len(), 0.0);
+        t[0] += n;
+        t[1] += n * held.contains(&true) as u8 as f64;
+        held.iter().enumerate().for_each(|(q, &h)| t[2 + q] += n * h as u8 as f64);
     }
     if kg <= 1e-12 * full.max(1e-30) {
         return false;

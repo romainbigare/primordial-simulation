@@ -67,8 +67,8 @@ const FIX_STREAM: u64 = 0xf1;
 /// The reaction that makes the mineral growth is built of from the air's gas and takes heat to do it (none where bodies do not
 /// grow, or the mineral comes from nowhere else).
 pub fn fixing(chem: &Chemistry) -> Option<usize> {
-    let (mineral, _) = chem.mineral()?;
-    (0..chem.reactions.len()).find(|&r| chem.dh(r) > 0.0 && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral))
+    let minerals = chem.minerals();
+    (0..chem.reactions.len()).find(|&r| chem.dh(r) > 0.0 && chem.reactions[r].outputs.iter().any(|p| minerals.iter().any(|m| m.0 == p.0 as usize)))
 }
 
 /// Light reaction, energy-rich solid, liquid, burning reaction.
@@ -589,19 +589,19 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     let (fuel, liq, mat) = split(kind.store, genes[lay.keep + liquid] as f64, matter.is_some());
     store[rich] = fuel * count * kind.mass / chem.subs[rich].molar_mass;
     store[liquid] = liq * count * kind.mass / chem.subs[liquid].molar_mass;
+    // The minerals growth also needs (15 Oct 2026): a member is placed holding what its matter was made of, so it can build a
+    // matter's worth again (the child it gives a share of every store); it keeps up to twice that per kg of its body, and a
+    // light-eater takes them from the ground (an animal has them from the matter it digests). The keep is a share of the body
+    // (`Body::level`): the body is the matter over 1 - h.
     if let Some((m, _)) = matter {
         store[m] = mat * count * kind.mass / chem.subs[m].molar_mass;
-    }
-    // The mineral growth also needs (15 Oct 2026): a member is placed holding what its matter was made of, so it can build a
-    // matter's worth again (the child it gives a share of every store); it keeps up to twice that per kg of its body, and a
-    // light-eater takes it from the ground (an animal has it from the matter it digests). The keep is a share of the body
-    // (`Body::level`): the body is the matter over 1 - h.
-    if let (Some((k, per)), Some((m, _))) = (chem.mineral(), matter) {
-        store[k] = store[m] * per;
-        let h = genes[lay.keep + liquid].clamp(0.0, 0.95) as f64;
-        genes[lay.keep + k] = (2.0 * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
-        if kind.cat[0] >= body::LIGHT_EATER {
-            genes[lay.upt + k] = 1.0;
+        for (k, per) in chem.minerals() {
+            store[k] = store[m] * per;
+            let h = genes[lay.keep + liquid].clamp(0.0, 0.95) as f64;
+            genes[lay.keep + k] = (2.0 * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
+            if kind.cat[0] >= body::LIGHT_EATER {
+                genes[lay.upt + k] = 1.0;
+            }
         }
     }
     let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };

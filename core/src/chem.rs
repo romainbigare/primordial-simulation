@@ -177,15 +177,15 @@ impl Chemistry {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
-    /// What growth (`build`) makes body matter of besides the fuel (15 Oct 2026: the nitrogen mineral of the ground): its
-    /// substance and the mol of it a mol of matter is made of. It is the input that no reaction of the chemistry burns
-    /// (releases heat from with a gas, as a fuel burns), so a body takes it from the ground or what it eats and does not burn
-    /// it. None where bodies do not grow or grow from one fuel.
-    pub fn mineral(&self) -> Option<(usize, f64)> {
-        let bl = self.build.as_ref()?;
+    /// What growth (`build`) makes body matter of besides the fuel (15 Oct 2026: the nitrogen mineral and the salt of the rock
+    /// element, both of the ground): each one's substance and the mol of it a mol of matter is made of. They are the inputs that no
+    /// reaction of the chemistry burns (releases heat from with a gas, as a fuel burns), so a body takes them from the ground or
+    /// what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.
+    pub fn minerals(&self) -> Vec<(usize, f64)> {
+        let Some(bl) = self.build.as_ref() else { return Vec::new() };
         let gas = |k: u16| self.phase(k as usize, crate::T_SURF) == Phase::Gas;
         let burns = |k: u16| self.reactions.iter().enumerate().any(|(r, rx)| self.dh(r) < 0.0 && rx.inputs.iter().any(|p| p.0 == k) && rx.inputs.iter().any(|p| gas(p.0)));
-        bl.inputs.iter().find(|p| !burns(p.0)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64))
+        bl.inputs.iter().filter(|p| !burns(p.0)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect()
     }
 
     /// Element counts of a reaction side.
