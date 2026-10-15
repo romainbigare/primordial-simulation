@@ -68,6 +68,8 @@ pub struct Reactor {
     /// and the share of it that reacts over the whole time left.
     lim: Vec<f64>,
     far: Vec<f64>,
+    /// The power of what is left of its scarcest input that its rate per unit goes with (`gone`).
+    pw: Vec<f64>,
     /// At the start of the last `react`: the heat capacity, J/K, and the rate of each reaction
     /// not driven by light, 1/s.
     cap0: f64,
@@ -160,6 +162,16 @@ pub(crate) fn frac(z: f64) -> f64 {
     if z < 1e-3 { z * (1.0 - 0.5 * z) } else { -(-z).exp_m1() }
 }
 
+/// The share of its scarcest input a reaction uses in a time over which it would use `z` of it at its starting rate, when
+/// its rate per unit of that input goes with the power `p` of what is left of it: 1 - (1 + p z)^(-1/p), the exact
+/// integral of dx/dt = -k x^(1 + p) (`frac` for p 0). (16 Oct 2026: a rate that goes with an input's share to its order
+/// was held at its starting value over the step, so a salt held far past its balance, its share squared, fell out
+/// to the last mol in one step, exp(-250) of it, where the rate law leaves 1 / sqrt(1 + 500), 4.5%.)
+#[inline]
+fn gone(z: f64, p: f64) -> f64 {
+    if p <= 0.0 || z < 1e-3 { frac(z) } else { -(-(p * z).ln_1p() / p).exp_m1() }
+}
+
 impl Reactor {
     pub fn new(chem: &Chemistry) -> Self {
         let (nr, ns) = (chem.reactions.len(), chem.ns());
@@ -179,6 +191,7 @@ impl Reactor {
             kap: vec![0.0; nr],
             lim: vec![0.0; nr],
             far: vec![0.0; nr],
+            pw: vec![0.0; nr],
             cap0: 0.0,
             kap0: vec![0.0; nr],
         }
@@ -334,13 +347,17 @@ impl Reactor {
                 if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (uses_light && light <= 0.0) {
                     continue;
                 }
-                let lim = scarce(&rx.inputs, |k| self.av[k]).0;
+                let (lim, q) = scarce(&rx.inputs, |k| self.av[k]);
                 if lim > 0.0 {
                     let kap = cr * rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot);
                     self.kap[r] = kap;
                     self.lim[r] = lim;
                     any = true;
-                    self.far[r] = frac(kap * left);
+                    // (In a liquid or a gas the rate per unit of the scarcest input goes with its share to its order less 1:
+                    // its order, less the 1 of the unit, as far as it is not most of its phase.)
+                    let k = rx.inputs[q].0 as usize;
+                    self.pw[r] = if self.ph[k] > 0 { (rx.order(q) as f64 - 1.0) * (1.0 - self.av[k] / tot[self.ph[k] as usize]) } else { 0.0 };
+                    self.far[r] = gone(kap * left, self.pw[r]);
                     if !uses_light {
                         heat += self.dh[r].abs() * lim * self.far[r];
                         if iter == 0 {
@@ -359,7 +376,7 @@ impl Reactor {
                     sub *= 0.5;
                     heat = (0..chem.reactions.len())
                         .filter(|&r| self.kap[r] > 0.0 && !(chem.reactions[r].light && self.dh[r] > 0.0))
-                        .map(|r| self.dh[r].abs() * self.lim[r] * frac(self.kap[r] * sub))
+                        .map(|r| self.dh[r].abs() * self.lim[r] * gone(self.kap[r] * sub, self.pw[r]))
                         .sum();
                 }
             }
@@ -371,7 +388,7 @@ impl Reactor {
                 let dh = self.dh[r];
                 let uses_light = rx.light && dh > 0.0;
                 let lim = scarce(&rx.inputs, |k| self.av[k]).0;
-                let mut ext = lim * if sub == left { self.far[r] } else { frac(self.kap[r] * sub) };
+                let mut ext = lim * if sub == left { self.far[r] } else { gone(self.kap[r] * sub, self.pw[r]) };
                 if uses_light {
                     ext = ext.min(light * LIGHT_YIELD / dh);
                 } else if dh > 0.0 {
