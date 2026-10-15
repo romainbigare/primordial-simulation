@@ -22,7 +22,7 @@ fn a_tenth_of_the_light_eaters_start_with_the_fixing_gene() {
     let share = on as f64 / all as f64;
     // (A binomial: the sd of the share of about 1,500 bodies at a tenth is 0.8 points.)
     assert!(all > 1000 && (share - FIXERS).abs() < 4.0 * (FIXERS * (1.0 - FIXERS) / all as f64).sqrt(), "{on} of {all} carry the gene");
-    // The line says how many, and the speed-up (log10 8.6 is in the genes).
+    // The line says how many, and the speed-up (log10 `FIX_GENE` is in the genes).
     assert!(line.contains(&format!("{on} of them")) && line.contains("fixes the air's nitrogen"), "{line}");
     let lay = Layout::of(&w.chem);
     assert!(w.life.alive().all(|b| b.genes[lay.cat + fix] < 0.0 || b.genes[lay.cat + fix] == FIX_GENE || b.genes[lay.cat + fix] < 0.5), "a gene turned on by mutation is small");
