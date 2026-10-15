@@ -881,10 +881,34 @@ impl Life {
         let g = self.new_genome(rows);
         let new = Body { cell: b.cell, genome: g, genes, ..Default::default() };
         self.genomes[g as usize].bodies += 1;
-        self.enrol(b.group, &new, 1);
-        self.enrol(b.group, b, -1);
+        self.swap_rows(b.group, b, &new);
         self.unref(b.genome);
         (b.genome, b.genes, b.k) = (g, new.genes, Consts::default());
+    }
+    /// `enrol(g, new, 1)` then `enrol(g, old, -1)` (a body changes its born rows within its group),
+    /// the same sums in the same order, in one pass over the rows instead of two.
+    fn swap_rows(&mut self, g: u32, old: &Body, new: &Body) {
+        let (gr, was, now) = (&self.groups[g as usize], &self.genomes[old.genome as usize].rows, &self.genomes[new.genome as usize].rows);
+        if gr.members == 0 || gr.rows.len() != was.len() || was.len() != now.len() {
+            self.enrol(g, new, 1);
+            return self.enrol(g, old, -1);
+        }
+        self.shift(g, new.cell, 1);
+        self.shift(g, old.cell, -1);
+        let (gr, was, now) = (&mut self.groups[g as usize], &self.genomes[old.genome as usize].rows, &self.genomes[new.genome as usize].rows);
+        // Members n, then n + 1 with the new body in, then n again.
+        let (n, more) = (gr.members as f32, (gr.members + 1) as f32);
+        gr.forget += 1.0 * new.forget();
+        gr.forget += -1.0 * old.forget();
+        gr.sum.resize(gr.rows.len(), 0.0);
+        let (k1, k0) = (1.0 / more, 1.0 / n);
+        for (((r, s), &x), &y) in gr.rows.iter_mut().zip(gr.sum.iter_mut()).zip(now).zip(was) {
+            let s1 = *s + 1.0 * x;
+            *r += s1 * k1 - *s * k0;
+            let s2 = s1 + -1.0 * y;
+            *r += s2 * k0 - s1 * k1;
+            *s = s2;
+        }
     }
     /// Body `b` (taken out of its slot) has these genes and the born rows it had (a member split
     /// off a node and back): of its group only the forgetting rate changes (counting the rows
