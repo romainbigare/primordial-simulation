@@ -306,7 +306,7 @@ impl Body {
                 }
             }
         }
-        let leaf = self.equiv(p, self.size(chem)) / self.n() * self.dec(LEAF);
+        let leaf = self.equiv(p, self.built(chem)) / self.n() * self.dec(LEAF);
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Learning rate of its brain within its life (0 when off).
@@ -356,15 +356,21 @@ impl Body {
         let (liquid, h) = self.wet_h(chem);
         (matter / (1.0 - h)).min(matter + liquid)
     }
-    /// The body its matter makes, kg (all members): its matter (less the brood) over 1 - `h`, as if it
-    /// held all the liquid it keeps (`size` without the cap of the liquid it holds now). What growth builds to
-    /// (`copy::grow`), and so what maturity reads (`adult`). Without body matter: `size`.
+    /// The living body its matter makes, kg (all members): its matter (less the brood) at the liquid share of living
+    /// tissue, `WET_TISSUE`: matter over 1 - `WET_TISSUE`, whatever liquid it keeps or holds. What growth builds to
+    /// (`copy::grow`), what maturity reads (`adult`) and a child is counted in (`copy::copy`), and what a body takes,
+    /// builds, pays to keep, wears, pushes with and catches light with go by. Without body matter: `size`.
+    /// **R4, 15 Oct 2026 (decided):** it was matter over 1 - `h`, the liquid keep gene, so liquid gave free capability:
+    /// a body that kept more liquid was a bigger body for the same matter (more intake, leaf, force, a cheaper maturity
+    /// and cheaper children), and selection took `h` from 0.75 to the cap 0.95 in plants and small animals within 30
+    /// to 60 years (a body 20 times its matter). Now what needs living matter goes by the matter; the liquid a body
+    /// keeps is still where its chemistry runs (`activity`, the contact of its reactions), its heat and its volume
+    /// (`size`: height in shade).
     pub fn built(&self, chem: &Chemistry) -> f64 {
         if chem.matter().is_none() {
             return self.size(chem);
         }
-        let (_, h) = self.wet_h(chem);
-        self.matter_kg(chem) / (1.0 - h)
+        self.matter_kg(chem) / (1.0 - WET_TISSUE)
     }
     /// Whether the mean member's body (`built`) is at or past its copy mass (the size of maturity its
     /// genes set, `COPY_MASS`): grown, and it may reproduce (`copy::grow` puts a share of what it
@@ -510,7 +516,7 @@ impl Body {
     /// per m² of it per day.
     pub fn open_area(&self, chem: &Chemistry, p: &crate::Physics, mass: f64) -> f64 {
         let m1 = mass / self.n();
-        self.equiv(p, self.size(chem)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
+        self.equiv(p, self.built(chem)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
     }
     /// Most of substance `k` the body holds, mol (14 Oct 2026: stores are carried by the body).
     /// Its keep gene is how much of it the body carries: for a key liquid the largest share of the
@@ -536,7 +542,7 @@ impl Body {
                     let f = f.clamp(0.0, 0.95);
                     f / (1.0 - f) * self.matter_kg(chem) / mm
                 } else {
-                    f.max(0.0) * self.size(chem) / mm
+                    f.max(0.0) * self.built(chem) / mm
                 }
             }
             _ => old(f),
@@ -625,6 +631,11 @@ pub fn light_cat(chem: &Chemistry, genes: &[f32]) -> f32 {
 /// chemistry 0's light reaction at k 10^-6 is what 8 was at k 10^-9). The tape counts by this, and
 /// so does `Config::nodes`: the others are the animals.
 pub const LIGHT_EATER: f32 = 5.0;
+
+/// The liquid share of living tissue (15 Oct 2026, R4): a kg of body matter makes 1 / (1 - this) kg of working body
+/// (`Body::built`). Anchored: the liquid of living tissue, about 0.7 to 0.75 in animals' lean tissue and 0.8 to 0.9 in
+/// herbs (from memory); the founders keep 0.75 (`worldgen::life`), so they are what they were.
+pub const WET_TISSUE: f64 = 0.75;
 
 /// Does a body of these genes live on light (the rest are animals, `Config::nodes`)?
 pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
@@ -1373,7 +1384,7 @@ fn cover_of(w: &World, b: &Body) -> f64 {
 /// 490 W/K open; its 14 W/K under 10 kg/m² of cover (1.3 W/K of cover in series) become 1.2: 476 W/K in all.
 fn surface(chem: &Chemistry, p: &crate::Physics, b: &Body, mass: f64, cover: f64, walls: Option<(f64, f64)>) -> (f64, f64) {
     let (m1, nb) = (mass / b.n(), b.n());
-    let leaf = b.equiv(p, b.size(chem)) * b.k.leaf;
+    let leaf = b.equiv(p, b.built(chem)) * b.k.leaf;
     let ab = 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0);
     let g0 = b.conductance(p.m_ref, mass);
     let g0 = if cover > 0.0 {
@@ -1479,7 +1490,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let work = b.size(chem);
     let wk = work / mass;
     // Its light-capture area, all members' (`visible`): of its body, by mass^0.75.
-    let leaf = b.equiv(&cfg.phys, work) * b.k.leaf;
+    let leaf = b.equiv(&cfg.phys, b.built(chem)) * b.k.leaf;
     let (gc, area) = surface(chem, &cfg.phys, b, mass, cover, walls);
     let rad = |t: f64| radiated(area, t, tg);
     let c0 = b.heat_cap(chem);

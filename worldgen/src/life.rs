@@ -606,7 +606,9 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     // genes after the spray, and fuel the share `store` of its mass on top. Before, a founder was placed at 0.44 to
     // 0.5 of the body it may breed at (the rows were set for copying in halves), so a 600 kg kind needed 2 to 4
     // years before its first child. Without body matter the whole mass is the body.
-    let mass = 10f64.powf(genes[body::COPY_MASS] as f64) / if matter.is_some() { 1.0 - kind.store } else { 1.0 };
+    // (Its matter is that of a living body of its copy mass, `Body::built`; the liquid it keeps with it in the share of its keep gene.)
+    let h = genes[lay.keep + liquid].clamp(0.0, 0.95) as f64;
+    let mass = 10f64.powf(genes[body::COPY_MASS] as f64) * if matter.is_some() { (1.0 - body::WET_TISSUE) / (1.0 - h) / (1.0 - kind.store) } else { 1.0 };
     let count = if kind.cover > 0.0 { kind.cover * w.grid.area() / mass } else { 1.0 };
     // Fuel, and a body of liquid and matter in the share its keep gene sets (`split`).
     let mut store = vec![0.0; ns];

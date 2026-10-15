@@ -418,9 +418,8 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     // (A unit of growth makes `nu0` mol of matter; chemistry 0: 1.)
     let (n, nu0, mm) = (b.n(), bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
     b.brood = b.brooded(chem);
-    // The matter a body of the size of maturity is made of: the body is its matter over 1 - h (`Body::size`).
-    let (_, h) = b.wet_h(chem);
-    let full = b.dec(body::COPY_MASS) * n * (1.0 - h);
+    // The matter a body of the size of maturity is made of: the living body is its matter over 1 - `WET_TISSUE` (`Body::built`).
+    let full = b.dec(body::COPY_MASS) * n * (1.0 - body::WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
     // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
@@ -504,11 +503,10 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         return false;
     }
     let mm = chem.subs[mi].molar_mass;
-    let (_, h) = b.wet_h(chem);
     b.brood = b.brooded(chem);
     // A child's body (kg) and its matter (mol); the births the brood covers.
     let body = 10f64.powf(b.gene(body::CHILD).clamp(-6.0, LOG_HALF as f64)) * mc;
-    let kid = Kid { body, matter: body * (1.0 - h) / mm };
+    let kid = Kid { body, matter: body * (1.0 - body::WET_TISSUE) / mm };
     let k = b.brood / kid.matter;
     let node = n > 1.0;
     let births = if node { k } else { (k + 1e-9).floor() };

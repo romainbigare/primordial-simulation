@@ -225,6 +225,14 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     small.e -= small.store[liquid] * w.chem.subs[liquid].cp * small.temp(&w.chem);
     small.store[liquid] = 0.0;
     small.wet = 0;
+    // (Its living body is its matter at the liquid share of tissue since 15 Oct 2026, `Body::built`: a quarter of the matter
+    // keeps the body, and so the upkeep that warms it, what it was when a dry body was its matter.)
+    let m = w.chem.matter().expect("matter");
+    let cut = 0.75 * small.store[m];
+    w.chem.add_elems(m, -cut, &mut w.ledger.imposed_elems);
+    w.ledger.imposed_energy -= cut * (w.chem.subs[m].hf + w.chem.subs[m].cp * small.temp(&w.chem));
+    small.e -= cut * w.chem.subs[m].cp * small.temp(&w.chem);
+    small.store[m] -= cut;
     let lay = pcore::body::Layout::of(&w.chem);
     (small.genes[lay.min + liquid], small.genes[lay.keep + liquid]) = (0.0, 0.0);
     small.k = Default::default();

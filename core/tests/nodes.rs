@@ -8,8 +8,7 @@ use pcore::{brain, check, choose, copy};
 /// `copy::grow` would have put there (14 Oct 2026: a body makes children from its brood).
 fn brood(w: &pcore::World, b: &mut Body, k: f64) {
     let (chem, m) = (&w.chem, w.chem.matter().expect("body matter"));
-    let (_, h) = b.wet_h(chem);
-    b.brood = k * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - h) / chem.subs[m].molar_mass;
+    b.brood = k * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - pcore::body::WET_TISSUE) / chem.subs[m].molar_mass;
 }
 
 /// Slots of the live bodies.

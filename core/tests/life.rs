@@ -887,9 +887,9 @@ fn leaf_area_per_kg_falls_with_mass() {
     let member = |count: f64, kg: f64, copy: f32| {
         let mut b = Body { count, genes: vec![0.0; pcore::body::Layout::of(&chem).len], store: vec![0.0; chem.ns()], ..Default::default() };
         (b.genes[LEAF], b.genes[COPY_MASS]) = (0.5f32.log10(), copy);
-        // Body matter up to `kg` per member (no key liquid: the body is its matter).
+        // Body matter for a living body of `kg` per member (`Body::built`: matter over 1 - `WET_TISSUE`; no key liquid).
         let m = chem.matter().expect("body matter");
-        b.store[m] = count * kg / chem.subs[m].molar_mass;
+        b.store[m] = count * kg * (1.0 - pcore::body::WET_TISSUE) / chem.subs[m].molar_mass;
         b.prepare(&chem, &p);
         b
     };
@@ -901,8 +901,9 @@ fn leaf_area_per_kg_falls_with_mass() {
     assert!((leaf(&tonne) / 1000.0 / (leaf(&one) / 1.0) - 1000f64.powf(-0.25)).abs() < 1e-6, "per kg it falls");
     // A node of 10 members of 1,000 kg: the open surface is 10 members' leaf plus their skin.
     let node = member(10.0, 1000.0, 6.0);
-    let (m, skin) = (node.mass(&chem), 10.0 * 6.0 * (1000.0 / p.rho_body).powf(2.0 / 3.0));
-    assert!((node.open_area(&chem, &p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * skin, "open area {}", node.open_area(&chem, &p, m));
+    let m = node.mass(&chem);
+    let skin = 10.0 * 6.0 * (m / 10.0 / p.rho_body).powf(2.0 / 3.0);
+    assert!((node.open_area(&chem, &p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * (10.0 * leaf(&tonne) + skin), "open area {}", node.open_area(&chem, &p, m));
     // Nothing caps the mass that works (14 Oct 2026: a body is mature from its copy mass but keeps growing, and leaf goes by all of
     // its body): a member of 10 kg (its copy mass) and one of 1,000 kg have leaf in the ratio of their bodies to the power 0.75.
     let (at, past) = (member(1.0, 10.0, 1.0), member(1.0, 1000.0, 1.0));
