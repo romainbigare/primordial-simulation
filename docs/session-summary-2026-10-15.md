@@ -172,13 +172,13 @@ Things that are open and not built:
   (merged). The land is still too wet: real land drains into channels a few hundred metres apart inside a 2 km cell.
   The 2/3 power of the sea's store comes from the pair's contacts, not from the gas source: still open.
 - **Review 7 items:** R4 (the liquid shortcut) is built (the living body is matter over 1 - 0.75); R5 was done by the energy
-  ceiling; R6 is not built: `c_build` is anchored at 1e4 to real P/B instead (tuned 63 -> 62). Liquid made in a body above its limit drains out (R11): landed on 16 Oct (below). Plants that
+  ceiling; R6 is not built: `c_build` is anchored at 1e4 to real P/B instead (tuned 63 -> 62). Liquid made in a body above its limit drains out (R11): ready, not landed (below). Plants that
   walk (fix 7) is closed: moving needs force, plants move under 0.1 times a year (was 8 to 11).
   R11 first killed the eaters on all three seeds: the rock salt fell out in their bodies. The cause was a
   step error in Law 2 (the rate was held over the step, so the salt went to its last mol in one update). Fixed
-  on 16 Oct; R11 then landed. Eaters live on all seeds and all can move; on seed 3 they are 3 times fewer, and in the
-  roster the big kinds die more often (5 of 9 alive at year 60 against 8 of 9). The owner may keep R11 or drop it
-  (handover, "The rock salt in bodies, R11 and gifts").
+  on 16 Oct. With R11 the eaters now live on all seeds and all can move, but on seed 3 they are 4 times fewer, in the
+  roster the big kinds die more often (4 of 9 alive at year 60 against 6 of 9), and a learning test fails at its noise
+  edge. So R11 is not landed; it is one commit (e13d911). The owner decides (handover, "The rock salt in bodies, R11 and gifts").
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
 - **The big-brain test:** no verdict yet.
 - **All results are 60 years, 64 x 64.** The 300-year runs were never made.
