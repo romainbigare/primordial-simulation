@@ -183,7 +183,7 @@ pub struct Physics {
     /// 1.67 x 10^6, set so light-eaters with a gene of 12, about 1,000 times more light catalyst
     /// than they need, paid what an older cost made them pay: so every catalyst was about 1,000
     /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing. (15 Oct 2026,
-    /// the smooth rate of Law 2, a study: the capacity counts every gas of a reaction at its share of
+    /// the smooth rate of Law 2, adopted: the capacity counts every gas of a reaction at its share of
     /// the open air to its order, as mass action does, so burning's capacity is 0.21 of what it was
     /// and the constant is 2.14 x 10^9 / 0.21 = 1.02 x 10^10: the founders pay what they paid.)
     pub c_cat: f64,

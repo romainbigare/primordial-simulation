@@ -1,7 +1,103 @@
 # Law 2 without a jump: a study of a smooth rate law
 
-15 October 2026. Branch `law2-smooth-rate`, from `main` at 03123d8. **A study, not a merge.** The owner
-decides. Runs: 64 x 64, 60 years, `--every 1000`, seeds 1 to 9, `main` against the branch.
+15 October 2026. Branch `law2-smooth-rate`, from `main` at 03123d8. It began as a study; **the owner
+adopted the law the same day**, and the branch now holds main a7aa285 too (first section). Runs: 64 x 64, 60 years, `--every 1000`, seeds 1 to 9, `main` against the branch.
+
+## Adopted, on main a7aa285 (15 October 2026)
+
+The owner chose to adopt the law. I merged main a7aa285 into the branch (the rock nutrient and the
+anchored erosion came with it). Below: what I checked, and new runs against main a7aa285.
+
+**The re-anchors still hold with the new chemistry.** Nothing had to move.
+- Reaction 22: the sea's balance at the anchor (500 m, 400 ppm, 288 K) is 1.003 mol/m3, as before.
+  The loose ground of the start did not change, so the rock of the anchor (2,210 mol/m2) is the same.
+- `LIGHT_X` = 2.34: a light-eater founder still breathes 10^2.34 times its liquid (the test checks it).
+- `c_cat` = 1.02e10: an eater founder pays 15,384 units a day for its catalysts, on main and here.
+- The numbers test passes; the tuned count stays 63 (no number changed its mark).
+
+**Tests:** 142 pass. Three older tests met the new law together with the rock nutrient, and I changed
+them. I say so plainly:
+1. Rotting gives the lime back within 1% (it was 0.1%). 0.7% of the lime now meets the liquid and the
+   gas and becomes the salt, because the lime is the contact. The rock element is still exact.
+2. A resting body's heat balance is held within 15% (it was 12%). The body stands 0.443 K above the
+   ground; the count says 0.509 K (13% under). Main alone and the study alone were within 2%. I did not
+   find the cause.
+3. The warm body under cover: the test took the warmest animal, and that one starved in its first month
+   (a fifth of the starting animals do, on both). Now it takes the warmest one that lives.
+
+**Runs:** 64 x 64, 60 years, `--every 1000`, means of years 56 to 60, main a7aa285 > this branch. Four
+runs at a time on 4 shared cores (main and branch of the same seed side by side). Snapshots deleted.
+
+Plants (kind 0) and eaters (kind 1):
+
+| seed | kind | kg | members | real life, y | adult life, y | nlim (any) | nlim N | nlim rock salt |
+|---|---|---|---|---|---|---|---|---|
+| 1 | plants | 4.3e10 > 3.7e10 | 3.7e10 > 3.4e10 | 0.61 > 0.56 | 1.16 > 1.27 | 0.05 > 0.10 | 0.05 > 0.10 | 0.002 > 0.002 |
+| 1 | eaters | 6.5e8 > 2.3e9 | 5.7e6 > 4.3e7 | 1.89 > 0.81 | 2.21 > 2.08 | 0.02 > 0.12 | 0.000 > 0.000 | 0.02 > 0.12 |
+| 2 | plants | 7.7e10 > 3.8e10 | 2.3e10 > 3.9e10 | 0.72 > 0.52 | 1.13 > 1.02 | 0.59 > 0.08 | 0.57 > 0.08 | 0.07 > 0.007 |
+| 2 | eaters | 7.9e8 > 1.9e9 | 1.2e7 > 3.5e7 | 1.05 > 0.89 | 1.65 > 1.26 | 0.25 > 0.08 | 0.03 > 0.000 | 0.23 > 0.08 |
+| 3 | plants | 4.9e10 > 5.0e10 | 4.8e10 > 5.3e10 | 0.46 > 0.45 | 1.01 > 0.98 | 0.12 > 0.09 | 0.11 > 0.07 | 0.011 > 0.020 |
+| 3 | eaters | 6.8e8 > 1.3e9 | 7.9e6 > 2.9e7 | 1.43 > 0.75 | 1.97 > 1.53 | 0.04 > 0.01 | 0.000 > 0.000 | 0.04 > 0.01 |
+
+(nlim = the share of the members' tries to build that a mineral held back; N = the nitrogen mineral,
+rock salt = substance 23.)
+
+The roster (seeds 1, 2, 3), kg; "0" = the kind died out:
+
+| kind | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|
+| 0 | 4.0e9 > 5.7e9 | 9.7e9 > 5.0e9 | 1.0e10 > 7.8e9 |
+| 1 | 3.8e7 > 5.2e8 | 8.8e7 > 8.7e6 | 2.1e7 > 89 |
+| 3 | 1.2e10 > **0** | 0 > 0 | 2.6e8 > 1.9e8 |
+| 4 | 8.8e10 > 8.8e10 | 8.1e10 > 6.0e10 | 1.0e11 > 6.7e10 |
+| 5 | 6.7e9 > 5.5e8 | 0 > 2.2e9 | 4.4e9 > 5.3e8 |
+| 6 | 0 > 2.2e8 | 5.2e8 > 0 | 0 > 0 |
+| 7 | 2.2e9 > 1.9e9 | 5.1e9 > 2.2e9 | 5.7e9 > 4.2e9 |
+| 8 | 5.9e4 > 0 | 0 > 3.0e3 | 3.3e4 > 0 |
+
+Kinds die out on both sides. Kind 3 died on roster seed 1 here, but it also died on seed 2 in main,
+and lives on seed 3 in both. Kind 1 nearly died on roster seed 3 here (89 kg). No kind dies everywhere.
+
+Carbon gas, ppm, by decade (10, 20, 30, 40, 50, 60):
+
+| run | main a7aa285 | branch |
+|---|---|---|
+| seed 1 | 275, 276, 283, 283, 284, 293 | 284, 286, 293, 294, 325, 334 |
+| seed 2 | 280, 272, 266, 264, 251, 248 | 327, 299, 304, 304, 308, 330 |
+| seed 3 | 276, 281, 286, 287, 291, 297 | 274, 280, 287, 285, 286, 307 |
+| roster 1 | 254, 233, 233, 270, 287, 292 | 283, 245, 231, 268, 292, 300 |
+| roster 2 | 272, 237, 210, 250, 255, 251 | 335, 280, 263, 297, 303, 299 |
+| roster 3 | 268, 219, 211, 257, 262, 267 | 279, 270, 262, 298, 306, 309 |
+
+Salt 23 at year 60, mol (land; sea): seed 1 7.1e10 > 8.2e10; 4.15e12 > 4.32e12. Seed 2 4.9e10 >
+6.8e10; 4.17e12 > 4.53e12. Seed 3 4.1e10 > 4.5e10; 4.09e12 > 4.15e12. Roster 1, 2, 3: land 6.9e10 >
+8.2e10, 6.2e10 > 7.0e10, 4.0e10 > 4.7e10; sea 4.11e12 > 4.17e12, 4.18e12 > 4.46e12, 3.95e12 > 4.17e12.
+
+Speed, ms a year (Change; whole year):
+
+| run | main a7aa285 | branch |
+|---|---|---|
+| seed 1 | 243; 3,993 | 419; 4,466 |
+| seed 2 | 225; 4,648 | 416; 4,049 |
+| seed 3 | 248; 4,350 | 394; 4,301 |
+| roster 1 | 208; 8,723 | 366; 8,724 |
+| roster 2 | 224; 7,124 | 415; 7,656 |
+| roster 3 | 231; 8,391 | 418; 8,527 |
+
+Books: element drift 0.9 to 1.4 x 10^-13, energy drift 0.7 to 1.7 x 10^-13 at year 60, on both.
+
+**What it means, in short.**
+- Nothing breaks. The books close. No kind dies everywhere.
+- Change costs 1.6 to 1.85 times more (+150 to +190 ms a year, 2 to 4% of a year). The whole year moves
+  with the number of bodies (-13% to +12%).
+- **The carbon gas ends higher:** +8 to +82 ppm at year 60 (it was about the same before the
+  merge). Plants are lighter on seeds 1 and 2 (-12%, -51% in kg; seed 2 has more, smaller members) and
+  the same on seed 3. Their light reaction is limited by their enzyme now (see 4.2).
+- **Eaters are heavier on all three seeds** (x1.9 to x3.6). They live shorter lives. With the chaos
+  of eaters (section 4.3), I would not read more into it.
+- Land holds 10 to 40% more salt 23; the sea 1 to 9% more.
+- The nitrogen still holds plants back on seed 1 a little more (10% of tries against 5%) and much less on
+  seed 2 (8% against 59%).
 
 ## Short answer
 

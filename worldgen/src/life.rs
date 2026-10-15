@@ -51,7 +51,7 @@ const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.
 pub const LITTER_X: f32 = 0.602;
 
 /// log10 of how much more light catalyst a founder light-eater needs for the same light reaction under the smooth rate of Law 2
-/// (15 Oct 2026, a study, `docs/reports/law2-smooth-rate.md`): the reaction's contact is the body's liquid, not the gas it
+/// (15 Oct 2026, adopted, `docs/reports/law2-smooth-rate.md`): the reaction's contact is the body's liquid, not the gas it
 /// exchanges in its interval, and a founder (1 kg, a 20-day interval) exchanges 217 times its liquid (log10 2.34). Its gene of
 /// the light reaction is that much higher, so its own light reaction goes as it did.
 pub const LIGHT_X: f32 = 2.34;
