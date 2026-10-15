@@ -460,7 +460,7 @@ pub fn regroup(w: &mut World) {
 /// per kg and m, `Physics::walk` (more per kg for a small member), distance, climb, and the
 /// body mass per area already there; less, and no climb, into deep liquid while held up by what
 /// it carries. The movers must fit in the free space over the cell (`phys.layer`). The part spent
-/// pushing through bodies breaks their bonds (`wear`). What it moves is the whole mass it
+/// pushing through bodies breaks their body matter (`wear`). What it moves is the whole mass it
 /// carries, fuel too (the cost and the push on structures are of that mass); what it can carry
 /// and hold goes by its force, of its body (`bond::carry`, `Body::built`; 15 Oct 2026). A body that strays from its group's
 /// centre leaves with a copy of its rows. A node moves as one: all its members go (they drew
@@ -512,13 +512,17 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     }
 }
 
-/// Energy dissipated pushing through the bodies of cell `j` breaks their bonds: each loses mass
-/// by its share of their mass, less when stronger (a node loses members). What breaks off goes
-/// to the ground as loose amounts, with its heat. Returns the mass broken, kg.
-fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
+/// Energy dissipated pushing through the bodies of cell `j` breaks their body matter (15 Oct 2026,
+/// partial damage; before, a share of every store evenly): each loses that share of its body
+/// (`Body::built`) by their body, less when stronger, and the stores that matter held spill in the
+/// same share (`body::tear`). A node loses members when the share is one member's body or more, and
+/// else every member loses part of its matter; an individual lives on smaller (it dies when half of
+/// its body is broken, or a store falls under its safe minimum). What breaks off goes to the ground as loose amounts,
+/// with its heat. Returns the mass broken, kg.
+pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     let chem = &w.chem;
     let others: Vec<u32> = w.life.at[j].iter().copied().filter(|&s| s as usize != mover).collect();
-    let total: f64 = others.iter().map(|&s| w.life.bodies[s as usize].mass(chem)).sum();
+    let total: f64 = others.iter().map(|&s| w.life.bodies[s as usize].built(chem)).sum();
     let mut broken = 0.0;
     if energy <= 0.0 || total <= 0.0 {
         return 0.0;
@@ -526,13 +530,11 @@ fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     for s in others {
         let s = s as usize;
         let mut o = std::mem::take(&mut w.life.bodies[s]);
-        let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
+        let (m, t, built0, matter0) = (o.mass(&w.chem), o.temp(&w.chem), o.built(&w.chem), o.matter_kg(&w.chem));
         let f = (w.cfg.phys.walk_wear * energy / total / (o.gene(STRENGTH) + 0.1)).min(0.5);
         broken += m * f;
         let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
-        // In a node, members are broken off; an individual loses part of itself.
-        let left = body::thin(w, &mut o, f, &dead, BROKEN);
-        if !left || (o.n() <= 1.0 && (o.mass(&w.chem) < 0.5 * m || o.lacking(&w.chem))) {
+        if !body::tear(w, &mut o, f, &dead, BROKEN, matter0) || (o.n() <= 1.0 && (o.built(&w.chem) <= 0.5 * built0 * (1.0 + 1e-9) || o.lacking(&w.chem))) {
             body::die(w, s, o, BROKEN);
         } else {
             o.vis = o.visible(&w.chem, &w.cfg.phys);
@@ -752,15 +754,24 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 }
 
 /// Take from another body in the cell, by uptake selectivity, as much as its mass (`Body::equiv`),
-/// what it can use (`sate`) and its force against the other's allow (a member's force: strength x what a held part adds x
-/// its body, `Body::built`, as `bond::force`: a hurt body is weaker), and its room. The quicker body acts first: one that decides
-/// more often than the taker has acted again within part of the taker's interval and gets away
-/// with chance 1 - its interval / the taker's (the taker has paid). The other dies if it loses
-/// half its mass or falls below a safe minimum (a node loses the members eaten); else it
-/// remembers this against the taker. From a node (its members lie spread over the cell) the
-/// taker also reaches only the area it works (`reach`); an individual it perceives is already
-/// found, so only the other caps hold for it.
-fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
+/// what it can use (`sate`) and its force against the other's allow (a member's force: strength x what a
+/// held part adds x its body, `Body::built`, as `bond::force`: a hurt body is weaker), and its room. The
+/// quicker body acts first: one that decides more often than the taker has acted again within part of the
+/// taker's interval and gets away with chance 1 - its interval / the taker's (the taker has paid). From
+/// a node (its members lie spread over the cell) the taker also reaches only the area it works (`reach`);
+/// an individual it perceives is already found, so only the other caps hold for it.
+///
+/// **A bite breaks body matter (15 Oct 2026, partial damage).** The kg taken tear that share of the
+/// other's body (`Body::built`), `f`, or the share of its body matter the taker ate if that is more
+/// (matter eaten is body torn): its body matter and the stores that matter held, in proportion
+/// (`body::tear`). The taker keeps what it took (digested, `Body::digest`); what is
+/// torn off and not taken goes to the ground as dead matter. An individual lives on smaller (its
+/// force falls with its body; it rebuilds the matter as it grows, `copy::grow`) and dies when half of
+/// its body or more is torn (the line was mass under half, which the cap of half of each store the taker
+/// takes could never reach) or a store falls below its safe minimum. A node loses members
+/// when the bite is one member's body or more (the members eaten, as before), and else every member
+/// loses a share of its matter (grazing): the node's mean body falls and its members live.
+pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let lever = bond::lever(w, b);
@@ -773,19 +784,19 @@ fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) 
         return;
     }
     let mut o = std::mem::take(&mut w.life.bodies[s]);
-    // From a node, whole members are eaten: the largest share taken of any store; what the taker
-    // does not take of them goes to the ground.
-    let node = o.n() > 1.0;
-    let f = if node { m.iter().zip(&o.store).map(|(a, s)| if *s > 0.0 { a / s } else { 0.0 }).fold(0.0, f64::max) } else { 0.0 };
+    // The bite tears this share of the body; the stores it held spill in proportion, less what the taker
+    // took of them (a taker that takes more of a store than the share holds takes it from the rest).
+    let (built0, matter0, got) = (o.built(&w.chem), o.matter_kg(&w.chem), kg(w, &m));
+    let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / o.store[k] } else { 0.0 });
+    let f = (got / built0.max(1e-30)).max(eaten).min(1.0);
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
     transfer(w, &mut o, b, &m);
     b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
-    let got = kg(w, &m);
     let t = &mut w.parts.tally.take[(lever > 1.0) as usize];
     (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), body::light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: got });
-    if if node { !body::thin(w, &mut o, f, &rest, TAKEN) } else { o.mass(&w.chem) < 0.5 * mo || o.lacking(&w.chem) } {
+    if !body::tear(w, &mut o, f, &rest, TAKEN, matter0) || (o.n() <= 1.0 && (o.built(&w.chem) <= 0.5 * built0 * (1.0 + 1e-9) || o.lacking(&w.chem))) {
         body::die(w, s, o, TAKEN);
     } else {
         o.note(b.id(slot), -(10.0 * got / mo) as f32);

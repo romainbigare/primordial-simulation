@@ -647,6 +647,10 @@ pub struct Diag {
     /// (`Lineage::root`): a node moving counts all its members (`choose::go`). A count only, not saved.
     #[serde(skip)]
     pub moves: Vec<f64>,
+    /// Body matter, kg, that hits tore off members who lived on (bites that left them smaller, bodies
+    /// trampled, `body::tear`), since the shell last read it, by starting kind. A count only, not saved.
+    #[serde(skip)]
+    pub hurt: Vec<f64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
