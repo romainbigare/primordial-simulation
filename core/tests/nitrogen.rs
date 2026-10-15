@@ -130,17 +130,21 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     assert!(chem.phase(salt, 290.0) == pcore::chem::Phase::Liquid && chem.subs[salt].boil > 2000.0);
     let takes: Vec<usize> = (0..chem.reactions.len()).filter(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == salt)).collect();
     assert!(takes.len() == 1 && chem.dh(takes[0]) > 0.0 && chem.reactions[takes[0]].outputs.iter().any(|p| p.0 as usize == lime));
-    // The fixing reaction: air's nitrogen gas (1), the liquid, the energy-rich solid and the oxygen-like gas -> the mineral and the
-    // reduced carbon gas. It is the reaction that takes 490 kJ a mol of the gas (16 x 30.5, the 16 ATP of nitrogenase) together with
-    // the burning of one unit of the solid that pays for it: left a little endothermic (+22.5 kJ), as the burners of a body (heat
-    // released) run on demand for its upkeep and a catalysed reaction that takes heat does not.
+    // The fixing reaction: air's nitrogen gas (1), the energy-rich solid and the oxygen-like gas -> the mineral, the reduced carbon gas,
+    // the carbon gas and the liquid. It is the reaction that takes 490 kJ a mol of the gas (16 x 30.5, the 16 ATP of nitrogenase)
+    // together with the burning of the units of the solid that real fixers respire for it: 4.7 to 6.6 g of carbon a g of nitrogen
+    // (Layzell et al. 1979; crop models take 6). It
+    // releases heat, but less from each unit of the solid than burning does: it keeps a part (`Chemistry::keeps`), so it is no burning
+    // and a body never pays its upkeep with it; burning itself is a burning.
     let fix = worldgen::life::fixing(&chem).expect("fixing");
     let (_, rich, _, burn1) = worldgen::life::roles(&chem).expect("roles");
-    let unit = -chem.dh(burn1) / chem.reactions[burn1].inputs.iter().find(|p| p.0 as usize == rich).expect("the solid").1 as f64;
-    println!("fixing takes {:.1} kJ a mol of nitrogen gas; with the {:.1} kJ of the unit of the solid it burns, {:.0}: 16 x 30.5 = {:.0}", chem.dh(fix) / 1e3, unit / 1e3, (chem.dh(fix) + unit) / 1e3, 16.0 * 30.5);
-    assert!(chem.dh(fix) > 0.0 && chem.dh(fix) < 0.1 * unit, "{} J", chem.dh(fix));
-    assert!(chem.reactions[fix].inputs.iter().any(|p| p.0 as usize == rich), "the fixing reaction takes no fuel");
-    assert!(((chem.dh(fix) + unit) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", chem.dh(fix) + unit);
+    let units = |r: usize| chem.reactions[r].inputs.iter().find(|p| p.0 as usize == rich).map_or(0.0, |p| p.1 as f64);
+    let (unit, n) = (-chem.dh(burn1) / units(burn1), units(fix));
+    let carbon = n * 12.0 / 28.0;
+    println!("fixing burns {n} units of the solid a mol of nitrogen gas ({carbon:.1} g of carbon a g of nitrogen), {:.1} kJ; less the {:.1} kJ of each unit, {:.0}: 16 x 30.5 = {:.0}", chem.dh(fix) / 1e3, unit / 1e3, (chem.dh(fix) + n * unit) / 1e3, 16.0 * 30.5);
+    assert!((4.7..=6.6).contains(&carbon), "{carbon} g of carbon a g of nitrogen");
+    assert!(((chem.dh(fix) + n * unit) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", chem.dh(fix) + n * unit);
+    assert!(chem.dh(fix) < 0.0 && chem.keeps(fix) && !chem.keeps(burn1) && !chem.keeps(burn));
     // The mineral is a salt that lives dissolved in the liquid (a liquid that never boils); nothing burns it in a gas, and hot it breaks down into the air's nitrogen gas (exothermic).
     assert!(chem.phase(mineral, 290.0) == pcore::chem::Phase::Liquid && chem.subs[mineral].boil > 2000.0, "a salt that lives in the liquid and never boils");
     let uses: Vec<usize> = (0..chem.reactions.len()).filter(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == mineral)).collect();
@@ -278,10 +282,10 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
 }
 
 /// Fixing the air's nitrogen: in the open it is nothing (1e-17 a second at 290 K), and a body whose genes speed the reaction up
-/// makes the mineral from the air's gas, the liquid it holds and the energy-rich solid it burns, and puts the reduced carbon gas
-/// out, at the cost of the reaction: it takes a unit of its fuel (the energy of the 16 ATP, 490 kJ a mol of the gas, is paid by
-/// it) for each mol of the mineral, and the enzyme costs upkeep by its capacity like the others. A body that has none fixes none.
-/// Elements and energy are kept.
+/// makes the mineral from the air's gas and the energy-rich solid it burns, and puts the reduced carbon gas out, at the cost of the
+/// reaction: it burns 14 units of its fuel for each mol of the mineral, and their heat pays none of its upkeep (it burns that much
+/// more than its twin), and the enzyme costs upkeep by its capacity like the others. A body that has none fixes none. Elements and
+/// energy are kept.
 #[test]
 fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     let (chem, init) = worldgen::chemistry0();
@@ -317,7 +321,11 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
             day(&mut w);
             let mut b = w.life.bodies[s].clone();
             b.prepare(&w.chem, &w.cfg.phys);
-            up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem));
+            // Its upkeep over that of the same body with the gene off.
+            let mut off = b.clone();
+            (off.genes[lay.cat + fix], off.k) = (-1.0, Default::default());
+            off.prepare(&w.chem, &w.cfg.phys);
+            up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem)) / body::upkeep(&w, &off, 1.0, b.mass(&w.chem));
         }
         assert!(w.life.bodies[s].alive);
         let (de, dq) = check::drift(&w, &t0, &l0);
@@ -329,17 +337,18 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     };
     let (fixed, co, up_with, cats_with, fuel_with, mass) = run(FIX);
     let (none, co_none, up_without, cats_without, fuel_without, _) = run(-1.0);
-    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral and put out {co:.3e} mol of the reduced carbon gas, upkeep {up_with:.3e} J a day against {up_without:.3e}; the other {none:.3e} mol; fuel {fuel_with:.4e} against {fuel_without:.4e}");
+    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral and put out {co:.3e} mol of the reduced carbon gas, upkeep {up_with:.4} times that with the gene off ({up_without:.4}); the other {none:.3e} mol; fuel {fuel_with:.4e} against {fuel_without:.4e}");
     // (Both build, which spends the mineral they hold; what the enzyme made is the difference.)
     let made = fixed - none;
     assert!(made > 1.0, "the plant fixed {made} mol");
     println!("it fixed {:.2e} mol of the mineral a kg of plant and second", made / (mass * 60.0 * 86_400.0));
     // One mol of the reduced carbon gas for each mol of the mineral made; it is where the energy of the reaction went.
     assert!((co - co_none) / made > 0.9 && (co - co_none) / made < 1.1, "{} mol of the gas for {made} of the mineral", co - co_none);
-    // And one mol of its fuel for each, the unit that pays the 490 kJ (and the enzyme's upkeep, a little more).
-    assert!((fuel_without - fuel_with) / made > 0.9 && (fuel_without - fuel_with) / made < 1.3, "{} mol of fuel for {made} of the mineral", fuel_without - fuel_with);
-    // The enzyme costs by its capacity: the plant that fixes pays more upkeep.
-    assert!(cats_with > cats_without && up_with > up_without, "capacity {cats_with} against {cats_without}, upkeep {up_with} against {up_without}");
+    // And 14 mol of its fuel for each, the units the reaction burns (and the enzyme's upkeep, a little more): their heat paid no upkeep.
+    let units = chem.reactions[fix].inputs.iter().find(|p| p.0 as usize == rich).expect("the fuel").1 as f64;
+    assert!((fuel_without - fuel_with) / made > 0.95 * units && (fuel_without - fuel_with) / made < 1.2 * units, "{} mol of fuel for {made} of the mineral", fuel_without - fuel_with);
+    // The enzyme costs by its capacity: the plant that fixes pays more upkeep than it would with the gene off.
+    assert!(cats_with > cats_without && up_with > 1.0 && up_without == 1.0, "capacity {cats_with} against {cats_without}, upkeep {up_with} against {up_without}");
 }
 
 /// Roots take each mineral from the ground by the uptake genes, up to the level the body keeps and no more; a body whose gene is off

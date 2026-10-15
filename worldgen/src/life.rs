@@ -64,17 +64,24 @@ pub const LIGHT_X: f32 = 2.34;
 pub const FIXERS: f64 = 0.1;
 /// log10 of the speed-up of the fixing reaction in those founders: the speed a growing plant needs. A plant turns its body matter
 /// over in about half a year (its matter is 5.5% of its mass, 0.049 mol per kg, so 3 x 10^-9 mol of the mineral a kg and second);
-/// a plant with the gene at 9 makes 7.1 x 10^-9 (`core/tests/nitrogen.rs`, a 60 day run of a founder), so 8.6: the light reaction's
-/// starting gene (9) was set in the same way, the speed a body needs over the speed of the bare reaction.
-pub const FIX_GENE: f32 = 8.6;
+/// a plant with the gene at 8.6 makes 2.1 x 10^-10 (`core/tests/nitrogen.rs`, a 60 day run of a founder), so 9.8: the light
+/// reaction's starting gene (9) was set in the same way, the speed a body needs over the speed of the bare reaction. (8.6 until 16 Oct
+/// 2026, when the reaction burnt one unit of the fuel: its contact is now the fuel over 14, the units it burns.)
+pub const FIX_GENE: f32 = 9.8;
 /// The stream of the draw that makes a founder a fixer (`Rng::new(seed, FIX_STREAM, id, Purpose::Body)`).
 const FIX_STREAM: u64 = 0xf1;
 
-/// The reaction that makes the mineral growth is built of from the air's gas and takes heat to do it (none where bodies do not
-/// grow, or the mineral comes from nowhere else).
+/// The reaction that makes a mineral growth is built of from the air's gas: an element of the mineral that only a gas it takes
+/// brings (none where bodies do not grow, or the mineral comes from nowhere else).
 pub fn fixing(chem: &Chemistry) -> Option<usize> {
     let minerals = chem.minerals();
-    (0..chem.reactions.len()).find(|&r| chem.dh(r) > 0.0 && chem.reactions[r].outputs.iter().any(|p| minerals.iter().any(|m| m.0 == p.0 as usize)))
+    let gas = |k: u16| chem.phase(k as usize, T_SURF) == Phase::Gas;
+    let has = |k: u16, e: usize| chem.subs[k as usize].elems[e] > 0;
+    (0..chem.reactions.len()).find(|&r| {
+        let i = &chem.reactions[r].inputs;
+        let from_air = |m: u16| (0..chem.n_elements).any(|e| has(m, e) && i.iter().all(|p| !has(p.0, e) || gas(p.0)) && i.iter().any(|p| has(p.0, e)));
+        chem.reactions[r].outputs.iter().any(|p| minerals.iter().any(|m| m.0 == p.0 as usize) && from_air(p.0))
+    })
 }
 
 /// Light reaction, energy-rich solid, liquid, burning reaction.

@@ -201,7 +201,7 @@ pub struct Consts {
     /// Catalyst factor of each reaction (1 when off)
     pub cat: Vec<f64>,
     pub interval: u64,
-    /// Catalysed reactions that release heat, with the heat per unit, J
+    /// Catalysed reactions that release heat, with the heat per unit, J (not those that keep a part of a fuel's heat, `Chemistry::keeps`)
     pub burn: Vec<(usize, f64)>,
     /// What a brain perceives of each safe minimum; the substances taken, by selectivity
     pub minln: Vec<f32>,
@@ -274,7 +274,7 @@ impl Body {
         }
         let cat = Layout::of(chem).cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
-        let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0).map(|r| (r, -chem.dh(r))).collect();
+        let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0 && !chem.keeps(r)).map(|r| (r, -chem.dh(r))).collect();
         let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
