@@ -38,7 +38,7 @@ row for each change) and in `docs/reports/`.
   flooding the eaters' nodes.
 - **Costs scale with size,** anchored at the 30 kg founder.
 - **Moving costs the real cost of transport** (Taylor).
-- **A fair big-brain test** (`--clever-year`). No verdict yet.
+- **A fair big-brain test** (`--clever-year`). Run (seeds 1 to 3): no verdict, the test cannot tell (see below).
 - **Bug fixes:** building could be paid twice in one update; the satiety target had no upper limit;
   tests that could not fail; the rain setting differed between tests and runs.
 - **`numbers.md` tells the truth:** `c_build` and `c_basal` marked tuned, plus a table of "rules
@@ -188,7 +188,12 @@ Things that are open and not built:
   roster the big kinds die more often (4 of 9 alive at year 60 against 6 of 9), and a learning test fails at its noise
   edge. So R11 is not landed; it is one commit (e13d911). The owner decides (handover, "The rock salt in bodies, R11 and gifts").
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
-- **The big-brain test:** no verdict yet.
+- **The big-brain test:** run on seeds 1 to 3 (64 x 64, 60 years, copies at year 40). It cannot tell.
+  The control (same brain, root 11) joins the ordinary eaters' nodes in the first year, so there is no real control.
+  The big brain starts with 300 members against 10^5 and loses members for 10 years (it dies of `SPENT` at 0.06 to 0.11
+  per member a year). From year 51 it is born more (0.36 to 0.43 per member against 0.29) and dies as often, so it grows
+  faster (0.28 to 0.33 a year against 0.18 to 0.23). But it starts small on an island that is not full, and its brain-size
+  gene stays at 48 (no selection seen). So "a big brain pays" is a hint, not a proof. It needs a control that does not merge.
 - **All results are 60 years, 64 x 64.** The 300-year runs were never made.
 
 ## 13. Next steps (suggested order)
