@@ -495,6 +495,8 @@ the measured yield per J (within a fifth) and the starting bed breaks at the sam
 1. **The sources are from memory.** The ranges are right to my knowledge, the exact figures need a check.
 2. **`carry` is the yield, not the capacity** (above). A reader could choose the capacity; it would strip the loose ground fast.
 3. **The first decade is slow** (0.003 to 0.014 mm a year) and later decades are 5 to 10 times faster. I do not know why.
+   (Follow-up, 15 Oct 2026: the measure counted body matter, which melts above 1000 K, as rock; dead matter piles up on the land
+   in the first decades. Without it the land loses 0.075 to 0.085 mm a year in the first decade. Handover, "Erosion at real rates".)
 4. **`carry` depends on the cell size** (Bagnold's L). The yield anchor does not, but the model's stream power does: at another
    cell size the check must be done again.
 5. **The island keeps its shape.** With real erosion, rivers carve almost nothing in 60 years, as in real life. If the owner wants
