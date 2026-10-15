@@ -71,6 +71,27 @@ const LOG_HALF: f32 = -0.301_029_995_7;
 /// step is 0.3 decades, so nodes alike within `phys.alike` steps differ by a factor 16 at most.
 fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     match g {
+        g if g < body::NSCALAR => SCALARS[g],
+        g if g < lay.min => (0.3, -6.0, 18.0),
+        g if g < lay.upt => (0.05, -1.0, 0.9),
+        g if g < lay.keep => (0.2, -4.0, 2.0),
+        _ => (0.2, -0.5, 6.0),
+    }
+}
+
+/// `range` of the scalar genes as a table: it is asked a hundred times in each likeness test and
+/// each draw of children, and a look-up is cheaper than the match.
+const SCALARS: [(f32, f32, f32); body::NSCALAR] = {
+    let (mut t, mut g) = ([(0.0, 0.0, 0.0); body::NSCALAR], 0);
+    while g < body::NSCALAR {
+        t[g] = scalar(g);
+        g += 1;
+    }
+    t
+};
+
+const fn scalar(g: usize) -> (f32, f32, f32) {
+    match g {
         body::GAS => (0.3, -1.0, 5.0),
         body::LIQ => (0.3, -4.0, 1.0),
         body::HEAT => (0.3, -2.5, 3.5),
@@ -93,10 +114,7 @@ fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
         body::DISPERSE => (0.05, 0.0, 1.0),
         body::DENATURE => (5.0, 250.0, 450.0),
         body::REPAIR => (0.2, -3.0, 3.0),
-        g if g < lay.min => (0.3, -6.0, 18.0),
-        g if g < lay.upt => (0.05, -1.0, 0.9),
-        g if g < lay.keep => (0.2, -4.0, 2.0),
-        _ => (0.2, -0.5, 6.0),
+        _ => (0.3, -6.0, 18.0),
     }
 }
 
