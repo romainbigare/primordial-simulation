@@ -133,7 +133,7 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     // The fixing reaction: air's nitrogen gas (1), the energy-rich solid and the oxygen-like gas -> the mineral, the reduced carbon gas,
     // the carbon gas and the liquid. It is the reaction that takes 490 kJ a mol of the gas (16 x 30.5, the 16 ATP of nitrogenase)
     // together with the burning of the units of the solid that real fixers respire for it: 4.7 to 6.6 g of carbon a g of nitrogen
-    // (Layzell et al. 1979; crop models take 6). It
+    // (Layzell et al. 1979; models take 6). It
     // releases heat, but less from each unit of the solid than burning does: it keeps a part (`Chemistry::keeps`), so it is no burning
     // and a body never pays its upkeep with it; burning itself is a burning.
     let fix = worldgen::life::fixing(&chem).expect("fixing");

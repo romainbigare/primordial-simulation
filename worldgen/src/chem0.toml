@@ -591,12 +591,13 @@ ea = 7647
 # 12 H2O, dH -6,055 kJ (16 Oct 2026). Its heart takes energy, N2 + 2 H2O + CO2 -> N2H4O3 + CO, dH = -365 + -110.5 - (2 x -286 +
 # -393.5) = +490 kJ per mol of 1 (real nitrogenase spends 16 ATP per N2, 16 x 30.5 kJ = 488); the reduced carbon gas leaves with a
 # part of the energy, as the hydrogen gas of the enzyme does. 14 units of the energy-rich solid are burnt for it (CH2O + O2 -> CO2 +
-# H2O, -467.5 kJ, reaction 1): what legume nodules respire for the nitrogen they fix, about 6 g of carbon per g of nitrogen (6 x 28 /
-# 12 = 14; measured 6 to 12, Phillips 1980, Ryle et al. 1979; free-living fixers more; from memory, unchecked), the low end since the
-# enzyme also costs upkeep by its capacity. The enzyme alone would take 5 (the 16 ATP made at 35%, 3 units, and its 8 electrons, 2);
-# the rest is the nodule and the mass of a slow enzyme. It releases heat, but less from each unit of the solid than burning it does,
-# so it keeps the rest in what it makes and is no burning: a body runs it at its catalyst's pace and its heat pays no upkeep
-# (`Chemistry::keeps`). Before (15 Oct 2026) it burnt one unit (+22.5 kJ), 0.43 g of carbon a g of nitrogen; the first version
+# H2O, -467.5 kJ, reaction 1): what a symbiosis spends for the nitrogen it fixes, 6 g of carbon per g of nitrogen (6 x 28 / 12 = 14;
+# models use 6; measured 4.7 in cowpea, 1.5 respired and 3.1 built into the nodules, to 6.6 in lupin, Layzell et al.
+# 1979, Plant Physiol 64: 888; free-living fixers spend more). The enzyme alone would take 5 (the 16 ATP made at 32%, 30 ATP of 30.5 kJ
+# from 2,880 kJ of glucose, 3 units, and its 8 electrons, 2); the rest is the nodule and the mass of a slow enzyme, which the reaction
+# carries since a body has no nodule (its catalyst's capacity costs a little more, about 0.4 of a unit a mol, `Physics::c_cat`).
+# It releases heat, but less from each unit of the solid than burning it does, so it keeps the rest in what it makes and is no
+# burning: a body runs it at its catalyst's pace and its heat pays no upkeep (`Chemistry::keeps`). Before (15 Oct 2026) it burnt one unit (+22.5 kJ), 0.43 g of carbon a g of nitrogen; the first version
 # (+490, the ground's heat paying) cost the fixer only its enzyme and flooded the world with the mineral (170 times the soil's gift).
 # Orders 1 (`ord`: 14 molecules do not meet at once). A high barrier: ea 6600 K (55 kJ/mol, a factor e^23 at 290 K), k 8e-8: 1e-17 /s
 # per mol of the contact at 290 K, nothing in the open, and 1e-10 /s at 1000 K: a burning node does not fix its air. Only a body
