@@ -160,9 +160,10 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         (1.0 - w.ground[mineral * n + top] / 1e6, 1.0 - w.ground[k * n + top] / liquid0)
     };
     // Half the pores' worth: nothing runs off over the ground; what moves is Darcy's flow, a little (the highest cell of the map,
-    // 600 m above its neighbours), and the mineral goes with the liquid in the same share.
+    // 600 m above its neighbours: 3.3% in 8 steps at the loam's `seep`, 0.9% at the old 1e-6), and the mineral goes with the
+    // liquid in the same share.
     let (m_in, l_in) = run(0.5, 8);
-    assert!(m_in < 0.03 && l_in < 0.03 && (m_in / l_in - 1.0).abs() < 0.05, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
+    assert!(m_in < 0.1 && l_in < 0.1 && (m_in / l_in - 1.0).abs() < 0.05, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
     // Twice: the half over the pores runs off, and the mineral with it, in the same share.
     let (m_out, l_out) = run(2.0, 8);
     println!("pores half full: {:.2}% of the mineral and {:.2}% of the liquid moved; twice full: {:.1}% of the mineral and {:.1}% of the liquid left the cell in 8 steps", 100.0 * m_in, 100.0 * l_in, 100.0 * m_out, 100.0 * l_out);
