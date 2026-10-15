@@ -288,3 +288,40 @@ fn null_run_freezes_the_brain_rows() {
     assert!(real.0 > 0 && real.1 > 0, "the real run learns and mutates rows: {real:?}");
     assert_eq!((null.0, null.1), (0, 0), "the null run does not: {null:?}");
 }
+
+/// The nitrogen mineral (15 Oct 2026): the series has the mineral in the ground per m² of land and of sea, and where the nitrogen
+/// is (ground of land and sea, dead matter on each, the bodies), which together stay what the soil gave the world (no body
+/// fixes, and nothing burns hot); and per kind the share of building the mineral held back (between 0 and 1) and the mineral
+/// in the stores per kg of body.
+#[test]
+fn yearly_series_counts_the_nitrogen_mineral() {
+    let dir = tmp("nitrogen");
+    let mut w = world();
+    worldgen::life::soil(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    let mut rec = tape::Recorder::new(&w, 0, 0);
+    rec.record_month(&mut w);
+    for _ in 0..2 * w.cfg.months_per_year {
+        run(&mut w, 1);
+        rec.record_month(&mut w);
+    }
+    rec.finish(&dir).unwrap();
+    let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
+    let mut lines = csv.lines();
+    let head: Vec<&str> = lines.next().unwrap().split(',').collect();
+    let rows: Vec<Vec<f64>> = lines.map(|l| l.split(',').map(|v| v.parse().unwrap()).collect()).collect();
+    assert_eq!(rows.len(), 3);
+    let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
+    // The soil: 0.357 mol of the salt (80 g) in a m2 is 28.6 g; the cells under standing liquid have none.
+    let first = &rows[0];
+    assert!(col("n_land", first) > 0.015 && col("n_land", first) <= 0.0286 + 1e-6, "{}", col("n_land", first));
+    assert_eq!(col("n_sea", first), 0.0);
+    let all = |r: &Vec<f64>| ["n_ground_land", "n_ground_sea", "n_dead_land", "n_dead_sea", "n_bodies"].iter().map(|c| col(c, r)).sum::<f64>();
+    for r in &rows {
+        assert!((all(r) / all(first) - 1.0).abs() < 1e-6, "the nitrogen in all: {} against {}", all(r), all(first));
+        let (nlim, nstore) = (col("root_0_nlim", r), col("root_0_nstore", r));
+        assert!(nlim.is_nan() || (0.0..=1.0).contains(&nlim), "nlim {nlim}");
+        assert!(nstore.is_nan() || (nstore >= 0.0 && nstore < 1.0), "nstore {nstore}");
+    }
+    assert!(col("n_land", &rows[2]) > 0.0 && col("n_dead_land", &rows[2]) > 0.0 && col("n_bodies", &rows[2]) > 0.0);
+}

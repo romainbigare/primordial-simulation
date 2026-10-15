@@ -105,3 +105,43 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     let (de, dq) = drift(&w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }
+
+/// A solid that dissolves in the liquid (the nitrogen mineral, 15 Oct 2026) moves with the liquid down the slope, a share of it
+/// each step, as dissolved gas does, and is deposited nowhere as sediment; on dry ground it stays where it is. Matter and energy
+/// are kept. (The share is that of the liquid that runs off of the standing liquid and the soil's moisture together,
+/// `Physics::pore`.)
+#[test]
+fn a_dissolved_solid_moves_with_the_liquid_and_a_dry_one_stays() {
+    let (_, init) = worldgen::chemistry0();
+    let mut wet = worldgen::new_world(3, 16, 16);
+    let (n, k) = (wet.grid.n(), init.low);
+    let mineral = wet.chem.mineral().expect("the mineral").0;
+    let top = (0..n).max_by(|&a, &b| wet.surface_z(a).total_cmp(&wet.surface_z(b))).unwrap();
+    let t = wet.t_ground(top).max(wet.chem.subs[k].melt + 5.0);
+    // The twin has no liquid on the highest cell; the other a sheet of it half a metre deep. Both 1e6 mol of the mineral there.
+    let mut dry = wet.clone();
+    let sheet = 0.5 * wet.grid.area() / wet.chem.molar_volume(k, pcore::chem::Phase::Liquid);
+    wet.ground[k * n + top] += sheet;
+    wet.e_ground[top] = wet.energy_ground(top, t);
+    for w in [&mut wet, &mut dry] {
+        let e = 1e6 * w.chem.subs[mineral].cp * w.t_ground(top);
+        w.ground[mineral * n + top] += 1e6;
+        w.e_ground[top] += e;
+        w.chem.add_elems(mineral, 1e6, &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy += e + 1e6 * w.chem.subs[mineral].hf;
+    }
+    let (t0, l0) = (totals(&wet), wet.ledger.clone());
+    for _ in 0..8 {
+        pcore::flow::step(&mut wet, DT);
+    }
+    // (One step for the dry twin: rain would wet it later.)
+    pcore::flow::step(&mut dry, DT);
+    let moved = 1.0 - wet.ground[mineral * n + top] / 1e6;
+    let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| wet.ground[mineral * n + i]).sum();
+    println!("with the sheet {:.1}% of the mineral left the cell in 8 steps, {:.3e} mol are downstream; on dry ground {:.3e} mol stayed in a step", 100.0 * moved, downstream, dry.ground[mineral * n + top]);
+    assert!(moved > 0.3, "only {moved} of the mineral moved with the liquid");
+    assert!((downstream + wet.ground[mineral * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + wet.ground[mineral * n + top]);
+    assert_eq!(dry.ground[mineral * n + top], 1e6, "the mineral moved on dry ground");
+    let (de, dq) = drift(&wet, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
+}

@@ -178,11 +178,12 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     assert!(w.life.shade[sb] > 1.2 * w.life.shade[sa], "the body of more matter is the taller: shade {} against {}", w.life.shade[sb], w.life.shade[sa]);
 }
 
-/// Growth makes body matter of the energy-rich solid, 6 of it for 1 of matter and 1 of liquid, and
+/// Growth makes body matter of the energy-rich solid and the nitrogen mineral, 40 of the solid and 1 of the mineral for 1
+/// of matter and 9 of liquid (15 Oct 2026; 6 of the solid for 1 of matter and 1 of liquid before), and
 /// pays `c_copy` per kg of matter made in work that burns the solid (the fuel's heat leaves the
 /// body for the ground): elements and energy are kept exactly, and the stores change as the
-/// chemistry says: matter up by x, the solid down by 6 x and by what the work burnt, the liquid up
-/// by x and by the liquid the burning made.
+/// chemistry says: matter up by x, the solid down by 40 x and by what the work burnt, the mineral down by x, the liquid up
+/// by 9 x and by the liquid the burning made.
 #[test]
 fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let (mut w, i) = start();
@@ -192,6 +193,12 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let (_, mut b) = out(&mut w, b);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     let (matter0, rich0, liquid0, e0) = (b.store[r.matter], b.store[r.rich], b.store[r.liquid], w.e_ground.iter().sum::<f64>());
+    let (mineral, per) = w.chem.mineral().expect("a mineral");
+    let mineral0 = b.store[mineral];
+    // (Counts of the chemistry's growth: the solid in, the liquid out.)
+    let bl = w.chem.build.as_ref().expect("growth");
+    let (n_rich, n_liquid) = (bl.inputs.iter().find(|p| p.0 as usize == r.rich).expect("the solid").1 as f64, bl.outputs.iter().find(|p| p.0 as usize == r.liquid).expect("the liquid").1 as f64);
+    assert!(n_rich == 40.0 && n_liquid == 9.0 && per == 1.0);
     let days = b.interval() as f64;
     assert!(copy::grow(&mut w, &mut b, days), "it did not grow");
     let (x, c_copy) = (b.store[r.matter] - matter0, w.cfg.phys.c_copy);
@@ -199,9 +206,13 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     // The work: c_copy per kg of matter, burnt as the solid is (heat per mol of the burning reaction).
     let burnt = c_copy * x * w.chem.subs[r.matter].molar_mass / -w.chem.dh(r.burn);
     let (dsolid, dliquid) = (rich0 - b.store[r.rich], b.store[r.liquid] - liquid0);
-    println!("matter made {x:.4} mol ({:.3} kg), solid down {dsolid:.4} mol (6 x = {:.4}, burnt {burnt:.4}), liquid up {dliquid:.4}", x * w.chem.subs[r.matter].molar_mass, 6.0 * x);
-    assert!((dsolid / (6.0 * x + burnt) - 1.0).abs() < 1e-6, "the solid fell by {dsolid}, 6 x + burnt = {}", 6.0 * x + burnt);
-    assert!((dliquid / (x + burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, x + burnt = {}", x + burnt);
+    let dmineral = mineral0 - b.store[mineral];
+    println!("matter made {x:.4} mol ({:.3} kg), solid down {dsolid:.4} mol (40 x = {:.4}, burnt {burnt:.4}), mineral down {dmineral:.4}, liquid up {dliquid:.4}", x * w.chem.subs[r.matter].molar_mass, 40.0 * x);
+    assert!((dsolid / (n_rich * x + burnt) - 1.0).abs() < 1e-6, "the solid fell by {dsolid}, 40 x + burnt = {}", n_rich * x + burnt);
+    assert!((dmineral / (per * x) - 1.0).abs() < 1e-9, "the mineral fell by {dmineral}, x = {x}");
+    // (The burning of the solid for the work makes liquid too, as its reaction says.)
+    let burn_liquid = w.chem.reactions[r.burn].outputs.iter().find(|p| p.0 as usize == r.liquid).map_or(0.0, |p| p.1 as f64);
+    assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, 9 x + burnt = {}", n_liquid * x + burn_liquid * burnt);
     // The work left the body as heat for the ground: that heat is the burnt solid's.
     let heat = w.e_ground.iter().sum::<f64>() - e0;
     assert!(heat > 0.0 && (heat / (burnt * -w.chem.dh(r.burn)) - 1.0).abs() < 0.05, "heat to the ground {heat:e} J, the work {:e} J", burnt * -w.chem.dh(r.burn));
@@ -814,8 +825,8 @@ fn satiety_caps_every_size_and_counts_the_matter_built() {
 /// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 0.2 of it a
 /// year at 290 K in the starting air (18.6% lost in a year; a little slower than the energy-rich
 /// solid's 0.27 a year, 24%: structure resists; both are litter decay constants, forest floor
-/// 0.25 a year), by mass action of the oxygen-like gas to the 6th power (0.21^6 = 8.6e-5) over a
-/// rate constant of 7.6e-5 /s at 290 K.
+/// 0.25 a year), by the oxygen-like gas to the 6th power (the power of the rate law, `Reaction::ord`; the matter takes 40 of
+/// it in all, 0.21^6 = 8.6e-5) over a rate constant of 7.6e-5 /s at 290 K.
 #[test]
 fn dead_body_matter_oxidises_at_the_set_rate() {
     let (chem, init) = worldgen::chemistry0();
@@ -837,9 +848,9 @@ fn dead_body_matter_oxidises_at_the_set_rate() {
     println!("a year at 290 K in the starting air: body matter {:.2}% oxidised, the energy-rich solid {:.2}%", 100.0 * matter, 100.0 * solid);
     assert!(matter > 0.17 && matter < 0.205, "{matter}");
     assert!(solid > 0.22 && solid < 0.26 && matter < solid, "{solid}");
-    // It burns: 2805 kJ a mol, the heat of 6 of the solid, and balances in elements (validated on load).
+    // It burns: 18,700 kJ a mol (16.7 MJ a kg, the heat of 40 of the solid less the mineral's), and balances in elements (validated on load).
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)).expect("a burning reaction");
-    assert!((chem.dh(burn) / -2805e3 - 1.0).abs() < 1e-9 && chem.validate().is_ok());
+    assert!((chem.dh(burn) / -18700e3 - 1.0).abs() < 1e-9 && chem.validate().is_ok());
     // Bodies catalyse it and pay for the enzyme as for the solid's: the same speed-up costs about
     // three quarters as much (the rate constants over the open rates, the air beyond first order).
     let cost = |r: usize| {
@@ -1011,8 +1022,8 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     let (rich, matter, taken, size) = take_from_ground(true);
     println!("an eater took {taken:.2} mol of matter from the ground: solid +{rich:.2} mol, its own matter {matter:+.3} mol, body {size:+.3} kg");
     assert!(taken > 0.5, "it took none");
-    // The solid rose by 6 per mol taken (less what it burnt in ten days); its own matter did not rise.
-    assert!(rich > 3.0 * taken, "solid +{rich} mol for {taken} mol of matter");
+    // The solid rose by 40 per mol taken (less what it burnt in ten days); its own matter did not rise.
+    assert!(rich > 20.0 * taken, "solid +{rich} mol for {taken} mol of matter");
     assert!(matter <= 1e-9 && size <= 1e-9, "matter entered as body: {matter} mol, body {size} kg");
     let (_, _, none, _) = take_from_ground(false);
     assert!(none < 1e-12, "a body that cannot burn matter took {none} mol of it");
@@ -1020,12 +1031,14 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     let (mut w, i) = start();
     let r = roles(&w);
     let mut b = eater(&mut w, i, 0, 6.0);
-    add(&mut w, &mut b, r.matter, 1.62);
+    add(&mut w, &mut b, r.matter, 11.18);
+    let (mineral, _) = w.chem.mineral().expect("a mineral");
     let (s, mut b) = out(&mut w, b);
     let (t0, l0, before) = (pcore::check::totals(&w), w.ledger.clone(), b.store.clone());
     let x = b.digest(&w.chem, 10.0);
     assert!((x - 10.0).abs() < 1e-12);
-    assert!((before[r.matter] - b.store[r.matter] - 10.0).abs() < 1e-9 && (b.store[r.rich] - before[r.rich] - 60.0).abs() < 1e-9 && (before[r.liquid] - b.store[r.liquid] - 10.0).abs() < 1e-9);
+    // 10 of matter and 90 of liquid become 400 of the solid and 10 of the mineral.
+    assert!((before[r.matter] - b.store[r.matter] - 10.0).abs() < 1e-9 && (b.store[r.rich] - before[r.rich] - 400.0).abs() < 1e-9 && (before[r.liquid] - b.store[r.liquid] - 90.0).abs() < 1e-9 && (b.store[mineral] - before[mineral] - 10.0).abs() < 1e-9);
     w.life.bodies[s] = b;
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");

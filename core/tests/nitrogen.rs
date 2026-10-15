@@ -1,0 +1,391 @@
+//! The nitrogen mineral of the ground (15 Oct 2026, queued item 4 of handover 13.2, agreed on 14 Oct 2026): body
+//! matter holds nitrogen at a carbon to nitrogen ratio of 20 and is built of the energy-rich solid and a mineral
+//! the ground holds (substance 24 of chemistry 0, a salt that dissolves in the common liquid); a body without
+//! the mineral cannot build; dead matter gives it back when it rots, and gives nitrogen gas to the air when it
+//! burns hot; a body whose genes speed up the reaction that fixes the air's nitrogen makes the mineral, at the
+//! energy cost of the reaction; roots take the mineral from the ground by the uptake genes; what a body holds
+//! of it past its level goes back to the ground; liquid carries it.
+
+use pcore::body::{self, Body, Layout, Lineage, DISPERSE, LIQ, REPAIR, STRENGTH};
+use pcore::chem::Chemistry;
+use pcore::rng::{Purpose, Rng};
+use pcore::{brain, change, check, choose, copy, flow, World};
+
+/// A small world after one month, and a land cell with dry ground.
+fn start() -> (World, usize) {
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    (w, i)
+}
+
+/// A starting body of kind `which` (0 light-eaters, 1 eaters) of a brain that only does fixed action `act` (0 rests, 3 takes
+/// from the ground), weak, staying where it is, soaking no liquid up, repair 0.
+fn body_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
+    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let mut fixed = [-8.0; brain::FIXED];
+    fixed[act] = 8.0;
+    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
+    let rows = base.split_off(shape.base());
+    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: which as u32 }), w.life.new_genome(rows));
+    let mut b = worldgen::life::make(w, which, i, l, g).expect("body");
+    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[LIQ], b.genes[REPAIR]) = (0.0, 0.0, -4.0, 0.0);
+    b
+}
+
+/// A body placed and taken out again, prepared, to call the laws on directly.
+fn out(w: &mut World, b: Body) -> (usize, Body) {
+    let s = w.life.add(b, w.day, 1);
+    body::survey(w);
+    w.day += 1;
+    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    b.prepare(&w.chem, &w.cfg.phys);
+    (s, b)
+}
+
+/// One day: the flow and change steps when due, then the bodies due.
+fn day(w: &mut World) {
+    let dt = w.cfg.phys_days as f64 * 86_400.0;
+    if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
+        body::survey(w);
+        flow::step(w, dt);
+        change::step(w, dt);
+    }
+    w.events.clear();
+    body::day(w);
+    w.day += 1;
+}
+
+/// Elements and (thermal + chemical) energy of one node, with its gas share.
+fn node_totals(chem: &Chemistry, n: &[f64], gas: &[f64], e: f64) -> (Vec<f64>, f64) {
+    let mut el = vec![0.0; chem.n_elements];
+    let mut en = e;
+    for k in 0..chem.ns() {
+        chem.add_elems(k, n[k] + gas[k], &mut el);
+        en += (n[k] + gas[k]) * chem.subs[k].hf;
+    }
+    (el, en)
+}
+
+/// `amount` mol of substance `k` added to the ground of cell `i` at its temperature, booked as an edit.
+fn put(w: &mut World, k: usize, i: usize, amount: f64) {
+    let n = w.grid.n();
+    let e = amount * w.chem.subs[k].cp * w.t_ground(i);
+    w.ground[k * n + i] += amount;
+    w.e_ground[i] += e;
+    w.chem.add_elems(k, amount, &mut w.ledger.imposed_elems);
+    w.ledger.imposed_energy += e + amount * w.chem.subs[k].hf;
+}
+
+/// All of substance `k` in the world's ground and bodies, mol.
+fn total(w: &World, k: usize) -> f64 {
+    let n = w.grid.n();
+    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.life.alive().map(|b| b.store[k]).sum::<f64>()
+}
+
+/// What the chemistry says: the matter holds one nitrogen to 20 carbon (40 and 2 in its formula unit), is made of 40 of the
+/// energy-rich solid and 1 of the mineral without a gain or loss of heat, and burns for about what it did (16.7 MJ a kg, 17.3
+/// before); the mineral dissolves in the liquid; fixing the air's nitrogen takes 490 kJ a mol of the gas, what 16 molecules of
+/// the carrier of the enzyme's energy (30.5 kJ each) hold; every reaction and growth balance in elements.
+#[test]
+fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
+    let (chem, _) = worldgen::chemistry0();
+    assert!(chem.validate().is_ok());
+    let (m, (mineral, per)) = (chem.matter().expect("matter"), chem.mineral().expect("the mineral"));
+    assert_eq!((m, mineral, per), (22, 24, 1.0));
+    // Carbon (element 1) to nitrogen (element 2) of the matter: 40 to 2.
+    assert_eq!((chem.subs[m].elems[1], chem.subs[m].elems[2]), (40, 2));
+    assert!(chem.dh_build().abs() < 1.0, "growth takes {} J", chem.dh_build());
+    let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m) && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral)).expect("rotting");
+    let per_kg = -chem.dh(burn) / chem.subs[m].molar_mass / 1e6;
+    println!("body matter burns for {per_kg:.2} MJ/kg");
+    assert!(per_kg > 16.0 && per_kg < 17.5, "{per_kg} MJ/kg");
+    // The fixing reaction: air's nitrogen gas (1), the liquid, the carbon gas -> the mineral and the reduced carbon gas.
+    let fix = (0..chem.reactions.len()).find(|&r| chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral) && !chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)).expect("fixing");
+    println!("fixing takes {:.0} kJ a mol of nitrogen gas, 16 x 30.5 = {:.0}", chem.dh(fix) / 1e3, 16.0 * 30.5);
+    assert!((chem.dh(fix) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", chem.dh(fix));
+    // The mineral is a solid that dissolves; nothing burns it in a gas, and hot it breaks down into the air's nitrogen gas (exothermic).
+    assert!(chem.subs[mineral].melt > 400.0 && chem.subs[mineral].solubility > 0.1);
+    let uses: Vec<usize> = (0..chem.reactions.len()).filter(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == mineral)).collect();
+    assert_eq!(uses.len(), 1);
+    assert!(chem.dh(uses[0]) < 0.0 && chem.reactions[uses[0]].outputs.iter().any(|p| p.0 == 1) && !chem.reactions[uses[0]].inputs.iter().any(|p| chem.phase(p.0 as usize, 290.0) == pcore::chem::Phase::Gas));
+    assert!(chem.reactions[uses[0]].ea > 15000.0);
+}
+
+/// Dead matter gives the mineral back: in the open at 290 K it rots (5% a year) and every mol that goes leaves one of
+/// the mineral and no nitrogen gas; burning hot (1000 K) the mineral it leaves breaks down as it is made, and most of the
+/// nitrogen of the matter goes to the air as the gas. Elements and energy are kept exactly.
+#[test]
+fn rotting_gives_the_mineral_back_and_burning_hot_gives_the_gas_to_the_air() {
+    let (chem, init) = worldgen::chemistry0();
+    let (m, (mineral, _)) = (chem.matter().expect("matter"), chem.mineral().expect("the mineral"));
+    let gas_n = 1usize;
+    let mut rc = change::Reactor::new(&chem);
+    let mut run = |t: f64, secs: f64| {
+        let mut n = vec![0.0; chem.ns()];
+        let mut gas = vec![0.0; chem.ns()];
+        for &(g, x) in &init.air {
+            gas[g] = x * 1e9;
+        }
+        n[m] = 1000.0;
+        let mut e = t * 1e15;
+        let (el0, en0) = node_totals(&chem, &n, &gas, e);
+        let gas0 = gas.clone();
+        // (A product waits for the next call to react further: the mineral breaks down in the calls after the one that makes it.)
+        for _ in 0..3 {
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, secs / 3.0);
+        }
+        let (el1, en1) = node_totals(&chem, &n, &gas, e);
+        for j in 0..chem.n_elements {
+            assert!((el1[j] - el0[j]).abs() <= 1e-9 * el0[j].max(1.0), "element {j}: {} -> {}", el0[j], el1[j]);
+        }
+        assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
+        (1000.0 - n[m], n[mineral], gas[gas_n] - gas0[gas_n])
+    };
+    let (lost, back, gas) = run(290.0, 365.0 * 86_400.0);
+    println!("a year at 290 K: {lost:.2} mol of matter rotted, {back:.2} mol of the mineral back, {gas:.4} mol of nitrogen gas");
+    assert!(lost > 45.0 && lost < 55.0, "{lost}");
+    assert!((back / lost - 1.0).abs() < 1e-6 && gas.abs() < 1e-6 * lost, "mineral {back}, gas {gas}");
+    let (lost, back, gas) = run(1000.0, 1e5);
+    println!("hot, 1000 K: {lost:.1} mol of matter burned, {back:.1} mol of the mineral, {gas:.1} mol of nitrogen gas");
+    assert!(lost > 990.0, "{lost}");
+    assert!(gas > 0.8 * lost && back < 0.2 * lost, "mineral {back}, gas {gas} for {lost} mol of matter");
+}
+
+/// A body without the mineral cannot build body matter, the nitrogen is what holds it back and the tape's tally
+/// says so; with it, it builds, and the mineral falls by the matter made.
+#[test]
+fn growth_stops_without_the_mineral_and_goes_on_with_it() {
+    let (mut w, i) = start();
+    w.cfg.phys.c_build = 1e6;
+    let (mineral, per) = w.chem.mineral().expect("the mineral");
+    let m = w.chem.matter().expect("matter");
+    let b = body_of(&mut w, 1, i, 0);
+    let (_, mut b) = out(&mut w, b);
+    assert!(b.store[mineral] > 0.0, "a starting body holds the mineral its matter was made of");
+    let days = b.interval() as f64;
+    // With the mineral it builds, for the matter made it spends the mineral.
+    let (m0, n0) = (b.store[m], b.store[mineral]);
+    let mut with = b.clone();
+    assert!(copy::grow(&mut w, &mut with, days), "it did not grow with the mineral");
+    let made = with.store[m] - m0;
+    assert!(made > 0.0 && ((n0 - with.store[mineral]) / (per * made) - 1.0).abs() < 1e-9, "{made} mol of matter for {} of the mineral", n0 - with.store[mineral]);
+    // Without it, none: not a gram of matter, and the tally of the year counts it held back by the mineral.
+    b.store[mineral] = 0.0;
+    w.diag.nlim.clear();
+    let m1 = b.store[m];
+    assert!(!copy::grow(&mut w, &mut b, days), "it grew without the mineral");
+    assert_eq!(b.store[m], m1);
+    let root = w.life.root(&b) as usize;
+    let tally = w.diag.nlim[root];
+    println!("without the mineral: held back {} of {} members that could build", tally[0], tally[1]);
+    assert!(tally[0] == tally[1] && tally[1] > 0.0);
+    // A little of it, a little matter: the mineral binds, in proportion.
+    b.store[mineral] = 0.5 * made * per;
+    assert!(copy::grow(&mut w, &mut b, days));
+    let grown = b.store[m] - m1;
+    assert!((grown / (0.5 * made) - 1.0).abs() < 1e-6, "{grown} mol for a mineral of {} mol", 0.5 * made);
+    assert!(b.store[mineral] < 1e-9 * made);
+}
+
+/// Dead matter on the ground returns its nitrogen to the ground: in a world with no body, a year, the matter that went is
+/// in the mineral one for one (the mineral dissolves and runs with the liquid: it is counted over the whole ground), more than
+/// the same world without the matter makes (the open air fixes next to nothing), and elements and energy are kept.
+#[test]
+fn dead_matter_on_the_ground_returns_the_mineral_to_the_ground() {
+    let (mut w, i) = start();
+    let (mineral, _) = w.chem.mineral().expect("the mineral");
+    let m = w.chem.matter().expect("matter");
+    // The same world with nothing on the ground: what the open makes of the mineral in a year.
+    let mut twin = w.clone();
+    let bare = total(&twin, mineral);
+    for _ in 0..12 {
+        pcore::step(&mut twin);
+    }
+    let bare = total(&twin, mineral) - bare;
+    put(&mut w, m, i, 1e6);
+    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let (m_before, n_before) = (total(&w, m), total(&w, mineral));
+    for _ in 0..12 {
+        pcore::step(&mut w);
+    }
+    let (lost, gained) = (m_before - total(&w, m), total(&w, mineral) - n_before - bare);
+    assert!(bare >= 0.0 && bare < 1e-3 * lost, "the open fixed {bare} mol in a year");
+    println!("a year on the ground: {lost:.0} of {m_before:.0} mol of matter rotted, {gained:.0} mol of the mineral back");
+    assert!(lost > 0.02 * m_before, "it did not rot: {lost}");
+    assert!((gained / lost - 1.0).abs() < 1e-4, "the mineral {gained} for the matter {lost}");
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// Fixing the air's nitrogen: in the open it is nothing (1e-17 a second at 290 K), and a body whose genes speed the reaction up
+/// makes the mineral from the air's gas, the liquid it holds and the carbon gas, and puts the reduced carbon gas out, at the
+/// cost of the reaction: it takes 490 kJ a mol of the gas, and the enzyme costs upkeep by its capacity like the others. A body
+/// that has none fixes none. Elements and energy are kept.
+#[test]
+fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
+    let (chem, init) = worldgen::chemistry0();
+    let (mineral, _) = chem.mineral().expect("the mineral");
+    let fix = (0..chem.reactions.len()).find(|&r| chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral) && chem.dh(r) > 0.0).expect("fixing");
+    // In the open: ten years at 290 K, the air in plenty and the liquid there.
+    let mut rc = change::Reactor::new(&chem);
+    let mut n = vec![0.0; chem.ns()];
+    let mut gas = vec![0.0; chem.ns()];
+    for &(g, x) in &init.air {
+        gas[g] = x * 1e9;
+    }
+    n[0] = 1e6;
+    let mut e = 290.0 * 1e15;
+    rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, 10.0 * 365.0 * 86_400.0);
+    println!("in the open, ten years: {:.3e} mol of the mineral", n[mineral]);
+    assert!(n[mineral] < 1e-6 * gas[3], "the open world fixed {} mol of the {} mol of the carbon gas there", n[mineral], gas[3]);
+    // A plant that fixes (the enzyme speeds the reaction up 10^9) and its twin that does not, 60 days.
+    let run = |cat: f32| {
+        let (mut w, i) = start();
+        let lay = Layout::of(&w.chem);
+        let mut b = body_of(&mut w, 0, i, 0);
+        // Its own mineral just short of nothing: what it holds past its level goes to the ground and is counted there.
+        b.genes[lay.cat + fix] = cat;
+        let s = w.life.add(b, w.day, 1);
+        let (t0, l0) = (check::totals(&w), w.ledger.clone());
+        let before = (total(&w, mineral), w.air[3 * w.grid.na()..4 * w.grid.na()].iter().sum::<f64>(), w.air[21 * w.grid.na()..22 * w.grid.na()].iter().sum::<f64>());
+        let mut up = 0.0;
+        for _ in 0..60 {
+            day(&mut w);
+            let mut b = w.life.bodies[s].clone();
+            b.prepare(&w.chem, &w.cfg.phys);
+            up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem));
+        }
+        assert!(w.life.bodies[s].alive);
+        let (de, dq) = check::drift(&w, &t0, &l0);
+        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        let na = w.grid.na();
+        let after = (total(&w, mineral), w.air[3 * na..4 * na].iter().sum::<f64>(), w.air[21 * na..22 * na].iter().sum::<f64>());
+        (after.0 - before.0, after.2 - before.2, up, w.life.bodies[s].k.cats)
+    };
+    let (fixed, co, up_with, cats_with) = run(9.0);
+    let (none, co_none, up_without, cats_without) = run(-1.0);
+    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral and put out {co:.3e} mol of the reduced carbon gas, upkeep {up_with:.3e} J a day against {up_without:.3e}; the other {none:.3e} mol");
+    // (Both build, which spends the mineral they hold; what the enzyme made is the difference.)
+    let made = fixed - none;
+    assert!(made > 1.0, "the plant fixed {made} mol");
+    // One mol of the reduced carbon gas for each mol of the mineral made; it is where the energy of the reaction went.
+    assert!((co - co_none) / made > 0.9 && (co - co_none) / made < 1.1, "{} mol of the gas for {made} of the mineral", co - co_none);
+    // The enzyme costs by its capacity: the plant that fixes pays more upkeep.
+    assert!(cats_with > cats_without && up_with > up_without, "capacity {cats_with} against {cats_without}, upkeep {up_with} against {up_without}");
+}
+
+/// Roots take the mineral from the ground by the uptake genes, up to the level the body keeps and no more; a body whose gene
+/// is off takes none. What a body holds of it past its level goes back to the ground at its update (an eater that digested
+/// matter, a plant that burned its own), with its heat; elements and energy are kept.
+#[test]
+fn roots_take_the_mineral_up_to_the_level_and_the_excess_goes_back() {
+    let (mut w, i) = start();
+    let (mineral, _) = w.chem.mineral().expect("the mineral");
+    let lay = Layout::of(&w.chem);
+    let n = w.grid.n();
+    // A plant with its stores of the mineral emptied, the ground full of it.
+    let mut plant = body_of(&mut w, 0, i, 0);
+    // (It soaks as a plant does, 1 a day, the rate roots take what is dissolved at.)
+    plant.genes[LIQ] = 0.0;
+    let mut idle = plant.clone();
+    for b in [&mut plant, &mut idle] {
+        let a = b.store[mineral];
+        w.chem.add_elems(mineral, -a, &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy -= a * w.chem.subs[mineral].hf;
+        b.store[mineral] = 0.0;
+    }
+    idle.genes[lay.upt + mineral] = -0.1;
+    assert!(plant.genes[lay.upt + mineral] > 0.0);
+    put(&mut w, mineral, i, 1e9);
+    let level = |w: &World, b: &Body| b.level(&w.chem, mineral, b.mass(&w.chem));
+    let (sp, si) = (w.life.add(plant, w.day, 1), w.life.add(idle, w.day, 1));
+    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    for _ in 0..40 {
+        day(&mut w);
+    }
+    let (took, lvl) = (w.life.bodies[sp].store[mineral], level(&w, &w.life.bodies[sp]));
+    println!("a plant with the gene on took {took:.3e} mol of the mineral, its level {lvl:.3e}; the other {:.3e}", w.life.bodies[si].store[mineral]);
+    assert!(took > 0.5 * lvl && took <= lvl * (1.0 + 1e-6), "took {took}, level {lvl}");
+    assert_eq!(w.life.bodies[si].store[mineral], 0.0, "a body whose gene is off took the mineral");
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    // The excess: give the plant ten times its level, and it is back on the ground at its next update.
+    let g = w.ground[mineral * n + i];
+    put(&mut w, mineral, i, -g);
+    let ground0 = 0.0;
+    let more = 10.0 * lvl;
+    w.chem.add_elems(mineral, more, &mut w.ledger.imposed_elems);
+    w.ledger.imposed_energy += more * (w.chem.subs[mineral].hf + w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem));
+    w.life.bodies[sp].e += more * w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem);
+    w.life.bodies[sp].store[mineral] += more;
+    for _ in 0..40 {
+        day(&mut w);
+    }
+    let (held, lvl2) = (w.life.bodies[sp].store[mineral], level(&w, &w.life.bodies[sp]));
+    println!("with ten times its level more: it holds {held:.3e} against a level of {lvl2:.3e}; the ground gained {:.3e}", w.ground[mineral * n + i] - ground0);
+    assert!(held <= lvl2 * 1.05, "held {held} past the level {lvl2}");
+    assert!(w.ground[mineral * n + i] > ground0 + 0.5 * more, "the excess did not go back to the ground");
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// An eater digests the matter it eats into the solid and the mineral (the reverse of growth) and takes it in even when the
+/// mineral it makes would fill the room its level leaves many times over: what it holds of the mineral past its level goes
+/// back to the ground at its update, so digestion never stops for the mineral. Elements and energy are kept.
+#[test]
+fn an_eater_digests_matter_into_the_solid_and_the_mineral_and_sheds_the_excess() {
+    let (mut w, i) = start();
+    let (mineral, _) = w.chem.mineral().expect("the mineral");
+    let m = w.chem.matter().expect("matter");
+    let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");
+    let n = w.grid.n();
+    // A great store of matter on its ground, an eater that only takes from the ground.
+    put(&mut w, m, i, 1e5);
+    let mut b = body_of(&mut w, 1, i, 3);
+    // It keeps little of the mineral (a thousandth of its body): what digestion makes of the matter it takes is many times that.
+    b.genes[Layout::of(&w.chem).keep + mineral] = 0.001;
+    let s = w.life.add(b, w.day, 1);
+    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let (matter0, rich0, mineral_ground0) = (w.ground[m * n + i], w.life.bodies[s].store[rich], w.ground[mineral * n + i]);
+    let mut most = 0.0f64;
+    for _ in 0..60 {
+        day(&mut w);
+        let b = &w.life.bodies[s];
+        assert!(b.alive);
+        most = most.max(b.store[mineral] / b.level(&w.chem, mineral, b.mass(&w.chem)).max(1e-30));
+    }
+    let b = &w.life.bodies[s];
+    let (taken, lvl) = (matter0 - w.ground[m * n + i], b.level(&w.chem, mineral, b.mass(&w.chem)));
+    println!("in 60 days it took {taken:.2} mol of matter (its level of the mineral {lvl:.3} mol), the solid rose {:.1} mol, the ground got {:.2} mol of the mineral back; it held at most {most:.2} of its level", b.store[rich] - rich0, w.ground[mineral * n + i] - mineral_ground0);
+    assert!(taken > 3.0 * lvl, "it took only {taken} mol of matter");
+    assert!(b.store[rich] > rich0, "the solid did not rise");
+    assert!(w.ground[mineral * n + i] > mineral_ground0 + 0.5 * (taken - lvl), "the excess of the mineral did not go back to the ground");
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// The soil is given to the land when life starts, 10 g of nitrogen to the m2, booked as new matter and energy, none under
+/// standing liquid; and the tape counts the mineral on land and on the low ground.
+#[test]
+fn the_soil_is_booked_and_the_tape_counts_the_mineral() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    for _ in 0..12 {
+        pcore::step(&mut w);
+    }
+    let (mineral, _) = w.chem.mineral().expect("the mineral");
+    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let n = w.grid.n();
+    let before = total(&w, mineral);
+    let line = worldgen::life::soil(&mut w);
+    println!("{line}");
+    let (placed, area) = (total(&w, mineral) - before, w.grid.area());
+    let cells = placed / (0.357 * area);
+    assert!(cells.fract().abs() < 1e-9 || (1.0 - cells.fract()).abs() < 1e-9, "{cells} cells' worth");
+    assert!(cells >= 10.0 && cells <= n as f64);
+    // 0.357 mol of the salt, 2 mol of nitrogen in each: 10 g of nitrogen in the m2.
+    let grams: f64 = 0.357 * 2.0 * 14.0;
+    assert!((grams - 10.0).abs() < 0.05);
+    let (de, dq) = check::drift(&w, &t0, &l0);
+    assert!(de < 1e-12 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
