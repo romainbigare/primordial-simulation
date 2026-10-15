@@ -111,3 +111,161 @@ fn a_cold_body_ages_slower() {
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// A body of `f` times the stores and heat (an edit), at its temperature.
+fn scaled(w: &mut World, b: &Body, f: f64) -> Body {
+    let mut x = b.clone();
+    for k in 0..w.chem.ns() {
+        w.chem.add_elems(k, (f - 1.0) * x.store[k], &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy += (f - 1.0) * x.store[k] * w.chem.subs[k].hf;
+        x.store[k] *= f;
+    }
+    w.ledger.imposed_energy += (f - 1.0) * x.e;
+    x.e *= f;
+    x.k = Default::default();
+    x.prepare(&w.chem, &w.cfg.phys);
+    x
+}
+
+/// The work a body pays for (`body::pay`: moving, handling, building) leaves heat in it, which leaves through its surface
+/// by its conductance (before, all of it went to the ground within the action): spread over the interval to its next update,
+/// a cost Q warms it by Q / (g dt), g the conductance of its genes, cover and walls and what it radiates, dt the interval. The
+/// heat that does not stay goes to the ground, so matter and energy are kept exactly. (A tenth of the cost is the latent
+/// heat of the gas it breathes out.)
+#[test]
+fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
+    let mut s = set();
+    let b = s.eater(0);
+    let w = &mut s.w;
+    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    let (mut b, days) = (b, 10.0);
+    let (temp0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
+    let cost = 2e6;
+    assert!(pcore::body::pay(w, &mut b, cost, days), "it can pay");
+    let (temp1, g) = (b.temp(&w.chem), pcore::body::conductance_to_ground(w, &b, mass, temp0));
+    let (cap, dt) = (b.heat_cap(&w.chem), b.interval() as f64 * 86_400.0);
+    let (rise, kept) = (temp1 - temp0, cap * (temp1 - temp0));
+    println!("a cost of {cost:.1e} J warms a body of {mass:.0} kg by {rise:.4} K (g {g:.2} W/K, {:.1} h time constant): the rate law says {:.4} K", cap / g / 3600.0, cost / (g * dt));
+    // Its time constant is hours, far under the days to the next update: the warmth is the heat made over the heat lost per K.
+    assert!(cap / g < 0.1 * dt, "the body's heat does not relax within the interval");
+    assert!(rise > 0.0 && (rise * g * dt / cost) > 0.85 && (rise * g * dt / cost) < 1.0, "it warms by {rise} K, the cost over g dt is {}", cost / (g * dt));
+    // What it keeps is a small part of the heat made (the rest went to the ground).
+    assert!(kept < 0.01 * cost, "it keeps {kept} J of {cost}");
+    let (de, dq) = pcore::check::drift(w, &t0, &l0);
+    assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
+    // The same work again warms it by as much more.
+    let mut c = b.clone();
+    assert!(pcore::body::pay(w, &mut c, cost, days));
+    let again = c.temp(&w.chem) - temp1;
+    assert!((again / rise - 1.0).abs() < 0.05, "the second cost warms by {again} K, the first {rise} K");
+}
+
+/// A bigger body of the same genes is warmer for the same work per kg: the heat it makes goes with its mass and its surface,
+/// which its heat leaves by, with the mass to the power 2/3, so it stands above its ground by (mass)^(1/3) times as much (8 times
+/// the body, twice the warmth).
+#[test]
+fn a_bigger_body_of_the_same_genes_is_warmer() {
+    let mut s = set();
+    let small = s.eater(0);
+    let big = scaled(&mut s.w, &small, 8.0);
+    let w = &mut s.w;
+    let rise = |w: &mut World, mut b: Body, per_kg: f64| {
+        let (t0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
+        assert!(pcore::body::pay(w, &mut b, per_kg * mass, 10.0), "it can pay");
+        b.temp(&w.chem) - t0
+    };
+    let (a, c) = (rise(w, small, 1e5), rise(w, big, 1e5));
+    println!("warmth over the ground for the same work per kg: {a:.4} K, 8 times the body {c:.4} K");
+    assert!(a > 0.0 && (c / a / 2.0 - 1.0).abs() < 0.03, "{a} K and {c} K");
+}
+
+/// A day of a world whose ground is held at `t` K in the cells `cells` (an edit): the flow and change steps when due, then
+/// the bodies due.
+fn held_day(w: &mut World, cells: &[usize], t: f64) {
+    for &i in cells {
+        let e = w.energy_ground(i, t);
+        w.ledger.imposed_energy += e - w.e_ground[i];
+        w.e_ground[i] = e;
+    }
+    if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
+        let dt = w.cfg.phys_days as f64 * 86_400.0;
+        pcore::body::survey(w);
+        pcore::flow::step(w, dt);
+        pcore::change::step(w, dt);
+    }
+    w.events.clear();
+    pcore::body::day(w);
+    w.day += 1;
+}
+
+/// A resting body in a cell whose ground is held settles at the temperature where the heat its upkeep makes is the heat its
+/// surface loses: T = T_ground + heat rate / conductance (the heat step of its update solves the relaxation, whose time constant
+/// of hours is far under its interval of days, and the rate law makes the heat it makes depend on T). So the body of
+/// kilograms stands above the ground by a degree, and one of 8 times the stores, which makes 8 times the heat through
+/// 4 times the surface, by more (not twice: its heat, and so its upkeep, rises with its warmth); and matter and energy are kept exactly.
+#[test]
+fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
+    let mut s = set();
+    s.w.cfg.phys.c_build = 0.0;
+    let mut small = s.eater(0);
+    // (In the dark: no light-capture area to absorb the sun, which warms a body too.)
+    small.genes[pcore::body::LEAF] = -9.0;
+    small.vis = small.visible(&s.w.chem, &s.w.cfg.phys);
+    // (And with no liquid, which would evaporate and cool it; what its burning makes is little.)
+    let liquid = worldgen::life::roles(&s.w.chem).expect("roles").2;
+    let w = &mut s.w;
+    w.chem.add_elems(liquid, -small.store[liquid], &mut w.ledger.imposed_elems);
+    w.ledger.imposed_energy -= small.store[liquid] * (w.chem.subs[liquid].hf + w.chem.subs[liquid].cp * small.temp(&w.chem));
+    small.e -= small.store[liquid] * w.chem.subs[liquid].cp * small.temp(&w.chem);
+    small.store[liquid] = 0.0;
+    small.wet = 0;
+    let lay = pcore::body::Layout::of(&w.chem);
+    (small.genes[lay.min + liquid], small.genes[lay.keep + liquid]) = (0.0, 0.0);
+    small.k = Default::default();
+    small.prepare(&s.w.chem, &s.w.cfg.phys);
+    let big = scaled(&mut s.w, &small, 8.0);
+    let w = &mut s.w;
+    // Two cells of high ground (rain does not flood it) in other air nodes (a body would take the air the other breathes).
+    let mut land = s.land.clone();
+    land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
+    let air = w.grid.air_of(land[0]);
+    let cells = [land[0], *land.iter().find(|&&i| w.grid.air_of(i) != air).expect("another air node")];
+    let t_cat = w.cfg.phys.t_cat;
+    let (mut small, mut big) = (small, big);
+    small.cell = cells[0] as u32;
+    big.cell = cells[1] as u32;
+    for b in [&mut small, &mut big] {
+        let e = t_cat * b.heat_cap(&w.chem);
+        w.ledger.imposed_energy += e - b.e;
+        b.e = e;
+    }
+    let slots = [w.life.add(small, w.day, 1), w.life.add(big, w.day, 1)];
+    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    for _ in 0..90 {
+        held_day(w, &cells, t_cat);
+    }
+    let mut rises = [0.0; 2];
+    for (n, &slot) in slots.iter().enumerate() {
+        let mut b = w.life.bodies[slot].clone();
+        assert!(b.alive, "it lives");
+        b.prepare(&w.chem, &w.cfg.phys);
+        let (i, mass, days) = (b.cell as usize, b.mass(&w.chem), b.interval() as f64);
+        let tg = w.scratch.temps().0[i];
+        // The temperature where heat made = heat lost: the upkeep over the interval is all released as heat (a tenth of it goes
+        // as the latent heat of the gas they breathe out).
+        let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w, &b, mass, t) * days * 86_400.0;
+        let made = |t: f64| 0.95 * pcore::body::upkeep(w, &at(w, &b, t), days, mass);
+        let (mut lo, mut hi) = (tg, tg + 60.0);
+        for _ in 0..80 {
+            let mid = 0.5 * (lo + hi);
+            if lost(mid) < made(mid) { lo = mid } else { hi = mid }
+        }
+        let want = 0.5 * (lo + hi) - tg;
+        rises[n] = b.temp(&w.chem) - tg;
+        println!("{:.0} kg: {:.3} K above the ground ({tg:.2} K); heat made = heat lost at {want:.3} K", mass, rises[n]);
+        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.1, "{} K above the ground, the heat balance says {want} K", rises[n]);
+    }
+    assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
+    let (de, dq) = pcore::check::drift(w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
