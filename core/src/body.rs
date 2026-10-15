@@ -395,6 +395,17 @@ impl Body {
         }
         (have / keep).min(1.0).max(0.0).powf(p.dormancy)
     }
+    /// End-product inhibition, 0..1 (15 Oct 2026): a catalyst is slowed by what the body holds of the
+    /// reaction's products, as an enzyme by its own end product: its speed-up goes with 1 / (1 + Σ x / x*),
+    /// x the store of each product it keeps a level of and x* that level (`level`), plain non-competitive
+    /// inhibition with the body's own level as the constant. Gases at `t` (they leave) and its key
+    /// liquids (the liquid its chemistry runs in, `activity`) do not count. Its capacity still costs
+    /// upkeep (`Consts::cats`). The reactions it runs on demand to pay (`plan`) are not slowed: they
+    /// run only as far as the cost asks.
+    pub fn inhibited(&self, chem: &Chemistry, r: usize, mass: f64, t: f64) -> f64 {
+        let out = chem.reactions[r].outputs.iter().map(|p| p.0 as usize).filter(|&k| self.wet >> k & 1 == 0 && chem.phase(k, t) != Phase::Gas);
+        1.0 / (1.0 + out.map(|k| (self.level(chem, k, mass), self.store[k].max(0.0))).filter(|x| x.0 > 0.0).map(|(l, x)| x / l).sum::<f64>())
+    }
     /// A catalyst's factor `f` (the speed-up of a reaction) at activity `a`: 1 + (f - 1) a. A dry
     /// body's enzymes do not work, but the bare reaction still runs.
     #[inline]
@@ -1493,10 +1504,10 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let e_start = t0 * (fixed + c0);
     let mut e = e_start;
     // The catalysts work as far as the body is wet (`Body::activity`): factor 1 + (f - 1) a. A dry
-    // plant's light reaction slows with the rest.
+    // plant's light reaction slows with the rest; each is slowed by its products (`Body::inhibited`).
     let act = b.activity(chem, &cfg.phys);
     tmp.cat.clear();
-    tmp.cat.extend(b.k.cat.iter().map(|&f| Body::catalyst(f, act)));
+    tmp.cat.extend(b.k.cat.iter().enumerate().map(|(r, &f)| Body::catalyst(f, if f > 1.0 { act * b.inhibited(chem, r, mass, t0) } else { act })));
     for &(r, _) in b.k.burn.iter().filter(|p| breathes(chem, p.0, t0)) {
         tmp.cat[r] = 1.0;
     }
