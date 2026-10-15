@@ -1733,11 +1733,14 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 /// it held breaking down) all of it, with its share of the heat. Digestion (`Body::digest`) and its own burning of matter give it more
 /// than it builds with and it has no other way out: an eater that kept it would grow without end and, its room full, stop taking
 /// matter. A plant takes only up to the level (`choose::wanted`), so for it the minerals shed nothing.
+/// The key liquid past its level drains out the same way (15 Oct 2026, review 7 R11): its burning makes it in the body, and
+/// before only evaporation took it out, so eaters held 40 to 65% of their liquid past the level (30 to 48% of their mass).
 fn shed(w: &mut World, b: &mut Body) {
     let (i, n, mass, minerals) = (b.cell as usize, w.grid.n(), b.mass(&w.chem), w.chem.minerals());
     for k in 0..w.chem.ns() {
-        let over = b.store[k] - if minerals.iter().any(|m| m.0 == k) { b.level(&w.chem, k, mass) } else { 0.0 };
-        if over <= 0.0 || w.chem.phase(k, crate::T_SURF) == Phase::Gas || w.chem.matter() == Some(k) || b.wet >> k & 1 == 1 || b.burns(&w.chem, k) {
+        let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k);
+        let over = b.store[k] - if kept { b.level(&w.chem, k, mass) } else { 0.0 };
+        if over <= 0.0 || w.chem.phase(k, crate::T_SURF) == Phase::Gas || w.chem.matter() == Some(k) || b.burns(&w.chem, k) {
             continue;
         }
         let q = b.e * over * w.chem.subs[k].cp / b.heat_cap(&w.chem).max(1e-9);
