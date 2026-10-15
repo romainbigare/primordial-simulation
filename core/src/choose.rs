@@ -513,16 +513,17 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
 }
 
 /// Energy dissipated pushing through the bodies of cell `j` breaks their body matter (15 Oct 2026,
-/// partial damage; before, a share of every store evenly): each loses that share of its body
-/// (`Body::built`) by their body, less when stronger, and the stores that matter held spill in the
-/// same share (`body::tear`). A node loses members when the share is one member's body or more, and
-/// else every member loses part of its matter; an individual lives on smaller (it dies when half of
-/// its body is broken, or a store falls under its safe minimum). What breaks off goes to the ground as loose amounts,
-/// with its heat. Returns the mass broken, kg.
+/// partial damage; before, a share of every store evenly): each loses the share `f` of its body
+/// (`Physics::walk_wear` kg per J over the mass in the cell, less when stronger: as before, so no
+/// number moves) and the stores that matter held spill in the same share (`body::tear`). A node
+/// loses members when the share is one member's body or more, and else every member loses part of
+/// its matter; an individual lives on smaller (it dies when half of its body is broken, or a store
+/// falls under its safe minimum). What breaks off goes to the ground as loose amounts, with its
+/// heat. Returns the mass broken, kg.
 pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     let chem = &w.chem;
     let others: Vec<u32> = w.life.at[j].iter().copied().filter(|&s| s as usize != mover).collect();
-    let total: f64 = others.iter().map(|&s| w.life.bodies[s as usize].built(chem)).sum();
+    let total: f64 = others.iter().map(|&s| w.life.bodies[s as usize].mass(chem)).sum();
     let mut broken = 0.0;
     if energy <= 0.0 || total <= 0.0 {
         return 0.0;
@@ -771,7 +772,8 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 /// force falls with its body; it rebuilds the matter as it grows, `copy::grow`) and dies when half of
 /// its body or more is torn (the line was mass under half, which the cap of half of each store the taker
 /// takes could never reach) or a store falls below its safe minimum. A node loses members
-/// when the bite is one member's body or more (the members eaten, as before), and else every member
+/// when the bite is one member's body or more (the members eaten: their share is what the bite weighs
+/// of the node's body; before, the largest share taken of any store), and else every member
 /// loses a share of its matter (grazing): the node's mean body falls and its members live.
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
