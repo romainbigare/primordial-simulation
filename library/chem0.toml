@@ -4,12 +4,12 @@ substances = [
   "water", "nitrogen", "oxygen", "carbon dioxide", "methane", "sugar / plant matter",
   "fat / oil", "charcoal / coal", "sand / quartz", "common rock", "limestone", "quicklime",
   "slaked lime", "iron ore", "iron", "steel", "copper ore", "copper", "tin ore", "tin",
-  "bronze", "carbon monoxide", "body matter (tissue)",
+  "bronze", "carbon monoxide", "body matter (tissue)", "calcium bicarbonate (dissolved)",
 ]
 reactions = [
   "light to sugar", "burning sugar", "burning fat", "fat making", "charring", "burning charcoal",
   "burning carbon monoxide", "partial burning charcoal", "burning methane", "rotting to methane",
   "iron smelting", "copper smelting", "tin smelting", "bronze making", "steel making",
   "lime burning", "lime slaking", "mortar setting", "rock weathering", "rusting", "copper tarnish",
-  "burning body matter",
+  "burning body matter", "limestone dissolving", "limestone settling",
 ]
