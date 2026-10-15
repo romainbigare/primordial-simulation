@@ -184,7 +184,7 @@ Things that are open and not built:
   walk (fix 7) is closed: moving needs force, plants move under 0.1 times a year (was 8 to 11).
   R11 first killed the eaters on all three seeds: the rock salt fell out in their bodies. The cause was a
   step error in Law 2 (the rate was held over the step, so the salt went to its last mol in one update). Fixed
-  on 16 Oct. With R11 the eaters now live on all seeds and all can move, but on seed 3 they are 4 times fewer, in the
+  on 15 Oct. With R11 the eaters now live on all seeds and all can move, but on seed 3 they are 4 times fewer, in the
   roster the big kinds die more often (4 of 9 alive at year 60 against 6 of 9), and a learning test fails at its noise
   edge. So R11 is not landed; it is one commit (e13d911). The owner decides (handover, "The rock salt in bodies, R11 and gifts").
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
@@ -202,11 +202,14 @@ Things that are open and not built:
    their light gene, whether fixing goes down by itself, whether the seasons hold, and where the
    carbon settles.
 2. **The small-cell world** for the nodes-against-individuals check, with plants included.
-3. **Fix the open problems** that the runs confirm: the fixing cost, the heat-test gap, the roster's
-   big animals.
-4. **A simplify pass on the core** to get back under 8,000 lines, or accept the extra 7% with a
-   reason.
-5. **Check the real figures from memory** (erosion, porosity, fixing share, calcium share) against
-   their sources.
+3. **Fix the open problems** that the runs confirm: done in the follow-up on 15 Oct (above). Left for the owner:
+   R11 (one commit), drainage inside a cell (channel spacing) before the sea floor's film change can land, a solid
+   store of the rock element in animals, product inhibition of fixing, a control that does not merge for the big-brain
+   test, and `bump` (tuned) now decides whether a body can move.
+4. **Core size:** two simplify passes (same history bit for bit) took it from 8,707 to 8,467 lines (6% over 8,000).
+   Almost no dead code is left; going lower means removing mechanisms (the speed schedule of Change, about 220
+   lines; `COPY_BY_CHOICE`; tape-only tallies). The owner decides, or accepts the 6% with this reason.
+5. **Real figures:** checked against sources in `docs/numbers.md` (most agree; `seep` was a wrong sum and is fixed; the
+   eaters are 20 to 100 times denser than real large plant-eaters, Hempson et al. 2015).
 6. **Then M4:** the planet with real seasons, frost and dry seasons, natural fire starts, and speed
    work. Disease after M4.
