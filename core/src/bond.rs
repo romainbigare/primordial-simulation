@@ -12,7 +12,7 @@
 //! held one), less what the liquid around holds up, plus the push of moving liquid and of bodies
 //! moving through the cell. A bond loaded beyond its strength breaks; what is left without
 //! support lies on the ground. A body–part bond is as strong as the weight the holder bears by its
-//! own force (strength × its mass × gravity × grip; a lever does not lift itself): a body takes
+//! own force (strength × its body, `Body::built`, × gravity × grip; a lever does not lift itself): a body takes
 //! hold of a part only if that bears the weight of the part's structure, and lets go when it no
 //! longer does. A structure the liquid holds up floats and drifts down the liquid's slope. A
 //! structure whose walls close around a space has an inside: a body in it loses heat to the
@@ -319,11 +319,11 @@ fn holder(w: &World, p: usize) -> Option<usize> {
     (h != NOBODY && w.life.bodies.get(s).is_some_and(|o| o.alive && o.gen == (h >> 32) as u32 && o.hold == id)).then_some(s)
 }
 
-/// Body `b` (mass `mb`) takes hold of part `p` if it bears the weight of `p`'s structure (one
-/// bonded to the ground rests on it).
-fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize, mb: f64) {
+/// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the
+/// ground rests on it).
+fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
     let s = w.parts.parts[w.parts.parts[p].root as usize].s;
-    if !s.anchored && s.mass * w.cfg.gravity > bears(w, b, mb) {
+    if !s.anchored && s.mass * w.cfg.gravity > bears(w, b) {
         return;
     }
     w.parts.parts[p].held = b.id(slot);
@@ -340,23 +340,25 @@ pub fn let_go(w: &mut World, b: &mut Body, load: bool) {
     b.hold = 0;
 }
 
-/// What a held part multiplies a body's force by: more for a hard part, up to its mass.
-pub fn lever(w: &World, b: &Body, mb: f64) -> f64 {
+/// What a held part multiplies a body's force by: more for a hard part, up to the body's size.
+pub fn lever(w: &World, b: &Body) -> f64 {
     held(w, b).map_or(1.0, |p| {
         let [m, _, hard, _, _] = w.parts.parts[p].walls(&w.chem);
-        1.0 + w.cfg.phys.lever * hard * m / (m + 0.05 * mb)
+        1.0 + w.cfg.phys.lever * hard * m / (m + 0.05 * b.built(&w.chem))
     })
 }
 
 /// Weight a body bears by its own force, N: what it holds adds nothing (a lever does not lift
-/// itself).
-fn bears(w: &World, b: &Body, mb: f64) -> f64 {
-    b.gene(STRENGTH) * mb * w.cfg.gravity * w.cfg.phys.grip
+/// itself). Force goes with the body that is built (`Body::built`: its matter and the liquid it keeps with
+/// it, not the fuel it stores nor the matter it holds for offspring), not the whole mass (15 Oct 2026,
+/// partial damage): a hurt body is weaker, and carrying fuel adds no strength.
+fn bears(w: &World, b: &Body) -> f64 {
+    b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip
 }
 
-/// Force a body pushes or pulls with, N.
-fn force(w: &World, b: &Body, mb: f64) -> f64 {
-    b.gene(STRENGTH) * lever(w, b, mb) * mb * w.cfg.gravity * w.cfg.phys.grip
+/// Force a body pushes or pulls with, N (of its body, as `bears`).
+pub fn force(w: &World, b: &Body) -> f64 {
+    bears(w, b) * lever(w, b)
 }
 
 /// The structure body `b` is inside: its root, how closed it is, its conductance (W/K).
@@ -447,7 +449,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
         0 => {
             if w.parts.parts[p].held == NOBODY && body::pay(w, b, 0.1 * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
                 let_go(w, b, false);
-                grab(w, slot, b, p, mb);
+                grab(w, slot, b, p);
             }
         }
         1 => take(w, b, p, mb, days),
@@ -462,13 +464,13 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
             }
         }
         4 => {
-            let f = force(w, b, mb);
+            let f = force(w, b);
             if !body::pay(w, b, f, days) {
                 return;
             }
             if let Some(o) = holder(w, p) {
                 let ob = &w.life.bodies[o];
-                if f > force(w, ob, ob.mass(&w.chem)) {
+                if f > force(w, ob) {
                     let mut ob = std::mem::take(&mut w.life.bodies[o]);
                     let_go(w, &mut ob, true);
                     w.life.bodies[o] = ob;
@@ -582,8 +584,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let p = make(w, i, wall, e, shape[0], shape[1]);
     w.parts.tally.formed += 1.0;
     if held(w, b).is_none() {
-        let mb = b.mass(&w.chem);
-        grab(w, slot, b, p, mb);
+        grab(w, slot, b, p);
     }
 }
 
@@ -609,10 +610,11 @@ pub fn anchor(w: &mut World, b: &mut Body) {
 }
 
 /// Break bonded ground with force: each substance whose bond strength is below the body's
-/// strength (times what a held part adds) comes loose, the more the weaker it is.
+/// strength (times what a held part adds) comes loose, the more the weaker it is, as far as the body
+/// can work in the time (`Physics::dig` x its body, `Body::built`, as force goes by the body).
 pub fn dig(w: &mut World, b: &mut Body) {
-    let (i, n, mb) = (b.cell as usize, w.grid.n(), b.mass(&w.chem));
-    let (lev, chem) = (lever(w, b, mb), &w.chem);
+    let (i, n, mb) = (b.cell as usize, w.grid.n(), b.built(&w.chem));
+    let (lev, chem) = (lever(w, b), &w.chem);
     let f = b.gene(STRENGTH) * lev;
     let vol: f64 = (0..chem.ns()).map(|k| w.bed[k * n + i] * chem.molar_volume(k, Phase::Solid)).sum();
     if vol <= 0.0 {
@@ -638,11 +640,11 @@ pub fn dig(w: &mut World, b: &mut Body) {
 }
 
 /// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets
-/// go (an anchored structure, or one heavier than the body bears).
-pub fn carry(w: &mut World, b: &mut Body, mb: f64) -> Option<(usize, f64)> {
+/// go (an anchored structure, or one heavier than the body bears, `bears`).
+pub fn carry(w: &mut World, b: &mut Body) -> Option<(usize, f64)> {
     let r = w.parts.parts[held(w, b)?].root as usize;
     let s = w.parts.parts[r].s;
-    if s.anchored || s.mass * w.cfg.gravity > bears(w, b, mb) {
+    if s.anchored || s.mass * w.cfg.gravity > bears(w, b) {
         let_go(w, b, true);
         return None;
     }
@@ -803,7 +805,7 @@ fn load(w: &mut World, r: usize) {
     let x = held.filter(|_| !s.anchored).and_then(|h| list.iter().position(|&p| p == h));
     if let Some((x, o)) = x.and_then(|x| holder(w, list[x]).map(|o| (x, o))) {
         let ob = &w.life.bodies[o];
-        if wt[x] + push[x] > bears(w, ob, ob.mass(&w.chem)) {
+        if wt[x] + push[x] > bears(w, ob) {
             let mut ob = std::mem::take(&mut w.life.bodies[o]);
             let_go(w, &mut ob, true);
             w.life.bodies[o] = ob;

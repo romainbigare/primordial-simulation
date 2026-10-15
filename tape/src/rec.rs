@@ -53,6 +53,8 @@ struct Social {
     wide: f64,
     /// Members that moved to a neighbouring cell in the year, by starting kind (the core's tally, `Diag::moves`)
     moves: Vec<f64>,
+    /// Body matter, kg, hits tore off members who lived on in the year, by starting kind (the core's tally, `Diag::hurt`)
+    hurt: Vec<f64>,
     months: String,
     /// Members born in each month by starting kind, one row per row of `months` (after its
     /// header), written as the last columns of `months.csv` (`root_<k>_births`)
@@ -402,6 +404,7 @@ impl Recorder {
             self.social.unlike = std::mem::take(&mut w.diag.unlike);
             self.social.wide = std::mem::take(&mut w.diag.wide);
             self.social.moves = std::mem::take(&mut w.diag.moves);
+            self.social.hurt = std::mem::take(&mut w.diag.hurt);
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -535,7 +538,7 @@ impl Recorder {
         // resumed tape), so a kind that died out reads 0 (its means NaN).
         let nr = w.chem.reactions.len();
         let seen = self.series.iter().filter(|c| c.0.starts_with("root_") && c.0.ends_with("_members")).count();
-        let mut by_root: Vec<Root> = vec![Root::new(nr); seen.max(self.social.root_births.len()).max(self.social.root_deaths.len()).max(self.social.moves.len())];
+        let mut by_root: Vec<Root> = vec![Root::new(nr); seen.max(self.social.root_births.len()).max(self.social.root_deaths.len()).max(self.social.moves.len()).max(self.social.hurt.len())];
         let cat = pcore::body::Layout::of(&w.chem).cat;
         for b in life.alive() {
             if let Some(l) = &life.brains[b.lineage as usize] {
@@ -644,6 +647,9 @@ impl Recorder {
                 (c("died_adult"), "1/yr", adult),
                 (c("life_adult"), "yr", if adult > 0.0 { stand_adult / adult } else { f64::NAN }),
                 (c("moves"), "1/yr", if stand > 0.0 { st.moves.get(k).copied().unwrap_or(0.0) / stand } else { f64::NAN }),
+                // 15 Oct 2026 (partial damage): the body matter hits tore off members who lived on (bites that left them smaller,
+                // bodies trampled; fire and the deaths of whole members are not in it), kg a year per standing member.
+                (c("hurt"), "kg/yr", if stand > 0.0 { st.hurt.get(k).copied().unwrap_or(0.0) / stand } else { f64::NAN }),
                 // 14 Oct 2026: the mean activity of the members (`Body::activity`), the share of them below 0.5, and the `WET` gene.
                 (c("activity"), "1", per(v.act)),
                 (c("dry"), "1", per(v.dry)),
@@ -772,7 +778,7 @@ impl Recorder {
         ]);
         (s.made, s.broken, s.failed, s.inside, s.intake) = Default::default();
         (s.root_births, s.root_deaths, s.root_stand, s.stand_months, s.t_land) = Default::default();
-        (s.root_young, s.root_adult, s.root_stand_adult, s.moves) = Default::default();
+        (s.root_young, s.root_adult, s.root_stand_adult, s.moves, s.hurt) = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();
         // Mole fraction in the air of each heat-absorbing gas (`air_<substance>`; `absorber` above is

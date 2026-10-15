@@ -269,7 +269,8 @@ pub struct Physics {
     /// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³
     pub layer: f64,
     pub rho_body: f64,
-    /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J
+    /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J: the share of a body's
+    /// matter broken and of the stores that matter held (`choose::wear`)
     pub walk_wear: f64,
     /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::supply`:
     /// per member its body, `Body::built`, to the power `intake_exp`), and no more than it can use (`choose::sate`)
@@ -647,6 +648,10 @@ pub struct Diag {
     /// (`Lineage::root`): a node moving counts all its members (`choose::go`). A count only, not saved.
     #[serde(skip)]
     pub moves: Vec<f64>,
+    /// Body matter, kg, that hits tore off members who lived on (bites that left them smaller, bodies
+    /// trampled, `body::tear`), since the shell last read it, by starting kind. A count only, not saved.
+    #[serde(skip)]
+    pub hurt: Vec<f64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
