@@ -169,6 +169,11 @@ fn yearly_series_has_the_measures_per_starting_kind() {
         assert!(m == 0.0 || ((0.0..=1.0).contains(&copy) && moves >= 0.0), "root_{k}: past copy {copy}, moves {moves}");
         assert!(m == 0.0 || ((0.0..=1.0).contains(&alloc) && (-6.0..=-0.3).contains(&child) && (0.0..1.0).contains(&brood)), "root_{k}: alloc {alloc}, child {child}, brood {brood}");
     }
+    // The share of a kind's births in the year that had two parents (15 Oct 2026): between 0 and 1, none where there were no births.
+    for k in &kinds {
+        let (births, mixed) = (col(&format!("root_{k}_births"), last), col(&format!("root_{k}_mixed"), last));
+        assert!(if births > 0.0 { (0.0..=1.0).contains(&mixed) } else { mixed.is_nan() }, "root_{k}: births {births}, mixed {mixed}");
+    }
     // months.csv carries the births of each kind by month; the twelve months before the last yearly row add up to its births.
     let months = std::fs::read_to_string(dir.join("months.csv")).unwrap();
     let mut ml = months.lines();
