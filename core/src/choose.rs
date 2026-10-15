@@ -825,7 +825,8 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     }
 }
 
-/// Put to another body in the cell: from the stores held above twice their safe minimum, by their
+/// Put to another body in the cell: from the stores held above twice their safe minimum (never its matter, nor a key
+/// liquid below its level), by their
 /// shares, up to what the other could take by its own size in the time (`phys.take` x interval x
 /// its mass, `Body::equiv`, and use, `sate`), as far as it has room. A node gives as one member: a share 1/count of its spare (its
 /// members cannot all reach one body). Before (review 3, M2) the cap was the giver's mass, so a
@@ -838,8 +839,12 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let World { chem, cfg, life, .. } = &mut *w;
     life.bodies[s].prepare(chem, &cfg.phys);
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
-    let size = b.size(chem);
-    let spare = |k: usize| (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass).max(0.0);
+    // (Its body matter is its body and its brood, not a store: it gives none of it. A key liquid it gives only past its
+    // level, the liquid of its living body. 16 Oct 2026: before, both were spare to twice their safe minimum, and the
+    // roster's 600 kg founders gave 0.7 to 3 t of their own body a month.)
+    let (size, mass) = (b.size(chem), b.mass(chem));
+    let keep = |k: usize| if b.wet >> k & 1 == 1 { b.level(chem, k, mass) } else { 0.0 };
+    let spare = |k: usize| if chem.matter() == Some(k) { 0.0 } else { (b.store[k] - keep(k).max(2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
     let mo = o.mass(chem);
