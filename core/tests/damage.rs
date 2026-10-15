@@ -320,8 +320,13 @@ fn a_hurt_adult_is_immature_until_it_has_healed() {
 
 /// Heat burns body matter: a warm body that lives on (its liquid does not boil) burns matter by the reaction that burns
 /// it, so it is smaller in body, not only in fuel, with no new rule (the reactions of `body::live` act on the matter in its
-/// stores, and the body is its matter over 1 - h); it dies when the matter falls below its safe minimum (day 30 of
-/// 350 K for this body). Elements and energy are kept.
+/// stores, and the body is its matter over 1 - h); it dies when the matter falls below its safe minimum (day 40 of
+/// 350 K for this body since the litter constants of 15 Oct 2026). Elements and energy are kept.
+///
+/// (30 days, not 20: the solid now burns bare 4 times faster, 24% a year at 290 K, so in the first update of a hot body
+/// it burns first and takes the oxygen the body has at hand, and the matter, which needs its sixth power, follows in
+/// the next: 5.25 -> 4.90 kg of matter after the first update, 1.64 kg after the second, against 4.61 kg at day 20
+/// before. What is tested is that heat makes a body smaller in body as well as in fuel, not how soon.)
 #[test]
 fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
     let (mut w, i) = start();
@@ -338,7 +343,7 @@ fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
     let before = seen(&w, &r, s);
     let dt = w.cfg.phys_days as f64 * 86_400.0;
-    for d in 0..20 {
+    for d in 0..30 {
 
         // The cell held at 350 K, booked as an edit.
         let e = w.energy_ground(i, 350.0);

@@ -824,6 +824,11 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
 /// node of 10^7 members could give its whole spare to a 1 kg member, which rain then filled to
 /// its keep level, and members of thousands of tonnes grew. It remembers this for the giver.
 fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
+    // The receiver's numbers (`supply` goes by its pace, `can_take` by its genes' catalysts) need `prepare`: a body of a
+    // world just loaded has not had its update yet, so without this a gift to it differs from the same gift in the run
+    // that was not saved (found 15 Oct 2026: the snapshot round trip test failed once reaction 21 burned 4 times faster).
+    let World { chem, cfg, life, .. } = &mut *w;
+    life.bodies[s].prepare(chem, &cfg.phys);
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let size = b.size(chem);
     let spare = |k: usize| (b.store[k] - 2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass).max(0.0);

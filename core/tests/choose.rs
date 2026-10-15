@@ -28,6 +28,13 @@ fn scene(seed: u64) -> (World, usize) {
     // The scene tests Choose alone: its bodies do not grow (a chemistry with no body matter, so no
     // building work: growth would take a quarter of the body's fuel before it can learn anything).
     chem.build = None;
+    // And the strip does not rot faster than it did: the open air burns the solid and the matter 4 times faster since the
+    // litter constants of 15 Oct 2026 (`worldgen::life::LITTER_X`), so with the old rates here, and the founders' burning
+    // genes put back (in `run`), the scene is the one this test was made with. Over its 1,000 days a strip that rots at
+    // 24% a year is half gone, and what a body learns by moving to it is no longer what is measured.
+    for r in [1, 21] {
+        chem.reactions[r].k /= 10f64.powf(worldgen::life::LITTER_X as f64);
+    }
     // The body is one of 30 kg: its brain costs what the scene was made with (a decision costs a
     // member of `m_ref` kg `c_brain` per kg; a body of that mass pays it per kg as before), and
     // so does copying (at 10^7 J/kg, 13 Oct 2026, the scene's body, whose brain costs 30 times
@@ -97,6 +104,9 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });
     let (start, genome) = (w.grid.idx(STRIP - 1, H / 2), w.life.new_genome(rows));
     let mut b = worldgen::life::make(&mut w, 1, start, lineage, genome).expect("body");
+    // (The founders' burning gene as it was with the old rates of the open air, see `scene`.)
+    let (_, _, _, burn) = worldgen::life::roles(&w.chem).expect("roles");
+    b.genes[pcore::body::Layout::of(&w.chem).cat + burn] += worldgen::life::LITTER_X;
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     let slot = w.life.add(b, w.day, 1);

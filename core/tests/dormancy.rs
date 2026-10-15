@@ -272,7 +272,8 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
     assert!(n_dry > 0 && n_wet > 0);
     assert!(a_wet > 0.3 && a_dry < 0.01, "activity at birth: {a_wet} against {a_dry}");
     assert!(alive_dry == n_dry && act_dry < 0.01, "dry children wait: {alive_dry} of {n_dry} alive, activity {act_dry}");
-    assert!(fuel_dry > 0.995 && fuel_wet < 0.95, "a dry child pays almost nothing to be: it keeps {fuel_dry} of its fuel in a month, a wet one {fuel_wet}");
+    // (0.995 before the solid rotted at 0.27 a year in the open, 1.1% a month with no enzyme: a dry child keeps all but that.)
+    assert!(fuel_dry > 0.985 && fuel_wet < 0.95, "a dry child pays almost nothing to be: it keeps {fuel_dry} of its fuel in a month, a wet one {fuel_wet}");
     // (Over 0.3 before the upkeep went by the kg of the body, 0.28 after it: what is asked is that it wakes, by
     // orders of magnitude.)
     assert!(wake > 0.2 && wake > 100.0 * act_dry, "a dry child that soaks liquid wakes: activity {wake}");

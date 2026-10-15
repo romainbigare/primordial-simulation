@@ -260,8 +260,20 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         // The temperature where heat made = heat lost: the upkeep over the interval is all released as heat (a tenth of it goes
         // as the latent heat of the gas they breathe out).
         let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w, &b, mass, t) * days * 86_400.0;
-        let made = |t: f64| 0.95 * pcore::body::upkeep(w, &at(w, &b, t), days, mass);
-        let (mut lo, mut hi) = (tg, tg + 60.0);
+        // (And the heat of the bare burning of its stores, which the open air does to them at any temperature: since the litter
+        // constants of 15 Oct 2026 the solid and the matter burn 4 times faster uncatalysed, 24% and 19% a year at 290 K, so it
+        // is about a sixth of what it makes, where it was a twenty-fifth.)
+        let bare = |t: f64| {
+            let (mut rc, ns) = (pcore::change::Reactor::new(&w.chem), w.chem.ns());
+            let mut n = b.store.clone();
+            let mut gas: Vec<f64> = w.chem.air.iter().enumerate().map(|(k, x)| if k == 1 || k == 2 { x * 1e12 } else { 0.0 }).collect();
+            let chem_e = |n: &[f64], g: &[f64]| (0..ns).map(|k| (n[k] + g[k]) * w.chem.subs[k].hf).sum::<f64>();
+            let (c0, mut e) = (chem_e(&n, &gas), t * 1e18);
+            rc.react(&w.chem, &mut n, Some(&mut gas), &mut e, 1e18, None, 0.0, days * 86_400.0);
+            c0 - chem_e(&n, &gas)
+        };
+        let made = |t: f64| 0.95 * (pcore::body::upkeep(w, &at(w, &b, t), days, mass) + bare(t));
+        let (mut lo, mut hi) = (tg, tg + 3.0);
         for _ in 0..80 {
             let mid = 0.5 * (lo + hi);
             if lost(mid) < made(mid) { lo = mid } else { hi = mid }

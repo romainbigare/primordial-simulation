@@ -44,6 +44,12 @@ type Hand = ([f32; brain::FIXED], f32, [f32; brain::VERBS + brain::OVERBS]);
 const H_LIGHT: Hand = ([2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], -4.0, [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0]);
 const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
 
+/// log10 of how much faster the open world burns the energy-rich solid, and body matter, than it did when the
+/// founders' `cat` numbers below were set (chemistry 0, reactions 1 and 21: k 4.3e3 -> 1.72e4 and 5.7e8 -> 2.28e9,
+/// litter constants of 0.27 and 0.2 a year instead of 0.068 and 0.051). A founder's burning genes are that much
+/// lower, so its burning and the cost of its enzymes (both go with k x 10^gene) are what they were.
+pub const LITTER_X: f32 = 0.602;
+
 /// Light reaction, energy-rich solid, liquid, burning reaction.
 pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
     let at = |k: u16| chem.phase(k as usize, T_SURF);
@@ -497,13 +503,13 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     let mut genes = vec![-0.1f32; lay.len];
     genes[lay.cat..lay.min].fill(-1.0);
     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
-    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1]);
+    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1] - LITTER_X);
     (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.25);
     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
     // Animals digest body matter as they digest the solid, and take it (14 Oct 2026): light-eaters do not.
     let matter = matter_roles(chem);
     if let Some((m, r)) = matter.filter(|_| kind.cat[0] < body::LIGHT_EATER) {
-        (genes[lay.cat + r], genes[lay.upt + m]) = (kind.cat[1], kind.upt[1]);
+        (genes[lay.cat + r], genes[lay.upt + m]) = (kind.cat[1] - LITTER_X, kind.upt[1]);
     }
     // What a body carries of each store is kg per kg of its body (`Body::level`, 14 Oct 2026): 0.9 of
     // the solid, or what it is placed with and a tenth more if that is more (a kind of 60% fuel and a
