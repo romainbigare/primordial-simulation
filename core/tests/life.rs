@@ -254,12 +254,11 @@ fn cold_bodies_release_and_pay_less() {
     }
 }
 
-/// A body whose safe minimums are all off holds nothing it must keep, so it can give all it holds
-/// to a body with room (here handling costs nothing, so no reaction leaves it anything). Left with
-/// nothing of a member, it dies at once: no other body meets an empty body, which has no heat
-/// capacity to share its heat by (taking from one gave NaN, which reached the air).
+/// A body whose safe minimums are all off can give all its stores to a body with room (here handling costs nothing), but
+/// not its body: its matter (body and brood) and the liquid its body keeps stay (15 Oct 2026; before, it gave them too, and
+/// left with nothing of a member it died at once). Nothing breaks the ledger (taking from an empty body once gave NaN).
 #[test]
-fn a_body_that_gives_all_it_holds_dies_at_once() {
+fn a_body_gives_its_stores_but_not_its_body() {
     use pcore::body::{Lineage, INTERVAL};
     use pcore::event::EventKind;
     use pcore::{body, bond, brain, change, choose, flow};
@@ -293,6 +292,8 @@ fn a_body_that_gives_all_it_holds_dies_at_once() {
     // (`choose::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
     let rich = worldgen::life::roles(&w.chem).expect("roles").1;
     taker.genes[lay.keep + rich] = 2.0;
+    let (matter, liquid) = (w.chem.matter().expect("matter"), worldgen::life::roles(&w.chem).expect("roles").2);
+    let (m0, fuel0) = (giver.store[matter], giver.store[rich]);
     let g = w.life.add(giver, w.day, 1);
     w.life.add(taker, w.day, 1);
     let dt = w.cfg.phys_days as f64 * 86_400.0;
@@ -314,7 +315,9 @@ fn a_body_that_gives_all_it_holds_dies_at_once() {
         assert_eq!(pcore::check::broken(&w), None);
     }
     assert!(w.events.iter().any(|e| matches!(e.kind, EventKind::Gave { .. })), "nothing was given");
-    assert!(!w.life.bodies[g].alive, "the giver lives on");
+    let b = &w.life.bodies[g];
+    assert!(b.alive && b.store[matter] > 0.99 * m0 && b.store[rich] < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.store[matter], b.store[rich]);
+    assert!(b.store[liquid] >= 0.99 * b.level(&w.chem, liquid, b.mass(&w.chem)), "the liquid of its body was given");
 }
 
 /// Dense cover of other bodies shelters a body's heat like walls: a conductance in series with the

@@ -313,6 +313,9 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         let mut b = body_of(&mut w, 0, i, 0);
         // Its own mineral just short of nothing: what it holds past its level goes to the ground and is counted there.
         b.genes[lay.cat + fix] = cat;
+        // (No rock salt, so neither builds: the two differ by the fixing alone. Before 15 Oct 2026 the salt fell out of the
+        // body in its first update, so neither built anyway.)
+        b.store[w.chem.minerals()[1].0] = 0.0;
         let s = w.life.add(b, w.day, 1);
         let (t0, l0) = (check::totals(&w), w.ledger.clone());
         let before = (total(&w, mineral), w.air[3 * w.grid.na()..4 * w.grid.na()].iter().sum::<f64>(), w.air[21 * w.grid.na()..22 * w.grid.na()].iter().sum::<f64>());
@@ -339,7 +342,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     let (fixed, co, up_with, cats_with, fuel_with, mass) = run(FIX);
     let (none, co_none, up_without, cats_without, fuel_without, _) = run(-1.0);
     println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral and put out {co:.3e} mol of the reduced carbon gas, upkeep {up_with:.4} times that with the gene off ({up_without:.4}); the other {none:.3e} mol; fuel {fuel_with:.4e} against {fuel_without:.4e}");
-    // (Both build, which spends the mineral they hold; what the enzyme made is the difference.)
+    // (What the enzyme made is the difference.)
     let made = fixed - none;
     assert!(made > 1.0, "the plant fixed {made} mol");
     println!("it fixed {:.2e} mol of the mineral a kg of plant and second", made / (mass * 60.0 * 86_400.0));

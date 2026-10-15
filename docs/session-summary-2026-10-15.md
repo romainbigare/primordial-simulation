@@ -125,6 +125,9 @@ row for each change) and in `docs/reports/`.
   (`LIGHT_X`) and the price of enzymes (`c_cat`).
 - **Result:** plants are lighter on 2 of 3 seeds. Eaters are heavier. Carbon gas ends 10 to 80 ppm
   higher.
+- **The step follows the rate law (16 Oct).** A step held a reaction's starting rate. For a salt far past its
+  balance this lost all of it in one step, where the law leaves a few percent. Now the step uses the integral of
+  the rate law. No new number.
 
 ## 11. Numbers at the end of the session
 
@@ -156,8 +159,8 @@ Things that are open and not built:
 - **The roster's big animals** (100 to 600 kg) died out in most runs: **mostly closed.** Their founders starved: across kinds a
   big kind paid the same per kg as a small one. Built (the owner agreed): Kleiber across kinds, founders placed as adults, and R4
   (handover, "Why the roster's big animals die"). The 150 kg and 600 kg kinds now live 60 years on seeds 1 to 3, the 100 kg on 2;
-  the 600 kg kind is few (1 to 120 bodies). Normal eaters are 2 to 5 times lighter, plants 16 to 38%. Open: bodies give away
-  their own matter in gifts (`choose::give`).
+  the 600 kg kind is few (1 to 120 bodies). Normal eaters are 2 to 5 times lighter, plants 16 to 38%. Bodies gave away their own matter in
+  gifts (`choose::give`): fixed on 15 Oct, a gift is of stores only (handover, "The rock salt in bodies, R11 and gifts").
 - **Eater numbers swing up to 1,000 times** between almost identical runs: **closed, no longer true on main 1c7e5d1.**
   Eaters at year 60 over seeds 1 to 9: 4.1e8 to 1.75e9 kg (4.3 times; log10 sd 0.20), at year 30 3.1e5 to 8.6e5.
   Seed 1 with `--spray 19`, `--spray 21`, `--life-year 3`, `--fixers 0.11`: 1.2e9 to 1.7e9 (seed 1 itself 1.2e9).
@@ -177,10 +180,13 @@ Things that are open and not built:
   (merged). The land is still too wet: real land drains into channels a few hundred metres apart inside a 2 km cell.
   The 2/3 power of the sea's store comes from the pair's contacts, not from the gas source: still open.
 - **Review 7 items:** R4 (the liquid shortcut) is built (the living body is matter over 1 - 0.75); R5 was done by the energy
-  ceiling; R6 is not built: `c_build` is anchored at 1e4 to real P/B instead (tuned 63 -> 62). Liquid made in a body above its limit drains out (R11): not landed. Plants that
+  ceiling; R6 is not built: `c_build` is anchored at 1e4 to real P/B instead (tuned 63 -> 62). Liquid made in a body above its limit drains out (R11): ready, not landed (below). Plants that
   walk (fix 7) is closed: moving needs force, plants move under 0.1 times a year (was 8 to 11).
-  R11 was built and measured: it kills the eaters on all three seeds, because the rock salt in a body
-  decays faster when it is less diluted. It is not landed; it waits for the owner (handover, Section 4).
+  R11 first killed the eaters on all three seeds: the rock salt fell out in their bodies. The cause was a
+  step error in Law 2 (the rate was held over the step, so the salt went to its last mol in one update). Fixed
+  on 16 Oct. With R11 the eaters now live on all seeds and all can move, but on seed 3 they are 4 times fewer, in the
+  roster the big kinds die more often (4 of 9 alive at year 60 against 6 of 9), and a learning test fails at its noise
+  edge. So R11 is not landed; it is one commit (e13d911). The owner decides (handover, "The rock salt in bodies, R11 and gifts").
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
 - **The big-brain test:** no verdict yet.
 - **All results are 60 years, 64 x 64.** The 300-year runs were never made.
