@@ -56,10 +56,11 @@ pub const LITTER_X: f32 = 0.602;
 /// about 19,000 of 295,000; with the alder and the others that is near a tenth; from memory, unchecked), and a floor
 /// of grass or forest has 5 to 20% of its cover in them. The gene then evolves as any other: it costs the enzyme's upkeep.
 pub const FIXERS: f64 = 0.1;
-/// log10 of the speed-up of the fixing reaction in those founders: the bare reaction runs at 1e-17 /s per mol of the scarce input
-/// at 290 K, a growing body needs about 5e-9 /s (chemistry 0, the fixing reaction), so 10^9: the same speed-up as the light
-/// reaction's 10^9, which was set the same way (the speed a body needs, over the speed of the bare reaction).
-pub const FIX_GENE: f32 = 9.0;
+/// log10 of the speed-up of the fixing reaction in those founders: the speed a growing plant needs. A plant turns its body matter
+/// over in about half a year (its matter is 5.5% of its mass, 0.049 mol per kg, so 3 x 10^-9 mol of the mineral a kg and second);
+/// a plant with the gene at 9 makes 7.1 x 10^-9 (`core/tests/nitrogen.rs`, a 60 day run of a founder), so 8.6: the light reaction's
+/// starting gene (9) was set in the same way, the speed a body needs over the speed of the bare reaction.
+pub const FIX_GENE: f32 = 8.6;
 /// The stream of the draw that makes a founder a fixer (`Rng::new(seed, FIX_STREAM, id, Purpose::Body)`).
 const FIX_STREAM: u64 = 0xf1;
 

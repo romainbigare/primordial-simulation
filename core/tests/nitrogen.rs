@@ -100,10 +100,17 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     let per_kg = -chem.dh(burn) / chem.subs[m].molar_mass / 1e6;
     println!("body matter burns for {per_kg:.2} MJ/kg");
     assert!(per_kg > 16.0 && per_kg < 17.5, "{per_kg} MJ/kg");
-    // The fixing reaction: air's nitrogen gas (1), the liquid, the carbon gas -> the mineral and the reduced carbon gas.
-    let fix = (0..chem.reactions.len()).find(|&r| chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral) && !chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)).expect("fixing");
-    println!("fixing takes {:.0} kJ a mol of nitrogen gas, 16 x 30.5 = {:.0}", chem.dh(fix) / 1e3, 16.0 * 30.5);
-    assert!((chem.dh(fix) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", chem.dh(fix));
+    // The fixing reaction: air's nitrogen gas (1), the liquid, the energy-rich solid and the oxygen-like gas -> the mineral and the
+    // reduced carbon gas. It is the reaction that takes 490 kJ a mol of the gas (16 x 30.5, the 16 ATP of nitrogenase) together with
+    // the burning of one unit of the solid that pays for it: left a little endothermic (+22.5 kJ), as the burners of a body (heat
+    // released) run on demand for its upkeep and a catalysed reaction that takes heat does not.
+    let fix = worldgen::life::fixing(&chem).expect("fixing");
+    let (_, rich, _, burn1) = worldgen::life::roles(&chem).expect("roles");
+    let unit = -chem.dh(burn1) / chem.reactions[burn1].inputs.iter().find(|p| p.0 as usize == rich).expect("the solid").1 as f64;
+    println!("fixing takes {:.1} kJ a mol of nitrogen gas; with the {:.1} kJ of the unit of the solid it burns, {:.0}: 16 x 30.5 = {:.0}", chem.dh(fix) / 1e3, unit / 1e3, (chem.dh(fix) + unit) / 1e3, 16.0 * 30.5);
+    assert!(chem.dh(fix) > 0.0 && chem.dh(fix) < 0.1 * unit, "{} J", chem.dh(fix));
+    assert!(chem.reactions[fix].inputs.iter().any(|p| p.0 as usize == rich), "the fixing reaction takes no fuel");
+    assert!(((chem.dh(fix) + unit) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", chem.dh(fix) + unit);
     // The mineral is a solid that dissolves; nothing burns it in a gas, and hot it breaks down into the air's nitrogen gas (exothermic).
     assert!(chem.subs[mineral].melt > 400.0 && chem.subs[mineral].solubility > 0.1);
     let uses: Vec<usize> = (0..chem.reactions.len()).filter(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == mineral)).collect();
@@ -219,27 +226,30 @@ fn dead_matter_on_the_ground_returns_the_mineral_to_the_ground() {
 }
 
 /// Fixing the air's nitrogen: in the open it is nothing (1e-17 a second at 290 K), and a body whose genes speed the reaction up
-/// makes the mineral from the air's gas, the liquid it holds and the carbon gas, and puts the reduced carbon gas out, at the
-/// cost of the reaction: it takes 490 kJ a mol of the gas, and the enzyme costs upkeep by its capacity like the others. A body
-/// that has none fixes none. Elements and energy are kept.
+/// makes the mineral from the air's gas, the liquid it holds and the energy-rich solid it burns, and puts the reduced carbon gas
+/// out, at the cost of the reaction: it takes a unit of its fuel (the energy of the 16 ATP, 490 kJ a mol of the gas, is paid by
+/// it) for each mol of the mineral, and the enzyme costs upkeep by its capacity like the others. A body that has none fixes none.
+/// Elements and energy are kept.
 #[test]
 fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     let (chem, init) = worldgen::chemistry0();
     let (mineral, _) = chem.mineral().expect("the mineral");
-    let fix = (0..chem.reactions.len()).find(|&r| chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral) && chem.dh(r) > 0.0).expect("fixing");
-    // In the open: ten years at 290 K, the air in plenty and the liquid there.
+    let fix = worldgen::life::fixing(&chem).expect("fixing");
+    let (_, rich, _, _) = worldgen::life::roles(&chem).expect("roles");
+    // In the open: ten years at 290 K, the air in plenty and the liquid and the fuel there.
     let mut rc = change::Reactor::new(&chem);
     let mut n = vec![0.0; chem.ns()];
     let mut gas = vec![0.0; chem.ns()];
     for &(g, x) in &init.air {
         gas[g] = x * 1e9;
     }
-    n[0] = 1e6;
+    (n[0], n[rich]) = (1e6, 1e6);
     let mut e = 290.0 * 1e15;
     rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, 10.0 * 365.0 * 86_400.0);
     println!("in the open, ten years: {:.3e} mol of the mineral", n[mineral]);
-    assert!(n[mineral] < 1e-6 * gas[3], "the open world fixed {} mol of the {} mol of the carbon gas there", n[mineral], gas[3]);
-    // A plant that fixes (the enzyme speeds the reaction up 10^9) and its twin that does not, 60 days.
+    assert!(n[mineral] < 1e-6 * 1e6, "the open world fixed {} mol with 10^6 mol of the fuel there", n[mineral]);
+    // A plant that fixes (the enzyme speeds the reaction up by 10^FIX_GENE) and its twin that does not, 60 days.
+    const FIX: f32 = worldgen::life::FIX_GENE;
     let run = |cat: f32| {
         let (mut w, i) = start();
         let lay = Layout::of(&w.chem);
@@ -249,7 +259,8 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         let s = w.life.add(b, w.day, 1);
         let (t0, l0) = (check::totals(&w), w.ledger.clone());
         let before = (total(&w, mineral), w.air[3 * w.grid.na()..4 * w.grid.na()].iter().sum::<f64>(), w.air[21 * w.grid.na()..22 * w.grid.na()].iter().sum::<f64>());
-        let mut up = 0.0;
+        let (mut up, mut fuel0, mut mass) = (0.0, 0.0, 0.0);
+        let _ = (&mut fuel0, &mut mass);
         for _ in 0..60 {
             day(&mut w);
             let mut b = w.life.bodies[s].clone();
@@ -261,16 +272,20 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
         let na = w.grid.na();
         let after = (total(&w, mineral), w.air[3 * na..4 * na].iter().sum::<f64>(), w.air[21 * na..22 * na].iter().sum::<f64>());
-        (after.0 - before.0, after.2 - before.2, up, w.life.bodies[s].k.cats)
+        let b = &w.life.bodies[s];
+        (after.0 - before.0, after.2 - before.2, up, b.k.cats, b.store[rich], b.mass(&w.chem))
     };
-    let (fixed, co, up_with, cats_with) = run(9.0);
-    let (none, co_none, up_without, cats_without) = run(-1.0);
-    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral and put out {co:.3e} mol of the reduced carbon gas, upkeep {up_with:.3e} J a day against {up_without:.3e}; the other {none:.3e} mol");
+    let (fixed, co, up_with, cats_with, fuel_with, mass) = run(FIX);
+    let (none, co_none, up_without, cats_without, fuel_without, _) = run(-1.0);
+    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral and put out {co:.3e} mol of the reduced carbon gas, upkeep {up_with:.3e} J a day against {up_without:.3e}; the other {none:.3e} mol; fuel {fuel_with:.4e} against {fuel_without:.4e}");
     // (Both build, which spends the mineral they hold; what the enzyme made is the difference.)
     let made = fixed - none;
     assert!(made > 1.0, "the plant fixed {made} mol");
+    println!("it fixed {:.2e} mol of the mineral a kg of plant and second", made / (mass * 60.0 * 86_400.0));
     // One mol of the reduced carbon gas for each mol of the mineral made; it is where the energy of the reaction went.
     assert!((co - co_none) / made > 0.9 && (co - co_none) / made < 1.1, "{} mol of the gas for {made} of the mineral", co - co_none);
+    // And one mol of its fuel for each, the unit that pays the 490 kJ (and the enzyme's upkeep, a little more).
+    assert!((fuel_without - fuel_with) / made > 0.9 && (fuel_without - fuel_with) / made < 1.3, "{} mol of fuel for {made} of the mineral", fuel_without - fuel_with);
     // The enzyme costs by its capacity: the plant that fixes pays more upkeep.
     assert!(cats_with > cats_without && up_with > up_without, "capacity {cats_with} against {cats_without}, upkeep {up_with} against {up_without}");
 }
