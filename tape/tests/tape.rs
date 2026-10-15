@@ -299,6 +299,9 @@ fn yearly_series_counts_the_nitrogen_mineral() {
     let mut w = world();
     worldgen::life::soil(&mut w);
     worldgen::life::seed(&mut w, 0);
+    // (The founders that fix are put back to none, so that the nitrogen in all can stay what the soil gave.)
+    let (lay, fix) = (pcore::body::Layout::of(&w.chem), worldgen::life::fixing(&w.chem).expect("the fixing reaction"));
+    w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
     let mut rec = tape::Recorder::new(&w, 0, 0);
     rec.record_month(&mut w);
     for _ in 0..2 * w.cfg.months_per_year {

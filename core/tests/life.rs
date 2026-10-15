@@ -598,7 +598,7 @@ fn a_body_with_no_brain_lives_and_copies() {
 /// per unit) at a higher upkeep (the repair share, a quarter at gene 0, doubles per unit). Matter and energy are kept exactly.
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
-    use pcore::body::{Lineage, AGE, DISPERSE, REPAIR, STRENGTH};
+    use pcore::body::{Lineage, AGE, DISPERSE, LEARN, REPAIR, STRENGTH};
     use pcore::event::EventKind;
     use pcore::{brain, choose};
     let mut w = worldgen::new_world(1, 16, 16);
@@ -623,7 +623,9 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let make = |w: &mut pcore::World, i: usize, repair: f32, count: f64| {
         let g = w.life.new_genome(rows.clone());
         let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
-        (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ]) = (0.0, 0.0, repair, -4.0);
+        // (And do not learn: with liquid in the pores of the ground the cell they feel is another, and a body that learns from its
+        // well-being may learn to walk away in the months of the test.)
+        (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ], b.genes[LEARN]) = (0.0, 0.0, repair, -4.0, -6.0);
         // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel (the
         // two months they settle and the long life of one of them cost more than the 9 kg a starting eater holds).
         let rich = worldgen::life::roles(&w.chem).expect("roles").1;

@@ -50,6 +50,26 @@ const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.
 /// lower, so its burning and the cost of its enzymes (both go with k x 10^gene) are what they were.
 pub const LITTER_X: f32 = 0.602;
 
+/// The share of the starting light-eaters that carry the gene of the reaction that fixes the air's nitrogen into the mineral
+/// growth is built of (`fixing`), an initial condition and not a law (15 Oct 2026, the decision "some fixing founders"),
+/// chosen before any run: one in ten. Plants that fix nitrogen with a partner are about 7% of the flowering species (the legumes,
+/// about 19,000 of 295,000; with the alder and the others that is near a tenth; from memory, unchecked), and a floor
+/// of grass or forest has 5 to 20% of its cover in them. The gene then evolves as any other: it costs the enzyme's upkeep.
+pub const FIXERS: f64 = 0.1;
+/// log10 of the speed-up of the fixing reaction in those founders: the bare reaction runs at 1e-17 /s per mol of the scarce input
+/// at 290 K, a growing body needs about 5e-9 /s (chemistry 0, the fixing reaction), so 10^9: the same speed-up as the light
+/// reaction's 10^9, which was set the same way (the speed a body needs, over the speed of the bare reaction).
+pub const FIX_GENE: f32 = 9.0;
+/// The stream of the draw that makes a founder a fixer (`Rng::new(seed, FIX_STREAM, id, Purpose::Body)`).
+const FIX_STREAM: u64 = 0xf1;
+
+/// The reaction that makes the mineral growth is built of from the air's gas and takes heat to do it (none where bodies do not
+/// grow, or the mineral comes from nowhere else).
+pub fn fixing(chem: &Chemistry) -> Option<usize> {
+    let (mineral, _) = chem.mineral()?;
+    (0..chem.reactions.len()).find(|&r| chem.dh(r) > 0.0 && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral))
+}
+
 /// Light reaction, energy-rich solid, liquid, burning reaction.
 pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
     let at = |k: u16| chem.phase(k as usize, T_SURF);
@@ -287,19 +307,21 @@ pub struct Seeding {
     pub size: f32,
     /// How many times the step of one generation the genes get in all (neutral starts)
     pub genes: f32,
+    /// The share of the light-eaters placed that carry the gene that fixes the air's nitrogen (`FIXERS`; `ew run --fixers`)
+    pub fixers: f64,
 }
 
 impl Seeding {
     /// The old start: hand-set brain biases and no mutation (for tests of the laws that need the
     /// same body every time).
     pub fn old() -> Self {
-        Seeding { hand: [true; 2], rounds: 0, ..Default::default() }
+        Seeding { hand: [true; 2], rounds: 0, fixers: 0.0, ..Default::default() }
     }
 }
 
 impl Default for Seeding {
     fn default() -> Self {
-        Seeding { hand: [false; 2], rounds: 20, size: 0.2, genes: 3.0 }
+        Seeding { hand: [false; 2], rounds: 20, size: 0.2, genes: 3.0, fixers: FIXERS }
     }
 }
 
@@ -358,7 +380,8 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let lineage = w.life.new_lineage(Lineage { shape, seen, sight, base, root: which as u32 });
     // One genome for all when nothing is sprayed; else one per body.
     let shared = (how.rounds == 0).then(|| w.life.new_genome(rows.clone()));
-    let (mut placed, mut members, mut kg) = (0usize, 0.0, 0.0);
+    let (mut placed, mut members, mut kg, mut fixers) = (0usize, 0.0, 0.0, 0usize);
+    let fix = fixing(&w.chem).filter(|_| kind.cat[0] >= body::LIGHT_EATER);
     let (mut cat, mut cmass) = ([(f32::MAX, f32::MIN); 2], (f32::MAX, f32::MIN));
     // One action bias, "take from a body": its range and spread over the bodies placed.
     let (at, mut tb) = (shape.verb(0) * shape.r() + shape.h, (f32::MAX, f32::MIN, 0.0f64, 0.0f64));
@@ -386,8 +409,13 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
                 }
                 w.life.new_genome(v)
             };
-            let Some(b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { how.genes }, id) else { return String::new() };
+            let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { how.genes }, id) else { return String::new() };
             let lay = Layout::of(&w.chem);
+            // A tenth of the light-eaters carry the gene that fixes the air's nitrogen (`FIXERS`); the draw is by the body's own id.
+            if let Some(fx) = fix.filter(|_| Rng::new(w.seed, FIX_STREAM, id, Purpose::Body).f64() < how.fixers) {
+                b.genes[lay.cat + fx] = FIX_GENE;
+                fixers += 1;
+            }
             for (c, g) in cat.iter_mut().zip([lay.cat + light, lay.cat + burn]) {
                 *c = (c.0.min(b.genes[g]), c.1.max(b.genes[g]));
             }
@@ -411,8 +439,12 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     } else {
         format!(", row biases {} x {} (spread {:.2}), other row entries and genes at one generation's step (genes x{})", how.rounds, how.size, how.size * (how.rounds as f32).sqrt(), how.genes)
     };
+    let fixing = match fix {
+        Some(r) => format!("; {fixers} of them ({:.1}%) carry the gene of reaction {r}, which fixes the air's nitrogen (log10 speed-up {FIX_GENE}, share {} chosen before any run), the others have it off", 100.0 * fixers as f64 / placed.max(1) as f64, how.fixers),
+        None => String::new(),
+    };
     format!(
-        "year {:.1}: placed {placed} {name} ({members:.3e} members, {kg:.3e} kg) with {brain}, {} rounds of mutation each{spray}; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}; bias of taking from a body {:.2}..{:.2} (mean {m:.2}, sd {:.2})",
+        "year {:.1}: placed {placed} {name} ({members:.3e} members, {kg:.3e} kg) with {brain}, {} rounds of mutation each{spray}{fixing}; light gene {:.2}..{:.2}, burn gene {:.2}..{:.2}, copy-mass gene {:.2}..{:.2}; bias of taking from a body {:.2}..{:.2} (mean {m:.2}, sd {:.2})",
         w.year(),
         how.rounds,
         cat[0].0,

@@ -606,6 +606,8 @@ impl Recorder {
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let tot = check::totals(w);
         let land_liquid: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| c.f.depth[i]).sum::<f64>() * w.grid.area();
+        // 15 Oct 2026 (soil water): of it, the liquid that stands (what the pores of the loose ground do not hold, `body::env_of`).
+        let land_stands: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| pcore::body::env_of(w, i)[1]).sum::<f64>() * w.grid.area();
         let mut row = vec![("year".to_string(), "yr", w.year()), ("null".to_string(), "1", w.cfg.null as u8 as f64)];
         row.extend(tot.elems.iter().enumerate().map(|(j, &v)| (format!("elem_{j}"), "mol", v)));
         // 15 Oct 2026, the nitrogen mineral (`Chemistry::mineral`): its mass in the ground per m² of land and of sea (kg/m2; the
@@ -642,6 +644,7 @@ impl Recorder {
             ("absorber".to_string(), "1", mean(&c.absorber)),
             ("ice_frac".to_string(), "1", c.f.ice.iter().filter(|&&v| v >= COVER_MIN).count() as f64 / n),
             ("liquid_land".to_string(), "km3", land_liquid / 1e9),
+            ("stand_land".to_string(), "km3", land_stands / 1e9),
             ("rain".to_string(), "mol/m2/s", w.diag.rain.iter().map(|&v| v as f64).sum::<f64>() / n),
             ("bodies".to_string(), "1", bodies),
             ("plants".to_string(), "1", light_eaters),

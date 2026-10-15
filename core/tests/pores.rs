@@ -1,7 +1,7 @@
-//! Soil water (15 Oct 2026, queued item 4 of 13.2, step 1): the loose ground has pores, the
+//! Soil liquid (15 Oct 2026, queued item 4 of 13.2, step 1): the loose ground has pores, the
 //! porosity times the volume of its loose solids. Liquid soaks into them up to that volume and only
-//! the liquid over it stands and runs off (`flow::liquid`); the water in the pores flows to a
-//! neighbour by Darcy's law, at `Physics::seep` times the slope of the water table, through the
+//! the liquid over it stands and runs off (`flow::liquid`); the liquid in the pores flows to a
+//! neighbour by Darcy's law, at `Physics::seep` times the slope of the liquid table, through the
 //! thickness of ground it fills; a body soaks it up like any liquid of its cell.
 
 use pcore::chem::Phase;
@@ -84,19 +84,19 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     assert!(full < 1.05 && full > 0.7, "the ground holds {full} of its pore volume after the excess ran off");
 }
 
-/// Darcy: the pore water of a cell flows to a neighbour whose water table is lower, at `seep` x the slope x the thickness
+/// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the thickness
 /// it fills x the width, in the time. With `seep` at 0 the neighbour gets none; the flow goes with `seep`, with the
-/// water table's slope and with the thickness; a level table does not flow; matter and energy are kept.
+/// liquid table's slope and with the thickness; a level table does not flow; matter and energy are kept.
 #[test]
-fn pore_water_flows_down_the_water_table_at_darcys_rate() {
+fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     let (_, init) = worldgen::chemistry0();
     let k = init.low;
-    // One liquid step with the water of cell `i` half filling its pores and `j` dry: what `j` gained, m³, with `seep`.
+    // One liquid step with the liquid of cell `i` half filling its pores and `j` dry: what `j` gained, m³, with `seep`.
     let gained = |seep: f64, share: f64| {
         let mut w = worldgen::new_world(3, 16, 16);
         let (i, j) = pair(&w);
         w.cfg.phys.seep = seep;
-        // (No evaporation, which would lower the water table before the water flows.)
+        // (No evaporation, which would lower the liquid table before the liquid flows.)
         w.cfg.evap = 0.0;
         let pores = w.cfg.phys.porosity * loose(&w, i);
         pour(&mut w, k, i, share * pores);
@@ -105,7 +105,7 @@ fn pore_water_flows_down_the_water_table_at_darcys_rate() {
         let (de, dq) = drift(&w, &t0, &l0);
         assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
         let (area, depth) = (w.grid.area(), loose(&w, i) / w.grid.area());
-        // The water table of `i` stood at its bottom plus the depth the water fills; `j` was dry on its own bottom.
+        // The liquid table of `i` stood at its bottom plus the depth the liquid fills; `j` was dry on its own bottom.
         let (zi, zj) = (w.surface_z(i), w.surface_z(j));
         let (bi, bj) = (zi - depth, zj - loose(&w, j) / area);
         let ti = bi + share * depth;
@@ -123,7 +123,7 @@ fn pore_water_flows_down_the_water_table_at_darcys_rate() {
     // Ten times the conductivity, ten times the flow.
     let (more, ..) = gained(1e-5, 0.5);
     assert!(((more - none) / (some - none) / 10.0 - 1.0).abs() < 0.05, "x10 gave x{}", (more - none) / (some - none));
-    // More water, a thicker flow: the thickness that carries it, and the slope, are bigger.
+    // More liquid, a thicker flow: the thickness that carries it, and the slope, are bigger.
     let (full, dh2, b2) = gained(1e-6, 0.9);
     let want2 = 1e-6 * b2 * dh2 * DT;
     assert!(b2 > b && dh2 > dh);
@@ -131,9 +131,9 @@ fn pore_water_flows_down_the_water_table_at_darcys_rate() {
 }
 
 /// The rate is physical: 1e-6 m/s through a metre of ground at a slope of 1 in 1000 moves a cubic metre in a few weeks
-/// across a kilometre of width, nowhere near enough to move the water of a cell (1.6 million m³ of pores) across it.
+/// across a kilometre of width, nowhere near enough to move the liquid of a cell (1.6 million m³ of pores) across it.
 #[test]
-fn pore_water_barely_moves_across_a_cell() {
+fn pore_liquid_barely_moves_across_a_cell() {
     let w = worldgen::new_world(3, 16, 16);
     let (k, slope, thick) = (w.cfg.phys.seep, 1e-3, 1.0);
     let per_year = k * thick * w.grid.cell_m * slope * 365.0 * 86_400.0;

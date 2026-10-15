@@ -112,7 +112,7 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     assert!(chem.reactions[uses[0]].ea > 15000.0);
 }
 
-/// Dead matter gives the mineral back: in the open at 290 K it rots (5% a year) and every mol that goes leaves one of
+/// Dead matter gives the mineral back: in the open at 290 K it rots (0.2 a year, the litter constant) and every mol that goes leaves one of
 /// the mineral and no nitrogen gas; burning hot (1000 K) the mineral it leaves breaks down as it is made, and most of the
 /// nitrogen of the matter goes to the air as the gas. Elements and energy are kept exactly.
 #[test]
@@ -144,7 +144,7 @@ fn rotting_gives_the_mineral_back_and_burning_hot_gives_the_gas_to_the_air() {
     };
     let (lost, back, gas) = run(290.0, 365.0 * 86_400.0);
     println!("a year at 290 K: {lost:.2} mol of matter rotted, {back:.2} mol of the mineral back, {gas:.4} mol of nitrogen gas");
-    assert!(lost > 45.0 && lost < 55.0, "{lost}");
+    assert!(lost > 170.0 && lost < 205.0, "{lost}");
     assert!((back / lost - 1.0).abs() < 1e-6 && gas.abs() < 1e-6 * lost, "mineral {back}, gas {gas}");
     let (lost, back, gas) = run(1000.0, 1e5);
     println!("hot, 1000 K: {lost:.1} mol of matter burned, {back:.1} mol of the mineral, {gas:.1} mol of nitrogen gas");

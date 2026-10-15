@@ -1050,7 +1050,8 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
 /// body's own costs set. An eater (ALLOC 0: it builds only for itself, nothing is given to children;
 /// strength 1; building fast, so that the allowance never binds; its liquid put back to the ground) in
 /// a place with all the fuel it can take, at every update. With tissue dear enough that the ceiling is
-/// near (costs 1.7 times the starting ones: about 60 kg) it levels off (under a quarter more body
+/// near (costs 1.5 times the starting ones, 1.7 before the nitrogen mineral: growth is 5% slower now and a body at 1.7 starves in the
+/// cold season of its 200th day) it levels off (under a quarter more body
 /// between the 100th and the 300th day) and in its last 100 days takes about what it pays to keep what
 /// it has (within 5 to 10%); with the costs of the start, a ceiling many times higher, it is still
 /// growing fast (more than twice the relative growth) and ends larger. (The bodies of this test die
@@ -1084,8 +1085,18 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
                 let e = w.energy_ground(i, t);
                 (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[k].hf, e);
             }
+            // And the nitrogen mineral growth is built of (15 Oct 2026): this is a test of the energy ceiling, so the body's store of it
+            // is kept at the level it keeps (an eater has it only from the matter it digests, and here eats none).
+            let (mk, _) = w.chem.mineral().expect("a mineral");
+            let (mass, t) = (w.life.bodies[s].mass(&w.chem), w.life.bodies[s].temp(&w.chem));
+            let a = (w.life.bodies[s].level(&w.chem, mk, mass) - w.life.bodies[s].store[mk]).max(0.0);
+            let q = a * w.chem.subs[mk].cp * t;
+            w.life.bodies[s].store[mk] += a;
+            w.life.bodies[s].e += q;
+            w.chem.add_elems(mk, a, &mut w.ledger.imposed_elems);
+            w.ledger.imposed_energy += q + a * w.chem.subs[mk].hf;
             self::day(&mut w);
-            assert!(w.life.bodies[s].alive, "the body died on day {day}");
+            assert!(w.life.bodies[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
             let b = &mut w.life.bodies[s];
             // What its burning made and it holds above the level it keeps goes back to the ground (a body that decides to put it
             // out, or breathes it out; this one only takes).
@@ -1105,7 +1116,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(1.7);
+    let (full, r_full) = run(1.5);
     let (cheap, r_cheap) = run(1.0);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).

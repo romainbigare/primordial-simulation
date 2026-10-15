@@ -4,6 +4,13 @@ use pcore::check::{drift, totals};
 
 const DT: f64 = 3.0 * 86_400.0;
 
+/// What the pores of the loose ground of cell `i` hold, mol of liquid `k` (the porosity times the volume of the loose solids).
+fn pore_mol(w: &pcore::World, i: usize, k: usize) -> f64 {
+    let t = w.t_ground(i);
+    let solids: f64 = (0..w.chem.ns()).filter(|&q| w.chem.phase(q, t) == pcore::chem::Phase::Solid).map(|q| w.g(q, i) * w.chem.molar_volume(q, pcore::chem::Phase::Solid)).sum();
+    w.cfg.phys.porosity * solids / w.chem.molar_volume(k, pcore::chem::Phase::Liquid)
+}
+
 #[test]
 fn liquid_runs_downhill() {
     let (_, init) = worldgen::chemistry0();
@@ -11,11 +18,14 @@ fn liquid_runs_downhill() {
     let (n, k) = (w.grid.n(), init.low);
     let top = (0..n).max_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).unwrap();
     let t = w.t_ground(top).max(w.chem.subs[k].melt + 5.0);
-    w.ground[k * n + top] += 1e9;
+    // Liquid soaks into the pores of the loose ground first (15 Oct 2026): what runs off is what is over them.
+    let pores = pore_mol(&w, top, k);
+    w.ground[k * n + top] += 1.5 * pores;
     w.e_ground[top] = w.energy_ground(top, t);
     let (t0, l0) = (totals(&w), w.ledger.clone());
     pcore::flow::step(&mut w, DT);
-    assert!(w.ground[k * n + top] < 1e8, "liquid stayed on the top: {}", w.ground[k * n + top]);
+    let left = w.ground[k * n + top];
+    assert!(left < 1.1 * pores && left > 0.7 * pores, "the cell holds {} of its pores' worth", left / pores);
     let (de, dq) = drift(&w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }
@@ -106,42 +116,61 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }
 
-/// A solid that dissolves in the liquid (the nitrogen mineral, 15 Oct 2026) moves with the liquid down the slope, a share of it
-/// each step, as dissolved gas does, and is deposited nowhere as sediment; on dry ground it stays where it is. Matter and energy
-/// are kept. (The share is that of the liquid that runs off of the standing liquid and the soil's moisture together,
-/// `Physics::pore`.)
+/// A solid that dissolves in the liquid (the nitrogen mineral, 15 Oct 2026) is in the liquid of the pores, and moves with the
+/// liquid that runs off the cell: the share of the mineral that leaves is the share of the liquid that leaves, down the slope,
+/// and it is deposited nowhere as sediment. Liquid that fits in the pores does not run off and the mineral stays with it; a dry
+/// cell keeps its mineral. Matter and energy are kept.
 #[test]
-fn a_dissolved_solid_moves_with_the_liquid_and_a_dry_one_stays() {
+fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pores() {
     let (_, init) = worldgen::chemistry0();
-    let mut wet = worldgen::new_world(3, 16, 16);
-    let (n, k) = (wet.grid.n(), init.low);
-    let mineral = wet.chem.mineral().expect("the mineral").0;
-    let top = (0..n).max_by(|&a, &b| wet.surface_z(a).total_cmp(&wet.surface_z(b))).unwrap();
-    let t = wet.t_ground(top).max(wet.chem.subs[k].melt + 5.0);
-    // The twin has no liquid on the highest cell; the other a sheet of it half a metre deep. Both 1e6 mol of the mineral there.
-    let mut dry = wet.clone();
-    let sheet = 0.5 * wet.grid.area() / wet.chem.molar_volume(k, pcore::chem::Phase::Liquid);
-    wet.ground[k * n + top] += sheet;
-    wet.e_ground[top] = wet.energy_ground(top, t);
-    for w in [&mut wet, &mut dry] {
+    let base = worldgen::new_world(3, 16, 16);
+    let (n, k) = (base.grid.n(), init.low);
+    let mineral = base.chem.mineral().expect("the mineral").0;
+    let top = (0..n).max_by(|&a, &b| base.surface_z(a).total_cmp(&base.surface_z(b))).unwrap();
+    let pores = pore_mol(&base, top, k);
+    // A world with `x` times the pores' worth of liquid on the highest cell, and 1e6 mol of the mineral there.
+    let scene = |x: f64| {
+        let mut w = base.clone();
+        let t = w.t_ground(top).max(w.chem.subs[k].melt + 5.0);
+        w.ground[k * n + top] += x * pores;
+        w.e_ground[top] = w.energy_ground(top, t);
         let e = 1e6 * w.chem.subs[mineral].cp * w.t_ground(top);
         w.ground[mineral * n + top] += 1e6;
         w.e_ground[top] += e;
         w.chem.add_elems(mineral, 1e6, &mut w.ledger.imposed_elems);
         w.ledger.imposed_energy += e + 1e6 * w.chem.subs[mineral].hf;
-    }
-    let (t0, l0) = (totals(&wet), wet.ledger.clone());
-    for _ in 0..8 {
-        pcore::flow::step(&mut wet, DT);
-    }
-    // (One step for the dry twin: rain would wet it later.)
+        w
+    };
+    // (No evaporation and no vapour in the air to rain, which would add or take liquid and not the mineral: the liquid there is
+    // all there is, and what it does is the pores' and the slope's.)
+    let run = |x: f64, steps: usize| {
+        let mut w = scene(x);
+        w.cfg.evap = 0.0;
+        let na = w.grid.na();
+        w.air[k * na..(k + 1) * na].fill(0.0);
+        let (t0, l0) = (totals(&w), w.ledger.clone());
+        let liquid0 = w.ground[k * n + top];
+        for _ in 0..steps {
+            pcore::flow::step(&mut w, DT);
+        }
+        let (de, dq) = drift(&w, &t0, &l0);
+        assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
+        let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| w.ground[mineral * n + i]).sum();
+        assert!((downstream + w.ground[mineral * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + w.ground[mineral * n + top]);
+        (1.0 - w.ground[mineral * n + top] / 1e6, 1.0 - w.ground[k * n + top] / liquid0)
+    };
+    // Half the pores' worth: nothing runs off over the ground; what moves is Darcy's flow, a little (the highest cell of the map,
+    // 600 m above its neighbours), and the mineral goes with the liquid in the same share.
+    let (m_in, l_in) = run(0.5, 8);
+    assert!(m_in < 0.03 && l_in < 0.03 && (m_in / l_in - 1.0).abs() < 0.05, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
+    // Twice: the half over the pores runs off, and the mineral with it, in the same share.
+    let (m_out, l_out) = run(2.0, 8);
+    println!("pores half full: {:.2}% of the mineral and {:.2}% of the liquid moved; twice full: {:.1}% of the mineral and {:.1}% of the liquid left the cell in 8 steps", 100.0 * m_in, 100.0 * l_in, 100.0 * m_out, 100.0 * l_out);
+    assert!(l_out > 0.3 && m_out > 0.3, "only {m_out} of the mineral and {l_out} of the liquid ran off");
+    assert!((m_out / l_out - 1.0).abs() < 0.05, "the mineral {m_out} and the liquid {l_out} ran off in different shares");
+    // No liquid: nothing carries it.
+    let mut dry = scene(0.0);
+    dry.cfg.evap = 0.0;
     pcore::flow::step(&mut dry, DT);
-    let moved = 1.0 - wet.ground[mineral * n + top] / 1e6;
-    let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| wet.ground[mineral * n + i]).sum();
-    println!("with the sheet {:.1}% of the mineral left the cell in 8 steps, {:.3e} mol are downstream; on dry ground {:.3e} mol stayed in a step", 100.0 * moved, downstream, dry.ground[mineral * n + top]);
-    assert!(moved > 0.3, "only {moved} of the mineral moved with the liquid");
-    assert!((downstream + wet.ground[mineral * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + wet.ground[mineral * n + top]);
     assert_eq!(dry.ground[mineral * n + top], 1e6, "the mineral moved on dry ground");
-    let (de, dq) = drift(&wet, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
 }

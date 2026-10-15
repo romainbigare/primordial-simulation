@@ -2,7 +2,7 @@
 //!
 //! Ground nodes (here): liquid soaks into the pores of the loose ground up to their volume (the
 //! porosity times the volume of the loose solids) and what is over that stands and runs down its
-//! head in one ordered sweep; the water in the pores flows to neighbours by Darcy's law; the head
+//! head in one ordered sweep; the liquid in the pores flows to neighbours by Darcy's law; the head
 //! it loses heats the ground and does work, carrying loose solids and breaking weak bonds; loose
 //! solids creep downhill and heat conducts. Air nodes (`air`): radiation, contact heat,
 //! evaporation and condensation, and gas moved by pressure, overturning and mixing.
@@ -541,7 +541,7 @@ fn stand(s: &Scratch, i: usize) -> f64 {
     (s.head[i] - s.pd[i]).max(s.z[i])
 }
 
-/// Head of the water table of node `i`, m (Darcy's law reads it): in a node whose pores are not
+/// Head of the liquid table of node `i`, m (Darcy's law reads it): in a node whose pores are not
 /// full, the bottom of its loose ground plus the depth they fill; else the head that stands.
 #[inline]
 fn table(s: &Scratch, i: usize, por: f64) -> f64 {
@@ -649,7 +649,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 qss += q[c];
             }
         }
-        // The pore water flows on by Darcy's law: through the thickness of ground the water table fills, at
+        // The pore liquid flows on by Darcy's law: through the thickness of ground the liquid table fills, at
         // `seep` times the slope of its head (to the neighbour with the lower table, no more than half way to a
         // level table), with the same liquid and heat as the standing liquid.
         if lvol > 0.0 && damp {

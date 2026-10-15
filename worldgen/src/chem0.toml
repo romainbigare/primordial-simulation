@@ -360,7 +360,7 @@ sol = 0.0
 cond = 0.2
 hf = -6271
 
-# 23: PLACEHOLDER, an inert solid that is nowhere in the world and in no reaction: the number is kept for the sea's carbonate store
+# 23: PLACEHOLDER, an inert solid that is nowhere in the world and in no reaction: the number is kept for the carbonate store of the low ground
 # that another branch adds as substance 23 (with reactions 22 and 23); the merge replaces this entry. Nothing reads it.
 [[s]] # 23
 e = [0,0,0,0,0,0,0,0,0]
@@ -543,7 +543,7 @@ ord = [1,6]
 k = 2.28e9
 ea = 9000
 
-# 22 and 23: PLACEHOLDERS (k 0: they do nothing), kept for the sea's carbonate store that another branch adds as reactions 22 and 23;
+# 22 and 23: PLACEHOLDERS (k 0: they do nothing), kept for the carbonate store of the low ground that another branch adds as reactions 22 and 23;
 # the merge replaces them. The nitrogen reactions follow as 24 and 25.
 [[r]] # 22
 i = [[23,1]]

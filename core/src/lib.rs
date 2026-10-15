@@ -401,8 +401,8 @@ pub struct Physics {
     /// (`flow::liquid`). Grains packed at random leave 0.36 (the random close packing of spheres, Scott 1960) to 0.44 (the
     /// loose packing); sands 0.35 to 0.45, loams 0.4 to 0.5. 0.4 (from memory, unchecked)
     pub porosity: f64,
-    /// Hydraulic conductivity of the loose ground, m/s (15 Oct 2026): Darcy's law, the pore water of a cell flows to a
-    /// neighbour at q = `seep` x the slope of the water head, through the thickness of ground it fills (`flow::liquid`).
+    /// Hydraulic conductivity of the loose ground, m/s (15 Oct 2026): Darcy's law, the pore liquid of a cell flows to a
+    /// neighbour at q = `seep` x the slope of the liquid head, through the thickness of ground it fills (`flow::liquid`).
     /// A loam passes about 1e-6 m/s (1.3 cm an hour, Rawls et al. 1982: sand 6e-5, loam 4e-6, clay 2e-7; from memory,
     /// unchecked)
     pub seep: f64,

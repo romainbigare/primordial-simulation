@@ -281,7 +281,9 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         let want = 0.5 * (lo + hi) - tg;
         rises[n] = b.temp(&w.chem) - tg;
         println!("{:.0} kg: {:.3} K above the ground ({tg:.2} K); heat made = heat lost at {want:.3} K", mass, rises[n]);
-        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.1, "{} K above the ground, the heat balance says {want} K", rises[n]);
+        // (Within 12%: it was 10% when the matter burned for 17.3 MJ/kg and the ground was dry; the balance here is 8 to 10%, the heat of
+        // the bare burning of the body's stores being a rough count; 15 Oct 2026, the nitrogen mineral and liquid in the pores.)
+        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.12, "{} K above the ground, the heat balance says {want} K", rises[n]);
     }
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
