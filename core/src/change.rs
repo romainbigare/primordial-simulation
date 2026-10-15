@@ -10,10 +10,11 @@
 //! decay. The rate has no jump when another input becomes the scarcest, and is first order in a
 //! trace input (a trace gas in plenty of the other goes at the same rate per unit whatever its
 //! amount). A body's catalysts work only below the temperature where they lose their shape
-//! (`denature`).
+//! (`denature`). A ground node with liquid standing over it reacts with the gas dissolved in that
+//! liquid, which the liquid's film renews (`Reactor::film`).
 
 use crate::World;
-use crate::chem::{Chemistry, Reaction};
+use crate::chem::{Chemistry, Phase, Reaction};
 
 const YEAR_S: f64 = 3.156e7;
 /// A reaction whose fraction per year stays below this is frozen and skipped.
@@ -71,6 +72,15 @@ pub struct Reactor {
     /// not driven by light, 1/s.
     cap0: f64,
     kap0: Vec<f64>,
+    /// Time, s, the liquid standing over the node takes to renew its gas through its film (Flow's
+    /// law, `air::dissolve`); 0: the node touches the gas around it. Its gas is then the gas
+    /// dissolved in the liquid, held where the film and its reactions balance: Henry's share `eq`
+    /// of the gas around it (`Chemistry::henry`) times (1 + made film / eq) / (1 + used film / eq),
+    /// with what its reactions use and make, mol/s, at that share. What they take and give still
+    /// comes from and goes to the gas around it: through the film.
+    pub film: f64,
+    /// Per substance, used and made, mol/s (scratch for `film`).
+    flux: Vec<[f64; 2]>,
 }
 
 /// `f` to a small whole power.
@@ -189,6 +199,8 @@ impl Reactor {
             pw: vec![0.0; nr],
             cap0: 0.0,
             kap0: vec![0.0; nr],
+            film: 0.0,
+            flux: vec![[0.0; 2]; ns],
         }
     }
 
@@ -239,7 +251,7 @@ impl Reactor {
                 continue;
             }
             let (made, took) = (chem.reactions[f].outputs[0].1 as f64, m as f64 * chem.reactions[f].outputs[0].1 as f64);
-            let used: Vec<(usize, f64, f64)> = (chem.reactions[f].inputs.iter()).filter(|p| chem.phase(p.0 as usize, t) != crate::chem::Phase::Gas).map(|&(k, c)| (k as usize, n[k as usize], c as f64 / made)).collect();
+            let used: Vec<(usize, f64, f64)> = (chem.reactions[f].inputs.iter()).filter(|p| chem.phase(p.0 as usize, t) != Phase::Gas).map(|&(k, c)| (k as usize, n[k as usize], c as f64 / made)).collect();
             // The rate of change of `u`, mol/s, with `x` of it in the node: positive below the balance.
             let net = |rc: &mut Self, n: &mut [f64], x: f64| {
                 n[u] = x;
@@ -270,6 +282,27 @@ impl Reactor {
             out.push((u, x));
         }
         out
+    }
+
+    /// The rates of the last `phases` under a liquid whose film renews its gas in `film` s: each
+    /// reaction goes with the liquid's share of Henry's of each gas it takes, to its order.
+    fn through_film(&mut self, chem: &Chemistry, tot: &[f64; 3], t: f64) {
+        self.flux.fill([0.0; 2]);
+        for (r, rx) in chem.reactions.iter().enumerate() {
+            for (side, &(k, nu)) in rx.inputs.iter().map(|p| (0, p)).chain(rx.outputs.iter().map(|p| (1, p))) {
+                self.flux[k as usize][side] += nu as f64 * (self.kap[r] * self.lim[r]) * (self.ph[k as usize] == 2) as u8 as f64;
+            }
+        }
+        for k in 0..self.flux.len() {
+            let [used, made] = self.flux[k];
+            let eq = if used > 0.0 { tot[1] * chem.henry(k, t, self.av[k] / tot[2] * crate::chem::P_REF) } else { 0.0 };
+            self.flux[k][0] = if eq > 0.0 { (1.0 + made * self.film / eq) / (1.0 + used * self.film / eq) } else { 1.0 };
+        }
+        for (r, rx) in chem.reactions.iter().enumerate() {
+            for (q, p) in rx.inputs.iter().enumerate() {
+                self.kap[r] *= self.flux[p.0 as usize][0].powi(rx.order(q) as i32);
+            }
+        }
     }
 
     /// `pace` of `rx` with the amounts and phases of the last `phases`.
@@ -344,24 +377,28 @@ impl Reactor {
                 }
                 let (lim, q) = scarce(&rx.inputs, |k| self.av[k]);
                 if lim > 0.0 {
-                    let kap = cr * rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot);
-                    self.kap[r] = kap;
+                    self.kap[r] = cr * rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot);
                     self.lim[r] = lim;
                     any = true;
                     // (In a liquid or a gas that power is its order less 1, as far as it is not most of its phase.)
                     let k = rx.inputs[q].0 as usize;
                     self.pw[r] = if self.ph[k] > 0 { (rx.order(q) as f64 - 1.0) * (1.0 - self.av[k] / tot[self.ph[k] as usize]) } else { 0.0 };
-                    self.far[r] = gone(kap * left, self.pw[r]);
-                    if !uses_light {
-                        heat += self.dh[r].abs() * lim * self.far[r];
-                        if iter == 0 {
-                            self.kap0[r] = kap;
-                        }
-                    }
                 }
             }
             if !any {
                 break;
+            }
+            if self.film > 0.0 {
+                self.through_film(chem, &tot, t);
+            }
+            for (r, rx) in chem.reactions.iter().enumerate().filter(|(r, _)| self.kap[*r] > 0.0) {
+                self.far[r] = gone(self.kap[r] * left, self.pw[r]);
+                if !(rx.light && self.dh[r] > 0.0) {
+                    heat += self.dh[r].abs() * self.lim[r] * self.far[r];
+                    if iter == 0 {
+                        self.kap0[r] = self.kap[r];
+                    }
+                }
             }
             // Sub-step length: the heat of one sub-step must stay within MAX_DT_K.
             let mut sub = left;
@@ -469,7 +506,7 @@ pub fn step(w: &mut World, dt: f64) {
     let (mut tg, mut bed, mut air_of, mut ta) = s.view();
     if tg.len() != n || bed.len() != n || air_of.len() != n || ta.len() != na {
         let skin = |i: usize| {
-            let (c, v) = (0..ns).fold((0.0, 0.0), |(c, v), k| (c + w.b(k, i) * chem.subs[k].cp, v + w.b(k, i) * chem.molar_volume(k, crate::chem::Phase::Solid)));
+            let (c, v) = (0..ns).fold((0.0, 0.0), |(c, v), k| (c + w.b(k, i) * chem.subs[k].cp, v + w.b(k, i) * chem.molar_volume(k, Phase::Solid)));
             if v > 0.0 { c / v * w.cfg.skin_m * w.grid.area() } else { 0.0 }
         };
         fallback = ((0..n).map(|i| w.t_ground(i)).collect(), (0..n).map(|i| [skin(i), 0.0, 0.0, 0.0]).collect(), (0..n).map(|i| w.grid.air_of(i) as u32).collect(), (0..na).map(|j| w.t_air(j)).collect());
@@ -665,6 +702,13 @@ pub fn step(w: &mut World, dt: f64) {
                 pool0[k] = w.air[k * na + j] * share;
             }
             pool.copy_from_slice(&pool0);
+            // Liquid stands over it (more than the pores of its loose ground hold): it reacts with
+            // the gas dissolved in that liquid, renewed through the liquid's film over its whole
+            // depth (`Reactor::film`; Flow's law, `air::dissolve`: depth / `dissolve`; the air's
+            // side of the film is faster by 100 times or more for every gas and left out).
+            let vol = |p: Phase| (0..ns).filter(|&k| chem.phase(k, t) == p).map(|k| amt[k] * chem.molar_volume(k, p)).sum::<f64>();
+            let wet = vol(Phase::Liquid);
+            rc.film = if wet > w.cfg.phys.porosity * vol(Phase::Solid) { wet / (w.grid.area() * w.cfg.dissolve) } else { 0.0 };
             let all = amt.iter().sum::<f64>();
             // The reactor sees sensible heat: molten amounts hold their fusion enthalpy apart.
             let fused: f64 = (0..ns).filter(|&k| chem.subs[k].melt <= t).map(|k| amt[k] * chem.subs[k].lf).sum();

@@ -110,12 +110,14 @@ fn a_dry_cell_holds_none_and_a_deeper_column_holds_more() {
 
 /// A long run of the two reactions in lumps of 120 days (the pace of a calm cell), the air held at
 /// 400 ppm, settles to the amount `balance` gives, from none and from twice as much (made of the
-/// same rock, so the same calcium in all).
+/// same rock, so the same calcium in all), with the gas reached through the liquid's film (500 m
+/// at 5e-5 m/s, `Reactor::film`): at the balance the salt gives the liquid as much gas as it takes.
 #[test]
 fn a_long_run_settles_to_the_balance() {
     let (chem, _) = worldgen::chemistry0();
     let want = at_balance(&chem, 500.0, 400.0, 288.0);
     let mut rc = Reactor::new(&chem);
+    rc.film = 500.0 / 5e-5;
     for start in [0.0, 2.0 * want] {
         let (mut n, gas0) = column(&chem, 500.0, 400.0);
         (n[SALT], n[ROCK]) = (start, n[ROCK] - start);
@@ -125,6 +127,34 @@ fn a_long_run_settles_to_the_balance() {
             rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, 120.0 * DAY);
         }
         assert!((n[SALT] / want - 1.0).abs() < 0.05, "from {start}: {} against the balance {want}", n[SALT]);
+    }
+}
+
+/// Under a liquid the dead matter burns with the oxygen-like gas dissolved there, which the
+/// liquid's film renews (`Reactor::film`): a pile that uses little of what the film can bring
+/// burns as in the open air; one that uses the gas faster than the film brings it, slower by
+/// 1 / (1 + used x film / Henry's share), the series law.
+#[test]
+fn under_a_liquid_dead_matter_burns_as_its_film_lets_the_gas_through() {
+    let (chem, _) = worldgen::chemistry0();
+    let (rich, ox, t, dt, depth) = (5, 2, 288.0, DAY, 100.0);
+    let film = depth / 5e-5;
+    let burn = |pile: f64, film: f64| {
+        let (mut n, mut gas) = column(&chem, depth, 400.0);
+        n[rich] = pile;
+        let mut rc = Reactor::new(&chem);
+        rc.film = film;
+        let (mut e, o2) = (t * 1e15, gas[ox]);
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, dt);
+        (o2 - gas[ox]) / dt
+    };
+    let air: f64 = column(&chem, depth, 400.0).1.iter().sum();
+    let eq = depth * MOL_PER_M3 * chem.henry(ox, t, 0.21 * AIR_COLUMN / air * pcore::chem::P_REF);
+    for pile in [10.0, 1e4] {
+        let open = burn(pile, 0.0);
+        let law = 1.0 / (1.0 + open * film / eq);
+        assert!((burn(pile, film) / open / law - 1.0).abs() < 0.05, "{pile} mol: x{} against the law's x{law}", burn(pile, film) / open);
+        assert!(if pile < 100.0 { law > 0.99 } else { law < 0.5 }, "{pile} mol: x{law}");
     }
 }
 
