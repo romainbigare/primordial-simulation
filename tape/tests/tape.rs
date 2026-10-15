@@ -125,7 +125,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
     assert!(!kinds.is_empty());
-    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age", "past_copy", "alloc", "child", "brood", "died_young", "died_adult", "life_adult", "moves", "hurt"] {
+    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age", "past_copy", "alloc", "child", "brood", "died_young", "died_adult", "life_adult", "moves", "hurt", "temp"] {
         assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
     }
     for r in &rows {
@@ -180,6 +180,17 @@ fn yearly_series_has_the_measures_per_starting_kind() {
         let sum: f64 = mrows[mrows.len() - 12..].iter().map(|r| r[at].parse::<f64>().unwrap()).sum();
         let year = col(&format!("root_{k}_births"), last);
         assert!((sum - year).abs() <= 1e-9 * year.max(1.0), "root_{k}: months {sum} year {year}");
+    }
+    // and so do the deaths of each kind by cause (15 Oct 2026).
+    for k in &kinds {
+        let sum = |c: &str| {
+            let at = mh.iter().position(|h| *h == format!("root_{k}_died_{c}")).unwrap_or_else(|| panic!("months.csv has no deaths of kind {k} by {c}"));
+            mrows[mrows.len() - 12..].iter().map(|r| r[at].parse::<f64>().unwrap()).sum::<f64>()
+        };
+        for c in ["lack", "phase", "spent", "taken", "broken", "age"] {
+            let year = col(&format!("root_{k}_died_{c}"), last);
+            assert!((sum(c) - year).abs() <= 1e-9 * year.max(1.0), "root_{k} died of {c}: months {} year {year}", sum(c));
+        }
     }
     assert!(kinds.contains(&(col("mass_max_root", last) as usize)));
     assert!(col("merged_unlike", last) >= 0.0 && col("merged_wide", last) >= col("merged_unlike", last));
