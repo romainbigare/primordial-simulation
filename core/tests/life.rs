@@ -479,7 +479,7 @@ fn a_body_takes_no_more_than_it_can_use() {
         (w.ledger.imposed_energy, b.store[rich]) = (w.ledger.imposed_energy - out * w.chem.subs[rich].hf, b.store[rich] - out);
         b.prepare(&w.chem, &w.cfg.phys);
         let (p, days, mass) = (w.cfg.phys, b.interval() as f64, b.mass(&w.chem));
-        let (equiv, joule_per_kg) = (b.equiv(&p, mass), -w.chem.dh(burn) / w.chem.reactions[burn].inputs.iter().find(|x| x.0 as usize == rich).unwrap().1 as f64 / w.chem.subs[rich].molar_mass);
+        let (equiv, joule_per_kg) = (b.supply(&w.chem, &p), -w.chem.dh(burn) / w.chem.reactions[burn].inputs.iter().find(|x| x.0 as usize == rich).unwrap().1 as f64 / w.chem.subs[rich].molar_mass);
         let (up, build) = (pcore::body::upkeep(&w, &b, days, mass), p.c_build * equiv / p.m_ref * days);
         let can = up + build;
         // (up + build) x fuel / release - fuel, never under the upkeep, never over what its size takes.
@@ -503,7 +503,9 @@ fn a_body_takes_no_more_than_it_can_use() {
         let burnt: f64 = w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, burn, .. } = e.kind { (by == id).then_some(burn as f64) } else { None }).sum();
         (burnt, can / joule_per_kg, p.take * days * equiv, target)
     };
-    for times in [1.0, 10.0, 100.0] {
+    // (Up to 30 times a starting eater, 900 kg: at 100 times upkeep, by the body, is above what it can take in an
+    // interval, the energy ceiling of 14 Oct 2026 - it takes 119 kg of fuel against an upkeep of 141.)
+    for times in [1.0, 10.0, 30.0] {
         let ((with, _, cap, _), (without, upkeep, _, _)) = (took(times, 3e4, 1.0, false), took(times, 0.0, 1.0, false));
         println!("{times} x 30 kg: takes {with:.3} kg of fuel (upkeep {upkeep:.3}, size cap {cap:.3}), with no building {without:.3}");
         assert!(upkeep < cap, "the size cap {cap} is not above its upkeep {upkeep}");
@@ -607,7 +609,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         (w.ledger.imposed_energy, b.e, b.count) = (w.ledger.imposed_energy + (count - 1.0) * b.e, count * b.e, count);
         b.prepare(&w.chem, &w.cfg.phys);
         let (d, m) = (b.interval() as f64, b.mass(&w.chem));
-        let u = pcore::body::upkeep(w, &b, d, m) / (d * m);
+        let u = pcore::body::upkeep(w, &b, d, m) / (d * b.built(&w.chem));
         (w.life.add(b, w.day, 1), u)
     };
     let (_, ua) = make(&mut w, land[0], 0.0, 1.0);
@@ -640,8 +642,9 @@ fn bodies_die_of_age_by_their_rate_of_living() {
 
 /// What a member takes and can build goes with its mass to the power `intake_exp`
 /// (14 Oct 2026, review 4, finding 5): 1 kg counts as 1 kg, 10 t takes 180 times what 10 kg does
-/// (not 1,000), and a node of n members counts n times a member. It counts by all its mass (satiety
-/// stops what it takes, `a_body_takes_no_more_than_it_can_use`).
+/// (not 1,000), and a node of n members counts n times a member. `equiv` counts the mass it is given;
+/// `Body::supply` gives it the body that is built, not the fuel stored (satiety stops what it takes,
+/// `a_body_takes_no_more_than_it_can_use`).
 #[test]
 fn equiv_goes_with_mass_to_the_power() {
     use pcore::body::{Body, COPY_MASS};
@@ -656,7 +659,21 @@ fn equiv_goes_with_mass_to_the_power() {
     assert!((take(1e4) / take(10.0) - 177.8).abs() < 0.1, "10 t takes 180 times 10 kg: {}", take(1e4) / take(10.0));
     assert!((member(4.0, 6.0).equiv(&p, 4.0 * 30.0) / take(30.0) - 4.0).abs() < 1e-9, "a node counts n members' worth");
     let m = member(1.0, 1.0);
-    assert!(m.equiv(&p, 2000.0) > m.equiv(&p, 20.0), "it counts by all its mass");
+    assert!(m.equiv(&p, 2000.0) > m.equiv(&p, 20.0), "equiv counts the mass it is given");
+    // What a body takes and builds counts its body, not the fuel it stores (`Body::supply`, 14 Oct 2026,
+    // the energy ceiling): the same body holding three times the fuel has the same supply.
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+    let mut b = Body { count: 1.0, genes: vec![0.0; pcore::body::Layout::of(&w.chem).len], store: vec![0.0; w.chem.ns()], ..Default::default() };
+    b.genes[COPY_MASS] = 1.0;
+    let matter = w.chem.matter().expect("body matter");
+    (b.store[matter], b.store[rich]) = (10.0, 20.0);
+    let thin = b.supply(&w.chem, &w.cfg.phys);
+    b.store[rich] *= 3.0;
+    assert!(thin > 0.0 && (b.supply(&w.chem, &w.cfg.phys) / thin - 1.0).abs() < 1e-12, "fuel changed the supply");
+    b.store[matter] *= 8.0;
+    assert!((b.supply(&w.chem, &w.cfg.phys) / thin - 8f64.powf(0.75)).abs() < 1e-9, "supply goes with the body to the power 0.75");
 }
 
 /// Every body pays a basal upkeep (14 Oct 2026, review 5): `c_basal` per day and kg of its body

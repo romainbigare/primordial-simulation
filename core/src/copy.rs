@@ -263,7 +263,7 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
     // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
-    let room = p.c_build * b.equiv(p, mass) / p.m_ref * days.min(ivl) * b.activity(chem, p);
+    let room = p.c_build * b.supply(chem, p) / p.m_ref * days.min(ivl) * b.activity(chem, p);
     let r = 0.999 * body::release(w, b, ivl);
     if room <= 0.0 || r <= 0.0 {
         return false;

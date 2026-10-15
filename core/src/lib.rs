@@ -271,12 +271,12 @@ pub struct Physics {
     pub rho_body: f64,
     /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J
     pub walk_wear: f64,
-    /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::equiv`:
-    /// per member its mass to the power `intake_exp`), and no more than it can use (`choose::sate`)
+    /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::supply`:
+    /// per member its body, `Body::built`, to the power `intake_exp`), and no more than it can use (`choose::sate`)
     pub take: f64,
     /// What a member takes, sweeps and receives as a gift, what it can build in a day (`c_build`)
-    /// and the leaf it spreads (the supply) go with its mass to this power, about the 0.75 of
-    /// intake and metabolism in life (`Body::equiv`). The cost of keeping tissue goes with the
+    /// and the leaf it spreads (the supply) go with the mass of its body (`Body::supply`) to this
+    /// power, about the 0.75 of intake and metabolism in life (`Body::equiv`). The cost of keeping tissue goes with the
     /// body's mass^1.0 (14 Oct 2026, `body::upkeep`), so growth stops where the two meet. Here
     /// every cost went with mass, so with 1 nothing scaled against size and selection pushed the
     /// copy-mass gene to its wall (eaters of 9 to 15 t that barely copy, review 4, finding 5); with
@@ -342,7 +342,7 @@ pub struct Physics {
     /// takes 27.3 MJ of fuel in all, 62% efficient.
     pub c_copy: f64,
     /// Most work a body can put into building body matter per day, J, for a member of `m_ref` (1 kg);
-    /// a member of `m` kg pays at most this x (`m` / `m_ref`)^`intake_exp` x days (`Body::equiv`,
+    /// a member of body `m` kg pays at most this x (`m` / `m_ref`)^`intake_exp` x days (`Body::supply`,
     /// `copy::grow`): building a body takes time, small ones grow fast and big ones slowly
     /// (14 Oct 2026, review 5; the work was for children until the decision after watch report 7, and
     /// growth was free; it is for growth now, and a child is born of matter already built). Anchored

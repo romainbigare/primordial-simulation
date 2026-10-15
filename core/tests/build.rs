@@ -229,7 +229,7 @@ fn growth_is_limited_by_c_build() {
         let (s, mut b) = out(&mut w, b);
         let m0 = b.store[r.matter];
         let days = b.interval() as f64;
-        let room = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, b.mass(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
+        let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         let (built0, grew) = (b.built(&w.chem), copy::grow(&mut w, &mut b, days));
         let kg_matter = (b.store[r.matter] - m0) * w.chem.subs[r.matter].molar_mass;
         let (brood, built1) = (b.brood * w.chem.subs[r.matter].molar_mass, b.built(&w.chem));
@@ -282,7 +282,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         let grew = copy::grow(&mut w, &mut b, days);
         let built = (b.store[r.matter] - m0) * w.chem.subs[r.matter].molar_mass;
         let (up, release) = (body::upkeep(&w, &b, days, b.mass(&w.chem)), body::release(&w, &b, days));
-        let room = w.cfg.phys.c_build * b.equiv(&w.cfg.phys, b.mass(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
+        let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         println!("fuel kept {keep}: built {built:.4} kg of matter (allowance {room:.3} kg), release {release:.3e} J against upkeep {up:.3e} J");
         w.life.bodies[s] = b;
         results.push((keep, grew, built, room, up, release));
@@ -763,7 +763,7 @@ fn satiety_caps_every_size_and_counts_the_matter_built() {
         (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
         b.prepare(&w.chem, &w.cfg.phys);
         let (p, days, mass) = (w.cfg.phys, b.interval() as f64, b.mass(&w.chem));
-        let (equiv, up) = (b.equiv(&p, mass), body::upkeep(&w, &b, days, mass));
+        let (equiv, up) = (b.supply(&w.chem, &p), body::upkeep(&w, &b, days, mass));
         let cap = p.take * days * equiv;
         let jpk = -w.chem.dh(r.burn) / w.chem.reactions[r.burn].inputs.iter().find(|x| x.0 as usize == r.rich).unwrap().1 as f64 / w.chem.subs[r.rich].molar_mass;
         let left = |w: &World, b: &Body| {
@@ -798,7 +798,7 @@ fn satiety_caps_every_size_and_counts_the_matter_built() {
         let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
         let left = |w: &World| {
             let mut m = vec![0.0; w.chem.ns()];
-            m[r.rich] = 40.0 * w.cfg.phys.take * days * b.equiv(&w.cfg.phys, mass) / w.chem.subs[r.rich].molar_mass;
+            m[r.rich] = 40.0 * w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys) / w.chem.subs[r.rich].molar_mass;
             choose::sate(w, &b, &mut m, days, mass);
             m[r.rich] * w.chem.subs[r.rich].molar_mass
         };
@@ -869,7 +869,7 @@ fn no_satiety_by_default_and_every_size_with_the_switch() {
         (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
         b.prepare(&w.chem, &w.cfg.phys);
         let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
-        let cap = w.cfg.phys.take * days * b.equiv(&w.cfg.phys, mass);
+        let cap = w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys);
         let mut m = vec![0.0; w.chem.ns()];
         m[r.rich] = 2.0 * cap / w.chem.subs[r.rich].molar_mass;
         choose::sate(&w, &b, &mut m, days, mass);

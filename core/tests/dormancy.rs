@@ -163,7 +163,7 @@ fn a_dry_body_builds_in_proportion_to_its_activity() {
     let m = s.w.chem.matter().expect("matter");
     let (m0, m1) = (wet.store[m], dry.store[m]);
     // (What it may build goes with its mass^0.75 too, and the dry body has the lighter liquid.)
-    let eq = dry.equiv(&s.w.cfg.phys, dry.mass(&s.w.chem)) / wet.equiv(&s.w.cfg.phys, wet.mass(&s.w.chem));
+    let eq = dry.supply(&s.w.chem, &s.w.cfg.phys) / wet.supply(&s.w.chem, &s.w.cfg.phys);
     assert!(pcore::copy::grow(&mut s.w, &mut wet, 10.0) && pcore::copy::grow(&mut s.w, &mut dry, 10.0));
     let (gw, gd) = (wet.store[m] - m0, dry.store[m] - m1);
     println!("matter built: wet {gw:.4e} mol, dry {gd:.4e}, activity {a:.4}");

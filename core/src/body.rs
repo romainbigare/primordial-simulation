@@ -466,6 +466,14 @@ impl Body {
         let n = self.n();
         n * p.m_ref * (mass / n / p.m_ref).powf(p.intake_exp)
     }
+    /// What a body can take and build, in kg-equivalents: `equiv` of the body that is built
+    /// (`Body::built`), not of the whole mass (14 Oct 2026, the energy ceiling): the fuel it stores
+    /// is carried, not working tissue, so it raises neither what the body can take nor what it
+    /// pays to keep (`body::upkeep`, by the same body). Intake (`take`, sweep, gifts), the `c_build`
+    /// allowance (`copy::grow`) and satiety go by it; the leaf by the body too (`visible`).
+    pub fn supply(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
+        self.equiv(p, self.built(chem))
+    }
     /// Surface the body exchanges gas with the air through, m²: per member its light-capture area
     /// (`LEAF` per kg-equivalent of its body, as `visible` and the light code count it)
     /// plus its skin, 6 (m1 / `rho_body`)^(2/3), as the surface of walls and the cover; times the
@@ -1295,7 +1303,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // can turn over in its life (`Physics::e_life`), so a body that lives fast wears fast. An
     // individual dies of age when its wear reaches 1. A node's members are of all ages: this share
     // of them dies now (the death rate of members who each live that long, so the same mean life).
-    let worn = upkeep / (mass * w.cfg.phys.e_life * b.dec(REPAIR));
+    // (Over the body that is built, the tissue that wears, not the fuel it carries; 14 Oct 2026.)
+    let worn = upkeep / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     let upkeep = b.e - e0;
     b.e = e0;
     for (f, cause) in [(short, SPENT), (if node { worn.min(1.0) } else { 0.0 }, AGE)] {
