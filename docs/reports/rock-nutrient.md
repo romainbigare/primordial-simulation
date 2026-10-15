@@ -25,10 +25,13 @@ years 56 to 60 unless said otherwise.
   main it does not.
 - **The rock element limits building a lot, more and more with the years.** It holds back 4% of
   the plants' building attempts at year 5, 27% at year 10, 63% at year 60 (seed 1; means of years 56 to 60,
-  seeds 1 to 3: 53 to 62%). Nitrogen holds back 10 to 13% (main: 19 to 52%). The reason is on the land,
-  and it is already in main: rain washes the lime out of the land. The median land cell holds 1,715 mol of
-  lime a m2 at year 10 and 103 at year 60. The share of land cells whose pores hold almost no salt rises
-  from 18% to 58%. More than half of the plants stand on those cells.
+  seeds 1 to 3: 53 to 62%). Nitrogen holds back 10 to 13% (main: 19 to 52%). I traced the cause (see
+  "Follow-up" below). It is on the land and it is already in main. **Running liquid erodes the loose
+  ground** (the tuned, first-guess numbers `carry`, `wear`, `creep`, which are 1,000 times or more above real
+  erosion). The median land cell holds 1,715 mol of lime a m2 at year 10 and 103 at year 60. Below about
+  110 mol/m2 of lime, **the reaction that makes the salt (22) goes 6,000 times slower**, because of how the
+  rate law counts a gas that is not the scarcest input. With erosion cut 100 times (a diagnostic, not
+  a fix) the rock element holds back only 1 to 3% and eaters live in all three seeds.
 - **Speed is the same.** 3.05 seconds a year against 3.13 (seed 1, 30 years).
 - **A surprise, and a rule it needed.** The salt does not last inside a body. It falls out as
   lime in hours to days. Without a rule, plants filled up with lime (2% of their mass at year
@@ -231,19 +234,11 @@ Why so often? I looked at the snapshots of seed 1 (every 10 years), main and bra
 | plant bodies standing on such cells (main) | 18% | 31% | 45% | 61% |
 | plant bodies standing on such cells (rock nutrient) | 22% | 37% | 48% | 53% |
 
-(At the balance a wet cell holds about 1 mol of the salt a m2.) So rain and rivers wash the
-rock out of the slopes. It was true in main too, and nobody saw it, because nothing needed the rock
-element. Now plants need it, and the limit follows the loss: in the branch it is 0.04, 0.27, 0.44, 0.55 and 0.63 of
-the building attempts at years 5, 10, 20, 40 and 60. This is what the owner expected from the
-nutrient ("erosion and rivers move it, so fertility differs from place to place").
-
-Two things I could not explain. (1) The cells that have lost their salt still hold liquid (hundreds to
-thousands of mol/m2, a few cm) and 25 to 110 mol/m2 of lime. The balance would give about 1 mol/m2 of the
-salt. In a probe that stepped the year-60 snapshot of main for six months, 4 of 5 such cells stayed
-under 0.001. I did not find out why the salt does not form there. (2) Whether this washing is too
-strong: the sea gets the rock, and a real land is also given rock by weathering of the bed. Here the
-bed becomes loose ground only where moving liquid works on it (Flow), so slopes are not
-replenished. I did not look at how much comes back. This is main's ground, not my change.
+(At the balance a wet cell holds about 1 mol of the salt a m2.) The limit follows the loss: in the
+branch it is 0.04, 0.27, 0.44, 0.55 and 0.63 of the building attempts at years 5, 10, 20, 40 and 60.
+Nothing needed the rock element in main, so nobody saw the loss. The next section says what takes
+the lime and why the salt does not form. (An earlier version of this report said "rain washes the
+lime out". That was wrong: it is erosion, not solution.)
 
 In the cells with 1 to 3 mol of the salt per m2, plants hold 56% of their level.
 
@@ -262,6 +257,105 @@ In the cells with 1 to 3 mol of the salt per m2, plants hold 56% of their level.
 | carbon gas, year 60 | 304 ppm | 315 ppm |
 
 Kinds 2, 9 and 10 are gone in both.
+
+## Follow-up: why the land has no salt, and where the lime goes
+
+The coordinator asked three questions after the first report. No code fix came out of them. The
+answers are below, with the numbers. All from seed 1; the snapshots were remade (same hash as before).
+
+### 1. Why do land cells with liquid and lime hold almost no salt?
+
+It is not the scheduler, and not the roots. I took cell 549 of the year-60 snapshot (285 K, 1,380 mol/m2 of
+liquid, 11.8 mol/m2 of lime, salt 1e-5 mol/m2) and called the reactor on it directly for one month, with
+the air's gas as the pool. Then I raised the lime and did it again:
+
+| lime in the cell (mol/m2) | salt made in a month (mol/m2) | per mol of lime and month |
+|---|---|---|
+| 0.6 | 2.7e-6 | 4.6e-6 |
+| 11.8 | 5.4e-5 | 4.6e-6 |
+| 58.9 | 2.7e-4 | 4.6e-6 |
+| **235.6** | **1.59** | 6.7e-3 |
+| 1,178 | 1.59 | 1.4e-3 |
+
+The salt made is **in proportion to the lime, at a very small rate, until the lime in the cell passes the
+carbon gas of the air column over it** (4.5e8 mol, 110 mol/m2). Above that it jumps by a factor of 6,000 and
+stops at the balance (1.6 mol/m2). A month in one go, so the scheduler is out of it. Why: Change's rate is
+"per unit of the scarcest input, times the share of the other gases". If the gas is the scarcest, its
+share is not counted (the sea's anchor: 0.19 a year per unit of the gas over it). If the lime is the
+scarcest, the gas share is counted, and carbon gas is 4 parts in 10,000 of the air: 4e-4 (2,500 times less).
+Two regimes, with a jump between them. A lime-rich cell (the sea floor, the young land) is in the first.
+A cell that has lost its lime is in the second, and there the salt cannot form as fast as the liquid carries
+it away or the roots take it. In the world: of the salt made on land in a year (3.1 mol/m2 on average at
+year 10), the roots take 1.9 and give back as lime (see "What happens to the salt inside a body"), the
+liquid takes 1.1 to the lower cells.
+
+I did **not** change the law. A continuous version (compare the lime with the whole gas of the cell, not
+with the carbon gas) puts the sea floor cells (about 1e10 mol of lime, against 1.1e12 of gas) in the slow
+regime too, about 100 times slower than the sea carbon anchor, and the burning of litter is anchored to the
+second regime (the 0.21 of the oxygen-like gas). So it needs a new anchor, not a bug fix. It is the
+owner's call. A smaller point: `Reactor::balance` skips a substance if the air holds even a trace of it
+(1e-34 mol of the salt, as vapour, by year 60); worldgen calls it only at the start, so it is harmless.
+
+### 2. What takes the lime from the land?
+
+Erosion by running liquid, not solution. Per m2 of land per year (seed 1; lime in mol):
+
+| | year 10 | year 40 |
+|---|---|---|
+| Flow: lime carried by liquid and by creep, net on all land cells | +10.9 | +27.3 |
+| Change (reaction 22 and 23): lime dissolved, all land | -3.0 | -2.0 |
+| bodies (roots take the salt, give lime back, `shed`) | +1.7 | +1.0 |
+| bed lime worn into loose ground (Flow) | 27.7 | 45.9 |
+
+The whole land gains lime (the bed wears into loose ground faster than the loose ground is carried to
+the low cells). The cells that have less than the median (a half of the land) lose it. I ran one year of that
+half with a thing switched off each time (mol/m2 of lime in the year):
+
+| below-median land cells | year 10 | year 40 |
+|---|---|---|
+| all as it is | -29.0 | -6.2 |
+| creep off | -24.4 | -6.4 |
+| liquid-borne solids off (`carry` 0) | **-3.0** | **-0.05** |
+| both off | -1.6 | +0.1 |
+| the Change step off | -27.6 | -6.9 |
+
+So 89% (year 10) to 99% (year 40) of the loss is loose solids carried by running liquid; creep is
+a sixth at year 10; chemistry is 1.4 mol/m2 at year 10 and about nothing later.
+
+Is it plausible? The chemistry is. 3.0 and 2.0 mol/m2 a year are 0.11 and 0.075 mm a year of pure lime
+(27 mol/m2 for a mm), which is 110 and 75 mm per thousand years, at the top of real chemical denudation of
+limestone, 10 to 100 mm per thousand years (and this ground is lime-rich). The erosion is not. The
+below-median cells lose 29 mol/m2 of lime a year, 1.1 mm a year of pure lime; with the ground a tenth lime,
+that is about 10 mm of ground a year, 1 m in a century. The bed lime lost under the land (27.7 mol/m2 a year)
+is the same size again. Real soils lose 0.1 to 1 mm in a century, so the world erodes 1,000 to 10,000
+times faster. `carry`, `wear` and `creep` are in `docs/numbers.md` as "tuned, first guess"
+(the creep row says itself that 1e-6 m/s is 30 m a year at a slope of 1, far above soil creep). It is not a
+bug in the lime: it is the tuned erosion, seen by a nutrient for the first time.
+
+### 3. Rerun
+
+No fix changed the code, so I did not rerun the branch. I ran **a diagnostic, not a fix**: the same
+branch with `carry`, `wear` and `creep` 100 times smaller (compiled for the run, not committed; closer to
+real, and the landscape changes less). 64x64, 60 years, seeds 1 to 3, years 56 to 60 (main > branch > erosion / 100):
+
+| | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|
+| plants, members | 3.0e10 > 2.5e10 > 4.6e10 | 4.0e10 > 1.8e10 > 1.7e10 | 4.4e10 > 3.2e10 > 5.3e10 |
+| plants, kg | 3.15e10 > 3.09e10 > 4.86e10 | 4.52e10 > 4.66e10 > 4.87e10 | 4.25e10 > 3.64e10 > 5.17e10 |
+| plant matter share | 5.8 > 4.7 > 5.2% | 4.9 > 4.1 > 6.2% | 5.3 > 5.1 > 6.2% |
+| plant life real / adult (y) | .46/.89 > .69/1.19 > .52/1.10 | .41/.78 > .53/.77 > .45/.70 | .38/.90 > .56/1.07 > .43/.96 |
+| eaters, members | 3.6e7 > 9.5e6 > 5.2e7 | 1.95e5 > 4 > 2.2e7 | 2.8e7 > 5.4e6 > 2.6e7 |
+| eaters, kg | 2.9e9 > 6.1e8 > 3.1e9 | 2.5e7 > 197 > 1.5e9 | 1.4e9 > 2.6e8 > 1.4e9 |
+| plants held back: any / nitrogen / rock salt | (.52 N only) > .66/.10/.63 > .08/.07/.01 | (.19) > .61/.13/.56 > .08/.06/.03 | (.42) > .58/.10/.53 > .16/.15/.02 |
+| eaters held back by the rock salt | - > .13 > .01 | - > .07 > .13 | - > .15 > .08 |
+| salt on land, kg/m2, years 1, 10, 30, 60 | main .53 .82 1.33 1.48 > .53 .86 1.31 1.52 > .53 .94 1.47 1.82 | - > .51 .79 1.22 1.44 > .51 .92 1.38 1.63 | - > .52 .60 .80 1.11 > .52 .67 .88 1.17 |
+| carbon gas, years 10 to 60 (ppm) | 266 ... 338 > 284 ... 322 > 260 259 270 272 282 308 | 246 ... 286 > 285 ... 296 > 293 284 293 299 302 317 | 268 ... 323 > 294 ... 311 > 265 270 273 278 284 295 |
+
+With the erosion near real the rock element holds back 1 to 3% of the plants' building, the eaters live
+in all three seeds (also seed 2, 2.2e7 members), and plants are heavier than in main (4.9 to 5.2e10 kg).
+The rock nutrient therefore does not limit life when the lime stays on the slopes. It limits it here
+because of the world's fast erosion. I did not retune anything. The owner may want to anchor `carry`,
+`wear` and `creep` (the rows say "none found"): that is a change to how fast valleys form.
 
 ## Speed
 
@@ -313,12 +407,13 @@ Older tests I changed, and why (no law was tuned to pass):
    lost. Here a plant has to find liquid at every update. I did not change the reaction, as the
    sea carbon depends on it.
 2. **The rock element limits building in 53 to 62% of attempts.** Is it "a little"? The owner
-   should judge. It comes from the land losing its lime to the rain (above). The nitrogen mineral is
-   washed to the sea too, but the fixers put it back, and the rock element has no input of its
-   own (the bed becomes loose ground only where moving liquid wears it). A weathering law would be
-   a new rule.
-3. **Eaters are fewer.** See above. I cannot separate this from the spread of seeds without
-   more runs.
+   should judge. It comes from the tuned erosion (`carry`, `wear`, `creep`: 1,000 times or more above
+   real) that strips the lime from the slopes, and from the rate law of reaction 22 that goes 6,000 times
+   slower in a cell with under 110 mol/m2 of lime ("Follow-up"). With the erosion cut 100 times it is
+   1 to 3%. The rock element has no input of its own (the bed becomes loose ground only where moving
+   liquid wears it). Changing the rate law would move the sea carbon's anchor, so I left it.
+3. **Eaters are fewer.** See above. With the erosion cut 100 times they live in all three seeds, so
+   the rock limit is a likely cause, through the plants they eat.
 4. **The shed rule is general.** Anything a body holds that it does not burn, is not matter, not gas and not
    its key liquid goes back. Today that is lime only. If a future chemistry gives bodies a solid
    store (bone, shell), this rule must be looked at again: such a store would need a level.
