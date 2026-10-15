@@ -1765,7 +1765,13 @@ fn shed(w: &mut World, b: &mut Body) {
 /// `c_build` allowance, leaf) grows more slowly than the tissue it must keep, so a body grows until
 /// keeping what it has takes all it can supply and there is nothing left to build with
 /// (`copy::grow` builds from the spare after upkeep): its size is set by its own costs, not by a cap.
-/// Across kinds, adult costs then follow Kleiber's mass^0.75 by themselves. (Review 6 had moved these
+/// **Across kinds by the size the kind grows to** (15 Oct 2026, decided; `docs/reports/big-animals.md`): the
+/// cost per kg of tissue is the kind's own, times (copy mass / `m_ref`)^(`intake_exp` - 1), the copy mass being the
+/// size its genes mature at (`COPY_MASS`). Inside one body nothing changes (its cost goes by its kg as it grows, the
+/// ceiling stays); across kinds an adult pays Kleiber's mass^0.75, as real adults do (in the growth law the
+/// maintenance per kg is a trait of the kind, smaller in a bigger one). Before, every kind paid the same per kg, so a
+/// kind's adult upkeep went with mass^1.0 against an intake of mass^0.75, and the roster's 600 kg founders could take
+/// only 1.9 times their upkeep (a 30 kg eater 3.2) and starved. No new number. (Review 6 had moved these
 /// costs to mass^0.75 because every animal evolved small; the main cause then was nodes mixing kinds,
 /// since fixed.) The mass is the body that is built, not the whole mass: storing fuel is cheap, tissue
 /// dear (decision of 14 Oct 2026 on body matter); and not `size`, which stops at the liquid held
@@ -1784,7 +1790,8 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     // The cost of keeping tissue goes with the kg of the body (`Body::built`: not the fuel it
     // stores, nor the liquid it lacks, which dormancy counts below), supply with the mass to the
     // power 0.75 (see above): storing fuel is cheap, building and keeping tissue is dear.
-    let tissue = b.built(&w.chem);
+    // And per kg by the size the kind matures at, to the power -0.25 (Kleiber across kinds, 15 Oct 2026).
+    let tissue = b.built(&w.chem) * (b.dec(COPY_MASS) / p.m_ref).powf(p.intake_exp - 1.0);
     let u = days * (tissue * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
     // Everything it pays is chemistry, which runs in its liquid: a dry body pays almost nothing (and,
     // as wear grows with what it pays, hardly ages): all of it, the decision's cost too, times its

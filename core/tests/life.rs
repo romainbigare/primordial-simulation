@@ -496,7 +496,7 @@ fn a_body_takes_no_more_than_it_can_use() {
         // (An eater of the energy-rich solid only: it does not burn body matter, which would be fuel too.)
         let (matter, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
         (b.genes[pcore::body::Layout::of(&w.chem).cat + burn_matter], b.genes[pcore::body::Layout::of(&w.chem).upt + matter]) = (-1.0, -0.1);
-        (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[pcore::body::COPY_MASS], b.genes[pcore::body::LIQ]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 6.0, -4.0);
+        (w.ledger.imposed_energy, b.e, b.genes[DISPERSE], b.genes[pcore::body::ALLOC], b.genes[pcore::body::LIQ]) = (w.ledger.imposed_energy + (times - 1.0) * b.e, times * b.e, 0.0, 0.0, -4.0);
         // Less of the fuel (the rest taken out as an edit).
         // (At the temperature it had: its upkeep goes with it, 15 Oct 2026.)
         let (out, t) = ((1.0 - keep) * b.store[rich], b.temp(&w.chem));
@@ -805,7 +805,9 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
     let (e1, e100) = (basal(&mut w, &one), basal(&mut w, &hundred));
     let (k1, k100) = (one.built(&w.chem), hundred.built(&w.chem));
     println!("basal upkeep of a member of {} kg ({k1:.3} kg of body) {e1:.4e} J/day, of {} kg ({k100:.3}) {e100:.4e}", one.mass(&w.chem), hundred.mass(&w.chem));
-    assert!((e1 / k1 / w.cfg.phys.c_basal - 1.0).abs() < 1e-9, "it pays c_basal per kg of body: {}", e1 / k1);
+    // (Per kg of body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25: Kleiber across kinds, 15 Oct 2026.)
+    let kind = (b.dec(pcore::body::COPY_MASS) / w.cfg.phys.m_ref).powf(w.cfg.phys.intake_exp - 1.0);
+    assert!((e1 / k1 / w.cfg.phys.c_basal / kind - 1.0).abs() < 1e-9, "it pays c_basal per kg of body: {}", e1 / k1);
     assert!((e100 / e1 / 100.0 - 1.0).abs() < 1e-9, "100 times the body pays 100 times as much, the same per kg: {}", e100 / e1);
     // A node of 5 members pays 5 times a member's.
     assert!((basal(&mut w, &sized(100.0, 5.0)) / (5.0 * e100) - 1.0).abs() < 1e-9, "a node pays for each member");
@@ -854,8 +856,14 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     }
     // Strength, catalysts, learning and basal are each in it, by the kg of body (at the temperature the costs are anchored to).
     let p = w.cfg.phys;
-    let want = days * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + p.c_learn * b.learn_rate() as f64);
+    let kind = (b.dec(pcore::body::COPY_MASS) / p.m_ref).powf(p.intake_exp - 1.0);
+    let want = days * kind * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + p.c_learn * b.learn_rate() as f64);
     assert!((per_kg[0] / want - 1.0).abs() < 1e-9, "per kg of body {} against the costs summed {want}", per_kg[0]);
+    // Across kinds by the size a kind matures at (Kleiber, 15 Oct 2026): the same body of a kind that matures 16 times
+    // larger pays half as much per kg.
+    let mut big = b.clone();
+    big.genes[pcore::body::COPY_MASS] += 16f32.log10();
+    assert!((up(&w, &big) / up(&w, &b) - 0.5).abs() < 1e-6, "a kind 16 times larger pays {} of the upkeep per kg", up(&w, &big) / up(&w, &b));
     // Fuel is no body: three times the fuel, the same upkeep.
     let mut fat = b.clone();
     fat.store[rich] *= 3.0;
