@@ -22,6 +22,9 @@ them. I say so plainly:
 2. A resting body's heat balance is held within 15% (it was 12%). The body stands 0.443 K above the
    ground; the count says 0.509 K (13% under). Main alone and the study alone were within 2%. I did not
    find the cause.
+   (Found later, 15 Oct 2026: the body's reactions ran 9 K too cold after its upkeep, and the test's count
+   left out the latent heat of the liquid the burning makes. Fixed; the test is within 2% again. See the
+   handover row "The heat a body makes stays in it", doubt 1.)
 3. The warm body under cover: the test took the warmest animal, and that one starved in its first month
    (a fifth of the starting animals do, on both). Now it takes the warmest one that lives.
 
