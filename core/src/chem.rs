@@ -66,9 +66,9 @@ pub struct Reaction {
     pub ea: f64,
     /// Takes absorbed light instead of heat
     pub light: bool,
-    /// The power each input's share enters the rate law at, in the order of `inputs` (15 Oct 2026); empty: the counts of
-    /// `inputs`, as mass action says for one step. A reaction of a big molecule is not one meeting of 40 molecules: the
-    /// law of its rate keeps the power it was measured at (`order`), whatever it takes in all.
+    /// The power each input's share enters the rate law at, in the order of `inputs`; empty: the counts of
+    /// `inputs`, as mass action says. A reaction of a big molecule is not one meeting of 40 molecules: the
+    /// rate law keeps the power it was measured at (`order`), whatever the reaction takes in all.
     #[serde(default)]
     pub ord: Vec<u16>,
 }
@@ -86,18 +86,17 @@ pub struct Chemistry {
     pub n_elements: usize,
     pub subs: Vec<Substance>,
     pub reactions: Vec<Reaction>,
-    /// How bodies grow (14 Oct 2026): a conversion of stores into body matter, balanced in
-    /// elements like a reaction, with no rate (it is not a reaction of the open world: Copy runs
-    /// it, paid by work, `copy::grow`). Its first output is the body matter; the others are
-    /// what is left over. None: bodies have no matter apart from their stores (`Body::size` is
-    /// their mass, and they do not grow).
+    /// How bodies grow: a conversion of stores into body matter, balanced in elements like a
+    /// reaction, with no rate (Copy runs it, paid by work, `copy::grow`). Its first output is the
+    /// body matter; the others are what is left over. None: bodies have no matter apart from
+    /// their stores (`Body::size` is their mass, and they do not grow).
     #[serde(default)]
     pub build: Option<Reaction>,
     /// Mole fractions of the starting air, per substance (empty: none known). The cost of a
     /// catalyst counts the gases of a reaction beyond first order at these shares (`Body::prepare`).
     #[serde(default)]
     pub air: Vec<f64>,
-    /// What the loose ground of every land cell is given when life starts (15 Oct 2026), mol per m² per substance: the
+    /// What the loose ground of every land cell is given when life starts, mol per m² per substance: the
     /// nitrogen mineral of the soil, 0.357 mol (10 g of nitrogen) in chemistry 0 (`worldgen::life::soil`). Empty: none.
     #[serde(default)]
     pub soil: Vec<(usize, f64)>,
@@ -166,7 +165,7 @@ impl Chemistry {
 
     /// Does reaction `r` get less heat out of a solid or liquid it takes than a burning of it does (a reaction that releases heat
     /// from it with a gas)? Then it keeps the rest in what it makes (a fuel gas, a mineral): it is no burning, and a body runs it at
-    /// its catalyst's pace and never pays its upkeep with its heat (`Body::prepare`, 15 Oct 2026).
+    /// its catalyst's pace and never pays its upkeep with its heat (`Body::prepare`).
     pub fn keeps(&self, r: usize) -> bool {
         let gas = |k: u16| self.phase(k as usize, crate::T_SURF) == Phase::Gas;
         let per = |q: usize, k: u16| self.reactions[q].inputs.iter().find(|p| p.0 == k).map_or(f64::NEG_INFINITY, |p| -self.dh(q) / p.1 as f64);
@@ -187,10 +186,10 @@ impl Chemistry {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
-    /// What growth (`build`) makes body matter of besides the fuel (15 Oct 2026: the nitrogen mineral and the salt of the rock
-    /// element, both of the ground): each one's substance and the mol of it a mol of matter is made of. They are the inputs that no
-    /// reaction of the chemistry burns (releases heat from with a gas, as a fuel burns), so a body takes them from the ground or
-    /// what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.
+    /// What growth (`build`) makes body matter of besides the fuel (the nitrogen mineral and the salt of the rock element, both
+    /// of the ground): each one's substance and the mol of it a mol of matter is made of. They are the inputs that no
+    /// reaction of the chemistry burns (releases heat from with a gas, as a fuel burns), so a body takes them from the
+    /// ground or what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.
     pub fn minerals(&self) -> Vec<(usize, f64)> {
         let Some(bl) = self.build.as_ref() else { return Vec::new() };
         let gas = |k: u16| self.phase(k as usize, crate::T_SURF) == Phase::Gas;

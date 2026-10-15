@@ -102,8 +102,6 @@ pub struct Scratch {
     fix: Vec<[f64; 2]>,
     bedk: Vec<usize>,
     gas: Vec<usize>,
-    // Ground nodes: bonded ground [heat capacity of the skin, volume, reflectance,
-    // conductivity]; heat capacity, temperature, solid surface, head, reflectance.
     bed: Vec<[f64; 4]>,
     cap: Vec<f64>,
     tg: Vec<f64>,
@@ -136,7 +134,6 @@ pub struct Scratch {
     sed_e: Vec<f64>,
     #[serde(skip)]
     mob: Vec<f64>,
-    // The temperature of the air touching the ground.
     #[serde(skip)]
     air_of: Vec<u32>,
     #[serde(skip)]
@@ -146,23 +143,14 @@ pub struct Scratch {
     #[serde(skip)]
     per: Vec<f64>,
     tl: Vec<f64>,
-    /// Per ground cell, from the last full step: temperature drop per metre, mean height of
-    /// the air's mass, heat-absorbing share, sunlight reflected by condensate in the air,
-    /// air temperature; and the temperature of each air node then.
     seen: Vec<[f64; 5]>,
-    /// Per ground cell, from the last full step: how much colder than the air at the ground each
-    /// layer of the air is that sends heat radiation [down, up] (`air::column`).
     #[serde(default)]
     lay: Vec<[[f64; air::LAYERS]; 2]>,
     ta0: Vec<f64>,
-    /// Per air node: condensed in the last full step, mol, and × its reflectance.
     #[serde(skip)]
     cloud: Vec<[f64; 2]>,
     #[serde(skip)]
     snap: Vec<f64>,
-    // Air nodes: ground cells (a table), mean ground height, volume, amount, heat capacity, mass,
-    // optical depth, temperature drop per metre, mean height of the air's mass,
-    // temperature, pressure, warmth at equal height and its gradient.
     #[serde(skip)]
     cells: Vec<f64>,
     za: Vec<f64>,
@@ -185,8 +173,6 @@ pub struct Scratch {
     cond: Vec<bool>,
     hk: Vec<f64>,
     split: Vec<f64>,
-    // Amounts of air nodes after the pushes of a direction, mol; the rows of numbers that each
-    // ground cell (`air::radiation`) and each line of air nodes (`air::wind`) make in a call.
     #[serde(skip)]
     nt_new: Vec<f64>,
     #[serde(skip)]
