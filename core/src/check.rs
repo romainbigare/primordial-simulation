@@ -33,10 +33,10 @@ pub fn totals(w: &World) -> Totals {
     let (chem, ns) = (&w.chem, w.chem.ns());
     // mol of each substance, and the energy held as latent heat in the air
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
-    for (store, len, air) in [(&w.ground, w.grid.n(), false), (&w.bed, w.grid.n(), false), (&w.air, w.grid.na(), true)] {
+    for (store, len, air) in [(&w.ground, w.grid.n(), false), (&w.bed, w.grid.n(), false), (&w.air, w.grid.na(), true), (&w.deep, w.grid.n(), false)] {
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
-            store[k * len..(k + 1) * len].iter().for_each(|&a| s.add(a));
+            store.get(k * len..(k + 1) * len).unwrap_or(&[]).iter().for_each(|&a| s.add(a));
             sum.add(s.get());
             // Air holds its gases' fusion and vaporisation enthalpy; the ground holds fusion in `e_ground`.
             if air {
@@ -45,7 +45,7 @@ pub fn totals(w: &World) -> Totals {
         }
     }
     // Light set aside for bodies counts as heat until they store it.
-    w.e_ground.iter().chain(&w.e_air).chain(&w.light_pool).for_each(|&e| thermal.add(e));
+    w.e_ground.iter().chain(&w.e_air).chain(&w.light_pool).chain(&w.e_deep).for_each(|&e| thermal.add(e));
     for b in w.life.alive() {
         b.store.iter().zip(subs.iter_mut()).for_each(|(&a, s)| s.add(a));
         thermal.add(b.e);
@@ -83,7 +83,7 @@ pub fn drift(w: &World, start: &Totals, start_ledger: &crate::Ledger) -> (f64, f
 
 /// True if any amount or energy is NaN, infinite or negative.
 pub fn broken(w: &World) -> Option<String> {
-    for (name, v) in [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("light_pool", &w.light_pool)] {
+    for (name, v) in [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("light_pool", &w.light_pool), ("deep", &w.deep)] {
         if let Some(i) = v.iter().position(|x| !x.is_finite() || *x < 0.0) {
             return Some(format!("{name}[{i}] = {}", v[i]));
         }

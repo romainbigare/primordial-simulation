@@ -638,6 +638,7 @@ impl Recorder {
                 (format!("min{q}_bodies"), "1e9 mol", t[2][0] / 1e9),
                 (format!("min{q}_ground_land"), "1e9 mol", t[0][0] / 1e9),
                 (format!("min{q}_ground_sea"), "1e9 mol", t[0][1] / 1e9),
+                (format!("min{q}_deep"), "1e9 mol", w.deep.get(mk * gn..(mk + 1) * gn).map_or(0.0, |v| v.iter().sum::<f64>()) / 1e9),
             ]);
         }
         row.extend([
@@ -648,6 +649,9 @@ impl Recorder {
             ("ice_frac".to_string(), "1", c.f.ice.iter().filter(|&&v| v >= COVER_MIN).count() as f64 / n),
             ("liquid_land".to_string(), "km3", land_liquid / 1e9),
             ("stand_land".to_string(), "km3", land_stands / 1e9),
+            // 15 Oct 2026 (drainage): the share of land cells where liquid stands over full pores, and the liquid in the stores of the bed under the land.
+            ("wet_land".to_string(), "1", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0 && pcore::body::env_of(w, i)[1] > 0.0).count() as f64 / (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).count().max(1) as f64),
+            ("deep_land".to_string(), "km3", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| (0..w.chem.ns()).filter(|&k| w.chem.phase(k, c.f.t[i]) == pcore::chem::Phase::Liquid).map(|k| w.deep.get(k * w.grid.n() + i).copied().unwrap_or(0.0) * w.chem.molar_volume(k, pcore::chem::Phase::Liquid)).sum::<f64>()).sum::<f64>() / 1e9),
             ("rain".to_string(), "mol/m2/s", w.diag.rain.iter().map(|&v| v as f64).sum::<f64>() / n),
             ("bodies".to_string(), "1", bodies),
             ("plants".to_string(), "1", light_eaters),

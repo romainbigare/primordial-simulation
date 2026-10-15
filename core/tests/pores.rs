@@ -79,9 +79,9 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     let (kept_old, _) = run(0.0, 0.5);
     assert!(kept > 0.7, "the ground kept {kept} of its liquid");
     assert!(kept_old < 0.1, "with no pores {kept_old} of it stayed");
-    // Twice the pores' volume: the pores are full and the rest ran off.
+    // Twice the pores' volume: the rest ran off, and the pores keep their field capacity (`field`, 0.6) as the rest sinks.
     let (_, full) = run(0.4, 2.0);
-    assert!(full < 1.05 && full > 0.7, "the ground holds {full} of its pore volume after the excess ran off");
+    assert!(full < 1.05 && full > 0.55, "the ground holds {full} of its pore volume after the excess ran off");
 }
 
 /// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the thickness
@@ -140,4 +140,37 @@ fn pore_liquid_barely_moves_across_a_cell() {
     let per_year = k * thick * w.grid.cell_m * slope * 365.0 * 86_400.0;
     let pores = w.cfg.phys.porosity * 1.0 * w.grid.area();
     assert!(per_year / pores < 1e-3, "{per_year} m³ a year against {pores} m³ of pores");
+}
+
+/// Drainage (`flow::drain`): liquid over the share `field` of the pores sinks into the bed's store, no more than it
+/// holds (`bed_porosity` x `bed_depth`) nor `seep` a second; a full store on a high cell passes its liquid down the
+/// slope, and none overfills. Matter and energy are kept.
+#[test]
+fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
+    let (_, init) = worldgen::chemistry0();
+    let mut w = worldgen::new_world(3, 16, 16);
+    let (k, (hi, lo)) = (init.low, pair(&w));
+    let (n, area, p) = (w.grid.n(), w.grid.area(), w.cfg.phys);
+    let (pores, full, mv) = (p.porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(k, Phase::Liquid));
+    w.cfg.evap = 0.0;
+    pour(&mut w, k, hi, 0.9 * pores);
+    let (t0, l0) = (totals(&w), w.ledger.clone());
+    pcore::flow::step(&mut w, DT);
+    let deep = |w: &World, i: usize| w.deep[k * n + i] * mv;
+    // Down: what is over the field capacity, 0.3 of the pores (0.9 - 0.6), less what Darcy's flow took sideways.
+    assert!(deep(&w, hi) > 0.1 * pores && deep(&w, hi) <= (0.3 * pores).min(full) * 1.000001, "{} m³ sank of {pores} m³ of pores", deep(&w, hi));
+    assert!(liquid_m3(&w, k, hi) >= 0.95 * 0.6 * pores, "the loose ground kept {} of {pores} m³", liquid_m3(&w, k, hi));
+    let (de, dq) = drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
+    // Across: the high cell's store, full and warm, drains to its neighbours; the low one's never holds more than it can.
+    w.deep[k * n + hi] = full / mv;
+    w.e_deep[hi] = full / mv * (w.chem.subs[k].cp * 290.0 + w.chem.subs[k].lf);
+    let (t0, l0) = (totals(&w), w.ledger.clone());
+    for _ in 0..20 {
+        pcore::flow::step(&mut w, DT);
+        assert!(deep(&w, lo) <= full * 1.000001, "the low cell's store overfilled");
+    }
+    assert!(deep(&w, hi) < 0.9 * full, "the full store on the high cell did not drain: {} of {full} m³", deep(&w, hi));
+    let (de, dq) = drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
 }

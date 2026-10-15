@@ -25,7 +25,8 @@ fn liquid_runs_downhill() {
     let (t0, l0) = (totals(&w), w.ledger.clone());
     pcore::flow::step(&mut w, DT);
     let left = w.ground[k * n + top];
-    assert!(left < 1.1 * pores && left > 0.7 * pores, "the cell holds {} of its pores' worth", left / pores);
+    // (It keeps its field capacity, `field` of its pores; the rest ran off or sank into the bed below, `flow::drain`.)
+    assert!(left < 1.1 * pores && left > 0.55 * pores, "the cell holds {} of its pores' worth", left / pores);
     let (de, dq) = drift(&w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }
@@ -155,7 +156,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         }
         let (de, dq) = drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
-        let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| w.ground[mineral * n + i]).sum();
+        let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| w.ground[mineral * n + i]).sum::<f64>() + w.deep.get(mineral * n..(mineral + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>());
         assert!((downstream + w.ground[mineral * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + w.ground[mineral * n + top]);
         (1.0 - w.ground[mineral * n + top] / 1e6, 1.0 - w.ground[k * n + top] / liquid0)
     };
