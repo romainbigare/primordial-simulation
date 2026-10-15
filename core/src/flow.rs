@@ -1,12 +1,11 @@
 //! Law 1: Flow. Stuff moves along edges from high push to low push, with loss.
 //!
-//! Ground nodes (here): liquid soaks into the pores of the loose ground up to their volume (the
-//! porosity times the volume of the loose solids) and what is over that stands and runs down its
-//! head in one ordered sweep; the liquid in the pores flows to neighbours by Darcy's law; the head
-//! it loses heats the ground and does work, carrying loose solids and breaking weak bonds; loose
-//! solids creep downhill and heat conducts. Air nodes (`air`): radiation, contact heat,
-//! evaporation and condensation, and gas moved by pressure, overturning and mixing.
-//! Every move takes from one node exactly what it gives to another, with its heat, and
+//! Ground nodes (here): liquid soaks into the pores of the loose ground (porosity times the volume
+//! of the loose solids); what is over that stands and runs down its head in one ordered sweep; the
+//! pore liquid flows by Darcy's law; the head lost heats the ground and does work, carrying loose
+//! solids and breaking weak bonds; loose solids creep downhill and heat conducts. Air nodes (`air`):
+//! radiation, contact heat, evaporation and condensation, and gas moved by pressure, overturning
+//! and mixing. Every move takes from one node exactly what it gives to another, with its heat, and
 //! books matter lifted or dropped in the gravity ledger, so elements and energy are kept.
 
 pub(crate) mod air;
@@ -43,19 +42,18 @@ struct Sp {
     refl: [f64; 2],
 }
 
-/// Working memory of the law, rebuilt from the world when missing. It is saved with the
-/// world (but for the space used only within a call, and the tables that depend on the grid and
-/// the chemistry alone, which `tables` rebuilds on load), as the slower parts of the law run
-/// from what it held at their last turn: a resumed run must go on exactly as an unbroken one.
+/// Working memory of the law, rebuilt from the world when missing. It is saved with the world
+/// (but for the space used within a call and the tables `tables` rebuilds on load): the slower
+/// parts of the law run from what it held at their last turn, so a resumed run matches an unbroken one.
 ///
-/// Who writes and who reads each field (R `refresh`, G `ground_state`, S `air::state`, Rad
+/// Who writes and reads each field (R `refresh`, G `ground_state`, S `air::state`, Rad
 /// `air::radiation`, X `air::exchange`, W `air::wind`, L `liquid`, C `creep`, Law 2 `change`
-/// through `view`). Ground fields are per ground node, air fields per air node; "all" is every part.
+/// through `view`). Ground fields are per ground node, air fields per air node.
 ///
 /// | field | unit | written by | read by |
 /// | --- | --- | --- | --- |
 /// | `month`, `year`, `pending`, `pending_liq`, `pending_exc`, `owe_work` | month, year, s, s, s, flag | `step` | `step` |
-/// | `area`, `sp` | m², `Sp` per substance | `tables` (on load) | all |
+/// | `area`, `sp`, `cells`, `air_of`, `near`, `wt`, `per` | m², `Sp` per substance, count, ground cell to air nodes, weights, share | `tables` (on load) | all |
 /// | `loose`, `fixed`, `vary`, `bedk`, `gas` | substance lists | R (`loose`, `vary` also X, L) | all |
 /// | `fix` | m³ (volume, volume × reflectance) | R | `surface` |
 /// | `bed` | [J/K skin, m³, reflectance, W/(m K)] | R (L wears `[1]`) | G, Rad (via `alb`), C, Law 2 |
@@ -64,27 +62,18 @@ struct Sp {
 /// | `pk`, `phi` | substance, share | G | `molten`, Rad |
 /// | `hold` | [J held, J low, J high, stage] | G, L (`[0]`), `lift` (marks stale) | G, L |
 /// | `z`, `head` | m (solid surface, surface of all the liquid, pores filled first) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
-/// | `pd` | m (liquid the pores of the loose ground hold, over the cell's area) | `surface` | L |
-/// | `alb`, `rc` | reflectance, m² K/W | `surface` | Rad |
-/// | `rain` | mol, condensed this call | X | X (to `diag.rain`) |
-/// | `order` | cell keys by head | L | L |
-/// | `nbr`, `done` | neighbour cells, visited flag | `space`; L | L |
-/// | `sed`, `sed_e`, `mob` | mol carried, J carried, m³ mobile | L (`sed`, `sed_e`); C (`mob`) | L; C |
-/// | `air_of`, `near`, `wt`, `per` | ground cell to air nodes and weights, share | `tables` (on load) | S, Rad, X, `lerp` |
-/// | `tl` | K, air touching the ground | Rad | X |
+/// | `pd`, `alb`, `rc` | m (pore liquid over the cell), reflectance, m² K/W | `surface` | L; Rad |
+/// | `order`, `done`, `sed`, `sed_e` | cell keys by head, visited flag, mol carried, J carried | L | L |
+/// | `nbr`, `mob` | neighbour cells, m³ mobile | `space`; C | L; C |
+/// | `tl`, `ta0` | K, air touching the ground; K, air at the last S | Rad; S | X; Rad |
 /// | `seen`, `lay` | [drop/m, air height, absorbing share, cloud reflectance, air K]; K below the ground's air, per layer | S (X sets `[3]`) | Rad |
-/// | `ta0` | K, air at the last S | S | Rad |
-/// | `cloud`, `snap` | [mol, mol × reflectance]; mol per gas | X | X |
-/// | `cells`, `za`, `vol` | count, m, m³ | `tables`; S | S, W |
+/// | `rain`, `cloud`, `snap`, `trace` | mol condensed, [mol, mol × reflectance], mol per gas, s and calls | X | X (`rain` to `diag.rain`) |
+/// | `za`, `vol` | m, m³ | S | S, W |
 /// | `nt`, `capa`, `mass` | mol, J/K, kg | S; X, W (moves) | X, W, Rad |
 /// | `fabs`, `gam`, `zair`, `ta` | optical depth, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
 /// | `node_tmp` | reused: J/K (S), J (Rad), reflectance (X), Pa (W) | S, Rad, X, W | the same part |
-/// | `warmth`, `grad` | K at equal height, K per node | W | W |
 /// | `cond`, `hk`, `split` | may condense, m, share (per gas) | S | X, W |
-/// | `nt_new` | mol, amounts after the pushes of a direction | W | W |
-/// | `rad` | a row of numbers per ground cell | Rad | Rad |
-/// | `lanes` | a row of fluxes per line of air nodes | W | W |
-/// | `trace` | s, calls | X | X |
+/// | `warmth`, `grad`, `nt_new`, `lanes`, `rad` | work space of W (warmth, gradient, amounts after a direction, a row of fluxes per line) and Rad (a row per ground cell) | W; Rad | W; Rad |
 /// | `slow` | [tick last, tick next, count] | Law 2 | Law 2 |
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
@@ -99,24 +88,20 @@ pub struct Scratch {
     stale: bool,
     /// Moving liquid's work on its bed is due at the next liquid step.
     owe_work: bool,
-    /// Tables of the grid and the chemistry alone (not saved): ground cell area, substance
-    /// constants, and the map from ground cells to air nodes (own node, four nearest nodes and
-    /// weights, ground cells per air node, share of a node).
+    /// Tables of the grid and the chemistry alone (not saved): cell area, substance constants,
+    /// and the map from ground cells to air nodes (own node, four nearest and weights, share).
     #[serde(skip)]
     area: f64,
     #[serde(skip)]
     sp: Vec<Sp>,
-    /// Substances present in ground, bonded ground and air nodes. Loose ones that stay solid
-    /// and cannot evaporate at any ground temperature are `fixed`: their volume and volume ×
-    /// reflectance per node are kept between refreshes in `fix`; the others `vary`.
+    /// Substances present in ground, bonded ground and air nodes. Loose ones that stay solid and
+    /// cannot evaporate are `fixed` (volume and volume × reflectance kept in `fix`); the others `vary`.
     loose: Vec<usize>,
     fixed: Vec<usize>,
     vary: Vec<usize>,
     fix: Vec<[f64; 2]>,
     bedk: Vec<usize>,
     gas: Vec<usize>,
-    // Ground nodes: bonded ground [heat capacity of the skin, volume, reflectance,
-    // conductivity]; heat capacity, temperature, solid surface, head, reflectance.
     bed: Vec<[f64; 4]>,
     cap: Vec<f64>,
     tg: Vec<f64>,
@@ -128,8 +113,7 @@ pub struct Scratch {
     hold: Vec<[f64; 4]>,
     z: Vec<f64>,
     head: Vec<f64>,
-    /// Pore space of the loose ground, as a depth of liquid over the cell (the porosity times the
-    /// volume of its loose solids over the area): the first liquid of a cell fills it.
+    /// Pore space of the loose ground, as a depth of liquid over the cell: the first liquid fills it.
     #[serde(default)]
     pd: Vec<f64>,
     alb: Vec<f64>,
@@ -150,7 +134,6 @@ pub struct Scratch {
     sed_e: Vec<f64>,
     #[serde(skip)]
     mob: Vec<f64>,
-    // The temperature of the air touching the ground.
     #[serde(skip)]
     air_of: Vec<u32>,
     #[serde(skip)]
@@ -160,23 +143,14 @@ pub struct Scratch {
     #[serde(skip)]
     per: Vec<f64>,
     tl: Vec<f64>,
-    /// Per ground cell, from the last full step: temperature drop per metre, mean height of
-    /// the air's mass, heat-absorbing share, sunlight reflected by condensate in the air,
-    /// air temperature; and the temperature of each air node then.
     seen: Vec<[f64; 5]>,
-    /// Per ground cell, from the last full step: how much colder than the air at the ground each
-    /// layer of the air is that sends heat radiation [down, up] (`air::column`).
     #[serde(default)]
     lay: Vec<[[f64; air::LAYERS]; 2]>,
     ta0: Vec<f64>,
-    /// Per air node: condensed in the last full step, mol, and × its reflectance.
     #[serde(skip)]
     cloud: Vec<[f64; 2]>,
     #[serde(skip)]
     snap: Vec<f64>,
-    // Air nodes: ground cells (a table), mean ground height, volume, amount, heat capacity, mass,
-    // optical depth, temperature drop per metre, mean height of the air's mass,
-    // temperature, pressure, warmth at equal height and its gradient.
     #[serde(skip)]
     cells: Vec<f64>,
     za: Vec<f64>,
@@ -199,8 +173,6 @@ pub struct Scratch {
     cond: Vec<bool>,
     hk: Vec<f64>,
     split: Vec<f64>,
-    // Amounts of air nodes after the pushes of a direction, mol; the rows of numbers that each
-    // ground cell (`air::radiation`) and each line of air nodes (`air::wind`) make in a call.
     #[serde(skip)]
     nt_new: Vec<f64>,
     #[serde(skip)]
@@ -220,8 +192,7 @@ impl Scratch {
         (&self.tg, &self.ta)
     }
     /// For Law 2, from the last flow step: per ground node its temperature, the heat capacity of
-    /// its bonded ground's skin (as of the last refresh) and its air node; per air node its
-    /// temperature. Empty before the first step.
+    /// its bonded skin (as of the last refresh) and its air node; per air node its temperature.
     pub(crate) fn view(&self) -> (&[f64], &[[f64; 4]], &[u32], &[f64]) {
         (&self.tg, &self.bed, &self.air_of, &self.ta)
     }
@@ -244,8 +215,7 @@ pub fn step(w: &mut World, dt: f64) {
     (s.pending, s.pending_liq) = (s.pending + dt, s.pending_liq + dt);
     let day = 86_400.0;
     let (air_due, liq_due) = (first || s.pending >= w.cfg.air_days as f64 * day - 1.0, first || s.pending_liq >= w.cfg.flow_days as f64 * day - 1.0);
-    // The state of ground and air is rebuilt at liquid steps (and when a refresh changed what is
-    // present, or a snapshot from before 13 October 2026 has no air layers).
+    // The state of ground and air is rebuilt at liquid steps and when a refresh changed what is present.
     let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.grid.n();
     ground_state(w, &mut s, full);
     air::state(w, &mut s, full);
@@ -447,13 +417,11 @@ fn space(w: &World, s: &mut Scratch) {
     (s.done, s.grad, s.cloud) = (vec![false; n], vec![[0.0; 2]; na], vec![[0.0; 2]; na]);
 }
 
-/// Heat capacity, temperature, surface, head and reflectance of every ground node. Between
-/// full steps the amounts change little: only nodes whose phases change (on or off a
-/// melting plateau, or past a melting point) get a new surface.
+/// Heat capacity, temperature, surface, head and reflectance of every ground node. Between full
+/// steps only nodes whose phases change (on or off a melting plateau, past a melting point) get a new surface.
 fn ground_state(w: &World, s: &mut Scratch, full: bool) {
-    // Heat capacity from the amounts now, at every step: bodies and Law 2 also move loose matter
-    // (with its heat) between liquid steps, and a node read with the capacity it had before
-    // would seem far too hot or cold (then evaporation, say, takes heat it does not hold).
+    // Heat capacity from the amounts now, at every step: bodies and Law 2 move loose matter
+    // (with its heat) between liquid steps, and a stale capacity would read a node far too hot or cold.
     let n = w.grid.n();
     let mut cap: Vec<f64> = s.bed.iter().map(|b| b[0]).collect();
     for &k in &s.loose {
@@ -462,8 +430,8 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             *c += a * cp;
         }
     }
-    // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting
-    // point (a plateau) until all of that substance has frozen or melted.
+    // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting point
+    // (a plateau) until all of that substance has frozen or melted.
     for i in 0..n {
         let same = (cap[i] - s.cap[i]).abs() <= 1e-9 * cap[i];
         s.cap[i] = cap[i];
@@ -547,11 +515,11 @@ fn table(s: &Scratch, i: usize, por: f64) -> f64 {
     if full { s.head[i] - s.pd[i] } else { s.z[i] - s.pd[i] / por + (s.head[i] - s.z[i]) / por }
 }
 
-/// Liquid by head, as one ordered sweep from the highest head down: each node passes liquid
-/// to its lower neighbours, more to the steeper, so it can cross the map in one sweep while
-/// depressions fill and spill. The head lost heats the node. Every few months (`work` > 0,
-/// their share of this call) the power lost also does work: it carries loose solids up to
-/// a capacity, drops the rest, and breaks bonded ground by power over bond strength.
+/// Liquid by head, as one ordered sweep from the highest head down: each node passes liquid to
+/// its lower neighbours, more to the steeper, so it can cross the map in one sweep while
+/// depressions fill and spill. The head lost heats the node. Every few months (`work` > 0) the
+/// power lost also carries loose solids up to a capacity, drops the rest, and breaks bonded
+/// ground by power over bond strength.
 fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let (n, area, g) = (w.grid.n(), s.area, w.cfg.gravity);
     let inv = DIRS.map(|d| 1.0 / w.grid.dist(d));
@@ -561,8 +529,8 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin).collect();
     let ns = sol.len();
     s.sed.resize(n * ns, 0.0);
-    // Highest head first (heads to 0.1 m, then by cell). The order is kept between refreshes:
-    // any order is safe, it only sets how far liquid gets in one call.
+    // Highest head first (heads to 0.1 m, then by cell); kept between refreshes (any order is safe,
+    // it only sets how far liquid gets in one call).
     if s.order.len() != n {
         s.order = (0..n).map(|i| (((2e4 - stand(s, i)).max(0.0) * 10.0) as u64) << 20 | i as u64).collect();
         s.order.sort_unstable();
@@ -575,16 +543,14 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         let i = (s.order[r] & 0xf_ffff) as usize;
         let (t, hd, zi) = (s.tg[i], stand(s, i), s.z[i]);
         s.done[i] = true;
-        // The head above the surface is the liquid standing here, and liquid in the pores is not at rest
-        // either: it flows by Darcy's law (`seep`).
+        // Head above the surface is liquid standing here; liquid in the pores flows by Darcy's law.
         let damp = s.pd[i] > 0.0 && s.head[i] > zi;
         if hd <= zi && !damp && work <= 0.0 {
             w.diag.liquid_flux[i] *= 1.0 - ema;
             continue;
         }
-        // Lower neighbours, and how far this node's head may fall for each: down to a
-        // neighbour still to come (which passes the liquid on) or to its own bed; half way
-        // to one already done, so heads never cross.
+        // Lower neighbours and how far this head may fall for each: to one still to come (which
+        // passes the liquid on) or to its own bed; half way to one already done, so heads never cross.
         let (mut nb, mut q, mut room) = ([(0usize, 0.0f64); 8], [0.0f64; 8], [0.0f64; 8]);
         let (mut cnt, mut wsum, mut rmax, mut qmax) = (0, 0.0, 0.0f64, 0.0f64);
         for (d, &j) in s.nbr[i].iter().enumerate() {
@@ -617,14 +583,12 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 q[c] = 0.0;
             }
         }
-        // What leaves carries the node's heat at its temperature now: radiation and evaporation
-        // earlier in this call may have cooled it below `tg`, and liquid that came in from above
-        // mixed in at its own temperature (its fusion enthalpy is counted held as it moves, so
-        // a hot node that a flood of cooler liquid crosses does not send it on at the old
-        // temperature, more heat than it holds).
+        // What leaves carries the node's heat at its temperature now: earlier radiation and
+        // evaporation in this call may have cooled it below `tg`, and liquid from above mixed in
+        // at its own temperature (so a flood of cooler liquid is not sent on at the old, hotter one).
         let tcur = t.min((w.e_ground[i] - s.hold[i][0]) / s.cap[i].max(1.0)).max(0.0);
         let (mut power, mut out) = (0.0, 0.0);
-        // Only the liquid over the pores runs off (`qs`, the load it carries goes with it alone); each
+        // Only the liquid over the pores runs off (`qs`: the load goes with it alone); `fall`: each
         // neighbour's drop in head, for the power lost.
         let (mut fall, mut qs, mut qss) = ([0.0; 8], [0.0; 8], 0.0);
         if lvol > 0.0 && cnt > 0 {
@@ -635,9 +599,8 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 qss += q[c];
             }
         }
-        // The pore liquid flows on by Darcy's law: through the thickness of ground the liquid table fills, at
-        // `seep` times the slope of its head (to the neighbour with the lower table, no more than half way to a
-        // level table), with the same liquid and heat as the standing liquid.
+        // Pore liquid flows by Darcy's law: through the ground the table fills, at `seep` times the
+        // slope of its head (toward a lower table, no more than half way to a level one).
         if lvol > 0.0 && damp {
             let por = w.cfg.phys.porosity;
             let ti = table(s, i, por);
@@ -694,9 +657,8 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             continue;
         }
 
-        // The work, on the bed below the liquid left standing (which hides it): drop
-        // what is over capacity (all of it where nothing flows on), else pick up loose solids
-        // and break bonded ground; pass the load on with the flow.
+        // The work, on the bed below the liquid left standing (which hides it): drop what is over
+        // capacity (all of it where nothing flows on), else pick up loose solids and break bonded ground.
         let bedwork = power * work * w.cfg.phys.hide[1] / (w.cfg.phys.hide[1] + (lvol - s.pd[i] * area - qss).max(0.0) / area);
         let load: f64 = sol.iter().enumerate().map(|(si, &k)| s.sed[i * ns + si] * s.sp[k].v[0]).sum();
         let capv = w.cfg.carry * bedwork * held(w, i);
@@ -782,13 +744,13 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     w.ledger.gravity += heat;
 }
 
-/// Drainage (15 Oct 2026): the loose ground holds its liquid against gravity up to a share `field` of its pores; the
-/// rest sinks, `seep` a second at the most (Darcy's law under its own weight), into the store of the bed below
-/// (`World::deep`: a zone `bed_depth` deep with pores `bed_porosity` of it). The stores flow to their neighbours by
-/// Darcy's law, as the pores do: `bed_seep` x the depth the store fills x the slope of its table, toward a lower table,
-/// no more than half way to a level one; what reaches a full store comes out into its node's loose ground (a spring,
-/// or the standing liquid of a low cell). Each move takes its share of every liquid and what is dissolved in it, with
-/// its heat. Bodies and Law 2 do not reach the store.
+/// Drainage: the loose ground holds its liquid against gravity up to a share `field` of its pores; the
+/// rest sinks, `seep` a second at most (Darcy's law under its own weight), into the store of the bed below
+/// (`World::deep`: a zone `bed_depth` deep with pores `bed_porosity` of it). The stores flow to their
+/// neighbours by Darcy's law as the pores do (`bed_seep` x the depth filled x the slope of the table, toward a
+/// lower table, no more than half way to a level one); what reaches a full store comes out into its node's
+/// loose ground (a spring, or standing liquid). Each move takes its share of every liquid and what is dissolved
+/// in it, with its heat. Bodies and Law 2 do not reach the store.
 fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, ns, area, p) = (w.grid.n(), w.chem.ns(), s.area, w.cfg.phys);
     if w.deep.len() != ns * n {
@@ -846,9 +808,9 @@ fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
     }
 }
 
-/// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers
-/// more; heat conducts between neighbouring ground nodes; bodies spread back into the ground
-/// cleared along edges (`choose::regrow`, here only, so it closes at the documented speed).
+/// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more;
+/// heat conducts between ground nodes; bodies spread back into ground cleared along edges
+/// (`choose::regrow`, here only, so it closes at the documented speed).
 fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, area, g, cell) = (w.grid.n(), s.area, w.cfg.gravity, w.grid.cell_m);
     let (tmin, _) = range(&s.tg);
@@ -884,8 +846,7 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             let r = w.cfg.creep * dz / dist * cell * dt / area * held(w, a);
             let f = (area * dz / 4.0 / (r * s.mob[a])).min(1.0);
             let (ta, tb) = (s.tg[a], s.tg[b]);
-            // What moves, summed over the substances: heat capacity, mass, mobility, and the
-            // rise of each node's surface and head.
+            // What moves, summed over substances: heat capacity, mass, mobility, rise of each surface and head.
             let (mut c, mut mass, mut mob, mut ua, mut ub) = (0.0, 0.0, 0.0, [0.0; 2], [0.0; 2]);
             for &k in &sol {
                 let x = w.ground[k * n + a] * (1.0 - molten(s, k, a));
@@ -901,7 +862,7 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             if c > 0.0 {
                 let drop = mass * g * dz / 2.0;
                 (s.cap[a], s.cap[b], s.mob[a], s.mob[b]) = (s.cap[a] - c, s.cap[b] + c, s.mob[a] - mob, s.mob[b] + mob);
-                // The heat of what moved goes with it; the node it leaves gives no more than it holds above `T_FLOOR`.
+                // The heat of what moved goes with it (no more than the node holds above `T_FLOOR`).
                 let took = w.take_heat(a, c * ta);
                 w.e_ground[b] += took + drop;
                 lift(s, a, ua);

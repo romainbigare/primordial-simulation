@@ -1,12 +1,11 @@
 //! A small brain. Its base (one hidden layer over what a body perceives and remembers) belongs
 //! to a lineage and changes only by evolution. Its rows are genes of each body, and a group of
-//! bodies shares their mean plus what the group learned: read from
-//! the hidden layer, they give fixed action scores, the weights of shared scorers (one used for
-//! every neighbour direction, one per verb for every perceived body or part), the mean of the
-//! signal and of the shape of a part made, the next memory, and an estimate of how well-being
-//! will go. Within a life the rows that
-//! pick actions and signals follow a policy gradient against that estimate (actor-critic); all
-//! rows also change by imitation. Kept apart from the laws so it can be swapped.
+//! bodies shares their mean plus what the group learned: read from the hidden layer, they give
+//! fixed action scores, the weights of shared scorers (one used for every neighbour direction,
+//! one per verb for every perceived body or part), the mean of the signal and of the shape of a
+//! part made, the next memory, and an estimate of how well-being will go. Within a life the rows
+//! that pick actions and signals follow a policy gradient against that estimate (actor-critic);
+//! all rows also change by imitation. Kept apart from the laws so it can be swapped.
 
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
@@ -153,8 +152,8 @@ pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
 
 /// Move each learned row `r` by `lr · g / rms · [h, 1]`, where `g = a · coef[r]` is its share of
 /// the step and `rms` the root of a moving average of its squares (kept in `ms`), capped at
-/// `most · lr` (`(beta, most)` are `Physics::learn_beta` and `learn_most`). Each row thus gets a step of its own size: a row that rarely matters (a
-/// feature seen only now and then) learns as fast when it does as one that matters every time.
+/// `most · lr` (`(beta, most)` are `Physics::learn_beta` and `learn_most`). Each row gets a step
+/// of its own size: a row that rarely matters learns as fast when it does as one that always does.
 pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>, (beta, most): (f32, f32)) {
     ms.resize(coef.len(), 0.0);
     for ((r, &c), v) in rows.chunks_exact_mut(h.len() + 1).zip(coef).zip(ms.iter_mut()) {
@@ -196,7 +195,6 @@ pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, v
     }
     w
 }
-
 
 /// The base of shape `a` carried over to shape `b`: weights both shapes have keep their values
 /// (the memory inputs matched from their first), new ones are noise of spread `size`.

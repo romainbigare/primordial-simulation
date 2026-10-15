@@ -8,18 +8,15 @@ fn mix(mut z: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// Purposes keep independent streams apart.
+/// Purposes keep independent streams apart (the numbers are part of the streams: do not renumber).
 #[derive(Clone, Copy)]
 #[repr(u64)]
 pub enum Purpose {
     Terrain = 1,
-    Weather,
-    Change,
-    Body,
+    Body = 4,
     Mutate,
     Choose,
-    Learn,
-    Bond,
+    Bond = 8,
     Chem,
     Split,
     /// Whether a frozen individual dies (`body::live`)

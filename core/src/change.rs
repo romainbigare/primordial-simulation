@@ -33,16 +33,13 @@ const CALM_K: f64 = 0.5;
 const SPECK: f64 = 1e-12;
 /// A reaction goes far within a step when its rate times the step reaches this.
 const FAR: f64 = 0.05;
-/// A substance making up less than this share of a ground node's loose amounts is a trace:
-/// reactions on traces alone never make a node react every step. Likewise a gas making up less
-/// than this share of its phase: a reaction that runs out of a trace of gas cannot do much in a
-/// step (heat, share of the others), and lumping it over `LAZY` steps is exact for a first-order
-/// decay at a fixed temperature (a speed schedule, as the others are).
+/// A substance making up less than this share of a ground node's loose amounts (or of its phase,
+/// for a gas) is a trace: reactions on traces alone never make a node react every step, and
+/// lumping a reaction that runs out of a trace over `LAZY` steps is exact for a first-order decay.
 const TRACE: f64 = 1e-6;
 /// Gas a ground node holds itself (left by its reactions, or dissolved in its liquid) lets it
 /// react every step only when it is more than this share of the air's gas over it: less changes
-/// the warmth its reactions need by about a tenth of a kelvin, and it reacts at its turn anyway
-/// (dissolved gases are mostly under 1% of the air's; a speed schedule, as the others are).
+/// the warmth its reactions need by about a tenth of a kelvin, and it reacts at its turn anyway.
 const OWN: f64 = 0.01;
 const BLOCK: usize = 64;
 /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
@@ -409,13 +406,12 @@ impl Reactor {
 
 /// A reaction that may go far within a step somewhere: its barrier, its inputs (one bit per
 /// substance), those that are gas at every temperature (drawn from the air) and the others
-/// with their boiling points, and its rate constant over the step relative to going far. It
-/// needs at least `hot` (all activities 1), and `low` for the gases of any air node; per air
-/// node, `need` for those gases at the most activity they can have there (their share of the
-/// air's gas), once asked for (NaN before). `shared`: the inputs that are not gas and count more
-/// than once, which in a liquid go by their share of it (a node holding little of one, a trace of
-/// its liquid, cannot go far however fast the rate constant is); `held` with their boiling points,
-/// counts and orders, `gnu` the largest count of a gas input.
+/// (`held`, with boiling points, counts and orders), and its rate constant over the step relative
+/// to going far. It needs at least `hot` (all activities 1), and `low` for the gases of any air
+/// node; per air node, `need` for those gases at the most activity they can have there, once
+/// asked for (NaN before). `shared`: the inputs that are not gas and count more than once, which
+/// in a liquid go by their share of it (a trace of one cannot go far however fast the rate is);
+/// `gnu` the largest count of a gas input.
 struct Cand {
     ea: f64,
     kdt: f64,
@@ -436,13 +432,12 @@ impl Cand {
     }
 }
 
-/// Run Law 2 on ground nodes (loose amounts, gas from the air above) and on air nodes.
-/// Node temperatures come from the last flow step. A ground node whose reactions may go far
-/// within one step (by their rate at its temperature and the most activity their inputs can
-/// have, a bound checked one reaction at a time over all nodes) reacts every step; at its turn,
-/// every `LAZY` (or `SLOW`) steps by block, a node reacts for all the time since its last turn
-/// it has not reacted for, unless all its reactions are frozen. Air nodes go far by their exact
-/// rates, else react at their turn.
+/// Run Law 2 on ground nodes (loose amounts, gas from the air above) and on air nodes, at the
+/// temperatures of the last flow step. A ground node whose reactions may go far within one step
+/// (by their rate at its temperature and the most activity their inputs can have, checked one
+/// reaction at a time over all nodes) reacts every step; at its turn, every `LAZY` (or `SLOW`)
+/// steps by block, it reacts for all the time since it last did, unless all its reactions are
+/// frozen. Air nodes go far by their exact rates, else react at their turn.
 pub fn step(w: &mut World, dt: f64) {
     let mut s = std::mem::take(&mut w.scratch);
     let chem = &w.chem;
@@ -472,8 +467,8 @@ pub fn step(w: &mut World, dt: f64) {
     let held: Vec<f64> = chem.subs.iter().map(|b| b.lf + b.lv).collect();
     let mut rc = Reactor::new(chem);
     let bit = |k: usize| 1u64 << k.min(63);
-    // Per reaction not driven by light: its inputs (one bit per substance), frozen below `thr`,
-    // too slow to go far within a step below `hot` even with all its inputs at activity 1.
+    // Per reaction not driven by light: its inputs (a bit per substance), frozen below `thr`,
+    // too slow to go far in a step below `hot` even with all inputs at activity 1.
     let rxs: Vec<(usize, u64, f64, f64)> = (0..chem.reactions.len())
         .filter(|&r| !chem.reactions[r].light)
         .map(|r| {
@@ -507,9 +502,9 @@ pub fn step(w: &mut World, dt: f64) {
     // The most activity `a` mol of a gas can have among at least `d` mol of gas.
     let act = |a: f64, d: f64| if d > 0.0 { (a / d).min(1.0) } else { 1.0 };
     // The most activity the rate per unit of the scarcest input can have from gases with shares
-    // `f`, whichever input that is: all shares to `nu`, or one power of one of them left out (not
-    // of a trace: it does not make the node react every step, see `TRACE`). A bound: `pace` is
-    // never more, as `e / lim` is at most the scarcest input's phase over its amount.
+    // `f`, whichever input that is: all shares to `nu`, or one power of one left out (not a trace,
+    // see `TRACE`). A bound: `pace` is never more, as `e / lim` is at most the scarcest input's
+    // phase over its amount.
     let up = |gas: &[(usize, u16)], f: &dyn Fn(usize) -> f64| {
         (0..=gas.len()).filter(|&d| d == gas.len() || f(gas[d].0) >= TRACE).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu.saturating_sub((q == d) as u16))).product::<f64>()).fold(0.0, f64::max)
     };
@@ -533,11 +528,10 @@ pub fn step(w: &mut World, dt: f64) {
         }
         c.need[j].get()
     };
-    // Ground nodes that may go far: warm enough; holding the inputs that are not gas there
-    // beyond a trace (of at least what the node holds of them and of the substances most of the
-    // ground is made of); and warm enough for the gases of the air above, thinned by those the
-    // node holds or gives off itself. Reactions that need warmth few nodes have look at those
-    // nodes only.
+    // Ground nodes that may go far: warm enough; holding the inputs that are not gas beyond a
+    // trace (of the substances most of the ground is made of); and warm enough for the gases of
+    // the air above, thinned by those the node holds or gives off itself. Reactions that need
+    // warmth few nodes have look at those nodes only.
     let mut most: Vec<(f64, usize)> = (0..ns).map(|k| (col(k).iter().step_by(61).sum::<f64>(), k)).collect();
     most.sort_by(|a, b| b.0.total_cmp(&a.0));
     let most: Vec<usize> = most.iter().take(3).map(|m| m.1).collect();
@@ -551,8 +545,7 @@ pub fn step(w: &mut World, dt: f64) {
             return false;
         }
         // An input that counts more than once, in a liquid, goes by its share of the liquid to the
-        // power `nu - 1` (the first of the least is the scarce one, the others to `nu`: never more):
-        // a node holding a trace of it in its liquid does not react every step.
+        // power `nu - 1`: a node holding a trace of it in its liquid does not react every step.
         if !c.shared.is_empty() {
             let liquid = |k: usize| chem.subs[k].melt <= t && t < chem.subs[k].boil;
             let all: f64 = liquids.iter().filter(|&&k| liquid(k)).map(|&k| col(k)[i]).sum();
@@ -572,8 +565,8 @@ pub fn step(w: &mut World, dt: f64) {
             return false;
         }
         // The contact of the phases (`pace`): with a gas the scarce input, the reaction goes no faster
-        // than the least the node holds of its other inputs (per count; a liquid by all the liquid)
-        // over the gas over it, times the gas's count; with another input scarce, all shares count.
+        // than the least the node holds of its other inputs (a liquid by all the liquid) over the
+        // gas over it, times the gas's count; with another input scarce, all shares count.
         let airy: Vec<(usize, u16)> = c.gas.iter().copied().chain(c.held.iter().filter(|h| t >= h.1).map(|h| (h.0, h.3))).collect();
         if !airy.is_empty() && c.held.iter().any(|h| t < h.1) {
             let liquid = |k: usize| chem.subs[k].melt <= t && t < chem.subs[k].boil;
@@ -603,9 +596,8 @@ pub fn step(w: &mut World, dt: f64) {
             }
             continue;
         }
-        // Many warm nodes: first a cheap test over all nodes (holding the inputs not gas there
-        // beyond a trace of the commonest substance, and warm enough for the air's gases or
-        // holding a gas input), then the full one.
+        // Many warm nodes: a cheap test over all (holding the non-gas inputs beyond a trace of the
+        // commonest substance, and warm enough for the air's gases or holding a gas input), then the full one.
         for (o, &t) in ok.iter_mut().zip(tg) {
             *o = t >= c.hot;
         }
@@ -649,10 +641,9 @@ pub fn step(w: &mut World, dt: f64) {
             amt[k] = w.ground[k * n + i];
         }
         let has = || (0..ns).filter(|&k| amt[k] > 0.0).fold(in_air[j], |m, k| m | bit(k));
-        // A node that may go far reacts for this step; at its turn, for all the time since its
-        // last turn it has not reacted for.
+        // A node that may go far reacts for this step (at least; a first turn has no earlier turn to
+        // count from); at its turn, for all the time since its last turn it has not reacted for.
         let [last, _, fasts] = slow[i];
-        // (At least this step if it may go far: a first turn has no earlier turn to count from.)
         let ticks = if due && !cold(t, has()) { (tick - last).saturating_sub(fasts).max(maybe[i] as u32) } else { maybe[i] as u32 };
         let mut next = LAZY;
         if ticks > 0 {
@@ -666,9 +657,9 @@ pub fn step(w: &mut World, dt: f64) {
             let mut e = w.e_ground[i] - fused;
             rc.react(chem, &mut amt, Some(&mut pool), &mut e, bed[i][0], None, 0.0, ticks as f64 * dt);
             // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas
-            // taken back from the air returns it); gas the ground cannot pay for stays behind.
-            // Gas taken from the air brings its heat at the air's temperature, and gas sent leaves
-            // with its share of the node's heat by heat capacity (at the node's temperature).
+            // taken back returns it); gas the ground cannot pay for stays behind. Gas taken from the
+            // air brings its heat at the air's temperature; gas sent leaves with its share of the
+            // node's heat by heat capacity.
             let (mut pay, mut back, mut c_out, mut q_in) = (0.0, 0.0, 0.0, 0.0);
             for k in 0..ns {
                 let (d, cp) = (pool[k] - pool0[k], chem.subs[k].cp);

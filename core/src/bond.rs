@@ -11,14 +11,13 @@
 //! structure is loaded: a bond carries the weight hanging on it from the anchored part (or the
 //! held one), less what the liquid around holds up, plus the push of moving liquid and of bodies
 //! moving through the cell. A bond loaded beyond its strength breaks; what is left without
-//! support lies on the ground. A body–part bond is as strong as the weight the holder bears by its
-//! own force (strength × its body, `Body::built`, × gravity × grip; a lever does not lift itself): a body takes
-//! hold of a part only if that bears the weight of the part's structure, and lets go when it no
-//! longer does. A structure the liquid holds up floats and drifts down the liquid's slope. A
-//! structure whose walls close around a space has an inside: a body in it loses heat to the
-//! outside only through the walls and the openings (a conductance in series with its own), and
-//! gets the light and rain that come through the openings. The inside holds almost no heat
-//! itself, so it is solved in closed form.
+//! support lies on the ground. A body–part bond is as strong as the weight the holder bears by
+//! its own force (`bears`): a body takes hold of a part only if that bears the weight of the
+//! part's structure, and lets go when it no longer does. A structure the liquid holds up floats
+//! and drifts down the liquid's slope. A structure whose walls close around a space has an
+//! inside: a body in it loses heat to the outside only through the walls and the openings (a
+//! conductance in series with its own) and gets the light and rain that come through the
+//! openings. The inside holds almost no heat, so it is solved in closed form.
 
 use crate::body::{self, Body, Layout, STRENGTH};
 use crate::change::Reactor;
@@ -208,8 +207,8 @@ pub fn ready(w: &mut World) {
 }
 
 fn event(w: &mut World, made: bool, cell: u32, kind: f64) {
-    let kind_ = if made { EventKind::BondMade } else { EventKind::BondBroken };
-    w.events.push(Event { day: w.day, kind: kind_, node: cell, value: kind });
+    let (day, what) = (w.day, if made { EventKind::BondMade } else { EventKind::BondBroken });
+    w.events.push(Event { day, kind: what, node: cell, value: kind });
 }
 
 /// Find the structure of part `p` again, and its numbers. Plates close a box as wide as the
@@ -349,9 +348,9 @@ pub fn lever(w: &World, b: &Body) -> f64 {
 }
 
 /// Weight a body bears by its own force, N: what it holds adds nothing (a lever does not lift
-/// itself). Force goes with the body that is built (`Body::built`: its matter and the liquid it keeps with
-/// it, not the fuel it stores nor the matter it holds for offspring), not the whole mass (15 Oct 2026,
-/// partial damage): a hurt body is weaker, and carrying fuel adds no strength.
+/// itself). Force goes with the body that is built (`Body::built`: its matter and the liquid it
+/// keeps, not the fuel it stores nor the matter held for offspring), not the whole mass: a hurt
+/// body is weaker, and carrying fuel adds no strength.
 pub(crate) fn bears(w: &World, b: &Body) -> f64 {
     b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip
 }
