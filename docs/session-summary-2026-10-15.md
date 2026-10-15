@@ -210,6 +210,10 @@ Things that are open and not built:
    Almost no dead code is left; going lower means removing mechanisms (the speed schedule of Change, about 220
    lines; `COPY_BY_CHOICE`; tape-only tallies). The owner decides, or accepts the 6% with this reason.
 5. **Real figures:** checked against sources in `docs/numbers.md` (most agree; `seep` was a wrong sum and is fixed; the
-   eaters are 20 to 100 times denser than real large plant-eaters, Hempson et al. 2015).
+   eaters are 20 to 100 times denser than real large plant-eaters, Hempson et al. 2015). **Studied (16 Oct, `docs/reports/eater-density.md`):**
+   61 to 67% of their kg is liquid past the level (R11 removes it: 34 to 72 t/km2 left, against 231 to 351). Their cost of living is
+   not the cause (half a mammal's, 2.5 times a reptile's). They are cold-blooded, and their tissue (17 to 59 t/km2) is no more than
+   Aldabra's tortoises (58). The fault is the food: 95 to 99.5% is dead plant matter, which is digested like meat; on living plants
+   alone they die out. They are still growing and could reach about 8 times year 60. Owner's choices: R11, a structural plant matter.
 6. **Then M4:** the planet with real seasons, frost and dry seasons, natural fire starts, and speed
    work. Disease after M4.
