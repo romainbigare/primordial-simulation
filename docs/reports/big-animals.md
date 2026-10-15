@@ -86,24 +86,39 @@ its decisions only to stay even. The first-year `SPENT` share follows this ratio
   Kinds 9 and 1 are also alike within `alike` in every gene, so they interbreed and join each other's nodes.
 - Speed: base 6.0 s a year (seed 1), K 5.2, U 5.2, K+A+U 4.8.
 
-## Roster at year 60 and normal runs (code of this change = main: nothing in the laws changed)
+## Before the change (main 81ad832)
 
-Roster, kg at year 60, seeds 1 / 2 / 3 (kinds 2, 3 not placed or gone): 0: 6.5e9 / 4.8e9 / 7.5e9; 1: 6.0e8 /
-1.0e7 / 0; 3: 0 / 0 / 1.4e8; 4: 8.2e10 / 6.1e10 / 6.5e10; 5: 2.8e8 / 2.2e9 / 5.1e8; 6: 1.8e8 / 0 / 0;
-7: 1.8e9 / 2.2e9 / 4.5e9; 8, 9, 10: 0. Carbon gas 300 / 299 / 309 ppm. The same after (no law changed).
+Roster kinds 8, 9, 10: 0 kg at year 60 on seeds 1 to 3. Normal runs: plants 3.7e10 / 3.8e10 / 5.0e10 kg, eaters
+2.3e9 / 1.9e9 / 1.3e9 kg, carbon gas 334 / 330 / 307 ppm.
 
-Normal runs (means of years 56 to 60, seeds 1 / 2 / 3): plants 3.7e10 / 3.8e10 / 5.0e10 kg, adult life 1.27 /
-1.02 / 0.98 y; eaters 2.3e9 / 1.9e9 / 1.3e9 kg, adult life 2.08 / 1.26 / 1.53 y; carbon gas 334 / 330 / 307 ppm
-(the same as the law-2 report's runs on this code). With K (seed 1): plants 3.9e10 kg, adult 0.83 y; eaters
-4.2e9 kg, adult 2.58 y, body 12.6 kg (20.7); carbon gas 336 ppm.
+## Built (15 Oct 2026, the owner agreed to K, founders as adults, and R4)
 
-## For the owner
+Three commits, each measured on roster seeds 1 to 3 (handover 4, "Why the roster's big animals die", has
+every step): **K** as above (`c_basal` back to 2e4, the four other costs x 2.578); **founders are adults**
+(body = own copy-mass gene, mass = body / (1 - `store`): the old rows' "copying at" masses); **R4**: the
+living body is matter / (1 - `WET_TISSUE`), 0.75, and leaf, intake, force, upkeep, maturity and children go
+by it, not by the liquid a body keeps. U (no unlike merges) was not asked for and is not built.
+"Founders as adults" is honest, but the founders it makes are heavier: the 600 kg kind is placed at 1.2 t
+(2.3 t with the liquid of their sprayed keep genes) with 60% fuel. The step alone raised its first-year starving (44 / 64 / 43% to 62 / 77 / 67%).
 
-1. **Kleiber across kinds (K)** is the physics the cause asks for, and it is one line. It changes every kind's
-   costs, plants included, so it is your choice. If taken, `c_basal` may come back to its review-5 form
-   (2e4 per kg^0.75 at 1 kg, Kleiber's shape) instead of the tuned 12,208.
-2. **Founders as adults (A)**, set from their own genes: an initial condition, honest, but it changes the
-   normal run's founders too (plants mature at 0.7 kg, eaters at 21 kg).
-3. **No unlike merges (U)**: nodes then never pool unlike kinds, as individuals never do; not slower here.
-4. **The liquid keep gene (R4)** and **the rock element for animals** are open.
-None of these, alone or together, kept the 600 kg kind for 60 years on seed 1. Not tuned, as asked.
+At the end, with main de1c134 merged (moving needs force, drainage); main de1c134 > this branch:
+
+| | seed 1 | seed 2 | seed 3 |
+|---|---|---|---|
+| roster kg at year 60, kinds 8 / 9 / 10 | 0 / 0 / 0 > 5.3e7 / 0 / 3.8e3 | 0 / 0 / 0 > 2.4e5 / 1.9e6 / 290 | 2.4e5 / 0 / 0 > 1.7e7 / 9.6e6 / 1.5e5 |
+| first-year `SPENT`, kinds 8 / 9 / 10 | 29 / 72 / 91% > 22 / 45 / 55% | 31 / 79 / 94% > 23 / 64 / 83% | 39 / 82 / 85% > 32 / 37 / 56% |
+| roster light-eaters (kinds 0, 3, 4), kg | 1.3e11 > 9.9e10 | 9.9e10 > 1.0e11 | 1.1e11 > 8.7e10 |
+| roster eaters (kind 1), kg | 2.3e8 > 3.6e8 | 1.9e6 > 1.5e8 | 1.5e7 > 3.2e8 |
+| roster carbon gas, ppm; s a year | 220; 5.9 > 222; 4.4 | 269; 5.2 > 231; 3.5 | 257; 4.9 > 244; 4.5 |
+| normal: plants kg; adult life | 4.9e10; 4.5 y > 4.1e10; 7.2 y | 4.8e10; 4.3 y > 3.0e10; 6.1 y | 4.5e10; 6.3 y > 2.9e10; 6.1 y |
+| normal: eaters kg; adult life | 2.8e9; 4.9 y > 1.2e9; 6.6 y | 4.9e9; 3.4 y > 8.9e8; 5.7 y | 3.7e9; 4.5 y > 1.7e9; 6.0 y |
+| normal: carbon gas, ppm; s a year | 306; 3.5 > 305; 3.3 | 346; 3.7 > 330; 3.0 | 350; 3.7 > 334; 3.1 |
+
+- **The big kinds now live 60 years:** the 150 kg kind on all three seeds, the 100 kg on two, the 600 kg on
+  all three but few (about 3, 1 and 120 bodies). Its adults live 13.8 years on seed 3 (bison: 12 to 20).
+- **The cost:** in normal runs plants are 16 to 38% lighter and eaters 2 to 5 times lighter (they lost the
+  liquid's free leaf and intake); adult lives are longer (eaters 5.7 to 6.6 years, deer 4 to 7).
+- **Seen, not built:** a body gives away its own body matter in gifts (`choose::give` counts matter above
+  twice its safe minimum, 0, as spare). Kind 10's founders gave 0.7 to 3 t a month (of 25 bodies) and lost a
+  fifth of their body in 5 months, with bites. Also open: the rock element for animals; the sprayed liquid keep
+  gene (spread about 0.28) makes founders of the same copy mass 1 to 5 times as heavy.
