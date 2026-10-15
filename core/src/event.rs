@@ -7,9 +7,9 @@ pub enum EventKind {
     /// Substance `k` has a non-zero amount somewhere for the first time
     FirstSubstance(u16),
     /// Members born (value), the highest speed-up (log10) of any light reaction in the
-    /// parent's genes, and the starting kind the parent descends from (`Lineage::root`; only a
-    /// label for tallies; `u32::MAX` if none)
-    Born { cat: f32, root: u32 },
+    /// parent's genes, the starting kind the parent descends from (`Lineage::root`; only a
+    /// label for tallies; `u32::MAX` if none), and whether they had two parents (a partner, `copy::copy`)
+    Born { cat: f32, root: u32, mixed: bool },
     /// Members died (value), the same speed-up in their genes, their starting kind, and whether
     /// their body was at or past their copy mass (`Body::adult`; a node is judged by its mean
     /// member). Only a label for tallies, as `root`

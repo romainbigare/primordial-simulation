@@ -79,6 +79,8 @@ struct Social {
     /// cause (the causes of `Recorder::deaths`), members summed over the months (standing members
     /// are this over `stand_months`) and the months counted
     root_births: Vec<f64>,
+    /// Of those, the members born of two parents (`Born::mixed`), by starting kind
+    root_mixed: Vec<f64>,
     root_deaths: Vec<[f64; 6]>,
     /// Members died while their body was below / at or past their copy mass (`Died::adult`)
     root_young: Vec<f64>,
@@ -340,9 +342,12 @@ impl Recorder {
         let events: Vec<Event> = w.events.drain(..).collect();
         for e in events {
             match e.kind {
-                EventKind::Born { cat, root } => {
+                EventKind::Born { cat, root, mixed } => {
                     self.births += e.value;
                     if root != u32::MAX {
+                        let v = &mut self.social.root_mixed;
+                        v.resize(v.len().max(root as usize + 1), 0.0);
+                        v[root as usize] += if mixed { e.value } else { 0.0 };
                         for v in [&mut self.social.root_births, &mut self.social.births_now] {
                             v.resize(v.len().max(root as usize + 1), 0.0);
                             v[root as usize] += e.value;
@@ -653,6 +658,8 @@ impl Recorder {
             row.extend(CAUSES.iter().zip(d).map(|(n, x)| (c(&format!("died_{n}")), "1/yr", x)));
             row.extend([
                 (c("births"), "1/yr", births.get(k).copied().unwrap_or(0.0)),
+                // 15 Oct 2026 (two-parent copying): the share of the year's births with two parents (a partner alike in the cell).
+                (c("mixed"), "1", if births.get(k).copied().unwrap_or(0.0) > 0.0 { st.root_mixed.get(k).copied().unwrap_or(0.0) / births[k] } else { f64::NAN }),
                 (c("life_real"), "yr", if d.iter().sum::<f64>() > 0.0 { stand / d.iter().sum::<f64>() } else { f64::NAN }),
                 (c("mass"), "kg", per(v.mass)),
                 (c("copy_mass"), "kg", per(v.copy_mass)),
@@ -796,6 +803,7 @@ impl Recorder {
         ]);
         (s.made, s.broken, s.failed, s.inside, s.intake) = Default::default();
         (s.root_births, s.root_deaths, s.root_stand, s.stand_months, s.t_land) = Default::default();
+        s.root_mixed = Default::default();
         (s.root_young, s.root_adult, s.root_stand_adult, s.moves, s.hurt) = Default::default();
         (s.watched, s.kin_watched, s.gave, s.gave_kg, s.gave_eaters) = (0.0, 0.0, 0.0, 0.0, 0.0);
         (s.spread, s.pairs, s.sig) = Default::default();

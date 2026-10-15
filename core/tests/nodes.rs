@@ -84,6 +84,11 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     let mut w = worldgen::new_world(1, 4, 4);
     pcore::step(&mut w);
     (w.cfg.crowd, w.cfg.phys.c_copy) = (crowd, 0.0);
+    // One parent: the node math alone is measured. With two (15 Oct 2026) a body's partner is the most alike of its cell, which
+    // need not choose it in return, so children are pulled toward the nodes that are many bodies' nearest, and the mean over all
+    // members wanders (1.5 to 2.3 steps in 1,000 updates here, against 0.2 with one parent), as it does when the nearest of
+    // each is not the one that chose it.
+    w.cfg.two_parents = false;
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     let len = Layout::of(&w.chem).len;
     let b0 = &w.life.bodies[live(&w)[0]];

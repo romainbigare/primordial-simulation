@@ -52,6 +52,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `crowd` | nodes per cell | speed-tool setting: past this many body nodes in a cell, the most alike merge | run: speed; it must give the same patterns as individuals (to be checked at M4, review 5 row 8) | tuned |
 | `share_brains` | on/off | bodies that stay near each other share one brain's rows | a setting, to check that sharing gives the same patterns | switch |
 | `nodes` | on/off | animals live in population nodes (on) or only as individuals (off, `--individuals`) | a setting, for the check that nodes give the same patterns as individuals (handover 7.1, review 5 row 8) | switch |
+| `two_parents` | on/off | a mature body's children have a second parent, each gene from one of the two, when a mature alike body is in its cell (on, the default), or are copies of one parent (off, `--no-mix`) | a setting, not a number: it exists for the check that nodes keep the mean of their genes without selection (`core/tests/nodes.rs`), since a partner not chosen in return pulls that mean, and to measure what mixing changes (15 Oct 2026, two-parent copying, handover 6.4) | switch |
 | `sate_all` | on/off | satiety on (at every size) or off (the default; `ew run --sate-all`) | with it off a body takes as its intake allows and what it carries is bounded by its body (`Body::level`: the keep genes are kg per kg of body), so a full store is the satiety (14 Oct 2026, after watch report 8). With it on, a body takes no more than its reactions can use over the interval (`choose::sate`), the decision after watch report 7: all the animals of six 64x64 runs died in their first year, with the keep genes a share of the whole mass and again with them a share of the body (handover 4, 14 Oct 2026). A setting, to repeat that result | switch |
 | `split_rows` | on/off | a node also splits along its born rows | an experiment, off: 2 to 2.5 times slower for no gain, doc comment | switch |
 | `null` | on/off | a null run: no learning, no imitation, brain rows frozen | the run to compare a seed with (review 3, M6) | switch |
@@ -196,7 +197,7 @@ Chemistry 0 (`worldgen/src/chem0.toml`) is data, not a struct of numbers, and is
 
 ## Counts
 
-By hand and by script on 14 Oct 2026. The 99 rows of `Config` and `Physics` are their 99 fields (`full` went on 14 Oct 2026: a body is mature at its copy mass and nothing caps its growth) (`dormancy`, anchored, is the new one, 14 Oct 2026; `sate_all` before it). Review 6 (finding 9) moved four marks: `c_build` and `c_basal` from anchored to tuned (set for a run), `c_move` and `take` from tuned to anchored (a real cost of transport; a real appetite), so the count of tuned rows is the same.
+By hand and by script on 14 Oct 2026. The 100 rows of `Config` and `Physics` are their 100 fields (`two_parents`, a switch, is the new one, 15 Oct 2026) (`full` went on 14 Oct 2026: a body is mature at its copy mass and nothing caps its growth) (`dormancy`, anchored, is the new one, 14 Oct 2026; `sate_all` before it). Review 6 (finding 9) moved four marks: `c_build` and `c_basal` from anchored to tuned (set for a run), `c_move` and `take` from tuned to anchored (a real cost of transport; a real appetite), so the count of tuned rows is the same.
 
 | mark | rows | which |
 |---|---|---|
@@ -204,7 +205,7 @@ By hand and by script on 14 Oct 2026. The 99 rows of `Config` and `Physics` are 
 | anchored | 30, and 3 outside the structs | 30 fields (among them `c_move`, `take` and `dormancy`) and the constants `MAX_INTERVAL`, `T_SURF` and `MOVE_REF`/`MOVE_EXP` |
 | tuned (run or reason named) | 19, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_build`, `c_basal`; outside: the kept copy logit, the roster's stores, intervals and years, the spray of the start) |
 | tuned, first guess | 40 | 36 free numbers (`wind`, `cloud`, `carry`, `wear`, `creep`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `walk_wear`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
-| switch | 4 | `share_brains`, `split_rows`, `null`, `nodes` |
+| switch | 5 | `share_brains`, `split_rows`, `null`, `nodes`, `two_parents` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 66 (59 in the structs, 7 outside). The test holds that count at 66 or below (handover 14.3). Rules chosen for a run: 2, held by the test too (satiety only past a size went on 14 Oct 2026: a store bounded by the body is the satiety, handover 4; the kept copy logits went the same day: bodies copy by physics only, `choose::COPY_BY_CHOICE`, review 7).

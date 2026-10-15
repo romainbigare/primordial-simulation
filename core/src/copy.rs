@@ -15,6 +15,20 @@
 //! is copied with small noise, which starts a new lineage too. It happens at the body's update whatever
 //! its brain does (`body::live`).
 //!
+//! Two parents (15 Oct 2026, `partner`, `mix`, `mix_rows`): when a mature body makes children it looks in
+//! its cell for a partner, another mature body (an individual or a node) alike to it, by the likeness that lets
+//! bodies join (`alike`: every gene within `phys.alike` steps of the means, brain and senses by whole units), the
+//! most alike, a keyed pick among equals, never itself. Each gene of the children is then one parent's, each gene
+//! a draw of its own, and each born brain row too (a row is one reader of the hidden layer, so it is kept whole;
+//! the partner's rows are carried over if its brain has other sizes); the generation's mutation is added as for
+//! one parent. The chance of the partner's is its share of the members of both (a half for two individuals), so
+//! the mean of all members is kept as a merge keeps it; a group of many children takes about that share from
+//! each, and the spread of a node's children is pooled as a merge pools it (each one's spread by its share, plus
+//! the squared gap of the means times the share of each). With no partner the children are copies of one parent.
+//! The partner gives and loses nothing: its genes are information, no matter or energy moves. Bodies that are
+//! not alike never mix, so kinds that are apart stay apart; nodes still pool members by likeness (`join`) and
+//! none of that changes. `Config::two_parents` off: one parent always.
+//!
 //! Growth is building (14 Oct 2026, decision after watch report 7): a member
 //! turns the energy-rich solid into body matter (`Chemistry::build`) and pays `c_copy` per kg of
 //! matter made in work (`grow`), as far as its allowance goes (`c_build`), its reactions can spare
@@ -126,10 +140,25 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
     a.iter().zip(b).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= limit)
 }
 
+/// Genes within `limit` steps of each other in every gene, as `alike` tests, and how far apart they are: the sum of
+/// the squared gaps in steps (none if not alike). The most alike partner has the least (`partner`).
+fn gap(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> Option<f32> {
+    let mut sum = 0.0;
+    for (g, (&x, &y)) in a.iter().zip(b).enumerate() {
+        let d = step(lay, g, x) - step(lay, g, y);
+        if d.abs() > limit {
+            return None;
+        }
+        sum += d * d;
+    }
+    Some(sum)
+}
+
 /// Standard deviations of spread (of a node and of the children joining it) that the means of
 /// children may lie from a node's beyond `phys.alike` steps and still belong to it (`within`).
-/// A half (14 Oct 2026; two before). Copying is asexual: in individuals the genes of two kinds
-/// never mix, so a node, which only saves time, must not mix them either. With two, a node and
+/// A half (14 Oct 2026; two before). Bodies mix genes only when alike (`partner`, from 15 Oct 2026; before, copying
+/// was asexual): in individuals the genes of two kinds never mix, so a node, which only saves time, must not mix
+/// them either. With two, a node and
 /// a group of children both at the spread's cap (2.7 steps each) took anything within
 /// 4 + 2 x sqrt(2 x 7.3) = 11.6 steps in every gene, and the monthly merge of a full cell
 /// (`body::crowd`) the same: the eaters (strength 0.6) and the eaters of remains (strength 0, 6
@@ -224,6 +253,118 @@ pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: 
         })
         .collect();
     (genes, left)
+}
+
+/// The partner of body `b` (slot `slot`, taken out of it) for its children (15 Oct 2026, two-parent copying): another
+/// body of its cell that is mature (`Body::adult`) and alike to it, the same likeness that lets bodies join (`alike`:
+/// every gene within `phys.alike` steps of the means, the sizes of brain and senses by whole units), the most alike
+/// of them (the least squared gap in steps), a keyed random pick among equals; never itself. None: the children are
+/// copies of one parent. It looks in the cell only, so no number is new, and it takes nothing from the partner.
+fn partner(w: &World, slot: usize, b: &Body, r: &mut Rng) -> Option<usize> {
+    if !w.cfg.two_parents {
+        return None;
+    }
+    let (lay, lim) = (Layout::of(&w.chem), w.cfg.phys.alike);
+    // Among equals the one with the least key (a draw keyed by the call and the slot, not the order of the cell's list,
+    // which a snapshot does not keep).
+    let (mut best, mut pick, salt) = (f32::INFINITY, None, r.u64());
+    for &s in &w.life.at[b.cell as usize] {
+        let (s, t) = (s as usize, &w.life.bodies[s as usize]);
+        if s == slot || !t.alive {
+            continue;
+        }
+        // (The hundred genes first, as they end at the first one unlike; the size of the body last.)
+        let Some(d) = gap(&lay, lim, &b.genes, &t.genes).filter(|&d| d <= best) else { continue };
+        if !t.adult(&w.chem) {
+            continue;
+        }
+        let key = Rng::new(salt, 0, s as u64, Purpose::Mutate).u64();
+        if d < best || pick.is_some_and(|(_, k)| key < k) {
+            (best, pick) = (d, Some((s, key)));
+        }
+    }
+    pick.map(|p| p.0)
+}
+
+/// The share of `m` children that take a thing from their second parent, which is the share `p` of the members of
+/// both (a half for two individuals, or two nodes of as many members; a node's partner of a few members is a few of
+/// the partners it would meet, so its children take little from it, and the mean over all members is kept, as a
+/// merge keeps it): one child, or less than one, takes it from one parent or the other (0 or 1, a keyed draw, 1
+/// with chance `p`); a group of many takes about `p` of it, a binomial of `m` draws being near a normal.
+fn share(m: f64, p: f32, r: &mut Rng) -> f32 {
+    if m <= 1.0 {
+        return (r.f64() < p as f64) as u8 as f32;
+    }
+    // A few children: that many draws. Many: the number taking it from the less likely parent (mean m q), a normal
+    // when m q is past 10, else a Poisson (a normal clamped at 0 would give the rare parent more than its due).
+    if m <= 32.0 {
+        let n = m.round();
+        return (0..n as usize).filter(|_| r.f64() < p as f64).count() as f32 / n as f32;
+    }
+    let (q, m) = (p.min(1.0 - p), m as f32);
+    let k = m * q;
+    let c = if k >= 10.0 {
+        (k + (k * (1.0 - q)).sqrt() * noise(r)).clamp(0.0, m)
+    } else {
+        let (mut c, mut t, e) = (0.0f32, r.f64(), (-k as f64).exp());
+        while t > e {
+            (c, t) = (c + 1.0, t * r.f64());
+        }
+        c.min(m)
+    };
+    if p <= 0.5 { c / m } else { 1.0 - c / m }
+}
+
+/// The share of the members of `a` and `t` that are `t`'s (`share`).
+fn weight(a: &Body, t: &Body) -> f32 {
+    (t.n() / (a.n() + t.n())) as f32
+}
+
+/// The genes and the spread of `m` children of `a` and its partner `t`: each gene from one of them, drawn gene by gene
+/// (`share`): `a`'s mean, or `t`'s with the chance `weight` (a half for two individuals); for a group of many the mean between them by the share drawn,
+/// and the spread what a merge pools (`take_in`): each one's spread by its share, plus the squared gap of their means
+/// times the share of each (a quarter at halves). One child gets one parent's gene and that parent's spread. The
+/// generation's mutation (`vary`) is then added, as for one parent.
+fn mix(a: &Body, t: &Body, m: f64, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
+    let s = |b: &Body, g: usize| b.spread.get(g).map_or(0.0, |&v| v.max(0.0));
+    let p = weight(a, t);
+    (0..a.genes.len())
+        .map(|g| {
+            let (x, d, f) = (a.genes[g], t.genes[g] - a.genes[g], share(m, p, r));
+            (x + f * d, (1.0 - f) * s(a, g) + f * s(t, g) + f * (1.0 - f) * d * d)
+        })
+        .unzip()
+}
+
+/// The born rows of the children of `a` (rows `ra`) and its partner `t` (rows `rt`, carried over to the sizes of `a`'s
+/// brain if they differ): each row from one of them, a keyed draw row by row (`share`; a row is one reader of the
+/// hidden layer, so a row kept whole stays coherent, and a weight drawn alone would not), the group's mean between
+/// them as in `mix`; and the spread of the rows pooled as a merge pools it (per weight: each one's by its share,
+/// plus the squared gap times the share of each). None where a brain has no rows alike (a brain of no size, or
+/// rows of other lengths): the children keep `a`'s.
+fn mix_rows(w: &World, a: &Body, t: &Body, m: f64, r: &mut Rng) -> Option<(Vec<f32>, f32)> {
+    let shape = |b: &Body| w.life.brains[b.lineage as usize].as_ref().map(|l| l.shape);
+    let (sa, st) = (shape(a)?, shape(t)?);
+    let (ra, rt) = (w.life.born(a), w.life.born(t));
+    let moved;
+    let rt = if sa == st { rt } else {
+        moved = brain::rerow(rt, st, sa, r, w.cfg.phys.new_noise);
+        &moved
+    };
+    if ra.len() != rt.len() || ra.len() != sa.rows() * sa.r() {
+        return None;
+    }
+    let (mut mean, mut gap, mut f_sum, p) = (Vec::with_capacity(ra.len()), 0.0, 0.0, weight(a, t));
+    for (x, y) in ra.chunks_exact(sa.r()).zip(rt.chunks_exact(sa.r())) {
+        let f = share(m, p, r);
+        f_sum += f;
+        for (&p, &q) in x.iter().zip(y) {
+            mean.push(p + f * (q - p));
+            gap += f * (1.0 - f) * (q - p) * (q - p);
+        }
+    }
+    let f = f_sum / (ra.len() / sa.r()) as f32;
+    Some((mean, (1.0 - f) * a.row_spread + f * t.row_spread + gap / ra.len() as f32))
 }
 
 /// The step of a node's born rows: that of a child whose rows changed, for mutation size `size`.
@@ -333,7 +474,9 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
 /// holds them to its matter (the key liquid times 10^`WET`, at most what the parent holds), with its
 /// share of the heat. A child is made whenever the brood covers one: an individual has whole children,
 /// a node (members who all do the same) fractional members, as many as the brood makes. The parent
-/// keeps its body: what it gives is brood and provisions. A body that is not mature (`Body::adult`)
+/// keeps its body: what it gives is brood and provisions. Their genes and born rows are one parent's or a partner's
+/// (`partner`: a mature alike body of the cell, if there is one; the same partner for all the children of the call).
+/// A body that is not mature (`Body::adult`)
 /// makes none (its brood waits). Children are always immature (below their parents' copy mass), so
 /// they never join their parent node, which is mature: they join a node of their kind and size class
 /// that is immature too, in their parent's cell or, if they disperse, a neighbour's, or start one
@@ -359,6 +502,8 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let id = b.id(slot);
     let mut r = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     let i = b.cell as usize;
+    // A partner for these children (15 Oct 2026): a mature body of the cell that is alike, if there is one.
+    let mate = partner(w, slot, b, &mut r);
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if
     // less than one member); an individual's go together, by that chance.
     let d = b.gene(body::DISPERSE).clamp(0.0, 1.0);
@@ -373,12 +518,12 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     };
     let mut made = false;
     if m > 0.0 {
-        made |= emit(w, slot, b, cell, m, &kid, node, alone, id, &mut r);
+        made |= emit(w, slot, b, cell, m, &kid, node, alone, mate, id, &mut r);
     }
     // A node's children who stay: a group of their own (less than one member waits in the brood
     // unless there is a node of theirs to join).
     if node && births - m > 0.0 {
-        made |= emit(w, slot, b, i, births - m, &kid, node, alone, id, &mut r);
+        made |= emit(w, slot, b, i, births - m, &kid, node, alone, mate, id, &mut r);
     }
     made
 }
@@ -430,9 +575,13 @@ pub fn near(lay: &Layout, chem: &crate::chem::Chemistry, alike: f32, a: &Body, b
 /// or start a body. Less than one member of a node's children that has no node to join waits in the
 /// brood (nothing is made; false).
 #[allow(clippy::too_many_arguments)]
-fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid, node: bool, alone: bool, id: u64, r: &mut Rng) -> bool {
+fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid, node: bool, alone: bool, mate: Option<usize>, id: u64, r: &mut Rng) -> bool {
     let lay = Layout::of(&w.chem);
-    let (genes, spread) = vary(&lay, &b.genes, &b.spread, m, w.cfg.phys.alike, r);
+    // With a partner each gene is one parent's (`mix`), and then the generation's mutation as for one.
+    let mixed = mate.map(|t| mix(b, &w.life.bodies[t], m, r));
+    let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));
+    let (genes, spread) = vary(&lay, from, pooled, m, w.cfg.phys.alike, r);
+    let size = 10f32.powf(from[body::MUT]);
     let mi = w.chem.matter().unwrap_or(0);
     // The matter of all m children, and their provisions as a share of the parent's body matter; of the
     // key liquid 10^`WET` times that (a child of a parent whose `WET` is below 0 is dry, and nearly dormant).
@@ -476,7 +625,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
         }
     }
     let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
-    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root }, node: b.cell, value: m });
+    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root, mixed: mate.is_some() }, node: b.cell, value: m });
     // Its heat is that of its parent's temperature on the heat capacity it got, so it starts as warm
     // as its parent (a dry child would else be much hotter, a wet one colder); the parent keeps the rest.
     c.e = b.e * c.heat_cap(&w.chem) / b.heat_cap(&w.chem).max(1e-9);
@@ -489,16 +638,31 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
     // sqrt(row_chance)), else share their parent's. Children drawn from a node whose rows differ,
     // or a group of them, get the mean of the group drawn (noise of that variance and the
     // generation's change, over `m`) and keep the variance left among them.
-    let (size, mm) = (10f32.powf(b.genes[body::MUT]), m.max(1.0) as f32);
+    // With a partner each row is one parent's (`mix_rows`), the group's spread pooled, then the same change.
+    let mm = m.max(1.0) as f32;
     let p = w.cfg.copy_phys();
-    let (var, changed) = (b.row_spread + (p.row_noise * size).powi(2), r.f64() < p.row_chance);
-    let sd = if w.cfg.null { 0.0 } else if b.row_spread > 0.0 || mm > 1.0 { (var / mm).sqrt() } else { changed as u8 as f32 * p.row_noise * size / (p.row_chance as f32).sqrt() };
+    let (mut pre, mut spread) = (None, b.row_spread);
+    if let Some(t) = mate.filter(|_| !w.cfg.null) {
+        if let Some((v, s)) = mix_rows(w, b, &w.life.bodies[t], m, r) {
+            // (Rows the same as the parent's are shared, not copied.)
+            (pre, spread) = ((v != w.life.born(b)).then_some(v), s);
+        }
+    }
+    let (var, changed) = (spread + (p.row_noise * size).powi(2), r.f64() < p.row_chance);
+    let sd = if w.cfg.null { 0.0 } else if spread > 0.0 || mm > 1.0 { (var / mm).sqrt() } else { changed as u8 as f32 * p.row_noise * size / (p.row_chance as f32).sqrt() };
     c.row_spread = var * (1.0 - 1.0 / mm);
-    let mut rows = (sd > 0.0).then(|| {
-        let mut v = w.life.born(b).to_vec();
-        shake(&mut v, r, sd);
-        v
-    });
+    let mut rows = match (pre, sd > 0.0) {
+        (Some(mut v), true) => {
+            shake(&mut v, r, sd);
+            Some(v)
+        }
+        (v, false) => v,
+        (None, true) => {
+            let mut v = w.life.born(b).to_vec();
+            shake(&mut v, r, sd);
+            Some(v)
+        }
+    };
     // A node's children start no new lineage: a change of the brain's base in one child is lost in
     // the mean of many (the laws in average form, plan 7.1); a node whose mean sizes moved moves
     // itself (`resize`).

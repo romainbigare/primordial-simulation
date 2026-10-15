@@ -115,6 +115,13 @@ pub struct Config {
     /// review 5): the nodes are a speed shortcut and must give the same patterns.
     #[serde(default = "yes")]
     pub nodes: bool,
+    /// Two-parent copying (15 Oct 2026, `copy::partner`). True (the default): a mature body's children
+    /// have a second parent when a mature, alike body is in its cell, each gene from one of the two.
+    /// False (`ew run --no-mix`): every child is a copy of one parent, as before; for the check that
+    /// nodes keep the mean of their genes without selection (`tests/nodes.rs`: a partner not chosen
+    /// by the other pulls the mean over members), and to measure what mixing changes.
+    #[serde(default = "yes")]
+    pub two_parents: bool,
     /// Satiety (`choose::sate`; `ew run --sate-all`): a body takes no more of what it burns than its
     /// upkeep plus what it can build and the fuel it converts to do it, whatever its size, the
     /// decision after watch report 7. False (the default): no satiety; a body takes as its intake
@@ -533,6 +540,7 @@ impl Default for Config {
             share_brains: true,
             split_rows: false,
             nodes: true,
+            two_parents: true,
             sate_all: false,
             null: false,
             phys: Physics::default(),
