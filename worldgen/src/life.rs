@@ -65,7 +65,7 @@ pub const FIXERS: f64 = 0.1;
 /// log10 of the speed-up of the fixing reaction in those founders: the speed a growing plant needs. A plant turns its body matter
 /// over in about half a year (its matter is 5.5% of its mass, 0.049 mol per kg, so 3 x 10^-9 mol of the mineral a kg and second);
 /// a plant with the gene at 8.6 makes 2.1 x 10^-10 (`core/tests/nitrogen.rs`, a 60 day run of a founder), so 9.8: the light
-/// reaction's starting gene (9) was set in the same way, the speed a body needs over the speed of the bare reaction. (8.6 until 16 Oct
+/// reaction's starting gene (9) was set in the same way, the speed a body needs over the speed of the bare reaction. (8.6 until 15 Oct
 /// 2026, when the reaction burnt one unit of the fuel: its contact is now the fuel over 14, the units it burns.)
 pub const FIX_GENE: f32 = 9.8;
 /// The stream of the draw that makes a founder a fixer (`Rng::new(seed, FIX_STREAM, id, Purpose::Body)`).

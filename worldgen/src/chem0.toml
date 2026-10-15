@@ -588,7 +588,7 @@ ea = 7647
 
 
 # 24: fixing the air's nitrogen into the mineral, paid by the fuel it really burns: N2 + 14 CH2O + 14 O2 -> N2H4O3 + CO + 13 CO2 +
-# 12 H2O, dH -6,055 kJ (16 Oct 2026). Its heart takes energy, N2 + 2 H2O + CO2 -> N2H4O3 + CO, dH = -365 + -110.5 - (2 x -286 +
+# 12 H2O, dH -6,055 kJ (15 Oct 2026). Its heart takes energy, N2 + 2 H2O + CO2 -> N2H4O3 + CO, dH = -365 + -110.5 - (2 x -286 +
 # -393.5) = +490 kJ per mol of 1 (real nitrogenase spends 16 ATP per N2, 16 x 30.5 kJ = 488); the reduced carbon gas leaves with a
 # part of the energy, as the hydrogen gas of the enzyme does. 14 units of the energy-rich solid are burnt for it (CH2O + O2 -> CO2 +
 # H2O, -467.5 kJ, reaction 1): what a symbiosis spends for the nitrogen it fixes, 6 g of carbon per g of nitrogen (6 x 28 / 12 = 14;

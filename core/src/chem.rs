@@ -166,7 +166,7 @@ impl Chemistry {
 
     /// Does reaction `r` get less heat out of a solid or liquid it takes than a burning of it does (a reaction that releases heat
     /// from it with a gas)? Then it keeps the rest in what it makes (a fuel gas, a mineral): it is no burning, and a body runs it at
-    /// its catalyst's pace and never pays its upkeep with its heat (`Body::prepare`, 16 Oct 2026).
+    /// its catalyst's pace and never pays its upkeep with its heat (`Body::prepare`, 15 Oct 2026).
     pub fn keeps(&self, r: usize) -> bool {
         let gas = |k: u16| self.phase(k as usize, crate::T_SURF) == Phase::Gas;
         let per = |q: usize, k: u16| self.reactions[q].inputs.iter().find(|p| p.0 == k).map_or(f64::NEG_INFINITY, |p| -self.dh(q) / p.1 as f64);

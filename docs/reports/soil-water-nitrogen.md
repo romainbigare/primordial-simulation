@@ -230,7 +230,7 @@ Older tests I had to change, and why (all honest changes of a test, no law tuned
    it would be 7.5%. Fixers fix at their capacity, not at the need. The world gets 50 to 80
    times the soil's gift. In real life the enzyme is switched off by its product. Here the gene
    would have to be lowered by selection. 60 years may be too short.
-   (16 Oct 2026: now priced at the real cost, 14 units, 6 g of carbon a g of nitrogen; the share of
+   (15 Oct 2026: now priced at the real cost, 14 units, 6 g of carbon a g of nitrogen; the share of
    fixers and the flood did not change. Handover Section 4, "Fixing costs what it costs".)
 2. **Why the fixers are 60 to 75% and not 100% or 10%.** Nitrogen still holds back 19 to 52% of
    building, and the fixers shed their extra to the ground, where others take it. I did not test
