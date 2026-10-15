@@ -620,9 +620,9 @@ pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64]
     }
     let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
     let per = bl.outputs[0].1 as f64;
-    // (Only the fuels: the nitrogen mineral it also makes of the matter it sheds when it updates, `body::shed`.)
-    let mineral = chem.mineral().map(|m| m.0);
-    let fuel = |k: u16| Some(k as usize) != mineral;
+    // (Only the fuels: the minerals it also makes of the matter it sheds when it updates, `body::shed`.)
+    let minerals = chem.minerals();
+    let fuel = |k: u16| !minerals.iter().any(|m| m.0 == k as usize);
     let f = bl.inputs.iter().filter(|p| fuel(p.0)).map(|&(k, nu)| room(k as usize) / (m[k as usize] + nu as f64 / per * m[km]).max(1e-300)).fold(1.0, f64::min);
     if f < 1.0 {
         for &(k, _) in bl.inputs.iter().filter(|p| fuel(p.0)) {

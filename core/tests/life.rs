@@ -328,28 +328,39 @@ fn cover_keeps_a_body_warm() {
     pcore::step(&mut w);
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
+    // The warmest animal that lives through the month on bare ground and under cover (a starting animal may starve in its
+    // first month, a fifth of them do: the test is about the cover, so it takes the warmest one that lives).
     let bs = &w.life.bodies;
-    let slot = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
-    let i = bs[slot].cell as usize;
-    // It rests, so it stays where it is.
-    let b = &mut w.life.bodies[slot];
-    b.adj.fill(-3.0);
-    b.adj[0] = 3.0;
-    let mut covered = w.clone();
-    // Cover: a node of light-eaters, 10 kg/m² over the cell.
-    let mut c = covered.life.alive().find(|b| pcore::body::light_cat(&w.chem, &b.genes) > 5.0).expect("a light-eater").clone();
-    let f = 10.0 * w.grid.area() / c.mass(&w.chem);
-    c.store.iter_mut().for_each(|a| *a *= f);
-    c.e *= f;
-    c.count = c.n() * f;
-    c.cell = i as u32;
-    c.adj.fill(-3.0);
-    c.adj[0] = 3.0;
-    covered.life.add(c, covered.day, 1);
+    let mut order: Vec<usize> = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).collect();
+    order.sort_by(|&a, &b| bs[b].temp(&w.chem).total_cmp(&bs[a].temp(&w.chem)));
+    let base = w.clone();
+    let (w, covered, slot, i) = order
+        .iter()
+        .take(10)
+        .find_map(|&slot| {
+            let mut w = base.clone();
+            let i = w.life.bodies[slot].cell as usize;
+            // It rests, so it stays where it is.
+            let b = &mut w.life.bodies[slot];
+            b.adj.fill(-3.0);
+            b.adj[0] = 3.0;
+            let mut covered = w.clone();
+            // Cover: a node of light-eaters, 10 kg/m² over the cell.
+            let mut c = covered.life.alive().find(|b| pcore::body::light_cat(&w.chem, &b.genes) > 5.0).expect("a light-eater").clone();
+            let f = 10.0 * w.grid.area() / c.mass(&w.chem);
+            c.store.iter_mut().for_each(|a| *a *= f);
+            c.e *= f;
+            c.count = c.n() * f;
+            c.cell = i as u32;
+            c.adj.fill(-3.0);
+            c.adj[0] = 3.0;
+            covered.life.add(c, covered.day, 1);
+            pcore::step(&mut w);
+            pcore::step(&mut covered);
+            (w.life.bodies[slot].alive && covered.life.bodies[slot].alive).then_some((w, covered, slot, i))
+        })
+        .expect("one of the ten warmest animals lives through the month");
     let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];
-    pcore::step(&mut w);
-    pcore::step(&mut covered);
-    assert!(w.life.bodies[slot].alive && covered.life.bodies[slot].alive);
     println!("above the ground: bare {} K, under cover {} K", temp(&w), temp(&covered));
     assert!(temp(&covered) > temp(&w) + 1.0, "bare {} K, under cover {} K above the ground", temp(&w), temp(&covered));
 }

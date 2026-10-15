@@ -75,15 +75,15 @@ pub struct Config {
     pub mix: f64,
     /// Condensation in the air at which its droplets cover half the sky, mol/(m² s)
     pub cloud: f64,
-    /// Loose solid volume moving liquid can carry per J it dissipates, m³/J
+    /// Loose solid volume moving liquid carries off per J it dissipates, m³/J (anchored: the sediment of running liquid per J of its runoff, `docs/numbers.md`)
     pub carry: f64,
-    /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J
+    /// Bonded volume broken per J dissipated, times (1 / bond strength), m³/J (anchored: the same measured ratio, `docs/numbers.md`)
     pub wear: f64,
     /// Speed at which bodies spread back into ground cleared along an edge, from each side, when
     /// the cover is dense (scaled down by `cover / phys.rho_pass` below that), m/s.
     #[serde(default = "regrow")]
     pub regrow: f64,
-    /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s
+    /// Speed of loose solids creeping down a unit slope, times (1 / hardness), m/s (anchored: a hillslope diffusivity, `docs/numbers.md`)
     pub creep: f64,
     /// A speed shortcut, not a law (plan 7.1): past this many body nodes (individuals or
     /// population nodes) in a cell at a month's start, its most alike pairs merge, but only pairs
@@ -547,9 +547,9 @@ impl Default for Config {
             wind: 0.25,
             mix: 2e4,
             cloud: 1.2e-2,
-            carry: 1e-7,
-            wear: 3e-9,
-            creep: 1e-6,
+            carry: 2e-11,
+            wear: 1.4e-11,
+            creep: 6.3e-11,
             regrow: 1e-9,
             crowd: 4,
             share_brains: true,
@@ -678,11 +678,11 @@ pub struct Diag {
     /// trampled, `body::tear`), since the shell last read it, by starting kind. A count only, not saved.
     #[serde(skip)]
     pub hurt: Vec<f64>,
-    /// Members that could build body matter in an update (15 Oct 2026), by starting kind, as [held back, tried]: the first
-    /// those whose store of a substance they do not burn (the nitrogen mineral) bound what they built, below what their other
-    /// stores, their allowance and their spare allowed (`copy::grow`). A count only, not saved.
+    /// Members that could build body matter in an update (15 Oct 2026), by starting kind, as [tried, held back by any mineral, by
+    /// the first, by the second...]: held back are those whose store of a mineral (`Chemistry::minerals`) bound what they built,
+    /// below what their fuels, their allowance and their spare allowed (`copy::grow`). A count only, not saved.
     #[serde(skip)]
-    pub nlim: Vec<[f64; 2]>,
+    pub nlim: Vec<Vec<f64>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

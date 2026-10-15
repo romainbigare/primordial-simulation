@@ -125,7 +125,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
     let (_, init) = worldgen::chemistry0();
     let base = worldgen::new_world(3, 16, 16);
     let (n, k) = (base.grid.n(), init.low);
-    let mineral = base.chem.mineral().expect("the mineral").0;
+    let mineral = base.chem.minerals()[0].0;
     let top = (0..n).max_by(|&a, &b| base.surface_z(a).total_cmp(&base.surface_z(b))).unwrap();
     let pores = pore_mol(&base, top, k);
     // A world with `x` times the pores' worth of liquid on the highest cell, and 1e6 mol of the mineral there.
