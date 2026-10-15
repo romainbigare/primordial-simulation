@@ -1,0 +1,636 @@
+diff --git a/cli/src/chem.rs b/cli/src/chem.rs
+index cfe39b2..71905bc 100644
+--- a/cli/src/chem.rs
++++ b/cli/src/chem.rs
+@@ -90,8 +90,10 @@ fn balances(c: &Chemistry, init: &worldgen::Init) {
+                 .map(|&t| {
+                     let mut n = vec![0.0; ns];
+                     n[init.low] = depth / c.molar_volume(init.low, pcore::chem::Phase::Liquid);
++                    // The loose ground of the start: 1 m of it, by volume (`worldgen::terrain`).
++                    let all: f64 = init.loose.iter().map(|p| p.1).sum();
+                     for &(k, share) in &init.loose {
+-                        n[k] = 1e4 * share;
++                        n[k] = share / all / c.molar_volume(k, pcore::chem::Phase::Solid);
+                     }
+                     let x = rc.balance(c, &mut n, &gas, t).iter().find(|p| p.0 == u).map_or(0.0, |p| p.1);
+                     format!("{t:.0} K: {x:8.1} mol/m2 ({:.3} mol/m3)", x / depth)
+diff --git a/core/src/body.rs b/core/src/body.rs
+index 041b2e2..9ca6edf 100644
+--- a/core/src/body.rs
++++ b/core/src/body.rs
+@@ -278,15 +278,12 @@ impl Body {
+         let lay = Layout::of(chem);
+         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
+         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
+-        // By capacity: the catalysed rate per unit of input at `t_cat`, over the genes that are on
+-        // (`Physics::c_cat`), dearer if they keep their shape when warmer (`Physics::t_firm`). A gas
+-        // counted beyond first order (its `nu` above 1: mass action) counts at its share of the open
+-        // air (`Chemistry::air`) to the power `nu` - 1: the first order is the supply, as the scarce
+-        // input counts once in the rate (`change`). Without it burning body matter (6 of the gas,
+-        // 0.21^6 = 8.6e-5 of its bare rate in the open) would cost 1,800 times what burning the
+-        // energy-rich solid does for the same speed-up, and no body could keep the enzyme.
++        // By capacity: the catalysed rate per unit of the contact of its phases (`change`) at
++        // `t_cat`, over the genes that are on (`Physics::c_cat`), dearer if they keep their shape
++        // when warmer (`Physics::t_firm`): its gases at their share of the open air
++        // (`Chemistry::air`) to their order, as mass action counts them.
+         let open = |rx: &crate::chem::Reaction| -> f64 {
+-            rx.inputs.iter().enumerate().filter(|(q, x)| rx.order(*q) > 1 && chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32 - 1)).product()
++            rx.inputs.iter().enumerate().filter(|(_, x)| chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
+         };
+         let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp() * open(rx)).sum();
+         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
+@@ -1834,10 +1831,9 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
+ 
+ /// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`
+ /// J, and the energy released. Each goes at most as far as Change's rate at the body's
+-/// temperature takes it over `days`: catalyst (as far as it keeps its shape at T) · k · exp(−Ea/T) · the activity of its gases (their
+-/// share of the air to their `nu`, the scarcest input's to `nu − 1`), per unit of its scarcest
+-/// input (its own stores, the air exchanged): the same law as `change`. So a cold body
+-/// releases little: the cold cost is the rate, not a rule.
++/// temperature takes it over `days`: the same law as `change` (`change::pace`), its gases the air
++/// it exchanges at the air's shares, its other inputs its own stores, each a phase of its own. So
++/// a cold body releases little: the cold cost is the rate, not a rule.
+ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64; 64], f64) {
+     let (chem, i) = (&w.chem, b.cell as usize);
+     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
+@@ -1860,8 +1856,11 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
+         if got >= cost || !breathes(chem, r, t) {
+             continue;
+         }
+-        let (lim, who) = crate::change::scarce(&rx.inputs, |k| have[k]);
+-        let act: f64 = rx.inputs.iter().enumerate().filter(|p| gas(p.1.0 as usize)).map(|(q, &(k, _))| (air[k as usize * na + j] / tot).powi((rx.order(q) as i32 - (q == who) as i32).max(0))).product();
++        let lim = crate::change::scarce(&rx.inputs, |k| have[k]).0;
++        if lim <= 0.0 {
++            continue;
++        }
++        let act = crate::change::pace(rx, lim, |k| have[k], |k| if gas(k) { have[k] * tot / air[k * na + j] } else { have[k] });
+         let rate = crate::change::denature(Body::catalyst(b.k.cat[r], dry), t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.k * (-rx.ea / t).exp() * act;
+         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
+         got += e * ext[q];
+diff --git a/core/src/change.rs b/core/src/change.rs
+index 30016f1..a1bd02b 100644
+--- a/core/src/change.rs
++++ b/core/src/change.rs
+@@ -1,13 +1,16 @@
+ //! Law 2: Change. Substances react inside nodes, faster when hot.
+ //!
+-//! A reaction goes as far as `lim × (1 − exp(−rate × time))`, where `lim` is the amount of its
+-//! scarcest input per `nu` (the first of the least) and `rate` is per unit of that input:
+-//! catalyst · k · exp(−Ea/T) · the product, over the other inputs in a gas or a liquid, of their
+-//! share of the phase to their `nu` (the scarcest one to `nu − 1`: `lim` already counts it
+-//! once, so it counts `nu` times in all, as mass action says). So the reaction is first order in
+-//! its scarce input (a trace gas in plenty of the other goes at the same rate per unit whatever
+-//! its amount), not second order. A solid is a phase of its own (share 1). A body's catalysts
+-//! work only below the temperature where they lose their shape (`denature`).
++//! Mass action: a reaction runs at catalyst · k · exp(−Ea/T) · `e` · the product, over its inputs,
++//! of their share of their phase to their order (`Reaction::order`; a solid is a phase of its own,
++//! share 1), in reaction units a second. `e` is the contact of its phases: what `lim` would be
++//! were each input all of its phase (the least, over the inputs, of its phase's amount per `nu`).
++//! So a reaction within one phase goes with that phase, and one between a solid and the air with
++//! the solid, as a surface would. In a step it goes as far as `lim × (1 − exp(−rate / lim ×
++//! time))`, `lim` the amount of its scarcest input per `nu`: never past it, exact for a first-order
++//! decay. The rate has no jump when another input becomes the scarcest, and is first order in a
++//! trace input (a trace gas in plenty of the other goes at the same rate per unit whatever its
++//! amount). A body's catalysts work only below the temperature where they lose their shape
++//! (`denature`).
+ 
+ use crate::World;
+ use crate::chem::{Chemistry, Reaction};
+@@ -128,6 +131,19 @@ fn per(a: f64, nu: u16) -> f64 {
+     }
+ }
+ 
++/// The rate of a reaction per unit of `lim` (its scarcest input per `nu`, above 0) before
++/// catalyst · k · exp(−Ea/T): the product of its inputs' shares to their order, times `e / lim`.
++/// `a(k)` is the amount of an input and `whole(k)` that of its phase (its own for a solid).
++#[inline]
++pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
++    let (mut x, mut e) = (1.0, f64::MAX);
++    for (q, &(k, nu)) in rx.inputs.iter().enumerate() {
++        let (a, n) = (a(k as usize), whole(k as usize));
++        (x, e) = (x * pow(a / n, rx.order(q)), e.min(per(n, nu)));
++    }
++    x * e / lim
++}
++
+ /// Catalyst factor `f` at `t` of a catalyst that loses its shape above `td` K, over a width of
+ /// `wk` K. A catalyst lowers the reaction's barrier (a speed-up `f` is a lowering of ln f × T);
+ /// losing its shape loses the lowering, so the share it keeps, 1 / (1 + exp((t − td) / wk)), is
+@@ -195,7 +211,7 @@ impl Reactor {
+             let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
+             let k = rx.inputs[who].0 as usize;
+             if lim > 0.0 && (self.ph[k] == 0 || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
+-                best = best.max(rx.k * (-rx.ea / t).exp() * self.share(rx, who, &tot));
++                best = best.max(rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot));
+             }
+         }
+         best
+@@ -205,7 +221,7 @@ impl Reactor {
+     /// node at `t`, from the chemistry's own rate constants and barriers, with the gas around the
+     /// node (`gas`) held as it is. Of each pair the substance the first makes, if the node holds
+     /// none of it, is set to the amount at which the two take it and give it at the same rate,
+-    /// and the other inputs of the first (those that are not gas) are lessened by what it holds.
++    /// with the other inputs of the first (those that are not gas) lessened by what it holds.
+     /// Returns the substances set and their amounts. A node without an input of the first (no
+     /// liquid, say) holds none: its rate is nothing at every amount.
+     pub fn balance(&mut self, chem: &Chemistry, n: &mut [f64], gas: &[f64], t: f64) -> Vec<(usize, f64)> {
+@@ -215,19 +231,22 @@ impl Reactor {
+                 continue;
+             }
+             let (made, took) = (chem.reactions[f].outputs[0].1 as f64, m as f64 * chem.reactions[f].outputs[0].1 as f64);
++            let used: Vec<(usize, f64, f64)> = (chem.reactions[f].inputs.iter()).filter(|p| chem.phase(p.0 as usize, t) != crate::chem::Phase::Gas).map(|&(k, c)| (k as usize, n[k as usize], c as f64 / made)).collect();
+             // The rate of change of `u`, mol/s, with `x` of it in the node: positive below the balance.
+             let net = |rc: &mut Self, n: &mut [f64], x: f64| {
+                 n[u] = x;
++                for &(k, a, c) in &used {
++                    n[k] = (a - c * x).max(0.0);
++                }
+                 let tot = rc.phases(n, Some(gas), t);
+                 let eps = |rc: &Self, r: usize| {
+                     let rx = &chem.reactions[r];
+-                    let (lim, who) = scarce(&rx.inputs, |k| rc.av[k]);
+-                    if lim > 0.0 { lim * rx.k * (-rx.ea / t).exp() * rc.share(rx, who, &tot) } else { 0.0 }
++                    let lim = scarce(&rx.inputs, |k| rc.av[k]).0;
++                    if lim > 0.0 { lim * rx.k * (-rx.ea / t).exp() * rc.pace(rx, lim, &tot) } else { 0.0 }
+                 };
+                 made * eps(rc, f) - took * eps(rc, b)
+             };
+             if net(self, n, 0.0) <= 0.0 {
+-                n[u] = 0.0;
+                 continue;
+             }
+             let (mut lo, mut hi) = (0.0, 1.0);
+@@ -239,28 +258,15 @@ impl Reactor {
+                 if net(self, n, mid) > 0.0 { lo = mid } else { hi = mid }
+             }
+             let x = 0.5 * (lo + hi);
+-            n[u] = x;
+-            for &(k, c) in &chem.reactions[f].inputs {
+-                if chem.phase(k as usize, t) != crate::chem::Phase::Gas {
+-                    n[k as usize] = (n[k as usize] - c as f64 * x / made).max(0.0);
+-                }
+-            }
++            net(self, n, x);
+             out.push((u, x));
+         }
+         out
+     }
+ 
+-    /// The product, over the inputs of `rx` in a gas or a liquid, of their share of the phase to
+-    /// their `nu`; the scarcest input (place `who`) to `nu - 1`.
+-    fn share(&self, rx: &Reaction, who: usize, tot: &[f64; 3]) -> f64 {
+-        let mut x = 1.0;
+-        for (q, &(k, _)) in rx.inputs.iter().enumerate() {
+-            let (k, p) = (k as usize, self.ph[k as usize] as usize);
+-            if p > 0 {
+-                x *= pow(self.av[k] / tot[p], rx.order(q).saturating_sub((q == who) as u16));
+-            }
+-        }
+-        x
++    /// `pace` of `rx` with the amounts and phases of the last `phases`.
++    fn pace(&self, rx: &Reaction, lim: f64, tot: &[f64; 3]) -> f64 {
++        pace(rx, lim, |k| self.av[k], |k| if self.ph[k] > 0 { tot[self.ph[k] as usize] } else { self.av[k] })
+     }
+ 
+     /// Phase and available amount of each substance at `t` (the node's, plus for a gas the gas
+@@ -328,9 +334,9 @@ impl Reactor {
+                 if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (uses_light && light <= 0.0) {
+                     continue;
+                 }
+-                let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
++                let lim = scarce(&rx.inputs, |k| self.av[k]).0;
+                 if lim > 0.0 {
+-                    let kap = cr * rx.k * (-rx.ea / t).exp() * self.share(rx, who, &tot);
++                    let kap = cr * rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot);
+                     self.kap[r] = kap;
+                     self.lim[r] = lim;
+                     any = true;
+@@ -408,7 +414,8 @@ impl Reactor {
+ /// node, `need` for those gases at the most activity they can have there (their share of the
+ /// air's gas), once asked for (NaN before). `shared`: the inputs that are not gas and count more
+ /// than once, which in a liquid go by their share of it (a node holding little of one, a trace of
+-/// its liquid, cannot go far however fast the rate constant is).
++/// its liquid, cannot go far however fast the rate constant is); `held` with their boiling points,
++/// counts and orders, `gnu` the largest count of a gas input.
+ struct Cand {
+     ea: f64,
+     kdt: f64,
+@@ -416,7 +423,8 @@ struct Cand {
+     low: f64,
+     need_bits: u64,
+     gas: Vec<(usize, u16)>,
+-    held: Vec<(usize, f64)>,
++    held: Vec<(usize, f64, u16, u16)>,
++    gnu: f64,
+     shared: Vec<(usize, u16)>,
+     need: Vec<std::cell::Cell<f64>>,
+ }
+@@ -500,7 +508,8 @@ pub fn step(w: &mut World, dt: f64) {
+     let act = |a: f64, d: f64| if d > 0.0 { (a / d).min(1.0) } else { 1.0 };
+     // The most activity the rate per unit of the scarcest input can have from gases with shares
+     // `f`, whichever input that is: all shares to `nu`, or one power of one of them left out (not
+-    // of a trace: it does not make the node react every step, see `TRACE`).
++    // of a trace: it does not make the node react every step, see `TRACE`). A bound: `pace` is
++    // never more, as `e / lim` is at most the scarcest input's phase over its amount.
+     let up = |gas: &[(usize, u16)], f: &dyn Fn(usize) -> f64| {
+         (0..=gas.len()).filter(|&d| d == gas.len() || f(gas[d].0) >= TRACE).map(|d| gas.iter().enumerate().map(|(q, &(k, nu))| pow(f(k), nu.saturating_sub((q == d) as u16))).product::<f64>()).fold(0.0, f64::max)
+     };
+@@ -510,8 +519,10 @@ pub fn step(w: &mut World, dt: f64) {
+             let rx = &chem.reactions[r];
+             let (gas, held): (Vec<_>, Vec<_>) = rx.inputs.iter().enumerate().map(|(q, p)| (p.0 as usize, rx.order(q))).partition(|p| chem.subs[p.0].boil <= tlo);
+             let shared = held.iter().copied().filter(|g| g.1 > 1).collect();
+-            let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil)).collect();
+-            let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, shared, need: vec![std::cell::Cell::new(f64::NAN); na] };
++            let count = |k: usize| rx.inputs.iter().find(|p| p.0 as usize == k).map_or(1, |p| p.1);
++            let gnu = gas.iter().map(|g| count(g.0)).max().unwrap_or(1) as f64;
++            let held = held.iter().map(|g| (g.0, chem.subs[g.0].boil, count(g.0), g.1)).collect();
++            let mut c = Cand { ea: rx.ea, kdt: rx.k * dt / FAR, hot, low: 0.0, need_bits, gas, held, gnu, shared, need: vec![std::cell::Cell::new(f64::NAN); na] };
+             c.low = c.warm(c.kdt * up(&c.gas, &|k| most_act[k])).max(hot);
+             c
+         })
+@@ -535,7 +546,7 @@ pub fn step(w: &mut World, dt: f64) {
+     let liquids: Vec<usize> = (0..ns).filter(|&k| chem.subs[k].melt <= gmax && chem.subs[k].boil > gmin).collect();
+     let own_gas = |k: usize, i: usize| col(k)[i] > OWN * share * w.air[k * na + air_of[i] as usize];
+     let fits = |c: &Cand, i: usize, t: f64| {
+-        let held = |all: f64| c.held.iter().all(|&(k, boil)| t >= boil || col(k)[i] > TRACE * all);
++        let held = |all: f64| c.held.iter().all(|&(k, boil, _, _)| t >= boil || col(k)[i] > TRACE * all);
+         if t < c.hot || !held(col(most[0])[i]) {
+             return false;
+         }
+@@ -560,7 +571,22 @@ pub fn step(w: &mut World, dt: f64) {
+         if (own || vapour > 0.0) && t < c.warm(c.kdt * up(&c.gas, &|k| act(col(k)[i] / share + w.air[k * na + j], d))) {
+             return false;
+         }
+-        held(most.iter().map(|&k| col(k)[i]).sum::<f64>() + c.held.iter().filter(|h| !most.contains(&h.0)).map(|&(k, _)| col(k)[i]).sum::<f64>())
++        // The contact of the phases (`pace`): with a gas the scarce input, the reaction goes no faster
++        // than the least the node holds of its other inputs (per count; a liquid by all the liquid)
++        // over the gas over it, times the gas's count; with another input scarce, all shares count.
++        let airy: Vec<(usize, u16)> = c.gas.iter().copied().chain(c.held.iter().filter(|h| t >= h.1).map(|h| (h.0, h.3))).collect();
++        if !airy.is_empty() && c.held.iter().any(|h| t < h.1) {
++            let liquid = |k: usize| chem.subs[k].melt <= t && t < chem.subs[k].boil;
++            let wet = || liquids.iter().filter(|&&k| liquid(k)).map(|&k| col(k)[i]).sum::<f64>();
++            let hold = (c.held.iter().filter(|h| t < h.1)).map(|&(k, _, nu, _)| (if liquid(k) { wet() } else { col(k)[i] }) / nu as f64).fold(f64::MAX, f64::min);
++            let gnu = c.held.iter().filter(|h| t >= h.1).fold(c.gnu, |m, h| m.max(h.2 as f64));
++            let x = |k: usize| act(col(k)[i] / share + w.air[k * na + j], d);
++            let full: f64 = airy.iter().map(|&(k, o)| pow(x(k), o)).product();
++            if t < c.warm(c.kdt * full.max((gnu * hold / (d * share)).min(1.0) * up(&airy, &x))) {
++                return false;
++            }
++        }
++        held(most.iter().map(|&k| col(k)[i]).sum::<f64>() + c.held.iter().filter(|h| !most.contains(&h.0)).map(|h| col(h.0)[i]).sum::<f64>())
+     };
+     let (mut maybe, mut ok, mut gas) = (vec![false; n], vec![false; n], vec![false; n]);
+     let mut warm: Option<Vec<u32>> = None;
+@@ -583,7 +609,7 @@ pub fn step(w: &mut World, dt: f64) {
+         for (o, &t) in ok.iter_mut().zip(tg) {
+             *o = t >= c.hot;
+         }
+-        for &(k, boil) in &c.held {
++        for &(k, boil, _, _) in &c.held {
+             for ((o, &t), (&a, &b)) in ok.iter_mut().zip(tg).zip(col(k).iter().zip(col(most[0]))) {
+                 *o &= t >= boil || a > TRACE * b;
+             }
+diff --git a/core/src/lib.rs b/core/src/lib.rs
+index 646d316..1d93e3f 100644
+--- a/core/src/lib.rs
++++ b/core/src/lib.rs
+@@ -182,7 +182,10 @@ pub struct Physics {
+     /// 2.1 x 10^-6 /s, 3,100 J/kg/day, what they paid before for a gene of 12). Before it was
+     /// 1.67 x 10^6, set so light-eaters with a gene of 12, about 1,000 times more light catalyst
+     /// than they need, paid what an older cost made them pay: so every catalyst was about 1,000
+-    /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing.
++    /// times too cheap, an eater's cost 4 J/kg/day, and cold tolerance cost nothing. (15 Oct 2026,
++    /// the smooth rate of Law 2, a study: the capacity counts every gas of a reaction at its share of
++    /// the open air to its order, as mass action does, so burning's capacity is 0.21 of what it was
++    /// and the constant is 2.14 x 10^9 / 0.21 = 1.02 x 10^10: the founders pay what they paid.)
+     pub c_cat: f64,
+     /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature), and
+     /// where the costs are anchored: a body's upkeep is what the costs say at this temperature and goes
+@@ -438,7 +441,7 @@ impl Default for Physics {
+             gas_depth: 1.0,
+             wet_depth: 0.01,
+             shelter: 220.0,
+-            c_cat: 2.1429e9,
++            c_cat: 1.0204e10,
+             t_cat: T_SURF,
+             unfold: 3.0,
+             t_firm: 320.0,
+diff --git a/core/tests/dissolved.rs b/core/tests/dissolved.rs
+index 2dad32e..16714e0 100644
+--- a/core/tests/dissolved.rs
++++ b/core/tests/dissolved.rs
+@@ -14,11 +14,12 @@ const MOL_PER_M3: f64 = 1000.0 / 0.018;
+ const AIR_COLUMN: f64 = 101_325.0 / (9.81 * 0.0288);
+ const DAY: f64 = 86_400.0;
+ 
+-/// One m2 of a liquid column `depth` m deep over plenty of rock, with the gas of the air over it.
++/// One m2 of a liquid column `depth` m deep over the rock of the start's loose ground (a tenth of
++/// 1 m by volume, 2,710 mol: the rate goes with it, Law 2's contact), with the gas of the air over it.
+ fn column(chem: &Chemistry, depth: f64, ppm: f64) -> (Vec<f64>, Vec<f64>) {
+     let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
+     n[LIQ] = depth * MOL_PER_M3;
+-    n[ROCK] = 1e4;
++    n[ROCK] = 0.1 / chem.molar_volume(ROCK, pcore::chem::Phase::Solid);
+     (gas[1], gas[2], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, ppm * 1e-6 * AIR_COLUMN);
+     (n, gas)
+ }
+@@ -72,18 +73,21 @@ fn the_two_reactions_close_elements_and_energy() {
+ }
+ 
+ /// The balance holds what the real carbonate chemistry says at the anchor (1 mol per m3 of the
+-/// liquid, 500 m deep, 400 ppm, 288 K), goes with the gas to the power 1/3 and falls with warmth
+-/// as the reaction heat says (dH / R = 4,847 K, the salt as the cube root of the constant).
++/// liquid, 500 m deep, 400 ppm, 288 K). The salt cubed, over the rock it left (the reaction's
++/// contact, Law 2), goes with the gas and falls with warmth as the reaction heat says (dH / R =
++/// 4,847 K): the real law, [Ca][HCO3]^2 = K pCO2, with the rock in it.
+ #[test]
+ fn the_balance_is_the_anchored_one_and_moves_as_the_law_says() {
+     let (chem, _) = worldgen::chemistry0();
+-    let s = at_balance(&chem, 500.0, 400.0, 288.0) / 500.0;
+-    assert!((0.9..1.1).contains(&s), "{s} mol per m3 at the anchor");
+-    let twice = at_balance(&chem, 500.0, 800.0, 288.0) / (s * 500.0);
+-    assert!((twice - 2f64.powf(1.0 / 3.0)).abs() < 0.01, "twice the gas: x{twice}");
+-    let warm = at_balance(&chem, 500.0, 400.0, 298.0) / (s * 500.0);
+-    let law = (-(-(chem.dh(22) / 8.314) * (1.0 / 288.0 - 1.0 / 298.0)) / 3.0).exp();
+-    assert!((warm / law - 1.0).abs() < 0.02, "10 K warmer: x{warm}, the law says x{law}");
++    let rock = column(&chem, 500.0, 400.0).0[ROCK];
++    let held = |salt: f64| salt.powi(3) / (rock - salt);
++    let s = at_balance(&chem, 500.0, 400.0, 288.0);
++    assert!((0.9..1.1).contains(&(s / 500.0)), "{} mol per m3 at the anchor", s / 500.0);
++    let twice = held(at_balance(&chem, 500.0, 800.0, 288.0)) / held(s);
++    assert!((twice - 2.0).abs() < 0.02, "twice the gas: x{twice}");
++    let warm = held(at_balance(&chem, 500.0, 400.0, 298.0)) / held(s);
++    let law = ((chem.dh(22) / 8.314) * (1.0 / 288.0 - 1.0 / 298.0)).exp();
++    assert!((warm / law - 1.0).abs() < 0.03, "10 K warmer: x{warm}, the law says x{law}");
+ }
+ 
+ /// The store goes with the liquid, not with the gas over it: a cell with no liquid holds none; a
+@@ -105,7 +109,8 @@ fn a_dry_cell_holds_none_and_a_deeper_column_holds_more() {
+ }
+ 
+ /// A long run of the two reactions in lumps of 120 days (the pace of a calm cell), the air held at
+-/// 400 ppm, settles to the amount `balance` gives, from none and from twice as much.
++/// 400 ppm, settles to the amount `balance` gives, from none and from twice as much (made of the
++/// same rock, so the same calcium in all).
+ #[test]
+ fn a_long_run_settles_to_the_balance() {
+     let (chem, _) = worldgen::chemistry0();
+@@ -113,7 +118,7 @@ fn a_long_run_settles_to_the_balance() {
+     let mut rc = Reactor::new(&chem);
+     for start in [0.0, 2.0 * want] {
+         let (mut n, gas0) = column(&chem, 500.0, 400.0);
+-        n[SALT] = start;
++        (n[SALT], n[ROCK]) = (start, n[ROCK] - start);
+         let mut e = 288.0 * 1e15;
+         for _ in 0..(60 * 3) {
+             let mut gas = gas0.clone();
+diff --git a/core/tests/rate.rs b/core/tests/rate.rs
+new file mode 100644
+index 0000000..3e9ba7d
+--- /dev/null
++++ b/core/tests/rate.rs
+@@ -0,0 +1,126 @@
++//! Law 2's rate is mass action with the contact of its phases (`change::pace`): no jump when
++//! another input becomes the scarcest, first order in a trace input, and with a solid as far as
++//! the solid goes. Substances by number (chemistry 0): 0 the liquid, 2 the oxygen-like gas, 3 the
++//! heat-absorbing gas, 5 the energy-rich solid, 10 the rock that dissolves, 23 the salt.
++
++use pcore::change::Reactor;
++use pcore::chem::Chemistry;
++
++const LIQ: usize = 0;
++const OX: usize = 2;
++const GAS: usize = 3;
++const RICH: usize = 5;
++const ROCK: usize = 10;
++const SALT: usize = 23;
++const AIR_COLUMN: f64 = 101_325.0 / (9.81 * 0.0288);
++const DAY: f64 = 86_400.0;
++
++/// One m2 of wet land (0.4 m of liquid in its pores) under the air at 400 ppm, with `rock` mol of
++/// the rock; the reactions run for `dt` at 288 K. Returns the salt made per second and the books
++/// (elements, energy) before and after.
++fn wet_land(chem: &Chemistry, rock: f64, dt: f64) -> (f64, bool) {
++    let mut rc = Reactor::new(chem);
++    let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
++    (n[LIQ], n[ROCK]) = (0.4 * 1000.0 / 0.018, rock);
++    (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
++    let cap = 1e15;
++    let mut e = 288.0 * (cap + n.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>());
++    let books = |n: &[f64], gas: &[f64], e: f64| {
++        let mut el = vec![0.0; chem.n_elements];
++        let mut en = e;
++        for k in 0..chem.ns() {
++            chem.add_elems(k, n[k] + gas[k], &mut el);
++            en += (n[k] + gas[k]) * chem.subs[k].hf;
++        }
++        (el, en)
++    };
++    let (el0, en0) = books(&n, &gas, e);
++    rc.react(chem, &mut n, Some(&mut gas), &mut e, cap, None, 0.0, dt);
++    let (el1, en1) = books(&n, &gas, e);
++    let closed = (0..chem.n_elements).all(|j| (el1[j] - el0[j]).abs() <= 1e-10 * el0[j].max(1.0)) && (en1 - en0).abs() <= 1e-9 * en0.abs();
++    (n[SALT] / dt, closed && n.iter().chain(&gas).all(|&a| a >= 0.0))
++}
++
++/// A sweep of the rock across the amount of the gas over the cell (144 mol/m2 at 400 ppm, where the
++/// old law switched from the gas's amount to the rock's and the rate fell about 2,500 times): the
++/// salt made goes with the rock, smoothly, and the books close at every step.
++#[test]
++fn no_jump_when_the_scarcest_input_changes() {
++    let (chem, _) = worldgen::chemistry0();
++    let co2 = 400e-6 * AIR_COLUMN;
++    let (mut last, mut rock) = (None, 1.0);
++    while rock < 1e5 {
++        let (rate, closed) = wet_land(&chem, rock, DAY);
++        assert!(closed, "the books at {rock} mol of rock");
++        assert!(rate > 0.0, "no salt at {rock} mol of rock");
++        if let Some((r0, x0)) = last {
++            // 2% more rock: never less salt, never more than 2% more (a jump would be a factor of 2,500).
++            let (up, more) = (rate / r0, rock / x0);
++            assert!(up >= 1.0 && up <= more * 1.0001, "rock {x0:.1} -> {rock:.1} mol (gas {co2:.0}): rate x{up}");
++        }
++        last = Some((rate, rock));
++        rock *= 1.02;
++    }
++    // Across the old break the rate is the rock's: 1% either side of the gas's amount, 2% apart.
++    let (below, _) = wet_land(&chem, 0.99 * co2, DAY);
++    let (above, _) = wet_land(&chem, 1.01 * co2, DAY);
++    assert!((above / below - 1.01 / 0.99).abs() < 1e-3, "across the gas's amount: x{}", above / below);
++}
++
++/// A trace gas against a solid is first order in the gas: the share of it the rock takes in a day
++/// is the same for 1 or 100 mol of the gas, the other amounts the same.
++#[test]
++fn a_trace_gas_against_a_solid_goes_first_order() {
++    let (chem, _) = worldgen::chemistry0();
++    let mut rc = Reactor::new(&chem);
++    let mut lost = |a: f64| {
++        let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
++        (n[LIQ], n[ROCK]) = (1e5, 1e4);
++        (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, a);
++        let mut e = 288.0 * 1e15;
++        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, 30.0 * DAY);
++        1.0 - gas[GAS] / a
++    };
++    let (few, many) = (lost(1.0), lost(100.0));
++    assert!(few > 1e-4 && few < 0.9, "share lost {few}");
++    assert!((many - few).abs() < 0.01 * few, "1 mol lost {few}, 100 mol lost {many}");
++}
++
++/// Dead matter in the open goes with what there is of it (first order: the same share lost for 1
++/// and 1,000 mol) at its litter constant, 0.27 a year at 290 K for the energy-rich solid (Olson
++/// 1963; `docs/numbers.md`), the oxygen-like gas at its share of the air.
++#[test]
++fn litter_goes_first_order_at_its_constant() {
++    let (chem, _) = worldgen::chemistry0();
++    let mut rc = Reactor::new(&chem);
++    let year = 3.156e7;
++    let mut lost = |a: f64| {
++        let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
++        n[RICH] = a;
++        (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
++        let mut e = 290.0 * 1e15;
++        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, year);
++        1.0 - n[RICH] / a
++    };
++    let (few, many) = (lost(1.0), lost(1000.0));
++    assert!((many - few).abs() < 1e-3 * few, "1 mol lost {few}, 1,000 mol lost {many}");
++    // 0.27 a year, the rest of the bare decay (reaction 4 and 9, far slower) aside.
++    assert!((0.235..0.25).contains(&few), "share lost in a year {few} (1 - e^-0.27 = 0.237)");
++}
++
++/// The founders' light gene is raised by `LIGHT_X`, the log10 of the gas a founder light-eater
++/// exchanges in its interval over the liquid it holds (the contact of the light reaction's phases
++/// in a body is its liquid): the constant is that measure.
++#[test]
++fn the_light_shift_is_the_founders_gas_over_their_liquid() {
++    let mut w = worldgen::new_world(1, 16, 16);
++    pcore::step(&mut w);
++    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
++    let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
++    let (l, g) = (w.life.new_lineage(pcore::body::Lineage { shape, seen: 3, sight: 1, base: vec![], root: 0 }), w.life.new_genome(vec![]));
++    let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a founder");
++    b.prepare(&w.chem, &w.cfg.phys);
++    let reach = b.k.gas * b.open_area(&w.chem, &w.cfg.phys, b.mass(&w.chem)) * b.interval() as f64;
++    let x = (reach / b.store[LIQ]).log10();
++    assert!((x - worldgen::life::LIGHT_X as f64).abs() < 0.01, "a founder exchanges 10^{x} times its liquid");
++}
+diff --git a/docs/handover.md b/docs/handover.md
+index 3ec2f49..1c4c3cf 100644
+--- a/docs/handover.md
++++ b/docs/handover.md
+@@ -295,13 +295,16 @@ When the structures (for example plants) are worn away, the cost falls.
+ **Substances react inside nodes, faster when hot, by the world's chemistry table.**
+ 
+ ```
+-rate[r] = k[r] · exp(−Ea[r] / T) · Π over the other inputs (share[input]^ν) · catalyst[r] · light[r]
+-          (per unit of the scarce input, the one that runs out first)
+-extent[r] = scarce amount per ν · (1 − exp(−rate[r] · time))
+-da[k]/dt ≈ Σ_r (out[k,r] − in[k,r]) · rate[r] · scarce amount per ν
+-dE/dt   = −Σ_r ΔH[r] · rate[r] · scarce amount per ν
++rate[r] = k[r] · exp(−Ea[r] / T) · contact[r] · Π over all inputs (share[input]^order) · catalyst[r] · light[r]
++          (reaction units per second; contact = the least, over the inputs, of the amount of the input's phase per ν)
++lim[r]    = the least, over the inputs, of the input's amount per ν (the scarce input)
++extent[r] = lim[r] · (1 − exp(−rate[r] / lim[r] · time))
++da[k]/dt ≈ Σ_r (out[k,r] − in[k,r]) · rate[r]
++dE/dt   = −Σ_r ΔH[r] · rate[r]
+ ```
+ 
++- **Mass action with the contact of the phases (study branch `law2-smooth-rate`, 15 Oct 2026, proposed and not decided; `docs/reports/law2-smooth-rate.md`).** Before, the rate was per unit of the scarce input with the other inputs' shares, so it jumped when another input became the scarcest (by the ratio of their shares: about 3,000 times for reaction 22 on land where the rock ran short). Now `contact` is what `lim` would be were each input all of its phase: a reaction within one phase goes with that phase (as before), one between a solid and the air goes with the solid (a surface), never faster than the smaller phase allows. No jump; first order in a trace input still. The bullets below describe the law of `main`.
++
+ - **Rate orders (15 Oct 2026).** A reaction may give the power its rate law takes of an input's share apart from the input's count (`Reaction::ord`, the data's `ord`, in the order of the inputs; the count when it says nothing): the stoichiometry of a big molecule is not a collision of 40 molecules. Reaction 21 burns C40H66N2O34 with 40 O2 and takes the oxygen-like gas to its 6th power, as the 6-unit matter did, so its rate in the open is what the data says (0.2 a year at 290 K with the litter `k` 2.28e9; 5% and 5.7e8 when this was built); with the count, 40, `k` would be 6.3e31 (so the rate with all gas at 1 would be absurd), the speed tool of `change::step` reads `k` to say which nodes can react at a step, and the law of nodes ran 10 times slower (444 ms a year against 33, seed 1, 64x64). The scarce input's power is its order less 1, as before with its count.
+ - `share` is the amount's share of its phase (gas or liquid); a solid is a phase of its own (share 1). The scarce input counts once through its own amount, and its share is left out, except `share^(ν−1)` when its `ν` is above 1 (so it counts `ν` times in all, as mass action says). The reaction is **first order in its scarce input**: a trace gas in plenty of the other goes at the same rate per unit whatever its amount. If two inputs tie, the first one listed is the scarce one. A body that burns stores (Section 6.4) uses the same law.
+ 
+diff --git a/docs/numbers.md b/docs/numbers.md
+index 1b2bf33..a6acfb4 100644
+--- a/docs/numbers.md
++++ b/docs/numbers.md
+@@ -68,7 +68,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
+ | `gas_depth` | m | liquid thickness over a body that cuts its gas exchange by a factor e | none found; a gas moves 10^4 times slower in liquid than in air, so 1 m is generous (my arithmetic) | tuned, first guess |
+ | `wet_depth` | m | depth of the liquid of a cell, standing or in the pores of its ground, at which the ground counts as half wet (what a body soaks up goes by it; 15 Oct 2026: the pores count, before it was the standing liquid) | a film or puddle of about 1 cm | anchored |
+ | `shelter` | W kg/(m⁴ K) | heat the cover of other bodies passes to a body (layer of m kg/m² passes shelter/m W per K and m²) | run: 220 gives a 30 kg member under 10 kg/m² of cover 3.4 K more warmth, as thick walls give 3.3 K (`body.rs`) | tuned |
+-| `c_cat` | J per kg of body per day per unit of capacity (1/s) | upkeep of catalysts: a body pays for what its catalysts can do | keeping enzymes costs a resting animal 10 to 25% of its upkeep, doc comment (14 Oct 2026). Per kg of the body (`Body::built`: matter and the liquid it keeps, not the fuel it stores), mass^1.0, since the same day (the energy ceiling, handover 4; it was per kg^0.75 from review 6 finding 2, 3.51e9, and per kg of the whole mass before), anchored at the 30 kg founders, 70% body, who pay what they paid: 1.5e9 / 0.7 = 2.14e9 | anchored |
++| `c_cat` | J per kg of body per day per unit of capacity (1/s) | upkeep of catalysts: a body pays for what its catalysts can do | keeping enzymes costs a resting animal 10 to 25% of its upkeep, doc comment (14 Oct 2026). Per kg of the body (`Body::built`: matter and the liquid it keeps, not the fuel it stores), mass^1.0, since the same day (the energy ceiling, handover 4; it was per kg^0.75 from review 6 finding 2, 3.51e9, and per kg of the whole mass before), anchored at the 30 kg founders, 70% body, who pay what they paid: 1.5e9 / 0.7 = 2.14e9. **Study branch `law2-smooth-rate` (15 Oct 2026, not decided):** with Law 2's rate by mass action the capacity counts every gas of a reaction at its share of the open air to its order (it counted only a gas beyond first order, to its order less 1), so burning's capacity is 0.21 of what it was and the constant is 2.14e9 / 0.21 = 1.02e10: the founders' burning costs what it cost | anchored |
+ | `t_cat` | K | the temperature at which upkeep measures catalyst capacity, and where the costs are anchored: upkeep is what the costs say at this temperature and goes from it by the rate law of the body's main burning reaction, exp(-Ea (1/T - 1/`t_cat`)), as do what it can take and build per day (`Body::supply`) (15 Oct 2026: the cost of living and the tempo of a body follow temperature, `Body::pace`; no new number) | a typical surface temperature; the same as `worldgen::life::T_SURF`, which now reads this (one constant, `pcore::T_SURF`). The costs (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `c_signal`, `c_leaf`, `c_brain`) were set when upkeep was the same at every temperature, so at the island's 287 to 289 K a body pays 0.7 to 0.8 of them, 2.4 times at 299 K; they are not re-anchored (handover 4) | anchored |
+ | `unfold` | K | width over which catalysts lose their shape above their gene | life's enzymes unfold within a few K | anchored |
+ | `t_firm` | K | catalysts that keep their shape up to here cost no more | about where life's enzymes fail, 320 K | anchored |
+@@ -187,6 +187,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
+ | the year each kind is placed (`Kind::year`: 0, 10, 20, 24) | years | when the starting kinds are placed after the first life | run: once what they eat has spread (`life.rs`) | tuned |
+ | `Seeding::default` (20 rounds, row-bias step 0.2, genes x3) | none | how much a start is sprayed with mutation | run: one generation's step is too small for selection to pick from in the time available (review 2, problem 2). The hand-set start, the default for animals in `ew run` since 14 Oct 2026, takes one generation's step for rows and genes | tuned |
+ | `worldgen::life::FIXERS` (0.1) | share | the share of the starting light-eaters that carry the gene of the reaction that fixes the air's nitrogen: **an initial condition, not a law** (15 Oct 2026, the decision "some fixing founders"), chosen before any run; `ew run --fixers` sets it, 0 for the control; the seeding line prints how many were drawn (a draw by each body's own id) | plants that fix nitrogen with a partner are about 7% of the flowering species (the legumes, about 19,000 of 295,000; with the alder and the others near a tenth; from memory, unchecked), and in grass and forest 5 to 20% of the cover. A founder rule, not a number the laws read: it is counted in the rules chosen for a run (the share was fixed from real floras before any run, but it was wanted because the run without an input collapsed, `docs/reports/nitrogen-not-merged.patch`) | anchored |
++| `worldgen::life::LIGHT_X` (2.34; study branch `law2-smooth-rate`, not decided) | log10 | how much more light catalyst a founder light-eater is given than the kinds' number (9) | with Law 2's rate by mass action the light reaction's contact in a body is its liquid, not the gas it exchanges in its interval; a founder (1 kg, 20 days) exchanges 217 times its liquid, so a founder's own light reaction goes as it did with the gene 2.34 higher (`core/tests/rate.rs` holds the constant to that measure). As `LITTER_X` was set: the body's own rate kept | anchored |
+ | `worldgen::life::FIX_GENE` (8.6) | log10 | the speed-up of the fixing reaction in those founders | the speed a growing plant needs: it turns its matter over in about half a year (5.5% of its mass, 0.049 mol per kg), 3e-9 mol of the mineral per kg and second; a founder with the gene at 9 makes 7.1e-9 (`core/tests/nitrogen.rs`), so 8.6. The light reaction's starting gene (9) was set the same way (the speed a body needs over the speed of the bare reaction); the enzyme is paid by capacity like the others (`Physics::c_cat`) and the reaction by the fuel it burns (a unit for each mol) | anchored |
+ 
+ ## Chemistry data that bodies live by (not rows of `Physics`)
+@@ -205,7 +206,7 @@ Chemistry 0 (`worldgen/src/chem0.toml`) is data, not a struct of numbers, and is
+ | reaction 25, the mineral breaking down hot | 2 N2H4O3 -> 2 N2 + 4 H2O + O2, k 2.6e9 /s, Ea 20,000 K; dH -414 kJ | where it is hot (burning matter) the nitrogen that went to the mineral leaves as the gas, to the air, as real fires lose most of the nitrogen of what they burn: 3e-21 /s at 290 K, 1e-8 at 500 K, 1e-3 at 700 K, 5 /s at 1000 K | the salt breaks down above 450 K with an energy near 170 kJ/mol (20,000 K) |
+ | `Chemistry::air`, the cost of catalysts | the starting air's mole fractions | the cost of a catalyst (`Body::prepare`) counts a gas of a reaction beyond first order at its share to the power of its order (`Reaction::order`, the count unless `ord` says) - 1 | without it the 6th power of the oxygen-like gas makes the enzyme for burning body matter cost 1,800 times that for the solid for the same speed-up (its rate constant is 1.9e-5 /s against 1.0e-8); with it, 0.75 times. Reactions of order 1 in every gas (the light reaction, burning the solid) are unchanged |
+ | substance 23, the salt that exists only dissolved | Ca(HCO3)2 (162.1 g/mol), hf -1,926.8 kJ/mol, cp 194 J/(mol K), melts at 271 K, never boils, liquid density 5,400 (30 cm³/mol) | holds the liquid's carbon beyond the free gas (15 Oct 2026, review 8, the owner's request) | **physical:** hf = Ca2+(aq) -542.8 + 2 HCO3-(aq) -692.0 kJ/mol, so CaCO3 + CO2 + H2O -> salt has dH = -40.3 kJ/mol (real: -40.1). **anchored:** cp by Kopp's rule (82 + 37 + 75), melting at the freezing point of a salty liquid (271.2 K), volume of the dissolved ions (about 30 cm³/mol, rough) |
+-| reaction 22, dissolving: CaCO3 + CO2 + H2O -> salt | k 1.0e-4 /s, Ea 2,800 K | the liquid takes the air's gas into the salt; 0.19 a year per unit of the gas over it at 288 K (6.0e-9 /s) | **anchored:** the Earth's gross exchange of this gas between air and its liquid cover, 80 of 589 PgC a year (Ciais et al. 2013) over the 71% of the planet the liquid covers; Ea from the temperature rise of gas transfer, 1.4 times per 10 K (2,800 K). Plain mass action: first order in the scarce input |
++| reaction 22, dissolving: CaCO3 + CO2 + H2O -> salt | k 1.62e-2 /s (study branch `law2-smooth-rate`; 1.0e-4 on main), Ea 2,800 K | the liquid takes the air's gas into the salt; 0.19 a year per unit of the gas over it at 288 K (6.0e-9 /s) over the anchor's sea floor | **anchored:** the Earth's gross exchange of this gas between air and its liquid cover, 80 of 589 PgC a year (Ciais et al. 2013) over the 71% of the planet the liquid covers; Ea from the temperature rise of gas transfer, 1.4 times per 10 K (2,800 K). By mass action the contact of the rock, the air and the liquid is the rock (the least of the three), so the rate per unit of the gas is k exp(-Ea/T) x the rock / the air over the cell: k = 6.0e-9 exp(2800/288) x 3.59e5 / 2,210 = 1.62e-2, 2,210 mol/m2 the start's loose rock (a tenth of 1 m by volume, 2,710) less the salt at 500 m. On main (first order in the scarce input) k was 1.0e-4 and the rock did not count while the gas was scarcer |
+ | reaction 23, settling: 3 salt -> 3 CaCO3 + 3 CO2 + 3 H2O | k 1.8e12 /s, Ea 7,647 K | the way back; written for three of the salt because its real rate takes one Ca2+ and two HCO3-, three particles, so its rate per unit of salt goes with the salt's share of the liquid squared | **physical:** Ea(23) - Ea(22) = dH / R = 40.3e3 / 8.314 = 4,847 K. **anchored:** k set so the balance at 288 K, 400 ppm and a liquid 500 m deep is 1.0 mol of salt per m³ of liquid (2.0 mol/m³ of dissolved carbon, measured; pure calcite and the gas give 0.6 by Ksp 10^-8.48, K1 10^-6.35, K2 10^-10.33, KH 10^-1.47 at 298 K). **The 500 m is this map's** (median sea depth 660 m, mean 540 m), because the reaction takes the gas from the air column over the cell: the balance is S³ = (k22 / k23) exp(4,847 / T) x gas x liquid², so a deeper liquid holds more per m² (to the power 2/3) and a little less per m³ (to the power -1/3). Anchored at the Earth's mean depth, 3,700 m, the same reaction would hold about 2 times more per m³ in this map's liquid |
+ 
+ ## Counts
+@@ -215,7 +216,7 @@ By hand and by script on 14 Oct 2026. The 102 rows of `Config` and `Physics` are
+ | mark | rows | which |
+ |---|---|---|
+ | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
+-| anchored | 32, and 5 outside the structs | 32 fields (among them `c_move`, `take`, `dormancy`, `porosity` and `seep`) and the constants `MAX_INTERVAL`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS` and `FIX_GENE` |
++| anchored | 32, and 6 outside the structs | 32 fields (among them `c_move`, `take`, `dormancy`, `porosity` and `seep`) and the constants `MAX_INTERVAL`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` (study branch) |
+ | tuned (run or reason named) | 19, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_build`, `c_basal`; outside: the kept copy logit, the roster's stores, intervals and years, the spray of the start) |
+ | tuned, first guess | 40 | 36 free numbers (`wind`, `cloud`, `carry`, `wear`, `creep`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `walk_wear`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
+ | switch | 5 | `share_brains`, `split_rows`, `null`, `nodes`, `two_parents` |
+diff --git a/worldgen/src/chem0.toml b/worldgen/src/chem0.toml
+index 04f6493..c01a299 100644
+--- a/worldgen/src/chem0.toml
++++ b/worldgen/src/chem0.toml
+@@ -557,7 +557,11 @@ ea = 9000
+ #   the balance moves with warmth as dH says (the liquid holds less when warm).
+ # - k of 22: a deep liquid takes the air's gas at the Earth's gross exchange between air and its liquid cover, 80 of 589 PgC a year
+ #   (Ciais et al. 2013) over the 71% of the planet that the liquid covers: 0.19 a year per unit of the gas over it at 288 K
+-#   (6.0e-9 /s): k exp(-2800 / 288) = 6.0e-9, k = 1.0e-4.
++#   (6.0e-9 /s). By mass action (Law 2) the contact of the rock, the air and the liquid is the rock, the smallest: the rate per
++#   unit of the gas is k exp(-2800 / T) x (the liquid's share) x the rock / the air over the cell. The anchor's floor is the loose
++#   ground of the start, 1 m of it a tenth rock by volume (2,710 mol/m2), less the 500 mol/m2 the salt took at 500 m: 2,210 mol/m2
++#   under 3.59e5 mol/m2 of air (the column at 101 kPa). k = 6.0e-9 exp(2800 / 288) x 3.59e5 / 2210 = 1.62e-2 (1.0e-4 when the
++#   rate went per unit of the scarce gas whatever the rock).
+ # - k of 23: set so the balance at 288 K, 400 ppm of the gas and a liquid 500 m deep (the depth of this map's low ground:
+ #   median 660 m, mean 540 m) is 1.0 mol of salt per m3 of liquid (2.0 mol/m3 of dissolved carbon, the measured amount in
+ #   the liquid cover of the Earth; pure calcite and gas give 0.6). The balance is S^3 = (k22 / k23) exp(4847 / T) x (the gas over the cell) x
+@@ -566,7 +570,7 @@ ea = 9000
+ [[r]] # 22
+ i = [[10,1],[3,1],[0,1]]
+ o = [[23,1]]
+-k = 1.0e-4
++k = 1.62e-2
+ ea = 2800
+ 
+ [[r]] # 23
+diff --git a/worldgen/src/life.rs b/worldgen/src/life.rs
+index f407ad2..17aa84d 100644
+--- a/worldgen/src/life.rs
++++ b/worldgen/src/life.rs
+@@ -50,6 +50,12 @@ const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.
+ /// lower, so its burning and the cost of its enzymes (both go with k x 10^gene) are what they were.
+ pub const LITTER_X: f32 = 0.602;
+ 
++/// log10 of how much more light catalyst a founder light-eater needs for the same light reaction under the smooth rate of Law 2
++/// (15 Oct 2026, a study, `docs/reports/law2-smooth-rate.md`): the reaction's contact is the body's liquid, not the gas it
++/// exchanges in its interval, and a founder (1 kg, a 20-day interval) exchanges 217 times its liquid (log10 2.34). Its gene of
++/// the light reaction is that much higher, so its own light reaction goes as it did.
++pub const LIGHT_X: f32 = 2.34;
++
+ /// The share of the starting light-eaters that carry the gene of the reaction that fixes the air's nitrogen into the mineral
+ /// growth is built of (`fixing`), an initial condition and not a law (15 Oct 2026, the decision "some fixing founders"),
+ /// chosen before any run: one in ten. Plants that fix nitrogen with a partner are about 7% of the flowering species (the legumes,
+@@ -562,7 +568,8 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
+     let mut genes = vec![-0.1f32; lay.len];
+     genes[lay.cat..lay.min].fill(-1.0);
+     genes[..body::NSCALAR].copy_from_slice(&kind.scalars);
+-    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (kind.cat[0], kind.cat[1] - LITTER_X);
++    let light = if kind.cat[0] >= body::LIGHT_EATER { kind.cat[0] + LIGHT_X } else { kind.cat[0] };
++    (genes[lay.cat + r_light], genes[lay.cat + burn]) = (light, kind.cat[1] - LITTER_X);
+     (genes[lay.min + liquid], genes[lay.min + rich]) = (0.3, 0.25);
+     (genes[lay.upt + liquid], genes[lay.upt + rich]) = (kind.upt[0], kind.upt[1]);
+     // Animals digest body matter as they digest the solid, and take it (14 Oct 2026): light-eaters do not.
