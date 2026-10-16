@@ -321,8 +321,10 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
                 a
             } else {
                 let d = a * sp.v[(t >= sp.melt) as usize] / area;
+                // A wet surface evaporates at the open rate: liquid stands on it, or its loose ground holds its field
+                // capacity or more (stage 1); a drier one goes with its liquid over that (stage 2: the bucket of Manabe 1969).
                 // No more than fills the column above the cell to saturation (the rest would rain back at once).
-                (c_evap * (ps - pa) / t * d / (d + w.cfg.phys.hide[1])).min(a).min((ps - pa) * c_cond * hk / tl)
+                (c_evap * (ps - pa) / t * (d / (w.cfg.phys.field * s.pd[i])).min(1.0)).min(a).min((ps - pa) * c_cond * hk / tl)
             };
             // Evaporating cools the node, no further than where the vapour pressure falls to the
             // partial pressure (the boiling point, when it boils): only heat above that pays.

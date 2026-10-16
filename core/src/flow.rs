@@ -2,7 +2,8 @@
 //!
 //! Ground nodes (here): liquid soaks into the pores of the loose ground (porosity times the volume
 //! of the loose solids); what is over that stands and runs down its head in one ordered sweep; the
-//! pore liquid flows by Darcy's law; the head lost heats the ground and does work, carrying loose
+//! pore liquid flows by Darcy's law, and drains to the channels inside a cell (`Physics::hill`) and into the
+//! store of the bed below (`drain`); the head lost heats the ground and does work, carrying loose
 //! solids and breaking weak bonds; loose solids creep downhill and heat conducts. Air nodes (`air`):
 //! radiation, contact heat, evaporation and condensation, and gas moved by pressure, overturning
 //! and mixing. Every move takes from one node exactly what it gives to another, with its heat, and
@@ -521,7 +522,7 @@ fn table(s: &Scratch, i: usize, por: f64) -> f64 {
 /// power lost also carries loose solids up to a capacity, drops the rest, and breaks bonded
 /// ground by power over bond strength.
 fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
-    let (n, area, g) = (w.grid.n(), s.area, w.cfg.gravity);
+    let (n, area, g, ph) = (w.grid.n(), s.area, w.cfg.gravity, w.cfg.phys);
     let inv = DIRS.map(|d| 1.0 / w.grid.dist(d));
     let (tmin, tmax) = range(&s.tg);
     // (With the gases dissolved in it, which are gas at every node: `air::dissolve`.)
@@ -543,29 +544,45 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         let i = (s.order[r] & 0xf_ffff) as usize;
         let (t, hd, zi) = (s.tg[i], stand(s, i), s.z[i]);
         s.done[i] = true;
-        // Head above the surface is liquid standing here; liquid in the pores flows by Darcy's law.
-        let damp = s.pd[i] > 0.0 && s.head[i] > zi;
-        if hd <= zi && !damp && work <= 0.0 {
-            w.diag.liquid_flux[i] *= 1.0 - ema;
-            continue;
-        }
         // Lower neighbours and how far this head may fall for each: to one still to come (which
         // passes the liquid on) or to its own bed; half way to one already done, so heads never cross.
+        // (Nothing stands on a node whose head is its solid surface: it may fall by none.)
         let (mut nb, mut q, mut room) = ([(0usize, 0.0f64); 8], [0.0f64; 8], [0.0f64; 8]);
         let (mut cnt, mut wsum, mut rmax, mut qmax) = (0, 0.0, 0.0f64, 0.0f64);
         for (d, &j) in s.nbr[i].iter().enumerate() {
-            if j == u32::MAX || hd <= zi {
+            if j == u32::MAX {
                 continue;
             }
             let (j, hj) = (j as usize, stand(s, j as usize));
-            let (dh, r) = (hd - hj, if s.done[j as usize] { 0.5 * (hd - hj) } else { hd - hj.max(zi) });
-            if dh > w.cfg.phys.still && r > 0.0 {
+            let (dh, r) = (hd - hj, if hd <= zi { 0.0 } else if s.done[j] { 0.5 * (hd - hj) } else { hd - hj.max(zi) });
+            if dh > ph.still {
                 (nb[cnt], room[cnt], q[cnt]) = ((j, dh), r, dh * inv[d]);
                 (wsum, rmax, qmax) = (wsum + q[cnt], rmax.max(r), qmax.max(q[cnt]));
                 cnt += 1;
             }
         }
-        if cnt == 0 && !damp && work <= 0.0 {
+        // Inside the node the liquid drains to its channels, `hill` from the divides, by Darcy's law down the
+        // slope of its surface (`qmax`, to the steepest lower neighbour), and runs off (`hs`, m3): from the bed's
+        // store, a share 1 - exp(-`bed_seep` x slope x time / (`bed_porosity` x `hill`)) of it, which comes up with
+        // its heat (below, from the loose ground over its field capacity, at `seep` through its pores).
+        let mut hs = 0.0;
+        if qmax > 0.0 && w.deep.len() == w.chem.ns() * n {
+            let f = -(-ph.bed_seep * qmax * dt / (ph.bed_porosity * ph.hill)).exp_m1();
+            let e = w.e_deep[i] * f;
+            (w.e_deep[i], w.e_ground[i]) = (w.e_deep[i] - e, w.e_ground[i] + e);
+            for k in 0..w.chem.ns() {
+                let (m, sp) = (w.deep[k * n + i] * f, s.sp[k]);
+                if m > 0.0 {
+                    (w.deep[k * n + i], w.ground[k * n + i], s.cap[i]) = (w.deep[k * n + i] - m, w.ground[k * n + i] + m, s.cap[i] + m * sp.cp);
+                    s.hold[i][0] += if s.pk[i] != k { m * sp.lf } else { 0.0 };
+                    settle(s, k, i, m);
+                    hs += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
+                }
+            }
+        }
+        // Head above the surface is liquid standing here; liquid in the pores flows by Darcy's law.
+        let damp = s.pd[i] > 0.0 && s.head[i] > zi;
+        if !damp && work <= 0.0 && (cnt == 0 || (hd <= zi && hs <= 0.0)) {
             w.diag.liquid_flux[i] *= 1.0 - ema;
             continue;
         }
@@ -575,6 +592,11 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             let gas = s.sp[k].boil <= tmin;
             *a = w.ground[k * n + i] * if gas { 1.0 } else { wet(s, k, i) };
             lvol += if gas { 0.0 } else { *a * s.sp[k].v[1] };
+        }
+        let (pores, lv0) = (s.pd[i] * area, lvol - hs);
+        if qmax > 0.0 && damp {
+            let lp = lv0.min(pores);
+            hs += (lp - ph.field * pores).max(0.0).min(-lp * (-ph.seep * qmax * dt / (ph.porosity * ph.hill)).exp_m1());
         }
         // Neighbours much less steep than the steepest get nothing.
         for c in 0..cnt {
@@ -592,9 +614,9 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // neighbour's drop in head, for the power lost.
         let (mut fall, mut qs, mut qss) = ([0.0; 8], [0.0; 8], 0.0);
         if lvol > 0.0 && cnt > 0 {
-            let x = (lvol - s.pd[i] * area).max(0.0).min(area * rmax) / wsum;
+            let (x, y) = ((lv0 - pores).max(0.0).min(area * rmax) / wsum, hs / wsum);
             for c in 0..cnt {
-                q[c] = (x * q[c]).min(area * room[c]);
+                q[c] = (x * q[c]).min(area * room[c]) + y * q[c];
                 (fall[c], qs[c]) = (nb[c].1, q[c]);
                 qss += q[c];
             }

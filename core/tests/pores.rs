@@ -96,8 +96,8 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let mut w = worldgen::new_world(3, 16, 16);
         let (i, j) = pair(&w);
         w.cfg.phys.seep = seep;
-        // (No evaporation, which would lower the liquid table before the liquid flows.)
-        w.cfg.evap = 0.0;
+        // (No evaporation, which would lower the liquid table before the liquid flows, and no channels inside the cell.)
+        (w.cfg.evap, w.cfg.phys.hill) = (0.0, 1e15);
         let pores = w.cfg.phys.porosity * loose(&w, i);
         pour(&mut w, k, i, share * pores);
         let (t0, l0) = (totals(&w), w.ledger.clone());
@@ -130,16 +130,64 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     assert!(((full - none) / want2 - 1.0).abs() < 0.05, "gained {} m³, Darcy says {want2}", full - none);
 }
 
-/// The rate is physical: `seep` (a loam, 3.6e-6 m/s) through a metre of ground at a slope of 1 in 1000 moves a few
-/// cubic metres a week across a kilometre of width, nowhere near enough to move the liquid of a cell (1.6 million m³ of
-/// pores) across it: about 0.014% a year.
+/// Darcy's law across a 2 km cell moves under 0.02% of its pores a year (`seep`, a metre of ground, a slope of 1 in
+/// 1,000), but the liquid drains inside the cell to its channels, `hill` (250 m) from the divides: a full store of the
+/// bed on a sloping cell loses a share 1 - exp(-`bed_seep` x slope x time / (`bed_porosity` x `hill`)) of it in a step,
+/// which runs off (it does not stay in the cell); under deep standing liquid (no slope) it loses none that way.
 #[test]
-fn pore_liquid_barely_moves_across_a_cell() {
-    let w = worldgen::new_world(3, 16, 16);
-    let (k, slope, thick) = (w.cfg.phys.seep, 1e-3, 1.0);
-    let per_year = k * thick * w.grid.cell_m * slope * 365.0 * 86_400.0;
-    let pores = w.cfg.phys.porosity * 1.0 * w.grid.area();
-    assert!(per_year / pores < 1e-3, "{per_year} m³ a year against {pores} m³ of pores");
+fn liquid_drains_inside_a_cell_to_its_channels() {
+    let (_, init) = worldgen::chemistry0();
+    let k = init.low;
+    let w0 = worldgen::new_world(3, 16, 16);
+    let (n, gw, area, p) = (w0.grid.n(), w0.grid.w, w0.grid.area(), w0.cfg.phys);
+    assert!(p.seep * w0.grid.cell_m * 1e-3 * 3.156e7 / (p.porosity * area) < 2e-4);
+    let mv = w0.chem.molar_volume(k, Phase::Liquid);
+    let full = p.bed_porosity * p.bed_depth * area;
+    let stands = |w: &World, i: usize| w.surface_z(i) + pcore::body::env_of(w, i)[1];
+    // The slope down to the steepest lower neighbour, as the sweep reads it.
+    let slope = |w: &World, i: usize| {
+        let (x, y) = ((i % gw) as i64, (i / gw) as i64);
+        let mut s = 0.0f64;
+        for (dx, dy) in [(-1i64, -1i64), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+            let (nx, ny) = (x + dx, y + dy);
+            if nx >= 0 && ny >= 0 && nx < gw as i64 && ny < (n / gw) as i64 {
+                let dh = stands(w, i) - stands(w, (ny * gw as i64 + nx) as usize);
+                if dh > p.still {
+                    s = s.max(dh / (w.grid.cell_m * if dx != 0 && dy != 0 { 2f64.sqrt() } else { 1.0 }));
+                }
+            }
+        }
+        s
+    };
+    // One liquid step with the store of `i` full and warm, with channels `hill` apart: the store and the ground liquid after.
+    let run = |i: usize, hill: f64| {
+        let mut w = worldgen::new_world(3, 16, 16);
+        (w.cfg.evap, w.cfg.phys.hill) = (0.0, hill);
+        if w.deep.len() != w.chem.ns() * n {
+            (w.deep, w.e_deep) = (vec![0.0; w.chem.ns() * n], vec![0.0; n]);
+        }
+        w.deep[k * n + i] = full / mv;
+        w.e_deep[i] = full / mv * (w.chem.subs[k].cp * 290.0 + w.chem.subs[k].lf);
+        let (t0, l0) = (totals(&w), w.ledger.clone());
+        pcore::flow::step(&mut w, DT);
+        let (de, dq) = drift(&w, &t0, &l0);
+        assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
+        (w.deep[k * n + i] * mv, liquid_m3(&w, k, i))
+    };
+    let (hi, _) = pair(&w0);
+    let s = slope(&w0, hi);
+    let want = full * -(-p.bed_seep * s * DT / (p.bed_porosity * p.hill)).exp_m1();
+    // The control: channels so far apart that none drain. What it loses is Darcy's flow across the cell, which goes
+    // with what the store holds after the channels took their share.
+    let ((d1, g1), (d0, g0)) = (run(hi, p.hill), run(hi, 1e15));
+    let drained = full - d1 / (d0 / full);
+    println!("slope {s:.3}: {drained:.0} m³ drained to the channels, the law says {want:.0}; Darcy across the cell {:.0}", full - d0);
+    assert!(s > 1e-3 && (drained / want - 1.0).abs() < 0.02, "drained {drained} m³, want {want}");
+    assert!(g1 - g0 < 0.05 * want, "{} m³ stayed in the cell", g1 - g0);
+    // Under the deep liquid, level with its neighbours: nothing drains to channels.
+    let under = (0..n).find(|&i| pcore::body::env_of(&w0, i)[1] > 20.0 && slope(&w0, i) == 0.0).expect("a cell under deep liquid");
+    let ((d1, _), (d0, _)) = (run(under, p.hill), run(under, 1e15));
+    assert!((d1 - d0).abs() <= 1e-9 * d0, "{d1} against {d0}");
 }
 
 /// Drainage (`flow::drain`): liquid over the share `field` of the pores sinks into the bed's store, no more than it
