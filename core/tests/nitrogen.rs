@@ -357,8 +357,9 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
 
 /// Roots take each mineral from the ground by the uptake genes, up to the level the body keeps and no more; a body whose gene is off
 /// takes none. What a body holds of one past its level goes back to the ground at its update, with its heat (an eater that digested
-/// matter, a plant that burned its own); the rock salt, which falls out of the liquid in a body in days as lime, goes back as lime,
-/// all of it (a body is not a quarry). Elements and energy are kept.
+/// matter, a plant that burned its own); the rock salt, which falls out of the liquid in a body in days as lime, goes back as lime past
+/// the level the body keeps of lime (16 Oct 2026: lime is a solid bodies build, kept at its share, `Body::level`; before, all of it).
+/// Elements and energy are kept.
 #[test]
 fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
     let (w0, _) = start();
@@ -396,7 +397,8 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let (took, lvl) = (w.life.bodies[sp].store[mineral], level(&w, &w.life.bodies[sp]));
         println!("substance {mineral}: a plant with the gene on held {took:.3e} mol (at most {most:.3e}), its level {lvl:.3e}, lime {:.3e}; the other {:.3e}", w.life.bodies[sp].store[lime], w.life.bodies[si].store[mineral]);
         assert!(most > 0.1 * lvl && most <= lvl * (1.0 + 1e-6), "held at most {most}, level {lvl}");
-        assert!(w.life.bodies[sp].store[lime] == 0.0 && w.life.bodies[si].store[lime] == 0.0, "lime stayed in a body");
+        let kept = |w: &World, s: usize| w.life.bodies[s].store[lime] <= w.life.bodies[s].level(&w.chem, lime, 0.0) * (1.0 + 1e-9);
+        assert!(kept(&w, sp) && kept(&w, si), "lime past its level stayed in a body");
         assert!(w.life.bodies[si].store[mineral] < 1e-9 * lvl, "a body whose gene is off took substance {mineral}");
         let (de, dq) = check::drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
@@ -417,7 +419,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let back = if q == 0 { w.ground[mineral * n + i] - twin.ground[mineral * n + i] } else { rock_outside(&w, i) - rock_outside(&twin, i) };
         println!("with ten times its level more: it holds {held:.3e} against a level of {lvl2:.3e}, lime {:.3e}; the ground gained {back:.3e} (the excess {more:.3e})", w.life.bodies[sp].store[lime]);
         assert!(held <= lvl2 * 1.05, "held {held} past the level {lvl2}");
-        assert!(w.life.bodies[sp].store[lime] == 0.0, "lime stayed in the body");
+        assert!(kept(&w, sp), "lime past its level stayed in the body");
         assert!(back > 0.5 * more, "the excess did not go back to the ground: {back} of {more}");
         let (de, dq) = check::drift(&w, &t0, &l0);
         assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
@@ -467,10 +469,11 @@ fn an_eater_digests_matter_into_the_solid_and_the_minerals_and_sheds_the_excess(
             assert!(w.ground[k * n + i] > ground0[q] + 0.5 * (taken * per - lvl), "the excess of substance {k} did not go back to the ground");
         }
     }
-    // No lime stays in the body (the salt falls out of the liquid in days, and the lime goes back to the ground at the update), and what
+    // No lime past its level stays in the body (the salt falls out of the liquid in days, and the lime past the level it keeps, 16 Oct
+    // 2026, goes back to the ground at the update), and what
     // it holds of the salt between two updates is a few times its level, the meals of the interval, not more and more.
     println!("the body holds {:.3} mol of salt and {} of lime at the end", b.store[23], b.store[10]);
-    assert!(b.store[10] == 0.0 && most[1] < 20.0, "lime {}, the salt at most {} of its level", b.store[10], most[1]);
+    assert!(b.store[10] <= b.level(&w.chem, 10, 0.0) * (1.0 + 1e-9) && most[1] < 20.0, "lime {}, the salt at most {} of its level", b.store[10], most[1]);
     let (de, dq) = check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }

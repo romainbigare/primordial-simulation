@@ -378,28 +378,53 @@ pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
 /// growth, so with `ALLOC` 1 it stops at maturity and with less it grows all its life. The liquid that
 /// goes with new matter comes by soaking (`live`). A kg of matter costs `c_copy` of work and 1.11 kg
 /// of the solid converted (6 x 30 g for 162 g) besides, 1.75 kg of it with the fuel the work burns
-/// (62% efficient, as growth in life). Returns whether it built.
+/// (62% efficient, as growth in life). The other solids it can build (`Chemistry::builds`, 16 Oct 2026) it builds the same
+/// way, first, each in its share (`Body::share`). Returns whether it built anything.
 pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let (chem, p) = (&w.chem, &w.cfg.phys);
-    let Some(bl) = chem.build.as_ref() else { return false };
-    let m = bl.outputs[0].0 as usize;
-    // (A unit of growth makes `nu0` mol of matter; chemistry 0: 1.)
-    let (n, nu0, mm) = (b.n(), bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
+    let Some(bl) = chem.build.clone() else { return false };
+    let (m, n) = (bl.outputs[0].0 as usize, b.n());
     b.brood = b.brooded(chem);
     // The matter a body of the size of maturity is made of: the living body is its matter over 1 - `WET_TISSUE` (`Body::built`).
     let full = b.dec(body::COPY_MASS) * n * (1.0 - body::WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
-    let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
     // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
-    let room = p.c_build * b.supply(chem, p) / p.m_ref * days.min(ivl) * b.activity(chem, p);
-    let r = 0.999 * body::release(w, b, ivl);
-    if room <= 0.0 || r <= 0.0 {
-        return false;
+    let room0 = p.c_build * b.supply(chem, p) / p.m_ref * days.min(b.interval() as f64) * b.activity(chem, p);
+    // The other solids it builds first (16 Oct 2026), each with its share (`Body::share`) of the allowance and of what it can spare,
+    // and up to the level that share makes of its matter (`Body::level`), by the same work; then matter with the rest.
+    let (mut room, mut built) = (room0, false);
+    for bk in chem.builds.clone() {
+        let k = bk.outputs[0].0 as usize;
+        let gap = (b.level(&w.chem, k, 0.0) - b.store[k]).max(0.0) * w.chem.subs[k].molar_mass;
+        let made = convert(w, b, &bk, room0, b.share(&w.chem, k), gap, 0.0);
+        (room, built) = (room - w.cfg.phys.c_copy * made, built || made > 0.0);
     }
-    // The fuel it spares: what is paid and the solid converted leave its fuel, less the matter's own
-    // fuel if it burns that too. Per kg of matter made, J.
+    let made = convert(w, b, &bl, room, 1.0, f64::MAX, full);
+    // What it made: up to what its maturity lacks it is body, of the rest the share `ALLOC` is brood.
+    b.brood += (made - made.min(needs)) * b.gene(body::ALLOC).clamp(0.0, 1.0) / w.chem.subs[m].molar_mass;
+    built || made > 0.0
+}
+
+/// One conversion of growth (`Chemistry::build` or one of `builds`): up to `most` kg of its first output with the share `part` of
+/// `room` J of the work allowance and of what the body can spare, as `grow` says; a gas it makes leaves to the air with its heat.
+/// Returns the kg made. `full` (kg of matter of the size of maturity) only for the tape's count of the minerals that held building
+/// back (0: not counted).
+#[allow(clippy::too_many_arguments)]
+fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, part: f64, most: f64, full: f64) -> f64 {
+    let (chem, p) = (&w.chem, &w.cfg.phys);
+    let m = bl.outputs[0].0 as usize;
+    // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
+    let (n, nu0, mm) = (b.n(), bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
+    let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
+    let r = 0.999 * body::release(w, b, ivl);
+    if room <= 0.0 || r <= 0.0 || most <= 0.0 {
+        return 0.0;
+    }
+    // The fuel it spares: what is paid and the inputs converted leave its fuel, less the product's own
+    // fuel if it burns that too. Per kg made, J.
     let (ins, outs) = (&bl.inputs, &bl.outputs);
-    let per_kg = p.c_copy + b.build_fuel(chem, t) - b.heat_of(chem, m, t) / mm;
+    let fuel = ins.iter().map(|&(k, nu)| nu as f64 * b.heat_of(chem, k as usize, t)).sum::<f64>() / (mm * nu0);
+    let per_kg = p.c_copy + fuel - b.heat_of(chem, m, t) / mm;
     let spare = b.fuel(chem, t) * (1.0 - body::upkeep(w, b, ivl, mass) / r);
     // The stores it converts must also cover the fuel the work burns (each input that burns), and
     // leave the safe minimum of each (a body is not built of its last fuel: below its minimum it dies).
@@ -410,14 +435,14 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
         let heat = b.heat_of(chem, k as usize, t);
         (b.store[k as usize] - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
     }).collect();
-    let free = (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
-    let kg = free.min(reach.iter().copied().fold(f64::MAX, f64::min));
+    let free = part * (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
+    let kg = free.min(reach.iter().copied().fold(f64::MAX, f64::min)).min(most);
     // Counted for the tape: a body that could build (all its fuels, its allowance and its spare allow it) and the
     // minerals' stores that held it back (any of them, each).
     let minerals = chem.minerals();
     let place = |k: u16| minerals.iter().position(|m| m.0 == k as usize);
     let able = free.min(ins.iter().zip(&reach).filter(|(x, _)| place(x.0).is_none()).map(|x| *x.1).fold(f64::MAX, f64::min));
-    let root = if minerals.is_empty() || able <= 1e-12 * full.max(1e-30) { u32::MAX } else { w.life.root(b) } as usize;
+    let root = if minerals.is_empty() || full <= 0.0 || able <= 1e-12 * full { u32::MAX } else { w.life.root(b) } as usize;
     if root != u32::MAX as usize {
         let held: Vec<bool> = (0..minerals.len()).map(|q| ins.iter().zip(&reach).any(|(x, &r)| place(x.0) == Some(q) && r < able)).collect();
         w.diag.nlim.resize(w.diag.nlim.len().max(root + 1), Vec::new());
@@ -427,12 +452,12 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
         t[1] += n * held.contains(&true) as u8 as f64;
         held.iter().enumerate().for_each(|(q, &h)| t[2 + q] += n * h as u8 as f64);
     }
-    if kg <= 1e-12 * full.max(1e-30) {
-        return false;
+    if kg <= 1e-12 * full.max(1e-12 * mass) {
+        return 0.0;
     }
-    let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_build(), p.c_copy * kg);
+    let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_of(bl), p.c_copy * kg);
     if !body::pay(w, b, cost, ivl) {
-        return false;
+        return 0.0;
     }
     // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.
     let ext = ins.iter().zip(&floors).fold(kg / (mm * nu0), |e, (&(k, nu), f)| e.min((b.store[k as usize] - f).max(0.0) / nu as f64));
@@ -440,14 +465,18 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
         // (A store used up to its last mol is zero, not a rounding below it.)
         b.store[k as usize] = (b.store[k as usize] - nu as f64 * ext).max(0.0);
     }
-    for &(k, nu) in &outs {
-        b.store[k as usize] += nu as f64 * ext;
-    }
     b.e -= dh * ext;
-    // What it made: up to what its maturity lacks it is body, of the rest the share `ALLOC` is brood.
-    let made = nu0 * ext * mm;
-    b.brood += (made - made.min(needs)) * b.gene(body::ALLOC).clamp(0.0, 1.0) / mm;
-    true
+    let (j, na, t) = (w.grid.air_of(b.cell as usize), w.grid.na(), b.temp(&w.chem));
+    for &(k, nu) in &outs {
+        let (k, x) = (k as usize, nu as f64 * ext);
+        if w.chem.phase(k, t) == crate::chem::Phase::Gas {
+            let q = x * w.chem.subs[k].cp * t;
+            (w.air[k * na + j], w.e_air[j], b.e) = (w.air[k * na + j] + x, w.e_air[j] + q, b.e - q);
+        } else {
+            b.store[k] += x;
+        }
+    }
+    nu0 * ext * mm
 }
 
 /// A mature body makes offspring from its brood. A child has a body of 10^`CHILD` of its parent's

@@ -263,18 +263,21 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     }
     let slots = [w.life.add(small, w.day, 1), w.life.add(big, w.day, 1)];
     let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    // (The ground held is that under the bodies: they have brains and may step to a neighbour cell, as the small one did once
+    // its brain had the inputs of two more substances, 16 Oct 2026; the law tested is the heat balance with the ground it stands on.)
+    let held = |w: &World| slots.map(|s| w.life.bodies[s].cell as usize);
     for _ in 0..90 {
-        held_day(w, &cells, t_cat);
+        held_day(w, &held(w), t_cat);
     }
     let mut rises = [0.0; 2];
     for (n, &slot) in slots.iter().enumerate() {
         // The world and the body as its next update finds them, and the body as that update leaves it.
         let next = w.life.bodies[slot].last + w.life.bodies[slot].interval();
         while w.day < next {
-            held_day(w, &cells, t_cat);
+            held_day(w, &held(w), t_cat);
         }
         let (w0, mut b) = (w.clone(), w.life.bodies[slot].clone());
-        held_day(w, &cells, t_cat);
+        held_day(w, &held(w), t_cat);
         assert!(w.life.bodies[slot].alive, "it lives");
         let w0 = &w0;
         b.prepare(&w0.chem, &w0.cfg.phys);

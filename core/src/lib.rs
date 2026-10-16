@@ -256,9 +256,6 @@ pub struct Physics {
     pub forced: f64,
     /// The size of a leaf, m: the length of the boundary layer of a body's capture area (`body::film`)
     pub leaf_size: f64,
-    /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J: the share of a body's
-    /// matter broken and of the stores that matter held (`choose::wear`)
-    pub walk_wear: f64,
     /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::supply`:
     /// per member its body, `Body::built`, to the power `intake_exp`), and no more than it can use (`choose::sate`)
     pub take: f64,
@@ -447,7 +444,6 @@ impl Default for Physics {
             wind_ground: 1.7,
             forced: 0.189,
             leaf_size: 0.05,
-            walk_wear: 3e-5,
             take: 0.05,
             sweep: 1.0,
             intake_exp: 0.75,

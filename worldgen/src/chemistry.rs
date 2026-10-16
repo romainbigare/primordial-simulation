@@ -10,6 +10,8 @@ struct File {
     r: Vec<R>,
     #[serde(default)]
     build: Option<B>,
+    #[serde(default)]
+    builds: Vec<B>,
     init: Init,
 }
 
@@ -40,6 +42,12 @@ struct S {
     /// kJ/mol; Trouton's rule (88 J/(mol K) × boil) when missing
     lv: Option<f64>,
     lf: Option<f64>,
+    /// GPa (`Substance::modulus`); none: 0
+    #[serde(default)]
+    modulus: f64,
+    /// MPa (`Substance::rupture`); none: 0
+    #[serde(default)]
+    rupture: f64,
 }
 
 #[derive(Deserialize)]
@@ -101,6 +109,8 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
                 hf: s.hf * 1000.0,
                 lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
                 lf: s.lf.map_or(9.5 * s.melt, |l| l * 1000.0),
+                modulus: s.modulus * 1e9,
+                rupture: s.rupture * 1e6,
             })
             .collect(),
         reactions: f
@@ -109,6 +119,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             .map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord })
             .collect(),
         build: f.build.map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }),
+        builds: f.builds.iter().map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }).collect(),
         air,
         soil: f.init.soil.clone(),
     };

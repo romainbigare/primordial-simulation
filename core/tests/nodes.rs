@@ -440,12 +440,12 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         node.e *= 5.0;
         w.life.bodies[s].genes[DISPERSE] = 0.0;
         let t = w.life.add(node, w.day, 1);
-        // One child: its parent is mature (its copy mass is half its body, `Body::size`, so it stays mature with the brood
+        // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays mature with the brood
         // out of its body whatever its sprayed `CHILD` gene), the child
         // 0.3 of that.
         let (at, before) = (live(&w).len(), held(&w));
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.genes[COPY_MASS] = (0.5 * b.size(&w.chem) as f32).log10();
+        b.genes[COPY_MASS] = (0.5 * b.built(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut b, 1.0);
         w.day += 1;
@@ -462,7 +462,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         // Many children at once: its brood covers 3.5 of them.
         let (at, before) = (live(&w).len(), held(&w));
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.genes[COPY_MASS] = (0.3 * b.size(&w.chem) as f32).log10();
+        b.genes[COPY_MASS] = (0.3 * b.built(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut b, 3.5);
         w.day += 1;

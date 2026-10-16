@@ -162,12 +162,16 @@ struct Root {
     warm: f64,
     /// Each mineral (`Chemistry::minerals`) their stores hold, kg (15 Oct 2026)
     mineral: Vec<f64>,
+    /// 16 Oct 2026 (several built materials): dry mass (all but the key liquids), the fuel (the first input of growth), each solid
+    /// bodies build besides matter (`Chemistry::materials`), kg; then each one's share gene (`Body::share`) and the height
+    /// (`Body::height`, m), by members
+    solid: Vec<f64>,
     cat: Vec<(f64, f64)>,
 }
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 9], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, mineral: Vec::new(), cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 9], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, mineral: Vec::new(), solid: Vec::new(), cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -593,6 +597,15 @@ impl Recorder {
                 for (x, &(k, _)) in r.mineral.iter_mut().zip(&minerals) {
                     *x += b.store[k] * w.chem.subs[k].molar_mass;
                 }
+                let (mats, fuel) = (w.chem.materials().collect::<Vec<_>>(), w.chem.build.as_ref().map_or(0, |b| b.inputs[0].0 as usize));
+                let kg = |k: usize| b.store[k] * w.chem.subs[k].molar_mass;
+                r.solid.resize(3 + 2 * mats.len(), 0.0);
+                r.solid[0] += (0..w.chem.ns()).filter(|&k| b.wet >> k & 1 == 0).map(kg).sum::<f64>();
+                r.solid[1] += kg(fuel);
+                for (q, &k) in mats.iter().enumerate() {
+                    (r.solid[2 + q], r.solid[2 + mats.len() + q]) = (r.solid[2 + q] + kg(k), r.solid[2 + mats.len() + q] + n * b.share(&w.chem, k));
+                }
+                r.solid[2 + 2 * mats.len()] += n * b.height(&w.chem, &w.cfg);
                 for (x, g) in r.genes.iter_mut().zip(GENES) {
                     *x += n * b.gene(g);
                 }
@@ -694,6 +707,13 @@ impl Recorder {
             ("a_age".to_string(), "1/yr", self.deaths_a[5]),
             ("body_mass".to_string(), "t", life.alive().map(|b| b.mass(&w.chem)).sum::<f64>() / 1e3),
         ]);
+        // 16 Oct 2026 (several built materials): dead fuel, matter and each solid bodies build on the ground of the land, kg/m2.
+        let land: Vec<usize> = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).collect();
+        let dead = w.chem.build.as_ref().map(|b| b.inputs[0].0 as usize).into_iter().chain(w.chem.matter()).chain(w.chem.materials());
+        for k in dead.collect::<Vec<_>>() {
+            let kg = land.iter().map(|&i| w.ground[k * w.grid.n() + i]).sum::<f64>() * w.chem.subs[k].molar_mass;
+            row.push((format!("dead_{k}"), "kg/m2", kg / (land.len().max(1) as f64 * w.grid.area())));
+        }
         // Per starting kind: members, bodies, the members' mean life at their upkeep now (years) and repair gene (the
         // old four), then what happened in the year (members born and died by cause, `life_real`: the standing members
         // over the year over the deaths in it, years), and the means by members: mass (kg), copy mass (kg, the gene: the body it copies
@@ -744,6 +764,15 @@ impl Recorder {
                 // stores holds per kg of body (`nstore<q>`).
                 (c("nlim"), "1", st.nlim.get(k).map_or(f64::NAN, |x| x.first().filter(|&&t| t > 0.0).map_or(f64::NAN, |t| x[1] / t))),
             ]);
+            // 16 Oct 2026 (several built materials): shares of the members' dry mass that are fuel, matter and each solid they
+            // build, the share genes and the height (m), means by members.
+            let mats: Vec<usize> = w.chem.materials().collect();
+            let sd = |q: usize| v.solid.get(q).copied().unwrap_or(0.0);
+            let dry = |x: f64| if sd(0) > 0.0 { x / sd(0) } else { f64::NAN };
+            row.extend([(c("fuel"), "1", dry(sd(1))), (c("drymatter"), "1", dry(v.matter)), (c("height"), "m", per(sd(2 + 2 * mats.len())))]);
+            for (q, &k) in mats.iter().enumerate() {
+                row.extend([(c(&format!("mat{k}")), "1", dry(sd(2 + q))), (c(&format!("share{k}")), "1", per(sd(2 + mats.len() + q)))]);
+            }
             for q in 0..minerals.len() {
                 row.push((c(&format!("nlim{q}")), "1", st.nlim.get(k).map_or(f64::NAN, |x| x.first().filter(|&&t| t > 0.0).map_or(f64::NAN, |t| x[2 + q] / t))));
                 row.push((c(&format!("nstore{q}")), "1", if v.body > 0.0 { v.mineral.get(q).copied().unwrap_or(0.0) / v.body } else { f64::NAN }));
