@@ -1077,6 +1077,12 @@ pub fn survey(w: &mut World) {
     choose::cells(w);
 }
 
+/// The share of what falls on a cell that a layer of capture area `x` per ground area intercepts, per unit of `x`:
+/// (1 - exp(-x)) / x.
+fn intercept(x: f64) -> f64 {
+    if x > 1e-9 { -(-x).exp_m1() / x } else { 1.0 - 0.5 * x }
+}
+
 /// Light passes through the bodies of a cell from the tallest member down: a member's height is
 /// `(body / rho_body)^(1/3)` (a body has no shape yet; its body, `Body::size`, not its fuel or
 /// the liquid it holds), so the order is that of member body mass, and
@@ -1085,7 +1091,7 @@ pub fn survey(w: &mut World) {
 /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
 /// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
 fn shade(w: &mut World) {
-    let g = |x: f64| if x > 1e-9 { -(-x).exp_m1() / x } else { 1.0 - 0.5 * x };
+    let g = intercept;
     let (Life { bodies, at, shade, .. }, area, chem) = (&mut w.life, w.grid.area(), &w.chem);
     shade.resize(bodies.len(), 1.0);
     let mut l: Vec<(f32, f64, usize)> = Vec::new();
@@ -1447,7 +1453,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks
     // up liquid): found when first needed, but before the body soaks anything up.
     let keep = w.keep_of(slot, b.gen) as f64;
-    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, light_pool, light_keep, diag, .. } = w;
+    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, light_pool, light_keep, diag, life, canopy, .. } = w;
     let mut gcap = None;
     macro_rules! cap {
         () => {
@@ -1456,6 +1462,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     }
     let (ns, n, na, j) = (chem.ns(), grid.n(), grid.na(), grid.air_of(i));
     let dt = days * DAY;
+    // The rain that fell on its capture area, mol: the cell's bodies intercept 1 - exp(-x) of the rain, x their capture
+    // area per ground area, shared out by height as the light is (`shade`), at the cell's rain rate of the year.
+    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open * life.shade.get(slot).map_or(1.0, |&f| f) * intercept(canopy.get(i).map_or(0.0, |&c| c as f64));
 
     // Its conductance to the surface it stands on, W/K (for its reactions, evaporation and the heat below):
     // by contact with walls and cover (`surface`) and in parallel by radiation, like every surface: 6 W/K per m² of its
@@ -1554,49 +1563,36 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         light_keep[slot] = (b.gen, (stored / got) as f32);
     }
 
-    // Liquids the body holds evaporate toward their vapour pressure at its temperature; what
-    // falls as liquid on its capture area is caught, from the vapour it falls from. The net
-    // goes in or out, up to the level the body keeps, with its latent heat. The latent heat
+    // Liquids the body holds evaporate toward their vapour pressure at its temperature, with
+    // their latent heat. The latent heat
     // is paid by the body's own heat released (not the light: the ground has it), and by what
     // the surface can conduct into a body that evaporating cools no lower than the vapour's
     // condensing point: through the same conductance as the heat below (cover and walls in
     // series), and once for all the liquids (what one spent is owed by the next), so the heat
     // step never needs more than the surface gives and the body never ends below that point.
-    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open;
-    tmp.pool.clear();
-    tmp.pool.extend((0..ns).map(|k| if chem.phase(k, tg) == Phase::Liquid { air[k * na + j] } else { 0.0 }));
-    let vap_tot: f64 = tmp.pool.iter().sum();
+    // (It catches no vapour: the rain its capture area catches is taken with what it soaks, below.)
     let mass1 = b.mass(chem);
     let mut moved = false;
     for k in 0..ns {
-        let (vap, wet) = (tmp.pool[k], b.store[k] > 0.0 && chem.phase(k, t0) == Phase::Liquid);
-        if !wet && (fall <= 0.0 || vap <= 0.0) {
+        let push = (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0);
+        if push <= 0.0 || b.store[k] <= 0.0 || chem.phase(k, t0) != Phase::Liquid {
             continue;
         }
-        let push = if wet { (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0) } else { 0.0 };
-        let out = if push > 0.0 {
-            let (own, room) = (heat - lit + took, crate::heat_above_floor(e_ground[i], cap!()));
-            let paid = (own + (g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room)).max(0.0);
-            (push * reach_mol).min(paid / held(chem, k))
-        } else {
-            0.0
-        };
-        let caught = if fall > 0.0 && vap > 0.0 { (fall * vap / vap_tot).min(0.5 * vap) } else { 0.0 };
-        let net = caught - out;
-        let (m, t) = if net > 0.0 { (net.min(b.level(chem, k, mass1) - b.store[k]).max(0.0), tg) } else { (net.max(-b.store[k]), t0) };
-        if m != 0.0 {
+        let (own, room) = (heat - lit + took, crate::heat_above_floor(e_ground[i], cap!()));
+        let paid = (own + (g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room)).max(0.0);
+        let m = (push * reach_mol).min(paid / held(chem, k)).min(b.store[k]);
+        if m > 0.0 {
             moved = true;
-            let q = m * chem.subs[k].cp * t;
-            air[k * na + j] -= m;
-            b.store[k] += m;
-            e_air[j] -= q;
-            b.e += q;
-            heat += m * held(chem, k);
+            let q = m * chem.subs[k].cp * t0;
+            (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
+            heat -= m * held(chem, k);
         }
     }
 
     // Liquids standing on the ground soak in by solubility, faster where the ground is wet,
-    // up to the level the body keeps, through the mass that works (`wk`).
+    // up to the level the body keeps, through the mass that works (`wk`). With them it takes the rain its capture area
+    // caught since its last update (`fall`): that rain fell into the cell's liquid in this time, so the ground has that
+    // much less.
     // (The liquid in the pores of the ground is soaked up like the liquid that stands: whatever the cell holds of it
     // counts for the wetness, but a body afloat on standing liquid reaches the ground through none.)
     let held = if stands && depth == 0.0 {
@@ -1613,8 +1609,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let rate = -(-b.k.liq * days).exp_m1() * wet * wk;
     let mass2 = if moved { b.mass(chem) } else { mass1 };
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
-        let x = ground[k * n + i] / in_ground;
-        let d = ((b.level(chem, k, mass2) - b.store[k]) * x * rate * chem.subs[k].solubility).min(0.5 * ground[k * n + i]).max(0.0);
+        let (x, room) = (ground[k * n + i] / in_ground, b.level(chem, k, mass2) - b.store[k]);
+        let d = ((room * rate * chem.subs[k].solubility + fall) * x).min(room).min(0.5 * ground[k * n + i]).max(0.0);
         // The ground pays the heat that goes with the liquid and its fusion enthalpy; if it
         // cannot pay it all, the body soaks up less.
         let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg));
