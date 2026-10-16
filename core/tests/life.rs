@@ -555,19 +555,16 @@ fn a_body_takes_no_more_than_it_can_use() {
     // before the body held matter and fuel apart, 17% before strength and catalysts went by mass^0.75,
     // 27% before they went by the kg of the body, 29.5% before upkeep went with the temperature, 15 Oct
     // 2026: the window is narrow, a few points of store; the body keeps its temperature when the fuel is taken out).
-    // (A store of 0.3%, not 10%, since 16 Oct 2026: at a reptile's resting rate 10% of the fuel covers more than an interval's
-    // upkeep and build, and the target is the upkeep's worth.)
-    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 6e4].iter().map(|&c| took(10.0, c, 0.003, true)).collect();
-    println!("sate asked for twice the size cap, store 0.3%: (left, upkeep+build, cap, target) {sated:?}");
+    let sated: Vec<(f64, f64, f64, f64)> = [0.0, 3e4, 6e4].iter().map(|&c| took(10.0, c, 0.1, true)).collect();
+    println!("sate asked for twice the size cap, store 10%: (left, upkeep+build, cap, target) {sated:?}");
     for &(left, _, cap, target) in &sated {
         assert!((left / target - 1.0).abs() < 1e-6, "sate left {left} kg, the formula says {target} kg");
         assert!(target < cap, "the size cap {cap} binds, the case shows nothing");
     }
     assert!(sated[0].0 > sated[0].1 * 1.2, "below the line of the upkeep it should take more than the upkeep's worth: {sated:?}");
     assert!(sated[1].0 > sated[0].0 * 1.1 && sated[2].0 > sated[1].0 * 1.1, "it takes no more with a higher c_build: {sated:?}");
-    // With a store of 0.1% of the fuel and a building allowance of 6e5 (3e4 before the reptile's resting rate of 16 Oct 2026,
-    // when its upkeep alone was enough) the target is far over the size cap: the cap is what it takes.
-    let (left, _, cap, _) = took(10.0, 6e5, 0.001, true);
+    // With a store of 0.1% of the fuel the target is far over the size cap: the cap is what it takes.
+    let (left, _, cap, _) = took(10.0, 3e4, 0.001, true);
     assert!((left / cap - 1.0).abs() < 1e-6, "sate left {left} kg of the {cap} kg its size takes");
 }
 
@@ -650,9 +647,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
         // (And do not learn: with liquid in the pores of the ground the cell they feel is another, and a body that learns from its
         // well-being may learn to walk away in the months of the test.)
-        // (They soak liquid since 16 Oct 2026: at a reptile's resting rate their burning makes too little liquid to make up what
-        // they breathe out, so they dried, paid less and lived a quarter longer; soaking keeps them at their level.)
-        (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ], b.genes[LEARN]) = (0.0, 0.0, repair, 1.0, -6.0);
+        (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ], b.genes[LEARN]) = (0.0, 0.0, repair, -4.0, -6.0);
         // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel (the
         // two months they settle and the long life of one of them cost more than the 9 kg a starting eater holds).
         let rich = worldgen::life::roles(&w.chem).expect("roles").1;

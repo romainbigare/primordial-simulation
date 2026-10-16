@@ -154,7 +154,7 @@ pub struct Physics {
     /// order (mass action). The five costs of tissue are per kg of body of a kind that matures at
     /// `m_ref`, times (copy mass / `m_ref`)^-0.25 (Kleiber); this one and `c_strength`, `c_learn`,
     /// `c_signal` carry a factor 44.16^0.25 = 2.578 so the eater founder, maturing at 44.16 kg,
-    /// pays 2.63 x 10^10; x 0.0680 since 16 Oct 2026 (see `c_basal`): 1.79 x 10^9.
+    /// pays 2.63 x 10^10.
     pub c_cat: f64,
     /// Temperature at which upkeep measures catalyst capacity, K (a typical surface temperature), and
     /// where the costs are anchored: a body's upkeep is what the costs say at this temperature and goes
@@ -171,17 +171,13 @@ pub struct Physics {
     pub c_firm: f64,
     /// Upkeep of strength, J per kg of body (`Body::size`) per day at strength 1 (`body::upkeep`).
     /// Anchored at the 30 kg founders: 10^5 per kg of the whole there (about 1 W/kg), their body 70%
-    /// of their mass: 1.43 x 10^5 per kg of body; x 2.578 (see `c_cat`): 3.68 x 10^5; x 0.0680 since 16 Oct 2026 (see
-    /// `c_basal`): 25,048
+    /// of their mass: 1.43 x 10^5 per kg of body; x 2.578 (see `c_cat`): 3.68 x 10^5
     pub c_strength: f64,
     /// Upkeep every body pays whatever its genes, J per kg of body per day (`body::upkeep`): the
-    /// cost of keeping tissue alive. Per kg of body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25,
-    /// so an adult pays it x m^0.75, Kleiber's shape. **The resting rate of a cold-blooded body (16 Oct 2026):** warm blood
-    /// is made on purpose (`KEEP_T`), so the five costs of tissue (this, `c_cat`, `c_strength`, `c_learn`, `c_signal`: all
-    /// of resting metabolism; not the cost of its decisions, which is work) are one factor, 0.0680, of what they were, so the eater founder (44 kg of body) rests at
-    /// t_cat at a reptile's standard rate: about 0.1 ml O2/(g h) for 1 kg at 30 C, mass^0.8 (Bennett and Dawson 1976, from
-    /// memory; 1/5 to 1/10 of a mammal's basal, Bennett and Ruben 1979), 0.26 W/kg at 44 kg, 0.084 at 290 K by the rate
-    /// law, against 1.24 before (Kleiber's 1.32; with its decisions 1.30). 2 x 10^4 before; the eater founder pays 528 per kg of body.
+    /// cost of keeping tissue alive, resting metabolism (Kleiber, about 3.4 m^0.75 W). Per kg of
+    /// body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25, so an adult pays
+    /// 2 x 10^4 x m^0.75, Kleiber's shape (1/15 of his whole value; the rest is strength and
+    /// catalysts here). The eater founder pays 7,758 per kg of body.
     pub c_basal: f64,
     /// Upkeep of light-capture area, J per m² per day
     pub c_leaf: f64,
@@ -205,17 +201,16 @@ pub struct Physics {
     pub c_sight: f64,
     /// Upkeep of learning, J per kg of body per day at learning rate 1 (`body::upkeep`; anchored
     /// at the 30 kg founders, 70% body: 3 x 10^4 per kg there / 0.7 = 4.3 x 10^4; x 2.578, see
-    /// `c_cat`: 1.10 x 10^5; x 0.0680 since 16 Oct 2026, see `c_basal`: 7,515)
+    /// `c_cat`: 1.10 x 10^5)
     pub c_learn: f64,
     /// Cost of signalling, J per kg of body per day at signal size 1 (as `c_learn`; anchored at
-    /// the 30 kg founders: 200 per kg there / 0.7 = 286; x 2.578: 737; x 0.0680 since 16 Oct 2026: 50.1)
+    /// the 30 kg founders: 200 per kg there / 0.7 = 286; x 2.578: 737)
     pub c_signal: f64,
     /// Energy a kg of body can turn over in its upkeep before it is worn out, at a `REPAIR` gene of
     /// 0, J/kg (`body::live`): it lives 10^gene times this over its upkeep per kg. 10^9 is the
     /// rate-of-living number of real life (Rubner, 1908): many kinds that move turn over about
     /// 1,000 kJ per gram of body in a life, whatever their size, as small ones live fast and short
-    /// and big ones slow and long. A starting eater (30 kg, 64 kJ/kg/day) lives 43 years at gene 0, 19 at its -0.4 (until
-    /// 16 Oct 2026: at a reptile's resting rate it pays 8.5 times less, so it lives 8.5 times longer; not changed)
+    /// and big ones slow and long. A starting eater (30 kg, 64 kJ/kg/day) lives 43 years at gene 0, 19 at its -0.4
     pub e_life: f64,
     /// Share of upkeep that is repair at `REPAIR` 0; each unit of the gene (ten times the energy per
     /// kg before wearing out) doubles that share (upkeep x (1 - c + c 2^gene)), so at gene 0 a life
@@ -417,13 +412,13 @@ impl Default for Physics {
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,
-            c_cat: 1.7891e9,
+            c_cat: 2.6306e10,
             t_cat: T_SURF,
             unfold: 3.0,
             t_firm: 320.0,
             c_firm: 20.0,
-            c_strength: 25_048.0,
-            c_basal: 1360.2,
+            c_strength: 3.683e5,
+            c_basal: 2e4,
             c_leaf: 2e3,
             c_brain: 1e5,
             m_ref: 1.0,
@@ -431,8 +426,8 @@ impl Default for Physics {
             c_memory: 5e3 / 3.0,
             c_seen: 5e3,
             c_sight: 1.5e4,
-            c_learn: 7514.5,
-            c_signal: 50.10,
+            c_learn: 1.1049e5,
+            c_signal: 736.6,
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,
