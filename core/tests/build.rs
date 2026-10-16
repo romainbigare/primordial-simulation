@@ -1116,7 +1116,10 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         let joule = -w.chem.dh(r.burn) / w.chem.reactions[r.burn].inputs.iter().find(|x| x.0 as usize == r.rich).unwrap().1 as f64 / w.chem.subs[r.rich].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {
-            // Fuel and liquid in plenty: 100 kg per m² of each on the cell at every update (booked as an edit).
+            // Fuel and liquid in plenty: 100 kg per m² of each on its cell at every update (booked as an edit). (The cell it is in:
+            // it has a brain and may step to a neighbour, as it did on day 167 once its brain had the inputs of two more substances,
+            // 16 Oct 2026, and starved there.)
+            let i = w.life.bodies[s].cell as usize;
             for k in [r.rich, r.liquid] {
                 let (t, a) = (w.t_ground(i), (100.0 * area / w.chem.subs[k].molar_mass - w.g(k, i)).max(0.0));
                 w.ground[k * n + i] += a;
@@ -1160,4 +1163,83 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     assert!(r_full > 0.95 && r_full < 1.1 && r_cheap > r_full, "took / upkeep at the end {r_full} and {r_cheap} with cheaper tissue");
     // Cheaper tissue, a larger body in the same time.
     assert!(cheap[n - 1] > 1.5 * full[n - 1], "a body with cheaper tissue grows larger: {} against {}", cheap[n - 1], full[n - 1]);
+}
+
+/// Several built solids (16 Oct 2026): growth builds each solid a body can build besides matter (`Chemistry::builds`) in the share
+/// its keep gene of it sets (`Body::share`), by the same work, the gas of the lime's conversion going to the air, elements and
+/// energy kept; and what it is built of holds it up and resists breaking: soft tissue alone holds a body low, a frame raises it
+/// (`Body::height`) and costs more to break (`Body::breaking`).
+#[test]
+fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
+    let (mut w, i) = start();
+    let (lay, r) = (Layout::of(&w.chem), roles(&w));
+    let mats: Vec<usize> = w.chem.materials().collect();
+    let mut b = eater(&mut w, i, 0, 6.0);
+    // Shares of 0.2 and 0.1, none of either held yet, the rock salt the lime is made of in plenty.
+    for (&k, s) in mats.iter().zip([0.2, 0.1]) {
+        b.genes[lay.keep + k] = s;
+        let held = kg(&w, &b, k);
+        add(&mut w, &mut b, k, -held);
+    }
+    add(&mut w, &mut b, 23, 1.0);
+    let (s, mut b) = out(&mut w, b);
+    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let before: Vec<f64> = mats.iter().chain([&r.matter]).map(|&k| kg(&w, &b, k)).collect();
+    let days = b.interval() as f64;
+    assert!(copy::grow(&mut w, &mut b, days));
+    let made: Vec<f64> = mats.iter().chain([&r.matter]).zip(&before).map(|(&k, x)| kg(&w, &b, k) - x).collect();
+    let all: f64 = made.iter().sum();
+    println!("built {made:.4?} kg (frame, lime, matter)");
+    assert!((made[0] / all - 0.2).abs() < 0.01 && (made[1] / all - 0.1).abs() < 0.01, "shares {:.3} and {:.3}", made[0] / all, made[1] / all);
+    // The same body of soft tissue alone, and with 1 kg of frame (5% of its mass).
+    let (mut soft, mut hard) = (b.clone(), b.clone());
+    mats.iter().for_each(|&k| (soft.store[k], hard.store[k]) = (0.0, 0.0));
+    hard.store[mats[0]] = 1.0 / w.chem.subs[mats[0]].molar_mass;
+    let (h_soft, h, e_soft, e) = (soft.height(&w.chem, &w.cfg), hard.height(&w.chem, &w.cfg), soft.breaking(&w.chem, &w.cfg, 1.0), hard.breaking(&w.chem, &w.cfg, 1.0));
+    println!("height {h_soft:.2} m of soft tissue alone, {h:.2} m with 1 kg of frame; breaking it all {e_soft:.0} J and {e:.0} J");
+    assert!(h_soft < 1.5 && h > 2.0 * h_soft && e > 2.0 * e_soft);
+    w.life.bodies[s] = b;
+    assert_eq!(pcore::check::broken(&w), None);
+    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// A body digests only what its catalysts break (16 Oct 2026): an eater that takes only the frame from the ground takes none
+/// without the enzyme that splits it; with it, it takes it, holds it till its update, splits it into the energy-rich solid, and
+/// what is left past its own level passes back to the ground. Elements and energy are kept.
+#[test]
+fn a_body_takes_and_digests_the_frame_only_with_its_enzyme() {
+    let take = |enzyme: bool| {
+        let (mut w, i) = start();
+        let (r, lay) = (roles(&w), Layout::of(&w.chem));
+        let f = w.chem.materials().next().expect("a frame");
+        let split = (0..w.chem.reactions.len()).find(|&x| w.chem.reactions[x].inputs.iter().any(|p| p.0 as usize == f) && w.chem.reactions[x].outputs.iter().any(|p| p.0 as usize == r.rich)).expect("its split");
+        w.cfg.phys.c_build = 0.0;
+        // 3 kg of frame per m² on its ground (booked as an edit).
+        let (t, a, n) = (w.t_ground(i), 3.0 * w.grid.area() / w.chem.subs[f].molar_mass, w.grid.n());
+        w.ground[f * n + i] += a;
+        w.chem.add_elems(f, a, &mut w.ledger.imposed_elems);
+        let e = w.energy_ground(i, t);
+        (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[f].hf, e);
+        let mut b = eater(&mut w, i, 3, 6.0);
+        // Only the frame to take, and the enzyme at the speed that splits what it holds within its interval, or off.
+        (b.genes[lay.upt + r.liquid], b.genes[lay.upt + r.rich], b.genes[lay.upt + r.matter], b.genes[lay.upt + f]) = (-0.1, -0.1, -0.1, 1.0);
+        b.genes[lay.cat + split] = if enzyme { 8.7 } else { -1.0 };
+        let rich0 = b.store[r.rich];
+        let s = w.life.add(b, w.day, 1);
+        let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+        let mut took = 0.0;
+        for _ in 0..40 {
+            day(&mut w);
+            took += w.events.iter().map(|e| if let pcore::event::EventKind::Took { from: u64::MAX, .. } = e.kind { e.value } else { 0.0 }).sum::<f64>();
+        }
+        let b = &w.life.bodies[s];
+        assert!(b.alive);
+        let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        (took, b.store[r.rich] - rich0, b.store[f] / b.level(&w.chem, f, 0.0))
+    };
+    let ((took, rich, held), (none, _, _)) = (take(true), take(false));
+    println!("with the enzyme it took {took:.2} kg of frame, its solid {rich:+.2} mol, it holds {held:.2} of its level of frame; without it took {none} kg");
+    assert!(none == 0.0 && took > 1.0 && rich > 0.0);
 }

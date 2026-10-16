@@ -17,7 +17,7 @@ const RICH: f64 = 20.0;
 const DECISIONS: usize = 200;
 /// 800 seeds, not 200, since the default `exchange_days` is 3, the row `ew` runs: the effect on the moves is
 /// about 3 points over chance, not 5, and 200 seeds could not tell it from the body that does not learn.
-const SEEDS: u64 = 800;
+const SEEDS: u64 = 1600;
 /// Learning rate genes (log10): on, and off.
 const ON: f32 = -1.0;
 const OFF: f32 = -4.0;
@@ -27,7 +27,8 @@ fn scene(seed: u64) -> (World, usize) {
     let (mut chem, init) = worldgen::chemistry0();
     // The scene tests Choose alone: its bodies do not grow (a chemistry with no body matter, so no
     // building work: growth would take a quarter of the body's fuel before it can learn anything).
-    chem.build = None;
+    // (Nor any other solid: `Chemistry::builds`, 16 Oct 2026.)
+    (chem.build, chem.builds) = (None, Vec::new());
     // And the strip does not rot faster than it did: the open air burns the solid and the matter 4 times faster since the
     // litter constants of 15 Oct 2026 (`worldgen::life::LITTER_X`), so with the old rates here, and the founders' burning
     // genes put back (in `run`), the scene is the one this test was made with. Over its 1,000 days a strip that rots at

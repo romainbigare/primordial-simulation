@@ -242,9 +242,6 @@ pub struct Physics {
     /// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³
     pub layer: f64,
     pub rho_body: f64,
-    /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J: the share of a body's
-    /// matter broken and of the stores that matter held (`choose::wear`)
-    pub walk_wear: f64,
     /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::supply`:
     /// per member its body, `Body::built`, to the power `intake_exp`), and no more than it can use (`choose::sate`)
     pub take: f64,
@@ -430,7 +427,6 @@ impl Default for Physics {
             lane: 1.0,
             layer: 10.0,
             rho_body: 1e3,
-            walk_wear: 3e-5,
             take: 0.05,
             sweep: 1.0,
             intake_exp: 0.75,
