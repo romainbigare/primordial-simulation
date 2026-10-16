@@ -72,6 +72,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 hf: -120e3 * n * spread * (0.4 + 0.7 * r.f64()),
                 lv: 88.0 * boil * (0.9 + 0.4 * r.f64()),
                 lf: 9.5 * melt,
+                modulus: 0.0,
             }
         })
         .collect();

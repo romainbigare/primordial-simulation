@@ -42,6 +42,9 @@ struct S {
     /// kJ/mol; Trouton's rule (88 J/(mol K) × boil) when missing
     lv: Option<f64>,
     lf: Option<f64>,
+    /// GPa (`Substance::modulus`); none: 0
+    #[serde(default)]
+    modulus: f64,
 }
 
 #[derive(Deserialize)]
@@ -103,6 +106,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
                 hf: s.hf * 1000.0,
                 lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
                 lf: s.lf.map_or(9.5 * s.melt, |l| l * 1000.0),
+                modulus: s.modulus * 1e9,
             })
             .collect(),
         reactions: f

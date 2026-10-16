@@ -539,10 +539,19 @@ impl Body {
             _ => (share(f) * (mass - self.store[k] * mm) / mm).max(0.0),
         }
     }
-    /// A member's height, m: (its body, `size`, over `Physics::rho_body`)^(1/3) (a body has no shape yet): the order of light
-    /// in `shade`.
+    /// A member's height, m: what what it is built of holds up against its own weight (Bond, 16 Oct 2026), the order of light in
+    /// `shade`. A column standing under its own weight buckles past h^3 = 7.837 E I / w (Greenhill 1881; McMahon 1973 found
+    /// trees near a quarter of it), w its weight per length; with the solids it built side by side in one round section (I =
+    /// A^2 / 4 pi, E their mean by volume, A = V / h), h^4 = 7.837 / 4 pi x (sum of E V) x V / (m g), m the member's whole mass
+    /// (its fuel and liquid are load too), V the volume of its living soft tissue (`built` over `Physics::rho_body`, at the modulus
+    /// of body matter) and of each solid it builds (`Chemistry::materials`). Soft tissue alone holds a low body: 0.4 m for a 1 kg
+    /// one at 1 MPa. Without body matter: (mass / `rho_body`)^(1/3).
     pub fn height(&self, chem: &Chemistry, cfg: &crate::Config) -> f64 {
-        (self.size(chem) / self.n() / cfg.phys.rho_body).cbrt()
+        let (n, mass) = (self.n(), self.mass(chem));
+        let Some(m) = chem.matter() else { return (mass / n / cfg.phys.rho_body).cbrt() };
+        let soft = self.built(chem) / cfg.phys.rho_body;
+        let (v, ev) = chem.materials().map(|k| (self.store[k].max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], chem.subs[k].modulus)).fold((soft, soft * chem.subs[m].modulus), |(v, ev), (x, e)| (v + x, ev + x * e));
+        (7.837 / (4.0 * std::f64::consts::PI) * ev * v / (n * mass * cfg.gravity).max(1e-30)).powf(0.25)
     }
     /// The share of solid `k` in what the body builds (`Chemistry::builds`, 16 Oct 2026): its keep gene of `k`, 0..1, the
     /// shares cut together to 0.95 at most; the rest is matter. `usize::MAX`: their sum.

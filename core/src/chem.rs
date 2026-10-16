@@ -53,6 +53,10 @@ pub struct Substance {
     pub lf: f64,
     /// Formation enthalpy, J/mol. Chemical energy held by one mole.
     pub hf: f64,
+    /// Young's modulus of the solid as a material, Pa (16 Oct 2026; 0: none given): how stiff what bodies build of it is
+    /// (`Body::height`). For body matter, that of living soft tissue with its liquid.
+    #[serde(default)]
+    pub modulus: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
