@@ -30,7 +30,9 @@ fn bodies_keep_elements_and_energy() {
     assert!(w.life.alive().count() > 0);
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    // (Tight: a run keeps them to rounding, about 1e-14 here. The lime's gas sent to the air without its latent heat, 16 Oct 2026,
+    // gave 4e-12 here and 1e-8 in 60 years.)
+    assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
 }
 
 /// The same seed gives the same history, with brains shared by bodies that stayed together.
