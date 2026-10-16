@@ -54,6 +54,36 @@ fn hot_plateau_cools_but_not_to_the_floor() {
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }
 
+/// A salty pool freezes lower than a fresh one (`Chemistry::melt_in`): 1 mol of a salt in a kg of the common liquid
+/// lowers its melting point by the textbook 1.86 K, and Flow holds each pool, half frozen, at its own melting point.
+#[test]
+fn salty_pool_freezes_lower() {
+    let (_, init) = worldgen::chemistry0();
+    let mut w = worldgen::new_world(3, 16, 16);
+    let (n, ns, k) = (w.grid.n(), w.chem.ns(), init.low);
+    let salt = (0..ns).find(|&j| j != k && w.chem.subs[j].melt < w.chem.subs[k].melt && w.chem.subs[j].boil > 1000.0).expect("a salt");
+    let (fresh, salty) = (0, n - 1);
+    for i in [fresh, salty] {
+        (0..ns).for_each(|x| w.ground[x * n + i] = 0.0);
+        w.ground[k * n + i] = 1e4 * w.grid.area() / w.chem.molar_volume(k, pcore::chem::Phase::Liquid);
+    }
+    w.ground[salt * n + salty] = w.ground[k * n + salty] * w.chem.subs[k].molar_mass;
+    let tm = [fresh, salty].map(|i| w.melt(k, i));
+    assert_eq!(tm[0], w.chem.subs[k].melt);
+    let dt = (w.chem.subs[k].melt - tm[1]) / 1.86;
+    assert!((dt - 1.0).abs() < 0.03, "{dt} of the textbook lowering");
+    for (i, t) in [fresh, salty].into_iter().zip(tm) {
+        w.e_ground[i] = w.energy_ground(i, t) + 0.5 * w.ground[k * n + i] * w.chem.subs[k].lf;
+        let (at, plateau) = w.thaw(i);
+        assert!(at == t && plateau.is_some_and(|(q, f)| q == k && (f - 0.5).abs() < 1e-9), "{at} K, {plateau:?}");
+    }
+    let (t0, l0) = (totals(&w), w.ledger.clone());
+    pcore::flow::step(&mut w, DT);
+    assert_eq!([fresh, salty].map(|i| w.scratch.temps().0[i]), tm);
+    let (de, dq) = drift(&w, &t0, &l0);
+    assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
+}
+
 #[test]
 fn warm_air_spreads() {
     let mut cold = worldgen::new_world(3, 16, 16);

@@ -297,7 +297,7 @@ impl Body {
         let t = self.e / cap.max(1e-9);
         let (mut v, mut c) = (1e-12, [0.0; 3]);
         for (k, &a) in self.store.iter().enumerate() {
-            let p = chem.phase(k, t);
+            let p = chem.phase_in(k, t, |j| self.store[j]);
             if p != Phase::Gas && a > 0.0 {
                 let vol = a * chem.molar_volume(k, p);
                 v += vol;
@@ -325,7 +325,7 @@ impl Body {
     /// Key stores that are liquid now.
     pub fn key_liquids(&self, chem: &Chemistry) -> u64 {
         let (t, lay) = (self.temp(chem), Layout::of(chem));
-        (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase(k, t) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
+        (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0 && chem.phase_in(k, t, |j| self.store[j]) == Phase::Liquid).fold(0, |m, k| m | 1 << k)
     }
     /// The brood, mol of body matter (all members), no more than the matter there is (a body that
     /// burnt or lost matter holds no more brood than matter).
@@ -404,12 +404,9 @@ impl Body {
         }
         (have / keep).min(1.0).max(0.0).powf(p.dormancy)
     }
-    /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::t_melt`): what it holds that is
-    /// liquid at that melting point (melts below it, boils above it) is in its liquid.
+    /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::melt_in`).
     pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {
-        let tm = chem.subs[k].melt;
-        let other: f64 = (0..chem.ns()).filter(|&j| j != k && chem.subs[j].melt < tm && chem.subs[j].boil > tm).map(|j| self.store[j].max(0.0)).sum();
-        chem.t_melt(k, self.store[k] / (self.store[k] + other).max(1e-300))
+        chem.melt_in(k, |j| self.store[j])
     }
     /// End-product inhibition, 0..1 (15 Oct 2026): a catalyst is slowed by what the body holds of the
     /// reaction's products, as an enzyme by its own end product: its speed-up goes with 1 / (1 + Σ x / x*),
@@ -610,7 +607,7 @@ impl Body {
             }
             if self.wet >> k & 1 == 1 {
                 let s = &chem.subs[k];
-                w += (((t - s.melt).min(s.boil - t) as f32 - 5.0) / 5.0).min(0.0);
+                w += (((t - self.melt(chem, k)).min(s.boil - t) as f32 - 5.0) / 5.0).min(0.0);
             }
         }
         w
@@ -1031,10 +1028,10 @@ pub(crate) fn held(chem: &Chemistry, k: usize) -> f64 {
     chem.subs[k].lf + chem.subs[k].lv
 }
 
-/// Fusion enthalpy a mole of `k` holds in the ground's heat at temperature `t`.
+/// Fusion enthalpy a mole of `k` holds in the ground's heat at temperature `t`, among the ground's amounts `a(j)`.
 #[inline]
-pub fn fused(chem: &Chemistry, k: usize, t: f64) -> f64 {
-    if t >= chem.subs[k].melt { chem.subs[k].lf } else { 0.0 }
+pub fn fused(chem: &Chemistry, k: usize, t: f64, a: impl Fn(usize) -> f64) -> f64 {
+    if chem.phase_in(k, t, a) != Phase::Solid { chem.subs[k].lf } else { 0.0 }
 }
 
 /// Temperature (as of the last flow step), depth of the liquid that stands (what the pores of the loose ground
@@ -1044,7 +1041,7 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     let (mut z, mut d, mut loose) = (0.0, 0.0, 0.0);
     for k in 0..w.chem.ns() {
         z += w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
-        match w.chem.phase(k, t) {
+        match w.chem.phase_in(k, t, |j| w.g(j, i)) {
             Phase::Solid => {
                 loose += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid);
                 z += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid);
@@ -1707,10 +1704,11 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let standing = if stands && depth == 0.0 {
         0.0
     } else {
-        (0..ns).filter(|&k| chem.phase(k, tg) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / grid.area()
+        (0..ns).filter(|&k| chem.phase_in(k, tg, |j| ground[j * n + i]) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / grid.area()
     };
     let wet = standing / (standing + cfg.phys.wet_depth);
-    let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
+    let wets = (0..ns).filter(|&k| chem.phase_in(k, tg, |j| ground[j * n + i]) == Phase::Liquid && chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
+    let liq = |k: usize| wets >> k & 1 == 1;
     let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
     if in_ground > 0.0 {
         let _ = cap!();
@@ -1740,9 +1738,10 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         // What flows through it past what it holds comes from the ground as it goes, as far as the ground has it (the ground pays
         // its heat and fusion enthalpy, as for what it soaks below, which then takes back the rest of what it lost).
         let d = if r > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(0.5 * ground[k * n + i]) } else { 0.0 };
-        let want = d * (chem.subs[k].cp * tg + fused(chem, k, tg));
+        let f = fused(chem, k, tg, |j| ground[j * n + i]);
+        let want = d * (chem.subs[k].cp * tg + f);
         let pre = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
-        (b.store[k], ground[k * n + i], b.e, heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, heat + pre * fused(chem, k, tg));
+        (b.store[k], ground[k * n + i], b.e, heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, heat + pre * f);
         let m = m.min(b.store[k]);
         diag.liquid_land[4] += if plant { pre * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
         if m > 0.0 {
@@ -1774,7 +1773,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let d = ((uptake + fall) * x).min(room).min(0.5 * ground[k * n + i]).max(0.0);
         // The ground pays the heat that goes with the liquid and its fusion enthalpy; if it
         // cannot pay it all, the body soaks up less.
-        let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg));
+        let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg, |j| ground[j * n + i]));
         let want = d * (per + f);
         let d = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
         b.store[k] += d;
@@ -1791,7 +1790,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // what there is (the bodies of a cell share it).
     let soak = -(-b.k.liq * days).exp_m1() * wk;
     for &(k, u) in &b.k.upt {
-        if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase(k, tg) != Phase::Liquid || ground[k * n + i] <= 0.0 {
+        if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| ground[j * n + i]) != Phase::Liquid || ground[k * n + i] <= 0.0 {
             continue;
         }
         let d = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(0.5 * ground[k * n + i]);

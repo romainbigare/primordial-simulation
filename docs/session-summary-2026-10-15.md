@@ -308,3 +308,15 @@ Things that are open and not built:
 - Plants froze on ground held at 273.00 K by its melting plateau; animals froze in dips of the ground made by the plants'
   updates (each settled 2 to 5 K of the ground's heat at once). Two prototypes: the heat pool (as the light pool) and
   freezing lowered by what is dissolved; the roster's animals 3.5 to 6 times more, big kinds kept. `docs/reports/frost.md`.
+
+## 19. One freezing law for bodies and the world (16 Oct 2026, a branch of main 8a38822; not merged)
+
+- The owner asked that the sea and the soil freeze lower by what they hold, as bodies do, in one general way. One helper,
+  `Chemistry::melt_in` (and `phase_in`), now decides every solid or liquid state of a liquid that holds something:
+  bodies, Flow's melting plateaus of the ground (pores, standing liquid, lakes, the sea), ice cover, what bodies take from the
+  ground, and Change's phases. Only the solvent is lowered; a solute keeps its own point (lowering the salts too doubled the
+  plain island's plant frost deaths, measured and dropped).
+- As expected, almost no effect: the sea freezes 0.003 K lower (0.0008 mol of salts and 0.0009 of gases per kg), the soil
+  liquid 0.007 to 0.011 K. No sea ice either way; frost deaths, ice, climate and carbon within the spread of the seeds.
+  Energy drift about 1e-13; speed +2%. One new test (a salty pool freezes 1.86 K lower, energy exact).
+- Details: handover, Section 4, "One freezing law".

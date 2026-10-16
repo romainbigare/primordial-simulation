@@ -773,22 +773,26 @@ impl World {
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
         cap_ground(&self.chem, &self.grid, &self.cfg, &self.ground, &self.bed, i)
     }
+    /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
+    pub fn melt(&self, k: usize, i: usize) -> f64 {
+        self.chem.melt_in(k, |j| self.g(j, i))
+    }
     /// Temperature of a ground node, and the substance held at its melting point with its
     /// liquid share, if any. Molten amounts hold their fusion enthalpy in `e_ground`, so a node
     /// freezes or melts at a plateau.
     pub fn thaw(&self, i: usize) -> (f64, Option<(usize, f64)>) {
         let c = self.heat_cap_ground(i).max(1.0);
-        let mut ks: Vec<usize> = (0..self.chem.ns()).filter(|&k| self.g(k, i) > 0.0).collect();
-        ks.sort_by(|&a, &b| self.chem.subs[a].melt.total_cmp(&self.chem.subs[b].melt));
+        let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| self.g(k, i) > 0.0).map(|k| (self.melt(k, i), k)).collect();
+        ks.sort_by(|a, b| a.0.total_cmp(&b.0));
         let (e, mut held) = (self.e_ground[i], 0.0);
-        for k in ks {
-            let (s, lat) = (&self.chem.subs[k], self.g(k, i) * self.chem.subs[k].lf);
-            let lo = c * s.melt + held;
+        for (tm, k) in ks {
+            let lat = self.g(k, i) * self.chem.subs[k].lf;
+            let lo = c * tm + held;
             if e < lo {
                 break;
             }
             if e < lo + lat {
-                return (s.melt, Some((k, (e - lo) / lat)));
+                return (tm, Some((k, (e - lo) / lat)));
             }
             held += lat;
         }
@@ -814,14 +818,14 @@ impl World {
     }
     /// Thermal energy of a ground node at temperature `t` (with the fusion enthalpy of what is molten).
     pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
-        let held: f64 = (0..self.chem.ns()).filter(|&k| self.chem.subs[k].melt < t).map(|k| self.g(k, i) * self.chem.subs[k].lf).sum();
+        let held: f64 = (0..self.chem.ns()).filter(|&k| self.melt(k, i) < t).map(|k| self.g(k, i) * self.chem.subs[k].lf).sum();
         self.heat_cap_ground(i) * t + held
     }
     /// Molten share of substance `k` in ground node `i` at temperature `t` (from `thaw`).
-    pub fn molten(&self, k: usize, t: f64, plateau: Option<(usize, f64)>) -> f64 {
+    pub fn molten(&self, k: usize, i: usize, t: f64, plateau: Option<(usize, f64)>) -> f64 {
         match plateau {
             Some((pk, f)) if pk == k => f,
-            _ => (t >= self.chem.subs[k].melt) as u8 as f64,
+            _ => (t >= self.melt(k, i)) as u8 as f64,
         }
     }
     pub fn heat_cap_air(&self, j: usize) -> f64 {
@@ -837,7 +841,7 @@ impl World {
         let mut v = 0.0;
         for k in 0..self.chem.ns() {
             let mv = self.chem.molar_volume(k, chem::Phase::Solid);
-            v += (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, t, pl))) * mv;
+            v += (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, i, t, pl))) * mv;
         }
         self.base_z + v / self.grid.area()
     }

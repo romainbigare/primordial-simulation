@@ -43,7 +43,7 @@ pub fn fields(w: &World) -> Fields {
         };
         for k in 0..ns {
             let s = &w.chem.subs[k];
-            let (melt, a) = (w.molten(k, t, pl), w.g(k, i));
+            let (melt, a) = (w.molten(k, i, t, pl), w.g(k, i));
             let solid = a * (1.0 - melt) * w.chem.molar_volume(k, Phase::Solid);
             add(if is_cover(s) { 0 } else { 2 }, solid, s.refl[0]);
             if t < s.boil {

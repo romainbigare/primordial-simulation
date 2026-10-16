@@ -164,6 +164,47 @@ impl Chemistry {
         1.0 / (1.0 / tm - R_GAS * x.max(1e-30).ln() / l)
     }
 
+    /// Melting point of `k` among the amounts `a(j)` (mol) of one node or body, K: `t_melt` at the share of `k` among
+    /// itself and what is dissolved in it, where `k` is the solvent there: a liquid of the world (liquid at `T_SURF`) and
+    /// the most of them. Dissolved in it is what melts below its melting point and is liquid there (the salts that live in
+    /// the liquid) or is a gas that dissolves; a solid there (the energy-rich solid) is not, nor `k` itself. A solute keeps
+    /// its own melting point: the data give a salt that of its solution. Bodies and ground nodes (their pores, the liquid
+    /// that stands on them, its ice) freeze by it; `phase_in` reads phases through it.
+    pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
+        match self.mixes(k) {
+            Some(js) => self.melt_with(k, a, js),
+            None => self.subs[k].melt,
+        }
+    }
+
+    /// What may share the liquid `k` (`melt_in`): each with whether it is dissolved in `k` and whether it is a liquid of
+    /// the world; none: `k` is not a liquid of the world.
+    pub fn mixes(&self, k: usize) -> Option<impl Iterator<Item = (usize, bool, bool)> + '_> {
+        let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < crate::T_SURF && d.boil > crate::T_SURF);
+        let mix = move |j: usize, d: &Substance| (j, d.melt < s.melt && (d.boil > s.melt || d.solubility > 0.0), liquid(d));
+        liquid(s).then(move || (0..self.ns()).filter(move |&j| j != k).map(move |j| mix(j, &self.subs[j])).filter(|m| m.1 || m.2))
+    }
+
+    /// `melt_in` over the list `mixes` gave.
+    pub fn melt_with(&self, k: usize, a: impl Fn(usize) -> f64, js: impl Iterator<Item = (usize, bool, bool)>) -> f64 {
+        let (x, mut other, mut most) = (a(k).max(0.0), 0.0, 0.0f64);
+        for (j, dissolved, liquid) in js {
+            let y = a(j).max(0.0);
+            other += if dissolved { y } else { 0.0 };
+            most = if liquid { most.max(y) } else { most };
+        }
+        if most > x { self.subs[k].melt } else { self.t_melt(k, x / (x + other).max(1e-300)) }
+    }
+
+    /// Phase of `k` at `t` among the amounts `a(j)` (mol) of one node or body: as `phase`, at its melting point there
+    /// (`melt_in`).
+    pub fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
+        match self.phase(k, t) {
+            Phase::Solid if t >= self.melt_in(k, a) => Phase::Liquid,
+            p => p,
+        }
+    }
+
     /// Mole fraction of gas `k` that a liquid at `t` holds under its partial pressure `p`, Pa
     /// (Henry's law). It falls with warmth by van 't Hoff's law, with the heat of solution taken
     /// as the vaporisation enthalpy: dissolving is like condensing (for the carbon gas of
