@@ -160,6 +160,7 @@ struct Root {
     wet: f64,
     /// The members' temperature above their ground's (`Body::temp`), K, summed by members
     warm: f64,
+    warm_n: f64,
     /// Each mineral (`Chemistry::minerals`) their stores hold, kg (15 Oct 2026)
     mineral: Vec<f64>,
     /// 16 Oct 2026 (several built materials): dry mass (all but the key liquids), the fuel (the first input of growth), each solid
@@ -171,7 +172,7 @@ struct Root {
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 9], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, mineral: Vec::new(), solid: Vec::new(), cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 9], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, warm_n: 0.0, mineral: Vec::new(), solid: Vec::new(), cat: vec![(0.0, 0.0); nr] }
     }
 }
 
@@ -592,7 +593,11 @@ impl Recorder {
                 r.brood += b.brooded(&w.chem) * w.chem.matter().map_or(0.0, |m| w.chem.subs[m].molar_mass);
                 let a = b.activity(&w.chem, &w.cfg.phys);
                 (r.act, r.dry, r.wet) = (r.act + n * a, r.dry + n * (a < 0.5) as u8 as f64, r.wet + n * b.gene(pcore::body::WET));
-                r.warm += n * (b.temp(&w.chem) - c.f.t[b.cell as usize]);
+                // (Only bodies updated in the last 5 days: a body keeps the temperature its update left it at, while the ground's
+                // moves with the season, so older ones read the ground's change since, 2 to 7 K in the cooling season, 16 Oct 2026.)
+                if w.day.saturating_sub(b.last) < 5 {
+                    (r.warm, r.warm_n) = (r.warm + n * (b.temp(&w.chem) - c.f.t[b.cell as usize]), r.warm_n + n);
+                }
                 r.mineral.resize(minerals.len(), 0.0);
                 for (x, &(k, _)) in r.mineral.iter_mut().zip(&minerals) {
                     *x += b.store[k] * w.chem.subs[k].molar_mass;
@@ -752,8 +757,8 @@ impl Recorder {
                 (c("activity"), "1", per(v.act)),
                 (c("dry"), "1", per(v.dry)),
                 (c("wet_gene"), "log10", per(v.wet)),
-                // 15 Oct 2026: how much warmer the members are than the ground they stand on (`Body::temp` less the cell's), K, mean by members.
-                (c("temp"), "K", per(v.warm)),
+                // 15 Oct 2026: how much warmer the members are than the ground they stand on (`Body::temp` less the cell's), K, mean by members updated in the last 5 days (16 Oct 2026).
+                (c("temp"), "K", if v.warm_n > 0.0 { v.warm / v.warm_n } else { f64::NAN }),
                 // 14 Oct 2026: the genes of reproduction (means by members: the share of building that goes to offspring, and a
                 // child's body as log10 of its share of the copy mass) and the brood as a share of the members' mass.
                 (c("alloc"), "1", per(v.alloc)),
