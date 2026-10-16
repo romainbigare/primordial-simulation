@@ -1474,7 +1474,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         };
     }
     let (ns, n, na, j) = (chem.ns(), grid.n(), grid.na(), grid.air_of(i));
-    let dt = days * DAY;
+    let (dt, plant) = (days * DAY, light_eater(chem, &b.genes));
     // The rain that fell on its capture area, mol: the cell's bodies intercept 1 - exp(-x) of the rain, x their capture
     // area per ground area, shared out by height as the light is (`shade`), at the cell's rain rate of the year.
     let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open * life.shade.get(slot).map_or(1.0, |&f| f) * intercept(canopy.get(i).map_or(0.0, |&c| c as f64));
@@ -1595,6 +1595,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
             let q = m * chem.subs[k].cp * t0;
             (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
             heat -= m * held(chem, k);
+            diag.liquid_land[3 - plant as usize] += m * chem.molar_volume(k, Phase::Liquid);
         }
     }
 
@@ -1629,6 +1630,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         ground[k * n + i] -= d;
         b.e += d * per;
         heat += d * f;
+        diag.liquid_land[4] += if plant { d * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
     }
     // Roots take what is dissolved in the soil: the salts that live in the liquid of the ground
     // (liquid at the cell's warmth but for the common liquid itself, whose soaking is above) that

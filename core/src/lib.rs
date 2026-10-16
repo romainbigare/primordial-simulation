@@ -651,6 +651,11 @@ pub struct Diag {
     /// below what their fuels, their allowance and their spare allowed (`copy::grow`). A count only, not saved.
     #[serde(skip)]
     pub nlim: Vec<Vec<f64>>,
+    /// The land's liquid since the shell last read it, m³ (16 Oct 2026): rain on land cells, evaporation from their ground,
+    /// evaporation from light-eaters and from the other bodies, and what light-eaters took of the ground's liquid (rain they
+    /// caught and what they soaked). A count only, not saved.
+    #[serde(skip)]
+    pub liquid_land: [f64; 5],
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

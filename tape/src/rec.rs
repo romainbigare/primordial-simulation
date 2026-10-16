@@ -57,6 +57,8 @@ struct Social {
     hurt: Vec<f64>,
     /// Members that could build in the year, by starting kind: [tried, held back by any mineral, by the first, by the second...] (the core's tally, `Diag::nlim`)
     nlim: Vec<Vec<f64>>,
+    /// The land's liquid in the year, m³ (`Diag::water`)
+    water: [f64; 5],
     months: String,
     /// Members born in each month by starting kind, one row per row of `months` (after its
     /// header), written as the last columns of `months.csv` (`root_<k>_births`)
@@ -429,6 +431,7 @@ impl Recorder {
             self.social.moves = std::mem::take(&mut w.diag.moves);
             self.social.hurt = std::mem::take(&mut w.diag.hurt);
             self.social.nlim = std::mem::take(&mut w.diag.nlim);
+            self.social.water = std::mem::take(&mut w.diag.liquid_land);
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -608,6 +611,7 @@ impl Recorder {
         let n = w.grid.n() as f64;
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let tot = check::totals(w);
+        let land_area = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).count().max(1) as f64 * w.grid.area();
         let land_liquid: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| c.f.depth[i]).sum::<f64>() * w.grid.area();
         // 15 Oct 2026 (soil water): of it, the liquid that stands (what the pores of the loose ground do not hold, `body::env_of`).
         let land_stands: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| pcore::body::env_of(w, i)[1]).sum::<f64>() * w.grid.area();
@@ -653,6 +657,13 @@ impl Recorder {
             ("wet_land".to_string(), "1", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0 && pcore::body::env_of(w, i)[1] > 0.0).count() as f64 / (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).count().max(1) as f64),
             ("deep_land".to_string(), "km3", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| (0..w.chem.ns()).filter(|&k| w.chem.phase(k, c.f.t[i]) == pcore::chem::Phase::Liquid).map(|k| w.deep.get(k * w.grid.n() + i).copied().unwrap_or(0.0) * w.chem.molar_volume(k, pcore::chem::Phase::Liquid)).sum::<f64>()).sum::<f64>() / 1e9),
             ("rain".to_string(), "mol/m2/s", w.diag.rain.iter().map(|&v| v as f64).sum::<f64>() / n),
+            // 16 Oct 2026: the land's liquid in the year, m over the land: rain, evaporation from the ground, from light-eaters
+            // and from the other bodies, and what light-eaters took of the ground's liquid (rain caught and soaked).
+            ("water_rain".to_string(), "m/yr", self.social.water[0] / land_area),
+            ("water_ground".to_string(), "m/yr", self.social.water[1] / land_area),
+            ("water_plants".to_string(), "m/yr", self.social.water[2] / land_area),
+            ("water_animals".to_string(), "m/yr", self.social.water[3] / land_area),
+            ("water_plants_took".to_string(), "m/yr", self.social.water[4] / land_area),
             ("bodies".to_string(), "1", bodies),
             ("plants".to_string(), "1", light_eaters),
             ("animals".to_string(), "1", bodies - light_eaters),

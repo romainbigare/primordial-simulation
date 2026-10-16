@@ -343,6 +343,9 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * sp.cp, s.capa[j] + m * sp.cp, s.nt[j] + m, s.mass[j] + m * sp.mm);
             w.e_air[j] += heat - lift;
             lifted += lift;
+            if s.z[i] > 0.0 && t < sp.boil {
+                w.diag.liquid_land[1] += m * sp.v[1];
+            }
         }
     }
     snap(w, s);
@@ -369,6 +372,9 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             w.e_air[j] += m * (sp.lv - sp.cp * tair);
             lifted += lift;
             s.rain[i] += m;
+            if s.z[i] > 0.0 {
+                w.diag.liquid_land[0] += m * sp.v[1];
+            }
             s.cloud[j] = [s.cloud[j][0] + m, s.cloud[j][1] + m * sp.refl[0]];
             rained[x] = true;
         }
