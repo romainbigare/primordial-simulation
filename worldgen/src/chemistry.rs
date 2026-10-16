@@ -10,6 +10,8 @@ struct File {
     r: Vec<R>,
     #[serde(default)]
     build: Option<B>,
+    #[serde(default)]
+    builds: Vec<B>,
     init: Init,
 }
 
@@ -109,6 +111,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             .map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord })
             .collect(),
         build: f.build.map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }),
+        builds: f.builds.iter().map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }).collect(),
         air,
         soil: f.init.soil.clone(),
     };

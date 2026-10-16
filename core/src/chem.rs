@@ -92,6 +92,11 @@ pub struct Chemistry {
     /// their stores (`Body::size` is their mass, and they do not grow).
     #[serde(default)]
     pub build: Option<Reaction>,
+    /// The other solids bodies can build (16 Oct 2026): each a conversion like `build`, run by Copy with the same work
+    /// (`copy::grow`); its first output is the solid. A body's keep gene of that solid is its share in what the body
+    /// builds (`Body::share`); the rest is matter. Empty: bodies build matter only.
+    #[serde(default)]
+    pub builds: Vec<Reaction>,
     /// Mole fractions of the starting air, per substance (empty: none known). The cost of a
     /// catalyst counts the gases of a reaction beyond first order at these shares (`Body::prepare`).
     #[serde(default)]
@@ -177,8 +182,18 @@ impl Chemistry {
     /// chemistry 0, where 6 of the energy-rich solid make 1 of matter and 1 of liquid (hf of the
     /// matter = 6 hf of the solid less hf of the liquid).
     pub fn dh_build(&self) -> f64 {
+        self.build.as_ref().map_or(0.0, |b| self.dh_of(b))
+    }
+
+    /// Enthalpy change of one unit of a conversion (`build`, `builds`), J.
+    pub fn dh_of(&self, b: &Reaction) -> f64 {
         let sum = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].hf).sum::<f64>();
-        self.build.as_ref().map_or(0.0, |b| sum(&b.outputs) - sum(&b.inputs))
+        sum(&b.outputs) - sum(&b.inputs)
+    }
+
+    /// The solids bodies build besides their matter (the first output of each of `builds`).
+    pub fn materials(&self) -> impl Iterator<Item = usize> + '_ {
+        self.builds.iter().filter_map(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
     /// The body matter: the first output of growth (`build`), if bodies grow.
@@ -220,7 +235,7 @@ impl Chemistry {
                 return Err(format!("reaction {r} does not balance"));
             }
         }
-        if let Some(b) = &self.build {
+        for b in self.build.iter().chain(&self.builds) {
             if self.side_elems(&b.inputs) != self.side_elems(&b.outputs) {
                 return Err("growth does not balance".into());
             }

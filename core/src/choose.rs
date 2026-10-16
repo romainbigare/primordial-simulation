@@ -830,7 +830,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     // level, the liquid of its living body.)
     let (size, mass) = (b.size(chem), b.mass(chem));
     let keep = |k: usize| if b.wet >> k & 1 == 1 { b.level(chem, k, mass) } else { 0.0 };
-    let spare = |k: usize| if chem.matter() == Some(k) { 0.0 } else { (b.store[k] - keep(k).max(2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
+    let spare = |k: usize| if chem.matter() == Some(k) || chem.materials().any(|x| x == k) { 0.0 } else { (b.store[k] - keep(k).max(2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
     let mo = o.mass(chem);

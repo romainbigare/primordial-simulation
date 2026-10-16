@@ -169,7 +169,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
     // (No growth in a random chemistry yet: its bodies are their mass, `Chemistry::build`.)
     let mut air = vec![0.0; ns];
     init.air.iter().for_each(|&(k, x)| air[k] = x);
-    let chem = Chemistry { n_elements: ne, subs, reactions, build: None, air, soil: Vec::new() };
+    let chem = Chemistry { n_elements: ne, subs, reactions, build: None, builds: Vec::new(), air, soil: Vec::new() };
     debug_assert!(chem.validate().is_ok());
     (chem, init)
 }

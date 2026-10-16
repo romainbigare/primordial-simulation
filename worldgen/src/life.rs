@@ -69,6 +69,10 @@ pub const FIXERS: f64 = 0.1;
 /// reaction's starting gene (9) was set in the same way, the speed a body needs over the speed of the bare reaction. (8.6 until 15 Oct
 /// 2026, when the reaction burnt one unit of the fuel: its contact is now the fuel over 14, the units it burns.)
 pub const FIX_GENE: f32 = 9.8;
+/// The share of each solid that bodies can build besides their matter (`Chemistry::builds`: a frame and lime in chemistry 0) in what
+/// every founder builds and holds (its keep gene of the solid, `Body::share`, 16 Oct 2026): an initial condition, the same for every
+/// kind, chosen before any run, small so that selection can find what each is worth.
+pub const BUILT_SHARE: f32 = 0.02;
 /// The stream of the draw that makes a founder a fixer (`Rng::new(seed, FIX_STREAM, id, Purpose::Body)`).
 const FIX_STREAM: u64 = 0xf1;
 
@@ -598,6 +602,7 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     genes[lay.keep..].fill(0.9);
     genes[lay.keep + liquid] = 0.75;
     genes[lay.keep + rich] = 0.9f32.max((1.1 * kind.store / (1.0 - kind.store)) as f32);
+    chem.materials().for_each(|k| genes[lay.keep + k] = BUILT_SHARE);
     let mut rg = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();
@@ -634,6 +639,8 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
         }
     }
     let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
+    // It holds what its shares make of its matter (`Body::level`).
+    chem.materials().for_each(|k| b.store[k] = b.level(chem, k, 0.0));
     b.e = b.heat_cap(chem) * t;
     ledger.imposed_energy += b.e;
     for (k, &a) in b.store.iter().enumerate() {

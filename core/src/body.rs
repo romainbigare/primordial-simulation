@@ -527,6 +527,8 @@ impl Body {
         let f = self.gene(Layout::of(chem).keep + k);
         let share = |f: f64| f.clamp(0.0, 0.95) / (1.0 - f.clamp(0.0, 0.95));
         match chem.matter() {
+            // (A solid it builds: what its share in what it builds makes of its matter, `share`.)
+            Some(_) if chem.materials().any(|x| x == k) => self.share(chem, k) / (1.0 - self.share(chem, usize::MAX)) * self.matter_kg(chem) / mm,
             Some(m) if k != m => {
                 if self.wet >> k & 1 == 1 {
                     share(f) * self.matter_kg(chem) / mm
@@ -536,6 +538,19 @@ impl Body {
             }
             _ => (share(f) * (mass - self.store[k] * mm) / mm).max(0.0),
         }
+    }
+    /// A member's height, m: (its body, `size`, over `Physics::rho_body`)^(1/3) (a body has no shape yet): the order of light
+    /// in `shade`.
+    pub fn height(&self, chem: &Chemistry, cfg: &crate::Config) -> f64 {
+        (self.size(chem) / self.n() / cfg.phys.rho_body).cbrt()
+    }
+    /// The share of solid `k` in what the body builds (`Chemistry::builds`, 16 Oct 2026): its keep gene of `k`, 0..1, the
+    /// shares cut together to 0.95 at most; the rest is matter. `usize::MAX`: their sum.
+    pub fn share(&self, chem: &Chemistry, k: usize) -> f64 {
+        let keep = Layout::of(chem).keep;
+        let all: f64 = chem.materials().map(|x| self.gene(keep + x).clamp(0.0, 1.0)).sum();
+        let s = if k == usize::MAX { all } else { self.gene(keep + k).clamp(0.0, 1.0) };
+        s * (0.95 / all.max(1e-30)).min(1.0)
     }
     /// Well-being at temperature `t`: the energy its catalysed reactions could release from a
     /// member's stores (log, in decisions' worth: `think` is what one decision of the starting
@@ -1092,12 +1107,12 @@ fn intercept(x: f64) -> f64 {
 /// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
 fn shade(w: &mut World) {
     let g = intercept;
-    let (Life { bodies, at, shade, .. }, area, chem) = (&mut w.life, w.grid.area(), &w.chem);
+    let (Life { bodies, at, shade, .. }, area, chem, cfg) = (&mut w.life, w.grid.area(), &w.chem, &w.cfg);
     shade.resize(bodies.len(), 1.0);
     let mut l: Vec<(f32, f64, usize)> = Vec::new();
     for s in at.iter() {
         l.clear();
-        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| ((b.size(chem) / b.n()) as f32, b.vis[1] as f64 * b.n() / area, s)));
+        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.height(chem, cfg) as f32, b.vis[1] as f64 * b.n() / area, s)));
         l.sort_by(|a, b| b.0.total_cmp(&a.0));
         let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
         while k < l.len() {
@@ -1741,7 +1756,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 fn shed(w: &mut World, b: &mut Body) {
     let (i, n, mass, minerals) = (b.cell as usize, w.grid.n(), b.mass(&w.chem), w.chem.minerals());
     for k in 0..w.chem.ns() {
-        let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k);
+        let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || w.chem.materials().any(|x| x == k);
         let over = b.store[k] - if kept { b.level(&w.chem, k, mass) } else { 0.0 };
         if over <= 0.0 || w.chem.phase(k, crate::T_SURF) == Phase::Gas || w.chem.matter() == Some(k) || b.burns(&w.chem, k) {
             continue;

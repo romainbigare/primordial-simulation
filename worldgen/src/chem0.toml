@@ -407,6 +407,26 @@ cond = 0.6
 hf = -365
 lf = 5.9
 
+# 25: a frame, (C6H10O5)n (cellulose; 162 g/mol a unit, six units of the energy-rich solid less one of the liquid, so 6 of 5 -> 1 of 25
+# + 1 of 0 is thermoneutral: hf = 6 x -212 + 286 = -986 kJ/mol, the energy per carbon of the solid). It holds no nitrogen and no
+# rock element. Bodies can build it (the first of `[[builds]]` below, `copy::grow`), in the share their keep gene of it sets. It breaks
+# down only by 26 (it rots, as litter) and 27 (an enzyme splits it into the solid). Real plant dry mass is 40 to 50% cellulose, and
+# lignin besides (from memory). Heat capacity about 1.3 J/(g K); it chars before it melts; reflectance as 5's; rho of the cell wall.
+[[s]] # 25
+e = [10,6,0,5,0,0,0,0,0]
+m = 162.0
+cp = 210
+melt = 1500
+boil = 3000
+rho = [1500, 1300]
+hard = 0.2
+str = 0.4
+refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
+ir = 0.0
+sol = 0.0
+cond = 0.2
+hf = -986
+
 # Reactions: i/o = [[substance, count]], k 1/s, ea K.
 [[r]] # 0
 i = [[3,1],[0,1]]
@@ -619,10 +639,48 @@ o = [[1,2],[0,4],[2,1]]
 k = 2.6e9
 ea = 20000
 
+# 26: the frame rots: C6H10O5 + 6 O2 -> 6 CO2 + 5 H2O, -2,805 kJ (6 x 467.5, as burning the solid per carbon). In the open this is how
+# dead frame decays, the work of the soil's small life, which the open world stands for (as 1 and 21 for the solid and the matter):
+# Olson's litter constant, 0.27 a year at 290 K, the figure reaction 1 had for all dead plant matter (docs/numbers.md); a litter is
+# mostly cellulose and lignin, so the constant is the frame's. The oxygen at order 1, so the same k and ea as 1: k exp(-7760/290)
+# x 0.21 = 8.6e-9 /s. It makes no fuel: what rots goes to the air. Inside a body it runs too (as 21 does for the matter), so a body
+# rebuilds about a quarter of its frame a year. It burns where it is hot.
+[[r]] # 26
+i = [[25,1],[2,6]]
+o = [[3,6],[0,5]]
+ord = [1,1]
+k = 1.72e4
+ea = 7760
+
+# 27: an enzyme splits the frame into the energy-rich solid: C6H10O5 + H2O -> 6 CH2O, thermoneutral (the reverse of the frame's growth).
+# Without an enzyme it does not go: the spontaneous hydrolysis of the bond between sugar units has a half-life of about 5 million years
+# at 25 C, 4.7e-15 /s (Wolfenden, Lu and Young 1998, J. Am. Chem. Soc. 120: 6814; from memory), so k exp(-ea/298) = 4.7e-15 /s; ea
+# 7760 K, that of the body's other chemistry, as a body's catalyst multiplies the rate and keeps its ea (the enzyme's rate goes with
+# warmth as the rest of life's, Gillooly et al. 2001); k = 4.7e-15 exp(7760/298) = 9.6e-4, 2.3e-15 /s at 290 K. A body whose
+# genes speed it up about 10^9 splits what it holds within days, and pays for that enzyme by its capacity (`Physics::c_cat`), as
+# for every enzyme; it splits its own frame too.
+[[r]] # 27
+i = [[25,1],[0,1]]
+o = [[5,6]]
+k = 9.6e-4
+ea = 7760
+
 # Growth, which is not a reaction of the open world: what bodies make of the energy-rich solid, the nitrogen mineral and the rock salt, paid by work (Copy): [inputs], [outputs]; the first output is the matter that builds bodies.
 [build]
 i = [[5,118],[24,3],[23,1]]
 o = [[22,1],[0,27]]
+
+# The other solids bodies can build (16 Oct 2026, `Chemistry::builds`), each paid by the same work per kg as matter (`copy::grow`), in the
+# share of what a body builds that its keep gene of the solid sets; the first output is the solid. Neither pays upkeep: the cells that
+# keep them are matter. The frame (25) of 6 of the energy-rich solid; lime (10) of the rock salt bodies take (the reverse of 22, as 23
+# runs, +40.3 kJ: Ca(HCO3)2 -> CaCO3 + CO2 + H2O; the gas leaves to the air), as shells and bones are made of the calcium of the liquid.
+[[builds]]
+i = [[5,6]]
+o = [[25,1],[0,1]]
+
+[[builds]]
+i = [[23,1]]
+o = [[10,1],[3,1],[0,1]]
 
 # Starting world: [substance, fraction]; soil: [substance, mol per m2 of land], the nitrogen mineral: 0.357 mol of 24 is 0.714 mol
 # of nitrogen, 10 g of it per m2 (mineral nitrogen of a soil: 1 to 10 g per m2, the top of it, as the start has no humus).
