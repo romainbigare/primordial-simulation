@@ -369,6 +369,11 @@ pub struct Physics {
     pub bed_depth: f64,
     pub bed_porosity: f64,
     pub bed_seep: f64,
+    /// Half the spacing of the channels inside a cell, m: the length of a hillslope, L = 1 / (2 x the drainage density)
+    /// (Horton 1945). The liquid of the loose ground over its field capacity and of the bed's store flows down the
+    /// cell's slope to them by Darcy's law and runs off (`flow::liquid`). Drainage densities of 1 to 5 km per km2
+    /// (Strahler 1957, Horton 1945; from memory) give 100 to 500 m: 2 km per km2, 250 m
+    pub hill: f64,
 }
 
 impl Physics {
@@ -471,6 +476,7 @@ impl Default for Physics {
             bed_depth: 30.0,
             bed_porosity: 0.02,
             bed_seep: 3e-6,
+            hill: 250.0,
         }
     }
 }
