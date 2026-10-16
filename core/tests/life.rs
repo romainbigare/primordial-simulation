@@ -706,7 +706,10 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // (The repair gene costs 0.75 + 0.25 x 2^0.5 times as much at 0.5; the second body makes a little more heat, so it is a little warmer.)
     assert!(((ub / ab) / (ua / aa) / (0.75 + 0.25 * 2f64.sqrt()) - 1.0).abs() < 0.03 && ((uc / ac) / (ua / aa) - 1.0).abs() < 0.07, "upkeep per kg {ua} {ub} {uc}, activity {aa} {ab} {ac}");
     // A life of 60 days at gene 0 (its upkeep per kg now), 10^0.5 ua / ub (10^0.5 / (0.75 + 0.25 x 2^0.5)) times that at 0.5.
-    let (life, x) = (40.0, 10f64.sqrt() * ua / ub);
+    // (38 days, not 40, since 16 Oct 2026: a body dies at an update, every 10 days, and a life of just four intervals sat on
+    // the line, so a body whose upkeep at the measuring update was 0.9% over its mean, as with the solids it now builds, died an
+    // interval late; 38 puts both deaths a few percent inside an interval.)
+    let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
     // (Lives are counted from the last update of the first individual: wear counts from there.)
     let (t0, l0, start, n0) = (pcore::check::totals(&w), w.ledger.clone(), w.life.bodies[sa].last, w.life.bodies[c].count);

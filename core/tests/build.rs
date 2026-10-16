@@ -1116,7 +1116,10 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         let joule = -w.chem.dh(r.burn) / w.chem.reactions[r.burn].inputs.iter().find(|x| x.0 as usize == r.rich).unwrap().1 as f64 / w.chem.subs[r.rich].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {
-            // Fuel and liquid in plenty: 100 kg per m² of each on the cell at every update (booked as an edit).
+            // Fuel and liquid in plenty: 100 kg per m² of each on its cell at every update (booked as an edit). (The cell it is in:
+            // it has a brain and may step to a neighbour, as it did on day 167 once its brain had the inputs of two more substances,
+            // 16 Oct 2026, and starved there.)
+            let i = w.life.bodies[s].cell as usize;
             for k in [r.rich, r.liquid] {
                 let (t, a) = (w.t_ground(i), (100.0 * area / w.chem.subs[k].molar_mass - w.g(k, i)).max(0.0));
                 w.ground[k * n + i] += a;

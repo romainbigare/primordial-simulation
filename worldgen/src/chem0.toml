@@ -432,8 +432,8 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -986
-# Young's modulus, GPa (`Body::height`): wood along the grain is about 10 GPa at 500 kg/m3 (Gibson and Ashby, from memory), its specific
-# stiffness about 20 MJ/kg, so the cell wall (1,500 kg/m3) about 30.
+# Young's modulus, GPa (`Body::height`): the stems of trees are about 10 GPa along their fibres at 500 kg/m3 (Gibson and Ashby, from
+# memory), a specific stiffness of about 20 MJ/kg, so the cell wall (1,500 kg/m3) about 30.
 modulus = 30
 
 # Reactions: i/o = [[substance, count]], k 1/s, ea K.
