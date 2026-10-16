@@ -151,7 +151,7 @@ struct Root {
     /// The `ALLOC` and `CHILD` genes by members
     alloc: f64,
     child: f64,
-    genes: [f64; 6],
+    genes: [f64; 8],
     /// Activity (`Body::activity`) summed over the members, the members below 0.5, and the `WET` gene by members
     act: f64,
     dry: f64,
@@ -165,14 +165,14 @@ struct Root {
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 6], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, mineral: Vec::new(), cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 8], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, mineral: Vec::new(), cat: vec![(0.0, 0.0); nr] }
     }
 }
 
 /// The genes averaged per starting kind, and their column names (`root_<k>_<name>`); the repair gene is the old
 /// `root_<k>_repair`, so it comes last here and is printed in its old place.
-const GENES: [usize; 6] = [pcore::body::GAS, pcore::body::LEAF, pcore::body::COPY_MASS, pcore::body::INTERVAL, pcore::body::HIDDEN, pcore::body::REPAIR];
-const GENE_NAMES: [&str; 5] = ["gas", "leaf", "copy_log", "interval", "hidden"];
+const GENES: [usize; 8] = [pcore::body::GAS, pcore::body::LEAF, pcore::body::COPY_MASS, pcore::body::INTERVAL, pcore::body::HIDDEN, pcore::body::HEAT, pcore::body::KEEP_T, pcore::body::REPAIR];
+const GENE_NAMES: [&str; 7] = ["gas", "leaf", "copy_log", "interval", "hidden", "heat", "keep_t"];
 /// The first columns of `months.csv`; `root_<k>_births` for each starting kind follow.
 const MONTHS: &str = "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile,spent,spent_y";
 /// Death causes in the order of the core's constants (`LACK` .. `AGE`).
@@ -698,7 +698,7 @@ impl Recorder {
             let stand_adult = st.root_stand_adult.get(k).copied().unwrap_or(0.0) / st.stand_months.max(1.0);
             let (young, adult) = (st.root_young.get(k).copied().unwrap_or(0.0), st.root_adult.get(k).copied().unwrap_or(0.0));
             let c = |n: &str| format!("root_{k}_{n}");
-            row.extend([(c("members"), "1", v.members), (c("kg"), "kg", v.mass), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[5]))]);
+            row.extend([(c("members"), "1", v.members), (c("kg"), "kg", v.mass), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[7]))]);
             row.extend(CAUSES.iter().zip(d).map(|(n, x)| (c(&format!("died_{n}")), "1/yr", x)));
             row.extend([
                 (c("births"), "1/yr", births.get(k).copied().unwrap_or(0.0)),
@@ -737,7 +737,7 @@ impl Recorder {
                 row.push((c(&format!("nlim{q}")), "1", st.nlim.get(k).map_or(f64::NAN, |x| x.first().filter(|&&t| t > 0.0).map_or(f64::NAN, |t| x[2 + q] / t))));
                 row.push((c(&format!("nstore{q}")), "1", if v.body > 0.0 { v.mineral.get(q).copied().unwrap_or(0.0) / v.body } else { f64::NAN }));
             }
-            row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), if *n == "hidden" { "1" } else { "log10" }, per(x))));
+            row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), match *n { "hidden" => "1", "keep_t" => "K", _ => "log10" }, per(x))));
             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
                 row.push((c(&format!("cat_{r}")), "log10", if v.cat[r].1 > 0.0 { v.cat[r].0 / v.cat[r].1 } else { f64::NAN }));
                 row.push((c(&format!("cat_{r}_on")), "1", per(v.cat[r].1)));

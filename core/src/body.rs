@@ -69,7 +69,11 @@ pub const WET: usize = 18;
 /// Share of what a mature body builds in an update that goes to offspring (the brood), 0..1; the rest
 /// is its own growth. With 1 it stops growing at maturity
 pub const ALLOC: usize = 19;
-pub const NSCALAR: usize = 20;
+/// The temperature the body keeps, K, as it keeps levels of its stores: when its update would leave it colder, it burns on
+/// demand, beside its upkeep, the heat that holds it there, as far as its reactions can release it (`live`). Above it,
+/// nothing more: it cools by physics. Below its surroundings it does nothing
+pub const KEEP_T: usize = 20;
+pub const NSCALAR: usize = 21;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -1635,7 +1639,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // taken from its own heat at once (its reactions took it at its temperature). The gas its
     // reactions put out (heat capacity `c_out`) goes the same way until it leaves at the end,
     // with its share of the heat.
-    let (mass3, c) = b.mass_cap(chem);
+    let (_, c) = b.mass_cap(chem);
     if c > 0.0 {
         let (r, ct, e0) = (heat.max(-g * dt * tg), c + c_out, b.e + heat - heat.max(-g * dt * tg));
         let relax = |g: f64| ct * (tg + r / dt / g + (e0 / ct - tg - r / dt / g) * (-g * dt / ct).exp());
@@ -1649,8 +1653,18 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let out = e1 * c_out / ct;
         (b.e, e_air[j]) = (e1 - out, e_air[j] + out);
     }
+    // It keeps its temperature at its `KEEP_T` gene: if the update leaves it colder, it burns on demand, as for its upkeep, the
+    // heat its surface sheds at that level over the time, so it ends there (the share `hold` of a heat released over the time
+    // stays in it), as far as its reactions can release it. Twice, as its products take a part of the heat at its temperature.
+    for _ in 0..2 {
+        let (m, c) = b.mass_cap(&w.chem);
+        let short = c * b.gene(KEEP_T) - b.e;
+        if c <= 0.0 || short <= 1e-6 * b.e || spend(w, b, short / hold(w, b, m, b.e / c, dt), span, dt, true) > 0.0 {
+            break;
+        }
+    }
 
-    let (mut mass3, mut c) = (mass3, c);
+    let (mut mass3, mut c) = b.mass_cap(&w.chem);
     if b.lacking_at(&w.chem, mass3) {
         if !(b.n() > 1.0 && mass3 >= 1e-3 * b.n() && starve(w, b, &mut tmp.dead)) {
             return Some(LACK);
@@ -1783,29 +1797,34 @@ pub fn release(w: &World, b: &Body, days: f64) -> f64 {
 /// with in `days` and go to its cell's air, and the heat stays in the body. False, and nothing
 /// paid, if they cannot release that much in that time.
 pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
-    if cost <= 0.0 {
-        return true;
-    }
+    cost <= 0.0 || spend(w, b, cost, days, b.interval() as f64 * DAY, false) == 0.0
+}
+
+/// `pay` with the heat released held over `dt` s; returns what was not paid (with `part` it pays what it can, else all or nothing).
+fn spend(w: &mut World, b: &mut Body, cost: f64, days: f64, dt: f64, part: bool) -> f64 {
     let (mass, cap) = b.mass_cap(&w.chem);
     let t0 = b.e / cap.max(1e-9);
-    let paid = pay_at(w, b, cost, days, mass, cap, false) == 0.0;
+    let left = pay_at(w, b, cost, days, mass, cap, part);
     // The heat released stays in the body and leaves through its surface: by the conductance of its
     // genes, cover and walls and what it radiates (`surface`, `radiated`), as in its update (`live`).
     // Its time constant (heat capacity over conductance, hours for a body of kilograms) is far under
     // the days to its next update, so what it makes warms it at a steady rate: spread over the
     // interval to the next update, the heat Q warms it by Q / (g dt) K for that time. The body keeps
-    // that warmth (the mean over the interval of a pulse that decays with the time constant,
-    // Q (1 - exp(-x)) / x, x = g dt / heat capacity: all of it if the time constant is the longer)
-    // and the rest goes to the ground. A cost that leaves it colder than it was is not held back.
+    // that warmth (`hold`) and the rest goes to the ground. A cost that leaves it colder than it was is not held back.
     let (keep, i) = (t0 * b.heat_cap(&w.chem), b.cell as usize);
     if b.e > keep {
-        let cap = b.heat_cap(&w.chem);
-        let x = conductance_to_ground(w, b, mass, t0) * b.interval() as f64 * DAY / cap.max(1e-9);
-        let held = if x < 1e-9 { 1.0 } else { -(-x).exp_m1() / x };
+        let held = hold(w, b, mass, t0, dt);
         w.e_ground[i] += (b.e - keep) * (1.0 - held);
         b.e = keep + (b.e - keep) * held;
     }
-    paid
+    left
+}
+
+/// The share of a heat released over `dt` s that a body of `mass` kg at `t` keeps: the mean over that time of a pulse that
+/// decays with its time constant, (1 - exp(-x)) / x, x = g dt / heat capacity (all of it if the time constant is the longer).
+fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
+    let x = conductance_to_ground(w, b, mass, t) * dt / b.heat_cap(&w.chem).max(1e-9);
+    if x < 1e-9 { 1.0 } else { -(-x).exp_m1() / x }
 }
 
 /// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`

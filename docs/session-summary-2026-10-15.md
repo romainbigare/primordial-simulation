@@ -187,6 +187,12 @@ Things that are open and not built:
   on 15 Oct. With R11 the eaters now live on all seeds and all can move, but on seed 3 they are 4 times fewer, in the
   roster the big kinds die more often (4 of 9 alive at year 60 against 6 of 9), and a learning test fails at its noise
   edge. So R11 is not landed; it is one commit (e13d911). The owner decides (handover, "The rock salt in bodies, R11 and gifts").
+- **A body keeps a temperature** (the owner agreed, 15 Oct): a gene `KEEP_T`; a body colder than it burns fuel to stay
+  at it (handover, "A body keeps a temperature"). Built, not merged. All founders start at 250 K (it does nothing). On seeds 1
+  to 3 (60 years) the gene does not move (249 to 252 K) and the insulation gene does not move: not selected on the mild island,
+  as expected. Plants and eaters as on main (under 2 times). Found: bodies radiate from their own temperature past their
+  insulation, so no body gets under about 3.6 W/K at 30 kg, 3.8 times real fur. The owner decides on putting radiation
+  behind the insulation.
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
 - **The big-brain test:** run on seeds 1 to 3 (64 x 64, 60 years, copies at year 40). It cannot tell.
   The control (same brain, root 11) joins the ordinary eaters' nodes in the first year, so there is no real control.
