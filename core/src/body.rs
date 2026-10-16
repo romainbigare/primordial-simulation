@@ -438,12 +438,10 @@ impl Body {
         let mm = chem.subs[bl.outputs[0].0 as usize].molar_mass * bl.outputs[0].1 as f64;
         bl.inputs.iter().map(|&(k, nu)| nu as f64 * self.heat_of(chem, k as usize, t)).sum::<f64>() / mm
     }
-    /// Can it digest body matter: does it burn it (its catalyst for the reaction that burns the matter
-    /// is on)? A body that cannot takes none in (`choose::wanted`). Read from the genes, so it holds
-    /// for a body that has not updated yet (a child).
+    /// Can it digest body matter: does it break it (`breaks`: its catalyst for the reaction that burns the matter is on)? A body
+    /// that cannot takes none in (`choose::wanted`).
     pub fn digests(&self, chem: &Chemistry) -> bool {
-        let (m, cat) = (chem.matter(), Layout::of(chem).cat);
-        m.is_some_and(|m| (0..chem.reactions.len()).any(|r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)))
+        chem.matter().is_some_and(|m| self.breaks(chem, m))
     }
     /// Digestion: `taken` mol of body matter that this body took in from outside (the
     /// ground, another body, a part, a gift) are broken into its units as they come in, the reverse
@@ -539,19 +537,40 @@ impl Body {
             _ => (share(f) * (mass - self.store[k] * mm) / mm).max(0.0),
         }
     }
+    /// What the body is built of as a material (Bond, 16 Oct 2026), all members: [volume m^3, the sum of volume x Young's modulus,
+    /// the sum of volume x the stress it breaks at] over its living soft tissue (`built` over `Physics::rho_body`, at the numbers of
+    /// body matter) and each solid it builds (`Chemistry::materials`). Its fuel and free liquid are in none of them.
+    pub fn solids(&self, chem: &Chemistry, cfg: &crate::Config) -> [f64; 3] {
+        let Some(m) = chem.matter() else { return [0.0; 3] };
+        let soft = self.built(chem).max(0.0) / cfg.phys.rho_body;
+        let of = |v: f64, s: &crate::chem::Substance| [v, v * s.modulus, v * s.rupture];
+        chem.materials().map(|k| of(self.store[k].max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], &chem.subs[k])).fold(of(soft, &chem.subs[m]), |a, x| [a[0] + x[0], a[1] + x[1], a[2] + x[2]])
+    }
     /// A member's height, m: what what it is built of holds up against its own weight (Bond, 16 Oct 2026), the order of light in
     /// `shade`. A column standing under its own weight buckles past h^3 = 7.837 E I / w (Greenhill 1881; McMahon 1973 found
-    /// trees near a quarter of it), w its weight per length; with the solids it built side by side in one round section (I =
-    /// A^2 / 4 pi, E their mean by volume, A = V / h), h^4 = 7.837 / 4 pi x (sum of E V) x V / (m g), m the member's whole mass
-    /// (its fuel and liquid are load too), V the volume of its living soft tissue (`built` over `Physics::rho_body`, at the modulus
-    /// of body matter) and of each solid it builds (`Chemistry::materials`). Soft tissue alone holds a low body: 0.4 m for a 1 kg
-    /// one at 1 MPa. Without body matter: (mass / `rho_body`)^(1/3).
+    /// trees near a quarter of it), w its weight per length; with its solids side by side in one round section (I = A^2 / 4 pi, E
+    /// their mean by volume, A = V / h), h^4 = 7.837 / 4 pi x (sum of E V) x V / (m g) (`solids`), m the member's whole mass (its
+    /// fuel and liquid are load too). Soft tissue alone holds a low body: 0.4 m for a 1 kg one at 1 MPa. Without body matter:
+    /// (mass / `rho_body`)^(1/3).
     pub fn height(&self, chem: &Chemistry, cfg: &crate::Config) -> f64 {
         let (n, mass) = (self.n(), self.mass(chem));
-        let Some(m) = chem.matter() else { return (mass / n / cfg.phys.rho_body).cbrt() };
-        let soft = self.built(chem) / cfg.phys.rho_body;
-        let (v, ev) = chem.materials().map(|k| (self.store[k].max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], chem.subs[k].modulus)).fold((soft, soft * chem.subs[m].modulus), |(v, ev), (x, e)| (v + x, ev + x * e));
+        if chem.matter().is_none() {
+            return (mass / n / cfg.phys.rho_body).cbrt();
+        }
+        let [v, ev, _] = self.solids(chem, cfg);
         (7.837 / (4.0 * std::f64::consts::PI) * ev * v / (n * mass * cfg.gravity).max(1e-30)).max(0.0).powf(0.25)
+    }
+    /// The energy to break the share `f` of the body, J (Bond, 16 Oct 2026): what it is built of times the stress each breaks at
+    /// (`solids`, J per m^3: the work to crush a solid through its own size), so hard parts protect. A bite pays it
+    /// (`choose::take_body`); a mover pushing through breaks as much as the energy it spends there pays for (`choose::wear`).
+    pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, f: f64) -> f64 {
+        f * self.solids(chem, cfg)[2]
+    }
+    /// Does it break substance `k`: is its catalyst on for a reaction that takes `k`? A body takes in body matter and the solids
+    /// bodies build only if it does (`choose::wanted`). Read from the genes, so it holds for a body that has not updated yet.
+    pub fn breaks(&self, chem: &Chemistry, k: usize) -> bool {
+        let cat = Layout::of(chem).cat;
+        (0..chem.reactions.len()).any(|r| self.genes[cat + r] > 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
     /// The share of solid `k` in what the body builds (`Chemistry::builds`, 16 Oct 2026): its keep gene of `k`, 0..1, the
     /// shares cut together to 0.95 at most; the rest is matter. `usize::MAX`: their sum.

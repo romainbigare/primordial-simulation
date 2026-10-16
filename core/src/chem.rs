@@ -57,6 +57,10 @@ pub struct Substance {
     /// (`Body::height`). For body matter, that of living soft tissue with its liquid.
     #[serde(default)]
     pub modulus: f64,
+    /// The stress at which the solid as a material breaks, Pa (16 Oct 2026; 0: none given): J per m^3 to break what bodies
+    /// build of it (`Body::solids`). For body matter, that of living soft tissue with its liquid.
+    #[serde(default)]
+    pub rupture: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

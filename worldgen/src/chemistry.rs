@@ -45,6 +45,9 @@ struct S {
     /// GPa (`Substance::modulus`); none: 0
     #[serde(default)]
     modulus: f64,
+    /// MPa (`Substance::rupture`); none: 0
+    #[serde(default)]
+    rupture: f64,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +110,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
                 lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
                 lf: s.lf.map_or(9.5 * s.melt, |l| l * 1000.0),
                 modulus: s.modulus * 1e9,
+                rupture: s.rupture * 1e6,
             })
             .collect(),
         reactions: f

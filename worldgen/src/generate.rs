@@ -73,6 +73,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 lv: 88.0 * boil * (0.9 + 0.4 * r.f64()),
                 lf: 9.5 * melt,
                 modulus: 0.0,
+                rupture: 0.0,
             }
         })
         .collect();

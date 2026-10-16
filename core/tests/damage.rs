@@ -302,8 +302,9 @@ fn a_hurt_adult_is_immature_until_it_has_healed() {
     let (mv, v) = (place(&mut w, mover), place(&mut w, v));
     assert!(w.life.bodies[v].adult(&w.chem));
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
-    // 40,000 J break 40% of it (3e-5 kg/J over the 30 kg in the cell, at strength 0 + 0.1).
-    choose::wear(&mut w, i, mv, 40_000.0);
+    // The energy that breaks 40% of it (`Body::breaking`, 16 Oct 2026: by what it is built of; 40,000 J at 3e-5 kg/J before).
+    let e = w.life.bodies[v].breaking(&w.chem, &w.cfg, 0.4);
+    choose::wear(&mut w, i, mv, e);
     let mut b = std::mem::take(&mut w.life.bodies[v]);
     println!("hurt to {:.2} kg of a copy mass of {:.2}", b.built(&w.chem), b.dec(COPY_MASS));
     assert!(!b.adult(&w.chem), "a body torn by 40% is still mature");

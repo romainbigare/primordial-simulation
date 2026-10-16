@@ -516,8 +516,9 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
 }
 
 /// Energy dissipated pushing through the bodies of cell `j` breaks their body matter (partial
-/// damage): each loses the share `f` of its body (`Physics::walk_wear` kg per J over the mass in
-/// the cell, less when stronger) and the stores that matter held spill in the same share
+/// damage): each takes its share of the energy by its mass and loses the share `f` of its body that this pays to break
+/// (`Body::breaking`, 16 Oct 2026: by what it is built of; before, `walk_wear` kg per J, less with the strength gene),
+/// and the stores that matter held spill in the same share
 /// (`body::tear`). A node
 /// loses members when the share is one member's body or more, and else every member loses part of
 /// its matter; an individual lives on smaller (it dies when half of its body is broken, or a store
@@ -535,7 +536,8 @@ pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
         let s = s as usize;
         let mut o = std::mem::take(&mut w.life.bodies[s]);
         let (m, t, built0, matter0) = (o.mass(&w.chem), o.temp(&w.chem), o.built(&w.chem), o.matter_kg(&w.chem));
-        let f = (w.cfg.phys.walk_wear * energy / total / (o.gene(STRENGTH) + 0.1)).min(0.5);
+        // (Its share of the energy, by its mass, breaks what that pays for, `Body::breaking`; half at the most.)
+        let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(0.5);
         broken += m * f;
         let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
         let torn = body::tear(w, &mut o, f, &dead, BROKEN, matter0);
@@ -588,10 +590,10 @@ pub fn regrow(w: &mut World, dt: f64) {
     }
 }
 
-/// Can the body take in substance `k` at temperature `t`: body matter only if it digests it
-/// (`Body::digests`); a body without the catalyst takes none.
+/// Can the body take in substance `k`: body matter and the solids bodies build only if it breaks them (`Body::breaks`), as it
+/// digests what it can break and nothing else; a body without the catalyst takes none.
 fn can_take(chem: &crate::chem::Chemistry, b: &Body, k: usize) -> bool {
-    chem.matter() != Some(k) || b.digests(chem)
+    (chem.matter() != Some(k) && !chem.materials().any(|x| x == k)) || b.breaks(chem, k)
 }
 
 /// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all, for a
@@ -601,7 +603,9 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
     let from = |k: usize| from(k).max(0.0);
     let up = |k: usize| if from(k) > 0.0 && can_take(chem, b, k) { b.gene(lay.upt + k).max(0.0) } else { 0.0 };
     let sum: f64 = (0..chem.ns()).map(up).sum();
-    let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
+    // (A solid bodies build it takes past its own level, 16 Oct 2026: it holds it until its reactions break it down, and what is
+    // left passes back to the ground at its update, `body::shed`.)
+    let room = |k: usize| if chem.materials().any(|x| x == k) { f64::MAX } else { (b.level(chem, k, mass) - b.store[k]).max(0.0) };
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect();
     digest_room(chem, b, &mut m, mass);
     sate(w, b, &mut m, days, mass);
@@ -783,10 +787,6 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mb, b.interval() as f64);
     let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / w.cfg.phys.rho_pass;
     let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
-    if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m) * resist, b.interval() as f64) || away {
-        return;
-    }
-    let mut o = std::mem::take(&mut w.life.bodies[s]);
     // The bite tears this share of the body; the stores it held spill in proportion, less what the taker
     // took of them (a taker that takes more of a store than the share holds takes it from the rest).
     let (built0, matter0, got) = (o.built(&w.chem), o.matter_kg(&w.chem), kg(w, &m));
@@ -797,6 +797,12 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     // the ground); less grazes every member.
     let eats_members = o.n() > 1.0 && weight * o.n() >= 1.0;
     let f = if eats_members { o.store.iter().zip(&m).map(|(s, a)| if *s > 0.0 { a / s } else { 0.0 }).fold(weight, f64::max) } else { weight.max(eaten) }.min(1.0);
+    // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`, 16 Oct 2026).
+    let cost = w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f);
+    if !body::pay(w, b, cost, b.interval() as f64) || away {
+        return;
+    }
+    let mut o = std::mem::take(&mut w.life.bodies[s]);
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
     transfer(w, &mut o, b, &m);
     b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));

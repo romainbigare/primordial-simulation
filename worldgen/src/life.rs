@@ -73,6 +73,12 @@ pub const FIX_GENE: f32 = 9.8;
 /// every founder builds and holds (its keep gene of the solid, `Body::share`, 16 Oct 2026): an initial condition, the same for every
 /// kind, chosen before any run, small so that selection can find what each is worth.
 pub const BUILT_SHARE: f32 = 0.02;
+/// The rows of `KINDS` whose founders break a solid bodies build into the energy-rich solid, where a reaction does it with no gas
+/// (the frame in chemistry 0, reaction 27): the two eaters of remains of the roster, which live on what lies on the ground, as the
+/// small animals of real litter do with the microbes of their gut (16 Oct 2026, an initial condition). They start with that
+/// enzyme at the speed that splits what they hold within one interval at `T_SURF` (a gene of 8.4 to 8.7, the speed a body needs
+/// over the bare reaction, as `FIX_GENE`; it splits their own frame too) and take the solid as they take the energy-rich solid.
+pub const DIGESTERS: [usize; 2] = [5, 6];
 /// The stream of the draw that makes a founder a fixer (`Rng::new(seed, FIX_STREAM, id, Purpose::Body)`).
 const FIX_STREAM: u64 = 0xf1;
 
@@ -603,6 +609,14 @@ fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, r
     genes[lay.keep + liquid] = 0.75;
     genes[lay.keep + rich] = 0.9f32.max((1.1 * kind.store / (1.0 - kind.store)) as f32);
     chem.materials().for_each(|k| genes[lay.keep + k] = BUILT_SHARE);
+    for k in chem.materials().filter(|_| DIGESTERS.contains(&which)) {
+        let gas = |p: &(u16, u16)| chem.phase(p.0 as usize, T_SURF) == Phase::Gas;
+        let split = chem.reactions.iter().position(|rx| rx.inputs.iter().any(|p| p.0 as usize == k) && rx.outputs.iter().any(|p| p.0 as usize == rich) && !rx.inputs.iter().any(gas));
+        if let Some(rx) = split.map(|r| (r, &chem.reactions[r])) {
+            genes[lay.cat + rx.0] = -(10f64.powf(kind.scalars[body::INTERVAL] as f64) * 86_400.0 * rx.1.k * (-rx.1.ea / T_SURF).exp()).log10() as f32;
+            genes[lay.upt + k] = kind.upt[1];
+        }
+    }
     let mut rg = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();

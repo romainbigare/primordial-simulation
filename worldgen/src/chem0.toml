@@ -178,6 +178,8 @@ hf = -1207
 # Young's modulus, GPa (`Body::height`): calcite about 70 to 80 (marble and shell nacre 50 to 70; bone, lime in a soft matrix, 18;
 # from memory): 70.
 modulus = 70
+# The stress it breaks at, MPa (`Body::solids`): calcite as marble 70 to 140 in compression, shells 100 to 300, bone 170 (from memory): 100.
+rupture = 100
 
 [[s]] # 11
 e = [0,0,0,1,0,1,0,0,0]
@@ -370,6 +372,9 @@ hf = -20315.8
 # Young's modulus, GPa, of living soft tissue with its liquid (`Body::height`): 0.1 to 10 MPa (muscle and fat about 0.1, skin and
 # turgid plant tissue 1 to 10: potato and apple flesh 3 to 6; from memory): 1 MPa, the middle of that range on a log scale.
 modulus = 0.001
+# The stress it breaks at, MPa, as living soft tissue (`Body::solids`): 0.1 to 10 (muscle 0.1 to 0.5, skin 5 to 20, turgid plant tissue
+# about 1; from memory): 1.
+rupture = 1
 
 # 23: a salt that exists only dissolved in the liquid, Ca(HCO3)2 (162 g/mol; the real compound is calcium bicarbonate): it
 # holds the liquid's carbon beyond the free gas. CaCO3 + CO2 + H2O -> Ca(HCO3)2, dH -40.3 kJ/mol (Ca2+(aq) -542.8 and
@@ -435,6 +440,9 @@ hf = -986
 # Young's modulus, GPa (`Body::height`): the stems of trees are about 10 GPa along their fibres at 500 kg/m3 (Gibson and Ashby, from
 # memory), a specific stiffness of about 20 MJ/kg, so the cell wall (1,500 kg/m3) about 30.
 modulus = 30
+# The stress it breaks at, MPa (`Body::solids`): the stems of trees about 40 to 50 along their fibres in compression at 500 kg/m3 (from
+# memory), so the cell wall (1,500 kg/m3) about 120.
+rupture = 120
 
 # Reactions: i/o = [[substance, count]], k 1/s, ea K.
 [[r]] # 0
