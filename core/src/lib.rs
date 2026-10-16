@@ -242,6 +242,15 @@ pub struct Physics {
     /// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³
     pub layer: f64,
     pub rho_body: f64,
+    /// The wind at a body, m/s (16 Oct 2026): the air's mean speed near the ground over land, which the boundary layer of
+    /// every body's surface goes by (`body::film`). Flow's air nodes move only as whole columns, at about 0.1 m/s
+    pub wind_ground: f64,
+    /// Forced convection through a surface's boundary layer, mol/(m² s) per (m/s / m)^0.5: its heat conductance is this x
+    /// sqrt(wind / size) x the air's molar heat capacity, and the same over the air's molar heat capacity carries vapour (the
+    /// Lewis relation)
+    pub forced: f64,
+    /// The size of a leaf, m: the length of the boundary layer of a body's capture area (`body::film`)
+    pub leaf_size: f64,
     /// Most a body can take per day of its interval, as a share of the mass it takes by (`Body::supply`:
     /// per member its body, `Body::built`, to the power `intake_exp`), and no more than it can use (`choose::sate`)
     pub take: f64,
@@ -427,6 +436,9 @@ impl Default for Physics {
             lane: 1.0,
             layer: 10.0,
             rho_body: 1e3,
+            wind_ground: 1.7,
+            forced: 0.189,
+            leaf_size: 0.05,
             take: 0.05,
             sweep: 1.0,
             intake_exp: 0.75,
@@ -647,6 +659,11 @@ pub struct Diag {
     /// below what their fuels, their allowance and their spare allowed (`copy::grow`). A count only, not saved.
     #[serde(skip)]
     pub nlim: Vec<Vec<f64>>,
+    /// The land's liquid since the shell last read it, m³ (16 Oct 2026): rain on land cells, evaporation from their ground,
+    /// evaporation from light-eaters and from the other bodies, and what light-eaters took of the ground's liquid (rain they
+    /// caught and what they soaked). A count only, not saved.
+    #[serde(skip)]
+    pub liquid_land: [f64; 5],
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

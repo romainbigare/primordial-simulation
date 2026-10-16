@@ -110,7 +110,8 @@ fn litter_goes_first_order_at_its_constant() {
 
 /// The founders' light gene is raised by `LIGHT_X`, the log10 of the gas a founder light-eater
 /// exchanges in its interval over the liquid it holds (the contact of the light reaction's phases
-/// in a body is its liquid): the constant is that measure.
+/// in a body is its liquid): the constant is that measure, with the `GAS` gene the founders had then (2.187; since 16 Oct
+/// 2026 they start with a leaf's pores, 4.334, which does not change the light reaction's contact).
 #[test]
 fn the_light_shift_is_the_founders_gas_over_their_liquid() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -120,7 +121,7 @@ fn the_light_shift_is_the_founders_gas_over_their_liquid() {
     let (l, g) = (w.life.new_lineage(pcore::body::Lineage { shape, seen: 3, sight: 1, base: vec![], root: 0 }), w.life.new_genome(vec![]));
     let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a founder");
     b.prepare(&w.chem, &w.cfg.phys);
-    let reach = b.k.gas * b.open_area(&w.chem, &w.cfg.phys, b.mass(&w.chem)) * b.interval() as f64;
+    let reach = 10f64.powf(2.187) * b.open_area(&w.chem, &w.cfg.phys, b.mass(&w.chem)) * b.interval() as f64;
     let x = (reach / b.store[LIQ]).log10();
     assert!((x - worldgen::life::LIGHT_X as f64).abs() < 0.01, "a founder exchanges 10^{x} times its liquid");
 }

@@ -82,7 +82,7 @@ const SCALARS: [(f32, f32, f32); body::NSCALAR] = {
 
 const fn scalar(g: usize) -> (f32, f32, f32) {
     match g {
-        body::GAS => (0.3, -1.0, 5.0),
+        body::GAS => (0.3, -1.0, 6.0),
         body::LIQ => (0.3, -4.0, 1.0),
         body::HEAT => (0.3, -2.5, 3.5),
         body::LEAF => (0.3, -4.0, 1.0),
@@ -106,7 +106,7 @@ const fn scalar(g: usize) -> (f32, f32, f32) {
         body::REPAIR => (0.2, -3.0, 3.0),
         // Up to the warmest real bodies keep (birds about 315 K) and down far enough below the coldest ground for an unused
         // level to wander without meeting the wall.
-        body::KEEP_T => (5.0, 200.0, 320.0),
+        body::KEEP_T | body::COOL_T => (5.0, 200.0, 320.0),
         _ => (0.3, -6.0, 18.0),
     }
 }

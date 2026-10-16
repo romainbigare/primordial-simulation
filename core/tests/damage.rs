@@ -342,7 +342,9 @@ fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
     for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal, &mut w.cfg.phys.c_leaf, &mut w.cfg.phys.c_brain] {
         *c = 0.0;
     }
-    let b = eater(&mut w, i, 6.0, 0.0);
+    let mut b = eater(&mut w, i, 6.0, 0.0);
+    // (Nor does it evaporate to cool, since 16 Oct 2026: above its `COOL_T` of 320 K it dried and died of it on day 20.)
+    b.genes[pcore::body::COOL_T] = 400.0;
     let s = place(&mut w, b);
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
     let before = seen(&w, &r, s);

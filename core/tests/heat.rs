@@ -150,7 +150,8 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     assert!(cap / g < 0.1 * dt, "the body's heat does not relax within the interval");
     assert!(rise > 0.0 && (rise * g * dt / cost) > 0.85 && (rise * g * dt / cost) < 1.0, "it warms by {rise} K, the cost over g dt is {}", cost / (g * dt));
     // What it keeps is a small part of the heat made (the rest went to the ground).
-    assert!(kept < 0.01 * cost, "it keeps {kept} J of {cost}");
+    // (A bare body passes only what its still air and radiation take since 16 Oct 2026: its time constant is 3 h, not 0.7, so it keeps 1.3%.)
+    assert!(kept < 0.02 * cost, "it keeps {kept} J of {cost}");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
     // The same work again warms it by as much more.
@@ -162,7 +163,9 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
 
 /// A bigger body of the same genes is warmer for the same work per kg: the heat it makes goes with its mass and its surface,
 /// which its heat leaves by, with the mass to the power 2/3, so it stands above its ground by (mass)^(1/3) times as much (8 times
-/// the body, twice the warmth).
+/// the body, twice the warmth). Since 16 Oct 2026 its boundary layer is thicker too (forced convection goes with size^-1/2), so
+/// a bare body's air takes mass^(1/2) and its radiation mass^(2/3): 8 times the body is 2 to 2.83 times warmer, by the ratio
+/// of its conductances.
 #[test]
 fn a_bigger_body_of_the_same_genes_is_warmer() {
     let mut s = set();
@@ -174,9 +177,11 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
         assert!(pcore::body::pay(w, &mut b, per_kg * mass, 10.0), "it can pay");
         b.temp(&w.chem) - t0
     };
+    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
+    let want = 8.0 * g(w, &small) / g(w, &big);
     let (a, c) = (rise(w, small, 1e5), rise(w, big, 1e5));
-    println!("warmth over the ground for the same work per kg: {a:.4} K, 8 times the body {c:.4} K");
-    assert!(a > 0.0 && (c / a / 2.0 - 1.0).abs() < 0.03, "{a} K and {c} K");
+    println!("warmth over the ground for the same work per kg: {a:.4} K, 8 times the body {c:.4} K ({:.3} times; 8 g / g' = {want:.3})", c / a);
+    assert!(a > 0.0 && (c / a / want - 1.0).abs() < 0.03 && want > 2.0 && want < 2.83, "{a} K and {c} K");
 }
 
 /// Days of a world whose ground is held at `temps[k]` K in the cell `cells[k]` (an edit): the flow and change steps when due, then
@@ -237,6 +242,9 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     (small.genes[lay.min + liquid], small.genes[lay.keep + liquid]) = (0.0, 0.0);
     small.k = Default::default();
     small.prepare(&s.w.chem, &s.w.cfg.phys);
+    // (An eighth of it and that again times 8, 2.5 and 20 kg: bare since 16 Oct 2026, the 163 kg body has no steady state at this
+    // upkeep, its warmth over the ground past T² / (Ea e), about 4 K, and runs away.)
+    let small = scaled(&mut s.w, &small, 0.125);
     let big = scaled(&mut s.w, &small, 8.0);
     let w = &mut s.w;
     // Two cells of high ground (rain does not flood it) in other air nodes (a body would take the air the other breathes).
@@ -286,7 +294,10 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let (s, gas) = (&chem.subs[k], chem.phase(k, t) == pcore::chem::Phase::Gas);
             s.hf + if gas { s.lf + s.lv } else { s.cp * t }
         };
-        let gas: Vec<f64> = chem.air.iter().enumerate().map(|(k, x)| if k == 1 || k == 2 { x * 1e12 } else { 0.0 }).collect();
+        // (The bare burning gets the oxygen its breath brings, not the open air's: with the costs of tissue at a reptile's rate, when
+        // that burning is most of a body's heat, counting the open air put the 163 kg body 17% under its balance; with the breath, 0.2%.)
+        let reach = b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days;
+        let gas: Vec<f64> = chem.air.iter().enumerate().map(|(k, x)| if k == 1 || k == 2 { x * reach } else { 0.0 }).collect();
         let made = |t: f64| {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
             let mut y = x.clone();
@@ -300,7 +311,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * (chem.subs[liquid].lf + chem.subs[liquid].lv)
         };
         let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, &b, mass, t) * days * 86_400.0;
-        let (mut lo, mut hi) = (tg, tg + 3.0);
+        let (mut lo, mut hi) = (tg, tg + 20.0);
         for _ in 0..80 {
             let mid = 0.5 * (lo + hi);
             if lost(mid) < made(mid) { lo = mid } else { hi = mid }
@@ -313,7 +324,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         // been within 2%, not measured again here): `body::live` ran its reactions after its upkeep 9 K below the body, its new liquid coming in with no heat (the
         // bare burning gave 4.9e5 J where 1.1e6 is due, 9% of the heat; fixed, 15 Oct 2026), and this count took 0.95 of the
         // heat where the latent heat of the liquid the burning makes takes 8% more.)
-        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.02,"{} K above the ground, the heat balance says {want} K", rises[n]);
+        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.02, "{} K above the ground, the heat balance says {want} K", rises[n]);
     }
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
@@ -445,6 +456,40 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     println!("keeps 300 K: {t:.3} K (its twin {t_twin:.2} K) on {tg} K ground; burned {burned:.4e} J in an update, lost {lost:.4e} J ({:.3}); with fur {g_fur:.2} W/K", burned / lost);
     assert!((t - 300.0).abs() < 0.1 && t_twin < 290.0, "{t} K, its twin {t_twin} K");
     assert!(burned / lost > 1.0 && burned / lost < 1.15, "burned {burned:e} J, lost {lost:e} J");
+    let (de, dq) = pcore::check::drift(w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}
+
+/// A body keeps its temperature from above by evaporating (16 Oct 2026): a bare resting eater (the founders' `HEAT`, 3.5)
+/// that evaporates above 300 K (`COOL_T`) on ground held at 295 K holds 300 K, the latent heat of what it evaporates carrying
+/// off what its upkeep makes past what its surface passes at 5 K, about 0.6 kg a day; its twin that does not (`COOL_T` 320 K,
+/// the founders') stands warmer. Matter and energy exact. (A furred one at 310 K in 300 K air cannot: this 140 kg body pays
+/// 327 W at 310 K, 5.6 times its 58 W at 290 K, its fur passes 24 W, and the rest is 10.6 kg of liquid a day, a third of what
+/// it holds: tried, it and its twin that does not evaporate both died at their second update, their liquid boiling.)
+#[test]
+fn a_body_keeps_its_temperature_from_above_by_evaporating() {
+    let mut s = set();
+    s.w.cfg.phys.c_build = 0.0;
+    let make = |s: &mut Set, cool: f32| {
+        let mut b = s.eater(0);
+        b.genes[pcore::body::COOL_T] = cool;
+        b.k = Default::default();
+        b.prepare(&s.w.chem, &s.w.cfg.phys);
+        b
+    };
+    let (sweat, dry) = (make(&mut s, 300.0), make(&mut s, 320.0));
+    let (w, cell) = (&mut s.w, sweat.cell as usize);
+    let liquid = worldgen::life::roles(&w.chem).expect("roles").2;
+    let slots = [w.life.add(sweat, w.day, 1), w.life.add(dry, w.day, 1)];
+    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    held_days(w, &[cell], &[295.0], 21);
+    let (a, b) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
+    assert!(a.alive && b.alive);
+    let (t, t_dry) = (a.temp(&w.chem), b.temp(&w.chem));
+    let kg = (b.store[liquid] - a.store[liquid]) * w.chem.subs[liquid].molar_mass;
+    println!("on 295 K ground: evaporating above 300 K, {t:.2} K; not evaporating {t_dry:.2} K; {kg:.1} kg less liquid");
+    assert!((t - 300.0).abs() < 0.5 && t_dry > t + 1.0, "{t} K, the twin {t_dry} K");
+    assert!(kg > 0.0, "{kg} kg");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }

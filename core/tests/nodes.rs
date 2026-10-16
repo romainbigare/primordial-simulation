@@ -281,8 +281,9 @@ fn a_node_acts_on_bonds_through_one_member() {
         let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
         let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
         b.spread = vec![0.01; b.genes.len()];
-        // (their mass stays: no liquid soaked up from the ground, which would add a third to it)
-        b.genes[pcore::body::LIQ] = -4.0;
+        // (their mass stays: no liquid soaked up from the ground, which would add a third to it, and little lost through their
+        // pores, which since 16 Oct 2026 are a leaf's and would take a quarter of it in an update: the old gene)
+        (b.genes[pcore::body::LIQ], b.genes[pcore::body::GAS]) = (-4.0, 2.187);
         if case == 0 {
             // (copying at 100 kg, so they do not copy instead)
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 2.0, b.count / 40.0);
@@ -297,7 +298,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         let node = w.life.alive().find(|b| b.lineage == l && b.count > 1.0).expect("the node");
         if case == 0 {
             assert!(one.len() == 1 && w.parts.parts[p].id(p) == one[0].hold, "the member holds nothing");
-            assert!((node.count + 1.0 - n0).abs() < 1e-9 * n0 && (one[0].mass(&w.chem) / kg - 1.0).abs() < 0.1);
+            assert!((node.count + 1.0 - n0).abs() < 1e-9 * n0 && (one[0].mass(&w.chem) / kg - 1.0).abs() < 0.1, "{} of {n0} members, {} kg against {kg}", node.count, one[0].mass(&w.chem));
         } else {
             assert!(one.is_empty() && (node.count - n0).abs() < 1e-9 * n0, "{} members", node.count);
             assert!(node.genes.iter().zip(&genes).all(|(a, b)| (a - b).abs() < 1e-4), "genes changed");

@@ -273,3 +273,32 @@ Things that are open and not built:
   by not being digested, not by force.
 - **Open:** the litter constants run inside living bodies; real living stems and bones do not rot. The owner decides.
 - Details: handover Section 4, "Bodies built of several materials".
+## 16. One heat network, cooling by evaporating, roots that refill (16 Oct 2026; a branch of main cc86483, not merged)
+
+- **One heat network for every body:** core, coat (`HEAT`), outer surface (skin and both faces of the leaf), still air and
+  radiation in parallel. The coat rule is gone. The founders' old contact cannot be kept (eaters 64 kg: 55 W/K, a bare
+  body passes at most 15.5): they start bare, `HEAT` 3.5. Fur gives 0.9 W/K for 31 kg.
+- **Cooling by evaporating:** a new gene `COOL_T`, the mirror of `KEEP_T`; above it a body evaporates what holds it
+  there, limited by its still air (Lewis relation), the air's deficit and its liquid's safe minimum. One level was
+  measured and failed (eaters dried themselves out). Founders at 320 K; not selected on the mild island. A furred body
+  cannot rest at 310 K: it would need 10.6 kg of liquid a day.
+- **Roots refill:** the soak is a flow along the contact solved exactly over the update. Plants are dry 1 to 2% of the
+  time (main 19 to 25%), but transpiration stays 0.04 to 0.06 m a year (real 0.3 to 0.6): it is set by the breath (`GAS`).
+- **Life:** eaters 5 to 20 times fewer at year 60 (they take off later); **the roster's 0.1 kg light-eaters die out on
+  seeds 1 and 2** (already with the network alone, seed 2), big kinds 3 of 9 alive (main 5). Not for merging as it is.
+- Details: handover, "One heat network, cooling by evaporating, roots that refill".
+
+## 17. Air by wind and size, a leaf's pores, what flows through a plant (16 Oct 2026, on main 6aa6ccd; not merged)
+
+- Every body's boundary layer goes by the wind near the ground (1.7 m/s, anchored: Flow has no wind there) and its size;
+  the `GAS` gene is a stomatal conductance, light-eaters start with a real leaf's (0.25 mol/(m2 s)); pores close as a body
+  dries; a soaking plant loses what flows through it. **Transpiration 0.31 to 0.32 m a year (main 0.04 to 0.06), 48 to 50%
+  of the land's evaporation (real about 60%).** Kind 3 lives on all roster seeds.
+- **A colder island:** the carbon gas falls to 250 ppm (140 to 180 in the roster), the coldest month is 1.5 to 5 K colder,
+  animals freeze: eaters 2 to 6 times fewer, the roster's 15 to 1,800 times, the big kinds lost on 2 seeds. Not a bug
+  found; an emergent loop. Not for merging by the rule; the owner decides.
+- The plants' warmth over the ground was the tape's measure (a body's temperature kept since its update); fixed. The 17% gap
+  of the heat-balance test was the test's oxygen; fixed.
+- **Resting upkeep at a cold-blooded rate: measured, not landed** (reverted): strength became free, plants walked and
+  trampled the eaters.
+- Details: handover, "Air by wind and size".

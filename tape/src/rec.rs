@@ -57,6 +57,8 @@ struct Social {
     hurt: Vec<f64>,
     /// Members that could build in the year, by starting kind: [tried, held back by any mineral, by the first, by the second...] (the core's tally, `Diag::nlim`)
     nlim: Vec<Vec<f64>>,
+    /// The land's liquid in the year, m³ (`Diag::water`)
+    water: [f64; 5],
     months: String,
     /// Members born in each month by starting kind, one row per row of `months` (after its
     /// header), written as the last columns of `months.csv` (`root_<k>_births`)
@@ -151,13 +153,14 @@ struct Root {
     /// The `ALLOC` and `CHILD` genes by members
     alloc: f64,
     child: f64,
-    genes: [f64; 8],
+    genes: [f64; 9],
     /// Activity (`Body::activity`) summed over the members, the members below 0.5, and the `WET` gene by members
     act: f64,
     dry: f64,
     wet: f64,
     /// The members' temperature above their ground's (`Body::temp`), K, summed by members
     warm: f64,
+    warm_n: f64,
     /// Each mineral (`Chemistry::minerals`) their stores hold, kg (15 Oct 2026)
     mineral: Vec<f64>,
     /// 16 Oct 2026 (several built materials): dry mass (all but the key liquids), the fuel (the first input of growth), each solid
@@ -169,14 +172,14 @@ struct Root {
 
 impl Root {
     fn new(nr: usize) -> Self {
-        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 8], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, mineral: Vec::new(), solid: Vec::new(), cat: vec![(0.0, 0.0); nr] }
+        Root { members: 0.0, bodies: 0.0, life: 0.0, mass: 0.0, matter: 0.0, body: 0.0, copy_mass: 0.0, past_copy: 0.0, brood: 0.0, alloc: 0.0, child: 0.0, genes: [0.0; 9], act: 0.0, dry: 0.0, wet: 0.0, warm: 0.0, warm_n: 0.0, mineral: Vec::new(), solid: Vec::new(), cat: vec![(0.0, 0.0); nr] }
     }
 }
 
 /// The genes averaged per starting kind, and their column names (`root_<k>_<name>`); the repair gene is the old
 /// `root_<k>_repair`, so it comes last here and is printed in its old place.
-const GENES: [usize; 8] = [pcore::body::GAS, pcore::body::LEAF, pcore::body::COPY_MASS, pcore::body::INTERVAL, pcore::body::HIDDEN, pcore::body::HEAT, pcore::body::KEEP_T, pcore::body::REPAIR];
-const GENE_NAMES: [&str; 7] = ["gas", "leaf", "copy_log", "interval", "hidden", "heat", "keep_t"];
+const GENES: [usize; 9] = [pcore::body::GAS, pcore::body::LEAF, pcore::body::COPY_MASS, pcore::body::INTERVAL, pcore::body::HIDDEN, pcore::body::HEAT, pcore::body::KEEP_T, pcore::body::COOL_T, pcore::body::REPAIR];
+const GENE_NAMES: [&str; 8] = ["gas", "leaf", "copy_log", "interval", "hidden", "heat", "keep_t", "cool_t"];
 /// The first columns of `months.csv`; `root_<k>_births` for each starting kind follow.
 const MONTHS: &str = "year,month,mobile,mean_y,mean_z,mean_dy,mean_dz,inside,t_mobile,spent,spent_y";
 /// Death causes in the order of the core's constants (`LACK` .. `AGE`).
@@ -433,6 +436,7 @@ impl Recorder {
             self.social.moves = std::mem::take(&mut w.diag.moves);
             self.social.hurt = std::mem::take(&mut w.diag.hurt);
             self.social.nlim = std::mem::take(&mut w.diag.nlim);
+            self.social.water = std::mem::take(&mut w.diag.liquid_land);
             self.social.tally = std::mem::take(&mut w.parts.tally);
         }
         let c = Ctx::new(w);
@@ -589,7 +593,13 @@ impl Recorder {
                 r.brood += b.brooded(&w.chem) * w.chem.matter().map_or(0.0, |m| w.chem.subs[m].molar_mass);
                 let a = b.activity(&w.chem, &w.cfg.phys);
                 (r.act, r.dry, r.wet) = (r.act + n * a, r.dry + n * (a < 0.5) as u8 as f64, r.wet + n * b.gene(pcore::body::WET));
-                r.warm += n * (b.temp(&w.chem) - c.f.t[b.cell as usize]);
+                // (Only bodies updated in the last 5 days, against the ground temperature their update relaxes them to, that of the
+                // last flow step: a body keeps the temperature its update left it at while the ground's moves, so older ones read the
+                // ground's change since, 20 to 30 K for some on frozen ground in winter, 16 Oct 2026.)
+                if w.day.saturating_sub(b.last) < 5 {
+                    let tg = w.scratch.temps().0.get(b.cell as usize).copied().unwrap_or(c.f.t[b.cell as usize]);
+                    (r.warm, r.warm_n) = (r.warm + n * (b.temp(&w.chem) - tg), r.warm_n + n);
+                }
                 r.mineral.resize(minerals.len(), 0.0);
                 for (x, &(k, _)) in r.mineral.iter_mut().zip(&minerals) {
                     *x += b.store[k] * w.chem.subs[k].molar_mass;
@@ -621,6 +631,7 @@ impl Recorder {
         let n = w.grid.n() as f64;
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let tot = check::totals(w);
+        let land_area = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).count().max(1) as f64 * w.grid.area();
         let land_liquid: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| c.f.depth[i]).sum::<f64>() * w.grid.area();
         // 15 Oct 2026 (soil water): of it, the liquid that stands (what the pores of the loose ground do not hold, `body::env_of`).
         let land_stands: f64 = (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| pcore::body::env_of(w, i)[1]).sum::<f64>() * w.grid.area();
@@ -666,6 +677,13 @@ impl Recorder {
             ("wet_land".to_string(), "1", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0 && pcore::body::env_of(w, i)[1] > 0.0).count() as f64 / (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).count().max(1) as f64),
             ("deep_land".to_string(), "km3", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| (0..w.chem.ns()).filter(|&k| w.chem.phase(k, c.f.t[i]) == pcore::chem::Phase::Liquid).map(|k| w.deep.get(k * w.grid.n() + i).copied().unwrap_or(0.0) * w.chem.molar_volume(k, pcore::chem::Phase::Liquid)).sum::<f64>()).sum::<f64>() / 1e9),
             ("rain".to_string(), "mol/m2/s", w.diag.rain.iter().map(|&v| v as f64).sum::<f64>() / n),
+            // 16 Oct 2026: the land's liquid in the year, m over the land: rain, evaporation from the ground, from light-eaters
+            // and from the other bodies, and what light-eaters took of the ground's liquid (rain caught and soaked).
+            ("water_rain".to_string(), "m/yr", self.social.water[0] / land_area),
+            ("water_ground".to_string(), "m/yr", self.social.water[1] / land_area),
+            ("water_plants".to_string(), "m/yr", self.social.water[2] / land_area),
+            ("water_animals".to_string(), "m/yr", self.social.water[3] / land_area),
+            ("water_plants_took".to_string(), "m/yr", self.social.water[4] / land_area),
             ("bodies".to_string(), "1", bodies),
             ("plants".to_string(), "1", light_eaters),
             ("animals".to_string(), "1", bodies - light_eaters),
@@ -718,7 +736,7 @@ impl Recorder {
             let stand_adult = st.root_stand_adult.get(k).copied().unwrap_or(0.0) / st.stand_months.max(1.0);
             let (young, adult) = (st.root_young.get(k).copied().unwrap_or(0.0), st.root_adult.get(k).copied().unwrap_or(0.0));
             let c = |n: &str| format!("root_{k}_{n}");
-            row.extend([(c("members"), "1", v.members), (c("kg"), "kg", v.mass), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[7]))]);
+            row.extend([(c("members"), "1", v.members), (c("kg"), "kg", v.mass), (c("bodies"), "1", v.bodies), (c("life"), "yr", per(v.life)), (c("repair"), "1", per(v.genes[8]))]);
             row.extend(CAUSES.iter().zip(d).map(|(n, x)| (c(&format!("died_{n}")), "1/yr", x)));
             row.extend([
                 (c("births"), "1/yr", births.get(k).copied().unwrap_or(0.0)),
@@ -741,8 +759,8 @@ impl Recorder {
                 (c("activity"), "1", per(v.act)),
                 (c("dry"), "1", per(v.dry)),
                 (c("wet_gene"), "log10", per(v.wet)),
-                // 15 Oct 2026: how much warmer the members are than the ground they stand on (`Body::temp` less the cell's), K, mean by members.
-                (c("temp"), "K", per(v.warm)),
+                // 15 Oct 2026: how much warmer the members are than the ground they stand on (`Body::temp` less the cell's), K, mean by members updated in the last 5 days (16 Oct 2026).
+                (c("temp"), "K", if v.warm_n > 0.0 { v.warm / v.warm_n } else { f64::NAN }),
                 // 14 Oct 2026: the genes of reproduction (means by members: the share of building that goes to offspring, and a
                 // child's body as log10 of its share of the copy mass) and the brood as a share of the members' mass.
                 (c("alloc"), "1", per(v.alloc)),
@@ -766,7 +784,7 @@ impl Recorder {
                 row.push((c(&format!("nlim{q}")), "1", st.nlim.get(k).map_or(f64::NAN, |x| x.first().filter(|&&t| t > 0.0).map_or(f64::NAN, |t| x[2 + q] / t))));
                 row.push((c(&format!("nstore{q}")), "1", if v.body > 0.0 { v.mineral.get(q).copied().unwrap_or(0.0) / v.body } else { f64::NAN }));
             }
-            row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), match *n { "hidden" => "1", "keep_t" => "K", _ => "log10" }, per(x))));
+            row.extend(GENE_NAMES.iter().zip(&v.genes).map(|(n, &x)| (c(n), match *n { "hidden" => "1", "keep_t" | "cool_t" => "K", _ => "log10" }, per(x))));
             for r in (0..nr).filter(|&r| v.cat[r].1 > 0.0 || ever.contains(&(k, r))) {
                 row.push((c(&format!("cat_{r}")), "log10", if v.cat[r].1 > 0.0 { v.cat[r].0 / v.cat[r].1 } else { f64::NAN }));
                 row.push((c(&format!("cat_{r}_on")), "1", per(v.cat[r].1)));
