@@ -75,6 +75,11 @@ fn walls_keep_a_body_warm() {
     b.store[k] *= 1.3;
     // (It does not grow: a warm body builds faster, the pace of its temperature, and would burn the fuel of its month.)
     w.cfg.phys.c_build = 0.0;
+    // (And it pays a mammal's upkeep, the costs of tissue before 16 Oct 2026: at a reptile's resting rate it makes too little
+    // heat for walls to show, 0.06 K inside against -0.04 outside.)
+    for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {
+        *c /= 0.068;
+    }
     let mut inside = w.clone();
     inside.life.bodies[slot].inside = inside.parts.parts[parts[0]].id(parts[0]);
     let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];

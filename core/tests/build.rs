@@ -1148,8 +1148,10 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(1.4);
-    let (cheap, r_cheap) = run(1.0);
+    // (Times the costs of tissue before 16 Oct 2026, when they fell to a reptile's resting rate, 0.068 of them: at those its
+    // ceiling is many times higher and neither body levels off within the year.)
+    let (full, r_full) = run(1.4 / 0.068);
+    let (cheap, r_cheap) = run(1.0 / 0.068);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).
     let rel = |x: &[f64]| x[5] / x[1] - 1.0;

@@ -242,8 +242,8 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     (small.genes[lay.min + liquid], small.genes[lay.keep + liquid]) = (0.0, 0.0);
     small.k = Default::default();
     small.prepare(&s.w.chem, &s.w.cfg.phys);
-    // (An eighth of it and that again times 8, 1.5 and 12 kg: bare since 16 Oct 2026, 12 kg and 98 kg have no steady state at this upkeep,
-    // their warmth over the ground past T² / (Ea e), about 4 K, and run away.)
+    // (An eighth of it and that again times 8, 2.5 and 20 kg, since 16 Oct 2026: the 163 kg body stood 17% under its balance,
+    // not explained; at a reptile's resting rate most of its heat is the bare burning of its stores.)
     let small = scaled(&mut s.w, &small, 0.125);
     let big = scaled(&mut s.w, &small, 8.0);
     let w = &mut s.w;
@@ -318,9 +318,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         // been within 2%, not measured again here): `body::live` ran its reactions after its upkeep 9 K below the body, its new liquid coming in with no heat (the
         // bare burning gave 4.9e5 J where 1.1e6 is due, 9% of the heat; fixed, 15 Oct 2026), and this count took 0.95 of the
         // heat where the latent heat of the liquid the burning makes takes 8% more.)
-        // (Bare since 16 Oct 2026: 1% and 4% under; the 12 kg body, 4 K over its ground, near where its warmth would feed its upkeep past any
-        // steady state, still creeps up after 90 days.)
-        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.05, "{} K above the ground, the heat balance says {want} K", rises[n]);
+        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.02, "{} K above the ground, the heat balance says {want} K", rises[n]);
     }
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
@@ -466,6 +464,11 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
 fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     let mut s = set();
     s.w.cfg.phys.c_build = 0.0;
+    // (It pays a mammal's upkeep, the costs of tissue before 16 Oct 2026: at a reptile's resting rate it stands 0.8 K over the
+    // ground and has little to shed.)
+    for c in [&mut s.w.cfg.phys.c_basal, &mut s.w.cfg.phys.c_cat, &mut s.w.cfg.phys.c_strength, &mut s.w.cfg.phys.c_learn, &mut s.w.cfg.phys.c_signal] {
+        *c /= 0.068;
+    }
     let make = |s: &mut Set, cool: f32| {
         let mut b = s.eater(0);
         b.genes[pcore::body::COOL_T] = cool;
