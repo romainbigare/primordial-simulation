@@ -287,3 +287,14 @@ Things that are open and not built:
 - **Life:** eaters 5 to 20 times fewer at year 60 (they take off later); **the roster's 0.1 kg light-eaters die out on
   seeds 1 and 2** (already with the network alone, seed 2), big kinds 3 of 9 alive (main 5). Not for merging as it is.
 - Details: handover, "One heat network, cooling by evaporating, roots that refill".
+
+## 17. Air by wind and size, a leaf's pores; resting upkeep at a cold-blooded rate (16 Oct 2026, on main 9967317; not merged)
+
+- **(a)** Every body's boundary layer goes by the wind near the ground (1.7 m/s, anchored: Flow has no wind there) and
+  its size; the `GAS` gene is a stomatal conductance, light-eaters start with a real leaf's (0.25 mol/(m2 s)); pores close
+  as a body dries; a soaking plant loses what flows through it. **Transpiration 0.30 to 0.33 m a year (main 0.04 to 0.05),
+  47 to 51% of the land's evaporation (real about 60%).** Eaters 2 to 3 times fewer; roster eaters 9 to 600 times fewer,
+  the big kinds lost; carbon gas 145 to 170 ppm in the roster (main 210 to 240). Kind 3 lives on all seeds.
+- **(b)** The five costs of tissue x 0.068, to a reptile's resting rate. It breaks the eaters (seeds 1 and 2, all roster
+  seeds): the light-eaters walk (strength is a gene and now nearly free) and trample them; the eaters are not denser.
+- Not for merging as it is. Details: handover, "Air by wind and size".
