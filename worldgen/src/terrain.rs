@@ -151,6 +151,8 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         light_keep: Vec::new(),
         deep: Vec::new(),
         e_deep: Vec::new(),
+        heat_pool: vec![0.0; n],
+        heat_keep: Vec::new(),
     };
     world.ledger.imposed_elems = vec![0.0; world.chem.n_elements];
 

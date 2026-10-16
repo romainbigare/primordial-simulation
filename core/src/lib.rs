@@ -724,6 +724,14 @@ pub struct World {
     pub deep: Vec<f64>,
     #[serde(default)]
     pub e_deep: Vec<f64>,
+    /// Heat set aside in each cell for what its bodies draw from the ground between their updates, J (below 0: given to the
+    /// ground ahead): each survey holds here what each body drew a second at its last update times the time since
+    /// (`body::survey`), so the ground pays it as it goes and a body's update settles only the difference (`body::live`).
+    #[serde(default)]
+    pub heat_pool: Vec<f64>,
+    /// Per body slot: the heat it drew from the ground at its last update, W, with the slot's generation.
+    #[serde(default)]
+    pub heat_keep: Vec<(u32, f32)>,
 }
 
 impl World {

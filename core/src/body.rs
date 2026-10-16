@@ -1107,6 +1107,21 @@ pub fn survey(w: &mut World) {
         let over = (light_pool[i] - claim[i]).max(0.0);
         (light_pool[i], e_ground[i]) = (light_pool[i] - over, e_ground[i] + over);
     }
+    // The heat its bodies drew from the ground at their last update goes on being drawn as time passes: the cell holds aside
+    // what each would settle now at that rate (and gives back what none can claim), as far as the ground has it.
+    let mut owed = vec![0.0; n];
+    for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
+        let q = w.heat_keep.get(slot).filter(|k| k.0 == b.gen).map_or(0.0, |k| k.1 as f64);
+        owed[b.cell as usize] += q * w.day.saturating_sub(b.last) as f64 * DAY;
+    }
+    w.heat_pool.resize(n, 0.0);
+    for i in 0..n {
+        let mut d = owed[i] - w.heat_pool[i];
+        if d > 0.0 {
+            d = d.min(crate::heat_above_floor(w.e_ground[i], w.heat_cap_ground(i)));
+        }
+        (w.heat_pool[i], w.e_ground[i]) = (w.heat_pool[i] + d, w.e_ground[i] - d);
+    }
     if monthly && w.day > 0 {
         choose::regroup(w);
         let d = &mut w.diag;
@@ -1558,7 +1573,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks
     // up liquid): found when first needed, but before the body soaks anything up.
     let keep = w.keep_of(slot, b.gen) as f64;
-    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, light_pool, light_keep, diag, life, canopy, .. } = w;
+    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, light_pool, light_keep, diag, life, canopy, heat_pool, heat_keep, .. } = w;
     let mut gcap = None;
     macro_rules! cap {
         () => {
@@ -1795,7 +1810,18 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         // The ground pays the difference (the light is already in it, but for what was set aside
         // and taken); if it cannot, the body ends colder.
         let give = e1 - b.e - heat + lit - took;
-        let got = crate::draw(&mut e_ground[i], ledger, cap!(), give);
+        // What the cell held aside for it since its last update pays first (`survey`), as far as it goes the same way.
+        let set = heat_keep.get(slot).filter(|k| k.0 == b.gen).map_or(0.0, |k| k.1 as f64) * dt;
+        let pool = heat_pool.get(i).copied().unwrap_or(0.0);
+        let from = if give * set > 0.0 && give * pool > 0.0 { give.signum() * give.abs().min(set.abs()).min(pool.abs()) } else { 0.0 };
+        if from != 0.0 {
+            heat_pool[i] -= from;
+        }
+        let got = from + crate::draw(&mut e_ground[i], ledger, cap!(), give - from);
+        if heat_keep.len() <= slot {
+            heat_keep.resize(slot + 1, (u32::MAX, 0.0));
+        }
+        heat_keep[slot] = (b.gen, (got / dt) as f32);
         let e1 = if got == give { e1 } else { e1 - (give - got) };
         let out = e1 * c_out / ct;
         (b.e, e_air[j]) = (e1 - out, e_air[j] + out);

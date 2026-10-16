@@ -45,7 +45,7 @@ pub fn totals(w: &World) -> Totals {
         }
     }
     // Light set aside for bodies counts as heat until they store it.
-    w.e_ground.iter().chain(&w.e_air).chain(&w.light_pool).chain(&w.e_deep).for_each(|&e| thermal.add(e));
+    w.e_ground.iter().chain(&w.e_air).chain(&w.light_pool).chain(&w.e_deep).chain(&w.heat_pool).for_each(|&e| thermal.add(e));
     for b in w.life.alive() {
         b.store.iter().zip(subs.iter_mut()).for_each(|(&a, s)| s.add(a));
         thermal.add(b.e);
@@ -129,7 +129,7 @@ pub fn hash(w: &World) -> u64 {
             eat(&mut h, x.to_bits());
         }
     }
-    for &(g, k) in &w.light_keep {
+    for &(g, k) in w.light_keep.iter().chain(&w.heat_keep) {
         eat(&mut h, g as u64 | (k.to_bits() as u64) << 32);
     }
     for x in w.life.groups.iter().flat_map(|g| &g.rows) {
