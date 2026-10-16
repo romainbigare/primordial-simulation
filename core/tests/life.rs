@@ -360,6 +360,9 @@ fn cover_keeps_a_body_warm() {
             c.cell = i as u32;
             c.adj.fill(-3.0);
             c.adj[0] = 3.0;
+            // (With the old pores, 16 Oct 2026: with a leaf's, 10 kg/m² of plants transpire more than the soil gives, dry out and thin to
+            // 5.7 kg/m² in the month, and the test is of the cover, not of their liquid.)
+            (c.genes[pcore::body::GAS], c.k) = (2.187, Default::default());
             covered.life.add(c, covered.day, 1);
             pcore::step(&mut w);
             pcore::step(&mut covered);
