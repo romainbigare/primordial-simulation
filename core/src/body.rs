@@ -337,8 +337,8 @@ impl Body {
     /// `h` the most share of its mass it keeps of it (the keep gene, below 0.95, `level`), so a body
     /// is its matter over 1 - `h`, and no more than its matter and all its liquid (a body short of
     /// liquid is as big as it is wet). The fuel it stores and liquid held past `h` are not body.
-    /// The light it catches and the gas it breathes (its leaf, `visible`, `open_area`), the height
-    /// order of `shade` and the safe minimums go by it; intake, upkeep and heat by the whole mass.
+    /// The light it catches and the gas it breathes (its leaf, `visible`, `open_area`) and the safe minimums go by it;
+    /// intake, upkeep and heat by the whole mass.
     /// A chemistry with no body matter (`Chemistry::build`): the whole mass.
     pub fn size(&self, chem: &Chemistry) -> f64 {
         if chem.matter().is_none() {
@@ -353,7 +353,7 @@ impl Body {
     /// (`copy::grow`), what maturity reads (`adult`) and a child is counted in (`copy::copy`), and what a body takes,
     /// builds, pays to keep, wears, pushes with and catches light with go by. Without body matter: `size`.
     /// The liquid a body keeps is where its chemistry runs (`activity`), its heat and its volume
-    /// (`size`: height in shade), and gives no free capability.
+    /// (`size`), and gives no free capability.
     pub fn built(&self, chem: &Chemistry) -> f64 {
         if chem.matter().is_none() {
             return self.size(chem);
@@ -516,7 +516,8 @@ impl Body {
     /// carries: for a key liquid the largest share of the body it may make up, `h` (below 0.95),
     /// so it holds `h` / (1 - `h`) of its matter and its body is its matter over 1 - `h`
     /// (`size`); for every other substance but body matter, kg of it per kg of its body (`size`;
-    /// 0.9 at the start, more for a kind placed with more fuel than that). Body matter itself is
+    /// 0.9 at the start, more for a kind placed with more fuel than that); for a solid it builds
+    /// (`Chemistry::materials`), what its share in what it builds makes of its matter (`share`). Body matter itself is
     /// a share of the whole mass. Liquid caught, taken or put stops there; the liquid a body
     /// keeps is that of its body matter, not of the brood. It bounds the stores, not the size.
     /// `mass` is the whole mass, for matter and for a chemistry with none.
@@ -1126,11 +1127,10 @@ fn intercept(x: f64) -> f64 {
     if x > 1e-9 { -(-x).exp_m1() / x } else { 1.0 - 0.5 * x }
 }
 
-/// Light passes through the bodies of a cell from the tallest member down: a member's height is
-/// `(body / rho_body)^(1/3)` (a body has no shape yet; its body, `Body::size`, not its fuel or
-/// the liquid it holds), so the order is that of member body mass, and
+/// Light passes through the bodies of a cell from the tallest member down: a member's height is what
+/// it is built of holds up against its weight (`Body::height`, 16 Oct 2026), and
 /// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
-/// `1 - exp(-x)` of what reaches it, so a big member shades a small one and size pays. Together
+/// `1 - exp(-x)` of what reaches it, so a tall member shades a low one and holding up pays. Together
 /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
 /// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
 fn shade(w: &mut World) {
@@ -1773,7 +1773,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 }
 
 /// A body is not a quarry: of what it holds besides its liquid, matter, gases and the fuel it burns, the minerals
-/// (`Chemistry::minerals`) go back to the ground past the level it keeps (`Body::level`), and anything else (a solid left by a salt
+/// (`Chemistry::minerals`) and the solids it builds (`Chemistry::materials`: what it took of one and did not break passes
+/// through) go back to the ground past the level it keeps (`Body::level`), and anything else (a solid left by a salt
 /// it held breaking down) all of it, with its share of the heat. Digestion (`Body::digest`) and its own burning of matter give it more
 /// than it builds with: an eater that kept it would grow without end and, its room full, stop taking
 /// matter. A plant takes only up to the level (`choose::wanted`), so for it the minerals shed nothing.

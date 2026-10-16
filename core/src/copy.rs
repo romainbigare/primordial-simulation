@@ -378,7 +378,8 @@ pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
 /// growth, so with `ALLOC` 1 it stops at maturity and with less it grows all its life. The liquid that
 /// goes with new matter comes by soaking (`live`). A kg of matter costs `c_copy` of work and 1.11 kg
 /// of the solid converted (6 x 30 g for 162 g) besides, 1.75 kg of it with the fuel the work burns
-/// (62% efficient, as growth in life). Returns whether it built.
+/// (62% efficient, as growth in life). The other solids it can build (`Chemistry::builds`, 16 Oct 2026) it builds the same
+/// way, first, each in its share (`Body::share`). Returns whether it built anything.
 pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let (chem, p) = (&w.chem, &w.cfg.phys);
     let Some(bl) = chem.build.clone() else { return false };
