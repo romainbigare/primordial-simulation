@@ -173,11 +173,16 @@ Things that are open and not built:
 - **Erosion is very slow in the first 10 years:** closed. The measure counted dead body matter piling up on the land as rock;
   without it the land loses 0.07 to 0.085 mm a year from the first year (handover, "Erosion at real rates").
 - **The sea floor uses the air's oxygen,** and the sea's carbon reaction takes gas from the whole air
-  column, not from the water. **Built, not merged** (`docs/reports/sea-floor-film-not-merged.patch`): ground under
-  standing liquid reacts with the dissolved gas through the liquid's film. It is right physics, but 52 to 70% of the
-  land stays waterlogged, so it slows rotting on most of the land and moves the carbon gas by +23 to -65 ppm. On the
-  way, `seep` was corrected (3.6e-6, a wrong sum) and drainage into the ground below the loose layer was built
-  (merged). The land is still too wet: real land drains into channels a few hundred metres apart inside a 2 km cell.
+  column, not from the water. **Closed on 16 Oct 2026 (branch, not merged yet):** ground under standing liquid
+  reacts with the dissolved gas through the liquid's film. It waited because 52 to 56% of the land stood waterlogged.
+  The water budget showed why: rain 0.72 to 0.75 m a year, 58% evaporated, 30% ran off, the rest filled basins;
+  standing liquid evaporated at half the open rate, wet soil at 0.35 to 0.39 of it. Now the bed's store and the wet
+  loose ground drain to channels inside each cell (Darcy's law over a 250 m hillslope, one anchored number) and wet
+  ground evaporates at the open rate: waterlogged land 10 to 11% (half of it basins), evaporation 67 to 69% of the rain.
+  With that the film moves the carbon gas by -1 to -6 ppm at year 60 (handover, "Soil water" and "The sea floor
+  reacts"). Found on the way: plants give 0.27 to 0.36 m of liquid a year to the air (real 0.3 to 0.6), but they
+  catch 5 to 6 m a year from the air's vapour (7 times the rain) and soak under 1 mm from the ground, so the soil's
+  liquid never goes through plants. Not changed (bodies, `body::live`): the owner decides.
   The 2/3 power of the sea's store comes from the pair's contacts, not from the gas source: still open.
 - **Review 7 items:** R4 (the liquid shortcut) is built (the living body is matter over 1 - 0.75); R5 was done by the energy
   ceiling; R6 is not built: `c_build` is anchored at 1e4 to real P/B instead (tuned 63 -> 62). Liquid made in a body above its limit drains out (R11): ready, not landed (below). Plants that
@@ -203,7 +208,7 @@ Things that are open and not built:
    carbon settles.
 2. **The small-cell world** for the nodes-against-individuals check, with plants included.
 3. **Fix the open problems** that the runs confirm: done in the follow-up on 15 Oct (above). Left for the owner:
-   R11 (one commit), drainage inside a cell (channel spacing) before the sea floor's film change can land, a solid
+   R11 (one commit), the plants' liquid that comes from the air and not the soil (above), a solid
    store of the rock element in animals, product inhibition of fixing, a control that does not merge for the big-brain
    test, and `bump` (tuned) now decides whether a body can move.
 4. **Core size:** two simplify passes (same history bit for bit) took it from 8,707 to 8,467 lines (6% over 8,000).
