@@ -288,13 +288,17 @@ Things that are open and not built:
   seeds 1 and 2** (already with the network alone, seed 2), big kinds 3 of 9 alive (main 5). Not for merging as it is.
 - Details: handover, "One heat network, cooling by evaporating, roots that refill".
 
-## 17. Air by wind and size, a leaf's pores; resting upkeep at a cold-blooded rate (16 Oct 2026, on main 9967317; not merged)
+## 17. Air by wind and size, a leaf's pores, what flows through a plant (16 Oct 2026, on main 6aa6ccd; not merged)
 
-- **(a)** Every body's boundary layer goes by the wind near the ground (1.7 m/s, anchored: Flow has no wind there) and
-  its size; the `GAS` gene is a stomatal conductance, light-eaters start with a real leaf's (0.25 mol/(m2 s)); pores close
-  as a body dries; a soaking plant loses what flows through it. **Transpiration 0.30 to 0.33 m a year (main 0.04 to 0.05),
-  47 to 51% of the land's evaporation (real about 60%).** Eaters 2 to 3 times fewer; roster eaters 9 to 600 times fewer,
-  the big kinds lost; carbon gas 145 to 170 ppm in the roster (main 210 to 240). Kind 3 lives on all seeds.
-- **(b)** The five costs of tissue x 0.068, to a reptile's resting rate. It breaks the eaters (seeds 1 and 2, all roster
-  seeds): the light-eaters walk (strength is a gene and now nearly free) and trample them; the eaters are not denser.
-- Not for merging as it is. Details: handover, "Air by wind and size".
+- Every body's boundary layer goes by the wind near the ground (1.7 m/s, anchored: Flow has no wind there) and its size;
+  the `GAS` gene is a stomatal conductance, light-eaters start with a real leaf's (0.25 mol/(m2 s)); pores close as a body
+  dries; a soaking plant loses what flows through it. **Transpiration 0.31 to 0.32 m a year (main 0.04 to 0.06), 48 to 50%
+  of the land's evaporation (real about 60%).** Kind 3 lives on all roster seeds.
+- **A colder island:** the carbon gas falls to 250 ppm (140 to 180 in the roster), the coldest month is 1.5 to 5 K colder,
+  animals freeze: eaters 2 to 6 times fewer, the roster's 15 to 1,800 times, the big kinds lost on 2 seeds. Not a bug
+  found; an emergent loop. Not for merging by the rule; the owner decides.
+- The plants' warmth over the ground was the tape's measure (a body's temperature kept since its update); fixed. The 17% gap
+  of the heat-balance test was the test's oxygen; fixed.
+- **Resting upkeep at a cold-blooded rate: measured, not landed** (reverted): strength became free, plants walked and
+  trampled the eaters.
+- Details: handover, "Air by wind and size".
