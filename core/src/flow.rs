@@ -441,6 +441,7 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // (a plateau) until all of that substance has frozen or melted. Each melts at its melting point in
     // the node, lowered by what is dissolved in its liquid (`World::melt`), in the order of those.
     let mut ord = [(0.0, 0); 64];
+    let mix: Vec<Option<Vec<_>>> = s.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect();
     for i in 0..n {
         let same = (cap[i] - s.cap[i]).abs() <= 1e-9 * cap[i];
         s.cap[i] = cap[i];
@@ -452,8 +453,8 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         let (mut held, mut lo, mut hi, pk, mut bits) = (0.0, f64::MIN, f64::MAX, s.pk[i], 0u64);
         s.pk[i] = NONE;
         let m = s.vary.len();
-        for (o, &k) in ord.iter_mut().zip(&s.vary) {
-            *o = (w.melt(k, i), k);
+        for ((o, &k), js) in ord.iter_mut().zip(&s.vary).zip(&mix) {
+            *o = (js.as_ref().map_or(s.sp[k].melt, |js| w.chem.melt_with(k, |j| w.ground[j * n + i], js.iter().copied())), k);
         }
         ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut tm = 0.0;
