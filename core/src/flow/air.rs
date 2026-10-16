@@ -2,12 +2,10 @@
 //! and gas between air nodes.
 
 use super::{range, settle, wet, Scratch, NONE};
-use crate::chem::R_GAS;
+use crate::units::{DAY, R_GAS, SIGMA};
 use crate::World;
 use std::f64::consts::{LN_2, PI, TAU};
 
-/// Stefan-Boltzmann constant, W/(m² K⁴): every surface emits σT⁴ (emissivity 1).
-pub(crate) const SIGMA: f64 = 5.670e-8;
 /// Share of the pressure difference between two air nodes evened out per call.
 const EVEN: f64 = 0.25;
 /// Most of a node's amount the overturning may exchange over one edge per call.
@@ -204,7 +202,7 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         }
         let (mut up, mut hs) = flux(ts);
         // A node pays only what it holds above `T_FLOOR`; past that it emits and conducts less (as `take_heat`).
-        let (room, lose, mut clamped) = (crate::heat_above_floor(e_ground_now[i], sc.cap[i]), adt * (up + hs), 0.0);
+        let (room, lose, mut clamped) = (crate::ground::heat_above_floor(e_ground_now[i], sc.cap[i]), adt * (up + hs), 0.0);
         if lose > room + adt * (sw + down) {
             let lam = (room + adt * (sw + down)) / lose;
             clamped = lose * (1.0 - lam);
@@ -328,11 +326,11 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             };
             // Evaporating cools the node, no further than where the vapour pressure falls to the
             // partial pressure (the boiling point, when it boils): only heat above that pays.
-            let over = t - if t >= sp.boil { sp.boil } else { w.chem.t_sat(k, pa / crate::chem::P_REF).min(t) };
+            let over = t - if t >= sp.boil { sp.boil } else { w.chem.t_sat(k, pa / crate::units::P_REF).min(t) };
             let m = m.min(s.cap[i].max(1.0) * over / (sp.cp * over + sp.lv));
             // The ground also pays the fusion and vaporisation enthalpy and the gas's heat; if it cannot, less evaporates.
             let want = m * (sp.cp * t + sp.lf + sp.lv);
-            let m = if want > 0.0 { m * crate::share(w.take_heat_with(i, want, m * sp.cp), want) } else { 0.0 };
+            let m = if want > 0.0 { m * crate::ground::share(w.take_heat_with(i, want, m * sp.cp), want) } else { 0.0 };
             if m <= 0.0 {
                 continue;
             }
@@ -396,7 +394,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
         let rate = m / (area * s.cells[j] * dt);
         s.node_tmp[j] = if m > 0.0 { rate / (rate + w.cfg.cloud) * mr / m } else { 0.0 };
     }
-    let ema = (dt / (w.days_per_year() as f64 * 86_400.0)) as f32;
+    let ema = (dt / (w.days_per_year() as f64 * DAY)) as f32;
     for i in 0..n {
         s.seen[i][3] = lerp(s, &s.node_tmp, i);
         let r = (s.rain[i] / (area * dt)) as f32;
@@ -438,7 +436,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
                 // Coming out cools the node, no further than the boiling point; it pays what it can.
                 let q = (-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv));
                 let want = q * (sp.cp * t + sp.lf + sp.lv);
-                -q * if want > 0.0 { crate::share(crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - q * sp.cp, want), want) } else { 0.0 }
+                -q * if want > 0.0 { crate::ground::share(crate::ground::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - q * sp.cp, want), want) } else { 0.0 }
             };
             if m == 0.0 {
                 continue;

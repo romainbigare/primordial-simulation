@@ -1,12 +1,7 @@
 //! The world's chemistry: data the laws read. Substances are numbers only.
 
+use crate::units::{MAX_SUBSTANCES, P_REF, R_GAS, T_SOL, T_SURF};
 use serde::{Deserialize, Serialize};
-
-pub const R_GAS: f64 = 8.314;
-/// Atmospheric reference pressure used for saturation (Pa).
-pub const P_REF: f64 = 101_325.0;
-/// Temperature at which a gas's solubility is given, K (where tables give it).
-pub const T_SOL: f64 = 298.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
@@ -180,7 +175,7 @@ impl Chemistry {
     /// What may share the liquid `k` (`melt_in`): each with whether it is dissolved in `k` and whether it is a liquid of
     /// the world; none: `k` is not a liquid of the world.
     pub fn mixes(&self, k: usize) -> Option<impl Iterator<Item = (usize, bool, bool)> + '_> {
-        let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < crate::T_SURF && d.boil > crate::T_SURF);
+        let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < T_SURF && d.boil > T_SURF);
         let mix = move |j: usize, d: &Substance| (j, d.melt < s.melt && (d.boil > s.melt || d.solubility > 0.0), liquid(d));
         liquid(s).then(move || (0..self.ns()).filter(move |&j| j != k).map(move |j| mix(j, &self.subs[j])).filter(|m| m.1 || m.2))
     }
@@ -232,7 +227,7 @@ impl Chemistry {
     /// from it with a gas)? Then it keeps the rest in what it makes (a fuel gas, a mineral): it is no burning, and a body runs it at
     /// its catalyst's pace and never pays its upkeep with its heat (`Body::prepare`).
     pub fn keeps(&self, r: usize) -> bool {
-        let gas = |k: u16| self.phase(k as usize, crate::T_SURF) == Phase::Gas;
+        let gas = |k: u16| self.phase(k as usize, T_SURF) == Phase::Gas;
         let per = |q: usize, k: u16| self.reactions[q].inputs.iter().find(|p| p.0 == k).map_or(f64::NEG_INFINITY, |p| -self.dh(q) / p.1 as f64);
         let burning = |q: usize| self.dh(q) < 0.0 && self.reactions[q].inputs.iter().any(|p| gas(p.0));
         self.reactions[r].inputs.iter().filter(|p| !gas(p.0)).any(|p| (0..self.reactions.len()).any(|q| burning(q) && per(q, p.0) > (1.0 + 1e-9) * per(r, p.0)))
@@ -267,7 +262,7 @@ impl Chemistry {
     /// ground or what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.
     pub fn minerals(&self) -> Vec<(usize, f64)> {
         let Some(bl) = self.build.as_ref() else { return Vec::new() };
-        let gas = |k: u16| self.phase(k as usize, crate::T_SURF) == Phase::Gas;
+        let gas = |k: u16| self.phase(k as usize, T_SURF) == Phase::Gas;
         let burns = |k: u16| self.reactions.iter().enumerate().any(|(r, rx)| self.dh(r) < 0.0 && rx.inputs.iter().any(|p| p.0 == k) && rx.inputs.iter().any(|p| gas(p.0)));
         bl.inputs.iter().filter(|p| !burns(p.0)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect()
     }
@@ -285,6 +280,9 @@ impl Chemistry {
 
     /// Every reaction must balance its elements.
     pub fn validate(&self) -> Result<(), String> {
+        if self.ns() > MAX_SUBSTANCES {
+            return Err(format!("{} substances: at most {MAX_SUBSTANCES}", self.ns()));
+        }
         for (k, s) in self.subs.iter().enumerate() {
             if s.elems.len() != self.n_elements {
                 return Err(format!("substance {k}: wrong element count"));

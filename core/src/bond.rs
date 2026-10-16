@@ -26,6 +26,7 @@ use crate::choose::{kg, wanted};
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
+use crate::units::DAY;
 use crate::World;
 use serde::{Deserialize, Serialize};
 
@@ -676,7 +677,7 @@ pub fn step(w: &mut World) {
     let react = (w.day / dpm) % REACT_MONTHS == 0;
     let (mut rc, share) = (Reactor::new(&w.chem), 1.0 / (w.grid.air_scale * w.grid.air_scale) as f64);
     let (mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns]);
-    let dt = (REACT_MONTHS * dpm) as f64 * 86_400.0;
+    let dt = (REACT_MONTHS * dpm) as f64 * DAY;
     for s in 0..w.parts.parts.len() {
         if !w.parts.parts[s].alive {
             continue;
@@ -701,7 +702,7 @@ pub fn step(w: &mut World) {
                 (pay, back) = (pay + d.max(0.0) * held(k), back - d.min(0.0) * held(k));
             }
             w.e_ground[i] += back;
-            let paid = if pay > 0.0 { crate::share(w.take_heat(i, pay), pay) } else { 1.0 };
+            let paid = if pay > 0.0 { crate::ground::share(w.take_heat(i, pay), pay) } else { 1.0 };
             for k in 0..ns {
                 let d = pool[k] - pool0[k];
                 let sent = if d > 0.0 { d * paid } else { d };
@@ -818,7 +819,7 @@ fn load(w: &mut World, r: usize) {
     let mut rng = Rng::new(w.seed, w.day, w.parts.parts[r].id(r), Purpose::Bond);
     let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
     let to = DIRS.iter().filter_map(|&d| w.grid.step(i, d)).filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
-    if let Some(j) = to.filter(|_| rng.f64() < v * (w.cfg.days_per_month as f64 * 86_400.0) / w.grid.cell_m) {
+    if let Some(j) = to.filter(|_| rng.f64() < v * (w.cfg.days_per_month as f64 * DAY) / w.grid.cell_m) {
         for p in w.parts.members(r) {
             w.parts.relocate(p, j);
         }

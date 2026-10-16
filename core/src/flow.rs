@@ -13,6 +13,7 @@ pub(crate) mod air;
 pub use air::{column, glow};
 
 use crate::grid::{DIRS, FORWARD};
+use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::World;
 use serde::{Deserialize, Serialize};
 
@@ -214,8 +215,7 @@ pub fn step(w: &mut World, dt: f64) {
         space(w, &mut s);
     }
     (s.pending, s.pending_liq) = (s.pending + dt, s.pending_liq + dt);
-    let day = 86_400.0;
-    let (air_due, liq_due) = (first || s.pending >= w.cfg.air_days as f64 * day - 1.0, first || s.pending_liq >= w.cfg.flow_days as f64 * day - 1.0);
+    let (air_due, liq_due) = (first || s.pending >= w.cfg.air_days as f64 * DAY - 1.0, first || s.pending_liq >= w.cfg.flow_days as f64 * DAY - 1.0);
     // The state of ground and air is rebuilt at liquid steps and when a refresh changed what is present.
     let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.grid.n();
     ground_state(w, &mut s, full);
@@ -228,7 +228,7 @@ pub fn step(w: &mut World, dt: f64) {
     let (dt, month) = (std::mem::take(&mut s.pending), w.day / w.cfg.days_per_month as u64);
     let monthly = s.month != Some(month);
     s.pending_exc += dt;
-    if first || s.pending_exc >= w.cfg.exchange_days as f64 * day - 1.0 {
+    if first || s.pending_exc >= w.cfg.exchange_days as f64 * DAY - 1.0 {
         let dt = std::mem::take(&mut s.pending_exc);
         air::exchange(w, &mut s, dt);
     }
@@ -236,13 +236,13 @@ pub fn step(w: &mut World, dt: f64) {
     s.owe_work |= monthly && month % WORK_MONTHS == 0;
     if liq_due {
         let dt = std::mem::take(&mut s.pending_liq);
-        let work = if std::mem::take(&mut s.owe_work) { (WORK_MONTHS * w.cfg.days_per_month as u64) as f64 * day / dt } else { 0.0 };
+        let work = if std::mem::take(&mut s.owe_work) { (WORK_MONTHS * w.cfg.days_per_month as u64) as f64 * DAY / dt } else { 0.0 };
         liquid(w, &mut s, dt, work);
         drain(w, &mut s, dt);
         let year = w.day / w.days_per_year();
         if s.year != Some(year) {
             if s.year.is_some() {
-                creep(w, &mut s, w.days_per_year() as f64 * day);
+                creep(w, &mut s, w.days_per_year() as f64 * DAY);
             }
             s.year = Some(year);
         }
@@ -440,7 +440,7 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting point
     // (a plateau) until all of that substance has frozen or melted. Each melts at its melting point in
     // the node, lowered by what is dissolved in its liquid (`World::melt`), in the order of those.
-    let mut ord = [(0.0, 0); 64];
+    let mut ord = [(0.0, 0); MAX_SUBSTANCES];
     let mix: Vec<Option<Vec<_>>> = s.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect();
     for i in 0..n {
         let same = (cap[i] - s.cap[i]).abs() <= 1e-9 * cap[i];
@@ -551,7 +551,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         s.order.sort_unstable();
     }
     s.done.fill(false);
-    let ema = (dt / (w.days_per_year() as f64 * 86_400.0)) as f32;
+    let ema = (dt / (w.days_per_year() as f64 * DAY)) as f32;
     let mut heat = 0.0;
     let mut wa = vec![0.0; liq.len()];
     for r in 0..n {
@@ -671,8 +671,8 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
                 // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
                 let want = m * (p.cp * tcur + p.lf);
-                let e = crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * p.cp, want);
-                let m = if want > 0.0 { m * crate::share(e, want) } else { m };
+                let e = crate::ground::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * p.cp, want);
+                let m = if want > 0.0 { m * crate::ground::share(e, want) } else { m };
                 (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
                 s.hold[i][0] -= if s.pk[i] != k { m * p.lf } else { 0.0 };
                 settle(s, k, i, -m);
@@ -722,7 +722,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                     // Picked up with its heat; less is picked up if the node cannot pay.
                     let want = m * s.sp[k].cp * tcur;
                     let e = w.take_heat_with(i, want, m * s.sp[k].cp);
-                    let m = if want > 0.0 { m * crate::share(e, want) } else { m };
+                    let m = if want > 0.0 { m * crate::ground::share(e, want) } else { m };
                     w.ground[k * n + i] -= m;
                     s.sed[i * ns + si] += m;
                     s.cap[i] -= m * s.sp[k].cp;
@@ -810,8 +810,8 @@ fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
             let sp = s.sp[k];
             let m = w.ground[k * n + i] * if sp.boil <= tmin { 1.0 } else { wet(s, k, i) } * v / lvol;
             let want = m * (sp.cp * tcur + sp.lf);
-            let e = crate::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * sp.cp, want);
-            let m = if want > 0.0 { m * crate::share(e, want) } else { m };
+            let e = crate::ground::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * sp.cp, want);
+            let m = if want > 0.0 { m * crate::ground::share(e, want) } else { m };
             (w.ground[k * n + i], w.deep[k * n + i], w.e_deep[i], s.cap[i]) = (w.ground[k * n + i] - m, w.deep[k * n + i] + m, w.e_deep[i] + e, s.cap[i] - m * sp.cp);
             s.hold[i][0] -= if s.pk[i] != k { m * sp.lf } else { 0.0 };
             settle(s, k, i, -m);

@@ -125,8 +125,8 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
         }
         for _ in 0..w.cfg.months_per_year {
             let mut t = Instant::now();
-            pcore::step_marked(&mut w, &mut |p| {
-                part[p] += t.elapsed();
+            pcore::step_marked(&mut w, &mut |s| {
+                part[s as usize] += t.elapsed();
                 t = Instant::now();
             });
             let t = Instant::now();

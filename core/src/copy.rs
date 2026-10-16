@@ -649,7 +649,9 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
     // generation's change, over `m`) and keep the variance left among them.
     // With a partner each row is one parent's (`mix_rows`), the group's spread pooled, then the same change.
     let mm = m.max(1.0) as f32;
-    let p = w.cfg.copy_phys();
+    // In a null run the born rows and the brain bases do not mutate.
+    let (row_noise, base_noise) = if w.cfg.null { (0.0, 0.0) } else { (w.cfg.phys.row_noise, w.cfg.phys.base_noise) };
+    let row_chance = w.cfg.phys.row_chance;
     let (mut pre, mut spread) = (None, b.row_spread);
     if let Some(t) = mate.filter(|_| !w.cfg.null) {
         if let Some((v, s)) = mix_rows(w, b, &w.life.bodies[t], m, r) {
@@ -657,8 +659,8 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
             (pre, spread) = ((v != w.life.born(b)).then_some(v), s);
         }
     }
-    let (var, changed) = (spread + (p.row_noise * size).powi(2), r.f64() < p.row_chance);
-    let sd = if w.cfg.null { 0.0 } else if spread > 0.0 || mm > 1.0 { (var / mm).sqrt() } else { changed as u8 as f32 * p.row_noise * size / (p.row_chance as f32).sqrt() };
+    let (var, changed) = (spread + (row_noise * size).powi(2), r.f64() < row_chance);
+    let sd = if w.cfg.null { 0.0 } else if spread > 0.0 || mm > 1.0 { (var / mm).sqrt() } else { changed as u8 as f32 * row_noise * size / (row_chance as f32).sqrt() };
     c.row_spread = var * (1.0 - 1.0 / mm);
     let mut rows = match (pre, sd > 0.0) {
         (Some(mut v), true) => {
@@ -680,7 +682,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
             Some(l)
         } else if r.f64() < w.cfg.phys.new_lineage {
             let mut l = lin.clone();
-            shake(&mut l.base, r, p.base_noise);
+            shake(&mut l.base, r, base_noise);
             Some(l)
         } else {
             None

@@ -717,7 +717,7 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let q = a * (w.chem.subs[k].cp * tg + body::fused(&w.chem, k, tg, |j| w.g(j, i)));
         let took = w.take_heat_with(i, q, a * w.chem.subs[k].cp);
-        let a = if q > 0.0 { a * crate::share(took, q) } else { a };
+        let a = if q > 0.0 { a * crate::ground::share(took, q) } else { a };
         w.ground[k * n + i] -= a;
         b.store[k] += a;
         b.e += took;

@@ -6,7 +6,8 @@
 use pcore::body::{self, Body, Layout, Lineage};
 use pcore::chem::{Chemistry, Phase};
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, World, T_SURF};
+use pcore::units::T_SURF;
+use pcore::{brain, choose, World};
 
 /// One row of the table of starting kinds: the genes it starts with and where and how many are placed.
 pub struct Kind {

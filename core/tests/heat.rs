@@ -307,7 +307,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let air = |k: usize| w0.air[k * na + j] - w2.air[k * na + j] + gas[k] - g[k];
             let wet = y.store[liquid] - x.store[liquid];
             let x_air = w0.air[liquid * na + j] / (0..ns).map(|k| w0.air[k * na + j]).sum::<f64>();
-            let vapour = wet.min((chem.p_sat(liquid, t) / pcore::chem::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
+            let vapour = wet.min((chem.p_sat(liquid, t) / pcore::units::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
             (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * (chem.subs[liquid].lf + chem.subs[liquid].lv)
         };
         let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, &b, mass, t) * days * 86_400.0;

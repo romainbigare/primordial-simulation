@@ -5,6 +5,7 @@ use pcore::change::Reactor;
 use pcore::chem::{Chemistry, Phase};
 use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
+use pcore::units::P_REF;
 use pcore::{Config, Diag, Ledger, World};
 
 fn hash01(seed: u64, x: i64, y: i64, octave: u64) -> f64 {
@@ -120,7 +121,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let m_air: f64 = init.air.iter().map(|&(k, f)| f / atot * chem.subs[k].molar_mass).sum();
     for j in 0..na {
         zmean[j] /= cnt[j];
-        let col = 101_325.0 / (cfg.gravity * m_air) * (-zmean[j] / 8000.0).exp() * area * cnt[j];
+        let col = P_REF / (cfg.gravity * m_air) * (-zmean[j] / 8000.0).exp() * area * cnt[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;
         }

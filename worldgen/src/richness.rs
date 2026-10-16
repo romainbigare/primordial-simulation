@@ -3,7 +3,7 @@
 
 use crate::Init;
 use pcore::chem::{Chemistry, Phase, Reaction};
-use pcore::T_SURF;
+use pcore::units::T_SURF;
 
 /// Smallest mole fraction that counts as abundant.
 const ABUNDANT: f64 = 0.01;

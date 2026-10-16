@@ -15,6 +15,7 @@
 
 use crate::World;
 use crate::chem::{Chemistry, Phase, Reaction};
+use crate::units::P_REF;
 
 const YEAR_S: f64 = 3.156e7;
 /// A reaction whose fraction per year stays below this is frozen and skipped.
@@ -295,7 +296,7 @@ impl Reactor {
         }
         for k in 0..self.flux.len() {
             let [used, made] = self.flux[k];
-            let eq = if used > 0.0 { tot[1] * chem.henry(k, t, self.av[k] / tot[2] * crate::chem::P_REF) } else { 0.0 };
+            let eq = if used > 0.0 { tot[1] * chem.henry(k, t, self.av[k] / tot[2] * P_REF) } else { 0.0 };
             self.flux[k][0] = if eq > 0.0 { (1.0 + made * self.film / eq) / (1.0 + used * self.film / eq) } else { 1.0 };
         }
         for (r, rx) in chem.reactions.iter().enumerate() {
@@ -729,7 +730,7 @@ pub fn step(w: &mut World, dt: f64) {
             w.e_ground[i] = e + fused + back + q_in - q_out;
             w.e_air[j] += q_out - q_in;
             let cap = w.heat_cap_ground(i);
-            let paid = if pay > 0.0 { crate::share(crate::draw(&mut w.e_ground[i], &mut w.ledger, cap, pay), pay) } else { 1.0 };
+            let paid = if pay > 0.0 { crate::ground::share(crate::ground::draw(&mut w.e_ground[i], &mut w.ledger, cap, pay), pay) } else { 1.0 };
             // The heat of the gas that stays behind stays with it.
             (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
             for k in 0..ns {

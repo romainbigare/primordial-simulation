@@ -136,7 +136,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     let held = |w: &pcore::World| w.ground[k * n + i] / w.ground[init.low * n + i];
     let j = w.grid.air_of(i);
     let x = w.air[k * na + j] / (0..w.chem.ns()).map(|q| w.air[q * na + j]).sum::<f64>();
-    let (h1, want) = (held(&w), w.chem.henry(k, w.t_ground(i), x * pcore::chem::P_REF));
+    let (h1, want) = (held(&w), w.chem.henry(k, w.t_ground(i), x * pcore::units::P_REF));
     assert!(h1 > 0.5 * want && h1 < 2.0 * want, "{h1} dissolved per mol, Henry's share {want}");
     let e = w.energy_ground(i, w.t_ground(i) + 20.0) - w.e_ground[i];
     w.e_ground[i] += e;

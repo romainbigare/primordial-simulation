@@ -67,7 +67,7 @@ fn same_seed_same_history_with_shared_brains() {
 fn take_heat_never_takes_a_node_below_the_floor() {
     let mut w = worldgen::new_world(1, 32, 32);
     let (i, e0) = (5, w.e_ground[5]);
-    let floor = w.heat_cap_ground(i).max(1.0) * pcore::T_FLOOR;
+    let floor = w.heat_cap_ground(i).max(1.0) * pcore::units::T_FLOOR;
     assert_eq!(w.take_heat(i, 0.25 * e0), 0.25 * e0);
     assert_eq!(w.ledger.clamped_heat, 0.0);
     // Asking for more than there is gives what is above the floor and counts the rest.
@@ -81,7 +81,7 @@ fn take_heat_never_takes_a_node_below_the_floor() {
     // to the floor of the heat capacity that stays.
     let (c, e1) = (0.9 * w.heat_cap_ground(i), w.e_ground[i]);
     let took = w.take_heat_with(i, e1, c);
-    assert!((e1 - took - (w.heat_cap_ground(i) - c) * pcore::T_FLOOR).abs() <= 1e-9 * e1, "{took} of {e1}");
+    assert!((e1 - took - (w.heat_cap_ground(i) - c) * pcore::units::T_FLOOR).abs() <= 1e-9 * e1, "{took} of {e1}");
 }
 
 /// A brain grown (more hidden units and memory) and shrunk back is the brain it was.

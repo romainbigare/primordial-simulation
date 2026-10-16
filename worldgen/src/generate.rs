@@ -2,8 +2,9 @@
 //! and reactions that balance by construction (two different ways to make the same element totals).
 
 use crate::Init;
-use pcore::chem::{Chemistry, Reaction, Substance, R_GAS};
+use pcore::chem::{Chemistry, Reaction, Substance};
 use pcore::rng::{Purpose, Rng};
+use pcore::units::R_GAS;
 use std::collections::BTreeMap;
 
 type Side = Vec<(u16, u16)>;

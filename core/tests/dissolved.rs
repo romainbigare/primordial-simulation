@@ -149,7 +149,7 @@ fn under_a_liquid_dead_matter_burns_as_its_film_lets_the_gas_through() {
         (o2 - gas[ox]) / dt
     };
     let air: f64 = column(&chem, depth, 400.0).1.iter().sum();
-    let eq = depth * MOL_PER_M3 * chem.henry(ox, t, 0.21 * AIR_COLUMN / air * pcore::chem::P_REF);
+    let eq = depth * MOL_PER_M3 * chem.henry(ox, t, 0.21 * AIR_COLUMN / air * pcore::units::P_REF);
     for pile in [10.0, 1e4] {
         let open = burn(pile, 0.0);
         let law = 1.0 / (1.0 + open * film / eq);
