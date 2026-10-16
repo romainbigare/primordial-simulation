@@ -397,14 +397,14 @@ impl Body {
     }
     /// End-product inhibition, 0..1 (15 Oct 2026): a catalyst is slowed by what the body holds of the
     /// reaction's products, as an enzyme by its own end product: its speed-up goes with 1 / (1 + Σ x / x*),
-    /// x the store of each product it keeps a level of and x* that level (`level`), plain non-competitive
-    /// inhibition with the body's own level as the constant. Gases at `t` (they leave) and its key
-    /// liquids (the liquid its chemistry runs in, `activity`) do not count. Its capacity still costs
+    /// x the store of each product and x* the level it keeps of it (`level`; a level of 0 stops it), plain
+    /// non-competitive inhibition with the body's own level as the constant. Gases at `t` (they leave) and
+    /// its key liquids (the liquid its chemistry runs in, `activity`) do not count. Its capacity still costs
     /// upkeep (`Consts::cats`). The reactions it runs on demand to pay (`plan`) are not slowed: they
     /// run only as far as the cost asks.
     pub fn inhibited(&self, chem: &Chemistry, r: usize, mass: f64, t: f64) -> f64 {
         let out = chem.reactions[r].outputs.iter().map(|p| p.0 as usize).filter(|&k| self.wet >> k & 1 == 0 && chem.phase(k, t) != Phase::Gas);
-        1.0 / (1.0 + out.map(|k| (self.level(chem, k, mass), self.store[k].max(0.0))).filter(|x| x.0 > 0.0).map(|(l, x)| x / l).sum::<f64>())
+        1.0 / (1.0 + out.map(|k| (self.level(chem, k, mass), self.store[k].max(0.0))).map(|(l, x)| if l > 0.0 { x / l } else { f64::INFINITY }).sum::<f64>())
     }
     /// A catalyst's factor `f` (the speed-up of a reaction) at activity `a`: 1 + (f - 1) a. A dry
     /// body's enzymes do not work, but the bare reaction still runs.
