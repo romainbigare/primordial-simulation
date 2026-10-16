@@ -388,26 +388,28 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let full = b.dec(body::COPY_MASS) * n * (1.0 - body::WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
-    let mut room = p.c_build * b.supply(chem, p) / p.m_ref * days.min(b.interval() as f64) * b.activity(chem, p);
-    // The other solids it builds first (16 Oct 2026), each with its share of the allowance (`Body::share`) and up to the level that
-    // share makes of its matter (`Body::level`), by the same work; then matter with the rest.
-    let mut built = false;
+    let room0 = p.c_build * b.supply(chem, p) / p.m_ref * days.min(b.interval() as f64) * b.activity(chem, p);
+    // The other solids it builds first (16 Oct 2026), each with its share (`Body::share`) of the allowance and of what it can spare,
+    // and up to the level that share makes of its matter (`Body::level`), by the same work; then matter with the rest.
+    let (mut room, mut built) = (room0, false);
     for bk in chem.builds.clone() {
         let k = bk.outputs[0].0 as usize;
         let gap = (b.level(&w.chem, k, 0.0) - b.store[k]).max(0.0) * w.chem.subs[k].molar_mass;
-        let made = convert(w, b, &bk, b.share(&w.chem, k) * room, gap, 0.0);
+        let made = convert(w, b, &bk, room0, b.share(&w.chem, k), gap, 0.0);
         (room, built) = (room - w.cfg.phys.c_copy * made, built || made > 0.0);
     }
-    let made = convert(w, b, &bl, room, f64::MAX, full);
+    let made = convert(w, b, &bl, room, 1.0, f64::MAX, full);
     // What it made: up to what its maturity lacks it is body, of the rest the share `ALLOC` is brood.
     b.brood += (made - made.min(needs)) * b.gene(body::ALLOC).clamp(0.0, 1.0) / w.chem.subs[m].molar_mass;
     built || made > 0.0
 }
 
-/// One conversion of growth (`Chemistry::build` or one of `builds`): up to `most` kg of its first output with `room` J of the work
-/// allowance, as `grow` says; a gas it makes leaves to the air with its heat. Returns the kg made. `full` (kg of matter of the size
-/// of maturity) only for the tape's count of the minerals that held building back (0: not counted).
-fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, most: f64, full: f64) -> f64 {
+/// One conversion of growth (`Chemistry::build` or one of `builds`): up to `most` kg of its first output with the share `part` of
+/// `room` J of the work allowance and of what the body can spare, as `grow` says; a gas it makes leaves to the air with its heat.
+/// Returns the kg made. `full` (kg of matter of the size of maturity) only for the tape's count of the minerals that held building
+/// back (0: not counted).
+#[allow(clippy::too_many_arguments)]
+fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, part: f64, most: f64, full: f64) -> f64 {
     let (chem, p) = (&w.chem, &w.cfg.phys);
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
@@ -432,7 +434,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, m
         let heat = b.heat_of(chem, k as usize, t);
         (b.store[k as usize] - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
     }).collect();
-    let free = (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
+    let free = part * (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
     let kg = free.min(reach.iter().copied().fold(f64::MAX, f64::min)).min(most);
     // Counted for the tape: a body that could build (all its fuels, its allowance and its spare allow it) and the
     // minerals' stores that held it back (any of them, each).
