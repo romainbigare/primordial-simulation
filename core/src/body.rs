@@ -1586,6 +1586,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let cpa: f64 = (0..ns).map(|k| tmp.x[k] * chem.subs[k].cp).sum();
     let wide = film(chem, cfg, b, mass, cover).0 / cpa.max(1e-9) * dt * open * (-depth / cfg.phys.gas_depth).exp();
     let (lay, size) = (Layout::of(chem), b.size(chem));
+    let mut lost = [0.0f64; 64];
     for k in 0..ns {
         let push = (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0);
         if push <= 0.0 || b.store[k] <= 0.0 || chem.phase(k, t0) != Phase::Liquid {
@@ -1604,12 +1605,17 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
             let q = m * chem.subs[k].cp * t0;
             (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
             heat -= m * held(chem, k);
+            lost[k] = m;
             diag.liquid_land[3 - plant as usize] += m * chem.molar_volume(k, Phase::Liquid);
         }
     }
 
     // Liquids standing on the ground soak in by solubility, faster where the ground is wet,
-    // up to the level the body keeps, through the mass that works (`wk`). With them it takes the rain its capture area
+    // up to the level the body keeps, through the mass that works (`wk`). **A flow along its contact with the ground (16 Oct
+    // 2026):** driven by how far the body is below its level, at the rate `LIQ` x wetness x `wk` x solubility per day, while
+    // it loses what it evaporated in this time at a steady rate, solved exactly over the time (as Law 2's step): from the
+    // store it had, it ends at the level less the loss over that rate, so over an update it takes back what it lost as far
+    // as the soil holds and the contact allows. Before, it took only that share of the gap at the end. With them it takes the rain its capture area
     // caught since its last update (`fall`): that rain fell into the cell's liquid in this time, so the ground has that
     // much less.
     // (The liquid in the pores of the ground is soaked up like the liquid that stands: whatever the cell holds of it
@@ -1625,11 +1631,16 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if in_ground > 0.0 {
         let _ = cap!();
     }
-    let rate = -(-b.k.liq * days).exp_m1() * wet * wk;
+    let rate = b.k.liq * wet * wk;
     let mass2 = if moved { b.mass(chem) } else { mass1 };
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
         let (x, room) = (ground[k * n + i] / in_ground, b.level(chem, k, mass2) - b.store[k]);
-        let d = ((room * rate * chem.subs[k].solubility + fall) * x).min(room).min(0.5 * ground[k * n + i]).max(0.0);
+        // (Rate r per day over `days`, the loss e a day: what it takes is (gap at the start) f + e days (1 - f / (r days)),
+        // f = 1 - exp(-r days); all the gap and the loss when r days is large.)
+        let r = rate * chem.subs[k].solubility;
+        let f = -(-r * days).exp_m1();
+        let uptake = if r * days > 1e-9 { (room - lost[k]) * f + lost[k] * (1.0 - f / (r * days)) } else { 0.0 };
+        let d = ((uptake + fall) * x).min(room).min(0.5 * ground[k * n + i]).max(0.0);
         // The ground pays the heat that goes with the liquid and its fusion enthalpy; if it
         // cannot pay it all, the body soaks up less.
         let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg));
