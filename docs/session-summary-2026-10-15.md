@@ -252,3 +252,18 @@ Things that are open and not built:
 - **Not moved:** `HEAT` and `KEEP_T` stay where they started. Roster: the big kinds alive at year 60, 5 of 9 (main 8).
 - Details: handover, "Three body-physics changes".
 
+
+## 15. One heat network, cooling by evaporating, roots that refill (16 Oct 2026; a branch of main cc86483, not merged)
+
+- **One heat network for every body:** core, coat (`HEAT`), outer surface (skin and both faces of the leaf), still air and
+  radiation in parallel. The coat rule is gone. The founders' old contact cannot be kept (eaters 64 kg: 55 W/K, a bare
+  body passes at most 15.5): they start bare, `HEAT` 3.5. Fur gives 0.9 W/K for 31 kg.
+- **Cooling by evaporating:** a new gene `COOL_T`, the mirror of `KEEP_T`; above it a body evaporates what holds it
+  there, limited by its still air (Lewis relation), the air's deficit and its liquid's safe minimum. One level was
+  measured and failed (eaters dried themselves out). Founders at 320 K; not selected on the mild island. A furred body
+  cannot rest at 310 K: it would need 10.6 kg of liquid a day.
+- **Roots refill:** the soak is a flow along the contact solved exactly over the update. Plants are dry 1 to 2% of the
+  time (main 19 to 25%), but transpiration stays 0.04 to 0.06 m a year (real 0.3 to 0.6): it is set by the breath (`GAS`).
+- **Life:** eaters 5 to 20 times fewer at year 60 (they take off later); **the roster's 0.1 kg light-eaters die out on
+  seeds 1 and 2** (already with the network alone, seed 2), big kinds 3 of 9 alive (main 5). Not for merging as it is.
+- Details: handover, "One heat network, cooling by evaporating, roots that refill".
