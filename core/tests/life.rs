@@ -1,4 +1,4 @@
-use pcore::body::{Layout, MUT};
+use pcore::body::{Layout, DENATURE, KEEP_T, MUT};
 use pcore::rng::{Purpose, Rng};
 
 #[test]
@@ -11,7 +11,8 @@ fn child_has_parent_genes_plus_noise() {
     let size = 10f32.powf(parent[MUT]);
     let diff: Vec<f32> = parent.iter().zip(&child).map(|(a, b)| (a - b).abs()).collect();
     assert!(diff.iter().any(|&d| d > 0.0), "no change");
-    assert!(diff.iter().all(|&d| d <= 6.0 * size), "change too big");
+    // (The two temperature genes step by 5 K, the others by at most 1.)
+    assert!(diff.iter().enumerate().all(|(g, &d)| d <= 6.0 * size * if g == DENATURE || g == KEEP_T { 5.0 } else { 1.0 }), "change too big");
 }
 
 #[test]

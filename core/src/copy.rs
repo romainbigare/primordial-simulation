@@ -104,6 +104,9 @@ const fn scalar(g: usize) -> (f32, f32, f32) {
         body::DISPERSE => (0.05, 0.0, 1.0),
         body::DENATURE => (5.0, 250.0, 450.0),
         body::REPAIR => (0.2, -3.0, 3.0),
+        // Up to the warmest real bodies keep (birds about 315 K) and down far enough below the coldest ground for an unused
+        // level to wander without meeting the wall.
+        body::KEEP_T => (5.0, 200.0, 320.0),
         _ => (0.3, -6.0, 18.0),
     }
 }
