@@ -266,7 +266,8 @@ Things that are open and not built:
   2.6 m. Eaters drop both.
 - **Step 3:** a bite pays to break what it tears, pushing through breaks what its energy pays for (by the stress each solid
   breaks at; `walk_wear` gone); a body takes matter and built solids only if its own catalyst breaks them, and what it does
-  not break passes back to the ground. Eaters of the normal runs never digest the frame; the roster's eaters of remains do.
+  not break passes back to the ground. No founder has the frame's enzyme: given to the roster's eaters of remains it cost a
+  third of their upkeep and made them 10,000 times fewer. Roster: the big kinds alive at year 60, 6 of 9 (main 5).
 - **Surprise:** plants build more lime than frame (as stiff per kg, needs no fuel, does not rot; the frame rots inside the
   living body at the litter constant). Bites barely pay to break (a few kJ per kg against 15 MJ of food): hard parts protect
   by not being digested, not by force.
