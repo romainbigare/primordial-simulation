@@ -404,6 +404,13 @@ impl Body {
         }
         (have / keep).min(1.0).max(0.0).powf(p.dormancy)
     }
+    /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::t_melt`): what it holds that is
+    /// liquid at that melting point (melts below it, boils above it) is in its liquid.
+    pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {
+        let tm = chem.subs[k].melt;
+        let other: f64 = (0..chem.ns()).filter(|&j| j != k && chem.subs[j].melt < tm && chem.subs[j].boil > tm).map(|j| self.store[j].max(0.0)).sum();
+        chem.t_melt(k, self.store[k] / (self.store[k] + other).max(1e-300))
+    }
     /// End-product inhibition, 0..1 (15 Oct 2026): a catalyst is slowed by what the body holds of the
     /// reaction's products, as an enzyme by its own end product: its speed-up goes with 1 / (1 + Σ x / x*),
     /// x the store of each product and x* the level it keeps of it (`level`; a level of 0 stops it), plain
@@ -1717,7 +1724,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let mut lost = [0.0f64; 64];
     for k in 0..ns {
         let push = (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0);
-        if push <= 0.0 || b.store[k] <= 0.0 || chem.phase(k, t0) != Phase::Liquid {
+        if push <= 0.0 || b.store[k] <= 0.0 || chem.phase(k, t0) == Phase::Gas || t0 < b.melt(chem, k) {
             continue;
         }
         let (own, room) = (heat - lit + took, crate::heat_above_floor(e_ground[i], cap!()));
@@ -1855,7 +1862,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     if (0..ns).any(|k| key(k) && chem.phase(k, t) == Phase::Gas) {
         return Some(PHASE);
     }
-    if (0..ns).any(|k| key(k) && chem.phase(k, t) != Phase::Liquid) {
+    if (0..ns).any(|k| key(k) && t < b.melt(chem, k)) {
         let f = b.activity(chem, &w.cfg.phys);
         if f >= 1.0 - 1e-9 {
             return Some(PHASE);

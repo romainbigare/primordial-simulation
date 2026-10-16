@@ -153,6 +153,17 @@ impl Chemistry {
         1.0 / (1.0 / tb - R_GAS * x.max(1e-30).ln() / l)
     }
 
+    /// Melting point of `k` where it is the share `x` of the moles of its liquid, the rest dissolved in it, K: an ideal
+    /// solution freezes lower (Schroeder-van Laar, the mirror of `t_sat`): 1 / T = 1 / Tm - R ln x / Lf. For the common
+    /// liquid of chemistry 0 that is 1.86 K per mol dissolved in a kg (the measured cryoscopic constant), no new number.
+    pub fn t_melt(&self, k: usize, x: f64) -> f64 {
+        let (tm, l) = (self.subs[k].melt, self.subs[k].lf);
+        if l <= 0.0 || x >= 1.0 {
+            return tm;
+        }
+        1.0 / (1.0 / tm - R_GAS * x.max(1e-30).ln() / l)
+    }
+
     /// Mole fraction of gas `k` that a liquid at `t` holds under its partial pressure `p`, Pa
     /// (Henry's law). It falls with warmth by van 't Hoff's law, with the heat of solution taken
     /// as the vaporisation enthalpy: dissolving is like condensing (for the carbon gas of
