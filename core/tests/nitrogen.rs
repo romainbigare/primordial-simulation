@@ -538,3 +538,25 @@ fn the_pores_of_the_land_hold_the_rock_salt_where_lime_and_liquid_meet() {
     assert!(wet > 20, "only {wet} wet land cells");
     assert!(ratio[ratio.len() / 2] > 0.5 && ratio[ratio.len() / 2] < 2.0, "the cells' salt is far from its balance: {}", ratio[ratio.len() / 2]);
 }
+
+/// End-product inhibition (15 Oct 2026): a body's catalyst is slowed by its store of each product it keeps a level of, by
+/// 1 / (1 + store / level): with none held it runs at full speed, at its level at half. Gases and the key liquid do not count,
+/// so a burning (gas and the liquid) is not slowed.
+#[test]
+fn a_catalyst_is_slowed_by_the_product_the_body_holds() {
+    let (mut w, i) = start();
+    let (mineral, _) = w.chem.minerals()[0];
+    let fix = worldgen::life::fixing(&w.chem).expect("fixing");
+    let (light, rich, _, burn) = worldgen::life::roles(&w.chem).expect("roles");
+    let b = body_of(&mut w, 0, i, 0);
+    let (_, mut b) = out(&mut w, b);
+    let (t, mass) = (b.temp(&w.chem), b.mass(&w.chem));
+    for (r, k) in [(fix, mineral), (light, rich)] {
+        b.store[k] = 0.0;
+        let none = b.inhibited(&w.chem, r, mass, t);
+        b.store[k] = b.level(&w.chem, k, mass);
+        let full = b.inhibited(&w.chem, r, mass, t);
+        assert!(none == 1.0 && (full - 0.5).abs() < 1e-9, "reaction {r}: {none} with none held, {full} at its level");
+    }
+    assert_eq!(b.inhibited(&w.chem, burn, mass, t), 1.0, "a burning makes gas and the liquid");
+}

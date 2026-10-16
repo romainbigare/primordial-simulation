@@ -152,7 +152,14 @@ Things that were decided to wait:
 
 Things that are open and not built:
 
-- **Nitrogen fixing is too cheap:** closed. It now burns 14 units of fuel per N2 (6 g C per g N, Layzell 1979), and its heat pays no upkeep (handover, "Fixing costs what it costs"). Fixers and the flood of the mineral barely changed; product inhibition would be a new rule (the owner decides).
+- **Nitrogen fixing is too cheap:** closed. It now burns 14 units of fuel per N2 (6 g C per g N, Layzell 1979), and its heat pays no upkeep (handover, "Fixing costs what it costs"). Fixers and the flood of the mineral barely changed.
+- **End-product inhibition (15 Oct 2026, the owner agreed): built, one general law, not merged.** A body's catalyst is slowed by
+  its store of the reaction's product: speed-up over 1 + store / level (the level the body keeps; no new number). Gases, the key
+  liquid and the burnings run for upkeep are not slowed. Seeds 1 to 3 (64 x 64, 60 years): the world's nitrogen mineral 68 to 97 ->
+  33 to 44 times the soil's gift; fixers 49 to 81% -> 43 to 74% of plant members (no real change); `nlim0` 6 to 23% -> 9 to 25%;
+  plants -14% to +8%; carbon gas +10 to +18 ppm. Soil already differed a lot between cells and still does (fixers make the rich
+  cells). The flood is halved, not removed: the store sits at its level, where the law gives one half. A stronger form (a full store
+  stops it) gives 14 to 18 times the gift and is the owner's call (handover, Section 4, "End-product inhibition").
 - **The body heat test:** closed. Found and fixed: the body's
   reactions ran 9 K too cold after its upkeep, and the test left out the latent heat of the liquid the burning makes.
   Within 2% again.
@@ -192,6 +199,12 @@ Things that are open and not built:
   on 15 Oct. With R11 the eaters now live on all seeds and all can move, but on seed 3 they are 4 times fewer, in the
   roster the big kinds die more often (4 of 9 alive at year 60 against 6 of 9), and a learning test fails at its noise
   edge. So R11 is not landed; it is one commit (e13d911). The owner decides (handover, "The rock salt in bodies, R11 and gifts").
+- **A body keeps a temperature** (the owner agreed, 15 Oct): a gene `KEEP_T`; a body colder than it burns fuel to stay
+  at it (handover, "A body keeps a temperature"). Built, not merged. All founders start at 250 K (it does nothing). On seeds 1
+  to 3 (60 years) the gene does not move (249 to 252 K) and the insulation gene does not move: not selected on the mild island,
+  as expected. Plants and eaters as on main (under 2 times). Found: bodies radiate from their own temperature past their
+  insulation, so no body gets under about 3.6 W/K at 30 kg, 3.8 times real fur. The owner decides on putting radiation
+  behind the insulation.
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
 - **The big-brain test:** run on seeds 1 to 3 (64 x 64, 60 years, copies at year 40). It cannot tell.
   The control (same brain, root 11) joins the ordinary eaters' nodes in the first year, so there is no real control.
@@ -209,12 +222,16 @@ Things that are open and not built:
 2. **The small-cell world** for the nodes-against-individuals check, with plants included.
 3. **Fix the open problems** that the runs confirm: done in the follow-up on 15 Oct (above). Left for the owner:
    R11 (one commit), the plants' liquid that comes from the air and not the soil (above), a solid
-   store of the rock element in animals, product inhibition of fixing, a control that does not merge for the big-brain
+   store of the rock element in animals, the stronger form of product inhibition (a full store stops the enzyme), a control that does not merge for the big-brain
    test, and `bump` (tuned) now decides whether a body can move.
 4. **Core size:** two simplify passes (same history bit for bit) took it from 8,707 to 8,467 lines (6% over 8,000).
    Almost no dead code is left; going lower means removing mechanisms (the speed schedule of Change, about 220
    lines; `COPY_BY_CHOICE`; tape-only tallies). The owner decides, or accepts the 6% with this reason.
 5. **Real figures:** checked against sources in `docs/numbers.md` (most agree; `seep` was a wrong sum and is fixed; the
-   eaters are 20 to 100 times denser than real large plant-eaters, Hempson et al. 2015).
+   eaters are 20 to 100 times denser than real large plant-eaters, Hempson et al. 2015). **Studied (16 Oct, `docs/reports/eater-density.md`):**
+   61 to 67% of their kg is liquid past the level (R11 removes it: 34 to 72 t/km2 left, against 231 to 351). Their cost of living is
+   not the cause (half a mammal's, 2.5 times a reptile's). They are cold-blooded, and their tissue (17 to 59 t/km2) is no more than
+   Aldabra's tortoises (58). The fault is the food: 95 to 99.5% is dead plant matter, which is digested like meat; on living plants
+   alone they die out. They are still growing and could reach about 8 times year 60. Owner's choices: R11, a structural plant matter.
 6. **Then M4:** the planet with real seasons, frost and dry seasons, natural fire starts, and speed
    work. Disease after M4.
