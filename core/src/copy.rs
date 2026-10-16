@@ -406,7 +406,8 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
 }
 
 /// One conversion of growth (`Chemistry::build` or one of `builds`): up to `most` kg of its first output with the share `part` of
-/// `room` J of the work allowance and of what the body can spare, as `grow` says; a gas it makes leaves to the air with its heat.
+/// `room` J of the work allowance and of what the body can spare, as `grow` says; a gas it makes leaves to the air with its heat
+/// and its latent heat.
 /// Returns the kg made. `full` (kg of matter of the size of maturity) only for the tape's count of the minerals that held building
 /// back (0: not counted).
 #[allow(clippy::too_many_arguments)]
@@ -470,8 +471,9 @@ fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, p
     for &(k, nu) in &outs {
         let (k, x) = (k as usize, nu as f64 * ext);
         if w.chem.phase(k, t) == crate::chem::Phase::Gas {
+            // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `body::held`.)
             let q = x * w.chem.subs[k].cp * t;
-            (w.air[k * na + j], w.e_air[j], b.e) = (w.air[k * na + j] + x, w.e_air[j] + q, b.e - q);
+            (w.air[k * na + j], w.e_air[j], b.e) = (w.air[k * na + j] + x, w.e_air[j] + q, b.e - q - x * body::held(&w.chem, k));
         } else {
             b.store[k] += x;
         }

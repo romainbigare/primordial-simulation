@@ -1020,7 +1020,7 @@ impl Life {
 
 /// Energy a mole of `k` carries apart from its heat while in the air (fusion and vaporisation).
 #[inline]
-fn held(chem: &Chemistry, k: usize) -> f64 {
+pub(crate) fn held(chem: &Chemistry, k: usize) -> f64 {
     chem.subs[k].lf + chem.subs[k].lv
 }
 
