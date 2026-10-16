@@ -152,7 +152,14 @@ Things that were decided to wait:
 
 Things that are open and not built:
 
-- **Nitrogen fixing is too cheap:** closed. It now burns 14 units of fuel per N2 (6 g C per g N, Layzell 1979), and its heat pays no upkeep (handover, "Fixing costs what it costs"). Fixers and the flood of the mineral barely changed; product inhibition would be a new rule (the owner decides).
+- **Nitrogen fixing is too cheap:** closed. It now burns 14 units of fuel per N2 (6 g C per g N, Layzell 1979), and its heat pays no upkeep (handover, "Fixing costs what it costs"). Fixers and the flood of the mineral barely changed.
+- **End-product inhibition (15 Oct 2026, the owner agreed): built, one general law, not merged.** A body's catalyst is slowed by
+  its store of the reaction's product: speed-up over 1 + store / level (the level the body keeps; no new number). Gases, the key
+  liquid and the burnings run for upkeep are not slowed. Seeds 1 to 3 (64 x 64, 60 years): the world's nitrogen mineral 68 to 97 ->
+  33 to 44 times the soil's gift; fixers 49 to 81% -> 43 to 74% of plant members (no real change); `nlim0` 6 to 23% -> 9 to 25%;
+  plants -14% to +8%; carbon gas +10 to +18 ppm. Soil already differed a lot between cells and still does (fixers make the rich
+  cells). The flood is halved, not removed: the store sits at its level, where the law gives one half. A stronger form (a full store
+  stops it) gives 14 to 18 times the gift and is the owner's call (handover, Section 4, "End-product inhibition").
 - **The body heat test:** closed. Found and fixed: the body's
   reactions ran 9 K too cold after its upkeep, and the test left out the latent heat of the liquid the burning makes.
   Within 2% again.
@@ -210,7 +217,7 @@ Things that are open and not built:
 2. **The small-cell world** for the nodes-against-individuals check, with plants included.
 3. **Fix the open problems** that the runs confirm: done in the follow-up on 15 Oct (above). Left for the owner:
    R11 (one commit), drainage inside a cell (channel spacing) before the sea floor's film change can land, a solid
-   store of the rock element in animals, product inhibition of fixing, a control that does not merge for the big-brain
+   store of the rock element in animals, the stronger form of product inhibition (a full store stops the enzyme), a control that does not merge for the big-brain
    test, and `bump` (tuned) now decides whether a body can move.
 4. **Core size:** two simplify passes (same history bit for bit) took it from 8,707 to 8,467 lines (6% over 8,000).
    Almost no dead code is left; going lower means removing mechanisms (the speed schedule of Change, about 220
