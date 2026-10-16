@@ -182,13 +182,13 @@ Things that are open and not built:
 - **The sea floor uses the air's oxygen,** and the sea's carbon reaction takes gas from the whole air
   column, not from the water. **Closed on 16 Oct 2026 (branch, not merged yet):** ground under standing liquid
   reacts with the dissolved gas through the liquid's film. It waited because 52 to 56% of the land stood waterlogged.
-  The water budget showed why: rain 0.72 to 0.75 m a year, 58% evaporated, 30% ran off, the rest filled basins;
-  standing liquid evaporated at half the open rate, wet soil at 0.35 to 0.39 of it. Now the bed's store and the wet
+  The water budget showed why: rain 0.73 to 0.76 m a year, 58 to 60% evaporated, 30% ran off, the rest filled basins;
+  standing liquid evaporated at half the open rate, wet soil at 0.36 to 0.39 of it. Now the bed's store and the wet
   loose ground drain to channels inside each cell (Darcy's law over a 250 m hillslope, one anchored number) and wet
   ground evaporates at the open rate: waterlogged land 10 to 11% (half of it basins), evaporation 67 to 69% of the rain.
-  With that the film moves the carbon gas by -1 to -6 ppm at year 60 (handover, "Soil water" and "The sea floor
-  reacts"). Found on the way: plants give 0.27 to 0.36 m of liquid a year to the air (real 0.3 to 0.6), but they
-  catch 5 to 6 m a year from the air's vapour (7 times the rain) and soak under 1 mm from the ground, so the soil's
+  With that the film moves the carbon gas by -18 to 0 ppm at year 60 (handover, "Soil water" and "The sea floor
+  reacts"). Found on the way: plants give 0.21 to 0.25 m of liquid a year to the air (real 0.3 to 0.6), but they
+  catch 5 to 6 m a year from the air's vapour (7 times the rain) and soak under 3 mm from the ground, so the soil's
   liquid never goes through plants. Not changed (bodies, `body::live`): the owner decides.
   The 2/3 power of the sea's store comes from the pair's contacts, not from the gas source: still open.
 - **Review 7 items:** R4 (the liquid shortcut) is built (the living body is matter over 1 - 0.75); R5 was done by the energy
