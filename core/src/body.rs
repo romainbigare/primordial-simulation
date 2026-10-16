@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 // (safe minimum as a share of mass; take selectivity; most share of mass kept). Below zero a
 // gene is off.
 /// Gas exchange, log10 mol of air per m² of the surface open to the air (`Body::open_area`) per
-/// day. Through the surface, capture area pays twice (light and gas), so a plant that grows its
+/// day: the conductance of its pores (a leaf's stomata), which open as far as it is wet and are in series with the
+/// boundary layer (`breath`); its vapour leaves through them too. Through the surface, capture area pays twice (light and gas), so a plant that grows its
 /// area gains on both and a taller plant that shades the rest gains more.
 pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
@@ -1379,13 +1380,47 @@ fn surface(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f6
     walls.map_or(g, |x| 1.0 / (1.0 / g + 1.0 / x.1))
 }
 
-/// The still air at a body's outer surface, W/K, and that surface, m² (`surface`): its skin (through the cover) and both
-/// faces of its light-capture area.
+/// The boundary layer of a body's outer surface, W/K, and that surface, m² (`surface`): its skin (through the cover) and
+/// both faces of its light-capture area. Forced convection in the wind near the ground (16 Oct 2026, Campbell and Norman
+/// 1998): `forced` x sqrt(`wind_ground` / d) mol/(m² s) x the air's molar heat capacity, d the body's length, (m1 /
+/// `rho_body`)^(1/3), or a leaf's (`leaf_size`): 12.8 W/(m² K) for a 30 kg member, 33 for 0.1 kg, 32 for a leaf. (Free
+/// convection, a few W/(m² K) at a few K, is under it at this wind.)
 fn film(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64) -> (f64, f64) {
     let p = &cfg.phys;
-    let (leaf, skin) = (b.equiv(p, b.built(chem)) * b.k.leaf, b.n() * 6.0 * (mass / b.n() / p.rho_body).powf(2.0 / 3.0));
-    let still = cfg.sensible * skin;
-    (if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + cfg.sensible * 2.0 * leaf, skin + 2.0 * leaf)
+    let (leaf, m1) = (b.equiv(p, b.built(chem)) * b.k.leaf, mass / b.n());
+    let skin = b.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0);
+    let h = |d: f64| p.forced * air_cp(chem) * (p.wind_ground / d).sqrt();
+    let still = h((m1 / p.rho_body).cbrt()) * skin;
+    (if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + h(p.leaf_size) * 2.0 * leaf, skin + 2.0 * leaf)
+}
+
+/// Molar heat capacity of the starting air, J/(mol K) (of an ideal gas of two atoms, 3.5 R, if none is known).
+fn air_cp(chem: &Chemistry) -> f64 {
+    let c: f64 = chem.air.iter().zip(&chem.subs).map(|(x, s)| x * s.cp).sum();
+    if c > 0.0 { c } else { 3.5 * crate::chem::R_GAS }
+}
+
+/// The air a body exchanges gas with in `days`, mol (`Body::open_area` times its conductance; 16 Oct 2026): its pores (the
+/// `GAS` gene, mol/(m² day), a stomatal conductance) in series with the boundary layer of its surface (`film`, over the air's
+/// molar heat capacity: the Lewis relation); liquid over it slows it. Its gases and the vapour of its liquids go through it
+/// alike; for the vapour the pores open only as far as it is wet (`live`).
+#[allow(clippy::too_many_arguments)]
+fn breath(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64, days: f64, depth: f64) -> f64 {
+    let ((air, area), gs) = (film(chem, cfg, b, mass, cover), b.k.gas);
+    let gb = air / air_cp(chem) / area.max(1e-12) * DAY;
+    b.open_area(chem, &cfg.phys, mass) * days * (-depth / cfg.phys.gas_depth).exp() * if gs > 0.0 { gs * gb / (gs + gb) } else { 0.0 }
+}
+
+/// What a key liquid of `l` mol loses over an update in which it would lose `e` mol with its pores open, when they open as far
+/// as it is wet (`Body::activity`: min(1, l / `ls`)^n, `ls` the level it keeps): at the full rate down to its level, then
+/// du/dt = -r u^n (u = l / `ls`), solved exactly: u^(1 - n) grows by (n - 1) times what is left of `e` over `ls`.
+fn closing(l: f64, ls: f64, e: f64, n: f64) -> f64 {
+    if ls <= 0.0 || e <= (l - ls).max(0.0) || l <= 0.0 {
+        return e.min(l.max(0.0));
+    }
+    let (full, u0) = ((l - ls).max(0.0), (l / ls).min(1.0));
+    let u = (u0.powf(1.0 - n) + (n - 1.0) * (e - full) / ls).powf(-1.0 / (n - 1.0));
+    l - ls * u
 }
 
 /// The heat conductance by which a body of `mass` kg at the temperature `t` loses heat to the ground it stands on,
@@ -1501,7 +1536,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // The air the body exchanges gas with in this time (mol), from its air node; liquid over
     // the body slows it.
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let reach_mol = b.k.gas * b.open_area(chem, &cfg.phys, mass) * days * (-depth / cfg.phys.gas_depth).exp();
+    let reach_mol = breath(chem, cfg, b, mass, cover, days, depth);
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..ns {
@@ -1569,7 +1604,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     }
 
     // Liquids the body holds evaporate toward their vapour pressure at its temperature, with
-    // their latent heat. The latent heat
+    // their latent heat, through its pores (`breath`), which for the vapour open as far as it is wet (its activity: a dry
+    // body closes them as it dries, `closing`; 16 Oct 2026. Not for its gases: the reactions that take them already go with its activity, and
+    // their pool goes into mass action to its order, so it would count twice: dry bodies could not pay). The latent heat
     // is paid by the body's own heat released (not the light: the ground has it), and by what
     // the surface can conduct into a body that evaporating cools no lower than the vapour's
     // condensing point: through the same conductance as the heat below (cover and walls in
@@ -1599,7 +1636,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let e1 = -(-x).exp_m1() * ct * tg + (-x).exp() * b.e + bx * heat;
         let need = ((e1 - ct * b.gene(COOL_T)) / bx / held(chem, k)).max(0.0);
         let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
-        let m = (push * reach_mol).max((push * wide).min(need).min(spare)).min(paid / held(chem, k)).min(b.store[k]);
+        let open_m = if b.wet >> k & 1 == 1 { closing(b.store[k], b.level(chem, k, 0.0), push * reach_mol, cfg.phys.dormancy) } else { push * reach_mol };
+        let m = open_m.max((push * wide).min(need).min(spare)).min(paid / held(chem, k)).min(b.store[k]);
         if m > 0.0 {
             moved = true;
             let q = m * chem.subs[k].cp * t0;
@@ -1880,7 +1918,7 @@ fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (b.k.gas * b.open_area(chem, &w.cfg.phys, mass) * days * (-depth / w.cfg.phys.gas_depth).exp() / tot).min(0.5);
+    let share = (breath(chem, &w.cfg, b, mass, cover_of(w, b), days, depth) / tot).min(0.5);
     let t = b.e / cap.max(1e-9);
     let dry = b.activity(chem, &w.cfg.phys);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;

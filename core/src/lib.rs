@@ -242,6 +242,15 @@ pub struct Physics {
     /// The bodies of a cell must fit in a layer this thick over it, m, at this density, kg/m³
     pub layer: f64,
     pub rho_body: f64,
+    /// The wind at a body, m/s (16 Oct 2026): the air's mean speed near the ground over land, which the boundary layer of
+    /// every body's surface goes by (`body::film`). Flow's air nodes move only as whole columns, at about 0.1 m/s
+    pub wind_ground: f64,
+    /// Forced convection through a surface's boundary layer, mol/(m² s) per (m/s / m)^0.5: its heat conductance is this x
+    /// sqrt(wind / size) x the air's molar heat capacity, and the same over the air's molar heat capacity carries vapour (the
+    /// Lewis relation)
+    pub forced: f64,
+    /// The size of a leaf, m: the length of the boundary layer of a body's capture area (`body::film`)
+    pub leaf_size: f64,
     /// Body mass broken per J a mover dissipates against it, times (strength + 0.1), kg/J: the share of a body's
     /// matter broken and of the stores that matter held (`choose::wear`)
     pub walk_wear: f64,
@@ -430,6 +439,9 @@ impl Default for Physics {
             lane: 1.0,
             layer: 10.0,
             rho_body: 1e3,
+            wind_ground: 1.7,
+            forced: 0.189,
+            leaf_size: 0.05,
             walk_wear: 3e-5,
             take: 0.05,
             sweep: 1.0,

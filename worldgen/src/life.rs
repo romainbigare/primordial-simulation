@@ -163,6 +163,12 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// 0.128 -> 0.127, 2.271 -> 2.273; 150 kg: 1.844 -> 1.737, 2.510 -> 2.536; eaters of eaters 100 kg:
 /// 1.393 -> 1.324, 2.456 -> 2.478; 600 kg: 4.868 -> 4.390, 2.691 -> 2.736.
 ///
+/// **Since 16 Oct 2026 the light-eaters start at `GAS` 4.334, a real leaf's pores:** the gene is a stomatal conductance (mol
+/// of air per m² of open surface a day, per unit of mole fraction), through which their gases and their vapour go alike
+/// (`body::breath`), and the old 2.19 (1.57 and 3.09) was 0.002 mol/(m² s), a hundredth of a leaf's open pores, 0.1 to 0.4
+/// (Körner, Scheel and Bauer 1979, from memory): 0.25 mol/(m² s) is 21,600 a day. The animals' genes stay (their breath is
+/// not a leaf's). An initial condition.
+///
 /// The `HEAT` genes (the third scalar) are W per K and kg of a member of `Physics::m_ref` = 1 kg
 /// since 14 Oct 2026 (before, of 30 kg: conductance = gene x 30^(1/3) x m^(2/3) per member). The
 /// same conductance at any mass needs a gene 30^(1/3) = 3.107 times higher, log10 = +0.492, in
@@ -283,13 +289,13 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// the rows before. So a founder weighs what the old rows said it copied at: light-eaters 2.0 kg, small fast 0.10, big
 /// slow 40; eaters 63; eaters of remains 2.5 and 30; eaters of light-eaters 6.0 and 302; eaters of eaters 200 and 1,202.
 pub const KINDS: [Kind; 11] = [
-    Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [2.187, 0.0, 3.5, 0.416, 0.05, -0.523, 0.145, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -1.0, 0.0, 0.8, 250.0, 320.0], cat: [9.0, 2.0], upt: [0.0, 0.0], cover: 0.1, per: 1, chance: 1.0, store: 0.3, hand: H_LIGHT },
+    Kind { name: "light-eaters", year: 0, anywhere: true, scalars: [4.334, 0.0, 3.5, 0.416, 0.05, -0.523, 0.145, 1.3, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -1.0, 0.0, 0.8, 250.0, 320.0], cat: [9.0, 2.0], upt: [0.0, 0.0], cover: 0.1, per: 1, chance: 1.0, store: 0.3, hand: H_LIGHT },
     Kind { name: "eaters", year: 20, anywhere: false, scalars: [2.304, -0.5, 3.5, -2.884, 0.6, -0.523, 1.645, 1.0, -1.2, -1.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.1, 320.0, -0.4, 0.0, 0.8, 250.0, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
     Kind { name: "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)", year: 0, anywhere: false, scalars: [2.304, -0.5, 3.5, -2.884, 0.6, -0.523, 1.645, 1.0, -1.2, -1.5, -4.0, 48.0, 12.0, 6.0, 3.0, 0.1, 320.0, -0.4, 0.0, 0.8, 250.0, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], cover: 0.0, per: 1, chance: 0.3, store: 0.3, hand: H_EATER },
     // Light-eaters, small and fast: members of 0.05 kg copying at 0.1 kg every 10 days, children spread wide.
-    Kind { name: "small fast light-eaters", year: 0, anywhere: true, scalars: [1.567, 0.0, 3.5, 0.716, 0.05, -0.523, -1.155, 1.0, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.2, 0.0, 0.8, 250.0, 320.0], cat: [9.0, 2.0], upt: [0.0, 0.0], cover: 0.05, per: 1, chance: 0.6, store: 0.3, hand: H_LIGHT },
+    Kind { name: "small fast light-eaters", year: 0, anywhere: true, scalars: [4.334, 0.0, 3.5, 0.716, 0.05, -0.523, -1.155, 1.0, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.2, 0.0, 0.8, 250.0, 320.0], cat: [9.0, 2.0], upt: [0.0, 0.0], cover: 0.05, per: 1, chance: 0.6, store: 0.3, hand: H_LIGHT },
     // Light-eaters, big and slow: members of 20 kg copying at 40 kg every 60 days, less capture area per kg, children stay.
-    Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [3.086, 0.0, 3.5, -0.184, 0.05, -0.523, 1.445, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5, 0.0, 0.8, 250.0, 320.0], cat: [9.0, 2.0], upt: [0.0, 0.0], cover: 0.3, per: 1, chance: 0.4, store: 0.3, hand: H_LIGHT },
+    Kind { name: "big slow light-eaters", year: 0, anywhere: true, scalars: [4.334, 0.0, 3.5, -0.184, 0.05, -0.523, 1.445, 1.78, -1.2, -4.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.05, 320.0, -0.5, 0.0, 0.8, 250.0, 320.0], cat: [9.0, 2.0], upt: [0.0, 0.0], cover: 0.3, per: 1, chance: 0.4, store: 0.3, hand: H_LIGHT },
     // Eaters of remains on the ground: weak (0.05 and 0.1) (the burning catalyst of the others: a quicker one costs too much), the solid first.
     Kind { name: "small eaters of remains", year: 10, anywhere: false, scalars: [1.815, -0.5, 3.5, -2.884, 0.0, -0.523, 0.245, 1.0, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.3, 320.0, -1.48, 0.0, 0.8, 250.0, 320.0], cat: [-1.0, 2.6], upt: [0.2, 1.0], cover: 0.0, per: 2, chance: 0.3, store: 0.3, hand: H_EATER },
     Kind { name: "big eaters of remains", year: 10, anywhere: false, scalars: [2.205, -0.5, 3.5, -2.884, 0.0, -0.523, 1.325, 1.3, -1.2, -1.5, -4.0, 12.0, 6.0, 3.0, 1.0, 0.2, 320.0, -0.89, 0.0, 0.8, 250.0, 320.0], cat: [-1.0, 2.6], upt: [0.3, 1.0], cover: 0.0, per: 1, chance: 0.2, store: 0.3, hand: H_EATER },

@@ -163,7 +163,9 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
 
 /// A bigger body of the same genes is warmer for the same work per kg: the heat it makes goes with its mass and its surface,
 /// which its heat leaves by, with the mass to the power 2/3, so it stands above its ground by (mass)^(1/3) times as much (8 times
-/// the body, twice the warmth).
+/// the body, twice the warmth). Since 16 Oct 2026 its boundary layer is thicker too (forced convection goes with size^-1/2), so
+/// a bare body's air takes mass^(1/2) and its radiation mass^(2/3): 8 times the body is 2 to 2.83 times warmer, by the ratio
+/// of its conductances.
 #[test]
 fn a_bigger_body_of_the_same_genes_is_warmer() {
     let mut s = set();
@@ -175,9 +177,11 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
         assert!(pcore::body::pay(w, &mut b, per_kg * mass, 10.0), "it can pay");
         b.temp(&w.chem) - t0
     };
+    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
+    let want = 8.0 * g(w, &small) / g(w, &big);
     let (a, c) = (rise(w, small, 1e5), rise(w, big, 1e5));
-    println!("warmth over the ground for the same work per kg: {a:.4} K, 8 times the body {c:.4} K");
-    assert!(a > 0.0 && (c / a / 2.0 - 1.0).abs() < 0.03, "{a} K and {c} K");
+    println!("warmth over the ground for the same work per kg: {a:.4} K, 8 times the body {c:.4} K ({:.3} times; 8 g / g' = {want:.3})", c / a);
+    assert!(a > 0.0 && (c / a / want - 1.0).abs() < 0.03 && want > 2.0 && want < 2.83, "{a} K and {c} K");
 }
 
 /// Days of a world whose ground is held at `temps[k]` K in the cell `cells[k]` (an edit): the flow and change steps when due, then

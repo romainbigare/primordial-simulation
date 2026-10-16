@@ -82,7 +82,7 @@ const SCALARS: [(f32, f32, f32); body::NSCALAR] = {
 
 const fn scalar(g: usize) -> (f32, f32, f32) {
     match g {
-        body::GAS => (0.3, -1.0, 5.0),
+        body::GAS => (0.3, -1.0, 6.0),
         body::LIQ => (0.3, -4.0, 1.0),
         body::HEAT => (0.3, -2.5, 3.5),
         body::LEAF => (0.3, -4.0, 1.0),

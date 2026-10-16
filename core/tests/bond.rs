@@ -97,9 +97,10 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
     b.cell = i as u32;
     for _ in 0..8 {
         // Fed again each time (its matter and heat are not booked here), so that it has solids
-        // above its minimums to spare.
+        // above its minimums to spare, and its liquid with them (since 16 Oct 2026 a dry body's pores close: with its matter
+        // doubled and not its liquid it could not breathe to pay).
         let t = b.temp(&w.chem);
-        (0..b.store.len()).filter(|&k| w.chem.phase(k, t) == pcore::chem::Phase::Solid).for_each(|k| b.store[k] *= 2.0);
+        (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != pcore::chem::Phase::Gas).for_each(|k| b.store[k] *= 2.0);
         b.e = b.heat_cap(&w.chem) * t;
         bond::form(&mut w, slot, &mut b, [0.0, 0.5]);
         b.hold = 0;
