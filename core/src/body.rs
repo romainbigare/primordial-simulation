@@ -1355,40 +1355,27 @@ fn cover_of(w: &World, b: &Body) -> f64 {
     (w.life.sum[b.cell as usize][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.grid.area()
 }
 
-/// A body's heat conductance to the ground it stands on at its temperature `t`, the ground at `tg`, W/K. Its own
-/// conductance (`Body::conductance`: the `HEAT` gene, mass^(2/3)) splits in the shares of its own surface (6 (m1 /
-/// `rho_body`)^(2/3) per member, as the space of walls) and of its light-capture area; the leaf's share goes to the ground
-/// as it is. The share of its own surface is its contact `gc`; a layer of `cover` kg/m² passes `phys.shelter` / `cover` W
-/// per K and m² in series with it. Its surface radiates, σ (T² + tg²)(T + tg) per m² (emissivity 1; the cover does not
-/// block it: it is matter about as warm as the ground). **Behind a coat (16 Oct 2026):** the contact is a coat in series
-/// with the still air at its outer surface, which passes `sensible` per m² and K (as for the ground). A contact under that
-/// is a coat of 1 / (1 / gc - 1 / still): heat crosses it to the outer surface, which loses it to the air (through the
-/// cover) and by radiation from its own temperature Ts, where the two meet (taken at the body's temperature first, then
-/// once at Ts). A contact at or over the still air's is no coat: the body's surface is its outer surface and radiates
-/// from its temperature (the two meet there). Walls around it are in series with all of it (their share of their
-/// conductance). A member of 30 kg (surface 0.58 m², capture area 0.03 m²) of the eaters' gene, 0.49, has a contact of
-/// 28 W/K, no coat (still air 5.8 W/K): 33 W/K with its radiation and leaf, 14 under 10 kg/m² of cover, so its 52 W of upkeep
-/// warm it 1.6 K, 3.8 K under cover. With fur (gene -1.0) it gets 1.0 W/K in all, Herreid and Kessel's 0.94 for a 30 kg
-/// mammal; when radiation went past the coat it got 4.4. A burning node of a high gene radiates from its own
-/// temperature, 1700 W/K per m² at 3000 K. A 1 kg plant member (surface 0.06 m², capture area 2 m²) keeps 475 of its 490
-/// W/K by its leaf.
+/// A body's heat conductance to the ground it stands on at its temperature `t`, the ground at `tg`, W/K: one network for
+/// every body (16 Oct 2026). Heat crosses its coat (`Body::conductance`: the `HEAT` gene, mass^(2/3)) to its outer surface,
+/// at Ts; from there it leaves in parallel to the still air (`sensible` per m² and K, the ground's number) and by radiation
+/// from Ts, σ (Ts² + tg²)(Ts + tg) per m² (emissivity 1). The outer surface is its skin, 6 (m1 / `rho_body`)^(2/3) per member
+/// (as the space of walls), and both faces of its light-capture area. A layer of `cover` kg/m² passes `phys.shelter` /
+/// `cover` W per K and m² of skin in series with the skin's still air (the leaf is above it); it does not block radiation
+/// (it is matter about as warm as the ground). Ts is where the coat and the outer surface meet (radiation taken at the
+/// body's temperature first, then once at Ts). Walls around it are in series with all of it (their share of their
+/// conductance). A bare 30 kg member (skin 0.58 m²) gets at most the still air and radiation of its skin, 9 W/K; fur
+/// (gene -1.0) gives 0.8 W/K (Herreid and Kessel 1967: 0.94). A 2 kg plant member of 3.4 m² of capture area gets at most
+/// about 100 W/K. A burning node of a high gene radiates from about its own temperature, 1700 W/K per m² at 3000 K.
 #[allow(clippy::too_many_arguments)]
 fn surface(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64, walls: Option<(f64, f64)>, t: f64, tg: f64) -> f64 {
-    let (p, m1, nb) = (&cfg.phys, mass / b.n(), b.n());
-    let leaf = b.equiv(p, b.built(chem)) * b.k.leaf;
-    let (ab, g0) = (6.0 * (m1 / p.rho_body).powf(2.0 / 3.0), b.conductance(p.m_ref, mass));
-    let (s, a) = (ab / (ab + leaf / nb), ab * nb);
-    let (gc, still) = (g0 * s, cfg.sensible * a);
-    let covered = |x: f64| if cover > 0.0 { 1.0 / (1.0 / x + cover / (p.shelter * a)) } else { x };
-    let own = if gc < still {
-        let (coat, air) = (gc * still / (still - gc), covered(still));
-        let out = air + radiated(a, t, tg);
-        let out = air + radiated(a, (coat * t + out * tg) / (coat + out), tg);
-        coat * out / (coat + out)
-    } else {
-        covered(gc) + radiated(a, t, tg)
-    };
-    let g = g0 * (1.0 - s) + own;
+    let (p, m1) = (&cfg.phys, mass / b.n());
+    let (leaf, skin) = (b.equiv(p, b.built(chem)) * b.k.leaf, b.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0));
+    let still = cfg.sensible * skin;
+    let air = if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + cfg.sensible * 2.0 * leaf;
+    let (coat, area) = (b.conductance(p.m_ref, mass), skin + 2.0 * leaf);
+    let out = air + radiated(area, t, tg);
+    let out = air + radiated(area, (coat * t + out * tg) / (coat + out), tg);
+    let g = coat * out / (coat + out);
     walls.map_or(g, |x| 1.0 / (1.0 / g + 1.0 / x.1))
 }
 
