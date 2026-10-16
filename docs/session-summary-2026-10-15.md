@@ -189,7 +189,7 @@ Things that are open and not built:
   With that the film moves the carbon gas by -18 to 0 ppm at year 60 (handover, "Soil water" and "The sea floor
   reacts"). Found on the way: plants give 0.21 to 0.25 m of liquid a year to the air (real 0.3 to 0.6), but they
   catch 5 to 6 m a year from the air's vapour (7 times the rain) and soak under 3 mm from the ground, so the soil's
-  liquid never goes through plants. Not changed (bodies, `body::live`): the owner decides.
+  liquid never goes through plants. Changed on 16 Oct (section 14).
   The 2/3 power of the sea's store comes from the pair's contacts, not from the gas source: still open.
 - **Review 7 items:** R4 (the liquid shortcut) is built (the living body is matter over 1 - 0.75); R5 was done by the energy
   ceiling; R6 is not built: `c_build` is anchored at 1e4 to real P/B instead (tuned 63 -> 62). Liquid made in a body above its limit drains out (R11): ready, not landed (below). Plants that
@@ -198,13 +198,13 @@ Things that are open and not built:
   step error in Law 2 (the rate was held over the step, so the salt went to its last mol in one update). Fixed
   on 15 Oct. With R11 the eaters now live on all seeds and all can move, but on seed 3 they are 4 times fewer, in the
   roster the big kinds die more often (4 of 9 alive at year 60 against 6 of 9), and a learning test fails at its noise
-  edge. So R11 is not landed; it is one commit (e13d911). The owner decides (handover, "The rock salt in bodies, R11 and gifts").
+  edge. So R11 was not landed; it is one commit (e13d911). Landed on 16 Oct, the owner's decision (section 14).
 - **A body keeps a temperature** (the owner agreed, 15 Oct): a gene `KEEP_T`; a body colder than it burns fuel to stay
   at it (handover, "A body keeps a temperature"). Built, not merged. All founders start at 250 K (it does nothing). On seeds 1
   to 3 (60 years) the gene does not move (249 to 252 K) and the insulation gene does not move: not selected on the mild island,
   as expected. Plants and eaters as on main (under 2 times). Found: bodies radiate from their own temperature past their
   insulation, so no body gets under about 3.6 W/K at 30 kg, 3.8 times real fur. The owner decides on putting radiation
-  behind the insulation.
+  behind the insulation. Done on 16 Oct (section 14).
 - **A second, dearer body matter** (protein-like) for animals: an idea, not built.
 - **The big-brain test:** run on seeds 1 to 3 (64 x 64, 60 years, copies at year 40). It cannot tell.
   The control (same brain, root 11) joins the ordinary eaters' nodes in the first year, so there is no real control.
@@ -221,7 +221,7 @@ Things that are open and not built:
    carbon settles.
 2. **The small-cell world** for the nodes-against-individuals check, with plants included.
 3. **Fix the open problems** that the runs confirm: done in the follow-up on 15 Oct (above). Left for the owner:
-   R11 (one commit), the plants' liquid that comes from the air and not the soil (above), a solid
+   (R11 and the plants' liquid: done on 16 Oct, section 14), a solid
    store of the rock element in animals, the stronger form of product inhibition (a full store stops the enzyme), a control that does not merge for the big-brain
    test, and `bump` (tuned) now decides whether a body can move.
 4. **Core size:** two simplify passes (same history bit for bit) took it from 8,707 to 8,467 lines (6% over 8,000).
@@ -235,3 +235,20 @@ Things that are open and not built:
    alone they die out. They are still growing and could reach about 8 times year 60. Owner's choices: R11, a structural plant matter.
 6. **Then M4:** the planet with real seasons, frost and dry seasons, natural fire starts, and speed
    work. Disease after M4.
+
+## 14. Three body-physics changes (16 Oct 2026, the owner approved; a branch of main 5de4eed, not merged)
+
+- **R11 landed:** liquid past the level a body keeps drains to the ground with its heat. Eater members weigh
+  49 to 54 kg, not 121 to 124; eater kg is 4 to 7 times lower; they live on all seeds. The learning test passes unchanged.
+- **Rain, not vapour:** a body takes its share of the cell's rain (1 - exp(-x) by capture area, shared by height as
+  the light is), from the cell's liquid. Plants now take 0.06 to 0.08 m a year, 70% of it rain they catch, 30% roots;
+  they transpire 0.06 to 0.08 m a year (real 0.3 to 0.6) and are dry a fifth of the time. Of the rain 68 to 70% goes
+  back to the air (real about 60%), but mostly from the ground: transpiration is 10 to 13% of it (real about 60%).
+  Roots that take what a plant transpires would be the next step.
+- **Radiation behind the coat:** a coat's outer surface radiates; fur gives 1.0 W/K for 30 kg (real 0.94; before 4.4).
+  Bare bodies (all founders) are unchanged. The textbook form (the gene is the coat, still air always outside) was
+  measured and dropped: bare eaters 4 times less coupled, they died out on 2 of 3 seeds. A body whose upkeep climbs
+  9% a K has no steady warmth past about 4 K of heat over conductance, so no body can wear real fur at rest.
+- **Not moved:** `HEAT` and `KEEP_T` stay where they started. Roster: the big kinds alive at year 60, 5 of 9 (main 8).
+- Details: handover, "Three body-physics changes".
+
