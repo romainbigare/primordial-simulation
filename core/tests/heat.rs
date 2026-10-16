@@ -451,3 +451,37 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
+
+/// A body keeps its temperature from above by evaporating (16 Oct 2026): a bare resting eater (the founders' `HEAT`, 3.5)
+/// that evaporates above 300 K (`COOL_T`) on ground held at 295 K holds 300 K, the latent heat of what it evaporates carrying
+/// off what its upkeep makes past what its surface passes at 5 K, about 0.6 kg a day; its twin that does not (`COOL_T` 320 K,
+/// the founders') stands warmer. Matter and energy exact. (A furred one at 310 K in 300 K air cannot: this 140 kg body pays
+/// 327 W at 310 K, 5.6 times its 58 W at 290 K, its fur passes 24 W, and the rest is 10.6 kg of liquid a day, a third of what
+/// it holds: tried, it and its twin that does not evaporate both died at their second update, their liquid boiling.)
+#[test]
+fn a_body_keeps_its_temperature_from_above_by_evaporating() {
+    let mut s = set();
+    s.w.cfg.phys.c_build = 0.0;
+    let make = |s: &mut Set, cool: f32| {
+        let mut b = s.eater(0);
+        b.genes[pcore::body::COOL_T] = cool;
+        b.k = Default::default();
+        b.prepare(&s.w.chem, &s.w.cfg.phys);
+        b
+    };
+    let (sweat, dry) = (make(&mut s, 300.0), make(&mut s, 320.0));
+    let (w, cell) = (&mut s.w, sweat.cell as usize);
+    let liquid = worldgen::life::roles(&w.chem).expect("roles").2;
+    let slots = [w.life.add(sweat, w.day, 1), w.life.add(dry, w.day, 1)];
+    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    held_days(w, &[cell], &[295.0], 21);
+    let (a, b) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
+    assert!(a.alive && b.alive);
+    let (t, t_dry) = (a.temp(&w.chem), b.temp(&w.chem));
+    let kg = (b.store[liquid] - a.store[liquid]) * w.chem.subs[liquid].molar_mass;
+    println!("on 295 K ground: evaporating above 300 K, {t:.2} K; not evaporating {t_dry:.2} K; {kg:.1} kg less liquid");
+    assert!((t - 300.0).abs() < 0.5 && t_dry > t + 1.0, "{t} K, the twin {t_dry} K");
+    assert!(kg > 0.0, "{kg} kg");
+    let (de, dq) = pcore::check::drift(w, &t0, &l0);
+    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+}

@@ -73,7 +73,11 @@ pub const ALLOC: usize = 19;
 /// demand, beside its upkeep, the heat that holds it there, as far as its reactions can release it (`live`). Above it,
 /// nothing more: it cools by physics. Below its surroundings it does nothing
 pub const KEEP_T: usize = 20;
-pub const NSCALAR: usize = 21;
+/// The temperature above which the body opens its surface to evaporation (pores, sweat, panting), K, as far as that holds it
+/// there (`live`), the mirror of `KEEP_T`. Two levels, not one: between them it neither burns nor evaporates, as a body that
+/// keeps no temperature must be able to (with one level every body would always burn or always evaporate)
+pub const COOL_T: usize = 21;
+pub const NSCALAR: usize = 22;
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
 /// body could not pay its upkeep; taken apart by another body.
@@ -1368,15 +1372,20 @@ fn cover_of(w: &World, b: &Body) -> f64 {
 /// about 100 W/K. A burning node of a high gene radiates from about its own temperature, 1700 W/K per m² at 3000 K.
 #[allow(clippy::too_many_arguments)]
 fn surface(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64, walls: Option<(f64, f64)>, t: f64, tg: f64) -> f64 {
-    let (p, m1) = (&cfg.phys, mass / b.n());
-    let (leaf, skin) = (b.equiv(p, b.built(chem)) * b.k.leaf, b.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0));
-    let still = cfg.sensible * skin;
-    let air = if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + cfg.sensible * 2.0 * leaf;
-    let (coat, area) = (b.conductance(p.m_ref, mass), skin + 2.0 * leaf);
+    let ((air, area), coat) = (film(chem, cfg, b, mass, cover), b.conductance(cfg.phys.m_ref, mass));
     let out = air + radiated(area, t, tg);
     let out = air + radiated(area, (coat * t + out * tg) / (coat + out), tg);
     let g = coat * out / (coat + out);
     walls.map_or(g, |x| 1.0 / (1.0 / g + 1.0 / x.1))
+}
+
+/// The still air at a body's outer surface, W/K, and that surface, m² (`surface`): its skin (through the cover) and both
+/// faces of its light-capture area.
+fn film(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64) -> (f64, f64) {
+    let p = &cfg.phys;
+    let (leaf, skin) = (b.equiv(p, b.built(chem)) * b.k.leaf, b.n() * 6.0 * (mass / b.n() / p.rho_body).powf(2.0 / 3.0));
+    let still = cfg.sensible * skin;
+    (if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + cfg.sensible * 2.0 * leaf, skin + 2.0 * leaf)
 }
 
 /// The heat conductance by which a body of `mass` kg at the temperature `t` loses heat to the ground it stands on,
@@ -1567,8 +1576,16 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // series), and once for all the liquids (what one spent is owed by the next), so the heat
     // step never needs more than the surface gives and the body never ends below that point.
     // (It catches no vapour: the rain its capture area catches is taken with what it soaks, below.)
+    // **It keeps its temperature from above as from below (16 Oct 2026):** where its update would leave it warmer than its
+    // `COOL_T` gene, it opens its surface to evaporation (pores, sweat, panting) as far as that holds it there: the latent heat
+    // that brings the end of the heat step below to the gene (that step is linear in the heat, `e1 = A + B heat`). It can open
+    // no further than its still air carries vapour away (the heat film's conductance over the air's molar heat capacity, the
+    // Lewis relation, `film`), against the air's deficit of vapour, and spends no liquid it keeps below its safe minimum.
     let mass1 = b.mass(chem);
     let mut moved = false;
+    let cpa: f64 = (0..ns).map(|k| tmp.x[k] * chem.subs[k].cp).sum();
+    let wide = film(chem, cfg, b, mass, cover).0 / cpa.max(1e-9) * dt * open * (-depth / cfg.phys.gas_depth).exp();
+    let (lay, size) = (Layout::of(chem), b.size(chem));
     for k in 0..ns {
         let push = (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0);
         if push <= 0.0 || b.store[k] <= 0.0 || chem.phase(k, t0) != Phase::Liquid {
@@ -1576,7 +1593,12 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         }
         let (own, room) = (heat - lit + took, crate::heat_above_floor(e_ground[i], cap!()));
         let paid = (own + (g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room)).max(0.0);
-        let m = (push * reach_mol).min(paid / held(chem, k)).min(b.store[k]);
+        let (ct, x) = (b.heat_cap(chem) + c_out, g * dt / (b.heat_cap(chem) + c_out));
+        let bx = if x < 1e-9 { 1.0 } else { -(-x).exp_m1() / x };
+        let e1 = -(-x).exp_m1() * ct * tg + (-x).exp() * b.e + bx * heat;
+        let need = ((e1 - ct * b.gene(COOL_T)) / bx / held(chem, k)).max(0.0);
+        let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
+        let m = (push * reach_mol).max((push * wide).min(need).min(spare)).min(paid / held(chem, k)).min(b.store[k]);
         if m > 0.0 {
             moved = true;
             let q = m * chem.subs[k].cp * t0;
