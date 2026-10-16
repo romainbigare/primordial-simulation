@@ -1222,7 +1222,7 @@ fn a_body_takes_and_digests_the_frame_only_with_its_enzyme() {
         let e = w.energy_ground(i, t);
         (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[f].hf, e);
         let mut b = eater(&mut w, i, 3, 6.0);
-        // Only the frame to take, and the enzyme at the founder digesters' speed (`worldgen::life::DIGESTERS`) or off.
+        // Only the frame to take, and the enzyme at the speed that splits what it holds within its interval, or off.
         (b.genes[lay.upt + r.liquid], b.genes[lay.upt + r.rich], b.genes[lay.upt + r.matter], b.genes[lay.upt + f]) = (-0.1, -0.1, -0.1, 1.0);
         b.genes[lay.cat + split] = if enzyme { 8.7 } else { -1.0 };
         let rich0 = b.store[r.rich];

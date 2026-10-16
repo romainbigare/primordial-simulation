@@ -675,7 +675,7 @@ ea = 7760
 # 7760 K, that of the body's other chemistry, as a body's catalyst multiplies the rate and keeps its ea (the enzyme's rate goes with
 # warmth as the rest of life's, Gillooly et al. 2001); k = 4.7e-15 exp(7760/298) = 9.6e-4, 2.3e-15 /s at 290 K. A body whose
 # genes speed it up about 10^9 splits what it holds within days, and pays for that enzyme by its capacity (`Physics::c_cat`), as
-# for every enzyme; it splits its own frame too.
+# for every enzyme; it splits its own frame too. No founder has it.
 [[r]] # 27
 i = [[25,1],[0,1]]
 o = [[5,6]]

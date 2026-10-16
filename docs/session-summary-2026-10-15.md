@@ -252,3 +252,23 @@ Things that are open and not built:
 - **Not moved:** `HEAT` and `KEEP_T` stay where they started. Roster: the big kinds alive at year 60, 5 of 9 (main 8).
 - Details: handover, "Three body-physics changes".
 
+
+## 15. Bodies built of several materials (16 Oct 2026, the owner agreed; a branch of main cc86483, not merged)
+
+- **Step 0, the store:** plants held 62 to 64% of their dry mass as the energy-rich solid (real 5 to 20%). Not a bug:
+  founders start at 63% (30% of their mass), a full store would be 78%, and storing cost nothing. Holding up (step 2)
+  makes the store a load: plants then hold 49 to 53%.
+- **Step 1:** chemistry lists the solids a body can build besides matter (a frame, substance 25, cellulose-like; lime,
+  substance 10, of the rock salt). The keep gene of each is its share in what a body builds; founders start at 0.02 of
+  each. No upkeep for them. A body keeps its own lime now (to its level).
+- **Step 2:** height is what a body's soft tissue and built solids hold up against its weight (Greenhill's column, Young's
+  modulus of each solid). Plants' share genes rise (frame 0.05 to 0.09, lime 0.06 to 0.13 at year 60); plants stand 2.1 to
+  2.6 m. Eaters drop both.
+- **Step 3:** a bite pays to break what it tears, pushing through breaks what its energy pays for (by the stress each solid
+  breaks at; `walk_wear` gone); a body takes matter and built solids only if its own catalyst breaks them, and what it does
+  not break passes back to the ground. Eaters of the normal runs never digest the frame; the roster's eaters of remains do.
+- **Surprise:** plants build more lime than frame (as stiff per kg, needs no fuel, does not rot; the frame rots inside the
+  living body at the litter constant). Bites barely pay to break (a few kJ per kg against 15 MJ of food): hard parts protect
+  by not being digested, not by force.
+- **Open:** the litter constants run inside living bodies; real living stems and bones do not rot. The owner decides.
+- Details: handover Section 4, "Bodies built of several materials".
