@@ -164,6 +164,31 @@ impl Chemistry {
         1.0 / (1.0 / tm - R_GAS * x.max(1e-30).ln() / l)
     }
 
+    /// Melting point of `k` among the amounts `a(j)` (mol) of one node or body, K: `t_melt` at the share of `k` among
+    /// itself and what is dissolved in it. Only a liquid of the world (liquid at `T_SURF`) holds anything. Dissolved in it is
+    /// what melts below its melting point and is liquid there (the salts that live in the liquid) or is a gas that dissolves;
+    /// a solid there (the energy-rich solid) is not, nor `k` itself. Bodies and ground nodes (their pores, the liquid that
+    /// stands on them, its ice) freeze by it; `phase_in` reads phases through it.
+    pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
+        let s = &self.subs[k];
+        if s.melt >= crate::T_SURF || s.boil <= crate::T_SURF {
+            return s.melt;
+        }
+        let dissolved = |d: &Substance| d.melt < s.melt && (d.boil > s.melt || d.solubility > 0.0);
+        let other: f64 = (0..self.ns()).filter(|&j| j != k && dissolved(&self.subs[j])).map(|j| a(j).max(0.0)).sum();
+        let x = a(k).max(0.0);
+        self.t_melt(k, x / (x + other).max(1e-300))
+    }
+
+    /// Phase of `k` at `t` among the amounts `a(j)` (mol) of one node or body: as `phase`, at its melting point there
+    /// (`melt_in`).
+    pub fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
+        match self.phase(k, t) {
+            Phase::Solid if t >= self.melt_in(k, a) => Phase::Liquid,
+            p => p,
+        }
+    }
+
     /// Mole fraction of gas `k` that a liquid at `t` holds under its partial pressure `p`, Pa
     /// (Henry's law). It falls with warmth by van 't Hoff's law, with the heat of solution taken
     /// as the vaporisation enthalpy: dissolving is like condensing (for the carbon gas of

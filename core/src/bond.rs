@@ -378,14 +378,14 @@ pub fn walls_around(w: &World, b: &Body) -> Option<(f64, f64)> {
 /// Volume of a body's solids and liquids, m³.
 pub fn volume(chem: &Chemistry, b: &Body) -> f64 {
     let t = b.temp(chem);
-    b.store.iter().enumerate().map(|(k, a)| a * chem.molar_volume(k, chem.phase(k, t))).sum()
+    b.store.iter().enumerate().map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| b.store[j]))).sum()
 }
 
 /// Standing liquid on cell `i`: depth m, density kg/m³, mol per m³.
 fn liquid(w: &World, i: usize) -> (f64, f64, f64) {
     let (env, n) = (w.life.env[i], w.grid.n());
     let (mut m, mut v, mut mol) = (0.0, 0.0, 0.0);
-    for k in (0..w.chem.ns()).filter(|&k| w.chem.phase(k, env[0]) == Phase::Liquid) {
+    for k in (0..w.chem.ns()).filter(|&k| w.chem.phase_in(k, env[0], |j| w.g(j, i)) == Phase::Liquid) {
         let a = w.ground[k * n + i];
         (m, v, mol) = (m + a * w.chem.subs[k].molar_mass, v + a * w.chem.molar_volume(k, Phase::Liquid), mol + a);
     }
@@ -534,7 +534,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     if all <= 0.0 {
         return;
     }
-    let wet: Vec<bool> = (0..chem.ns()).map(|k| chem.phase(k, t) == Phase::Liquid).collect();
+    let wet: Vec<bool> = (0..chem.ns()).map(|k| chem.phase_in(k, t, |j| b.store[j]) == Phase::Liquid).collect();
     let mut m: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * (w.cfg.phys.take * days * mb / all).min(1.0)).min(0.5 * s)).collect();
     let lv: f64 = (0..chem.ns()).filter(|&k| wet[k]).map(|k| m[k] * chem.molar_volume(k, Phase::Liquid)).sum();
     let fit = (w.parts.parts[p].room(chem) / lv.max(1e-12)).min(1.0);
@@ -715,7 +715,7 @@ pub fn step(w: &mut World) {
         let p = &mut w.parts.parts[s];
         let t = p.e / p.heat_cap(chem).max(1e-9);
         for k in 0..ns {
-            if p.wall[k] > 0.0 && chem.phase(k, t) != Phase::Solid {
+            if p.wall[k] > 0.0 && chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid {
                 let q = p.wall[k] * chem.subs[k].cp * t;
                 (w.ground[k * n + i], w.e_ground[i], p.e) = (w.ground[k * n + i] + p.wall[k], w.e_ground[i] + q, p.e - q);
                 p.wall[k] = 0.0;

@@ -222,7 +222,7 @@ impl Reactor {
     /// Fastest rate, 1/s, among the reactions not driven by light that the amounts `n` of one
     /// node can run at `t`.
     pub fn fastest(&mut self, chem: &Chemistry, n: &[f64], t: f64) -> f64 {
-        let tot = self.phases(n, None, t);
+        let tot = self.phases(chem, n, None, t);
         let mut best = 0.0f64;
         for (r, rx) in chem.reactions.iter().enumerate() {
             if rx.light || t < self.thr[r] {
@@ -258,7 +258,7 @@ impl Reactor {
                 for &(k, a, c) in &used {
                     n[k] = (a - c * x).max(0.0);
                 }
-                let tot = rc.phases(n, Some(gas), t);
+                let tot = rc.phases(chem, n, Some(gas), t);
                 let eps = |rc: &Self, r: usize| {
                     let rx = &chem.reactions[r];
                     let lim = scarce(&rx.inputs, |k| rc.av[k]).0;
@@ -313,10 +313,10 @@ impl Reactor {
     /// Phase and available amount of each substance at `t` (the node's, plus for a gas the gas
     /// around it), and the total of each phase: in a gas or a liquid the mole fraction is a
     /// substance's activity; a solid is a phase of its own (activity 1).
-    fn phases(&mut self, n: &[f64], gas: Option<&[f64]>, t: f64) -> [f64; 3] {
+    fn phases(&mut self, chem: &Chemistry, n: &[f64], gas: Option<&[f64]>, t: f64) -> [f64; 3] {
         let mut tot = [0.0; 3];
         for k in 0..n.len() {
-            let p = (t >= self.melt[k]) as usize + (t >= self.boil[k]) as usize;
+            let p = (t >= self.melt[k] || t >= chem.melt_in(k, |j| n[j])) as usize + (t >= self.boil[k]) as usize;
             let a = match gas {
                 Some(g) if p == 2 => n[k] + g[k],
                 _ => n[k],
@@ -365,7 +365,7 @@ impl Reactor {
             if iter == 0 {
                 self.cap0 = c;
             }
-            let tot = self.phases(n, has_pool.then_some(&*pool), t);
+            let tot = self.phases(chem, n, has_pool.then_some(&*pool), t);
             // Rates of the reactions that are not frozen and have all their inputs.
             let (mut any, mut heat) = (false, 0.0);
             for (r, rx) in chem.reactions.iter().enumerate() {
@@ -598,7 +598,7 @@ pub fn step(w: &mut World, dt: f64) {
         // An input that counts more than once, in a liquid, goes by its share of the liquid to the
         // power `nu - 1`: a node holding a trace of it in its liquid does not react every step.
         if !c.shared.is_empty() {
-            let liquid = |k: usize| chem.subs[k].melt <= t && t < chem.subs[k].boil;
+            let liquid = |k: usize| chem.phase_in(k, t, |j| col(j)[i]) == Phase::Liquid;
             let all: f64 = liquids.iter().filter(|&&k| liquid(k)).map(|&k| col(k)[i]).sum();
             let x: f64 = (c.shared.iter().filter(|p| liquid(p.0))).map(|&(k, nu)| pow(col(k)[i] / all, nu - 1)).product();
             if t < c.warm(c.kdt * x) {
@@ -620,7 +620,7 @@ pub fn step(w: &mut World, dt: f64) {
         // gas over it, times the gas's count; with another input scarce, all shares count.
         let airy: Vec<(usize, u16)> = c.gas.iter().copied().chain(c.held.iter().filter(|h| t >= h.1).map(|h| (h.0, h.3))).collect();
         if !airy.is_empty() && c.held.iter().any(|h| t < h.1) {
-            let liquid = |k: usize| chem.subs[k].melt <= t && t < chem.subs[k].boil;
+            let liquid = |k: usize| chem.phase_in(k, t, |j| col(j)[i]) == Phase::Liquid;
             let wet = || liquids.iter().filter(|&&k| liquid(k)).map(|&k| col(k)[i]).sum::<f64>();
             let hold = (c.held.iter().filter(|h| t < h.1)).map(|&(k, _, nu, _)| (if liquid(k) { wet() } else { col(k)[i] }) / nu as f64).fold(f64::MAX, f64::min);
             let gnu = c.held.iter().filter(|h| t >= h.1).fold(c.gnu, |m, h| m.max(h.2 as f64));
@@ -706,12 +706,12 @@ pub fn step(w: &mut World, dt: f64) {
             // the gas dissolved in that liquid, renewed through the liquid's film over its whole
             // depth (`Reactor::film`; Flow's law, `air::dissolve`: depth / `dissolve`; the air's
             // side of the film is faster by 100 times or more for every gas and left out).
-            let vol = |p: Phase| (0..ns).filter(|&k| chem.phase(k, t) == p).map(|k| amt[k] * chem.molar_volume(k, p)).sum::<f64>();
+            let vol = |p: Phase| (0..ns).filter(|&k| chem.phase_in(k, t, |j| amt[j]) == p).map(|k| amt[k] * chem.molar_volume(k, p)).sum::<f64>();
             let wet = vol(Phase::Liquid);
             rc.film = if wet > w.cfg.phys.porosity * vol(Phase::Solid) { wet / (w.grid.area() * w.cfg.dissolve) } else { 0.0 };
             let all = amt.iter().sum::<f64>();
             // The reactor sees sensible heat: molten amounts hold their fusion enthalpy apart.
-            let fused: f64 = (0..ns).filter(|&k| chem.subs[k].melt <= t).map(|k| amt[k] * chem.subs[k].lf).sum();
+            let fused: f64 = (0..ns).map(|k| amt[k] * crate::body::fused(chem, k, t, |j| amt[j])).sum();
             let mut e = w.e_ground[i] - fused;
             rc.react(chem, &mut amt, Some(&mut pool), &mut e, bed[i][0], None, 0.0, ticks as f64 * dt);
             // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas

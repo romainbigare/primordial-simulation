@@ -61,7 +61,7 @@ struct Sp {
 /// | `cap` | J/K | G (every step), X, L, C (moves of heat capacity) | G, Rad, X, L, C |
 /// | `tg` | K | G | all, Law 2, bodies (`temps`) |
 /// | `pk`, `phi` | substance, share | G | `molten`, Rad |
-/// | `hold` | [J held, J low, J high, stage] | G, L (`[0]`), `lift` (marks stale) | G, L |
+/// | `hold` | [J held, J low, J high, molten bits] | G, L (`[0]`), `lift` (marks stale) | G, L |
 /// | `z`, `head` | m (solid surface, surface of all the liquid, pores filled first) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
 /// | `pd`, `alb`, `rc` | m (pore liquid over the cell), reflectance, m² K/W | `surface` | L; Rad |
 /// | `order`, `done`, `sed`, `sed_e` | cell keys by head, visited flag, mol carried, J carried | L | L |
@@ -110,7 +110,7 @@ pub struct Scratch {
     pk: Vec<usize>,
     phi: Vec<f64>,
     /// Off a plateau: the fusion enthalpy held, and the energies between which it holds
-    /// (until the amounts change); and how many of `vary` are molten.
+    /// (until the amounts change); and what is molten, one bit per substance (`melted`).
     hold: Vec<[f64; 4]>,
     z: Vec<f64>,
     head: Vec<f64>,
@@ -259,7 +259,13 @@ const NONE: usize = usize::MAX;
 /// Molten share of substance `k` in ground node `i` (liquid, or gas above boiling).
 #[inline]
 fn molten(s: &Scratch, k: usize, i: usize) -> f64 {
-    if s.pk[i] == k { s.phi[i] } else { (s.tg[i] >= s.sp[k].melt) as u8 as f64 }
+    if s.pk[i] == k { s.phi[i] } else { melted(s, k, i) as u8 as f64 }
+}
+
+/// Is substance `k` at or over its melting point in ground node `i` (`World::melt`, as of the last `ground_state`)?
+#[inline]
+fn melted(s: &Scratch, k: usize, i: usize) -> bool {
+    (s.hold[i][3] as u64) >> k & 1 == 1
 }
 
 /// Liquid share of substance `k` in ground node `i`.
@@ -269,16 +275,16 @@ fn wet(s: &Scratch, k: usize, i: usize) -> f64 {
 }
 
 /// Rise of the solid surface and of the head of a ground node at `t` for `m` mol of a
-/// substance (negative `m`: fall).
+/// substance, molten there or not (negative `m`: fall).
 #[inline]
-fn rise(p: &Sp, t: f64, m: f64, area: f64) -> [f64; 2] {
-    if t < p.melt {
+fn rise(p: &Sp, t: f64, liq: bool, m: f64, area: f64) -> [f64; 2] {
+    if t >= p.boil {
+        [0.0; 2]
+    } else if !liq {
         let d = m * p.v[0] / area;
         [d, d]
-    } else if t < p.boil {
-        [0.0, m * p.v[1] / area]
     } else {
-        [0.0; 2]
+        [0.0, m * p.v[1] / area]
     }
 }
 
@@ -293,7 +299,7 @@ fn lift(s: &mut Scratch, i: usize, [dz, dh]: [f64; 2]) {
 /// Raise (or with negative `m`, lower) the surface of ground node `i` for `m` mol of `k`.
 #[inline]
 fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
-    let d = rise(&s.sp[k], s.tg[i], m, s.area);
+    let d = rise(&s.sp[k], s.tg[i], melted(s, k, i), m, s.area);
     lift(s, i, d);
 }
 
@@ -432,7 +438,9 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         }
     }
     // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting point
-    // (a plateau) until all of that substance has frozen or melted.
+    // (a plateau) until all of that substance has frozen or melted. Each melts at its melting point in
+    // the node, lowered by what is dissolved in its liquid (`World::melt`), in the order of those.
+    let mut ord = [(0.0, 0); 64];
     for i in 0..n {
         let same = (cap[i] - s.cap[i]).abs() <= 1e-9 * cap[i];
         s.cap[i] = cap[i];
@@ -441,27 +449,32 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             s.tg[i] = (e - held) / c;
             continue;
         }
-        let (mut held, mut lo, mut hi, pk) = (0.0, f64::MIN, f64::MAX, s.pk[i]);
+        let (mut held, mut lo, mut hi, pk, mut bits) = (0.0, f64::MIN, f64::MAX, s.pk[i], 0u64);
         s.pk[i] = NONE;
-        let mut stage = 0.0;
-        for &k in &s.vary {
+        let m = s.vary.len();
+        for (o, &k) in ord.iter_mut().zip(&s.vary) {
+            *o = (w.melt(k, i), k);
+        }
+        ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut tm = 0.0;
+        for &(t, k) in &ord[..m] {
             let (p, a) = (&s.sp[k], w.ground[k * n + i]);
-            let at = c * p.melt + held;
+            let at = c * t + held;
             if e < at {
                 hi = at;
                 break;
             }
+            bits |= 1 << k;
             if a > 0.0 && e < at + a * p.lf {
-                (s.pk[i], s.phi[i], hi) = (k, (e - at) / (a * p.lf), f64::MIN);
+                (s.pk[i], s.phi[i], hi, tm) = (k, (e - at) / (a * p.lf), f64::MIN, t);
                 break;
             }
             held += a * p.lf;
             lo = at + a * p.lf;
-            stage += 1.0;
         }
-        s.hold[i] = [held, lo, hi, stage];
-        s.tg[i] = if s.pk[i] == NONE { (e - held) / c } else { s.sp[s.pk[i]].melt };
-        if full || pk != NONE || s.pk[i] != NONE || stage != was {
+        s.hold[i] = [held, lo, hi, bits as f64];
+        s.tg[i] = if s.pk[i] == NONE { (e - held) / c } else { tm };
+        if full || pk != NONE || s.pk[i] != NONE || bits as f64 != was {
             surface(w, s, i);
         }
     }
@@ -876,7 +889,7 @@ fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
                     let (p, m) = (&s.sp[k], (x * r * f * soft[k]).min(0.25 * x));
                     w.ground[k * n + a] -= m;
                     w.ground[k * n + b] += m;
-                    let (da, db) = (rise(p, ta, -m, area), rise(p, tb, m, area));
+                    let (da, db) = (rise(p, ta, melted(s, k, a), -m, area), rise(p, tb, melted(s, k, b), m, area));
                     (c, mass, mob) = (c + m * p.cp, mass + m * p.mm, mob + m * p.v[0] * soft[k]);
                     (ua, ub) = ([ua[0] + da[0], ua[1] + da[1]], [ub[0] + db[0], ub[1] + db[1]]);
                 }
