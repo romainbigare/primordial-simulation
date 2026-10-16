@@ -39,7 +39,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `skin_m` | m | depth of ground that exchanges heat with the surface | the depth the yearly swing reaches in soil is 2 to 4 m (my arithmetic, unchecked) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |
 | `gravity` | m/s² | pull of the planet | 9.81 | physical |
-| `sensible` | W/(m² K) | heat passed between ground and the air touching it | measured bulk exchange over land in wind, 5 to 30 (unchecked) | anchored |
+| `sensible` | W/(m² K) | heat passed between ground and the air touching it; since 16 Oct 2026 also between a body's outer surface and the air (the still air outside its coat, `body::surface`) | measured bulk exchange over land in wind, 5 to 30 (unchecked) | anchored |
 | `evap` | m/s | transfer speed on the air's side of a surface (evaporation) | usual exchange speed over open ground in wind, 0.005 to 0.02 (unchecked) | anchored |
 | `dissolve` | m/s | transfer speed on the liquid's side of a surface for a dissolving gas; since 15 Oct 2026 also the film through which a ground node under standing liquid reaches the air for its reactions (`Reactor::film` = depth / `dissolve`, Law 2) | slightly soluble gases over open liquid in wind, 5e-5 (4 m a day), doc comment | anchored |
 | `wind` | m/s per K | overturning air speed per K of warmth difference between air nodes | none found; a sea breeze of a few m/s for about 10 K is the same order (my arithmetic, unchecked) | tuned, first guess |

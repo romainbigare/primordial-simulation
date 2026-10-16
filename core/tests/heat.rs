@@ -394,10 +394,13 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
     assert!((took[1] / took[0] / (ups[1] / ups[0]) - 1.0).abs() < 0.01, "taken {took:?}, upkeep {ups:?}");
 }
 
-/// A body keeps its temperature at its `KEEP_T` gene (15 Oct 2026): a resting eater with fur (contact 1 W/K at 30 kg, Herreid
-/// and Kessel 1967) that keeps 310 K on ground held at 280 K stands at 310 K, where its twin that keeps 250 K stands 4 K above
-/// the ground, and the fuel it burns in an update is the heat its surface loses at 310 K by contact and radiation (the latent
-/// heat of what it breathes out and evaporates is the few % more); matter and energy exact.
+/// A body keeps its temperature at its `KEEP_T` gene (15 Oct 2026): a resting eater with a thin coat (`HEAT` -0.3) that keeps
+/// 300 K on ground held at 280 K stands at 300 K, where its twin that keeps 250 K stands 2 K above the ground, and the fuel it
+/// burns in an update is the heat its surface loses at 300 K by contact and radiation (the latent heat of what it breathes out
+/// and evaporates is the few % more); matter and energy exact. With fur (-1.0) its outer surface radiates, not its body
+/// (16 Oct 2026): 2.5 W/K in all for this body of about 100 kg (Herreid and Kessel 1967: 1.7), where radiation past the fur gave 9.
+/// (Neither fur nor 310 K serves this test now: its upkeep at 310 K, 10 times what it pays at 284 K, would warm it past any
+/// steady state with fur, and with this coat it would burn its fuel in two updates.)
 #[test]
 fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let mut s = set();
@@ -405,7 +408,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let rich = worldgen::life::roles(&s.w.chem).expect("roles").1;
     let make = |s: &mut Set, keep: f32| {
         let mut b = s.eater(0);
-        (b.genes[pcore::body::KEEP_T], b.genes[pcore::body::HEAT]) = (keep, -1.0);
+        (b.genes[pcore::body::KEEP_T], b.genes[pcore::body::HEAT]) = (keep, -0.3);
         // Fuel for the test (an edit): at 30 K over its ground it burns about its own fuel in an update.
         let t = b.temp(&s.w.chem);
         let w = &mut s.w;
@@ -416,7 +419,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
         b.prepare(&w.chem, &w.cfg.phys);
         b
     };
-    let (warm, cold) = (make(&mut s, 310.0), make(&mut s, 250.0));
+    let (warm, cold) = (make(&mut s, 300.0), make(&mut s, 250.0));
     let (w, cell) = (&mut s.w, warm.cell as usize);
     let slots = [w.life.add(warm, w.day, 1), w.life.add(cold, w.day, 1)];
     let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
@@ -424,6 +427,11 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     // One update more: the fuel it burns against the heat it loses (by the mean of its conductance at its start and end).
     let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
     let (b, tg) = (w.life.bodies[slots[0]].clone(), 280.0);
+    let mut fur = b.clone();
+    (fur.genes[pcore::body::HEAT], fur.k) = (-1.0, Default::default());
+    fur.prepare(&w.chem, &w.cfg.phys);
+    let g_fur = g(w, &fur);
+    assert!(g_fur < 3.0, "with fur {g_fur} W/K for {} kg", fur.mass(&w.chem));
     let (fuel0, g0, next) = (b.store[rich], g(w, &b), b.last + b.interval());
     held_days(w, &[cell], &[tg], (next - w.day) as usize + 1);
     let (y, twin) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
@@ -431,8 +439,8 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let (t, t_twin) = (y.temp(&w.chem), twin.temp(&w.chem));
     let lost = (t - tg) * 0.5 * (g0 + g(w, y)) * y.interval() as f64 * 86_400.0;
     let burned = (fuel0 - y.store[rich]) * y.k.burn[0].1;
-    println!("keeps 310 K: {t:.3} K (its twin {t_twin:.2} K) on {tg} K ground; burned {burned:.4e} J in an update, lost {lost:.4e} J ({:.3})", burned / lost);
-    assert!((t - 310.0).abs() < 0.1 && t_twin < 290.0, "{t} K, its twin {t_twin} K");
+    println!("keeps 300 K: {t:.3} K (its twin {t_twin:.2} K) on {tg} K ground; burned {burned:.4e} J in an update, lost {lost:.4e} J ({:.3}); with fur {g_fur:.2} W/K", burned / lost);
+    assert!((t - 300.0).abs() < 0.1 && t_twin < 290.0, "{t} K, its twin {t_twin} K");
     assert!(burned / lost > 1.0 && burned / lost < 1.15, "burned {burned:e} J, lost {lost:e} J");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");

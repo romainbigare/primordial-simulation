@@ -1129,13 +1129,11 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             feed_minerals(&mut w, s);
             self::day(&mut w);
             assert!(w.life.bodies[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
-            let b = &mut w.life.bodies[s];
-            // What its burning made and it holds above the level it keeps goes back to the ground (a body that decides to put it
-            // out, or breathes it out; this one only takes).
-            let (mass, t) = (b.mass(&w.chem), b.temp(&w.chem));
-            let over = (b.store[r.liquid] - b.level(&w.chem, r.liquid, mass)).max(0.0);
-            let q = over * w.chem.subs[r.liquid].cp * t;
-            (w.ground[r.liquid * n + i], b.store[r.liquid], w.e_ground[i], b.e) = (w.ground[r.liquid * n + i] + over, b.store[r.liquid] - over, w.e_ground[i] + q, b.e - q);
+            // What its burning made and it holds above the level it keeps drains to the ground at its update (`body::shed`,
+            // review 7 R11; this test did it by hand before). What a decision burns after it adds a trace.
+            let b = &w.life.bodies[s];
+            let level = b.level(&w.chem, r.liquid, b.mass(&w.chem));
+            assert!(b.store[r.liquid] <= level * (1.0 + 1e-3), "day {day}: liquid over its level by a share {:.3e}", b.store[r.liquid] / level - 1.0);
             takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, burn, .. } = e.kind { burn as f64 * joule } else { 0.0 }).sum();
             let mut b = w.life.bodies[s].clone();
             b.prepare(&w.chem, &w.cfg.phys);
