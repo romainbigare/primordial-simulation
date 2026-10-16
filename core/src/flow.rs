@@ -116,7 +116,6 @@ pub struct Scratch {
     z: Vec<f64>,
     head: Vec<f64>,
     /// Pore space of the loose ground, as a depth of liquid over the cell: the first liquid fills it.
-    #[serde(default)]
     pd: Vec<f64>,
     alb: Vec<f64>,
     /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
@@ -146,7 +145,6 @@ pub struct Scratch {
     per: Vec<f64>,
     tl: Vec<f64>,
     seen: Vec<[f64; 5]>,
-    #[serde(default)]
     lay: Vec<[[f64; air::LAYERS]; 2]>,
     ta0: Vec<f64>,
     #[serde(skip)]

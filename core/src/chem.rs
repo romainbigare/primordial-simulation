@@ -34,7 +34,6 @@ pub struct Substance {
     pub ir_abs: f64,
     /// Column amount past which the absorption grows only as the square root of the amount
     /// (the gas's bands fill up, a stand-in for the logarithm of real gases), mol/m²; 0: never
-    #[serde(default)]
     pub ir_sat: f64,
     /// Solubility in liquids: the mole fraction that dissolves (for a gas, under the reference
     /// pressure of it alone at `T_SOL`; `Chemistry::henry`)
@@ -44,17 +43,14 @@ pub struct Substance {
     /// Vaporisation enthalpy, J/mol (sets the vapour pressure curve)
     pub lv: f64,
     /// Fusion enthalpy, J/mol
-    #[serde(default)]
     pub lf: f64,
     /// Formation enthalpy, J/mol. Chemical energy held by one mole.
     pub hf: f64,
     /// Young's modulus of the solid as a material, Pa (16 Oct 2026; 0: none given): how stiff what bodies build of it is
     /// (`Body::height`). For body matter, that of living soft tissue with its liquid.
-    #[serde(default)]
     pub modulus: f64,
     /// The stress at which the solid as a material breaks, Pa (16 Oct 2026; 0: none given): J per m^3 to break what bodies
     /// build of it (`Body::solids`). For body matter, that of living soft tissue with its liquid.
-    #[serde(default)]
     pub rupture: f64,
 }
 
@@ -72,7 +68,6 @@ pub struct Reaction {
     /// The power each input's share enters the rate law at, in the order of `inputs`; empty: the counts of
     /// `inputs`, as mass action says. A reaction of a big molecule is not one meeting of 40 molecules: the
     /// rate law keeps the power it was measured at (`order`), whatever the reaction takes in all.
-    #[serde(default)]
     pub ord: Vec<u16>,
 }
 
@@ -93,20 +88,16 @@ pub struct Chemistry {
     /// reaction, with no rate (Copy runs it, paid by work, `copy::grow`). Its first output is the
     /// body matter; the others are what is left over. None: bodies have no matter apart from
     /// their stores (`Body::size` is their mass, and they do not grow).
-    #[serde(default)]
     pub build: Option<Reaction>,
     /// The other solids bodies can build (16 Oct 2026): each a conversion like `build`, run by Copy with the same work
     /// (`copy::grow`); its first output is the solid. A body's keep gene of that solid is its share in what the body
     /// builds (`Body::share`); the rest is matter. Empty: bodies build matter only.
-    #[serde(default)]
     pub builds: Vec<Reaction>,
     /// Mole fractions of the starting air, per substance (empty: none known). The cost of a
     /// catalyst counts the gases of a reaction beyond first order at these shares (`Body::prepare`).
-    #[serde(default)]
     pub air: Vec<f64>,
     /// What the loose ground of every land cell is given when life starts, mol per m² per substance: the
     /// nitrogen mineral of the soil, 0.357 mol (10 g of nitrogen) in chemistry 0 (`worldgen::life::soil`). Empty: none.
-    #[serde(default)]
     pub soil: Vec<(usize, f64)>,
 }
 

@@ -128,7 +128,6 @@ pub struct Body {
     /// stores and heat are the members' totals, its genes and brain one (their mean), so every
     /// law runs on the totals: rates are per kg or per member, times the count. Per member: the
     /// size a brain perceives, the mass compared with the copy mass. Use `n()`.
-    #[serde(default = "one")]
     pub count: f64,
     pub lineage: u32,
     pub parent: u64,
@@ -146,9 +145,7 @@ pub struct Body {
     /// How a node's members differ (plan 7.1): the variance of their genes around `genes`, per
     /// gene, in gene units squared (empty: none), and of their born brain rows around the node's,
     /// the same for every row (`copy`)
-    #[serde(default)]
     pub spread: Vec<f32>,
-    #[serde(default)]
     pub row_spread: f32,
     /// The brain rows it was born with (genes too), in `Life::genomes`
     pub genome: u32,
@@ -157,7 +154,6 @@ pub struct Body {
     /// Body matter built for offspring and held back, mol (all members; part of the matter in `store`,
     /// not counted in the body: `size`, `built`). A mature body puts the share `ALLOC` of what it
     /// builds here (`copy::grow`); `copy::copy` turns it into children of the size the `CHILD` gene sets
-    #[serde(default)]
     pub brood: f64,
     /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands)
     pub vis: [f32; 6],
@@ -168,9 +164,7 @@ pub struct Body {
     /// Its own adjustment of the action scores: fixed actions, moving, the verbs
     pub adj: [f32; FIXED + 1 + VERBS + OVERBS],
     /// The part it holds, and a part of the structure it is inside (ids, 0 if none)
-    #[serde(default)]
     pub hold: u64,
-    #[serde(default)]
     pub inside: u64,
     /// Memory the brain reads and writes; the signal emitted at the last decision
     pub mem: Vec<f32>,
@@ -183,7 +177,6 @@ pub struct Body {
     /// An individual's wear, 0 at birth: the energy its upkeep turned over per kg, over what it
     /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
     /// has none: its members are of all ages (`live`).
-    #[serde(default)]
     pub wear: f64,
     /// Numbers that follow from the genes (rebuilt when missing). Saved with the body: a body not
     /// updated since it was made has none yet, and others read them (`burns`, `pace`, `visible`).
@@ -208,10 +201,6 @@ pub struct Consts {
     pub upt: Vec<(usize, f32)>,
     /// Its catalysts' capacity (`upkeep`; an exponential per catalyst, so kept)
     pub cats: f64,
-}
-
-fn one() -> f64 {
-    1.0
 }
 
 impl Body {
@@ -747,7 +736,6 @@ pub struct Lineage {
     pub base: Vec<f32>,
     /// The row of the starting kinds this lineage descends from (set where a kind is placed,
     /// inherited by every lineage made from another one): only a label, for tallies by origin.
-    #[serde(default)]
     pub root: u32,
 }
 
@@ -1062,23 +1050,13 @@ pub fn survey(w: &mut World) {
     if w.life.at.len() != n {
         (w.life.at, w.life.due, w.life.gw) = (vec![Vec::new(); n], vec![Vec::new(); RING as usize], w.grid.w as u32);
     }
-    if w.life.due.len() as u64 != RING {
-        // A snapshot with a shorter ring: file each update again on the day it is due.
-        let m = w.life.due.len() as u64;
-        let old = std::mem::replace(&mut w.life.due, vec![Vec::new(); RING as usize]);
-        for (s, v) in old.into_iter().enumerate() {
-            w.life.due[((w.day + (s as u64 + m - w.day % m) % m) % RING) as usize].extend(v);
-        }
-    }
     if w.canopy.len() != n {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
     bond::ready(w);
     let monthly = w.day % w.cfg.days_per_month as u64 == 0;
-    if monthly || w.life.groups.iter().any(|g| g.members > 0 && g.sum.is_empty()) {
-        w.life.resum();
-    }
     if monthly {
+        w.life.resum();
         crowd(w);
     }
     shade(w);

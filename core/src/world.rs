@@ -25,7 +25,6 @@ pub struct Ledger {
     pub clamped: f64,
     /// Heat a ground node could not give (it would have fallen below `T_FLOOR`), J: whoever asked
     /// received that much less, so this is not a loss of energy.
-    #[serde(default)]
     pub clamped_heat: f64,
 }
 
@@ -49,7 +48,6 @@ pub struct Diag {
     pub greedy: f64,
     /// Population nodes split since the start: in two (`copy::split`), and one member off to act
     /// alone (`copy::one`)
-    #[serde(default)]
     pub splits: [f64; 2],
     /// Members merged by the monthly merge however unlike (the safeguard past twice `Config::crowd`
     /// nodes in a cell, `body::crowd`), since the shell last read them. A count only, not saved.
@@ -104,7 +102,6 @@ pub struct World {
     pub ledger: Ledger,
     /// Bodies and made parts (the sparse graph)
     pub life: body::Life,
-    #[serde(default)]
     pub parts: bond::Parts,
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
     pub canopy: Vec<f32>,
@@ -114,37 +111,29 @@ pub struct World {
     /// Ground cleared of bodies along each edge, m²: edge `4i + f` joins cell `i` to its
     /// neighbour `FORWARD[f]` (each edge once, used both ways). Movers pushing through bodies raise
     /// it (`choose::go`), cover growing back lowers it (`choose::regrow`). Empty until first used.
-    #[serde(default)]
     pub pass: Vec<f32>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,
     /// Working memory of the laws, rebuilt when missing (saved, so a resumed run goes on the same)
     pub scratch: flow::Scratch,
-    // Fields added later go last: a snapshot without them loads them empty (`tape::load_snapshot`).
     /// Light set aside in each cell for what its bodies' light reactions will store, J: put
     /// aside as it falls (`flow::air::radiation`), not as heat; a body takes its share at its
     /// update (`body::live`), what no body can claim goes to the ground's heat (`body::survey`).
-    #[serde(default)]
     pub light_pool: Vec<f64>,
     /// Per body slot: the share of the light it caught that its light reactions stored at its
     /// last update (J per J), with the slot's generation (`World::keep_of`). Its cell sets that
     /// share of the light it absorbs aside.
-    #[serde(default)]
     pub light_keep: Vec<(u32, f32)>,
     /// Liquid (with what is dissolved in it) in the store of the bed under each ground node, [k * n + i], mol, and its
     /// thermal energy with the fusion enthalpy of what is molten, J (`flow::drain`; empty until first used)
-    #[serde(default)]
     pub deep: Vec<f64>,
-    #[serde(default)]
     pub e_deep: Vec<f64>,
     /// Heat set aside in each cell for what its bodies draw from the ground between their updates, J (below 0: given to the
     /// ground ahead): each survey holds here what each body drew a second at its last update times the time since
     /// (`body::survey`), so the ground pays it as it goes and a body's update settles only the difference (`body::live`).
-    #[serde(default)]
     pub heat_pool: Vec<f64>,
     /// Per body slot: the heat it drew from the ground at its last update, W, with the slot's generation.
-    #[serde(default)]
     pub heat_keep: Vec<(u32, f32)>,
 }
 

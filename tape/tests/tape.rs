@@ -39,6 +39,19 @@ fn snapshot_round_trip() {
     assert_eq!(hash(&b), hash(&whole));
 }
 
+/// A file without the snapshot header (here: a bare bincode body) is refused with a clear error.
+#[test]
+fn a_file_without_the_snapshot_header_is_refused() {
+    use flate2::{write::GzEncoder, Compression};
+    use std::io::Write;
+    let path = tmp("snap_bare").join("s.bin.gz");
+    let mut z = GzEncoder::new(std::fs::File::create(&path).unwrap(), Compression::fast());
+    z.write_all(&bincode::serialize(&world()).unwrap()).unwrap();
+    z.finish().unwrap();
+    let e = tape::load_snapshot(&path).err().expect("refused");
+    assert!(e.to_string().contains("not a snapshot"), "{e}");
+}
+
 /// Save and load in the middle of the slow cycles of Flow (refresh, work, creep) and with life
 /// about: the resumed run must give the same history as the unbroken one.
 #[test]

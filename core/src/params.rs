@@ -36,7 +36,6 @@ pub struct Config {
     /// Liquid and creep move every this many days (a multiple of `air_days`)
     pub flow_days: u32,
     /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`body::crowd`)
-    #[serde(default = "four")]
     pub crowd: usize,
 
     // Ground and air physics
@@ -49,7 +48,6 @@ pub struct Config {
     /// Transfer speed of evaporation on the air's side of a surface, m/s
     pub evap: f64,
     /// Transfer speed of a dissolving gas on the liquid's side of its surface (in series with `evap`), m/s
-    #[serde(default = "dissolve")]
     pub dissolve: f64,
     /// Overturning air speed per K of warmth difference between neighbouring air nodes, m/s per K
     pub wind: f64,
@@ -62,33 +60,25 @@ pub struct Config {
     /// Bonded volume broken per J dissipated, times 1 / bond strength, m³/J
     pub wear: f64,
     /// Speed at which dense cover spreads back into ground cleared along an edge, from each side, m/s
-    #[serde(default = "regrow")]
     pub regrow: f64,
     /// Speed of loose solids creeping down a unit slope, times 1 / hardness, m/s
     pub creep: f64,
 
     // Run switches (control runs to compare with)
     /// Bodies that stay near each other share one brain's rows (off: each keeps its own)
-    #[serde(default = "yes")]
     pub share_brains: bool,
     /// A node also splits along its born rows (`copy::split`)
-    #[serde(default)]
     pub split_rows: bool,
     /// Animals may be population nodes (off, `--individuals`: they are always individuals)
-    #[serde(default = "yes")]
     pub nodes: bool,
     /// A mature body's children may have a second, alike parent (off, `--no-mix`: one parent)
-    #[serde(default = "yes")]
     pub two_parents: bool,
     /// Satiety at every size: a body takes no more than it can use (`choose::sate`)
-    #[serde(default)]
     pub sate_all: bool,
     /// A null run: no learning, no imitation, born rows and brain bases never change at a copy
-    #[serde(default)]
     pub null: bool,
 
     /// The free numbers of the laws
-    #[serde(default)]
     pub phys: Physics,
 }
 
@@ -96,7 +86,6 @@ pub struct Config {
 /// law that reads them; none is a rule, all are sizes of costs, strengths, spreads and flows.
 /// Numerical safeguards, speed schedules and fixed sizes stay consts in the code.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-#[serde(default)]
 pub struct Physics {
     // Change and Flow, as bodies feel them
     /// Liquid thickness over a body that holds back 63% of the light reaching it, m
@@ -366,19 +355,6 @@ impl Default for Physics {
             hill: 250.0,
         }
     }
-}
-
-fn yes() -> bool {
-    true
-}
-fn dissolve() -> f64 {
-    5e-5
-}
-fn regrow() -> f64 {
-    1e-9
-}
-fn four() -> usize {
-    4
 }
 
 impl Default for Config {
