@@ -302,3 +302,9 @@ Things that are open and not built:
 - **Resting upkeep at a cold-blooded rate: measured, not landed** (reverted): strength became free, plants walked and
   trampled the eaters.
 - Details: handover, "Air by wind and size".
+
+## 18. Frost deaths: a study (16 Oct 2026, on main 4a3c4fc; nothing landed)
+
+- Plants froze on ground held at 273.00 K by its melting plateau; animals froze in dips of the ground made by the plants'
+  updates (each settled 2 to 5 K of the ground's heat at once). Two prototypes: the heat pool (as the light pool) and
+  freezing lowered by what is dissolved; the roster's animals 3.5 to 6 times more, big kinds kept. `docs/reports/frost.md`.
