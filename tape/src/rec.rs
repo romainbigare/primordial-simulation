@@ -593,10 +593,12 @@ impl Recorder {
                 r.brood += b.brooded(&w.chem) * w.chem.matter().map_or(0.0, |m| w.chem.subs[m].molar_mass);
                 let a = b.activity(&w.chem, &w.cfg.phys);
                 (r.act, r.dry, r.wet) = (r.act + n * a, r.dry + n * (a < 0.5) as u8 as f64, r.wet + n * b.gene(pcore::body::WET));
-                // (Only bodies updated in the last 5 days: a body keeps the temperature its update left it at, while the ground's
-                // moves with the season, so older ones read the ground's change since, 2 to 7 K in the cooling season, 16 Oct 2026.)
+                // (Only bodies updated in the last 5 days, against the ground temperature their update relaxes them to, that of the
+                // last flow step: a body keeps the temperature its update left it at while the ground's moves, so older ones read the
+                // ground's change since, 20 to 30 K for some on frozen ground in winter, 16 Oct 2026.)
                 if w.day.saturating_sub(b.last) < 5 {
-                    (r.warm, r.warm_n) = (r.warm + n * (b.temp(&w.chem) - c.f.t[b.cell as usize]), r.warm_n + n);
+                    let tg = w.scratch.temps().0.get(b.cell as usize).copied().unwrap_or(c.f.t[b.cell as usize]);
+                    (r.warm, r.warm_n) = (r.warm + n * (b.temp(&w.chem) - tg), r.warm_n + n);
                 }
                 r.mineral.resize(minerals.len(), 0.0);
                 for (x, &(k, _)) in r.mineral.iter_mut().zip(&minerals) {
