@@ -242,8 +242,8 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     (small.genes[lay.min + liquid], small.genes[lay.keep + liquid]) = (0.0, 0.0);
     small.k = Default::default();
     small.prepare(&s.w.chem, &s.w.cfg.phys);
-    // (An eighth of it and that again times 8, 1.5 and 12 kg: bare since 16 Oct 2026, 12 kg and 98 kg have no steady state at this upkeep,
-    // their warmth over the ground past T² / (Ea e), about 4 K, and run away.)
+    // (An eighth of it and that again times 8, 2.5 and 20 kg: bare since 16 Oct 2026, the 163 kg body has no steady state at this
+    // upkeep, its warmth over the ground past T² / (Ea e), about 4 K, and runs away.)
     let small = scaled(&mut s.w, &small, 0.125);
     let big = scaled(&mut s.w, &small, 8.0);
     let w = &mut s.w;
@@ -294,7 +294,10 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let (s, gas) = (&chem.subs[k], chem.phase(k, t) == pcore::chem::Phase::Gas);
             s.hf + if gas { s.lf + s.lv } else { s.cp * t }
         };
-        let gas: Vec<f64> = chem.air.iter().enumerate().map(|(k, x)| if k == 1 || k == 2 { x * 1e12 } else { 0.0 }).collect();
+        // (The bare burning gets the oxygen its breath brings, not the open air's: with the costs of tissue at a reptile's rate, when
+        // that burning is most of a body's heat, counting the open air put the 163 kg body 17% under its balance; with the breath, 0.2%.)
+        let reach = b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days;
+        let gas: Vec<f64> = chem.air.iter().enumerate().map(|(k, x)| if k == 1 || k == 2 { x * reach } else { 0.0 }).collect();
         let made = |t: f64| {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
             let mut y = x.clone();
@@ -321,9 +324,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         // been within 2%, not measured again here): `body::live` ran its reactions after its upkeep 9 K below the body, its new liquid coming in with no heat (the
         // bare burning gave 4.9e5 J where 1.1e6 is due, 9% of the heat; fixed, 15 Oct 2026), and this count took 0.95 of the
         // heat where the latent heat of the liquid the burning makes takes 8% more.)
-        // (Bare since 16 Oct 2026: 1% and 4% under; the 12 kg body, 4 K over its ground, near where its warmth would feed its upkeep past any
-        // steady state, still creeps up after 90 days.)
-        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.05, "{} K above the ground, the heat balance says {want} K", rises[n]);
+        assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.02, "{} K above the ground, the heat balance says {want} K", rises[n]);
     }
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
     let (de, dq) = pcore::check::drift(w, &t0, &l0);
