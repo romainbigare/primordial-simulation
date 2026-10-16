@@ -1466,6 +1466,24 @@ fn closing(l: f64, ls: f64, e: f64, n: f64) -> f64 {
     l - ls * u
 }
 
+/// What a key liquid loses through the pores over an update when it also soaks (16 Oct 2026): the pores pass `e` mol in
+/// the update open, and open as its liquid goes (`closing`), while it soaks at `rd` (its rate per day times the days) of
+/// how far it is below its level `ls`. Its time constant is days, so it stands where the two meet, u = l / `ls`:
+/// `rd` (1 - u) `ls` = `e` u^n, and what it loses is `e` u^n, what flows through it; or, if it soaks little, what it
+/// loses drying out (`closing`), whichever is more.
+fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
+    let dry = closing(l, ls, e, n);
+    if rd <= 0.0 || ls <= 0.0 || e <= 0.0 {
+        return dry;
+    }
+    let (mut lo, mut hi) = (0.0f64, 1.0f64);
+    for _ in 0..40 {
+        let u = 0.5 * (lo + hi);
+        if rd * (1.0 - u) * ls > e * u.powf(n) { lo = u } else { hi = u }
+    }
+    dry.max(e * (0.5 * (lo + hi)).powf(n))
+}
+
 /// The heat conductance by which a body of `mass` kg at the temperature `t` loses heat to the ground it stands on,
 /// W/K (`surface`: its `HEAT` gene, cover and walls, and radiation from its outer surface). The ground's
 /// temperature is that of the last flow step, as in its update.
@@ -1661,6 +1679,21 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // that brings the end of the heat step below to the gene (that step is linear in the heat, `e1 = A + B heat`). It can open
     // no further than its still air carries vapour away (the heat film's conductance over the air's molar heat capacity, the
     // Lewis relation, `film`), against the air's deficit of vapour, and spends no liquid it keeps below its safe minimum.
+    // (The liquid in the pores of the ground is soaked up like the liquid that stands: whatever the cell holds of it
+    // counts for the wetness, but a body afloat on standing liquid reaches the ground through none. The rate it soaks at,
+    // below, is wanted here: what a body that soaks loses through its pores is what flows through it.)
+    let standing = if stands && depth == 0.0 {
+        0.0
+    } else {
+        (0..ns).filter(|&k| chem.phase(k, tg) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / grid.area()
+    };
+    let wet = standing / (standing + cfg.phys.wet_depth);
+    let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
+    let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
+    if in_ground > 0.0 {
+        let _ = cap!();
+    }
+    let rate = b.k.liq * wet * wk;
     let mass1 = b.mass(chem);
     let mut moved = false;
     let cpa: f64 = (0..ns).map(|k| tmp.x[k] * chem.subs[k].cp).sum();
@@ -1679,14 +1712,23 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let e1 = -(-x).exp_m1() * ct * tg + (-x).exp() * b.e + bx * heat;
         let need = ((e1 - ct * b.gene(COOL_T)) / bx / held(chem, k)).max(0.0);
         let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
-        let open_m = if b.wet >> k & 1 == 1 { closing(b.store[k], b.level(chem, k, 0.0), push * reach_mol, cfg.phys.dormancy) } else { push * reach_mol };
-        let m = open_m.max((push * wide).min(need).min(spare)).min(paid / held(chem, k)).min(b.store[k]);
+        let r = if in_ground > 0.0 && liq(k) { rate * chem.subs[k].solubility * ground[k * n + i] / in_ground } else { 0.0 };
+        let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach_mol, r * days, cfg.phys.dormancy) } else { push * reach_mol };
+        let m = open_m.max((push * wide).min(need).min(spare)).min(paid / held(chem, k));
+        // What flows through it past what it holds comes from the ground as it goes, as far as the ground has it (the ground pays
+        // its heat and fusion enthalpy, as for what it soaks below, which then takes back the rest of what it lost).
+        let d = if r > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(0.5 * ground[k * n + i]) } else { 0.0 };
+        let want = d * (chem.subs[k].cp * tg + fused(chem, k, tg));
+        let pre = if want > 0.0 { d * crate::share(crate::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
+        (b.store[k], ground[k * n + i], b.e, heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, heat + pre * fused(chem, k, tg));
+        let m = m.min(b.store[k]);
+        diag.liquid_land[4] += if plant { pre * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
         if m > 0.0 {
             moved = true;
             let q = m * chem.subs[k].cp * t0;
             (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
             heat -= m * held(chem, k);
-            lost[k] = m;
+            lost[k] = (m - pre).max(0.0);
             diag.liquid_land[3 - plant as usize] += m * chem.molar_volume(k, Phase::Liquid);
         }
     }
@@ -1699,20 +1741,6 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // as the soil holds and the contact allows. Before, it took only that share of the gap at the end. With them it takes the rain its capture area
     // caught since its last update (`fall`): that rain fell into the cell's liquid in this time, so the ground has that
     // much less.
-    // (The liquid in the pores of the ground is soaked up like the liquid that stands: whatever the cell holds of it
-    // counts for the wetness, but a body afloat on standing liquid reaches the ground through none.)
-    let held = if stands && depth == 0.0 {
-        0.0
-    } else {
-        (0..ns).filter(|&k| chem.phase(k, tg) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / grid.area()
-    };
-    let wet = held / (held + cfg.phys.wet_depth);
-    let liq = |k: usize| chem.phase(k, tg) == Phase::Liquid && chem.subs[k].solubility > 0.0;
-    let in_ground: f64 = (0..ns).filter(|&k| liq(k)).map(|k| ground[k * n + i]).sum();
-    if in_ground > 0.0 {
-        let _ = cap!();
-    }
-    let rate = b.k.liq * wet * wk;
     let mass2 = if moved { b.mass(chem) } else { mass1 };
     for k in (0..ns).filter(|&k| in_ground > 0.0 && liq(k)) {
         let (x, room) = (ground[k * n + i] / in_ground, b.level(chem, k, mass2) - b.store[k]);
