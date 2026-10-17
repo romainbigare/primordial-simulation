@@ -4,6 +4,7 @@ pub mod chemistry;
 pub mod generate;
 pub mod life;
 pub mod richness;
+pub mod schedule;
 pub mod terrain;
 
 pub use chemistry::{chemistry0, Init};

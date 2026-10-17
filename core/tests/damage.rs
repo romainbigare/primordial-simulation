@@ -31,7 +31,7 @@ struct Roles {
 }
 
 fn roles(w: &World) -> Roles {
-    let (_, rich, liquid, _) = worldgen::life::roles(&w.chem).expect("roles");
+    let (_, rich, liquid, _) = w.chem.life_roles().expect("roles");
     Roles { rich, liquid, matter: w.chem.matter().expect("body matter") }
 }
 

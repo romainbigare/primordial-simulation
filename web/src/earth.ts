@@ -44,6 +44,7 @@ function ramp(r: RGB[], t: number, o: number[]): void {
 const mix = (o: number[], c: RGB, t: number) => { for (let k = 0; k < 3; k++) o[k] += (c[k] - o[k]) * t; };
 
 const WET = 2; // metres of liquid that make a cell water
+const RIVER_LOG = [3.6, 4.3]; // log10 flux (mol/s) over which a river fades in
 const L = [-0.588, -0.588, 0.647]; // light from the north-west
 const EXAGGERATE = 6;
 
@@ -66,17 +67,16 @@ function oceanFill(wet: Uint8Array, W: number, H: number): Uint8Array {
 /** Fill `img` for frame f. mode: 'earth', 'true' or a layer name. `cls` receives the map class of every cell. */
 export function paint(w: World, f: number, mode: string, img: ImageData, cls: Uint8Array): void {
   const { w: W, h: H, cell_m } = w.meta;
-  const z = decode(w, f, 'z'), depthL = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
-  const rain = plane(w, f, 'rain'), flux = decode(w, f, 'flux'), plants = plane(w, f, 'plants');
+  const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
+  const flux = decode(w, f, 'flux'), plants = plane(w, f, 'plants');
   const tr = plane(w, f, 'true_r'), tgc = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
   const over = ['earth', 'true'].includes(mode) ? null : plane(w, f, mode);
   const overLut = over ? w.lut[w.index.get(mode)!] : null;
   const overRamp = rampFor(mode);
 
-  const depth = depthL ?? Float32Array.from(z ?? [], v => Math.max(0, -v));
   const wet = Uint8Array.from(depth, d => (d >= WET ? 1 : 0));
   const sea = oceanFill(wet, W, H);
-  const zAt = (x: number, y: number) => z![clamp(y, 0, H - 1) * W + clamp(x, 0, W - 1)];
+  const zAt = (x: number, y: number) => z[clamp(y, 0, H - 1) * W + clamp(x, 0, W - 1)];
   const nearSea = (x: number, y: number) => {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
       if (x + dx >= 0 && x + dx < W && y + dy >= 0 && y + dy < H && sea[(y + dy) * W + x + dx]) return true;
@@ -86,15 +86,11 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
 
   for (let i = 0; i < W * H; i++) {
     const x = i % W, y = (i / W) | 0;
-    let shade = 1, slope = 0;
-    if (z) {
-      const gx = (zAt(x + 1, y - 1) + 2 * zAt(x + 1, y) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x - 1, y) - zAt(x - 1, y + 1)) / (8 * cell_m);
-      const gy = (zAt(x - 1, y + 1) + 2 * zAt(x, y + 1) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x, y - 1) - zAt(x + 1, y - 1)) / (8 * cell_m);
-      slope = Math.hypot(gx, gy);
-      const nx = -EXAGGERATE * gx, ny = -EXAGGERATE * gy;
-      shade = ((nx * L[0] + ny * L[1] + L[2]) / Math.hypot(nx, ny, 1)) / L[2];
-    }
-    const zi = z ? z[i] : 0, iceI = ice ? smooth(0.02, 0.5, ice[i]) : 0;
+    const gx = (zAt(x + 1, y - 1) + 2 * zAt(x + 1, y) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x - 1, y) - zAt(x - 1, y + 1)) / (8 * cell_m);
+    const gy = (zAt(x - 1, y + 1) + 2 * zAt(x, y + 1) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x, y - 1) - zAt(x + 1, y - 1)) / (8 * cell_m);
+    const slope = Math.hypot(gx, gy), nx = -EXAGGERATE * gx, ny = -EXAGGERATE * gy;
+    const shade = ((nx * L[0] + ny * L[1] + L[2]) / Math.hypot(nx, ny, 1)) / L[2];
+    const zi = z[i], iceI = smooth(0.02, 0.5, ice[i]);
     let k = 0.8, river = 0;
     if (wet[i]) {
       if (sea[i]) { ramp(SEA, 1 - Math.exp(-depth[i] / 350), c); cls[i] = depth[i] > 200 ? DEEP : SHALLOW; }
@@ -102,9 +98,7 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
       mix(c, SNOW, iceI * 0.85); if (iceI > 0.5) cls[i] = ICE;
       k = 0.25 + 0.5 * iceI;
     } else {
-      const t = tg ? tg[i] : 288, rn = rain ? rain[i] / 255 : 0.5;
-      const v = plants ? Math.sqrt(plants[i] / 255)
-        : smooth(0.22, 0.7, rn) * (0.25 + 0.75 * smooth(258, 278, t)) * (1 - 0.4 * smooth(318, 335, t));
+      const t = tg[i], v = Math.sqrt(plants[i] / 255);
       ramp(VEG, v, c); cls[i] = v < 0.3 ? DESERT : v < 0.62 ? GRASS : FOREST;
       mix(c, TUNDRA, smooth(278, 266, t) * 0.7);
       mix(c, UPLAND, smooth(1200, 2600, zi) * 0.5);
@@ -113,10 +107,11 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
       const rock = Math.max(smooth(0.14, 0.42, slope) * smooth(150, 700, zi), smooth(2000, 3200, zi) * 0.85) * (1 - 0.5 * v);
       if (rock > 0) { const hi = smooth(1500, 4000, zi); mix(c, [0, 1, 2].map(j => ROCK_LO[j] + (ROCK_HI[j] - ROCK_LO[j]) * hi) as RGB, rock); }
       if (rock > 0.5) cls[i] = ROCK;
-      const snow = ice ? iceI : smooth(266, 258, t);
+      const snow = iceI;
       mix(c, SNOW, snow); if (snow > 0.5) cls[i] = ICE;
       k = 0.8 + 0.3 * snow;
-      river = flux ? smooth(3.6, 4.3, Math.log10(flux[i] + 1)) * (1 - 0.6 * snow) : 0;
+      // A river fades in over log10 flux 3.6 to 4.3 (mol/s), half at about 9e3: cli/src/render.rs RIVER_WEB.
+      river = smooth(RIVER_LOG[0], RIVER_LOG[1], Math.log10(flux[i] + 1)) * (1 - 0.6 * snow);
     }
     const m = clamp(1 + (shade - 1) * k, 0.5, 1.45);
     for (let j = 0; j < 3; j++) c[j] *= m;
@@ -124,7 +119,7 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
     let [r, g, b] = c;
     if (river > 0.5) cls[i] = RIVER;
 
-    if (mode === 'true' && tr && tgc && tb) {
+    if (mode === 'true') {
       const mt = clamp(1 + (shade - 1) * 0.7, 0.55, 1.4);
       r = tr[i] * mt; g = tgc[i] * mt; b = tb[i] * mt;
     } else if (over && overLut) {

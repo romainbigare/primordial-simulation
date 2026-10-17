@@ -5,11 +5,17 @@ use pcore::chem::{Phase, Substance};
 use pcore::World;
 
 /// Thinnest cover (m) that hides what lies below it.
-pub const COVER_MIN: f64 = 0.01;
+pub(crate) const COVER_MIN: f64 = 0.01;
+/// Melting points of the frozen cover, K: substances that are liquid somewhere on the surface.
+const COVER_MELT: (f64, f64) = (200.0, 320.0);
+/// Boiling point above which a gas of the air counts as vapour (it condenses on the surface), K.
+const VAPOR_BOIL: f64 = 250.0;
+/// Ground temperature at which the true colour starts to glow, K; the glow triples it over as many K again.
+const GLOW_T: f64 = 500.0;
 
-/// Frozen cover: substances that are liquid somewhere on the surface (melt within 200..320 K).
+/// Frozen cover: substances that are liquid somewhere on the surface (`COVER_MELT`).
 fn is_cover(s: &Substance) -> bool {
-    s.melt > 200.0 && s.melt < 320.0
+    s.melt > COVER_MELT.0 && s.melt < COVER_MELT.1
 }
 
 /// Per ground cell values.
@@ -55,14 +61,14 @@ pub fn fields(w: &World) -> Fields {
         f.z[i] = w.surface_z(i);
         (f.ice[i], f.depth[i], f.loose[i]) = (acc[0][0] / area, acc[1][0] / area, acc[2][0] / area);
         let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
-        let glow = 1.0 + 2.0 * ((t - 500.0) / 500.0).clamp(0.0, 1.0);
+        let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
         f.rgb[i] = [1, 2, 3].map(|c| if top[0] > 0.0 { (top[c] / top[0] * glow).min(1.0) } else { 0.0 });
     }
     f
 }
 
-/// Everything a layer may read.
-pub struct Ctx<'a> {
+/// Everything a layer, and a row of the series, may read.
+pub(crate) struct Ctx<'a> {
     pub w: &'a World,
     pub f: Fields,
     /// Per air node: temperature K, column of condensable gases mol/m², heat-absorbing column (Σ n·ir_abs / area)
@@ -76,10 +82,12 @@ pub struct Ctx<'a> {
     pub bodies: Vec<f64>,
     /// Per ground cell: mass of made objects (parts), kg/m²
     pub parts: Vec<f64>,
+    /// Per body slot: a live light-eater (`body::light_eater`)
+    pub light: Vec<bool>,
 }
 
 impl<'a> Ctx<'a> {
-    pub fn new(w: &'a World) -> Self {
+    pub(crate) fn new(w: &'a World) -> Self {
         let (na, ns) = (w.grid.na(), w.chem.ns());
         let mut cells = vec![0.0; na];
         for i in 0..w.grid.n() {
@@ -87,22 +95,23 @@ impl<'a> Ctx<'a> {
         }
         let n = w.grid.n();
         let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
-        let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n] };
+        let light = w.life.bodies.iter().map(|b| b.alive && pcore::body::light_eater(&w.chem, &b.genes)).collect();
+        let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light };
         for p in w.parts.alive() {
             c.parts[p.cell as usize] += p.mass(&w.chem) / w.grid.area();
         }
-        for b in w.life.alive() {
+        for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let i = b.cell as usize;
             let m = b.mass(&w.chem) / w.grid.area();
-            *if crate::light_eater(&w.chem, &b.genes) { &mut c.plants[i] } else { &mut c.animals[i] } += m;
+            *if c.light[s] { &mut c.plants[i] } else { &mut c.animals[i] } += m;
             c.bodies[i] += 1.0;
         }
-        for j in 0..na {
-            let area = cells[j] * w.grid.area();
+        for (j, &count) in cells.iter().enumerate() {
+            let area = count * w.grid.area();
             for k in 0..ns {
                 let (s, n) = (&w.chem.subs[k], w.a(k, j));
                 c.absorber[j] += w.chem.depth(k, n / area);
-                if s.boil > 250.0 {
+                if s.boil > VAPOR_BOIL {
                     c.vapor[j] += n / area;
                 }
             }
@@ -121,7 +130,7 @@ pub struct Layer {
     pub scale: &'static str,
     pub min: f64,
     pub max: f64,
-    pub val: fn(&Ctx, usize) -> f64,
+    pub(crate) val: fn(&Ctx, usize) -> f64,
 }
 
 const fn l(name: &'static str, unit: &'static str, scale: &'static str, min: f64, max: f64, val: fn(&Ctx, usize) -> f64) -> Layer {
@@ -162,7 +171,7 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
 }
 
 /// Append one frame: every layer in table order, row-major.
-pub fn frame(c: &Ctx, out: &mut Vec<u8>) {
+pub(crate) fn frame(c: &Ctx, out: &mut Vec<u8>) {
     for l in LAYERS {
         out.extend((0..c.w.grid.n()).map(|i| quantise(l, (l.val)(c, i))));
     }

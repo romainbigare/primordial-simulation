@@ -1,7 +1,8 @@
-//! What the reactions and conversions do for bodies: their heat, which burn, which keep their energy, and what bodies
-//! build of.
+//! What the reactions and conversions do for bodies: their heat, which burn, which keep their energy, what bodies
+//! build of, and the roles the first bodies are placed with (`life_roles`, `matter_roles`, `fixing`).
 
-use super::{Chemistry, Reaction};
+use super::{Chemistry, Phase, Reaction};
+use crate::units::T_SURF;
 
 /// A reaction keeps energy (`keeps`) only where a burning gets more than this share more heat out of the same input:
 /// equal heats with rounding are not a difference.
@@ -59,5 +60,38 @@ impl Chemistry {
     pub fn minerals(&self) -> Vec<(usize, f64)> {
         let Some(bl) = self.build.as_ref() else { return Vec::new() };
         bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect()
+    }
+
+    /// The roles a first body's chemistry is built on, found from the numbers: the light reaction (one that takes
+    /// energy), the energy-rich solid it makes, the liquid it uses, and the reaction that burns that solid with a gas.
+    pub fn life_roles(&self) -> Option<(usize, usize, usize, usize)> {
+        let at = |k: u16| self.phase(k as usize, T_SURF);
+        let r_light = (0..self.reactions.len()).find(|&r| self.reactions[r].light && self.dh(r) > 0.0)?;
+        let rx = &self.reactions[r_light];
+        let rich = rx.outputs.iter().find(|p| at(p.0) == Phase::Solid)?.0 as usize;
+        let liquid = rx.inputs.iter().find(|p| at(p.0) == Phase::Liquid)?.0 as usize;
+        let burn = (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == rich))?;
+        Some((r_light, rich, liquid, burn))
+    }
+
+    /// Body matter and the reaction that burns it with a gas (none where bodies do not grow).
+    pub fn matter_roles(&self) -> Option<(usize, usize)> {
+        let m = self.matter()?;
+        let burn = (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == m))?;
+        Some((m, burn))
+    }
+
+    /// The fixing reaction: the one that makes a mineral growth is built of (`minerals`) from the air's gas, an element
+    /// of the mineral that only a gas it takes brings (none where bodies do not grow, or the mineral comes from nowhere
+    /// else).
+    pub fn fixing(&self) -> Option<usize> {
+        let minerals = self.minerals();
+        let gas = |k: u16| self.gas_at_surface(k as usize);
+        let has = |k: u16, e: usize| self.subs[k as usize].elems[e] > 0;
+        (0..self.reactions.len()).find(|&r| {
+            let i = &self.reactions[r].inputs;
+            let from_air = |m: u16| (0..self.n_elements).any(|e| has(m, e) && i.iter().all(|p| !has(p.0, e) || gas(p.0)) && i.iter().any(|p| has(p.0, e)));
+            self.reactions[r].outputs.iter().any(|p| minerals.iter().any(|m| m.0 == p.0 as usize) && from_air(p.0))
+        })
     }
 }

@@ -224,7 +224,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     small.genes[pcore::body::LEAF] = -9.0;
     small.vis = small.visible(&s.w.chem, &s.w.cfg.phys);
     // (And with no liquid, which would evaporate and cool it; what its burning makes is little.)
-    let liquid = worldgen::life::roles(&s.w.chem).expect("roles").2;
+    let liquid = s.w.chem.life_roles().expect("roles").2;
     let w = &mut s.w;
     w.chem.add_elems(liquid, -small.store[liquid], &mut w.ledger.imposed_elems);
     w.ledger.imposed_energy -= small.store[liquid] * (w.chem.subs[liquid].hf + w.chem.subs[liquid].cp * small.temp(&w.chem));
@@ -367,7 +367,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     s.rows = base.split_off(shape.base());
     s.lineage = s.w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 1 });
-    let rich = worldgen::life::roles(&s.w.chem).expect("roles").1;
+    let rich = s.w.chem.life_roles().expect("roles").1;
     let mut took = vec![];
     let mut ups = vec![];
     let mut paces = vec![];
@@ -421,7 +421,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
 fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let mut s = set();
     s.w.cfg.phys.c_build = 0.0;
-    let rich = worldgen::life::roles(&s.w.chem).expect("roles").1;
+    let rich = s.w.chem.life_roles().expect("roles").1;
     let make = |s: &mut Set, keep: f32| {
         let mut b = s.eater(0);
         (b.genes[pcore::body::KEEP_T], b.genes[pcore::body::HEAT]) = (keep, -0.3);
@@ -481,7 +481,7 @@ fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     };
     let (sweat, dry) = (make(&mut s, 300.0), make(&mut s, 320.0));
     let (w, cell) = (&mut s.w, sweat.cell as usize);
-    let liquid = worldgen::life::roles(&w.chem).expect("roles").2;
+    let liquid = w.chem.life_roles().expect("roles").2;
     let slots = [w.life.add(sweat, w.day, 1), w.life.add(dry, w.day, 1)];
     let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
     held_days(w, &[cell], &[295.0], 21);

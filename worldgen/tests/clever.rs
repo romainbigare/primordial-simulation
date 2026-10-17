@@ -1,4 +1,4 @@
-//! The big-brain test (`worldgen::life::seed_clever`, review 6, finding 3): copies of living eaters
+//! The big-brain test (`worldgen::life::seed_clever`): copies of living eaters
 //! in two new lineages that differ in brain size only, with the same cells, genes, born rows and
 //! stores; the world stays whole.
 

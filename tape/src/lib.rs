@@ -1,51 +1,10 @@
-//! The history tape: snapshots, yearly summary series, raw events and viewer frames.
+//! The history tape: snapshots, the yearly series, the monthly rows, raw events and viewer frames.
 
 mod layers;
 mod measure;
 mod rec;
+mod snapshot;
 
-pub use layers::{fields, quantise, Ctx, Fields, Layer, COVER_MIN, LAYERS};
-pub use measure::{kinds, kinds_by_members, learned, light_eater, LIGHT_EATER};
+pub use layers::{fields, quantise, Fields, LAYERS};
 pub use rec::Recorder;
-
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use pcore::World;
-use std::io::{self, BufReader, BufWriter, Read, Write};
-use std::path::Path;
-
-fn bad(e: impl std::fmt::Display) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-}
-
-/// Start of every snapshot file, before the bincode body: a tag, then the format version
-/// (little-endian `u32`). Raise `SNAPSHOT_VERSION` whenever `World` changes shape.
-const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
-const SNAPSHOT_VERSION: u32 = 1;
-
-/// Save the full state (header, then bincode, gzip). Scratch fields marked `serde(skip)` are not saved.
-pub fn save_snapshot(w: &World, path: impl AsRef<Path>) -> io::Result<()> {
-    // The buffer goes before the compressor: bincode writes 8 bytes at a time, and each call into the compressor is slow.
-    let mut z = BufWriter::with_capacity(1 << 20, GzEncoder::new(std::fs::File::create(path)?, Compression::fast()));
-    z.write_all(&SNAPSHOT_TAG)?;
-    z.write_all(&SNAPSHOT_VERSION.to_le_bytes())?;
-    bincode::serialize_into(&mut z, w).map_err(bad)?;
-    z.into_inner().map_err(|e| e.into_error())?.finish()?.flush()
-}
-
-/// Load a snapshot written by `save_snapshot` of this format version. Skipped scratch fields
-/// come back as their defaults; the groups' sums of born rows are rebuilt, as each month does.
-pub fn load_snapshot(path: impl AsRef<Path>) -> io::Result<World> {
-    let mut z = BufReader::with_capacity(1 << 20, GzDecoder::new(std::fs::File::open(path)?));
-    let mut head = [0u8; 8];
-    z.read_exact(&mut head).map_err(|e| bad(format!("not a snapshot ({e})")))?;
-    if head[..4] != SNAPSHOT_TAG {
-        return Err(bad("not a snapshot (no snapshot header)"));
-    }
-    let version = u32::from_le_bytes([head[4], head[5], head[6], head[7]]);
-    if version != SNAPSHOT_VERSION {
-        return Err(bad(format!("snapshot format version {version}; this build reads version {SNAPSHOT_VERSION}")));
-    }
-    let mut w: World = bincode::deserialize_from(z).map_err(bad)?;
-    w.life.resum();
-    Ok(w)
-}
+pub use snapshot::{load_snapshot, save_snapshot};
