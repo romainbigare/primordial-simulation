@@ -1314,6 +1314,28 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// Members who join a node are kept, however few: children of less than one member (a node's, `copy::copy`) add what
+/// they are to its count, and the genes become the means by members.
+#[test]
+fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    let t = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1.0).expect("a node");
+    w.life.bodies[t].count = 3.0;
+    let (o, before) = (w.life.bodies[t].clone(), held(&w).0);
+    let mut c = o.clone();
+    (c.count, c.genes) = (0.4, o.genes.iter().map(|g| g + 0.1).collect());
+    let rows = w.life.born(&o).to_vec();
+    nodes::join(&mut w, t, c, &rows);
+    let (after, node) = (held(&w).0, &w.life.bodies[t]);
+    assert!((after - (before + 0.4)).abs() < 1e-12 * after && (node.count - 3.4).abs() < 1e-12, "members {before} + 0.4 then {after}");
+    for (g, (x, y)) in o.genes.iter().zip(&node.genes).enumerate() {
+        let want = x + 0.1 * 0.4 / 3.4;
+        assert!((y - want).abs() < 1e-5 * (1.0 + x.abs()), "gene {g}: {x} then {y}, wanted {want}");
+    }
+}
+
 /// With `Config::nodes` off an animal's children are individuals: a child joins no node, even when one of its own kind
 /// is in its cell (with nodes on it joins it), and a member whose brood covers many children has that many
 /// individuals, not a node of them. Members, stores and heat are kept.

@@ -119,13 +119,14 @@ pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     w.life.bodies[t] = o;
 }
 
-/// Members `c` join body `o`, taken out of its slot: stores, brood and heat add up; genes and born rows become the means
-/// by count, and the spread what both held around the new mean (each one's spread plus its gap from the new mean
-/// squared, by count; for the rows the mean over rows of the gap squared; up to `most`), so the smaller one's genes stay
-/// in the spread, not only in the mean. `rows` are the born rows of `c`; none: those of `o` (a member split off `o`
-/// coming back), which leaves its rows and its group's as they are.
+/// Members `c` join body `o`, taken out of its slot: members, stores, brood and heat add up; genes and born rows become
+/// the means by members (children of less than one member weigh what they are), and the spread what both held around
+/// the new mean (each one's spread plus its gap from the new mean squared, by members; for the rows the mean over rows
+/// of the gap squared; up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows` are
+/// the born rows of `c`; none: those of `o` (a member split off `o` coming back), which leaves its rows and its group's
+/// as they are.
 pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
-    let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.n() / (o.n() + c.n())) as f32);
+    let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
     o.spread = (0..o.genes.len()).map(|g| pool(spread_at(&o.spread, g), spread_at(&c.spread, g), (c.genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
@@ -140,7 +141,7 @@ pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     // A node has no wear: its members are of all ages (`body::live`).
-    (o.e, o.count, o.wear) = (o.e + c.e, o.n() + c.n(), 0.0);
+    (o.e, o.count, o.wear) = (o.e + c.e, o.count + c.count, 0.0);
     o.vis = o.visible(&w.chem, &w.cfg.phys);
 }
 
