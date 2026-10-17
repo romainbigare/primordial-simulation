@@ -1,3 +1,6 @@
+//! The exchange of ground nodes with the air: evaporation, condensation (rain and cloud), and
+//! gases dissolving in the ground's liquid.
+
 use super::super::land::{melted, settle, wet};
 use super::super::scratch::P_UP;
 use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};

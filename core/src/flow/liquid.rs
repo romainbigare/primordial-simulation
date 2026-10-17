@@ -78,6 +78,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // Head above the surface is liquid standing here; liquid in the pores flows by Darcy's law.
         let damp = s.pd[i] > 0.0 && s.head[i] > zi;
         if !damp && work <= 0.0 && (out.cnt == 0 || (hd <= zi && hs <= 0.0)) {
+            // Nothing moves: the average outflow decays.
             w.liquid_flux[i] *= 1.0 - ema;
             continue;
         }
@@ -90,7 +91,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         }
         // Neighbours much less steep than the steepest get nothing.
         for qc in out.q[..out.cnt].iter_mut() {
-            if *qc < w.cfg.phys.split * out.qmax {
+            if *qc < ph.split * out.qmax {
                 out.wsum -= *qc;
                 *qc = 0.0;
             }

@@ -179,7 +179,7 @@ impl World {
         self.e_air[j] / self.heat_cap_air(j).max(1.0)
     }
     /// Height of the solid surface (bonded + loose solids), m, at the node's temperature now and with the solid share of a
-    /// substance on its plateau (`body::env_of` reads the last flow step's temperature and whole phases; `flow::surface`
+    /// substance on its plateau (`body::env_of` reads the last flow step's temperature and whole phases; `flow::land::surface`
     /// adds the soft cover and the reflectance).
     pub fn surface_z(&self, i: usize) -> f64 {
         let (t, pl) = self.thaw(i);

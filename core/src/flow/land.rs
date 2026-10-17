@@ -1,3 +1,6 @@
+//! Ground nodes: their heat capacity and temperature on the melting plateaus (`ground_state`),
+//! the phase of each substance, the surface and heads, and putting matter into a node.
+
 use super::scratch::{Latent, Scratch, Sp};
 use crate::grid::Grid;
 use crate::units::MAX_SUBSTANCES;
@@ -79,8 +82,9 @@ pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
     w.ground[k * w.grid.n() + i] * (1.0 - molten(s, k, i))
 }
 
-/// Temperature of ground node `i` now, K: earlier radiation and evaporation in this call may have
-/// cooled it below `tg`, and matter moved in at its own temperature (no warmer than `tg`).
+/// Temperature of ground node `i` now, K, no warmer than at the last `ground_state` (`tg`):
+/// earlier radiation and evaporation in this call may have cooled it, and liquid from above
+/// mixes in at its own temperature.
 #[inline]
 pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
     s.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(0.0)
@@ -128,7 +132,9 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 }
 
 /// Solid surface, head, heat resistance of the soft cover and reflectance of node `i`, from
-/// the volume and volume × reflectance of its layers [soft solid, liquid, loose solid].
+/// the volume and volume × reflectance of its layers [soft solid, liquid, loose solid], top
+/// down: each covers a share depth / (depth + `hide`) of what lies below. A solid is soft over
+/// `soft` times its melting point. The pores of the solids hold the first liquid (`pd`).
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     let (n, area, t) = (w.grid.n(), s.area, s.tg[i]);
     let mut l = [0.0, 0.0, 0.0, 0.0, s.fix[i][0], s.fix[i][1]];
@@ -139,13 +145,13 @@ pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
             continue;
         }
         let liq = molten(s, k, i);
-        let solid = a * (1.0 - liq) * p.v[0];
+        let vs = a * (1.0 - liq) * p.v[0];
         let o = if t > w.cfg.phys.soft * p.melt { 0 } else { 4 };
-        (l[o], l[o + 1]) = (l[o] + solid, l[o + 1] + solid * p.refl[0]);
+        (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
-        z += solid / area;
+        z += vs / area;
         if o == 0 {
-            rc += solid / area / p.cond;
+            rc += vs / area / p.cond;
         }
     }
     let (mut a, mut seen) = (0.0, 1.0);

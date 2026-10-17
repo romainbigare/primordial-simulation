@@ -1,5 +1,5 @@
 //! Flow in and through the air: radiation, contact heat, evaporation and condensation,
-//! and gas between air nodes.
+//! and gas between air nodes. Here: the state of the air nodes (`state`).
 
 mod exchange;
 mod radiation;
@@ -108,6 +108,7 @@ fn heights(w: &World, s: &mut Scratch) {
         s.node_tmp[j] = 0.0;
     }
     // (The vapour pressure falls by a factor exp(lv/R (1/(t-½) - 1/(t+½))) per K.)
+    // A gas that does not condense is spread like the air: the `split` below with `hk` = `h`.
     let half = (-LN_2).exp();
     for (gi, &k) in s.gas.iter().enumerate() {
         for j in 0..na {
