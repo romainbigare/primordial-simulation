@@ -8,6 +8,11 @@ use pcore::units::DAY;
 use pcore::{bond, brain, change, choose, World};
 use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
+/// The default world's year, s (a reaction too slow to matter over it is frozen).
+fn year() -> f64 {
+    pcore::Config::default().seconds_per_year()
+}
+
 /// A world with a lineage of brains that only rest, and the land cells with no liquid on them.
 struct Set {
     w: World,
@@ -266,7 +271,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
             let mut y = x.clone();
             assert!(pcore::body::pay(&mut w2, &mut y, pcore::body::upkeep(w0, &x, days, mass), days));
-            let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem));
+            let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, w0.cfg.seconds_per_year()));
             rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * DAY);
             let air = |k: usize| w0.air[k * na + j] - w2.air[k * na + j] + gas[k] - g[k];
             let wet = y.store[LIQUID] - x.store[LIQUID];
@@ -1150,7 +1155,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     let fix = chem.fixing().expect("fixing");
     let (_, rich, _, _) = chem.life_roles().expect("roles");
     // In the open: ten years at 290 K, the air in plenty and the liquid and the fuel there.
-    let mut rc = change::Reactor::new(&chem);
+    let mut rc = change::Reactor::new(&chem, year());
     let (mut n, mut gas, mut e) = open_air(&chem, &init, 290.0);
     (n[LIQUID], n[rich]) = (1e6, 1e6);
     rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, 10.0 * 365.0 * DAY);

@@ -94,7 +94,7 @@ struct Held {
 /// earlier turn to count from); at its turn, for all the time since its last turn it has not reacted for.
 fn ground(w: &mut World, nodes: &FlowView, plan: &Plan, slow: &mut [[u32; 3]], tick: u32, dt: f64) {
     let (ns, n) = (w.chem.ns(), w.grid.n());
-    let mut rc = Reactor::new(&w.chem);
+    let mut rc = Reactor::new(&w.chem, w.cfg.seconds_per_year());
     let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], pool0: vec![0.0; ns] };
     for (i, turn) in slow.iter_mut().enumerate() {
         let (due, fast) = (turn[1] <= tick, plan.ground[i]);
@@ -170,14 +170,14 @@ fn air(w: &mut World, nodes: &FlowView, plan: &Plan, tick: u32, dt: f64) {
     let (chem, ns, na) = (&w.chem, w.chem.ns(), w.grid.na());
     let turn = ((LAZY - tick as u64 % LAZY) % LAZY) as usize;
     let mut rows = vec![0.0; na * (ns + 2)];
-    let (air_now, e_now) = (&w.air, &w.e_air);
+    let (air_now, e_now, year) = (&w.air, &w.e_air, w.cfg.seconds_per_year());
     crate::par::rows(&mut rows, ns + 2, || None, |st: &mut Option<(Reactor, Vec<f64>)>, j, row| {
         let t = nodes.ta[j];
         let lazy = j % LAZY as usize == turn && !plan.cold(t, plan.in_air[j]);
         if !plan.air[j] && !lazy {
             return;
         }
-        let (rc, amt) = st.get_or_insert_with(|| (Reactor::new(chem), vec![0.0; ns]));
+        let (rc, amt) = st.get_or_insert_with(|| (Reactor::new(chem, year), vec![0.0; ns]));
         for k in 0..ns {
             amt[k] = air_now[k * na + j];
         }

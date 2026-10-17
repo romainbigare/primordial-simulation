@@ -5,10 +5,7 @@ use crate::chem::{Chemistry, Reaction};
 use crate::math::one_minus_exp;
 use crate::units::P_REF;
 
-/// The time over which a frozen reaction goes no further than `NEGLIGIBLE`, s: a calendar year of 365.25 days (not the
-/// world's year, `World::days_per_year`; to be fixed with the bugs).
-const FROZEN_SPAN: f64 = 3.156e7;
-/// A reaction whose fraction over `FROZEN_SPAN` stays below this is frozen and skipped.
+/// A reaction whose fraction over the world's year stays below this is frozen and skipped.
 const NEGLIGIBLE: f64 = 1e-12;
 /// Largest temperature change in one sub-step, K.
 const MAX_DT_K: f64 = 30.0;
@@ -48,9 +45,10 @@ pub struct Reactor {
     /// The power of what is left of its scarcest input that its rate per unit goes with (`gone`).
     pw: Vec<f64>,
     /// At the start of the last `react`: the heat capacity, J/K, and the rate of each reaction
-    /// not driven by light, 1/s.
+    /// not driven by light, 1/s, with its limiting input in reaction units.
     cap0: f64,
     kap0: Vec<f64>,
+    lim0: Vec<f64>,
     /// Time, s, the liquid standing over the node takes to renew its gas through its film (Flow's
     /// law, `air::dissolve`); 0: the node touches the gas around it. Its gas is then the gas
     /// dissolved in the liquid, held where the film and its reactions balance: Henry's share `eq`
@@ -79,10 +77,10 @@ pub(super) fn warm_at(ea: f64, z: f64) -> f64 {
     if z > 1.0 { ea / z.ln() } else { f64::INFINITY }
 }
 
-/// Temperature below which reaction `rx` (catalyst 1) is frozen: it would go no further than `NEGLIGIBLE` over
-/// `FROZEN_SPAN`, K.
-pub(super) fn frozen_below(rx: &Reaction) -> f64 {
-    warm_at(rx.ea, rx.k * FROZEN_SPAN / NEGLIGIBLE)
+/// Temperature below which reaction `rx` (catalyst 1) is frozen: it would go no further than `NEGLIGIBLE` over a
+/// year of `year` s, K.
+pub(super) fn frozen_below(rx: &Reaction, year: f64) -> f64 {
+    warm_at(rx.ea, rx.k * year / NEGLIGIBLE)
 }
 
 /// The input that runs out first: its amount per `nu` (reaction units) and its place in `inputs`
@@ -126,10 +124,15 @@ pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: imp
 /// `wk` K. A catalyst lowers the reaction's barrier (a speed-up `f` is a lowering of ln f × T);
 /// losing its shape loses the lowering, so the share it keeps, 1 / (1 + exp((t − td) / wk)), is
 /// the share of its decades kept: f to that power. Whole below `td`, near 1 a few `wk` above it
-/// whatever its size, and smooth, so a body warming past `td` slows without a jump.
+/// whatever its size, and smooth, so a body warming past `td` slows without a jump (with no
+/// width: whole up to `td`, gone above it).
 #[inline]
 pub(crate) fn denature(f: f64, t: f64, td: f64, wk: f64) -> f64 {
-    if f <= 1.0 { f } else { f.powf(1.0 / (1.0 + ((t - td) / wk).exp())) }
+    if f <= 1.0 {
+        return f;
+    }
+    let z = if wk > 0.0 { (t - td) / wk } else if t > td { f64::INFINITY } else { f64::NEG_INFINITY };
+    f.powf(1.0 / (1.0 + z.exp()))
 }
 
 /// 1 - exp(-z), cheap when small.
@@ -146,11 +149,12 @@ fn gone(z: f64, p: f64) -> f64 {
 }
 
 impl Reactor {
-    pub fn new(chem: &Chemistry) -> Self {
+    /// The reactor of `chem` in a world whose year is `year` s (a reaction too slow to matter over it is frozen).
+    pub fn new(chem: &Chemistry, year: f64) -> Self {
         let (nr, ns) = (chem.reactions.len(), chem.ns());
         let dh: Vec<f64> = (0..nr).map(|r| chem.dh(r)).collect();
         Reactor {
-            thr: chem.reactions.iter().map(frozen_below).collect(),
+            thr: chem.reactions.iter().map(|rx| frozen_below(rx, year)).collect(),
             lit: chem.reactions.iter().zip(&dh).map(|(rx, &d)| rx.light && d > 0.0).collect(),
             dh,
             cp: chem.subs.iter().map(|s| s.cp).collect(),
@@ -164,18 +168,19 @@ impl Reactor {
             pw: vec![0.0; nr],
             cap0: 0.0,
             kap0: vec![0.0; nr],
+            lim0: vec![0.0; nr],
             film: 0.0,
             flux: vec![[0.0; 2]; ns],
         }
     }
 
     /// Would the last `react` have gone no further over `span` seconds than a share `far` of
-    /// each reaction's inputs, nor than a `trace` of the amounts, nor heated by more than `dt_k`?
-    /// (The rates of its first sub-step, the limits of its last.)
+    /// each reaction's inputs, nor than a `trace` of the amounts, nor heated by more than `dt_k`,
+    /// at its start (the rates and limits of its first sub-step)?
     pub(super) fn calm(&self, span: f64, far: f64, trace: f64, dt_k: f64) -> bool {
         let mut heat = 0.0;
         for (r, &k) in self.kap0.iter().enumerate() {
-            let go = self.lim[r] * k * span;
+            let go = self.lim0[r] * k * span;
             if k * span > far && go > trace {
                 return false;
             }
@@ -321,7 +326,7 @@ impl Reactor {
 
     /// The length of sub-step `iter` of the `left` seconds still to go, at heat capacity `c`: all of them, halved while the
     /// heat of the reactions not driven by light would change the temperature by more than `MAX_DT_K` (but for the last
-    /// sub-step). Sets the share `far` each reaction goes in it, and on the first the rates `kap0`.
+    /// sub-step). Sets the share `far` each reaction goes in it, and on the first the rates `kap0` and limits `lim0`.
     fn sub_step(&mut self, left: f64, c: f64, iter: usize) -> f64 {
         let mut heat = 0.0;
         for r in (0..self.kap.len()).filter(|&r| self.kap[r] > 0.0) {
@@ -329,7 +334,7 @@ impl Reactor {
             if !self.lit[r] {
                 heat += self.dh[r].abs() * self.lim[r] * self.far[r];
                 if iter == 0 {
-                    self.kap0[r] = self.kap[r];
+                    (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
                 }
             }
         }

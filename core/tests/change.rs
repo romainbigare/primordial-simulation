@@ -6,6 +6,11 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::units::{DAY, P_REF, R_GAS, T_SURF};
 use worldgen::testkit::{hold_ground, in_all, BURN, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 
+/// The default world's year, s (a reaction too slow to matter over it is frozen).
+fn year() -> f64 {
+    pcore::Config::default().seconds_per_year()
+}
+
 /// A heat capacity so large that a node's temperature stays put, J/K.
 const HUGE_CAP: f64 = 1e12;
 /// The element of the rock (its cation), and the reaction that makes the dissolved mineral of the rock, the gas and
@@ -29,7 +34,7 @@ fn air_over_m2(chem: &Chemistry, ppm: f64) -> Vec<f64> {
 #[test]
 fn hot_reacts_faster() {
     let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     let mut used = |t: f64| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
         (n[RICH], gas[OX]) = (1000.0, 1e6);
@@ -46,7 +51,7 @@ fn hot_reacts_faster() {
 #[test]
 fn hot_energy_rich_node_keeps_burning() {
     let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
     (n[RICH], gas[OX], gas[FIX_GAS]) = (1000.0, 5000.0, 20000.0);
     let mut e = 650.0 * 1000.0 * chem.subs[RICH].cp;
@@ -157,11 +162,11 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
 }
 
 /// A body's catalyst works below the temperature where it loses its shape, and a few K above it the reaction goes
-/// about as fast as bare.
+/// about as fast as bare (at once, for a catalyst that loses its shape over no width).
 #[test]
 fn catalysts_fail_when_hot() {
     let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     let mut cat = vec![1.0; chem.reactions.len()];
     cat[1] = 1e6;
     let mut used = |t: f64, c: Option<(&[f64], f64, f64)>| {
@@ -174,6 +179,9 @@ fn catalysts_fail_when_hot() {
     let (cool, cool_bare) = (used(310.0, Some((&cat, 320.0, 3.0))), used(310.0, None));
     let (hot, hot_bare) = (used(340.0, Some((&cat, 320.0, 3.0))), used(340.0, None));
     assert!(cool > 1e5 * cool_bare && hot < 1.2 * hot_bare, "310 K: {cool:e} vs bare {cool_bare:e}; 340 K: {hot:e} vs bare {hot_bare:e}");
+    // With no width it is whole up to its temperature and gone above it.
+    let (sharp_cool, sharp_hot) = (used(310.0, Some((&cat, 320.0, 0.0))), used(340.0, Some((&cat, 320.0, 0.0))));
+    assert!(sharp_cool >= cool && sharp_hot == hot_bare, "no width: 310 K {sharp_cool:e}, 340 K {sharp_hot:e}");
 }
 
 /// Dead matter in the open goes with what there is of it (first order: the same share lost for 1 and 1,000 mol) at
@@ -182,7 +190,7 @@ fn catalysts_fail_when_hot() {
 #[test]
 fn litter_goes_first_order_at_its_constant() {
     let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     let year = 3.156e7;
     let mut lost = |a: f64| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
@@ -201,7 +209,7 @@ fn litter_goes_first_order_at_its_constant() {
 /// reactions run for `dt` at 288 K. Returns the dissolved mineral made per second, and whether the books closed and
 /// no amount went negative.
 fn wet_land(chem: &Chemistry, rock: f64, dt: f64) -> (f64, bool) {
-    let mut rc = Reactor::new(chem);
+    let mut rc = Reactor::new(chem, year());
     let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(chem, 400.0));
     (n[LIQUID], n[ROCK]) = (0.4 * MOL_PER_M3, rock);
     let mut e = 288.0 * (OPEN_CAP + n.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>());
@@ -244,7 +252,7 @@ fn no_jump_when_the_scarcest_input_changes() {
 #[test]
 fn a_mineral_past_its_balance_falls_out_by_its_rate_law_over_a_long_step() {
     let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     let mut left = |calls: usize| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
         (n[LIQUID], n[DISSOLVED]) = (1250.0, 4.35);
@@ -273,7 +281,7 @@ fn column(chem: &Chemistry, depth: f64, ppm: f64) -> (Vec<f64>, Vec<f64>) {
 /// The dissolved mineral the chemistry holds per m² at balance: `depth` m of liquid, `ppm` of the gas, `t` K.
 fn at_balance(chem: &Chemistry, depth: f64, ppm: f64, t: f64) -> f64 {
     let (mut n, gas) = column(chem, depth, ppm);
-    let set = Reactor::new(chem).balance(chem, &mut n, &gas, t);
+    let set = Reactor::new(chem, year()).balance(chem, &mut n, &gas, t);
     set.iter().find(|p| p.0 == DISSOLVED).map_or(0.0, |p| p.1)
 }
 
@@ -281,7 +289,7 @@ fn at_balance(chem: &Chemistry, depth: f64, ppm: f64, t: f64) -> f64 {
 #[test]
 fn the_two_reactions_close_elements_and_energy() {
     let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     for mineral in [0.0, 5000.0] {
         let (mut n, mut gas) = column(&chem, 300.0, 400.0);
         n[DISSOLVED] = mineral;
@@ -328,7 +336,7 @@ fn a_dry_cell_holds_none_and_a_deeper_column_holds_more() {
     let (shallow, deep) = (at_balance(&chem, 50.0, 400.0, 288.0), at_balance(&chem, 500.0, 400.0, 288.0));
     assert!(deep > 4.0 * shallow && deep < 5.0 * shallow, "50 m: {shallow}, 500 m: {deep} (10^(2/3) = 4.64)");
     // The mineral in a cell with no liquid but what it makes: it settles to the rock within a day.
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     let (mut n, mut gas) = column(&chem, 0.0, 400.0);
     n[DISSOLVED] = 100.0;
     let mut e = 288.0 * OPEN_CAP;
@@ -344,7 +352,7 @@ fn a_dry_cell_holds_none_and_a_deeper_column_holds_more() {
 fn a_long_run_settles_to_the_balance() {
     let (chem, _) = worldgen::chemistry0();
     let want = at_balance(&chem, 500.0, 400.0, 288.0);
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     rc.film = 500.0 / 5e-5;
     for start in [0.0, 2.0 * want] {
         let (mut n, gas0) = column(&chem, 500.0, 400.0);
@@ -369,7 +377,7 @@ fn under_a_liquid_dead_matter_burns_as_its_film_lets_the_gas_through() {
     let burn = |pile: f64, film: f64| {
         let (mut n, mut gas) = column(&chem, depth, 400.0);
         n[RICH] = pile;
-        let mut rc = Reactor::new(&chem);
+        let mut rc = Reactor::new(&chem, year());
         rc.film = film;
         let (mut e, gas0) = (t * OPEN_CAP, gas[OX]);
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, dt);
@@ -434,7 +442,7 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
     for _ in 0..12 {
         pcore::step(&mut w);
     }
-    let mut rc = Reactor::new(&w.chem);
+    let mut rc = Reactor::new(&w.chem, w.cfg.seconds_per_year());
     let (mut wet, mut dry, mut ratio) = (0, 0, Vec::new());
     for &i in &land {
         if w.ground[LIQUID * n + i] > 1e6 {
@@ -468,7 +476,7 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
 #[test]
 fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
     let (chem, init) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
+    let mut rc = Reactor::new(&chem, year());
     let mut run = |t: f64, secs: f64| {
         let (mut n, mut gas, mut e) = open_air(&chem, &init, t);
         n[MATTER] = 1000.0;
