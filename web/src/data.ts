@@ -5,7 +5,8 @@ export interface Meta {
   w: number; h: number; cell_m: number; seed: number; days_per_year: number;
   layers: Layer[];
   frames: { day: number; year: number }[];
-  series: Record<string, number[]>;
+  /** One value a year per column; null where the tape wrote NaN (none that year). */
+  series: Record<string, (number | null)[]>;
   series_units: Record<string, string>;
   events: { day: number; year: number; text: string }[];
 }
@@ -60,7 +61,11 @@ export function decode(w: World, f: number, name: string): Float32Array | null {
   return out;
 }
 
-export function fmt(v: number): string {
+/** A missing value: null (a NaN the tape wrote) or NaN. */
+export const missing = (v: number | null): v is null => v === null || Number.isNaN(v);
+
+export function fmt(v: number | null): string {
+  if (missing(v)) return '–';
   const a = Math.abs(v);
   if (a === 0) return '0';
   if (a >= 1e7 || a < 1e-3) return v.toExponential(2).replace('e+', 'e');

@@ -1,7 +1,8 @@
-// Sparklines for the summary series, each with a cursor at the current year.
-import { fmt, unitText } from './data';
+// Sparklines for the summary series, each with a cursor at the current year. A missing value (null: a NaN the
+// tape wrote, a mean of nothing) is a gap in the line and prints as a dash, never as 0.
+import { fmt, missing, unitText } from './data';
 
-interface Card { name: string; xs: number[]; ys: number[]; cv: HTMLCanvasElement; cur: HTMLElement; val: HTMLElement; unit: string }
+interface Card { name: string; xs: number[]; ys: (number | null)[]; cv: HTMLCanvasElement; cur: HTMLElement; val: HTMLElement; unit: string }
 
 export class Charts {
   private cards: Card[] = [];
@@ -11,10 +12,10 @@ export class Charts {
     new ResizeObserver(() => this.draw()).observe(root);
   }
 
-  set(series: Record<string, number[]>, units: Record<string, string>, years: number[]): void {
+  set(series: Record<string, (number | null)[]>, units: Record<string, string>, years: number[]): void {
     this.root.replaceChildren();
-    const ys = series.year ?? years;
-    this.x0 = Math.min(ys[0] ?? 0, years[0] ?? 0); this.x1 = Math.max(ys[ys.length - 1] ?? 1, years[years.length - 1] ?? 1);
+    const xs = series.year as number[];
+    this.x0 = Math.min(xs[0] ?? 0, years[0] ?? 0); this.x1 = Math.max(xs[xs.length - 1] ?? 1, years[years.length - 1] ?? 1);
     this.cards = Object.keys(series).filter(k => k !== 'year' && !/^elem_|^energy$/.test(k) && series[k].length > 1).map(name => {
       const el = document.createElement('div');
       el.className = 'card';
@@ -25,8 +26,7 @@ export class Charts {
       plot.addEventListener('pointerdown', e => { plot.setPointerCapture(e.pointerId); seek(e); });
       plot.addEventListener('pointermove', seek);
       this.root.append(el);
-      return { name, xs: series.year && series.year.length === series[name].length ? series.year : series[name].map((_, i, a) => this.x0 + (i / (a.length - 1)) * (this.x1 - this.x0)),
-        ys: series[name], cv: el.querySelector('canvas')!, cur: el.querySelector('i')!, val: el.querySelector('b')!, unit: unitText(units[name]) };
+      return { name, xs, ys: series[name], cv: el.querySelector('canvas')!, cur: el.querySelector('i')!, val: el.querySelector('b')!, unit: unitText(units[name]) };
     });
     this.draw(); this.setYear(this.year);
   }
@@ -36,7 +36,8 @@ export class Charts {
     for (const c of this.cards) {
       let lo = 0, hi = c.xs.length - 1; // last sample at or before the year
       while (lo < hi) { const m = (lo + hi + 1) >> 1; if (c.xs[m] <= year) lo = m; else hi = m - 1; }
-      c.val.textContent = `${fmt(c.ys[lo])} ${c.unit}`.trim();
+      const v = c.ys[lo];
+      c.val.textContent = missing(v) ? fmt(v) : `${fmt(v)} ${c.unit}`.trim();
       c.cur.style.left = `${clamp01((year - this.x0) / (this.x1 - this.x0 || 1)) * 100}%`;
     }
   }
@@ -49,14 +50,28 @@ export class Charts {
       c.cv.width = W * d; c.cv.height = H * d;
       const g = c.cv.getContext('2d')!;
       g.scale(d, d);
-      const lo = c.ys.reduce((a, b) => Math.min(a, b)), hi = c.ys.reduce((a, b) => Math.max(a, b)), pad = 4, span = hi - lo || 1;
+      const known = c.ys.filter((v): v is number => !missing(v));
+      if (!known.length) continue;
+      const lo = known.reduce((a, b) => Math.min(a, b)), hi = known.reduce((a, b) => Math.max(a, b)), pad = 4, span = hi - lo || 1;
       const px = (i: number) => ((c.xs[i] - this.x0) / (this.x1 - this.x0 || 1)) * W;
       const py = (v: number) => (hi === lo ? H / 2 : H - pad - ((v - lo) / span) * (H - 2 * pad));
-      g.beginPath();
-      c.ys.forEach((v, i) => (i ? g.lineTo(px(i), py(v)) : g.moveTo(px(i), py(v))));
-      g.strokeStyle = line; g.lineWidth = 1.5; g.lineJoin = 'round'; g.stroke();
-      g.lineTo(px(c.ys.length - 1), H); g.lineTo(px(0), H); g.closePath();
-      g.globalAlpha = 0.12; g.fillStyle = line; g.fill();
+      g.strokeStyle = g.fillStyle = line; g.lineWidth = 1.5; g.lineJoin = 'round';
+      // Each run of known values is its own line with its own fill; a lone value is a dot.
+      let run: number[] = [];
+      const flush = () => {
+        if (run.length === 1) { g.globalAlpha = 1; g.beginPath(); g.arc(px(run[0]), py(c.ys[run[0]]!), 1.5, 0, 2 * Math.PI); g.fill(); }
+        else if (run.length > 1) {
+          g.globalAlpha = 1; g.beginPath();
+          run.forEach((i, k) => (k ? g.lineTo(px(i), py(c.ys[i]!)) : g.moveTo(px(i), py(c.ys[i]!))));
+          g.stroke();
+          g.lineTo(px(run[run.length - 1]), H); g.lineTo(px(run[0]), H); g.closePath();
+          g.globalAlpha = 0.12; g.fill();
+        }
+        run = [];
+      };
+      c.ys.forEach((v, i) => (missing(v) ? flush() : run.push(i)));
+      flush();
+      g.globalAlpha = 1;
     }
   }
 }
