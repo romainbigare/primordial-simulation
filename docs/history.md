@@ -301,3 +301,7 @@ The work of `docs/foundation/plan.md`, one line per task.
   now holds `DIRS`, `FORWARD` and the square layout) and stacks of layers with vertical links. `Grid` is a thin view
   on the mesh: cell count, area, air nodes (`air_of` is the parent at the air level) and latitude come from it; the
   mesh is built from the grid's numbers and `Config`'s latitudes, not saved. Results unchanged (golden fingerprints).
+- C2: `solve::downhill`: the cells sorted by head (a topological order of the downhill links) and one pass down it
+  that moves rows of amounts by the shares a rule gives each link, with exact per-link fluxes and no cell below zero.
+  On bare test terrain with rain it ends one liquid step as `flow::liquid`'s sweep does to rounding
+  (`core/tests/solve.rs`); not yet used by a law (D2).
