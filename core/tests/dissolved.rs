@@ -4,15 +4,11 @@
 
 use pcore::change::{reversible, Reactor};
 use pcore::chem::Chemistry;
+use pcore::units::DAY;
+use worldgen::testkit::{node_totals, FIX_GAS, ABSORBER as GAS, AIR_COLUMN, DISSOLVED as SALT, LIQUID as LIQ, ROCK};
 
-const LIQ: usize = 0;
-const GAS: usize = 3;
-const ROCK: usize = 10;
-const SALT: usize = 23;
-/// Moles of liquid in 1 m3 of it; the gas over 1 m2 at the start (its 400 ppm of the air's column).
+/// Moles of liquid in 1 m3 of it.
 const MOL_PER_M3: f64 = 1000.0 / 0.018;
-const AIR_COLUMN: f64 = 101_325.0 / (9.81 * 0.0288);
-const DAY: f64 = 86_400.0;
 
 /// One m2 of a liquid column `depth` m deep over the rock of the start's loose ground (a tenth of
 /// 1 m by volume, 2,710 mol: the rate goes with it, Law 2's contact), with the gas of the air over it.
@@ -20,19 +16,8 @@ fn column(chem: &Chemistry, depth: f64, ppm: f64) -> (Vec<f64>, Vec<f64>) {
     let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
     n[LIQ] = depth * MOL_PER_M3;
     n[ROCK] = 0.1 / chem.molar_volume(ROCK, pcore::chem::Phase::Solid);
-    (gas[1], gas[2], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, ppm * 1e-6 * AIR_COLUMN);
+    (gas[FIX_GAS], gas[2], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, ppm * 1e-6 * AIR_COLUMN);
     (n, gas)
-}
-
-/// Elements and (thermal + chemical) energy of one node, with its gas share.
-fn totals(chem: &Chemistry, n: &[f64], gas: &[f64], e: f64) -> (Vec<f64>, f64) {
-    let mut el = vec![0.0; chem.n_elements];
-    let mut en = e;
-    for k in 0..chem.ns() {
-        chem.add_elems(k, n[k] + gas[k], &mut el);
-        en += (n[k] + gas[k]) * chem.subs[k].hf;
-    }
-    (el, en)
 }
 
 /// The salt the chemistry holds per m2 at balance: `depth` m of liquid, `ppm` of the gas, `t` K.
@@ -58,11 +43,11 @@ fn the_two_reactions_close_elements_and_energy() {
         n[SALT] = salt;
         let (t, cap) = (288.0, 1e15);
         let mut e = t * (cap + n.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>());
-        let (el0, en0) = totals(&chem, &n, &gas, e);
+        let (el0, en0) = node_totals(&chem, &n, &gas, e);
         for _ in 0..30 {
             rc.react(&chem, &mut n, Some(&mut gas), &mut e, cap, None, 0.0, 120.0 * DAY);
         }
-        let (el1, en1) = totals(&chem, &n, &gas, e);
+        let (el1, en1) = node_totals(&chem, &n, &gas, e);
         assert!((n[SALT] - salt).abs() > 1.0, "it did react: {salt} -> {}", n[SALT]);
         for j in 0..chem.n_elements {
             assert!((el1[j] - el0[j]).abs() <= 1e-10 * el0[j].max(1.0), "element {j}");

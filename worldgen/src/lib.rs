@@ -6,6 +6,8 @@ pub mod life;
 pub mod richness;
 pub mod schedule;
 pub mod terrain;
+#[cfg(feature = "testkit")]
+pub mod testkit;
 
 pub use chemistry::{chemistry0, Init};
 pub use generate::generate;

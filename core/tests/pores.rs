@@ -5,17 +5,11 @@
 //! thickness of ground it fills; a body soaks it up like any liquid of its cell.
 
 use pcore::chem::Phase;
-use pcore::check::{drift, totals};
 use pcore::World;
+use worldgen::testkit::{loose_volume as loose, Books};
 
 /// 15 days: one liquid step.
 const DT: f64 = 15.0 * 86_400.0;
-
-/// Volume of the loose solids of land cell `i`, m³, and the cell's liquid (the key liquid of chemistry 0), mol per m³.
-fn loose(w: &World, i: usize) -> f64 {
-    let t = w.t_ground(i);
-    (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Solid).map(|k| w.g(k, i) * w.chem.molar_volume(k, Phase::Solid)).sum()
-}
 
 /// Two land cells side by side, both warm and dry: the higher first.
 fn pair(w: &World) -> (usize, usize) {
@@ -67,11 +61,10 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
         let (i, _) = pair(&w);
         let pores = 0.4 * loose(&w, i);
         pour(&mut w, k, i, share * pores);
-        let (t0, l0) = (totals(&w), w.ledger.clone());
+        let books = Books::now(&w);
         let v0 = liquid_m3(&w, k, i);
         pcore::flow::step(&mut w, DT);
-        let (de, dq) = drift(&w, &t0, &l0);
-        assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
+        books.assert_within(&w, 1e-12, 1e-9);
         (liquid_m3(&w, k, i) / v0, liquid_m3(&w, k, i) / pores)
     };
     // Half the pores' volume: it all stays (but for what the open air takes), where the same sheet ran off before.
@@ -100,10 +93,9 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         (w.cfg.evap, w.cfg.phys.hill) = (0.0, 1e15);
         let pores = w.cfg.phys.porosity * loose(&w, i);
         pour(&mut w, k, i, share * pores);
-        let (t0, l0) = (totals(&w), w.ledger.clone());
+        let books = Books::now(&w);
         pcore::flow::step(&mut w, DT);
-        let (de, dq) = drift(&w, &t0, &l0);
-        assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
+        books.assert_within(&w, 1e-12, 1e-9);
         let (area, depth) = (w.grid.area(), loose(&w, i) / w.grid.area());
         // The liquid table of `i` stood at its bottom plus the depth the liquid fills; `j` was dry on its own bottom.
         let (zi, zj) = (w.surface_z(i), w.surface_z(j));
@@ -168,10 +160,9 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
         }
         w.deep[k * n + i] = full / mv;
         w.e_deep[i] = full / mv * (w.chem.subs[k].cp * 290.0 + w.chem.subs[k].lf);
-        let (t0, l0) = (totals(&w), w.ledger.clone());
+        let books = Books::now(&w);
         pcore::flow::step(&mut w, DT);
-        let (de, dq) = drift(&w, &t0, &l0);
-        assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
+        books.assert_kept(&w, 1e-9);
         (w.deep[k * n + i] * mv, liquid_m3(&w, k, i))
     };
     let (hi, _) = pair(&w0);
@@ -202,23 +193,21 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     let (pores, full, mv) = (p.porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(k, Phase::Liquid));
     w.cfg.evap = 0.0;
     pour(&mut w, k, hi, 0.9 * pores);
-    let (t0, l0) = (totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     pcore::flow::step(&mut w, DT);
     let deep = |w: &World, i: usize| w.deep[k * n + i] * mv;
     // Down: what is over the field capacity, 0.3 of the pores (0.9 - 0.6), less what Darcy's flow took sideways.
     assert!(deep(&w, hi) > 0.1 * pores && deep(&w, hi) <= (0.3 * pores).min(full) * 1.000001, "{} m³ sank of {pores} m³ of pores", deep(&w, hi));
     assert!(liquid_m3(&w, k, hi) >= 0.95 * 0.6 * pores, "the loose ground kept {} of {pores} m³", liquid_m3(&w, k, hi));
-    let (de, dq) = drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
+    books.assert_kept(&w, 1e-9);
     // Across: the high cell's store, full and warm, drains to its neighbours; the low one's never holds more than it can.
     w.deep[k * n + hi] = full / mv;
     w.e_deep[hi] = full / mv * (w.chem.subs[k].cp * 290.0 + w.chem.subs[k].lf);
-    let (t0, l0) = (totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     for _ in 0..20 {
         pcore::flow::step(&mut w, DT);
         assert!(deep(&w, lo) <= full * 1.000001, "the low cell's store overfilled");
     }
     assert!(deep(&w, hi) < 0.9 * full, "the full store on the high cell did not drain: {} of {full} m³", deep(&w, hi));
-    let (de, dq) = drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "drift {de} {dq}");
+    books.assert_kept(&w, 1e-9);
 }

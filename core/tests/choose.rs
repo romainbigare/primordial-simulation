@@ -5,10 +5,9 @@
 //! copies once it has eaten twice its copy mass) are taken out at once.
 
 use pcore::body::{self, INTERVAL, LEARN};
-use pcore::lineage::Lineage;
 use pcore::grid::DIRS;
-use pcore::rng::{Purpose, Rng};
-use pcore::{bond, brain, change, flow, lineage, World};
+use pcore::World;
+use worldgen::testkit::{dry_land, founder, scale, Brain, OFF};
 
 const W: usize = 12;
 const H: usize = 8;
@@ -20,8 +19,8 @@ const DECISIONS: usize = 200;
 /// about 3 points over chance, not 5, and 200 seeds could not tell it from the body that does not learn.
 const SEEDS: u64 = 1600;
 /// Learning rate genes (log10): on, and off.
-const ON: f32 = -1.0;
-const OFF: f32 = -4.0;
+const LEARN_ON: f32 = -1.0;
+const LEARN_OFF: f32 = -4.0;
 
 /// A flat, warm world: every cell a copy of one dry land cell, the strip added on top.
 fn scene(seed: u64) -> (World, usize) {
@@ -68,7 +67,7 @@ fn scene(seed: u64) -> (World, usize) {
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);
     let (n, ns) = (w.grid.n(), w.chem.ns());
-    let land = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    let land = dry_land(&w);
     for k in 0..ns {
         let (g, b) = (w.ground[k * n + land], w.bed[k * n + land]);
         (0..n).for_each(|i| (w.ground[k * n + i], w.bed[k * n + i]) = (g, b));
@@ -98,22 +97,12 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // A neutral brain: small random weights, no bias among resting, putting, taking from the
     // ground and moving (which all start equally likely); copying, the actions on parts and on
     // other bodies kept rare, as they are not part of this scene.
-    let mut r = Rng::new(seed, 0, 0, Purpose::Body);
-    let fixed = [0.0, -8.0, 0.0, 0.0, -8.0, -8.0, -8.0, -8.0];
-    let shape = lineage::shape(w.chem.ns(), 12, 6);
-    let mut base = brain::random(shape, &mut r, 0.1, fixed, 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });
-    let (start, genome) = (w.grid.idx(STRIP - 1, H / 2), w.life.new_genome(rows));
-    let mut b = worldgen::life::make(&mut w, 1, start, lineage, genome).expect("body");
+    let brain = Brain { fixed: [0.0, OFF, 0.0, 0.0, OFF, OFF, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
+    let start = w.grid.idx(STRIP - 1, H / 2);
+    let mut b = founder(&mut w, 1, start, &brain);
     // (A founder is placed as an adult since 15 Oct 2026, 63 kg: this scene is set for a 30 kg one; booked as an edit.)
     let f = 30.0 / b.mass(&w.chem);
-    for k in 0..w.chem.ns() {
-        w.chem.add_elems(k, (f - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy += (f - 1.0) * b.store[k] * w.chem.subs[k].hf;
-        b.store[k] *= f;
-    }
-    (w.ledger.imposed_energy, b.e) = (w.ledger.imposed_energy + (f - 1.0) * b.e, f * b.e);
+    scale(&mut w, &mut b, f);
     // (The founders' burning gene as it was with the old rates of the open air, see `scene`.)
     let (_, _, _, burn) = w.chem.life_roles().expect("roles");
     b.genes[pcore::body::Layout::of(&w.chem).cat + burn] += worldgen::life::LITTER_X;
@@ -121,23 +110,12 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     let slot = w.life.add(b, w.day, 1);
     let mut log = Vec::new();
-    // The days of `pcore::step`, one by one, to see each decision.
-    let dt = w.cfg.phys_days as f64 * 86_400.0;
+    // Day by day, to see each decision.
     while log.len() < DECISIONS && w.life.bodies[slot].alive {
-        let d = w.day % w.cfg.days_per_month as u64;
-        if d.is_multiple_of(w.cfg.phys_days as u64) {
-            pcore::survey::survey(&mut w);
-            flow::step(&mut w, dt);
-            change::step(&mut w, dt);
-        }
-        if d == 0 {
-            bond::step(&mut w);
-        }
         let (u, from) = (w.counts.updates, w.life.bodies[slot].cell as usize);
         let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.grid.step(from, d)).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, rich, j) > seen(&w, rich, from) + 0.02).collect();
-        pcore::survey::day(&mut w);
-        w.day += 1;
+        pcore::day(&mut w);
         // A body that grew past twice its copy mass has children: they die at once, their matter
         // back to the ground where they were born, so the scene stays one body.
         for s in 0..w.life.bodies.len() {
@@ -172,8 +150,8 @@ fn measure(learn: f32) -> (f64, f64, f64, usize, usize) {
 
 #[test]
 fn body_learns_to_move_toward_what_it_can_take() {
-    let (strip_on, toward_on, chance_on, n_on, m_on) = measure(ON);
-    let (strip_off, toward_off, chance_off, n_off, m_off) = measure(OFF);
+    let (strip_on, toward_on, chance_on, n_on, m_on) = measure(LEARN_ON);
+    let (strip_off, toward_off, chance_off, n_off, m_off) = measure(LEARN_OFF);
     let report = format!(
         "learning on: on the strip {strip_on:.3}, toward {toward_on:.3} (chance {chance_on:.3}), {n_on} decisions, {m_on} moves; \
          off: on the strip {strip_off:.3}, toward {toward_off:.3} (chance {chance_off:.3}), {n_off} decisions, {m_off} moves"

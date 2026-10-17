@@ -3,43 +3,29 @@
 //! `Physics::dormancy`); upkeep and the cost of a decision, the speed-up of catalysts, building and
 //! the share a freezing kills go with it. A child may get less liquid than its parent (`WET`).
 
-use pcore::body::{Body, CHILD, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
-use pcore::lineage::Lineage;
-use pcore::event::EventKind;
-use pcore::rng::{Purpose, Rng};
-use pcore::{brain, lineage, World};
+use pcore::body::{Body, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
+use pcore::{brain, World};
+use worldgen::testkit::{brood, children, died, dry_lands, scale, small_world, Books, Brain, Line, LIQUID, RICH};
 
 /// A world with a lineage of brains that only rest, and the land cells with no liquid on them.
 struct Set {
     w: World,
-    lineage: u32,
-    rows: Vec<f32>,
+    line: Line,
     land: Vec<usize>,
-    /// The key liquid, the energy-rich solid, and the reaction that burns it
-    liquid: usize,
-    rich: usize,
 }
 
 fn set() -> Set {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
-    let shape = lineage::shape(w.chem.ns(), 12, 6);
-    let mut rest = [-8.0; brain::FIXED];
-    rest[brain::REST] = 8.0;
-    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 1 });
-    let (_, rich, liquid, _) = w.chem.life_roles().expect("roles");
-    Set { w, lineage, rows, land, liquid, rich }
+    let mut w = small_world();
+    let land = dry_lands(&w);
+    let line = Line::new(&mut w, &Brain::only(brain::REST), 1);
+    Set { w, line, land }
 }
 
 impl Set {
     /// A starting eater (30 kg, 10 days between updates) in land cell number `at`, resting, that does not soak
     /// liquid from the ground unless `soak`, repair 0.
     fn eater(&mut self, at: usize, soak: bool) -> Body {
-        let g = self.w.life.new_genome(self.rows.clone());
-        let mut b = worldgen::life::make(&mut self.w, 1, self.land[at], self.lineage, g).expect("body");
+        let mut b = self.line.founder(&mut self.w, 1, self.land[at]);
         b.genes[REPAIR] = 0.0;
         if !soak {
             b.genes[LIQ] = -4.0;
@@ -51,7 +37,7 @@ impl Set {
     fn dried(&self, b: &Body, x: f64) -> Body {
         let mut d = b.clone();
         let t = d.temp(&self.w.chem);
-        d.store[self.liquid] = x * b.level(&self.w.chem, self.liquid, 0.0);
+        d.store[LIQUID] = x * b.level(&self.w.chem, LIQUID, 0.0);
         d.e = t * d.heat_cap(&self.w.chem);
         d
     }
@@ -183,21 +169,17 @@ fn frost_kills_in_proportion_to_activity() {
         let b = s.eater(at, false);
         let mut b = s.dried(&b, x);
         // A node of `count` such members (its matter and energy booked as an edit).
-        let w = &mut s.w;
-        for k in 0..w.chem.ns() {
-            w.chem.add_elems(k, (count - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
-            (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (count - 1.0) * b.store[k] * w.chem.subs[k].hf, count * b.store[k]);
-        }
-        (w.ledger.imposed_energy, b.e, b.count) = (w.ledger.imposed_energy + (count - 1.0) * b.e, count * b.e, count);
-        w.life.add(b, w.day, 1)
+        scale(&mut s.w, &mut b, count);
+        b.count = count;
+        s.w.life.add(b, s.w.day, 1)
     };
     let (wet, dry) = (node(&mut s, 0, 1.0), node(&mut s, 1, 0.5));
     let a = s.w.life.bodies[dry].activity(&s.w.chem, &s.w.cfg.phys);
-    let (t0, l0) = (pcore::check::totals(&s.w), s.w.ledger.clone());
+    let books = Books::now(&s.w);
     // The key liquid freezes at the temperature the bodies are at (they are at their cell's).
-    s.w.chem.subs[s.liquid].melt = 400.0;
+    s.w.chem.subs[LIQUID].melt = 400.0;
     pcore::step(&mut s.w);
-    let killed: f64 = s.w.events.iter().filter(|e| matches!(e.kind, EventKind::Died { cause: PHASE, .. })).map(|e| e.value).sum();
+    let killed = died(&s.w, PHASE);
     let (cw, cd) = (s.w.life.bodies[wet].alive, s.w.life.bodies[dry].count);
     println!("wet node alive {cw}; dry node {cd:.0} of {count} left (activity {a:.4}); died of PHASE {killed:.0}");
     assert!(!cw, "a wet node frozen dies");
@@ -206,8 +188,7 @@ fn frost_kills_in_proportion_to_activity() {
     let left = (1.0 - a).powi(3) * count;
     assert!((cd / left - 1.0).abs() < 0.02, "left {cd} of {count}, expected {left:.0}");
     assert!(killed >= count - cd - 1.0 && killed >= 0.9 * count, "died of PHASE {killed}");
-    let (de, dq) = pcore::check::drift(&s.w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&s.w, 1e-9);
 }
 
 /// A body whose `WET` gene is below 0 gives its children less of its key liquid than of the rest, and
@@ -219,15 +200,13 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
     let run = |wet: f32| {
         let mut s = set();
         s.w.cfg.nodes = false;
-        let (t0, l0) = (pcore::check::totals(&s.w), s.w.ledger.clone());
+        let books = Books::now(&s.w);
                 let mut b = s.eater(0, false);
         (b.genes[WET], b.genes[DISPERSE], b.genes[STRENGTH]) = (wet, 0.0, 0.0);
         // A mature body (a body of 21 kg, its copy mass 1.6 kg) with a brood of three children.
         b.genes[COPY_MASS] = 0.2;
         b.prepare(&s.w.chem, &s.w.cfg.phys);
-        let m = s.w.chem.matter().expect("body matter");
-        let (_, h) = b.wet_h(&s.w.chem);
-        b.brood = 3.0 * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - h) / s.w.chem.subs[m].molar_mass;
+        brood(&s.w, &mut b, 3.0);
         let (before, t) = (b.store.clone(), b.temp(&s.w.chem));
         let (slot, id) = {
             let slot = s.w.life.add(b, s.w.day, 1);
@@ -237,19 +216,17 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
             s.w.life.bodies[slot] = b;
             (slot, id)
         };
-        let kids: Vec<usize> = (0..s.w.life.bodies.len()).filter(|&k| k != slot && s.w.life.bodies[k].alive && s.w.life.bodies[k].parent == id).collect();
+        let kids: Vec<usize> = children(&s.w, id).into_iter().filter(|&k| k != slot).collect();
         assert!(!kids.is_empty(), "no children");
         let c = &s.w.life.bodies[kids[0]];
-        let (share_rich, share_liquid) = (c.store[s.rich] / before[s.rich], c.store[s.liquid] / before[s.liquid]);
+        let (share_rich, share_liquid) = (c.store[RICH] / before[RICH], c.store[LIQUID] / before[LIQUID]);
         assert!((share_liquid / share_rich / 10f64.powf(wet as f64) - 1.0).abs() < 1e-9, "the child's liquid is 10^WET of its share: {share_liquid} {share_rich}");
         assert!((c.temp(&s.w.chem) / t - 1.0).abs() < 1e-9, "the child is as warm as the parent was");
         let a0 = c.activity(&s.w.chem, &s.w.cfg.phys);
         // Matter and energy are exactly kept by the birth.
-        assert_eq!(pcore::check::broken(&s.w), None);
-        let (de, dq) = pcore::check::drift(&s.w, &t0, &l0);
-        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        books.assert_kept(&s.w, 1e-9);
         // A month with nothing to take in and no soaking (the children's gene for it is -4): the fuel they keep, and how active.
-        let fuel = |s: &Set| kids.iter().filter(|&&k| s.w.life.bodies[k].alive).map(|&k| s.w.life.bodies[k].store[s.rich]).sum::<f64>();
+        let fuel = |s: &Set| kids.iter().filter(|&&k| s.w.life.bodies[k].alive).map(|&k| s.w.life.bodies[k].store[RICH]).sum::<f64>();
         let acts = |s: &Set| kids.iter().filter(|&&k| s.w.life.bodies[k].alive).map(|&k| s.w.life.bodies[k].activity(&s.w.chem, &s.w.cfg.phys)).collect::<Vec<_>>();
         let f0 = fuel(&s);
         pcore::step(&mut s.w);

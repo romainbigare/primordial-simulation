@@ -11,4 +11,4 @@ bincode = "1.3"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [dev-dependencies]
-worldgen = { path = "../worldgen" }
+worldgen = { path = "../worldgen", features = ["testkit"] }

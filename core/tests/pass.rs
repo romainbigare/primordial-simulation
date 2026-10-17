@@ -2,10 +2,8 @@
 //! ground along their edge (it gets cheaper to cross), and the cover grows back over years
 //! once the moving stops. A body too weak to give the push of a mover does not move.
 
-use pcore::body;
-use pcore::lineage::Lineage;
-use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, lanes, lineage, World};
+use pcore::{body, brain, choose, lanes, World};
+use worldgen::testkit::{Brain, Line, OFF};
 
 /// Cover per area in the two cells, kg/m².
 const COVER: f64 = 20.0;
@@ -17,21 +15,17 @@ fn scene() -> (World, usize, usize, usize) {
     pcore::step(&mut w);
     let n = w.grid.n();
     let a = (0..n - 1).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i + 1][2] > 0.0 && i % 12 < 11).expect("two land cells");
-    let mut r = Rng::new(3, 0, 0, Purpose::Body);
-    let shape = lineage::shape(w.chem.ns(), 12, 6);
-    let mut base = brain::random(shape, &mut r, 0.1, [0.0; 8], 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });
-    let genome = w.life.new_genome(rows);
+    let brain = Brain { verbs: [OFF; brain::VERBS + brain::OVERBS], seed: 3, ..Brain::neutral() };
+    let line = Line::new(&mut w, &brain, 0);
     for cell in [a, a + 1] {
-        let mut p = worldgen::life::make(&mut w, 0, cell, lineage, genome).expect("plant");
+        let mut p = line.founder(&mut w, 0, cell);
         // Scale the node to the cover wanted (stores are totals).
         let k = COVER * w.grid.area() / p.mass(&w.chem);
         p.store.iter_mut().for_each(|x| *x *= k);
         p.count *= k;
         w.life.add(p, w.day, 1);
     }
-    let m = worldgen::life::make(&mut w, 1, a, lineage, genome).expect("mover");
+    let m = line.founder(&mut w, 1, a);
     let slot = w.life.add(m, w.day, 1);
     (w, a, a + 1, slot)
 }

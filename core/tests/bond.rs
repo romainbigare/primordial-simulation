@@ -1,29 +1,7 @@
 //! Two tiny scenes for Law 3 (Bond).
 
 use pcore::bond::{self, GROUND};
-use pcore::check::{drift, totals};
-
-/// A land cell of a small world after one month (so the laws have their surroundings).
-fn world() -> (pcore::World, usize) {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 0.01).expect("land");
-    (w, i)
-}
-
-/// A part of `kg` of the cell's most plentiful loose substance, taken from the ground at its
-/// temperature: flat, or a block if `thick`.
-fn plate(w: &mut pcore::World, i: usize, kg: f64, thick: bool) -> usize {
-    let n = w.grid.n();
-    let k = (0..w.chem.ns()).max_by(|&a, &b| w.ground[a * n + i].total_cmp(&w.ground[b * n + i])).unwrap();
-    let mut wall = vec![0.0; w.chem.ns()];
-    wall[k] = kg / w.chem.subs[k].molar_mass;
-    assert!(w.ground[k * n + i] > wall[k]);
-    let e = wall[k] * w.chem.subs[k].cp * w.life.env[i][0];
-    w.ground[k * n + i] -= wall[k];
-    w.e_ground[i] -= e;
-    bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0)
-}
+use worldgen::testkit::{plate, start as world, Books};
 
 #[test]
 fn bond_breaks_under_too_much_load() {
@@ -34,13 +12,12 @@ fn bond_breaks_under_too_much_load() {
     // Each hangs on the anchored part by a bond that holds 10 t weight.
     bond::link(&mut w, light, top as u32, 1e5);
     bond::link(&mut w, heavy, top as u32, 1e5);
-    let (t0, l0) = (totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     bond::step(&mut w);
     let p = &w.parts.parts;
     assert!(p[light].links.iter().any(|l| l.0 == top as u32), "the light part fell");
     assert!(p[heavy].links.is_empty() && p[heavy].root as usize == heavy, "the heavy part still hangs");
-    let (de, dq) = drift(&w, &t0, &l0);
-    assert!(de < 1e-12 && dq < 1e-9, "drift {de:e} {dq:e}");
+    books.assert_within(&w, 1e-12, 1e-9);
 }
 
 #[test]
@@ -131,12 +108,11 @@ fn forming_never_takes_more_than_is_left() {
     let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;
     let r = pcore::body::release(&w, &w.life.bodies[slot], w.life.bodies[slot].interval() as f64);
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
-    let (t0, l0) = (totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
     bond::form(&mut w, slot, &mut b, [0.0, 0.5]);
     assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
     w.life.bodies[slot] = b;
     assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
-    let (de, dq) = drift(&w, &t0, &l0);
-    assert!(de < 1e-12 && dq < 1e-9, "drift {de:e} {dq:e}");
+    books.assert_within(&w, 1e-12, 1e-9);
 }

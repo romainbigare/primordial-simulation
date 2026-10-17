@@ -6,36 +6,27 @@
 //! body stands above its ground by that heat over that conductance (`body::live`, `body::pay`).
 
 use pcore::body::{Body, DISPERSE, LIQ, REPAIR};
-use pcore::lineage::Lineage;
-use pcore::rng::{Purpose, Rng};
-use pcore::{brain, lineage, World};
+use pcore::{brain, World};
+use worldgen::testkit::{add, dry_lands, hold_ground, kg, put_kg_m2, scale, warm, small_world, Books, Brain, Line, LIQUID, MATTER, RICH};
 
 /// A world with a lineage of brains that only rest, and the land cells with no liquid on them.
 struct Set {
     w: World,
-    lineage: u32,
-    rows: Vec<f32>,
+    line: Line,
     land: Vec<usize>,
 }
 
 fn set() -> Set {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
-    let shape = lineage::shape(w.chem.ns(), 12, 6);
-    let mut rest = [-8.0; brain::FIXED];
-    rest[brain::REST] = 8.0;
-    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 1 });
-    Set { w, lineage, rows, land }
+    let mut w = small_world();
+    let land = dry_lands(&w);
+    let line = Line::new(&mut w, &Brain::only(brain::REST), 1);
+    Set { w, line, land }
 }
 
 impl Set {
-    /// A starting eater (30 kg, 10 days between updates) in land cell number `at`, resting, soaking no liquid, repair 0.
+    /// A starting eater in land cell number `at`, resting, soaking no liquid, repair 0.
     fn eater(&mut self, at: usize) -> Body {
-        let g = self.w.life.new_genome(self.rows.clone());
-        let mut b = worldgen::life::make(&mut self.w, 1, self.land[at], self.lineage, g).expect("body");
+        let mut b = self.line.founder(&mut self.w, 1, self.land[at]);
         (b.genes[REPAIR], b.genes[LIQ], b.genes[DISPERSE]) = (0.0, -4.0, 0.0);
         b.k = Default::default();
         b.prepare(&self.w.chem, &self.w.cfg.phys);
@@ -83,24 +74,17 @@ fn upkeep_follows_the_rate_law_of_the_reactions() {
 #[test]
 fn a_cold_body_ages_slower() {
     let mut s = set();
-    let (cold, warm) = (s.eater(0), s.eater(0));
     let (t_cold, t_warm) = (270.0, 300.0);
-    let (mut cold, mut warm) = (at(&s.w, &cold, t_cold), at(&s.w, &warm, t_warm));
-    // (The temperatures are edits.)
-    let fix = |w: &mut World, b: &mut Body, t: f64| {
-        let e = t * b.heat_cap(&w.chem);
-        w.ledger.imposed_energy += e - b.e;
-        b.e = e;
-    };
-    fix(&mut s.w, &mut cold, t_cold);
-    fix(&mut s.w, &mut warm, t_warm);
+    let (mut cold, mut hot) = (s.eater(0), s.eater(0));
+    warm(&mut s.w, &mut cold, t_cold);
+    warm(&mut s.w, &mut hot, t_warm);
     let w = &mut s.w;
     let (days, mass) = (1.0, cold.mass(&w.chem));
     cold.prepare(&w.chem, &w.cfg.phys);
-    warm.prepare(&w.chem, &w.cfg.phys);
-    let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass), pcore::body::upkeep(w, &warm, days, mass));
-    let (c, k) = (w.life.add(cold, w.day, 1), w.life.add(warm, w.day, 1));
-    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    hot.prepare(&w.chem, &w.cfg.phys);
+    let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass), pcore::body::upkeep(w, &hot, days, mass));
+    let (c, k) = (w.life.add(cold, w.day, 1), w.life.add(hot, w.day, 1));
+    let books = Books::now(w);
     pcore::survey::survey(w);
     w.day += 1;
     pcore::survey::day(w);
@@ -109,20 +93,13 @@ fn a_cold_body_ages_slower() {
     println!("wear after a day: cold (270 K) {wc:.4e}, warm (300 K) {wk:.4e}; upkeep {uc:.4e} and {uw:.4e} J");
     assert!(wc > 0.0 && wk > 10.0 * wc, "the warm body ages {} times as fast", wk / wc);
     assert!((wk / wc / (uw / uc) - 1.0).abs() < 1e-6, "wear {wk:e} / {wc:e} against the upkeep {uw:e} / {uc:e}");
-    let (de, dq) = pcore::check::drift(w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(w, 1e-9);
 }
 
-/// A body of `f` times the stores and heat (an edit), at its temperature.
+/// A body of `f` times the stores and heat (an edit), at its temperature, prepared.
 fn scaled(w: &mut World, b: &Body, f: f64) -> Body {
     let mut x = b.clone();
-    for k in 0..w.chem.ns() {
-        w.chem.add_elems(k, (f - 1.0) * x.store[k], &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy += (f - 1.0) * x.store[k] * w.chem.subs[k].hf;
-        x.store[k] *= f;
-    }
-    w.ledger.imposed_energy += (f - 1.0) * x.e;
-    x.e *= f;
+    scale(w, &mut x, f);
     x.k = Default::default();
     x.prepare(&w.chem, &w.cfg.phys);
     x
@@ -138,7 +115,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     let mut s = set();
     let b = s.eater(0);
     let w = &mut s.w;
-    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    let books = Books::now(w);
     let (mut b, days) = (b, 10.0);
     let (temp0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
     let cost = 2e6;
@@ -153,8 +130,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     // What it keeps is a small part of the heat made (the rest went to the ground).
     // (A bare body passes only what its still air and radiation take since 16 Oct 2026: its time constant is 3 h, not 0.7, so it keeps 1.3%.)
     assert!(kept < 0.02 * cost, "it keeps {kept} J of {cost}");
-    let (de, dq) = pcore::check::drift(w, &t0, &l0);
-    assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(w, 1e-12);
     // The same work again warms it by as much more.
     let mut c = b.clone();
     assert!(pcore::body::pay(w, &mut c, cost, days));
@@ -185,24 +161,14 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
     assert!(a > 0.0 && (c / a / want - 1.0).abs() < 0.03 && want > 2.0 && want < 2.83, "{a} K and {c} K");
 }
 
-/// Days of a world whose ground is held at `temps[k]` K in the cell `cells[k]` (an edit): the flow and change steps when due, then
-/// the bodies due.
+/// `days` days of a world whose ground is held at `temps[k]` K in the cell `cells[k]` (an edit).
 fn held_days(w: &mut World, cells: &[usize], temps: &[f64], days: usize) {
     for _ in 0..days {
         for (&i, &t) in cells.iter().zip(temps) {
-            let e = w.energy_ground(i, t);
-            w.ledger.imposed_energy += e - w.e_ground[i];
-            w.e_ground[i] = e;
-        }
-        if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
-            let dt = w.cfg.phys_days as f64 * 86_400.0;
-            pcore::survey::survey(w);
-            pcore::flow::step(w, dt);
-            pcore::change::step(w, dt);
+            hold_ground(w, i, t);
         }
         w.events.clear();
-        pcore::survey::day(w);
-        w.day += 1;
+        pcore::day(w);
     }
 }
 
@@ -223,24 +189,17 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     // (In the dark: no light-capture area to absorb the sun, which warms a body too.)
     small.genes[pcore::body::LEAF] = -9.0;
     small.vis = small.visible(&s.w.chem, &s.w.cfg.phys);
-    // (And with no liquid, which would evaporate and cool it; what its burning makes is little.)
-    let liquid = s.w.chem.life_roles().expect("roles").2;
+    // (And with no LIQUID, which would evaporate and cool it; what its burning makes is little.)
     let w = &mut s.w;
-    w.chem.add_elems(liquid, -small.store[liquid], &mut w.ledger.imposed_elems);
-    w.ledger.imposed_energy -= small.store[liquid] * (w.chem.subs[liquid].hf + w.chem.subs[liquid].cp * small.temp(&w.chem));
-    small.e -= small.store[liquid] * w.chem.subs[liquid].cp * small.temp(&w.chem);
-    small.store[liquid] = 0.0;
-    small.wet = 0;
-    // (Its living body is its matter at the liquid share of tissue since 15 Oct 2026, `Body::built`: a quarter of the matter
-    // keeps the body, and so the upkeep that warms it, what it was when a dry body was its matter.)
-    let m = w.chem.matter().expect("matter");
-    let cut = 0.75 * small.store[m];
-    w.chem.add_elems(m, -cut, &mut w.ledger.imposed_elems);
-    w.ledger.imposed_energy -= cut * (w.chem.subs[m].hf + w.chem.subs[m].cp * small.temp(&w.chem));
-    small.e -= cut * w.chem.subs[m].cp * small.temp(&w.chem);
-    small.store[m] -= cut;
+    let wet = kg(w, &small, LIQUID);
+    add(w, &mut small, LIQUID, -wet);
+    (small.store[LIQUID], small.wet) = (0.0, 0);
+    // (Its living body is its matter at the LIQUID share of tissue, `Body::built`: a quarter of the matter keeps the body,
+    // and so the upkeep that warms it, what it was when a dry body was its matter.)
+    let cut = 0.75 * kg(w, &small, MATTER);
+    add(w, &mut small, MATTER, -cut);
     let lay = pcore::body::Layout::of(&w.chem);
-    (small.genes[lay.min + liquid], small.genes[lay.keep + liquid]) = (0.0, 0.0);
+    (small.genes[lay.min + LIQUID], small.genes[lay.keep + LIQUID]) = (0.0, 0.0);
     small.k = Default::default();
     small.prepare(&s.w.chem, &s.w.cfg.phys);
     // (An eighth of it and that again times 8, 2.5 and 20 kg: bare since 16 Oct 2026, the 163 kg body has no steady state at this
@@ -258,12 +217,10 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     small.cell = cells[0] as u32;
     big.cell = cells[1] as u32;
     for b in [&mut small, &mut big] {
-        let e = t_cat * b.heat_cap(&w.chem);
-        w.ledger.imposed_energy += e - b.e;
-        b.e = e;
+        warm(w, b, t_cat);
     }
     let slots = [w.life.add(small, w.day, 1), w.life.add(big, w.day, 1)];
-    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    let books = Books::now(w);
     // (The ground held is that under the bodies: they have brains and may step to a neighbour cell, as the small one did once
     // its brain had the inputs of two more substances, 16 Oct 2026; the law tested is the heat balance with the ground it stands on.)
     let held = |w: &World| slots.map(|s| w.life.bodies[s].cell as usize);
@@ -288,9 +245,9 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         // The temperature where heat made = heat lost. The heat made is what its reactions release at that temperature to their
         // products where they go: the gases to the air with their latent heat, the rest held at its temperature (each mol of `k`
         // holds `h`). Its upkeep burns its fuel (`body::pay`), and the open air burns its stores bare at any temperature (since
-        // the litter constants of 15 Oct 2026, a sixth of what it makes). The liquid that makes, which it keeps none of, leaves:
+        // the litter constants of 15 Oct 2026, a sixth of what it makes). The LIQUID that makes, which it keeps none of, leaves:
         // as vapour, with its latent heat, as far as the air it exchanges takes it up to its vapour pressure, and the rest to the
-        // ground as liquid with its heat (`live::shed`).
+        // ground as LIQUID with its heat (`live::shed`).
         let h = |k: usize, t: f64| {
             let (s, gas) = (&chem.subs[k], chem.phase(k, t) == pcore::chem::Phase::Gas);
             s.hf + if gas { s.lf + s.lv } else { s.cp * t }
@@ -306,10 +263,10 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem));
             rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * 86_400.0);
             let air = |k: usize| w0.air[k * na + j] - w2.air[k * na + j] + gas[k] - g[k];
-            let wet = y.store[liquid] - x.store[liquid];
-            let x_air = w0.air[liquid * na + j] / (0..ns).map(|k| w0.air[k * na + j]).sum::<f64>();
-            let vapour = wet.min((chem.p_sat(liquid, t) / pcore::units::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
-            (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * (chem.subs[liquid].lf + chem.subs[liquid].lv)
+            let wet = y.store[LIQUID] - x.store[LIQUID];
+            let x_air = w0.air[LIQUID * na + j] / (0..ns).map(|k| w0.air[k * na + j]).sum::<f64>();
+            let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
+            (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * (chem.subs[LIQUID].lf + chem.subs[LIQUID].lv)
         };
         let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, &b, mass, t) * days * 86_400.0;
         let (mut lo, mut hi) = (tg, tg + 20.0);
@@ -322,14 +279,13 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         println!("{:.0} kg: {:.3} K above the ground ({tg:.2} K); heat made = heat lost at {want:.3} K", mass, rises[n]);
         // (Within 2%, 0.2% and 0.5% here: what is left is the update's steps, the body's mass at its start against its mean. It was
         // 13% under, held within 15%, after the smooth rate of Law 2 met the rock nutrient, from two errors (each change alone had
-        // been within 2%, not measured again here): `body::live` ran its reactions after its upkeep 9 K below the body, its new liquid coming in with no heat (the
+        // been within 2%, not measured again here): `body::live` ran its reactions after its upkeep 9 K below the body, its new LIQUID coming in with no heat (the
         // bare burning gave 4.9e5 J where 1.1e6 is due, 9% of the heat; fixed, 15 Oct 2026), and this count took 0.95 of the
-        // heat where the latent heat of the liquid the burning makes takes 8% more.)
+        // heat where the latent heat of the LIQUID the burning makes takes 8% more.)
         assert!(rises[n] > 0.0 && (rises[n] / want - 1.0).abs() < 0.02, "{} K above the ground, the heat balance says {want} K", rises[n]);
     }
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
-    let (de, dq) = pcore::check::drift(w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(w, 1e-9);
 }
 
 /// The whole tempo of a body goes with its temperature, not only what it pays to live (15 Oct 2026, after A made upkeep alone
@@ -361,13 +317,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
     s.w.cfg.phys.sweep = 1e12;
     s.w.cfg.phys.c_build = 0.0;
     // A starting eater whose brain only takes from the ground.
-    let shape = lineage::shape(s.w.chem.ns(), 12, 6);
-    let mut fixed = [-8.0; brain::FIXED];
-    fixed[brain::TAKE] = 8.0;
-    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    s.rows = base.split_off(shape.base());
-    s.lineage = s.w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 1 });
-    let rich = s.w.chem.life_roles().expect("roles").1;
+    s.line = Line::new(&mut s.w, &Brain::only(brain::TAKE), 1);
     let mut took = vec![];
     let mut ups = vec![];
     let mut paces = vec![];
@@ -375,20 +325,10 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         let mut b = s.eater(n);
         let w = &mut s.w;
         // Little fuel, so that it has room to take; at the temperature `t`; a kg of the solid per m² (booked) on its cell.
-        let out = 0.8 * b.store[rich];
-        w.chem.add_elems(rich, -out, &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy -= out * w.chem.subs[rich].hf;
-        b.store[rich] -= out;
-        let e = t * b.heat_cap(&w.chem);
-        w.ledger.imposed_energy += e - b.e;
-        b.e = e;
-        let (i, tg, nn) = (b.cell as usize, w.t_ground(b.cell as usize), w.grid.n());
-        let a = 100.0 * w.grid.area() / w.chem.subs[rich].molar_mass;
-        w.ground[rich * nn + i] += a;
-        w.chem.add_elems(rich, a, &mut w.ledger.imposed_elems);
-        let en = w.energy_ground(i, tg);
-        w.ledger.imposed_energy += a * w.chem.subs[rich].hf + en - w.e_ground[i];
-        w.e_ground[i] = en;
+        let out = 0.8 * kg(w, &b, RICH);
+        add(w, &mut b, RICH, -out);
+        warm(w, &mut b, t);
+        put_kg_m2(w, RICH, b.cell as usize, 100.0);
         let slot = w.life.add(b, w.day, 1);
         pcore::survey::survey(w);
         w.day += 1;
@@ -421,24 +361,20 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
 fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let mut s = set();
     s.w.cfg.phys.c_build = 0.0;
-    let rich = s.w.chem.life_roles().expect("roles").1;
     let make = |s: &mut Set, keep: f32| {
         let mut b = s.eater(0);
         (b.genes[pcore::body::KEEP_T], b.genes[pcore::body::HEAT]) = (keep, -0.3);
         // Fuel for the test (an edit): at 30 K over its ground it burns about its own fuel in an update.
-        let t = b.temp(&s.w.chem);
-        let w = &mut s.w;
-        let add = 4.0 * b.store[rich];
-        w.chem.add_elems(rich, add, &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy += add * (w.chem.subs[rich].hf + w.chem.subs[rich].cp * t);
-        (b.e, b.store[rich], b.k) = (b.e + add * w.chem.subs[rich].cp * t, b.store[rich] + add, Default::default());
-        b.prepare(&w.chem, &w.cfg.phys);
+        let fuel = 4.0 * kg(&s.w, &b, RICH);
+        add(&mut s.w, &mut b, RICH, fuel);
+        b.k = Default::default();
+        b.prepare(&s.w.chem, &s.w.cfg.phys);
         b
     };
-    let (warm, cold) = (make(&mut s, 300.0), make(&mut s, 250.0));
-    let (w, cell) = (&mut s.w, warm.cell as usize);
-    let slots = [w.life.add(warm, w.day, 1), w.life.add(cold, w.day, 1)];
-    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    let (keeps, twin) = (make(&mut s, 300.0), make(&mut s, 250.0));
+    let (w, cell) = (&mut s.w, keeps.cell as usize);
+    let slots = [w.life.add(keeps, w.day, 1), w.life.add(twin, w.day, 1)];
+    let books = Books::now(w);
     held_days(w, &[cell], &[280.0], 21);
     // One update more: the fuel it burns against the heat it loses (by the mean of its conductance at its start and end).
     let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
@@ -448,18 +384,17 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     fur.prepare(&w.chem, &w.cfg.phys);
     let g_fur = g(w, &fur);
     assert!(g_fur < 3.0, "with fur {g_fur} W/K for {} kg", fur.mass(&w.chem));
-    let (fuel0, g0, next) = (b.store[rich], g(w, &b), b.last + b.interval());
+    let (fuel0, g0, next) = (b.store[RICH], g(w, &b), b.last + b.interval());
     held_days(w, &[cell], &[tg], (next - w.day) as usize + 1);
     let (y, twin) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
     assert!(y.alive && twin.alive && y.last == next);
     let (t, t_twin) = (y.temp(&w.chem), twin.temp(&w.chem));
     let lost = (t - tg) * 0.5 * (g0 + g(w, y)) * y.interval() as f64 * 86_400.0;
-    let burned = (fuel0 - y.store[rich]) * y.k.burn[0].1;
+    let burned = (fuel0 - y.store[RICH]) * y.k.burn[0].1;
     println!("keeps 300 K: {t:.3} K (its twin {t_twin:.2} K) on {tg} K ground; burned {burned:.4e} J in an update, lost {lost:.4e} J ({:.3}); with fur {g_fur:.2} W/K", burned / lost);
     assert!((t - 300.0).abs() < 0.1 && t_twin < 290.0, "{t} K, its twin {t_twin} K");
     assert!(burned / lost > 1.0 && burned / lost < 1.15, "burned {burned:e} J, lost {lost:e} J");
-    let (de, dq) = pcore::check::drift(w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(w, 1e-9);
 }
 
 /// A body keeps its temperature from above by evaporating (16 Oct 2026): a bare resting eater (the founders' `HEAT`, 3.5)
@@ -481,17 +416,15 @@ fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     };
     let (sweat, dry) = (make(&mut s, 300.0), make(&mut s, 320.0));
     let (w, cell) = (&mut s.w, sweat.cell as usize);
-    let liquid = w.chem.life_roles().expect("roles").2;
     let slots = [w.life.add(sweat, w.day, 1), w.life.add(dry, w.day, 1)];
-    let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
+    let books = Books::now(w);
     held_days(w, &[cell], &[295.0], 21);
     let (a, b) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
     assert!(a.alive && b.alive);
     let (t, t_dry) = (a.temp(&w.chem), b.temp(&w.chem));
-    let kg = (b.store[liquid] - a.store[liquid]) * w.chem.subs[liquid].molar_mass;
+    let kg = (b.store[LIQUID] - a.store[LIQUID]) * w.chem.subs[LIQUID].molar_mass;
     println!("on 295 K ground: evaporating above 300 K, {t:.2} K; not evaporating {t_dry:.2} K; {kg:.1} kg less liquid");
     assert!((t - 300.0).abs() < 0.5 && t_dry > t + 1.0, "{t} K, the twin {t_dry} K");
     assert!(kg > 0.0, "{kg} kg");
-    let (de, dq) = pcore::check::drift(w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(w, 1e-9);
 }

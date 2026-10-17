@@ -5,15 +5,8 @@
 
 use pcore::change::Reactor;
 use pcore::chem::Chemistry;
-
-const LIQ: usize = 0;
-const OX: usize = 2;
-const GAS: usize = 3;
-const RICH: usize = 5;
-const ROCK: usize = 10;
-const SALT: usize = 23;
-const AIR_COLUMN: f64 = 101_325.0 / (9.81 * 0.0288);
-const DAY: f64 = 86_400.0;
+use pcore::units::DAY;
+use worldgen::testkit::{small_world, node_totals, FIX_GAS, ABSORBER as GAS, AIR_COLUMN, DISSOLVED as SALT, LIQUID as LIQ, OX, RICH, ROCK};
 
 /// One m2 of wet land (0.4 m of liquid in its pores) under the air at 400 ppm, with `rock` mol of
 /// the rock; the reactions run for `dt` at 288 K. Returns the salt made per second and the books
@@ -22,21 +15,12 @@ fn wet_land(chem: &Chemistry, rock: f64, dt: f64) -> (f64, bool) {
     let mut rc = Reactor::new(chem);
     let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
     (n[LIQ], n[ROCK]) = (0.4 * 1000.0 / 0.018, rock);
-    (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
+    (gas[FIX_GAS], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
     let cap = 1e15;
     let mut e = 288.0 * (cap + n.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>());
-    let books = |n: &[f64], gas: &[f64], e: f64| {
-        let mut el = vec![0.0; chem.n_elements];
-        let mut en = e;
-        for k in 0..chem.ns() {
-            chem.add_elems(k, n[k] + gas[k], &mut el);
-            en += (n[k] + gas[k]) * chem.subs[k].hf;
-        }
-        (el, en)
-    };
-    let (el0, en0) = books(&n, &gas, e);
+    let (el0, en0) = node_totals(chem, &n, &gas, e);
     rc.react(chem, &mut n, Some(&mut gas), &mut e, cap, None, 0.0, dt);
-    let (el1, en1) = books(&n, &gas, e);
+    let (el1, en1) = node_totals(chem, &n, &gas, e);
     let closed = (0..chem.n_elements).all(|j| (el1[j] - el0[j]).abs() <= 1e-10 * el0[j].max(1.0)) && (en1 - en0).abs() <= 1e-9 * en0.abs();
     (n[SALT] / dt, closed && n.iter().chain(&gas).all(|&a| a >= 0.0))
 }
@@ -76,7 +60,7 @@ fn a_trace_gas_against_a_solid_goes_first_order() {
     let mut lost = |a: f64| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
         (n[LIQ], n[ROCK]) = (1e5, 1e4);
-        (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, a);
+        (gas[FIX_GAS], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, a);
         let mut e = 288.0 * 1e15;
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, 30.0 * DAY);
         1.0 - gas[GAS] / a
@@ -97,7 +81,7 @@ fn litter_goes_first_order_at_its_constant() {
     let mut lost = |a: f64| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
         n[RICH] = a;
-        (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
+        (gas[FIX_GAS], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
         let mut e = 290.0 * 1e15;
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, year);
         1.0 - n[RICH] / a
@@ -114,8 +98,7 @@ fn litter_goes_first_order_at_its_constant() {
 /// 2026 they start with a leaf's pores, 4.334, which does not change the light reaction's contact).
 #[test]
 fn the_light_shift_is_the_founders_gas_over_their_liquid() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
+    let mut w = small_world();
     let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
     let shape = pcore::lineage::shape(w.chem.ns(), 12, 6);
     let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base: vec![], root: 0 }), w.life.new_genome(vec![]));
@@ -136,7 +119,7 @@ fn a_salt_past_its_balance_falls_out_by_its_rate_law_over_a_long_step() {
     let mut left = |calls: usize| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
         (n[LIQ], n[SALT]) = (1250.0, 4.35);
-        (gas[1], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
+        (gas[FIX_GAS], gas[OX], gas[GAS]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, 400e-6 * AIR_COLUMN);
         let mut e = 305.0 * 1e7;
         for _ in 0..calls {
             rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e7, None, 0.0, 10.0 * DAY / calls as f64);

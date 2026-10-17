@@ -1,5 +1,6 @@
 use pcore::body::{Layout, COOL_T, DENATURE, KEEP_T, MUT};
 use pcore::rng::{Purpose, Rng};
+use worldgen::testkit::{add, dry_lands, founder, hold_ground, kg, scale, small_world, start, Books, Brain, Line, RICH};
 
 #[test]
 fn child_has_parent_genes_plus_noise() {
@@ -18,7 +19,7 @@ fn child_has_parent_genes_plus_noise() {
 #[test]
 fn bodies_keep_elements_and_energy() {
     let mut w = worldgen::new_world(1, 32, 32);
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     for _ in 0..24 {
         pcore::step(&mut w);
     }
@@ -28,11 +29,9 @@ fn bodies_keep_elements_and_energy() {
         pcore::step(&mut w);
     }
     assert!(w.life.alive().count() > 0);
-    assert_eq!(pcore::check::broken(&w), None);
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     // (Tight: a run keeps them to rounding, about 1e-14 here. The lime's gas sent to the air without its latent heat, 16 Oct 2026,
     // gave 4e-12 here and 1e-8 in 60 years.)
-    assert!(de < 1e-12 && dq < 1e-12, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-12);
 }
 
 /// The same seed gives the same history, with brains shared by bodies that stayed together.
@@ -106,7 +105,7 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
 #[test]
 fn own_brains_keep_one_body_per_group() {
     let mut w = worldgen::new_world(1, 32, 32);
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     w.cfg.share_brains = false;
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
@@ -118,8 +117,7 @@ fn own_brains_keep_one_body_per_group() {
     let born = w.life.alive().filter(|b| b.born > 0).count();
     assert!(born > 0 && w.life.alive().count() > 0, "{first} bodies placed, none born");
     assert!(w.life.groups.iter().all(|g| g.members <= 1), "a group with more than one member");
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// Cover is fuel when hot: on a cell held at 700 K for a month, a light-eater node loses most of
@@ -141,21 +139,12 @@ fn hot_cover_burns() {
         let n = w.grid.n();
         let held = |w: &pcore::World| w.ground[rich * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[rich]).sum::<f64>();
         let before = held(&w);
-        // The days of `pcore::step`, the cell heated back to 700 K before each (booked as an edit).
-        let dt = w.cfg.phys_days as f64 * 86_400.0;
-        for d in 0..w.cfg.days_per_month {
+        // A month, the cell heated back to 700 K before each day (booked as an edit).
+        for _ in 0..w.cfg.days_per_month {
             if hot {
-                let e = w.energy_ground(i, 700.0);
-                w.ledger.imposed_energy += e - w.e_ground[i];
-                w.e_ground[i] = e;
+                hold_ground(&mut w, i, 700.0);
             }
-            if d % w.cfg.phys_days == 0 {
-                pcore::survey::survey(&mut w);
-                pcore::flow::step(&mut w, dt);
-                pcore::change::step(&mut w, dt);
-            }
-            pcore::survey::day(&mut w);
-            w.day += 1;
+            pcore::day(&mut w);
         }
         assert_eq!(pcore::check::broken(&w), None);
         held(&w) / before
@@ -170,7 +159,7 @@ fn hot_cover_burns() {
 #[test]
 fn crowded_individuals_merge_into_a_node() {
     let mut w = worldgen::new_world(1, 32, 32);
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
@@ -187,9 +176,7 @@ fn crowded_individuals_merge_into_a_node() {
     let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
     assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
     pcore::step(&mut w);
-    assert_eq!(pcore::check::broken(&w), None);
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// However unlike, the bodies of a cell merge at a month's start until at most `cfg.crowd` nodes
@@ -197,7 +184,7 @@ fn crowded_individuals_merge_into_a_node() {
 #[test]
 fn crowd_bounds_the_nodes_of_a_cell() {
     let mut w = worldgen::new_world(1, 32, 32);
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
@@ -214,8 +201,7 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     let after = here(&w);
     assert!(after.len() <= w.cfg.crowd, "{} nodes left", after.len());
     assert!((after.iter().sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// The cost of living follows temperature (15 Oct 2026): what a starting body's reactions can release over
@@ -257,35 +243,19 @@ fn cold_bodies_release_and_pay_less() {
 /// left with nothing of a member it died at once). Nothing breaks the ledger (taking from an empty body once gave NaN).
 #[test]
 fn a_body_gives_its_stores_but_not_its_body() {
-    use pcore::body::{INTERVAL};
-    use pcore::lineage::Lineage;
+    use pcore::body::INTERVAL;
+    use pcore::brain;
     use pcore::event::EventKind;
-    use pcore::{bond, brain, change, flow, lineage};
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
+    let (mut w, i) = start();
     w.cfg.phys.c_handle = 0.0;
-    let (n, ns, lay) = (w.grid.n(), w.chem.ns(), Layout::of(&w.chem));
-    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    let lay = Layout::of(&w.chem);
     // Brains that only give to a body they see, and that only rest.
-    let mut r = Rng::new(1, 0, 0, Purpose::Body);
-    let shape = lineage::shape(ns, 12, 6);
-    let mut lineage = |w: &mut pcore::World, fixed: [f32; brain::FIXED], verbs: [f32; brain::VERBS + brain::OVERBS]| {
-        let mut base = brain::random(shape, &mut r, 0.1, fixed, -8.0, verbs);
-        let rows = base.split_off(shape.base());
-        (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows))
-    };
-    let mut give = [-8.0; brain::VERBS + brain::OVERBS];
-    give[1] = 8.0;
-    let (gl, gg) = lineage(&mut w, [-8.0; brain::FIXED], give);
-    let mut rest = [-8.0; brain::FIXED];
-    rest[brain::REST] = 8.0;
-    let (rl, rg) = lineage(&mut w, rest, [-8.0; brain::VERBS + brain::OVERBS]);
-    let mut giver = worldgen::life::make(&mut w, 1, i, gl, gg).expect("body");
+    let mut giver = founder(&mut w, 1, i, &Brain::verb(brain::GIVE));
     // No safe minimums, and a long interval (316 days: the taker, of 30 kg, takes by 30^0.75 =
     // 12.8 kg, 0.05 x 316 x 12.8 = 200 kg of a 30 kg giver's spare), so one give may move all it holds.
     giver.genes[lay.min..lay.upt].fill(-0.1);
     giver.genes[INTERVAL] = 2.5;
-    let mut taker = worldgen::life::make(&mut w, 1, i, rl, rg).expect("body");
+    let mut taker = founder(&mut w, 1, i, &Brain::only(brain::REST));
     taker.genes[lay.keep..].fill(0.95);
     // (Body matter given is digested into the solid, so it fills the taker's room for the solid
     // (`Body::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
@@ -295,19 +265,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let (m0, fuel0) = (giver.store[matter], giver.store[rich]);
     let g = w.life.add(giver, w.day, 1);
     w.life.add(taker, w.day, 1);
-    let dt = w.cfg.phys_days as f64 * 86_400.0;
     for _ in 0..3 {
-        let d = w.day % w.cfg.days_per_month as u64;
-        if d.is_multiple_of(w.cfg.phys_days as u64) {
-            pcore::survey::survey(&mut w);
-            flow::step(&mut w, dt);
-            change::step(&mut w, dt);
-        }
-        if d == 0 {
-            bond::step(&mut w);
-        }
-        pcore::survey::day(&mut w);
-        w.day += 1;
+        pcore::day(&mut w);
         for b in w.life.alive() {
             assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);
         }
@@ -389,14 +348,13 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
     b.e *= 1e3;
     // It decides once a year: a year's stored light at once.
     (b.genes[pcore::body::INTERVAL], b.k) = (2.556, Default::default());
-    let (t0, l0, h0) = (pcore::check::totals(&w), w.ledger.clone(), w.counts.clamped_heat);
+    let (books, h0) = (Books::now(&w), w.counts.clamped_heat);
     for _ in 0..14 {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
     assert!(w.light_pool.iter().sum::<f64>() > 0.0 && w.counts.clamped_heat == h0, "heat not given {:e} J", w.counts.clamped_heat - h0);
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// Light passes through a cell's bodies from the tallest member down (`survey::shade`): of two
@@ -429,7 +387,7 @@ fn a_tall_member_shades_a_short_one() {
     tall.genes[pcore::body::LEAF] += 0.5;
     (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg.phys), tall.visible(&w.chem, &w.cfg.phys));
     let slots = [w.life.add(tall, w.day, 1), short];
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     pcore::survey::survey(&mut w);
     let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * 86_400.0);
     pcore::flow::step(&mut w, dt);
@@ -445,8 +403,7 @@ fn a_tall_member_shades_a_short_one() {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
@@ -455,21 +412,13 @@ fn a_tall_member_shades_a_short_one() {
 #[test]
 fn a_body_with_no_brain_lives_and_copies() {
     use pcore::body::{COPY_MASS, HIDDEN};
-    use pcore::lineage::Lineage;
     use pcore::event::EventKind;
-    use pcore::{brain, lineage};
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    let n = w.grid.n();
-    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+    let (mut w, i) = start();
     // The light-eaters' sizes but no hidden units.
-    let shape = lineage::shape(w.chem.ns(), 0, 6);
-    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    assert!(base.is_empty());
-    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let line = Line::new(&mut w, &Brain { hidden: 0, ..Brain::neutral() }, 0);
+    assert!(w.life.brains[line.lineage as usize].as_ref().expect("its lineage").base.is_empty());
     // A light-eater node whose members are mature: a body (0.7 kg of the 1 kg) of more than their copy mass (0.25 kg).
-    let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
+    let mut b = line.founder(&mut w, 0, i);
     (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.6);
     let (n0, s) = (b.count, w.life.add(b, w.day, 1));
     // It pays nothing for a brain, however costly brains are.
@@ -480,7 +429,7 @@ fn a_body_with_no_brain_lives_and_copies() {
     (w.cfg.phys.c_hidden, w.cfg.phys.c_memory, w.cfg.phys.c_seen, w.cfg.phys.c_sight, w.cfg.phys.c_learn) = (1e9, 1e9, 1e9, 1e9, 1e9);
     assert_eq!(pcore::body::upkeep(&w, &x, d, m), u0);
     w.cfg.phys = p0;
-    let (t0, l0, u) = (pcore::check::totals(&w), w.ledger.clone(), w.counts.updates);
+    let (books, u) = (Books::now(&w), w.counts.updates);
     for _ in 0..2 {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
@@ -492,8 +441,7 @@ fn a_body_with_no_brain_lives_and_copies() {
     let all: f64 = w.life.alive().map(|x| x.n()).sum();
     assert!(b.alive && w.counts.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
     assert!(w.counts.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// Living wears a body (14 Oct 2026): an individual dies of age when the energy its upkeep turned
@@ -503,71 +451,46 @@ fn a_body_with_no_brain_lives_and_copies() {
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
     use pcore::body::{AGE, DISPERSE, LEARN, REPAIR, STRENGTH};
-    use pcore::lineage::Lineage;
-    use pcore::event::EventKind;
-    use pcore::{brain, lineage};
-    let mut w = worldgen::new_world(1, 16, 16);
+    use pcore::brain;
+    let mut w = small_world();
     // Bodies that neither grow nor soak liquid up (their mass, which the wear goes by, stays): no
-    // building work, and no liquid exchange with the ground (14 Oct 2026: growth is building).
+    // building work, and no liquid exchange with the ground.
     w.cfg.phys.c_build = 0.0;
-    // Upkeep goes with the temperature (15 Oct 2026): the bodies stand on ground held at the temperature the costs
-    // are anchored to (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of
-    // high ground (rain does not flood it) with other air nodes (a node would take the air an individual breathes).
-    pcore::step(&mut w);
-    let mut land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
+    // Upkeep goes with the temperature: the bodies stand on ground held at the temperature the costs are anchored to
+    // (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of high ground (rain
+    // does not flood it) with other air nodes (a node would take the air an individual breathes).
+    let mut land = dry_lands(&w);
     land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
     let air = w.grid.air_of(land[0]);
     let cells = [land[0], *land.iter().find(|&&i| w.grid.air_of(i) != air).expect("another air node")];
-    // Starting eaters (30 kg, under their copy mass) whose brain only rests, weak so their stores last.
-    let shape = lineage::shape(w.chem.ns(), 12, 6);
-    let mut rest = [-8.0; brain::FIXED];
-    rest[brain::REST] = 8.0;
-    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let l = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });
+    // Starting eaters whose brain only rests, weak so their stores last.
+    let line = Line::new(&mut w, &Brain::only(brain::REST), 1);
     let make = |w: &mut pcore::World, i: usize, repair: f32, count: f64| {
-        let g = w.life.new_genome(rows.clone());
-        let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
+        let mut b = line.founder(w, 1, i);
         // (And do not learn: with liquid in the pores of the ground the cell they feel is another, and a body that learns from its
         // well-being may learn to walk away in the months of the test.)
         (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ], b.genes[LEARN]) = (0.0, 0.0, repair, -4.0, -6.0);
         // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel (the
-        // two months they settle and the long life of one of them cost more than the 9 kg a starting eater holds).
-        let rich = w.chem.life_roles().expect("roles").1;
-        b.store[rich] *= 3.0;
-        w.chem.add_elems(rich, 2.0 * b.store[rich] / 3.0, &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy += 2.0 * b.store[rich] / 3.0 * w.chem.subs[rich].hf;
-        for k in 0..w.chem.ns() {
-            w.chem.add_elems(k, (count - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
-            (w.ledger.imposed_energy, b.store[k]) = (w.ledger.imposed_energy + (count - 1.0) * b.store[k] * w.chem.subs[k].hf, count * b.store[k]);
-        }
-        (w.ledger.imposed_energy, b.e, b.count) = (w.ledger.imposed_energy + (count - 1.0) * b.e, count * b.e, count);
+        // two months they settle and the long life of one of them cost more than a starting eater holds).
+        let fuel = 2.0 * kg(w, &b, RICH);
+        add(w, &mut b, RICH, fuel);
+        scale(w, &mut b, count);
+        b.count = count;
         b.prepare(&w.chem, &w.cfg.phys);
-        let (d, m) = (b.interval() as f64, b.mass(&w.chem));
-        let u = pcore::body::upkeep(w, &b, d, m) / (d * b.built(&w.chem));
-        (w.life.add(b, w.day, 1), u)
+        w.life.add(b, w.day, 1)
     };
-    let (sa, _) = make(&mut w, cells[0], 0.0, 1.0);
-    let (sb, _) = make(&mut w, cells[0], 0.5, 1.0);
-    let (c, _) = make(&mut w, cells[1], 0.0, 1000.0);
-    // A day: the ground held, the flow and change steps when due, then the bodies due; the age deaths of the day.
+    let sa = make(&mut w, cells[0], 0.0, 1.0);
+    let sb = make(&mut w, cells[0], 0.5, 1.0);
+    let c = make(&mut w, cells[1], 0.0, 1000.0);
+    // A day with the ground held; the age deaths of the day.
     let t_cat = w.cfg.phys.t_cat;
     let day = |w: &mut pcore::World, deaths: &mut Vec<(u64, f64)>| {
         for &i in &cells {
-            let e = w.energy_ground(i, t_cat);
-            w.ledger.imposed_energy += e - w.e_ground[i];
-            w.e_ground[i] = e;
-        }
-        if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
-            let dt = w.cfg.phys_days as f64 * 86_400.0;
-            pcore::survey::survey(w);
-            pcore::flow::step(w, dt);
-            pcore::change::step(w, dt);
+            hold_ground(w, i, t_cat);
         }
         w.events.clear();
-        pcore::survey::day(w);
-        deaths.extend(w.events.iter().filter(|e| matches!(e.kind, EventKind::Died { cause: AGE, .. })).map(|e| (e.day, e.value)));
-        w.day += 1;
+        pcore::day(w);
+        deaths.extend(w.events.iter().filter(|e| matches!(e.kind, pcore::event::EventKind::Died { cause: AGE, .. })).map(|e| (e.day, e.value)));
     };
     // Two months for the bodies to settle at the temperature their heat and the ground give them (an individual does
     // not age: `e_life` is large), then their upkeep per kg of body and day, their wear put back to nothing.
@@ -597,7 +520,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
     // (Lives are counted from the last update of the first individual: wear counts from there.)
-    let (t0, l0, start, n0) = (pcore::check::totals(&w), w.ledger.clone(), w.life.bodies[sa].last, w.life.bodies[c].count);
+    let (books, start, n0) = (Books::now(&w), w.life.bodies[sa].last, w.life.bodies[c].count);
     let mut deaths = Vec::new();
     for _ in 0..240 {
         day(&mut w, &mut deaths);
@@ -615,8 +538,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     assert!(ones.len() == 2 && (ones[0].0 as f64 / life - 1.0).abs() < 0.1 && (ones[1].0 as f64 / (life * x) - 1.0).abs() < 0.1, "lives {ones:?}");
     // (The node's members live the same time as an individual would at their own upkeep, `ua / uc` times as long.)
     assert!(node.len() >= 6 && (dc / (life * ua / uc) - 1.0).abs() < 0.1, "node: mean life {dc} days against {} predicted", life * ua / uc);
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// What a member takes and can build goes with its mass to the power `intake_exp`
@@ -641,8 +563,7 @@ fn equiv_goes_with_mass_to_the_power() {
     assert!(m.equiv(&p, 2000.0) > m.equiv(&p, 20.0), "equiv counts the mass it is given");
     // What a body takes and builds counts its body, not the fuel it stores (`Body::supply`, 14 Oct 2026,
     // the energy ceiling): the same body holding three times the fuel has the same supply.
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
+    let w = small_world();
     let rich = w.chem.life_roles().expect("roles").1;
     let mut b = Body { count: 1.0, genes: vec![0.0; pcore::body::Layout::of(&w.chem).len], store: vec![0.0; w.chem.ns()], ..Default::default() };
     b.genes[COPY_MASS] = 1.0;
@@ -663,15 +584,9 @@ fn equiv_goes_with_mass_to_the_power() {
 #[test]
 fn a_body_with_no_strength_pays_a_basal_upkeep() {
     use pcore::body::{REPAIR, STRENGTH};
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
-    let shape = pcore::lineage::shape(w.chem.ns(), 12, 6);
-    let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 5 }), w.life.new_genome(rows));
+    let (mut w, i) = start();
     // Eaters of remains (kind 5: strength 0, 1 kg); repair 0 so the factor is 1.
-    let mut b = worldgen::life::make(&mut w, 5, i, l, g).expect("body");
+    let mut b = founder(&mut w, 5, i, &Brain::neutral());
     assert_eq!(b.genes[STRENGTH], 0.0);
     b.genes[REPAIR] = 0.0;
     b.prepare(&w.chem, &w.cfg.phys);
@@ -716,15 +631,9 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
 #[test]
 fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     use pcore::body::{LEARN, REPAIR, STRENGTH};
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
-    let shape = pcore::lineage::shape(w.chem.ns(), 12, 6);
-    let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 1 }), w.life.new_genome(rows));
+    let (mut w, i) = start();
     // A starting eater: strength 0.6, a burning catalyst, learning on.
-    let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
+    let mut b = founder(&mut w, 1, i, &Brain::neutral());
     (b.genes[STRENGTH], b.genes[LEARN], b.genes[REPAIR]) = (0.6, -1.0, 0.0);
     b.prepare(&w.chem, &w.cfg.phys);
     // At the temperature the costs are anchored to, where upkeep is what the costs say (15 Oct 2026).
@@ -772,8 +681,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
 #[test]
 fn leaf_area_per_kg_falls_with_mass() {
     use pcore::body::{Body, COPY_MASS, LEAF};
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
+    let w = small_world();
     let (chem, p) = (w.chem.clone(), w.cfg.phys);
     // A member of `kg` (that copies at 10^`copy` kg), 0.5 m² of leaf per kg of 1 kg.
     let member = |count: f64, kg: f64, copy: f32| {

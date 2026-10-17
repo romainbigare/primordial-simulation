@@ -8,86 +8,27 @@
 //! the uptake genes; what a body holds of them past its level goes back to the ground; liquid carries them.
 
 use pcore::body::{self, Body, Layout, DISPERSE, LIQ, REPAIR, STRENGTH};
-use pcore::lineage::Lineage;
-use pcore::chem::Chemistry;
-use pcore::rng::{Purpose, Rng};
-use pcore::{brain, change, check, copy, flow, lineage, World};
+use pcore::{brain, change, copy, World};
+use worldgen::testkit::{founder, node_totals, open_air, out, put, start, Books, Brain, DISSOLVED, OPEN_CAP};
 
-/// A small world after one month, and a land cell with dry ground.
-fn start() -> (World, usize) {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
-    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
-    (w, i)
-}
-
-/// A small world after a year, and a land cell with no liquid standing, whose pores hold liquid, and the rock salt in it.
+/// A small world after a year, and a land cell with no liquid standing, whose pores hold liquid, and the dissolved
+/// mineral in it.
 fn start_wet() -> (World, usize) {
     let mut w = worldgen::new_world(1, 16, 16);
     for _ in 0..12 {
         pcore::step(&mut w);
     }
     let n = w.grid.n();
-    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3 && w.ground[23 * n + i] > 1e5).expect("wet land");
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3 && w.ground[DISSOLVED * n + i] > 1e5).expect("wet land");
     (w, i)
 }
 
-/// A starting body of kind `which` (0 light-eaters, 1 eaters) of a brain that only does fixed action `act` (0 rests, 3 takes
-/// from the ground), weak, staying where it is, soaking no liquid up, repair 0.
+/// A starting body of kind `which` (0 light-eaters, 1 eaters) of a brain that only does fixed action `act`, weak,
+/// staying where it is, soaking no liquid up, repair 0.
 fn body_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
-    let shape = lineage::shape(w.chem.ns(), 12, 6);
-    let mut fixed = [-8.0; brain::FIXED];
-    fixed[act] = 8.0;
-    let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
-    let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: which as u32 }), w.life.new_genome(rows));
-    let mut b = worldgen::life::make(w, which, i, l, g).expect("body");
+    let mut b = founder(w, which, i, &Brain::only(act));
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[LIQ], b.genes[REPAIR]) = (0.0, 0.0, -4.0, 0.0);
     b
-}
-
-/// A body placed and taken out again, prepared, to call the laws on directly.
-fn out(w: &mut World, b: Body) -> (usize, Body) {
-    let s = w.life.add(b, w.day, 1);
-    pcore::survey::survey(w);
-    w.day += 1;
-    let mut b = std::mem::take(&mut w.life.bodies[s]);
-    b.prepare(&w.chem, &w.cfg.phys);
-    (s, b)
-}
-
-/// One day: the flow and change steps when due, then the bodies due.
-fn day(w: &mut World) {
-    let dt = w.cfg.phys_days as f64 * 86_400.0;
-    if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
-        pcore::survey::survey(w);
-        flow::step(w, dt);
-        change::step(w, dt);
-    }
-    w.events.clear();
-    pcore::survey::day(w);
-    w.day += 1;
-}
-
-/// Elements and (thermal + chemical) energy of one node, with its gas share.
-fn node_totals(chem: &Chemistry, n: &[f64], gas: &[f64], e: f64) -> (Vec<f64>, f64) {
-    let mut el = vec![0.0; chem.n_elements];
-    let mut en = e;
-    for k in 0..chem.ns() {
-        chem.add_elems(k, n[k] + gas[k], &mut el);
-        en += (n[k] + gas[k]) * chem.subs[k].hf;
-    }
-    (el, en)
-}
-
-/// `amount` mol of substance `k` added to the ground of cell `i` at its temperature, booked as an edit.
-fn put(w: &mut World, k: usize, i: usize, amount: f64) {
-    let n = w.grid.n();
-    let e = amount * w.chem.subs[k].cp * w.t_ground(i);
-    w.ground[k * n + i] += amount;
-    w.e_ground[i] += e;
-    w.chem.add_elems(k, amount, &mut w.ledger.imposed_elems);
-    w.ledger.imposed_energy += e + amount * w.chem.subs[k].hf;
 }
 
 /// All of substance `k` in the world's ground and bodies, mol.
@@ -168,18 +109,13 @@ fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
     let gas_n = 1usize;
     let mut rc = change::Reactor::new(&chem);
     let mut run = |t: f64, secs: f64| {
-        let mut n = vec![0.0; chem.ns()];
-        let mut gas = vec![0.0; chem.ns()];
-        for &(g, x) in &init.air {
-            gas[g] = x * 1e9;
-        }
+        let (mut n, mut gas, mut e) = open_air(&chem, &init, t);
         n[m] = 1000.0;
-        let mut e = t * 1e15;
         let (el0, en0) = node_totals(&chem, &n, &gas, e);
         let gas0 = gas.clone();
         // (A product waits for the next call to react further: the mineral breaks down in the calls after the one that makes it.)
         for _ in 0..3 {
-            rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, secs / 3.0);
+            rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, secs / 3.0);
         }
         let (el1, en1) = node_totals(&chem, &n, &gas, e);
         for j in 0..chem.n_elements {
@@ -262,7 +198,7 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     }
     let (bare, bare_rock) = (total(&twin, mineral) - bare, rock_outside(&twin, i));
     put(&mut w, m, i, 1e8);
-    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     let (m_before, n_before) = (total(&w, m), total(&w, mineral));
     for _ in 0..12 {
         pcore::step(&mut w);
@@ -275,8 +211,7 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     // (In the cell, to a tenth: the salt the rotting's gas and liquid make of the lime moves with the liquid, to and from the cells
     // around; the ledger of elements below is exact.)
     assert!((rock / lost - 1.0).abs() < 0.1, "the rock element {rock} for the matter {lost}");
-    let (de, dq) = check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// Fixing the air's nitrogen: in the open it is nothing (1e-17 a second at 290 K), and a body whose genes speed the reaction up
@@ -292,14 +227,9 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     let (_, rich, _, _) = chem.life_roles().expect("roles");
     // In the open: ten years at 290 K, the air in plenty and the liquid and the fuel there.
     let mut rc = change::Reactor::new(&chem);
-    let mut n = vec![0.0; chem.ns()];
-    let mut gas = vec![0.0; chem.ns()];
-    for &(g, x) in &init.air {
-        gas[g] = x * 1e9;
-    }
+    let (mut n, mut gas, mut e) = open_air(&chem, &init, 290.0);
     (n[0], n[rich]) = (1e6, 1e6);
-    let mut e = 290.0 * 1e15;
-    rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, 10.0 * 365.0 * 86_400.0);
+    rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, 10.0 * 365.0 * 86_400.0);
     println!("in the open, ten years: {:.3e} mol of the mineral", n[mineral]);
     assert!(n[mineral] < 1e-6 * 1e6, "the open world fixed {} mol with 10^6 mol of the fuel there", n[mineral]);
     // A plant that fixes (the enzyme speeds the reaction up by 10^FIX_GENE) and its twin that does not, 60 days.
@@ -314,12 +244,13 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         // body in its first update, so neither built anyway.)
         b.store[w.chem.minerals()[1].0] = 0.0;
         let s = w.life.add(b, w.day, 1);
-        let (t0, l0) = (check::totals(&w), w.ledger.clone());
+        let books = Books::now(&w);
         let before = (total(&w, mineral), w.air[3 * w.grid.na()..4 * w.grid.na()].iter().sum::<f64>(), w.air[21 * w.grid.na()..22 * w.grid.na()].iter().sum::<f64>());
         let (mut up, mut fuel0, mut mass) = (0.0, 0.0, 0.0);
         let _ = (&mut fuel0, &mut mass);
         for _ in 0..60 {
-            day(&mut w);
+            w.events.clear();
+            pcore::day(&mut w);
             let mut b = w.life.bodies[s].clone();
             b.prepare(&w.chem, &w.cfg.phys);
             // Its upkeep over that of the same body with the gene off.
@@ -329,8 +260,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
             up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem)) / body::upkeep(&w, &off, 1.0, b.mass(&w.chem));
         }
         assert!(w.life.bodies[s].alive);
-        let (de, dq) = check::drift(&w, &t0, &l0);
-        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        books.assert_kept(&w, 1e-9);
         let na = w.grid.na();
         let after = (total(&w, mineral), w.air[3 * na..4 * na].iter().sum::<f64>(), w.air[21 * na..22 * na].iter().sum::<f64>());
         let b = &w.life.bodies[s];
@@ -384,11 +314,12 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         }
         let level = |w: &World, b: &Body| b.level(&w.chem, mineral, b.mass(&w.chem));
         let (sp, si) = (w.life.add(plant, w.day, 1), w.life.add(idle, w.day, 1));
-        let (t0, l0) = (check::totals(&w), w.ledger.clone());
+        let books = Books::now(&w);
         // (The most it held in the days, at the end of an update: the salt is lost to lime between them.)
         let mut most = 0.0f64;
         for _ in 0..40 {
-            day(&mut w);
+            w.events.clear();
+            pcore::day(&mut w);
             most = most.max(w.life.bodies[sp].store[mineral]);
         }
         let (took, lvl) = (w.life.bodies[sp].store[mineral], level(&w, &w.life.bodies[sp]));
@@ -397,8 +328,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let kept = |w: &World, s: usize| w.life.bodies[s].store[lime] <= w.life.bodies[s].level(&w.chem, lime, 0.0) * (1.0 + 1e-9);
         assert!(kept(&w, sp) && kept(&w, si), "lime past its level stayed in a body");
         assert!(w.life.bodies[si].store[mineral] < 1e-9 * lvl, "a body whose gene is off took substance {mineral}");
-        let (de, dq) = check::drift(&w, &t0, &l0);
-        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        books.assert_kept(&w, 1e-9);
         // The excess: give the plant ten times its level, and it is back on the ground at its next update (as lime for the salt: the
         // rock element in the ground, counted in the salt and the lime, rises by what was over).
         let mut twin = w.clone();
@@ -408,8 +338,10 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         w.life.bodies[sp].e += more * w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem);
         w.life.bodies[sp].store[mineral] += more;
         for _ in 0..40 {
-            day(&mut twin);
-            day(&mut w);
+            twin.events.clear();
+            pcore::day(&mut twin);
+            w.events.clear();
+            pcore::day(&mut w);
         }
         let (held, lvl2) = (w.life.bodies[sp].store[mineral], level(&w, &w.life.bodies[sp]));
         // (Against its twin, the same world without the excess: the nitrogen mineral by itself, the rock element in all its forms.)
@@ -418,8 +350,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         assert!(held <= lvl2 * 1.05, "held {held} past the level {lvl2}");
         assert!(kept(&w, sp), "lime past its level stayed in the body");
         assert!(back > 0.5 * more, "the excess did not go back to the ground: {back} of {more}");
-        let (de, dq) = check::drift(&w, &t0, &l0);
-        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        books.assert_kept(&w, 1e-9);
     }
 }
 
@@ -442,11 +373,12 @@ fn an_eater_digests_matter_into_the_solid_and_the_minerals_and_sheds_the_excess(
         b.genes[Layout::of(&w.chem).keep + k] = 0.001;
     }
     let s = w.life.add(b, w.day, 1);
-    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     let (matter0, rich0, ground0) = (w.ground[m * n + i], w.life.bodies[s].store[rich], minerals.iter().map(|&(k, _)| w.ground[k * n + i]).collect::<Vec<_>>());
     let mut most = vec![0.0f64; minerals.len()];
     for _ in 0..60 {
-        day(&mut w);
+        w.events.clear();
+        pcore::day(&mut w);
         let b = &w.life.bodies[s];
         assert!(b.alive);
         for (q, &(k, _)) in minerals.iter().enumerate() {
@@ -471,8 +403,7 @@ fn an_eater_digests_matter_into_the_solid_and_the_minerals_and_sheds_the_excess(
     // it holds of the salt between two updates is a few times its level, the meals of the interval, not more and more.
     println!("the body holds {:.3} mol of salt and {} of lime at the end", b.store[23], b.store[10]);
     assert!(b.store[10] <= b.level(&w.chem, 10, 0.0) * (1.0 + 1e-9) && most[1] < 20.0, "lime {}, the salt at most {} of its level", b.store[10], most[1]);
-    let (de, dq) = check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// The soil is given to the land when life starts, 10 g of nitrogen to the m2, booked as new matter and energy, none under
@@ -484,7 +415,7 @@ fn the_soil_is_booked_and_the_tape_counts_the_mineral() {
         pcore::step(&mut w);
     }
     let (mineral, _) = w.chem.minerals()[0];
-    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     let n = w.grid.n();
     let before = total(&w, mineral);
     let line = worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
@@ -496,8 +427,7 @@ fn the_soil_is_booked_and_the_tape_counts_the_mineral() {
     // 0.357 mol of the salt, 2 mol of nitrogen in each: 10 g of nitrogen in the m2.
     let grams: f64 = 0.357 * 2.0 * 14.0;
     assert!((grams - 10.0).abs() < 0.05);
-    let (de, dq) = check::drift(&w, &t0, &l0);
-    assert!(de < 1e-12 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_within(&w, 1e-12, 1e-9);
 }
 
 /// The rock salt in the pores of the land (15 Oct 2026): worldgen sets no salt on land (the ground has no liquid at the start, and a cell

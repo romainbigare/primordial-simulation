@@ -46,28 +46,40 @@ fn audit(w: &World, stage: &str) {
 
 /// `step`, calling `mark(stage)` after each stage, e.g. to time them.
 pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(Stage)) {
-    let dpm = w.cfg.days_per_month;
-    for d in 0..dpm {
-        if d % w.cfg.phys_days == 0 {
-            let dt = w.cfg.phys_days.min(dpm - d) as f64 * DAY;
-            survey::survey(w);
-            mark(Stage::Bodies);
-            audit(w, "survey");
-            flow::step(w, dt);
-            mark(Stage::Flow);
-            audit(w, "flow");
-            change::step(w, dt);
-            mark(Stage::Change);
-            audit(w, "change");
-        }
-        if d == 0 {
-            bond::step(w);
-            mark(Stage::Parts);
-            audit(w, "bond");
-        }
-        survey::day(w);
-        w.day += 1;
-        mark(Stage::Bodies);
-        audit(w, "body day");
+    for d in 0..w.cfg.days_per_month {
+        day_of_month(w, d, mark);
     }
+}
+
+/// Advance the world by one day, the day of the month its clock is at: what `step` does on that day.
+pub fn day(w: &mut World) {
+    let d = (w.day % w.cfg.days_per_month as u64) as u32;
+    day_of_month(w, d, &mut |_| {});
+}
+
+/// Day `d` of the month: the survey, Flow and Change every `phys_days` days from the month's start (the last
+/// span cut to the month's end), Bond on the first day, then the bodies due.
+fn day_of_month(w: &mut World, d: u32, mark: &mut dyn FnMut(Stage)) {
+    let dpm = w.cfg.days_per_month;
+    if d.is_multiple_of(w.cfg.phys_days) {
+        let dt = w.cfg.phys_days.min(dpm - d) as f64 * DAY;
+        survey::survey(w);
+        mark(Stage::Bodies);
+        audit(w, "survey");
+        flow::step(w, dt);
+        mark(Stage::Flow);
+        audit(w, "flow");
+        change::step(w, dt);
+        mark(Stage::Change);
+        audit(w, "change");
+    }
+    if d == 0 {
+        bond::step(w);
+        mark(Stage::Parts);
+        audit(w, "bond");
+    }
+    survey::day(w);
+    w.day += 1;
+    mark(Stage::Bodies);
+    audit(w, "body day");
 }

@@ -1,16 +1,9 @@
 //! Population nodes (plan 7.1): how their members differ, how they split, how they act on bonds.
 
 use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, GAS, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
-use pcore::lineage::Lineage;
 use pcore::rng::{Purpose, Rng};
-use pcore::{body, brain, check, copy, lineage, nodes};
-
-/// Set aside a brood of `k` children for `b` (all its members together) out of the matter it holds: what
-/// `copy::grow` would have put there (14 Oct 2026: a body makes children from its brood).
-fn brood(w: &pcore::World, b: &mut Body, k: f64) {
-    let (chem, m) = (&w.chem, w.chem.matter().expect("body matter"));
-    b.brood = k * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - pcore::body::WET_TISSUE) / chem.subs[m].molar_mass;
-}
+use pcore::{body, brain, copy, lineage, nodes};
+use worldgen::testkit::{brood, dry_land, plate, small_world, Books, Brain, Line};
 
 /// Slots of the live bodies.
 fn live(w: &pcore::World) -> Vec<usize> {
@@ -26,7 +19,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 32, 32);
     pcore::step(&mut w);
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     // Members are mature (a low copy mass), each has a child and all children stay in the cell.
@@ -67,9 +60,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let (x, y) = (a.genes[COPY_MASS] - m, c.genes[COPY_MASS] - m);
     assert!((x.abs() - d).abs() < 1e-5 && (x + y).abs() < 1e-5, "halves at {x} and {y}, not ±{d}");
     assert!((a.spread[COPY_MASS] + d * d - 1.0).abs() < 1e-5 && a.spread == c.spread, "pooled spread not kept");
-    assert_eq!(check::broken(&w), None);
-    let (de, dq) = check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// Light-eater nodes with a fast mutation (their spreads reach the split threshold) and members
@@ -204,8 +195,7 @@ fn selection_moves_a_nodes_brain_size() {
 /// joined), and cells filled up with variants of one kind.
 #[test]
 fn dispersing_children_of_a_varied_node_join_their_kind() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
+    let mut w = small_world();
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     (w.cfg.phys.c_copy, w.cfg.crowd) = (0.0, 64);
     let lay = Layout::of(&w.chem);
@@ -261,26 +251,16 @@ fn a_node_acts_on_bonds_through_one_member() {
     // 0.05: they bear about 0.25 N); 2: breaks the ground.
     let scene = |case: u8| {
         let hold = case < 2;
-        let mut w = worldgen::new_world(1, 16, 16);
-        pcore::step(&mut w);
+        let mut w = small_world();
         // (no member dies of age here, so the node's count is exact)
         w.cfg.phys.e_life = 1e30;
-        let (t0, l0) = (check::totals(&w), w.ledger.clone());
-        let (n, ns) = (w.grid.n(), w.chem.ns());
-        let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
+        let books = Books::now(&w);
+        let i = dry_land(&w);
         // A part of 5 kg of the cell's most plentiful loose substance.
-        let k = (0..ns).max_by(|&a, &b| w.ground[a * n + i].total_cmp(&w.ground[b * n + i])).unwrap();
-        let mut wall = vec![0.0; ns];
-        wall[k] = 5.0 / w.chem.subs[k].molar_mass;
-        let e = wall[k] * w.chem.subs[k].cp * w.life.env[i][0];
-        (w.ground[k * n + i], w.e_ground[i]) = (w.ground[k * n + i] - wall[k], w.e_ground[i] - e);
-        let p = pcore::bond::make(&mut w, i, wall, e, -1.0, 0.0);
-        let (shape, mut fixed, mut verbs) = (lineage::shape(ns, 12, 6), [-8.0; brain::FIXED], [-8.0; brain::VERBS + brain::OVERBS]);
-        if hold { verbs[brain::VERBS] = 8.0 } else { fixed[brain::DIG] = 8.0 }
-        let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, verbs);
-        let rows = base.split_off(shape.base());
-        let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
-        let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a node");
+        let p = plate(&mut w, i, 5.0, false);
+        let brain = if hold { Brain::verb(brain::VERBS) } else { Brain::only(brain::DIG) };
+        let line = Line::new(&mut w, &brain, 0);
+        let (l, mut b) = (line.lineage, line.founder(&mut w, 0, i));
         b.spread = vec![0.01; b.genes.len()];
         // (their mass stays: no liquid soaked up from the ground, which would add a third to it, and little lost through their
         // pores, which since 16 Oct 2026 are a leaf's and would take a quarter of it in an update: the old gene)
@@ -305,9 +285,7 @@ fn a_node_acts_on_bonds_through_one_member() {
             assert!(node.genes.iter().zip(&genes).all(|(a, b)| (a - b).abs() < 1e-4), "genes changed");
             assert!(w.parts.parts[p].held == pcore::bond::NOBODY, "the part is held");
         }
-        assert_eq!(check::broken(&w), None);
-        let (de, dq) = check::drift(&w, &t0, &l0);
-        assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+        books.assert_kept(&w, 1e-9);
     };
     scene(0);
     scene(1);
@@ -319,10 +297,9 @@ fn a_node_acts_on_bonds_through_one_member() {
 /// own that keeps what its group learned; matter and energy as they were.
 #[test]
 fn a_node_whose_size_genes_moved_changes_lineage() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    pcore::step(&mut w);
+    let mut w = small_world();
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     let (lin0, g0) = (b.lineage, b.group);
@@ -344,9 +321,7 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     for _ in 0..2 {
         pcore::step(&mut w);
     }
-    assert_eq!(check::broken(&w), None);
-    let (de, dq) = check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// Totals over all live bodies: members, each store, heat (`same` compares the stores and heat; a copy makes members).
@@ -376,7 +351,7 @@ fn same(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
 #[test]
 fn opening_a_node_draws_members_and_keeps_everything() {
     let mut w = worldgen::new_world(1, 16, 16);
-    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     pcore::step(&mut w);
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1000.0).expect("a node");
@@ -414,9 +389,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let rest = w.life.bodies[s].count.floor() as usize;
     assert_eq!(nodes::open(&mut w, s, rest + 5).len(), rest - 1);
     assert!(w.life.bodies[s].count < 2.0);
-    assert_eq!(check::broken(&w), None);
-    let (de, dq) = check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
 
 /// With `Config::nodes` off an animal's children are individuals: a child joins no node, even
@@ -492,7 +465,7 @@ fn individuals_mode_merges_no_animal() {
     use pcore::event::EventKind;
     let mut w = worldgen::new_world(1, 32, 32);
     w.cfg.nodes = false;
-    let (t0, l0) = (check::totals(&w), w.ledger.clone());
+    let books = Books::now(&w);
     pcore::step(&mut w);
     let old = worldgen::life::Seeding::old();
     worldgen::life::seed_with(&mut w, 0, &old);
@@ -524,7 +497,5 @@ fn individuals_mode_merges_no_animal() {
     assert!(alive.last().is_some_and(|&a| a > 0), "no animal was alive at the end: {alive:?}");
     assert!(born > 0.0, "no animal was born in the window: {alive:?}");
     assert!(w.life.alive().any(|b| !animal(&w, b) && b.count > 1.0), "no light-eater node");
-    assert_eq!(check::broken(&w), None);
-    let (de, dq) = check::drift(&w, &t0, &l0);
-    assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
+    books.assert_kept(&w, 1e-9);
 }
