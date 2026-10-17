@@ -14,6 +14,10 @@ const SNAPSHOT_VERSION: u32 = 2;
 /// the compressor is slow.
 const BUFFER: usize = 1 << 20;
 
+/// FNV-1a, 64 bits: offset basis and prime.
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x100_0000_01b3;
+
 fn bad(e: impl std::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e.to_string())
 }
@@ -45,4 +49,22 @@ pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
     w.life.resum();
     Ok((w, plan))
+}
+
+/// FNV-1a over the bytes of the world's snapshot body (bincode): two worlds a snapshot cannot tell apart have the same
+/// fingerprint.
+pub fn fingerprint(w: &World) -> u64 {
+    struct Fnv(u64);
+    impl Write for Fnv {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            buf.iter().for_each(|&b| self.0 = (self.0 ^ b as u64).wrapping_mul(FNV_PRIME));
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut h = Fnv(FNV_OFFSET);
+    bincode::serialize_into(&mut h, w).expect("a world serialises");
+    h.0
 }

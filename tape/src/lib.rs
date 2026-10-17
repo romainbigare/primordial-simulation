@@ -7,4 +7,4 @@ mod snapshot;
 
 pub use layers::{fields, quantise, Fields, LAYERS};
 pub use rec::Recorder;
-pub use snapshot::{load_snapshot, save_snapshot};
+pub use snapshot::{fingerprint, load_snapshot, save_snapshot};

@@ -13,4 +13,6 @@ jobs:
       - run: cargo test --release --workspace
       # The slow tests: long runs, the learning scene over 1,600 seeds, the speed benchmark.
       - run: cargo test --release --workspace -- --ignored
+      # The threads build gives the golden runs' fingerprints too.
+      - run: cargo test --release -p tape --test golden --features pcore/threads
       - run: cargo build -p pcore --target wasm32-unknown-unknown

@@ -1,5 +1,8 @@
-//! Whole runs: small worlds with every starting kind placed by worldgen's schedule, kept whole and in their books
-//! for a century, and the speed of a run.
+//! Whole runs: small worlds with every starting kind placed by worldgen's schedule. The golden runs stay whole, keep
+//! their books and end on pinned fingerprints; a century keeps its books; and the speed of a run.
+//!
+//! The threads build must give the same fingerprints, which one test binary cannot compare: CI runs this file again
+//! with `--features pcore/threads`.
 
 use pcore::World;
 use std::time::Instant;
@@ -23,6 +26,44 @@ fn run(w: &mut World, plan: &Schedule, years: u64, mut month: impl FnMut(&World)
         for _ in 0..w.cfg.months_per_year {
             pcore::step(w);
             month(w);
+        }
+    }
+}
+
+/// The golden runs: seed, and the fingerprint (`tape::fingerprint`) of the world after `GOLDEN_YEARS` years. Only a
+/// bug fix may change them: `GOLDEN=print cargo test -p tape --test golden -- --nocapture` prints the new values.
+const GOLDEN: [(u64, u64); 3] = [(1, 0xa2e0199c6ec02875), (2, 0x2d086d643c7973b4), (3, 0x63b74ac19026e002)];
+const GOLDEN_SIDE: usize = 16;
+const GOLDEN_YEARS: u64 = 2;
+
+/// Each golden run holds no negative, infinite or undefined amount at the end of any month, keeps its elements and
+/// energy to rounding, and ends on its pinned fingerprint: the same seed gives the same history, bit for bit.
+#[test]
+fn golden_runs_stay_whole_keep_their_books_and_end_on_their_fingerprints() {
+    let print = std::env::var("GOLDEN").is_ok_and(|v| v == "print");
+    let ends: Vec<(u64, u64, u64)> = std::thread::scope(|s| {
+        let runs: Vec<_> = GOLDEN
+            .iter()
+            .map(|&(seed, pin)| {
+                s.spawn(move || {
+                    let (mut w, plan) = scheduled(seed, GOLDEN_SIDE, true);
+                    let (books, mut months) = (Books::now(&w), 0);
+                    run(&mut w, &plan, GOLDEN_YEARS, |w| {
+                        months += 1;
+                        assert_eq!(pcore::check::broken(w), None, "seed {seed}, month {months}");
+                    });
+                    books.assert_kept(&w, 1e-12);
+                    (seed, pin, tape::fingerprint(&w))
+                })
+            })
+            .collect();
+        runs.into_iter().map(|r| r.join().expect("a golden run")).collect()
+    });
+    for (seed, pin, got) in ends {
+        if print {
+            println!("({seed}, {got:#018x}),");
+        } else {
+            assert_eq!(got, pin, "seed {seed}: fingerprint {got:#018x}, pinned {pin:#018x}");
         }
     }
 }
