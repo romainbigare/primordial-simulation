@@ -10,14 +10,14 @@ use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::grid::DIRS;
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
-use worldgen::testkit::{dry_land, founder, scale, start, Books, Brain, Line, OFF};
+use worldgen::testkit::{self, dry_land, founder, scale, start, Books, Brain, Line, LIQUID, MATTER, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
 const H: usize = 8;
 /// First column of the strip, and the loose energy-rich solid on each of its cells, mol/m².
 const STRIP: usize = 6;
-const RICH: f64 = 20.0;
+const STRIP_MOL: f64 = 20.0;
 /// The body's mass, kg.
 const BODY_KG: f64 = 30.0;
 const DECISIONS: usize = 200;
@@ -25,8 +25,8 @@ const DECISIONS: usize = 200;
 const LEARN_ON: f32 = -1.0;
 const LEARN_OFF: f32 = -4.0;
 
-/// A flat, warm world: every cell a copy of one dry land cell, the strip added on top.
-fn scene(seed: u64) -> (World, usize) {
+/// The scene's world for `seed`: flat and warm, every cell a copy of one dry land cell, the strip added on top.
+fn scene(seed: u64) -> World {
     let (chem, init) = worldgen::chemistry0();
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
@@ -39,29 +39,29 @@ fn scene(seed: u64) -> (World, usize) {
     }
     let e = w.e_ground[land];
     w.e_ground.iter_mut().for_each(|x| *x = e);
-    let (_, rich, _, _) = w.chem.life_roles().expect("roles");
     for i in (0..n).filter(|&i| i % W >= STRIP) {
-        w.ground[rich * n + i] += RICH * w.grid.area();
+        w.ground[RICH * n + i] += STRIP_MOL * w.grid.area();
     }
     w.life.env.clear();
     pcore::survey::survey(&mut w);
-    (w, rich)
+    w
 }
 
 /// What a body perceives of the energy-rich solid in cell `i`.
-fn seen(w: &World, rich: usize, i: usize) -> f32 {
-    w.life.seen[i * w.chem.ns() + rich]
+fn seen(w: &World, i: usize) -> f32 {
+    w.life.seen[i * w.chem.ns() + RICH]
 }
 
-/// Per decision: on the strip; moved; a neighbour was richer; moved to a richer one; the share of
-/// richer neighbours (what a move in a random direction would give).
+/// Per decision: on the strip; moved; a neighbour was richer; moved to a richer one; the share of richer neighbours
+/// (what a move in a random direction would give).
 type Decision = (bool, bool, bool, bool, f64);
 
+/// The scene for `seed` with the learning gene `learn`: the body's decisions until its 200th or its death.
 fn run(seed: u64, learn: f32) -> Vec<Decision> {
-    let (mut w, rich) = scene(seed);
-    // A neutral brain: small random weights, no bias among resting, putting, taking from the
-    // ground and moving (which all start equally likely); copying, the actions on parts and on
-    // other bodies kept rare, as they are not part of this scene.
+    let mut w = scene(seed);
+    // A neutral brain: small random weights, no bias among resting, putting, taking from the ground and moving (which
+    // all start equally likely); copying, the actions on parts and on other bodies kept rare, as they are not part of
+    // this scene. The body scaled to `BODY_KG` (booked as an edit).
     let brain = Brain { fixed: [0.0, OFF, 0.0, 0.0, OFF, OFF, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
     let start = w.grid.idx(STRIP - 1, H / 2);
     let mut b = founder(&mut w, 1, start, &brain);
@@ -75,7 +75,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     while log.len() < DECISIONS && w.life.bodies[slot].alive {
         let (u, from) = (w.counts.updates, w.life.bodies[slot].cell as usize);
         let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.grid.step(from, d)).collect();
-        let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, rich, j) > seen(&w, rich, from) + 0.02).collect();
+        let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
         pcore::day(&mut w);
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene
         // stays one body.
@@ -106,6 +106,7 @@ struct Tally {
     lives: Vec<f64>,
 }
 
+/// The scene over seeds 1 to `seeds`.
 fn measure(learn: f32, seeds: u64) -> Tally {
     let (mut on, mut n, mut moves, mut toward, mut chance, mut lives) = (0, 0, 0usize, 0, 0.0, Vec::new());
     for seed in 1..=seeds {
@@ -137,9 +138,9 @@ fn report(on: &Tally, off: &Tally) -> String {
 }
 
 /// Over 200 seeds the body that learns lives to make more decisions than the one that does not, by more than three
-/// standard errors of the difference of their means (about 36 against 16, the error about 5): it learns to take
-/// what it finds and to stay where it is. Of all its decisions a clearly larger share is made on the strip. (Whether
-/// its moves go toward the richer cells is a smaller effect, which needs the seeds of the slow version.)
+/// standard errors of the difference of their means: it learns to take what it finds and to stay where it is. Of all
+/// its decisions a clearly larger share is made on the strip. (Whether its moves go toward the richer cells is a
+/// smaller effect, which needs the seeds of the slow version.)
 #[test]
 fn a_body_that_learns_lives_on_what_it_can_take() {
     let (on, off) = (measure(LEARN_ON, 200), measure(LEARN_OFF, 200));
@@ -153,10 +154,9 @@ fn a_body_that_learns_lives_on_what_it_can_take() {
 
 /// Over 1,600 seeds the body that learns ends up on the strip clearly more often than one that does not, and its moves
 /// from a cell next to a richer one go to a richer cell more often than chance, and more than those of a body that
-/// does not learn by one standard error of the difference of the two shares (about 1.3 points over chance against
-/// 0, the error 1.1 points). Moving pays only through a take at a later decision; it is learned because each row of
-/// the brain steps by its own size, so the row for the richness of a neighbour learns when that matters, not drowned
-/// by the others.
+/// does not learn by one standard error of the difference of the two shares. Moving pays only through a take at a
+/// later decision; it is learned because each row of the brain steps by its own size, so the row for the richness of
+/// a neighbour learns when that matters, not drowned by the others.
 #[test]
 #[ignore = "slow: 3,200 runs of the learning scene"]
 fn body_learns_to_move_toward_what_it_can_take() {
@@ -169,7 +169,7 @@ fn body_learns_to_move_toward_what_it_can_take() {
     assert!(up_on > 0.01 && up_on > up_off + se, "{report}, standard error {se:.4}");
 }
 
-/// A world of seed 1, 32 x 32, with the light-eaters and the eaters (neutral brains) placed after a month and run for
+/// A world of seed 1, 16 x 16, with the light-eaters and the eaters (neutral brains) placed after a month and run for
 /// 30 months more, its bodies sharing brains in groups or not; and its books at the start.
 fn lived(share_brains: bool) -> (pcore::World, Books) {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -228,12 +228,11 @@ fn own_brains_keep_one_body_per_group() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A body whose safe minimums are all off can give all its stores to a body with room (here handling costs nothing), but
-/// not its body: its matter (body and brood) and the liquid its body keeps stay (15 Oct 2026; before, it gave them too, and
-/// left with nothing of a member it died at once). Nothing breaks the ledger (taking from an empty body once gave NaN).
+/// A body whose safe minimums are all off can give all its stores to a body with room (here handling costs nothing),
+/// but not its body: its matter (body and brood) and the liquid its body keeps stay. No body is left empty and alive,
+/// and nothing breaks.
 #[test]
 fn a_body_gives_its_stores_but_not_its_body() {
-    use pcore::body::INTERVAL;
     use pcore::brain;
     use pcore::event::EventKind;
     let (mut w, i) = start();
@@ -241,18 +240,15 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let lay = Layout::of(&w.chem);
     // Brains that only give to a body they see, and that only rest.
     let mut giver = founder(&mut w, 1, i, &Brain::verb(brain::GIVE));
-    // No safe minimums, and a long interval (316 days: the taker, of 30 kg, takes by 30^0.75 =
-    // 12.8 kg, 0.05 x 316 x 12.8 = 200 kg of a 30 kg giver's spare), so one give may move all it holds.
+    // No safe minimums, and a long interval (316 days), so that one give may move all it holds.
     giver.genes[lay.min..lay.upt].fill(-0.1);
     giver.genes[INTERVAL] = 2.5;
     let mut taker = founder(&mut w, 1, i, &Brain::only(brain::REST));
     taker.genes[lay.keep..].fill(0.95);
-    // (Body matter given is digested into the solid, so it fills the taker's room for the solid
-    // (`Body::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
-    let rich = w.chem.life_roles().expect("roles").1;
-    taker.genes[lay.keep + rich] = 2.0;
-    let (matter, liquid) = (w.chem.matter().expect("matter"), w.chem.life_roles().expect("roles").2);
-    let (m0, fuel0) = (giver.store[matter], giver.store[rich]);
+    // (Body matter given is digested into the solid, so it fills the taker's room for the solid (`Body::digest_room`):
+    // room for all the giver's solid and matter, 2 kg per kg of body.)
+    taker.genes[lay.keep + RICH] = 2.0;
+    let (m0, fuel0) = (giver.store[MATTER], giver.store[RICH]);
     let g = w.life.add(giver, w.day, 1);
     w.life.add(taker, w.day, 1);
     for _ in 0..3 {
@@ -264,17 +260,15 @@ fn a_body_gives_its_stores_but_not_its_body() {
     }
     assert!(w.events.iter().any(|e| matches!(e.kind, EventKind::Gave { .. })), "nothing was given");
     let b = &w.life.bodies[g];
-    assert!(b.alive && b.store[matter] > 0.99 * m0 && b.store[rich] < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.store[matter], b.store[rich]);
-    assert!(b.store[liquid] >= 0.99 * b.level(&w.chem, liquid, b.mass(&w.chem)), "the liquid of its body was given");
+    assert!(b.alive && b.store[MATTER] > 0.99 * m0 && b.store[RICH] < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.store[MATTER], b.store[RICH]);
+    assert!(b.store[LIQUID] >= 0.99 * b.level(&w.chem, LIQUID, b.mass(&w.chem)), "the liquid of its body was given");
 }
 
-/// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
-/// decision and pays nothing for a brain, but lives its physics at its updates and has offspring from its
-/// brood (W3). Matter and energy are kept exactly.
+/// A brain of no hidden units is no brain: a body of such a lineage takes no decision and pays nothing for a brain,
+/// but lives its physics at its updates and has offspring from its brood. Matter and energy are kept.
 #[test]
 fn a_body_with_no_brain_lives_and_copies() {
     use pcore::body::{COPY_MASS, HIDDEN};
-    use pcore::event::EventKind;
     let (mut w, i) = start();
     // The light-eaters' sizes but no hidden units.
     let line = Line::new(&mut w, &Brain { hidden: 0, ..Brain::neutral() }, 0);
@@ -297,18 +291,18 @@ fn a_body_with_no_brain_lives_and_copies() {
         assert_eq!(pcore::check::broken(&w), None);
     }
     let b = &w.life.bodies[s];
-    let born: f64 = w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum();
+    let born = testkit::born(&w);
     println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.counts.updates - u, b.count);
-    // (Its children are small against its members, 0.075 kg against 0.7: another size class, so they are nodes of their own.)
+    // (Its children are small against its members: another size class, so they are nodes of their own.)
     let all: f64 = w.life.alive().map(|x| x.n()).sum();
     assert!(b.alive && w.counts.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
     assert!(w.counts.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
     books.assert_kept(&w, 1e-9);
 }
 
-/// Moving costs the real cost of transport (14 Oct 2026, review 6, finding 2): per kg and m a 30 kg
-/// member pays `c_move`, a smaller one more and a bigger one less, as m^-0.32 (Taylor et al.), so a
-/// metre costs a member of 100 times the mass 100^0.68 = 23 times as much, not 100 times.
+/// Moving costs the real cost of transport: per kg and m a 30 kg member pays `c_move`, a smaller one more and a bigger
+/// one less, as m^-0.32 (Taylor et al. 1982), so a metre costs a member of 100 times the mass 100^0.68 = 23 times as
+/// much, not 100 times.
 #[test]
 fn moving_costs_the_real_cost_of_transport() {
     let p = pcore::Physics::default();

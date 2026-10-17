@@ -3,8 +3,8 @@
 use pcore::World;
 
 /// Substances of chemistry 0: the common liquid, and the mineral that exists only dissolved in it.
-const LIQ: usize = 0;
-const SALT: usize = 23;
+const LIQUID: usize = 0;
+const DISSOLVED: usize = 23;
 
 /// All of substance `k` in the world's ground and bodies, mol.
 fn total(w: &World, k: usize) -> f64 {
@@ -20,11 +20,11 @@ fn a_world_starts_with_the_dissolved_mineral_in_its_liquid() {
     let n = w.grid.n();
     let (mut wet, mut dry) = (0.0, 0.0);
     for i in 0..n {
-        if w.ground[LIQ * n + i] > 0.0 {
-            assert!(w.ground[SALT * n + i] > 0.0, "cell {i} has liquid and no salt");
-            wet += w.ground[SALT * n + i];
+        if w.ground[LIQUID * n + i] > 0.0 {
+            assert!(w.ground[DISSOLVED * n + i] > 0.0, "cell {i} has liquid and none of the mineral");
+            wet += w.ground[DISSOLVED * n + i];
         } else {
-            dry += w.ground[SALT * n + i];
+            dry += w.ground[DISSOLVED * n + i];
         }
     }
     assert!(wet > 0.0 && dry == 0.0, "the mineral in the liquid {wet}, on dry land {dry}");

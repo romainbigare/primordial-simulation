@@ -1,3 +1,6 @@
+//! The tape: snapshots (in the middle of the slow cycles, refused without their header, carrying the schedule), the
+//! viewer file, the yearly series and the monthly rows, resuming into the same folder, and the null run.
+
 use flate2::read::GzDecoder;
 use pcore::{check::hash, step, World};
 use std::io::Read;
@@ -6,16 +9,19 @@ use std::sync::OnceLock;
 /// The side of the tests' worlds, cells.
 const SIDE: usize = 16;
 
+/// The world of the tape tests: seed 1, `SIDE` x `SIDE` cells.
 fn world() -> World {
     worldgen::new_world(1, SIDE, SIDE)
 }
 
+/// `months` months of `w`.
 fn run(w: &mut World, months: u32) {
     for _ in 0..months {
         step(w);
     }
 }
 
+/// A folder of this test process for `name`.
 fn tmp(name: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!("ew_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
@@ -82,6 +88,7 @@ fn a_resumed_run_places_the_kinds_still_due() {
     assert_eq!(hash(&b), hash(&whole));
 }
 
+/// The viewer file holds its header (the layers, the frames, the events) and a byte per cell, layer and frame.
 #[test]
 fn frames_file_round_trip() {
     let dir = tmp("frames");
@@ -147,6 +154,7 @@ fn recording() -> &'static Recording {
     })
 }
 
+/// The series has a column for each heat-absorbing gas of the air and each reaction's catalysts.
 #[test]
 fn yearly_series_names_gases_and_catalysts() {
     let Recording { w, dir, .. } = recording();

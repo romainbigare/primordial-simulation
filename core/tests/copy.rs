@@ -5,7 +5,7 @@ use pcore::body::{Body, Layout, ALLOC, CHILD, COOL_T, COPY_MASS, DENATURE, DISPE
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
 use pcore::{body, brain, copy, lineage, nodes, World};
-use worldgen::testkit::{self, add, brood, children, eater, founder, kg, only_the_solid, out, put, put_kg_m2, scale, small_world, start, took_to_burn, Books, Brain, BURN, LIQUID, MATTER, RICH};
+use worldgen::testkit::{self, add, brood, children, eater, founder, kg, only_the_solid, out, put, put_kg_m2, scale, small_world, start, took_to_burn, Books, Brain, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 
 /// Bodies `a` and `b` are in one size class (`body::class`): alike in size and in maturity.
 fn near(lay: &Layout, chem: &pcore::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
@@ -13,10 +13,11 @@ fn near(lay: &Layout, chem: &pcore::chem::Chemistry, alike: f32, a: &Body, b: &B
     x.1 == y.1 && body::alike_log(lay, alike, x.0, y.0)
 }
 
-/// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly all fuel; soaking at least a tenth a day, `body::live`), and the ground of its cell
-/// given a hundred times the level it keeps of each (booked as an edit): what a test that builds for many days needs to be
-/// free of the minerals. (The rock salt falls out of the liquid inside a body within days, so a store given from outside
-/// is gone by the next update; roots give it at the update, just before the body builds.)
+/// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly
+/// all fuel; soaking at least a tenth a day, `body::live`), and the ground of its cell given a hundred times the level
+/// it keeps of each (booked as an edit): what a test that builds for many days needs to be free of the minerals. (The
+/// dissolved mineral falls out of the liquid inside a body within days, so a store given from outside is gone by the
+/// next update; roots give it at the update, just before the body builds.)
 fn feed_minerals(w: &mut World, s: usize) {
     let (i, n, lay) = (w.life.bodies[s].cell as usize, w.grid.n(), Layout::of(&w.chem));
     for (mk, _) in w.chem.minerals() {
@@ -28,12 +29,11 @@ fn feed_minerals(w: &mut World, s: usize) {
     }
 }
 
-/// Growth makes body matter of the energy-rich solid, the nitrogen mineral and the rock salt, 118 of the solid, 3 of the mineral and 1 of
-/// the salt for 1 of matter and 27 of liquid (15 Oct 2026; 40, 1 and none for 1 and 9 before the rock salt, 6 of the solid for 1 of matter
-/// and 1 of liquid before the mineral), and pays `c_copy` per kg of matter made in work that burns the solid (the fuel's heat leaves the
-/// body for the ground): elements and energy are kept exactly, and the stores change as the
-/// chemistry says: matter up by x, the solid down by 118 x and by what the work burnt, each mineral down by its count times x, the liquid up
-/// by 27 x and by the liquid the burning made.
+/// Growth makes body matter of the energy-rich solid and the two minerals (`chemistry0.rs` has the counts), and pays
+/// `c_copy` per kg of matter made in work that burns the solid (the fuel's heat leaves the body for the ground):
+/// elements and energy are kept, and the stores change as the chemistry says: matter up by x, the solid down by its
+/// count times x and by what the work burnt, each mineral down by its count times x, the liquid up by its count times
+/// x and by the liquid the burning made.
 #[test]
 fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let (mut w, i) = start();
@@ -55,16 +55,16 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let burnt = c_copy * x * w.chem.subs[MATTER].molar_mass / -w.chem.dh(BURN);
     let (dsolid, dliquid) = (rich0 - b.store[RICH], b.store[LIQUID] - liquid0);
     let dmineral: Vec<f64> = minerals.iter().zip(&mineral0).map(|(m, a)| a - b.store[m.0]).collect();
-    println!("matter made {x:.4} mol ({:.3} kg), solid down {dsolid:.4} mol (118 x = {:.4}, burnt {burnt:.4}), minerals down {dmineral:.4?}, liquid up {dliquid:.4}", x * w.chem.subs[MATTER].molar_mass, 118.0 * x);
-    assert!((dsolid / (n_rich * x + burnt) - 1.0).abs() < 1e-6, "the solid fell by {dsolid}, 118 x + burnt = {}", n_rich * x + burnt);
+    println!("matter made {x:.4} mol ({:.3} kg), solid down {dsolid:.4} mol ({:.4} for the matter, burnt {burnt:.4}), minerals down {dmineral:.4?}, liquid up {dliquid:.4}", x * w.chem.subs[MATTER].molar_mass, n_rich * x);
+    assert!((dsolid / (n_rich * x + burnt) - 1.0).abs() < 1e-6, "the solid fell by {dsolid}, not {}", n_rich * x + burnt);
     for (m, d) in minerals.iter().zip(&dmineral) {
         assert!((d / (m.1 * x) - 1.0).abs() < 1e-9, "substance {} fell by {d}, x = {x}", m.0);
     }
     // (The burning of the solid for the work makes liquid too, as its reaction says.)
     let burn_liquid = w.chem.reactions[BURN].outputs.iter().find(|p| p.0 as usize == LIQUID).map_or(0.0, |p| p.1 as f64);
-    assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, 27 x + burnt = {}", n_liquid * x + burn_liquid * burnt);
-    // The work left the body as heat for the ground: that heat is the burnt solid's, less the share the body keeps while it leaves
-    // (4.7% before the rock salt and 5.1% after it, the body holding a little more of the heat: the old bound of 5% was at the edge).
+    assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, not {}", n_liquid * x + burn_liquid * burnt);
+    // The work left the body as heat for the ground: that heat is the burnt solid's, less the share the body keeps while it
+    // leaves (about 5%).
     let heat = w.e_ground.iter().sum::<f64>() - e0;
     assert!(heat > 0.0 && (heat / (burnt * -w.chem.dh(BURN)) - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {:e} J", burnt * -w.chem.dh(BURN));
     // Growth is thermoneutral: the matter holds the energy of the solid it was made of.
@@ -74,10 +74,10 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Building takes time: with fuel and spare in plenty, a body builds `c_build` x its `equiv` /
-/// `m_ref` x the days of its interval over `c_copy` kg of matter in an update, no more; twice the
-/// allowance builds twice the matter. A mature body (its body at or past its copy mass) builds as much
-/// and puts the share `ALLOC` of it into its brood: at 1 its body stays what it was.
+/// Building takes time: with fuel and spare in plenty, a body builds `c_build` x its supply / `m_ref` x the days of
+/// its interval over `c_copy` kg of matter in an update, no more; twice the allowance builds twice the matter. A
+/// mature body (its body at or past its copy mass) builds as much and puts the share `ALLOC` of it into its brood: at
+/// 1 its body stays what it was.
 #[test]
 fn growth_is_limited_by_c_build() {
     let built = |c_build: f64, copy: f32, alloc: f32| {
@@ -102,16 +102,16 @@ fn growth_is_limited_by_c_build() {
     assert!(g1 && g2);
     assert!((one / room1 - 1.0).abs() < 1e-3 && (two / room2 - 1.0).abs() < 1e-3, "the allowance binds: {one} of {room1}, {two} of {room2}");
     assert!((two / one - 2.0).abs() < 0.01, "twice the allowance, twice the matter: {one} and {two}");
-    // A mature one (matter 5 x 5.25 kg over 0.25 = 105 kg of body; copy mass 10^1.0 = 10 kg) builds as much; with ALLOC 1 all of it is
-    // brood and its body stays; with 0.8 a fifth of it is body.
+    // A mature one (matter 5 x 5.25 kg over 0.25 = 105 kg of body; copy mass 10^1.0 = 10 kg) builds as much; with
+    // ALLOC 1 all of it is brood and its body stays.
     let (grew, kg_matter, room, brood, grown) = built(1e4, 1.0, 1.0);
     assert!(grew && (kg_matter / room - 1.0).abs() < 1e-3, "a mature body built {kg_matter} kg of {room}");
     assert!((brood / kg_matter - 1.0).abs() < 1e-9 && grown.abs() < 1e-9 * 105.0, "ALLOC 1: brood {brood} of {kg_matter} kg, its body grew by {grown} kg");
 }
 
-/// Building takes what the body can spare: after what it pays and converts, its reactions must
-/// still be able to release its upkeep over an interval. A body
-/// with little fuel builds less than its allowance and keeps that; one with none builds nothing.
+/// Building takes what the body can spare: after what it pays and converts, its reactions must still be able to
+/// release its upkeep over an interval. A body with little fuel builds less than its allowance and keeps that; one
+/// with none builds nothing.
 #[test]
 fn growth_is_limited_by_what_the_body_can_spare() {
     let (mut w, i) = start();
@@ -120,8 +120,8 @@ fn growth_is_limited_by_what_the_body_can_spare() {
     for keep in [0.0, 0.08, 0.15, 1.0] {
         let mut w = w.clone();
         let mut b = eater(&mut w, i, brain::REST, 6.0);
-        // (This measures the spare rule: the solid's minimum, the reserve growth keeps, is set to
-        // the 0.02 of the body it was before the starting kinds got 0.25, so it does not bind.)
+        // (This measures the spare rule: the solid's minimum, the reserve growth keeps, is set low so that it does not
+        // bind.)
         b.genes[Layout::of(&w.chem).min + RICH] = 0.02;
         let out_kg = (1.0 - keep) * kg(&w, &b, RICH);
         add(&mut w, &mut b, RICH, -out_kg);
@@ -136,7 +136,8 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         w.life.bodies[s] = b;
         results.push((keep, grew, built, room, up, release));
     }
-    // With no fuel it builds nothing; with some, less than the allowance and still able to pay its upkeep; with a lot, the allowance (or its wanting).
+    // With no fuel it builds nothing; with some, less than the allowance and still able to pay its upkeep; with a lot, the
+    // allowance (or what it wants).
     assert!(!results[0].1 && results[0].2 == 0.0, "built with no fuel: {:?}", results[0]);
     assert!(results[1].1 && results[1].2 < 0.5 * results[1].3, "{:?}", results[1]);
     for &(_, grew, _, _, up, release) in &results[1..] {
@@ -145,15 +146,14 @@ fn growth_is_limited_by_what_the_body_can_spare() {
     assert!(results[2].2 > results[1].2 && results[3].2 > results[2].2, "more fuel, more built: {results:?}");
 }
 
-/// Storing fuel costs no building work: a body with no allowance builds nothing however much fuel it
-/// holds (`copy::grow` pays no work and changes no store), and a body that takes the energy-rich
-/// solid from the ground with no allowance to build with stores it (the solid rises) and its matter
-/// and size stay.
+/// Storing fuel costs no building work: a body with no allowance builds nothing however much fuel it holds
+/// (`copy::grow` pays no work and changes no store), and a body that takes the energy-rich solid from the ground with
+/// no allowance to build with stores it (the solid rises) and its matter and size stay.
 #[test]
 fn storing_the_solid_costs_no_build() {
     let (mut w, i) = start();
-    // A mature body (copy mass 10 kg of body, its body 21 kg) with 100 kg more fuel and no allowance to build with: it pays
-    // no work for the fuel and builds nothing.
+    // A mature body (copy mass 10 kg of body, its body 21 kg) with 100 kg more fuel and no allowance to build with: it
+    // pays no work for the fuel and builds nothing.
     w.cfg.phys.c_build = 0.0;
     let mut b = eater(&mut w, i, brain::REST, 1.0);
     add(&mut w, &mut b, RICH, 100.0);
@@ -186,24 +186,24 @@ fn storing_the_solid_costs_no_build() {
     let b = &w.life.bodies[s];
     println!("took {took:.3} kg: solid {rich0:.3} -> {:.3} kg, matter {matter0:.3} -> {:.3} kg", kg(&w, b, RICH), kg(&w, b, MATTER));
     assert!(took > 0.5 && kg(&w, b, RICH) > rich0, "it stored nothing: took {took} kg, solid {rich0} -> {}", kg(&w, b, RICH));
-    // (Matter does not rise; it oxidises in the open at 0.2 a year, here a month: 1.5%.)
+    // (Matter does not rise; it rots in the open at 0.2 a year: 1.5% in a month.)
     assert!(kg(&w, b, MATTER) <= matter0 && kg(&w, b, MATTER) > 0.97 * matter0, "matter changed with no allowance: {matter0} -> {}", kg(&w, b, MATTER));
     books.assert_kept(&w, 1e-9);
 }
 
-/// Matter and energy are kept over a child's making, and what a child is made of: matter of the brood
-/// at the size its `CHILD` gene sets (`10^CHILD` of its parent's copy mass in body, `Body::built`),
-/// provisions of every other store in the proportion its parent's body holds them to its matter, the
-/// heat of its parent's temperature, and no work paid (a copy cost nobody could pay and no allowance:
-/// the matter was built and paid for as brood). The parent keeps its body: what it built (`built`) does
-/// not fall. Births are the brood over a child's matter: whole for an individual (the rest of the brood
-/// waits), fractional members for a node.
+/// Matter and energy are kept over a child's making, and what a child is made of: matter of the brood at the size its
+/// `CHILD` gene sets (`10^CHILD` of its parent's copy mass in body, `Body::built`), provisions of every other store in
+/// the proportion its parent's body holds them to its matter, the heat of its parent's temperature, and no work paid
+/// (a copy cost nobody could pay and no allowance: the matter was built and paid for as brood). The parent keeps its
+/// body: what it built (`built`) does not fall. Births are the brood over a child's matter: whole for an individual
+/// (the rest of the brood waits), fractional members for a node.
 #[test]
 fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let (mut w, i) = start();
     // (A copy cost nobody could pay, no allowance: a child costs its parent no work.)
     (w.cfg.phys.c_copy, w.cfg.phys.c_build) = (1e18, 0.0);
-    // A mature eater: a body of 21 kg, matter 5.25 kg and the liquid it keeps, its copy mass 10 kg; a child is 0.1 of that, a body of 1 kg.
+    // A mature eater: a body of 21 kg, matter 5.25 kg and the liquid it keeps, its copy mass 10 kg; a child is 0.1 of
+    // that, a body of 1 kg.
     let mut b = eater(&mut w, i, brain::REST, 10f32.log10());
     b.genes[CHILD] = -1.0;
     let (mm, h) = (w.chem.subs[MATTER].molar_mass, 0.75);
@@ -243,8 +243,8 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
         assert!((b.store[q] + kids_hold - was).abs() <= 1e-9 * was.max(1.0), "substance {q} not kept");
     }
     assert_eq!(w.e_ground.iter().sum::<f64>(), ground0, "work was paid for a child");
-    // The parent's body does not fall: the matter it built is what it was (the brood left its matter and its brood together), and
-    // its size, which waits on the liquid it still holds, is no smaller either.
+    // The parent's body does not fall: the matter it built is what it was (the brood left its matter and its brood
+    // together), and its size, which waits on the liquid it still holds, is no smaller either.
     println!("parent: built {built0:.3} -> {:.3} kg, size {size0:.3} -> {:.3} kg", b.built(&w.chem), b.size(&w.chem));
     assert!((b.built(&w.chem) - built0).abs() < 1e-9 * built0, "the parent's body fell: {built0} -> {}", b.built(&w.chem));
     assert!(b.size(&w.chem) >= size0 * (1.0 - 1e-9), "the parent's size fell: {size0} -> {}", b.size(&w.chem));
@@ -253,9 +253,9 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     w.life.bodies[s] = b;
     books.assert_kept(&w, 1e-9);
 
-    // A node of five such members: the brood of 7.3 children makes 7.3 members, who are immature and so do not join their
-    // mature parents but start a young node of their own; the parents' stores and members stay what they were but for what
-    // they gave, and the mean member of the node is what it was.
+    // A node of five such members: the brood of 7.3 children makes 7.3 members, who are immature and so do not join
+    // their mature parents but start a young node of their own; the parents' stores and members stay what they were but
+    // for what they gave, and the mean member of the node is what it was.
     let (mut w, i) = start();
     w.cfg.phys.c_copy = 1e18;
     let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
@@ -283,11 +283,10 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     println!("node: {count0} members of {built0:.2} kg; children {} members of {:.2} kg", c.count, c.built(&w.chem) / c.n());
 }
 
-/// A mature node's children never lower its mean under maturity: they gather in a young node of their own
-/// (the second brood joins the first), and the young node merges into the adult only once it is mature
-/// itself (`body::class`: the same size class and both mature, or both immature). Grown to the size of the
-/// adults' class but under the size of maturity, the young stay apart at the month's merge; mature, they join.
-/// Members, matter and energy are kept.
+/// A mature node's children never lower its mean under maturity: they gather in a young node of their own (the second
+/// brood joins the first), and the young node merges into the adult only once it is mature itself (`body::class`: the
+/// same size class and both mature, or both immature). Grown to the size of the adults' class but under the size of
+/// maturity, the young stay apart at the month's merge; mature, they join. Members, matter and energy are kept.
 #[test]
 fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     let (mut w, i) = start();
@@ -307,7 +306,7 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     for round in 0..3 {
         let mut n = std::mem::take(&mut w.life.bodies[s]);
         n.prepare(&w.chem, &w.cfg.phys);
-        // A brood of 4 children for the members together (each mature, 3.2 kg of matter more than it needs)
+        // A brood of 4 children for the members together.
         n.brood = 4.0 * child_mol;
         assert!(n.adult(&w.chem), "round {round}: the node is mature: {} kg", n.built(&w.chem) / n.n());
         let before = n.built(&w.chem) / n.n();
@@ -354,10 +353,10 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A mature body splits what it builds in an update by `ALLOC`: the share to its brood, the rest its own
-/// growth; one below the size of maturity puts everything into its own growth up to that size and splits
-/// what it builds past it. Counted in matter: what it made is the matter that rose, the brood is the share of it, the body grew
-/// by the rest (matter over 1 - h).
+/// A mature body splits what it builds in an update by `ALLOC`: the share to its brood, the rest its own growth; one
+/// just below the size of maturity puts everything into its own growth up to that size and splits what it builds past
+/// it. Counted in matter: what it made is the matter that rose, the brood is the share of it, the body grew by the
+/// rest (matter over 1 - h).
 #[test]
 fn a_mature_body_splits_its_building_by_alloc() {
     let build = |copy: f32, alloc: f32| {
@@ -395,19 +394,19 @@ fn a_mature_body_splits_its_building_by_alloc() {
     assert!((grown2 - (0.2 * made + 0.5 * 0.8 * made)).abs() < 1e-6 * made && (brood2 - 0.5 * 0.8 * made).abs() < 1e-6 * made, "crossing maturity: body {grown2}, brood {brood2} of {made}");
 }
 
-/// An immature body never reproduces: whatever its brood (a brood it would not have), `copy::copy` makes no child
-/// while its body (`Body::built`) is under its copy mass, and over the updates of its life a body that
-/// builds fast grows to maturity first and has a brood only from then on.
+/// An immature body never reproduces: whatever its brood (a brood it would not have), `copy::copy` makes no child while
+/// its body (`Body::built`) is under its copy mass, and over the updates of its life a body that builds fast grows to
+/// maturity first and has a brood only from then on.
 #[test]
 fn an_immature_body_never_reproduces() {
-    let brain_less = |w: &mut World, i: usize| {
+    let immature = |w: &mut World, i: usize| {
         let mut b = eater(w, i, brain::REST, 24f32.log10());
         b.genes[CHILD] = -1.0;
         b
     };
     let (mut w, i) = start();
     // Copy mass 24 kg of body, a body of 21 kg.
-    let mut b = brain_less(&mut w, i);
+    let mut b = immature(&mut w, i);
     let child = 0.1 * 24.0 * (1.0 - 0.75) / w.chem.subs[MATTER].molar_mass;
     b.brood = 3.0 * child;
     let (s, mut b) = out(&mut w, b);
@@ -418,9 +417,9 @@ fn an_immature_body_never_reproduces() {
     // Updates: it builds with all it has and has no brood and no child until it is mature.
     let (mut w, i) = start();
     w.cfg.phys.c_build = 1e5;
-    let (rich, mut b) = (RICH, brain_less(&mut w, i));
+    let mut b = immature(&mut w, i);
     // (Fuel for a life of building: 60 kg more of it.)
-    add(&mut w, &mut b, rich, 60.0);
+    add(&mut w, &mut b, RICH, 60.0);
     let s = w.life.add(b, w.day, 1);
     let (mut grown_up, mut born_before, mut born) = (None, 0.0, 0.0);
     for d in 0..400 {
@@ -481,8 +480,8 @@ fn a_hurt_body_rebuilds_within_its_allowance_and_is_immature_until_healed() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Matter and energy are kept over updates in which a body builds, fills a brood and has children
-/// (the update path of `body::live`): a mature eater with fuel and an allowance, over 150 days.
+/// Matter and energy are kept over updates in which a body builds, fills a brood and has children (the update path of
+/// `body::live`): a mature eater with fuel and an allowance, over 150 days.
 #[test]
 fn reproducing_updates_keep_elements_and_energy() {
     let (mut w, i) = start();
@@ -508,18 +507,14 @@ fn reproducing_updates_keep_elements_and_energy() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Body size by an energy ceiling, not a cap (14 Oct 2026): what a body takes goes with its mass^0.75
-/// (`Body::equiv`) and the cost of keeping its tissue with its body^1.0 (`body::upkeep`), so growth,
-/// which builds only from the spare after upkeep (`copy::grow`), stops where the two meet, a size the
-/// body's own costs set. An eater (ALLOC 0: it builds only for itself, nothing is given to children;
-/// strength 1; building fast, so that the allowance never binds; its liquid put back to the ground) in
-/// a place with all the fuel it can take, at every update. With tissue dear enough that the ceiling is
-/// near (costs 1.4 times the starting ones, 1.7 before the nitrogen mineral: growth was 5% slower then and a body at 1.7 starved in the
-/// cold season of its 200th day) it levels off (under a quarter more body
-/// between the 100th and the 300th day) and in its last 100 days takes about what it pays to keep what
-/// it has (within 5 to 10%); with the costs of the start, a ceiling many times higher, it is still
-/// growing fast (more than twice the relative growth) and ends larger. (The bodies of this test die
-/// of a cold season when held at the ceiling for a year: 360 days are run.)
+/// Body size by an energy ceiling, not a cap: what a body takes goes with its mass^0.75 (`Body::equiv`) and the cost
+/// of keeping its tissue with its body^1.0 (`body::upkeep`), so growth, which builds only from the spare after upkeep
+/// (`copy::grow`), stops where the two meet, a size the body's own costs set. An eater (ALLOC 0: it builds only for
+/// itself; strength 1; building fast, so that the allowance never binds) in a place with all the fuel it can take, at
+/// every update, for 360 days. With tissue dear enough that the ceiling is near (costs 1.4 times the starting ones)
+/// it levels off (under a quarter more body between the 100th and the 300th day) and in its last 100 days takes about
+/// what it pays to keep what it has; with the costs of the start, a ceiling many times higher, it is still growing
+/// fast and ends larger.
 #[test]
 fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     use pcore::event::EventKind;
@@ -532,11 +527,11 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             *c *= cost;
         }
         let mut b = eater(&mut w, i, brain::TAKE, 0.0);
-        // A body that is wet (soaking), breathes freely and sheds its heat, so that only its energy limits it. (Since 16 Oct 2026
-        // a bare body sheds no more than its still air and radiation take, and growing past 30 kg its upkeep warmed it past any
-        // steady state: it sheds the rest by evaporating above 295 K, `COOL_T`, and soaks fast to stay wet.)
+        // A body that is wet (soaking), breathes freely and sheds its heat, so that only its energy limits it: a bare body
+        // sheds no more than its still air and radiation take, so growing it sheds the rest by evaporating above 295 K
+        // (`COOL_T`), and soaks fast to stay wet.
         (b.genes[STRENGTH], b.genes[ALLOC], b.genes[LIQ], b.genes[GAS], b.genes[HEAT], b.genes[body::COOL_T]) = (1.0, 0.0, 1.0, 3.0, 3.0, 295.0);
-        // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber, 15 Oct 2026).
+        // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber).
         b.genes[COPY_MASS] = 1.645;
         let (s, b0) = out(&mut w, b);
         w.life.bodies[s] = b0;
@@ -544,22 +539,21 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {
-            // Fuel and liquid in plenty: 100 kg per m² of each on its cell at every update (booked as an edit). (The cell it is in:
-            // it has a brain and may step to a neighbour, as it did on day 167 once its brain had the inputs of two more substances,
-            // 16 Oct 2026, and starved there.)
+            // Fuel and liquid in plenty: 100 kg per m² of each on its cell at every update (booked as an edit); the cell it
+            // is in, as it has a brain and may step to a neighbour.
             let i = w.life.bodies[s].cell as usize;
             for k in [RICH, LIQUID] {
                 let a = (100.0 * area / w.chem.subs[k].molar_mass - w.g(k, i)).max(0.0);
                 put(&mut w, k, i, a);
             }
-            // And the minerals growth is built of (15 Oct 2026): this is a test of the energy ceiling, so its roots find them in plenty
+            // And the minerals growth is built of: this is a test of the energy ceiling, so its roots find them in plenty
             // (an eater has them only from the matter it digests, and here eats none).
             feed_minerals(&mut w, s);
             w.events.clear();
             pcore::day(&mut w);
             assert!(w.life.bodies[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
-            // What its burning made and it holds above the level it keeps drains to the ground at its update (`live::shed`,
-            // review 7 R11; this test did it by hand before). What a decision burns after it adds a trace.
+            // What its burning made and it holds above the level it keeps drains to the ground at its update (`live::shed`);
+            // what a decision burns after it adds a trace.
             let b = &w.life.bodies[s];
             let level = b.level(&w.chem, LIQUID, b.mass(&w.chem));
             assert!(b.store[LIQUID] <= level * (1.0 + 1e-3), "day {day}: liquid over its level by a share {:.3e}", b.store[LIQUID] / level - 1.0);
@@ -581,21 +575,19 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).
     let rel = |x: &[f64]| x[5] / x[1] - 1.0;
     // Growth slows toward a size: the body with the dearer tissue is near it, the other far from it.
-    // (1.5 times since 15 Oct 2026, Kleiber across kinds: 0.40 against 0.21; it was 2 times.)
     assert!(rel(&full) < 0.25 && rel(&cheap) > 1.5 * rel(&full), "growth: {:.3} of the body between the 100th and the 300th day against {:.3} with cheaper tissue", rel(&full), rel(&cheap));
-    // What it takes over what it pays to keep what it has falls toward 1 as it grows (supply goes with mass^0.75,
-    // upkeep with the body): at the end it is within 10% of 1, for the body with dear tissue, and the other, far from its
-    // ceiling, more.
-    // (0.8 since 16 Oct 2026, when it began to hold 295 K by evaporating: 0.84 measured, the cheaper 1.09; the gap to 1, with
-    // the body still levelling off, is not explained: the upkeep here is counted each day at the temperature of that day.)
+    // What it takes over what it pays to keep what it has falls toward 1 as it grows (supply goes with mass^0.75, upkeep
+    // with the body): near 1 at the end for the body with dear tissue, and more for the other, far from its ceiling. (The
+    // bound is 0.8 below: the upkeep here is counted each day at the temperature of that day, while the body still
+    // levels off.)
     assert!(r_full > 0.8 && r_full < 1.1 && r_cheap > r_full, "took / upkeep at the end {r_full} and {r_cheap} with cheaper tissue");
     // Cheaper tissue, a larger body in the same time.
     assert!(cheap[n - 1] > 1.5 * full[n - 1], "a body with cheaper tissue grows larger: {} against {}", cheap[n - 1], full[n - 1]);
 }
 
-/// Several built solids (16 Oct 2026): growth builds each solid a body can build besides matter (`Chemistry::builds`) in the share
-/// its keep gene of it sets (`Body::share`), by the same work, the gas of the lime's conversion going to the air, elements and
-/// energy kept; and what it is built of holds it up and resists breaking: soft tissue alone holds a body low, a frame raises it
+/// Growth builds each solid a body can build besides matter (`Chemistry::builds`) in the share its keep gene of it sets
+/// (`Body::share`), by the same work, the gas the rock's making gives off going to the air, elements and energy kept;
+/// and what it is built of holds it up and resists breaking: soft tissue alone holds a body low, a frame raises it
 /// (`Body::height`) and costs more to break (`Body::breaking`).
 #[test]
 fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
@@ -603,13 +595,13 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     let lay = Layout::of(&w.chem);
     let mats: Vec<usize> = w.chem.materials().collect();
     let mut b = eater(&mut w, i, brain::REST, 6.0);
-    // Shares of 0.2 and 0.1, none of either held yet, the rock salt the lime is made of in plenty.
+    // Shares of 0.2 and 0.1, none of either held yet, the dissolved mineral the rock is made of in plenty.
     for (&k, s) in mats.iter().zip([0.2, 0.1]) {
         b.genes[lay.keep + k] = s;
         let held = kg(&w, &b, k);
         add(&mut w, &mut b, k, -held);
     }
-    add(&mut w, &mut b, 23, 1.0);
+    add(&mut w, &mut b, DISSOLVED, 1.0);
     let (s, mut b) = out(&mut w, b);
     let books = Books::now(&w);
     let before: Vec<f64> = mats.iter().chain([&MATTER]).map(|&k| kg(&w, &b, k)).collect();
@@ -617,7 +609,7 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     assert!(copy::grow(&mut w, &mut b, days));
     let made: Vec<f64> = mats.iter().chain([&MATTER]).zip(&before).map(|(&k, x)| kg(&w, &b, k) - x).collect();
     let all: f64 = made.iter().sum();
-    println!("built {made:.4?} kg (frame, lime, matter)");
+    println!("built {made:.4?} kg (frame, rock, matter)");
     assert!((made[0] / all - 0.2).abs() < 0.01 && (made[1] / all - 0.1).abs() < 0.01, "shares {:.3} and {:.3}", made[0] / all, made[1] / all);
     // The same body of soft tissue alone, and with 1 kg of frame (5% of its mass).
     let (mut soft, mut hard) = (b.clone(), b.clone());
@@ -631,7 +623,8 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
 }
 
 /// A body without a mineral cannot build body matter (not a gram of it, whichever of the two is missing); with both, it
-/// builds, and each falls by its count for the matter made (3 and 1 for 1); with a part of one, the matter made binds to it in proportion.
+/// builds, and each falls by its count for the matter made; with a part of one, the matter made binds to it in
+/// proportion.
 #[test]
 fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     let (mut w, i) = start();
@@ -665,6 +658,7 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     }
 }
 
+/// A child's genes are its parent's plus noise of the size its mutation gene sets.
 #[test]
 fn child_has_parent_genes_plus_noise() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -679,8 +673,8 @@ fn child_has_parent_genes_plus_noise() {
     assert!(diff.iter().enumerate().all(|(g, &d)| d <= 6.0 * size * if g == DENATURE || g == KEEP_T || g == COOL_T { 5.0 } else { 1.0 }), "change too big");
 }
 
-/// More than `cfg.crowd` alike individuals in one cell (of light-eaters, which they eat) merge
-/// into one population node at the next month's start; matter and energy are kept exactly.
+/// More than `cfg.crowd` alike individuals in one cell (of light-eaters, which they eat) merge into one population node
+/// at the next month's start; matter and energy are kept.
 #[test]
 fn crowded_individuals_merge_into_a_node() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -695,8 +689,8 @@ fn crowded_individuals_merge_into_a_node() {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         w.life.add(b, w.day, 1);
     }
-    // At the month's start (looked at before they act: within the month the node may give its
-    // members up one at a time to the actions of Bond, as the draws go).
+    // At the month's start (looked at before they act: within the month the node may give its members up one at a time
+    // to the actions of Bond, as the draws go).
     pcore::survey::survey(&mut w);
     let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
     assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
@@ -704,8 +698,8 @@ fn crowded_individuals_merge_into_a_node() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// However unlike, the bodies of a cell merge at a month's start until at most `cfg.crowd` nodes
-/// are left; no member is lost and matter and energy are kept exactly.
+/// However unlike, the bodies of a cell merge at a month's start until at most `cfg.crowd` nodes are left; no member
+/// is lost and matter and energy are kept.
 #[test]
 fn crowd_bounds_the_nodes_of_a_cell() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -729,12 +723,11 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Gene value of the first body in the genes under test, and the step the catalyst genes move in (0.3).
+/// Two parents: the gene value of the first body in the genes under test, and the step the catalyst genes move in.
 const BASE: f32 = 3.0;
-
 const STEP: f32 = 0.3;
 
-/// A starting mixer of a brain that only rests, weak, staying where it is, copying at 10^`copy` kg of body, mutating
+/// A starting eater of a brain that only rests, weak, staying where it is, mature at 10^`copy` kg of body, mutating
 /// little (so the noise on a gene is far less than the steps tested), with children 10^-3 of its copy mass.
 fn mixer(w: &mut World, i: usize, copy: f32) -> Body {
     let mut b = founder(w, 1, i, &Brain::only(brain::REST));
@@ -743,8 +736,8 @@ fn mixer(w: &mut World, i: usize, copy: f32) -> Body {
     b
 }
 
-/// Two mature eaters in one cell whose catalyst genes are `BASE` and `BASE` + `gap` steps; the second (the
-/// partner) is placed, the first is taken out to copy. The second's born rows are the first's plus 1.
+/// Two mature eaters in one cell whose catalyst genes are `BASE` and `BASE` + `gap` steps; the second (the partner) is
+/// placed, the first is taken out to copy. The second's born rows are the first's plus 1.
 fn pair(w: &mut World, i: usize, gap: f32) -> (usize, Body, usize) {
     let lay = Layout::of(&w.chem);
     let (mut a, mut b) = (mixer(w, i, 1.0), mixer(w, i, 1.0));
@@ -831,8 +824,8 @@ fn each_gene_and_row_of_a_child_is_one_parents() {
     assert_eq!(mixed(&w), (200.0, 200.0));
 }
 
-/// With no partner, or none mature, a child is a copy of one parent as before: every gene and row is its parent's
-/// plus noise, and the birth is not marked.
+/// With no partner, or none mature, a child is a copy of one parent: every gene and row is its parent's plus noise,
+/// and the birth is not marked.
 #[test]
 fn with_no_partner_a_child_has_one_parent() {
     let (mut w, i) = start();
@@ -969,7 +962,7 @@ fn a_nodes_mixed_children_have_the_pooled_spread() {
         assert!(a.adult(&w.chem) && w.life.bodies[sb].adult(&w.chem));
         w.events.clear();
         assert!(copy::copy(&mut w, s, &mut a));
-        // (The brood over the child's matter, a float: 1999.9999999999998 with the matter of 3,456 g a mol, 2000 with the one before.)
+        // (The brood over the child's matter is a float, within rounding of 2,000.)
         assert!((mixed(&w).0 - 2000.0).abs() < 1e-9 * 2000.0, "{} children", mixed(&w).0);
         let c = w.life.bodies.iter().find(|c| c.alive && c.parent == a.id(s)).expect("the children").clone();
         assert!((c.count - 2000.0).abs() < 1e-6 * 2000.0, "{} members", c.count);
@@ -999,10 +992,10 @@ fn live(w: &pcore::World) -> Vec<usize> {
     (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).collect()
 }
 
-/// A mature node's children start a node of their own (they are immature, `body::class`) that carries the variance left
-/// among them; when they have grown and join their parents' node (the month's merge, `nodes::merge`) its spread
-/// is widened by it; a node whose members differ so much that its halves would not be alike splits in
-/// two along that gene, keeping its members, stores, heat and pooled spread.
+/// A mature node's children start a node of their own (they are immature, `body::class`) that carries the variance
+/// left among them; when they have grown and join their parents' node (the month's merge, `nodes::merge`) its spread
+/// is widened by it; a node whose members differ so much that its halves would not be alike splits in two along that
+/// gene, keeping its members, stores, heat and pooled spread.
 #[test]
 fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -1045,29 +1038,28 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     }
     assert!((a.e + c.e - e).abs() <= 1e-12 * e);
     let d = (2.0 / std::f32::consts::PI).sqrt();
-    // (which half keeps the node's place is drawn)
+    // (Which half keeps the node's place is drawn.)
     let (x, y) = (a.genes[COPY_MASS] - m, c.genes[COPY_MASS] - m);
     assert!((x.abs() - d).abs() < 1e-5 && (x + y).abs() < 1e-5, "halves at {x} and {y}, not ±{d}");
     assert!((a.spread[COPY_MASS] + d * d - 1.0).abs() < 1e-5 && a.spread == c.spread, "pooled spread not kept");
     books.assert_kept(&w, 1e-9);
 }
 
-/// Light-eater nodes with a fast mutation (their spreads reach the split threshold) and members
-/// of 100 kg (a body of 70 kg) that are mature from 28 kg, with children of 14 kg (no copy cost; the copy-mass and child
-/// genes are set again at each update so that every node is mature, and its children are of its size class, whatever
-/// its other genes: no selection by when a body may reproduce) copy, split, move to the lineage
-/// their brain sizes ask for, send children to join or start nodes in neighbour cells, and merge
-/// each month, for `updates` updates of 10 days (`wide`: from spreads held at the split threshold). Every member has one child per update, and then
-/// a share `live(b)` of each body's members lives on (0.5: as many die as were born). Returns the
-/// mean genes by members at the start and at the end.
+/// Light-eater nodes with a fast mutation (their spreads reach the split threshold) and members of 100 kg that are
+/// mature from 28 kg, with children of 14 kg (no copy cost; the copy-mass and child genes are set again at each update
+/// so that every node is mature, and its children are of its size class, whatever its other genes: no selection by
+/// when a body may reproduce) copy, split, move to the lineage their brain sizes ask for, send children to join or
+/// start nodes in neighbour cells, and merge each month, for `updates` updates of 10 days (`wide`: from spreads held at
+/// the split threshold). Every member has one child per update, and then a share `live_on(b)` of each body's members
+/// lives on (0.5: as many die as were born). Returns the world and the mean genes by members at the start and at the
+/// end.
 fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f64) -> (pcore::World, Vec<f64>, Vec<f64>) {
     let mut w = worldgen::new_world(1, 4, 4);
     pcore::step(&mut w);
     (w.cfg.crowd, w.cfg.phys.c_copy) = (crowd, 0.0);
-    // One parent: the node math alone is measured. With two (15 Oct 2026) a body's partner is the most alike of its cell, which
-    // need not choose it in return, so children are pulled toward the nodes that are many bodies' nearest, and the mean over all
-    // members wanders (1.5 to 2.3 steps in 1,000 updates here, against 0.2 with one parent), as it does when the nearest of
-    // each is not the one that chose it.
+    // One parent: the node math alone is measured. With two a body's partner is the most alike of its cell, which need
+    // not choose it in return, so children are pulled toward the nodes that are many bodies' nearest, and the mean over
+    // all members wanders by more than the bound below.
     w.cfg.two_parents = false;
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     let len = Layout::of(&w.chem).len;
@@ -1076,7 +1068,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     for s in live(&w) {
         (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT], w.life.bodies[s].genes[CHILD]) = (1.45, -0.8, -std::f32::consts::LOG10_2);
         if wide {
-            // (the first children that stay bring every spread down to the split threshold)
+            // (The first children that stay bring every spread down to the split threshold.)
             w.life.bodies[s].spread = vec![1e9; len];
         }
     }
@@ -1112,8 +1104,9 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             lineage::resize(&mut w, s, &mut b);
             nodes::split(&mut w, s, &mut b);
             w.life.bodies[s] = b;
-            // The children are young nodes of their own (immature, `body::class`); here they grow up at once, and the month's
-            // merge would take them back into their parent's node: they do now, so the update's node math is the same.
+            // The children are young nodes of their own (immature, `body::class`); here they grow up at once, and the
+            // month's merge would take them back into their parent's node: they do now, so the update's node math is the
+            // same.
             let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life.bodies[*k].parent == id).collect();
             for k in kids {
                 nodes::merge(&mut w, k, s);
@@ -1129,19 +1122,17 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     (w, m0, m1)
 }
 
-/// Without selection the node math moves no gene (review 3, M1), the brain's sizes included
-/// (review 4, finding 1: they now split too): every body's members live on alike, so a gene's
-/// mean over all members may move only by the noise of the children that leave. Over 1,000
-/// updates every gene's mean stays within a mutation step of its start, in cells over `crowd`
-/// and not.
+/// Without selection the node math moves no gene, the brain's sizes included: every body's members live on alike, so
+/// a gene's mean over all members may move only by the noise of the children that leave. Over 1,000 updates every
+/// gene's mean stays within a mutation step of its start, in cells over `crowd` and not.
 #[test]
 #[ignore = "slow: 2 x 1,000 updates of node churn"]
 fn genes_do_not_drift_without_selection() {
     for crowd in [1, 64] {
         let w0 = worldgen::new_world(1, 4, 4);
         let lay = Layout::of(&w0.chem);
-        // Gene steps (from `steps` of all ones: 1 / step; the brain's sizes, which `steps` leaves
-        // out of likeness, by their own steps).
+        // Gene steps (from `steps` of all ones: 1 / step; the brain's sizes, which `steps` leaves out of likeness, by
+        // their own steps).
         let mut inv = body::steps(&lay, &vec![1.0; lay.len]);
         for (g, step) in [(HIDDEN, 0.3), (MEMORY, 0.15), (SEEN, 0.1), (SIGHT, 0.07)] {
             inv[g] = 1.0 / step;
@@ -1157,14 +1148,11 @@ fn genes_do_not_drift_without_selection() {
     }
 }
 
-/// With selection a node's brain size moves (review 4, finding 1): from spreads held at the split
-/// threshold, members live on a little less the more hidden units their genes ask for (5% per unit
-/// and update, as if they paid for a brain they do not use), and nothing else differs. Within
-/// 1,000 updates the mean of the hidden-units gene falls by more than a unit (12 to 10.9) and the
-/// nodes move to a lineage with fewer hidden units. Before, a node never split along a size gene,
-/// so its mean stayed at 12 whatever the selection. Slow, as a split exposes one gene at a time (a
-/// random pick among the widest): about 3% of what selection on the whole spread would move (0.07
-/// units in 300 updates at 1% per unit, against 0.01 x 0.655 x 300 = 2).
+/// With selection a node's brain size moves: from spreads held at the split threshold, members live on a little less
+/// the more hidden units their genes ask for (5% per unit and update, as if they paid for a brain they do not use),
+/// and nothing else differs. Within 1,000 updates the mean of the hidden-units gene falls by more than a unit and the
+/// nodes move to a lineage with fewer hidden units. It is slow, as a split exposes one gene at a time (a random pick
+/// among the widest).
 #[test]
 #[ignore = "slow: 1,000 updates of node churn"]
 fn selection_moves_a_nodes_brain_size() {
@@ -1178,12 +1166,9 @@ fn selection_moves_a_nodes_brain_size() {
     assert!(smaller > 0, "no node moved to a smaller brain");
 }
 
-/// Children that leave a varied node join the node of their own kind in the next cell (review 3,
-/// M3): pairs of children drawn from a node held at the split threshold in every gene (2.7 steps),
-/// sent to a cell whose node has the same genes and spread, join it nearly always, as they lie
-/// within its spread. With the means within `alike` steps alone (the pair's mean differs from the
-/// node's by 2 steps in each gene) about half of them started a node of their own (108 of 200
-/// joined), and cells filled up with variants of one kind.
+/// Children that leave a varied node join the node of their own kind in the next cell: pairs of children drawn from a
+/// node held at the split threshold in every gene, sent to a cell whose node has the same genes and spread, join it
+/// nearly always, as they lie within its spread (a pair's mean can differ from the node's by more than `alike` steps).
 #[test]
 fn dispersing_children_of_a_varied_node_join_their_kind() {
     let mut w = small_world();
@@ -1204,8 +1189,8 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     for t in live(&w) {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
         w.life.bodies[t].k = Default::default();
-        // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes of
-        // children are: a child joins no mature node (`body::class`).
+        // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes
+        // of children are: a child joins no mature node (`body::class`).
         if t != s {
             let m = w.chem.matter().expect("matter");
             w.life.bodies[t].store[m] *= 0.5;
@@ -1230,9 +1215,9 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     assert!(joined as f64 >= 0.95 * tries as f64, "{joined} of {tries} joined");
 }
 
-/// A node whose mean brain-size gene moved a whole unit from its lineage's size moves to a new
-/// lineage with that size at its update (review 3, M4): its brain carried over, in a group of its
-/// own that keeps what its group learned; matter and energy as they were.
+/// A node whose mean brain-size gene moved a whole unit from its lineage's size moves to a new lineage with that size
+/// at its update: its brain carried over, in a group of its own that keeps what its group learned; matter and energy
+/// as they were.
 #[test]
 fn a_node_whose_size_genes_moved_changes_lineage() {
     let mut w = small_world();
@@ -1262,7 +1247,7 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Totals over all live bodies: members, each store, heat (`same` compares the stores and heat; a copy makes members).
+/// Totals over all live bodies: members, each store, heat.
 fn held(w: &pcore::World) -> (f64, Vec<f64>, f64) {
     let (mut n, mut store, mut e) = (0.0, vec![0.0; w.chem.ns()], 0.0);
     for b in w.life.alive() {
@@ -1273,6 +1258,7 @@ fn held(w: &pcore::World) -> (f64, Vec<f64>, f64) {
     (n, store, e)
 }
 
+/// The stores and heat of two `held` totals are the same (a copy makes members, so they are not compared).
 fn same(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
     assert!((a.2 - b.2).abs() <= 1e-9 * a.2.abs().max(1.0), "heat {} then {}", a.2, b.2);
     for (k, (x, y)) in a.1.iter().zip(&b.1).enumerate() {
@@ -1280,12 +1266,10 @@ fn same(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
     }
 }
 
-/// `open` draws members of a node as individuals (plan 7.1, "split it back into individuals when
-/// the player looks closely"): they are in the node's cell, of count 1, with a wear in [0, 1), and
-/// members, stores and heat are kept exactly; the node keeps its place with the members left; the
-/// genes of the drawn are the node's plus noise of its spread (their mean near the node's, within
-/// four standard errors, and as wide as the spread) and the mean of all members, drawn and left,
-/// is the node's, as before.
+/// `open` draws members of a node as individuals: they are in the node's cell, of count 1, with a wear in [0, 1), and
+/// members, stores and heat are kept exactly; the node keeps its place with the members left; the genes of the drawn
+/// are the node's plus noise of its spread (their mean near the node's, within four standard errors, and as wide as the
+/// spread) and the mean of all members, drawn and left, is the node's.
 #[test]
 fn opening_a_node_draws_members_and_keeps_everything() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -1330,10 +1314,9 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// With `Config::nodes` off an animal's children are individuals: a child joins no node, even
-/// when one of its own kind is in its cell (with nodes on it joins it), and a member whose brood
-/// covers many children has that many individuals, not a node of them.
-/// Members, stores and heat are kept exactly.
+/// With `Config::nodes` off an animal's children are individuals: a child joins no node, even when one of its own kind
+/// is in its cell (with nodes on it joins it), and a member whose brood covers many children has that many
+/// individuals, not a node of them. Members, stores and heat are kept.
 #[test]
 fn individuals_mode_children_of_an_animal_are_individuals() {
     for nodes in [true, false] {
@@ -1347,14 +1330,13 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         let mut node = w.life.bodies[s].clone();
         (node.count, node.genes[DISPERSE]) = (5.0, 0.0);
         node.store.iter_mut().for_each(|x| *x *= 5.0);
-        // Young (half the matter: founders are adults since 15 Oct 2026), as a node children join is.
+        // Young (half the matter of an adult founder), as a node children join is.
         node.store[w.chem.matter().expect("matter")] *= 0.5;
         node.e *= 5.0;
         w.life.bodies[s].genes[DISPERSE] = 0.0;
         let t = w.life.add(node, w.day, 1);
-        // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays mature with the brood
-        // out of its body whatever its sprayed `CHILD` gene), the child
-        // 0.3 of that.
+        // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays
+        // mature with the brood out of its body whatever its sprayed `CHILD` gene).
         let (at, before) = (live(&w).len(), held(&w));
         let mut b = std::mem::take(&mut w.life.bodies[s]);
         b.genes[COPY_MASS] = (0.5 * b.built(&w.chem) as f32).log10();
@@ -1391,17 +1373,14 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
     }
 }
 
-/// With `Config::nodes` off, more than `crowd` alike animals in one cell stay individuals at the
-/// month's start (with nodes on they merge, `crowded_individuals_merge_into_a_node`), and over
-/// three years of the whole world no animal becomes a node; light-eaters still are nodes. The
-/// animals are the hand-set eaters (`Seeding::old`, which find what they eat), so that some live and breed
-/// through the window: the check is empty when none do (review 6, finding 10: with the default
-/// neutral start 7, 2, 1, 1, 1 and then 0 animals were alive at months 6 to 36). Matter and
-/// energy are kept exactly.
+/// With `Config::nodes` off, more than `crowd` alike animals in one cell stay individuals at the month's start (with
+/// nodes on they merge, `crowded_individuals_merge_into_a_node`), and over three years of the whole world no animal
+/// becomes a node; light-eaters still are nodes. The animals are the hand-set eaters (`Seeding::old`, which find what
+/// they eat), so that some live and breed through the window: the check would be empty with none (neutral animal
+/// founders mostly die in their first year). Matter and energy are kept.
 #[test]
 #[ignore = "slow: three years of a 32 x 32 world"]
 fn individuals_mode_merges_no_animal() {
-    use pcore::event::EventKind;
     let mut w = worldgen::new_world(1, 32, 32);
     w.cfg.nodes = false;
     let books = Books::now(&w);
