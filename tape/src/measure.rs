@@ -1,20 +1,13 @@
-//! Numbers computed from the world's raw facts: what counts as a light-eater, how far learning
-//! has moved the brains, and how many kinds of bodies there are. The core knows none of this.
+//! Numbers computed from the world's raw facts: how far learning has moved the brains, and how many
+//! kinds of bodies there are. The core knows none of this.
 
 use pcore::body::{self, Body, Layout, COPY_MASS, INTERVAL, LEAF, STRENGTH};
 use pcore::chem::Chemistry;
 use pcore::World;
 
-/// The core's threshold for a light-eater (`body::LIGHT_EATER`), as the tape reads it.
-pub const LIGHT_EATER: f32 = body::LIGHT_EATER;
-
-pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
-    body::light_eater(chem, genes)
-}
-
 /// Mean absolute learned offset of each live group's rows (its rows less the mean of its members'
 /// born rows), averaged over groups by their members.
-pub fn learned(w: &World) -> f64 {
+pub(crate) fn learned(w: &World) -> f64 {
     let (mut sum, mut members) = (0.0, 0.0);
     for g in w.life.groups.iter().filter(|g| g.members > 0 && !g.rows.is_empty()) {
         let d: f64 = g.learned().map(|x| x.abs() as f64).sum();
@@ -132,7 +125,7 @@ fn fit(w: &World, by_members: bool) -> Vec<Vec<f32>> {
 
 /// Kinds of the live bodies (in the order of `World::life.alive()`): the kind of each, and the
 /// number of kinds, each body counting once.
-pub fn kinds(w: &World) -> (Vec<usize>, usize) {
+pub(crate) fn kinds(w: &World) -> (Vec<usize>, usize) {
     let c = fit(w, false);
     if c.is_empty() {
         return (vec![0; w.life.alive().count()], 1);
@@ -142,6 +135,6 @@ pub fn kinds(w: &World) -> (Vec<usize>, usize) {
 }
 
 /// The number of kinds when each body counts as many times as it has members.
-pub fn kinds_by_members(w: &World) -> usize {
+pub(crate) fn kinds_by_members(w: &World) -> usize {
     fit(w, true).len().max(1)
 }

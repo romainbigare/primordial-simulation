@@ -138,11 +138,11 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
         }
         if y % every == 0 || y == y0 + years {
             let (de, dq) = pcore::check::drift(&w, &t0, &l0);
-            let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| tape::light_eater(&w.chem, &b.genes)).count());
+            let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| pcore::body::light_eater(&w.chem, &b.genes)).count());
             // Members of light-eaters; individuals, nodes and members of the others.
             let mut m = [0.0; 4];
             for b in w.life.alive() {
-                let k = if tape::light_eater(&w.chem, &b.genes) { 0 } else { 1 + (b.n() > 1.0) as usize };
+                let k = if pcore::body::light_eater(&w.chem, &b.genes) { 0 } else { 1 + (b.n() > 1.0) as usize };
                 (m[k], m[3]) = (m[k] + if k == 0 { b.n() } else { 1.0 }, m[3] + if k > 0 { b.n() } else { 0.0 });
             }
             let ms = part.map(|d| d.as_secs_f64() * 1000.0 / (y - since) as f64);
@@ -150,7 +150,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
             let us = part[2].as_secs_f64() * 1e6 / (w.life.updates - upd).max(1) as f64;
             let ms_tape = tape.as_secs_f64() * 1000.0 / (y - since) as f64;
             (since, upd) = (y, w.life.updates);
-            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), merged unlike {:.0}/yr, wide {:.0}/yr, gifts {}/yr, watches {}/yr", w.ledger.clamped_heat, w.life.at.iter().map(|v| v.len()).max().unwrap_or(0), m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count(), w.diag.splits[0], w.diag.splits[1], rec.last("kinds"), rec.last("kinds_members"), rec.last("merged_unlike"), rec.last("merged_wide"), rec.last("gave"), rec.last("watched"));
+            println!("year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), gifts {}/yr, watches {}/yr", w.ledger.clamped_heat, w.life.at.iter().map(|v| v.len()).max().unwrap_or(0), m[0], m[1], m[2], m[3], w.life.lineages(), w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count(), ms[0], ms[1], ms[2], ms[3], ms_tape, us, w.parts.alive().count(), w.diag.splits[0], w.diag.splits[1], rec.last("kinds"), rec.last("kinds_members"), rec.last("gave"), rec.last("watched"));
             busy += part.iter().sum::<Duration>() + tape;
             (part, tape) = ([Duration::ZERO; 4], Duration::ZERO);
             render::save(&w, &format!("{out}/year{y:04}.png"));

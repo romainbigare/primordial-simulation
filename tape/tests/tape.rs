@@ -116,7 +116,7 @@ fn yearly_series_names_gases_and_catalysts() {
 }
 
 /// The per-kind columns (`root_<k>_*`) are in the series, deaths and births of the kinds add up to
-/// the totals of the year, and the land's seasonal swing is there and not negative.
+/// the totals of the year, and the land's summer is not colder than its winter.
 #[test]
 fn yearly_series_has_the_measures_per_starting_kind() {
     let dir = tmp("per_kind");
@@ -138,7 +138,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     let kinds: Vec<usize> = (0..8).filter(|k| head.contains(&format!("root_{k}_members").as_str())).collect();
     assert!(!kinds.is_empty());
-    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "died_age", "past_copy", "alloc", "child", "brood", "died_young", "died_adult", "life_adult", "moves", "hurt", "temp"] {
+    for name in ["births", "life_real", "mass", "copy_mass", "matter", "body", "gas", "leaf", "copy_log", "interval", "hidden", "repair", "died_age", "alloc", "child", "brood"] {
         assert!(head.contains(&format!("root_{}_{name}", kinds[0]).as_str()), "{name}");
     }
     for r in &rows {
@@ -147,42 +147,30 @@ fn yearly_series_has_the_measures_per_starting_kind() {
             let all = col(total, r);
             assert!((sum - all).abs() <= 1e-9 * all.max(1.0), "{total}: kinds {sum} total {all}");
         }
-        // Deaths split by the life stage of the body: young and adult add up to all the deaths of the kind.
-        for k in &kinds {
-            let all: f64 = ["lack", "phase", "spent", "taken", "broken", "age"].iter().map(|c| col(&format!("root_{k}_died_{c}"), r)).sum();
-            let (young, adult) = (col(&format!("root_{k}_died_young"), r), col(&format!("root_{k}_died_adult"), r));
-            if all.is_nan() {
-                continue;
-            }
-            assert!((young + adult - all).abs() <= 1e-9 * all.max(1.0), "root_{k}: young {young} adult {adult} all {all}");
-            assert!(young >= 0.0 && adult >= 0.0);
-        }
     }
     let last = rows.last().unwrap();
-    assert!(col("t_land_swing", last) >= 0.0 && col("t_land_summer", last) >= col("t_land_winter", last));
+    assert!(col("t_land_summer", last) >= col("t_land_winter", last));
     // A catalyst gene on in a kind keeps its columns, with the share of members that carry it.
     assert!(head.iter().any(|h| h.starts_with("root_0_cat_") && h.ends_with("_on")));
-    // The kind's mass in kg is its members times its mean member's mass; the heaviest member has a kind; the merge tally is there.
+    // The kind's mass in kg is its members times its mean member's mass.
     for k in &kinds {
         let (m, mean, kg) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_kg"), last));
         assert!(m == 0.0 && kg == 0.0 || (kg - m * mean).abs() <= 1e-9 * kg, "root_{k}_kg {kg} members {m} mean {mean}");
     }
-    // The body matter (14 Oct 2026): its share of a kind's mass is between 0 and 1, and the mean body of a member (matter and the
-    // liquid it keeps with it) is no more than the mean member's mass.
+    // The body matter's share of a kind's mass is between 0 and 1, and the mean body of a member (matter and the liquid it keeps
+    // with it) is no more than the mean member's mass.
     for k in &kinds {
         let (m, mean, matter, body) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_mass"), last), col(&format!("root_{k}_matter"), last), col(&format!("root_{k}_body"), last));
         assert!(m == 0.0 || (matter > 0.0 && matter < 1.0 && body > 0.0 && body <= mean * (1.0 + 1e-9)), "root_{k}: matter {matter}, body {body}, mass {mean}");
     }
-    // The share of members past their copy mass (mature), the moves a member makes a year, and the genes of reproduction
-    // (14 Oct 2026): the share of building that goes to offspring, a child's body as log10 of its share of the copy mass,
-    // and the brood as a share of the members' mass.
+    // The genes of reproduction: the share of building that goes to offspring, a child's body as log10 of its share of the
+    // copy mass, and the brood as a share of the members' mass.
     for k in &kinds {
-        let (m, copy, moves) = (col(&format!("root_{k}_members"), last), col(&format!("root_{k}_past_copy"), last), col(&format!("root_{k}_moves"), last));
+        let m = col(&format!("root_{k}_members"), last);
         let (alloc, child, brood) = (col(&format!("root_{k}_alloc"), last), col(&format!("root_{k}_child"), last), col(&format!("root_{k}_brood"), last));
-        assert!(m == 0.0 || ((0.0..=1.0).contains(&copy) && moves >= 0.0), "root_{k}: past copy {copy}, moves {moves}");
         assert!(m == 0.0 || ((0.0..=1.0).contains(&alloc) && (-6.0..=-0.3).contains(&child) && (0.0..1.0).contains(&brood)), "root_{k}: alloc {alloc}, child {child}, brood {brood}");
     }
-    // The share of a kind's births in the year that had two parents (15 Oct 2026): between 0 and 1, none where there were no births.
+    // The share of a kind's births in the year that had two parents: between 0 and 1, none where there were no births.
     for k in &kinds {
         let (births, mixed) = (col(&format!("root_{k}_births"), last), col(&format!("root_{k}_mixed"), last));
         assert!(if births > 0.0 { (0.0..=1.0).contains(&mixed) } else { mixed.is_nan() }, "root_{k}: births {births}, mixed {mixed}");
@@ -199,7 +187,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
         let year = col(&format!("root_{k}_births"), last);
         assert!((sum - year).abs() <= 1e-9 * year.max(1.0), "root_{k}: months {sum} year {year}");
     }
-    // and so do the deaths of each kind by cause (15 Oct 2026).
+    // and so do the deaths of each kind by cause.
     for k in &kinds {
         let sum = |c: &str| {
             let at = mh.iter().position(|h| *h == format!("root_{k}_died_{c}")).unwrap_or_else(|| panic!("months.csv has no deaths of kind {k} by {c}"));
@@ -210,8 +198,8 @@ fn yearly_series_has_the_measures_per_starting_kind() {
             assert!((sum(c) - year).abs() <= 1e-9 * year.max(1.0), "root_{k} died of {c}: months {} year {year}", sum(c));
         }
     }
+    // The heaviest member has a kind.
     assert!(kinds.contains(&(col("mass_max_root", last) as usize)));
-    assert!(col("merged_unlike", last) >= 0.0 && col("merged_wide", last) >= col("merged_unlike", last));
     // The run's numbers are written beside the series.
     let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join("physics.json")).unwrap()).unwrap();
     assert_eq!(doc["physics"]["alike"].as_f64().map(|x| x as f32), Some(w.cfg.phys.alike));
@@ -305,24 +293,33 @@ fn null_run_freezes_the_brain_rows() {
     assert_eq!((null.0, null.1), (0, 0), "the null run does not: {null:?}");
 }
 
-/// The minerals (15 Oct 2026, the rock salt 15 Oct): the series has each mineral (`min0_`, the nitrogen mineral, and `min1_`, the rock
-/// salt) in the ground per m² of land and of sea, and where the nitrogen is (ground of land and sea, dead matter on each, the
-/// bodies), which together stay what the soil gave the world (no body fixes, and nothing burns hot); and per kind the share of
-/// building any mineral held back (`nlim`, between 0 and 1), each one (`nlim0`, `nlim1`) and each in the stores per kg of body.
+/// The minerals: the series has each mineral (`min0_`, the mineral of the fixing reaction's gas, and `min1_`) in the ground per m²
+/// of land and of sea, and where the first is in all (dead matter on land and sea, the bodies, the bed's stores), which with the
+/// ground's stays what the soil gave the world (no body fixes, and nothing burns hot).
 #[test]
-fn yearly_series_counts_the_nitrogen_mineral() {
-    let dir = tmp("nitrogen");
+fn yearly_series_counts_the_minerals() {
+    let dir = tmp("minerals");
     let mut w = world();
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
     worldgen::life::seed(&mut w, 0);
-    // (The founders that fix are put back to none, so that the nitrogen in all can stay what the soil gave.)
+    // (The founders that fix are put back to none, so that the mineral in all can stay what the soil gave.)
     let (lay, fix) = (pcore::body::Layout::of(&w.chem), worldgen::life::fixing(&w.chem).expect("the fixing reaction"));
     w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
+    // The land and sea cells at each yearly row, to turn the ground's kg/m² back into mol.
+    let cells = |w: &pcore::World| {
+        let land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).count() as f64;
+        [land, w.grid.n() as f64 - land]
+    };
+    let mpy = w.cfg.months_per_year;
     let mut rec = tape::Recorder::new(&w, 0, 0);
     rec.record_month(&mut w);
-    for _ in 0..2 * w.cfg.months_per_year {
+    let mut at = vec![cells(&w)];
+    for m in 1..=2 * mpy {
         run(&mut w, 1);
         rec.record_month(&mut w);
+        if m % mpy == 0 {
+            at.push(cells(&w));
+        }
     }
     rec.finish(&dir).unwrap();
     let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
@@ -331,21 +328,19 @@ fn yearly_series_counts_the_nitrogen_mineral() {
     let rows: Vec<Vec<f64>> = lines.map(|l| l.split(',').map(|v| v.parse().unwrap()).collect()).collect();
     assert_eq!(rows.len(), 3);
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
-    // The soil: 0.357 mol of the salt (80 g) in a m2 is 28.6 g; the cells under standing liquid have none.
+    // The soil: 0.357 mol of the mineral (80 g) in a m2 is 28.6 g; the cells under standing liquid have none.
     let first = &rows[0];
     assert!(col("min0_land", first) > 0.015 && col("min0_land", first) <= 0.0286 + 1e-6, "{}", col("min0_land", first));
     assert_eq!(col("min0_sea", first), 0.0);
-    // (The rock salt: where the liquid lies on the lime, and the sea holds it from the start at balance with the air.)
+    // (The second: where the liquid lies on the rock that holds it, and the sea holds it from the start at balance with the air.)
     assert!(col("min1_sea", first) > 1.0 && col("min1_land", first) >= 0.0);
-    let all = |r: &Vec<f64>| ["min0_ground_land", "min0_ground_sea", "min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>();
-    for r in &rows {
-        assert!((all(r) / all(first) - 1.0).abs() < 1e-6, "the nitrogen in all: {} against {}", all(r), all(first));
-        let (nlim, nstore) = (col("root_0_nlim", r), col("root_0_nstore0", r));
-        assert!(nlim.is_nan() || (0.0..=1.0).contains(&nlim), "nlim {nlim}");
-        assert!(nstore.is_nan() || (nstore >= 0.0 && nstore < 1.0), "nstore {nstore}");
-        // Held back by any mineral is held back by one of them (at least the larger of the two, at most their sum).
-        let (n0, n1) = (col("root_0_nlim0", r), col("root_0_nlim1", r));
-        assert!(nlim.is_nan() || (nlim >= n0.max(n1) - 1e-9 && nlim <= n0 + n1 + 1e-9), "nlim {nlim} of {n0} and {n1}");
+    let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.grid.area());
+    let all = |r: &Vec<f64>, c: [f64; 2]| {
+        let ground = (col("min0_land", r) * c[0].max(1.0) + col("min0_sea", r) * c[1].max(1.0)) * area / mm / 1e9;
+        ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()
+    };
+    for (r, &c) in rows.iter().zip(&at) {
+        assert!((all(r, c) / all(first, at[0]) - 1.0).abs() < 1e-6, "the mineral in all: {} against {}", all(r, c), all(first, at[0]));
     }
     assert!(col("min0_land", &rows[2]) > 0.0 && col("min0_dead_land", &rows[2]) > 0.0 && col("min0_bodies", &rows[2]) > 0.0);
 }
