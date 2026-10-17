@@ -307,6 +307,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   that moves rows of amounts by the shares a rule gives each link, with exact per-link fluxes and no cell below zero.
   On bare test terrain with rain it ends one liquid step as `flow::liquid`'s sweep does to rounding
   (`core/tests/solve.rs`); not yet used by a law (D2).
+- B4 measured, not built: the amount arrays `ground`, `bed`, `deep` and `air` (208 B per node each) are about 5% of a
+  world with life (128 x 128, year 4: 10 of 186 MB; 64 x 64, year 30: 2.6 of 54 MB, where born brain rows are 63%
+  and bodies 23%). Loose ground fills as life spreads (zeros 30% at year 4, 9% at year 30); bed (82% zeros) and deep
+  (65%) would gain, about 40 MB of 1.5 to 1.7 GB at 512 x 256 (3%). Flow already loops only over the substances
+  present (`Scratch::loose`, `bedk`, `gas`). Kept dense until the amounts, not brains and bodies, bound the memory.
 
 **Owner's decisions after Phase A**
 
