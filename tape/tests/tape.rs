@@ -60,7 +60,7 @@ fn snapshot_round_trip_mid_cycle() {
     let (mut a, mut whole) = (world(), world());
     for w in [&mut a, &mut whole] {
         worldgen::life::seed(w, 0);
-        worldgen::life::seed(w, 1);
+        worldgen::life::seed_with(w, 1, &worldgen::life::Seeding::neutral());
     }
     run(&mut a, 17);
     tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
@@ -150,7 +150,7 @@ fn yearly_series_has_the_measures_per_starting_kind() {
     let dir = tmp("per_kind");
     let mut w = world();
     worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let mut rec = tape::Recorder::new(&w, 0, 0);
     rec.record_month(&mut w);
     for _ in 0..3 * w.cfg.months_per_year {
@@ -303,7 +303,7 @@ fn null_run_freezes_the_brain_rows() {
         let mut w = world();
         w.cfg.null = null;
         worldgen::life::seed(&mut w, 0);
-        worldgen::life::seed(&mut w, 1);
+        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();
         let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();
         run(&mut w, 24);

@@ -49,8 +49,8 @@ fn founder_id(which: usize, i: usize, k: usize) -> u64 {
 /// for everything.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Seeding {
-    /// Hand-set brain biases, per kind (light-eaters, animals). The default sets the animals' (neutral animal founders
-    /// nearly all die in their first year, a lottery) and not the light-eaters'.
+    /// Hand-set brain biases, per kind (light-eaters, animals). The default, what `ew run` uses, sets the animals'
+    /// (neutral animal founders nearly all die in their first year, a lottery) and not the light-eaters'.
     pub hand: [bool; 2],
     /// Rounds of mutation given to every body placed (0: all bodies of a kind are the same)
     pub rounds: u32,
@@ -67,15 +67,20 @@ impl Seeding {
     pub fn old() -> Self {
         Seeding { hand: [true; 2], rounds: 0, fixers: 0.0, ..Default::default() }
     }
+
+    /// Neutral brains for the animals too (for tests that start every kind from no behaviour).
+    pub fn neutral() -> Self {
+        Seeding { hand: [false; 2], ..Default::default() }
+    }
 }
 
 impl Default for Seeding {
     fn default() -> Self {
-        Seeding { hand: [false; 2], rounds: 20, size: 0.2, genes: 3.0, fixers: FIXERS }
+        Seeding { hand: [false, true], rounds: 20, size: 0.2, genes: 3.0, fixers: FIXERS }
     }
 }
 
-/// Place bodies of starting kind `which` (a row of `KINDS`) as `Seeding::default` does.
+/// Place bodies of starting kind `which` (a row of `KINDS`) as `ew run` does (`Seeding::default`).
 pub fn seed(w: &mut World, which: usize) -> String {
     seed_with(w, which, &Seeding::default())
 }

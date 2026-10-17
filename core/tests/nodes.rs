@@ -428,7 +428,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         let mut w = worldgen::new_world(1, 32, 32);
         pcore::step(&mut w);
         worldgen::life::seed(&mut w, 0);
-        worldgen::life::seed(&mut w, 1);
+        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         (w.cfg.nodes, w.cfg.phys.c_copy) = (nodes, 0.0);
         let s = live(&w).into_iter().find(|&s| !pcore::body::light_eater(&w.chem, &w.life.bodies[s].genes)).expect("an animal");
         // A node of its own kind beside it, in its cell; its children stay in their cell.

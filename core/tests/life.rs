@@ -23,7 +23,7 @@ fn bodies_keep_elements_and_energy() {
         pcore::step(&mut w);
     }
     worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     for _ in 0..12 {
         pcore::step(&mut w);
     }
@@ -42,7 +42,7 @@ fn same_seed_same_history_with_shared_brains() {
         let mut w = worldgen::new_world(1, 32, 32);
         pcore::step(&mut w);
         worldgen::life::seed(&mut w, 0);
-        worldgen::life::seed(&mut w, 1);
+        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         for _ in 0..30 {
             pcore::step(&mut w);
         }
@@ -110,7 +110,7 @@ fn own_brains_keep_one_body_per_group() {
     w.cfg.share_brains = false;
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let first = w.life.alive().count();
     for _ in 0..30 {
         pcore::step(&mut w);
@@ -173,7 +173,7 @@ fn crowded_individuals_merge_into_a_node() {
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
     let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
     let placed = w.cfg.crowd + 4;
@@ -201,7 +201,7 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed(&mut w, 1);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let a = w.life.alive().find(|b| b.count == 1.0).expect("an individual");
     let (i, lineage, genome) = (a.cell as usize, a.lineage, a.genome);
     for x in 0..3 * w.cfg.crowd {
