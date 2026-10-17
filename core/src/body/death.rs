@@ -62,7 +62,7 @@ const TORN_TO_DEATH: f64 = 0.5;
 
 /// A hit tears the share `f` of body `b`, taken out of `slot` (`tear`). It dies if less than one member is left, or, as an
 /// individual, if it is left `TORN_TO_DEATH` of its body (`built0` before the hit) or less, or a store below its safe
-/// minimum; else it lives on, hurt (`hurt`), back in its slot. True if it lives.
+/// minimum; else it lives on, smaller, back in its slot. True if it lives.
 #[allow(clippy::too_many_arguments)]
 pub fn wound(w: &mut World, slot: usize, mut b: Body, f: f64, dead: &[f64], cause: u8, built0: f64, matter0: f64) -> bool {
     let torn = tear(w, &mut b, f, dead, cause, matter0);

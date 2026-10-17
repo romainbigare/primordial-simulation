@@ -29,9 +29,9 @@ pub const USAGE: &str = "usage:
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --flow-days N         days between moves of liquid and creep (15; a multiple of the air's)
+    --flow-days N         days between moves of liquid and creep (15; a multiple of the physics step's, 3)
     --air-days N          days between moves of the air (3; a multiple of the physics step's, 3)
-    --exchange-days N     days between evaporation and condensation (3; a multiple of the air's)
+    --exchange-days N     days between evaporation and condensation (3; a multiple of the physics step's, 3)
     --regrow X            Config::regrow
     --crowd N             Config::crowd
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
