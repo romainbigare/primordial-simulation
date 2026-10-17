@@ -14,7 +14,7 @@ The other documents:
 - `docs/tape.md`: what a run records.
 - `docs/history.md`: what changed in M0 to M3, what was tried and not kept, and where old files are in git.
 - `docs/reports/`: the watch reports (Section 12.4).
-- `docs/foundation/plan.md`: the foundation work before M4 (the owner's choice at the M3 check point, 13.1). Its decisions are in its Section 3; the code budget (D2) is still open. Where it and this document differ, this document wins until it is updated.
+- `docs/foundation/plan.md`: the foundation work before M4 (the owner's choice at the M3 check point, 13.1). Its decisions are in its Section 3. Its first rule: the foundation replaces the special code, it is not one more patch. Where it and this document differ, this document wins until it is updated.
 
 ---
 
@@ -970,14 +970,17 @@ All of these must be true:
 
 | Part | Budget |
 |---|---|
-| `core` (five laws, state, random numbers) | ≤ 5,000 lines through M3; ≤ 8,000 lines through M7 |
+| `core` (five laws, state, random numbers) | ≤ 8,000 lines of code through M7, not counting comments and blank lines (the owner's decision, 17 October 2026) |
 | `worldgen` | ≤ 3,000 lines |
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
 
 **Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET` (**62** at the end of M3), or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
 
-**Code size at the end of M3:** `core` is about 8,900 lines (`cat core/src/*.rs core/src/flow/*.rs | wc -l`), over its goal of 8,000 through M7; the owner knows.
+**Code size at the end of M3:** `core` is 9,962 lines on `43efbc5`: 7,236 of code, 2,142 of comments, 584 blank. A
+comment line starts with `//` after its spaces. Comments are not counted, so do not delete them to save lines. The
+foundation work keeps `core` at or under 8,000 code lines by replacing special code with general pieces, not by adding
+to it (`docs/foundation/plan.md`, "The main rule" and "The line budget"); a test will count the lines (its task A6).
 
 If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
 

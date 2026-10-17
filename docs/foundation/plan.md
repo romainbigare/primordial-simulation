@@ -2,8 +2,7 @@
 
 **Written:** 17 October 2026, from a review of the whole project with the owner.
 **Starts from:** branch `claude/sanitise-m0-m3` at `43efbc5` (the M3 clean-up). `main` was still at `154554a`.
-**Status:** approved by the owner on 17 October 2026 (decisions D1 and D3 to D8 taken, Section 3). **D2, the code
-budget, is still open**: do not start work that depends on it (Phases B to L) until it is decided. Where this file and
+**Status:** approved by the owner on 17 October 2026. All decisions are taken (Section 3). Where this file and
 `docs/handover.md` differ, the handover wins until it is updated.
 
 This file is for the agents who will do the work, and for the owner. It is written in simple English (handover 0,
@@ -11,9 +10,88 @@ This file is for the agents who will do the work, and for the owner. It is writt
 
 ---
 
+## The main rule: the foundation REPLACES the code, it is not one more patch
+
+**Read this before anything else. It is the owner's first wish for this work.**
+
+During M0 to M3 every review added one more special piece of code: one for how a body loses heat, one for how it
+breathes, one for rain on a leaf, one for roots, one for the chemistry's own timer, one for merging groups, one for worn
+lanes. Each piece was right, but together they are a pile of small rules. **The foundation exists to replace that pile
+with a few general pieces.** It must not sit on top of the old code as one more layer.
+
+The idea in one sentence: **a body, a patch, a wall, an air layer are all just nodes; everything that passes between
+them goes along links; a gene or a material only says how easily a link passes.** Then Flow moves heat, gas, liquid and
+light between a body and its cell exactly as it moves them between two cells. Many separate pieces of code each become
+**one line**: the conductance of a link.
+
+### What today's special code becomes
+
+| Today: a special piece of code | Where it is now | In the foundation: one general thing |
+|---|---|---|
+| How a body loses heat: coat, skin, still air and radiation as a network of its own | `body/exchange.rs` (`surface`, `film`, `conductance_to_ground`, `radiated`), `body/physics.rs` (`relax_heat`) | Heat links from the body node to its cell's air and ground nodes. Their conductance comes from the `HEAT` gene, the size and the wind. Flow's `spread` moves the heat. |
+| How a body breathes gas through its pores, and how the pores close when it dries | `body/physics.rs` (`gas_pool`, `settle_gas`), `body/exchange.rs` (`breath`, `closing`, `through`) | A gas link from the body to its air node. Conductance = `GAS` gene × open area × how wet the body is. |
+| Evaporation, and cooling by evaporating (`COOL_T`) | `body/physics.rs` (`evaporate`) | The same gas link. Vapour moves by vapour pressure, as it does from the ground. |
+| Rain caught by a body | `body/physics.rs` (`rain_caught`) | A move from the cell's rain to the body, by its share of the capture area (as light is shared). |
+| Soaking liquid from the ground, and roots taking salts | `body/physics.rs` (`soil`, `soak`, `roots`) | A liquid link from the body to its cell's pore liquid. Conductance = `LIQ` gene × reach. Dissolved salts ride along, as they do between cells. |
+| Light caught and stored, and the pools that hold light and heat for bodies between their updates | `body/physics.rs` (`catch_light`, `store_light`), `survey.rs` (`hold_heat`), `World::light_pool`, `heat_pool`, `light_keep`, `heat_keep` | Moves from the sun node through the cell's shade, made as the light falls. A body takes part in Flow's steps, so no pool and no catch-up are needed. |
+| The walls of a shelter keep a body warm | `bond/` (enclosure conductance, `walls_around`) | Links that pass heat badly. Nothing else. |
+| The chemistry's own lazy timer: which nodes react now | `change/screen.rs` | The clock's one sleep and wake. |
+| The bodies' own ring of updates due | `life.rs` (`RING`, `due`) | The clock. |
+| Merging, splitting and opening population nodes | `nodes.rs` (`merge`, `join`, `take_in`, `split`, `one`, `open`) | The store's one `split` and `join`. |
+| Ground cleared along edges | `lanes.rs`, `World::pass` | The memory of a link. |
+| Heat moving sideways between cells once a year | `flow/creep.rs` | `spread` on links, every step. |
+| Pore liquid between cells (Darcy's law) | `flow/liquid.rs` (`pore_flow`), `flow/drain.rs` | `spread` on links; the deep store is a node in the cell's stack. |
+| The surface liquid's sorted sweep, and erosion sampled every 7 months | `flow/liquid.rs`, `WORK_MONTHS` | The `downhill` tree, every step. |
+| Taking heat from a node with a guard in each place | `ground.rs` (`draw`, `take_paid`, `take_heat`) | `apply`, with one guard at zero for every move. |
+| Caches the laws keep between steps | `flow/scratch.rs` (most of it) | The mesh and the store hold what is needed. |
+
+This table is the plan's promise. Each row is a task (Section 7). When the task is done, **the special code on the left
+is deleted in the same change.**
+
+### How to work by the main rule
+
+1. **Before you write code, find the special code your task replaces.** Delete it in the same branch. A task that adds
+   the general piece and leaves the old one is not done.
+2. **A law says *what*, the base does *how*.** A law gives a conductance, a capacity, a rate, a share. The loops, the
+   time steps, the solving and the books live in `space/`, `store/`, `clock/` and `solve/`, once.
+3. **No special path by node class inside a law.** If you write `if` on whether a node is a body, a patch, a part or a
+   cell, stop. Ask which link or conductance says the same thing. Only where the physics really differs is a class
+   test allowed, with a one-line comment saying why.
+4. **No new pool, cache or catch-up for timing.** The clock and the moves handle time.
+5. **Two functions of the same shape become one.** A new function with a single caller, shaped like an existing
+   one, is merged into it.
+6. **If the general way does not fit, do not add a special one.** Stop and tell the owner, with the case.
+7. **Every commit message ends with its line count:** `Lines: +X -Y (core code N)`.
+
+### The line budget (decision D2)
+
+- **`core` may hold at most 8,000 lines of code, not counting comments and blank lines** (handover 14.3). A comment is a
+  line that starts with `//` after its spaces. Comments help the next agent: do not delete them to save lines.
+- On `43efbc5` `core` holds 9,962 lines: **7,236 of code**, 2,142 of comments, 584 blank.
+- The new base gets a fixed allowance of code lines. It must not grow past it without the owner's agreement:
+
+| New part | Allowance (code lines) |
+|---|---|
+| `space/` (meshes, levels, stacks, zoom) | 500 |
+| `store/` (nodes, amounts, moves, links, split and join) | 700 |
+| `clock/` (processes, sleep and wake) | 250 |
+| `solve/` (`spread`, `downhill`, `lines`) | 350 |
+| `zone/` | 400 |
+| `query/` | 150 |
+| **Total** | **2,350** |
+
+- So the old code must lose **at least about 1,600 code lines**. Rough targets: Phase D at least 600, Phase E at least
+  600, Phases F to K at least 400 together.
+- A test (task A6) counts the code lines and fails above the ceiling: **9,500 until the end of Phase D** (the new base
+  is built while the old code is still there to compare against), **8,000 from the end of Phase E on.**
+- If a phase cannot keep its ceiling, it stops and simplifies before the next phase starts.
+
+---
+
 ## 0. How to use this plan (agents, read this first)
 
-1. Read, in this order: `docs/handover.md` (Sections 0 to 3, 5, 7, 8, 12, 14), this file, then `docs/laws.md`.
+1. Read, in this order: **the main rule above**, `docs/handover.md` (Sections 0 to 3, 5, 7, 8, 12, 14), the rest of
+   this file, then `docs/laws.md`. Every task's "done when" includes deleting the special code it replaces.
 2. Every task has an **ID** (for example `B5`), a **check level** (Section 6.1), the files it touches and a
    "done when". Do one task per branch: `claude/foundation-<id>` (for example `claude/foundation-b5`).
 3. **The old island must run at the end of every task.** `cargo test --release --workspace` passes, and the golden
@@ -68,12 +146,12 @@ good. The base they run on holds them back.
 
 ## 3. The owner's decisions
 
-Decided on 17 October 2026, except D2.
+All decided on 17 October 2026.
 
 | # | Decision | Status |
 |---|---|---|
 | D1 | The M3 check point choice (handover 13.1) | **Decided:** a foundation phase (this plan), then M4. Written in handover 13.1. |
-| D2 | The `core` code budget (handover 14.3: 8,000 lines through M7) | **Open.** Today `core` is 9,962 lines: 7,236 of code, 2,142 of comments, 584 blank (on `43efbc5`). The owner wants no growth by patches and small rules. The choice is between counting only code lines, and a plan in which the general base replaces the special code instead of sitting on top of it. Do not start Phases B to L before it is decided. |
+| D2 | The `core` code budget (handover 14.3) | **Decided:** at most 8,000 lines of code in `core`, not counting comments and blank lines. The foundation replaces the special code, it does not sit on top of it (see "The main rule" at the top). The new base has fixed allowances; a test keeps the ceiling (A6). |
 | D3 | The cell shape for the planet and for zoom | **Decided:** squares on a cube-shaped ball (see 5.5). They nest exactly, so zoom keeps exact books, and today's square laws carry over. |
 | D4 | Speed settings (when a zone opens, when a node sleeps, when a patch splits, how many nodes a cell keeps) | **Decided:** a new table "speed settings" in `docs/numbers.md`, outside the tuned budget. Each must pass an equivalence test (6.4): changing it 2× must not change the key numbers beyond their noise. |
 | D5 | Old snapshots | **Decided:** no backwards compatibility; snapshots carry a format version (`tape/src/snapshot.rs`). |
@@ -345,7 +423,8 @@ A speed tool must not make the world. Each one gets a test that runs a small wor
 ### 6.5 Speed
 
 The benchmark `speed` (`tape/tests/golden.rs`) and the CLI's per-stage times are recorded at the end of each phase,
-on the same machine, in the phase report. Goals for the end of this plan, against A1:
+on the same machine, in the phase report. So are the code lines of `core` (A6), per folder, with what the phase
+added and deleted. Goals for the end of this plan, against A1:
 - the island without life: flow and change at least **3 times** faster;
 - the island with life: at least **10 times** faster per year, at the same body count.
 
@@ -363,7 +442,8 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | A2 | The reference runs (6.2) | `docs/reports/foundation-a/` | — | Saved, with pictures |
 | A3 | The key-number test (6.3) | `tape/tests/ranges.rs` | — | It passes on today's code and runs in CI |
 | A4 | Check two possible bugs: (a) plant members die "taken" in years 3 to 5 of a normal run, before any animal exists (light-eaters may take from each other); (b) the rain picture shows stripes on the 4 × 4 air grid | — | — | Each is explained or fixed (a fix is its own branch) |
-| A5 | The owner's decisions of Section 3 written in the handover (D1 done on 17 October 2026; D2 when it is decided) | `docs/handover.md` 13.1 and 14.3 | — | Written in the handover |
+| A5 | The owner's decisions of Section 3 written in the handover | `docs/handover.md` 13.1 and 14.3 | — | Done on 17 October 2026 |
+| A6 | **The code-size test:** counts the code lines of `core/src` (not blank, not starting with `//`), prints them per folder, and fails above the ceiling of the line budget (9,500 until the end of Phase D, 8,000 after Phase E). It replaces the `wc -l` count of handover 14.3. | `cli/tests/core_size.rs` (beside `word_ban.rs`) | — | It passes on today's code (7,236) and runs in CI |
 
 ### Phase B: the base layers (about 45 days)
 
@@ -378,6 +458,9 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | B7 | **CLOCK:** time in seconds; processes with periods; the month of `schedule.rs` rebuilt on it in the same order | `core/src/clock/`, `schedule.rs` | 1 | Golden fingerprints unchanged; `World::day` and `season` derived from the seconds |
 | B8 | One sleep and wake for nodes: an alarm time, and a wake when a move into a node is above a share of what it holds | `core/src/clock/sleep.rs` | — (used in D6 and E5) | Tests: a calm node sleeps; a move wakes it; a sleeping node's catch-up equals an awake node's steps within the solver's tolerance |
 | B9 | Random numbers keyed by `NodeId` and seconds for new draws; old draws keep their keys until their task changes them | `rng.rs` | 1 | No two purposes share a stream (as today) |
+
+**Deleted in or by the end of this phase:** the `Ledger`'s own fields (now the boundary nodes' totals). `grid.rs`
+stays only as a thin view until D9 removes it.
 
 ### Phase C: the shared maths (about 25 days)
 
@@ -398,10 +481,15 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | D4 | Radiation reads the mesh (latitude per cell) | `flow/air/radiation.rs` | 1 | Fingerprints unchanged |
 | D5 | Erosion on every liquid step, along `downhill` (no `WORK_MONTHS` sample) | `flow/liquid.rs`, `flow/mod.rs` | 3 | The land wears 0.01 to 0.07 mm a year (test `an_island_loses_ground_at_a_real_rate`) |
 | D6 | Change: `change/screen.rs` replaced by the clock's sleep and wake | `change/` | 3 | Ranges hold; the sleep-against-no-sleep test passes; carbon, nitrogen and lime as before |
-| D7 | Bond: parts are store nodes; bonds are links with a strength | `bond/` | 2 | Bond tests pass |
+| D7 | Bond: parts are store nodes; bonds are links with a strength; **walls are links that pass heat, light and rain badly** (the enclosure conductance and `walls_around` become link conductances) | `bond/` | 3 | Bond tests pass, including `walls keep a body warm` |
 | D8 | `World::pass` and `lanes.rs` become the first link field | `lanes.rs`, `world.rs` | 1 | Fingerprints unchanged |
 | D9 | Every law moves through the store: no law writes the arrays directly (the grep test of 5.2); `Grid` removed from the laws | all laws | 2 | The contract test passes |
 | — | **Phase check:** the island without life, against A2 | | 3 | Ranges hold; flow and change at least 2 times faster |
+
+**Deleted in this phase (at least 600 code lines):** `change/screen.rs`; most of `flow/scratch.rs`; the heat part of
+`flow/creep.rs`; the sorted sweep, `pore_flow` and the sampled work (`WORK_MONTHS`) of `flow/liquid.rs`; most of
+`flow/drain.rs`; `ground.rs`'s `draw`, `take_paid` and `take_heat` guards; `grid.rs`; the enclosure heat code of
+`bond/`.
 
 ### Phase E: the life engine (about 50 days)
 
@@ -413,8 +501,15 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | E4 | The brains of one group run as one block of maths | `brain.rs`, `choose/` | 1 if the order of sums is kept, else 2 | Same choices; faster |
 | E5 | Calm bodies sleep through the clock (instead of the due ring) | `life.rs`, `survey.rs` | 3 | The sleep-against-no-sleep test passes |
 | E6 | Bodies on threads by chunks in colour passes | `par.rs`, `survey.rs` | 1 between threads and none | Fingerprints equal with and without threads |
-| E7 | What bodies take from and give to the ground, the light pool and the heat pool go through moves | `body/`, `survey.rs`, `world.rs` | 2 | Books exact with life |
-| — | **Phase check:** the island with life, against A2 | | 3 | Ranges hold; bodies at least 5 times faster per update |
+| E7 | What bodies take from and give to the ground goes through moves | `body/`, `choose/feed.rs` | 2 | Books exact with life |
+| E8 | **A body is a node with links to its cell** (the main rule's table): heat links to the air and ground nodes (conductance from `HEAT`, size and wind), a gas link to the air node (`GAS` × open area × wetness: breathing, evaporating, cooling), a liquid link to the pore liquid (`LIQ` × reach: soaking, roots, salts), rain and light as moves by share. Bodies take part in Flow's steps through these links, so the pools and catch-ups go. The physics stays the same (D6); only the code that moves things changes. | `body/physics.rs`, `body/exchange.rs`, `survey.rs`, `world.rs`, `flow/` | 3 | Ranges hold; the heat-balance, pores, dormancy and frost tests pass; books exact |
+| — | **Phase check:** the island with life, against A2 | | 3 | Ranges hold; bodies at least 5 times faster per update; **core at or under 8,000 code lines** |
+
+**Deleted in this phase (at least 600 code lines):** in `body/physics.rs` `rain_caught`, `gas_pool`, `settle_gas`,
+`soil`, `evaporate`, `soak`, `roots`, `relax_heat`, `catch_light` and `store_light` (what is left there is the
+conductance of each link); in `body/exchange.rs` the moving code (`surface`, `film`, `breath`, `closing`, `through`,
+`conductance_to_ground`, `radiated`), keeping only the formulas that give a conductance; `survey.rs`'s `hold_heat`;
+`World::light_pool`, `heat_pool`, `light_keep`, `heat_keep` and `PerSlot`; the due ring of `life.rs`.
 
 ### Phase F: split, join, population nodes and patches (about 45 days)
 
@@ -427,6 +522,10 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | F5 | Age classes inside nodes beyond young and adult, if F7 shows they matter | `nodes.rs` | 3 | Measured, kept or dropped with a reason |
 | F6 | **Patches:** a cell's ground splits into 2 to 4 patch nodes when its surface differs a lot (cover, liquid, what was burnt), and joins back when they are alike; Flow and bodies treat patches as nodes | `store/`, `flow/land.rs`, `survey.rs` | 3 | A test cell holds two kinds of ground; ranges hold |
 | F7 | **The nodes-against-individuals check** (handover 7.1, as written there), as a slow test and a report | `tape/tests/`, report | — | The modes agree by the handover's three rules, or the difference is found and fixed |
+
+**Deleted in this phase:** the merge, join, take-in, split, one and open code of `nodes.rs` (each becomes a call to
+the store's `split` or `join` with its shares); the unlike-merge safeguard of `nodes::crowd`. Patches use `split` and
+`join`, with no code of their own for creating or merging.
 
 ### Phase G: new shapes and zoom (about 40 days)
 
@@ -447,6 +546,9 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | H2 | Use raises an ease: liquid's lost power wears a channel on the link; movers' pushing clears a lane (today's `lanes::clear`); creep and regrowth lower them slowly | `flow/liquid.rs`, `lanes.rs` | 3 | A test: repeated use makes a lasting easy link, which fades without use |
 | H3 | Links through zoom: a split gives a link's memory to the child links along its border; a join takes their width-weighted mean | `store/split.rs` | 3 | A channel survives zoom out and in |
 
+**Deleted in this phase:** `lanes.rs` and `World::pass` (the link's memory does it). A channel, a lane and any later
+"easy link" are the same field rule, not separate code.
+
 ### Phase I: focus zones (about 45 days)
 
 | ID | What | Files | Level | Done when |
@@ -460,6 +562,9 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | I7 | Catching and escaping by speed and distance inside zones (instead of the chance from intervals in `choose/feed.rs`) | `choose/feed.rs` | — | Fast prey escapes slow takers in a test |
 | I8 | A computer-time budget: zones wait in a queue when the budget is full (a speed setting) | `zone/` | — | Speed stays inside the budget |
 | I9 | **The zone-against-no-zone test** | `tape/tests/` | 3 | Key numbers agree; what differs is reported |
+
+**Rule for this phase:** a zone is the same laws on finer nodes with a faster clock. It may not hold its own copy of a
+law. The only zone code is opening, closing and the border (within the `zone/` allowance of 400 code lines).
 
 ### Phase J: speed on the machine (about 30 days)
 
@@ -506,7 +611,7 @@ A ─► B ─► C ─► D ─► E ─► F ─► G ─► H ─► I ─►
 | B base layers | 45 |
 | C shared maths | 25 |
 | D physics laws | 45 |
-| E life engine | 50 |
+| E life engine (with bodies as nodes with links) | 60 |
 | F split, join, nodes, patches | 45 |
 | G shapes and zoom | 40 |
 | H links with memory | 20 |
@@ -514,7 +619,7 @@ A ─► B ─► C ─► D ─► E ─► F ─► G ─► H ─► I ─►
 | J machine speed | 30 |
 | K recording and viewer | 30 |
 | L final check | 15 |
-| **Total** | **about 400 days** |
+| **Total** | **about 410 days** |
 
 Work like this usually takes longer than planned. Report the real days in each phase report.
 
@@ -528,7 +633,8 @@ Work like this usually takes longer than planned. Report the real days in each p
 | Exact books across split, join and zoom | F1's random test is the gate: no later phase starts while it fails. |
 | The new engine gives a different world | Level-3 differences are allowed only when the report explains them. A range broken without a reason stops the phase. |
 | A speed tool makes the world (nodes, zones, sleep, zoom, patches) | Its equivalence test (6.4) is part of its "done when". |
-| Code size grows past D2's budget | Simplify before adding (handover 14.3). Report the size in each phase report. |
+| The new base becomes one more layer on top of the old code (the opposite of the main rule) | Each phase's "Deleted in this phase" list is part of its "done when". The code-size test (A6) fails above the ceiling. Each phase report gives the lines added and removed per folder. |
+| Code size grows past the budget (D2: 8,000 code lines) | Simplify before adding (handover 14.3). A new part past its allowance needs the owner's agreement. |
 | New tuned numbers creep in | The tuned budget test (`core/tests/numbers.rs`) stays; speed settings go in their own table (D4). |
 | Body physics changes sneak in | D6: bug fixes only, each its own branch. |
 
