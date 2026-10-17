@@ -1,10 +1,10 @@
 //! The lines a run prints: what it is, the liquid's start, one line every `--every` years, the rivers and the end.
 
-use crate::render::{RIVER_PNG, RIVER_WEB, STANDING_M};
+use crate::render::RIVER_PNG;
 use pcore::body::light_eater;
 use pcore::World;
 use std::time::Duration;
-use tape::Recorder;
+use tape::{Recorder, RIVER_WEB};
 use worldgen::life::Seeding;
 
 /// Which run this is: whether it is the real run or its null run (a resumed run keeps the snapshot's), its switches,
@@ -83,14 +83,10 @@ pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder)
 }
 
 /// Rivers as the viewers draw them (dry land cells with a liquid flux over each viewer's threshold), and the mean
-/// rain on land.
-pub fn rivers(w: &World) -> String {
-    let f = tape::fields(w);
-    let flux = |i: usize| w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
-    let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.is_land(i)).collect();
-    let dry: Vec<usize> = land.iter().copied().filter(|&i| f.depth[i] <= STANDING_M).collect();
-    let over = |t: f64| dry.iter().filter(|&&i| flux(i) > t).count();
-    let rain = land.iter().map(|&i| w.rain[i] as f64).sum::<f64>() / land.len().max(1) as f64;
-    let top = dry.iter().map(|&i| flux(i)).fold(0.0, f64::max);
-    format!("rivers: max flux {top:.3e} mol/s on land, dry land cells over {RIVER_WEB:.0e} (web) {}, over {RIVER_PNG:.0e} (png) {}, mean land rain {rain:.3e} mol/m2/s", over(RIVER_WEB), over(RIVER_PNG))
+/// rain on land (the series' `rain_land` of the last year).
+pub fn rivers(w: &World, rec: &Recorder) -> String {
+    let flux = tape::dry_land_flux(w, &tape::fields(w));
+    let over = |t: f64| flux.iter().filter(|&&q| q > t).count();
+    let top = flux.iter().copied().fold(0.0, f64::max);
+    format!("rivers: max flux {top:.3e} mol/s on land, dry land cells over {RIVER_WEB:.0e} (web) {}, over {RIVER_PNG:.0e} (png) {}, mean land rain {:.3e} mol/m2/s", over(RIVER_WEB), over(RIVER_PNG), rec.last("rain_land"))
 }

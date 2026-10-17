@@ -33,12 +33,13 @@ worn edges, structures, true colour (r, g, b).
 | `min<q>_land`, `min<q>_sea` | kg/m² | mineral q in the ground of land and of the sea floor |
 | `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_bodies`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea, in bodies, in the bed's stores |
 | `t_ground`, `t_air` | K | mean ground and air temperature |
-| `t_land_summer`, `t_land_winter` | K | the land's ground in its warmest and coldest month |
+| `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground: the mean of the year's months, the warmest month and the coldest |
 | `absorber` | | mean absorption of the heat-absorbing gases |
 | `air_<k>` | | mole fraction of heat-absorbing gas k in the air |
 | `ice_frac` | | share of cells under ice |
 | `liquid_land` | km³ | liquid on land |
-| `rain` | mol/m²/s | mean rain |
+| `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
+| `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) with a liquid flux over the web viewer's threshold (`tape::RIVER_WEB`) |
 | `bodies`, `plants` | | bodies (nodes and individuals), of them light-eaters |
 | `plant_members`, `animal_members`, `animal_nodes` | | members of light-eaters and of the others; nodes of the others |
 | `cover_median`, `cover_max` | kg/m² | light-eater mass on a land cell: median and largest |

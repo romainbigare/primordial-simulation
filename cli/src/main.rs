@@ -100,7 +100,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     let t = Instant::now();
     rec.finish(&out).expect("write tape");
     clock.tape += t.elapsed();
-    println!("{}", report::rivers(&w));
+    println!("{}", report::rivers(&w, &rec));
     let s = (busy + clock.stages.iter().sum::<Duration>() + clock.tape).as_secs_f64();
     println!("{years} years in {s:.2} s ({:.1} ms per year), hash {:016x}", s * 1000.0 / years.max(1) as f64, tape::fingerprint(&w));
 }

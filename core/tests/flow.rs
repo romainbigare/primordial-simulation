@@ -4,7 +4,7 @@
 use pcore::chem::Phase;
 use pcore::units::{DAY, T_FLOOR};
 use pcore::{body, brain, choose, lanes, World};
-use worldgen::testkit::{loose_volume as loose, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
+use worldgen::testkit::{ground_of, loose_volume as loose, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
 /// One step of radiation and the air.
 const DT: f64 = 3.0 * DAY;
@@ -464,21 +464,6 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     assert!(w.ground[LIQUID * n + i] < 0.99 * liquid0, "the liquid did not evaporate: {} of {liquid0}", w.ground[LIQUID * n + i]);
     assert_eq!(w.ground[DISSOLVED * n + i], mineral0);
     assert_eq!(w.air[DISSOLVED * na..(DISSOLVED + 1) * na].iter().sum::<f64>(), 0.0);
-}
-
-/// Thickness of rock-making solids (those that melt above 1000 K, but body matter, which chars before it melts) in the
-/// loose ground of cell `i` and the bed below it, m, and the mean softness (1 / (hardness + 0.05)) of the loose ones, by
-/// volume.
-fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
-    let (n, area) = (w.grid.n(), w.grid.area());
-    let (mut loose, mut bed, mut soft) = (0.0, 0.0, 0.0);
-    for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0 && Some(k) != w.chem.matter()) {
-        let v = w.chem.molar_volume(k, Phase::Solid);
-        loose += w.ground[k * n + i] * v / area;
-        bed += w.bed[k * n + i] * v / area;
-        soft += w.ground[k * n + i] * v / area / (w.chem.subs[k].hardness + 0.05);
-    }
-    (loose, bed, soft / loose.max(1e-300))
 }
 
 /// The diffusivity of the starting loose ground is the measured one: creep x softness x thickness = 3e-3 m²/yr

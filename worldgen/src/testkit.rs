@@ -1,6 +1,6 @@
 //! What the tests of the laws share (the `testkit` feature, turned on only by the crates' dev-dependencies): a small
-//! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked in the ledger, the books
-//! of a world, the books of one reacting node, sums of the day's events, and the substances of chemistry 0 by number.
+//! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked in the ledger, the rock
+//! of a cell, the books of a world, the books of one reacting node, sums of the day's events, and the substances of chemistry 0 by number.
 
 use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
 use pcore::bond;
@@ -198,6 +198,21 @@ pub fn in_all(w: &World, k: usize) -> f64 {
 pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
     let n = w.grid.n();
     (0..w.chem.ns()).filter(|&k| k != MATTER).map(|k| w.chem.subs[k].elems[5] as f64 * w.ground[k * n + i]).sum()
+}
+
+/// Thickness of rock-making solids (those that melt above 1000 K, but body matter, which chars before it melts) in the
+/// loose ground of cell `i` and the bed below it, m, and the mean softness (1 / (hardness + 0.05)) of the loose ones, by
+/// volume.
+pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
+    let (n, area) = (w.grid.n(), w.grid.area());
+    let (mut loose, mut bed, mut soft) = (0.0, 0.0, 0.0);
+    for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0 && Some(k) != w.chem.matter()) {
+        let v = w.chem.molar_volume(k, Phase::Solid);
+        loose += w.ground[k * n + i] * v / area;
+        bed += w.bed[k * n + i] * v / area;
+        soft += w.ground[k * n + i] * v / area / (w.chem.subs[k].hardness + 0.05);
+    }
+    (loose, bed, soft / loose.max(1e-300))
 }
 
 /// The ground of cell `i` brought to `t` K (booked as an edit).

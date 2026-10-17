@@ -1,17 +1,12 @@
 //! Quick PNG pictures of a world: map, temperature, rain and life side by side.
 
 use pcore::World;
-use tape::{fields, Fields};
+use tape::{fields, Fields, STANDING_M};
 
 type Rgb = [u8; 3];
 
-/// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.
-pub const STANDING_M: f64 = 1.0;
-/// Liquid flux over which a dry land cell is a river in these pictures, mol/s.
+/// Liquid flux over which a dry land cell is a river in these pictures, mol/s (the web viewer's is `tape::RIVER_WEB`).
 pub const RIVER_PNG: f64 = 3.0e4;
-/// The same for the web viewer: web/src/earth.ts fades a river in over log10 flux 3.6 to 4.3, half at about this
-/// (keep the two in step).
-pub const RIVER_WEB: f64 = 9.0e3;
 /// Ice thicker than this covers the map, m.
 const ICE_M: f64 = 0.05;
 /// Pixels per cell, the panels side by side and the gap between them.

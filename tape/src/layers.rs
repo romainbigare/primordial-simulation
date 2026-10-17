@@ -67,6 +67,18 @@ pub fn fields(w: &World) -> Fields {
     f
 }
 
+/// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.
+pub const STANDING_M: f64 = 1.0;
+/// Liquid flux over which a dry land cell is a river in the web viewer, mol/s: web/src/earth.ts fades a river in over
+/// log10 flux 3.6 to 4.3, half at about this (keep the two in step).
+pub const RIVER_WEB: f64 = 9.0e3;
+
+/// The liquid flux of each dry land cell (land under no more than `STANDING_M` of liquid), mol/s: where a river may be.
+pub fn dry_land_flux(w: &World, f: &Fields) -> Vec<f64> {
+    let dry = (0..w.grid.n()).filter(|&i| w.is_land(i) && f.depth[i] <= STANDING_M);
+    dry.map(|i| w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64).collect()
+}
+
 /// Everything a layer, and a row of the series, may read.
 pub(crate) struct Ctx<'a> {
     pub w: &'a World,

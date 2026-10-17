@@ -2,7 +2,7 @@
 //! deaths, dead matter, the heat-absorbing gases and the catalysts life carries.
 
 use super::{Row, GIGA};
-use crate::layers::{Ctx, COVER_MIN};
+use crate::layers::{dry_land_flux, Ctx, COVER_MIN, RIVER_WEB};
 use crate::rec::{Recorder, CAUSES};
 use pcore::World;
 
@@ -24,8 +24,9 @@ impl Recorder {
         row.push("energy", "J", tot.thermal + tot.chemical);
         row.push("t_ground", "K", mean(&c.f.t));
         row.push("t_air", "K", mean(&c.t_air));
-        // The land's ground temperature in the warmest and the coldest month of the year.
+        // The land's ground temperature: the mean of the year's months, the warmest month and the coldest.
         let t_land = &self.year.t_land;
+        row.push("t_land", "K", mean(t_land));
         row.push("t_land_summer", "K", t_land.iter().copied().fold(f64::NAN, f64::max));
         row.push("t_land_winter", "K", t_land.iter().copied().fold(f64::NAN, f64::min));
         // The mole fraction in the air of each heat-absorbing gas (`absorber` is their total absorption, so the
@@ -38,6 +39,9 @@ impl Recorder {
         row.push("ice_frac", "1", c.f.ice.iter().filter(|&&v| v >= COVER_MIN).count() as f64 / n);
         row.push("liquid_land", "km3", land.iter().map(|&i| c.f.depth[i]).sum::<f64>() * area / GIGA);
         row.push("rain", "mol/m2/s", w.rain.iter().map(|&v| v as f64).sum::<f64>() / n);
+        row.push("rain_land", "mol/m2/s", land.iter().map(|&i| w.rain[i] as f64).sum::<f64>() / land.len().max(1) as f64);
+        // Rivers as the web viewer draws them.
+        row.push("rivers", "1", dry_land_flux(w, &c.f).iter().filter(|&&q| q > RIVER_WEB).count() as f64);
         // Bodies (nodes and individuals) and light-eaters; members of light-eaters and of the others; nodes of the others.
         let (mut members, mut nodes) = ([0.0; 2], 0.0);
         for (s, b) in life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {

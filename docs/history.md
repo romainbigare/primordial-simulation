@@ -265,3 +265,6 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 - A6: the code-size test `cli/tests/core_size.rs` counts the code lines of `core/src` per folder and fails above
   9,500 (7,508 at its start); it replaces the `wc -l` command of handover 14.3.
+- A3: the key-number test `tape/tests/ranges.rs` runs seeds 1, 2 and 3 of `ew run --size 64` for 30 years and holds
+  ten numbers of climate, land and life near the A2 references; the series gains `t_land`, `rain_land` and `rivers`
+  (the river count moves from the CLI into `tape::dry_land_flux`), and the rock of a cell moves into the test kit.

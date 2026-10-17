@@ -110,7 +110,7 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
       const snow = iceI;
       mix(c, SNOW, snow); if (snow > 0.5) cls[i] = ICE;
       k = 0.8 + 0.3 * snow;
-      // A river fades in over log10 flux 3.6 to 4.3 (mol/s), half at about 9e3: cli/src/render.rs RIVER_WEB.
+      // A river fades in over log10 flux 3.6 to 4.3 (mol/s), half at about 9e3: tape/src/layers.rs RIVER_WEB.
       river = smooth(RIVER_LOG[0], RIVER_LOG[1], Math.log10(flux[i] + 1)) * (1 - 0.6 * snow);
     }
     const m = clamp(1 + (shade - 1) * k, 0.5, 1.45);
