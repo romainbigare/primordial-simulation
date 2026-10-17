@@ -139,7 +139,7 @@ fn recording() -> &'static Recording {
         w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let cells = |w: &World| {
-            let land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).count() as f64;
+            let land = (0..w.grid.n()).filter(|&i| w.is_land(i)).count() as f64;
             [land, w.grid.n() as f64 - land]
         };
         let mpy = w.cfg.months_per_year;

@@ -53,7 +53,7 @@ pub(super) struct YearTally {
     pub stand: Vec<f64>,
     pub months: f64,
     /// The land's mean ground temperature at each month end, K, and the land cells it is of (listed at the first
-    /// month of the year: solid surface above 0 m, as everywhere on the tape)
+    /// month of the year, `World::is_land`)
     pub t_land: Vec<f64>,
     pub land: Vec<u32>,
     /// Watch events, of them within a lineage; watcher groups per watched group

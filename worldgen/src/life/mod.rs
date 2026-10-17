@@ -19,7 +19,16 @@ pub use soil::soil;
 
 use pcore::body::Body;
 use pcore::chem::Chemistry;
-use pcore::Ledger;
+use pcore::{survey, Ledger, World};
+
+/// Land under more standing liquid than this, m, gets no soil and no founder (a basin of standing liquid).
+const MAX_STANDING_M: f64 = 0.5;
+
+/// Whether life starts on cell `i`: land (`World::is_land`) under no more than `MAX_STANDING_M` of standing liquid (what
+/// the pores of the ground do not hold, `survey::env_of`).
+fn open_land(w: &World, i: usize) -> bool {
+    w.is_land(i) && survey::env_of(w, i)[1] <= MAX_STANDING_M
+}
 
 /// Book new matter like an edit: `amount` mol of substance `k` with `heat` J of heat (its formation enthalpy is
 /// added).

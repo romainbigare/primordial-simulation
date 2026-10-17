@@ -90,7 +90,7 @@ impl Recorder {
         s.last = last;
         // The land's mean ground temperature this month (the land is listed again each year).
         if y.t_land.is_empty() {
-            y.land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).map(|i| i as u32).collect();
+            y.land = (0..w.grid.n()).filter(|&i| w.is_land(i)).map(|i| i as u32).collect();
         }
         y.t_land.push(y.land.iter().map(|&i| w.thaw(i as usize).0).sum::<f64>() / y.land.len().max(1) as f64);
         let dpm = w.cfg.days_per_month as u64;

@@ -2,6 +2,7 @@
 //! light-eaters, and the line that reports it.
 
 use super::kinds::{light, Kind, KINDS};
+use super::open_land;
 use super::make::{make_with, split, KEEP_LIQUID};
 use pcore::body::{self, Body, Layout};
 use pcore::lineage::Lineage;
@@ -19,8 +20,6 @@ pub const FIXERS: f64 = 0.1;
 /// matter over in about half a year (3 x 10^-9 mol of the mineral a kg and second), and the gene is set as the light
 /// reaction's was, the speed a body needs over the speed of the bare reaction.
 pub const FIX_GENE: f32 = 9.8;
-/// Cells under more liquid than this, m, get no founder (a basin of standing liquid).
-pub(super) const MAX_STANDING_M: f64 = 0.5;
 /// Size of the random weights of a founder lineage's brain.
 const BRAIN_NOISE: f32 = 0.1;
 /// A founder's id (the key of its random streams): 1 + its kind above `KIND_BIT`, its cell above `CELL_BIT`, its
@@ -124,8 +123,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let take = shape.verb(0) * shape.r() + shape.h;
     let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, fixers: 0, cat: [(f32::MAX, f32::MIN); 2], copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
     for i in 0..w.grid.n() {
-        let [_, depth, z] = w.life.env[i];
-        if z <= 0.0 || depth > MAX_STANDING_M || r.f64() >= kind.chance || (!kind.anywhere && w.life.at[i].is_empty()) {
+        if !open_land(w, i) || r.f64() >= kind.chance || (!kind.anywhere && w.life.at[i].is_empty()) {
             continue;
         }
         for k in 0..kind.per {
