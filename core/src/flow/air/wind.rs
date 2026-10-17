@@ -249,7 +249,7 @@ fn sweep(w: &mut World, s: &mut Scratch, dt: f64, order: [usize; 2]) -> f64 {
 }
 
 /// Temperature, pressure (in `node_tmp`, Pa) and warmth at equal height of each air node, and the
-/// gradient of the warmth [east, south], K per node.
+/// gradient of the warmth [east, north], K per node.
 fn warmth(s: &mut Scratch, e_air: &[f64], aw: usize, ah: usize) {
     let na = aw * ah;
     for (j, &e) in e_air.iter().enumerate().take(na) {

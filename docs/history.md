@@ -263,11 +263,14 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 **Phase A: prepare**
 
-- A4 (b): the north–south stripes of the rain map came from the wind's lines solved last (north–south); the wind now
-  solves both orders from the same start and keeps the mean. 5 years without life, 64 x 64, seeds 1 to 3: land rain
-  +0.7 to +2.5 %, temperatures within 0.03 K; golden re-pinned.
 - A6: the code-size test `cli/tests/core_size.rs` counts the code lines of `core/src` per folder and fails above
   9,500 (7,508 at its start); it replaces the `wc -l` command of handover 14.3.
 - A3: the key-number test `tape/tests/ranges.rs` runs seeds 1, 2 and 3 of `ew run --size 64` for 30 years and holds
   ten numbers of climate, land and life near the A2 references; the series gains `t_land`, `rain_land` and `rivers`
   (the river count moves from the CLI into `tape::dry_land_flux`), and the rock of a cell moves into the test kit.
+- A4 (a): plant members die "taken" in years 3 to 21, before any animal: light-eater nodes take from each other
+  (their neutral brains draw the take action), and a bite that is more than one member kills members by the largest
+  share it takes of any store (the node rule the owner kept). Behaviour of the laws, not a bug; nothing changed.
+- A4 (b): the north–south stripes of the rain map came from the wind's lines solved last (north–south); the wind now
+  solves both orders from the same start and keeps the mean. 5 years without life, 64 x 64, seeds 1 to 3: land rain
+  +0.7 to +2.5 %, temperatures within 0.03 K; golden re-pinned.
