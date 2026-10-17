@@ -4,6 +4,12 @@
 //! A process runs every `period` seconds, counted from the start of each longer period that holds it (`Every`), so a
 //! fast process runs several times inside a slow one. A list of processes is their fixed order at one time: `due`
 //! gives the ones that run at a time in that order, and `next` the next time any of them runs.
+//!
+//! `sleep`: a calm node's own process sleeps until an alarm, or until a large move into the node wakes it.
+
+pub mod sleep;
+
+pub use sleep::Sleep;
 
 /// The lengths of a world's day, month and year, s.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

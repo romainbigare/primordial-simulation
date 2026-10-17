@@ -74,6 +74,8 @@ pub struct World {
     pub seed: u64,
     /// World clock, seconds since the start (`clock`)
     pub time: u64,
+    /// The alarms of the nodes' own processes, and when each was last brought up to date (`clock::Sleep`)
+    pub sleep: crate::clock::Sleep,
     /// Loose (unbonded) amounts in ground nodes, [k * n + i], mol
     pub ground: Vec<f64>,
     /// Bonded ground amounts, [k * n + i], mol

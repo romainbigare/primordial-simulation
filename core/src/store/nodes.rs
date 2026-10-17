@@ -44,6 +44,11 @@ pub enum Boundary {
 /// The number of boundary nodes.
 pub const BOUNDARIES: usize = 3;
 
+impl Class {
+    /// Every class, by its index (`class as usize`).
+    pub(crate) const ALL: [Class; CLASSES] = [Class::Ground, Class::Air, Class::Deep, Class::Boundary];
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Node {
     gen: u32,

@@ -9,11 +9,12 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 - **unit:** the unit of the number.
 - **fact:** the fact of matter or energy it is (a capacity, a cost, a conductance, a rate, a reference mass, a speed-tool setting...). A number that is not a fact of matter or energy is a setting, and the row says so.
 - **anchor:** the real-world size it is anchored to, with the source in a few words. "Run:" means the run or the reason it was set for. "None found" means no real size is known.
-- **mark:** one of three, plus two for things that are not numbers.
+- **mark:** one of three, plus three for things that are not numbers of the world.
   - **physical:** a measured size, used as measured.
   - **anchored:** a real order of magnitude, chosen within it.
   - **tuned:** set so a run came out a certain way. The row names the run or the reason. `tuned, first guess` is the same mark for a number with no real size and no recorded run: it was written by hand to get a sensible start. It counts as tuned. The first job of any of them is to find a size and become anchored.
   - **switch:** an on/off setting of an experiment, not a number of the world. **container:** a field that holds other rows.
+  - **speed:** a speed setting (decision D4 of `docs/foundation/plan.md`): it says when the model may save time, not how the world works. Speed settings are in their own table, outside the tuned budget, and each must pass the test that ×2 and ÷2 change no key number beyond its noise.
 
 **The M7 world search varies only tuned and anchored numbers, within their anchors, and never the physical ones.** Switches are not searched. For an anchored number "within its anchor" means within the real order named in its row (about a factor of 3 each way unless the row says more). For a tuned number it means around its value, by the factor its row suggests. Every run prints the numbers it used (`physics.json`).
 
@@ -55,6 +56,14 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `two_parents` | on/off | a mature body's children may have a second, alike parent (off, `--no-mix`: copies of one parent) | a setting: the check that nodes keep the mean of their genes without selection, and the measure of what mixing changes (handover 6.4) | switch |
 | `null` | on/off | a null run: no learning, no imitation, born rows and brain bases never change; genes still mutate | the run to compare a seed with | switch |
 | `phys` | (a `Physics`) | holds the numbers below | | container |
+
+## Speed settings
+
+Fields of `Config` that say when the model may save time (mark **speed**). The test that ×2 and ÷2 change no key number beyond its noise comes with the first law that uses each one.
+
+| name | unit | fact | anchor (source) | mark |
+|---|---|---|---|---|
+| `wake_share` | share | a move into a sleeping node that brings more than this share of what it holds of that amount, or of its heat, wakes it before its alarm (`clock::Sleep`, `store::apply`) | the share of its inputs a calm ground node's own reactions may use while it waits (`change`, `CALM`, 0.05): a move larger than that changes the node more than its sleep allowed | speed |
 
 ## Physics
 
@@ -231,7 +240,7 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 108 rows of `Config` and `Physics` are their 108 fields.
+The 109 rows of `Config` and `Physics` are their 109 fields.
 
 | mark | rows | which |
 |---|---|---|
@@ -240,6 +249,7 @@ The 108 rows of `Config` and `Physics` are their 108 fields.
 | tuned (run or reason named) | 18, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 4 | `share_brains`, `nodes`, `two_parents`, `null` |
+| speed | 1 | `wake_share` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 61 (54 in the structs, 7 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

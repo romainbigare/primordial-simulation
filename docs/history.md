@@ -296,6 +296,11 @@ The work of `docs/foundation/plan.md`, one line per task.
 - B9: `Rng::of_node(seed, seconds, NodeId, purpose)`, a second key beside `Rng::new(seed, day, index, purpose)`. It packs
   slot and generation into one number and tags the key, so it never gives the stream of `new` for the same inputs. No
   draw uses it yet; every old draw keeps its key (golden unchanged).
+- B8: `clock::Sleep` (`World::sleep`, saved): per class a queue of node alarms by time, then slot, and per node the
+  time it was last brought up to date; `store::apply` wakes a node when a change brings it more than `wake_share`
+  (a new speed setting, in the new table "Speed settings" of `docs/numbers.md`) of what it holds. Boundary nodes run no
+  process and never sleep. No law sleeps a node yet: `series.csv` and `months.csv` unchanged; snapshot version 7 and
+  golden re-pinned for the new fields.
 - C4: tests that one big step is close to many small steps for `solve::lines` and, for `solve::downhill`, that one
   rain in one pass equals the same rain in parts with a pass each (linear rule); tests only.
 - C3: the wind's tridiagonal solve moves from `flow/air/wind.rs` to `solve::lines::along_line`; results unchanged

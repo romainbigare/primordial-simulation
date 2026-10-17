@@ -16,7 +16,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 
 | Law or part | Files |
 |---|---|
-| time and the month's order | `clock/` (the calendar, processes with periods), `schedule.rs` (`step`, `step_marked`, `day`) |
+| time and the month's order | `clock/` (the calendar, processes with periods; `sleep`: the sleep and wake of nodes), `schedule.rs` (`step`, `step_marked`, `day`) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`) |
 | 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind`, `sky`); `lanes.rs` (paths) |
@@ -62,6 +62,11 @@ Inside Flow (`flow::step`): radiation every call. Each other part has its own pe
 when that period is over, for all the time since: evaporation and rain every `exchange_days`
 (3), wind every `air_days` (3), liquid and drainage every `flow_days` (15), the work of moving
 liquid every 7 months (`WORK_MONTHS`), creep once a year.
+
+**Sleep and wake** (`clock::Sleep`). A node's own process may sleep while the node is calm: until an
+alarm time, or until a change booked by `store::apply` brings the node more than `wake_share` (5%) of
+what it holds of an amount or of its heat. When it is due, its law brings it up to date for all the
+time since it last did, in one span. No law puts a node to sleep yet.
 
 **One ground temperature.** Every law and the tape read the ground temperature of Flow's last
 step (`World::t_ground_last`). Where Flow has not run yet, `flow::ensure` builds that state from

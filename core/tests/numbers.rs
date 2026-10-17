@@ -13,7 +13,10 @@ const TUNED_BUDGET: usize = 61;
 /// table "Rules chosen for a run" lists them, and it may not grow.
 const RULES_BUDGET: usize = 3;
 
-const MARKS: [&str; 5] = ["physical", "anchored", "tuned", "switch", "container"];
+const MARKS: [&str; 6] = ["physical", "anchored", "tuned", "switch", "container", "speed"];
+
+/// The headings whose tables have the rows of the fields.
+const FIELD_HEADINGS: [&str; 3] = ["Config", "Speed settings", "Physics"];
 
 /// A table row of the file: the "## " heading it is under and its cells.
 struct Row {
@@ -37,9 +40,9 @@ fn rows() -> Vec<Row> {
     out
 }
 
-/// The rows of the fields (under "## Config" and "## Physics"): name and mark.
+/// The rows of the fields (under the `FIELD_HEADINGS`): name and mark.
 fn field_rows() -> Vec<(String, String)> {
-    let rows = rows().into_iter().filter(|r| (r.heading == "Config" || r.heading == "Physics") && r.cells[0].starts_with('`'));
+    let rows = rows().into_iter().filter(|r| FIELD_HEADINGS.contains(&r.heading.as_str()) && r.cells[0].starts_with('`'));
     rows.map(|r| {
         assert!(r.cells.len() == 5, "a row has five cells (name, unit, fact, anchor, mark): {:?}", r.cells);
         (r.cells[0].trim_matches('`').to_string(), r.cells[4].clone())

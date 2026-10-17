@@ -179,6 +179,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         grid,
         seed,
         time: 0,
+        sleep: Default::default(),
         ground,
         bed,
         e_ground: vec![0.0; n],

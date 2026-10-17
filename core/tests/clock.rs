@@ -1,9 +1,11 @@
 //! The clock: processes run at their periods inside longer ones, in a fixed order at one time; the day, the month and
-//! the season come from the seconds; the month of `step` is built on it.
+//! the season come from the seconds; the month of `step` is built on it. A calm node sleeps until its alarm or until a
+//! large move into it, and then catches up.
 
-use pcore::clock::{self, Every};
+use pcore::clock::{self, Every, Sleep};
+use pcore::store::{apply, Boundary, Class, Move, NodeId};
 use pcore::units::DAY_S;
-use pcore::{Config, Stage};
+use pcore::{Config, Stage, World};
 use worldgen::testkit::small_world;
 
 /// A fast process runs a whole number of times inside a slow one, each run standing for the time to the next; a span
@@ -62,4 +64,85 @@ fn a_month_runs_its_processes_in_their_order() {
     let (d, m) = (w.day(), w.month());
     pcore::day(&mut w);
     assert_eq!((w.day(), w.month(), w.time % cal.day), (d + 1, m, 0));
+}
+
+/// The node of slot `slot` (a test's own ids: `Sleep` asks nothing of the table).
+fn node(slot: u32) -> NodeId {
+    NodeId { slot, gen: 0 }
+}
+
+/// A sleeping node is not due before its alarm; at its alarm it is, after the nodes whose alarms rang earlier and
+/// with those of the same alarm in slot order. A node with no alarm is never due by itself.
+#[test]
+fn a_calm_node_sleeps_until_its_alarm() {
+    let mut s = Sleep::default();
+    for (slot, until) in [(3, 50), (1, 100), (2, 50), (4, u64::MAX)] {
+        s.sleep(Class::Ground, node(slot), 0, until);
+    }
+    s.sleep(Class::Air, node(5), 0, 10);
+    assert!(s.due(Class::Ground, 49).is_empty());
+    assert_eq!(s.due(Class::Ground, 120), [node(2), node(3), node(1)]);
+    assert!(s.due(Class::Ground, u64::MAX - 1).is_empty());
+    assert_eq!(s.due(Class::Air, 10), [node(5)]);
+}
+
+/// A move into a sleeping node that brings less than `wake_share` of what it holds leaves it asleep; one that brings
+/// more wakes it (it is due at once). The node the move leaves sleeps on; a boundary node, which runs no process, gives
+/// and is never woken.
+#[test]
+fn a_large_move_into_a_node_wakes_it() {
+    let mut w = small_world();
+    let n = w.grid.n();
+    let (k, i) = (0..w.chem.ns()).flat_map(|k| (0..n - 1).map(move |i| (k, i))).find(|&(k, i)| w.g(k, i) > 0.0 && w.g(k, i + 1) > 0.0).unwrap();
+    let (from, to, now) = (w.table.id(Class::Ground, i), w.table.id(Class::Ground, i + 1), w.time);
+    for id in [from, to] {
+        w.sleep.sleep(Class::Ground, id, now, now + DAY_S);
+    }
+    let send = |w: &World, share: f64| Move { from, to, k: k as u16, mol: share * w.cfg.wake_share * w.g(k, i + 1), heat: 0.0 };
+    let small = send(&w, 0.5);
+    apply(&mut w, &[], &[small], &[]);
+    assert!(w.sleep.due(Class::Ground, now).is_empty());
+    let large = send(&w, 2.0);
+    apply(&mut w, &[], &[large], &[]);
+    assert_eq!(w.sleep.due(Class::Ground, now), [to]);
+    w.sleep.sleep(Class::Ground, to, now, now + DAY_S);
+    let outside = w.table.id(Class::Boundary, Boundary::Outside as usize);
+    let back = Move { from: outside, to, k: k as u16, mol: 2.0 * w.cfg.wake_share * w.g(k, i + 1), heat: 0.0 };
+    apply(&mut w, &[], &[Move { from: to, to: outside, ..back }, back], &[]);
+    assert_eq!(w.sleep.due(Class::Ground, now), [to]);
+    assert!(w.sleep.due(Class::Boundary, now).is_empty());
+    assert_eq!(w.sleep.due(Class::Ground, now + DAY_S), [from]);
+}
+
+/// What a law's own step may differ by between one span and many steps of the same time, relative: rounding, as the
+/// test law integrates exactly.
+const CATCH_UP: f64 = 1e-12;
+
+/// A law that relaxes a node's amount towards 1 at a rate of 1e-7 /s, run on two nodes: one due every step of 3 days,
+/// one asleep for a year but woken once by a move. Each time it is due it is brought up to date for the time since
+/// (`Sleep::since`) in one span; at the year's end both hold the same.
+#[test]
+fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
+    let (dt, year, rate) = (3 * DAY_S, 360 * DAY_S, 1e-7);
+    let relax = |a: f64, span: u64| 1.0 + (a - 1.0) * (-rate * span as f64).exp();
+    let (awake, asleep) = (node(0), node(1));
+    let mut s = Sleep::default();
+    let mut amount = [0.0, 0.0];
+    s.sleep(Class::Ground, awake, 0, dt);
+    s.sleep(Class::Ground, asleep, 0, year);
+    let mut t = 0;
+    while t < year {
+        t += dt;
+        if t == 100 * DAY_S {
+            s.wake(Class::Ground, asleep, t);
+        }
+        for id in s.due(Class::Ground, t) {
+            let a = &mut amount[id.slot as usize];
+            *a = relax(*a, t - s.since(id));
+            s.sleep(Class::Ground, id, t, if id == awake { t + dt } else { year });
+        }
+    }
+    assert_eq!((s.since(awake), s.since(asleep)), (year, year));
+    assert!((amount[0] - amount[1]).abs() <= CATCH_UP * amount[0], "{amount:?}");
+    assert!(amount[0] > 0.9, "the law ran: {amount:?}");
 }

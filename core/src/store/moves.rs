@@ -61,6 +61,13 @@ impl Slot {
     fn unit(self) -> usize {
         matches!(self, Slot::Heat(..)) as usize
     }
+    /// Its class, and the index of its node in that class's arrays (of `len` nodes).
+    fn node(self, len: &[usize; CLASSES]) -> (usize, usize) {
+        match self {
+            Slot::Amount(c, x) => (c, x % len[c]),
+            Slot::Heat(c, i) => (c, i),
+        }
+    }
 }
 
 /// Whether a change of `x` to number `s` takes from what a node holds, so it may have to be scaled down: a boundary node
@@ -142,11 +149,13 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 /// (an amount of a node, or its heat) is more than it holds, each change that takes from it is scaled down by the
 /// share it holds (the least share over all it takes from), so no amount and no heat falls below zero
 /// (`docs/handover.md` 6.1); a boundary node gives all it is asked. What the scaling left in place is counted in
-/// `Counters::scaled`, and the last rounding below zero, set to zero, in `Counters::rounded`. Panics on a transform that does not keep its elements, and on the
-/// id of a node that is gone.
+/// `Counters::scaled`, and the last rounding below zero, set to zero, in `Counters::rounded`. A change that brings a
+/// node more than `Config::wake_share` of what it held of that amount or heat wakes the node (`clock::Sleep::wake`; a
+/// boundary node never sleeps). Panics on a transform that does not keep its elements, and on the id of a node that is
+/// gone.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
-    let World { chem, table, counts, grid, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, .. } = w;
+    let World { cfg, chem, table, sleep, time, counts, grid, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, .. } = w;
     let len = [grid.n(), grid.na(), grid.n(), BOUNDARIES];
     let amount = [&mut ground[..], &mut air[..], &mut deep[..], &mut boundary[..]];
     let mut books = Field { amount, heat: [&mut e_ground[..], &mut e_air[..], &mut e_deep[..], &mut e_boundary[..]] };
@@ -187,9 +196,13 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         deltas(item, table, chem, &len, &mut d);
         let f = d.iter().filter(|e| takes(e)).fold(1.0, |f: f64, &(s, _)| f.min(*share_of.at(s)));
         for &(s, x) in &d {
-            *books.at(s) += x * f;
+            let (held, given) = (*books.at(s), x * f);
+            *books.at(s) += given;
             if x < 0.0 {
                 counts.scaled[s.unit()] -= x * (1.0 - f);
+            } else if given > cfg.wake_share * held.max(0.0) {
+                let (c, i) = s.node(&len);
+                sleep.wake(Class::ALL[c], table.id(Class::ALL[c], i), *time);
             }
         }
     }
