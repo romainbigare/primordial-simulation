@@ -24,7 +24,6 @@ pub enum EventKind {
     Took { by: u64, from: u64, burn: f32, cat: [f32; 2] },
     BondMade,
     BondBroken,
-    Imposed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

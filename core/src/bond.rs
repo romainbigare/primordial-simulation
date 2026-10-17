@@ -35,12 +35,12 @@ pub const NOBODY: u64 = u64::MAX;
 pub const GROUND: u32 = u32::MAX;
 /// Bond kinds (the value of bond events): body–part, part–part, part–ground; a break by load
 /// adds `LOAD`.
-pub const HELD: f64 = 0.0;
-pub const JOINED: f64 = 1.0;
-pub const ANCHORED: f64 = 2.0;
+pub(crate) const HELD: f64 = 0.0;
+pub(crate) const JOINED: f64 = 1.0;
+pub(crate) const ANCHORED: f64 = 2.0;
 pub const LOAD: f64 = 3.0;
 /// Features of a perceived part.
-pub const NO: usize = 8;
+pub(crate) const NO: usize = 8;
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
 
@@ -49,7 +49,6 @@ pub struct Part {
     pub gen: u32,
     pub alive: bool,
     pub cell: u32,
-    pub born: u64,
     /// mol of each substance: the walls, and the liquid held in the hollow
     pub wall: Vec<f64>,
     pub fill: Vec<f64>,
@@ -73,10 +72,9 @@ pub struct Part {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Info {
     pub parts: u32,
-    /// kg (walls and what they hold); outer volume m³; area of the largest faces m²
+    /// kg (walls and what they hold); outer volume m³
     pub mass: f64,
     pub outer: f64,
-    pub foot: f64,
     /// How closed its walls are around the space inside (0..1), that space m³, and the heat
     /// conductance between inside and outside, W/K
     pub encl: f32,
@@ -201,7 +199,7 @@ impl Parts {
 }
 
 /// Size the per-cell lists.
-pub fn ready(w: &mut World) {
+pub(crate) fn ready(w: &mut World) {
     if w.parts.at.len() != w.grid.n() {
         w.parts.at = vec![Vec::new(); w.grid.n()];
     }
@@ -227,12 +225,13 @@ fn restructure(w: &mut World, p: usize) {
         q += 1;
     }
     let chem = &w.chem;
-    let (mut s, mut l, mut cond, mut best) = (Info { parts: list.len() as u32, ..Default::default() }, 0f64, 0f64, (0f64, 0f64));
+    // `foot`: the area of the parts' largest faces, m².
+    let (mut s, mut l, mut cond, mut best, mut foot) = (Info { parts: list.len() as u32, ..Default::default() }, 0f64, 0f64, (0f64, 0f64), 0f64);
     for &x in &list {
         let pt = &w.parts.parts[x];
         let ([_, v, _, _, k], d) = (pt.walls(chem), pt.size.map(|v| v as f64));
         let (vo, face) = (pt.outer(), d[0] * d[1]);
-        (s.mass, s.outer, s.foot) = (s.mass + pt.mass(chem), s.outer + vo, s.foot + face);
+        (s.mass, s.outer, foot) = (s.mass + pt.mass(chem), s.outer + vo, foot + face);
         s.anchored |= pt.links.iter().any(|b| b.0 == GROUND);
         l = l.max(d[0]);
         cond += k * face * face / v.max(1e-9);
@@ -241,7 +240,7 @@ fn restructure(w: &mut World, p: usize) {
         }
     }
     let need = if s.anchored { 5.0 } else { 6.0 } * l * l;
-    let plates = if list.len() > 1 { (s.foot / need).min(1.0) } else { 0.0 };
+    let plates = if list.len() > 1 { (foot / need).min(1.0) } else { 0.0 };
     let (e, space) = if plates * l.powi(3) > best.1 { (plates, plates * l.powi(3)) } else { best };
     (s.encl, s.space) = (e as f32, space);
     s.g = e * cond + w.cfg.phys.leak * (1.0 - e) * 6.0 * space.powf(2.0 / 3.0);
@@ -281,7 +280,7 @@ fn unlink(w: &mut World, a: usize, b: u32, load: bool) {
 /// Make a part of `wall` (mol) with `e` J in cell `i`, of elongation `x` and hollowness `h`.
 pub fn make(w: &mut World, i: usize, wall: Vec<f64>, e: f64, x: f32, h: f32) -> usize {
     let (x, h) = (x.clamp(-1.0, 1.0), h.clamp(0.0, 0.95));
-    let mut p = Part { cell: i as u32, born: w.day, fill: vec![0.0; wall.len()], wall, e, hollow: h, held: NOBODY, ..Default::default() };
+    let mut p = Part { cell: i as u32, fill: vec![0.0; wall.len()], wall, e, hollow: h, held: NOBODY, ..Default::default() };
     p.size = dims(p.walls(&w.chem)[1], x, h);
     let s = w.parts.add(p);
     restructure(w, s);
@@ -332,7 +331,7 @@ fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
 }
 
 /// Let go of the held part (also when the body dies).
-pub fn let_go(w: &mut World, b: &mut Body, load: bool) {
+pub(crate) fn let_go(w: &mut World, b: &mut Body, load: bool) {
     if let Some(p) = held(w, b) {
         w.parts.parts[p].held = NOBODY;
         event(w, false, b.cell, HELD + if load { LOAD } else { 0.0 });
@@ -341,7 +340,7 @@ pub fn let_go(w: &mut World, b: &mut Body, load: bool) {
 }
 
 /// What a held part multiplies a body's force by: more for a hard part, up to the body's size.
-pub fn lever(w: &World, b: &Body) -> f64 {
+pub(crate) fn lever(w: &World, b: &Body) -> f64 {
     held(w, b).map_or(1.0, |p| {
         let [m, _, hard, _, _] = w.parts.parts[p].walls(&w.chem);
         1.0 + w.cfg.phys.lever * hard * m / (m + 0.05 * b.built(&w.chem))
@@ -370,7 +369,7 @@ pub fn room(w: &World, b: &Body) -> Option<(usize, f32, f64)> {
 }
 
 /// For a body's update: how closed the walls around it are, and its share of their conductance.
-pub fn walls_around(w: &World, b: &Body) -> Option<(f64, f64)> {
+pub(crate) fn walls_around(w: &World, b: &Body) -> Option<(f64, f64)> {
     let (r, e, g) = room(w, b)?;
     let others = w.life.at[b.cell as usize].iter().filter(|&&o| w.life.bodies[o as usize].alive && room(w, &w.life.bodies[o as usize]).is_some_and(|x| x.0 == r)).count();
     Some((e as f64, g / (others + 1) as f64))
@@ -408,7 +407,7 @@ pub fn depth(w: &World, b: &Body, d: f64) -> f64 {
 
 /// What a body perceives of what it holds (whether, ln mass ratio, hardness, hollowness) and
 /// of the walls around it.
-pub fn sense(w: &World, b: &Body, mb: f64) -> [f32; 5] {
+pub(crate) fn sense(w: &World, b: &Body, mb: f64) -> [f32; 5] {
     let mut x = [0f32; 5];
     if let Some(p) = held(w, b) {
         let pt = &w.parts.parts[p];
@@ -431,7 +430,7 @@ pub fn features(w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
 }
 
 /// Can verb `v` be done to part `p` at all (as the body sees it)?
-pub fn possible(w: &World, b: &Body, v: usize, p: usize, vol: f64) -> bool {
+pub(crate) fn possible(w: &World, b: &Body, v: usize, p: usize, vol: f64) -> bool {
     let pt = &w.parts.parts[p];
     let s = &w.parts.parts[pt.root as usize].s;
     match v {

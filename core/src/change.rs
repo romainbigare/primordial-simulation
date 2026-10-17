@@ -160,7 +160,7 @@ pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: imp
 /// the share of its decades kept: f to that power. Whole below `td`, near 1 a few `wk` above it
 /// whatever its size, and smooth, so a body warming past `td` slows without a jump.
 #[inline]
-pub fn denature(f: f64, t: f64, td: f64, wk: f64) -> f64 {
+pub(crate) fn denature(f: f64, t: f64, td: f64, wk: f64) -> f64 {
     if f <= 1.0 { f } else { f.powf(1.0 / (1.0 + ((t - td) / wk).exp())) }
 }
 
@@ -222,7 +222,7 @@ impl Reactor {
 
     /// Fastest rate, 1/s, among the reactions not driven by light that the amounts `n` of one
     /// node can run at `t`.
-    pub fn fastest(&mut self, chem: &Chemistry, n: &[f64], t: f64) -> f64 {
+    pub(crate) fn fastest(&mut self, chem: &Chemistry, n: &[f64], t: f64) -> f64 {
         let tot = self.phases(chem, n, None, t);
         let mut best = 0.0f64;
         for (r, rx) in chem.reactions.iter().enumerate() {

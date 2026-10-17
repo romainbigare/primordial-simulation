@@ -11,6 +11,12 @@ use pcore::body::{Body, Layout, ALLOC, CHILD, COPY_MASS, DISPERSE, GAS, HEAT, LI
 use pcore::rng::{Purpose, Rng};
 use pcore::{body, brain, change, choose, copy, flow, World};
 
+/// Bodies `a` and `b` are in one size class (`copy::class`): alike in size and in maturity.
+fn near(lay: &Layout, chem: &pcore::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
+    let (x, y) = (copy::class(chem, a), copy::class(chem, b));
+    x.1 == y.1 && copy::alike_log(lay, alike, x.0, y.0)
+}
+
 /// A land cell with dry ground.
 fn dry_land(w: &World) -> usize {
     (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land")
@@ -519,7 +525,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
 
 /// A mature node's children never lower its mean under maturity: they gather in a young node of their own
 /// (the second brood joins the first), and the young node merges into the adult only once it is mature
-/// itself (`copy::near`: the same size class and both mature, or both immature). Grown to the size of the
+/// itself (`copy::class`: the same size class and both mature, or both immature). Grown to the size of the
 /// adults' class but under the size of maturity, the young stay apart at the month's merge; mature, they join.
 /// Members, matter and energy are kept.
 #[test]
@@ -579,7 +585,7 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     };
     grow_to(&mut w, k, 8.0);
     assert!(!w.life.bodies[k].adult(&w.chem) && copy::alike_size(&lay, w.cfg.phys.alike, 8.0, w.life.bodies[s].built(&w.chem) / 5.0));
-    assert!(!copy::near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]));
+    assert!(!near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]));
     w.day += month;
     body::survey(&mut w);
     assert_eq!(w.life.alive().count(), 2, "an immature node merged into a mature one");
@@ -732,7 +738,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     assert!((c.count - 12.6).abs() < 1e-9);
     assert!((c.store[r.matter] * mm / c.n() / (1.0 - h) - 0.1).abs() < 1e-9, "a child's body is not 10^CHILD x the copy mass");
     let lay = Layout::of(&w.chem);
-    assert!(!copy::near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "a child of 0.1 kg is of the size class of members of {parent_body} kg");
+    assert!(!near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "a child of 0.1 kg is of the size class of members of {parent_body} kg");
     // A month's start: they are alike in genes but not in size: they stay two.
     let month = w.cfg.days_per_month as u64;
     w.day = (w.day / month + 1) * month;
@@ -746,7 +752,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     add(&mut w, &mut c, r.liquid, 3.0 * want);
     c.prepare(&w.chem, &w.cfg.phys);
     w.life.bodies[k] = c;
-    assert!(copy::near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "grown to {} kg a member, not yet of the size class", w.life.bodies[k].built(&w.chem) / 12.6);
+    assert!(near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "grown to {} kg a member, not yet of the size class", w.life.bodies[k].built(&w.chem) / 12.6);
     w.day += month;
     body::survey(&mut w);
     assert_eq!(w.life.alive().count(), 1, "the grown young did not merge back");

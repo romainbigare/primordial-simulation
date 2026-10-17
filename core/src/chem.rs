@@ -134,7 +134,7 @@ impl Chemistry {
     }
 
     /// Temperature at which the vapour pressure of `k` is `x` times the reference pressure, K.
-    pub fn t_sat(&self, k: usize, x: f64) -> f64 {
+    pub(crate) fn t_sat(&self, k: usize, x: f64) -> f64 {
         let (tb, l) = (self.subs[k].boil, self.subs[k].lv);
         1.0 / (1.0 / tb - R_GAS * x.max(1e-30).ln() / l)
     }
@@ -142,7 +142,7 @@ impl Chemistry {
     /// Melting point of `k` where it is the share `x` of the moles of its liquid, the rest dissolved in it, K: an ideal
     /// solution freezes lower (Schroeder-van Laar, the mirror of `t_sat`): 1 / T = 1 / Tm - R ln x / Lf. For the common
     /// liquid of chemistry 0 that is 1.86 K per mol dissolved in a kg (the measured cryoscopic constant), no new number.
-    pub fn t_melt(&self, k: usize, x: f64) -> f64 {
+    pub(crate) fn t_melt(&self, k: usize, x: f64) -> f64 {
         let (tm, l) = (self.subs[k].melt, self.subs[k].lf);
         if l <= 0.0 || x >= 1.0 {
             return tm;
@@ -172,7 +172,7 @@ impl Chemistry {
     }
 
     /// `melt_in` over the list `mixes` gave.
-    pub fn melt_with(&self, k: usize, a: impl Fn(usize) -> f64, js: impl Iterator<Item = (usize, bool, bool)>) -> f64 {
+    pub(crate) fn melt_with(&self, k: usize, a: impl Fn(usize) -> f64, js: impl Iterator<Item = (usize, bool, bool)>) -> f64 {
         let (x, mut other, mut most) = (a(k).max(0.0), 0.0, 0.0f64);
         for (j, dissolved, liquid) in js {
             let y = a(j).max(0.0);
@@ -184,7 +184,7 @@ impl Chemistry {
 
     /// Phase of `k` at `t` among the amounts `a(j)` (mol) of one node or body: as `phase`, at its melting point there
     /// (`melt_in`).
-    pub fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
+    pub(crate) fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
         match self.phase(k, t) {
             Phase::Solid if t >= self.melt_in(k, a) => Phase::Liquid,
             p => p,
@@ -232,7 +232,7 @@ impl Chemistry {
     }
 
     /// Enthalpy change of one unit of a conversion (`build`, `builds`), J.
-    pub fn dh_of(&self, b: &Reaction) -> f64 {
+    pub(crate) fn dh_of(&self, b: &Reaction) -> f64 {
         let sum = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].hf).sum::<f64>();
         sum(&b.outputs) - sum(&b.inputs)
     }

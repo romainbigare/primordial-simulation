@@ -5,13 +5,12 @@
 //! genes, and each costs energy per decision (`body::Lineage::cost`). The brain of its group,
 //! plus a few numbers of its own, scores every action; one is drawn by those scores, and the
 //! body emits a signal and writes its memory. Actions are physical: move, take from the node or
-//! a body, put to the node or a body, watch a body (copy part of its brain), copy, rest, and the
+//! a body, put to the node or a body, watch a body (copy part of its brain), rest, and the
 //! actions of Bond (`bond`): form a part, hold, let go, join, break, enter (a population node
 //! perceives parts as one of its members would, and does these through one member split off,
 //! `copy::one`). Each costs energy paid by the body's own reactions; if it cannot pay, it fails.
-//! Copying is drawn first, by its own chance. At its next decision the brain learns from the
-//! change of the body's own well-being (a policy gradient whose baseline is the brain's own
-//! estimate of how well-being will go).
+//! At its next decision the brain learns from the change of the body's own well-being (a policy
+//! gradient whose baseline is the brain's own estimate of how well-being will go).
 //!
 //! Bodies that stay near each other share their brain's rows (the mean of the rows they were
 //! born with, plus what the group learned): a body that strays from its group's centre takes a
@@ -68,11 +67,6 @@ fn sector(sight: usize) -> Sector {
     }
     s
 }
-
-/// Whether a body may also copy by its brain's own chance (the kept copy logit, `worldgen::life`).
-/// Off: a body makes children only from its brood, when it has one (`copy::copy`, `body::live`),
-/// so no brain bias sets how often anything is born (handover 4).
-pub const COPY_BY_CHOICE: bool = false;
 
 pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let (i, ns) = (b.cell as usize, w.chem.ns());
@@ -213,11 +207,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         }
     }
 
-    // Copy by its own chance (set by evolution and imitation, never learned) once the body is
-    // mature (it can have offspring); else draw one of the other actions by its score. Off
-    // (`COPY_BY_CHOICE`): copying is physics only, from the brood (`body::live`), and the brain's
-    // copy row is not read.
-    let copying = rng.f64() < 1.0 / (1.0 + (-logit[1] as f64).exp()) && b.adult(&w.chem) && COPY_BY_CHOICE;
+    // Draw one action by its score. Copying is not among them: a body makes children only from
+    // its brood (`copy::copy`, `body::live`), so no brain bias sets how often anything is born.
+    // The draw that once decided a copy stays: dropping it would shift every later draw.
+    rng.f64();
     logit[1] = f32::NEG_INFINITY;
     let top = logit.iter().cloned().fold(f32::MIN, f32::max);
     let mut p = logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
@@ -228,13 +221,11 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         u -= v;
         u < 0.0
     });
-    let a = if copying { 1 } else { a.unwrap_or(0) };
-    if !copying {
-        (w.diag.decisions, w.diag.greedy) = (w.diag.decisions + 1.0, w.diag.greedy + (logit[a] >= top) as u8 as f64);
-    }
+    let a = a.unwrap_or(0);
+    (w.diag.decisions, w.diag.greedy) = (w.diag.decisions + 1.0, w.diag.greedy + (logit[a] >= top) as u8 as f64);
 
     // The trace of this decision for learning: the hidden layer, and per learned row how its
-    // output moves the log-chance of what was done (nothing for a copy) and of the signal. For
+    // output moves the log-chance of what was done and of the signal. For
     // the values drawn around a mean (signal, shape) that is the natural gradient (times the
     // spread squared), so their noise does not use up the step allowed to the actions.
     let (l, nh, learning) = (s.learned(), s.h, b.learn_rate() > 0.0 && !w.cfg.null);
@@ -243,7 +234,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         let (th, c) = b.trace.split_at_mut(nh);
         th.copy_from_slice(&t.thought.h);
         c.fill(0.0);
-        let g = |o: usize| if copying { 0.0 } else { (o == a) as u8 as f32 - p[o] };
+        let g = |o: usize| (o == a) as u8 as f32 - p[o];
         for q in 0..FIXED {
             c[q] = g(q);
         }
@@ -301,10 +292,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     let node = b;
     let (b, slot) = (one.as_mut().unwrap_or(&mut *node), me);
     match a {
-        0 => {}
-        1 => {
-            copy::copy(w, slot, b);
-        }
+        // (1, copying, is never drawn.)
+        0 | 1 => {}
         2 => put(w, b),
         3 => take_node(w, slot, b),
         4 => bond::form(w, slot, b, [shape[0], 0.5 * (shape[1] + 1.0)]),
@@ -383,7 +372,7 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 /// Monthly: what each group learned fades by its forgetting rate. A body that has stayed for a
 /// year within `phys.join` cells of the centre of a bigger group of its lineage joins it; if it was
 /// alone, what it learned is blended in by its share. (No joining unless brains are shared.)
-pub fn regroup(w: &mut World) {
+pub(crate) fn regroup(w: &mut World) {
     let (gw, gh, day, share, life) = (w.grid.w, w.grid.h, w.day, w.cfg.share_brains, &mut w.life);
     let at = |g: &body::Group| {
         let (x, y) = g.centre();

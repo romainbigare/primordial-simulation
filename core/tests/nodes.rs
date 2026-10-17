@@ -16,7 +16,7 @@ fn live(w: &pcore::World) -> Vec<usize> {
     (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).collect()
 }
 
-/// A mature node's children start a node of their own (they are immature, `copy::near`) that carries the variance left
+/// A mature node's children start a node of their own (they are immature, `copy::class`) that carries the variance left
 /// among them; when they have grown and join their parents' node (the month's merge, `copy::merge`) its spread
 /// is widened by it; a node whose members differ so much that its halves would not be alike splits in
 /// two along that gene, keeping its members, stores, heat and pooled spread.
@@ -131,7 +131,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             copy::resize(&mut w, s, &mut b);
             copy::split(&mut w, s, &mut b);
             w.life.bodies[s] = b;
-            // The children are young nodes of their own (immature, `copy::near`); here they grow up at once, and the month's
+            // The children are young nodes of their own (immature, `copy::class`); here they grow up at once, and the month's
             // merge would take them back into their parent's node: they do now, so the update's node math is the same.
             let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life.bodies[*k].parent == id).collect();
             for k in kids {
@@ -223,7 +223,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
         w.life.bodies[t].k = Default::default();
         // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes of
-        // children are: a child joins no mature node (`copy::near`).
+        // children are: a child joins no mature node (`copy::class`).
         if t != s {
             let m = w.chem.matter().expect("matter");
             w.life.bodies[t].store[m] *= 0.5;

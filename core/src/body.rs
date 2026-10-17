@@ -46,7 +46,7 @@ pub const MUT: usize = 8;
 pub const LEARN: usize = 9;
 /// Share of what its group learned that fades each month, log10 (off at the lower end): the
 /// group forgets at the mean rate of its members
-pub const FORGET: usize = 10;
+pub(crate) const FORGET: usize = 10;
 /// Sizes of the brain and the senses (each rounded): hidden units (0..64; 0 is no brain, see
 /// `Lineage::none`), memory numbers (0..12), bodies perceived (1..6), sight in cells (1..4). A
 /// body whose size genes are a whole unit away from its lineage's sizes starts a new lineage with
@@ -88,11 +88,11 @@ pub const PHASE: u8 = 1;
 pub const SPENT: u8 = 2;
 pub const TAKEN: u8 = 3;
 /// Bonds broken by bodies moving through its cell.
-pub const BROKEN: u8 = 4;
+pub(crate) const BROKEN: u8 = 4;
 /// Worn out by living (`Body::wear`).
 pub const AGE: u8 = 5;
 /// Others a body remembers.
-pub const KNOWN: usize = 4;
+pub(crate) const KNOWN: usize = 4;
 
 /// Updates are kept in a ring of this many days (more than the longest interval).
 const RING: u64 = 384;
@@ -130,6 +130,8 @@ pub struct Body {
     /// size a brain perceives, the mass compared with the copy mass. Use `n()`.
     pub count: f64,
     pub lineage: u32,
+    /// The body it was copied from (id; 0 for a placed founder) and its day of birth: a record of
+    /// descent, read by the checks that follow a parent's children
     pub parent: u64,
     pub born: u64,
     /// Day of the last update
@@ -228,7 +230,7 @@ impl Body {
         self.store.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum()
     }
     /// `mass` and `heat_cap` in one pass over the stores (the same sums).
-    pub fn mass_cap(&self, chem: &Chemistry) -> (f64, f64) {
+    pub(crate) fn mass_cap(&self, chem: &Chemistry) -> (f64, f64) {
         self.store.iter().zip(&chem.subs).fold((0.0, 0.0), |(m, c), (a, s)| (m + a * s.molar_mass, c + a * s.cp))
     }
     pub fn temp(&self, chem: &Chemistry) -> f64 {
@@ -303,11 +305,11 @@ impl Body {
         if self.genes[LEARN] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[LEARN]) }
     }
     /// Share of what its group learned that it would let fade each month (0 when off).
-    pub fn forget(&self) -> f32 {
+    pub(crate) fn forget(&self) -> f32 {
         if self.genes[FORGET] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[FORGET]) }
     }
     /// Key stores (safe minimum above 0), one bit per substance.
-    pub fn key_mask(&self, chem: &Chemistry) -> u64 {
+    pub(crate) fn key_mask(&self, chem: &Chemistry) -> u64 {
         let lay = Layout::of(chem);
         (0..chem.ns()).filter(|&k| self.genes[lay.min + k] > 0.0).fold(0, |m, k| m | 1 << k)
     }
@@ -428,11 +430,6 @@ impl Body {
         }
         (liquid, h)
     }
-    /// Can it digest body matter: does it break it (`breaks`: its catalyst for the reaction that burns the matter is on)? A body
-    /// that cannot takes none in (`choose::wanted`).
-    pub fn digests(&self, chem: &Chemistry) -> bool {
-        chem.matter().is_some_and(|m| self.breaks(chem, m))
-    }
     /// Digestion: `taken` mol of body matter that this body took in from outside (the
     /// ground, another body, a part, a gift) are broken into its units as they come in, the reverse
     /// of growth (`Chemistry::build`): 1 of matter + 1 of liquid -> 6 of the energy-rich solid, element
@@ -462,7 +459,7 @@ impl Body {
     }
     /// Energy a mole of `k` gives its body's catalysed reactions at temperature `t` (J; 0 for a gas
     /// or what none of its reactions burns): the best over `Consts::burn`. Needs `prepare`.
-    pub fn heat_of(&self, chem: &Chemistry, k: usize, t: f64) -> f64 {
+    pub(crate) fn heat_of(&self, chem: &Chemistry, k: usize, t: f64) -> f64 {
         if chem.phase(k, t) == Phase::Gas {
             return 0.0;
         }
@@ -578,7 +575,7 @@ impl Body {
     /// margin, which is the log of its share over its minimum, counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
     /// the same margin form), and its key liquids to freezing or boiling (within 5 K). Needs
     /// `prepare`.
-    pub fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
+    pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass) = (Layout::of(chem), self.size(chem));
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
         for k in 0..chem.ns() {
@@ -604,12 +601,12 @@ impl Body {
         e
     }
     /// How past dealings with body `id` went, if it is known.
-    pub fn recall(&self, id: u64) -> Option<f32> {
+    pub(crate) fn recall(&self, id: u64) -> Option<f32> {
         self.known.iter().find(|k| k.0 == id && id != 0).map(|k| k.1)
     }
     /// Remember a dealing with body `id`: better (+) or worse (-). A new one replaces the least
     /// marked.
-    pub fn note(&mut self, id: u64, d: f32) {
+    pub(crate) fn note(&mut self, id: u64, d: f32) {
         let s = match self.known.iter().position(|k| k.0 == id) {
             Some(s) => s,
             None => {
@@ -621,7 +618,7 @@ impl Body {
         self.known[s].1 = (self.known[s].1 + d).clamp(-1.0, 1.0);
     }
     /// Nothing left of a member (under 1 g each) when the mass is `m`.
-    pub fn empty_at(&self, m: f64) -> bool {
+    pub(crate) fn empty_at(&self, m: f64) -> bool {
         m < 1e-3 * self.n()
     }
     /// A store below its safe minimum, or nothing left of a member.
@@ -780,7 +777,7 @@ pub struct Group {
 }
 
 impl Group {
-    pub fn centre(&self) -> (f32, f32) {
+    pub(crate) fn centre(&self) -> (f32, f32) {
         let m = self.members.max(1) as f32;
         (self.sx as f32 / m, self.sy as f32 / m)
     }
@@ -837,7 +834,7 @@ impl Life {
         }
     }
     /// Body `b` has no brain (`Lineage::none`).
-    pub fn brainless(&self, b: &Body) -> bool {
+    pub(crate) fn brainless(&self, b: &Body) -> bool {
         self.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).is_some_and(|l| l.none())
     }
     /// The starting kind body `b` descends from (`Lineage::root`); `u32::MAX` if its lineage is gone.
@@ -851,7 +848,7 @@ impl Life {
     /// Count body `b` into group `g` (`d` = 1) or out of it (`d` = -1): its cell in the centre,
     /// its born rows in the sum (the rows shift by the change of the mean, so what the group
     /// learned stays), its forgetting rate.
-    pub fn enrol(&mut self, g: u32, b: &Body, d: i64) {
+    pub(crate) fn enrol(&mut self, g: u32, b: &Body, d: i64) {
         self.shift(g, b.cell, d);
         let (gr, born) = (&mut self.groups[g as usize], &self.genomes[b.genome as usize].rows);
         let n0 = gr.members as f32;
@@ -934,7 +931,7 @@ impl Life {
         }
     }
     /// Body `b` (taken out of its slot) now has these genes and born rows; its group follows.
-    pub fn reborn(&mut self, b: &mut Body, genes: Vec<f32>, rows: Vec<f32>) {
+    pub(crate) fn reborn(&mut self, b: &mut Body, genes: Vec<f32>, rows: Vec<f32>) {
         if rows == self.genomes[b.genome as usize].rows {
             return self.regene(b, genes);
         }
@@ -973,7 +970,7 @@ impl Life {
     /// Body `b` (taken out of its slot) has these genes and the born rows it had (a member split
     /// off a node and back): of its group only the forgetting rate changes (counting the rows
     /// out and in again only rounded the group's rows, and cost two passes over them).
-    pub fn regene(&mut self, b: &mut Body, genes: Vec<f32>) {
+    pub(crate) fn regene(&mut self, b: &mut Body, genes: Vec<f32>) {
         let old = b.forget();
         (b.genes, b.k) = (genes, Consts::default());
         let gr = &mut self.groups[b.group as usize];
@@ -981,7 +978,7 @@ impl Life {
     }
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in group `group`
     /// (new, for it); its old lineage, group and born rows lose it.
-    pub fn move_to(&mut self, b: &mut Body, lineage: u32, group: u32, rows: Vec<f32>) {
+    pub(crate) fn move_to(&mut self, b: &mut Body, lineage: u32, group: u32, rows: Vec<f32>) {
         self.enrol(b.group, b, -1);
         self.unref(b.genome);
         let old = b.lineage as usize;
@@ -1010,7 +1007,7 @@ pub(crate) fn held(chem: &Chemistry, k: usize) -> f64 {
 
 /// Fusion enthalpy a mole of `k` holds in the ground's heat at temperature `t`, among the ground's amounts `a(j)`.
 #[inline]
-pub fn fused(chem: &Chemistry, k: usize, t: f64, a: impl Fn(usize) -> f64) -> f64 {
+pub(crate) fn fused(chem: &Chemistry, k: usize, t: f64, a: impl Fn(usize) -> f64) -> f64 {
     if chem.phase_in(k, t, a) != Phase::Solid { chem.subs[k].lf } else { 0.0 }
 }
 
@@ -1152,7 +1149,7 @@ fn shade(w: &mut World) {
 /// that hold and are inside nothing: a node joins the first larger one alike in genes
 /// (`copy::alike`, on the means only, so a split's halves stay apart for selection; never for
 /// being of the same lineage) and of its size (member bodies within `alike` steps of the
-/// copy-mass gene, and both mature or both immature, `copy::near`); then, while more than
+/// copy-mass gene, and both mature or both immature, `copy::class`); then, while more than
 /// `cfg.crowd` remain, the two most alike (squared distance of their genes in mutation steps,
 /// `copy::steps`) merge, the smaller into the larger, if they are alike: unlike nodes are not
 /// merged, unless the cell holds more than twice `crowd`: then the most alike merge however
@@ -1173,7 +1170,7 @@ fn crowd(w: &mut World) {
         let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold == 0 && b[s].inside == 0 && (w.cfg.nodes || light_eater(&w.chem, &b[s].genes))).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
         list.sort_unstable();
         let mut head: Vec<usize> = (0..list.len()).collect();
-        // Each one's class once (`copy::near`), tested before the hundred genes.
+        // Each one's class once (`copy::class`), tested before the hundred genes.
         let class: Vec<(f64, bool)> = list.iter().map(|&(_, s)| crate::copy::class(&w.chem, &b[s])).collect();
         for x in 0..list.len() {
             let a = &b[list[x].1];

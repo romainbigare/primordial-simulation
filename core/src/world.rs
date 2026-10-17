@@ -140,10 +140,10 @@ pub struct World {
 impl World {
     /// The share of the light it caught that the body in `slot` (of generation `gen`) stored at
     /// its last update (none before its first).
-    pub fn keep_of(&self, slot: usize, gen: u32) -> f32 {
+    pub(crate) fn keep_of(&self, slot: usize, gen: u32) -> f32 {
         self.light_keep.get(slot).filter(|k| k.0 == gen).map_or(0.0, |k| k.1)
     }
-    pub fn set_keep(&mut self, slot: usize, gen: u32, k: f32) {
+    pub(crate) fn set_keep(&mut self, slot: usize, gen: u32, k: f32) {
         if self.light_keep.len() <= slot {
             self.light_keep.resize(slot + 1, (u32::MAX, 0.0));
         }

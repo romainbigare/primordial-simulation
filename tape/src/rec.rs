@@ -239,7 +239,6 @@ fn physics_json(w: &World) -> String {
 fn describe(e: &Event) -> String {
     match e.kind {
         EventKind::FirstSubstance(k) => format!("substance {k} first appears"),
-        EventKind::Imposed => format!("god action at node {}", e.node),
         // Counted before they get here (see `record_month`).
         _ => String::new(),
     }

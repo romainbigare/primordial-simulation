@@ -143,7 +143,7 @@ fn gap(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> Option<f32> {
 /// and the kinds mostly stay apart. A pair of children of a node held at the split threshold
 /// still joins it 199 times in 200 (`tests/nodes.rs`). Kinds less than 6 steps apart in every
 /// gene still blend. With `alike` alone (0) a lone child left its own node 1 time in 6 per gene.
-pub const WITHIN: f32 = 0.5;
+pub(crate) const WITHIN: f32 = 0.5;
 
 /// Children `c` (one or a group drawn from a node, with the spread left among them) belong to
 /// node `o`: in each gene their mean is within `limit` steps of its mean plus `WITHIN` standard
@@ -174,7 +174,7 @@ pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
     a.iter().enumerate().map(|(g, &x)| step(lay, g, x)).collect()
 }
 /// A body's spread per gene in steps of `like`, squared.
-pub fn spread_steps(lay: &Layout, b: &Body) -> Vec<f32> {
+pub(crate) fn spread_steps(lay: &Layout, b: &Body) -> Vec<f32> {
     (0..b.genes.len()).map(|g| b.spread.get(g).map_or(0.0, |&v| v.max(0.0)) / like(lay, g).powi(2)).collect()
 }
 
@@ -208,7 +208,7 @@ fn most(step: f32, alike: f32) -> f32 {
 /// so the mean drawn is never clamped: a clamp would move the mean of a node's children away
 /// from the wall, a drift no selection made. A generation's own change may still
 /// be clamped (one small step; a gene at a wall can still move off it).
-pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
+pub(crate) fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
     let (size, m, mut left) = (10f32.powf(genes[body::MUT]), m.max(1.0) as f32, Vec::with_capacity(genes.len()));
     let genes = (genes.iter().enumerate())
         .map(|(g, &v)| {
@@ -543,13 +543,16 @@ struct Kid {
     matter: f64,
 }
 
-/// The step of the copy-mass gene that sizes are alike in (`alike_size`, `near`).
-pub fn size_step(lay: &Layout) -> f32 {
+/// The step of the copy-mass gene that sizes are alike in (`alike_size`, `class`).
+pub(crate) fn size_step(lay: &Layout) -> f32 {
     like(lay, body::COPY_MASS)
 }
 
-/// A body's class for `near`: log10 of its member's body (`Body::built` per member), which size
-/// classes compare, and whether it is mature. Taken once per body where it meets many (`body::crowd`).
+/// A body's class: log10 of its member's body (`Body::built` per member), which size classes compare
+/// (`alike_log`), and whether it is mature (`Body::adult`). Two bodies are in one class when they are
+/// alike in size and both mature or both not: a node's mean must stay at or past its copy mass for its
+/// members to reproduce, so the young join and merge with the young until they have grown. Taken once
+/// per body where it meets many (`body::crowd`).
 pub fn class(chem: &crate::chem::Chemistry, b: &Body) -> (f64, bool) {
     let x = b.member_body(chem);
     (x.max(1e-30).log10(), b.mature(x))
@@ -558,7 +561,7 @@ pub fn class(chem: &crate::chem::Chemistry, b: &Body) -> (f64, bool) {
 /// Two member bodies (kg) are in one size class: within `alike` steps of the copy-mass gene of each
 /// other, in log10 (0.2 decades a step: with `alike` 4 about a factor 6.3). A node holds members of
 /// one size class: a child far smaller than its parent node's mean member starts a node of its own
-/// (`copy`), and nodes join and merge only within a class (`near`, `body::crowd`), so young and adult
+/// (`copy`), and nodes join and merge only within a class (`class`, `body::crowd`), so young and adult
 /// nodes stay apart until the young have grown.
 pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
     alike_log(lay, alike, x.max(1e-30).log10(), y.max(1e-30).log10())
@@ -567,15 +570,6 @@ pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
 /// `alike_size` of two bodies given as log10 (`class`).
 pub fn alike_log(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
     (x - y).abs() <= (alike * size_step(lay)) as f64 + 1e-9
-}
-
-/// Bodies `a` and `b` are in one class: alike in size (their members' bodies, `Body::built` per member,
-/// `alike_size`) and in maturity (both mature, `Body::adult`, or both not: a node's mean must stay at or
-/// past its copy mass for its members to reproduce, so the young join and merge with the young until
-/// they have grown).
-pub fn near(lay: &Layout, chem: &crate::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
-    let (x, y) = (class(chem, a), class(chem, b));
-    x.1 == y.1 && alike_log(lay, alike, x.0, y.0)
 }
 
 /// `m` children of `b` (each as `kid` says: its matter taken from the brood, provisions of every other
@@ -813,7 +807,7 @@ pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
 
 /// `join` into body `o`, taken out of its slot. `rows` are the born rows of `c`; none: those of `o`
 /// (a member split off `o` coming back), which leaves its rows and its group's as they are.
-pub fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
+pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.n() / (o.n() + c.n())) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));

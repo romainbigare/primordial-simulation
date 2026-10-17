@@ -19,7 +19,7 @@ pub const VERBS: usize = 3;
 /// break its bonds, enter the inside of its structure.
 pub const OVERBS: usize = 6;
 /// Signal outputs.
-pub const SIG: usize = 2;
+pub(crate) const SIG: usize = 2;
 
 /// Sizes of a brain: hidden units, memory numbers, inputs (the memory last), direction
 /// features, body features and part features. A row is `h` weights, then a bias.
@@ -62,7 +62,7 @@ impl Shape {
         self.form() + 2
     }
     /// The row that estimates how well-being will go from here (the critic).
-    pub fn critic(&self) -> usize {
+    pub(crate) fn critic(&self) -> usize {
         self.learned() + self.mem
     }
     pub fn rows(&self) -> usize {
@@ -95,7 +95,7 @@ pub fn dot(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// `base` is the lineage's, `rows` the group's.
-pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
+pub(crate) fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
     let b1 = s.h * s.ni;
     t.h.clear();
     t.h.extend((0..s.h).map(|m| squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x))));
@@ -118,7 +118,7 @@ pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
 
 /// A cheap tanh (error below 0.025).
 #[inline]
-pub fn squash(x: f32) -> f32 {
+pub(crate) fn squash(x: f32) -> f32 {
     let x = x.clamp(-3.0, 3.0);
     x * (27.0 + x * x) / (27.0 + 9.0 * x * x)
 }
@@ -175,7 +175,7 @@ fn step(r: &mut [f32], h: &[f32], c: f32) {
 }
 
 /// Move `w` a share `a` of the way toward `o`.
-pub fn blend(w: &mut [f32], o: &[f32], a: f32) {
+pub(crate) fn blend(w: &mut [f32], o: &[f32], a: f32) {
     for (x, y) in w.iter_mut().zip(o) {
         *x += a * (y - *x);
     }
