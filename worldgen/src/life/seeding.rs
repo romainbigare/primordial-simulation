@@ -61,8 +61,9 @@ pub struct Seeding {
 }
 
 impl Seeding {
-    /// Hand-set brain biases and no mutation (for tests of the laws that need the same body every time).
-    pub fn old() -> Self {
+    /// Every body of a kind alike: hand-set brain biases, no mutation and no fixers (for tests of the laws that need
+    /// the same body every time).
+    pub fn alike() -> Self {
         Seeding { hand: [true; 2], rounds: 0, fixers: 0.0, ..Default::default() }
     }
 

@@ -2,16 +2,15 @@
 //! in two new lineages that differ in brain size only, with the same cells, genes, born rows and
 //! stores; the world stays whole.
 
-use worldgen::life::{seed_clever, seed_with, Seeding, CLEVER_ROOT, CLEVER_SIZES, CONTROL_ROOT};
+use worldgen::life::{seed, seed_clever, CLEVER_ROOT, CLEVER_SIZES, CONTROL_ROOT};
 
 #[test]
 fn the_big_brain_and_its_control_differ_in_brain_size_only() {
     let mut w = worldgen::new_world(1, 32, 32);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     pcore::step(&mut w);
-    let old = Seeding::old();
-    seed_with(&mut w, 0, &old);
-    seed_with(&mut w, 1, &old);
+    seed(&mut w, 0);
+    seed(&mut w, 1);
     for _ in 0..12 {
         pcore::step(&mut w);
     }
