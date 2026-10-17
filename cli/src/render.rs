@@ -70,8 +70,8 @@ pub fn save(w: &World, path: &str) {
         *if pcore::body::light_eater(&w.chem, &b.genes) { &mut green[b.cell as usize] } else { &mut other[b.cell as usize] } += m;
     }
     let mut made = vec![false; w.grid.n()];
-    for p in w.parts.alive() {
-        made[p.cell as usize] = true;
+    for x in (0..w.parts.parts.len()).filter(|&x| w.parts.parts[x].alive) {
+        made[pcore::bond::cell(w, x)] = true;
     }
     let (pw, ph) = (gw * s * panels + (panels - 1) * GAP, gh * s);
     let mut img = vec![255u8; pw * ph * 3];

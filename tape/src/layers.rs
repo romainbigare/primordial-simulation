@@ -109,8 +109,8 @@ impl<'a> Ctx<'a> {
         let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
         let light = w.life.bodies.iter().map(|b| b.alive && pcore::body::light_eater(&w.chem, &b.genes)).collect();
         let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light };
-        for p in w.parts.alive() {
-            c.parts[p.cell as usize] += p.mass(&w.chem) / w.grid.area();
+        for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
+            c.parts[pcore::bond::cell(w, x)] += p.mass(&w.chem) / w.grid.area();
         }
         for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let i = b.cell as usize;

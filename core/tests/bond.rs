@@ -21,9 +21,9 @@ fn bond_breaks_under_too_much_load() {
     bond::link(&mut w, heavy, top as u32, 1e5);
     let books = Books::now(&w);
     bond::step(&mut w);
-    let p = &w.parts.parts;
-    assert!(p[light].links.iter().any(|l| l.0 == top as u32), "the light part fell");
-    assert!(p[heavy].links.is_empty() && p[heavy].root as usize == heavy, "the heavy part still hangs");
+    let (p, bonds) = (&w.parts.parts, &w.parts.bonds);
+    assert!(bonds.of(light).any(|l| l.0 == top as u32), "the light part fell");
+    assert!(bonds.of(heavy).next().is_none() && p[heavy].root as usize == heavy, "the heavy part still hangs");
     books.assert_within(&w, 1e-12, 1e-9);
 }
 
@@ -41,7 +41,7 @@ fn walls_keep_a_body_warm() {
         bond::link(&mut w, *p, parts[0] as u32, 1e9);
     }
     let r = w.parts.parts[parts[0]].root as usize;
-    assert!(w.parts.parts[r].s.encl > 0.99, "not closed: {:?}", w.parts.parts[r].s);
+    assert!(w.parts.parts[r].s.encl.closed > 0.99, "not closed: {:?}", w.parts.parts[r].s);
     // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place.
     let bs = &w.life.bodies;
     let slot = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
@@ -61,7 +61,7 @@ fn walls_keep_a_body_warm() {
     // (It does not grow: a warm body builds faster, at the pace of its temperature, and would burn the fuel of its month.)
     w.cfg.phys.c_build = 0.0;
     let mut inside = w.clone();
-    inside.life.bodies[slot].inside = inside.parts.parts[parts[0]].id(parts[0]);
+    inside.life.bodies[slot].inside = Some(bond::id(&inside, parts[0]));
     let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];
     pcore::step(&mut w);
     pcore::step(&mut inside);
@@ -86,7 +86,7 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
         (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] *= 2.0);
         b.e = b.energy_at(&w.chem, t);
         bond::form(&mut w, slot, &mut b, [0.0, 0.5]);
-        b.hold = 0;
+        b.hold = None;
     }
     assert!(w.parts.at[i].len() > 6, "{} parts in the cell", w.parts.at[i].len());
 }
@@ -159,7 +159,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         let one: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l && b.count == 1.0).collect();
         let node = w.life.alive().find(|b| b.lineage == l && b.count > 1.0).expect("the node");
         if case == 0 {
-            assert!(one.len() == 1 && w.parts.parts[p].id(p) == one[0].hold, "the member holds nothing");
+            assert!(one.len() == 1 && Some(bond::id(&w, p)) == one[0].hold, "the member holds nothing");
             // (Its share of the stores: both lost what their leaves give off in the update.)
             let kg = node.mass(&w.chem) / node.count;
             assert!((node.count + 1.0 - n0).abs() < 1e-9 * n0 && (one[0].mass(&w.chem) / kg - 1.0).abs() < 0.1, "{} of {n0} members, {} kg against {kg}", node.count, one[0].mass(&w.chem));

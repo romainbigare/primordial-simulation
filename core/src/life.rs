@@ -321,7 +321,7 @@ impl World {
 }
 
 /// A free place in `v` (the last one freed first, `free`), or a new one at its end.
-fn free_place<T: Default>(v: &mut Vec<T>, free: &mut Vec<u32>) -> usize {
+pub(crate) fn free_place<T: Default>(v: &mut Vec<T>, free: &mut Vec<u32>) -> usize {
     match free.pop() {
         Some(i) => i as usize,
         None => {

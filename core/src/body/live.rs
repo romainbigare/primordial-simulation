@@ -5,11 +5,12 @@ use super::exchange::cover_of;
 use super::pay::{hold, pay_at, plan, spend, upkeep};
 use super::physics::physics;
 use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
+use crate::bond::{self, Enclosure};
 use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::rng::{Purpose, Rng};
 use crate::units::DAY;
-use crate::{bond, World};
+use crate::World;
 
 /// Passes of `keep_warm`: its products take a part of the heat it burns at its temperature, so a second pass tops it up.
 const KEEP_T_PASSES: usize = 2;
@@ -52,9 +53,9 @@ pub(super) struct Site {
     /// Liquid stands in the cell; the depth of liquid over the body, m (`bond::depth`)
     pub stands: bool,
     pub depth: f64,
-    /// The walls around it (`bond::walls_around`), the cover of other bodies over it (`cover_of`), and the share of the
-    /// light the walls let through
-    pub walls: Option<(f64, f64)>,
+    /// Its link to the outside through the walls around it (`bond::enclosure`), the cover of other bodies over it
+    /// (`cover_of`), and the share of the light and rain the walls let through
+    pub walls: Option<Enclosure>,
     pub cover: f64,
     pub open: f64,
     /// Days since its last update (at least one), and the same in s
@@ -65,9 +66,9 @@ pub(super) struct Site {
 fn site(w: &World, b: &Body) -> Site {
     let i = b.cell as usize;
     let (tg, depth) = (w.t_ground_last(i), w.life.env[i][1]);
-    let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::walls_around(w, b));
+    let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::enclosure(w, b));
     let cover = cover_of(w, b);
-    let open = 1.0 - walls.map_or(0.0, |x| x.0);
+    let open = 1.0 - walls.map_or(0.0, |x| x.closed as f64);
     let days = w.day().saturating_sub(b.last).max(1) as f64;
     Site { i, j: w.grid.air_of(i), tg, stands, depth, walls, cover, open, days, dt: days * DAY }
 }

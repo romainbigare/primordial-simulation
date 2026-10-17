@@ -2,10 +2,11 @@
 //! layer of its surface, and the gas and vapour through its pores.
 
 use super::Body;
+use crate::bond::{self, Enclosure};
 use crate::chem::Chemistry;
 use crate::math::cube_area;
 use crate::units::{DAY, R_GAS, SIGMA};
-use crate::{bond, World};
+use crate::World;
 
 impl Body {
     /// Heat conductance of its coat, W/K (the `HEAT` gene): through each member's surface, which grows as mass^(2/3), so a
@@ -48,15 +49,15 @@ pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
 /// parallel to the still air (`film`) and by radiation (`radiated`, from Ts: taken at the body's temperature first, then
 /// once at Ts). The outer surface is its skin and both faces of its light-capture area. A cover of `cover` kg/m² passes
 /// `phys.shelter` / `cover` W per K and m² of skin in series with the skin's still air, and does not block radiation
-/// (it is about as warm as the ground). Walls around it are in series with all of it. A 30 kg member with a coat gene
-/// of -1.0 gets 0.8 W/K (Herreid and Kessel 1967 measured 0.94 for fur).
+/// (it is about as warm as the ground). The link through walls around it (`walls`, `bond::enclosure`) is in series with
+/// all of it. A 30 kg member with a coat gene of -1.0 gets 0.8 W/K (Herreid and Kessel 1967 measured 0.94 for fur).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn surface(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64, walls: Option<(f64, f64)>, t: f64, tg: f64) -> f64 {
+pub(super) fn surface(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64, walls: Option<Enclosure>, t: f64, tg: f64) -> f64 {
     let ((air, area), coat) = (film(chem, cfg, b, mass, cover), b.conductance(cfg.phys.m_ref, mass));
     let out = air + radiated(area, t, tg);
     let out = air + radiated(area, (coat * t + out * tg) / (coat + out), tg);
     let g = coat * out / (coat + out);
-    walls.map_or(g, |x| 1.0 / (1.0 / g + 1.0 / x.1))
+    walls.map_or(g, |x| 1.0 / (1.0 / g + 1.0 / x.g))
 }
 
 /// The boundary layer of a body's outer surface, W/K, and that surface, m² (`surface`): its skin (through the cover) and
@@ -123,7 +124,7 @@ pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
 pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
     let i = b.cell as usize;
     let tg = w.t_ground_last(i);
-    surface(&w.chem, &w.cfg, b, mass, cover_of(w, b), bond::walls_around(w, b), t, tg)
+    surface(&w.chem, &w.cfg, b, mass, cover_of(w, b), bond::enclosure(w, b), t, tg)
 }
 
 /// Heat conductance of radiation between a surface of `area` m² at `t` and the ground at `tg`, W/K: σ (T² + tg²)

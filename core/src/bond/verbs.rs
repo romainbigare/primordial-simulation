@@ -2,7 +2,7 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::sense::room;
-use super::{dissolve, event, held, holder, link, make, restructure, strength, unlink, GROUND, HELD, LOAD, NOBODY};
+use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, strength, unlink, GROUND, HELD, LOAD, NOBODY};
 use crate::body::{self, Body, Layout, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::World;
@@ -25,17 +25,17 @@ fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
         return;
     }
     w.parts.parts[p].held = b.id(slot);
-    b.hold = w.parts.parts[p].id(p);
-    event(w, true, b.cell, HELD);
+    b.hold = Some(id(w, p));
+    event(w, true, b.cell as usize, HELD);
 }
 
 /// Let go of the held part (also when the body dies).
 pub(crate) fn let_go(w: &mut World, b: &mut Body, load: bool) {
     if let Some(p) = held(w, b) {
         w.parts.parts[p].held = NOBODY;
-        event(w, false, b.cell, HELD + if load { LOAD } else { 0.0 });
+        event(w, false, b.cell as usize, HELD + if load { LOAD } else { 0.0 });
     }
-    b.hold = 0;
+    b.hold = None;
 }
 
 /// The body in slot `o` lets go of what it holds, broken off by a load.
@@ -96,7 +96,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
                 if f > force(w, &w.life.bodies[o]) {
                     torn_from(w, o);
                 }
-            } else if let Some(&(o, s)) = w.parts.parts[p].links.iter().min_by(|a, b| a.1.total_cmp(&b.1)) {
+            } else if let Some((o, s)) = w.parts.bonds.of(p).min_by(|a, b| a.1.total_cmp(&b.1)) {
                 if f > s as f64 {
                     unlink(w, p, o, false);
                 }
@@ -107,8 +107,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
             let i = b.cell as usize;
             let used: f64 = w.life.at[i].iter().map(|&o| &w.life.bodies[o as usize]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| o.volume(&w.chem)).sum();
             let s = w.parts.parts[r].s;
-            if s.encl > 0.0 && s.space >= used + b.volume(&w.chem) && body::pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
-                b.inside = w.parts.parts[p].id(p);
+            if s.encl.closed > 0.0 && s.space >= used + b.volume(&w.chem) && body::pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
+                b.inside = Some(id(w, p));
             }
         }
     }
@@ -124,7 +124,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;
     }
-    let (chem, pt) = (&w.chem, &mut w.parts.parts[p]);
+    let (me, chem, pt) = (Some(id(w, p)), &w.chem, &mut w.parts.parts[p]);
     let q = chem.heat_share(pt.e, pt.heat_cap(chem), &m);
     for (k, &a) in m.iter().enumerate() {
         let f = a.min(pt.fill[k]);
@@ -136,7 +136,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     (pt.e, b.e) = (pt.e - q, b.e + q);
     w.counts.parts.from_parts += got;
     if pt.walls(chem).mass < w.cfg.phys.min_kg {
-        if b.hold == pt.id(p) {
+        if b.hold == me {
             let_go(w, b, false);
         }
         dissolve(w, p);
@@ -217,7 +217,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
 
 /// Let go of the held part; with nothing held, leave the inside.
 pub fn release(w: &mut World, b: &mut Body) {
-    if held(w, b).is_some() { let_go(w, b, false) } else { b.inside = 0 }
+    if held(w, b).is_some() { let_go(w, b, false) } else { b.inside = None }
 }
 
 /// Bond the held part to the cell's bonded ground and let go of it.
@@ -279,9 +279,9 @@ pub fn carry(w: &mut World, b: &mut Body) -> Option<(usize, f64)> {
 /// After a body moved from `i` into `j`: the structure it carried comes along; it pushes the
 /// structures there.
 pub fn moved(w: &mut World, b: &mut Body, carried: Option<(usize, f64)>, j: usize, mb: f64) {
-    b.inside = 0;
+    b.inside = None;
     if let Some((r, _)) = carried {
-        w.parts.move_structure(r, j);
+        move_structure(w, r, j);
     }
     let push = (w.cfg.phys.bump * mb * w.cfg.gravity) as f32;
     for x in 0..w.parts.at[j].len() {

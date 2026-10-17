@@ -38,7 +38,7 @@ pub(crate) fn crowd(w: &mut World) {
 /// a split's halves stay apart for selection) and of its size class (`body::class`). Returns the bodies left.
 fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     let b = &w.life.bodies;
-    let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold == 0 && b[s].inside == 0 && may_be_node(w, &b[s].genes)).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
+    let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold.is_none() && b[s].inside.is_none() && may_be_node(w, &b[s].genes)).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_unstable();
     let mut head: Vec<usize> = (0..list.len()).collect();
     // Each one's class once, tested before the genes.
@@ -155,7 +155,7 @@ pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>
 fn part(life: &mut Life, b: &mut Body, f: f64) -> Body {
     // (The trace and the constants are not the part's: set aside, not cloned.)
     let (trace, k) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k));
-    let mut c = Body { count: f * b.count, e: f * b.e, brood: f * b.brood, hold: 0, inside: 0, ..b.clone() };
+    let mut c = Body { count: f * b.count, e: f * b.e, brood: f * b.brood, hold: None, inside: None, ..b.clone() };
     (b.trace, b.k) = (trace, k);
     for (a, x) in b.store.iter_mut().zip(c.store.iter_mut()) {
         *x = f * *a;

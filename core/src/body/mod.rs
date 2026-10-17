@@ -27,6 +27,7 @@ pub use pay::{pay, release, upkeep};
 use crate::brain::{ln, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::{melting, Melting};
+use crate::store::NodeId;
 use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
 
@@ -104,9 +105,9 @@ pub struct Body {
     pub since: u64,
     /// Its own adjustment of the action scores: fixed actions, moving, the verbs
     pub adj: [f32; FIXED + 1 + VERBS + OVERBS],
-    /// The part it holds, and a part of the structure it is inside (ids, 0 if none)
-    pub hold: u64,
-    pub inside: u64,
+    /// The part it holds, and a part of the structure it is inside
+    pub hold: Option<NodeId>,
+    pub inside: Option<NodeId>,
     /// Memory the brain reads and writes; the signal emitted at the last decision
     pub mem: Vec<f32>,
     pub sig: [f32; SIG],

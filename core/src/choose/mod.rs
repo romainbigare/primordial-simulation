@@ -61,7 +61,7 @@ struct Choice {
     nseen: usize,
     parts: [usize; PARTS],
     nparts: usize,
-    room: Option<(usize, f32, f64)>,
+    room: Option<(usize, bond::Enclosure)>,
     held: Option<usize>,
     logit: [f32; OPTS],
     p: [f32; OPTS],
@@ -280,7 +280,7 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
     if let Some(mut o) = one {
         o.vis = o.visible(&w.chem, &w.cfg.phys);
         w.life.bodies[me] = o;
-        if w.life.bodies[me].hold == 0 && w.life.bodies[me].inside == 0 {
+        if w.life.bodies[me].hold.is_none() && w.life.bodies[me].inside.is_none() {
             let o = w.life.bodies[me].clone();
             w.life.remove(me);
             nodes::take_in(w, node, o, None);

@@ -1,7 +1,7 @@
 //! The three ways a law changes the world (`docs/foundation/plan.md`, Idea 2): a move between two nodes, a transform
 //! of the amounts inside one node, and a link flux over a whole field; and `apply`, which books them.
 
-use super::nodes::{Class, NodeId, Nodes, BOUNDARIES, CLASSES};
+use super::nodes::{Class, NodeId, Nodes, BOUNDARIES};
 use crate::chem::Chemistry;
 use crate::clock::Sleep;
 use crate::ground::share;
@@ -9,6 +9,9 @@ use crate::World;
 
 /// What a transform may lose or gain of an element to rounding, relative to all the elements it changes.
 const ELEMENT_ROUNDING: f64 = 1e-9;
+/// The classes `apply` books, the first ones: those whose amounts lie in arrays of `World` (a part's lie in the part,
+/// `Class::Part`, which Bond books).
+const BOOKED: usize = Class::Part as usize;
 
 /// `mol` of substance `k` and `heat` J leave node `from` for node `to`. `to` receives `heat` less the energy the mol
 /// hold apart from heat more there than in `from` (`held`): so the law chooses who pays the latent heat of a gas that
@@ -52,7 +55,7 @@ pub fn held(chem: &Chemistry, class: Class, k: usize) -> f64 {
 
 /// The arrays `apply` books: `2 * class` holds the amounts of a class and `2 * class + 1` its heat, the order in which
 /// it counts what it rounds.
-const ARRAYS: usize = 2 * CLASSES;
+const ARRAYS: usize = 2 * BOOKED;
 /// The first array of the boundary nodes, which give all they are asked (`Class::Boundary`).
 const BOUNDARY_ARRAYS: usize = 2 * Class::Boundary as usize;
 
@@ -108,7 +111,7 @@ struct Column<'a> {
 
 impl<'a> LinkFlux<'a> {
     /// Its columns: one for each substance, then the heat.
-    fn columns(&self, len: &[usize; CLASSES]) -> Vec<Column<'a>> {
+    fn columns(&self, len: &[usize; BOOKED]) -> Vec<Column<'a>> {
         let (c, links, at, mol) = (self.class as usize, self.a.len(), len[self.class as usize], self.mol);
         let amounts = self.ks.iter().enumerate().map(|(q, &k)| Column { arr: 2 * c, at: k as usize * at, by_link: &mol[q * links..(q + 1) * links] });
         amounts.chain((!self.heat.is_empty()).then_some(Column { arr: 2 * c + 1, at: 0, by_link: self.heat })).collect()
@@ -142,13 +145,20 @@ fn each_item<'i>(moves: &'i [Move], transforms: &'i [Transform], f: impl FnMut(I
     moves.iter().map(Item::Move).chain(transforms.iter().map(Item::Transform)).for_each(f);
 }
 
+/// Where the amounts and heat of node `id` lie (`Nodes::place`), in a class `apply` books.
+fn booked(table: &Nodes, id: NodeId) -> (Class, usize) {
+    let p = table.place(id);
+    assert!((p.0 as usize) < BOOKED, "apply books no node of {:?}", p.0);
+    p
+}
+
 /// Each number `item` changes, with its change unscaled, in order.
-fn each_delta(item: Item, table: &Nodes, chem: &Chemistry, len: &[usize; CLASSES], mut f: impl FnMut(Slot, f64)) {
+fn each_delta(item: Item, table: &Nodes, chem: &Chemistry, len: &[usize; BOOKED], mut f: impl FnMut(Slot, f64)) {
     let amount = |c: usize, at| Slot { arr: 2 * c, at };
     let heat = |c: usize, at| Slot { arr: 2 * c + 1, at };
     match item {
         Item::Move(m) => {
-            let (((cf, i), (ct, j)), k) = ((table.place(m.from), table.place(m.to)), m.k as usize);
+            let (((cf, i), (ct, j)), k) = ((booked(table, m.from), booked(table, m.to)), m.k as usize);
             let lift = m.mol * (held(chem, ct, k) - held(chem, cf, k));
             let (cf, ct) = (cf as usize, ct as usize);
             f(amount(cf, k * len[cf] + i), -m.mol);
@@ -157,7 +167,7 @@ fn each_delta(item: Item, table: &Nodes, chem: &Chemistry, len: &[usize; CLASSES
             f(heat(ct, j), m.heat - lift);
         }
         Item::Transform(t) => {
-            let ((class, i), mut q) = (table.place(t.at), 0.0);
+            let ((class, i), mut q) = (booked(table, t.at), 0.0);
             let c = class as usize;
             for &(k, d) in &t.dmol {
                 f(amount(c, k as usize * len[c] + i), d);
@@ -175,7 +185,7 @@ struct Giver<'w> {
     sleep: &'w mut Sleep,
     table: &'w Nodes,
     time: u64,
-    len: [usize; CLASSES],
+    len: [usize; BOOKED],
 }
 
 impl Giver<'_> {
@@ -250,7 +260,7 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     }
     for x in fluxes {
         let (links, once) = (x.a.len(), x.ks.iter().enumerate().all(|(q, k)| !x.ks[..q].contains(k)));
-        let shaped = x.b.len() == links && x.mol.len() == x.ks.len() * links && (x.heat.is_empty() || x.heat.len() == links);
+        let shaped = (x.class as usize) < BOOKED && x.b.len() == links && x.mol.len() == x.ks.len() * links && (x.heat.is_empty() || x.heat.len() == links);
         assert!(shaped && once, "a link flux of the wrong shape");
     }
     for t in transforms {

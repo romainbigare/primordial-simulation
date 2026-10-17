@@ -433,11 +433,13 @@ Files: `core/src/bond/` (`verbs` what bodies do to parts, `sense` what parts giv
 ### 3.1 Parts and structures
 
 - A **part** is a made object: solid walls, the liquid held in its hollow, heat, a size (3
-  numbers) and a hollowness. It lies in a cell or is held by a body. A body makes one with the
-  action "form" (`bond::form`, cost `c_form` per kg), at most `form` of its mass.
-- A **bond** joins two parts, or a part and the bonded ground. Its strength (N) comes from the
-  weaker material at the joint and the contact area (`tensile`, `joint`). Making it costs
-  `c_join` per m².
+  numbers) and a hollowness. It is a node of the store (`Class::Part`): the node table gives it its
+  id and its cell, and gives its slot to a new part, with a new generation, when it is gone. It lies
+  in a cell or is held by a body. A body makes one with the action "form" (`bond::form`, cost
+  `c_form` per kg), at most `form` of its mass.
+- A **bond** is a link (`bond::Bonds`, each bond once) that joins two parts, or a part and the
+  bonded ground. Its strength (N) comes from the weaker material at the joint and the contact
+  area (`tensile`, `joint`). Making it costs `c_join` per m².
 - A **structure** is the parts joined by bonds. It moves as one.
 - Parts take their cell's temperature each month and react with the air every 6 months (2.2).
 
@@ -460,10 +462,13 @@ and drifts down the liquid's slope (`bond::afloat`).
 
 ### 3.4 Containment
 
-If a structure's walls close around a space, it has an **inside** (`bond::room`). A body in it
-loses heat to the outside only through the walls and the openings (a conductance in series with
-its own; `leak` per m² of opening), and gets the light and rain that come through the openings.
-"Shelter" is nothing more than this low conductance.
+If a structure's walls close around a space, it has an **inside** (`bond::room`), joined to its
+cell by one link, its enclosure (`bond::Enclosure`). Heat passes the link through the walls (their
+conductivity × face over thickness, for the share of the space they close) and through the
+openings (`leak` per m² of opening); light and rain pass only through the openings. A body inside
+exchanges with the outside only through its share of that link (`bond::enclosure`: the bodies
+inside share it), in series with its own surface. The inside holds almost no heat, so it is no
+node: the series is solved in closed form. "Shelter" is nothing more than this low conductance.
 
 ### 3.5 Moving needs force
 

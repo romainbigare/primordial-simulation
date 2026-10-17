@@ -2,7 +2,7 @@
 
 use super::sense::liquid;
 use super::verbs::{bears, torn_from};
-use super::{dissolve, holder, ready, restructure, unlink, GROUND};
+use super::{cell, dissolve, holder, id, members, move_structure, ready, restructure, unlink, GROUND};
 use crate::change::{send_gas, GasMove, Reactor};
 use crate::flow::Sky;
 use crate::ground::share;
@@ -53,7 +53,7 @@ pub fn step(w: &mut World) {
 /// ground, with its heat.
 fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
     let (n, na) = (w.grid.n(), w.grid.na());
-    let i = w.parts.parts[s].cell as usize;
+    let i = cell(w, s);
     let j = w.grid.air_of(i);
     let (air_share, lift, ta) = (w.grid.air_share(), w.lift(i), w.t_air(j));
     let chem = &w.chem;
@@ -81,7 +81,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
 /// ground cannot pay the heat, it ends colder); walls lighter than `Physics::min_kg` fall apart.
 fn settle(w: &mut World, s: usize) {
     let (ns, n) = (w.chem.ns(), w.grid.n());
-    let i = w.parts.parts[s].cell as usize;
+    let i = cell(w, s);
     let tg = w.t_ground_last(i);
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
@@ -108,7 +108,7 @@ fn settle(w: &mut World, s: usize) {
 /// Load one structure: weights less buoyancy, pushes of moving liquid and bodies; break what is
 /// overloaded; float and drift.
 fn load(w: &mut World, r: usize) {
-    let (list, i, g) = (w.parts.members(r), w.parts.parts[r].cell as usize, w.cfg.gravity);
+    let (list, i, g) = (members(w, r), cell(w, r), w.cfg.gravity);
     let (depth, rho, molv) = liquid(w, i);
     let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     let v = if depth > STILL_DEPTH { flux / (molv * w.grid.cell_m * depth) } else { 0.0 };
@@ -128,14 +128,14 @@ fn load(w: &mut World, r: usize) {
     let held = list.iter().copied().find(|&p| holder(w, p).is_some());
     // From the supports (anchored parts, else the held one) out along the bonds; each bond
     // carries what hangs beyond it; a ground bond carries the pushes on what it holds.
-    let mut order: Vec<usize> = (0..list.len()).filter(|&x| w.parts.parts[list[x]].links.iter().any(|l| l.0 == GROUND)).collect();
+    let mut order: Vec<usize> = (0..list.len()).filter(|&x| w.parts.bonds.of(list[x]).any(|l| l.0 == GROUND)).collect();
     if order.is_empty() {
         order.extend(held.and_then(|h| list.iter().position(|&p| p == h)));
     }
     let mut up = vec![usize::MAX; list.len()];
     let mut q = 0;
     while q < order.len() {
-        for &(o, _) in &w.parts.parts[list[order[q]]].links {
+        for (o, _) in w.parts.bonds.of(list[order[q]]) {
             if let Some(c) = list.iter().position(|&p| p as u32 == o).filter(|&c| !order.contains(&c)) {
                 up[c] = order[q];
                 order.push(c);
@@ -150,7 +150,7 @@ fn load(w: &mut World, r: usize) {
     }
     let mut breaks = Vec::new();
     for &c in &order {
-        for &(o, st) in &w.parts.parts[list[c]].links {
+        for (o, st) in w.parts.bonds.of(list[c]) {
             let hang = if o == GROUND { push[c] } else if up[c] != usize::MAX && list[up[c]] as u32 == o { wt[c] + push[c] } else { 0.0 };
             if hang > st as f64 {
                 breaks.push((list[c], o));
@@ -158,7 +158,7 @@ fn load(w: &mut World, r: usize) {
         }
     }
     for (a, o) in breaks {
-        if w.parts.parts[a].links.iter().any(|l| l.0 == o) {
+        if w.parts.bonds.of(a).any(|l| l.0 == o) {
             unlink(w, a, o, true);
         }
     }
@@ -175,10 +175,10 @@ fn load(w: &mut World, r: usize) {
     if !afloat || held.is_some() || v <= 0.0 || w.parts.parts[r].root as usize != r {
         return;
     }
-    let mut rng = Rng::new(w.seed, w.day(), w.parts.parts[r].id(r), Purpose::Bond);
+    let mut rng = Rng::of_node(w.seed, w.time, id(w, r), Purpose::Bond);
     let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
     let to = DIRS.iter().filter_map(|&d| w.grid.step(i, d)).filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
     if let Some(j) = to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / w.grid.cell_m) {
-        w.parts.move_structure(r, j);
+        move_structure(w, r, j);
     }
 }

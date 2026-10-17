@@ -65,7 +65,7 @@ pub(super) fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut
         for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
             let ob = &w.life.bodies[o as usize];
             let their = bond::room(w, ob);
-            let walls = if room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { room.map_or(0.0, |r| r.1).max(their.map_or(0.0, |r| r.1)) };
+            let walls = if room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { room.map_or(0.0, |r| r.1.closed).max(their.map_or(0.0, |r| r.1.closed)) };
             let cover = (w.canopy[j] as f64 - ob.vis[1] as f64 * ob.n() / w.grid.area()).max(0.0);
             if cnt < nseen && (walls == 0.0 || rng.f64() as f32 >= walls) && (cover <= 0.0 || rng.f64() < (-cover).exp()) {
                 (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);

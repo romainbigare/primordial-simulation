@@ -23,6 +23,7 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
         Class::Air => (&w.air, &w.e_air, w.grid.na()),
         Class::Deep => (&w.deep, &w.e_deep, w.grid.n()),
         Class::Boundary => (&w.boundary, &w.e_boundary[..], BOUNDARIES),
+        Class::Part => unreachable!("a part's amounts lie in the part"),
     }
 }
 

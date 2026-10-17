@@ -67,8 +67,7 @@ pub struct World {
     pub cfg: Config,
     pub chem: Chemistry,
     pub grid: Grid,
-    /// The id, class, parent and cell of every node (built from the grid, `store::Nodes::of_grid`, so not saved)
-    #[serde(skip)]
+    /// The id, class, parent and cell of every node (`store::Nodes`): the grid's, and the parts', which come and go
     pub table: crate::store::Nodes,
     /// The working space of `store::apply`, kept between its calls (not saved)
     #[serde(skip)]

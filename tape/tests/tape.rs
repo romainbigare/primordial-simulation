@@ -62,6 +62,28 @@ fn snapshot_round_trip_mid_cycle() {
     assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 
+/// A part is a node of the table: its id holds through a snapshot, and when it is gone its slot goes to the next part
+/// with a new generation, so the old id names nothing.
+#[test]
+fn a_part_keeps_its_id_through_a_snapshot_and_its_freed_slot_gets_a_new_generation() {
+    use pcore::{bond, store::Class};
+    let dir = tmp("snap_part");
+    let mut a = worldgen::testkit::small_world();
+    let i = worldgen::testkit::dry_land(&a);
+    let q = [0; 2].map(|_| worldgen::testkit::plate(&mut a, i, 10.0, false))[1];
+    let id = bond::id(&a, q);
+    tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
+    let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
+    assert_eq!((b.table.place(id), b.table.cell(id)), ((Class::Part, q), i));
+    // Both fall apart in the month, as lighter than the least a part may weigh; `q`'s slot is the last freed.
+    b.cfg.phys.min_kg = 1e3;
+    bond::step(&mut b);
+    assert!(b.parts.alive().next().is_none() && b.table.find(id).is_none(), "the old id still names a node");
+    let r = worldgen::testkit::plate(&mut b, i, 10.0, false);
+    let new = bond::id(&b, r);
+    assert_eq!((r, new.slot, new.gen), (q, id.slot, id.gen + 1));
+}
+
 /// A roster run resumed from a snapshot taken before some of its kinds are due places them as the unbroken run does:
 /// the snapshot carries the schedule, and both runs end with the same world.
 #[test]

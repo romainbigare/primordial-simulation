@@ -342,10 +342,21 @@ The work of `docs/foundation/plan.md`, one line per task.
   `--roster` to year 22, where 230 links are worn); golden re-pinned and `SNAPSHOT_VERSION` 8, since the saved field
   changes its layout. The `worn` layer of the viewer now shows the most worn of all links of a cell, not only of its
   east and south ones.
+- D0: `store::apply` keeps its working space between calls (`store::Booking`, `World::booking`, not saved) and works on
+  the numbers its changes touch alone, not on zeroed arrays of the whole world; it books each link flux one column
+  (substance or heat) at a time, so a flux names each substance once. Same results bit for bit. Heat on the 64,770
+  cell links of 128 x 128: from 6.1 ms (43 times a plain loop) to 0.35 to 0.4 ms (2.6 to 3 times).
 - D1: heat conducts sideways through the ground once a year (`flow::land::conduct`: `solve::spread` on the cell links
   with a shared border, booked as heat-only link fluxes by `store::apply`), with the bed's mean conductivity kept in
   `Scratch::bed`. It was removed from the yearly creep before (`5f7b59a`); creep keeps only the loose solids that slide
   with their heat. Snapshot version 9, golden re-pinned.
+- D7: parts are nodes of the store (`Class::Part`): the node table gives each its id and cell, reuses a freed slot
+  with a new generation (`life::free_place`) and is now saved (snapshot version 10); `Part::gen`, `Part::cell` and
+  `Parts::free` go, and bodies name the part they hold and the one they are inside by `NodeId`. Bonds are one link
+  list (`bond::Bonds`, each bond once, not twice in each part); the inside of a structure is joined to its cell by
+  one link (`bond::Enclosure`: how closed, heat conductance) that the body's heat, light, rain and evaporation read
+  (`bond::enclosure`, was `walls_around`). Same physics; only the drift of a floating structure draws from a new key
+  (`Rng::of_node`); golden re-pinned.
 
 **Owner's decisions after Phase A**
 
@@ -358,10 +369,3 @@ The work of `docs/foundation/plan.md`, one line per task.
   store beyond the dead members' share comes from the members who live. 64 x 64, seeds 1 and 2, with the start
   above: bites fall from 0.2% to 0.004% of plant deaths in years 3 to 21; plant members at year 30 +7% (seed 1)
   and -17% (seed 2); golden re-pinned.
-
-**Phase D: the physics laws on the new base**
-
-- D0: `store::apply` keeps its working space between calls (`store::Booking`, `World::booking`, not saved) and works on
-  the numbers its changes touch alone, not on zeroed arrays of the whole world; it books each link flux one column
-  (substance or heat) at a time, so a flux names each substance once. Same results bit for bit. Heat on the 64,770
-  cell links of 128 x 128: from 6.1 ms (43 times a plain loop) to 0.35 to 0.4 ms (2.6 to 3 times).
