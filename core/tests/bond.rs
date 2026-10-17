@@ -124,7 +124,7 @@ fn forming_never_takes_more_than_is_left() {
 /// A node whose brain draws an action of Bond splits one member off as an individual of its lineage, with its share of
 /// the stores, to act. One that holds a part after (its brain only holds parts, and its force bears the part's weight)
 /// lives on; one that holds nothing (too weak to bear the part, or its brain only breaks the ground) goes back into the
-/// node at once, which is then as it was.
+/// node at once, which is then as it was: its members, genes and the spread of its born rows.
 #[test]
 fn a_node_acts_on_bonds_through_one_member() {
     // 0: holds a part of 5 kg, members of 40 kg at strength about 1 (they bear about 200 N, the part weighs 49 N); 1: the
@@ -141,7 +141,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         let brain = if hold { Brain::verb(brain::VERBS) } else { Brain::only(brain::DIG) };
         let line = Line::new(&mut w, &brain, 0);
         let (l, mut b) = (line.lineage, line.founder(&mut w, 0, i));
-        b.spread = vec![0.01; b.genes.len()];
+        (b.spread, b.row_spread) = (vec![0.01; b.genes.len()], 0.01);
         // (No liquid soaked up from the ground, which would add a third to their mass.)
         b.genes[LIQ] = -4.0;
         if case == 0 {
@@ -164,6 +164,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         } else {
             assert!(one.is_empty() && (node.count - n0).abs() < 1e-9 * n0, "{} members", node.count);
             assert!(node.genes.iter().zip(&genes).all(|(a, b)| (a - b).abs() < 1e-4), "genes changed");
+            assert_eq!(node.row_spread, 0.01, "the spread of the born rows changed");
             assert!(w.parts.parts[p].held == pcore::bond::NOBODY, "the part is held");
         }
         books.assert_kept(&w, 1e-9);

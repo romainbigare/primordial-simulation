@@ -123,19 +123,22 @@ pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
 /// the means by members (children of less than one member weigh what they are), and the spread what both held around
 /// the new mean (each one's spread plus its gap from the new mean squared, by members; for the rows the mean over rows
 /// of the gap squared; up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows` are
-/// the born rows of `c`; none: those of `o` (a member split off `o` coming back), which leaves its rows and its group's
-/// as they are.
+/// the born rows of `c`; none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows, their
+/// spread and its group's as they are: it left with the rows' mean and comes back with it.
 pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
     o.spread = (0..o.genes.len()).map(|g| pool(spread_at(&o.spread, g), spread_at(&c.spread, g), (c.genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
-    let born = w.life.born(o);
-    let gap = rows.map_or(0.0, |rows| born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32);
-    o.row_spread = pool(o.row_spread, c.row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
     let genes = mix(&o.genes, &c.genes);
     match rows {
-        Some(rows) => w.life.reborn(o, genes, mix(born, rows)),
+        Some(rows) => {
+            let born = w.life.born(o);
+            let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
+            o.row_spread = pool(o.row_spread, c.row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
+            let rows = mix(born, rows);
+            w.life.reborn(o, genes, rows);
+        }
         None => w.life.regene(o, genes),
     }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
