@@ -8,6 +8,9 @@ use crate::chem::{Chemistry, Phase};
 /// herbs (from memory); the founders keep 0.75 (`worldgen::life`).
 pub const WET_TISSUE: f64 = 0.75;
 
+/// The most share of a body's mass its keep gene of a key liquid, or of the solids it builds together, may make up.
+pub(crate) const MAX_KEEP: f64 = 0.95;
+
 impl Body {
     /// Key stores (safe minimum above 0), one bit per substance.
     pub(crate) fn key_mask(&self, chem: &Chemistry) -> u64 {
@@ -110,7 +113,7 @@ impl Body {
         while bits != 0 {
             let k = bits.trailing_zeros() as usize;
             bits &= bits - 1;
-            (liquid, h) = (liquid + self.store[k] * chem.subs[k].molar_mass, h.max(self.gene(keep + k).clamp(0.0, 0.95)));
+            (liquid, h) = (liquid + self.store[k] * chem.subs[k].molar_mass, h.max(self.gene(keep + k).clamp(0.0, MAX_KEEP)));
         }
         (liquid, h)
     }
@@ -150,7 +153,7 @@ impl Body {
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         let mm = chem.subs[k].molar_mass;
         let f = self.gene(Layout::of(chem).keep + k);
-        let share = |f: f64| f.clamp(0.0, 0.95) / (1.0 - f.clamp(0.0, 0.95));
+        let share = |f: f64| f.clamp(0.0, MAX_KEEP) / (1.0 - f.clamp(0.0, MAX_KEEP));
         match chem.matter() {
             // (A solid it builds: what its share in what it builds makes of its matter, `share`.)
             Some(_) if chem.is_material(k) => self.share(chem, k) / (1.0 - self.share(chem, usize::MAX)) * self.matter_kg(chem) / mm,
@@ -199,7 +202,7 @@ impl Body {
         let keep = Layout::of(chem).keep;
         let all: f64 = chem.materials().map(|x| self.gene(keep + x).clamp(0.0, 1.0)).sum();
         let s = if k == usize::MAX { all } else { self.gene(keep + k).clamp(0.0, 1.0) };
-        s * (0.95 / all.max(1e-30)).min(1.0)
+        s * (MAX_KEEP / all.max(1e-30)).min(1.0)
     }
     /// Nothing left of a member (under 1 g each) when the mass is `m`.
     pub(crate) fn empty_at(&self, m: f64) -> bool {

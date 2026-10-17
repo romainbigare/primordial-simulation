@@ -22,7 +22,7 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
 /// substance), with its share of the heat. In a node these are the remains of a share `f` of
 /// its members, who died of `cause` (the count falls). False if less than one member is left
 /// (the caller lets the node die).
-pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> bool {
+pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> bool {
     let (n, i, chem) = (w.grid.n(), b.cell as usize, &w.chem);
     // Whether the members who die were grown, judged before their matter leaves the node.
     let adult = b.adult(chem);
@@ -57,14 +57,30 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
 /// little to live). `matter0` is the body matter, kg, it had before the hit. Returns `None` if less
 /// than one member is left, else the body matter, kg, torn off members who live on (0 when members
 /// died), which the caller counts with `hurt` once it knows the body lives.
-pub fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter0: f64) -> Option<f64> {
+fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter0: f64) -> Option<f64> {
     let whole = b.n() > 1.0 && f * b.n() >= 1.0;
     let alive = thin(w, b, if whole { f } else { 0.0 }, dead, cause);
     alive.then(|| if whole { 0.0 } else { (matter0 - b.matter_kg(&w.chem)).max(0.0) })
 }
 
+/// A hit tears the share `f` of the body in `slot` (`tear`, taken out of its slot). It dies if less than one member is left,
+/// or, as an individual, when half of its body (`Body::built`, `built0` before the hit) or more is torn or a store fell
+/// below its safe minimum; else it lives on, hurt (`hurt`), back in its slot. True if it lives.
+#[allow(clippy::too_many_arguments)]
+pub fn wound(w: &mut World, slot: usize, mut b: Body, f: f64, dead: &[f64], cause: u8, built0: f64, matter0: f64) -> bool {
+    let torn = tear(w, &mut b, f, dead, cause, matter0);
+    if torn.is_none() || (b.n() <= 1.0 && (b.built(&w.chem) <= 0.5 * built0 * (1.0 + 1e-9) || b.lacking(&w.chem))) {
+        die(w, slot, b, cause);
+        return false;
+    }
+    hurt(w, &b, torn.unwrap_or(0.0));
+    b.vis = b.visible(&w.chem, &w.cfg.phys);
+    w.life.bodies[slot] = b;
+    true
+}
+
 /// Count `kg` of body matter torn off a body that lived on (`tear`) for its starting kind (`Diag::hurt`).
-pub fn hurt(w: &mut World, b: &Body, kg: f64) {
+fn hurt(w: &mut World, b: &Body, kg: f64) {
     if kg > 0.0 {
         if let Some(h) = Diag::of_root(&mut w.diag.hurt, w.life.root(b)) {
             *h += kg;

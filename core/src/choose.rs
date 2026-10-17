@@ -532,20 +532,13 @@ pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     }
     for s in others {
         let s = s as usize;
-        let mut o = std::mem::take(&mut w.life.bodies[s]);
+        let o = std::mem::take(&mut w.life.bodies[s]);
         let (m, t, built0, matter0) = (o.mass(&w.chem), o.temp(&w.chem), o.built(&w.chem), o.matter_kg(&w.chem));
         // (Its share of the energy, by its mass, breaks what that pays for, `Body::breaking`; half at the most.)
         let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(0.5);
         broken += m * f;
         let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
-        let torn = body::tear(w, &mut o, f, &dead, BROKEN, matter0);
-        if torn.is_none() || (o.n() <= 1.0 && (o.built(&w.chem) <= 0.5 * built0 * (1.0 + 1e-9) || o.lacking(&w.chem))) {
-            body::die(w, s, o, BROKEN);
-        } else {
-            body::hurt(w, &o, torn.unwrap_or(0.0));
-            o.vis = o.visible(&w.chem, &w.cfg.phys);
-            w.life.bodies[s] = o;
-        }
+        body::wound(w, s, o, f, &dead, BROKEN, built0, matter0);
     }
     broken
 }
@@ -762,14 +755,8 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), body::light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: got });
-    let torn = body::tear(w, &mut o, f, &rest, TAKEN, matter0);
-    if torn.is_none() || (o.n() <= 1.0 && (o.built(&w.chem) <= 0.5 * built0 * (1.0 + 1e-9) || o.lacking(&w.chem))) {
-        body::die(w, s, o, TAKEN);
-    } else {
-        body::hurt(w, &o, torn.unwrap_or(0.0));
-        o.note(b.id(slot), -(10.0 * got / mo) as f32);
-        o.vis = o.visible(&w.chem, &w.cfg.phys);
-        w.life.bodies[s] = o;
+    if body::wound(w, s, o, f, &rest, TAKEN, built0, matter0) {
+        w.life.bodies[s].note(b.id(slot), -(10.0 * got / mo) as f32);
     }
 }
 

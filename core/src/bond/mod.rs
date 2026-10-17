@@ -277,7 +277,7 @@ fn restructure(w: &mut World, p: usize) {
     let plates = if list.len() > 1 { (foot / need).min(1.0) } else { 0.0 };
     let (e, space) = if plates * l.powi(3) > best.1 { (plates, plates * l.powi(3)) } else { best };
     (s.encl, s.space) = (e as f32, space);
-    s.g = e * cond + w.cfg.phys.leak * (1.0 - e) * BOX_FACES * space.powf(2.0 / 3.0);
+    s.g = e * cond + crate::math::cube_area(w.cfg.phys.leak * (1.0 - e), space);
     let root = *list.iter().min().expect("one part");
     for &x in &list {
         w.parts.parts[x].root = root as u32;

@@ -2,6 +2,7 @@
 
 use super::Body;
 use crate::chem::Chemistry;
+use crate::math::cube_area;
 use crate::units::{DAY, R_GAS, SIGMA};
 use crate::{bond, World};
 
@@ -19,8 +20,16 @@ impl Body {
     /// kg-equivalent (12.8): 0.38 + 0.58 m². Needs `prepare`. The `GAS` gene is the air exchanged
     /// per m² of it per day.
     pub fn open_area(&self, chem: &Chemistry, p: &crate::Physics, mass: f64) -> f64 {
+        self.leaf_area(chem, p) + self.skin_area(p, mass)
+    }
+    /// Its light-capture area, all members', m²: `LEAF` per kg-equivalent of its body (`equiv` of `built`). Needs `prepare`.
+    pub(crate) fn leaf_area(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
+        self.equiv(p, self.built(chem)) * self.k.leaf
+    }
+    /// Its skin at a whole mass of `mass` kg, all members', m²: each member a cube of its volume at `rho_body`.
+    pub(crate) fn skin_area(&self, p: &crate::Physics, mass: f64) -> f64 {
         let m1 = mass / self.n();
-        self.equiv(p, self.built(chem)) * self.k.leaf + self.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0)
+        cube_area(self.n(), m1 / p.rho_body)
     }
 }
 
@@ -56,8 +65,7 @@ pub(super) fn surface(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64
 /// convection, a few W/(m² K) at a few K, is under it at this wind.)
 pub(super) fn film(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64) -> (f64, f64) {
     let p = &cfg.phys;
-    let (leaf, m1) = (b.equiv(p, b.built(chem)) * b.k.leaf, mass / b.n());
-    let skin = b.n() * 6.0 * (m1 / p.rho_body).powf(2.0 / 3.0);
+    let (leaf, m1, skin) = (b.leaf_area(chem, p), mass / b.n(), b.skin_area(p, mass));
     let h = |d: f64| p.forced * air_cp(chem) * (p.wind_ground / d).sqrt();
     let still = h((m1 / p.rho_body).cbrt()) * skin;
     (if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + h(p.leaf_size) * 2.0 * leaf, skin + 2.0 * leaf)
@@ -115,7 +123,7 @@ pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
 /// temperature is that of the last flow step, as in its update.
 pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
     let i = b.cell as usize;
-    let tg = w.t_ground_last(i).unwrap_or(w.life.env[i][0]);
+    let tg = ground_t(w, i);
     surface(&w.chem, &w.cfg, b, mass, cover_of(w, b), bond::walls_around(w, b), t, tg)
 }
 
@@ -123,4 +131,9 @@ pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
 /// (T + tg) per m², as every surface radiates (σT⁴, emissivity 1, `flow::air::radiation`).
 fn radiated(area: f64, t: f64, tg: f64) -> f64 {
     SIGMA * area * (t * t + tg * tg) * (t + tg)
+}
+
+/// The temperature of ground cell `i` as of the last flow step, K (the monthly survey's before the first).
+pub(super) fn ground_t(w: &World, i: usize) -> f64 {
+    w.t_ground_last(i).unwrap_or(w.life.env[i][0])
 }

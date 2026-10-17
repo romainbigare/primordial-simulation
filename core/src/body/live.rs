@@ -1,7 +1,7 @@
 //! A body's update: Flow and Change on it since its last update, in stages (`live`). Upkeep and
 //! the end checks are here; the physics of the time between is in `physics`.
 
-use super::exchange::cover_of;
+use super::exchange::{cover_of, ground_t};
 use super::pay::{hold, pay_at, plan, spend, upkeep};
 use super::physics::physics;
 use super::{thin, Body, Layout, AGE, KEEP_T, LACK, PHASE, REPAIR, SPENT};
@@ -59,8 +59,7 @@ pub(super) struct Site {
 
 fn site(w: &World, b: &Body) -> Site {
     let i = b.cell as usize;
-    let [tg, depth, _] = w.life.env[i];
-    let tg = w.t_ground_last(i).unwrap_or(tg);
+    let (tg, depth) = (ground_t(w, i), w.life.env[i][1]);
     let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::walls_around(w, b));
     let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
@@ -161,7 +160,7 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
 fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
     let (mut mass, mut c) = b.mass_cap(&w.chem);
     if b.lacking_at(&w.chem, mass) {
-        if !(b.n() > 1.0 && mass >= 1e-3 * b.n() && starve(w, b, &mut tmp.dead)) {
+        if !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, b, &mut tmp.dead)) {
             return Err(LACK);
         }
         (mass, c) = b.mass_cap(&w.chem);

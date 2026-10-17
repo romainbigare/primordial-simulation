@@ -15,7 +15,8 @@ mod pay;
 mod physics;
 mod tissue;
 
-pub use death::{die, hurt, tear, thin};
+pub use death::{die, wound};
+use death::thin;
 pub use exchange::conductance_to_ground;
 pub use genes::*;
 pub(crate) use live::{live, LiveTmp};
@@ -175,10 +176,10 @@ impl Body {
         if !self.k.cat.is_empty() {
             return;
         }
-        let cat = Layout::of(chem).cat;
+        let lay = Layout::of(chem);
+        let cat = lay.cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
         let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0 && !chem.keeps(r)).map(|r| (r, -chem.dh(r))).collect();
-        let lay = Layout::of(chem);
         let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
         // By capacity: the catalysed rate per unit of the contact of its phases (`change`) at
@@ -191,6 +192,10 @@ impl Body {
         let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp() * open(rx)).sum();
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
+    }
+    /// The reflectance of a member, the mean of its colour's three bands (`visible`).
+    pub(crate) fn reflectance(&self) -> f64 {
+        (self.vis[3] + self.vis[4] + self.vis[5]) as f64 / 3.0
     }
     /// Visible traits of one member; the colour is the reflectance of the stores by volume. Its
     /// light-capture area is `LEAF` per kg-equivalent of its body (`size`, `equiv`: mass^0.75).

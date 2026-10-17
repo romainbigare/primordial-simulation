@@ -59,7 +59,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let fall = rain_caught(w, slot, b, s);
     // It soaks through the mass that works; its light-capture area is all members' (`visible`): of its body, by mass^0.75.
     let wk = b.size(chem) / mass;
-    let leaf = b.equiv(&cfg.phys, b.built(chem)) * b.k.leaf;
+    let leaf = b.leaf_area(chem, &cfg.phys);
     // Its conductance to the surface, at its temperature at the start of the update (and at the end, if it ends warmer).
     let c0 = b.heat_cap(chem);
     let t0 = b.e / c0;
@@ -92,8 +92,7 @@ fn rain_caught(w: &World, slot: usize, b: &Body, s: &Site) -> f64 {
 /// the share set aside for what light reactions store: so up to `MAX_INTERVAL` days of sunlight neither reach the ground
 /// in one go nor are drawn back from it in one go.
 fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
-    let refl = (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0;
-    let caught = leaf * (w.light[s.i] - b.mark) * (1.0 - refl) * s.open;
+    let caught = leaf * (w.light[s.i] - b.mark) * (1.0 - b.reflectance()) * s.open;
     b.mark = w.light[s.i];
     let reach = (-s.depth / w.cfg.phys.light_depth).exp();
     (caught, caught * reach)

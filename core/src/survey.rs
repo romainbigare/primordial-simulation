@@ -56,7 +56,7 @@ pub fn survey(w: &mut World) {
         for (x, &v) in sum[i][1..].iter_mut().zip(&b.vis) {
             *x += v as f64 * m;
         }
-        let a = b.vis[1] as f64 * m * (1.0 - (b.vis[3] + b.vis[4] + b.vis[5]) as f64 / 3.0);
+        let a = b.vis[1] as f64 * m * (1.0 - b.reflectance());
         let s = a * w.life.shade[slot];
         (abs[i], kept[i], claim[i]) = (abs[i] + s, kept[i] + s * k, claim[i] + a * k * (w.light[i] - b.mark));
     }

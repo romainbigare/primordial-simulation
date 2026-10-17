@@ -153,31 +153,15 @@ impl Life {
     /// A new group of `lineage` with these rows (its first member brings its born rows, and
     /// the difference counts as learned).
     pub fn new_group(&mut self, lineage: u32, rows: Vec<f32>) -> u32 {
-        let g = Group { lineage, rows, ..Default::default() };
-        match self.free_groups.pop() {
-            Some(i) => {
-                self.groups[i as usize] = g;
-                i
-            }
-            None => {
-                self.groups.push(g);
-                (self.groups.len() - 1) as u32
-            }
-        }
+        let i = free_place(&mut self.groups, &mut self.free_groups);
+        self.groups[i] = Group { lineage, rows, ..Default::default() };
+        i as u32
     }
     /// New born rows (not yet given to a body).
     pub fn new_genome(&mut self, rows: Vec<f32>) -> u32 {
-        let g = Genome { rows, bodies: 0 };
-        match self.free_genomes.pop() {
-            Some(i) => {
-                self.genomes[i as usize] = g;
-                i
-            }
-            None => {
-                self.genomes.push(g);
-                (self.genomes.len() - 1) as u32
-            }
-        }
+        let i = free_place(&mut self.genomes, &mut self.free_genomes);
+        self.genomes[i] = Genome { rows, bodies: 0 };
+        i as u32
     }
     /// Body `b` has no brain (`Lineage::none`).
     pub(crate) fn brainless(&self, b: &Body) -> bool {
@@ -236,36 +220,39 @@ impl Life {
     }
     /// Place a new body on `day`; it first updates `delay` days later (1..=360).
     pub fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
-        let slot = match self.free.pop() {
-            Some(s) => s as usize,
-            None => {
-                self.bodies.push(Body::default());
-                self.bodies.len() - 1
-            }
-        };
+        let slot = free_place(&mut self.bodies, &mut self.free);
         (b.gen, b.alive, b.last, b.count) = (self.bodies[slot].gen, true, day, b.n());
         self.at[b.cell as usize].push(slot as u32);
-        self.members[b.lineage as usize] += 1;
-        self.genomes[b.genome as usize].bodies += 1;
-        self.enrol(b.group, &b, 1);
+        self.enter(&b);
         self.schedule(day + delay.clamp(1, MAX_INTERVAL as u64), slot as u32, b.gen);
         self.bodies[slot] = b;
         slot
     }
     pub(crate) fn remove(&mut self, slot: usize) {
         let mut b = std::mem::take(&mut self.bodies[slot]);
-        let (cell, lin, g) = (b.cell as usize, b.lineage as usize, b.group);
-        self.enrol(g, &b, -1);
-        self.unref(b.genome);
+        let cell = b.cell as usize;
+        self.leave(&b);
         (b.alive, b.store, b.genes, b.trace, b.mem) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new());
         b.gen += 1;
         self.bodies[slot] = b;
         self.at[cell].retain(|&s| s as usize != slot);
+        self.free.push(slot as u32);
+    }
+    /// Count body `b` into its lineage, its born rows and its group.
+    fn enter(&mut self, b: &Body) {
+        self.members[b.lineage as usize] += 1;
+        self.genomes[b.genome as usize].bodies += 1;
+        self.enrol(b.group, b, 1);
+    }
+    /// Count body `b` out of its group, its born rows and its lineage (which dies out with its last body).
+    fn leave(&mut self, b: &Body) {
+        self.enrol(b.group, b, -1);
+        self.unref(b.genome);
+        let lin = b.lineage as usize;
         self.members[lin] -= 1;
         if self.members[lin] == 0 {
             self.brains[lin] = None;
         }
-        self.free.push(slot as u32);
     }
     /// One body fewer born with rows `g`.
     fn unref(&mut self, g: u32) {
@@ -325,17 +312,9 @@ impl Life {
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in group `group`
     /// (new, for it); its old lineage, group and born rows lose it.
     pub(crate) fn move_to(&mut self, b: &mut Body, lineage: u32, group: u32, rows: Vec<f32>) {
-        self.enrol(b.group, b, -1);
-        self.unref(b.genome);
-        let old = b.lineage as usize;
-        self.members[old] -= 1;
-        if self.members[old] == 0 {
-            self.brains[old] = None;
-        }
+        self.leave(b);
         (b.lineage, b.group, b.genome) = (lineage, group, self.new_genome(rows));
-        self.genomes[b.genome as usize].bodies += 1;
-        self.members[lineage as usize] += 1;
-        self.enrol(group, b, 1);
+        self.enter(b);
     }
     /// Size the cell lists and the ring of updates for a grid of `n` cells, `gw` wide (once, on a new grid).
     pub(crate) fn fit_grid(&mut self, n: usize, gw: u32) {
@@ -356,5 +335,16 @@ impl Life {
         self.at[to].push(slot as u32);
         self.shift(g, to as u32, 1);
         self.shift(g, from as u32, -1);
+    }
+}
+
+/// A free place in `v` (the last one freed first, `free`), or a new one at its end.
+fn free_place<T: Default>(v: &mut Vec<T>, free: &mut Vec<u32>) -> usize {
+    match free.pop() {
+        Some(i) => i as usize,
+        None => {
+            v.push(T::default());
+            v.len() - 1
+        }
     }
 }

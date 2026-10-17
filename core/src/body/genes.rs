@@ -158,11 +158,15 @@ impl Layout {
 impl Body {
     /// Learning rate of its brain within its life (0 when off).
     pub fn learn_rate(&self) -> f32 {
-        if self.genes[LEARN] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[LEARN]) }
+        self.rate_gene(LEARN)
     }
     /// Share of what its group learned that it would let fade each month (0 when off).
     pub(crate) fn forget(&self) -> f32 {
-        if self.genes[FORGET] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[FORGET]) }
+        self.rate_gene(FORGET)
+    }
+    /// 10 to the power of gene `g`, 0 when it is off (at the lower end of its range).
+    fn rate_gene(&self, g: usize) -> f32 {
+        if self.genes[g] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[g]) }
     }
 }
 
