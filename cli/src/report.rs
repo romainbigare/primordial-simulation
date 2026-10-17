@@ -14,7 +14,7 @@ pub fn config(w: &World, how: &Seeding) -> String {
     let nodes = if w.cfg.nodes { "on (animals may be nodes)" } else { "OFF (--individuals: animals are individuals, light-eaters nodes)" };
     let parents = if w.cfg.two_parents { "on (a mature alike body of the cell is a second parent)" } else { "OFF (--no-mix: one parent)" };
     let animals = if how.hand[1] { "HAND-SET eater biases (default; --neutral-eaters for neutral brains)" } else { "NEUTRAL brains (--neutral-eaters)" };
-    let plants = if how.hand[0] { "hand-set biases (--plant-bias)" } else { "neutral brains (default)" };
+    let plants = if how.hand[0] { "hand-set biases (--plant-bias)" } else { "neutral brains but the hand-set bias against taking from a body (default)" };
     format!("config: seed {}, {}x{}, {run}, nodes {nodes}, two parents {parents}, start: animals {animals}, plants {plants}", w.seed, w.grid.w, w.grid.h)
 }
 

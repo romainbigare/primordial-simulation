@@ -305,3 +305,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   that moves rows of amounts by the shares a rule gives each link, with exact per-link fluxes and no cell below zero.
   On bare test terrain with rain it ends one liquid step as `flow::liquid`'s sweep does to rounding
   (`core/tests/solve.rs`); not yet used by a law (D2).
+
+**Owner's decisions after Phase A**
+
+- A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body
+  before the spray (spread 0.9), so almost none starts with a bias to bite. 64 x 64, seeds 1 and 2: bites fall from
+  8% to 0.2% of plant deaths in years 3 to 21; plant members at year 10 rise 1.9 to 2.5 times, at year 30 by 6 to
+  19%; golden re-pinned.

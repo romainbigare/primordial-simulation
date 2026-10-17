@@ -36,9 +36,9 @@ fn founder_id(which: usize, i: usize, k: usize) -> u64 {
 ///
 /// A neutral brain has every action bias at 0 (resting, putting, taking, moving, the verbs on bodies and parts) and
 /// small random weights, so nothing says "eat" or "move when hungry"; selection has to find that. The one bias kept
-/// from the hand-set brains is the copy logit (the body's own chance to copy): copying is already gated by physics (a
-/// member must hold its copy mass and pay for it), and a neutral 0 would make every body that holds the mass copy on
-/// half of its decisions, a rate nobody chose. Then every body gets `rounds` rounds of mutation (genes by
+/// from the hand-set brains is the light-eaters' bias against taking from a body (`H_LIGHT`, -4): at 0, after the
+/// spray, half of the founders would start with a bias to bite their neighbours, a rate nobody chose, while at -4,
+/// about 4.5 spreads of the spray below 0, almost none does. Then every body gets `rounds` rounds of mutation (genes by
 /// `body::mutate`, born brain rows by `brain::shake`), each body its own random walk and genome, so the first
 /// generation is already a spray of variants. A neutral start gets more than one generation's step, which is too
 /// small to give selection anything to pick from: the bias of every row gets rounds of `size` (after 20 rounds of 0.2
@@ -121,7 +121,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let fix = w.chem.fixing().filter(|_| light(kind));
     let lay = Layout::of(&w.chem);
     // One action bias, "take from a body": its range and spread over the bodies placed.
-    let take = shape.verb(0) * shape.r() + shape.h;
+    let take = shape.verb(brain::TAKE_FROM) * shape.r() + shape.h;
     let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, fixers: 0, cat: [(f32::MAX, f32::MIN); 2], copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
     for i in 0..w.grid.n() {
         if !open_land(w, i) || r.f64() >= kind.chance || (!kind.anywhere && w.life.at[i].is_empty()) {
@@ -145,11 +145,14 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
 }
 
 /// The founders' lineage (labelled with the kind's row) and its brain: hand-set biases, or neutral ones that keep the
-/// copy logit. Returns its shape, the lineage and the born rows of its brain.
+/// light-eaters' bias against taking from a body. Returns its shape, the lineage and the born rows of its brain.
 fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: bool, r: &mut Rng) -> (Shape, u32, Vec<f32>) {
     let [h, mem, seen, sight] = lineage::sizes(&kind.scalars);
     let shape = lineage::shape(w.chem.ns(), h, mem);
-    let (fixed, dir, verbs) = if hand { kind.hand } else { ([0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]) };
+    let (fixed, dir, mut verbs) = if hand { kind.hand } else { ([0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]) };
+    if !hand && light(kind) {
+        verbs[brain::TAKE_FROM] = kind.hand.2[brain::TAKE_FROM];
+    }
     let mut base = brain::random(shape, r, BRAIN_NOISE, fixed, dir, verbs);
     let rows = base.split_off(shape.base());
     (shape, w.life.new_lineage(Lineage { shape, seen, sight, base, root: which as u32 }), rows)
@@ -177,7 +180,11 @@ fn line(w: &World, kind: &Kind, how: &Seeding, hand: bool, fix: Option<usize>, p
     let sc = &kind.scalars;
     let (fuel, liq, mat) = split(kind.store, KEEP_LIQUID as f64, w.chem.matter_roles().is_some());
     let name = format!("{} (adults: members of {:.4} kg, their body at their copy mass of {:.4} kg, every {:.0} days, strength {}, repair {}, starting mass {:.1}% energy-rich solid, {:.1}% liquid, {:.1}% body matter, a child's body {:.2} of its parent's copy mass (CHILD gene {}), {:.0}% of what a mature body builds to offspring (ALLOC gene {}))", kind.name, 10f64.powf(sc[body::COPY_MASS] as f64) / (1.0 - if mat > 0.0 { kind.store } else { 0.0 }), 10f32.powf(sc[body::COPY_MASS]), 10f32.powf(sc[body::INTERVAL]), sc[body::STRENGTH], sc[body::REPAIR], 100.0 * fuel, 100.0 * liq, 100.0 * mat, 10f32.powf(sc[body::CHILD]), sc[body::CHILD], 100.0 * sc[body::ALLOC], sc[body::ALLOC]);
-    let brain = if hand { "hand-set brain biases (initial condition)" } else { "neutral brain (action biases 0, copy logit kept)" };
+    let brain = match (hand, light(kind)) {
+        (true, _) => "hand-set brain biases (initial condition)".to_string(),
+        (false, true) => format!("neutral brain (action biases 0 but taking from a body, hand-set at {})", kind.hand.2[brain::TAKE_FROM]),
+        (false, false) => "neutral brain (action biases 0)".to_string(),
+    };
     let (m, n) = (p.take.2 / p.bodies.max(1) as f64, p.bodies.max(1) as f64);
     let spray = if how.rounds == 0 {
         String::new()

@@ -122,7 +122,7 @@ What went wrong:
 | Moving | Moving needs force |
 | Materials | Bodies are built of several materials; physics reads the material (height, breaking, digestion) |
 | Freezing | One freezing law for bodies, ground, lakes and the sea |
-| The start | What is placed at the start is an initial condition and every run prints it. Animals start with hand-set brain biases, plants with neutral brains, founders as adults |
+| The start | What is placed at the start is an initial condition and every run prints it. Animals start with hand-set brain biases, plants with neutral brains (but a hand-set bias against taking from a body), founders as adults |
 | Waits | Natural fire starts wait for M4. Disease (bodies inside bodies) waits until after M4 |
 | World chemistry | One fixed Earth-like "chemistry 0" through M6 (numbers only, no names in core). Random chemistry per world from M7 (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
