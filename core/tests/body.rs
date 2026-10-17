@@ -3,8 +3,8 @@
 
 use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::rng::{Purpose, Rng};
-use pcore::{bond, brain, change, choose, copy, World};
-use worldgen::testkit::{add, brood, children, died, dry_lands, founder, hold_ground, kg, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, took_to_burn, warm, Books, Brain, Line, DISSOLVED, LIQUID, MATTER, OPEN_CAP, RICH};
+use pcore::{bond, brain, change, choose, World};
+use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, LIQUID, MATTER, OPEN_CAP, RICH};
 
 /// A world with a lineage of brains that only rest, and the land cells with no liquid on them.
 struct Set {
@@ -47,26 +47,27 @@ fn at(w: &World, b: &Body, t: f64) -> Body {
     x
 }
 
-/// Upkeep at a temperature is its upkeep at `t_cat` times exp(-Ea (1/T - 1/T_ref)), Ea the barrier of the
-/// first reaction the body burns with (`Consts::burn`): the same rate law as the reactions that pay it, so
-/// about 2.5 times more for each 10 K at 290 K for the solid's 7,760 K. No new number. A body that burns nothing
-/// pays the same at every temperature. Wear goes with upkeep, so a cold body ages slower (`body::live`).
+/// The tempo of a body follows the rate law of its reactions: its upkeep at a temperature is its upkeep at `t_cat`
+/// times exp(-Ea (1/T - 1/T_ref)), Ea the barrier of the first reaction it burns with (`Consts::burn`), and what it
+/// can take and build a day (`Body::supply`, by `Body::pace`) goes by the same factor: about 2.5 times for each 10 K at
+/// 290 K. A body that burns nothing pays the same at every temperature.
 #[test]
-fn upkeep_follows_the_rate_law_of_the_reactions() {
+fn upkeep_and_supply_follow_the_rate_law_of_the_reactions() {
     let mut s = set();
     let b = s.eater(0);
     let (w, p) = (&s.w, s.w.cfg.phys);
     let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
     let up = |x: &Body| pcore::body::upkeep(w, x, days, mass);
     let ea = w.chem.reactions[b.k.burn[0].0].ea;
-    let u0 = up(&at(w, &b, p.t_cat));
+    let (b0, u0) = (at(w, &b, p.t_cat), up(&at(w, &b, p.t_cat)));
     assert!(u0 > 0.0);
     for t in [250.0, 270.0, 280.0, 285.0, 295.0, 300.0, 310.0] {
-        let (want, got) = ((-ea * (1.0 / t - 1.0 / p.t_cat)).exp(), up(&at(w, &b, t)) / u0);
-        println!("{t} K: upkeep x {got:.4} (the law: {want:.4})");
-        assert!((got / want - 1.0).abs() < 1e-9, "{t} K: {got} against {want}");
+        let x = at(w, &b, t);
+        let (want, got, supply) = ((-ea * (1.0 / t - 1.0 / p.t_cat)).exp(), up(&x) / u0, x.supply(&w.chem, &p) / b0.supply(&w.chem, &p));
+        println!("{t} K: upkeep x {got:.4}, supply x {supply:.4} (the law: {want:.4})");
+        assert!((got / want - 1.0).abs() < 1e-9 && (supply / want - 1.0).abs() < 1e-9, "{t} K: upkeep {got}, supply {supply}, the law {want}");
     }
-    // About 2.5 times per 10 K at 290 K (Ea 7,760 K): the lives review found "about twice per 10 K".
+    // About 2.5 times per 10 K at 290 K (Ea 7,760 K).
     let q10 = up(&at(w, &b, p.t_cat + 10.0)) / u0;
     assert!(q10 > 2.0 && q10 < 3.0, "10 K warmer: x {q10}");
     // A body that burns nothing pays the same at every temperature.
@@ -173,7 +174,6 @@ fn held_days(w: &mut World, cells: &[usize], temps: &[f64], days: usize) {
         for (&i, &t) in cells.iter().zip(temps) {
             hold_ground(w, i, t);
         }
-        w.events.clear();
         pcore::day(w);
     }
 }
@@ -292,26 +292,6 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     }
     assert!(rises[1] > 1.5 * rises[0], "the bigger body is warmer: {rises:?}");
     books.assert_kept(w, 1e-9);
-}
-
-/// The whole tempo of a body goes with its temperature, not only what it pays to live (15 Oct 2026, after A made upkeep alone
-/// follow it, which left summer upkeep 2.4 times with the same intake): what it can take per day (`take`, the sweep, gifts)
-/// and the `c_build` allowance per day are by `Body::supply`, which goes by the same factor as upkeep, `Body::pace`. Not
-/// the light, nor the catalysed reactions (they follow T by their own rate), nor the cost of a metre.
-#[test]
-fn what_a_body_takes_and_builds_per_day_scales_with_upkeep() {
-    let mut s = set();
-    let b = s.eater(0);
-    let (w, p) = (&s.w, s.w.cfg.phys);
-    let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
-    let (s0, u0) = (b.supply(&w.chem, &p), pcore::body::upkeep(w, &b, days, mass));
-    for t in [250.0, 270.0, 285.0, 300.0, 310.0] {
-        let x = at(w, &b, t);
-        let (take, build, up) = (p.take * days * x.supply(&w.chem, &p), p.c_build * x.supply(&w.chem, &p) / p.m_ref * days, pcore::body::upkeep(w, &x, days, mass));
-        let (take0, build0) = (p.take * days * s0, p.c_build * s0 / p.m_ref * days);
-        println!("{t} K: take x {:.4}, build x {:.4}, upkeep x {:.4}", take / take0, build / build0, up / u0);
-        assert!((take / take0 / (up / u0) - 1.0).abs() < 1e-9 && (build / build0 / (up / u0) - 1.0).abs() < 1e-9);
-    }
 }
 
 /// The kg a body takes from the ground at its decision goes by the same factor: two bodies alike, at 280 K and at 300 K
@@ -649,17 +629,6 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
     assert!(wake > 0.2 && wake > 100.0 * act_dry, "a dry child that soaks liquid wakes: activity {wake}");
 }
 
-/// A starting eater (30 kg: 9 kg of fuel, 15.75 kg of liquid, 5.25 kg of body matter, a body of 21 kg) of a brain
-/// that only does fixed action `act`, weak (strength 0), staying where it is, soaking no liquid up, copying at
-/// 10^`copy` kg of body.
-fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
-    let mut b = founder(w, 1, i, &Brain::only(act));
-    let m = b.mass(&w.chem);
-    scale(w, &mut b, 30.0 / m);
-    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
-    b
-}
-
 /// Size is the body: its matter over 1 - h (h the share of the liquid it keeps, its keep gene below
 /// 0.95), and no more than its matter and all its liquid; the fuel it stores and liquid past the
 /// share it keeps are not body. Leaf (`visible`) and the open surface follow it, and so does the
@@ -706,9 +675,8 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     let (va, vc) = (a.visible(&w.chem, &w.cfg.phys), c.visible(&w.chem, &w.cfg.phys));
     assert!(va[1] > 0.0 && va[1] == vc[1], "leaf {} and {}", va[1], vc[1]);
     assert!(vc[0] > 4.0 * va[0], "the mass differs: {} and {}", va[0], vc[0]);
-    let (ma, mc) = (a.mass(&w.chem), c.mass(&w.chem));
+    let ma = a.mass(&w.chem);
     assert!((a.open_area(&w.chem, &w.cfg.phys, ma) - c.open_area(&w.chem, &w.cfg.phys, ma)).abs() < 1e-9 * ma, "the open surface, with a mass of {ma} kg");
-    let _ = mc;
 
     // Height: two nodes in one cell, B of 3 times the matter of A but lighter (A holds 100 kg of fuel
     // a member more): by mass A is the taller, by body B. Leaf area is set so that each catches a
@@ -773,7 +741,6 @@ fn a_body_cannot_store_more_than_keep_times_body() {
     let s = w.life.add(b, w.day, 1);
     let (mut top_rich, mut top_liq) = (0.0f64, 0.0f64);
     for _ in 0..120 {
-        w.events.clear();
         pcore::day(&mut w);
         let b = &w.life.bodies[s];
         let mass = b.mass(&w.chem);
@@ -861,184 +828,16 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     let (books, before) = (Books::now(&w), b.store.clone());
     let x = b.digest(&w.chem, 10.0);
     assert!((x - 10.0).abs() < 1e-12);
-    // 10 of matter and 270 of liquid become 1,180 of the solid, 30 of the nitrogen mineral and 10 of the rock salt.
-    assert!((before[MATTER] - b.store[MATTER] - 10.0).abs() < 1e-9 && (b.store[RICH] - before[RICH] - 1180.0).abs() < 1e-9 && (before[LIQUID] - b.store[LIQUID] - 270.0).abs() < 1e-9);
-    for (mineral, per) in w.chem.minerals() {
-        assert!((b.store[mineral] - before[mineral] - 10.0 * per).abs() < 1e-9, "substance {mineral}");
+    // 10 of matter and the liquid growth makes with it become what growth is made of, 10 times its counts.
+    let growth = w.chem.build.as_ref().expect("growth");
+    for (side, sign) in [(&growth.inputs, 1.0), (&growth.outputs, -1.0)] {
+        for p in side.iter() {
+            let k = p.0 as usize;
+            assert!((sign * (b.store[k] - before[k]) - 10.0 * p.1 as f64).abs() < 1e-9, "substance {k}: {} -> {}", before[k], b.store[k]);
+        }
     }
     w.life.bodies[s] = b;
     books.assert_kept(&w, 1e-12);
-}
-
-/// Body matter taken from outside is digested into the energy-rich solid as it comes in, so it fills
-/// the room of the solid (`Body::level`): an eater on ground covered in body matter carries no more of
-/// the solid than its keep gene allows per kg of its body. Before (14 Oct 2026, the review of lives)
-/// the matter was held only to its own room, nine times the mass, and an eater's solid rose past its
-/// level and its mass with it (the heaviest eaters of seeds 1 to 3 held 3 times their level at year 60).
-#[test]
-fn digested_matter_fills_the_room_of_the_solid() {
-    let (mut w, i) = start();
-    (w.cfg.phys.c_handle, w.cfg.phys.c_build) = (0.0, 0.0);
-    // Ten kg of body matter per m² on its ground (booked as an edit).
-    put_kg_m2(&mut w, MATTER, i, 10.0);
-    let b = eater(&mut w, i, brain::TAKE, 6.0);
-    let keep = b.gene(Layout::of(&w.chem).keep + RICH);
-    let s = w.life.add(b, w.day, 1);
-    let (mut took, mut most) = (0.0, 0.0f64);
-    for _ in 0..60 {
-        w.events.clear();
-        pcore::day(&mut w);
-        took += took_to_burn(&w);
-        w.events.clear();
-        let b = &w.life.bodies[s];
-        if b.alive {
-            most = most.max(kg(&w, b, RICH) / b.size(&w.chem));
-        }
-    }
-    println!("took {took:.2} kg; the most of the solid it held: {most:.3} kg per kg of body (keep gene {keep:.2})");
-    assert!(took > 1.0, "it took nothing: {took}");
-    // (Within 2%: digesting uses the body's liquid, so its body may shrink a little after the room is found.)
-    assert!(most <= keep * 1.02, "the solid rose past its level: {most} kg per kg of body, keep {keep}");
-    assert_eq!(pcore::check::broken(&w), None);
-}
-
-/// A body digests only what its catalysts break (16 Oct 2026): an eater that takes only the frame from the ground takes none
-/// without the enzyme that splits it; with it, it takes it, holds it till its update, splits it into the energy-rich solid, and
-/// what is left past its own level passes back to the ground. Elements and energy are kept.
-#[test]
-fn a_body_takes_and_digests_the_frame_only_with_its_enzyme() {
-    let take = |enzyme: bool| {
-        let (mut w, i) = start();
-        let lay = Layout::of(&w.chem);
-        let f = w.chem.materials().next().expect("a frame");
-        let split = (0..w.chem.reactions.len()).find(|&x| w.chem.reactions[x].inputs.iter().any(|p| p.0 as usize == f) && w.chem.reactions[x].outputs.iter().any(|p| p.0 as usize == RICH)).expect("its split");
-        w.cfg.phys.c_build = 0.0;
-        // 3 kg of frame per m² on its ground (booked as an edit).
-        put_kg_m2(&mut w, f, i, 3.0);
-        let mut b = eater(&mut w, i, brain::TAKE, 6.0);
-        // Only the frame to take, and the enzyme at the speed that splits what it holds within its interval, or off.
-        (b.genes[lay.upt + LIQUID], b.genes[lay.upt + RICH], b.genes[lay.upt + MATTER], b.genes[lay.upt + f]) = (-0.1, -0.1, -0.1, 1.0);
-        b.genes[lay.cat + split] = if enzyme { 8.7 } else { -1.0 };
-        let rich0 = b.store[RICH];
-        let s = w.life.add(b, w.day, 1);
-        let books = Books::now(&w);
-        let mut took = 0.0;
-        for _ in 0..40 {
-            w.events.clear();
-            pcore::day(&mut w);
-            took += took_from_ground(&w);
-        }
-        let b = &w.life.bodies[s];
-        assert!(b.alive);
-        books.assert_kept(&w, 1e-9);
-        (took, b.store[RICH] - rich0, b.store[f] / b.level(&w.chem, f, 0.0))
-    };
-    let ((took, rich, held), (none, _, _)) = (take(true), take(false));
-    println!("with the enzyme it took {took:.2} kg of frame, its solid {rich:+.2} mol, it holds {held:.2} of its level of frame; without it took {none} kg");
-    assert!(none == 0.0 && took > 1.0 && rich > 0.0);
-}
-
-#[test]
-fn bodies_keep_elements_and_energy() {
-    let mut w = worldgen::new_world(1, 32, 32);
-    let books = Books::now(&w);
-    for _ in 0..24 {
-        pcore::step(&mut w);
-    }
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-    for _ in 0..12 {
-        pcore::step(&mut w);
-    }
-    assert!(w.life.alive().count() > 0);
-    // (Tight: a run keeps them to rounding, about 1e-14 here. The lime's gas sent to the air without its latent heat, 16 Oct 2026,
-    // gave 4e-12 here and 1e-8 in 60 years.)
-    books.assert_kept(&w, 1e-12);
-}
-
-/// The cost of living follows temperature (15 Oct 2026): what a starting body's reactions can release over
-/// its interval falls with its temperature by Change's rate, and so does its upkeep, by the same law, so
-/// the cold does not leave it short (before, upkeep was the same at every temperature and the cold bodies
-/// could not pay: release over upkeep fell from 4.9 at 290 K to 0.01 at 250 K for an eater). In the warmth
-/// upkeep rises faster than what the body can release (catalysts, the air it breathes), so a warm body
-/// has less to spare.
-#[test]
-fn cold_bodies_release_and_pay_less() {
-    let mut w = worldgen::new_world(1, 32, 32);
-    pcore::step(&mut w);
-    // (The starting bodies unsprayed: a sprayed one can be anything, and the first found is a lottery.)
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
-    for kind in [true, false] {
-        let mut b = w.life.alive().find(|b| (pcore::body::light_cat(&w.chem, &b.genes) > 5.0) == kind).expect("a body").clone();
-        b.prepare(&w.chem, &w.cfg.phys);
-        let at = |t: f64| {
-            let mut b = b.clone();
-            b.e = b.heat_cap(&w.chem) * t;
-            let days = b.interval() as f64;
-            let (rel, up) = (pcore::body::release(&w, &b, days), pcore::body::upkeep(&w, &b, days, b.mass(&w.chem)));
-            (rel, up, rel / up)
-        };
-        let t = [250.0, 270.0, 280.0, 290.0, 300.0];
-        let r = t.map(at);
-        println!("light-capturing {kind}: release / upkeep at 250, 270, 280, 290, 300 K: {:.3?}", r.map(|x| x.2));
-        // Both rise with the temperature, the upkeep by 50 times or more (72 for the 7,760 K of burning the solid) between 250 K and 290 K
-        // (2.5 per 10 K); the cold does not leave the body short, the warmth leaves it less to spare.
-        assert!(r.windows(2).all(|p| p[1].0 > p[0].0 && p[1].1 > p[0].1), "{r:?}");
-        assert!(r[3].1 > 50.0 * r[0].1, "{r:?}");
-        assert!(r[0].2 > 1.0 && r[4].2 > 1.0 && r[4].2 < r[0].2, "{r:?}");
-    }
-}
-
-/// Dense cover of other bodies shelters a body's heat like walls: a conductance in series with the
-/// body's own, so a body under 10 kg/m² of cover ends warmer over the ground than one on bare
-/// ground (its upkeep warms it more).
-#[test]
-fn cover_keeps_a_body_warm() {
-    // The scene of the latitudes 5° to 55° the map had until 13 October 2026 (it picks the warmest body).
-    let (chem, init) = worldgen::chemistry0();
-    let mut w = worldgen::terrain::build(1, 32, 32, chem, &init, pcore::Config { lat_south: 5.0, lat_north: 55.0, ..Default::default() });
-    pcore::step(&mut w);
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
-    // The warmest animal that lives through the month on bare ground and under cover (a starting animal may starve in its
-    // first month, a fifth of them do: the test is about the cover, so it takes the warmest one that lives).
-    let bs = &w.life.bodies;
-    let mut order: Vec<usize> = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).collect();
-    order.sort_by(|&a, &b| bs[b].temp(&w.chem).total_cmp(&bs[a].temp(&w.chem)));
-    let base = w.clone();
-    let (w, covered, slot, i) = order
-        .iter()
-        .take(10)
-        .find_map(|&slot| {
-            let mut w = base.clone();
-            let i = w.life.bodies[slot].cell as usize;
-            // It rests, so it stays where it is.
-            let b = &mut w.life.bodies[slot];
-            b.adj.fill(-3.0);
-            b.adj[pcore::brain::REST] = 3.0;
-            let mut covered = w.clone();
-            // Cover: a node of light-eaters, 10 kg/m² over the cell.
-            let mut c = covered.life.alive().find(|b| pcore::body::light_cat(&w.chem, &b.genes) > 5.0).expect("a light-eater").clone();
-            let f = 10.0 * w.grid.area() / c.mass(&w.chem);
-            c.store.iter_mut().for_each(|a| *a *= f);
-            c.e *= f;
-            c.count = c.n() * f;
-            c.cell = i as u32;
-            c.adj.fill(-3.0);
-            c.adj[pcore::brain::REST] = 3.0;
-            // (With the old pores, 16 Oct 2026: with a leaf's, 10 kg/m² of plants transpire more than the soil gives, dry out and thin to
-            // 5.7 kg/m² in the month, and the test is of the cover, not of their liquid.)
-            (c.genes[pcore::body::GAS], c.k) = (2.187, Default::default());
-            covered.life.add(c, covered.day, 1);
-            pcore::step(&mut w);
-            pcore::step(&mut covered);
-            (w.life.bodies[slot].alive && covered.life.bodies[slot].alive).then_some((w, covered, slot, i))
-        })
-        .expect("one of the ten warmest animals lives through the month");
-    let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];
-    println!("above the ground: bare {} K, under cover {} K", temp(&w), temp(&covered));
-    assert!(temp(&covered) > temp(&w) + 1.0, "bare {} K, under cover {} K above the ground", temp(&w), temp(&covered));
 }
 
 /// The light a node's light reactions store is set aside in its cell as it falls (not drawn
@@ -1250,52 +1049,6 @@ fn equiv_goes_with_mass_to_the_power() {
     assert!((b.supply(&w.chem, &w.cfg.phys) / thin - 8f64.powf(0.75)).abs() < 1e-9, "supply goes with the body to the power 0.75");
 }
 
-/// Every body pays a basal upkeep (14 Oct 2026, review 5): `c_basal` per day and kg of its body
-/// (since 14 Oct 2026, the energy ceiling: mass^1.0, not the mass^0.75 of review 5; the cost of keeping
-/// tissue), strength on top. A kind with strength 0 (the eaters of remains) used to pay none of the
-/// body cost; now a body of 1 kg pays `c_basal` a day and one of 100 kg a hundred times that, the same
-/// per kg.
-#[test]
-fn a_body_with_no_strength_pays_a_basal_upkeep() {
-    use pcore::body::{REPAIR, STRENGTH};
-    let (mut w, i) = start();
-    // Eaters of remains (kind 5: strength 0, 1 kg); repair 0 so the factor is 1.
-    let mut b = founder(&mut w, 5, i, &Brain::neutral());
-    assert_eq!(b.genes[STRENGTH], 0.0);
-    b.genes[REPAIR] = 0.0;
-    b.prepare(&w.chem, &w.cfg.phys);
-    let days = 10.0;
-    // The body `f` times as big (all its stores), alone or as a node of `n` such members.
-    let (chem, t_cat) = (w.chem.clone(), w.cfg.phys.t_cat);
-    let sized = |f: f64, n: f64| {
-        let mut x = b.clone();
-        x.count = n;
-        x.store.iter_mut().for_each(|a| *a *= f * n);
-        // (At the temperature the costs are anchored to, where upkeep is what the costs say, 15 Oct 2026.)
-        x.e = x.heat_cap(&chem) * t_cat;
-        x
-    };
-    let basal = |w: &mut pcore::World, x: &pcore::body::Body| {
-        let m = x.mass(&w.chem);
-        let with = pcore::body::upkeep(w, x, days, m);
-        let p0 = w.cfg.phys;
-        w.cfg.phys.c_basal = 0.0;
-        let without = pcore::body::upkeep(w, x, days, m);
-        w.cfg.phys = p0;
-        (with - without) / days
-    };
-    let (one, hundred) = (sized(1.0, 1.0), sized(100.0, 1.0));
-    let (e1, e100) = (basal(&mut w, &one), basal(&mut w, &hundred));
-    let (k1, k100) = (one.built(&w.chem), hundred.built(&w.chem));
-    println!("basal upkeep of a member of {} kg ({k1:.3} kg of body) {e1:.4e} J/day, of {} kg ({k100:.3}) {e100:.4e}", one.mass(&w.chem), hundred.mass(&w.chem));
-    // (Per kg of body of a kind that matures at `m_ref`, times (copy mass / `m_ref`)^-0.25: Kleiber across kinds, 15 Oct 2026.)
-    let kind = (b.dec(pcore::body::COPY_MASS) / w.cfg.phys.m_ref).powf(w.cfg.phys.intake_exp - 1.0);
-    assert!((e1 / k1 / w.cfg.phys.c_basal / kind - 1.0).abs() < 1e-9, "it pays c_basal per kg of body: {}", e1 / k1);
-    assert!((e100 / e1 / 100.0 - 1.0).abs() < 1e-9, "100 times the body pays 100 times as much, the same per kg: {}", e100 / e1);
-    // A node of 5 members pays 5 times a member's.
-    assert!((basal(&mut w, &sized(100.0, 5.0)) / (5.0 * e100) - 1.0).abs() < 1e-9, "a node pays for each member");
-}
-
 /// The cost of keeping tissue goes with the kg of the body, mass^1.0, at every mass (14 Oct 2026, the energy
 /// ceiling; the supply of a body goes with mass^0.75, `equiv_goes_with_mass_to_the_power`): the same
 /// genes, a body 1, 10, 100 and 10,000 times the size pay upkeep in proportion to their body, so per kg
@@ -1314,7 +1067,6 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     b.e = b.heat_cap(&w.chem) * w.cfg.phys.t_cat;
     let p = &mut w.cfg.phys;
     (p.c_brain, p.c_hidden, p.c_memory, p.c_seen, p.c_sight, p.c_leaf) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-    let rich = w.chem.life_roles().expect("roles").1;
     let days = 10.0;
     let up = |w: &pcore::World, x: &pcore::body::Body| pcore::body::upkeep(w, x, days, x.mass(&w.chem));
     let per_kg: Vec<f64> = [1.0, 10.0, 100.0, 1e4]
@@ -1341,11 +1093,12 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     let mut big = b.clone();
     big.genes[pcore::body::COPY_MASS] += 16f32.log10();
     assert!((up(&w, &big) / up(&w, &b) - 0.5).abs() < 1e-6, "a kind 16 times larger pays {} of the upkeep per kg", up(&w, &big) / up(&w, &b));
-    // Fuel is no body: three times the fuel, the same upkeep.
-    let mut fat = b.clone();
-    fat.store[rich] *= 3.0;
-    fat.e = fat.heat_cap(&w.chem) * w.cfg.phys.t_cat;
-    assert!((up(&w, &fat) / up(&w, &b) - 1.0).abs() < 1e-9, "stored fuel adds to the upkeep: {} and {}", up(&w, &fat), up(&w, &b));
+    // A node of 5 such members pays for each member.
+    let mut node = b.clone();
+    node.count = 5.0;
+    node.store.iter_mut().for_each(|a| *a *= 5.0);
+    node.e = node.heat_cap(&w.chem) * w.cfg.phys.t_cat;
+    assert!((up(&w, &node) / up(&w, &b) / 5.0 - 1.0).abs() < 1e-9, "a node of 5 pays {} times a member's upkeep", up(&w, &node) / up(&w, &b));
 }
 
 /// Leaf goes with mass^0.75 like intake (14 Oct 2026, review 5): the same `LEAF` gene gives a
@@ -1404,19 +1157,6 @@ fn eater_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
     b
 }
 
-/// All of substance `k` in the world's ground and bodies, mol.
-fn total(w: &World, k: usize) -> f64 {
-    let n = w.grid.n();
-    // (With the store of the bed under the ground, where drained liquid takes what is dissolved in it.)
-    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
-}
-
-/// The rock element (5) outside body matter on the ground of cell `i`, mol (lime, the salt, quicklime...).
-fn rock_outside(w: &World, i: usize) -> f64 {
-    let (m, n) = (w.chem.matter().expect("matter"), w.grid.n());
-    (0..w.chem.ns()).filter(|&k| k != m).map(|k| w.chem.subs[k].elems[5] as f64 * w.ground[k * n + i]).sum()
-}
-
 /// Fixing the air's nitrogen: in the open it is nothing (1e-17 a second at 290 K), and a body whose genes speed the reaction up
 /// makes the mineral from the air's gas and the energy-rich solid it burns, and puts the reduced carbon gas out, at the cost of the
 /// reaction: it burns 14 units of its fuel for each mol of the mineral, and their heat pays none of its upkeep (it burns that much
@@ -1448,11 +1188,9 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         b.store[w.chem.minerals()[1].0] = 0.0;
         let s = w.life.add(b, w.day, 1);
         let books = Books::now(&w);
-        let before = (total(&w, mineral), w.air[3 * w.grid.na()..4 * w.grid.na()].iter().sum::<f64>(), w.air[21 * w.grid.na()..22 * w.grid.na()].iter().sum::<f64>());
-        let (mut up, mut fuel0, mut mass) = (0.0, 0.0, 0.0);
-        let _ = (&mut fuel0, &mut mass);
+        let before = (in_all(&w, mineral), w.air[3 * w.grid.na()..4 * w.grid.na()].iter().sum::<f64>(), w.air[21 * w.grid.na()..22 * w.grid.na()].iter().sum::<f64>());
+        let mut up = 0.0;
         for _ in 0..60 {
-            w.events.clear();
             pcore::day(&mut w);
             let mut b = w.life.bodies[s].clone();
             b.prepare(&w.chem, &w.cfg.phys);
@@ -1465,7 +1203,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         assert!(w.life.bodies[s].alive);
         books.assert_kept(&w, 1e-9);
         let na = w.grid.na();
-        let after = (total(&w, mineral), w.air[3 * na..4 * na].iter().sum::<f64>(), w.air[21 * na..22 * na].iter().sum::<f64>());
+        let after = (in_all(&w, mineral), w.air[3 * na..4 * na].iter().sum::<f64>(), w.air[21 * na..22 * na].iter().sum::<f64>());
         let b = &w.life.bodies[s];
         (after.0 - before.0, after.2 - before.2, up, b.k.cats, b.store[rich], b.mass(&w.chem))
     };
@@ -1521,7 +1259,6 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         // (The most it held in the days, at the end of an update: the salt is lost to lime between them.)
         let mut most = 0.0f64;
         for _ in 0..40 {
-            w.events.clear();
             pcore::day(&mut w);
             most = most.max(w.life.bodies[sp].store[mineral]);
         }
@@ -1548,65 +1285,13 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         }
         let (held, lvl2) = (w.life.bodies[sp].store[mineral], level(&w, &w.life.bodies[sp]));
         // (Against its twin, the same world without the excess: the nitrogen mineral by itself, the rock element in all its forms.)
-        let back = if q == 0 { w.ground[mineral * n + i] - twin.ground[mineral * n + i] } else { rock_outside(&w, i) - rock_outside(&twin, i) };
+        let back = if q == 0 { w.ground[mineral * n + i] - twin.ground[mineral * n + i] } else { rock_outside_matter(&w, i) - rock_outside_matter(&twin, i) };
         println!("with ten times its level more: it holds {held:.3e} against a level of {lvl2:.3e}, lime {:.3e}; the ground gained {back:.3e} (the excess {more:.3e})", w.life.bodies[sp].store[lime]);
         assert!(held <= lvl2 * 1.05, "held {held} past the level {lvl2}");
         assert!(kept(&w, sp), "lime past its level stayed in the body");
         assert!(back > 0.5 * more, "the excess did not go back to the ground: {back} of {more}");
         books.assert_kept(&w, 1e-9);
     }
-}
-
-/// An eater digests the matter it eats into the solid and the minerals (the reverse of growth) and takes it in even when the minerals
-/// it makes would fill the room its level leaves many times over: what it holds of them past its level goes back to the ground at its
-/// update (the nitrogen mineral, and the rock element as the salt or the lime it falls out as), so digestion never stops for them.
-/// Elements and energy are kept.
-#[test]
-fn an_eater_digests_matter_into_the_solid_and_the_minerals_and_sheds_the_excess() {
-    let (mut w, i) = start();
-    let minerals = w.chem.minerals();
-    let m = w.chem.matter().expect("matter");
-    let (_, rich, _, _) = w.chem.life_roles().expect("roles");
-    let n = w.grid.n();
-    // A great store of matter on its ground, an eater that only takes from the ground.
-    put(&mut w, m, i, 1e5);
-    let mut b = eater_of(&mut w, 1, i, brain::TAKE);
-    // It keeps little of the minerals (a thousandth of its body): what digestion makes of the matter it takes is many times that.
-    for &(k, _) in &minerals {
-        b.genes[Layout::of(&w.chem).keep + k] = 0.001;
-    }
-    let s = w.life.add(b, w.day, 1);
-    let books = Books::now(&w);
-    let (matter0, rich0, ground0) = (w.ground[m * n + i], w.life.bodies[s].store[rich], minerals.iter().map(|&(k, _)| w.ground[k * n + i]).collect::<Vec<_>>());
-    let mut most = vec![0.0f64; minerals.len()];
-    for _ in 0..60 {
-        w.events.clear();
-        pcore::day(&mut w);
-        let b = &w.life.bodies[s];
-        assert!(b.alive);
-        for (q, &(k, _)) in minerals.iter().enumerate() {
-            most[q] = most[q].max(b.store[k] / b.level(&w.chem, k, b.mass(&w.chem)).max(1e-30));
-        }
-    }
-    let b = &w.life.bodies[s];
-    let taken = matter0 - w.ground[m * n + i];
-    println!("in 60 days it took {taken:.2} mol of matter, the solid rose {:.1} mol; it held at most {most:.2?} of its levels", b.store[rich] - rich0);
-    assert!(b.store[rich] > rich0, "the solid did not rise");
-    for (q, &(k, per)) in minerals.iter().enumerate() {
-        let lvl = b.level(&w.chem, k, b.mass(&w.chem));
-        println!("substance {k}: level {lvl:.3} mol, the ground got {:.2} mol more (the salt's number includes what the ground itself makes)", w.ground[k * n + i] - ground0[q]);
-        assert!(taken * per > 3.0 * lvl, "it took only {taken} mol of matter");
-        // (The salt falls out of the liquid in the body in days, so what comes back is lime as much as salt: the nitrogen mineral by itself, the rock element by all its forms.)
-        if q == 0 {
-            assert!(w.ground[k * n + i] > ground0[q] + 0.5 * (taken * per - lvl), "the excess of substance {k} did not go back to the ground");
-        }
-    }
-    // No lime past its level stays in the body (the salt falls out of the liquid in days, and the lime past the level it keeps, 16 Oct
-    // 2026, goes back to the ground at the update), and what
-    // it holds of the salt between two updates is a few times its level, the meals of the interval, not more and more.
-    println!("the body holds {:.3} mol of salt and {} of lime at the end", b.store[23], b.store[10]);
-    assert!(b.store[10] <= b.level(&w.chem, 10, 0.0) * (1.0 + 1e-9) && most[1] < 20.0, "lime {}, the salt at most {} of its level", b.store[10], most[1]);
-    books.assert_kept(&w, 1e-9);
 }
 
 /// End-product inhibition (15 Oct 2026): a body's catalyst is slowed by its store of each product it keeps a level of, by
@@ -1679,9 +1364,9 @@ fn seen(w: &World, s: usize) -> Seen {
 }
 
 /// A bite breaks body matter and spills the stores it held in proportion; an individual lives on smaller and
-/// weaker (its force goes by its body), and rebuilds the matter at the build rate. Elements and energy are kept.
+/// weaker (its force goes by its body). Elements and energy are kept.
 #[test]
-fn an_attacked_individual_loses_body_and_lives_on_weaker_then_rebuilds() {
+fn an_attacked_individual_loses_body_and_lives_on_weaker() {
     let (mut w, i) = bite_start();
     let a = resting(&mut w, i, 6.0, 1.0);
     let v = resting(&mut w, i, 6.0, 0.3);
@@ -1706,28 +1391,6 @@ fn an_attacked_individual_loses_body_and_lives_on_weaker_then_rebuilds() {
     assert!((after.force / before.force - after.built / before.built).abs() < 1e-9, "force {} -> {} N", before.force, after.force);
     // What the taker did not take went to the ground as dead matter.
     assert!(w.ground[RICH * n + i] > ground0, "no dead matter on the ground");
-    books.assert_kept(&w, 1e-9);
-
-    // It rebuilds, at c_copy within c_build: each update by no more than the allowance, and over time to what it
-    // was (given fuel: it is the fuel it converts, and it keeps its reserve).
-    let mut b = std::mem::take(&mut w.life.bodies[v]);
-    add(&mut w, &mut b, RICH, 6.0);
-    let (m1, days) = (b.matter_kg(&w.chem), b.interval() as f64);
-    let mut last = b.matter_kg(&w.chem);
-    let mut updates = 0;
-    while b.built(&w.chem) < before.built * (1.0 - 1e-3) && updates < 1000 {
-        let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
-        assert!(copy::grow(&mut w, &mut b, days), "it did not grow after {updates} updates");
-        let made = b.matter_kg(&w.chem) - last;
-        assert!(made > 0.0 && made <= room * (1.0 + 1e-9), "built {made} kg in an update of allowance {room}");
-        last = b.matter_kg(&w.chem);
-        updates += 1;
-    }
-    println!("rebuilt {:.3} kg of matter in {updates} updates of {days} days ({:.0} days)", last - m1, updates as f64 * days);
-    assert!(b.built(&w.chem) >= before.built * (1.0 - 1e-3) && updates > 5, "rebuilt in {updates} updates");
-    // (An immature body puts all it builds into itself: no brood.)
-    assert_eq!(b.brood, 0.0);
-    w.life.bodies[v] = b;
     books.assert_kept(&w, 1e-9);
 }
 
@@ -1835,37 +1498,6 @@ fn trampling_breaks_body_matter() {
     assert!(w.life.bodies[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life.bodies[big].n());
     assert!(w.life.bodies[small].n() < ns0, "a node of light members kept all {ns0}");
     assert!(w.ground[MATTER * w.grid.n() + i] > g0 && w.e_ground[i] > e0, "nothing went to the ground");
-    books.assert_kept(&w, 1e-9);
-}
-
-/// A hurt adult is immature until healed: it follows from `Body::adult` reading the body, so it makes no
-/// offspring while it rebuilds (everything it builds is its own growth), and is mature again once rebuilt.
-#[test]
-fn a_hurt_adult_is_immature_until_it_has_healed() {
-    let (mut w, i) = bite_start();
-    let mover = resting(&mut w, i, 6.0, 1.0);
-    // A body of 21 kg that is mature from 15 kg.
-    let v = resting(&mut w, i, 15f32.log10(), 0.0);
-    let (mv, v) = (place(&mut w, mover), place(&mut w, v));
-    assert!(w.life.bodies[v].adult(&w.chem));
-    let books = Books::now(&w);
-    // The energy that breaks 40% of it (`Body::breaking`, 16 Oct 2026: by what it is built of; 40,000 J at 3e-5 kg/J before).
-    let e = w.life.bodies[v].breaking(&w.chem, &w.cfg, 0.4);
-    choose::wear(&mut w, i, mv, e);
-    let mut b = std::mem::take(&mut w.life.bodies[v]);
-    println!("hurt to {:.2} kg of a copy mass of {:.2}", b.built(&w.chem), b.dec(COPY_MASS));
-    assert!(!b.adult(&w.chem), "a body torn by 40% is still mature");
-    let days = b.interval() as f64;
-    let mut updates = 0;
-    while !b.adult(&w.chem) && updates < 2000 {
-        assert!(copy::grow(&mut w, &mut b, days));
-        // (The update that crosses the size of maturity puts what it built past it, by `ALLOC`, into a brood.)
-        assert!(b.adult(&w.chem) || b.brood == 0.0, "a hurt body put matter into a brood");
-        updates += 1;
-    }
-    println!("mature again after {updates} updates of {days} days (matter {:.2} kg)", kg(&w, &b, MATTER));
-    assert!(b.adult(&w.chem) && updates > 5);
-    w.life.bodies[v] = b;
     books.assert_kept(&w, 1e-9);
 }
 

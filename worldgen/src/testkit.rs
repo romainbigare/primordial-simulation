@@ -2,7 +2,7 @@
 //! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked in the ledger, the books
 //! of a world, the books of one reacting node, sums of the day's events, and the substances of chemistry 0 by number.
 
-use pcore::body::{Body, Layout, CHILD, COPY_MASS, WET_TISSUE};
+use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
 use pcore::bond;
 use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};
@@ -134,6 +134,20 @@ pub fn founder(w: &mut World, kind: usize, i: usize, brain: &Brain) -> Body {
     Line::new(w, brain, kind as u32).founder(w, kind, i)
 }
 
+/// The mass the tests' starting eaters are scaled to, kg: 9 kg of fuel, 15.75 kg of liquid, 5.25 kg of body matter, a
+/// body of 21 kg.
+pub const EATER_KG: f64 = 30.0;
+
+/// A starting eater of `EATER_KG` in cell `i`, of a brain that only does fixed action `act`, weak (strength 0), staying
+/// where it is, soaking no liquid up, mature at 10^`copy` kg of body.
+pub fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
+    let mut b = founder(w, 1, i, &Brain::only(act));
+    let m = b.mass(&w.chem);
+    scale(w, &mut b, EATER_KG / m);
+    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
+    b
+}
+
 /// Body `b` made `f` times as big: its stores and heat (booked as an edit).
 pub fn scale(w: &mut World, b: &mut Body, f: f64) {
     for k in 0..w.chem.ns() {
@@ -172,6 +186,18 @@ pub fn put(w: &mut World, k: usize, i: usize, mol: f64) {
 pub fn put_kg_m2(w: &mut World, k: usize, i: usize, kg: f64) {
     let mol = kg * w.grid.area() / w.chem.subs[k].molar_mass;
     put(w, k, i, mol);
+}
+
+/// All of substance `k` in the world's ground, the store of its bed and its bodies, mol.
+pub fn in_all(w: &World, k: usize) -> f64 {
+    let n = w.grid.n();
+    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
+}
+
+/// The rock element (element 5) outside body matter on the ground of cell `i`, mol.
+pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
+    let n = w.grid.n();
+    (0..w.chem.ns()).filter(|&k| k != MATTER).map(|k| w.chem.subs[k].elems[5] as f64 * w.ground[k * n + i]).sum()
 }
 
 /// The ground of cell `i` brought to `t` K (booked as an edit).

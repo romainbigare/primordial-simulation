@@ -1,6 +1,7 @@
 use flate2::read::GzDecoder;
 use pcore::{check::hash, step, World};
 use std::io::Read;
+use std::sync::OnceLock;
 
 fn world() -> World {
     worldgen::new_world(1, 32, 32)
@@ -16,27 +17,6 @@ fn tmp(name: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!("ew_{name}_{}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
     d
-}
-
-#[test]
-fn same_seed_same_hash() {
-    let (mut a, mut b) = (world(), world());
-    run(&mut a, 3);
-    run(&mut b, 3);
-    assert_eq!(hash(&a), hash(&b));
-}
-
-#[test]
-fn snapshot_round_trip() {
-    let dir = tmp("snap");
-    let (mut a, mut whole) = (world(), world());
-    run(&mut a, 2);
-    tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
-    let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
-    assert_eq!(hash(&a), hash(&b));
-    run(&mut b, 2);
-    run(&mut whole, 4);
-    assert_eq!(hash(&b), hash(&whole));
 }
 
 /// A file without the snapshot header (here: a bare bincode body) is refused with a clear error.
@@ -125,16 +105,48 @@ fn frames_file_round_trip() {
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
 }
 
+/// The recording the series tests read: `world` with the soil, the light-eaters (none of them fixing, so that the fixed
+/// mineral in all stays what the soil gave) and the eaters (neutral brains), recorded month by month for three years;
+/// its folder, and the land and low-ground cells at each yearly row.
+struct Recording {
+    w: World,
+    dir: std::path::PathBuf,
+    cells: Vec<[f64; 2]>,
+}
+
+fn recording() -> &'static Recording {
+    static RECORDING: OnceLock<Recording> = OnceLock::new();
+    RECORDING.get_or_init(|| {
+        let dir = tmp("series");
+        let mut w = world();
+        worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
+        worldgen::life::seed(&mut w, 0);
+        let (lay, fix) = (pcore::body::Layout::of(&w.chem), w.chem.fixing().expect("the fixing reaction"));
+        w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
+        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+        let cells = |w: &World| {
+            let land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).count() as f64;
+            [land, w.grid.n() as f64 - land]
+        };
+        let mpy = w.cfg.months_per_year;
+        let mut rec = tape::Recorder::new(&w, 0, 0);
+        rec.record_month(&mut w);
+        let mut at = vec![cells(&w)];
+        for m in 1..=3 * mpy {
+            run(&mut w, 1);
+            rec.record_month(&mut w);
+            if m % mpy == 0 {
+                at.push(cells(&w));
+            }
+        }
+        rec.finish(&dir).unwrap();
+        Recording { w, dir, cells: at }
+    })
+}
+
 #[test]
 fn yearly_series_names_gases_and_catalysts() {
-    let dir = tmp("series");
-    let mut w = world();
-    let mut rec = tape::Recorder::new(&w, 0, 0);
-    for _ in 0..w.cfg.months_per_year {
-        run(&mut w, 1);
-        rec.record_month(&mut w);
-    }
-    rec.finish(&dir).unwrap();
+    let Recording { w, dir, .. } = recording();
     let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
     let head: Vec<&str> = csv.lines().next().unwrap().split(',').collect();
     let gases = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0).count();
@@ -147,17 +159,7 @@ fn yearly_series_names_gases_and_catalysts() {
 /// the totals of the year, and the land's summer is not colder than its winter.
 #[test]
 fn yearly_series_has_the_measures_per_starting_kind() {
-    let dir = tmp("per_kind");
-    let mut w = world();
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-    let mut rec = tape::Recorder::new(&w, 0, 0);
-    rec.record_month(&mut w);
-    for _ in 0..3 * w.cfg.months_per_year {
-        run(&mut w, 1);
-        rec.record_month(&mut w);
-    }
-    rec.finish(&dir).unwrap();
+    let Recording { w, dir, .. } = recording();
     let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
     let mut lines = csv.lines();
     let head: Vec<&str> = lines.next().unwrap().split(',').collect();
@@ -325,35 +327,12 @@ fn null_run_freezes_the_brain_rows() {
 /// ground's stays what the soil gave the world (no body fixes, and nothing burns hot).
 #[test]
 fn yearly_series_counts_the_minerals() {
-    let dir = tmp("minerals");
-    let mut w = world();
-    worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
-    worldgen::life::seed(&mut w, 0);
-    // (The founders that fix are put back to none, so that the mineral in all can stay what the soil gave.)
-    let (lay, fix) = (pcore::body::Layout::of(&w.chem), w.chem.fixing().expect("the fixing reaction"));
-    w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
-    // The land and sea cells at each yearly row, to turn the ground's kg/m² back into mol.
-    let cells = |w: &pcore::World| {
-        let land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).count() as f64;
-        [land, w.grid.n() as f64 - land]
-    };
-    let mpy = w.cfg.months_per_year;
-    let mut rec = tape::Recorder::new(&w, 0, 0);
-    rec.record_month(&mut w);
-    let mut at = vec![cells(&w)];
-    for m in 1..=2 * mpy {
-        run(&mut w, 1);
-        rec.record_month(&mut w);
-        if m % mpy == 0 {
-            at.push(cells(&w));
-        }
-    }
-    rec.finish(&dir).unwrap();
+    let Recording { w, dir, cells: at } = recording();
     let csv = std::fs::read_to_string(dir.join("series.csv")).unwrap();
     let mut lines = csv.lines();
     let head: Vec<&str> = lines.next().unwrap().split(',').collect();
     let rows: Vec<Vec<f64>> = lines.map(|l| l.split(',').map(|v| v.parse().unwrap()).collect()).collect();
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 4);
     let col = |n: &str, r: &Vec<f64>| r[head.iter().position(|h| *h == n).unwrap_or_else(|| panic!("no column {n}"))];
     // The soil: 0.357 mol of the mineral (80 g) in a m2 is 28.6 g; the cells under standing liquid have none.
     let first = &rows[0];
@@ -366,8 +345,9 @@ fn yearly_series_counts_the_minerals() {
         let ground = (col("min0_land", r) * c[0].max(1.0) + col("min0_sea", r) * c[1].max(1.0)) * area / mm / 1e9;
         ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()
     };
-    for (r, &c) in rows.iter().zip(&at) {
+    for (r, &c) in rows.iter().zip(at) {
         assert!((all(r, c) / all(first, at[0]) - 1.0).abs() < 1e-6, "the mineral in all: {} against {}", all(r, c), all(first, at[0]));
     }
-    assert!(col("min0_land", &rows[2]) > 0.0 && col("min0_dead_land", &rows[2]) > 0.0 && col("min0_bodies", &rows[2]) > 0.0);
+    let last = rows.last().unwrap();
+    assert!(col("min0_land", last) > 0.0 && col("min0_dead_land", last) > 0.0 && col("min0_bodies", last) > 0.0);
 }

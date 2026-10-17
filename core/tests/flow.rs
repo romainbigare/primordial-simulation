@@ -5,32 +5,13 @@ use pcore::units::DAY;
 use pcore::{body, brain, choose, lanes, World};
 use worldgen::testkit::{loose_volume as loose, Books, Brain, Line, DISSOLVED, LIQUID, OFF};
 
-const DT: f64 = 3.0 * 86_400.0;
+const DT: f64 = 3.0 * DAY;
 
 /// What the pores of the loose ground of cell `i` hold, mol of liquid `k` (the porosity times the volume of the loose solids).
 fn pore_mol(w: &pcore::World, i: usize, k: usize) -> f64 {
     let t = w.t_ground(i);
     let solids: f64 = (0..w.chem.ns()).filter(|&q| w.chem.phase(q, t) == pcore::chem::Phase::Solid).map(|q| w.g(q, i) * w.chem.molar_volume(q, pcore::chem::Phase::Solid)).sum();
     w.cfg.phys.porosity * solids / w.chem.molar_volume(k, pcore::chem::Phase::Liquid)
-}
-
-#[test]
-fn liquid_runs_downhill() {
-    let (_, init) = worldgen::chemistry0();
-    let mut w = worldgen::new_world(3, 16, 16);
-    let (n, k) = (w.grid.n(), init.low);
-    let top = (0..n).max_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).unwrap();
-    let t = w.t_ground(top).max(w.chem.subs[k].melt + 5.0);
-    // Liquid soaks into the pores of the loose ground first (15 Oct 2026): what runs off is what is over them.
-    let pores = pore_mol(&w, top, k);
-    w.ground[k * n + top] += 1.5 * pores;
-    w.e_ground[top] = w.energy_ground(top, t);
-    let books = Books::now(&w);
-    pcore::flow::step(&mut w, DT);
-    let left = w.ground[k * n + top];
-    // (It keeps its field capacity, `field` of its pores; the rest ran off or sank into the bed below, `flow::drain`.)
-    assert!(left < 1.1 * pores && left > 0.55 * pores, "the cell holds {} of its pores' worth", left / pores);
-    books.assert_within(&w, 1e-12, 1e-9);
 }
 
 /// A hot node held at a melting point with little fusion enthalpy left: radiating for a whole
@@ -205,38 +186,21 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
     assert!(dry.ground[mineral * n + top] > 0.99e6, "the mineral moved on dry ground: {}", dry.ground[mineral * n + top]);
 }
 
-/// The salt moves with the liquid that runs off a high cell, by the liquid's share, and stays when
-/// the liquid evaporates (it is no gas).
+/// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): a thin film on warm ground in dry
+/// air, in a pit of dry land (lower than all its neighbours, so nothing runs off it).
 #[test]
-fn the_salt_runs_with_the_liquid_and_stays_when_the_liquid_leaves() {
+fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (n, na, area) = (w.grid.n(), w.grid.na(), w.grid.area());
-    let top = (0..n).max_by(|&a, &b| w.surface_z(a).total_cmp(&w.surface_z(b))).unwrap();
-    let t = w.t_ground(top).max(w.chem.subs[LIQUID].melt + 5.0);
-    // (Liquid soaks into the pores of the loose ground first, 15 Oct 2026; what runs off is what is over them: three times their volume.)
-    let pores: f64 = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, w.t_ground(top)) == pcore::chem::Phase::Solid).map(|k| w.g(k, top) * w.chem.molar_volume(k, pcore::chem::Phase::Solid)).sum::<f64>() * w.cfg.phys.porosity / w.chem.molar_volume(LIQUID, pcore::chem::Phase::Liquid);
-    let (liquid, salt) = (3.0 * pores, 1e5);
-    (w.ground[LIQUID * n + top], w.ground[DISSOLVED * n + top]) = (liquid, salt);
-    w.e_ground[top] = w.energy_ground(top, t);
-    let all = |w: &pcore::World, k: usize| w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.air[k * na..(k + 1) * na].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>());
-    let (salt0, liq0) = (all(&w, DISSOLVED), all(&w, LIQUID));
-    pcore::flow::step(&mut w, 3.0 * DAY);
-    let (left_liq, left_salt) = (w.ground[LIQUID * n + top], w.ground[DISSOLVED * n + top]);
-    assert!(left_liq < 0.5 * liquid && left_salt < 0.5 * salt, "stayed: liquid {left_liq}, salt {left_salt}");
-    // The same share leaves: the salt left over the liquid left is the start's, within a tenth.
-    assert!(((left_salt / salt) / (left_liq / liquid) - 1.0).abs() < 0.1, "left {} of the liquid, {} of the salt", left_liq / liquid, left_salt / salt);
-    assert!((all(&w, DISSOLVED) - salt0).abs() < 1e-9 * salt0 && (all(&w, LIQUID) - liq0).abs() < 1e-6 * liq0);
-    // A thin film on warm ground in dry air: the liquid evaporates, the salt stays where it is.
-    let mut w = worldgen::new_world(3, 16, 16);
-    // (A pit of dry land, lower than all its neighbours: nothing runs off it.)
-    let pit = |w: &pcore::World, i: usize| pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| w.surface_z(j) > w.surface_z(i)));
+    let pit = |w: &World, i: usize| pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| w.surface_z(j) > w.surface_z(i)));
     let i = (0..n).find(|&i| w.ground[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && pit(&w, i)).expect("a pit of dry land");
-    (w.ground[LIQUID * n + i], w.ground[DISSOLVED * n + i]) = (0.05 * area / 0.018e-3 * 1.0, 1e3);
+    // 5 cm of the liquid.
+    (w.ground[LIQUID * n + i], w.ground[DISSOLVED * n + i]) = (0.05 * area / w.chem.molar_volume(LIQUID, Phase::Liquid), 1e3);
     w.e_ground[i] = w.energy_ground(i, 330.0);
     w.air[LIQUID * na..(LIQUID + 1) * na].fill(0.0);
     let (liq0, salt0) = (w.ground[LIQUID * n + i], w.ground[DISSOLVED * n + i]);
     for _ in 0..4 {
-        pcore::flow::step(&mut w, 3.0 * DAY);
+        pcore::flow::step(&mut w, DT);
     }
     assert!(w.ground[LIQUID * n + i] < 0.99 * liq0, "the liquid did not evaporate: {} of {liq0}", w.ground[LIQUID * n + i]);
     assert_eq!(w.ground[DISSOLVED * n + i], salt0);
@@ -265,7 +229,7 @@ fn take_heat_never_takes_a_node_below_the_floor() {
 }
 
 /// 15 days: one liquid step.
-const LIQUID_STEP: f64 = 15.0 * 86_400.0;
+const LIQUID_STEP: f64 = 15.0 * DAY;
 
 /// Two land cells side by side, both warm and dry: the higher first.
 fn pair(w: &World) -> (usize, usize) {

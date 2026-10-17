@@ -23,11 +23,16 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     let share = rock / chem.subs[m].molar_mass;
     println!("the rock element is {:.2}% of the dry matter ({} g of {} g)", 100.0 * share, 1e3 * rock, 1e3 * chem.subs[m].molar_mass);
     assert!(share > 0.005 && share < 0.02, "{share}");
-    let growth = chem.dh_of(chem.build.as_ref().unwrap());
+    // Growth: 118 of the energy-rich solid, 3 of the fixed mineral and 1 of the dissolved one make 1 of matter and 27 of the
+    // liquid, with no gain or loss of heat.
+    let build = chem.build.as_ref().expect("growth");
+    assert_eq!((build.inputs.as_slice(), build.outputs.as_slice()), (&[(5, 118), (24, 3), (23, 1)][..], &[(22, 1), (0, 27)][..]));
+    let growth = chem.dh_of(build);
     assert!(growth.abs() < 1.0, "growth takes {growth} J");
     // Growth gives off only the liquid (the salt's carbon goes into the matter): nothing to the air.
     assert!(chem.build.as_ref().expect("growth").outputs.iter().all(|p| p.0 == m as u16 || chem.phase(p.0 as usize, 290.0) == pcore::chem::Phase::Liquid));
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m) && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral)).expect("rotting");
+    assert!((chem.dh(burn) / -55124.7e3 - 1.0).abs() < 1e-6, "body matter burns for {} J a mol", -chem.dh(burn));
     let per_kg = -chem.dh(burn) / chem.subs[m].molar_mass / 1e6;
     println!("body matter burns for {per_kg:.2} MJ/kg");
     assert!(per_kg > 15.5 && per_kg < 17.0, "{per_kg} MJ/kg");

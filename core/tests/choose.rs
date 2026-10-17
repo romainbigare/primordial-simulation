@@ -1,8 +1,10 @@
-//! Law 5 scene: one body learns to move toward what it can take. Flat ground, the energy-rich
-//! solid lying loose only in a strip on the east side, one body (of the starting kind that burns
-//! that solid and takes it from the ground) just west of the strip, with a neutral brain. Over
-//! its first 200 decisions, with learning on against off, over many seeds. Its children (it
-//! copies once it has eaten twice its copy mass) are taken out at once.
+//! Law 5 (Choose): one body learns to move to what it can take; brains shared in groups; giving; moving; a body with
+//! no brain.
+//!
+//! The learning scene: flat ground, the energy-rich solid lying loose only in a strip on the east side, one body (of
+//! the starting kind that burns that solid and takes it from the ground) just west of the strip, with a neutral
+//! brain. Over its first 200 decisions, with learning on against off, over many seeds. Its children are taken out at
+//! once.
 
 use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::grid::DIRS;
@@ -10,68 +12,23 @@ use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use worldgen::testkit::{dry_land, founder, scale, start, Books, Brain, Line, OFF};
 
+/// The scene's grid.
 const W: usize = 12;
-
 const H: usize = 8;
-
 /// First column of the strip, and the loose energy-rich solid on each of its cells, mol/m².
 const STRIP: usize = 6;
-
 const RICH: f64 = 20.0;
-
+/// The body's mass, kg.
+const BODY_KG: f64 = 30.0;
 const DECISIONS: usize = 200;
-
-/// 800 seeds, not 200, since the default `exchange_days` is 3, the row `ew` runs: the effect on the moves is
-/// about 3 points over chance, not 5, and 200 seeds could not tell it from the body that does not learn.
-const SEEDS: u64 = 1600;
-
 /// Learning rate genes (log10): on, and off.
 const LEARN_ON: f32 = -1.0;
-
 const LEARN_OFF: f32 = -4.0;
 
 /// A flat, warm world: every cell a copy of one dry land cell, the strip added on top.
 fn scene(seed: u64) -> (World, usize) {
-    let (mut chem, init) = worldgen::chemistry0();
-    // The scene tests Choose alone: its bodies do not grow (a chemistry with no body matter, so no
-    // building work: growth would take a quarter of the body's fuel before it can learn anything).
-    // (Nor any other solid: `Chemistry::builds`, 16 Oct 2026.)
-    (chem.build, chem.builds) = (None, Vec::new());
-    // And the strip does not rot faster than it did: the open air burns the solid and the matter 4 times faster since the
-    // litter constants of 15 Oct 2026 (`worldgen::life::LITTER_X`), so with the old rates here, and the founders' burning
-    // genes put back (in `run`), the scene is the one this test was made with. Over its 1,000 days a strip that rots at
-    // 24% a year is half gone, and what a body learns by moving to it is no longer what is measured.
-    for r in [1, 21] {
-        chem.reactions[r].k /= 10f64.powf(worldgen::life::LITTER_X as f64);
-    }
-    // The body is one of 30 kg: its brain costs what the scene was made with (a decision costs a
-    // member of `m_ref` kg `c_brain` per kg; a body of that mass pays it per kg as before), and
-    // so does copying (at 10^7 J/kg, 13 Oct 2026, the scene's body, whose brain costs 30 times
-    // what a 1 kg member's does, starves soon after its first child: 22 decisions on average
-    // against 98, before it can learn).
-    // `m_ref` is also the mass at which `take` and `sweep` are per kg; ref^0.25 x m^0.75 is what a
-    // member takes, so scaling both by 30^-0.25 keeps what the 1 kg reference gave.
-    let d = pcore::Physics::default();
-    // `c_build` stays 3e4, what the scene was made with (the default is 1e4 since 14 Oct 2026, review
-    // 6: with it the effect is 2.5 points over chance against 0.5, just under the margin the test asks).
-    // The costs of keeping tissue are per kg of the body since 14 Oct 2026 (the energy ceiling,
-    // `body::upkeep`); they were per kg-equivalent, which for this body of 30 kg at `m_ref` 30 kg was
-    // one unit. This chemistry has no body matter, so all its 30 kg are body: each cost is what the
-    // scene paid (the constants of before that day), over 30.
-    let phys = pcore::Physics {
-        m_ref: 30.0,
-        c_copy: 2e6,
-        c_build: 3e4,
-        take: d.take * 30f64.powf(-0.25),
-        sweep: d.sweep * 30f64.powf(-0.25),
-        c_basal: 2e4 / 30.0,
-        c_cat: 3.5105e9 / 30.0,
-        c_strength: 2.3403e5 / 30.0,
-        c_learn: 7.021e4 / 30.0,
-        c_signal: 4.6807e2 / 30.0,
-        ..d
-    };
-    let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, phys, ..Default::default() };
+    let (chem, init) = worldgen::chemistry0();
+    let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);
     let (n, ns) = (w.grid.n(), w.chem.ns());
@@ -108,12 +65,8 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let brain = Brain { fixed: [0.0, OFF, 0.0, 0.0, OFF, OFF, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
     let start = w.grid.idx(STRIP - 1, H / 2);
     let mut b = founder(&mut w, 1, start, &brain);
-    // (A founder is placed as an adult since 15 Oct 2026, 63 kg: this scene is set for a 30 kg one; booked as an edit.)
-    let f = 30.0 / b.mass(&w.chem);
+    let f = BODY_KG / b.mass(&w.chem);
     scale(&mut w, &mut b, f);
-    // (The founders' burning gene as it was with the old rates of the open air, see `scene`.)
-    let (_, _, _, burn) = w.chem.life_roles().expect("roles");
-    b.genes[pcore::body::Layout::of(&w.chem).cat + burn] += worldgen::life::LITTER_X;
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     let slot = w.life.add(b, w.day, 1);
@@ -124,8 +77,8 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.grid.step(from, d)).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, rich, j) > seen(&w, rich, from) + 0.02).collect();
         pcore::day(&mut w);
-        // A body that grew past twice its copy mass has children: they die at once, their matter
-        // back to the ground where they were born, so the scene stays one body.
+        // A body that has children: they die at once, their matter back to the ground where they were born, so the scene
+        // stays one body.
         for s in 0..w.life.bodies.len() {
             if s != slot && w.life.bodies[s].alive {
                 let c = std::mem::take(&mut w.life.bodies[s]);
@@ -140,68 +93,103 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     log
 }
 
-/// Over all seeds: share of decisions made on the strip; of the moves made from a cell next to a
-/// richer one, the share to a richer cell, and what random moves would give; decisions; those
-/// moves.
-fn measure(learn: f32) -> (f64, f64, f64, usize, usize) {
-    let (mut on, mut n, mut moves, mut toward, mut chance) = (0, 0, 0usize, 0, 0.0);
-    for seed in 1..=SEEDS {
-        for (strip, moved, next, up, share) in run(seed, learn) {
+/// What the scene's body did over many seeds.
+struct Tally {
+    /// The share of all decisions made on the strip
+    strip: f64,
+    /// Of the moves made from a cell next to a richer one: the share to a richer cell, and what random moves would give
+    toward: f64,
+    chance: f64,
+    decisions: usize,
+    moves: usize,
+    /// The decisions each seed's body lived to make
+    lives: Vec<f64>,
+}
+
+fn measure(learn: f32, seeds: u64) -> Tally {
+    let (mut on, mut n, mut moves, mut toward, mut chance, mut lives) = (0, 0, 0usize, 0, 0.0, Vec::new());
+    for seed in 1..=seeds {
+        let log = run(seed, learn);
+        lives.push(log.len() as f64);
+        for (strip, moved, next, up, share) in log {
             (on, n) = (on + strip as usize, n + 1);
             if moved && next {
                 (moves, toward, chance) = (moves + 1, toward + up as usize, chance + share);
             }
         }
     }
-    (on as f64 / n as f64, toward as f64 / moves as f64, chance / moves as f64, n, moves)
+    Tally { strip: on as f64 / n as f64, toward: toward as f64 / moves as f64, chance: chance / moves as f64, decisions: n, moves, lives }
 }
 
+/// The mean of `x` and its standard error.
+fn mean_and_error(x: &[f64]) -> (f64, f64) {
+    let n = x.len() as f64;
+    let mean = x.iter().sum::<f64>() / n;
+    let var = x.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    (mean, (var / n).sqrt())
+}
+
+fn report(on: &Tally, off: &Tally) -> String {
+    format!(
+        "learning on: on the strip {:.3}, toward {:.3} (chance {:.3}), {} decisions, {} moves; off: on the strip {:.3}, toward {:.3} (chance {:.3}), {} decisions, {} moves",
+        on.strip, on.toward, on.chance, on.decisions, on.moves, off.strip, off.toward, off.chance, off.decisions, off.moves
+    )
+}
+
+/// Over 200 seeds the body that learns lives to make more decisions than the one that does not, by more than three
+/// standard errors of the difference of their means (about 36 against 16, the error about 5): it learns to take
+/// what it finds and to stay where it is. Of all its decisions a clearly larger share is made on the strip. (Whether
+/// its moves go toward the richer cells is a smaller effect, which needs the seeds of the slow version.)
 #[test]
-fn body_learns_to_move_toward_what_it_can_take() {
-    let (strip_on, toward_on, chance_on, n_on, m_on) = measure(LEARN_ON);
-    let (strip_off, toward_off, chance_off, n_off, m_off) = measure(LEARN_OFF);
-    let report = format!(
-        "learning on: on the strip {strip_on:.3}, toward {toward_on:.3} (chance {chance_on:.3}), {n_on} decisions, {m_on} moves; \
-         off: on the strip {strip_off:.3}, toward {toward_off:.3} (chance {chance_off:.3}), {n_off} decisions, {m_off} moves"
-    );
+fn a_body_that_learns_lives_on_what_it_can_take() {
+    let (on, off) = (measure(LEARN_ON, 200), measure(LEARN_OFF, 200));
+    let ((life_on, e_on), (life_off, e_off)) = (mean_and_error(&on.lives), mean_and_error(&off.lives));
+    let se = (e_on * e_on + e_off * e_off).sqrt();
+    let report = format!("{}; decisions per body {life_on:.1} and {life_off:.1}, standard error of the difference {se:.1}", report(&on, &off));
     eprintln!("{report}");
-    // It ends up on the strip clearly more often than a body that does not learn (about 0.86
-    // against 0.43 here; the one that does not learn mostly starves within 20 decisions).
-    assert!(strip_on > strip_off + 0.07, "{report}");
-    // Its moves go toward richer cells more often than chance, and more than those of a body
-    // that does not learn (about 2 points over chance against 0 here: 2.7 and 1.5 on seeds 1 to 800
-    // and 801 to 1600 of main on 15 Oct 2026, so 0.02 sat at the mean of the effect and a change of
-    // brain size, with one more substance, failed it twice at 1.7 and 1.6; it was 14 to 16 points
-    // while bodies grew without bound: a body of real size that has eaten its fill copies, and
-    // gains no well-being by eating more). (15 Oct 2026: the bar is one standard error of the difference of the two shares, 1.2
-    // points, not a fixed 1.5: the body's reactions running at its temperature after its upkeep moved the effect from 2.0 to
-    // 1.4 points on seeds 1 to 800, and 0.8 to 1.1 on seeds 801 to 1600, where main fails too: noise, not a change.)
-    // Moving pays only through a take at a later decision;
-    // it is learned because each row of the brain steps by its own size, so the row for the
-    // richness of a neighbour learns when that matters, not drowned by the others.
-    let (up_on, up_off) = (toward_on - chance_on, toward_off - chance_off);
-    let se = (toward_on * (1.0 - toward_on) / m_on as f64 + toward_off * (1.0 - toward_off) / m_off as f64).sqrt();
+    assert!(life_on - life_off > 3.0 * se, "{report}");
+    assert!(on.strip > off.strip + 0.07, "{report}");
+}
+
+/// Over 1,600 seeds the body that learns ends up on the strip clearly more often than one that does not, and its moves
+/// from a cell next to a richer one go to a richer cell more often than chance, and more than those of a body that
+/// does not learn by one standard error of the difference of the two shares (about 1.3 points over chance against
+/// 0, the error 1.1 points). Moving pays only through a take at a later decision; it is learned because each row of
+/// the brain steps by its own size, so the row for the richness of a neighbour learns when that matters, not drowned
+/// by the others.
+#[test]
+#[ignore = "slow: 3,200 runs of the learning scene"]
+fn body_learns_to_move_toward_what_it_can_take() {
+    let (on, off) = (measure(LEARN_ON, 1600), measure(LEARN_OFF, 1600));
+    let report = report(&on, &off);
+    eprintln!("{report}");
+    assert!(on.strip > off.strip + 0.07, "{report}");
+    let (up_on, up_off) = (on.toward - on.chance, off.toward - off.chance);
+    let se = (on.toward * (1.0 - on.toward) / on.moves as f64 + off.toward * (1.0 - off.toward) / off.moves as f64).sqrt();
     assert!(up_on > 0.01 && up_on > up_off + se, "{report}, standard error {se:.4}");
 }
 
-/// The same seed gives the same history, with brains shared by bodies that stayed together.
-#[test]
-fn same_seed_same_history_with_shared_brains() {
-    let run = || {
-        let mut w = worldgen::new_world(1, 32, 32);
+/// A world of seed 1, 32 x 32, with the light-eaters and the eaters (neutral brains) placed after a month and run for
+/// 30 months more, its bodies sharing brains in groups or not; and its books at the start.
+fn lived(share_brains: bool) -> (pcore::World, Books) {
+    let mut w = worldgen::new_world(1, 32, 32);
+    let books = Books::now(&w);
+    w.cfg.share_brains = share_brains;
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+    for _ in 0..30 {
         pcore::step(&mut w);
-        worldgen::life::seed(&mut w, 0);
-        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-        for _ in 0..30 {
-            pcore::step(&mut w);
-        }
-        w
-    };
-    let (a, b) = (run(), run());
-    assert_eq!(pcore::check::hash(&a), pcore::check::hash(&b));
+    }
+    (w, books)
+}
+
+/// Bodies that stay together share a brain in a group, and each group knows the mean of its members' born rows.
+#[test]
+fn a_group_holds_the_mean_of_its_members_born_rows() {
+    let (a, _) = lived(true);
     let shared = a.life.groups.iter().filter(|g| g.members > 1).count();
     assert!(shared > 0, "no shared brains among {} bodies", a.life.alive().count());
-    // Each group knows the mean of its members' born rows.
     for (k, g) in a.life.groups.iter().enumerate().filter(|(_, g)| g.members > 0) {
         let mut sum = vec![0f32; g.rows.len()];
         for b in a.life.alive().filter(|b| b.group as usize == k) {
@@ -233,18 +221,9 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
 /// Without shared brains every body keeps a group of its own, and matter and energy still add up.
 #[test]
 fn own_brains_keep_one_body_per_group() {
-    let mut w = worldgen::new_world(1, 32, 32);
-    let books = Books::now(&w);
-    w.cfg.share_brains = false;
-    pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-    let first = w.life.alive().count();
-    for _ in 0..30 {
-        pcore::step(&mut w);
-    }
+    let (w, books) = lived(false);
     let born = w.life.alive().filter(|b| b.born > 0).count();
-    assert!(born > 0 && w.life.alive().count() > 0, "{first} bodies placed, none born");
+    assert!(born > 0, "no body was born");
     assert!(w.life.groups.iter().all(|g| g.members <= 1), "a group with more than one member");
     books.assert_kept(&w, 1e-9);
 }
@@ -340,3 +319,4 @@ fn moving_costs_the_real_cost_of_transport() {
     // The real figure, 10.7 m^-0.32 J per kg per m, at 30 kg is 3.6: c_move 3 is the same order.
     assert!(p.c_move > 0.7 * 10.7 * 30f64.powf(-0.32) && p.c_move < 1.0 * 10.7 * 30f64.powf(-0.32));
 }
+

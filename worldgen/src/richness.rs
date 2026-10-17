@@ -111,14 +111,19 @@ mod tests {
         }
     }
 
+    /// Every generated chemistry is valid, and the generator makes rich ones: some of them pass every check.
     #[test]
-    fn generated_chemistries_validate() {
-        let mut pass = 0;
+    fn generated_chemistries_validate_and_some_are_rich() {
+        let (mut all, mut each) = (0, Vec::new());
         for seed in 0..200 {
             let (c, i) = crate::generate(seed);
             c.validate().unwrap();
-            pass += richness(&c, &i).iter().all(|p| p.1) as u32;
+            let checks = richness(&c, &i);
+            each.resize(checks.len(), 0);
+            checks.iter().zip(&mut each).for_each(|(p, n)| *n += p.1 as u32);
+            all += checks.iter().all(|p| p.1) as u32;
         }
-        println!("generated chemistries passing all richness checks: {pass} of 200");
+        println!("of 200 generated chemistries, {all} pass all richness checks; each check: {each:?}");
+        assert!(all > 0, "no generated chemistry passes every check; each check: {each:?}");
     }
 }

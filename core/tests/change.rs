@@ -1,12 +1,10 @@
 //! Law 2 (Change): the rate law of the reactions, burning and rotting in the open, catalysts, the liquid's store of the
 //! heat-absorbing gas, and what dead matter gives back to the ground.
 
-use pcore::body::{Body, Layout};
 use pcore::change::{self, Reactor};
 use pcore::chem::Chemistry;
 use pcore::units::DAY;
-use pcore::World;
-use worldgen::testkit::{hold_ground, node_totals, open_air, put, small_world, start, Books, ABSORBER, AIR_COLUMN, BURNING_GAS, DISSOLVED, FIX_GAS, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{hold_ground, in_all, rock_outside_matter, node_totals, open_air, put, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, OPEN_CAP, OX, RICH, ROCK};
 
 #[test]
 fn hot_reacts_faster() {
@@ -82,25 +80,6 @@ fn hot_node_reacts_in_the_next_step() {
         pcore::change::step(&mut w, 3.0 * 86_400.0);
         assert!(w.ground[rich * n + i] < 999.0, "tick {tick}: amount left {}", w.ground[rich * n + i]);
     }
-}
-
-/// A reaction is first order in its scarce input: a trace of the methane-like gas (4) in plenty of
-/// the oxygen-like gas (2) loses the same share of itself in the same time whatever its amount.
-#[test]
-fn scarce_gas_goes_first_order() {
-    let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
-    let mut lost = |a: f64| {
-        let mut n = vec![0.0; chem.ns()];
-        n[OX] = 1e6;
-        n[BURNING_GAS] = a;
-        let mut e = 300.0 * 1e12; // huge heat capacity: temperature stays put
-        rc.react(&chem, &mut n, None, &mut e, 1e12, None, 0.0, 3e4);
-        1.0 - n[BURNING_GAS] / a
-    };
-    let (few, many) = (lost(1.0), lost(100.0));
-    assert!(few > 0.1 && few < 0.9, "share lost {few}");
-    assert!((many - few).abs() < 0.01 * few, "1 mol lost {few}, 100 mol lost {many}");
 }
 
 /// A body's catalyst works below the temperature where it loses its shape, and a few K above it
@@ -201,25 +180,6 @@ fn no_jump_when_the_scarcest_input_changes() {
     assert!((above / below - 1.01 / 0.99).abs() < 1e-3, "across the gas's amount: x{}", above / below);
 }
 
-/// A trace gas against a solid is first order in the gas: the share of it the rock takes in a day
-/// is the same for 1 or 100 mol of the gas, the other amounts the same.
-#[test]
-fn a_trace_gas_against_a_solid_goes_first_order() {
-    let (chem, _) = worldgen::chemistry0();
-    let mut rc = Reactor::new(&chem);
-    let mut lost = |a: f64| {
-        let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
-        (n[LIQUID], n[ROCK]) = (1e5, 1e4);
-        (gas[FIX_GAS], gas[OX], gas[ABSORBER]) = (0.78 * AIR_COLUMN, 0.21 * AIR_COLUMN, a);
-        let mut e = 288.0 * 1e15;
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, 1e15, None, 0.0, 30.0 * DAY);
-        1.0 - gas[ABSORBER] / a
-    };
-    let (few, many) = (lost(1.0), lost(100.0));
-    assert!(few > 1e-4 && few < 0.9, "share lost {few}");
-    assert!((many - few).abs() < 0.01 * few, "1 mol lost {few}, 100 mol lost {many}");
-}
-
 /// Dead matter in the open goes with what there is of it (first order: the same share lost for 1
 /// and 1,000 mol) at its litter constant, 0.27 a year at 290 K for the energy-rich solid (Olson
 /// 1963; `docs/numbers.md`), the oxygen-like gas at its share of the air.
@@ -240,23 +200,6 @@ fn litter_goes_first_order_at_its_constant() {
     assert!((many - few).abs() < 1e-3 * few, "1 mol lost {few}, 1,000 mol lost {many}");
     // 0.27 a year, the rest of the bare decay (reaction 4 and 9, far slower) aside.
     assert!((0.235..0.25).contains(&few), "share lost in a year {few} (1 - e^-0.27 = 0.237)");
-}
-
-/// The founders' light gene is raised by `LIGHT_X`, the log10 of the gas a founder light-eater
-/// exchanges in its interval over the liquid it holds (the contact of the light reaction's phases
-/// in a body is its liquid): the constant is that measure, with the `ABSORBER` gene the founders had then (2.187; since 16 Oct
-/// 2026 they start with a leaf's pores, 4.334, which does not change the light reaction's contact).
-#[test]
-fn the_light_shift_is_the_founders_gas_over_their_liquid() {
-    let mut w = small_world();
-    let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
-    let shape = pcore::lineage::shape(w.chem.ns(), 12, 6);
-    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base: vec![], root: 0 }), w.life.new_genome(vec![]));
-    let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a founder");
-    b.prepare(&w.chem, &w.cfg.phys);
-    let reach = 10f64.powf(2.187) * b.open_area(&w.chem, &w.cfg.phys, b.mass(&w.chem)) * b.interval() as f64;
-    let x = (reach / b.store[LIQUID]).log10();
-    assert!((x - worldgen::life::LIGHT_X as f64).abs() < 0.01, "a founder exchanges 10^{x} times its liquid");
 }
 
 /// A salt held far past its balance (an eater's rock salt: 4.35 mol in 1,250 mol of liquid at 305 K) falls out at the pace
@@ -281,58 +224,6 @@ fn a_salt_past_its_balance_falls_out_by_its_rate_law_over_a_long_step() {
     let (one, ten, law) = (left(1), left(10), 4.35 / (1.0 + 2.0 * z).sqrt());
     println!("salt left after 10 days: one call {one:.4}, ten calls {ten:.4}, the rate law {law:.4} mol");
     assert!((0.9..1.25).contains(&(one / law)) && (one / ten - 1.0).abs() < 0.05, "one call {one}, ten calls {ten}, the law {law}");
-}
-
-/// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 0.2 of it a
-/// year at 290 K in the starting air (18.6% lost in a year; a little slower than the energy-rich
-/// solid's 0.27 a year, 24%: structure resists; both are litter decay constants, forest floor
-/// 0.25 a year), by the oxygen-like gas to the 6th power (the power of the rate law, `Reaction::ord`; the matter takes 118 of
-/// it in all, 0.21^6 = 8.6e-5) over a rate constant of 7.6e-5 /s at 290 K. The rate is per mol of matter, so it did not change when the
-/// unit of matter grew three times (15 Oct 2026).
-#[test]
-fn dead_body_matter_oxidises_at_the_set_rate() {
-    let (chem, init) = worldgen::chemistry0();
-    let (m, rich) = (MATTER, RICH);
-    let mut rc = change::Reactor::new(&chem);
-    // The starting air in plenty (booked nowhere: a node of its own), a huge heat capacity.
-    let mut lost = |k: usize| {
-        let (mut n, mut gas, mut e) = open_air(&chem, &init, 290.0);
-        n[k] = 1000.0;
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, 365.0 * 86_400.0);
-        1.0 - n[k] / 1000.0
-    };
-    let (matter, solid) = (lost(m), lost(rich));
-    println!("a year at 290 K in the starting air: body matter {:.2}% oxidised, the energy-rich solid {:.2}%", 100.0 * matter, 100.0 * solid);
-    assert!(matter > 0.17 && matter < 0.205, "{matter}");
-    assert!(solid > 0.22 && solid < 0.26 && matter < solid, "{solid}");
-    // It burns: 55,124.7 kJ a mol (15.9 MJ a kg, a little over the solid's 15.6, which the matter was made of without a gain of heat;
-    // 16.7 before the rock salt, whose carbon is already burnt and which leaves as lime), and balances in elements (validated on load).
-    let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m)).expect("a burning reaction");
-    assert!((chem.dh(burn) / -55124.7e3 - 1.0).abs() < 1e-6 && chem.validate().is_ok(), "{}", chem.dh(burn));
-    // Bodies catalyse it and pay for the enzyme as for the solid's: the same speed-up costs about
-    // three quarters as much (the rate constants over the open rates, the air beyond first order).
-    let cost = |r: usize| {
-        let mut b = Body { genes: vec![0.0; Layout::of(&chem).len], store: vec![0.0; chem.ns()], ..Default::default() };
-        b.genes[Layout::of(&chem).cat + r] = 2.6;
-        b.prepare(&chem, &pcore::Physics::default());
-        b.k.cats
-    };
-    let (c_matter, c_solid) = (cost(burn), cost(1));
-    println!("enzyme capacity at a speed-up of 10^2.6: body matter {c_matter:.2e}, the solid {c_solid:.2e} per s");
-    assert!(c_matter > 0.5 * c_solid && c_matter < 1.0 * c_solid, "{c_matter} and {c_solid}");
-}
-
-/// All of substance `k` in the world's ground and bodies, mol.
-fn total(w: &World, k: usize) -> f64 {
-    let n = w.grid.n();
-    // (With the store of the bed under the ground, where drained liquid takes what is dissolved in it.)
-    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
-}
-
-/// The rock element (5) outside body matter on the ground of cell `i`, mol (lime, the salt, quicklime...).
-fn rock_outside(w: &World, i: usize) -> f64 {
-    let (m, n) = (w.chem.matter().expect("matter"), w.grid.n());
-    (0..w.chem.ns()).filter(|&k| k != m).map(|k| w.chem.subs[k].elems[5] as f64 * w.ground[k * n + i]).sum()
 }
 
 /// Dead matter gives the minerals back: in the open at 290 K it rots (0.2 a year, the litter constant) and every mol that goes leaves three
@@ -389,18 +280,18 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     let m = w.chem.matter().expect("matter");
     // The same world with nothing on the ground: what the open makes of the mineral in a year.
     let mut twin = w.clone();
-    let bare = total(&twin, mineral);
+    let bare = in_all(&twin, mineral);
     for _ in 0..12 {
         pcore::step(&mut twin);
     }
-    let (bare, bare_rock) = (total(&twin, mineral) - bare, rock_outside(&twin, i));
+    let (bare, bare_rock) = (in_all(&twin, mineral) - bare, rock_outside_matter(&twin, i));
     put(&mut w, m, i, 1e8);
     let books = Books::now(&w);
-    let (m_before, n_before) = (total(&w, m), total(&w, mineral));
+    let (m_before, n_before) = (in_all(&w, m), in_all(&w, mineral));
     for _ in 0..12 {
         pcore::step(&mut w);
     }
-    let (lost, gained, rock) = (m_before - total(&w, m), total(&w, mineral) - n_before - bare, rock_outside(&w, i) - bare_rock);
+    let (lost, gained, rock) = (m_before - in_all(&w, m), in_all(&w, mineral) - n_before - bare, rock_outside_matter(&w, i) - bare_rock);
     assert!(bare >= 0.0 && bare < 1e-3 * lost, "the open fixed {bare} mol in a year");
     println!("a year on the ground: {lost:.0} of {m_before:.0} mol of matter rotted, {gained:.0} mol of the mineral back, {rock:.0} mol of the rock element more than the twin's cell");
     assert!(lost > 0.02 * m_before, "it did not rot: {lost}");

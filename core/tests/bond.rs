@@ -57,10 +57,8 @@ fn walls_keep_a_body_warm() {
     let mut inside = w.clone();
     inside.life.bodies[slot].inside = inside.parts.parts[parts[0]].id(parts[0]);
     let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];
-    for _ in 0..1 {
-        pcore::step(&mut w);
-        pcore::step(&mut inside);
-    }
+    pcore::step(&mut w);
+    pcore::step(&mut inside);
     assert!(w.life.bodies[slot].alive && inside.life.bodies[slot].alive);
     assert!(temp(&inside) > temp(&w) + 1.0, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
 }
@@ -142,14 +140,13 @@ fn a_node_acts_on_bonds_through_one_member() {
         let line = Line::new(&mut w, &brain, 0);
         let (l, mut b) = (line.lineage, line.founder(&mut w, 0, i));
         b.spread = vec![0.01; b.genes.len()];
-        // (their mass stays: no liquid soaked up from the ground, which would add a third to it, and little lost through their
-        // pores, which since 16 Oct 2026 are a leaf's and would take a quarter of it in an update: the old gene)
-        (b.genes[pcore::body::LIQ], b.genes[pcore::body::GAS]) = (-4.0, 2.187);
+        // (No liquid soaked up from the ground, which would add a third to their mass.)
+        b.genes[pcore::body::LIQ] = -4.0;
         if case == 0 {
             // (copying at 100 kg, so they do not copy instead)
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 2.0, b.count / 40.0);
         }
-        let (n0, genes, kg) = (b.count, b.genes.clone(), b.mass(&w.chem) / b.count);
+        let (n0, genes) = (b.count, b.genes.clone());
         w.life.add(b, w.day, 1);
         pcore::survey::survey(&mut w);
         w.day += 1;
@@ -159,6 +156,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         let node = w.life.alive().find(|b| b.lineage == l && b.count > 1.0).expect("the node");
         if case == 0 {
             assert!(one.len() == 1 && w.parts.parts[p].id(p) == one[0].hold, "the member holds nothing");
+            let kg = node.mass(&w.chem) / node.count;
             assert!((node.count + 1.0 - n0).abs() < 1e-9 * n0 && (one[0].mass(&w.chem) / kg - 1.0).abs() < 0.1, "{} of {n0} members, {} kg against {kg}", node.count, one[0].mass(&w.chem));
         } else {
             assert!(one.is_empty() && (node.count - n0).abs() < 1e-9 * n0, "{} members", node.count);
