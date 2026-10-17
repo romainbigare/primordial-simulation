@@ -84,8 +84,11 @@ fn a_resumed_run_places_the_kinds_still_due() {
     assert!(a.life.brains.iter().flatten().all(|l| !late.contains(&l.root)), "a later kind placed before the snapshot");
     tape::save_snapshot(&a, &plan, dir.join("s.bin.gz")).unwrap();
     let (mut b, plan): (World, Schedule) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
-    years(&mut b, &plan, 1);
+    // (Checked as they are placed: a kind placed in so small a world may die out within the year.)
+    plan.place(&mut b);
     assert!(late.iter().all(|k| b.life.brains.iter().flatten().any(|l| l.root == *k)), "the resumed run placed the later kinds");
+    let months = b.cfg.months_per_year;
+    run(&mut b, months);
     assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 

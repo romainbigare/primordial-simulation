@@ -83,7 +83,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let group = w.life.new_group(lineage, w.life.genomes[genome as usize].rows.clone());
     let (chem, ledger, t) = (&w.chem, &mut w.ledger, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
-    let mut rg = Rng::new(w.seed, w.day, id, Purpose::Mutate);
+    let mut rg = Rng::new(w.seed, w.day, id, Purpose::Make);
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();
     for _ in 0..rounds {

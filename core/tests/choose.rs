@@ -204,7 +204,7 @@ fn a_group_holds_the_mean_of_its_members_born_rows() {
 #[test]
 fn brain_grown_and_shrunk_back_is_unchanged() {
     let (a, b) = (pcore::lineage::shape(9, 12, 6), pcore::lineage::shape(9, 16, 8));
-    let mut r = Rng::new(1, 0, 0, Purpose::Body);
+    let mut r = Rng::new(1, 0, 0, Purpose::Resize);
     let w = pcore::brain::random(a, &mut r, 0.1, [0.0; 8], 0.0, [0.0; 9]);
     let (base, rows) = w.split_at(a.base());
     let grown = (pcore::brain::rebase(base, a, b, &mut r, 0.1), pcore::brain::rerow(rows, a, b, &mut r, 0.1));

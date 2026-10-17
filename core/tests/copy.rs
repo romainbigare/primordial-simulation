@@ -1087,7 +1087,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             pcore::survey::survey(&mut w);
         }
         // In a random order, so no body is first by its slot.
-        let (mut order, mut r) = (live(&w), Rng::new(1, w.day, 0, Purpose::Body));
+        let (mut order, mut r) = (live(&w), Rng::new(1, w.day, 0, Purpose::Choose));
         for k in (1..order.len()).rev() {
             order.swap(k, r.below(k + 1));
         }

@@ -106,7 +106,7 @@ pub(crate) fn may_be_node(w: &World, genes: &[f32]) -> bool {
 /// where they differ.
 pub fn merge(w: &mut World, s: usize, t: usize) {
     let c = w.life.bodies[s].clone();
-    let mut r = Rng::new(w.seed, w.day, c.id(s), Purpose::Mutate);
+    let mut r = Rng::new(w.seed, w.day, c.id(s), Purpose::Merge);
     let rows = w.life.carry_rows(w.life.born(&c).to_vec(), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.phys.new_noise);
     w.life.remove(s);
     join(w, t, c, &rows);
@@ -230,7 +230,7 @@ pub(crate) const COUNT_SLACK: f64 = 1e-9;
 /// members' slots.
 pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
-    let (mut r, keep) = (Rng::new(w.seed, w.day, !b.id(slot), Purpose::Split), w.light_keep.get(slot, b.gen));
+    let (mut r, keep) = (Rng::new(w.seed, w.day, b.id(slot), Purpose::Open), w.light_keep.get(slot, b.gen));
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         if (b.count - b.count.round()).abs() < COUNT_SLACK {

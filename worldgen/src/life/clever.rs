@@ -15,7 +15,7 @@ pub const CONTROL_ROOT: u32 = KINDS.len() as u32;
 pub const CLEVER_SIZES: [usize; 4] = [48, 12, 6, 3];
 /// The root of the ordinary eaters copied (`KINDS[1]`).
 const EATERS: u32 = 1;
-/// The random streams of the test (with `Purpose::Body`): the big brain's base of each source lineage, the delay of
+/// The random streams of the test (with `Purpose::Clever`): the big brain's base of each source lineage, the delay of
 /// each pair, and the big brain's born rows of each copy.
 const REBASE_STREAM: u64 = 1 << 40;
 const DELAY_STREAM: u64 = 2 << 40;
@@ -54,21 +54,21 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
         let (store, e): (Vec<f64>, f64) = (b.store.iter().map(|a| a / m).collect(), b.e / m);
         let src_lin = w.life.brains[lin as usize].clone().expect("lineage");
         if !made.iter().any(|x| x.0 == lin) {
-            let mut r = Rng::new(w.seed, w.day, REBASE_STREAM | lin as u64, Purpose::Body);
+            let mut r = Rng::new(w.seed, w.day, REBASE_STREAM | lin as u64, Purpose::Clever);
             let base = brain::rebase(&src_lin.base, src_lin.shape, big, &mut r, noise);
             let a = w.life.new_lineage(Lineage { shape: big, seen: CLEVER_SIZES[2], sight: CLEVER_SIZES[3], base, root: CLEVER_ROOT });
             let c = w.life.new_lineage(Lineage { root: CONTROL_ROOT, ..src_lin.clone() });
             made.push((lin, a, c));
         }
         let (_, a, c) = *made.iter().find(|x| x.0 == lin).expect("made");
-        let mut r = Rng::new(w.seed, w.day, DELAY_STREAM | j as u64, Purpose::Body);
+        let mut r = Rng::new(w.seed, w.day, DELAY_STREAM | j as u64, Purpose::Clever);
         for (lineage, is_big) in [(a, true), (c, false)] {
             let (mut g, mut rows) = (genes.clone(), born.clone());
             if is_big {
                 for (k, gene) in body::BRAIN_SIZES.into_iter().enumerate() {
                     g[gene] = CLEVER_SIZES[k] as f32;
                 }
-                rows = brain::rerow(&born, src_lin.shape, big, &mut Rng::new(w.seed, w.day, REROW_STREAM | j as u64, Purpose::Body), noise);
+                rows = brain::rerow(&born, src_lin.shape, big, &mut Rng::new(w.seed, w.day, REROW_STREAM | j as u64, Purpose::Clever), noise);
             }
             let group = w.life.new_group(lineage, rows.clone());
             let genome = w.life.new_genome(rows);

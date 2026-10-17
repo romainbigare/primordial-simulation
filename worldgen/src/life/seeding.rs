@@ -19,8 +19,6 @@ pub const FIXERS: f64 = 0.1;
 /// matter over in about half a year (3 x 10^-9 mol of the mineral a kg and second), and the gene is set as the light
 /// reaction's was, the speed a body needs over the speed of the bare reaction.
 pub const FIX_GENE: f32 = 9.8;
-/// The stream of the draw that makes a founder a fixer (`Rng::new(seed, FIX_STREAM, id, Purpose::Body)`).
-const FIX_STREAM: u64 = 0xf1;
 /// Cells under more liquid than this, m, get no founder (a basin of standing liquid).
 pub(super) const MAX_STANDING_M: f64 = 0.5;
 /// Size of the random weights of a founder lineage's brain.
@@ -115,7 +113,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let Some(kind) = KINDS.get(which) else { return String::new() };
     let Some((r_light, _, _, burn)) = w.chem.life_roles() else { return String::new() };
     pcore::survey::survey(w);
-    let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Body);
+    let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Brain);
     let hand = how.hand[(!kind.anywhere) as usize];
     let (shape, lineage, rows) = founder_lineage(w, which, kind, hand, &mut r);
     // One genome for all when nothing is sprayed; else one per body.
@@ -135,7 +133,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
             let genome = shared.unwrap_or_else(|| sprayed(w, kind, shape, &rows, how, hand, id));
             let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { how.genes }, id) else { return String::new() };
             // A share `fixers` of the light-eaters carry the gene of the fixing reaction; the draw is by the body's own id.
-            if let Some(fx) = fix.filter(|_| Rng::new(w.seed, FIX_STREAM, id, Purpose::Body).f64() < how.fixers) {
+            if let Some(fx) = fix.filter(|_| Rng::new(w.seed, w.day, id, Purpose::Fixer).f64() < how.fixers) {
                 b.genes[lay.cat + fx] = FIX_GENE;
                 p.fixers += 1;
             }
@@ -169,7 +167,7 @@ fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: bool, r: &mut
 #[allow(clippy::too_many_arguments)]
 fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding, hand: bool, id: u64) -> u32 {
     let mut v = rows.to_vec();
-    let mut rr = Rng::new(w.seed, w.day, id, Purpose::Mutate);
+    let mut rr = Rng::new(w.seed, w.day, id, Purpose::Spray);
     let size = pcore::brain::row_step(&w.cfg.phys, body::mutation_size(&kind.scalars));
     for _ in 0..how.rounds {
         pcore::brain::shake(&mut v, &mut rr, size);

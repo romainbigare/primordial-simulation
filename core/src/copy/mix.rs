@@ -32,7 +32,7 @@ pub(super) fn partner(w: &World, slot: usize, b: &Body, r: &mut Rng) -> Option<u
         if !t.adult(&w.chem) {
             continue;
         }
-        let key = Rng::new(salt, 0, s as u64, Purpose::Mutate).u64();
+        let key = Rng::new(salt, 0, s as u64, Purpose::Partner).u64();
         if d < best || pick.is_some_and(|(_, k)| key < k) {
             (best, pick) = (d, Some((s, key)));
         }
