@@ -14,9 +14,7 @@ struct File {
     element_masses: Vec<f64>,
     s: Vec<S>,
     r: Vec<R>,
-    #[serde(default)]
-    build: Option<B>,
-    #[serde(default)]
+    build: B,
     builds: Vec<B>,
     init: Init,
 }
@@ -39,6 +37,7 @@ struct S {
     str: f64,
     refl: [[f32; 3]; 2],
     ir: f64,
+    /// mol/m² (`Substance::ir_sat`); optional in the file (none: 0, the optical depth always in proportion)
     #[serde(default)]
     sat: f64,
     sol: f64,
@@ -47,10 +46,10 @@ struct S {
     /// kJ/mol; none: Trouton's rule (`TROUTON`), and Richards's rule (`RICHARDS`) for `lf`
     lv: Option<f64>,
     lf: Option<f64>,
-    /// GPa (`Substance::modulus`); none: 0
+    /// GPa (`Substance::modulus`); optional in the file (none: 0)
     #[serde(default)]
     modulus: f64,
-    /// MPa (`Substance::rupture`); none: 0
+    /// MPa (`Substance::rupture`); optional in the file (none: 0)
     #[serde(default)]
     rupture: f64,
 }
@@ -61,9 +60,10 @@ struct R {
     o: Vec<[u16; 2]>,
     k: f64,
     ea: f64,
+    /// Driven by light (`Reaction::light`); optional in the file (none: not)
     #[serde(default)]
     light: bool,
-    /// The power of each input's share in the rate law, where it is not its count (`Reaction::ord`)
+    /// The power of each input's share in the rate law (`Reaction::ord`); optional in the file (none: each its count)
     #[serde(default)]
     ord: Vec<u16>,
 }
@@ -120,7 +120,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
         .collect();
     let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord }).collect();
     let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
-    let chem = Chemistry::new(f.element_masses.len(), subs, reactions, f.build.as_ref().map(conversion), f.builds.iter().map(conversion).collect(), &f.init.air);
+    let chem = Chemistry::new(f.element_masses.len(), subs, reactions, Some(conversion(&f.build)), f.builds.iter().map(conversion).collect(), &f.init.air);
     chem.validate()?;
     Ok((chem, f.init))
 }
