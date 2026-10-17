@@ -34,7 +34,7 @@ pub const USAGE: &str = "usage:
     --exchange-days N     days between evaporation and condensation
     --regrow X            Config::regrow
     --crowd N             Config::crowd
-  ew resume   go on from a snapshot, into the tape in --out
+  ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --years N, --every N, --out DIR, --frames-every N, --monthly-years N   as for run
   ew chem     print chemistry 0 as a table
@@ -88,11 +88,9 @@ impl Args {
         Seeding { hand, rounds: self.get("--spray", 20), size: self.get("--spray-size", 0.2), genes: self.get("--spray-genes", 3.0), fixers: self.get("--fixers", FIXERS) }
     }
 
-    /// What is placed when (`--life-year`, `--roster`, `--clever-year`, `--clever-n`); a resumed run places no life of
-    /// its own, only the big-brain test.
-    pub fn schedule(&self, resumed: bool) -> Schedule {
+    /// What is placed when (`--life-year`, `--roster`, `--clever-year`, `--clever-n`, and the seeding flags).
+    pub fn schedule(&self) -> Schedule {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
-        let life = if resumed { None } else { year("--life-year", 2) };
-        Schedule::new(life, self.has("--roster"), year("--clever-year", -1).map(|y| (y, self.get("--clever-n", 300))), self.seeding())
+        Schedule::new(year("--life-year", 2), self.has("--roster"), year("--clever-year", -1).map(|y| (y, self.get("--clever-n", 300))), self.seeding())
     }
 }

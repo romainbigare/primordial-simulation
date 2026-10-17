@@ -31,8 +31,8 @@ fn snapshot_round_trip() {
     let dir = tmp("snap");
     let (mut a, mut whole) = (world(), world());
     run(&mut a, 2);
-    tape::save_snapshot(&a, dir.join("s.bin.gz")).unwrap();
-    let mut b = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
+    tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
+    let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     assert_eq!(hash(&a), hash(&b));
     run(&mut b, 2);
     run(&mut whole, 4);
@@ -48,7 +48,7 @@ fn a_file_without_the_snapshot_header_is_refused() {
     let mut z = GzEncoder::new(std::fs::File::create(&path).unwrap(), Compression::fast());
     z.write_all(&bincode::serialize(&world()).unwrap()).unwrap();
     z.finish().unwrap();
-    let e = tape::load_snapshot(&path).expect_err("refused");
+    let e = tape::load_snapshot::<()>(&path).expect_err("refused");
     assert!(e.to_string().contains("not a snapshot"), "{e}");
 }
 
@@ -63,11 +63,39 @@ fn snapshot_round_trip_mid_cycle() {
         worldgen::life::seed(w, 1);
     }
     run(&mut a, 17);
-    tape::save_snapshot(&a, dir.join("s.bin.gz")).unwrap();
-    let mut b = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
+    tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
+    let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     assert_eq!(hash(&a), hash(&b));
     run(&mut b, 14);
     run(&mut whole, 31);
+    assert_eq!(hash(&b), hash(&whole));
+}
+
+/// A roster run resumed from a snapshot taken before some of its kinds are due places them as the unbroken run does:
+/// the snapshot carries the schedule, and both runs end with the same world.
+#[test]
+fn a_resumed_run_places_the_kinds_still_due() {
+    use worldgen::life::{Seeding, KINDS, ROSTER};
+    use worldgen::schedule::Schedule;
+    let dir = tmp("resume_plan");
+    // The roster from year 0, its later kinds due at year 1, after the snapshot.
+    let mut plan = Schedule::new(Some(0), true, None, Seeding::default());
+    plan.kinds.iter_mut().for_each(|k| k.1 = k.1.min(1));
+    let late: Vec<u32> = ROSTER.iter().filter(|&&k| KINDS[k].year > 0).map(|&k| k as u32).collect();
+    let years = |w: &mut World, plan: &Schedule, n: u64| {
+        for _ in 0..n {
+            plan.place(w);
+            run(w, w.cfg.months_per_year);
+        }
+    };
+    let (mut a, mut whole) = (world(), world());
+    years(&mut whole, &plan, 2);
+    years(&mut a, &plan, 1);
+    assert!(a.life.brains.iter().flatten().all(|l| !late.contains(&l.root)), "a later kind placed before the snapshot");
+    tape::save_snapshot(&a, &plan, dir.join("s.bin.gz")).unwrap();
+    let (mut b, plan): (World, Schedule) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
+    years(&mut b, &plan, 1);
+    assert!(late.iter().all(|k| b.life.brains.iter().flatten().any(|l| l.root == *k)), "the resumed run placed the later kinds");
     assert_eq!(hash(&b), hash(&whole));
 }
 
@@ -234,14 +262,14 @@ fn resume_into_the_same_folder_continues_the_tape() {
         run(&mut w, 1);
         rec.record_month(&mut w);
         if m == 2 * mpy {
-            tape::save_snapshot(&w, dir.join("snap.bin.gz")).unwrap();
+            tape::save_snapshot(&w, &(), dir.join("snap.bin.gz")).unwrap();
         }
     }
     rec.finish(&dir).unwrap();
     let (first, ..) = read_tape(&dir);
     let first_series = std::fs::read_to_string(dir.join("series.csv")).unwrap();
 
-    let mut w = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
+    let (mut w, ()) = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
     let mut rec = tape::Recorder::new(&w, 1, 0);
     rec.resume(&mut w, &dir).unwrap();
     rec.record_month(&mut w);

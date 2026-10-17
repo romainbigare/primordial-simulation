@@ -1,12 +1,15 @@
 //! What is placed in a world, and when: the soil and the starting kinds once life starts, and the big-brain test.
-//! These are initial conditions, reported with every result.
+//! These are initial conditions, reported with every result. A snapshot carries the schedule, so a resumed run
+//! places what is still due as the unbroken run does.
 
 use crate::life::{self, Seeding, KINDS, ROSTER};
 use pcore::World;
+use serde::{Deserialize, Serialize};
 
 /// The kinds `ew run` places without `--roster` (rows of `KINDS`): light-eaters, then eaters.
 const TWO: [usize; 2] = [0, 1];
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Schedule {
     /// The year life starts: the soil gets its mineral (`life::soil`); none: no life
     pub life: Option<u64>,

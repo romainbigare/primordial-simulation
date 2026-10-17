@@ -23,13 +23,14 @@ fn main() {
             let size = args.get("--size", 128usize);
             let mut w = worldgen::new_world(args.get("--seed", 1u64), size, size);
             args.apply(&mut w);
-            let plan = args.schedule(false);
+            let plan = args.schedule();
             drive(w, &args, plan, false);
         }
         "resume" => {
+            // The snapshot carries the plan of its run: what is still due is placed when it is due.
             let from = args.get("--from", String::new());
-            let w = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
-            drive(w, &args, args.schedule(true), true);
+            let (w, plan) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+            drive(w, &args, plan, true);
         }
         "chem" => chem::run(&args),
         "numbers" => numbers::run(&args.0),
@@ -83,7 +84,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, resumed: bool) {
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }
         if y % SNAP_EVERY == 0 || y == y0 + years {
-            tape::save_snapshot(&w, format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
+            tape::save_snapshot(&w, &plan, format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
             // Write the tape so far too, so a stopped run keeps its series and frames.
             let t = Instant::now();
             rec.finish(&out).expect("write tape");

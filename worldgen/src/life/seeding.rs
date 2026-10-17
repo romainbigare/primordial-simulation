@@ -7,6 +7,7 @@ use pcore::body::{self, Body, Layout, Lineage};
 use pcore::brain::{self, Shape};
 use pcore::rng::{Purpose, Rng};
 use pcore::{choose, World};
+use serde::{Deserialize, Serialize};
 
 /// The share of the starting light-eaters that carry the gene of the fixing reaction (`Chemistry::fixing`), chosen
 /// before any run: one in ten. Plants that fix with a partner are near a tenth of the flowering species, and a floor
@@ -46,7 +47,7 @@ fn founder_id(which: usize, i: usize, k: usize) -> u64 {
 /// they span about 0.9), the other row entries keep the step of one generation so the features do not swamp the
 /// brain, and the genes get `genes` times the step of one generation. Hand-set starts keep the step of one generation
 /// for everything.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Seeding {
     /// Hand-set brain biases, per kind (light-eaters, animals). The default sets the animals' (neutral animal founders
     /// nearly all die in their first year, a lottery) and not the light-eaters'.
