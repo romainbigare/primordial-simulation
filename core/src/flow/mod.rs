@@ -49,35 +49,35 @@ const CREEP_YEARS: u64 = 1;
 const DUE_SLACK: f64 = 1.0;
 
 /// Advance flow by `dt` seconds. At every call: the state of ground nodes (`ground_state`) and of
-/// air nodes (`air::state`), then radiation (`air::radiation`). Once `cfg.air_days` have passed,
-/// for all the time since: the exchange of the ground with the air (`air::exchange`, every
-/// `cfg.exchange_days`) and the wind (`air::wind`); once `cfg.flow_days` have passed, liquid
-/// (`liquid`, its work on the bed every `WORK_MONTHS`) and drainage (`drain`), and creep every
-/// `CREEP_YEARS` (`creep`); every `REFRESH_MONTHS` the slow ground is rechecked (`refresh`).
+/// air nodes (`air::state`), then radiation (`air::radiation`). Each other part runs once its own
+/// period has passed, for all the time since: the exchange of the ground with the air
+/// (`air::exchange`, every `cfg.exchange_days`), the wind (`air::wind`, every `cfg.air_days`),
+/// liquid (`liquid`, its work on the bed every `WORK_MONTHS`) and drainage (`drain`) every
+/// `cfg.flow_days`, and creep every `CREEP_YEARS` (`creep`); every `REFRESH_MONTHS` the slow
+/// ground is rechecked (`refresh`).
 pub fn step(w: &mut World, dt: f64) {
     ensure(w);
     let mut s = std::mem::take(&mut w.scratch);
+    let cfg = &w.cfg;
     // The first step runs every part.
-    let first = s.month.is_none();
-    (s.pending, s.pending_liq) = (s.pending + dt, s.pending_liq + dt);
-    let (air_due, liq_due) = (first || due(s.pending, w.cfg.air_days as f64), first || due(s.pending_liq, w.cfg.flow_days as f64));
+    let (first, month) = (s.month.is_none(), w.day / cfg.days_per_month as u64);
+    let monthly = s.month != Some(month);
+    (s.pending_exc, s.pending, s.pending_liq) = (s.pending_exc + dt, s.pending + dt, s.pending_liq + dt);
+    let exc_due = first || due(s.pending_exc, cfg.exchange_days as f64);
+    let (air_due, liq_due) = (first || due(s.pending, cfg.air_days as f64), first || due(s.pending_liq, cfg.flow_days as f64));
     // The state of ground and air is rebuilt at liquid steps and when a refresh changed what is present.
     let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.grid.n();
     ground_state(w, &mut s, full);
     air::state(w, &mut s, full);
     air::radiation(w, &mut s, dt);
-    if !air_due {
-        w.scratch = s;
-        return;
-    }
-    let (dt, month) = (std::mem::take(&mut s.pending), w.day / w.cfg.days_per_month as u64);
-    let monthly = s.month != Some(month);
-    s.pending_exc += dt;
-    if first || due(s.pending_exc, w.cfg.exchange_days as f64) {
+    if exc_due {
         let dt = std::mem::take(&mut s.pending_exc);
         air::exchange(w, &mut s, dt);
     }
-    air::wind(w, &mut s, dt);
+    if air_due {
+        let dt = std::mem::take(&mut s.pending);
+        air::wind(w, &mut s, dt);
+    }
     s.owe_work |= monthly && month % WORK_MONTHS == 0;
     if liq_due {
         let dt = std::mem::take(&mut s.pending_liq);

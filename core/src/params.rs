@@ -31,9 +31,9 @@ pub struct Config {
     pub phys_days: u32,
     /// Gas moves between air nodes (wind) every this many days
     pub air_days: u32,
-    /// Evaporation and condensation run every this many days (a multiple of `air_days`)
+    /// Evaporation and condensation run every this many days (a multiple of `phys_days`)
     pub exchange_days: u32,
-    /// Liquid and creep move every this many days (a multiple of `air_days`)
+    /// Liquid and creep move every this many days (a multiple of `phys_days`)
     pub flow_days: u32,
     /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
     pub crowd: usize,

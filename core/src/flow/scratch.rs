@@ -83,11 +83,11 @@ impl FlowView<'_> {
 /// matches an unbroken one. Ground fields are per ground node, air fields per air node.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
-    /// The month of the last air step, and the creep period (`CREEP_YEARS`) of the last liquid step.
+    /// The month of the last step, and the creep period (`CREEP_YEARS`) of the last liquid step.
     pub(super) month: Option<u64>,
     pub(super) year: Option<u64>,
-    /// Seconds since air and rain last moved, since liquid (and creep) last moved, and since the
-    /// ground last exchanged with the air.
+    /// Seconds since the wind last moved gas between air nodes, since liquid (and creep) last
+    /// moved, and since the ground last exchanged with the air.
     pub(super) pending: f64,
     pub(super) pending_liq: f64,
     pub(super) pending_exc: f64,

@@ -223,6 +223,21 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     assert!(full < 1.05 && full > 0.55, "the ground holds {full} of its pore volume after the excess ran off");
 }
 
+/// Each part of Flow runs on its own period: with the wind every 15 days and liquid every 3, liquid poured on a slope
+/// (four times what the pores hold) runs off at the next 3-day step, between two turns of the wind.
+#[test]
+fn liquid_runs_on_its_own_period_between_turns_of_the_wind() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    (w.cfg.air_days, w.cfg.flow_days) = (15, 3);
+    pcore::flow::step(&mut w, DT);
+    let (i, _) = pair(&w);
+    let pores = w.cfg.phys.porosity * loose(&w, i);
+    pour(&mut w, i, 4.0 * pores);
+    let v0 = liquid_m3(&w, i);
+    pcore::flow::step(&mut w, DT);
+    assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed", liquid_m3(&w, i));
+}
+
 /// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the
 /// thickness it fills x the width, in the time. With `seep` at 0 the neighbour gets none; the flow goes with `seep`,
 /// with the liquid table's slope and with the thickness; matter and energy are kept.
