@@ -6,7 +6,7 @@ use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, S
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY;
 use pcore::{bond, brain, change, choose, World};
-use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -1458,14 +1458,16 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A bite of one member's body or more takes whole members: the count falls by the share of the node that was eaten
-/// (the body and the brood fall by the same share), the survivors keep their bodies.
+/// A bite of one member's body or more takes whole members by its weight: the count falls by the mass taken over the
+/// node's body (the body and the brood fall by the same share), the survivors keep their bodies.
 #[test]
 fn a_big_bite_takes_whole_members() {
     let (mut w, i) = bite_start();
-    // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg; most of their matter is brood.
+    // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg that eats no body matter; most of the members'
+    // matter is brood.
     let mut a = resting(&mut w, i, 6.0, 1.0);
     scale(&mut w, &mut a, 8.0);
+    only_the_solid(&w, &mut a);
     let mut m = resting(&mut w, i, 6.0, 0.0);
     scale(&mut w, &mut m, 0.01);
     let mut v = node(&mut w, m, 1000.0);
@@ -1475,11 +1477,14 @@ fn a_big_bite_takes_whole_members() {
     let b = &w.life.bodies[v];
     let (n0, mean0, brood0) = (b.n(), b.built(&w.chem) / b.n(), b.brood);
     let before = seen(&w, v);
+    w.events.clear();
     bite(&mut w, a, v);
+    let got: f64 = w.events.iter().map(|e| if let pcore::event::EventKind::Took { .. } = e.kind { e.value } else { 0.0 }).sum();
     let (b, after) = (&w.life.bodies[v], seen(&w, v));
     let (mean1, share) = (b.built(&w.chem) / b.n(), 1.0 - after.built / before.built);
-    println!("{n0} members of {mean0:.4} kg: {:.1} members left of {mean1:.4} kg ({:.2}% of the body torn)", b.n(), 100.0 * share);
+    println!("{n0} members of {mean0:.4} kg: {:.1} members left of {mean1:.4} kg ({:.2}% of the body torn by a bite of {got:.4} kg)", b.n(), 100.0 * share);
     assert!(b.n() < n0 && (b.n() / n0 - (1.0 - share)).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
+    assert!((share - got / before.built).abs() < 1e-9, "{share} of the members died of a bite of {} of the body", got / before.built);
     assert!((mean1 / mean0 - 1.0).abs() < 1e-9, "survivors changed: {mean0} -> {mean1} kg");
     assert!((b.brood / brood0 - b.n() / n0).abs() < 1e-9, "brood {} of {brood0}, count {} of {n0}", b.brood, b.n());
     books.assert_kept(&w, 1e-9);

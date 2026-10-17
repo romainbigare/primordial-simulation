@@ -312,3 +312,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   before the spray (spread 0.9), so almost none starts with a bias to bite. 64 x 64, seeds 1 and 2: bites fall from
   8% to 0.2% of plant deaths in years 3 to 21; plant members at year 10 rise 1.9 to 2.5 times, at year 30 by 6 to
   19%; golden re-pinned.
+- A4 (a), the law: a bite of one member's body or more kills members by its weight (the mass taken over the body,
+  or the share of body matter eaten if more), not by the largest share it takes of any store; what it takes of a
+  store beyond the dead members' share comes from the members who live. 64 x 64, seeds 1 and 2, with the start
+  above: bites fall from 0.2% to 0.004% of plant deaths in years 3 to 21; plant members at year 30 +7% (seed 1)
+  and -17% (seed 2); golden re-pinned.

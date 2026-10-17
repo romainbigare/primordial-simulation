@@ -91,7 +91,8 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 /// not taken goes to the ground. An individual lives on smaller (its force falls with its body; it rebuilds the matter
 /// as it grows) and dies when half of its body or more is torn or a store falls below its safe minimum. A bite of less
 /// than a node's member's body grazes: every member loses that share of its matter and lives; one of a member's body or
-/// more takes whole members, the share of them the largest share taken of any store.
+/// more takes whole members, the same share of them, so the members killed carry the bite. What the taker takes of a
+/// store beyond the share those members held comes from the members who live.
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
@@ -104,9 +105,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     // taker that takes more of a store than the share holds takes it from the rest).
     let (built0, matter0, got) = (o.built(&w.chem), o.matter_kg(&w.chem), w.chem.mass_of(&m));
     let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / o.store[k] } else { 0.0 });
-    let weight = got / built0.max(1e-30);
-    let eats_members = o.n() > 1.0 && weight * o.n() >= 1.0;
-    let f = (if eats_members { o.store.iter().zip(&m).map(|(s, a)| if *s > 0.0 { a / s } else { 0.0 }).fold(weight, f64::max) } else { weight.max(eaten) }).min(1.0);
+    let f = (got / built0.max(1e-30)).max(eaten).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
     let cost = w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f);
     if !body::pay(w, b, cost, b.interval() as f64) || away {

@@ -836,7 +836,9 @@ up to the level its share makes of its matter. They pay no upkeep and are not th
   immature (its body is under its copy mass) until it heals: it makes no children meanwhile.
 - **In a node** the size of the bite decides: less than one member's body takes part of every
   member's matter (grazing: the members live, smaller); one member's body or more takes whole
-  members.
+  members, the same share of them, so the members killed carry the bite's weight. What the taker
+  takes of a store beyond the share those members held (a small store it takes much of) comes
+  from the members who live.
 - **Death causes**: `LACK` (a store under its minimum), `PHASE` (froze or boiled), `SPENT` (could
   not pay), `TAKEN` (taken apart by another body), `BROKEN` (broken by bodies moving through),
   `AGE` (worn out). At death the body's matter, stores and heat go to the ground (`body::die`).
