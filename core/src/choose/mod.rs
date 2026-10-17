@@ -11,16 +11,20 @@
 mod feed;
 mod go;
 mod learn;
+mod perceive;
 
 pub use feed::take_body;
 pub use go::{go, wear};
 pub(crate) use learn::regroup;
+pub use perceive::{cells, Sector};
+
+use perceive::{inputs, perceive, sector, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_SCALE};
 
 use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
-use crate::{bond, nodes, lanes, World};
+use crate::{bond, lanes, nodes, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
@@ -37,25 +41,6 @@ const TO_PART: usize = TO_BODY + VERBS * MAX_SEEN;
 /// of its own state, its cell and the season, the signals heard, and what Bond senses (`bond::sense`).
 pub(crate) const INPUTS: usize = 8 + SIG + bond::SENSE;
 const NONE: u32 = u32::MAX;
-
-/// Per direction, the offsets of the cells seen that way and their weights.
-pub type Sector = [Vec<(i32, i32, f32)>; 8];
-
-/// The cells within `sight` of a cell, by the nearest of the 8 directions they lie in: offsets and weights (nearer
-/// cells more, 1 / distance², distance counted in rings).
-fn sector(sight: usize) -> Sector {
-    let (mut s, r): (Sector, i32) = (Default::default(), sight as i32);
-    for dy in -r..=r {
-        for dx in -r..=r {
-            let k = dx.abs().max(dy.abs());
-            if k > 0 {
-                let d = ((dy as f64).atan2(dx as f64) / std::f64::consts::FRAC_PI_4).round() as i32;
-                s[d.rem_euclid(8) as usize].push((dx, dy, 1.0 / (k * k) as f32));
-            }
-        }
-    }
-    s
-}
 
 /// Working memory of `act`, kept from body to body.
 #[derive(Default)]
@@ -113,74 +98,6 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     dispatch(w, slot, b, &c, form, &mut rng);
 }
 
-/// Bodies perceived: in its own cell first, then next to it from a random side, up to `nseen`. Walls between two bodies
-/// hide them from each other by how closed they are; cover hides a body as it shades the ground: it is seen through the
-/// others' capture area per m² of its cell, a, with chance exp(-a). Parts perceived in its cell (not the one it holds),
-/// from a random one on; a node perceives them as one of its members would.
-fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
-    let i = b.cell as usize;
-    let (mut seen, mut cnt, side) = ([(0usize, false); MAX_SEEN], 0, rng.below(8));
-    let room = bond::room(w, b);
-    for q in 0..9 {
-        if cnt == nseen {
-            break;
-        }
-        let Some(j) = (if q == 0 { Some(i) } else { w.grid.step(i, DIRS[(side + q) % 8]) }) else { continue };
-        for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
-            let ob = &w.life.bodies[o as usize];
-            let their = bond::room(w, ob);
-            let walls = if room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { room.map_or(0.0, |r| r.1).max(their.map_or(0.0, |r| r.1)) };
-            let cover = (w.canopy[j] as f64 - ob.vis[1] as f64 * ob.n() / w.grid.area()).max(0.0);
-            if cnt < nseen && (walls == 0.0 || rng.f64() as f32 >= walls) && (cover <= 0.0 || rng.f64() < (-cover).exp()) {
-                (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);
-            }
-        }
-    }
-    let (held, list) = (bond::held(w, b), &w.parts.at[i][..]);
-    let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
-    for q in 0..list.len() {
-        let p = list[(off + q) % list.len()] as usize;
-        if np == PARTS {
-            break;
-        }
-        if Some(p) != held {
-            (parts[np], np) = (p, np + 1);
-        }
-    }
-    Choice {
-        seen,
-        nseen: cnt,
-        parts,
-        nparts: np,
-        room,
-        held,
-        logit: [f32::NEG_INFINITY; OPTS],
-        p: [0.0; OPTS],
-        to: [usize::MAX; MOVES],
-        fb: [0.0; MAX_SEEN * NT],
-        fo: [0.0; PARTS * bond::NO],
-        a: REST,
-    }
-}
-
-/// The brain's inputs: own stores against their safe minimums, the cell's loose substances, warmth, size and light,
-/// the cell's liquid, temperature and crowding, the season, signals heard, what Bond senses, memory.
-fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, x: &mut Vec<f32>) {
-    let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
-    let (env, pm) = (w.life.env[i], mass / b.n());
-    let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, &(o, _)| [0, 1].map(|k| h[k] + w.life.bodies[o].sig[k] / c.nseen as f32));
-    x.clear();
-    let none = 0.25 * ln(1e-4);
-    x.extend((0..ns).map(|k| if b.store[k] > 0.0 { 0.25 * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + 1e-4) } else { none } - b.k.minln[k]));
-    x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
-    let crowd = ln(1.0 + (w.life.sum[i][1] / w.grid.area()) as f32);
-    let (dt, lit, sun) = ((temp - env[0]) as f32, lived.lit as f32, w.season() as f32 * std::f32::consts::TAU);
-    x.extend([dt / 10.0, ln(pm as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
-    x.extend(heard);
-    x.extend(bond::sense(w, b, pm));
-    x.extend_from_slice(&b.mem);
-}
-
 /// The score of each option: the fixed actions, a move to each neighbour (each direction's features are the weighted
 /// mean over the cells it sees that way), each verb toward each perceived body and part. Letting go needs something
 /// held or walls around; joining to the ground, a held part. A node does the actions of Bond through one member split
@@ -202,8 +119,8 @@ fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Cho
             let Some(k) = w.grid.step(i, (dx, dy)) else { continue };
             let (ck, e) = (&w.life.cellf[k], w.life.env[k]);
             fd[..8].iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
-            fd[0] += wt * ((e[2] - env[2]) / 200.0) as f32;
-            fd[6] += wt * ((e[0] - env[0]) / 5.0) as f32;
+            fd[0] += wt * ((e[2] - env[2]) / DZ_SCALE) as f32;
+            fd[6] += wt * ((e[0] - env[0]) / DT_NEAR) as f32;
             fd[8] += wt * smell(k);
             fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
             // The step into the next cell is felt along its edge, worn or not.
@@ -222,7 +139,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Cho
         let v = ob.vis;
         let known = b.recall(ob.id(o));
         let fq = &mut c.fb[q * NT..(q + 1) * NT];
-        fq.copy_from_slice(&[ln(v[0] / pm as f32) / 7.0, ln(v[1] / v[0]) / 5.0, v[2], v[3], v[4], v[5], ob.sig[0], ob.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, ob.wb / 4.0]);
+        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], ob.sig[0], ob.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, ob.wb / WB_SCALE]);
         for verb in 0..VERBS {
             if same || verb == WATCH {
                 c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq) + b.adj[FIXED + 1 + verb];
@@ -368,19 +285,4 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
             nodes::take_in(w, node, o, None);
         }
     }
-}
-
-/// After each survey: what a brain perceives of each cell as a place to move to (liquid depth, members, their mean mass,
-/// light-capture area and strength, the resistance they give to moving through; the height and temperature differences
-/// are added per move, in places 0 and 6).
-pub fn cells(w: &mut World) {
-    let (life, area) = (&mut w.life, w.grid.area() as f32);
-    life.cellf.clear();
-    life.cellf.extend(life.sum.iter().zip(&life.env).map(|(c, e)| {
-        let c = c.map(|v| v as f32);
-        let n = c[0].max(1.0);
-        let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / 5.0 } else { 0.0 };
-        let resist = 1.0 + c[1] / area / w.cfg.phys.rho_pass as f32;
-        [0.0, ln(1.0 + e[1] as f32), ln(1.0 + c[0]) / 10.0, ln((c[1] / n).max(1.0)) / 7.0 - 1.0, leaf, c[3] / n, 0.0, ln(resist)]
-    }));
 }

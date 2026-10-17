@@ -8,6 +8,16 @@ use crate::brain::{self, ln, Shape, FIXED, OVERBS, VERBS};
 use crate::event::{Event, EventKind};
 use crate::World;
 
+/// Weight of each new error in the critic's moving average of its square (`Group::var`), and the floor of its root.
+const CRITIC_RATE: f32 = 0.05;
+const CRITIC_FLOOR: f32 = 1e-3;
+/// Rate of a body's own adjustment of its action scores (`Body::adj`) against that of the rows, and its bounds.
+const ADJ_RATE: f32 = 0.1;
+const ADJ_MOST: f32 = 3.0;
+/// A body copies less of one whose strength differs by this much (one standard deviation, as one of ln mass or ln
+/// capture area).
+const STRENGTH_STEP: f32 = 0.2;
+
 /// Learn from the last decision: the change of well-being since, plus the discounted estimate
 /// of how it will go from the state now, less the estimate made then. The critic row moves
 /// toward that; the group's learned rows and the body's own adjustment move along the
@@ -22,8 +32,8 @@ pub(super) fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32])
     let (h, c) = b.trace.split_at(nh);
     let v = |x: &[f32]| gr.rows[cr + nh] + brain::dot(&gr.rows[cr..cr + nh], x);
     let delta = wb - b.wb + w.cfg.phys.discount * v(now) - v(h);
-    gr.var = if gr.var > 0.0 { gr.var + 0.05 * (delta * delta - gr.var) } else { delta * delta };
-    let a = lr * delta / (gr.var.sqrt() + 1e-3);
+    gr.var = if gr.var > 0.0 { gr.var + CRITIC_RATE * (delta * delta - gr.var) } else { delta * delta };
+    let a = lr * delta / (gr.var.sqrt() + CRITIC_FLOOR);
     if !a.is_finite() {
         return;
     }
@@ -36,7 +46,7 @@ pub(super) fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32])
     brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, gl, &mut gr.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
     let bias = (0..FIXED).map(|q| c[q]).chain([c[s.dir()]]).chain((0..VERBS + OVERBS).map(|v| c[s.verb(v)]));
     for (j, cb) in b.adj.iter_mut().zip(bias) {
-        *j = (*j + 0.1 * a * cb).clamp(-3.0, 3.0);
+        *j = (*j + ADJ_RATE * a * cb).clamp(-ADJ_MOST, ADJ_MOST);
     }
 }
 
@@ -122,7 +132,7 @@ pub(super) fn watch(w: &mut World, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
     let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem, &w.cfg.phys)));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
-    let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / 0.2).powi(2))).exp();
+    let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / STRENGTH_STEP).powi(2))).exp();
     let alike = if w.cfg.null { 0.0 } else { w.cfg.phys.blend * alike };
     brain::blend(&mut b.adj, &oadj, alike);
     let g = b.group as usize;
