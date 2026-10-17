@@ -20,6 +20,7 @@ mod liquid;
 mod scratch;
 pub use air::{column, glow};
 pub use scratch::Scratch;
+pub(crate) use scratch::FlowView;
 
 use crate::units::DAY;
 use crate::World;
@@ -52,17 +53,10 @@ const DUE_SLACK: f64 = 1.0;
 /// (`liquid`, its work on the bed every `WORK_MONTHS`) and drainage (`drain`), and creep every
 /// `CREEP_YEARS` (`creep`); every `REFRESH_MONTHS` the slow ground is rechecked (`refresh`).
 pub fn step(w: &mut World, dt: f64) {
+    ensure(w);
     let mut s = std::mem::take(&mut w.scratch);
-    if s.air_of.len() != w.grid.n() {
-        tables(w, &mut s);
-    }
-    let first = s.cap.len() != w.grid.n();
-    if first {
-        refresh(w, &mut s);
-    }
-    if s.done.len() != w.grid.n() {
-        space(w, &mut s);
-    }
+    // The first step runs every part.
+    let first = s.month.is_none();
     (s.pending, s.pending_liq) = (s.pending + dt, s.pending_liq + dt);
     let (air_due, liq_due) = (first || due(s.pending, w.cfg.air_days as f64), first || due(s.pending_liq, w.cfg.flow_days as f64));
     // The state of ground and air is rebuilt at liquid steps and when a refresh changed what is present.
@@ -101,6 +95,29 @@ pub fn step(w: &mut World, dt: f64) {
         refresh(w, &mut s);
     }
     s.month = Some(month);
+    w.scratch = s;
+}
+
+/// Build the working memory of the law where it is missing (a new world, a resumed one, a test
+/// that calls another law alone): its tables and, where it has none, the state of every ground and
+/// air node from the world now. Every law then reads the same state of the last flow step.
+pub(crate) fn ensure(w: &mut World) {
+    let n = w.grid.n();
+    let mut s = std::mem::take(&mut w.scratch);
+    if s.air_of.len() != n {
+        tables(w, &mut s);
+    }
+    let new = s.cap.len() != n;
+    if new {
+        refresh(w, &mut s);
+    }
+    if s.done.len() != n {
+        space(w, &mut s);
+    }
+    if new {
+        ground_state(w, &mut s, true);
+        air::state(w, &mut s, true);
+    }
     w.scratch = s;
 }
 

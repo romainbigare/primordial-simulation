@@ -92,7 +92,7 @@ impl Recorder {
         if y.t_land.is_empty() {
             y.land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).map(|i| i as u32).collect();
         }
-        y.t_land.push(y.land.iter().map(|&i| w.thaw(i as usize).0).sum::<f64>() / y.land.len().max(1) as f64);
+        y.t_land.push(y.land.iter().map(|&i| w.t_ground_last(i as usize)).sum::<f64>() / y.land.len().max(1) as f64);
         let dpm = w.cfg.days_per_month as u64;
         let (year, month) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
         let mean = sum.map(|v| v / n.max(1.0));

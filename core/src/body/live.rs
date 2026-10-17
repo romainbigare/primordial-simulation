@@ -1,7 +1,7 @@
 //! A body's update: Flow and Change on it since its last update, in stages (`live`). Upkeep and
 //! the end checks are here; the physics of the time between is in `physics`.
 
-use super::exchange::{cover_of, ground_t};
+use super::exchange::cover_of;
 use super::pay::{hold, pay_at, plan, spend, upkeep};
 use super::physics::physics;
 use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
@@ -64,7 +64,7 @@ pub(super) struct Site {
 
 fn site(w: &World, b: &Body) -> Site {
     let i = b.cell as usize;
-    let (tg, depth) = (ground_t(w, i), w.life.env[i][1]);
+    let (tg, depth) = (w.t_ground_last(i), w.life.env[i][1]);
     let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::walls_around(w, b));
     let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.0);

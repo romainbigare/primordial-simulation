@@ -81,7 +81,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
 fn settle(w: &mut World, s: usize) {
     let (ns, n) = (w.chem.ns(), w.grid.n());
     let i = w.parts.parts[s].cell as usize;
-    let tg = w.life.env[i][0];
+    let tg = w.t_ground_last(i);
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
     let t = p.e / p.heat_cap(chem).max(1e-9);

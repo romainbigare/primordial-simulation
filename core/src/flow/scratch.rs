@@ -46,9 +46,24 @@ pub(super) struct Latent {
     pub(super) molten: f64,
 }
 
-/// What Law 2 reads of the last flow step (`Scratch::view`): ground temperatures, bed skins,
-/// the air node of each ground node, air temperatures.
-pub(crate) type FlowView<'a> = (&'a [f64], &'a [[f64; 3]], &'a [u32], &'a [f64]);
+/// The bonded ground of a ground node as of the last refresh (liquid wears `vol`).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub(super) struct Bed {
+    /// Volume, m³
+    pub(super) vol: f64,
+    /// Mean reflectance
+    pub(super) refl: f64,
+}
+
+/// What Law 2 reads of the last flow step (`Scratch::view`).
+pub(crate) struct FlowView<'a> {
+    /// Per ground node: its temperature, K; the heat capacity of the skin of its bed, J/K; its air node
+    pub tg: &'a [f64],
+    pub skin: &'a [f64],
+    pub air_of: &'a [u32],
+    /// Per air node: its temperature, K
+    pub ta: &'a [f64],
+}
 
 /// Working memory of the law, rebuilt from the world when missing. It is saved with the world
 /// (but for the fields marked `serde(skip)`: tables `tables` rebuilds and space used within a
@@ -85,9 +100,10 @@ pub struct Scratch {
     /// Substances present in bonded ground, and in the air (or able to evaporate into it).
     pub(super) bedk: Vec<usize>,
     pub(super) gas: Vec<usize>,
-    /// Bonded ground of each ground node: heat capacity of its skin, J/K (at every step, `land::ground_state`); as of the
-    /// last refresh (liquid wears `[1]`), its volume, m³, and reflectance.
-    pub(super) bed: Vec<[f64; 3]>,
+    /// Heat capacity of the skin of each ground node's bed, J/K (at every step, `land::ground_state`).
+    pub(super) skin: Vec<f64>,
+    /// Bonded ground of each ground node.
+    pub(super) bed: Vec<Bed>,
     /// Heat capacity of each ground node, J/K (from the amounts at every step; moves keep it).
     pub(super) cap: Vec<f64>,
     /// Temperature of each ground node, K.
@@ -201,10 +217,9 @@ impl Scratch {
     pub fn temps(&self) -> (&[f64], &[f64]) {
         (&self.tg, &self.ta)
     }
-    /// For Law 2, from the last flow step: per ground node its temperature, the heat capacity of
-    /// its bonded skin (as of the last refresh) and its air node; per air node its temperature.
+    /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        (&self.tg, &self.bed, &self.air_of, &self.ta)
+        FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, ta: &self.ta }
     }
     /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
     /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that
@@ -275,8 +290,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
                 v += b * s.sp[k].v[0];
                 r += b * s.sp[k].v[0] * s.sp[k].refl[0];
             }
-            let c = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
-            [c, v, r / v.max(V_MIN)]
+            Bed { vol: v, refl: r / v.max(V_MIN) }
         })
         .collect();
     if s.cap.len() == n {
@@ -284,7 +298,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     }
     (s.pk, s.phi) = (vec![NONE; n], vec![0.0; n]);
     s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0.0 }; n];
-    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
+    for v in [&mut s.skin, &mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
         *v = vec![0.0; n];
     }
     for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {

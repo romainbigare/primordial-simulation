@@ -97,10 +97,10 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // matter (with its heat) between liquid steps, liquid wears the bed and bodies dig it, and a stale capacity would read a
     // node far too hot or cold.
     let n = w.grid.n();
-    for (i, bed) in s.bed.iter_mut().enumerate() {
-        bed[0] = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
+    for (i, skin) in s.skin.iter_mut().enumerate() {
+        *skin = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
     }
-    let mut cap: Vec<f64> = s.bed.iter().map(|b| b[0]).collect();
+    let mut cap = s.skin.clone();
     for &k in &s.loose {
         let cp = s.sp[k].cp;
         for (c, &a) in cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
@@ -142,7 +142,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     let (n, area, t) = (w.grid.n(), s.area, s.tg[i]);
     let mut l = [0.0, 0.0, 0.0, 0.0, s.fix[i][0], s.fix[i][1]];
-    let (mut z, mut rc) = (w.base_z + (s.bed[i][1] + s.fix[i][0]) / area, 0.0);
+    let (mut z, mut rc) = (w.base_z + (s.bed[i].vol + s.fix[i][0]) / area, 0.0);
     for &k in &s.vary {
         let (p, a) = (&s.sp[k], w.ground[k * n + i]);
         if a <= 0.0 || t >= p.boil {
@@ -167,7 +167,7 @@ pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
             seen *= 1.0 - cover;
         }
     }
-    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, a + seen * s.bed[i][2]);
+    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, a + seen * s.bed[i].refl);
     s.pd[i] = w.cfg.phys.porosity * (l[0] + l[4]) / area;
 }
 

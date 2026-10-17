@@ -119,10 +119,10 @@ pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
 }
 
 /// The heat conductance by which a body of `mass` kg at the temperature `t` loses heat to the ground it stands on, W/K
-/// (`surface`, with its cover and walls), the ground at its temperature of the last flow step (`ground_t`).
+/// (`surface`, with its cover and walls), the ground at its temperature of the last flow step (`World::t_ground_last`).
 pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
     let i = b.cell as usize;
-    let tg = ground_t(w, i);
+    let tg = w.t_ground_last(i);
     surface(&w.chem, &w.cfg, b, mass, cover_of(w, b), bond::walls_around(w, b), t, tg)
 }
 
@@ -130,9 +130,4 @@ pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
 /// (T + tg) per m², the linearised σT⁴ (emissivity 1, as `flow::air::radiation`).
 fn radiated(area: f64, t: f64, tg: f64) -> f64 {
     SIGMA * area * (t * t + tg * tg) * (t + tg)
-}
-
-/// The temperature of ground cell `i` as of the last flow step, K (the monthly survey's before the first).
-pub(super) fn ground_t(w: &World, i: usize) -> f64 {
-    w.t_ground_last(i).unwrap_or(w.life.env[i][0])
 }

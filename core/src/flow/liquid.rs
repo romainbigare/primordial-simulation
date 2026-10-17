@@ -294,14 +294,14 @@ fn pick_up(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], room: f64, t
 fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
     let n = w.grid.n();
     for bi in 0..s.bedk.len() {
-        let (k, bv) = (s.bedk[bi], s.bed[i][1]);
+        let (k, bv) = (s.bedk[bi], s.bed[i].vol);
         let b = w.bed[k * n + i];
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
             let m = (v / s.sp[k].v[0]).min(MOST_TAKEN * b);
             w.bed[k * n + i] -= m;
             w.ground[k * n + i] += m;
-            s.bed[i][1] -= m * s.sp[k].v[0];
+            s.bed[i].vol -= m * s.sp[k].v[0];
             s.cap[i] += m * s.sp[k].cp;
             s.add_loose(k, false);
         }
