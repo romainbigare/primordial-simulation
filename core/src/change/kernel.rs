@@ -1,7 +1,7 @@
 //! The reactor of Law 2: the rate law and its helpers, and `Reactor`, which reacts the amounts of one node, body or part.
 
 use super::TRACE;
-use crate::chem::{Chemistry, Reaction};
+use crate::chem::{Chemistry, Phase, Reaction};
 use crate::math::one_minus_exp;
 use crate::units::P_REF;
 
@@ -20,6 +20,9 @@ const SERIES_BELOW: f64 = 1e-3;
 /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
 pub(crate) const LIGHT_YIELD: f64 = 0.05;
 
+/// The phases by the number of the points a substance is past (melting, boiling).
+const PHASES: [Phase; 3] = [Phase::Solid, Phase::Liquid, Phase::Gas];
+
 /// Reusable reaction solver for one chemistry: per-reaction constants and scratch buffers.
 pub struct Reactor {
     /// Temperature below which a reaction is frozen (catalyst 1), K (`frozen_below`).
@@ -32,8 +35,8 @@ pub struct Reactor {
     cp: Vec<f64>,
     melt: Vec<f64>,
     boil: Vec<f64>,
-    /// Phase of each substance at the current temperature: 0 solid, 1 liquid, 2 gas.
-    ph: Vec<u8>,
+    /// Phase of each substance at the current temperature (`Phase as usize` indexes the totals of the phases).
+    ph: Vec<Phase>,
     /// Amount of each substance that can react now (the node's plus, for gas, the surrounding gas).
     pub(super) av: Vec<f64>,
     /// Effective rate of each reaction in this sub-step, 1/s (0 = idle).
@@ -160,7 +163,7 @@ impl Reactor {
             cp: chem.subs.iter().map(|s| s.cp).collect(),
             melt: chem.subs.iter().map(|s| s.melt).collect(),
             boil: chem.subs.iter().map(|s| s.boil).collect(),
-            ph: vec![0; ns],
+            ph: vec![Phase::Solid; ns],
             av: vec![0.0; ns],
             kap: vec![0.0; nr],
             lim: vec![0.0; nr],
@@ -200,7 +203,7 @@ impl Reactor {
             }
             let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
             let k = rx.inputs[who].0 as usize;
-            if lim > 0.0 && (self.ph[k] == 0 || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
+            if lim > 0.0 && (self.ph[k] == Phase::Solid || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
                 best = best.max(rx.arrhenius(t) * self.pace(rx, lim, &tot));
             }
         }
@@ -213,7 +216,7 @@ impl Reactor {
         self.flux.fill([0.0; 2]);
         for (r, rx) in chem.reactions.iter().enumerate() {
             for (side, &(k, nu)) in rx.inputs.iter().map(|p| (0, p)).chain(rx.outputs.iter().map(|p| (1, p))) {
-                self.flux[k as usize][side] += nu as f64 * (self.kap[r] * self.lim[r]) * (self.ph[k as usize] == 2) as u8 as f64;
+                self.flux[k as usize][side] += nu as f64 * (self.kap[r] * self.lim[r]) * (self.ph[k as usize] == Phase::Gas) as u8 as f64;
             }
         }
         for k in 0..self.flux.len() {
@@ -230,7 +233,7 @@ impl Reactor {
 
     /// `pace` of `rx` with the amounts and phases of the last `phases`.
     pub(super) fn pace(&self, rx: &Reaction, lim: f64, tot: &[f64; 3]) -> f64 {
-        pace(rx, lim, |k| self.av[k], |k| if self.ph[k] > 0 { tot[self.ph[k] as usize] } else { self.av[k] })
+        pace(rx, lim, |k| self.av[k], |k| if self.ph[k] != Phase::Solid { tot[self.ph[k] as usize] } else { self.av[k] })
     }
 
     /// Phase and available amount of each substance at `t` (the node's, plus for a gas the gas
@@ -244,7 +247,7 @@ impl Reactor {
                 Some(g) if p == 2 => n[k] + g[k],
                 _ => n[k],
             };
-            self.ph[k] = p as u8;
+            self.ph[k] = PHASES[p];
             self.av[k] = a;
             tot[p] += a;
         }
@@ -318,7 +321,7 @@ impl Reactor {
                 any = true;
                 // (In a liquid or a gas that power is its order less 1, as far as it is not most of its phase.)
                 let k = rx.inputs[q].0 as usize;
-                self.pw[r] = if self.ph[k] > 0 { (rx.order(q) as f64 - 1.0) * (1.0 - self.av[k] / tot[self.ph[k] as usize]) } else { 0.0 };
+                self.pw[r] = if self.ph[k] != Phase::Solid { (rx.order(q) as f64 - 1.0) * (1.0 - self.av[k] / tot[self.ph[k] as usize]) } else { 0.0 };
             }
         }
         any
@@ -378,7 +381,7 @@ impl Reactor {
             }
             for &(k, nu) in &rx.inputs {
                 let (k, d) = (k as usize, nu as f64 * ext);
-                let from_pool = if self.ph[k] == 2 && has_pool { pool[k].min(d) } else { 0.0 };
+                let from_pool = if self.ph[k] == Phase::Gas && has_pool { pool[k].min(d) } else { 0.0 };
                 if from_pool > 0.0 {
                     pool[k] -= from_pool;
                 }
@@ -387,7 +390,7 @@ impl Reactor {
             }
             for &(k, nu) in &rx.outputs {
                 let (k, d) = (k as usize, nu as f64 * ext);
-                if self.ph[k] == 2 && has_pool { pool[k] += d } else { n[k] += d }
+                if self.ph[k] == Phase::Gas && has_pool { pool[k] += d } else { n[k] += d }
                 self.av[k] += d;
             }
             if self.lit[r] {
