@@ -60,9 +60,9 @@ type Decision = (bool, bool, bool, bool, f64);
 fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let mut w = scene(seed);
     // A neutral brain: small random weights, no bias among resting, putting, taking from the ground and moving (which
-    // all start equally likely); copying, the actions on parts and on other bodies kept rare, as they are not part of
-    // this scene. The body scaled to `BODY_KG` (booked as an edit).
-    let brain = Brain { fixed: [0.0, OFF, 0.0, 0.0, OFF, OFF, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
+    // all start equally likely); the actions on parts and on other bodies kept rare, as they are not part of this
+    // scene. The body scaled to `BODY_KG` (booked as an edit).
+    let brain = Brain { fixed: [0.0, 0.0, 0.0, OFF, OFF, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
     let start = w.grid.idx(STRIP - 1, H / 2);
     let mut b = founder(&mut w, 1, start, &brain);
     let f = BODY_KG / b.mass(&w.chem);
@@ -205,7 +205,7 @@ fn a_group_holds_the_mean_of_its_members_born_rows() {
 fn brain_grown_and_shrunk_back_is_unchanged() {
     let (a, b) = (pcore::lineage::shape(9, 12, 6), pcore::lineage::shape(9, 16, 8));
     let mut r = Rng::new(1, 0, 0, Purpose::Resize);
-    let w = pcore::brain::random(a, &mut r, 0.1, [0.0; 8], 0.0, [0.0; 9]);
+    let w = pcore::brain::random(a, &mut r, 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; 9]);
     let (base, rows) = w.split_at(a.base());
     let grown = (pcore::brain::rebase(base, a, b, &mut r, 0.1), pcore::brain::rerow(rows, a, b, &mut r, 0.1));
     assert_eq!((grown.0.len(), grown.1.len()), (b.base(), b.rows() * b.r()));

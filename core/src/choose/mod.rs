@@ -168,11 +168,8 @@ fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Cho
 }
 
 /// Draw one action by its score (a softmax). Copying is not among them: a body makes children only from its brood
-/// (`copy::copy`), so no brain bias sets how often anything is born. The draw that once decided a copy stays: dropping
-/// it would shift every later draw.
+/// (`copy::copy`), so no brain bias sets how often anything is born.
 fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
-    rng.f64();
-    c.logit[brain::COPY] = f32::NEG_INFINITY;
     let top = c.logit.iter().cloned().fold(f32::MIN, f32::max);
     c.p = c.logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
     let sum = c.p.iter().sum::<f32>();
@@ -257,8 +254,7 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
     };
     let (b, slot) = (one.as_mut().unwrap_or(&mut *node), me);
     match a {
-        // (Copying is never drawn.)
-        REST | brain::COPY => {}
+        REST => {}
         PUT => feed::put(w, b),
         TAKE => feed::take_node(w, slot, b),
         FORM => bond::form(w, slot, b, [form[0], 0.5 * (form[1] + 1.0)]),

@@ -150,13 +150,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
 fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: bool, r: &mut Rng) -> (Shape, u32, Vec<f32>) {
     let [h, mem, seen, sight] = lineage::sizes(&kind.scalars);
     let shape = lineage::shape(w.chem.ns(), h, mem);
-    let (fixed, dir, verbs) = if hand {
-        kind.hand
-    } else {
-        let mut fixed = [0.0; brain::FIXED];
-        fixed[brain::COPY] = kind.hand.0[brain::COPY];
-        (fixed, 0.0, [0.0; brain::VERBS + brain::OVERBS])
-    };
+    let (fixed, dir, verbs) = if hand { kind.hand } else { ([0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]) };
     let mut base = brain::random(shape, r, BRAIN_NOISE, fixed, dir, verbs);
     let rows = base.split_off(shape.base());
     (shape, w.life.new_lineage(Lineage { shape, seen, sight, base, root: which as u32 }), rows)

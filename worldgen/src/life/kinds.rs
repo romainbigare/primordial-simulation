@@ -26,12 +26,11 @@ pub struct Kind {
     pub(super) hand: Hand,
 }
 
-/// Hand-set brain biases: rest, copy (its own chance, as a logit), put, take from the node, form a part, let go, join
-/// to the ground, break the ground; move; take from, put to, watch a body; hold, take from, put to, join to, break,
+/// Hand-set brain biases: rest, put, take from the node, form a part, let go, join to the ground, break the ground; move; take from, put to, watch a body; hold, take from, put to, join to, break,
 /// enter a part.
 pub(super) type Hand = ([f32; brain::FIXED], f32, [f32; brain::VERBS + brain::OVERBS]);
-const H_LIGHT: Hand = ([2.0, -1.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], -4.0, [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0]);
-const H_EATER: Hand = ([0.0, -1.6, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
+const H_LIGHT: Hand = ([2.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], -4.0, [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0]);
+const H_EATER: Hand = ([0.0, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
 
 /// `s` with the genes of `d` (gene, value) set.
 const fn with(mut s: [f32; NSCALAR], d: &[(usize, f32)]) -> [f32; NSCALAR] {
