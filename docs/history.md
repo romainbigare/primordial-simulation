@@ -289,3 +289,6 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 - C3: the wind's tridiagonal solve moves from `flow/air/wind.rs` to `solve::lines::along_line`; results unchanged
   (golden kept).
+- C1: `solve::spread`, one backward Euler step along links (conductance per link, capacity per node) by conjugate
+  gradient with a Jacobi preconditioner, a bounded number of iterations in a fixed order; it returns the link fluxes
+  and moves each node only by them, so the books are exact even unconverged. No law calls it yet (golden unchanged).
