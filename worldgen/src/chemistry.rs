@@ -82,7 +82,6 @@ pub struct Init {
     /// Extra volume fractions found in patches
     pub deposits: Vec<(usize, f64)>,
     /// Amounts in the loose ground of every land cell when life starts, mol per m² (`life::soil`; empty: none)
-    #[serde(default)]
     pub soil: Vec<(usize, f64)>,
 }
 
