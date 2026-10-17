@@ -17,7 +17,7 @@
 //! copy and starts a group; one that stays a year near a bigger group of its lineage joins it.
 //! What a group learned fades at the mean forgetting rate of its members.
 
-use crate::body::{self, Body, Layout, LiveTmp, Lineage, BROKEN, STRENGTH, TAKEN};
+use crate::body::{self, Body, Layout, Lived, Lineage, BROKEN, STRENGTH, TAKEN};
 use crate::brain::{self, ln, score, squash, Shape, Thought, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::Phase;
 use crate::event::{Event, EventKind};
@@ -79,7 +79,7 @@ pub struct ActTmp {
     pub sector: Vec<Sector>,
 }
 
-pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &LiveTmp, t: &mut ActTmp) {
+pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let (i, ns) = (b.cell as usize, w.chem.ns());
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.

@@ -163,11 +163,11 @@ pub fn day(w: &mut World) {
         b.prepare(&w.chem, &w.cfg.phys);
         w.life.updates += 1;
         match live(w, s, &mut b, &mut rc, &mut tmp) {
-            Some(cause) => die(w, s, b, cause),
-            None => {
+            Err(cause) => die(w, s, b, cause),
+            Ok(lived) => {
                 // A body with no brain takes no decision: its update is its physics only.
                 if !w.life.brainless(&b) {
-                    choose::act(w, s, &mut b, &tmp, &mut act);
+                    choose::act(w, s, &mut b, &lived, &mut act);
                     // An action can leave nothing of a member (all its stores put or given
                     // away): it dies at once, before another body deals with it.
                     if b.empty_at(b.mass(&w.chem)) {

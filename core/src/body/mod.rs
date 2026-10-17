@@ -12,13 +12,14 @@ mod genes;
 mod live;
 mod metab;
 mod pay;
+mod physics;
 mod tissue;
 
 pub use death::{die, hurt, tear, thin};
 pub use exchange::conductance_to_ground;
 pub use genes::*;
-pub(crate) use live::live;
-pub use live::LiveTmp;
+pub(crate) use live::{live, LiveTmp};
+pub use live::Lived;
 pub use pay::{pay, release, upkeep};
 pub use tissue::WET_TISSUE;
 pub use crate::life::Lineage;
