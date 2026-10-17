@@ -9,11 +9,14 @@ A world that runs on five physical laws; everything else must emerge.
 - `docs/history.md`: what changed in M0 to M3, and where old files are in git
 
 ```
-cargo run --release -p cli --bin ew -- run --years 300 --frames-every 5 --out out/run   # simulate, write PNGs + tape
-cargo run --release -p cli --bin ew                                                       # all flags
-cargo run --release -p cli --features threads --bin ew -- run ...                          # the same run, flow and change on threads (same hash)
-cd web && npm run build && cp ../out/run/world.ewf.gz dist/                             # viewer: open dist/index.html via a local server
+cargo run --release -p cli --bin ew -- run --years 300 --frames-every 5 --out out/run       # simulate: pictures, tape, snapshots
+cargo run --release -p cli --bin ew -- resume --from out/run/snap_00300.bin.gz --years 100 --out out/run   # go on from a snapshot
+cargo run --release -p cli --bin ew -- chem                                                   # chemistry 0 as a table
+cargo run --release -p cli --bin ew -- numbers out/a out/b                                    # the numbers two runs differ in
+cargo run --release -p cli --bin ew                                                           # every command and flag
+cargo run --release -p cli --features threads --bin ew -- run ...                             # flow and change on threads (same hash)
+cd web && npm run build && cp ../out/run/world.ewf.gz dist/                                   # viewer: open dist/index.html via a local server
 ```
 
-By default animals start with hand-set brain biases and plants with neutral brains
+By default the animals start with hand-set brain biases and the light-eaters with neutral brains
 (`--neutral-eaters` and `--plant-bias` change this).
