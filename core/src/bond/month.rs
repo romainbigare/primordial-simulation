@@ -25,7 +25,7 @@ pub fn step(w: &mut World) {
     }
     let (dpm, ns) = (w.cfg.days_per_month as u64, w.chem.ns());
     let react = (w.day / dpm).is_multiple_of(REACT_MONTHS);
-    let mut rc = Reactor::new(&w.chem, w.cfg.seconds_per_year());
+    let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns]);
     let dt = (REACT_MONTHS * dpm) as f64 * DAY;
     for s in 0..w.parts.parts.len() {

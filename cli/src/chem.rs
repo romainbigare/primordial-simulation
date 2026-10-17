@@ -86,7 +86,7 @@ fn balances(c: &Chemistry, init: &worldgen::Init) {
     let atot: f64 = init.air.iter().map(|p| p.1).sum();
     let gas: Vec<f64> = (0..ns).map(|k| init.air.iter().find(|p| p.0 == k).map_or(0.0, |p| p.1 / atot * column)).collect();
     println!("\nbalance with the starting air ({column:.0} mol/m2 of air over a cell), per m2 of cell and per m3 of liquid:");
-    let mut rc = pcore::change::Reactor::new(c, pcore::Config::default().seconds_per_year());
+    let mut rc = pcore::change::Reactor::new(c, &pcore::Config::default());
     for (f, b, _, u) in pairs {
         for depth in DEPTHS {
             let cols: Vec<String> = TEMPS

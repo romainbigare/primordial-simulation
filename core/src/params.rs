@@ -86,6 +86,8 @@ pub struct Physics {
     // Change and Flow, as bodies feel them
     /// Liquid thickness over a body that holds back 63% of the light reaching it, m
     pub light_depth: f64,
+    /// Share of the light a light-driven reaction takes that it stores; the rest becomes heat
+    pub light_yield: f64,
     /// Liquid thickness over a body that cuts its gas exchange by a factor e, m
     pub gas_depth: f64,
     /// Depth of liquid, standing or in the ground's pores, at which the ground counts as half wet, m
@@ -268,10 +270,14 @@ impl Physics {
         self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
     }
     /// Check the numbers the laws need in their range: `dormancy` above 1 (a drying body's pores close as u^n, solved
-    /// with n - 1 in a divisor: `body::exchange::closing`).
+    /// with n - 1 in a divisor: `body::exchange::closing`); `light_yield` above 0 and at most 1 (the light a light
+    /// reaction takes is what it stores over this share).
     pub fn validate(&self) -> Result<(), String> {
         if self.dormancy.is_nan() || self.dormancy <= 1.0 {
             return Err(format!("dormancy ({}) must be above 1", self.dormancy));
+        }
+        if !(self.light_yield > 0.0 && self.light_yield <= 1.0) {
+            return Err(format!("light_yield ({}) must be above 0 and at most 1", self.light_yield));
         }
         Ok(())
     }
@@ -281,6 +287,7 @@ impl Default for Physics {
     fn default() -> Self {
         Physics {
             light_depth: 10.0,
+            light_yield: 0.05,
             gas_depth: 1.0,
             wet_depth: 0.01,
             shelter: 220.0,

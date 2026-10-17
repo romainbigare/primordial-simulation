@@ -229,7 +229,7 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
   (`change::gone`): never past the scarce input. For an input of order above 1 the rate falls as
   the input goes, and the step follows that.
 - **Heat.** Each reaction unit gives −ΔH of heat to the node. A **light reaction** takes
-  absorbed light instead of heat: it stores `LIGHT_YIELD` (5%) of the light it takes; the rest is
+  absorbed light instead of heat: it stores `light_yield` (5%) of the light it takes; the rest is
   heat.
 - `change::pace` holds the shared formula. Ground nodes, air nodes, parts and bodies all use it.
 

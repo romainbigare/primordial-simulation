@@ -155,10 +155,10 @@ fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat
     (h.heat, h.c_out) = (heat - paid * gas.pay, paid * gas.c_out);
 }
 
-/// What its light reactions stored (`LIGHT_YIELD` of the light they used) is paid by the light set aside for it, by the
+/// What its light reactions stored (`Physics::light_yield` of the light they used) is paid by the light set aside for it, by the
 /// share it stored last time (`keep`); it keeps the share it stored now. Returns the light set aside it took, J.
 fn store_light(w: &mut World, slot: usize, b: &Body, s: &Site, keep: f64, caught: f64, used: f64) -> f64 {
-    let stored = crate::change::LIGHT_YIELD * used;
+    let stored = w.cfg.phys.light_yield * used;
     let took = (keep * caught).min(w.light_pool[s.i]).max(0.0);
     w.light_pool[s.i] -= took;
     if caught > 0.0 {

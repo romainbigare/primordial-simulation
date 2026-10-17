@@ -4,6 +4,7 @@ use super::TRACE;
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::math::one_minus_exp;
 use crate::units::P_REF;
+use crate::Config;
 
 /// A reaction whose fraction over the world's year stays below this is frozen and skipped.
 const NEGLIGIBLE: f64 = 1e-12;
@@ -17,8 +18,6 @@ const MIN_SUB: f64 = 1e-4;
 const MOST_HEAT: f64 = 0.5;
 /// Below this, 1 - exp(-z) is taken as its series to second order (exact to 2e-7 of its value).
 const SERIES_BELOW: f64 = 1e-3;
-/// Share of the light a light-driven reaction takes that it stores; the rest becomes heat.
-pub(crate) const LIGHT_YIELD: f64 = 0.05;
 
 /// The phases by the number of the points a substance is past (melting, boiling).
 const PHASES: [Phase; 3] = [Phase::Solid, Phase::Liquid, Phase::Gas];
@@ -31,6 +30,8 @@ pub struct Reactor {
     dh: Vec<f64>,
     /// Per reaction: does it store absorbed light (light-driven and taking energy)?
     lit: Vec<bool>,
+    /// Share of the light a light-driven reaction takes that it stores (`Physics::light_yield`).
+    light_yield: f64,
     /// Per substance: heat capacity, melting and boiling point.
     cp: Vec<f64>,
     melt: Vec<f64>,
@@ -152,13 +153,14 @@ fn gone(z: f64, p: f64) -> f64 {
 }
 
 impl Reactor {
-    /// The reactor of `chem` in a world whose year is `year` s (a reaction too slow to matter over it is frozen).
-    pub fn new(chem: &Chemistry, year: f64) -> Self {
-        let (nr, ns) = (chem.reactions.len(), chem.ns());
+    /// The reactor of `chem` in a world of settings `cfg` (a reaction too slow to matter over its year is frozen).
+    pub fn new(chem: &Chemistry, cfg: &Config) -> Self {
+        let (nr, ns, year) = (chem.reactions.len(), chem.ns(), cfg.seconds_per_year());
         let dh: Vec<f64> = (0..nr).map(|r| chem.dh(r)).collect();
         Reactor {
             thr: chem.reactions.iter().map(|rx| frozen_below(rx, year)).collect(),
             lit: chem.reactions.iter().zip(&dh).map(|(rx, &d)| rx.light && d > 0.0).collect(),
+            light_yield: cfg.phys.light_yield,
             dh,
             cp: chem.subs.iter().map(|s| s.cp).collect(),
             melt: chem.subs.iter().map(|s| s.melt).collect(),
@@ -264,7 +266,7 @@ impl Reactor {
     /// - `light_j`: absorbed light energy available to light reactions, J.
     ///
     /// Elements are exact; thermal energy plus Σ n·hf gains exactly the light used (a share
-    /// `LIGHT_YIELD` of it stored, the rest as heat).
+    /// `Physics::light_yield` of it stored, the rest as heat).
     #[allow(clippy::too_many_arguments)]
     pub fn react(
         &mut self,
@@ -372,7 +374,7 @@ impl Reactor {
             let lim = scarce(&rx.inputs, |k| self.av[k]).0;
             let mut ext = lim * self.far[r];
             if self.lit[r] {
-                ext = ext.min(*light * LIGHT_YIELD / dh);
+                ext = ext.min(*light * self.light_yield / dh);
             } else if dh > 0.0 {
                 ext = ext.min(MOST_HEAT * *energy / dh);
             }
@@ -394,8 +396,8 @@ impl Reactor {
                 self.av[k] += d;
             }
             if self.lit[r] {
-                *light -= dh * ext / LIGHT_YIELD;
-                *energy += dh * ext * (1.0 / LIGHT_YIELD - 1.0);
+                *light -= dh * ext / self.light_yield;
+                *energy += dh * ext * (1.0 / self.light_yield - 1.0);
             } else {
                 *energy -= dh * ext
             }

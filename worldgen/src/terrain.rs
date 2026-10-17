@@ -212,7 +212,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     // substance the first makes is set, in each cell, to the amount at which the pair goes at equal
     // rates at the cell's temperature and the air's start (`Reactor::balance`: from the chemistry's
     // own rate constants and barriers). A cell with no liquid holds none. The air stays as it is.
-    let mut rc = Reactor::new(&world.chem, world.cfg.seconds_per_year());
+    let mut rc = Reactor::new(&world.chem, &world.cfg);
     let share = world.grid.air_share();
     for i in 0..n {
         let (t, j) = (world.t_ground(i), world.grid.air_of(i));
