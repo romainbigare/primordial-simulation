@@ -5,7 +5,7 @@ use crate::measure;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pcore::check;
 use pcore::event::{Event, EventKind};
-use pcore::World;
+use pcore::{Diag, World};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Read, Write};
@@ -675,14 +675,14 @@ impl Recorder {
             // 15 Oct 2026 (drainage): the share of land cells where liquid stands over full pores, and the liquid in the stores of the bed under the land.
             ("wet_land".to_string(), "1", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0 && pcore::body::env_of(w, i)[1] > 0.0).count() as f64 / (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).count().max(1) as f64),
             ("deep_land".to_string(), "km3", (0..w.grid.n()).filter(|&i| c.f.z[i] > 0.0).map(|i| (0..w.chem.ns()).filter(|&k| w.chem.phase(k, c.f.t[i]) == pcore::chem::Phase::Liquid).map(|k| w.deep.get(k * w.grid.n() + i).copied().unwrap_or(0.0) * w.chem.molar_volume(k, pcore::chem::Phase::Liquid)).sum::<f64>()).sum::<f64>() / 1e9),
-            ("rain".to_string(), "mol/m2/s", w.diag.rain.iter().map(|&v| v as f64).sum::<f64>() / n),
+            ("rain".to_string(), "mol/m2/s", w.rain.iter().map(|&v| v as f64).sum::<f64>() / n),
             // 16 Oct 2026: the land's liquid in the year, m over the land: rain, evaporation from the ground, from light-eaters
             // and from the other bodies, and what light-eaters took of the ground's liquid (rain caught and soaked).
-            ("water_rain".to_string(), "m/yr", self.social.water[0] / land_area),
-            ("water_ground".to_string(), "m/yr", self.social.water[1] / land_area),
-            ("water_plants".to_string(), "m/yr", self.social.water[2] / land_area),
-            ("water_animals".to_string(), "m/yr", self.social.water[3] / land_area),
-            ("water_plants_took".to_string(), "m/yr", self.social.water[4] / land_area),
+            ("water_rain".to_string(), "m/yr", self.social.water[Diag::LAND_RAIN] / land_area),
+            ("water_ground".to_string(), "m/yr", self.social.water[Diag::LAND_GROUND] / land_area),
+            ("water_plants".to_string(), "m/yr", self.social.water[Diag::LAND_PLANTS] / land_area),
+            ("water_animals".to_string(), "m/yr", self.social.water[Diag::LAND_OTHERS] / land_area),
+            ("water_plants_took".to_string(), "m/yr", self.social.water[Diag::LAND_PLANTS_TOOK] / land_area),
             ("bodies".to_string(), "1", bodies),
             ("plants".to_string(), "1", light_eaters),
             ("animals".to_string(), "1", bodies - light_eaters),

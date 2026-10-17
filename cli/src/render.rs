@@ -23,7 +23,7 @@ fn ramp(stops: &[(f64, Rgb)], v: f64) -> Rgb {
 }
 
 fn map_pixel(w: &World, f: &Fields, i: usize) -> Rgb {
-    let flux = w.diag.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
+    let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     let shade = {
         let zl = f.z[w.grid.step(i, (-1, 0)).unwrap_or(i)];
         let zu = f.z[w.grid.step(i, (0, -1)).unwrap_or(i)];
@@ -72,7 +72,7 @@ pub fn save(w: &World, path: &str) {
             map_pixel(w, &f, i),
             ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
-            ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.diag.rain[i] as f64 * 3.15e7).max(1.0).log10()),
+            ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.rain[i] as f64 * 3.15e7).max(1.0).log10()),
             {
                 let base = if f.depth[i] > 1.0 { [40, 50, 70] } else { [90, 85, 80] };
                 ramp(&[(-1.5, base), (0.0, [60, 120, 40]), (1.5, [30, 200, 40])], green[i].max(1e-9).log10())

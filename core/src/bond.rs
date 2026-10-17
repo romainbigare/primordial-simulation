@@ -747,7 +747,7 @@ pub fn step(w: &mut World) {
 fn load(w: &mut World, r: usize) {
     let (list, i, g) = (w.parts.members(r), w.parts.parts[r].cell as usize, w.cfg.gravity);
     let (depth, rho, molv) = liquid(w, i);
-    let flux = w.diag.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
+    let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     let v = if depth > 0.01 { flux / (molv * w.grid.cell_m * depth) } else { 0.0 };
     let bump = std::mem::take(&mut w.parts.parts[r].push) as f64 / list.len() as f64;
     let (mut wt, mut push, mut lift) = (vec![0.0; list.len()], vec![0.0; list.len()], 0.0);

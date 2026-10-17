@@ -168,10 +168,10 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     tape += t.elapsed();
     // Rivers as the viewers draw them: dry land cells with a liquid flux over a threshold, mol/s.
     let f = fields(&w);
-    let flux = |i: usize| w.diag.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
+    let flux = |i: usize| w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     let dry: Vec<usize> = (0..w.grid.n()).filter(|&i| f.z[i] > 0.0 && f.depth[i] <= 1.0).collect();
     let over = |t: f64| dry.iter().filter(|&&i| flux(i) > t).count();
-    let rain = (0..w.grid.n()).filter(|&i| f.z[i] > 0.0).map(|i| w.diag.rain[i] as f64).sum::<f64>() / (0..w.grid.n()).filter(|&i| f.z[i] > 0.0).count().max(1) as f64;
+    let rain = (0..w.grid.n()).filter(|&i| f.z[i] > 0.0).map(|i| w.rain[i] as f64).sum::<f64>() / (0..w.grid.n()).filter(|&i| f.z[i] > 0.0).count().max(1) as f64;
     println!("rivers: max flux {:.3e} mol/s on land, dry land cells over 9e3 (web) {}, over 3e4 (png) {}, mean land rain {rain:.3e} mol/m2/s", dry.iter().map(|&i| flux(i)).fold(0.0, f64::max), over(9e3), over(3e4));
     let s = (busy + part.iter().sum::<Duration>() + tape).as_secs_f64();
     println!("{years} years in {s:.2} s ({:.1} ms per year), hash {:016x}", s * 1000.0 / years.max(1) as f64, pcore::check::hash(&w));

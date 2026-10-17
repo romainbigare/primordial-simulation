@@ -342,7 +342,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             w.e_air[j] += heat - lift;
             lifted += lift;
             if s.z[i] > 0.0 && t < sp.boil {
-                w.diag.liquid_land[1] += m * sp.v[1];
+                w.diag.liquid_land[crate::Diag::LAND_GROUND] += m * sp.v[1];
             }
         }
     }
@@ -371,7 +371,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             lifted += lift;
             s.rain[i] += m;
             if s.z[i] > 0.0 {
-                w.diag.liquid_land[0] += m * sp.v[1];
+                w.diag.liquid_land[crate::Diag::LAND_RAIN] += m * sp.v[1];
             }
             s.cloud[j] = [s.cloud[j][0] + m, s.cloud[j][1] + m * sp.refl[0]];
             rained[x] = true;
@@ -398,7 +398,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     for i in 0..n {
         s.seen[i][3] = lerp(s, &s.node_tmp, i);
         let r = (s.rain[i] / (area * dt)) as f32;
-        w.diag.rain[i] += (r - w.diag.rain[i]) * ema;
+        w.rain[i] += (r - w.rain[i]) * ema;
         s.rain[i] = 0.0;
     }
 }

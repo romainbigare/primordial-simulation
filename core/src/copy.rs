@@ -443,11 +443,9 @@ fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, p
     let minerals = chem.minerals();
     let place = |k: u16| minerals.iter().position(|m| m.0 == k as usize);
     let able = free.min(ins.iter().zip(&reach).filter(|(x, _)| place(x.0).is_none()).map(|x| *x.1).fold(f64::MAX, f64::min));
-    let root = if minerals.is_empty() || full <= 0.0 || able <= 1e-12 * full { u32::MAX } else { w.life.root(b) } as usize;
-    if root != u32::MAX as usize {
+    let root = if minerals.is_empty() || full <= 0.0 || able <= 1e-12 * full { u32::MAX } else { w.life.root(b) };
+    if let Some(t) = crate::Diag::of_root(&mut w.diag.nlim, root) {
         let held: Vec<bool> = (0..minerals.len()).map(|q| ins.iter().zip(&reach).any(|(x, &r)| place(x.0) == Some(q) && r < able)).collect();
-        w.diag.nlim.resize(w.diag.nlim.len().max(root + 1), Vec::new());
-        let t = &mut w.diag.nlim[root];
         t.resize(2 + minerals.len(), 0.0);
         t[0] += n;
         t[1] += n * held.contains(&true) as u8 as f64;

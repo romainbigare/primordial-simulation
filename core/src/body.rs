@@ -13,7 +13,7 @@ use crate::event::{Event, EventKind};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::rng::{Purpose, Rng};
 use crate::units::{DAY, MAX_SUBSTANCES, P_REF, R_GAS, SIGMA, T_SURF};
-use crate::{bond, choose, World};
+use crate::{bond, choose, Diag, World};
 use serde::{Deserialize, Serialize};
 
 // Scalar genes, then one per reaction (catalyst, log10 speed-up) and three per substance
@@ -1357,10 +1357,10 @@ pub fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter
 
 /// Count `kg` of body matter torn off a body that lived on (`tear`) for its starting kind (`Diag::hurt`).
 pub fn hurt(w: &mut World, b: &Body, kg: f64) {
-    let root = w.life.root(b) as usize;
-    if kg > 0.0 && root != u32::MAX as usize {
-        w.diag.hurt.resize(w.diag.hurt.len().max(root + 1), 0.0);
-        w.diag.hurt[root] += kg;
+    if kg > 0.0 {
+        if let Some(h) = Diag::of_root(&mut w.diag.hurt, w.life.root(b)) {
+            *h += kg;
+        }
     }
 }
 
@@ -1542,7 +1542,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // Heat the ground node can give, J (its capacity as of now; it only falls while the body soaks
     // up liquid): found when first needed, but before the body soaks anything up.
     let keep = w.light_keep.get(slot, b.gen) as f64;
-    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, light_pool, light_keep, diag, life, canopy, heat_pool, heat_keep, .. } = w;
+    let World { cfg, chem, grid, ground, bed, e_ground, air, e_air, ledger, light, light_pool, light_keep, diag, life, canopy, heat_pool, heat_keep, rain, .. } = w;
     let mut gcap = None;
     macro_rules! cap {
         () => {
@@ -1553,7 +1553,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let (dt, plant) = (days * DAY, light_eater(chem, &b.genes));
     // The rain that fell on its capture area, mol: the cell's bodies intercept 1 - exp(-x) of the rain, x their capture
     // area per ground area, shared out by height as the light is (`shade`), at the cell's rain rate of the year.
-    let fall = diag.rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open * life.shade.get(slot).map_or(1.0, |&f| f) * intercept(canopy.get(i).map_or(0.0, |&c| c as f64));
+    let fall = rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * dt * open * life.shade.get(slot).map_or(1.0, |&f| f) * intercept(canopy.get(i).map_or(0.0, |&c| c as f64));
 
     // Its conductance to the surface it stands on, W/K (for its reactions, evaporation and the heat below): through its
     // coat, then by contact and radiation from its outer surface (`surface`). Taken at its temperature at the start of
@@ -1704,14 +1704,14 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let pre = crate::ground::take_paid(&mut e_ground[i], ledger, cap!(), d, cp, d * (cp * tg + f)).0;
         (b.store[k], ground[k * n + i], b.e, heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, heat + pre * f);
         let m = m.min(b.store[k]);
-        diag.liquid_land[4] += if plant { pre * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
+        diag.liquid_land[Diag::LAND_PLANTS_TOOK] += if plant { pre * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
         if m > 0.0 {
             moved = true;
             let q = m * chem.subs[k].cp * t0;
             (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
             heat -= m * chem.subs[k].latent_gas();
             lost[k] = (m - pre).max(0.0);
-            diag.liquid_land[3 - plant as usize] += m * chem.molar_volume(k, Phase::Liquid);
+            diag.liquid_land[if plant { Diag::LAND_PLANTS } else { Diag::LAND_OTHERS }] += m * chem.molar_volume(k, Phase::Liquid);
         }
     }
 
@@ -1740,7 +1740,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         ground[k * n + i] -= d;
         b.e += d * per;
         heat += d * f;
-        diag.liquid_land[4] += if plant { d * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
+        diag.liquid_land[Diag::LAND_PLANTS_TOOK] += if plant { d * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
     }
     // Roots take what is dissolved in the soil: the salts that live in the liquid of the ground
     // (liquid at the cell's warmth but for the common liquid itself, whose soaking is above) that

@@ -28,15 +28,10 @@ pub struct Ledger {
     pub clamped_heat: f64,
 }
 
-/// Per-cell slow averages and counts for the shell. Bodies read `rain` and parts read
-/// `liquid_flux`; the rest is only seen. The fields not saved (`serde(skip)`) count since the
-/// shell last read them.
+/// Counts and slow averages for the shell only: the laws never read them. The fields not saved
+/// (`serde(skip)`) count since the shell last read them.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Diag {
-    /// Liquid moved out of each ground cell, mol/s (moving average)
-    pub liquid_flux: Vec<f32>,
-    /// Liquid falling on each ground cell, mol/(m² s) (moving average)
-    pub rain: Vec<f32>,
     /// Members moving into each ground cell, per year (moving average over about a year), and
     /// since the last month
     pub traffic: Vec<f32>,
@@ -71,10 +66,35 @@ pub struct Diag {
     /// below what their fuels, their allowance and their spare allowed (`copy::grow`)
     #[serde(skip)]
     pub nlim: Vec<Vec<f64>>,
-    /// The land's liquid, m³: rain on land cells, evaporation from their ground, evaporation from light-eaters and
-    /// from the other bodies, and what light-eaters took of the ground's liquid (rain they caught and what they soaked)
+    /// The land's liquid, m³, by the indices `LAND_*`
     #[serde(skip)]
     pub liquid_land: [f64; 5],
+}
+
+impl Diag {
+    /// `liquid_land`: rain on land cells
+    pub const LAND_RAIN: usize = 0;
+    /// evaporation from their ground
+    pub const LAND_GROUND: usize = 1;
+    /// evaporation from light-eaters
+    pub const LAND_PLANTS: usize = 2;
+    /// evaporation from the other bodies
+    pub const LAND_OTHERS: usize = 3;
+    /// what light-eaters took of the ground's liquid (rain they caught and what they soaked)
+    pub const LAND_PLANTS_TOOK: usize = 4;
+
+    /// The entry of starting kind `root` (`Lineage::root`) in a tally by kind, grown to hold it; none for a body of no
+    /// starting kind (`u32::MAX`).
+    pub(crate) fn of_root<T: Clone + Default>(v: &mut Vec<T>, root: u32) -> Option<&mut T> {
+        let r = root as usize;
+        if root == u32::MAX {
+            return None;
+        }
+        if v.len() <= r {
+            v.resize(r + 1, T::default());
+        }
+        Some(&mut v[r])
+    }
 }
 
 /// One number per body slot, kept with the generation of the body that set it: a body reads only its own (0 for a new
@@ -121,6 +141,12 @@ pub struct World {
     pub e_air: Vec<f64>,
     /// Elevation of the bottom of the ground column, m
     pub base_z: f64,
+    /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year (`flow::air::exchange`); bodies
+    /// catch it (`body::live`)
+    pub rain: Vec<f32>,
+    /// Liquid moved out of each ground cell, mol/s, a moving average over about a year (`flow::liquid`); it pushes parts
+    /// (`bond::load`)
+    pub liquid_flux: Vec<f32>,
     pub diag: Diag,
     pub ledger: Ledger,
     /// Bodies, and the parts they made: the sparse graph

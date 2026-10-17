@@ -70,7 +70,7 @@ struct Sp {
 /// | `nbr`, `mob` | neighbour cells, m³ mobile | `space`; C | L; C |
 /// | `tl`, `ta0` | K, air touching the ground; K, air at the last S | Rad; S | X; Rad |
 /// | `seen`, `lay` | [drop/m, air height, absorbing share, cloud reflectance, air K]; K below the ground's air, per layer | S (X sets `[3]`) | Rad |
-/// | `rain`, `cloud`, `snap`, `trace` | mol condensed, [mol, mol × reflectance], mol per gas, s and calls | X | X (`rain` to `diag.rain`) |
+/// | `rain`, `cloud`, `snap`, `trace` | mol condensed, [mol, mol × reflectance], mol per gas, s and calls | X | X (`rain` to `World::rain`) |
 /// | `za`, `vol` | m, m³ | S | S, W |
 /// | `nt`, `capa`, `mass` | mol, J/K, kg | S; X, W (moves) | X, W, Rad |
 /// | `fabs`, `gam`, `zair`, `ta` | optical depth, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
@@ -584,7 +584,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // Head above the surface is liquid standing here; liquid in the pores flows by Darcy's law.
         let damp = s.pd[i] > 0.0 && s.head[i] > zi;
         if !damp && work <= 0.0 && (cnt == 0 || (hd <= zi && hs <= 0.0)) {
-            w.diag.liquid_flux[i] *= 1.0 - ema;
+            w.liquid_flux[i] *= 1.0 - ema;
             continue;
         }
         let mut lvol = 0.0;
@@ -673,7 +673,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         }
         w.e_ground[i] += power;
         heat += power;
-        w.diag.liquid_flux[i] += ((out / dt) as f32 - w.diag.liquid_flux[i]) * ema;
+        w.liquid_flux[i] += ((out / dt) as f32 - w.liquid_flux[i]) * ema;
         if work <= 0.0 {
             continue;
         }
