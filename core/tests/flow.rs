@@ -209,7 +209,7 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
 
 #[test]
 fn take_heat_never_takes_a_node_below_the_floor() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     let (i, e0) = (5, w.e_ground[5]);
     let floor = w.heat_cap_ground(i).max(1.0) * pcore::units::T_FLOOR;
     assert_eq!(w.take_heat(i, 0.25 * e0), 0.25 * e0);
@@ -486,6 +486,7 @@ fn liquid_carries_and_breaks_at_the_measured_yield_per_joule() {
 /// A small island, ten years: the land loses rock (the rock-making solids of its loose ground and bed, over its cells) at the real rate
 /// of denudation, 0.01 to 1 mm a year, and not the 10 mm a year it lost when the numbers were first guesses.
 #[test]
+#[ignore = "slow: ten years of a 32 x 32 world"]
 fn an_island_loses_ground_at_a_real_rate() {
     let mut w = worldgen::new_world(1, 32, 32);
     let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).collect();

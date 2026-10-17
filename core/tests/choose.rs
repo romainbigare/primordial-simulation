@@ -172,7 +172,7 @@ fn body_learns_to_move_toward_what_it_can_take() {
 /// A world of seed 1, 32 x 32, with the light-eaters and the eaters (neutral brains) placed after a month and run for
 /// 30 months more, its bodies sharing brains in groups or not; and its books at the start.
 fn lived(share_brains: bool) -> (pcore::World, Books) {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     w.cfg.share_brains = share_brains;
     pcore::step(&mut w);

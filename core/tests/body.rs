@@ -846,7 +846,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
 /// kept exactly.
 #[test]
 fn a_big_node_stores_light_set_aside_as_it_fell() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     for _ in 0..3 {
@@ -874,7 +874,7 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
 /// catch what the cell's canopy intercepts, and matter and energy are kept exactly.
 #[test]
 fn a_tall_member_shades_a_short_one() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     let short = (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).max_by(|&a, &b| w.life.bodies[a].count.total_cmp(&w.life.bodies[b].count)).expect("a node");

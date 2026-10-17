@@ -10,5 +10,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
-      - run: cargo test --release
+      - run: cargo test --release --workspace
+      # The slow tests: long runs, the learning scene over 1,600 seeds, the speed benchmark.
+      - run: cargo test --release --workspace -- --ignored
       - run: cargo build -p pcore --target wasm32-unknown-unknown

@@ -3,8 +3,11 @@ use pcore::{check::hash, step, World};
 use std::io::Read;
 use std::sync::OnceLock;
 
+/// The side of the tests' worlds, cells.
+const SIDE: usize = 16;
+
 fn world() -> World {
-    worldgen::new_world(1, 32, 32)
+    worldgen::new_world(1, SIDE, SIDE)
 }
 
 fn run(w: &mut World, months: u32) {
@@ -94,13 +97,13 @@ fn frames_file_round_trip() {
     assert_eq!(&raw[..4], b"EWF1");
     let n = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
     let meta: serde_json::Value = serde_json::from_slice(&raw[8..8 + n]).unwrap();
-    let (cells, layers, frames) = (32 * 32, meta["layers"].as_array().unwrap().len(), meta["frames"].as_array().unwrap().len());
-    assert_eq!((meta["w"].as_u64(), frames), (Some(32), 2));
+    let (cells, layers, frames) = (SIDE * SIDE, meta["layers"].as_array().unwrap().len(), meta["frames"].as_array().unwrap().len());
+    assert_eq!((meta["w"].as_u64(), frames), (Some(SIDE as u64), 2));
     assert_eq!(raw.len() - 8 - n, cells * layers * frames);
     // Layer "z" of frame 0 is the first layer: check one cell.
     let z = &tape::LAYERS[0];
     assert_eq!(z.name, meta["layers"][0]["name"].as_str().unwrap());
-    let first = tape::quantise(z, worldgen::new_world(1, 32, 32).surface_z(100));
+    let first = tape::quantise(z, world().surface_z(100));
     assert_eq!(raw[8 + n + 100], first);
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
 }
@@ -289,7 +292,7 @@ fn resume_into_the_same_folder_continues_the_tape() {
     assert_eq!(months, (0..=4 * mpy).map(|i| (i / mpy, i % mpy)).collect::<Vec<_>>());
     let days: Vec<u64> = meta["frames"].as_array().unwrap().iter().map(|f| f["day"].as_u64().unwrap()).collect();
     assert_eq!(days, (0..5).map(|y| y * dpy).collect::<Vec<_>>());
-    assert_eq!(bytes, 5 * 32 * 32 * tape::LAYERS.len());
+    assert_eq!(bytes, 5 * SIDE * SIDE * tape::LAYERS.len());
     assert_eq!(meta["events"], first["events"]);
     for col in meta["series"].as_object().unwrap().values() {
         assert_eq!(col.as_array().unwrap().len(), 5);

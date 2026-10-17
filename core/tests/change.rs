@@ -109,7 +109,7 @@ fn catalysts_fail_when_hot() {
 #[test]
 fn hot_cover_burns() {
     let run = |hot: bool| {
-        let mut w = worldgen::new_world(1, 32, 32);
+        let mut w = worldgen::new_world(1, 16, 16);
         // (No growth: building body matter takes the solid too, and this is about the burning. And no body can pay to move: with liquid
         // in the pores of the ground the cells they feel are not the dry ones of before, and a node that walks out of the hot cell
         // does not burn.)

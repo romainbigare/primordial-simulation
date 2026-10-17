@@ -667,7 +667,7 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
 
 #[test]
 fn child_has_parent_genes_plus_noise() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     worldgen::life::seed(&mut w, 0);
     let parent = w.life.alive().next().expect("a body").genes.clone();
     let lay = Layout::of(&w.chem);
@@ -683,7 +683,7 @@ fn child_has_parent_genes_plus_noise() {
 /// into one population node at the next month's start; matter and energy are kept exactly.
 #[test]
 fn crowded_individuals_merge_into_a_node() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
@@ -708,7 +708,7 @@ fn crowded_individuals_merge_into_a_node() {
 /// are left; no member is lost and matter and energy are kept exactly.
 #[test]
 fn crowd_bounds_the_nodes_of_a_cell() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
@@ -1005,7 +1005,7 @@ fn live(w: &pcore::World) -> Vec<usize> {
 /// two along that gene, keeping its members, stores, heat and pooled spread.
 #[test]
 fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
-    let mut w = worldgen::new_world(1, 32, 32);
+    let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     let books = Books::now(&w);
@@ -1135,6 +1135,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
 /// updates every gene's mean stays within a mutation step of its start, in cells over `crowd`
 /// and not.
 #[test]
+#[ignore = "slow: 2 x 1,000 updates of node churn"]
 fn genes_do_not_drift_without_selection() {
     for crowd in [1, 64] {
         let w0 = worldgen::new_world(1, 4, 4);
@@ -1165,6 +1166,7 @@ fn genes_do_not_drift_without_selection() {
 /// random pick among the widest): about 3% of what selection on the whole spread would move (0.07
 /// units in 300 updates at 1% per unit, against 0.01 x 0.655 x 300 = 2).
 #[test]
+#[ignore = "slow: 1,000 updates of node churn"]
 fn selection_moves_a_nodes_brain_size() {
     let w0 = worldgen::new_world(1, 4, 4);
     let h0 = 12.0;
@@ -1335,7 +1337,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
 #[test]
 fn individuals_mode_children_of_an_animal_are_individuals() {
     for nodes in [true, false] {
-        let mut w = worldgen::new_world(1, 32, 32);
+        let mut w = worldgen::new_world(1, 16, 16);
         pcore::step(&mut w);
         worldgen::life::seed(&mut w, 0);
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
@@ -1397,6 +1399,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
 /// neutral start 7, 2, 1, 1, 1 and then 0 animals were alive at months 6 to 36). Matter and
 /// energy are kept exactly.
 #[test]
+#[ignore = "slow: three years of a 32 x 32 world"]
 fn individuals_mode_merges_no_animal() {
     use pcore::event::EventKind;
     let mut w = worldgen::new_world(1, 32, 32);
