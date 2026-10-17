@@ -48,7 +48,7 @@ pub(super) struct Latent {
 
 /// What Law 2 reads of the last flow step (`Scratch::view`): ground temperatures, bed skins,
 /// the air node of each ground node, air temperatures.
-pub(crate) type FlowView<'a> = (&'a [f64], &'a [[f64; 4]], &'a [u32], &'a [f64]);
+pub(crate) type FlowView<'a> = (&'a [f64], &'a [[f64; 3]], &'a [u32], &'a [f64]);
 
 /// Working memory of the law, rebuilt from the world when missing. It is saved with the world
 /// (but for the fields marked `serde(skip)`: tables `tables` rebuilds and space used within a
@@ -86,8 +86,8 @@ pub struct Scratch {
     pub(super) bedk: Vec<usize>,
     pub(super) gas: Vec<usize>,
     /// Bonded ground of each ground node: heat capacity of its skin, J/K (at every step, `land::ground_state`); as of the
-    /// last refresh (liquid wears `[1]`), its volume, m³, reflectance and heat conductivity, W/(m K).
-    pub(super) bed: Vec<[f64; 4]>,
+    /// last refresh (liquid wears `[1]`), its volume, m³, and reflectance.
+    pub(super) bed: Vec<[f64; 3]>,
     /// Heat capacity of each ground node, J/K (from the amounts at every step; moves keep it).
     pub(super) cap: Vec<f64>,
     /// Temperature of each ground node, K.
@@ -269,15 +269,14 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     }
     s.bed = (0..n)
         .map(|i| {
-            let (mut v, mut r, mut kc) = (0.0, 0.0, 0.0);
+            let (mut v, mut r) = (0.0, 0.0);
             for &k in &s.bedk {
                 let b = w.bed[k * n + i];
                 v += b * s.sp[k].v[0];
                 r += b * s.sp[k].v[0] * s.sp[k].refl[0];
-                kc += b * s.sp[k].v[0] * w.chem.subs[k].conductivity;
             }
             let c = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
-            [c, v, r / v.max(V_MIN), kc / v.max(V_MIN)]
+            [c, v, r / v.max(V_MIN)]
         })
         .collect();
     if s.cap.len() == n {

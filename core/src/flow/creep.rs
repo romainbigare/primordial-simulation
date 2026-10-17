@@ -1,5 +1,4 @@
-//! The yearly part of Flow: creep of loose solids, heat conduction between ground nodes, and
-//! the regrowth of bodies into cleared ground.
+//! The yearly part of Flow: creep of loose solids, and the regrowth of bodies into cleared ground.
 
 use super::land::{lift, melted, rise, solid};
 use super::{bare_share, range, Scratch};
@@ -8,9 +7,6 @@ use crate::World;
 
 /// Added to a substance's hardness before its softness (1 / hardness) is taken.
 const HARD_MIN: f64 = 0.05;
-/// Most heat conducted over an edge per call, as a share of the temperature difference times the
-/// smaller heat capacity (so it never overshoots level).
-const COND_STEP: f64 = 0.2;
 /// Most volume that creeps over an edge per call, as a share of the step between the surfaces
 /// times the cell's area (the higher node goes no further than half way to level).
 const CREEP_LEVEL: f64 = 0.25;
@@ -18,7 +14,7 @@ const CREEP_LEVEL: f64 = 0.25;
 const CREEP_MOST: f64 = 0.25;
 
 /// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more;
-/// heat conducts between ground nodes; bodies spread back into ground cleared along edges
+/// bodies spread back into ground cleared along edges
 /// (`lanes::regrow`, here only, so it closes at the documented speed).
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let n = w.grid.n();
@@ -34,25 +30,12 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     for i in 0..n {
         for d in FORWARD {
             let Some(j) = w.grid.step(i, d) else { continue };
-            conduct(w, s, i, j, d, dt);
             let (a, b) = if s.z[i] > s.z[j] { (i, j) } else { (j, i) };
             slide(w, s, (a, b), d, (&sol, &soft), dt, &mut heat);
         }
     }
     w.ledger.gravity += heat;
     crate::lanes::regrow(w, dt);
-}
-
-/// Heat conducts between ground nodes `i` and `j` (neighbours along `d`) through the skins of
-/// their beds; it goes from the warmer node, which gives no more than it holds above `T_FLOOR`.
-fn conduct(w: &mut World, s: &Scratch, i: usize, j: usize, d: (i32, i32), dt: f64) {
-    let (ti, tj) = (s.tg[i], s.tg[j]);
-    let gk = (s.bed[i][3] + s.bed[j][3]) / 2.0 * w.cfg.skin_m * w.grid.cell_m / w.grid.dist(d);
-    let qmax = COND_STEP * (ti - tj).abs() * s.cap[i].min(s.cap[j]);
-    let qh = (gk * (ti - tj) * dt).clamp(-qmax, qmax);
-    let (from, to) = if qh >= 0.0 { (i, j) } else { (j, i) };
-    let took = w.take_heat(from, qh.abs());
-    w.e_ground[to] += took;
 }
 
 /// Loose solids `sol` (with softness `soft`) creep from the higher node `a` to its neighbour `b`

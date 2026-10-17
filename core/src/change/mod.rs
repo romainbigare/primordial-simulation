@@ -52,21 +52,21 @@ const FAR: f64 = 0.05;
 const TRACE: f64 = 1e-6;
 
 /// What Law 2 reads of the last flow step (`Scratch::view`): per ground node its temperature, the heat capacity of its
-/// bonded skin (the first of four) and its air node; per air node its temperature.
+/// bonded skin (the first of three) and its air node; per air node its temperature.
 struct Nodes<'a> {
     tg: &'a [f64],
-    bed: &'a [[f64; 4]],
+    bed: &'a [[f64; 3]],
     air_of: &'a [u32],
     ta: &'a [f64],
 }
 
 /// `Nodes` made from the world where Flow has not run yet (a test that calls this law alone).
-type Fallback = (Vec<f64>, Vec<[f64; 4]>, Vec<u32>, Vec<f64>);
+type Fallback = (Vec<f64>, Vec<[f64; 3]>, Vec<u32>, Vec<f64>);
 
 fn fallback(w: &World) -> Fallback {
     let (n, na) = (w.grid.n(), w.grid.na());
     let skin = |i: usize| crate::ground::skin_cap(&w.chem, &w.cfg, w.grid.area(), 0..w.chem.ns(), |k| w.b(k, i));
-    ((0..n).map(|i| w.t_ground(i)).collect(), (0..n).map(|i| [skin(i), 0.0, 0.0, 0.0]).collect(), (0..n).map(|i| w.grid.air_of(i) as u32).collect(), (0..na).map(|j| w.t_air(j)).collect())
+    ((0..n).map(|i| w.t_ground(i)).collect(), (0..n).map(|i| [skin(i), 0.0, 0.0]).collect(), (0..n).map(|i| w.grid.air_of(i) as u32).collect(), (0..na).map(|j| w.t_air(j)).collect())
 }
 
 /// Per ground node: the tick it last reacted at its turn, the tick of its next turn, and the steps it reacted on its own

@@ -4,7 +4,7 @@
 //! loose solids); what is over that stands and runs down its head in one ordered sweep; the pore
 //! liquid flows by Darcy's law, and drains to the channels inside a cell (`Physics::hill`) and into
 //! the store of the bed below (`drain`); the head lost heats the ground and does work, carrying
-//! loose solids and breaking weak bonds; loose solids creep downhill and heat conducts. Air nodes
+//! loose solids and breaking weak bonds; loose solids creep downhill. Air nodes
 //! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
 //! overturning and mixing. Every move takes from one node exactly what it gives to another, with
 //! its heat, and books matter lifted or dropped in the gravity ledger, so elements and energy are kept.
@@ -38,7 +38,7 @@ const REFRESH_MONTHS: u64 = 3;
 /// A trace gas (`air::exchange`) evaporates and condenses only at every this many exchanges,
 /// for all the time since.
 const TRACE_TURN: u32 = 4;
-/// Creep (with the heat conduction and the regrowth of bodies) runs once in this many years, at
+/// Creep (with the regrowth of bodies) runs once in this many years, at
 /// the first liquid step of the year, for all that time.
 const CREEP_YEARS: u64 = 1;
 /// A part of the law is due this many seconds before its period is full (so that a period made
