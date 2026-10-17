@@ -273,7 +273,7 @@ impl Chemistry {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
-    /// What growth (`build`) makes body matter of besides the fuel (the nitrogen mineral and the salt of the rock element, both
+    /// What growth (`build`) makes body matter of besides the fuel (the mineral of the fixing reaction's gas and the one of the rock element, both
     /// of the ground): each one's substance and the mol of it a mol of matter is made of. They are the inputs that no
     /// reaction of the chemistry burns (releases heat from with a gas, as a fuel burns), so a body takes them from the
     /// ground or what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.

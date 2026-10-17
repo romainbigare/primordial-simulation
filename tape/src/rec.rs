@@ -596,7 +596,7 @@ impl Recorder {
                 // last flow step: a body keeps the temperature its update left it at while the ground's moves, so older ones read the
                 // ground's change since, 20 to 30 K for some on frozen ground in winter, 16 Oct 2026.)
                 if w.day.saturating_sub(b.last) < 5 {
-                    let tg = w.scratch.temps().0.get(b.cell as usize).copied().unwrap_or(c.f.t[b.cell as usize]);
+                    let tg = w.t_ground_last(b.cell as usize).unwrap_or(c.f.t[b.cell as usize]);
                     (r.warm, r.warm_n) = (r.warm + n * (b.temp(&w.chem) - tg), r.warm_n + n);
                 }
                 r.mineral.resize(minerals.len(), 0.0);

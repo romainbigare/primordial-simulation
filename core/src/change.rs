@@ -506,10 +506,7 @@ pub fn step(w: &mut World, dt: f64) {
     let fallback: (Vec<f64>, Vec<[f64; 4]>, Vec<u32>, Vec<f64>);
     let (mut tg, mut bed, mut air_of, mut ta) = s.view();
     if tg.len() != n || bed.len() != n || air_of.len() != n || ta.len() != na {
-        let skin = |i: usize| {
-            let (c, v) = (0..ns).fold((0.0, 0.0), |(c, v), k| (c + w.b(k, i) * chem.subs[k].cp, v + w.b(k, i) * chem.molar_volume(k, Phase::Solid)));
-            if v > 0.0 { c / v * w.cfg.skin_m * w.grid.area() } else { 0.0 }
-        };
+        let skin = |i: usize| crate::ground::skin_cap(chem, &w.cfg, w.grid.area(), |k| w.b(k, i));
         fallback = ((0..n).map(|i| w.t_ground(i)).collect(), (0..n).map(|i| [skin(i), 0.0, 0.0, 0.0]).collect(), (0..n).map(|i| w.grid.air_of(i) as u32).collect(), (0..na).map(|j| w.t_air(j)).collect());
         (tg, bed, air_of, ta) = (&fallback.0, &fallback.1, &fallback.2, &fallback.3);
     }

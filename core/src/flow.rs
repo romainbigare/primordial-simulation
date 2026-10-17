@@ -351,15 +351,14 @@ fn refresh(w: &World, s: &mut Scratch) {
     }
     s.bed = (0..n)
         .map(|i| {
-            let (mut c, mut v, mut r, mut kc) = (0.0, 0.0, 0.0, 0.0);
+            let (mut v, mut r, mut kc) = (0.0, 0.0, 0.0);
             for &k in &s.bedk {
-                let (b, sub) = (w.bed[k * n + i], &w.chem.subs[k]);
-                c += b * sub.cp;
+                let b = w.bed[k * n + i];
                 v += b * s.sp[k].v[0];
                 r += b * s.sp[k].v[0] * s.sp[k].refl[0];
-                kc += b * s.sp[k].v[0] * sub.conductivity;
+                kc += b * s.sp[k].v[0] * w.chem.subs[k].conductivity;
             }
-            let c = if v > 0.0 { c / v * w.cfg.skin_m * s.area } else { 0.0 };
+            let c = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, |k| w.bed[k * n + i]);
             [c, v, r / v.max(1e-9), kc / v.max(1e-9)]
         })
         .collect();
@@ -440,9 +439,8 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             *c += a * cp;
         }
     }
-    // Temperature: molten amounts hold their fusion enthalpy, so a node stays at a melting point
-    // (a plateau) until all of that substance has frozen or melted. Each melts at its melting point in
-    // the node, lowered by what is dissolved in its liquid (`World::melt`), in the order of those.
+    // Temperature on the melting plateaus (`ground::melting`): each substance melts at its melting point in the node,
+    // lowered by what is dissolved in its liquid (`World::melt`), in the order of those.
     let mut ord = [(0.0, 0); MAX_SUBSTANCES];
     let mix: Vec<Option<Vec<_>>> = s.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect();
     for (i, &ci) in cap.iter().enumerate().take(n) {
@@ -453,31 +451,16 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             s.tg[i] = (e - held) / c;
             continue;
         }
-        let (mut held, mut lo, mut hi, pk, mut bits) = (0.0, f64::MIN, f64::MAX, s.pk[i], 0u64);
-        s.pk[i] = NONE;
-        let m = s.vary.len();
+        let (pk, m) = (s.pk[i], s.vary.len());
         for ((o, &k), js) in ord.iter_mut().zip(&s.vary).zip(&mix) {
             *o = (js.as_ref().map_or(s.sp[k].melt, |js| w.chem.melt_with(k, |j| w.ground[j * n + i], js.iter().copied())), k);
         }
         ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
-        let mut tm = 0.0;
-        for &(t, k) in &ord[..m] {
-            let (p, a) = (&s.sp[k], w.ground[k * n + i]);
-            let at = c * t + held;
-            if e < at {
-                hi = at;
-                break;
-            }
-            bits |= 1 << k;
-            if a > 0.0 && e < at + a * p.lf {
-                (s.pk[i], s.phi[i], hi, tm) = (k, (e - at) / (a * p.lf), f64::MIN, t);
-                break;
-            }
-            held += a * p.lf;
-            lo = at + a * p.lf;
-        }
-        s.hold[i] = [held, lo, hi, bits as f64];
-        s.tg[i] = if s.pk[i] == NONE { (e - held) / c } else { tm };
+        let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.ground[k * n + i] * s.sp[k].lf)));
+        (s.pk[i], s.phi[i]) = th.on.unwrap_or((NONE, s.phi[i]));
+        let bits = th.bits;
+        s.hold[i] = [th.held, th.lo, th.hi, bits as f64];
+        s.tg[i] = th.t;
         if full || pk != NONE || s.pk[i] != NONE || bits as f64 != was {
             surface(w, s, i);
         }

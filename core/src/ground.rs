@@ -35,10 +35,59 @@ pub(crate) fn cap_ground(chem: &Chemistry, grid: &Grid, cfg: &Config, ground: &[
         bc += b * s.cp;
         bv += b * s.molar_mass / s.density[0];
     }
+    // (The skin of `skin_cap`, but its volume rounded as b·M/ρ, not b·(M/ρ): kept apart so results stay the same.)
     if bv > 0.0 {
         c += bc / bv * cfg.skin_m * grid.area();
     }
     c
+}
+
+/// Heat capacity of the skin of a ground node's bed, J/K: `skin_m` of its bonded amounts `b(k)` (mol), at their mean heat
+/// capacity per volume.
+pub(crate) fn skin_cap(chem: &Chemistry, cfg: &Config, area: f64, b: impl Fn(usize) -> f64) -> f64 {
+    let (mut c, mut v) = (0.0, 0.0);
+    for k in 0..chem.ns() {
+        c += b(k) * chem.subs[k].cp;
+        v += b(k) * chem.molar_volume(k, chem::Phase::Solid);
+    }
+    if v > 0.0 { c / v * cfg.skin_m * area } else { 0.0 }
+}
+
+/// Where a ground node of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
+pub(crate) struct Melting {
+    /// Temperature, K
+    pub t: f64,
+    /// The substance held at its melting point, with its molten share
+    pub on: Option<(usize, f64)>,
+    /// Fusion enthalpy held by what is molten (not counting `on`), J
+    pub held: f64,
+    /// The energies between which the node stays off a plateau with this `held`, J (`f64::MIN` for `hi` on a plateau)
+    pub lo: f64,
+    pub hi: f64,
+    /// What is at or over its melting point, a bit per substance
+    pub bits: u64,
+}
+
+/// Temperature of a node of heat capacity `c` and energy `e`, where molten amounts hold their fusion enthalpy: `melts` gives,
+/// in the order they melt, each substance's melting point there, the substance and the fusion enthalpy of its amount (J). A
+/// node stays at a melting point (a plateau) until all of that substance has frozen or melted. `World::energy_ground` is the
+/// inverse.
+pub(crate) fn melting(c: f64, e: f64, melts: impl IntoIterator<Item = (f64, usize, f64)>) -> Melting {
+    let (mut held, mut lo, mut hi, mut bits) = (0.0, f64::MIN, f64::MAX, 0u64);
+    for (tm, k, lat) in melts {
+        let at = c * tm + held;
+        if e < at {
+            hi = at;
+            break;
+        }
+        bits |= 1 << k;
+        if e < at + lat {
+            return Melting { t: tm, on: Some((k, (e - at) / lat)), held, lo, hi: f64::MIN, bits };
+        }
+        held += lat;
+        lo = at + lat;
+    }
+    Melting { t: (e - held) / c, on: None, held, lo, hi, bits }
 }
 
 /// Heat a node with energy `e` and heat capacity `cap` can give before it falls to `T_FLOOR`, J.
@@ -63,19 +112,8 @@ impl World {
         let c = self.heat_cap_ground(i).max(1.0);
         let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| self.g(k, i) > 0.0).map(|k| (self.melt(k, i), k)).collect();
         ks.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let (e, mut held) = (self.e_ground[i], 0.0);
-        for (tm, k) in ks {
-            let lat = self.g(k, i) * self.chem.subs[k].lf;
-            let lo = c * tm + held;
-            if e < lo {
-                break;
-            }
-            if e < lo + lat {
-                return (tm, Some((k, (e - lo) / lat)));
-            }
-            held += lat;
-        }
-        ((e - held) / c, None)
+        let th = melting(c, self.e_ground[i], ks.into_iter().map(|(tm, k)| (tm, k, self.g(k, i) * self.chem.subs[k].lf)));
+        (th.t, th.on)
     }
     /// Take up to `q` J from ground node `i`, never more than it holds above `T_FLOOR`, and return what was
     /// really taken. The shortfall is counted in `ledger.clamped_heat`. Whoever wanted `q` must
@@ -92,11 +130,15 @@ impl World {
         let cap = if q > 0.0 { self.heat_cap_ground(i) - c } else { 0.0 };
         draw(&mut self.e_ground[i], &mut self.ledger, cap, q)
     }
+    /// Temperature of ground node `i` as of the last flow step, K (none before the first).
+    pub fn t_ground_last(&self, i: usize) -> Option<f64> {
+        self.scratch.temps().0.get(i).copied()
+    }
     /// Temperature of ground node `i`, K.
     pub fn t_ground(&self, i: usize) -> f64 {
         self.thaw(i).0
     }
-    /// Thermal energy of a ground node at temperature `t` (with the fusion enthalpy of what is molten).
+    /// Thermal energy of a ground node at temperature `t` (with the fusion enthalpy of what is molten): the inverse of `thaw` (`melting`).
     pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
         let held: f64 = (0..self.chem.ns()).filter(|&k| self.melt(k, i) < t).map(|k| self.g(k, i) * self.chem.subs[k].lf).sum();
         self.heat_cap_ground(i) * t + held
@@ -116,7 +158,9 @@ impl World {
     pub fn t_air(&self, j: usize) -> f64 {
         self.e_air[j] / self.heat_cap_air(j).max(1.0)
     }
-    /// Height of the solid surface (bonded + loose solids), m.
+    /// Height of the solid surface (bonded + loose solids), m, at the node's temperature now and with the solid share of a
+    /// substance on its plateau (`body::env_of` reads the last flow step's temperature and whole phases; `flow::surface`
+    /// adds the soft cover and the reflectance).
     pub fn surface_z(&self, i: usize) -> f64 {
         let (t, pl) = self.thaw(i);
         let mut v = 0.0;

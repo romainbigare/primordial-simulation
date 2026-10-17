@@ -1004,9 +1004,10 @@ impl Life {
 }
 
 /// Temperature (as of the last flow step), depth of the liquid that stands (what the pores of the loose ground
-/// do not hold, `flow::liquid`) and surface height of a ground cell.
+/// do not hold, `flow::liquid`) and surface height of a ground cell (with whole phases: no plateau share, unlike
+/// `World::surface_z`).
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
-    let t = w.scratch.temps().0.get(i).copied().unwrap_or_else(|| w.t_ground(i));
+    let t = w.t_ground_last(i).unwrap_or_else(|| w.t_ground(i));
     let (mut z, mut d, mut loose) = (0.0, 0.0, 0.0);
     for k in 0..w.chem.ns() {
         z += w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
@@ -1472,7 +1473,7 @@ fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
 /// temperature is that of the last flow step, as in its update.
 pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
     let i = b.cell as usize;
-    let tg = w.scratch.temps().0.get(i).copied().unwrap_or(w.life.env[i][0]);
+    let tg = w.t_ground_last(i).unwrap_or(w.life.env[i][0]);
     surface(&w.chem, &w.cfg, b, mass, cover_of(w, b), bond::walls_around(w, b), t, tg)
 }
 
@@ -1487,7 +1488,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // The ground's temperature as of the last flow step (the monthly survey's is too old to feel
     // a cell that turned hot).
     let [tg, depth, _] = w.life.env[i];
-    let tg = w.scratch.temps().0.get(i).copied().unwrap_or(tg);
+    let tg = w.t_ground_last(i).unwrap_or(tg);
     let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::walls_around(w, b));
     let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
