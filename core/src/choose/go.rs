@@ -22,7 +22,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let carried = bond::carry(w, b);
     let afloat = carried.is_some() && bond::afloat(w, b, j, mb);
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
-    let resist = lanes::resist(w, i, d, j);
+    let resist = lanes::resist(w, i, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
     // Moving needs force: a mover pushes on what it passes with `bump` of its weight (`bond::moved`), so it must push
     // that much itself, by its own force (`bond::bears`, of its built body).
@@ -44,7 +44,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let broken = wear(w, j, slot, cost * (1.0 - 1.0 / resist));
     if broken > 0.0 && cover > 0.0 {
         // The cover broken along the way was the lane's: that much ground is now clear.
-        lanes::clear(w, i, d, j, broken / cover);
+        lanes::clear(w, i, j, broken / cover);
     }
     let gr = &w.life.groups[b.group as usize];
     let ((cx, cy), (x, y)) = (gr.centre(), w.grid.xy(j));

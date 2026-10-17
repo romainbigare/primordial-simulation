@@ -125,7 +125,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Cho
             fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
             // The step into the next cell is felt along its edge, worn or not.
             if (dx, dy) == off {
-                fd[7] += wt * (ln(lanes::resist(w, i, d, j) as f32) - ck[7]);
+                fd[7] += wt * (ln(lanes::resist(w, i, j) as f32) - ck[7]);
             }
             sum += wt;
         }

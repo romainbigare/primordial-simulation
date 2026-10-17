@@ -336,6 +336,12 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 - D4: radiation reads the latitude and the area of each cell from the mesh (`mesh().cells()`), not by rows of the
   map; it works on any mesh. Same fingerprints.
+- D8: the cleared ground of a lane is the first link field: `Links::cleared` (`store/links.rs`), one value per link of
+  the cell level (was `World::pass`, four forward edges per cell, empty until first used); `lanes.rs` and the tape read
+  it by link (`Level::link` finds the link of two neighbours). Same history (series and months byte for byte, with
+  `--roster` to year 22, where 230 links are worn); golden re-pinned and `SNAPSHOT_VERSION` 8, since the saved field
+  changes its layout. The `worn` layer of the viewer now shows the most worn of all links of a cell, not only of its
+  east and south ones.
 
 **Owner's decisions after Phase A**
 

@@ -242,9 +242,9 @@ columns, so there is no wind near the ground; bodies use the anchored `wind_grou
 
 `core/src/lanes.rs`. A body that moves through a cell spends energy pushing through the bodies
 there (`choose::go`, `choose::wear`). That breaks what it pushes through (6.8) and clears the
-edge it used (`lanes::clear`, kept in `World::pass`). A cleared edge is cheaper to cross
-(`lanes::resist`, `lanes::eased`). Once a year, with creep, the bodies grow back into cleared
-edges (`lanes::regrow`, rate `regrow`). This one rule is what can make paths.
+link it used (`lanes::clear`, kept per link of the cell level in `World::links`, `store/links.rs`). A
+cleared link is cheaper to cross (`lanes::resist`, `lanes::eased`). Once a year, with creep, the bodies grow back
+into cleared links (`lanes::regrow`, rate `regrow`). This one rule is what can make paths.
 
 ### 1.8 Stability
 

@@ -6,9 +6,8 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::flow::scale_height;
 use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
-use pcore::store::Nodes;
+use pcore::store::{Links, Nodes, BOUNDARIES};
 use pcore::units::P_REF;
-use pcore::store::BOUNDARIES;
 use pcore::{Config, Counters, World};
 
 /// Cell size, m, and ground cells per air node along a side.
@@ -172,6 +171,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         }
     }
 
+    let links = Links::new(grid.mesh().cells().a().len());
     let mut world = World {
         cfg,
         chem,
@@ -194,7 +194,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         life: Default::default(),
         parts: Default::default(),
         canopy: vec![0.0; n],
-        pass: Vec::new(),
+        links,
         light: vec![0.0; n],
         events: Vec::new(),
         scratch: Default::default(),

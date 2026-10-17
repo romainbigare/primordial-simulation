@@ -113,6 +113,11 @@ impl Level {
         let r = self.start[i] as usize..self.start[i + 1] as usize;
         (&self.adj_link[r.clone()], &self.adj_cell[r])
     }
+    /// The link between cells `i` and `j`, if they are neighbours.
+    pub fn link(&self, i: usize, j: usize) -> Option<usize> {
+        let (links, cells) = self.around(i);
+        cells.iter().position(|&c| c as usize == j).map(|e| links[e] as usize)
+    }
     /// Each cell's parent at the next coarser level (empty at the coarsest).
     pub fn parent(&self) -> &[u32] {
         &self.parent

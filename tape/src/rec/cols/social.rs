@@ -34,7 +34,7 @@ impl Recorder {
             s.persist = if old.is_empty() { f64::NAN } else { top.iter().filter(|i| old.contains(i)).count() as f64 / top.len() as f64 };
             s.top = top.to_vec();
         }
-        let now: Vec<u32> = (0..4 * gn).filter(|&e| pcore::lanes::eased(w, e / 4, e % 4) > WORN_EASE).map(|e| e as u32).collect();
+        let now: Vec<u32> = (0..w.links.cleared.len()).filter(|&l| pcore::lanes::eased(w, l) > WORN_EASE).map(|l| l as u32).collect();
         let fresh = now.iter().filter(|e| s.worn.binary_search(e).is_err()).count() as f64;
         if decade {
             s.worn_persist = if s.worn_old.is_empty() { f64::NAN } else { s.worn_old.iter().filter(|e| now.binary_search(e).is_ok()).count() as f64 / s.worn_old.len() as f64 };

@@ -553,8 +553,9 @@ fn lane_scene() -> (World, usize, usize, usize) {
 #[test]
 fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     let (mut w, a, b, slot) = lane_scene();
+    let link = w.grid.mesh().cells().link(a, b).expect("the cells are neighbours");
     pcore::survey::survey(&mut w);
-    assert!((lanes::eased(&w, a, 0) - 1.0).abs() < 1e-9);
+    assert!((lanes::eased(&w, link) - 1.0).abs() < 1e-9);
     let mut crossed = 0;
     // Moving needs force: with the strength of the starting light-eaters (0.05: a force of 0.025 of its weight) the
     // body cannot give the push of a mover (`bump`, 0.05 of its weight) and stays; with its own (0.6) it goes.
@@ -573,18 +574,18 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         crossed += (m.cell as usize == to) as u32;
         w.life.bodies[slot] = m;
         pcore::survey::survey(&mut w);
-        if lanes::eased(&w, a, 0) > 3.0 {
+        if lanes::eased(&w, link) > 3.0 {
             break;
         }
     }
-    let worn = lanes::eased(&w, a, 0);
+    let worn = lanes::eased(&w, link);
     assert!(crossed > 10 && worn > 3.0, "{crossed} crossings, edge {worn} times easier");
     // Moving stops: the cover grows back into the cleared ground over some decades.
     let year = 360.0 * DAY;
     let mut left = vec![worn];
     for _ in 0..40 {
         lanes::regrow(&mut w, year);
-        left.push(lanes::eased(&w, a, 0));
+        left.push(lanes::eased(&w, link));
     }
     assert!(left[1] > 1.2, "recovers slowly: {left:?}");
     assert!(left.windows(2).all(|p| p[1] <= p[0] + 1e-9) && left[40] < 1.01, "and fully: {left:?}");

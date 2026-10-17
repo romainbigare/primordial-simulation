@@ -107,10 +107,8 @@ pub struct World {
     /// Light intercepted in each cell per m² of light-capture area since the start (the mean of
     /// its bodies: taller members catch more, `survey::shade`), J/m²
     pub light: Vec<f64>,
-    /// Ground cleared of bodies along each edge, m²: edge `4i + f` joins cell `i` to its
-    /// neighbour `FORWARD[f]` (each edge once, used both ways). Movers pushing through bodies raise
-    /// it (`choose::go`), cover growing back lowers it (`lanes::regrow`). Empty until first used.
-    pub pass: Vec<f32>,
+    /// What the links of the cell level remember (`store::Links`)
+    pub links: crate::store::Links,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,

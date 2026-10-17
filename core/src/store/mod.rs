@@ -2,9 +2,11 @@
 //! their amounts and heat (moves, transforms and link fluxes, booked by `apply`), with the three nodes beyond the
 //! world's boundary that book what crosses it. The store decides nothing physical.
 
+pub mod links;
 pub mod moves;
 pub mod nodes;
 
+pub use links::Links;
 pub use moves::{apply, held, LinkFlux, Move, Transform};
 pub use nodes::{Boundary, Class, NodeId, Nodes, BOUNDARIES};
 

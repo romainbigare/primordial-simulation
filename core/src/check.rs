@@ -109,7 +109,7 @@ pub fn broken(w: &World) -> Option<String> {
         // The heat pool goes below 0 where bodies gave the ground heat ahead.
         .or_else(|| first_bad("heat_pool", &w.heat_pool, f64::is_finite))
         .or_else(|| {
-            [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("pass", &w.pass)]
+            [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)]
                 .into_iter()
                 .find_map(|(name, v)| first_bad(name, v, at_least_0))
         });
