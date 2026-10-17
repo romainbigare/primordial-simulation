@@ -3,6 +3,7 @@
 use crate::chemistry::{chemistry0, Init};
 use pcore::change::Reactor;
 use pcore::chem::{Chemistry, Phase};
+use pcore::flow::scale_height;
 use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
 use pcore::units::P_REF;
@@ -15,8 +16,6 @@ const AIR_SCALE: usize = 4;
 const BASE_Z: f64 = -3000.0;
 /// Depth of the loose ground every cell starts with, m.
 pub const LOOSE_M: f64 = 1.0;
-/// Scale height of the air, m: the column over high ground is thinner by exp(-z / `SCALE_HEIGHT`).
-const SCALE_HEIGHT: f64 = 8000.0;
 /// Starting temperatures, K: at the equator at 0 m, less `POLE_DROP` x sin² latitude, less `LAPSE` K per m of height.
 const T_EQUATOR: f64 = 302.0;
 const POLE_DROP: f64 = 45.0;
@@ -90,6 +89,12 @@ pub fn air_column(chem: &Chemistry, init: &Init, gravity: f64) -> f64 {
     P_REF / (gravity * m_air)
 }
 
+/// Starting temperature at row `y` and height `z`, K: warm low latitudes, cooler poles and heights.
+fn t_start(grid: &Grid, cfg: &Config, y: usize, z: f64) -> f64 {
+    let lat = grid.lat(y, cfg.lat_south, cfg.lat_north).to_radians();
+    T_EQUATOR - POLE_DROP * lat.sin().powi(2) - LAPSE * z.max(0.0)
+}
+
 /// Scale the heat-absorbing gases of the air by `factor` (`ew run --absorber`), each air node keeping its temperature.
 pub fn scale_absorbers(w: &mut World, factor: f64) {
     let na = w.grid.na();
@@ -150,10 +155,16 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         zmean[grid.air_of(i)] += hz[i].max(0.0);
         cnt[grid.air_of(i)] += 1.0;
     }
+    // The column over high ground is thinner by exp(-z / H), H the scale height of the air at the node's starting
+    // temperature (`flow::scale_height`, as Flow's law takes it).
     let (atot, column): (f64, f64) = (init.air.iter().map(|p| p.1).sum(), air_column(&chem, init, cfg.gravity));
+    let m_air: f64 = init.air.iter().map(|&(k, f)| f * chem.subs[k].molar_mass).sum();
+    let mut t_air = vec![0.0; na];
     for j in 0..na {
         zmean[j] /= cnt[j];
-        let col = column * (-zmean[j] / SCALE_HEIGHT).exp() * area * cnt[j];
+        let y = (j / grid.aw()) * grid.air_scale + grid.air_scale / 2;
+        t_air[j] = t_start(&grid, &cfg, y.min(h - 1), zmean[j]);
+        let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * area * cnt[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;
         }
@@ -192,20 +203,13 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     };
     world.ledger.imposed_elems = vec![0.0; world.chem.n_elements];
 
-    // Starting temperatures: warm low latitudes, cooler poles and heights.
-    let t_at = |w: &World, y: usize, z: f64| {
-        let lat = w.grid.lat(y, w.cfg.lat_south, w.cfg.lat_north).to_radians();
-        T_EQUATOR - POLE_DROP * lat.sin().powi(2) - LAPSE * z.max(0.0)
-    };
     for (i, &z) in hz.iter().enumerate().take(n) {
         let (_, y) = world.grid.xy(i);
         // Low ground starts with its liquid molten.
-        let t = t_at(&world, y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
+        let t = t_start(&world.grid, &world.cfg, y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
         world.e_ground[i] = world.energy_ground(i, t);
     }
-    for (j, &z) in zmean.iter().enumerate().take(na) {
-        let y = (j / world.grid.aw()) * world.grid.air_scale + world.grid.air_scale / 2;
-        let t = t_at(&world, y.min(h - 1), z);
+    for (j, &t) in t_air.iter().enumerate() {
         world.e_air[j] = world.heat_cap_air(j) * t;
     }
     // The liquid starts at balance with the air: of each pair of reactions that undo each other, the

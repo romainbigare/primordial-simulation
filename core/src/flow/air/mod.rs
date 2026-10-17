@@ -39,10 +39,17 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
     w[0] * v[j[0] as usize] + w[1] * v[j[1] as usize] + w[2] * v[j[2] as usize] + w[3] * v[j[3] as usize]
 }
 
-/// Scale height of the air of node `j` (RT/(Mg), with the mean molar mass of its gases), m.
+/// Scale height of air at `t` K whose `mol` mol weigh `kg` kg under gravity `g` (RT/(Mg), with the mean molar mass
+/// of its gases), m.
 #[inline]
-fn scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
-    R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j])
+pub fn scale_height(t: f64, mol: f64, kg: f64, g: f64) -> f64 {
+    R_GAS * t * mol / (g * kg)
+}
+
+/// Scale height of the air of node `j`, m.
+#[inline]
+fn node_scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
+    scale_height(s.ta[j], s.nt[j], s.mass[j], g)
 }
 
 /// Amounts, heat capacity, mass, heights, volume and optical depth of every air node, the air
@@ -85,7 +92,7 @@ fn nodes(w: &World, s: &mut Scratch) {
         s.vol[j] = a * l;
         s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
         s.gam[j] = g * s.mass[j] / s.capa[j].max(CAPA_MIN);
-        let h = scale_height(s, j, g);
+        let h = node_scale_height(s, j, g);
         s.zair[j] = s.za[j] + h - l / (l / h).exp_m1();
     }
 }
@@ -122,7 +129,7 @@ fn heights(w: &World, s: &mut Scratch) {
     // A gas that does not condense is spread like the air: the `split` below with `hk` = `h`, one half.
     for (gi, &k) in s.gas.iter().enumerate() {
         for j in 0..na {
-            let h = scale_height(s, j, g).min((top - s.za[j]).max(COLUMN_MIN));
+            let h = node_scale_height(s, j, g).min((top - s.za[j]).max(COLUMN_MIN));
             let (mut hk, mut split) = (h, 0.5);
             if s.cond[gi] {
                 let t = s.ta[j] + s.gam[j] * (s.zair[j] - s.za[j]);
@@ -142,7 +149,7 @@ fn seen(w: &World, s: &mut Scratch) {
     s.lay.resize(n, [[0.0; LAYERS]; 2]);
     for i in 0..n {
         let (gam, zair, fabs, ta) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i), lerp(s, &s.ta, i));
-        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), scale_height(s, s.air_of[i] as usize, g));
+        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, s.air_of[i] as usize, g));
         s.seen[i] = [gam, zair, one_minus_exp(fabs), s.seen[i][3], ta];
     }
 }
