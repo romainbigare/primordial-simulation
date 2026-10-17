@@ -67,11 +67,11 @@ pub(super) fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
     mean_decay(conductance_to_ground(w, b, mass, t) * dt / b.heat_cap(&w.chem).max(1e-9))
 }
 
-/// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost` J, and the energy
+/// How far each reaction of `pay` runs (one entry for each of `Consts::burn`, in its order) to release up to `cost` J, and the energy
 /// released. Each goes at most as far as Change's rate at the body's temperature takes it over `days` (`change::pace`),
 /// its gases the air it exchanges (at most `MAX_TAKE_SHARE` of its air node), its other inputs its own stores. So a cold
 /// body releases little: the cold cost is the rate, not a rule.
-pub(super) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> ([f64; MAX_SUBSTANCES], f64) {
+pub(super) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> (Vec<f64>, f64) {
     let (chem, i) = (&w.chem, b.cell as usize);
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
@@ -87,7 +87,7 @@ pub(super) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f6
             have[k] = if gas(k) { air[k * na + j] * share } else { b.store[k] };
         }
     }
-    let (mut ext, mut got) = ([0.0f64; MAX_SUBSTANCES], 0.0);
+    let (mut ext, mut got) = (vec![0.0f64; b.k.burn.len()], 0.0);
     for (q, &(r, e)) in b.k.burn.iter().enumerate() {
         let rx = &chem.reactions[r];
         if got >= cost || !breathes(chem, r, t) {
