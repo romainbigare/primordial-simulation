@@ -45,7 +45,7 @@ pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8)
     if b.n() > 1.0 && f > 0.0 {
         let (cat, root) = (light_cat(chem, &b.genes), w.life.root(b));
         w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count * f });
-        b.count *= 1.0 - f;
+        w.life.set_count(b, b.count * (1.0 - f));
     }
     b.count >= 1.0
 }

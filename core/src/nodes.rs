@@ -6,6 +6,7 @@ use crate::body::{self, alike, alike_log, class, light_eater, most, noise, range
 use crate::brain::{row_step, shake};
 use crate::lineage::own;
 use crate::rng::{Purpose, Rng};
+use crate::life::Life;
 use crate::World;
 use std::f32::consts::FRAC_2_PI;
 
@@ -144,13 +145,14 @@ pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     // A node has no wear: its members are of all ages (`body::live`).
-    (o.e, o.count, o.wear) = (o.e + c.e, o.count + c.count, 0.0);
+    (o.e, o.wear) = (o.e + c.e, 0.0);
+    w.life.set_count(o, o.count + c.count);
     o.vis = o.visible(&w.chem, &w.cfg.phys);
 }
 
 /// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the brood and of the heat;
 /// lineage, group, genome and memory as the node's; holding nothing, inside nothing.
-fn part(b: &mut Body, f: f64) -> Body {
+fn part(life: &mut Life, b: &mut Body, f: f64) -> Body {
     // (The trace and the constants are not the part's: set aside, not cloned.)
     let (trace, k) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k));
     let mut c = Body { count: f * b.count, e: f * b.e, brood: f * b.brood, hold: 0, inside: 0, ..b.clone() };
@@ -159,7 +161,8 @@ fn part(b: &mut Body, f: f64) -> Body {
         *x = f * *a;
         *a -= *x;
     }
-    (b.e, b.count, b.brood) = (b.e - c.e, b.count - c.count, b.brood - c.brood);
+    (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
+    life.set_count(b, b.count - c.count);
     c
 }
 
@@ -201,7 +204,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     let mut r = Rng::new(w.seed, w.day, b.id(slot), Purpose::Split);
     let g = gap[r.below(gap.len())].0;
     let d = half(g).0;
-    let mut c = part(b, 0.5);
+    let mut c = part(&mut w.life, b, 0.5);
     let (mut genes, rows) = (b.genes.clone(), w.life.born(b).to_vec());
     // Which half keeps the slot (and so is first in the order of updates) is drawn.
     let d = if r.below(2) == 0 { d } else { -d };
@@ -238,8 +241,9 @@ pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
     let (mut r, keep) = (Rng::new(w.seed, w.day, b.id(slot), Purpose::Open), w.light_keep.get(slot, b.gen));
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
-        if (b.count - b.count.round()).abs() < COUNT_SLACK {
-            b.count = b.count.round();
+        let whole = b.count.round();
+        if (b.count - whole).abs() < COUNT_SLACK {
+            w.life.set_count(&mut b, whole);
         }
         if b.count < 2.0 {
             break;
@@ -256,7 +260,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: b
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
     let spread = std::mem::take(&mut b.spread);
-    let (mut c, mut genes) = (part(b, 1.0 / b.count), b.genes.clone());
+    let (mut c, mut genes) = (part(&mut w.life, b, 1.0 / b.count), b.genes.clone());
     b.spread = spread;
     for (g, x) in c.genes.iter_mut().enumerate() {
         let ((_, lo, hi), v) = (range(&lay, g), spread_at(&b.spread, g));

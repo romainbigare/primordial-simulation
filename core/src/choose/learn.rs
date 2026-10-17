@@ -40,7 +40,7 @@ pub(super) fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32])
     // The group's rows step by the rate split over its members, so a shared brain moves as fast
     // as one body's would (on the mean of what its members met): a node's decision is that of
     // all its members, so it weighs by its count, and an individual split off a node of thousands
-    // weighs as one of them (counts as of the month's start; a new group's first body, all).
+    // weighs as one of them.
     let gl = (lr as f64 * b.n() / gr.count.max(b.n())) as f32;
     brain::fit(&mut gr.rows[cr..cr + s.r()], h, &[1.0], gl * delta);
     brain::learn(&mut gr.rows[..l * s.r()], h, c, a / lr, gl, &mut gr.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
@@ -50,9 +50,9 @@ pub(super) fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32])
     }
 }
 
-/// Monthly: what each group learned fades by its forgetting rate. A body that has stayed for a
-/// year within `phys.join` cells of the centre of a bigger group of its lineage joins it; if it was
-/// alone, what it learned is blended in by its share. (No joining unless brains are shared.)
+/// Monthly: what each group learned fades by its members' mean forgetting rate. A body that has stayed for a year
+/// within `phys.join` cells of the centre of a group of its lineage with more members joins it; if it was alone, what it
+/// learned is blended in by its share of the members. (No joining unless brains are shared.)
 pub(crate) fn regroup(w: &mut World) {
     let (gw, gh, day, share, life) = (w.grid.w, w.grid.h, w.day, w.cfg.share_brains, &mut w.life);
     let at = |g: &crate::life::Group| {
@@ -73,7 +73,7 @@ pub(crate) fn regroup(w: &mut World) {
         fill[at(g)] += 1;
     }
     for g in life.groups.iter_mut().filter(|g| g.members > 0) {
-        let f = (g.forget / g.members as f32).max(0.0);
+        let f = g.forget_rate().max(0.0);
         if f > 0.0 {
             let fade: Vec<f32> = g.learned().map(|l| f * l).collect();
             g.rows.iter_mut().zip(fade).for_each(|(r, x)| *r -= x);
@@ -88,7 +88,7 @@ pub(crate) fn regroup(w: &mut World) {
             continue;
         }
         let ((x, y), groups) = (((b.cell as usize) % gw, (b.cell as usize) / gw), &life.groups);
-        let key = |g: u32| (groups[g as usize].members, u32::MAX - g);
+        let key = |g: u32| (groups[g as usize].count, u32::MAX - g);
         let mut best = b.group;
         for yy in y.saturating_sub(w.cfg.phys.join)..=(y + w.cfg.phys.join).min(gh - 1) {
             for xx in x.saturating_sub(w.cfg.phys.join)..=(x + w.cfg.phys.join).min(gw - 1) {
@@ -116,18 +116,18 @@ pub(crate) fn regroup(w: &mut World) {
             life.bodies[slot] = b;
             if let Some(o) = lone {
                 let gr = &mut life.groups[best as usize];
-                let n = gr.members as f32;
-                let add: Vec<f32> = gr.learned().zip(o).map(|(l, x)| (x - l) / n).collect();
+                let share = (life.bodies[slot].n() / gr.count) as f32;
+                let add: Vec<f32> = gr.learned().zip(o).map(|(l, x)| (x - l) * share).collect();
                 gr.rows.iter_mut().zip(add).for_each(|(r, a)| *r += a);
             }
         }
     }
 }
 
-/// Watch another body (it costs the turn): the group's rows move part of the way toward the
-/// rows of the other's group if their brains have the same sizes (the share split over the
-/// group's members), and the body's own adjustment toward the other's; less the less alike the two bodies are (size,
-/// light-capture area, strength), as a body can only copy what its own body can do.
+/// Watch another body (it costs the turn): the group's rows move part of the way toward the rows of the other's group if
+/// their brains have the same sizes (by the body's share of the group's members, as in `learn`), and the body's own
+/// adjustment toward the other's; less the less alike the two bodies are (size, light-capture area, strength), as a
+/// body can only copy what its own body can do.
 pub(super) fn watch(w: &mut World, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
     let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem, &w.cfg.phys)));
@@ -139,7 +139,7 @@ pub(super) fn watch(w: &mut World, b: &mut Body, s: usize) {
     if og != g && w.life.shape_of(ol) == w.life.shape_of(b.lineage) {
         let (lo, hi) = w.life.groups.split_at_mut(g.max(og));
         let (mine, theirs) = if g < og { (&mut lo[g], &hi[0]) } else { (&mut hi[0], &lo[og]) };
-        brain::blend(&mut mine.rows, &theirs.rows, alike / mine.members.max(1) as f32);
+        brain::blend(&mut mine.rows, &theirs.rows, (alike as f64 * b.n() / mine.count.max(b.n())) as f32);
     }
     let same = (ol == b.lineage) as u8 as f64;
     w.events.push(Event { day: w.day, kind: EventKind::Watched { by: g as u32, of: og as u32 }, node: b.cell, value: same });

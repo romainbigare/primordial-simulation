@@ -253,7 +253,9 @@ fn place_child(w: &mut World, slot: usize, b: &Body, l: &Litter, mut c: Body, ro
         for m in open(w, s, k) {
             w.life.bodies[m].wear = 0.0;
         }
-        let c = &mut w.life.bodies[s];
-        (c.count, c.spread, c.row_spread) = (1.0, Vec::new(), 0.0);
+        let mut c = std::mem::take(&mut w.life.bodies[s]);
+        (c.spread, c.row_spread) = (Vec::new(), 0.0);
+        w.life.set_count(&mut c, 1.0);
+        w.life.bodies[s] = c;
     }
 }

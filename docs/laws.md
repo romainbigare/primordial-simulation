@@ -515,10 +515,11 @@ Files: `core/src/choose.rs` (perception, actions), `core/src/brain.rs` (the netw
   12), bodies perceived (1 to 6), sight (1 to 4 cells). A body with no hidden units takes no
   decisions and pays nothing for a brain; its update is physics only.
 - **Shared group brains** (`choose::regroup`, monthly). Bodies that stay near each other share
-  one set of rows: the mean of their born rows plus what the group learned. A body further than
-  `leave` cells from its group's centre leaves with a copy. One that stays `stay` days within
-  `join` cells of a bigger group of its lineage joins it. What a group learned fades at the mean
-  `FORGET` rate of its members. `Config::share_brains` off gives one brain per body.
+  one set of rows: the mean of their members' born rows (a node counts its count) plus what the
+  group learned. A body further than `leave` cells from its group's centre leaves with a copy.
+  One that stays `stay` days within `join` cells of a group of its lineage with more members
+  joins it. What a group learned fades at the mean `FORGET` rate of its members. A body moves the
+  shared rows by its share of the members. `Config::share_brains` off gives one brain per body.
 
 ### 5.2 Perception
 

@@ -184,18 +184,22 @@ fn lived(share_brains: bool) -> (pcore::World, Books) {
     (w, books)
 }
 
-/// Bodies that stay together share a brain in a group, and each group knows the mean of its members' born rows.
+/// Bodies that stay together share a brain in a group, and each group knows, as members come and go, how many members
+/// its bodies hold (a node counts its count) and the mean of their born rows by members.
 #[test]
 fn a_group_holds_the_mean_of_its_members_born_rows() {
     let (a, _) = lived(true);
     let shared = a.life.groups.iter().filter(|g| g.members > 1).count();
     assert!(shared > 0, "no shared brains among {} bodies", a.life.alive().count());
+    assert!(a.life.alive().any(|b| b.count > 1.0), "no node");
     for (k, g) in a.life.groups.iter().enumerate().filter(|(_, g)| g.members > 0) {
-        let mut sum = vec![0f32; g.rows.len()];
+        let (mut sum, mut count) = (vec![0f64; g.rows.len()], 0.0);
         for b in a.life.alive().filter(|b| b.group as usize == k) {
-            sum.iter_mut().zip(a.life.born(b)).for_each(|(s, x)| *s += x / g.members as f32);
+            sum.iter_mut().zip(a.life.born(b)).for_each(|(s, &x)| *s += x as f64 * b.count);
+            count += b.count;
         }
-        let err = sum.iter().zip(g.innate()).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max);
+        assert!((g.count - count).abs() < 1e-9 * count, "group {k}: {} members, counted {count}", g.count);
+        let err = sum.iter().zip(g.innate()).map(|(x, y)| (x / count - y as f64).abs()).fold(0.0, f64::max);
         assert!(err < 1e-4, "group {k}: mean off by {err}");
     }
 }
