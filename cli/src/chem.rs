@@ -1,7 +1,9 @@
 //! `ew chem [--seed N]`: print chemistry 0 (or a generated one) as a table.
 
-use pcore::chem::Chemistry;
+use crate::args::Args;
+use pcore::chem::{Chemistry, Phase};
 use worldgen::richness::ignition;
+use worldgen::terrain::{air_column, LOOSE_M};
 
 /// Earth names of chemistry 0 (display only; the core never reads them).
 const LIBRARY: &str = include_str!("../../library/chem0.toml");
@@ -25,8 +27,12 @@ fn formula(c: &Chemistry, k: usize, sym: &[String]) -> String {
     s
 }
 
-pub fn run(args: &[String]) {
-    let seed = args.iter().position(|a| a == "--seed").and_then(|p| args.get(p + 1)).and_then(|v| v.parse::<u64>().ok());
+/// Depths of liquid, m, and temperatures, K, of the balance table.
+const DEPTHS: [f64; 3] = [10.0, 100.0, 500.0];
+const TEMPS: [f64; 3] = [278.0, 288.0, 298.0];
+
+pub fn run(args: &Args) {
+    let seed = args.value::<u64>("--seed");
     let (c, init) = match seed {
         Some(s) => worldgen::generate(s),
         None => worldgen::chemistry0(),
@@ -76,24 +82,22 @@ fn balances(c: &Chemistry, init: &worldgen::Init) {
     if pairs.is_empty() {
         return;
     }
-    let (ns, g) = (c.ns(), pcore::Config::default().gravity);
+    let (ns, column) = (c.ns(), air_column(c, init, pcore::Config::default().gravity));
     let atot: f64 = init.air.iter().map(|p| p.1).sum();
-    let m_air: f64 = init.air.iter().map(|&(k, f)| f / atot * c.subs[k].molar_mass).sum();
-    let column = pcore::units::P_REF / (g * m_air);
     let gas: Vec<f64> = (0..ns).map(|k| init.air.iter().find(|p| p.0 == k).map_or(0.0, |p| p.1 / atot * column)).collect();
     println!("\nbalance with the starting air ({column:.0} mol/m2 of air over a cell), per m2 of cell and per m3 of liquid:");
     let mut rc = pcore::change::Reactor::new(c);
     for (f, b, _, u) in pairs {
-        for depth in [10.0, 100.0, 500.0] {
-            let cols: Vec<String> = [278.0, 288.0, 298.0]
+        for depth in DEPTHS {
+            let cols: Vec<String> = TEMPS
                 .iter()
                 .map(|&t| {
                     let mut n = vec![0.0; ns];
-                    n[init.low] = depth / c.molar_volume(init.low, pcore::chem::Phase::Liquid);
-                    // The loose ground of the start: 1 m of it, by volume (`worldgen::terrain`).
+                    n[init.low] = depth / c.molar_volume(init.low, Phase::Liquid);
+                    // The loose ground of the start, by volume (`worldgen::terrain`).
                     let all: f64 = init.loose.iter().map(|p| p.1).sum();
                     for &(k, share) in &init.loose {
-                        n[k] = share / all / c.molar_volume(k, pcore::chem::Phase::Solid);
+                        n[k] = share / all * LOOSE_M / c.molar_volume(k, Phase::Solid);
                     }
                     let x = rc.balance(c, &mut n, &gas, t).iter().find(|p| p.0 == u).map_or(0.0, |p| p.1);
                     format!("{t:.0} K: {x:8.1} mol/m2 ({:.3} mol/m3)", x / depth)

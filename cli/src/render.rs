@@ -5,6 +5,22 @@ use tape::{fields, Fields};
 
 type Rgb = [u8; 3];
 
+/// Liquid deeper than this stands (a basin), m; shallower, it may flow as a river.
+pub const STANDING_M: f64 = 1.0;
+/// Liquid flux over which a dry land cell is a river in these pictures, mol/s.
+pub const RIVER_PNG: f64 = 3.0e4;
+/// The same for the web viewer: web/src/earth.ts fades a river in over log10 flux 3.6 to 4.3, half at about this
+/// (keep the two in step).
+pub const RIVER_WEB: f64 = 9.0e3;
+/// Ice thicker than this covers the map, m.
+const ICE_M: f64 = 0.05;
+/// Pixels per cell, the panels side by side and the gap between them.
+const PX: usize = 3;
+const PANELS: usize = 5;
+const GAP: usize = 4;
+/// Seconds of a year for the rain panel (1e4 mol/(m² year) is about 0.2 m of liquid).
+const YEAR_S: f64 = 3.15e7;
+
 fn lerp(a: Rgb, b: Rgb, t: f64) -> Rgb {
     let t = t.clamp(0.0, 1.0);
     [0, 1, 2].map(|c| (a[c] as f64 + (b[c] as f64 - a[c] as f64) * t) as u8)
@@ -30,12 +46,12 @@ fn map_pixel(w: &World, f: &Fields, i: usize) -> Rgb {
         let s = ((zl - f.z[i]) + (zu - f.z[i])) / w.grid.cell_m;
         (1.0 - s * 6.0).clamp(0.6, 1.3)
     };
-    let c = if f.ice[i] > 0.05 {
+    let c = if f.ice[i] > ICE_M {
         [240, 244, 250]
-    } else if f.depth[i] > 1.0 {
+    } else if f.depth[i] > STANDING_M {
         // Standing liquid: shallow light, deep dark.
         ramp(&[(1.0, [90, 160, 215]), (30.0, [50, 110, 190]), (200.0, [25, 60, 140]), (800.0, [10, 30, 80])], f.depth[i])
-    } else if flux > 3.0e4 {
+    } else if flux > RIVER_PNG {
         // Flowing liquid, mol/s, on a log scale.
         ramp(&[(4.5, [120, 175, 225]), (5.5, [50, 110, 215]), (6.5, [20, 50, 170])], flux.log10())
     } else {
@@ -44,15 +60,14 @@ fn map_pixel(w: &World, f: &Fields, i: usize) -> Rgb {
             f.z[i],
         )
     };
-    let shade = if f.depth[i] > 1.0 || flux > 3.0e4 { 1.0 } else { shade };
+    let shade = if f.depth[i] > STANDING_M || flux > RIVER_PNG { 1.0 } else { shade };
     c.map(|v| (v as f64 * shade).clamp(0.0, 255.0) as u8)
 }
 
 pub fn save(w: &World, path: &str) {
     let f = fields(w);
     let (gw, gh) = (w.grid.w, w.grid.h);
-    let s = 3; // pixels per cell
-    let panels = 5;
+    let (s, panels) = (PX, PANELS);
     // Life: mass per area of light-eaters (green) and of the other bodies (orange dots), kg/m².
     let (mut green, mut other) = (vec![0.0; w.grid.n()], vec![0.0; w.grid.n()]);
     for b in w.life.alive() {
@@ -63,7 +78,7 @@ pub fn save(w: &World, path: &str) {
     for p in w.parts.alive() {
         made[p.cell as usize] = true;
     }
-    let (pw, ph) = (gw * s * panels + (panels - 1) * 4, gh * s);
+    let (pw, ph) = (gw * s * panels + (panels - 1) * GAP, gh * s);
     let mut img = vec![255u8; pw * ph * 3];
     let n = w.grid.n();
     for i in 0..n {
@@ -72,9 +87,9 @@ pub fn save(w: &World, path: &str) {
             map_pixel(w, &f, i),
             ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),
             // Condensed substance falling, mol/(m² year), on a log scale (1e4 is about 0.2 m of liquid).
-            ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.rain[i] as f64 * 3.15e7).max(1.0).log10()),
+            ramp(&[(3.0, [235, 225, 200]), (4.0, [190, 200, 140]), (4.5, [110, 180, 110]), (5.0, [40, 110, 170]), (5.5, [20, 40, 120])], (w.rain[i] as f64 * YEAR_S).max(1.0).log10()),
             {
-                let base = if f.depth[i] > 1.0 { [40, 50, 70] } else { [90, 85, 80] };
+                let base = if f.depth[i] > STANDING_M { [40, 50, 70] } else { [90, 85, 80] };
                 ramp(&[(-1.5, base), (0.0, [60, 120, 40]), (1.5, [30, 200, 40])], green[i].max(1e-9).log10())
             },
             // Bodies moving into the cell per year, on a log scale, over the map in grey.
@@ -91,7 +106,7 @@ pub fn save(w: &World, path: &str) {
                     let c = &if dot { ramp(&[(-5.0, [255, 170, 60]), (-2.0, [255, 30, 0])], other[i].log10()) } else { *c };
                     // Made objects: a white dot in the corner.
                     let c = &if p == 3 && made[i] && dx == 0 && dy == 0 { [255, 255, 255] } else { *c };
-                    let px = p * (gw * s + 4) + x * s + dx;
+                    let px = p * (gw * s + GAP) + x * s + dx;
                     let o = ((y * s + dy) * pw + px) * 3;
                     img[o..o + 3].copy_from_slice(c);
                 }
