@@ -4,6 +4,7 @@
 use super::air;
 use super::land::NONE;
 use super::range;
+use crate::chem::Chemistry;
 use crate::grid::DIRS;
 use crate::World;
 use serde::{Deserialize, Serialize};
@@ -205,20 +206,30 @@ impl Scratch {
     pub(crate) fn view(&self) -> FlowView<'_> {
         (&self.tg, &self.bed, &self.air_of, &self.ta)
     }
-}
-/// Neighbours of cell `i` along `dirs`, or `usize::MAX` off the map.
-#[inline]
-pub(super) fn around<const N: usize>(dirs: &[(i32, i32); N], gw: usize, gh: usize, i: usize) -> [usize; N] {
-    let (x, y) = ((i % gw) as i32, (i / gw) as i32);
-    let inside = x > 0 && y > 0 && x + 1 < gw as i32 && y + 1 < gh as i32;
-    dirs.map(|(dx, dy)| {
-        let (nx, ny) = (x + dx, y + dy);
-        if inside || (nx >= 0 && ny >= 0 && (nx as usize) < gw && (ny as usize) < gh) {
-            ny as usize * gw + nx as usize
-        } else {
-            usize::MAX
+    /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
+    /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that
+    /// dissolve in the liquid (`air::dissolve`), which move with it.
+    pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {
+        self.loose.iter().copied().filter(|&k| self.sp[k].melt <= tmax && (self.sp[k].boil > tmin || dissolved && chem.subs[k].solubility > 0.0)).collect()
+    }
+    /// Loose substances solid in some node: melting above the coldest, `tmin`, K.
+    pub(super) fn solids(&self, tmin: f64) -> Vec<usize> {
+        self.loose.iter().copied().filter(|&k| self.sp[k].melt > tmin).collect()
+    }
+    /// `k` has come into the loose ground: add it to `loose` and `vary` (at the end of `vary`,
+    /// whose order sets the order of sums over it, or `in_order` of melting point).
+    pub(super) fn add_loose(&mut self, k: usize, in_order: bool) {
+        if self.loose.contains(&k) {
+            return;
         }
-    })
+        self.loose.push(k);
+        if in_order {
+            let at = self.vary.partition_point(|&x| self.sp[x].melt < self.sp[k].melt);
+            self.vary.insert(at, k);
+        } else {
+            self.vary.push(k);
+        }
+    }
 }
 
 /// Every few months: which substances are present, the slow-changing bonded ground and fixed
@@ -315,7 +326,7 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
 /// Space used only within a call, and the neighbour table (not saved).
 pub(super) fn space(w: &World, s: &mut Scratch) {
     let (n, na) = (w.grid.n(), w.grid.na());
-    s.nbr = (0..n).map(|i| around(&DIRS, w.grid.w, w.grid.h, i).map(|j| j as u32)).collect();
+    s.nbr = (0..n).map(|i| DIRS.map(|d| w.grid.step(i, d).map_or(u32::MAX, |j| j as u32))).collect();
     for v in [&mut s.rain, &mut s.sed_e, &mut s.mob] {
         *v = vec![0.0; n];
     }

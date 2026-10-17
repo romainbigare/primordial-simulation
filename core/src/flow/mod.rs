@@ -32,9 +32,20 @@ const WORK_MONTHS: u64 = 7;
 /// The slow-changing ground and the substances present are rechecked this often, months.
 const REFRESH_MONTHS: u64 = 3;
 
-/// What the bodies on cell `i` leave of carrying and creep there (1 when bare).
-pub(super) fn held(w: &World, i: usize) -> f64 {
+/// Share of carrying and creep the bodies on cell `i` leave there (1 when bare).
+fn bare_share(w: &World, i: usize) -> f64 {
     1.0 / (1.0 + w.life.sum.get(i).map_or(0.0, |s| s[1]) / w.grid.area() / w.cfg.phys.hold)
+}
+
+/// Weight of a step of `dt` seconds in a moving average over about a year.
+fn year_weight(w: &World, dt: f64) -> f32 {
+    (dt / (w.days_per_year() as f64 * DAY)) as f32
+}
+
+/// Move the moving average `avg` toward `x` by the weight `a` (`year_weight`).
+#[inline]
+fn follow(avg: &mut f32, x: f32, a: f32) {
+    *avg += (x - *avg) * a;
 }
 
 /// Advance flow by `dt` seconds: radiation every call; air and rain once `cfg.air_days` have
@@ -91,6 +102,7 @@ pub fn step(w: &mut World, dt: f64) {
     w.scratch = s;
 }
 
-pub(super) fn range(v: &[f64]) -> (f64, f64) {
+/// Lowest and highest of `v`.
+fn range(v: &[f64]) -> (f64, f64) {
     v.iter().fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)))
 }

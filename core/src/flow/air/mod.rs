@@ -23,17 +23,31 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
     w[0] * v[j[0] as usize] + w[1] * v[j[1] as usize] + w[2] * v[j[2] as usize] + w[3] * v[j[3] as usize]
 }
 
+/// Scale height of the air of node `j` (RT/(Mg), with the mean molar mass of its gases), m.
+#[inline]
+fn scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
+    R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j])
+}
+
 /// Amounts, heat capacity, mass, heights, volume and optical depth of every air node, the air
 /// each ground cell sees, and how high each gas fills its column: a gas that would condense
 /// higher up is held near the ground, by how fast its vapour pressure falls as the air cools upwards.
 pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
-    let (n, na, g, top) = (w.grid.n(), w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
     if !full {
-        for j in 0..na {
+        for j in 0..w.grid.na() {
             s.ta[j] = w.e_air[j] / s.capa[j];
         }
         return;
     }
+    nodes(w, s);
+    heights(w, s);
+    seen(w, s);
+    s.ta0.copy_from_slice(&s.ta);
+}
+
+/// Amounts, heat capacity, mass, optical depth, volume, temperature and mean height of each air node.
+fn nodes(w: &World, s: &mut Scratch) {
+    let (n, na, g, top) = (w.grid.n(), w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
     for j in 0..na {
         (s.za[j], s.nt[j], s.capa[j], s.mass[j], s.fabs[j], s.node_tmp[j]) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     }
@@ -55,9 +69,16 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
         s.vol[j] = a * l;
         s.ta[j] = w.e_air[j] / s.capa[j];
         s.gam[j] = g * s.mass[j] / s.capa[j];
-        let h = R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j]);
+        let h = scale_height(s, j, g);
         s.zair[j] = s.za[j] + h - l / (l / h).exp_m1();
     }
+}
+
+/// Which gases may condense in the column, the temperature drop of the air with height (slower
+/// where a gas condenses), and per gas and node the height its amount fills and its share in the
+/// upper half of the column.
+fn heights(w: &World, s: &mut Scratch) {
+    let (na, g, top) = (w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
     let ng = s.gas.len();
     (s.cond, s.hk, s.split) = (vec![false; ng], vec![0.0; ng * na], vec![0.0; ng * na]);
     for (gi, &k) in s.gas.iter().enumerate() {
@@ -85,7 +106,7 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
     let half = (-LN_2).exp();
     for (gi, &k) in s.gas.iter().enumerate() {
         for j in 0..na {
-            let h = (R_GAS * s.ta[j] * s.nt[j] / (g * s.mass[j])).min((top - s.za[j]).max(100.0));
+            let h = scale_height(s, j, g).min((top - s.za[j]).max(100.0));
             let (mut hk, mut split) = (h, half);
             if s.cond[gi] {
                 let t = s.ta[j] + s.gam[j] * (s.zair[j] - s.za[j]);
@@ -97,19 +118,15 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
             s.split[gi * na + j] = split;
         }
     }
-    let node: Vec<[f64; 4]> = (0..na).map(|j| [s.gam[j], s.zair[j], s.fabs[j], s.ta[j]]).collect();
+}
+
+/// The air each ground cell sees (from the four nearest nodes, `lerp`) and the layers of its column.
+fn seen(w: &World, s: &mut Scratch) {
+    let (n, g, top) = (w.grid.n(), w.cfg.gravity, w.cfg.air_top_m);
     s.lay.resize(n, [[0.0; LAYERS]; 2]);
     for i in 0..n {
-        let (j, wt, mut v) = (s.near[i], s.wt[i], [0.0; 4]);
-        for c in 0..4 {
-            let x = node[j[c] as usize];
-            for f in 0..4 {
-                v[f] += wt[c] * x[f];
-            }
-        }
-        let o = s.air_of[i] as usize;
-        s.lay[i] = column(v[2], v[0], (top - s.head[i]).max(100.0), R_GAS * s.ta[o] * s.nt[o] / (g * s.mass[o]));
-        s.seen[i] = [v[0], v[1], one_minus_exp(v[2]), s.seen[i][3], v[3]];
+        let (gam, zair, fabs, ta) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i), lerp(s, &s.ta, i));
+        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(100.0), scale_height(s, s.air_of[i] as usize, g));
+        s.seen[i] = [gam, zair, one_minus_exp(fabs), s.seen[i][3], ta];
     }
-    s.ta0.copy_from_slice(&s.ta);
 }

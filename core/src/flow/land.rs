@@ -1,4 +1,5 @@
 use super::scratch::{Latent, Scratch, Sp};
+use crate::grid::Grid;
 use crate::units::MAX_SUBSTANCES;
 use crate::World;
 
@@ -49,6 +50,35 @@ pub(super) fn lift(s: &mut Scratch, i: usize, [dz, dh]: [f64; 2]) {
 pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
     let d = rise(&s.sp[k], s.tg[i], melted(s, k, i), m, s.area);
     lift(s, i, d);
+}
+
+impl Scratch {
+    /// Put `m` mol of `k` into ground node `i` (negative `m`: take), with its heat capacity, the
+    /// fusion enthalpy it holds there when `latent` (unless `k` is on its plateau there), and the
+    /// rise of the surface. The caller moves the heat.
+    #[inline]
+    pub(super) fn put(&mut self, ground: &mut [f64], k: usize, i: usize, m: f64, latent: bool) {
+        let (n, p) = (self.cap.len(), self.sp[k]);
+        ground[k * n + i] += m;
+        self.cap[i] += m * p.cp;
+        if latent {
+            self.latent[i].held += if self.pk[i] != k { m * p.lf } else { 0.0 };
+        }
+        settle(self, k, i, m);
+    }
+}
+
+/// Solid amount of `k` in ground node `i`, mol.
+#[inline]
+pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
+    w.ground[k * w.grid.n() + i] * (1.0 - molten(s, k, i))
+}
+
+/// Temperature of ground node `i` now, K: earlier radiation and evaporation in this call may have
+/// cooled it below `tg`, and matter moved in at its own temperature (no warmer than `tg`).
+#[inline]
+pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
+    s.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(0.0)
 }
 
 /// Heat capacity, temperature, surface, head and reflectance of every ground node. Between full
@@ -139,4 +169,11 @@ pub(super) fn stand(s: &Scratch, i: usize) -> f64 {
 pub(super) fn table(s: &Scratch, i: usize, por: f64) -> f64 {
     let full = s.head[i] - s.z[i] >= s.pd[i];
     if full { s.head[i] - s.pd[i] } else { s.z[i] - s.pd[i] / por + (s.head[i] - s.z[i]) / por }
+}
+
+/// Darcy's law between two cells along `d`: the volume through their side in `dt`, m³, for a
+/// conductivity times depth filled `kd` (m²/s) and a fall `dh` of the table between them.
+#[inline]
+pub(super) fn darcy(kd: f64, grid: &Grid, d: (i32, i32), dh: f64, dt: f64) -> f64 {
+    kd * grid.cell_m * dh / grid.dist(d) * dt
 }

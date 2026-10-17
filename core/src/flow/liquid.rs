@@ -1,11 +1,10 @@
 //! Liquid over and in the loose ground: one ordered sweep by head, the springs of the bed's
 //! store, pore flow by Darcy's law, and the work moving liquid does on its bed.
 
-use super::land::{molten, settle, stand, table, wet};
-use super::{held, range, Scratch};
+use super::land::{darcy, solid, stand, t_now, table, wet};
+use super::{bare_share, follow, range, year_weight, Scratch};
 use crate::grid::DIRS;
 use crate::math::one_minus_exp;
-use crate::units::DAY;
 use crate::World;
 
 /// The lower neighbours of a node in the sweep, and what it sends each.
@@ -39,9 +38,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let (n, area, ph) = (w.grid.n(), s.area, w.cfg.phys);
     let inv = DIRS.map(|d| 1.0 / w.grid.dist(d));
     let (tmin, tmax) = range(&s.tg);
-    // (With the gases dissolved in it, which are gas at every node: `air::dissolve`.)
-    let liq: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && (s.sp[k].boil > tmin || w.chem.subs[k].solubility > 0.0)).collect();
-    let sol: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt > tmin).collect();
+    let (liq, sol) = (s.liquids(&w.chem, (tmin, tmax), true), s.solids(tmin));
     s.sed.resize(n * sol.len(), 0.0);
     // Highest head first (heads to 0.1 m, then by cell); kept between refreshes (any order is safe,
     // it only sets how far liquid gets in one call).
@@ -50,12 +47,12 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         s.order.sort_unstable();
     }
     s.done.fill(false);
-    let ema = (dt / (w.days_per_year() as f64 * DAY)) as f32;
+    let ema = year_weight(w, dt);
     let mut heat = 0.0;
     let mut wa = vec![0.0; liq.len()];
     for r in 0..n {
         let i = (s.order[r] & 0xf_ffff) as usize;
-        let (t, hd, zi) = (s.tg[i], stand(s, i), s.z[i]);
+        let (hd, zi) = (stand(s, i), s.z[i]);
         s.done[i] = true;
         let mut out = lower(s, i, &inv, ph.still);
         let mut hs = spring(w, s, i, out.qmax, dt, tmin);
@@ -79,10 +76,9 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 *qc = 0.0;
             }
         }
-        // What leaves carries the node's heat at its temperature now: earlier radiation and
-        // evaporation in this call may have cooled it below `tg`, and liquid from above mixed in
-        // at its own temperature (so a flood of cooler liquid is not sent on at the old, hotter one).
-        let tcur = t.min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(0.0);
+        // What leaves carries the node's heat at its temperature now (so a flood of cooler liquid
+        // from above is not sent on at the old, hotter one).
+        let tcur = t_now(w, s, i);
         if lvol > 0.0 && out.cnt > 0 {
             runoff(&mut out, lv0 - pores, hs, area);
         }
@@ -92,7 +88,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         let (power, sent) = if lvol > 0.0 && out.cnt > 0 { send(w, s, i, &out, (&liq, &wa), lvol, tcur) } else { (0.0, 0.0) };
         w.e_ground[i] += power;
         heat += power;
-        w.liquid_flux[i] += ((sent / dt) as f32 - w.liquid_flux[i]) * ema;
+        follow(&mut w.liquid_flux[i], (sent / dt) as f32, ema);
         // The work, on the bed below the liquid left standing (which hides it).
         let bedwork = power * work * ph.hide[1] / (ph.hide[1] + (lvol - s.pd[i] * area - out.qss).max(0.0) / area);
         if work > 0.0 && work_on_bed(w, s, i, &out, &sol, bedwork, tcur) {
@@ -138,9 +134,8 @@ fn spring(w: &mut World, s: &mut Scratch, i: usize, qmax: f64, dt: f64, tmin: f6
         for k in 0..w.chem.ns() {
             let (m, sp) = (w.deep[k * n + i] * f, s.sp[k]);
             if m > 0.0 {
-                (w.deep[k * n + i], w.ground[k * n + i], s.cap[i]) = (w.deep[k * n + i] - m, w.ground[k * n + i] + m, s.cap[i] + m * sp.cp);
-                s.latent[i].held += if s.pk[i] != k { m * sp.lf } else { 0.0 };
-                settle(s, k, i, m);
+                w.deep[k * n + i] -= m;
+                s.put(&mut w.ground, k, i, m, true);
                 hs += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
             }
         }
@@ -188,7 +183,7 @@ fn pore_flow(w: &World, s: &Scratch, i: usize, o: &mut Outlets, dt: f64) {
             continue;
         }
         let (si, sj) = (area * if s.head[i] - zi >= s.pd[i] { 1.0 } else { por }, area * if s.head[j] - s.z[j] >= s.pd[j] { 1.0 } else { por });
-        let v = (w.cfg.phys.seep * b * w.grid.cell_m * dh / w.grid.dist(DIRS[d]) * dt).min(0.5 * dh / (1.0 / si + 1.0 / sj));
+        let v = darcy(w.cfg.phys.seep * b, &w.grid, DIRS[d], dh, dt).min(0.5 * dh / (1.0 / si + 1.0 / sj));
         if v <= 0.0 {
             continue;
         }
@@ -213,15 +208,12 @@ fn send(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, (liq, wa): (&[usi
     for (&a, &k) in wa.iter().zip(liq).filter(|p| *p.0 > 0.0) {
         let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
         let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], m, p.cp, m * (p.cp * tcur + p.lf));
-        (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
-        s.latent[i].held -= if s.pk[i] != k { m * p.lf } else { 0.0 };
-        settle(s, k, i, -m);
+        s.put(&mut w.ground, k, i, -m, true);
         sent += m;
         for ((&(j, _), &dh), &q) in o.nb[..o.cnt].iter().zip(&o.fall).zip(&o.q).filter(|p| *p.1 > 0.0) {
             let (m, e) = (m * q * inv, e * q * inv);
-            (w.ground[k * n + j], s.cap[j], w.e_ground[j]) = (w.ground[k * n + j] + m, s.cap[j] + m * p.cp, w.e_ground[j] + e);
-            s.latent[j].held += if s.pk[j] != k { m * p.lf } else { 0.0 };
-            settle(s, k, j, m);
+            w.e_ground[j] += e;
+            s.put(&mut w.ground, k, j, m, true);
             power += m * p.mm * g * dh;
         }
     }
@@ -234,7 +226,7 @@ fn send(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, (liq, wa): (&[usi
 fn work_on_bed(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, sol: &[usize], bedwork: f64, tcur: f64) -> bool {
     let ns = sol.len();
     let load: f64 = sol.iter().enumerate().map(|(si, &k)| s.sed[i * ns + si] * s.sp[k].v[0]).sum();
-    let capv = w.cfg.carry * bedwork * held(w, i);
+    let capv = w.cfg.carry * bedwork * bare_share(w, i);
     if load <= 0.0 && capv < 1.0 {
         return false;
     }
@@ -250,13 +242,11 @@ fn work_on_bed(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, sol: &[usi
 
 /// Drop a share `f` of the load carried into node `i`, with its heat.
 fn drop_load(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], f: f64) {
-    let (n, ns) = (w.grid.n(), sol.len());
+    let ns = sol.len();
     for (si, &k) in sol.iter().enumerate() {
         let m = s.sed[i * ns + si] * f;
         s.sed[i * ns + si] -= m;
-        w.ground[k * n + i] += m;
-        s.cap[i] += m * s.sp[k].cp;
-        settle(s, k, i, m);
+        s.put(&mut w.ground, k, i, m, false);
     }
     w.e_ground[i] += s.sed_e[i] * f;
     s.sed_e[i] -= s.sed_e[i] * f;
@@ -265,19 +255,16 @@ fn drop_load(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], f: f64) {
 /// Pick up loose solids of node `i` up to `room` m³ more of load (no more than half of each),
 /// with their heat at `tcur`; less is picked up if the node cannot pay.
 fn pick_up(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], room: f64, tcur: f64) {
-    let (n, ns) = (w.grid.n(), sol.len());
-    let solid = |k: usize| w.ground[k * n + i] * (1.0 - molten(s, k, i));
-    let avail: f64 = sol.iter().map(|&k| solid(k) * s.sp[k].v[0]).sum();
+    let ns = sol.len();
+    let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
     let f = if avail > 0.0 { (room / avail).min(0.5) } else { 0.0 };
     for (si, &k) in sol.iter().enumerate() {
         if f > 0.0 {
-            let m = w.ground[k * n + i] * (1.0 - molten(s, k, i)) * f;
+            let m = solid(w, s, k, i) * f;
             let (m, e) = w.take_paid(i, m, s.sp[k].cp, m * s.sp[k].cp * tcur);
-            w.ground[k * n + i] -= m;
+            s.put(&mut w.ground, k, i, -m, false);
             s.sed[i * ns + si] += m;
-            s.cap[i] -= m * s.sp[k].cp;
             s.sed_e[i] += e;
-            settle(s, k, i, -m);
         }
     }
 }
@@ -296,10 +283,7 @@ fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
             w.ground[k * n + i] += m;
             s.bed[i][1] -= m * s.sp[k].v[0];
             s.cap[i] += m * s.sp[k].cp;
-            if !s.loose.contains(&k) {
-                s.loose.push(k);
-                s.vary.push(k);
-            }
+            s.add_loose(k, false);
         }
     }
 }
@@ -307,7 +291,7 @@ fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
 /// Carry the load of node `i` on with the runoff, its heat and the head it loses: into the load of
 /// an outlet still to come, or onto the ground of one already done.
 fn carry(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, sol: &[usize], heat: &mut f64) {
-    let (n, ns, g) = (w.grid.n(), sol.len(), w.cfg.gravity);
+    let (ns, g) = (sol.len(), w.cfg.gravity);
     for (&(j, dh), &q) in o.nb[..o.cnt].iter().zip(&o.qs).filter(|p| *p.1 > 0.0) {
         let (f, mut mass) = (q / o.qss, 0.0);
         for (si, &k) in sol.iter().enumerate() {
@@ -317,9 +301,7 @@ fn carry(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, sol: &[usize], h
             }
             mass += m * s.sp[k].mm;
             if s.done[j] {
-                w.ground[k * n + j] += m;
-                s.cap[j] += m * s.sp[k].cp;
-                settle(s, k, j, m);
+                s.put(&mut w.ground, k, j, m, false);
             } else {
                 s.sed[j * ns + si] += m;
             }

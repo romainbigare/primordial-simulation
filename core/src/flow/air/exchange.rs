@@ -1,8 +1,8 @@
 use super::super::land::{melted, settle, wet};
-use super::super::{range, Scratch};
+use super::super::{follow, range, year_weight, Scratch};
 use super::lerp;
 use crate::math::one_minus_exp;
-use crate::units::{DAY, R_GAS};
+use crate::units::R_GAS;
 use crate::World;
 
 /// A gas making up less than this share of the air is a trace: it evaporates and condenses
@@ -107,9 +107,7 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             }
             let (heat, lift) = (m * sp.cp * t, m * g * sp.mm * (s.zair[j] - s.head[i]));
             settle(s, k, i, -m);
-            w.ground[k * n + i] -= m;
-            w.air[k * na + j] += m;
-            (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * sp.cp, s.capa[j] + m * sp.cp, s.nt[j] + m, s.mass[j] + m * sp.mm);
+            to_air(w, s, k, (i, j), m);
             w.e_air[j] += heat - lift;
             lifted += lift;
             if s.z[i] > 0.0 && t < sp.boil {
@@ -133,9 +131,7 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             let sp = s.sp[k];
             let (tair, lift) = (w.e_air[j] / s.capa[j], m * g * sp.mm * (s.head[i] - s.zair[j]));
             settle(s, k, i, m);
-            w.ground[k * n + i] += m;
-            w.air[k * na + j] -= m;
-            (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] + m * sp.cp, s.capa[j] - m * sp.cp, s.nt[j] - m, s.mass[j] - m * sp.mm);
+            to_air(w, s, k, (i, j), -m);
             // Condensing frees the vaporisation enthalpy into the air; the liquid keeps its fusion.
             w.e_ground[i] += m * (sp.cp * tair + sp.lf) - lift;
             w.e_air[j] += m * (sp.lv - sp.cp * tair);
@@ -153,10 +149,7 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     }
     w.ledger.gravity -= lifted;
     for (&(_, k, ..), _) in act.iter().zip(&rained).filter(|(_, &r)| r) {
-        if !s.loose.contains(&k) {
-            s.loose.push(k);
-            s.vary.push(k);
-        }
+        s.add_loose(k, false);
     }
     // Condensate in the air scatters sunlight like the powder of its solid; the faster a
     // node condenses, the more of its sky it covers.
@@ -165,13 +158,21 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
         let rate = m / (area * s.cells[j] * dt);
         s.node_tmp[j] = if m > 0.0 { rate / (rate + w.cfg.cloud) * mr / m } else { 0.0 };
     }
-    let ema = (dt / (w.days_per_year() as f64 * DAY)) as f32;
+    let ema = year_weight(w, dt);
     for i in 0..n {
         s.seen[i][3] = lerp(s, &s.node_tmp, i);
-        let r = (s.rain[i] / (area * dt)) as f32;
-        w.rain[i] += (r - w.rain[i]) * ema;
+        follow(&mut w.rain[i], (s.rain[i] / (area * dt)) as f32, ema);
         s.rain[i] = 0.0;
     }
+}
+
+/// Move `m` mol of gas `k` from ground node `i` to air node `j` (negative `m`: from the air to the
+/// ground), with its heat capacity and mass. The caller moves the heat and the surface.
+fn to_air(w: &mut World, s: &mut Scratch, k: usize, (i, j): (usize, usize), m: f64) {
+    let (n, na, p) = (w.grid.n(), w.grid.na(), s.sp[k]);
+    w.ground[k * n + i] -= m;
+    w.air[k * na + j] += m;
+    (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * p.cp, s.capa[j] + m * p.cp, s.nt[j] + m, s.mass[j] + m * p.mm);
 }
 
 /// Gases that cannot condense on the ground (`henry`: index in `gas`, substance) dissolve in the
@@ -185,7 +186,7 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
 /// Returns the energy spent lifting gas, J.
 fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) -> f64 {
     let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
-    let solv: Vec<usize> = s.loose.iter().copied().filter(|&k| s.sp[k].melt <= tmax && s.sp[k].boil > tmin).collect();
+    let solv = s.liquids(&w.chem, (tmin, tmax), false);
     let mut lifted = 0.0;
     for i in 0..n {
         let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
@@ -216,17 +217,13 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             if m > 0.0 {
                 w.e_ground[i] += heat + m * (sp.lf + sp.lv) - lift;
             }
-            w.ground[k * n + i] += m;
-            w.air[k * na + j] -= m;
-            (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] + m * sp.cp, s.capa[j] - m * sp.cp, s.nt[j] - m, s.mass[j] - m * sp.mm);
+            to_air(w, s, k, (i, j), -m);
             lifted += lift;
         }
     }
     for &(_, k) in henry {
-        if !s.loose.contains(&k) && (0..n).any(|i| w.ground[k * n + i] > 0.0) {
-            s.loose.push(k);
-            let at = s.vary.partition_point(|&x| s.sp[x].melt < s.sp[k].melt);
-            s.vary.insert(at, k);
+        if (0..n).any(|i| w.ground[k * n + i] > 0.0) {
+            s.add_loose(k, true);
         }
     }
     lifted
