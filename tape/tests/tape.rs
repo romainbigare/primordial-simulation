@@ -308,8 +308,7 @@ fn null_run_freezes_the_brain_rows() {
         let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();
         run(&mut w, 24);
         // (Rows of the starting shape only: genes still mutate in a null run, and a lineage whose size genes moved a whole unit
-        // has rows of another length, carried over from the starting ones; with two more substances, 16 Oct 2026, two such
-        // appeared in the null run's 24 years, with fewer hidden units.)
+        // has rows of another length, carried over from the starting ones.)
         let out = |r: &Vec<f32>| r.len() == lo.len() && r.iter().enumerate().any(|(k, &x)| x < lo[k] - 1e-5 || x > hi[k] + 1e-5);
         let new = w.life.genomes.iter().filter(|g| !g.rows.is_empty() && out(&g.rows)).count();
         let moved = w.life.alive().filter(|b| b.adj.iter().any(|&x| x != 0.0)).count();
