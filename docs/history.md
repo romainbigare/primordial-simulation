@@ -354,3 +354,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   store beyond the dead members' share comes from the members who live. 64 x 64, seeds 1 and 2, with the start
   above: bites fall from 0.2% to 0.004% of plant deaths in years 3 to 21; plant members at year 30 +7% (seed 1)
   and -17% (seed 2); golden re-pinned.
+
+**Phase D: the physics laws on the new base**
+
+- D0: `store::apply` keeps its working space between calls (`store::Booking`, `World::booking`, not saved) and works on
+  the numbers its changes touch alone, not on zeroed arrays of the whole world; it books each link flux one column
+  (substance or heat) at a time, so a flux names each substance once. Same results bit for bit. Heat on the 64,770
+  cell links of 128 x 128: from 6.1 ms (43 times a plain loop) to 0.35 to 0.4 ms (2.6 to 3 times).

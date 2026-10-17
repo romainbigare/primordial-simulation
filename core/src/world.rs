@@ -70,6 +70,9 @@ pub struct World {
     /// The id, class, parent and cell of every node (built from the grid, `store::Nodes::of_grid`, so not saved)
     #[serde(skip)]
     pub table: crate::store::Nodes,
+    /// The working space of `store::apply`, kept between its calls (not saved)
+    #[serde(skip)]
+    pub booking: crate::store::Booking,
     /// Seed of every keyed random draw (`rng::Rng`)
     pub seed: u64,
     /// World clock, seconds since the start (`clock`)

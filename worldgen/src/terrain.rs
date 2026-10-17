@@ -176,6 +176,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         cfg,
         chem,
         table: Nodes::of_grid(&grid),
+        booking: Default::default(),
         grid,
         seed,
         time: 0,

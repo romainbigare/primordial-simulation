@@ -91,7 +91,8 @@ fn random_round(w: &mut World, r: &mut Rng) {
     let class = CLASSES[r.below(3)];
     let len = arrays(w, class).2;
     let (a, b): (Vec<u32>, Vec<u32>) = (0..per).map(|_| (r.below(len) as u32, r.below(len) as u32)).unzip();
-    let ks = [r.below(ns) as u16, r.below(ns) as u16];
+    let k = r.below(ns);
+    let ks = [k, (k + 1 + r.below(ns - 1)) % ns].map(|k| k as u16);
     let (mut mol, mut heat) = (Vec::new(), Vec::new());
     // + from a to b, or back: each takes from the end it leaves.
     let sign = |r: &mut Rng, l: usize| if r.below(2) == 0 { (a[l], 1.0) } else { (b[l], -1.0) };

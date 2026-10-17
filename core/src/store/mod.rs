@@ -7,7 +7,7 @@ pub mod moves;
 pub mod nodes;
 
 pub use links::Links;
-pub use moves::{apply, held, LinkFlux, Move, Transform};
+pub use moves::{apply, held, Booking, LinkFlux, Move, Transform};
 pub use nodes::{Boundary, Class, NodeId, Nodes, BOUNDARIES};
 
 use crate::World;
