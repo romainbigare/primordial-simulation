@@ -1,8 +1,11 @@
 //! Ground nodes: their heat capacity and temperature on the melting plateaus (`ground_state`),
-//! the phase of each substance, the surface and heads, and putting matter into a node.
+//! the phase of each substance, the surface and heads, putting matter into a node, and heat
+//! conducted sideways between nodes (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
 use crate::grid::Grid;
+use crate::solve::spread::{Net, Spread};
+use crate::store::{apply, Class, LinkFlux};
 use crate::units::{MAX_SUBSTANCES, T_FLOOR};
 use crate::World;
 
@@ -138,6 +141,43 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             surface(w, s, i);
         }
     }
+}
+
+/// Heat conducts sideways through the active layer of the ground over `dt` seconds: one backward-Euler step on the cell
+/// level's links (`solve::spread`), booked as heat-only link fluxes (`store::apply`). The potential is each node's
+/// temperature of the last `ground_state` and its capacity the heat capacity `cap`. A node on a melting plateau holds
+/// its temperature in truth, so within the step it is given its share as if it warmed; the books are the fluxes, and
+/// the next `ground_state` sets each node's temperature from its energy, plateaus included. A link passes the harmonic
+/// mean of its nodes' conductivity times thickness (two half cells in series, Patankar 1980, 4.2) times its width
+/// over its length: a corner-only diagonal (width 0) passes nothing and is left out.
+pub(super) fn conduct(w: &mut World, s: &Scratch, dt: f64) {
+    let (n, cells) = (w.grid.n(), w.grid.mesh().cells());
+    // Conductivity times thickness of each node's active layer, W/K: the skin of its bed and the solid and liquid
+    // of its loose ground, side by side.
+    let mut kt: Vec<f64> = s.bed.iter().map(|b| b.cond * w.cfg.skin_m).collect();
+    for &k in &s.loose {
+        let p = s.sp[k];
+        for (i, x) in kt.iter_mut().enumerate() {
+            let a = w.ground[k * n + i];
+            if a > 0.0 {
+                *x += a * ((1.0 - molten(s, k, i)) * p.v[0] + wet(s, k, i) * p.v[1]) * p.cond / s.area;
+            }
+        }
+    }
+    let (mut a, mut b, mut g) = (Vec::new(), Vec::new(), Vec::new());
+    for (l, (&i, &j)) in cells.a().iter().zip(cells.b()).enumerate() {
+        let (ki, kj) = (kt[i as usize], kt[j as usize]);
+        let gl = 2.0 * ki * kj / (ki + kj).max(f64::MIN_POSITIVE) * cells.width()[l] / cells.dist()[l];
+        if gl > 0.0 {
+            a.push(i);
+            b.push(j);
+            g.push(gl);
+        }
+    }
+    let (cap, mut t, mut heat) = (s.cap.iter().map(|&c| c.max(1.0)).collect::<Vec<_>>(), s.tg.clone(), vec![0.0; a.len()]);
+    // At most as many iterations as nodes: the solve stops once converged, in a few where links pass little.
+    Spread::default().step(&Net { a: &a, b: &b, g: &g, cap: &cap }, &mut t, dt, n, &mut heat);
+    apply(w, &[LinkFlux { class: Class::Ground, a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[], &[]);
 }
 
 /// Solid surface, head, heat resistance of the soft cover and reflectance of node `i`, from

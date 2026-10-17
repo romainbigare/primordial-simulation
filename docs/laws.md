@@ -20,7 +20,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | the shape of the world | `space/` (`Mesh`: levels of cells and links with their widths, parents and children; `square`: the square map; `stack`: layers above and below a cell); `grid.rs` is a thin view on it |
 | the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `lines`: the implicit step along a line) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
-| ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`) |
+| ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`); `flow::land::conduct` (sideways) |
 | 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind`, `sky`); `lanes.rs` (paths) |
 | 2 Change | `change/` (`mod`, `kernel`, `balance`, `screen`, `gas`); the chemistry in `chem/` (`mod`, `thermo`, `roles`) |
 | 3 Bond | `bond/` (`mod`, `verbs`, `sense`, `month`) |
@@ -63,7 +63,8 @@ one month per call of `step` (`core/src/schedule.rs`). Each process has a period
 Inside Flow (`flow::step`): radiation every call. Each other part has its own period and runs
 when that period is over, for all the time since: evaporation and rain every `exchange_days`
 (3), wind every `air_days` (3), liquid and drainage every `flow_days` (15), the work of moving
-liquid every 7 months (`WORK_MONTHS`), creep once a year.
+liquid every 7 months (`WORK_MONTHS`), heat conducted sideways through the ground and creep once a
+year.
 
 **Sleep and wake** (`clock::Sleep`). A node's own process may sleep while the node is calm: until an
 alarm time, or until a change booked by `store::apply` brings the node more than `wake_share` (5%) of
@@ -104,8 +105,16 @@ amounts now).
 
 - **Heat of the ground.** Only the top `skin_m` metres of ground trade heat with the surface,
   plus everything that lies on it (liquid, ice, cover). The ground's temperature comes from its
-  energy and its heat capacity. Ground nodes do not pass heat to each other through the ground:
-  heat goes from cell to cell only with moving matter and through the air.
+  energy and its heat capacity.
+- **Heat conducted sideways** (`flow::land::conduct`, once a year). Heat goes from cell to
+  cell through the ground's active layer as one implicit step along the links with a shared border
+  (`solve::spread`, booked by `store::apply`). Each node holds its heat capacity per kelvin; a link
+  passes the harmonic mean of its two nodes' conductivity × thickness (the bed's skin, `skin_m` of
+  its mean conductivity, beside the solid and liquid of the loose ground) times its width over its
+  length (Patankar 1980). A node on a melting plateau takes its share as if it warmed; the next
+  ground state sets its temperature from its energy. On 2 km cells this is slow: a hot spot in rock
+  spreads by one cell in about 70,000 years. So it runs once a year, for the whole year in one
+  step; the implicit step holds for any length.
 - **Melting plateaus** (`ground::melting`). A ground node holds the melting heat (fusion
   enthalpy) of what is molten in it. So it stays at a melting point until that substance has all
   frozen or all melted. Each substance melts at its own melting point **in that node**, lowered

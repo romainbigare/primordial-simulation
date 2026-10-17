@@ -342,6 +342,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   `--roster` to year 22, where 230 links are worn); golden re-pinned and `SNAPSHOT_VERSION` 8, since the saved field
   changes its layout. The `worn` layer of the viewer now shows the most worn of all links of a cell, not only of its
   east and south ones.
+- D1: heat conducts sideways through the ground once a year (`flow::land::conduct`: `solve::spread` on the cell links
+  with a shared border, booked as heat-only link fluxes by `store::apply`), with the bed's mean conductivity kept in
+  `Scratch::bed`. It was removed from the yearly creep before (`5f7b59a`); creep keeps only the loose solids that slide
+  with their heat. Snapshot version 9, golden re-pinned.
 
 **Owner's decisions after Phase A**
 

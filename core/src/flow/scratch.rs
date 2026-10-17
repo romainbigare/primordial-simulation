@@ -53,6 +53,8 @@ pub(super) struct Bed {
     pub(super) vol: f64,
     /// Mean reflectance
     pub(super) refl: f64,
+    /// Mean heat conductivity by volume, W/(m K)
+    pub(super) cond: f64,
 }
 
 /// What Law 2 reads of the last flow step (`Scratch::view`).
@@ -322,13 +324,14 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     }
     s.bed = (0..n)
         .map(|i| {
-            let (mut v, mut r) = (0.0, 0.0);
+            let (mut v, mut r, mut c) = (0.0, 0.0, 0.0);
             for &k in &s.bedk {
-                let b = w.bed[k * n + i];
-                v += b * s.sp[k].v[0];
-                r += b * s.sp[k].v[0] * s.sp[k].refl[0];
+                let (b, p) = (w.bed[k * n + i], &s.sp[k]);
+                v += b * p.v[0];
+                r += b * p.v[0] * p.refl[0];
+                c += b * p.v[0] * p.cond;
             }
-            Bed { vol: v, refl: r / v.max(V_MIN) }
+            Bed { vol: v, refl: r / v.max(V_MIN), cond: c / v.max(V_MIN) }
         })
         .collect();
     if s.cap.len() == n {

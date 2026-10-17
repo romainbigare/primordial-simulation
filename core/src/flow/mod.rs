@@ -4,7 +4,8 @@
 //! loose solids); what is over that stands and runs down its head in one ordered sweep; the pore
 //! liquid flows by Darcy's law, and drains to the channels inside a cell (`Physics::hill`) and into
 //! the store of the bed below (`drain`); the head lost heats the ground and does work, carrying
-//! loose solids and breaking weak bonds; loose solids creep downhill. Air nodes
+//! loose solids and breaking weak bonds; loose solids creep downhill; heat conducts sideways
+//! through the ground's active layer. Air nodes
 //! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
 //! overturning and mixing. Every move takes from one node exactly what it gives to another, with
 //! its heat; lifting matter takes heat and a fall gives it back, the difference held as the world's
@@ -41,8 +42,9 @@ const REFRESH_MONTHS: u64 = 3;
 /// A trace gas (`air::exchange`) evaporates and condenses only at every this many exchanges,
 /// for all the time since.
 const TRACE_TURN: u32 = 4;
-/// Creep (with the regrowth of bodies) runs once in this many years, at
-/// the first liquid step of the year, for all that time.
+/// Heat conducted sideways through the ground, and creep (with the regrowth of bodies), run once in
+/// this many years, at the first liquid step of the year, for all that time: on cells of kilometres
+/// both are slow, and the implicit spread holds for any step.
 const CREEP_YEARS: u64 = 1;
 /// A part of the law is due this many seconds before its period is full (so that a period made
 /// of whole steps is not missed by rounding).
@@ -53,7 +55,8 @@ const DUE_SLACK: f64 = 1.0;
 /// period has passed, for all the time since: the exchange of the ground with the air
 /// (`air::exchange`, every `cfg.exchange_days`), the wind (`air::wind`, every `cfg.air_days`),
 /// liquid (`liquid`, its work on the bed every `WORK_MONTHS`) and drainage (`drain`) every
-/// `cfg.flow_days`, and creep every `CREEP_YEARS` (`creep`); every `REFRESH_MONTHS` the slow
+/// `cfg.flow_days`, and heat conducted sideways through the ground (`land::conduct`) and creep
+/// every `CREEP_YEARS` (`creep`); every `REFRESH_MONTHS` the slow
 /// ground is rechecked (`refresh`).
 pub fn step(w: &mut World, dt: f64) {
     ensure(w);
@@ -88,6 +91,7 @@ pub fn step(w: &mut World, dt: f64) {
         let year = w.time / period;
         if s.year != Some(year) {
             if s.year.is_some() {
+                land::conduct(w, &s, period as f64);
                 creep(w, &mut s, period as f64);
             }
             s.year = Some(year);
@@ -97,6 +101,16 @@ pub fn step(w: &mut World, dt: f64) {
         refresh(w, &mut s);
     }
     s.month = Some(month);
+    w.scratch = s;
+}
+
+/// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`) from the world as it is, and nothing
+/// else of Flow moves.
+pub fn conduct(w: &mut World, dt: f64) {
+    ensure(w);
+    let mut s = std::mem::take(&mut w.scratch);
+    ground_state(w, &mut s, false);
+    land::conduct(w, &s, dt);
     w.scratch = s;
 }
 

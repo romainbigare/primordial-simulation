@@ -112,6 +112,46 @@ fn warm_air_spreads() {
     books.assert_within(&warm, 1e-12, 1e-9);
 }
 
+/// Heat spreads sideways through flat, even ground as diffusion does: on the bed of one land cell everywhere with no
+/// loose ground, a hot spot keeps its excess heat while its variance grows by 2 D t along each axis, D = k / (rho c) of
+/// the bed (backward Euler on an open lattice gives just that growth at any step length).
+#[test]
+fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    let (n, ns, g) = (w.grid.n(), w.chem.ns(), w.grid.clone());
+    let land = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
+    let (mut cp, mut vol, mut kv) = (0.0, 0.0, 0.0);
+    for k in 0..ns {
+        let (b, v) = (w.bed[k * n + land], w.chem.molar_volume(k, Phase::Solid));
+        (cp, vol, kv) = (cp + b * w.chem.subs[k].cp, vol + b * v, kv + b * v * w.chem.subs[k].conductivity);
+        w.bed[k * n..(k + 1) * n].fill(b);
+        w.ground[k * n..(k + 1) * n].fill(0.0);
+    }
+    let mid = g.idx(g.w / 2, g.h / 2);
+    for i in 0..n {
+        w.e_ground[i] = w.energy_ground(i, if i == mid { 310.0 } else { 300.0 });
+    }
+    w.scratch = Default::default();
+    let (books, base, hot) = (Books::now(&w), w.energy_ground(0, 300.0), w.e_ground[mid] - w.energy_ground(0, 300.0));
+    // Spread to a standard deviation of one cell, in ten steps (the edges, 7 cells off, then reflect almost nothing).
+    let d = kv / cp;
+    let t = g.cell_m * g.cell_m / (2.0 * d);
+    (0..10).for_each(|_| pcore::flow::conduct(&mut w, t / 10.0));
+    let (mx, my) = g.xy(mid);
+    let (mut sum, mut var) = (0.0, [0.0; 2]);
+    for i in 0..n {
+        let ((x, y), q) = (g.xy(i), w.e_ground[i] - base);
+        sum += q;
+        for (v, c) in var.iter_mut().zip([x as f64 - mx as f64, y as f64 - my as f64]) {
+            *v += q * (c * g.cell_m).powi(2);
+        }
+    }
+    println!("diffusivity {d:.2e} m2/s over {:.0} years: variance {:.6} and {:.6} of 2 D t", t / DAY / 365.0, var[0] / sum / (2.0 * d * t), var[1] / sum / (2.0 * d * t));
+    assert!((sum / hot - 1.0).abs() < 1e-9, "excess heat {sum} of {hot}");
+    assert!(var.iter().all(|v| (v / sum / (2.0 * d * t) - 1.0).abs() < 1e-4), "variance {var:?} of {}", 2.0 * d * t * sum);
+    books.assert_within(&w, 1e-12, 1e-12);
+}
+
 /// More heat-absorbing gas keeps warming the ground: under 240 W/m² of sunlight, with the air following the ground by
 /// the lapse rate, the balance at optical depth 17 is clearly warmer than at 9 (one slab at the air's mean temperature
 /// would give both the same).

@@ -37,7 +37,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `air_days` | days | speed-tool setting: how often air moves between nodes | the same run: 3 days loses nothing against 15 once moisture moves every 3 | tuned |
 | `exchange_days` | days | speed-tool setting: how often evaporation and rain run | the same run | tuned |
 | `flow_days` | days | speed-tool setting: how often liquid moves | the same run | tuned |
-| `skin_m` | m | depth of ground that exchanges heat with the surface | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked) | anchored |
+| `skin_m` | m | depth of ground that exchanges heat with the surface and conducts it sideways | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |
 | `gravity` | m/s² | pull of the planet | 9.81 | physical |
 | `sensible` | W/(m² K) | heat passed between ground and the air touching it (not bodies: they go by `wind_ground`, their size and `forced`) | measured bulk exchange over land in wind, 5 to 30 (unchecked) | anchored |
