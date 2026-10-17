@@ -13,25 +13,20 @@ pub struct Life {
     free: Vec<u32>,
     /// Bodies in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
-    /// Per cell, from the last survey: members, then the visible traits summed over them (mass
-    /// and light-capture area are the totals)
+    /// Per cell, from the last survey: members, then their visible traits summed (mass and capture area are totals)
     pub sum: Vec<[f64; 7]>,
-    /// Per cell, from the last survey: the share of the light reaching its bodies' capture area
-    /// that they absorb (1 - their reflectance, weighted by the light each catches)
+    /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
     #[serde(skip)]
     pub absorb: Vec<f32>,
-    /// Per body slot, from the last survey: its light per m² of capture area over its cell's
-    /// mean (`World::light`), by the shade of the taller members above it (`shade`)
+    /// Per body slot, from the last survey: its light per m² of capture area over its cell's mean (`survey::shade`)
     #[serde(skip)]
     pub shade: Vec<f64>,
-    /// Per cell, from the last survey: the share of that absorbed light set aside for what its
-    /// bodies' light reactions store (`World::light_keep`, weighted by the light each absorbs)
+    /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
     #[serde(skip)]
     pub keep: Vec<f32>,
     /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
     pub env: Vec<[f64; 3]>,
-    /// Per cell, from the last monthly survey: its loose substances as a brain perceives them,
-    /// [cell * substances + k]
+    /// Per cell, from the last monthly survey: its loose substances as a brain perceives them, [cell * substances + k]
     pub seen: Vec<f32>,
     /// Per cell, from the last survey: what a brain perceives of it as a place to move to
     #[serde(skip)]
@@ -53,39 +48,34 @@ pub struct Life {
     pub updates: u64,
 }
 
-/// Born brain rows and how many living bodies were born with them. Most children are born
-/// with their parent's; a few with a changed copy (`copy`).
+/// Born brain rows and how many living bodies were born with them (most children share their parent's, `copy`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Genome {
     pub rows: Vec<f32>,
     pub bodies: u32,
 }
 
-/// What the bodies of a lineage share: the sizes of their brain and senses, the base of
-/// the brain (its hidden layer), and where it came from.
+/// What the bodies of a lineage share: the sizes of their brain and senses, the base of the brain (its hidden layer),
+/// and where it came from.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Lineage {
     pub shape: Shape,
     pub seen: usize,
     pub sight: usize,
     pub base: Vec<f32>,
-    /// The row of the starting kinds this lineage descends from (set where a kind is placed,
-    /// inherited by every lineage made from another one): only a label, for tallies by origin.
+    /// The starting kind this lineage descends from (inherited by every lineage made from it): a label for tallies
     pub root: u32,
 }
 
 impl Lineage {
-    /// A brain of no hidden units is no brain (zero is a size): its bodies take no decisions and
-    /// pay nothing for a brain (no decision, learning or signal); their update is their physics
-    /// only (`body::day`). A lineage gets there by evolution, as it saves the cost.
+    /// A brain of no hidden units is no brain: its bodies take no decisions and pay nothing for a brain; their update is
+    /// their physics only (`survey::day`).
     pub fn none(&self) -> bool {
         self.shape.h == 0
     }
-    /// Energy one decision takes, J per kg of a member of `Physics::m_ref` kg (`Physics::think`
-    /// gives it for a member of another mass); none without a brain. It goes with the body's own
-    /// size genes, not the lineage's rounded sizes it thinks with (they differ by less than a
-    /// unit): so a smaller brain pays less at once, and selection can lead a node's sizes down,
-    /// to none, a unit at a time.
+    /// Energy one decision takes, J per kg of a member of `Physics::m_ref` kg (`Physics::think`); none without a brain.
+    /// It goes with the body's own size genes, not the lineage's rounded sizes, so a smaller brain pays less at once and
+    /// selection can lead a node's sizes down, to none.
     pub fn cost(&self, p: &crate::Physics, genes: &[f32]) -> f64 {
         if self.none() {
             return 0.0;
@@ -95,9 +85,8 @@ impl Lineage {
     }
 }
 
-/// Bodies that stayed near each other share the rows of one brain: the mean of the rows they
-/// were born with, plus what the group learned (by learning and watching). `rows` holds that
-/// sum, kept up to date as members come and go.
+/// Bodies that stayed near each other share the rows of one brain (`rows`): the mean of the rows they were born with,
+/// plus what the group learned, kept up to date as members come and go.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Group {
     pub lineage: u32,
@@ -106,13 +95,12 @@ pub struct Group {
     pub sx: i64,
     pub sy: i64,
     pub rows: Vec<f32>,
-    /// Sums of the members' born rows (kept up to date as members come and go, and rebuilt
-    /// from the members at the start of each month, so a run resumed from a snapshot goes on
-    /// the same; not saved); and of their forgetting rates
+    /// Sums of the members' born rows (kept up to date as members come and go, and rebuilt from the members each month,
+    /// `resum`; not saved); and of their forgetting rates
     #[serde(skip)]
     pub sum: Vec<f32>,
-    /// Members of its bodies (a node counts its count), as of the start of the month (not saved;
-    /// rebuilt with `sum`): a body's decisions move the shared rows by its share of them
+    /// Members of its bodies (a node counts its count), as of the start of the month (rebuilt with `sum`, not saved): a
+    /// body's decisions move the shared rows by its share of them
     #[serde(skip)]
     pub count: f64,
     pub forget: f32,
@@ -150,8 +138,7 @@ impl Life {
         self.members.push(0);
         (self.brains.len() - 1) as u32
     }
-    /// A new group of `lineage` with these rows (its first member brings its born rows, and
-    /// the difference counts as learned).
+    /// A new group of `lineage` with these rows (the difference from its first member's born rows counts as learned).
     pub fn new_group(&mut self, lineage: u32, rows: Vec<f32>) -> u32 {
         let i = free_place(&mut self.groups, &mut self.free_groups);
         self.groups[i] = Group { lineage, rows, ..Default::default() };
@@ -175,9 +162,8 @@ impl Life {
     pub fn born(&self, b: &Body) -> &[f32] {
         &self.genomes[b.genome as usize].rows
     }
-    /// Count body `b` into group `g` (`d` = 1) or out of it (`d` = -1): its cell in the centre,
-    /// its born rows in the sum (the rows shift by the change of the mean, so what the group
-    /// learned stays), its forgetting rate.
+    /// Count body `b` into group `g` (`d` = 1) or out of it (`d` = -1): its cell, its born rows (the rows shift by the
+    /// change of the mean, so what the group learned stays) and its forgetting rate.
     pub(crate) fn enrol(&mut self, g: u32, b: &Body, d: i64) {
         self.shift(g, b.cell, d);
         let (gr, born) = (&mut self.groups[g as usize], &self.genomes[b.genome as usize].rows);
@@ -198,8 +184,7 @@ impl Life {
             *s = s1;
         }
     }
-    /// Rebuild the groups' sums of born rows and their counts of members from their bodies, in slot
-    /// order.
+    /// Rebuild the groups' sums of born rows and their counts of members from their bodies, in slot order.
     pub fn resum(&mut self) {
         for g in self.groups.iter_mut() {
             g.sum.clear();
@@ -218,7 +203,7 @@ impl Life {
         let gr = &mut self.groups[g as usize];
         (gr.sx, gr.sy) = (gr.sx + d * x, gr.sy + d * y);
     }
-    /// Place a new body on `day`; it first updates `delay` days later (1..=360).
+    /// Place a new body on `day`; it first updates `delay` days later (1..=`MAX_INTERVAL`).
     pub fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
         let slot = free_place(&mut self.bodies, &mut self.free);
         (b.gen, b.alive, b.last, b.count) = (self.bodies[slot].gen, true, day, b.n());
@@ -275,8 +260,8 @@ impl Life {
         self.unref(b.genome);
         (b.genome, b.genes, b.k) = (g, new.genes, Consts::default());
     }
-    /// `enrol(g, new, 1)` then `enrol(g, old, -1)` (a body changes its born rows within its group),
-    /// the same sums in the same order, in one pass over the rows instead of two.
+    /// `enrol(g, new, 1)` then `enrol(g, old, -1)` (a body changes its born rows within its group): the same sums in the
+    /// same order, bit for bit, in one pass over the rows.
     fn swap_rows(&mut self, g: u32, old: &Body, new: &Body) {
         let (gr, was, now) = (&self.groups[g as usize], &self.genomes[old.genome as usize].rows, &self.genomes[new.genome as usize].rows);
         if gr.members == 0 || gr.rows.len() != was.len() || was.len() != now.len() {
@@ -300,17 +285,15 @@ impl Life {
             *s = s2;
         }
     }
-    /// Body `b` (taken out of its slot) has these genes and the born rows it had (a member split
-    /// off a node and back): of its group only the forgetting rate changes (counting the rows
-    /// out and in again only rounded the group's rows, and cost two passes over them).
+    /// Body `b` (taken out of its slot) has these genes and the born rows it had (a member split off a node and back): of
+    /// its group only the forgetting rate changes.
     pub(crate) fn regene(&mut self, b: &mut Body, genes: Vec<f32>) {
         let old = b.forget();
         (b.genes, b.k) = (genes, Consts::default());
         let gr = &mut self.groups[b.group as usize];
         gr.forget = gr.forget + b.forget() - old;
     }
-    /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in group `group`
-    /// (new, for it); its old lineage, group and born rows lose it.
+    /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in its new group `group`.
     pub(crate) fn move_to(&mut self, b: &mut Body, lineage: u32, group: u32, rows: Vec<f32>) {
         self.leave(b);
         (b.lineage, b.group, b.genome) = (lineage, group, self.new_genome(rows));
@@ -330,6 +313,7 @@ impl Life {
     pub(crate) fn take_due(&mut self, day: u64) -> Vec<(u32, u32)> {
         std::mem::take(&mut self.due[(day % RING) as usize])
     }
+    /// Body `slot` of group `g` moves from cell `from` to `to`.
     pub fn relocate(&mut self, slot: usize, g: u32, from: usize, to: usize) {
         self.at[from].retain(|&s| s as usize != slot);
         self.at[to].push(slot as u32);

@@ -28,7 +28,7 @@
 //! (one number for all rows). Its children never join it while it is mature (a mature node's mean
 //! must stay at or past maturity for its members to reproduce): they join the first immature node
 //! of their kind and size class where they start (`near`, `within`, `emit`), or start one; a young
-//! node joins and merges with the adult only once mature (`body::crowd`). A share of a node's
+//! node joins and merges with the adult only once mature (`nodes::crowd`). A share of a node's
 //! children (the `DISPERSE` gene) starts in a random neighbour cell. An individual's children
 //! stay together, in a neighbour cell with that chance. Only individuals' children start new
 //! lineages; a node whose mean brain-size genes are a whole unit away from its lineage's sizes
@@ -53,7 +53,7 @@ const REACH: f32 = 3.464_101_6;
 
 /// Genes no more than `limit` steps apart in each gene (`step`: genes that are off count as 0, the
 /// sizes of brain and senses by whole units). Nodes merge each month only if their means are alike
-/// (`body::crowd`), as a split's halves are tested (`split`).
+/// (`nodes::crowd`), as a split's halves are tested (`split`).
 pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
     a.iter().zip(b).enumerate().all(|(g, (&x, &y))| (step(lay, g, x) - step(lay, g, y)).abs() <= limit)
 }
@@ -78,7 +78,7 @@ fn gap(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> Option<f32> {
 /// never mix, so a node, which only saves time, must not mix them either. With two, a node and a
 /// group of children both at the spread's cap (2.7 steps each) took anything within
 /// 4 + 2 x sqrt(2 x 7.3) = 11.6 steps in every gene, and the monthly merge of a full cell
-/// (`body::crowd`) the same: kinds 6 steps apart were one kind for the nodes, and the children of
+/// (`nodes::crowd`) the same: kinds 6 steps apart were one kind for the nodes, and the children of
 /// the most numerous, smallest kind swamped the others' nodes. With a half the bound is 5.9 steps
 /// and the kinds mostly stay apart. A pair of children of a node held at the split threshold
 /// still joins it 199 times in 200 (`tests/nodes.rs`). Kinds less than 6 steps apart in every
@@ -105,7 +105,7 @@ fn like(lay: &Layout, g: usize) -> f32 {
 }
 
 /// A gene in steps of `like` (off as 0): two bodies are as alike as their genes are near in these
-/// (`alike`, `within`, `body::crowd`). A split measures the sizes in their mutation steps
+/// (`alike`, `within`, `nodes::crowd`). A split measures the sizes in their mutation steps
 /// (`split`), so selection can move them in a node.
 fn step(lay: &Layout, g: usize, x: f32) -> f32 {
     (if g < lay.cat { x } else { x.max(0.0) }) / like(lay, g)
@@ -490,7 +490,7 @@ pub(crate) fn size_step(lay: &Layout) -> f32 {
 /// (`alike_log`), and whether it is mature (`Body::adult`). Two bodies are in one class when they are
 /// alike in size and both mature or both not: a node's mean must stay at or past its copy mass for its
 /// members to reproduce, so the young join and merge with the young until they have grown. Taken once
-/// per body where it meets many (`body::crowd`).
+/// per body where it meets many (`nodes::crowd`).
 pub fn class(chem: &crate::chem::Chemistry, b: &Body) -> (f64, bool) {
     let x = b.member_body(chem);
     (x.max(1e-30).log10(), b.mature(x))
@@ -499,7 +499,7 @@ pub fn class(chem: &crate::chem::Chemistry, b: &Body) -> (f64, bool) {
 /// Two member bodies (kg) are in one size class: within `alike` steps of the copy-mass gene of each
 /// other, in log10 (0.2 decades a step: with `alike` 4 about a factor 6.3). A node holds members of
 /// one size class: a child far smaller than its parent node's mean member starts a node of its own
-/// (`copy`), and nodes join and merge only within a class (`class`, `body::crowd`), so young and adult
+/// (`copy`), and nodes join and merge only within a class (`class`, `nodes::crowd`), so young and adult
 /// nodes stay apart until the young have grown.
 pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
     alike_log(lay, alike, x.max(1e-30).log10(), y.max(1e-30).log10())
@@ -791,7 +791,7 @@ fn part(b: &mut Body, f: f64) -> Body {
 /// mean is kept exactly. Each half has half the members, stores and heat; their means are the
 /// mean ± `d`, and the variance along it falls by `d²`, so the spread of both together is kept.
 /// Selection then acts between the halves. Halves of a gene are not alike, so the monthly merge
-/// (`body::crowd`) leaves them apart until they grow alike again; halves of a brain size are
+/// (`nodes::crowd`) leaves them apart until they grow alike again; halves of a brain size are
 /// alike (likeness counts the sizes by whole units, `like`), so the merge takes them back, each
 /// having paid for its own size (`Lineage::cost`), and a mean that reaches a whole unit from its
 /// lineage's size moves the node to a lineage of that size (`resize`). A node splits only while

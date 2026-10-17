@@ -291,7 +291,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     b.wb = wb;
 
     // A node does an action of Bond through one member, split off as an individual that acts
-    // (plan 7.1). If it then holds or is inside something it lives on as one (`body::crowd` never
+    // (plan 7.1). If it then holds or is inside something it lives on as one (`nodes::crowd` never
     // merges it); else it has no reason to stay apart and goes back into the node at once, with
     // what it got, as the next month's merge would take it back.
     let (me, mut one) = if b.n() > 1.0 && ((4..FIXED).contains(&a) || a >= o0) {
@@ -517,7 +517,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
 /// damage): each takes its share of the energy by its mass and loses the share `f` of its body that this pays to break
 /// (`Body::breaking`, 16 Oct 2026: by what it is built of; before, `walk_wear` kg per J, less with the strength gene),
 /// and the stores that matter held spill in the same share
-/// (`body::tear`). A node
+/// (`body::wound`). A node
 /// loses members when the share is one member's body or more, and else every member loses part of
 /// its matter; an individual lives on smaller (it dies when half of its body is broken, or a store
 /// falls under its safe minimum). What breaks off goes to the ground as loose amounts, with its
@@ -595,7 +595,7 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
     let up = |k: usize| if from(k) > 0.0 && can_take(chem, b, k) { b.gene(lay.upt + k).max(0.0) } else { 0.0 };
     let sum: f64 = (0..chem.ns()).map(up).sum();
     // (A solid bodies build it takes past its own level, 16 Oct 2026: it holds it until its reactions break it down, and what is
-    // left passes back to the ground at its update, `body::shed`.)
+    // left passes back to the ground at its update, `live::shed`.)
     let room = |k: usize| if chem.is_material(k) { f64::MAX } else { (b.level(chem, k, mass) - b.store[k]).max(0.0) };
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect();
     digest_room(chem, b, &mut m, mass);
@@ -614,7 +614,7 @@ pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64]
     }
     let room = |k: usize| (b.level(chem, k, mass) - b.store[k]).max(0.0);
     let per = bl.outputs[0].1 as f64;
-    // (Only the fuels: the minerals it also makes of the matter it sheds when it updates, `body::shed`.)
+    // (Only the fuels: the minerals it also makes of the matter it sheds when it updates, `live::shed`.)
     let minerals = chem.minerals();
     let fuel = |k: u16| !minerals.iter().any(|m| m.0 == k as usize);
     let f = bl.inputs.iter().filter(|p| fuel(p.0)).map(|&(k, nu)| room(k as usize) / (m[k as usize] + nu as f64 / per * m[km]).max(1e-300)).fold(1.0, f64::min);
@@ -715,7 +715,7 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 /// **A bite breaks body matter (partial damage).** The kg taken tear that share of the
 /// other's body (`Body::built`), `f`, or the share of its body matter the taker ate if that is more
 /// (matter eaten is body torn): its body matter and the stores that matter held, in proportion
-/// (`body::tear`). The taker keeps what it took (digested, `Body::digest`); what is torn off and not
+/// (`body::wound`). The taker keeps what it took (digested, `Body::digest`); what is torn off and not
 /// taken goes to the ground as dead matter. An individual lives on smaller (its force falls with its
 /// body; it rebuilds the matter as it grows, `copy::grow`) and dies when half of its body or more is torn
 /// or a store falls below its safe minimum. In a node the size of the bite decides: one

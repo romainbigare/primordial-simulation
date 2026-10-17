@@ -290,7 +290,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         // holds `h`). Its upkeep burns its fuel (`body::pay`), and the open air burns its stores bare at any temperature (since
         // the litter constants of 15 Oct 2026, a sixth of what it makes). The liquid that makes, which it keeps none of, leaves:
         // as vapour, with its latent heat, as far as the air it exchanges takes it up to its vapour pressure, and the rest to the
-        // ground as liquid with its heat (`body::shed`).
+        // ground as liquid with its heat (`live::shed`).
         let h = |k: usize, t: f64| {
             let (s, gas) = (&chem.subs[k], chem.phase(k, t) == pcore::chem::Phase::Gas);
             s.hf + if gas { s.lf + s.lv } else { s.cp * t }

@@ -1,6 +1,6 @@
 //! Partial damage and healing (15 Oct 2026): the energy of a bite (`choose::take_body`), of
 //! being pushed through (`choose::wear`) and of heat breaks body matter first, which is what holds a body
-//! together, and spills the stores it held in proportion (`body::tear`); a body that keeps enough of itself
+//! together, and spills the stores it held in proportion (`body::wound`); a body that keeps enough of itself
 //! lives on smaller, weaker (force goes by its body, `Body::built`), and rebuilds what it lost as it grows
 //! (`copy::grow`, at `c_copy` within `c_build`). In a node the size of the hit decides: less than one member's
 //! body takes part of every member's matter, one member or more takes whole members.

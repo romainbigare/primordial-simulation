@@ -13,32 +13,28 @@ use crate::survey::intercept;
 use crate::units::{MAX_SUBSTANCES, P_REF};
 use crate::{Diag, World};
 
-/// The most share of the heat the body has (its own, what it released and what the surface can give it) that pays the
-/// enthalpy of the gas its reactions put out; what it cannot pay for stays in the body.
+/// The most share of the heat the body has and can get from the surface that pays the enthalpy of the gas it puts out.
 const GAS_HEAT_SHARE: f64 = 0.5;
 
 /// The heat of an update as its stages go.
 struct Heat {
-    /// The body's mass, kg, its temperature, K, and its conductance to the surface it stands on, W/K (`surface`), at the
-    /// start of the physics
+    /// The body's mass, kg, temperature, K, and conductance to the surface, W/K (`surface`), at the start; the heat
+    /// capacity of its ground node then, J/K
     mass: f64,
     t0: f64,
     g: f64,
-    /// The heat capacity of its ground node, J/K, as of the start of the physics
     gcap: f64,
-    /// Heat released beside the heat its stores hold at their temperature, J
+    /// Heat released beside the heat its stores hold at their temperature, J; heat capacity of the gas its reactions put
+    /// out, J/K (it leaves at the end)
     heat: f64,
-    /// Heat capacity of the gas its reactions put out, J/K: it stays with the body's heat until it leaves at the end
     c_out: f64,
-    /// Light it absorbed, J, and the light set aside for it that it took (`World::light_pool`), J
+    /// Light it absorbed, J; light set aside for it that it took (`World::light_pool`), J; it lives on light
     lit: f64,
     took: f64,
-    /// It lives on light (for the tallies of the land's liquid)
     plant: bool,
 }
 
-/// What the ground of a cell offers to soak up: its liquids that dissolve (one bit per substance), their sum, mol, and
-/// the rate a body soaks them at, per day (by solubility).
+/// What the ground of a cell offers to soak up: its liquids that dissolve (bits), their sum, mol, and the rate, per day.
 struct Soil {
     wets: u64,
     in_ground: f64,
@@ -51,8 +47,8 @@ impl Soil {
     }
 }
 
-/// The physics of a body of `mass` kg over its update, with the heat `upkeep_heat` its upkeep released. Returns the light
-/// it caught per kg per day, J.
+/// The physics of a body of `mass` kg over its update, with the heat its upkeep released. Returns the light it caught
+/// per kg per day, J.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, mass: f64, upkeep_heat: f64) -> f64 {
     let keep = w.light_keep.get(slot, b.gen) as f64;
@@ -61,10 +57,9 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let (chem, cfg) = (&w.chem, &w.cfg);
     let plant = light_eater(chem, &b.genes);
     let fall = rain_caught(w, slot, b, s);
-    // It soaks through the mass that works; its light-capture area is all members' (`visible`): of its body, by mass^0.75.
+    // It soaks through the mass that works; its conductance is taken at its temperature at the start.
     let wk = b.size(chem) / mass;
     let leaf = b.leaf_area(chem, &cfg.phys);
-    // Its conductance to the surface, at its temperature at the start of the update (and at the end, if it ends warmer).
     let c0 = b.heat_cap(chem);
     let t0 = b.e / c0;
     let g = surface(chem, cfg, b, mass, s.cover, s.walls, t0, s.tg);
@@ -93,8 +88,7 @@ fn rain_caught(w: &World, slot: usize, b: &Body, s: &Site) -> f64 {
 
 /// Light caught since the last update through the openings of walls around it, less what it reflects, and what of it
 /// liquid over the body leaves it, J. Its energy already warmed the surface as it fell (`flow::air::radiation`), but for
-/// the share set aside for what light reactions store: so up to `MAX_INTERVAL` days of sunlight neither reach the ground
-/// in one go nor are drawn back from it in one go.
+/// the share set aside for light reactions (`store_light`).
 fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
     let caught = leaf * (w.light[s.i] - b.mark) * (1.0 - b.reflectance()) * s.open;
     b.mark = w.light[s.i];
@@ -102,8 +96,7 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
     (caught, caught * reach)
 }
 
-/// The air the body exchanges gas with in this time, mol (`breath`), from its air node, at the air's shares; each gas
-/// at most half of what the node holds. Returns that air.
+/// The air the body exchanges gas with in this time (`breath`), at the air's shares, at most `MAX_TAKE_SHARE` of each.
 fn gas_pool(w: &World, b: &Body, s: &Site, mass: f64, tmp: &mut LiveTmp) -> f64 {
     let (chem, air, na, j) = (&w.chem, &w.air, w.grid.na(), s.j);
     let tot: f64 = (0..chem.ns()).map(|k| air[k * na + j]).sum();
@@ -119,13 +112,10 @@ fn gas_pool(w: &World, b: &Body, s: &Site, mass: f64, tmp: &mut LiveTmp) -> f64 
     reach
 }
 
-/// Catalysed reactions, at the body's temperature held by the surface it stands on. The surface holds it as a store of
-/// the heat it can conduct into the body over the time (`g` dt `tg`, at the body's temperature): a body well bound to it
-/// reacts at a fixed temperature, a big one under cover warms with what its reactions release and cools with what they
-/// take, and they cannot take more heat than the body and that store hold. The catalysts work as far as the body is wet
-/// (`Body::activity`) and each is slowed by its products (`Body::inhibited`); those that breathe ran on demand (upkeep,
-/// actions) and go here at the open world's rate; above the `DENATURE` gene they lose their shape. Their products take
-/// their heat at the body's temperature from what they release. Returns the light the reactions used, J.
+/// Catalysed reactions, at the body's temperature held by the surface: the surface holds it as a store of the heat it
+/// can conduct into the body over the time (`g` dt `tg`), so a body well bound to it reacts at a fixed temperature and
+/// a big one under cover warms with what its reactions release. Catalysts go with activity, inhibition and `DENATURE`;
+/// those that breathe ran on demand (upkeep, actions) and go here at the bare rate. Returns the light they used, J.
 #[allow(clippy::too_many_arguments)]
 fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, h: &mut Heat, c0: f64, upkeep_heat: f64) -> f64 {
     let (chem, cfg, t0, dt) = (&w.chem, &w.cfg, h.t0, s.dt);
@@ -145,10 +135,8 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
     used
 }
 
-/// The gas its reactions took from the air brings its heat (at the air's temperature) and gives up its fusion and
-/// vaporisation enthalpy. Gas they put out takes that enthalpy, as far as half of what the body's heat, the heat
-/// released and the surface's store hold pays for it (the rest stays in the body), and leaves with its heat at the
-/// body's last temperature (`Heat::c_out`).
+/// The gas its reactions took brings its heat at the air's temperature and gives up its latent heat; gas they put out
+/// takes its latent heat, as far as `GAS_HEAT_SHARE` of the heat pays for it (the rest stays in the body).
 fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
     let World { chem, grid, air, e_air, .. } = w;
     let (ns, na, j) = (chem.ns(), grid.na(), s.j);
@@ -169,9 +157,8 @@ fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat
     (h.heat, h.c_out) = (heat, c_out);
 }
 
-/// What its light reactions stored (`LIGHT_YIELD` of the light they `used`) is paid by the light set aside for it, as
-/// far as its share goes (the share it stored last time, `keep`, of the light it `caught`); the difference is settled
-/// with the ground (`relax_heat`). It keeps the share it stored now. Returns the light set aside it took, J.
+/// What its light reactions stored (`LIGHT_YIELD` of the light they used) is paid by the light set aside for it, by the
+/// share it stored last time (`keep`); it keeps the share it stored now. Returns the light set aside it took, J.
 fn store_light(w: &mut World, slot: usize, b: &Body, s: &Site, keep: f64, caught: f64, used: f64) -> f64 {
     let stored = crate::change::LIGHT_YIELD * used;
     let took = (keep * caught).min(w.light_pool[s.i]).max(0.0);
@@ -182,9 +169,8 @@ fn store_light(w: &mut World, slot: usize, b: &Body, s: &Site, keep: f64, caught
     took
 }
 
-/// The liquids of the cell's ground a body soaks up, and its rate (`Soil`). The liquid in the pores of the ground is
-/// soaked up like the liquid that stands: whatever the cell holds of it counts for the wetness, but a body afloat on
-/// standing liquid reaches the ground through none.
+/// The liquids of the cell's ground a body soaks up (`Soil`): whatever the cell holds counts for the wetness, but a
+/// body afloat on standing liquid reaches the ground through none.
 fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
     let (chem, ground, n, i, tg) = (&w.chem, &w.ground, w.grid.n(), s.i, s.tg);
     let ns = chem.ns();
@@ -199,16 +185,11 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
     Soil { wets, in_ground, rate: b.k.liq * wet * wk }
 }
 
-/// Liquids the body holds evaporate toward their vapour pressure at its temperature, with their latent heat, through its
-/// pores (`breath`), which for the vapour open as far as it is wet (its activity: a dry body closes them as it dries,
-/// `closing`; not for its gases, whose reactions already go with its activity). The latent heat is paid by the body's own
-/// heat released (not the light: the ground has it), and by what the surface can conduct into a body that evaporating
-/// cools no lower than the vapour's condensing point, once for all the liquids (what one spent is owed by the next).
-/// Where its update would leave it warmer than its `COOL_T` gene, it opens its surface (pores, sweat, panting) as far as
-/// that holds it there: the latent heat that brings the end of the heat step (`relax_heat`, linear in the heat) to the
-/// gene, no further than its still air carries vapour away (`film` over the air's molar heat capacity, the Lewis
-/// relation), and spending no liquid it keeps below its safe minimum. What flows through a body that soaks past what it
-/// holds comes from the ground as it goes (`through`). Returns what each liquid lost past that, mol, and whether any left.
+/// Its liquids evaporate toward their vapour pressure through its pores (`breath`), which for a key liquid open as far as
+/// it is wet (`through`). The latent heat is paid by its own heat released and what the surface can conduct into it
+/// before it cools to the vapour's condensing point, once for all the liquids. Above its `COOL_T` gene it opens its
+/// surface further, as far as that brings the end of `relax_heat` to the gene, its still air carries the vapour away
+/// (`film`, the Lewis relation) and its liquid stays above its safe minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
     let World { cfg, chem, grid, ground, e_ground, air, e_air, ledger, diag, .. } = w;
     let (ns, n, na, i, j, tg, dt, days) = (chem.ns(), grid.n(), grid.na(), s.i, s.j, s.tg, s.dt, s.days);
@@ -233,7 +214,7 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         let soak_rate = if soil.in_ground > 0.0 && soil.liquid(k) { soil.rate * chem.subs[k].solubility * ground[k * n + i] / soil.in_ground } else { 0.0 };
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach, soak_rate * days, cfg.phys.dormancy) } else { push * reach };
         let m = open_m.max((push * wide).min(need).min(spare)).min(heat_paid / chem.subs[k].latent_gas());
-        // What flows through it comes from the ground, which pays its heat and fusion enthalpy as for what it soaks.
+        // What flows through it comes from the ground, which pays its heat and fusion enthalpy.
         let inflow = if soak_rate > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(MAX_TAKE_SHARE * ground[k * n + i]) } else { 0.0 };
         let (fused, cp) = (chem.fused_heat(k, tg, |j| ground[j * n + i]), chem.subs[k].cp);
         let pre = take_paid(&mut e_ground[i], ledger, h.gcap, inflow, cp, inflow * (cp * tg + fused)).0;
@@ -252,12 +233,9 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
     (lost, moved)
 }
 
-/// Liquids of the ground soak in by solubility, faster where the ground is wet, up to the level the body keeps, through
-/// the mass that works: a flow along its contact with the ground, driven by how far the body is below its level, at the
-/// rate `LIQ` x wetness x the working share x solubility per day, while it loses what it evaporated (`lost`) at a steady
-/// rate, solved exactly over the time: it takes back what it lost as far as the soil holds and the contact allows. With
-/// them it takes the rain its capture area caught (`fall`), which fell into the cell's liquid in this time. The ground
-/// pays the heat that goes with the liquid and its fusion enthalpy; if it cannot pay it all, the body soaks up less.
+/// Liquids of the ground soak in by solubility up to the level the body keeps, at the rate of `Soil` x solubility,
+/// while it loses what it evaporated (`lost`) at a steady rate, solved exactly over the time; with them the rain its
+/// capture area caught (`fall`). The ground pays their heat and fusion enthalpy, or the body soaks less.
 #[allow(clippy::too_many_arguments)]
 fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
     let World { chem, grid, ground, e_ground, ledger, diag, .. } = w;
@@ -280,10 +258,8 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
     }
 }
 
-/// Roots take what is dissolved in the soil: what is liquid at the cell's warmth but does not dissolve itself (the
-/// liquids that do are soaked above), that its uptake genes are on for, from the loose ground of its cell, up to the room
-/// its level leaves, at the rate it soaks liquids (without the wetness of the surface: soil holds moisture the surface
-/// does not show), through the mass that works (`wk`), and no more than half of what there is (the bodies of a cell share it).
+/// Roots take what is liquid in the ground but does not dissolve itself, for the uptake genes that are on, up to its
+/// level, at the rate it soaks liquids (without the surface's wetness) through the mass that works (`wk`).
 fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
     let World { chem, grid, ground, e_ground, ledger, .. } = w;
     let (n, i, tg) = (grid.n(), s.i, s.tg);
@@ -300,12 +276,10 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
     }
 }
 
-/// Heat to the surface the body stands on (which radiates it and warms the air): its temperature relaxes toward the
-/// ground's plus the warming of the heat released, over the time. Heat taken beyond what the surface can conduct into it
-/// (down to 0 K) over the time is taken from its own heat at once. The gas its reactions put out goes the same way until
-/// it leaves at the end, with its share of the heat. The ground pays the difference (the light is already in it, but for
-/// what was set aside and taken), first from what the cell held aside for it since its last update (`survey`); if it
-/// cannot, the body ends colder.
+/// Heat to the surface: its temperature relaxes toward the ground's plus the warming of the heat released, over the time
+/// (heat taken beyond what the surface can give it comes from its own heat at once). The ground pays the difference,
+/// first from what the cell held aside for it (`survey`); if it cannot, the body ends colder. The gas its reactions put
+/// out leaves at the end with its share of the heat.
 fn relax_heat(w: &mut World, slot: usize, b: &mut Body, s: &Site, h: &Heat) {
     let World { cfg, chem, e_ground, e_air, ledger, heat_pool, heat_keep, .. } = w;
     let (i, j, tg, dt, g, heat) = (s.i, s.j, s.tg, s.dt, h.g, h.heat);

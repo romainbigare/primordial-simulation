@@ -1,14 +1,14 @@
 //! The order of the laws in one month.
 //!
 //! Every `Config::phys_days` days:
-//! 1. `body::survey`: what each cell holds, its cover, light and heat set aside for its bodies;
+//! 1. `survey::survey`: what each cell holds, its cover, light and heat set aside for its bodies;
 //!    once a month the merge of alike nodes and each cell's surroundings.
 //! 2. `flow::step`: radiation every step; once `air_days` have passed the exchange of the ground
 //!    with the air (every `exchange_days`) and the wind; once `flow_days` have passed liquid and
 //!    drainage, and creep once a year; the slow ground rechecked every few months.
 //! 3. `change::step`: the reactions of ground and air nodes.
 //!
-//! On the first day of the month `bond::step` (parts and structures), and every day `body::day`
+//! On the first day of the month `bond::step` (parts and structures), and every day `survey::day`
 //! (the bodies whose update is due: their physics, decisions and copying).
 
 use crate::units::DAY;
@@ -22,7 +22,7 @@ pub enum Stage {
     Flow,
     /// `change::step`
     Change,
-    /// `body::survey` and `body::day`
+    /// `survey::survey` and `survey::day`
     Bodies,
     /// `bond::step`
     Parts,

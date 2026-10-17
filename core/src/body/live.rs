@@ -35,7 +35,7 @@ pub(crate) struct LiveTmp {
 pub struct Lived {
     /// Light caught per kg per day, J
     pub lit: f64,
-    /// What its reactions could release over the time against its upkeep (counted up to 2)
+    /// What its reactions could release over the time against its upkeep (well-being counts it up to `MARGIN`)
     pub spare: f64,
     /// Its mass and heat capacity (valid until its stores change)
     pub mass: f64,
@@ -193,10 +193,9 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
     Ok(left)
 }
 
-/// A node short of key stores: the members poorest in them die (members differ around the
-/// mean), so the survivors keep those stores and the dead take their share of the rest. The
-/// share that dies is the least that lifts every key store to its safe minimum; false if that
-/// is all of them.
+/// A node short of key stores: the members poorest in them die (members differ around the mean), so the survivors keep
+/// those stores and the dead take their share of the rest. The share that dies is the least that lifts every key store
+/// to its safe minimum; false if that is all of them.
 fn starve(w: &mut World, b: &mut Body, dead: &mut Vec<f64>) -> bool {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
@@ -210,16 +209,11 @@ fn starve(w: &mut World, b: &mut Body, dead: &mut Vec<f64>) -> bool {
     f < 1.0 && thin(w, b, f, dead, LACK) && !b.lacking(&w.chem)
 }
 
-/// A body is not a quarry: of what it holds besides its liquid, matter, gases and the fuel it burns, the minerals
-/// (`Chemistry::minerals`) and the solids it builds (`Chemistry::materials`: what it took of one and did not break passes
-/// through) go back to the ground past the level it keeps (`Body::level`), and anything else (a solid left by a salt
-/// it held breaking down) all of it, with its share of the heat. Digestion (`Body::digest`) and its own burning of matter give it more
-/// than it builds with: an eater that kept it would grow without end and, its room full, stop taking
-/// matter. A plant takes only up to the level (`choose::wanted`), so for it the minerals shed nothing.
-/// The key liquid past its level drains out the same way (15 Oct 2026, review 7 R11): its burning makes it in the body, and
-/// before only evaporation took it out, so eaters held 40 to 65% of their liquid past the level (30 to 48% of their mass).
-/// It goes to the ground with its heat; what is dissolved in it goes by its own level in this same loop (the minerals are
-/// kept by the body's matter, not by its liquid), and gases leave by breath.
+/// What a body sheds to the ground, with its share of the heat: of what it holds besides its matter, gases and the fuel
+/// it burns, its key liquids, the minerals (`Chemistry::minerals`) and the solids it builds (`Chemistry::materials`)
+/// past the level it keeps (`Body::level`), and all of anything else. Digestion and its own burning make more of them
+/// than it builds with (its burning makes its key liquid): an eater that kept them would grow without end and, its room
+/// full, stop taking matter. Gases leave by breath.
 fn shed(w: &mut World, b: &mut Body) {
     let (i, n, mass, minerals) = (b.cell as usize, w.grid.n(), b.mass(&w.chem), w.chem.minerals());
     for k in 0..w.chem.ns() {

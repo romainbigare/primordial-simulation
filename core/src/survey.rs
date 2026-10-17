@@ -1,4 +1,5 @@
-//! Before each physics step: what each cell holds, the shade of its bodies, and the updates due.
+//! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
+//! (`survey`), and every day the updates due (`day`).
 
 use crate::body::{die, live, LiveTmp, LACK};
 use crate::chem::Phase;
@@ -32,9 +33,8 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [t, (d - w.cfg.phys.porosity * loose).max(0.0) / area, w.base_z + z / area]
 }
 
-/// Before each physics step: what each cell holds (sums of visible traits), its bodies'
-/// light-capture area per ground area, the share of the light they absorb and set aside, and
-/// once a month each cell's surroundings.
+/// Before each physics step: what each cell holds (`sum_cells`), the light and heat it holds aside for its bodies
+/// (`hold_heat`), and once a month the merge of alike nodes, the brain groups, the traffic and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.grid.n();
     w.life.fit_grid(n, w.grid.w as u32);
@@ -48,9 +48,27 @@ pub fn survey(w: &mut World) {
         crate::nodes::crowd(w);
     }
     shade(w);
+    sum_cells(w);
+    hold_heat(w);
+    if monthly && w.day > 0 {
+        choose::regroup(w);
+        traffic(w);
+    }
+    if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
+        w.life.env = (0..n).map(|i| env_of(w, i)).collect();
+        let (ns, area) = (w.chem.ns(), w.grid.area());
+        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
+    }
+    choose::cells(w);
+}
+
+/// Per cell: its members and their visible traits summed (`Life::sum`), their light-capture area per ground area
+/// (`World::canopy`), the share of the light reaching it that they absorb and the share of that set aside for their
+/// light reactions (`Life::absorb`, `Life::keep`). Set-aside light its bodies can no longer claim at their updates (one
+/// died, moved or merged before its update, or caught less than its share; walls aside) becomes the ground's heat.
+fn sum_cells(w: &mut World) {
+    let n = w.grid.n();
     let keep = |s: usize, g: u32| w.light_keep.get(s, g) as f64;
-    // Per cell: light absorbed per J reaching the capture area, the share of it set aside, and
-    // what its bodies can claim of the set-aside light at their updates (at most: walls aside).
     let (mut abs, mut kept, mut claim) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     let mut sum = vec![[0.0; 7]; n];
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
@@ -74,13 +92,16 @@ pub fn survey(w: &mut World) {
         canopy[i] = (s / area) as f32;
         life.absorb[i] = if s > 0.0 { (abs[i] / s) as f32 } else { 0.0 };
         life.keep[i] = if abs[i] > 0.0 { (kept[i] / abs[i]) as f32 } else { 0.0 };
-        // Set-aside light its bodies can no longer claim (one died, moved or merged before its
-        // update, or caught less than its share) becomes the ground's heat.
         let over = (light_pool[i] - claim[i]).max(0.0);
         (light_pool[i], e_ground[i]) = (light_pool[i] - over, e_ground[i] + over);
     }
-    // The heat its bodies drew from the ground at their last update goes on being drawn as time passes: the cell holds aside
-    // what each would settle now at that rate (and gives back what none can claim), as far as the ground has it.
+}
+
+/// The heat its bodies drew from the ground at their last update goes on being drawn as time passes: the cell holds
+/// aside what each would settle now at that rate (`World::heat_pool`; it gives back what none can claim), as far as
+/// the ground has it.
+fn hold_heat(w: &mut World) {
+    let n = w.grid.n();
     let mut owed = vec![0.0; n];
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         let q = w.heat_keep.get(slot, b.gen) as f64;
@@ -94,23 +115,18 @@ pub fn survey(w: &mut World) {
         }
         (w.heat_pool[i], w.e_ground[i]) = (w.heat_pool[i] + d, w.e_ground[i] - d);
     }
-    if monthly && w.day > 0 {
-        choose::regroup(w);
-        let d = &mut w.diag;
-        d.traffic.resize(n, 0.0);
-        d.crossings.resize(n, 0.0);
-        let a = 1.0 / w.cfg.months_per_year as f32;
-        for (t, c) in d.traffic.iter_mut().zip(d.crossings.iter_mut()) {
-            *t += a * (*c * w.cfg.months_per_year as f32 - *t);
-            *c = 0.0;
-        }
+}
+
+/// The yearly moving average of the crossings of each cell (`Diag::traffic`), once a month.
+fn traffic(w: &mut World) {
+    let (n, d) = (w.grid.n(), &mut w.diag);
+    d.traffic.resize(n, 0.0);
+    d.crossings.resize(n, 0.0);
+    let a = 1.0 / w.cfg.months_per_year as f32;
+    for (t, c) in d.traffic.iter_mut().zip(d.crossings.iter_mut()) {
+        *t += a * (*c * w.cfg.months_per_year as f32 - *t);
+        *c = 0.0;
     }
-    if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
-        w.life.env = (0..n).map(|i| env_of(w, i)).collect();
-        let (ns, area) = (w.chem.ns(), w.grid.area());
-        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
-    }
-    choose::cells(w);
 }
 
 /// The share of what falls on a cell that a layer of capture area `x` per ground area intercepts, per unit of `x`:
@@ -119,8 +135,7 @@ pub(crate) fn intercept(x: f64) -> f64 {
     if x > 1e-9 { one_minus_exp(x) / x } else { 1.0 - 0.5 * x }
 }
 
-/// Light passes through the bodies of a cell from the tallest member down: a member's height is what
-/// it is built of holds up against its weight (`Body::height`, 16 Oct 2026), and
+/// Light passes through the bodies of a cell from the tallest member down (`Body::height`), and
 /// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
 /// `1 - exp(-x)` of what reaches it, so a tall member shades a low one and holding up pays. Together
 /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,

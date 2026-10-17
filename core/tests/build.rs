@@ -1038,7 +1038,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             feed_minerals(&mut w, s);
             self::day(&mut w);
             assert!(w.life.bodies[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
-            // What its burning made and it holds above the level it keeps drains to the ground at its update (`body::shed`,
+            // What its burning made and it holds above the level it keeps drains to the ground at its update (`live::shed`,
             // review 7 R11; this test did it by hand before). What a decision burns after it adds a trace.
             let b = &w.life.bodies[s];
             let level = b.level(&w.chem, r.liquid, b.mass(&w.chem));

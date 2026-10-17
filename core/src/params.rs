@@ -35,7 +35,7 @@ pub struct Config {
     pub exchange_days: u32,
     /// Liquid and creep move every this many days (a multiple of `air_days`)
     pub flow_days: u32,
-    /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`body::crowd`)
+    /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
     pub crowd: usize,
 
     // Ground and air physics
@@ -142,7 +142,7 @@ pub struct Physics {
     pub layer: f64,
     /// Density of bodies, kg/m³
     pub rho_body: f64,
-    /// The wind at a body, which the boundary layer of its surface goes by, m/s (`body::film`)
+    /// The wind at a body, which the boundary layer of its surface goes by, m/s (`exchange::film`)
     pub wind_ground: f64,
     /// Forced convection through a surface's boundary layer, mol/(m² s) per (m/s / m)^0.5
     pub forced: f64,

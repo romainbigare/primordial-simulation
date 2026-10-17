@@ -1,10 +1,8 @@
-//! Bodies: nodes of the sparse graph that hold substances, heat and genes, with stable IDs
-//! (slot and generation). Here: their storage, and Flow and Change on each body since its
-//! last update: light, gas and liquid exchange with its cell, its catalysed reactions, heat
-//! to the surface, upkeep, death, and copying when full. Choose (`choose`) and Copy (`copy`) act on them.
-//! A body updates every `interval` days; everything in between is integrated at its update.
-//! The light it catches warms the surface as it falls, but for the share its cell sets aside for
-//! what light reactions store (`World::light_pool`), which it takes at its update.
+//! Bodies: nodes of the sparse graph that hold substances, heat and genes, with stable IDs (slot and generation).
+//! A body updates every `interval` days, and everything in between is integrated at its update (`live`): Flow and
+//! Change on it (`physics`), its upkeep (`pay`), its death (`death`). Choose (`choose`) and Copy (`copy`) act on it.
+//! Its genes are in `genes`, what it is made of in `tissue`, its chemistry in `metab`, its exchange with its
+//! surroundings in `exchange`. The registry of bodies is `life`, the survey of cells before each step `survey`.
 
 mod death;
 mod exchange;
@@ -23,6 +21,7 @@ pub(crate) use live::{live, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, release, upkeep};
 pub use tissue::WET_TISSUE;
+// (Re-exported for worldgen and tape.)
 pub use crate::life::Lineage;
 pub use crate::survey::{env_of, survey};
 
@@ -60,7 +59,7 @@ pub struct Body {
     pub gen: u32,
     pub alive: bool,
     pub cell: u32,
-    /// Members this node stands for (1: an individual; more: a population node, plan 7.1). Its
+    /// Members this node stands for (1: an individual; more: a population node). Its
     /// stores and heat are the members' totals, its genes and brain one (their mean), so every
     /// law runs on the totals: rates are per kg or per member, times the count. Per member: the
     /// size a brain perceives, the mass compared with the copy mass. Use `n()`.
@@ -73,14 +72,14 @@ pub struct Body {
     /// Day of the last update
     pub last: u64,
     /// The cell's cumulative light at the last update, J/m², moved since by what its shade gave
-    /// it more or less than the cell's mean (`Life::shade`): it caught `light - mark` per m²
+    /// it more or less than the cell's mean (`survey::shade`): it caught `light - mark` per m²
     pub mark: f64,
     /// Thermal energy, J
     pub e: f64,
     /// mol of each substance
     pub store: Vec<f64>,
     pub genes: Vec<f32>,
-    /// How a node's members differ (plan 7.1): the variance of their genes around `genes`, per
+    /// How a node's members differ: the variance of their genes around `genes`, per
     /// gene, in gene units squared (empty: none), and of their born brain rows around the node's,
     /// the same for every row (`copy`)
     pub spread: Vec<f32>,
@@ -116,8 +115,7 @@ pub struct Body {
     /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
     /// has none: its members are of all ages (`live`).
     pub wear: f64,
-    /// Numbers that follow from the genes (rebuilt when missing). Saved with the body: a body not
-    /// updated since it was made has none yet, and others read them (`burns`, `pace`, `visible`).
+    /// Numbers that follow from the genes (`prepare`; empty until its first update, and others read them: `burns`, `pace`)
     pub k: Consts,
 }
 
@@ -132,7 +130,8 @@ pub struct Consts {
     /// Catalyst factor of each reaction (1 when off)
     pub cat: Vec<f64>,
     pub interval: u64,
-    /// Catalysed reactions that release heat, with the heat per unit, J (not those that keep a part of a fuel's heat, `Chemistry::keeps`)
+    /// Catalysed reactions that release heat, with the heat per unit, J (not those that keep a part of a fuel's heat,
+    /// `Chemistry::keeps`)
     pub burn: Vec<(usize, f64)>,
     /// What a brain perceives of each safe minimum; the substances taken, by selectivity
     pub minln: Vec<f32>,
@@ -194,10 +193,9 @@ impl Body {
         let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0 && !chem.keeps(r)).map(|r| (r, -chem.dh(r))).collect();
         let minln = (0..chem.ns()).map(|k| SHARE_SENSE * ln(self.genes[lay.min + k].max(0.0) + MIN_FLOOR)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
-        // By capacity: the catalysed rate per unit of the contact of its phases (`change`) at
-        // `t_cat`, over the genes that are on (`Physics::c_cat`), dearer if they keep their shape
-        // when warmer (`Physics::t_firm`): its gases at their share of the open air
-        // (`Chemistry::air`) to their order, as mass action counts them.
+        // Its catalysts' capacity: the catalysed rate per unit of the contact of its phases (`change`) at `t_cat`, summed
+        // over the genes that are on, its gases at their share of the open air (`Chemistry::air`) to their order;
+        // dearer if they keep their shape when warmer (`Physics::t_firm`).
         let open = |rx: &crate::chem::Reaction| -> f64 {
             rx.inputs.iter().enumerate().filter(|(_, x)| chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
         };
@@ -209,8 +207,7 @@ impl Body {
     pub(crate) fn reflectance(&self) -> f64 {
         (self.vis[3] + self.vis[4] + self.vis[5]) as f64 / 3.0
     }
-    /// Visible traits of one member; the colour is the reflectance of the stores by volume. Its
-    /// light-capture area is `LEAF` per kg-equivalent of its body (`size`, `equiv`: mass^0.75).
+    /// Visible traits of one member (`Body::vis`); the colour is the reflectance of the stores by volume.
     pub fn visible(&self, chem: &Chemistry, p: &crate::Physics) -> [f32; 6] {
         let (m, cap) = self.mass_cap(chem);
         let m1 = m / self.n();
@@ -229,13 +226,11 @@ impl Body {
         let leaf = self.equiv(p, self.built(chem)) / self.n() * self.dec(LEAF);
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
-    /// Well-being at temperature `t`: the energy its catalysed reactions could release from a
-    /// member's stores (log, in decisions' worth: `think` is what one decision of the starting
-    /// brain costs a member of the mass it copies at, J, so shedding mass does not raise it), less
-    /// how near it is to its limits: its key stores to their safe minimums (the log of each one's
-    /// margin, which is the log of its share over its minimum, counted up to 2), how fast its reactions can release energy now to its upkeep (`spare`,
-    /// the same margin form), and its key liquids to freezing or boiling (within 5 K). Needs
-    /// `prepare`.
+    /// Well-being at temperature `t`: the energy its catalysed reactions could release from a member's stores (log, in
+    /// decisions' worth: `think` is what one decision of the starting brain costs a member of the mass it copies at, J, so
+    /// shedding mass does not raise it), less how near it is to its limits: each key store's margin over its safe minimum,
+    /// the margin of its reactions over its upkeep (`spare`), both in `MARGIN` form, and its key liquids to freezing or
+    /// boiling (`PHASE_MARGIN`). Needs `prepare`.
     pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass) = (Layout::of(chem), self.size(chem));
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(MARGIN_MIN, MARGIN) as f32 / MARGIN as f32);
@@ -255,8 +250,7 @@ impl Body {
     pub(crate) fn recall(&self, id: u64) -> Option<f32> {
         self.known.iter().find(|k| k.0 == id && id != 0).map(|k| k.1)
     }
-    /// Remember a dealing with body `id`: better (+) or worse (-). A new one replaces the least
-    /// marked.
+    /// Remember a dealing with body `id`: better (+) or worse (-). A new one replaces the least marked.
     pub(crate) fn note(&mut self, id: u64, d: f32) {
         let s = match self.known.iter().position(|k| k.0 == id) {
             Some(s) => s,

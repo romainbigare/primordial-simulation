@@ -120,7 +120,7 @@ fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
     // Bodies with light-capture area `a` per ground area intercept a share 1 - exp(-a) of what
     // passes the clouds. What they absorb warms the surface now but for the share their light
     // reactions store (as at their last update, `Life::keep`): that is set aside, and each takes
-    // its share when it updates (`body::live`). Taller members shade smaller ones (`body::shade`).
+    // its share when it updates (`body::live`). Taller members shade smaller ones (`survey::shade`).
     let (a, mut cover, mut caught, mut kept, mut dl) = (at.canopy[i] as f64, 0.0, 0.0, 0.0, 0.0);
     if a > 0.0 {
         cover = one_minus_exp(a);

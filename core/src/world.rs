@@ -45,10 +45,10 @@ pub struct Diag {
     /// alone (`copy::one`)
     pub splits: [f64; 2],
     /// Members merged by the monthly merge however unlike (the safeguard past twice `Config::crowd`
-    /// nodes in a cell, `body::crowd`)
+    /// nodes in a cell, `nodes::crowd`)
     #[serde(skip)]
     pub unlike: f64,
-    /// Members that joined a node (the monthly merge, `body::crowd`, and a child's join, `copy::copy`)
+    /// Members that joined a node (the monthly merge, `nodes::crowd`, and a child's join, `copy::copy`)
     /// whose means differ from the node's by more than `Physics::alike` steps in some gene
     /// (`copy::alike`)
     #[serde(skip)]
@@ -58,7 +58,7 @@ pub struct Diag {
     #[serde(skip)]
     pub moves: Vec<f64>,
     /// Body matter, kg, that hits tore off members who lived on (bites that left them smaller, bodies
-    /// trampled, `body::tear`), by starting kind
+    /// trampled, `body::wound`), by starting kind
     #[serde(skip)]
     pub hurt: Vec<f64>,
     /// Members that could build body matter in an update, by starting kind, as [tried, held back by any mineral, by
@@ -155,7 +155,7 @@ pub struct World {
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
     pub canopy: Vec<f32>,
     /// Light intercepted in each cell per m² of light-capture area since the start (the mean of
-    /// its bodies: taller members catch more, `body::shade`), J/m²
+    /// its bodies: taller members catch more, `survey::shade`), J/m²
     pub light: Vec<f64>,
     /// Ground cleared of bodies along each edge, m²: edge `4i + f` joins cell `i` to its
     /// neighbour `FORWARD[f]` (each edge once, used both ways). Movers pushing through bodies raise
@@ -168,7 +168,7 @@ pub struct World {
     pub scratch: flow::Scratch,
     /// Light set aside in each cell for what its bodies' light reactions will store, J: put
     /// aside as it falls (`flow::air::radiation`), not as heat; a body takes its share at its
-    /// update (`body::live`), what no body can claim goes to the ground's heat (`body::survey`).
+    /// update (`body::live`), what no body can claim goes to the ground's heat (`survey::survey`).
     pub light_pool: Vec<f64>,
     /// Per body slot: the share of the light it caught that its light reactions stored at its
     /// last update (J per J). Its cell sets that share of the light it absorbs aside.
@@ -179,7 +179,7 @@ pub struct World {
     pub e_deep: Vec<f64>,
     /// Heat set aside in each cell for what its bodies draw from the ground between their updates, J (below 0: given to the
     /// ground ahead): each survey holds here what each body drew a second at its last update times the time since
-    /// (`body::survey`), so the ground pays it as it goes and a body's update settles only the difference (`body::live`).
+    /// (`survey::survey`), so the ground pays it as it goes and a body's update settles only the difference (`body::live`).
     pub heat_pool: Vec<f64>,
     /// Per body slot: the heat it drew from the ground at its last update, W.
     pub heat_keep: PerSlot,

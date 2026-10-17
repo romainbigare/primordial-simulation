@@ -404,7 +404,7 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
-/// Light passes through a cell's bodies from the tallest member down (`body::shade`): of two
+/// Light passes through a cell's bodies from the tallest member down (`survey::shade`): of two
 /// light-eater nodes with the same capture area, the one of 100 times heavier members catches
 /// more light per m² of it (e^(its capture area per ground area) times more), the two together
 /// catch what the cell's canopy intercepts, and matter and energy are kept exactly.
