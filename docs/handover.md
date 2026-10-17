@@ -14,6 +14,7 @@ The other documents:
 - `docs/tape.md`: what a run records.
 - `docs/history.md`: what changed in M0 to M3, what was tried and not kept, and where old files are in git.
 - `docs/reports/`: the watch reports (Section 12.4).
+- `docs/foundation/plan.md`: the proposed foundation work before M4. A proposal: it starts only after the owner's decisions in its Section 3; until then this document wins.
 
 ---
 
