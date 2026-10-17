@@ -236,7 +236,8 @@ fn child_lineage(w: &mut World, b: &Body, c: &mut Body, rows: &mut Option<Vec<f3
 
 /// Children `c` of `b` that join no node start a body of their own, born with `rows` (none: its parent's), in a group of
 /// its own if brains are not shared (`lineage::own`). Several children together that join no node at all (`alone`) are
-/// drawn from it as individuals, newborn (wear 0), the last one the body itself.
+/// drawn from it as individuals (`nodes::open`: each with genes and born rows of its own, drawn from their spread),
+/// newborn (wear 0), the last one the body itself, with the genes and rows the draws left.
 fn place_child(w: &mut World, slot: usize, b: &Body, l: &Litter, mut c: Body, rows: Option<Vec<f32>>) {
     if let Some(v) = rows {
         c.genome = w.life.new_genome(v);

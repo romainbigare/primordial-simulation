@@ -3,7 +3,7 @@
 //! heat are kept exactly in every join and split.
 
 use crate::body::{self, alike, alike_log, class, light_eater, most, noise, range, size_step, spread_at, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
-use crate::brain::row_step;
+use crate::brain::{row_step, shake};
 use crate::lineage::own;
 use crate::rng::{Purpose, Rng};
 use crate::World;
@@ -222,16 +222,17 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 /// Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     w.counts.splits[1] += 1.0;
-    draw(w, b, r, None)
+    draw(w, b, r, None, false)
 }
 
 /// A count this close to a whole number is that number.
 pub(crate) const COUNT_SLACK: f64 = 1e-9;
 
-/// `n` members of the node in `slot` as individuals, each drawn as `one` draws a member, placed in the node's cell: the
-/// close view of a node, and what the check of nodes against individuals compares. Each draw leaves the others' genes,
-/// so the mean of all is kept. The node keeps at least one member (draws stop when it has fewer than two). Returns the
-/// members' slots.
+/// `n` members of the node in `slot` as individuals, each drawn as `one` draws a member and with born rows of its own,
+/// drawn as its genes are from their spread (`Body::row_spread`), placed in the node's cell: the close view of a node,
+/// and what the check of nodes against individuals compares. Each draw leaves the others' genes and rows, so the mean
+/// of all is kept. The node keeps at least one member (draws stop when it has fewer than two). Returns the members'
+/// slots.
 pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
     let (mut r, keep) = (Rng::new(w.seed, w.day, b.id(slot), Purpose::Open), w.light_keep.get(slot, b.gen));
@@ -243,14 +244,15 @@ pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
         if b.count < 2.0 {
             break;
         }
-        out.push(draw(w, &mut b, &mut r, Some(keep)));
+        out.push(draw(w, &mut b, &mut r, Some(keep), true));
     }
     w.life.bodies[slot] = b;
     out
 }
 
-/// One member drawn from node `b` (`one`), placed with the light-keep share `keep`.
-fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>) -> usize {
+/// One member drawn from node `b` (`one`), placed with the light-keep share `keep`; with `own_rows`, born with rows of
+/// its own (`member_rows`), else with the node's.
+fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: bool) -> usize {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
     let spread = std::mem::take(&mut b.spread);
@@ -265,8 +267,24 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>) -> usize {
             *s = ((n * v - d * d * n / (n - 1.0)) / (n - 1.0)).max(0.0);
         }
     }
-    w.life.regene(b, genes);
+    if own_rows && b.row_spread > 0.0 {
+        let (mine, left, spread) = member_rows(w.life.born(b), b.row_spread, n, r);
+        (c.genome, b.row_spread) = (w.life.new_genome(mine), spread);
+        w.life.reborn(b, genes, left);
+    } else {
+        w.life.regene(b, genes);
+    }
     (c.count, c.spread, c.row_spread, c.wear) = (1.0, Vec::new(), 0.0, r.f64());
     own(w, b, &mut c);
     w.place(c, keep)
+}
+
+/// The born rows of one member drawn from `n` members whose rows have mean `rows` and variance `v` (`brain::shake`),
+/// the mean of the others' rows, and the variance left among them, as `draw` draws genes.
+fn member_rows(rows: &[f32], v: f32, n: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>, f32) {
+    let mut mine = rows.to_vec();
+    shake(&mut mine, r, v.sqrt());
+    let d2 = mine.iter().zip(rows).map(|(x, m)| (x - m) * (x - m)).sum::<f32>() / rows.len().max(1) as f32;
+    let left = rows.iter().zip(&mine).map(|(m, x)| m - (x - m) / (n - 1.0)).collect();
+    (mine, left, ((n * v - d2 * n / (n - 1.0)) / (n - 1.0)).max(0.0))
 }

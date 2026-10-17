@@ -1269,7 +1269,8 @@ fn same(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
 /// `open` draws members of a node as individuals: they are in the node's cell, of count 1, with a wear in [0, 1), and
 /// members, stores and heat are kept exactly; the node keeps its place with the members left; the genes of the drawn
 /// are the node's plus noise of its spread (their mean near the node's, within four standard errors, and as wide as the
-/// spread) and the mean of all members, drawn and left, is the node's.
+/// spread) and the mean of all members, drawn and left, is the node's; and so are their born rows, each member's its
+/// own.
 #[test]
 fn opening_a_node_draws_members_and_keeps_everything() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -1282,6 +1283,9 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let cat = lay.cat + 1;
     let wide = [(COPY_MASS, 0.04f64), (GAS, 0.09), (cat, 0.09)];
     w.life.bodies[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
+    // And one of 0.1 in the born rows.
+    w.life.bodies[s].row_spread = 0.01;
+    let rows0 = w.life.born(&w.life.bodies[s]).to_vec();
     let (before, count0, cell) = (held(&w), w.life.bodies[s].count, w.life.bodies[s].cell);
     let n = 400;
     let drawn = nodes::open(&mut w, s, n);
@@ -1307,7 +1311,17 @@ fn opening_a_node_draws_members_and_keeps_everything() {
         let all = (mean[g] * n as f64 + node.genes[g] as f64 * node.count) / count0;
         assert!((all - genes0[g] as f64).abs() < 1e-4 * (1.0 + genes0[g].abs() as f64), "gene {g}: mean of all {all} against {}", genes0[g]);
     }
-    // A node keeps one member: asked for more than it has, it gives all but one.
+    let (mut rows, mut var) = (w.life.born(node).iter().map(|&x| x as f64 * node.count / count0).collect::<Vec<f64>>(), 0.0);
+    for b in drawn.iter().map(|&m| &w.life.bodies[m]) {
+        for ((r, &x), &x0) in rows.iter_mut().zip(w.life.born(b)).zip(&rows0) {
+            (*r, var) = (*r + x as f64 / count0, var + (x as f64 - x0 as f64).powi(2) / (n * rows0.len()) as f64);
+        }
+    }
+    let off = rows.iter().zip(&rows0).map(|(x, &y)| (x - y as f64).abs()).fold(0.0, f64::max);
+    assert!(off < 1e-4 && var.sqrt() > 0.08 && var.sqrt() < 0.12, "born rows: mean of all off by {off}, drawn as wide as {}", var.sqrt());
+    // A node keeps one member: asked for more than it has, it gives all but one. (Its rows made alike first, so that its
+    // many members do not each get rows of their own.)
+    w.life.bodies[s].row_spread = 0.0;
     let rest = w.life.bodies[s].count.floor() as usize;
     assert_eq!(nodes::open(&mut w, s, rest + 5).len(), rest - 1);
     assert!(w.life.bodies[s].count < 2.0);
