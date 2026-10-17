@@ -363,19 +363,18 @@ impl Default for Seeding {
     }
 }
 
-/// Give the loose ground of every land cell the soil of the chemistry (`Chemistry::soil`, mol per m²: the nitrogen
-/// mineral in chemistry 0, 10 g of nitrogen per m²) at this moment, which is when life starts (15 Oct 2026): booked as new
-/// matter and energy like an edit, at the cell's own temperature. Land under more than half a metre of liquid (a basin of
-/// standing liquid; the cells no body is placed on) is no soil and gets none. It is not placed at year 0: the first years of
-/// a world are the liquid's, before any body, and rain washes a dissolved mineral from the slopes into the basins and the
-/// low ground in the first year. Returns what was placed, in one line.
-pub fn soil(w: &mut World) -> String {
+/// Give the loose ground of every land cell the soil `soil` (substance, mol per m²: `Init::soil`, the mineral of the
+/// fixing reaction's gas in chemistry 0) at this moment, which is when life starts: booked as new matter and energy like
+/// an edit, at the cell's own temperature. Land under more than half a metre of liquid (a basin of standing liquid; the
+/// cells no body is placed on) is no soil and gets none. It is not placed at year 0: the first years of a world are the
+/// liquid's, before any body, and rain washes a dissolved mineral from the slopes into the basins and the low ground in
+/// the first year. Returns what was placed, in one line.
+pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
     let (n, area) = (w.grid.n(), w.grid.area());
     // (The liquid that stands, not what the pores of the ground hold: `body::env_of`.)
     let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0 && body::env_of(w, i)[1] <= 0.5).collect();
     let mut said = Vec::new();
-    for q in 0..w.chem.soil.len() {
-        let (s, per) = w.chem.soil[q];
+    for &(s, per) in soil {
         let a = per * area;
         for &i in &land {
             let e = a * w.chem.subs[s].cp * w.t_ground(i);

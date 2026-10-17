@@ -76,8 +76,7 @@ pub struct Init {
     pub loose: Vec<(usize, f64)>,
     /// Extra volume fractions found in patches
     pub deposits: Vec<(usize, f64)>,
-    /// Amounts in the loose ground of every land cell when life starts, mol per m² (15 Oct 2026: the nitrogen mineral of the
-    /// soil; none where a chemistry has no such substance), `Chemistry::soil`
+    /// Amounts in the loose ground of every land cell when life starts, mol per m² (`life::soil`; empty: none)
     #[serde(default)]
     pub soil: Vec<(usize, f64)>,
 }
@@ -85,44 +84,33 @@ pub struct Init {
 pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
     let f: File = toml::from_str(text).map_err(|e| e.to_string())?;
     let pair = |v: &[[u16; 2]]| v.iter().map(|p| (p[0], p[1])).collect();
-    let mut air = vec![0.0; f.s.len()];
-    f.init.air.iter().for_each(|&(k, x)| air[k] = x);
-    let chem = Chemistry {
-        n_elements: f.elements,
-        subs: f
-            .s
-            .into_iter()
-            .map(|s| Substance {
-                elems: s.e,
-                molar_mass: s.m / 1000.0,
-                cp: s.cp,
-                melt: s.melt,
-                boil: s.boil,
-                density: s.rho,
-                hardness: s.hard,
-                strength: s.str,
-                refl: s.refl,
-                ir_abs: s.ir,
-                ir_sat: s.sat,
-                solubility: s.sol,
-                conductivity: s.cond,
-                hf: s.hf * 1000.0,
-                lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
-                lf: s.lf.map_or(9.5 * s.melt, |l| l * 1000.0),
-                modulus: s.modulus * 1e9,
-                rupture: s.rupture * 1e6,
-            })
-            .collect(),
-        reactions: f
-            .r
-            .into_iter()
-            .map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord })
-            .collect(),
-        build: f.build.map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }),
-        builds: f.builds.iter().map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }).collect(),
-        air,
-        soil: f.init.soil.clone(),
-    };
+    let subs = f
+        .s
+        .into_iter()
+        .map(|s| Substance {
+            elems: s.e,
+            molar_mass: s.m / 1000.0,
+            cp: s.cp,
+            melt: s.melt,
+            boil: s.boil,
+            density: s.rho,
+            hardness: s.hard,
+            strength: s.str,
+            refl: s.refl,
+            ir_abs: s.ir,
+            ir_sat: s.sat,
+            solubility: s.sol,
+            conductivity: s.cond,
+            hf: s.hf * 1000.0,
+            lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
+            lf: s.lf.map_or(9.5 * s.melt, |l| l * 1000.0),
+            modulus: s.modulus * 1e9,
+            rupture: s.rupture * 1e6,
+        })
+        .collect();
+    let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord }).collect();
+    let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
+    let chem = Chemistry::new(f.elements, subs, reactions, f.build.as_ref().map(conversion), f.builds.iter().map(conversion).collect(), &f.init.air);
     chem.validate()?;
     Ok((chem, f.init))
 }

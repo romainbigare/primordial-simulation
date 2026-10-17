@@ -313,7 +313,7 @@ fn null_run_freezes_the_brain_rows() {
 fn yearly_series_counts_the_nitrogen_mineral() {
     let dir = tmp("nitrogen");
     let mut w = world();
-    worldgen::life::soil(&mut w);
+    worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
     worldgen::life::seed(&mut w, 0);
     // (The founders that fix are put back to none, so that the nitrogen in all can stay what the soil gave.)
     let (lay, fix) = (pcore::body::Layout::of(&w.chem), worldgen::life::fixing(&w.chem).expect("the fixing reaction"));

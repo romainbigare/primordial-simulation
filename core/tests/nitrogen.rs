@@ -491,7 +491,7 @@ fn the_soil_is_booked_and_the_tape_counts_the_mineral() {
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
     let n = w.grid.n();
     let before = total(&w, mineral);
-    let line = worldgen::life::soil(&mut w);
+    let line = worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
     println!("{line}");
     let (placed, area) = (total(&w, mineral) - before, w.grid.area());
     let cells = placed / (0.357 * area);

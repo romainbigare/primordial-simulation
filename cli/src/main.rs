@@ -108,7 +108,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     for y in y0 + 1..=y0 + years {
         // The soil gets its mineral when life starts (`worldgen::life::soil`).
         if life_year >= 0 && y as i64 - 1 == life_year {
-            println!("{}", worldgen::life::soil(&mut w));
+            println!("{}", worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil));
         }
         // First light-eaters; once they have spread, the others (each kind at its own year after the first life).
         for &(kind, at) in &plan {
