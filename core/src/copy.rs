@@ -713,7 +713,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
     c.vis = c.visible(&w.chem, &w.cfg.phys);
     let delay = c.interval();
     let s = w.life.add(c, w.day, delay);
-    w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
+    w.light_keep.set(s, w.life.bodies[s].gen, w.light_keep.get(slot, b.gen));
     // Several children together (a member far past `full` has more than one): drawn from the group
     // as individuals, newborn (wear 0), the last one the group's body itself.
     if alone && w.life.bodies[s].count > 1.5 {
@@ -899,7 +899,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     w.diag.splits[0] += 1.0;
     let delay = c.interval();
     let s = w.life.add(c, w.day, delay);
-    w.set_keep(s, w.life.bodies[s].gen, w.keep_of(slot, b.gen));
+    w.light_keep.set(s, w.life.bodies[s].gen, w.light_keep.get(slot, b.gen));
 }
 
 /// One member of node `b` (at least two) split off as an individual, to do what only a single
@@ -922,7 +922,7 @@ pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
 /// are kept exactly. Returns the members' slots.
 pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
-    let (mut r, keep) = (Rng::new(w.seed, w.day, !b.id(slot), Purpose::Split), w.keep_of(slot, b.gen));
+    let (mut r, keep) = (Rng::new(w.seed, w.day, !b.id(slot), Purpose::Split), w.light_keep.get(slot, b.gen));
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         // (A count a rounding away from a whole number is that number.)
@@ -933,7 +933,7 @@ pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
             break;
         }
         let s = draw(w, &mut b, &mut r);
-        w.set_keep(s, w.life.bodies[s].gen, keep);
+        w.light_keep.set(s, w.life.bodies[s].gen, keep);
         out.push(s);
     }
     w.life.bodies[slot] = b;

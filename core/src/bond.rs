@@ -694,6 +694,7 @@ pub fn step(w: &mut World) {
             rc.react(chem, &mut p.wall, Some(&mut pool), &mut p.e, fixed, None, 0.0, dt);
             // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas
             // taken back returns it); gas the ground cannot pay for goes to the ground instead.
+            // Bug B4: no sensible heat; fixed in the bug stage.
             let (mut pay, mut back) = (0.0, 0.0);
             for k in 0..ns {
                 let (d, latent) = (pool[k] - pool0[k], chem.subs[k].latent_gas());

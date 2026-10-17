@@ -129,7 +129,7 @@ pub fn hash(w: &World) -> u64 {
             eat(&mut h, x.to_bits());
         }
     }
-    for &(g, k) in w.light_keep.iter().chain(&w.heat_keep) {
+    for &(g, k) in w.light_keep.entries().iter().chain(w.heat_keep.entries()) {
         eat(&mut h, g as u64 | (k.to_bits() as u64) << 32);
     }
     for x in w.life.groups.iter().flat_map(|g| &g.rows) {

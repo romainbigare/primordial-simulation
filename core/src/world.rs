@@ -77,6 +77,28 @@ pub struct Diag {
     pub liquid_land: [f64; 5],
 }
 
+/// One number per body slot, kept with the generation of the body that set it: a body reads only its own (0 for a new
+/// body in a reused slot, and before its first set).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PerSlot(Vec<(u32, f32)>);
+
+impl PerSlot {
+    /// The number set by the body in `slot` of generation `gen` (0 if it set none).
+    pub fn get(&self, slot: usize, gen: u32) -> f32 {
+        self.0.get(slot).filter(|k| k.0 == gen).map_or(0.0, |k| k.1)
+    }
+    pub fn set(&mut self, slot: usize, gen: u32, v: f32) {
+        if self.0.len() <= slot {
+            self.0.resize(slot + 1, (u32::MAX, 0.0));
+        }
+        self.0[slot] = (gen, v);
+    }
+    /// Every slot's (generation, number); `u32::MAX` for a slot never set.
+    pub fn entries(&self) -> &[(u32, f32)] {
+        &self.0
+    }
+}
+
 /// The whole state of a world: what `step` advances, and what a snapshot saves.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct World {
@@ -123,9 +145,8 @@ pub struct World {
     /// update (`body::live`), what no body can claim goes to the ground's heat (`body::survey`).
     pub light_pool: Vec<f64>,
     /// Per body slot: the share of the light it caught that its light reactions stored at its
-    /// last update (J per J), with the slot's generation (`World::keep_of`). Its cell sets that
-    /// share of the light it absorbs aside.
-    pub light_keep: Vec<(u32, f32)>,
+    /// last update (J per J). Its cell sets that share of the light it absorbs aside.
+    pub light_keep: PerSlot,
     /// Liquid (with what is dissolved in it) in the store of the bed under each ground node, [k * n + i], mol, and its
     /// thermal energy with the fusion enthalpy of what is molten, J (`flow::drain`; empty until first used)
     pub deep: Vec<f64>,
@@ -134,22 +155,11 @@ pub struct World {
     /// ground ahead): each survey holds here what each body drew a second at its last update times the time since
     /// (`body::survey`), so the ground pays it as it goes and a body's update settles only the difference (`body::live`).
     pub heat_pool: Vec<f64>,
-    /// Per body slot: the heat it drew from the ground at its last update, W, with the slot's generation.
-    pub heat_keep: Vec<(u32, f32)>,
+    /// Per body slot: the heat it drew from the ground at its last update, W.
+    pub heat_keep: PerSlot,
 }
 
 impl World {
-    /// The share of the light it caught that the body in `slot` (of generation `gen`) stored at
-    /// its last update (none before its first).
-    pub(crate) fn keep_of(&self, slot: usize, gen: u32) -> f32 {
-        self.light_keep.get(slot).filter(|k| k.0 == gen).map_or(0.0, |k| k.1)
-    }
-    pub(crate) fn set_keep(&mut self, slot: usize, gen: u32, k: f32) {
-        if self.light_keep.len() <= slot {
-            self.light_keep.resize(slot + 1, (u32::MAX, 0.0));
-        }
-        self.light_keep[slot] = (gen, k);
-    }
     pub fn days_per_year(&self) -> u64 {
         (self.cfg.days_per_month * self.cfg.months_per_year) as u64
     }
