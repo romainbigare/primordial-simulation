@@ -366,6 +366,27 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// The stores of the bed flow from where they stand before the step, so no direction goes first: in one liquid step
+/// the full store of a cell (among empty ones, with nothing sinking into them) reaches its neighbours and no further.
+#[test]
+fn a_store_reaches_only_its_neighbours_in_a_step() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    w.cfg.phys.seep = 0.0;
+    pcore::flow::step(&mut w, LIQUID_STEP);
+    let (n, gw, p) = (w.grid.n(), w.grid.w, w.cfg.phys);
+    let (x, y) = (gw / 2, w.grid.h / 2);
+    let i = y * gw + x;
+    w.deep.fill(0.0);
+    w.e_deep.fill(0.0);
+    let (mv, sub) = (w.chem.molar_volume(LIQUID, Phase::Liquid), &w.chem.subs[LIQUID]);
+    w.deep[LIQUID * n + i] = p.bed_porosity * p.bed_depth * w.grid.area() / mv;
+    w.e_deep[i] = w.deep[LIQUID * n + i] * (sub.cp * 290.0 + sub.lf);
+    pcore::flow::step(&mut w, LIQUID_STEP);
+    let near = |j: usize| (j % gw).abs_diff(x) <= 1 && (j / gw).abs_diff(y) <= 1;
+    let reached: Vec<usize> = (0..n).filter(|&j| j != i && w.deep[LIQUID * n + j] > 0.0).collect();
+    assert!(!reached.is_empty() && reached.iter().all(|&j| near(j)), "reached {reached:?} from {i}");
+}
+
 /// A solid that dissolves in the liquid (the fixed gas's mineral) is in the liquid of the pores, and moves with the
 /// liquid that runs off the cell: the share of the mineral that leaves is the share of the liquid that leaves, down
 /// the slope, and it is deposited nowhere as sediment. Liquid that fits in the pores does not run off and the mineral
