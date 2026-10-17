@@ -104,8 +104,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
 /// off (`dispatch`): with less than two members it has none to spare. `pm` is the mass of a member, kg.
 fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Choice, t: &mut ActTmp) {
     let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
-    for a in 0..FIXED {
-        c.logit[a] = out[a] + b.adj[a];
+    for ((l, o), j) in c.logit[..FIXED].iter_mut().zip(out).zip(&b.adj) {
+        *l = o + j;
     }
     // What the body can take (by its uptake selectivity) in a cell, as it perceives it.
     let smell = |j: usize| b.k.upt.iter().map(|&(k, u)| u * w.life.seen[j * ns + k]).sum::<f32>();
