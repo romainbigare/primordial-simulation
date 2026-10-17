@@ -131,7 +131,8 @@ fn film(w: &World, amt: &[f64], t: f64) -> f64 {
 }
 
 /// React ground node `i` (its amounts in `h.amt`) for `time` s with the gas over it, and settle the gas with its air node.
-/// The reactor sees sensible heat: molten amounts hold their fusion enthalpy apart. Gas sent to the air takes its fusion
+/// The reactor sees sensible heat: the fusion enthalpy the node holds by Flow's solve of its plateaus stays apart
+/// (`FlowView::fused`), so a node on a plateau reacts at its melting point. Gas sent to the air takes its fusion
 /// and vaporisation enthalpy from the ground (gas taken back returns it); gas the ground cannot pay for stays behind.
 /// Gas taken from the air brings its heat at the air's temperature; gas sent leaves with its share of the node's heat by
 /// heat capacity.
@@ -143,11 +144,12 @@ fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView,
     }
     h.pool.copy_from_slice(&h.pool0);
     rc.film = film(w, &h.amt, t);
-    let fused: f64 = (0..ns).map(|k| h.amt[k] * chem.fused_heat(k, t, |j| h.amt[j])).sum();
+    let cap = |amt: &[f64]| nodes.skin[i] + (0..ns).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
+    let fused = nodes.fused(i, w.e_ground[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.e_ground[i] - fused;
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], None, 0.0, time);
     let gas = GasMove::of(chem, &h.pool, &h.pool0, nodes.ta[j]);
-    let c_r = nodes.skin[i] + (0..ns).map(|k| h.amt[k] * chem.subs[k].cp).sum::<f64>();
+    let c_r = cap(&h.amt);
     let q_out = e.max(0.0) * gas.c_out / (c_r + gas.c_out).max(1e-9);
     w.e_ground[i] = e + fused + gas.back + gas.q_in - q_out;
     w.e_air[j] += q_out - gas.q_in;

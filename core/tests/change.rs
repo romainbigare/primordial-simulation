@@ -4,7 +4,7 @@
 use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
 use pcore::units::{DAY, P_REF, R_GAS};
-use worldgen::testkit::{hold_ground, in_all, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{hold_ground, in_all, BURN, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 
 /// A heat capacity so large that a node's temperature stays put, J/K.
 const HUGE_CAP: f64 = 1e12;
@@ -126,6 +126,34 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
     println!("the air gained {kg:.2} kg across {height:.0} m");
     assert!(kg.abs() > 1.0 && height > 1e3 && height < w.cfg.air_top_m, "{kg} kg across {height} m");
     books.assert_kept(&w, 1e-12);
+}
+
+/// A ground node reacts at its temperature: one half frozen, on the melting plateau of its liquid, burns the energy-rich
+/// solid as fast as the same node all frozen a millionth of a kelvin below (the fusion enthalpy its liquid holds is no
+/// heat the reactor sees). The burning is the world's only reaction, and the rock holds the node's heat and its liquid.
+#[test]
+fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
+    let (mut chem, init) = worldgen::chemistry0();
+    chem.reactions = vec![chem.reactions[BURN].clone()];
+    let base = worldgen::terrain::build(1, 16, 16, chem, &init, pcore::Config::default());
+    let (n, i, liquid) = (base.grid.n(), 17, 2000.0);
+    let burned = |half: bool| {
+        let mut w = base.clone();
+        for k in 0..w.chem.ns() {
+            (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
+        }
+        (w.ground[LIQUID * n + i], w.ground[RICH * n + i], w.ground[ROCK * n + i]) = (liquid, 10.0, 1e5);
+        let tm = w.chem.subs[LIQUID].melt;
+        w.e_ground[i] = if half { w.energy_ground(i, tm) - 0.5 * liquid * w.chem.subs[LIQUID].lf } else { w.energy_ground(i, tm - 1e-6) };
+        // A tick at which every block reacts at its turn for all the time since its first.
+        (w.scratch, w.day) = (Default::default(), 4000 * w.cfg.phys_days as u64);
+        assert_eq!(w.thaw(i).1.map(|p| p.0), half.then_some(LIQUID));
+        let dt = w.cfg.phys_days as f64 * DAY;
+        change::step(&mut w, dt);
+        10.0 - w.ground[RICH * n + i]
+    };
+    let (half, frozen) = (burned(true), burned(false));
+    assert!(frozen > 0.0 && (half - frozen).abs() <= 1e-5 * frozen, "half frozen {half}, all frozen {frozen}");
 }
 
 /// A body's catalyst works below the temperature where it loses its shape, and a few K above it the reaction goes
