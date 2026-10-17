@@ -1,4 +1,5 @@
-//! Snapshots: the whole world and the shell's plan of what it still has to place (`P`), in one file.
+//! Snapshots: the whole world and the shell's own state (`P`: what it still has to place, what its recorder keeps,
+//! `Recorder::kept`), in one file.
 
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pcore::World;
@@ -7,7 +8,7 @@ use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 /// Start of every snapshot file, before the bincode body: a tag, then the format version
-/// (little-endian `u32`). Raise `SNAPSHOT_VERSION` whenever `World` or the plan changes shape.
+/// (little-endian `u32`). Raise `SNAPSHOT_VERSION` whenever `World` or the shell's state changes shape.
 const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
 const SNAPSHOT_VERSION: u32 = 2;
 /// Buffer between bincode and the compressor, bytes: bincode reads and writes 8 bytes at a time, and each call into
@@ -22,7 +23,7 @@ fn bad(e: impl std::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e.to_string())
 }
 
-/// Save the world and the plan (header, then bincode, gzip). Scratch fields marked `serde(skip)` are not saved.
+/// Save the world and the shell's state (header, then bincode, gzip). Scratch fields marked `serde(skip)` are not saved.
 pub fn save_snapshot<P: Serialize>(w: &World, plan: &P, path: impl AsRef<Path>) -> io::Result<()> {
     let mut z = BufWriter::with_capacity(BUFFER, GzEncoder::new(std::fs::File::create(path)?, Compression::fast()));
     z.write_all(&SNAPSHOT_TAG)?;

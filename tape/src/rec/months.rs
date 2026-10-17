@@ -49,6 +49,11 @@ pub(super) fn csv(rows: &[MonthRow]) -> String {
     out + "\n"
 }
 
+/// The world's year and month of the year now.
+pub(super) fn year_month(w: &World) -> (u64, u64) {
+    (w.day / w.days_per_year(), (w.day / w.cfg.days_per_month as u64) % w.cfg.months_per_year as u64)
+}
+
 impl Recorder {
     /// The month: its row (where the mobile bodies are and how they moved since last month), and what the year
     /// counts at month ends: standing members by kind, signals by context, bodies inside walls, the land's
@@ -93,15 +98,11 @@ impl Recorder {
             y.land = (0..w.grid.n()).filter(|&i| w.is_land(i)).map(|i| i as u32).collect();
         }
         y.t_land.push(y.land.iter().map(|&i| w.thaw(i as usize).0).sum::<f64>() / y.land.len().max(1) as f64);
-        let dpm = w.cfg.days_per_month as u64;
-        let (year, month) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
+        let (year, month) = year_month(w);
         let mean = sum.map(|v| v / n.max(1.0));
         let [sp, sy] = std::mem::take(&mut self.month.spent);
         let values = [n, mean[0], mean[1], mean[2], mean[3], inside, tm / n.max(1.0), sp, sy / sp.max(MIN_SPENT)];
         let (births, deaths) = (std::mem::take(&mut self.month.births), std::mem::take(&mut self.month.deaths));
-        // (A resumed run has this month's row already, from the tape it loaded.)
-        if self.months.last().is_none_or(|r| (r.year, r.month) != (year, month)) {
-            self.months.push(MonthRow { year, month, values, births, deaths });
-        }
+        self.months.push(MonthRow { year, month, values, births, deaths });
     }
 }

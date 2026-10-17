@@ -10,7 +10,7 @@ use args::{Args, USAGE};
 use pcore::World;
 use report::Clock;
 use std::time::{Duration, Instant};
-use tape::Recorder;
+use tape::{Kept, Recorder};
 use worldgen::schedule::Schedule;
 
 /// Years between snapshots (and between writes of the tape so far).
@@ -28,13 +28,14 @@ fn main() {
                 std::process::exit(2);
             }
             let plan = args.schedule();
-            drive(w, &args, plan, false);
+            drive(w, &args, plan, None);
         }
         "resume" => {
-            // The snapshot carries the plan of its run: what is still due is placed when it is due.
+            // The snapshot carries the plan of its run (what is still due is placed when it is due) and what its
+            // recorder kept across years.
             let from = args.get("--from", String::new());
-            let (w, plan) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
-            drive(w, &args, plan, true);
+            let (w, (plan, kept)) = tape::load_snapshot(&from).unwrap_or_else(|e| panic!("load {from}: {e}"));
+            drive(w, &args, plan, Some(kept));
         }
         "chem" => chem::run(&args),
         "numbers" => numbers::run(&args.0),
@@ -43,13 +44,14 @@ fn main() {
 }
 
 /// Simulate `--years` years: place what `plan` says when it is due, print drift and speed, and write pictures, the
-/// tape and snapshots to `--out`.
-fn drive(mut w: World, a: &Args, plan: Schedule, resumed: bool) {
+/// tape and snapshots to `--out`. A resumed run brings what its recorder kept (`kept`).
+fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     let (years, every, out) = (a.get("--years", 10u64), a.get("--every", 10u64), a.get("--out", String::from("out")));
     std::fs::create_dir_all(&out).expect("create out dir");
     let mut rec = Recorder::new(&w, a.get("--frames-every", 10u64), a.get("--monthly-years", 2u64));
-    if resumed {
-        rec.resume(&mut w, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
+    let resumed = kept.is_some();
+    if let Some(kept) = kept {
+        rec.resume(&mut w, kept, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
     }
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     let y0 = w.day / w.days_per_year();
@@ -88,7 +90,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, resumed: bool) {
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }
         if y % SNAP_EVERY == 0 || y == y0 + years {
-            tape::save_snapshot(&w, &plan, format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
+            tape::save_snapshot(&w, &(&plan, rec.kept()), format!("{out}/snap_{y:05}.bin.gz")).expect("save snapshot");
             // Write the tape so far too, so a stopped run keeps its series and frames.
             let t = Instant::now();
             rec.finish(&out).expect("write tape");
