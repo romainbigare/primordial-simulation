@@ -9,15 +9,15 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 
 | File | What it holds |
 |---|---|
-| `snap_NNNNN.bin.gz` | the whole world and the run's plan of what is placed when, every 10 years (bincode, gzip); `ew resume --from` goes on from it |
+| `snap_NNNNN.bin.gz` | every 10 years and at the end: the whole world, the run's plan of what is placed when, and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one |
 | `series.csv` | one row a year, the columns below |
 | `months.csv` | one row a month (below) |
 | `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |
 | `world.ewf.gz` | the viewer's file: `EWF1`, the header's length, the header (JSON: size, layers, frames, series and units, events, the months rows), then the frames |
 | `yearNNNN.png` | map, temperature, rain, life and traffic every `--every` years |
 
-**Raw events** (`core/src/event.rs`): born, died (with cause, kind, adult or young), took, gave, watched, bond made or
-broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
+**Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
+the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a cell): height, liquid depth, ice, liquid flux, loose
 ground, ground and air temperature, rain, vapour, absorber, light-eater and other body mass per m², bodies, traffic,
@@ -67,8 +67,8 @@ worn edges, structures, true colour (r, g, b).
 | `crossings`, `traffic_top2`, `traffic_persist` | 1/yr, , | moves to a neighbour cell; share on the busiest 2% of cells; overlap with ten years before |
 | `worn_edges`, `worn_new`, `worn_persist` | , 1/yr, | edges cleared by movers (path-like), new ones, kept from ten years before |
 | `mass_top2`, `mass_land` | kg/m² | body mass on the busiest cells and on other land |
-| `groups`, `watched`, `watched_kin`, `watched_groups`, `spread_max` | | groups; watches (imitation), of them within a lineage; groups watched; most watchers of one |
-| `gave`, `gave_kg`, `gave_eaters`, `gave_pairs`, `gave_reciprocal` | | gifts, kg given, gifts by eaters, giving pairs, pairs giving both ways |
+| `groups`, `watched`, `watched_kin`, `watched_groups`, `spread_max` | , 1/yr, 1/yr, , groups | groups; watches (imitation), of them within a lineage; groups watched; most watchers of one |
+| `gave`, `gave_kg`, `gave_eaters`, `gave_pairs`, `gave_reciprocal` | 1/yr, kg/yr, 1/yr, , | gifts, kg given, gifts by eaters, giving pairs, pairs giving both ways |
 | `ate_light_eaters`, `ate_others`, `ate_ground` | kg/yr | what eaters could burn of what they took, by source |
 
 **Parts and structures**
