@@ -109,7 +109,7 @@ pub struct World {
     pub light: Vec<f64>,
     /// Ground cleared of bodies along each edge, m²: edge `4i + f` joins cell `i` to its
     /// neighbour `FORWARD[f]` (each edge once, used both ways). Movers pushing through bodies raise
-    /// it (`choose::go`), cover growing back lowers it (`choose::regrow`). Empty until first used.
+    /// it (`choose::go`), cover growing back lowers it (`lanes::regrow`). Empty until first used.
     pub pass: Vec<f32>,
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]

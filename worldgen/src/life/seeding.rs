@@ -114,7 +114,7 @@ impl Placed {
 pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let Some(kind) = KINDS.get(which) else { return String::new() };
     let Some((r_light, _, _, burn)) = w.chem.life_roles() else { return String::new() };
-    body::survey(w);
+    pcore::survey::survey(w);
     let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Body);
     let hand = how.hand[(!kind.anywhere) as usize];
     let (shape, lineage, rows) = founder_lineage(w, which, kind, hand, &mut r);

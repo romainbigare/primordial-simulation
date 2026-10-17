@@ -78,7 +78,7 @@ pub(crate) const LOG_HALF: f32 = -LOG10_2;
 
 /// Mutation step (times the body's mutation size) and range of a gene. Catalysts, safe minimums and uptake are off
 /// below 0 (they cost and do nothing there), and their ranges go 20 steps below 0, so an off gene wanders as far as the
-/// noise of a node's spread reaches (`body::most`) without meeting a wall, whose clamp would push it up.
+/// noise of a node's spread reaches (`most`) without meeting a wall, whose clamp would push it up.
 pub(crate) fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     match g {
         g if g < NSCALAR => SCALARS[g],
@@ -225,7 +225,7 @@ pub(crate) fn distance(lay: &Layout, a: &[f32], b: &[f32], reach: impl Fn(usize)
 }
 
 /// Genes no more than `limit` steps apart in every gene (`distance`). Nodes merge each month only if their means are
-/// alike (`nodes::crowd`), and bodies mix their genes only if they are (`copy::partner`).
+/// alike (`nodes::crowd`), and bodies mix their genes only if they are (a partner, `copy::copy`).
 pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
     distance(lay, a, b, |_| limit).is_some()
 }

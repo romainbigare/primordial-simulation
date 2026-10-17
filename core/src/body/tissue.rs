@@ -1,12 +1,9 @@
 //! The body as tissue: its matter and brood, the liquid it keeps, its size and supply, the levels of its stores, what
 //! it is built of, its height, and when it lacks a store.
 
-use super::{Body, Layout, COPY_MASS};
+use super::{Body, Layout, COPY_MASS, WET_TISSUE};
 use crate::chem::{Chemistry, Phase};
 
-/// The liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of working body (`Body::built`).
-/// About 0.7 to 0.9 in real living tissue (docs/numbers.md).
-pub const WET_TISSUE: f64 = 0.75;
 
 /// The most share of a body its keep gene of a key liquid, or the solids it builds together, may make up.
 pub(crate) const MAX_KEEP: f64 = 0.95;

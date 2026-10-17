@@ -60,7 +60,7 @@ impl Body {
         self.k.burn.iter().filter_map(|&(r, e)| chem.reactions[r].inputs.iter().find(|x| x.0 as usize == k).map(|x| e / x.1 as f64)).fold(0.0, f64::max)
     }
     /// Does it break substance `k`: is its catalyst on for a reaction that takes `k`? A body takes in body matter and the
-    /// solids bodies build only if it does (`choose::wanted`). Read from the genes, so it holds before `prepare`.
+    /// solids bodies build only if it does (`Body::wanted`). Read from the genes, so it holds before `prepare`.
     pub fn breaks(&self, chem: &Chemistry, k: usize) -> bool {
         let cat = Layout::of(chem).cat;
         (0..chem.reactions.len()).any(|r| self.genes[cat + r] > 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))

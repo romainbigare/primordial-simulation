@@ -288,7 +288,7 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let mut taker = worldgen::life::make(&mut w, 1, i, rl, rg).expect("body");
     taker.genes[lay.keep..].fill(0.95);
     // (Body matter given is digested into the solid, so it fills the taker's room for the solid
-    // (`choose::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
+    // (`Body::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
     let rich = w.chem.life_roles().expect("roles").1;
     taker.genes[lay.keep + rich] = 2.0;
     let (matter, liquid) = (w.chem.matter().expect("matter"), w.chem.life_roles().expect("roles").2);

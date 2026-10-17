@@ -1,8 +1,9 @@
 //! Bodies: nodes of the sparse graph that hold substances, heat and genes, with stable IDs (slot and generation).
 //! A body updates every `interval` days, and everything in between is integrated at its update (`live`): Flow and
 //! Change on it (`physics`), its upkeep (`pay`), its death (`death`). Choose (`choose`) and Copy (`copy`) act on it.
-//! Its genes are in `genes`, what it is made of in `tissue`, its chemistry in `metab`, its exchange with its
-//! surroundings in `exchange`. The registry of bodies is `life`, the survey of cells before each step `survey`.
+//! Its genes, how alike they are and how they change are in `genes`, what it is made of in `tissue`, its chemistry in
+//! `metab`, what it takes in in `intake`, its exchange with its surroundings in `exchange`. The registry of bodies is
+//! `life`, its lineages `lineage`, the survey of cells before each step `survey`.
 
 mod death;
 mod exchange;
@@ -21,10 +22,6 @@ pub use genes::*;
 pub(crate) use live::{live, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, release, upkeep};
-pub use tissue::WET_TISSUE;
-// (Re-exported for worldgen and tape.)
-pub use crate::lineage::Lineage;
-pub use crate::survey::{env_of, survey};
 
 use crate::brain::{ln, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::{Chemistry, Phase};
@@ -52,6 +49,9 @@ const PHASE_MARGIN: f32 = 5.0;
 /// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a safe minimum with the floor `MIN_FLOOR`.
 pub(crate) const SHARE_SENSE: f32 = 0.25;
 const MIN_FLOOR: f32 = 1e-2;
+/// The liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of working body (`Body::built`).
+/// About 0.7 to 0.9 in real living tissue (docs/numbers.md).
+pub const WET_TISSUE: f64 = 0.75;
 /// Others a body remembers.
 pub(crate) const KNOWN: usize = 4;
 

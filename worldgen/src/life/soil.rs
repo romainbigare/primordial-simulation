@@ -2,7 +2,7 @@
 
 use super::book;
 use super::seeding::MAX_STANDING_M;
-use pcore::{body, World};
+use pcore::{survey, World};
 
 /// Give the loose ground of every land cell the soil `soil` (substance, mol per m²: `Init::soil`, the mineral of the
 /// fixing reaction's gas in chemistry 0) at this moment, which is when life starts: booked as new matter and energy
@@ -12,8 +12,8 @@ use pcore::{body, World};
 /// Returns what was placed, in one line.
 pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
     let (n, area) = (w.grid.n(), w.grid.area());
-    // (The liquid that stands, not what the pores of the ground hold: `body::env_of`.)
-    let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0 && body::env_of(w, i)[1] <= MAX_STANDING_M).collect();
+    // (The liquid that stands, not what the pores of the ground hold: `survey::env_of`.)
+    let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0 && survey::env_of(w, i)[1] <= MAX_STANDING_M).collect();
     let mut said = Vec::new();
     for &(s, per) in soil {
         let a = per * area;
