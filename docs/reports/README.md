@@ -8,4 +8,4 @@ a folder with the same name as the report.
   done before M4.
 
 Old reports (the reviews and watch reports of M0 to M3, the studies and their patches): see
-`docs/history.md`, section 3. Git keeps them in commit 154554a.
+`docs/history.md`, section 4. Git keeps them in commit 154554a.

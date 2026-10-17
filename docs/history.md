@@ -96,7 +96,86 @@ straight to main).
 - The heat a body draws from the ground is set aside as it flows: `30737df` (commit `f03056d`).
 - One freezing law for bodies, ground, lakes and the sea: `154554a`.
 
-## 2. Tried and not kept
+## 2. M3 clean-up (16–17 October 2026)
+
+The code was made clean before the foundation work, and the bugs a review found were fixed. Each
+line says what was done, and for a bug what it did wrong. Merges are named where there are some.
+
+**The clean-up (results unchanged unless the line says so)**
+
+- One folder per law: `flow/` (`cf9b151`), `change/` (`37c9518`), `bond/` (`30f4012`), `chem/`
+  (`cf8138c`), `body/` with `life.rs`, `survey.rs`, `nodes.rs` (`8464bd8`), `copy/` (`026c8ea`),
+  `choose/` with `lanes.rs` and `body/intake.rs` (`8c89a6c`); `lib.rs` split (`4fc2d95`); the
+  tape, cli and worldgen in folders too (merge `4c65ce0`).
+- Backwards compatibility removed: old snapshots, tapes and flags are not read; a snapshot has a
+  format header (`797b1a1`).
+- The experiment switches `split_rows` and `sate_all` removed (`fab9e96`); dead code removed
+  (`a8b64d5`).
+- Diagnostic and derivable tape columns, and the counters only they read, deleted (`84853d3`,
+  `3a8dcb9`); the counters in one place, `World::counts` (`32884a5`).
+- Near-duplicates made one helper each (ground heat, gas settling, Arrhenius rate and others:
+  `3100d49`, `83e7e64`); every random draw has its own purpose (`80dec58`).
+- Tests reorganised: one file per law with a shared test kit, `worldgen::testkit` (`4639b6b`,
+  `12afe06`); overlapping tests removed (`ef7615a`); slow tests `#[ignore]` and run in CI
+  (`3e54e9f`); the golden test pins three small runs by their fingerprint (`968ae5e`, `902183d`).
+- The docs rewritten: the handover is the plan, `laws.md`, `history.md` and `tape.md` added, old
+  reports removed (merge `3269b05`).
+
+**Bugs fixed (each changes results)**
+
+- A child of less than one member joining a node counted as a whole member: animals were about 3
+  times too many (`d817aa9`).
+- A member going back to its node made the node's row spread smaller each time (`57e2965`).
+- In `--individuals`, siblings shared one set of born rows (`06d09d5`).
+- Brain groups weighed bodies, not members, and a new group counted 0 until the next month
+  (`b3d2c0d`).
+- One error too big for a number stopped a group's learning for good (`3f93399`).
+- A null run still drew new brain weights (`e900262`); the copy action still had a row, a score
+  and a dead draw in the brain (`43efbc5`).
+- The children who stayed got their provisions from stores already cut by the children who left;
+  a birth was recorded in the parent's cell (`fbf5d54`).
+- Gas entering the air from bodies, parts, reactions and growth did not pay its lift, but its
+  fall was paid: energy from nothing, about 3.5e16 J a year in a 48 × 48 run (`ac0c48b`, merge
+  `8cb98fb`).
+- Two ground temperatures (Flow's and one rebuilt from the amounts); taking from the ground read a
+  survey weeks old (`064924d`, `628bd6c`).
+- Liquid waited for the wind's turn when their periods differed (`9ba34e9`).
+- The bed's stores flowed several cells a step toward +x and +y, one toward −x and −y
+  (`1be7b83`).
+- The yearly sideways heat conduction between ground nodes did almost nothing (about 1e-5 of a
+  difference a year): removed (`5f7b59a`).
+- Smaller Flow faults: the wind made matter from nothing when it clamped negative amounts, moves
+  of molten amounts left the held fusion heat stale, pore liquid under field capacity flowed
+  sideways (`f3e10b0`); the molten bit set was exact only to 53 substances (`306f41f`); drainage
+  could take more than a node held (`7875ee9`).
+- Land had two definitions in worldgen (`a92e71e`); an empty row in the kinds table
+  (`92d3748`); the tape's yearly state was lost at a resume (`c71d668`); the tape weighed groups
+  by bodies (`c548616`) (merge `62b441f`).
+- A ground node on a melting plateau reacted up to about 80 K too cold (`cd363b9`).
+- Formation enthalpies were the measured ones where the books count the solid's: burning the
+  energy-rich solid gave about 451 kJ, not 467.5 (`71eca3f`).
+- Parts settled their gas with the air without its heat or lift (`f34949c`); parts used the
+  plain melting point, and gases counted as dissolved (`87f6296`).
+- One substance's molar mass was not the sum of its elements: a reaction made or lost mass
+  (`1f2c839`); molar masses now come from the element masses (`3c1098f`).
+- The reactor froze reactions over a calendar year, not the world's year, and judged calm with
+  numbers from two sub-steps (`f75aa55`) (merge `9509c6c`).
+- A node that lost members lost more brood than matter, and a bite left the brood whole: deaths
+  of want were about 6 times too many (`37e98f0`).
+- Two rules for what a body burns (one at 290 K, one at its own temperature) (`63a3c60`).
+- A dormancy of 1 gave NaN, and bad time steps were not refused in core (`cd9b219`).
+- `pay::plan` would fail with more than 64 burning reactions (`0066c2b`).
+- A body's molten stores held no fusion heat: it warmed by the fusion heat of every mol it drank,
+  and frost killed about 10 times too many (`8ff6e90`).
+- The share of light a light reaction stores was a constant in the reactor, not a number of
+  `Physics` (`c9294c9`).
+- The starting air thinned with height by a fixed scale, not its own (`9c1c252`).
+- Tool bugs: a resume did not place the kinds still due (T1, `0bf0414`); `root_<k>_life` divided
+  by the whole mass (T2, `25eca36`); the viewer drew a missing value as 0 (T3, `5bda05f`); the tests'
+  default start was not `ew run`'s (T4, `9417861`); bad time steps gave no clear error (T5,
+  `3bee6fc`) (merge `4c65ce0`).
+
+## 3. Tried and not kept
 
 Each item names where its code or its record can be found.
 
@@ -118,13 +197,13 @@ Each item names where its code or its record can be found.
 - **First-order rate law** (per unit of the scarce input; it jumped when the scarce input changed):
   `22c291f`, replaced by `b147ca2`.
 - **Catalyst costs by mass^0.75** (review 6): `a3d31a0`, replaced by `d2374d0`.
-- **Satiety at every size** (killed every animal, twice): `e9705b1`; still the switch
-  `Config::sate_all`, to be removed. The gate "satiety only past `full`" went in `a15251a`.
+- **Satiety at every size** (killed every animal, twice): `e9705b1`; the switch
+  `Config::sate_all` was removed in `fab9e96`. The gate "satiety only past `full`" went in `a15251a`.
 - **The `full` factor and copying when full** (a body copied at 2 × its copy mass): replaced by
   reproduction by surplus, `2b6c8a9`.
 - **The child store** (`Body::paid`, work paid ahead for children): `9089704`, removed in `c19a846`.
-- **Copying by the brain's choice**: off since `1d5358c` (`choose::COPY_BY_CHOICE`).
-- **Splitting nodes along their brain rows**: `Config::split_rows`, off; to be removed.
+- **Copying by the brain's choice**: off since `1d5358c`; the copy action left the brain in `43efbc5`.
+- **Splitting nodes along their brain rows**: `Config::split_rows`, off, removed in `fab9e96`.
 - **R11, the first two tries** (draining the liquid past the level killed the eaters, then cost
   the big kinds): `12aaf60` reverted in `915b051`; `e13d911` reverted in `e9176f7`; landed as `0639392`.
 - **Damage by the weight of the bite in nodes**: commit `5679524`; the old node rule was kept.
@@ -135,7 +214,7 @@ Each item names where its code or its record can be found.
   of `KEEP_T` and `COOL_T`, the linear form of product inhibition, lowering the salts' own melting
   points, the film with only the dissolved stock, and `c_build` at 3 × 10⁴.
 
-## 3. Reports that were deleted
+## 4. Reports that were deleted
 
 All are in commit 154554a. Read one with `git show 154554a:<path>`. Pictures are in the folder
 of the same name.
@@ -170,7 +249,7 @@ of the same name.
 The watch reports of M0, M1, M2 and the M3 check point were shared as separate files and were
 never in the repository.
 
-## 4. How M0 to M3 were worked
+## 5. How M0 to M3 were worked
 
 M0 to M3 used many review rounds (reviews 2 to 8, each followed by a watch report), done by
 the agent and the owner together. Each round found real faults, and the fixes are in the list
