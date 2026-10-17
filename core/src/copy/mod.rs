@@ -103,9 +103,10 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
         }
     }
     w.events.push(Event { day: w.day, kind: EventKind::Born { root: w.life.root(b), mixed: l.mate.is_some() }, node: cell as u32, value: m });
-    // Its heat is that of its parent's temperature on the heat capacity it got, so it starts as warm as its parent (a dry
-    // child would else be much hotter, a wet one colder); the parent keeps the rest.
-    c.e = w.chem.heat_share(b.e, b.heat_cap(&w.chem).max(1e-9), &c.store);
+    // Its heat is that of its parent's temperature on the heat capacity it got, with the fusion enthalpy of what it got
+    // molten (`Body::heat_with`), so it starts as warm as its parent (a dry child would else be much hotter, a wet one
+    // colder); the parent keeps the rest.
+    c.e = b.heat_with(&w.chem, &c.store);
     b.e -= c.e;
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;

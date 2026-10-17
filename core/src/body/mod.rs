@@ -26,6 +26,8 @@ pub use pay::{pay, release, upkeep};
 
 use crate::brain::{ln, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::{Chemistry, Phase};
+use crate::ground::{melting, Melting};
+use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
 
 /// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
@@ -170,8 +172,63 @@ impl Body {
     pub(crate) fn mass_cap(&self, chem: &Chemistry) -> (f64, f64) {
         self.store.iter().zip(&chem.subs).fold((0.0, 0.0), |(m, c), (a, s)| (m + a * s.molar_mass, c + a * s.cp))
     }
+    /// Its temperature, K: its molten stores hold their fusion enthalpy in `e`, as the ground's do, so a body freezes and
+    /// melts at a plateau (`thermal`).
     pub fn temp(&self, chem: &Chemistry) -> f64 {
-        self.e / self.heat_cap(chem).max(1e-9)
+        self.temp_at(chem, self.heat_cap(chem))
+    }
+    /// `temp` when the heat capacity `cap` is known.
+    pub(crate) fn temp_at(&self, chem: &Chemistry, cap: f64) -> f64 {
+        self.thermal(chem, cap).t
+    }
+    /// Where the body of heat capacity `cap` stands among the melting plateaus of its stores (`ground::melting`), each
+    /// store melting at its point lowered by what is dissolved in it (`melt`). (What is dissolved only lowers a melting
+    /// point: solved first at the stores' own points, the answer holds when every store that may hold something
+    /// dissolved is molten above its own point, as a warm body's liquid is.)
+    pub(crate) fn thermal(&self, chem: &Chemistry, cap: f64) -> Melting {
+        let held = |k: usize| self.store[k] > 0.0 && chem.subs[k].lf > 0.0;
+        let own = self.melting_at(chem, cap, |k| chem.subs[k].melt);
+        if (0..chem.ns()).all(|k| !held(k) || chem.mixes(k).is_none() || own.t > chem.subs[k].melt) {
+            return own;
+        }
+        self.melting_at(chem, cap, |k| self.melt(chem, k))
+    }
+    /// `thermal` with each store melting at `melt(k)`.
+    fn melting_at(&self, chem: &Chemistry, cap: f64, melt: impl Fn(usize) -> f64) -> Melting {
+        let (mut ks, mut m) = ([(0.0, 0usize); MAX_SUBSTANCES], 0);
+        for k in (0..chem.ns()).filter(|&k| self.store[k] > 0.0 && chem.subs[k].lf > 0.0) {
+            ks[m] = (melt(k), k);
+            m += 1;
+        }
+        ks[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
+        melting(cap.max(1e-9), self.e, ks[..m].iter().map(|&(tm, k)| (tm, k, self.store[k] * chem.subs[k].lf)))
+    }
+    /// Its energy with its stores as they are at the plateau state `th` (`thermal`): their heat capacity at `th.t` and
+    /// the fusion enthalpy of their molten shares there, J.
+    pub(crate) fn energy_in(&self, chem: &Chemistry, th: &Melting) -> f64 {
+        self.heat_cap(chem) * th.t + self.fusion_in(chem, th)
+    }
+    /// The fusion enthalpy its stores hold at the plateau state `th`, J.
+    pub(crate) fn fusion_in(&self, chem: &Chemistry, th: &Melting) -> f64 {
+        self.fused_of(chem, th, &self.store)
+    }
+    /// The fusion enthalpy amounts `m` hold in the body at the plateau state `th`: of each its molten share there (what
+    /// `th` does not hold molten, as a store it did not have then, by its melting point now), J.
+    fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
+        let molten_at = |k: usize| th.t >= chem.subs[k].melt || th.t >= self.melt(chem, k);
+        let molten = |k: usize| if th.bits >> k & 1 == 1 { th.molten(k) } else { molten_at(k) as u8 as f64 };
+        m.iter().enumerate().filter(|&(k, &a)| a > 0.0 && chem.subs[k].lf > 0.0).map(|(k, a)| a * chem.subs[k].lf * molten(k)).sum()
+    }
+    /// Its energy at `t` with what is at or over its melting point molten (`Chemistry::fused_heat`), J: the inverse of
+    /// `temp` off a plateau.
+    pub fn energy_at(&self, chem: &Chemistry, t: f64) -> f64 {
+        self.heat_cap(chem) * t + (0..chem.ns()).map(|k| self.store[k] * chem.fused_heat(k, t, |j| self.store[j])).sum::<f64>()
+    }
+    /// The heat that leaves with amounts `m` (mol of each substance): their heat capacity at its temperature and the fusion
+    /// enthalpy of their molten shares, J.
+    pub(crate) fn heat_with(&self, chem: &Chemistry, m: &[f64]) -> f64 {
+        let th = self.thermal(chem, self.heat_cap(chem));
+        chem.heat_cap_of(m) * th.t + self.fused_of(chem, &th, m)
     }
     /// Volume of its solids and liquids, m³.
     pub fn volume(&self, chem: &Chemistry) -> f64 {
@@ -213,7 +270,7 @@ impl Body {
     pub fn visible(&self, chem: &Chemistry, p: &crate::Physics) -> [f32; 6] {
         let (m, cap) = self.mass_cap(chem);
         let m1 = m / self.n();
-        let t = self.e / cap.max(1e-9);
+        let t = self.temp_at(chem, cap);
         let (mut v, mut c) = (1e-12, [0.0; 3]);
         for (k, &a) in self.store.iter().enumerate() {
             let p = chem.phase_in(k, t, |j| self.store[j]);

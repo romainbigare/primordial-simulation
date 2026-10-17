@@ -42,7 +42,7 @@ impl Set {
         let mut d = b.clone();
         let t = d.temp(&self.w.chem);
         d.store[LIQUID] = x * b.level(&self.w.chem, LIQUID, 0.0);
-        d.e = t * d.heat_cap(&self.w.chem);
+        d.e = d.energy_at(&self.w.chem, t);
         d
     }
 }
@@ -50,7 +50,7 @@ impl Set {
 /// The same body at the temperature `t`.
 fn at(w: &World, b: &Body, t: f64) -> Body {
     let mut x = b.clone();
-    x.e = x.heat_cap(&w.chem) * t;
+    x.e = x.energy_at(&w.chem, t);
     x
 }
 
@@ -262,7 +262,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         // liquid with its heat (`live::shed`).
         let h = |k: usize, t: f64| {
             let (s, gas) = (&chem.subs[k], chem.phase(k, t) == pcore::chem::Phase::Gas);
-            s.hf + if gas { s.lf + s.lv } else { s.cp * t }
+            s.hf + if gas { s.lf + s.lv } else { s.cp * t + chem.fused_heat(k, t, |j| b.store[j]) }
         };
         // (The bare burning gets the burning gas its breath brings, not the open air's.)
         let reach = b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days;
@@ -277,7 +277,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let wet = y.store[LIQUID] - x.store[LIQUID];
             let x_air = w0.air[LIQUID * na + j] / (0..ns).map(|k| w0.air[k * na + j]).sum::<f64>();
             let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
-            (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * (chem.subs[LIQUID].lf + chem.subs[LIQUID].lv)
+            (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * chem.subs[LIQUID].lv
         };
         let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, &b, mass, t) * days * DAY;
         let (mut lo, mut hi) = (tg, tg + 20.0);
@@ -547,8 +547,15 @@ fn frost_kills_in_proportion_to_activity() {
     let (wet, dry) = (node(&mut s, 0, 1.0), node(&mut s, 1, 0.5));
     let a = s.w.life.bodies[dry].activity(&s.w.chem, &s.w.cfg.phys);
     let books = Books::now(&s.w);
-    // The key liquid freezes at the temperature the bodies are at (they are at their cell's).
+    // The key liquid freezes at the temperature the bodies are at (they are at their cell's, and stay there as their
+    // liquid gives up its fusion enthalpy: an edit).
+    let temps = [wet, dry].map(|x| s.w.life.bodies[x].temp(&s.w.chem));
     s.w.chem.subs[LIQUID].melt = 400.0;
+    for (x, t) in [wet, dry].into_iter().zip(temps) {
+        let mut b = std::mem::take(&mut s.w.life.bodies[x]);
+        warm(&mut s.w, &mut b, t);
+        s.w.life.bodies[x] = b;
+    }
     pcore::step(&mut s.w);
     let killed = died(&s.w, PHASE);
     let (cw, cd) = (s.w.life.bodies[wet].alive, s.w.life.bodies[dry].count);
@@ -560,6 +567,30 @@ fn frost_kills_in_proportion_to_activity() {
     assert!((cd / left - 1.0).abs() < 0.02, "left {cd} of {count}, expected {left:.0}");
     assert!(killed >= count - cd - 1.0 && killed >= 0.9 * count, "died of PHASE {killed}");
     books.assert_kept(&s.w, 1e-9);
+}
+
+/// A body's molten stores hold their fusion enthalpy, as the ground's do: a body that takes 1 kg of liquid at its own
+/// temperature with the heat the ground gives up for it (cp T and the fusion enthalpy) keeps its temperature, and the
+/// ground it dies on, at the same temperature, keeps its own.
+#[test]
+fn liquid_taken_at_the_body_temperature_leaves_it_as_warm() {
+    let mut s = set();
+    let mut b = s.eater(0);
+    let (chem, i) = (&s.w.chem, b.cell as usize);
+    let t = b.temp(chem);
+    assert!(t > b.melt(chem, LIQUID), "the key liquid is molten at {t} K");
+    let (a, sub) = (1.0 / chem.subs[LIQUID].molar_mass, &chem.subs[LIQUID]);
+    b.store[LIQUID] += a;
+    b.e += a * (sub.cp * t + sub.lf);
+    let t1 = b.temp(chem);
+    println!("{t} K, after 1 kg of liquid {t1} K");
+    assert!((t1 - t).abs() < 1e-9 * t, "1 kg of liquid at {t} K left the body at {t1} K");
+    hold_ground(&mut s.w, i, t);
+    let slot = s.w.life.add(b, s.w.day, 1);
+    let b = std::mem::take(&mut s.w.life.bodies[slot]);
+    body::die(&mut s.w, slot, b, body::LACK);
+    let tg = s.w.t_ground(i);
+    assert!((tg - t).abs() < 1e-6, "the ground at {t} K took the body's remains and went to {tg} K");
 }
 
 /// A body whose `WET` gene is below 0 gives its children less of its key liquid than of the rest, and they start as
@@ -1051,7 +1082,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     (b.genes[STRENGTH], b.genes[LEARN], b.genes[REPAIR]) = (0.6, -1.0, 0.0);
     b.prepare(&w.chem, &w.cfg.phys);
     // At the temperature the costs are anchored to, where upkeep is what the costs say.
-    b.e = b.heat_cap(&w.chem) * w.cfg.phys.t_cat;
+    b.e = b.energy_at(&w.chem, w.cfg.phys.t_cat);
     let p = &mut w.cfg.phys;
     (p.c_brain, p.c_hidden, p.c_memory, p.c_seen, p.c_sight, p.c_leaf) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     let days = 10.0;
@@ -1061,7 +1092,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
         .map(|&f| {
             let mut x = b.clone();
             x.store.iter_mut().for_each(|a| *a *= f);
-            x.e = x.heat_cap(&w.chem) * w.cfg.phys.t_cat;
+            x.e = x.energy_at(&w.chem, w.cfg.phys.t_cat);
             up(&w, &x) / x.built(&w.chem)
         })
         .collect();
@@ -1084,7 +1115,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     let mut node = b.clone();
     node.count = 5.0;
     node.store.iter_mut().for_each(|a| *a *= 5.0);
-    node.e = node.heat_cap(&w.chem) * w.cfg.phys.t_cat;
+    node.e = node.energy_at(&w.chem, w.cfg.phys.t_cat);
     assert!((up(&w, &node) / up(&w, &b) / 5.0 - 1.0).abs() < 1e-9, "a node of 5 pays {} times a member's upkeep", up(&w, &node) / up(&w, &b));
 }
 

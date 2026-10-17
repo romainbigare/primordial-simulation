@@ -173,7 +173,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     }
     let chem = &w.chem;
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let q = chem.heat_share(b.e, b.heat_cap(chem), &m);
+    let q = b.heat_with(chem, &m);
     let pt = &mut w.parts.parts[p];
     for (k, &a) in m.iter().enumerate() {
         *if wet[k] { &mut pt.fill[k] } else { &mut pt.wall[k] } += a;
@@ -203,7 +203,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     }
     // Paying may have used some of what was to be put out.
     let wall: Vec<f64> = wall.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let e = w.chem.heat_share(b.e, b.heat_cap(&w.chem), &wall);
+    let e = b.heat_with(&w.chem, &wall);
     for (s, a) in b.store.iter_mut().zip(&wall) {
         *s -= a;
     }

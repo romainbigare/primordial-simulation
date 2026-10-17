@@ -106,7 +106,7 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
 fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64), u8> {
     let (cost, span) = (upkeep(w, b, s.days, mass), s.days.max(b.interval() as f64));
     let spare = plan(w, b, MARGIN * cost, span, mass, cap).1 / cost.max(1e-300);
-    let (e_before, node) = (b.e, b.n() > 1.0);
+    let (th, node) = (b.thermal(&w.chem, cap), b.n() > 1.0);
     let short = pay_at(w, b, cost, span, mass, cap, node) / cost.max(1e-300);
     if short > 1e-9 && !node {
         return Err(SPENT);
@@ -117,7 +117,7 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
     let worn = cost / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so
     // the body keeps its temperature as its stores change (as in `pay`).
-    let kept = e_before / cap.max(1e-9) * b.heat_cap(&w.chem);
+    let kept = b.energy_in(&w.chem, &th);
     let upkeep_heat = b.e - kept;
     b.e = kept;
     for (f, cause) in [(short, SPENT), (if node { worn.min(1.0) } else { 0.0 }, AGE)] {
@@ -151,17 +151,18 @@ fn members_die(w: &mut World, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f6
 fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
     for _ in 0..KEEP_T_PASSES {
         let (m, c) = b.mass_cap(&w.chem);
-        let short = c * b.gene(KEEP_T) - b.e;
-        if c <= 0.0 || short <= KEEP_T_SLACK * b.e || spend(w, b, short / hold(w, b, m, b.e / c, dt), span, dt, true) > 0.0 {
+        let short = b.energy_at(&w.chem, b.gene(KEEP_T)) - b.e;
+        if c <= 0.0 || short <= KEEP_T_SLACK * b.e || spend(w, b, short / hold(w, b, m, b.temp_at(&w.chem, c), dt), span, dt, true) > 0.0 {
             break;
         }
     }
 }
 
 /// A store below its safe minimum kills the body (a node loses its poorest members, `starve`). A key liquid that boiled
-/// kills it; one that froze kills the share of it that is free liquid to freeze: the frozen share (all of it, the body
-/// being at one temperature) times its activity, as a dry body holds little liquid to freeze. A node loses that share of
-/// its members (`thin`); an individual dies with that chance. Returns the mass and heat capacity left.
+/// kills it; one that froze kills the share of it that is free liquid to freeze: the share frozen (all of it below its
+/// melting point, the body being at one temperature; on its melting plateau, the share frozen there) times its
+/// activity, as a dry body holds little liquid to freeze. A node loses that share of its members (`thin`); an
+/// individual dies with that chance. Returns the mass and heat capacity left.
 fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
     let (mut mass, mut c) = b.mass_cap(&w.chem);
     if b.lacking_at(&w.chem, mass) {
@@ -171,13 +172,18 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
         (mass, c) = b.mass_cap(&w.chem);
     }
     let (chem, mut left) = (&w.chem, (mass, c));
-    let (t, ns) = (b.e / c.max(1e-9), chem.ns());
+    let (th, ns) = (b.thermal(chem, c), chem.ns());
     let key = |k: usize| b.wet >> k & 1 == 1;
-    if (0..ns).any(|k| key(k) && chem.phase(k, t) == Phase::Gas) {
+    if (0..ns).any(|k| key(k) && chem.phase(k, th.t) == Phase::Gas) {
         return Err(PHASE);
     }
-    if (0..ns).any(|k| key(k) && t < b.melt(chem, k)) {
-        let f = b.activity(chem, &w.cfg.phys);
+    let frozen = |k: usize| match th.on {
+        Some((j, molten)) if j == k => 1.0 - molten,
+        _ => (th.t < b.melt(chem, k)) as u8 as f64,
+    };
+    let frozen = (0..ns).filter(|&k| key(k)).map(frozen).fold(0.0, f64::max);
+    if frozen > 0.0 {
+        let f = frozen * b.activity(chem, &w.cfg.phys);
         if f >= 1.0 - 1e-9 {
             return Err(PHASE);
         }

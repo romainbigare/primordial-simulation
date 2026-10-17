@@ -48,13 +48,13 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
 /// nothing).
 pub(super) fn spend(w: &mut World, b: &mut Body, cost: f64, days: f64, dt: f64, part: bool) -> f64 {
     let (mass, cap) = b.mass_cap(&w.chem);
-    let t0 = b.e / cap.max(1e-9);
+    let th0 = b.thermal(&w.chem, cap);
     let left = pay_at(w, b, cost, days, mass, cap, part);
     // The heat released leaves through its surface (`conductance_to_ground`) over `dt`: the body keeps the share `hold`
     // and the rest goes to the ground. A cost that leaves it colder than it was is not held back.
-    let (keep, i) = (t0 * b.heat_cap(&w.chem), b.cell as usize);
+    let (keep, i) = (b.energy_in(&w.chem, &th0), b.cell as usize);
     if b.e > keep {
-        let held = hold(w, b, mass, t0, dt);
+        let held = hold(w, b, mass, th0.t, dt);
         w.e_ground[i] += (b.e - keep) * (1.0 - held);
         b.e = keep + (b.e - keep) * held;
     }
@@ -77,7 +77,7 @@ pub(super) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f6
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
     let share = (breath(chem, &w.cfg, b, mass, cover_of(w, b), days, depth) / tot).min(MAX_TAKE_SHARE);
-    let t = b.e / cap.max(1e-9);
+    let t = b.temp_at(chem, cap);
     let dry = b.activity(chem, &w.cfg.phys);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; MAX_SUBSTANCES];
@@ -121,7 +121,7 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f6
         return cost;
     }
     let World { chem, grid, air, .. } = w;
-    let (na, j, t) = (grid.na(), grid.air_of(b.cell as usize), b.e / cap.max(1e-9));
+    let (na, j, t) = (grid.na(), grid.air_of(b.cell as usize), b.temp_at(chem, cap));
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut latent = 0.0;
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {

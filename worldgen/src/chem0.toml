@@ -359,7 +359,7 @@ refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
 ir = 0.0
 sol = 0.0
 cond = 0.2
-hf = -20174.0745
+hf = -20315.8
 # Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 22, 25 and 10".
 modulus = 0.001
 # Living soft tissue: docs/numbers.md, "rupture of substances 22, 25 and 10".
@@ -412,7 +412,7 @@ refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
 ir = 0.0
 sol = 0.0
 cond = 0.2
-hf = -980
+hf = -986
 # docs/numbers.md: "modulus of substances 22, 25 and 10".
 modulus = 30
 # docs/numbers.md: "rupture of substances 22, 25 and 10".

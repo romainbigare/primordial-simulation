@@ -82,7 +82,7 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
         // spare, and its liquid with them (a dry body's pores close, and it could not breathe to pay).
         let t = b.temp(&w.chem);
         (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] *= 2.0);
-        b.e = b.heat_cap(&w.chem) * t;
+        b.e = b.energy_at(&w.chem, t);
         bond::form(&mut w, slot, &mut b, [0.0, 0.5]);
         b.hold = 0;
     }
@@ -106,7 +106,7 @@ fn forming_never_takes_more_than_is_left() {
     (0..b.store.len()).filter(|&x| solid(x) && x != k).for_each(|x| b.store[x] = 0.0);
     b.genes[pcore::body::Layout::of(chem).min + k] = 0.0;
     b.store[k] = 0.05 * b.mass(chem) / chem.subs[k].molar_mass;
-    b.e = b.heat_cap(chem) * t;
+    b.e = b.energy_at(chem, t);
     b.k.cat.iter_mut().for_each(|c| *c *= 1e6);
     // Half the fuel is to go out, and paying for it burns nearly all of it.
     let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;

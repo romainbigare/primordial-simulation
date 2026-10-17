@@ -59,8 +59,11 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     // It soaks through the mass that works; its conductance is taken at its temperature at the start.
     let wk = b.size(chem) / mass;
     let leaf = b.leaf_area(chem, &cfg.phys);
+    // Its molten stores hold their fusion enthalpy apart (`Body::thermal`): the stages move sensible heat, and the liquids
+    // that come and go bring and take their fusion enthalpy as heat, until its stores hold theirs again at the end.
     let c0 = b.heat_cap(chem);
-    let t0 = b.e / c0;
+    let th0 = b.thermal(chem, c0);
+    let (t0, fusion0) = (th0.t, b.e - c0 * th0.t);
     let g = surface(chem, cfg, b, mass, s.cover, s.walls, t0, s.tg);
     let (caught, lit) = catch_light(w, b, s, leaf);
     let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0 };
@@ -73,8 +76,11 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let (lost, moved) = evaporate(w, b, tmp, s, &mut h, &soil, reach);
     let mass2 = if moved { b.mass(&w.chem) } else { mass1 };
     soak(w, b, s, &mut h, &soil, &lost, fall, mass2);
-    roots(w, b, s, &h, mass2, wk);
+    roots(w, b, s, &mut h, mass2, wk);
+    let fusion1 = b.fusion_in(&w.chem, &th0);
+    h.heat += fusion0 - fusion1;
     relax_heat(w, slot, b, s, &h);
+    b.e += fusion1;
     lit / mass / s.days
 }
 
@@ -250,8 +256,9 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
 }
 
 /// Roots take what is liquid in the ground but does not dissolve itself, for the uptake genes that are on, up to its
-/// level, at the rate it soaks liquids (without the surface's wetness) through the mass that works (`wk`).
-fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
+/// level, at the rate it soaks liquids (without the surface's wetness) through the mass that works (`wk`). The ground
+/// pays their heat and fusion enthalpy, or the body takes less.
+fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f64) {
     let World { chem, grid, ground, e_ground, counts, .. } = w;
     let (n, i, tg) = (grid.n(), s.i, s.tg);
     let soak = one_minus_exp(b.k.liq * s.days) * wk;
@@ -260,10 +267,12 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
             continue;
         }
         let want = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(MAX_TAKE_SHARE * ground[k * n + i]);
-        let d = take_paid(&mut e_ground[i], counts, h.gcap, want, chem.subs[k].cp, want * chem.subs[k].cp * tg).0;
+        let (per, fused) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
+        let d = take_paid(&mut e_ground[i], counts, h.gcap, want, chem.subs[k].cp, want * (per + fused)).0;
         b.store[k] += d;
         ground[k * n + i] -= d;
-        b.e += d * chem.subs[k].cp * tg;
+        b.e += d * per;
+        h.heat += d * fused;
     }
 }
 

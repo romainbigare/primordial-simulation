@@ -35,16 +35,18 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     println!("the rock element is {:.2}% of the dry matter ({} g of {} g)", 100.0 * share, 1e3 * rock, 1e3 * chem.subs[m].molar_mass);
     assert!(share > 0.005 && share < 0.02, "{share}");
     // Growth: 118 of the energy-rich solid, 3 of the fixed mineral and 1 of the dissolved one make 1 of matter and 27 of
-    // the liquid, with no gain or loss of heat; nothing goes to the air (the dissolved mineral's gas goes into the matter).
+    // the liquid, with no gain or loss of heat in a body (its liquids hold their fusion enthalpy); nothing goes to the air
+    // (the dissolved mineral's gas goes into the matter).
     let build = chem.build.as_ref().expect("growth");
     assert_eq!((build.inputs.as_slice(), build.outputs.as_slice()), (&[(5, 118), (24, 3), (23, 1)][..], &[(22, 1), (0, 27)][..]));
-    let growth = chem.dh_of(build);
+    let fused = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * chem.fused_heat(k as usize, T_SURF, |_| 0.0)).sum::<f64>();
+    let growth = chem.dh_of(build) + fused(&build.outputs) - fused(&build.inputs);
     assert!(growth.abs() < 1.0, "growth takes {growth} J");
     assert!(build.outputs.iter().all(|p| p.0 == m as u16 || chem.phase(p.0 as usize, 290.0) == Phase::Liquid));
-    // Rotting: 55,266.4 kJ a mol (16.0 MJ a kg), from and to the states found at the surface (`Chemistry::dh_at`).
+    // Rotting: 55,124.7 kJ a mol (16.0 MJ a kg), from and to the states found at the surface (`Chemistry::dh_at`).
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m) && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == MINERAL)).expect("rotting");
     let heat = -chem.dh_at(burn, T_SURF);
-    assert!((heat / 55266.425e3 - 1.0).abs() < 1e-6, "body matter burns for {heat} J a mol");
+    assert!((heat / 55124.7e3 - 1.0).abs() < 1e-6, "body matter burns for {heat} J a mol");
     let per_kg = heat / chem.subs[m].molar_mass / 1e6;
     println!("body matter burns for {per_kg:.2} MJ/kg");
     assert!(per_kg > 15.5 && per_kg < 17.0, "{per_kg} MJ/kg");

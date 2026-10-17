@@ -46,7 +46,7 @@ pub(crate) fn skin_cap(chem: &Chemistry, cfg: &Config, area: f64, ks: impl IntoI
     if v > 0.0 { c / v * cfg.skin_m * area } else { 0.0 }
 }
 
-/// Where a ground node of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
+/// Where a ground node or a body of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
 pub(crate) struct Melting {
     /// Temperature, K
     pub t: f64,
@@ -61,7 +61,17 @@ pub(crate) struct Melting {
     pub bits: u64,
 }
 
-/// Temperature of a node of heat capacity `c` and energy `e`, where molten amounts hold their fusion enthalpy: `melts` gives,
+impl Melting {
+    /// The molten share of substance `k` (of those given to `melting`).
+    pub fn molten(&self, k: usize) -> f64 {
+        match self.on {
+            Some((j, f)) if j == k => f,
+            _ => (self.bits >> k & 1) as f64,
+        }
+    }
+}
+
+/// Temperature of a node (or body) of heat capacity `c` and energy `e`, where molten amounts hold their fusion enthalpy: `melts` gives,
 /// in the order they melt, each substance's melting point there, the substance and the fusion enthalpy of its amount (J). A
 /// node stays at a melting point (a plateau) until all of that substance has frozen or melted. `World::energy_ground` is the
 /// inverse.

@@ -117,7 +117,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
     // It holds what its shares make of its matter (`Body::level`).
     chem.materials().for_each(|k| b.store[k] = b.level(chem, k, 0.0));
-    b.e = b.heat_cap(chem) * t;
+    b.e = b.energy_at(chem, t);
     book_body(ledger, chem, &b);
     // Its key liquids first: `visible` reads the body (`Body::size`) through them.
     b.wet = b.key_liquids(chem);

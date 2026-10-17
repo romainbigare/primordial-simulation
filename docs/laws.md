@@ -295,9 +295,9 @@ lowered by what is dissolved in it, by the ideal-solution law:
 
 **Latent heat.** Flow keeps the fusion and vaporisation heat of the ground and the air. A gas in
 the air holds its melting and boiling heat (`body::held`); every gas that enters or leaves the
-air pays or gets it. A body holds its liquid without its fusion heat: when it soaks liquid from
-the ground it takes the ground's fusion heat as warmth, and when it gives liquid back it gives
-only its sensible heat. The books stay exact.
+air pays or gets it. A body holds the fusion heat of its molten stores, as a ground node does
+(`Body::thermal`): it freezes and melts at a plateau, liquid it takes or gives carries its fusion
+heat, and liquid that evaporates from it takes its vaporisation heat beside. The books stay exact.
 
 ### 2.6 Pairs at balance and the sea's carbon
 
@@ -695,8 +695,8 @@ n = `dormancy` (5.7, from the life of dry seeds). It multiplies the catalysts' s
 whole upkeep (6.2) and the building allowance (6.6). A dry body pays almost nothing, ages hardly
 at all and can hardly act, but still takes its updates and decisions.
 
-- **Frost**: if a key liquid freezes (at its lowered melting point, 2.5), the frozen share times
-  the activity dies (a node loses that share of its members, an individual dies with that
+- **Frost**: if a key liquid freezes (at its lowered melting point, 2.5), the frozen share (all
+  of it below that point; on its plateau, the share frozen there) times the activity dies (a node loses that share of its members, an individual dies with that
   chance; cause `PHASE`). A dry body holds little free liquid to freeze.
 - **Boiling**: a key liquid that boils kills the body.
 

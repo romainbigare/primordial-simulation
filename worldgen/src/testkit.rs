@@ -161,11 +161,11 @@ pub fn scale(w: &mut World, b: &mut Body, f: f64) {
 
 /// `kg` of substance `k` added to body `b` at its temperature (booked as an edit), or taken out if negative.
 pub fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
-    let (a, t) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem));
+    let (a, t, e0) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem), b.e);
     w.chem.add_elems(k, a, &mut w.ledger.imposed_elems);
-    w.ledger.imposed_energy += a * (w.chem.subs[k].hf + w.chem.subs[k].cp * t);
     b.store[k] += a;
-    b.e += a * w.chem.subs[k].cp * t;
+    b.e = b.energy_at(&w.chem, t);
+    w.ledger.imposed_energy += a * w.chem.subs[k].hf + b.e - e0;
 }
 
 /// What body `b` holds of substance `k`, kg.
@@ -209,7 +209,7 @@ pub fn hold_ground(w: &mut World, i: usize, t: f64) {
 
 /// Body `b` brought to `t` K (booked as an edit).
 pub fn warm(w: &mut World, b: &mut Body, t: f64) {
-    let e = t * b.heat_cap(&w.chem);
+    let e = b.energy_at(&w.chem, t);
     w.ledger.imposed_energy += e - b.e;
     b.e = e;
 }

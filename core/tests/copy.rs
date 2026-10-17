@@ -63,12 +63,16 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     // (The burning of the solid for the work makes liquid too, as its reaction says.)
     let burn_liquid = w.chem.reactions[BURN].outputs.iter().find(|p| p.0 as usize == LIQUID).map_or(0.0, |p| p.1 as f64);
     assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, not {}", n_liquid * x + burn_liquid * burnt);
-    // The work left the body as heat for the ground: that heat is the burnt solid's, less the share the body keeps while it
-    // leaves (about 5%).
+    // The work left the body as heat for the ground: that heat is the burnt solid's, less the fusion enthalpy the liquid it
+    // made holds in the body, less the share the body keeps while it leaves (about 5%).
     let heat = w.e_ground.iter().sum::<f64>() - e0;
-    assert!(heat > 0.0 && (heat / (burnt * -w.chem.dh(BURN)) - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {:e} J", burnt * -w.chem.dh(BURN));
-    // Growth is thermoneutral: the matter holds the energy of the solid it was made of.
-    let growth = w.chem.dh_of(w.chem.build.as_ref().unwrap());
+    let work = burnt * (-w.chem.dh(BURN) - burn_liquid * w.chem.subs[LIQUID].lf);
+    assert!(heat > 0.0 && (heat / work - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {work:e} J");
+    // Growth is thermoneutral in a body: the matter holds the energy of the solid it was made of (the liquids holding their
+    // fusion enthalpy).
+    let (chem, bl) = (&w.chem, w.chem.build.as_ref().unwrap());
+    let fused = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * chem.fused_heat(k as usize, pcore::units::T_SURF, |_| 0.0)).sum::<f64>();
+    let growth = chem.dh_of(bl) + fused(&bl.outputs) - fused(&bl.inputs);
     assert!(growth.abs() < 1.0, "growth takes {growth} J");
     w.life.bodies[0] = b;
     books.assert_kept(&w, 1e-9);
@@ -516,7 +520,7 @@ fn reproducing_updates_keep_elements_and_energy() {
 /// of keeping its tissue with its body^1.0 (`body::upkeep`), so growth, which builds only from the spare after upkeep
 /// (`copy::grow`), stops where the two meet, a size the body's own costs set. An eater (ALLOC 0: it builds only for
 /// itself; strength 1; building fast, so that the allowance never binds) in a place with all the fuel it can take, at
-/// every update, for 360 days. With tissue dear enough that the ceiling is near (costs 1.4 times the starting ones)
+/// every update, for 360 days. With tissue dear enough that the ceiling is near (costs 1.6 times the starting ones)
 /// it levels off (under a quarter more body between the 100th and the 300th day) and in its last 100 days takes about
 /// what it pays to keep what it has; with the costs of the start, a ceiling many times higher, it is still growing
 /// fast and ends larger.
@@ -574,7 +578,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(1.4);
+    let (full, r_full) = run(1.6);
     let (cheap, r_cheap) = run(1.0);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).

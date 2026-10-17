@@ -77,7 +77,7 @@ struct Choice {
 pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
-    let temp = b.e / lived.cap.max(1e-9);
+    let temp = b.temp_at(&w.chem, lived.cap);
     // A brain perceives sizes per member.
     let pm = lived.mass / b.n();
     let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS)), temp, lived.spare);
