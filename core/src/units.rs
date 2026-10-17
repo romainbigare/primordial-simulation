@@ -1,7 +1,10 @@
 //! Physical constants, units and the fixed temperatures the laws refer to.
 
+/// Seconds in a day, the clock's whole number (`clock`).
+pub const DAY_S: u64 = 86_400;
+
 /// Seconds in a day.
-pub const DAY: f64 = 86_400.0;
+pub const DAY: f64 = DAY_S as f64;
 
 /// Gas constant, J/(mol K).
 pub const R_GAS: f64 = 8.314;

@@ -107,7 +107,7 @@ pub(crate) fn may_be_node(w: &World, genes: &[f32]) -> bool {
 /// where they differ.
 pub fn merge(w: &mut World, s: usize, t: usize) {
     let c = w.life.bodies[s].clone();
-    let mut r = Rng::new(w.seed, w.day, c.id(s), Purpose::Merge);
+    let mut r = Rng::new(w.seed, w.day(), c.id(s), Purpose::Merge);
     let rows = w.life.carry_rows(w.life.born(&c).to_vec(), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.new_noise());
     w.life.remove(s);
     join(w, t, c, &rows);
@@ -201,7 +201,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     }
     let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).collect();
     gap.retain(|x| x.1 >= top * (1.0 - TIE));
-    let mut r = Rng::new(w.seed, w.day, b.id(slot), Purpose::Split);
+    let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Split);
     let g = gap[r.below(gap.len())].0;
     let d = half(g).0;
     let mut c = part(&mut w.life, b, 0.5);
@@ -238,7 +238,7 @@ pub(crate) const COUNT_SLACK: f64 = 1e-9;
 /// slots.
 pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
-    let (mut r, keep) = (Rng::new(w.seed, w.day, b.id(slot), Purpose::Open), w.light_keep.get(slot, b.gen));
+    let (mut r, keep) = (Rng::new(w.seed, w.day(), b.id(slot), Purpose::Open), w.light_keep.get(slot, b.gen));
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let whole = b.count.round();

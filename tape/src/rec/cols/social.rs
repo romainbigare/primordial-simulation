@@ -28,7 +28,7 @@ impl Recorder {
         let top = &order[..(gn / TOP_PER).min(order.len())];
         let all: f64 = order.iter().map(|&i| traffic[i] as f64).sum();
         let on_top: f64 = top.iter().map(|&i| traffic[i] as f64).sum();
-        let (s, decade) = (&mut self.social, (w.day / w.days_per_year()).is_multiple_of(DECADE));
+        let (s, decade) = (&mut self.social, w.cfg.calendar().years(w.time).is_multiple_of(DECADE));
         if decade && !top.is_empty() {
             let old: BTreeSet<usize> = s.top.iter().copied().collect();
             s.persist = if old.is_empty() { f64::NAN } else { top.iter().filter(|i| old.contains(i)).count() as f64 / top.len() as f64 };

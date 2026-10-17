@@ -60,7 +60,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
         return false;
     }
     let id = b.id(slot);
-    let mut r = Rng::new(w.seed, w.day, id, Purpose::Mutate);
+    let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = partner(w, slot, b, &mut r);
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if less than one member); an
@@ -102,7 +102,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
             return false;
         }
     }
-    w.events.push(Event { day: w.day, kind: EventKind::Born { root: w.life.root(b), mixed: l.mate.is_some() }, node: cell as u32, value: m });
+    w.events.push(Event { day: w.day(), kind: EventKind::Born { root: w.life.root(b), mixed: l.mate.is_some() }, node: cell as u32, value: m });
     // Its heat is that of its parent's temperature on the heat capacity it got, with the fusion enthalpy of what it got
     // molten (`Body::heat_with`), so it starts as warm as its parent (a dry child would else be much hotter, a wet one
     // colder); the parent keeps the rest.
@@ -146,7 +146,7 @@ fn provision(w: &World, b: &Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) 
         count: m,
         lineage: b.lineage,
         parent: l.parent,
-        born: w.day,
+        born: w.day(),
         mark: w.light[cell],
         store: b.store.iter().zip(&l.prov).enumerate().map(|(k, (a, p))| if k == mi { take } else { (p * m).min(*a) }).collect(),
         genes,

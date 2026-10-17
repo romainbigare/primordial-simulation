@@ -60,7 +60,7 @@ pub fn step(w: &mut World, dt: f64) {
     let mut s = std::mem::take(&mut w.scratch);
     let cfg = &w.cfg;
     // The first step runs every part.
-    let (first, month) = (s.month.is_none(), w.day / cfg.days_per_month as u64);
+    let (first, month) = (s.month.is_none(), w.month());
     let monthly = s.month != Some(month);
     (s.pending_exc, s.pending, s.pending_liq) = (s.pending_exc + dt, s.pending + dt, s.pending_liq + dt);
     let exc_due = first || due(s.pending_exc, cfg.exchange_days as f64);
@@ -81,14 +81,14 @@ pub fn step(w: &mut World, dt: f64) {
     s.owe_work |= monthly && month % WORK_MONTHS == 0;
     if liq_due {
         let dt = std::mem::take(&mut s.pending_liq);
-        let work = if std::mem::take(&mut s.owe_work) { (WORK_MONTHS * w.cfg.days_per_month as u64) as f64 * DAY / dt } else { 0.0 };
+        let work = if std::mem::take(&mut s.owe_work) { (WORK_MONTHS * w.cfg.calendar().month) as f64 / dt } else { 0.0 };
         liquid(w, &mut s, dt, work);
         drain(w, &mut s, dt);
-        let period = CREEP_YEARS * w.days_per_year();
-        let year = w.day / period;
+        let period = CREEP_YEARS * w.cfg.calendar().year;
+        let year = w.time / period;
         if s.year != Some(year) {
             if s.year.is_some() {
-                creep(w, &mut s, period as f64 * DAY);
+                creep(w, &mut s, period as f64);
             }
             s.year = Some(year);
         }
@@ -141,7 +141,7 @@ fn bare_share(w: &World, i: usize) -> f64 {
 
 /// Weight of a step of `dt` seconds in a moving average over about a year.
 fn year_weight(w: &World, dt: f64) -> f32 {
-    (dt / (w.days_per_year() as f64 * DAY)) as f32
+    (dt / w.cfg.calendar().year as f64) as f32
 }
 
 /// Move the moving average `avg` toward `x` by the weight `a` (`year_weight`).

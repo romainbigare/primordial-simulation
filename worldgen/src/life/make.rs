@@ -81,9 +81,9 @@ fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
 pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, gmul: f32, id: u64) -> Option<Body> {
     let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, KINDS.get(which)?, genes(w, which)?);
     let group = w.life.new_group(lineage, w.life.genomes[genome as usize].rows.clone());
+    let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
     let (chem, ledger, t) = (&w.chem, &mut w.ledger, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
-    let mut rg = Rng::new(w.seed, w.day, id, Purpose::Make);
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();
     for _ in 0..rounds {

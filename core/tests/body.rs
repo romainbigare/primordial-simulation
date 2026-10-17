@@ -4,7 +4,7 @@
 
 use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::rng::{Purpose, Rng};
-use pcore::units::DAY;
+use pcore::units::{DAY, DAY_S};
 use pcore::{bond, brain, change, choose, World};
 use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
@@ -97,10 +97,10 @@ fn a_cold_body_ages_slower() {
     cold.prepare(&w.chem, &w.cfg.phys);
     hot.prepare(&w.chem, &w.cfg.phys);
     let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass), pcore::body::upkeep(w, &hot, days, mass));
-    let (c, k) = (w.life.add(cold, w.day, 1), w.life.add(hot, w.day, 1));
+    let (c, k) = (w.life.add(cold, w.day(), 1), w.life.add(hot, w.day(), 1));
     let books = Books::now(w);
     pcore::survey::survey(w);
-    w.day += 1;
+    w.time += DAY_S;
     pcore::survey::day(w);
     assert!(w.life.bodies[c].alive && w.life.bodies[k].alive);
     let (wc, wk) = (w.life.bodies[c].wear, w.life.bodies[k].wear);
@@ -231,7 +231,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     for b in [&mut small, &mut big] {
         warm(w, b, t_cat);
     }
-    let slots = [w.life.add(small, w.day, 1), w.life.add(big, w.day, 1)];
+    let slots = [w.life.add(small, w.day(), 1), w.life.add(big, w.day(), 1)];
     let books = Books::now(w);
     // (The ground held is that under the bodies: they have brains and may step to a neighbour cell, and the law tested is
     // the heat balance with the ground a body stands on.)
@@ -243,7 +243,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     for (n, &slot) in slots.iter().enumerate() {
         // The world and the body as its next update finds them, and the body as that update leaves it.
         let next = w.life.bodies[slot].last + w.life.bodies[slot].interval();
-        while w.day < next {
+        while w.day() < next {
             held_day(w, &held(w), t_cat);
         }
         let (w0, mut b) = (w.clone(), w.life.bodies[slot].clone());
@@ -317,9 +317,9 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         add(w, &mut b, RICH, -out);
         warm(w, &mut b, t);
         put_kg_m2(w, RICH, b.cell as usize, 100.0);
-        let slot = w.life.add(b, w.day, 1);
+        let slot = w.life.add(b, w.day(), 1);
         pcore::survey::survey(w);
-        w.day += 1;
+        w.time += DAY_S;
         let mut b = std::mem::take(&mut w.life.bodies[slot]);
         b.prepare(&w.chem, &w.cfg.phys);
         let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
@@ -359,7 +359,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     };
     let (keeps, twin) = (make(&mut s, 300.0), make(&mut s, 250.0));
     let (w, cell) = (&mut s.w, keeps.cell as usize);
-    let slots = [w.life.add(keeps, w.day, 1), w.life.add(twin, w.day, 1)];
+    let slots = [w.life.add(keeps, w.day(), 1), w.life.add(twin, w.day(), 1)];
     let books = Books::now(w);
     held_days(w, &[cell], &[280.0], 21);
     // One update more: the fuel it burns against the heat it loses (by the mean of its conductance at its start and end).
@@ -371,7 +371,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let g_fur = g(w, &fur);
     assert!(g_fur < 3.0, "with fur {g_fur} W/K for {} kg", fur.mass(&w.chem));
     let (fuel0, g0, next) = (b.store[RICH], g(w, &b), b.last + b.interval());
-    held_days(w, &[cell], &[tg], (next - w.day) as usize + 1);
+    held_days(w, &[cell], &[tg], (next - w.day()) as usize + 1);
     let (y, twin) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
     assert!(y.alive && twin.alive && y.last == next);
     let (t, t_twin) = (y.temp(&w.chem), twin.temp(&w.chem));
@@ -400,7 +400,7 @@ fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     };
     let (sweat, dry) = (make(&mut s, 300.0), make(&mut s, 320.0));
     let (w, cell) = (&mut s.w, sweat.cell as usize);
-    let slots = [w.life.add(sweat, w.day, 1), w.life.add(dry, w.day, 1)];
+    let slots = [w.life.add(sweat, w.day(), 1), w.life.add(dry, w.day(), 1)];
     let books = Books::now(w);
     held_days(w, &[cell], &[295.0], 21);
     let (a, b) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
@@ -464,8 +464,8 @@ fn a_dry_body_pays_upkeep_times_activity_and_ages_slower() {
     assert!(uw2 > 2.0 * uw && (ud2 / uw2 / a - 1.0).abs() < 1e-9, "{uw2} {ud2}");
     s.w.cfg.phys.c_hidden /= 1000.0;
     // Over two months of updates the dry body's wear is a small share of the wet one's.
-    let w0 = s.w.life.add(wet, s.w.day, 1);
-    let d0 = s.w.life.add(dry.clone(), s.w.day, 1);
+    let w0 = s.w.life.add(wet, s.w.day(), 1);
+    let d0 = s.w.life.add(dry.clone(), s.w.day(), 1);
     for _ in 0..2 {
         pcore::step(&mut s.w);
     }
@@ -542,7 +542,7 @@ fn frost_kills_in_proportion_to_activity() {
         // A node of `count` such members (its matter and energy booked as an edit).
         scale(&mut s.w, &mut b, count);
         b.count = count;
-        s.w.life.add(b, s.w.day, 1)
+        s.w.life.add(b, s.w.day(), 1)
     };
     let (wet, dry) = (node(&mut s, 0, 1.0), node(&mut s, 1, 0.5));
     let a = s.w.life.bodies[dry].activity(&s.w.chem, &s.w.cfg.phys);
@@ -586,7 +586,7 @@ fn liquid_taken_at_the_body_temperature_leaves_it_as_warm() {
     println!("{t} K, after 1 kg of liquid {t1} K");
     assert!((t1 - t).abs() < 1e-9 * t, "1 kg of liquid at {t} K left the body at {t1} K");
     hold_ground(&mut s.w, i, t);
-    let slot = s.w.life.add(b, s.w.day, 1);
+    let slot = s.w.life.add(b, s.w.day(), 1);
     let b = std::mem::take(&mut s.w.life.bodies[slot]);
     body::die(&mut s.w, slot, b, body::LACK);
     let tg = s.w.t_ground(i);
@@ -611,7 +611,7 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
         brood(&s.w, &mut b, 3.0);
         let (before, t) = (b.store.clone(), b.temp(&s.w.chem));
         let (slot, id) = {
-            let slot = s.w.life.add(b, s.w.day, 1);
+            let slot = s.w.life.add(b, s.w.day(), 1);
             let mut b = std::mem::take(&mut s.w.life.bodies[slot]);
             assert!(pcore::copy::copy(&mut s.w, slot, &mut b));
             let id = b.id(slot);
@@ -717,7 +717,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     scale(&mut w, &mut ha, n);
     add(&mut w, &mut ha, RICH, 100.0 * n);
     (ha.count, hb.count) = (n, n);
-    let (sa, sb) = (w.life.add(ha, w.day, 1), w.life.add(hb, w.day, 1));
+    let (sa, sb) = (w.life.add(ha, w.day(), 1), w.life.add(hb, w.day(), 1));
     for s in [sa, sb] {
         let mut x = std::mem::take(&mut w.life.bodies[s]);
         x.prepare(&w.chem, &w.cfg.phys);
@@ -725,7 +725,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
         w.life.bodies[s] = x;
     }
     // (Not at a month's start: alike nodes of a cell merge then.)
-    w.day += 1;
+    w.time += DAY_S;
     pcore::survey::survey(&mut w);
     let (a, b) = (&w.life.bodies[sa], &w.life.bodies[sb]);
     let (ma, mb) = (a.mass(&w.chem) / n, b.mass(&w.chem) / n);
@@ -766,7 +766,7 @@ fn a_body_cannot_store_more_than_keep_times_body() {
     put_kg_m2(&mut w, RICH, i, 50.0);
     put_kg_m2(&mut w, LIQUID, i, 50.0);
     let rich0 = b.store[RICH];
-    let s = w.life.add(b, w.day, 1);
+    let s = w.life.add(b, w.day(), 1);
     let (mut top_rich, mut top_liq) = (0.0f64, 0.0f64);
     for _ in 0..120 {
         pcore::day(&mut w);
@@ -826,7 +826,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         // Only matter on the ground to take: it takes neither the liquid nor the solid.
         (b.genes[lay.upt + LIQUID], b.genes[lay.upt + RICH]) = (-0.1, -0.1);
         let (rich0, matter0, size0) = (b.store[RICH], b.store[MATTER], b.size(&w.chem));
-        let s = w.life.add(b, w.day, 1);
+        let s = w.life.add(b, w.day(), 1);
         let books = Books::now(&w);
         // (What the body took from the ground, by the events, not what left it: dead matter on the ground also rots.)
         let mut took = 0.0;
@@ -922,7 +922,7 @@ fn a_tall_member_shades_a_short_one() {
     (tall.count, tall.genes[pcore::body::COPY_MASS], tall.k) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0, Default::default());
     tall.genes[pcore::body::LEAF] += 0.5;
     (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg.phys), tall.visible(&w.chem, &w.cfg.phys));
-    let slots = [w.life.add(tall, w.day, 1), short];
+    let slots = [w.life.add(tall, w.day(), 1), short];
     let books = Books::now(&w);
     pcore::survey::survey(&mut w);
     let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * DAY);
@@ -974,7 +974,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         scale(w, &mut b, count);
         b.count = count;
         b.prepare(&w.chem, &w.cfg.phys);
-        w.life.add(b, w.day, 1)
+        w.life.add(b, w.day(), 1)
     };
     let sa = make(&mut w, cells[0], 0.0, 1.0);
     let sb = make(&mut w, cells[0], 0.5, 1.0);
@@ -1202,7 +1202,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         b.genes[lay.cat + fix] = cat;
         // (None of the dissolved mineral, so neither builds: the two differ by the fixing alone.)
         b.store[w.chem.minerals()[1].0] = 0.0;
-        let s = w.life.add(b, w.day, 1);
+        let s = w.life.add(b, w.day(), 1);
         let books = Books::now(&w);
         let na = w.grid.na();
         let air = |w: &World, k: usize| w.air[k * na..(k + 1) * na].iter().sum::<f64>();
@@ -1272,7 +1272,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
             put(&mut w, mineral, i, 1e9);
         }
         let level = |w: &World, b: &Body| b.level(&w.chem, mineral, b.mass(&w.chem));
-        let (sp, si) = (w.life.add(plant, w.day, 1), w.life.add(idle, w.day, 1));
+        let (sp, si) = (w.life.add(plant, w.day(), 1), w.life.add(idle, w.day(), 1));
         let books = Books::now(&w);
         // (The most it held in the days, at the end of an update: the dissolved mineral falls out as the rock between them.)
         let mut most = 0.0f64;
@@ -1361,7 +1361,7 @@ fn node(w: &mut World, mut b: Body, n: f64) -> Body {
 /// Body `a` bites body `v` once.
 fn bite(w: &mut World, a: usize, v: usize) {
     let mut b = std::mem::take(&mut w.life.bodies[a]);
-    choose::take_body(w, a, &mut b, v, &mut Rng::new(1, w.day, 7, Purpose::Choose));
+    choose::take_body(w, a, &mut b, v, &mut Rng::new(1, w.day(), 7, Purpose::Choose));
     w.life.bodies[a] = b;
 }
 
@@ -1445,7 +1445,7 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
     let before = seen(&w, v);
     for _ in 0..3 {
         bite(&mut w, a, v);
-        w.day += 1;
+        w.time += DAY_S;
     }
     let (b, after) = (&w.life.bodies[v], seen(&w, v));
     let (mean1, took) = (b.built(&w.chem) / b.n(), before.built - after.built);

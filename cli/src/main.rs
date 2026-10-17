@@ -54,7 +54,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
         rec.resume(&mut w, kept, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
     }
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
-    let y0 = w.day / w.days_per_year();
+    let y0 = w.cfg.calendar().years(w.time);
     render::save(&w, &format!("{out}/year{y0:04}.png"));
     rec.record_month(&mut w);
     // Time spent in flow, change, bodies and parts, and in the tape (the recorder each month, the files each

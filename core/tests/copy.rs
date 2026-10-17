@@ -4,6 +4,7 @@
 use pcore::body::{Body, Layout, ALLOC, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, HIDDEN, KEEP_T, LIQ, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
+use pcore::units::DAY_S;
 use pcore::{body, brain, copy, lineage, nodes, World};
 use worldgen::testkit::{self, add, brood, children, eater, founder, kg, only_the_solid, out, put, put_kg_m2, scale, small_world, start, took_to_burn, Books, Brain, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 
@@ -179,7 +180,7 @@ fn storing_the_solid_costs_no_build() {
     let out_kg = 0.5 * kg(&w, &b, RICH);
     add(&mut w, &mut b, RICH, -out_kg);
     let (rich0, matter0) = (kg(&w, &b, RICH), kg(&w, &b, MATTER));
-    let s = w.life.add(b, w.day, 1);
+    let s = w.life.add(b, w.day(), 1);
     let books = Books::now(&w);
     let mut took = 0.0;
     for _ in 0..30 {
@@ -218,7 +219,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let books = Books::now(&w);
     let (before, ground0, built0, size0, temp0) = (b.store.clone(), w.e_ground.iter().sum::<f64>(), b.built(&w.chem), b.size(&w.chem), b.temp(&w.chem));
     assert!(b.adult(&w.chem), "the parent is mature: built {} kg", built0);
-    w.day += 1;
+    w.time += DAY_S;
     assert!(copy::copy(&mut w, s, &mut b), "no child");
     let kids = children(&w, b.id(s));
     // Two whole children (an individual's), the rest of the brood waits for the next.
@@ -272,7 +273,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let (s, mut n) = out(&mut w, n);
     let (before, count0, built0) = (n.store.clone(), n.count, n.built(&w.chem) / n.n());
     assert!(n.adult(&w.chem), "the node is mature: built {} kg a member", n.built(&w.chem) / n.n());
-    w.day += 1;
+    w.time += DAY_S;
     let at = w.life.alive().count();
     assert!(copy::copy(&mut w, s, &mut n));
     w.life.bodies[s] = std::mem::take(&mut n);
@@ -307,9 +308,9 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     n.count = 5.0;
     let (mm, h) = (w.chem.subs[MATTER].molar_mass, 0.75);
     let child_mol = 3.0 * (1.0 - h) / mm;
-    let s = w.life.add(n, w.day, 1);
+    let s = w.life.add(n, w.day(), 1);
     let books = Books::now(&w);
-    w.day += 1;
+    w.time += DAY_S;
     pcore::survey::survey(&mut w);
     let lay = Layout::of(&w.chem);
     for round in 0..3 {
@@ -324,16 +325,16 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
         // The mean member of the node is what it was, and mature.
         assert!(n.adult(&w.chem) && (n.built(&w.chem) / n.n() - before).abs() < 1e-9 * before, "round {round}: the mean member fell: {before} -> {}", n.built(&w.chem) / n.n());
         w.life.bodies[s] = n;
-        w.day += 1;
+        w.time += DAY_S;
     }
     // All three broods are in one young node.
     let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
     assert_eq!(kids.len(), 1, "the children are {} nodes", kids.len());
     let k = kids[0];
     assert!((w.life.bodies[k].count - 12.0).abs() < 1e-4 && !w.life.bodies[k].adult(&w.chem), "young: {} members", w.life.bodies[k].count);
-    let month = w.cfg.days_per_month as u64;
+    let month = w.cfg.calendar().month;
     // A month's merge: alike in genes and in size class (3 kg and the parents' about 20), but the young are immature.
-    w.day = (w.day / month + 1) * month;
+    w.time = (w.time / month + 1) * month;
     pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 2, "the young merged into the mature node");
     // Grown to 8 kg a member (under the copy mass 10 kg, within the size class of the parents' 20): still apart.
@@ -348,13 +349,13 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     grow_to(&mut w, k, 8.0);
     assert!(!w.life.bodies[k].adult(&w.chem) && body::alike_size(&lay, w.cfg.phys.alike, 8.0, w.life.bodies[s].built(&w.chem) / 5.0));
     assert!(!near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]));
-    w.day += month;
+    w.time += month;
     pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 2, "an immature node merged into a mature one");
     // Mature (11 kg), it joins.
     grow_to(&mut w, k, 11.0);
     assert!(w.life.bodies[k].adult(&w.chem));
-    w.day += month;
+    w.time += month;
     pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 1, "the mature young did not merge in");
     let all: f64 = w.life.alive().map(|b| b.n()).sum();
@@ -421,7 +422,7 @@ fn an_immature_body_never_reproduces() {
     let (s, mut b) = out(&mut w, b);
     assert!(!b.adult(&w.chem));
     let at = w.life.alive().count();
-    w.day += 1;
+    w.time += DAY_S;
     assert!(!copy::copy(&mut w, s, &mut b) && w.life.alive().count() == at, "an immature body had children");
     // Updates: it builds with all it has and has no brood and no child until it is mature.
     let (mut w, i) = start();
@@ -429,7 +430,7 @@ fn an_immature_body_never_reproduces() {
     let mut b = immature(&mut w, i);
     // (Fuel for a life of building: 60 kg more of it.)
     add(&mut w, &mut b, RICH, 60.0);
-    let s = w.life.add(b, w.day, 1);
+    let s = w.life.add(b, w.day(), 1);
     let (mut grown_up, mut born_before, mut born) = (None, 0.0, 0.0);
     for d in 0..400 {
         feed_minerals(&mut w, s);
@@ -499,7 +500,7 @@ fn reproducing_updates_keep_elements_and_energy() {
     // Children of 0.1 of the copy mass (0.5 kg) from a mature body of 21 kg.
     (b.genes[CHILD], b.genes[ALLOC]) = (-1.0, 0.8);
     let id = {
-        let s = w.life.add(b, w.day, 1);
+        let s = w.life.add(b, w.day(), 1);
         w.life.bodies[s].id(s)
     };
     let books = Books::now(&w);
@@ -696,7 +697,7 @@ fn crowded_individuals_merge_into_a_node() {
     let placed = w.cfg.crowd + 4;
     for _ in 0..placed - w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage).count() {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        w.life.add(b, w.day, 1);
+        w.life.add(b, w.day(), 1);
     }
     // At the month's start (looked at before they act: within the month the node may give its members up one at a time
     // to the actions of Bond, as the draws go).
@@ -721,7 +722,7 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     for x in 0..3 * w.cfg.crowd {
         let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         b.genes[pcore::body::COPY_MASS] += 0.3 * x as f32;
-        w.life.add(b, w.day, 1);
+        w.life.add(b, w.day(), 1);
     }
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.n()).collect::<Vec<f64>>();
     let before: f64 = here(&w).iter().sum();
@@ -755,7 +756,7 @@ fn pair(w: &mut World, i: usize, gap: f32) -> (usize, Body, usize) {
     }
     let rows = w.life.born(&b).iter().map(|x| x + 1.0).collect();
     w.life.genomes[b.genome as usize].rows = rows;
-    let sb = w.life.add(b, w.day, 1);
+    let sb = w.life.add(b, w.day(), 1);
     let (sa, a) = out(w, a);
     (sa, a, sb)
 }
@@ -763,7 +764,7 @@ fn pair(w: &mut World, i: usize, gap: f32) -> (usize, Body, usize) {
 /// Make `n` children of `a` one after another (a day apart, each from a new brood of one), and return them.
 fn copies(w: &mut World, s: usize, a: &mut Body, n: usize) -> Vec<Body> {
     for _ in 0..n {
-        w.day += 1;
+        w.time += DAY_S;
         brood(w, a, 1.0);
         assert!(copy::copy(w, s, a), "no child");
     }
@@ -906,7 +907,7 @@ fn unlike_bodies_never_mix() {
     for g in lay.cat..lay.min {
         near.genes[g] = BASE + 1.0 * STEP;
     }
-    w.life.add(near, w.day, 1);
+    w.life.add(near, w.day(), 1);
     let kids = copies(&mut w, s, &mut a, 60);
     let (mut a_n, mut far) = (0, 0);
     for c in &kids {
@@ -967,7 +968,7 @@ fn a_nodes_mixed_children_have_the_pooled_spread() {
         w.life.bodies[sb] = b;
         // A brood of 2,000 children (members of the new node).
         brood(&w, &mut a, 2000.0);
-        w.day += 1;
+        w.time += DAY_S;
         assert!(a.adult(&w.chem) && w.life.bodies[sb].adult(&w.chem));
         w.events.clear();
         assert!(copy::copy(&mut w, s, &mut a));
@@ -1091,12 +1092,12 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     };
     let m0 = mean(&w);
     for _ in 0..updates {
-        w.day += 10;
-        if w.day.is_multiple_of(w.cfg.days_per_month as u64) {
+        w.time += 10 * DAY_S;
+        if w.day().is_multiple_of(w.cfg.days_per_month as u64) {
             pcore::survey::survey(&mut w);
         }
         // In a random order, so no body is first by its slot.
-        let (mut order, mut r) = (live(&w), Rng::new(1, w.day, 0, Purpose::Choose));
+        let (mut order, mut r) = (live(&w), Rng::new(1, w.day(), 0, Purpose::Choose));
         for k in (1..order.len()).rev() {
             order.swap(k, r.below(k + 1));
         }
@@ -1215,7 +1216,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         c.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();
-        w.day += 1;
+        w.time += DAY_S;
         assert!(copy::copy(&mut w, s, &mut c), "no children");
         (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);
         w.events.clear();
@@ -1379,7 +1380,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         node.store[w.chem.matter().expect("matter")] *= 0.5;
         node.e *= 5.0;
         w.life.bodies[s].genes[DISPERSE] = 0.0;
-        let t = w.life.add(node, w.day, 1);
+        let t = w.life.add(node, w.day(), 1);
         // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays
         // mature with the brood out of its body whatever its sprayed `CHILD` gene).
         let (at, before) = (live(&w).len(), held(&w));
@@ -1387,7 +1388,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         b.genes[COPY_MASS] = (0.5 * b.built(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut b, 1.0);
-        w.day += 1;
+        w.time += DAY_S;
         assert!(copy::copy(&mut w, s, &mut b), "no child");
         w.life.bodies[s] = b;
         let kids: Vec<usize> = live(&w).into_iter().skip(at).collect();
@@ -1404,7 +1405,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         b.genes[COPY_MASS] = (0.3 * b.built(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut b, 3.5);
-        w.day += 1;
+        w.time += DAY_S;
         assert!(copy::copy(&mut w, s, &mut b), "no children");
         w.life.bodies[s] = b;
         let kids: Vec<usize> = live(&w).into_iter().skip(at).collect();
@@ -1439,7 +1440,7 @@ fn individuals_mode_merges_no_animal() {
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i && animal(w, b)).count();
     while here(&w) < w.cfg.crowd + 4 {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        w.life.add(b, w.day, 1);
+        w.life.add(b, w.day(), 1);
     }
     let n = here(&w);
     pcore::survey::survey(&mut w);

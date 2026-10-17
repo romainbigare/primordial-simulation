@@ -16,7 +16,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 
 | Law or part | Files |
 |---|---|
-| the month's order | `schedule.rs` (`step`, `step_marked`, `day`) |
+| time and the month's order | `clock/` (the calendar, processes with periods), `schedule.rs` (`step`, `step_marked`, `day`) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Ledger`, `Counters`), `check.rs` (the books) |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`) |
 | 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind`, `sky`); `lanes.rs` (paths) |
@@ -47,7 +47,10 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 
 ## 0. One step of the world
 
-The world moves one month per call of `step` (`core/src/schedule.rs`). Inside the month:
+Time is a whole number of seconds since the start (`World::time`); the day, the month, the year and
+the season come from it by the calendar (`clock::Calendar`, from `Config::calendar`). The world moves
+one month per call of `step` (`core/src/schedule.rs`). Each process has a period inside the month
+(`clock::Every`), and at one time they run in this order, written once in `schedule::processes`:
 
 1. Every `phys_days` days (3): `survey::survey` (what each cell holds, light and shade),
    then Flow (`flow::step`), then Change (`change::step`).

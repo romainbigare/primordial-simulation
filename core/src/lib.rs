@@ -1,4 +1,4 @@
-//! The world core: one graph, five laws. No IO, no clocks, no Earth words.
+//! The world core: one graph, five laws. No IO, no wall clock, no Earth words.
 
 pub mod body;
 pub mod bond;
@@ -7,6 +7,7 @@ pub mod change;
 pub mod check;
 pub mod chem;
 pub mod choose;
+pub mod clock;
 pub mod copy;
 pub mod event;
 pub mod flow;

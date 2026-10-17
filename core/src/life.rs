@@ -312,7 +312,7 @@ impl World {
     /// came from stored (`World::light_keep`), which it inherits.
     pub(crate) fn place(&mut self, c: Body, keep: Option<f32>) -> usize {
         let delay = c.interval();
-        let s = self.life.add(c, self.day, delay);
+        let s = self.life.add(c, self.day(), delay);
         if let Some(k) = keep {
             self.light_keep.set(s, self.life.bodies[s].gen, k);
         }

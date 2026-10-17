@@ -101,7 +101,7 @@ pub(super) fn screen(w: &World, nodes: &FlowView, dt: f64) -> Plan {
         .filter(|&r| !chem.reactions[r].light)
         .map(|r| {
             let rx = &chem.reactions[r];
-            Gate { r, need: rx.inputs.iter().fold(0, |m, p| m | bit(p.0 as usize)), thr: frozen_below(rx, w.cfg.seconds_per_year()), hot: warm_at(rx.ea, rx.k * dt / FAR) }
+            Gate { r, need: rx.inputs.iter().fold(0, |m, p| m | bit(p.0 as usize)), thr: frozen_below(rx, w.cfg.calendar().year as f64), hot: warm_at(rx.ea, rx.k * dt / FAR) }
         })
         .collect();
     let mut in_air = vec![0u64; na];

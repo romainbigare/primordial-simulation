@@ -9,7 +9,6 @@ use crate::ground::share;
 use crate::chem::Phase;
 use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
-use crate::units::DAY;
 use crate::World;
 
 /// Parts react with the air every this many months.
@@ -23,11 +22,11 @@ pub fn step(w: &mut World) {
     if w.parts.parts.iter().all(|p| !p.alive) {
         return;
     }
-    let (dpm, ns) = (w.cfg.days_per_month as u64, w.chem.ns());
-    let react = (w.day / dpm).is_multiple_of(REACT_MONTHS);
+    let (month, ns) = (w.cfg.calendar().month, w.chem.ns());
+    let react = w.month().is_multiple_of(REACT_MONTHS);
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns]);
-    let dt = (REACT_MONTHS * dpm) as f64 * DAY;
+    let dt = (REACT_MONTHS * month) as f64;
     for s in 0..w.parts.parts.len() {
         if !w.parts.parts[s].alive {
             continue;
@@ -176,10 +175,10 @@ fn load(w: &mut World, r: usize) {
     if !afloat || held.is_some() || v <= 0.0 || w.parts.parts[r].root as usize != r {
         return;
     }
-    let mut rng = Rng::new(w.seed, w.day, w.parts.parts[r].id(r), Purpose::Bond);
+    let mut rng = Rng::new(w.seed, w.day(), w.parts.parts[r].id(r), Purpose::Bond);
     let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
     let to = DIRS.iter().filter_map(|&d| w.grid.step(i, d)).filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
-    if let Some(j) = to.filter(|_| rng.f64() < v * (w.cfg.days_per_month as f64 * DAY) / w.grid.cell_m) {
+    if let Some(j) = to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / w.grid.cell_m) {
         w.parts.move_structure(r, j);
     }
 }

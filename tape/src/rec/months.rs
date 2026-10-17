@@ -51,7 +51,7 @@ pub(super) fn csv(rows: &[MonthRow]) -> String {
 
 /// The world's year and month of the year now.
 pub(super) fn year_month(w: &World) -> (u64, u64) {
-    (w.day / w.days_per_year(), (w.day / w.cfg.days_per_month as u64) % w.cfg.months_per_year as u64)
+    (w.cfg.calendar().years(w.time), w.month() % w.cfg.months_per_year as u64)
 }
 
 impl Recorder {

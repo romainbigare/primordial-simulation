@@ -228,7 +228,7 @@ pub(crate) fn ready(w: &mut World) {
 }
 
 fn event(w: &mut World, made: bool, cell: u32, kind: f64) {
-    let (day, what) = (w.day, if made { EventKind::BondMade } else { EventKind::BondBroken });
+    let (day, what) = (w.day(), if made { EventKind::BondMade } else { EventKind::BondBroken });
     w.events.push(Event { day, kind: what, node: cell, value: kind });
 }
 

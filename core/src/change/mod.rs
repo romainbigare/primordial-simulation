@@ -70,7 +70,7 @@ pub fn step(w: &mut World, dt: f64) {
     crate::flow::ensure(w);
     let mut s = std::mem::take(&mut w.scratch);
     let n = w.grid.n();
-    let tick = (w.day / w.cfg.phys_days as u64) as u32;
+    let tick = (w.day() / w.cfg.phys_days as u64) as u32;
     if s.slow.len() != n {
         s.slow = turns(n, tick);
     }

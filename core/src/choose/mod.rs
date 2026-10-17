@@ -75,7 +75,7 @@ struct Choice {
 /// decision (`learn`), scores its options (`options`), draws one (`pick`), keeps the trace for learning and emits its
 /// signal (`trace`), and acts (`dispatch`).
 pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
-    let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
+    let mut rng = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp_at(&w.chem, lived.cap);
     // A brain perceives sizes per member.

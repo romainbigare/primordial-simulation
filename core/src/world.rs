@@ -84,8 +84,8 @@ pub struct World {
     pub table: crate::store::Nodes,
     /// Seed of every keyed random draw (`rng::Rng`)
     pub seed: u64,
-    /// World clock, days since the start
-    pub day: u64,
+    /// World clock, seconds since the start (`clock`)
+    pub time: u64,
     /// Loose (unbonded) amounts in ground nodes, [k * n + i], mol
     pub ground: Vec<f64>,
     /// Bonded ground amounts, [k * n + i], mol
@@ -147,14 +147,24 @@ pub struct World {
 
 impl World {
     pub fn days_per_year(&self) -> u64 {
-        (self.cfg.days_per_month * self.cfg.months_per_year) as u64
+        let cal = self.cfg.calendar();
+        cal.days(cal.year)
     }
+    /// Whole days since the start: the day it is
+    pub fn day(&self) -> u64 {
+        self.cfg.calendar().days(self.time)
+    }
+    /// Whole months since the start
+    pub fn month(&self) -> u64 {
+        self.cfg.calendar().months(self.time)
+    }
+    /// Years since the start, with their fraction
     pub fn year(&self) -> f64 {
-        self.day as f64 / self.days_per_year() as f64
+        self.time as f64 / self.cfg.calendar().year as f64
     }
     /// Fraction of the year, 0..1
     pub fn season(&self) -> f64 {
-        (self.day % self.days_per_year()) as f64 / self.days_per_year() as f64
+        self.cfg.calendar().season(self.time)
     }
     /// Whether ground node `i` is land: its solid surface above 0 m (`surface_z`).
     pub fn is_land(&self, i: usize) -> bool {

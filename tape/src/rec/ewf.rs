@@ -61,9 +61,9 @@ impl Recorder {
         if raw.len() - 8 - n != frame * frames.len() {
             return Err(bad("the frames do not fit the tape's size"));
         }
-        self.frames = frames.iter().map(day).take_while(|&d| d <= w.day).collect();
+        self.frames = frames.iter().map(day).take_while(|&d| d <= w.day()).collect();
         self.bytes = raw[8 + n..8 + n + frame * self.frames.len()].to_vec();
-        self.log = events.iter().take_while(|e| day(e) <= w.day).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
+        self.log = events.iter().take_while(|e| day(e) <= w.day()).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
         // Series: the rows of years up to this one (a null is a NaN that was written).
         let (series, units) = (object("series")?, object("series_units")?);
         let years = series.get("year").and_then(Value::as_array).ok_or_else(|| bad("no years"))?;

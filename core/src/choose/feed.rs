@@ -39,7 +39,7 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
         return;
     }
     let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
-    w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
+    w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
     let mut matter = 0.0;
     for (k, &a) in m.iter().enumerate() {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
@@ -116,7 +116,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     transfer(w, &mut o, b, &m);
     b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
-    w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: got });
+    w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
     if body::wound(w, s, o, f, &rest, TAKEN, built0, matter0) {
         w.life.bodies[s].note(b.id(slot), -(NOTE_SCALE * got / mo) as f32);
     }
@@ -153,6 +153,6 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     o.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
     o.note(b.id(slot), (NOTE_SCALE * got / mo) as f32);
     o.vis = o.visible(&w.chem, &w.cfg.phys);
-    w.events.push(Event { day: w.day, kind: EventKind::Gave { from: b.id(slot), to: o.id(s) }, node: b.cell, value: got });
+    w.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id(slot), to: o.id(s) }, node: b.cell, value: got });
     w.life.bodies[s] = o;
 }

@@ -113,7 +113,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     let Some(kind) = KINDS.get(which) else { return String::new() };
     let Some((r_light, _, _, burn)) = w.chem.life_roles() else { return String::new() };
     pcore::survey::survey(w);
-    let mut r = Rng::new(w.seed, w.day, which as u64, Purpose::Brain);
+    let mut r = Rng::new(w.seed, w.day(), which as u64, Purpose::Brain);
     let hand = how.hand[(!kind.anywhere) as usize];
     let (shape, lineage, rows) = founder_lineage(w, which, kind, hand, &mut r);
     // One genome for all when nothing is sprayed; else one per body.
@@ -132,13 +132,13 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
             let genome = shared.unwrap_or_else(|| sprayed(w, kind, shape, &rows, how, hand, id));
             let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { how.genes }, id) else { return String::new() };
             // A share `fixers` of the light-eaters carry the gene of the fixing reaction; the draw is by the body's own id.
-            if let Some(fx) = fix.filter(|_| Rng::new(w.seed, w.day, id, Purpose::Fixer).f64() < how.fixers) {
+            if let Some(fx) = fix.filter(|_| Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers) {
                 b.genes[lay.cat + fx] = FIX_GENE;
                 p.fixers += 1;
             }
             p.add(w, &b, [lay.cat + r_light, lay.cat + burn], take);
             let delay = 1 + r.below(b.interval() as usize) as u64;
-            w.life.add(b, w.day, delay);
+            w.life.add(b, w.day(), delay);
         }
     }
     line(w, kind, how, hand, fix, &p)
@@ -163,7 +163,7 @@ fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: bool, r: &mut
 #[allow(clippy::too_many_arguments)]
 fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding, hand: bool, id: u64) -> u32 {
     let mut v = rows.to_vec();
-    let mut rr = Rng::new(w.seed, w.day, id, Purpose::Spray);
+    let mut rr = Rng::new(w.seed, w.day(), id, Purpose::Spray);
     let size = pcore::brain::row_step(&w.cfg.phys, body::mutation_size(&kind.scalars));
     for _ in 0..how.rounds {
         pcore::brain::shake(&mut v, &mut rr, size);

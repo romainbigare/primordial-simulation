@@ -42,7 +42,7 @@ pub fn survey(w: &mut World) {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
     bond::ready(w);
-    let monthly = w.day.is_multiple_of(w.cfg.days_per_month as u64);
+    let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
     if monthly {
         w.life.resum();
         crate::nodes::crowd(w);
@@ -50,7 +50,7 @@ pub fn survey(w: &mut World) {
     shade(w);
     sum_cells(w);
     hold_heat(w);
-    if monthly && w.day > 0 {
+    if monthly && w.time > 0 {
         choose::regroup(w);
         traffic(w);
     }
@@ -105,7 +105,7 @@ fn hold_heat(w: &mut World) {
     let mut owed = vec![0.0; n];
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         let q = w.heat_keep.get(slot, b.gen) as f64;
-        owed[b.cell as usize] += q * w.day.saturating_sub(b.last) as f64 * DAY;
+        owed[b.cell as usize] += q * w.day().saturating_sub(b.last) as f64 * DAY;
     }
     w.heat_pool.resize(n, 0.0);
     for (i, &o) in owed.iter().enumerate() {
@@ -162,7 +162,7 @@ fn shade(w: &mut World) {
 
 /// Update the bodies due today.
 pub fn day(w: &mut World) {
-    let due = w.life.take_due(w.day);
+    let due = w.life.take_due(w.day());
     if due.is_empty() {
         return;
     }
@@ -196,7 +196,7 @@ pub fn day(w: &mut World) {
                 crate::lineage::resize(w, s, &mut b);
                 crate::nodes::split(w, s, &mut b);
                 b.vis = b.visible(&w.chem, &w.cfg.phys);
-                w.life.schedule(w.day + b.interval(), slot, gen);
+                w.life.schedule(w.day() + b.interval(), slot, gen);
                 w.life.bodies[s] = b;
             }
         }

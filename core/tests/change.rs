@@ -3,7 +3,7 @@
 
 use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
-use pcore::units::{DAY, P_REF, R_GAS, T_SURF};
+use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
 use worldgen::testkit::{hold_ground, in_all, BURN, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -86,7 +86,7 @@ fn hot_node_reacts_in_the_next_step() {
     for tick in 0..40 {
         let mut w = base.clone();
         w.scratch = Default::default();
-        w.day = 3 * tick;
+        w.time = 3 * tick * DAY_S;
         for k in 0..w.chem.ns() {
             w.ground[k * n + i] = 0.0;
             w.bed[k * n + i] = 0.0;
@@ -151,7 +151,7 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
         let tm = w.chem.subs[LIQUID].melt;
         w.e_ground[i] = if half { w.energy_ground(i, tm) - 0.5 * liquid * w.chem.subs[LIQUID].lf } else { w.energy_ground(i, tm - 1e-6) };
         // A tick at which every block reacts at its turn for all the time since its first.
-        (w.scratch, w.day) = (Default::default(), 4000 * w.cfg.phys_days as u64);
+        (w.scratch, w.time) = (Default::default(), 4000 * w.cfg.phys_days as u64 * DAY_S);
         assert_eq!(w.thaw(i).1.map(|p| p.0), half.then_some(LIQUID));
         let dt = w.cfg.phys_days as f64 * DAY;
         change::step(&mut w, dt);
@@ -419,7 +419,7 @@ fn a_cell_at_balance_does_not_react_every_step() {
     for _ in 0..39 {
         let before: Vec<f64> = w.ground[DISSOLVED * n..(DISSOLVED + 1) * n].to_vec();
         change::step(&mut w, 3.0 * DAY);
-        w.day += 3;
+        w.time += 3 * DAY_S;
         changes += (0..n).filter(|&i| w.ground[DISSOLVED * n + i] != before[i]).count();
     }
     eprintln!("{changes} changes of the mineral in 39 steps over {wet} cells");

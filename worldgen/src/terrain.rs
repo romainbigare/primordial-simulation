@@ -177,7 +177,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         table: Nodes::of_grid(&grid),
         grid,
         seed,
-        day: 0,
+        time: 0,
         ground,
         bed,
         e_ground: vec![0.0; n],

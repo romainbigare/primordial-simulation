@@ -68,7 +68,7 @@ fn site(w: &World, b: &Body) -> Site {
     let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::walls_around(w, b));
     let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.0);
-    let days = w.day.saturating_sub(b.last).max(1) as f64;
+    let days = w.day().saturating_sub(b.last).max(1) as f64;
     Site { i, j: w.grid.air_of(i), tg, stands, depth, walls, cover, open, days, dt: days * DAY }
 }
 
@@ -77,7 +77,7 @@ fn site(w: &World, b: &Body) -> Site {
 pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<Lived, u8> {
     let s = site(w, b);
     let (mass, cap) = b.mass_cap(&w.chem);
-    b.last = w.day;
+    b.last = w.day();
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
         return Err(LACK);
@@ -192,7 +192,7 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
                 return Err(PHASE);
             }
             left = b.mass_cap(&w.chem);
-        } else if Rng::new(w.seed, w.day, b.id(slot), Purpose::Frost).f64() < f {
+        } else if Rng::new(w.seed, w.day(), b.id(slot), Purpose::Frost).f64() < f {
             return Err(PHASE);
         }
     }

@@ -155,7 +155,7 @@ fn gone(z: f64, p: f64) -> f64 {
 impl Reactor {
     /// The reactor of `chem` in a world of settings `cfg` (a reaction too slow to matter over its year is frozen).
     pub fn new(chem: &Chemistry, cfg: &Config) -> Self {
-        let (nr, ns, year) = (chem.reactions.len(), chem.ns(), cfg.seconds_per_year());
+        let (nr, ns, year) = (chem.reactions.len(), chem.ns(), cfg.calendar().year as f64);
         let dh: Vec<f64> = (0..nr).map(|r| chem.dh(r)).collect();
         Reactor {
             thr: chem.reactions.iter().map(|rx| frozen_below(rx, year)).collect(),

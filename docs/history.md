@@ -312,6 +312,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   and bodies 23%). Loose ground fills as life spreads (zeros 30% at year 4, 9% at year 30); bed (82% zeros) and deep
   (65%) would gain, about 40 MB of 1.5 to 1.7 GB at 512 x 256 (3%). Flow already loops only over the substances
   present (`Scratch::loose`, `bedk`, `gas`). Kept dense until the amounts, not brains and bodies, bound the memory.
+- B7: the clock (`core/src/clock/`): time is whole seconds (`World::time`, was `World::day`); the day, the month, the
+  year and the season are derived (`clock::Calendar`, `Config::calendar`); `schedule.rs` runs its month as processes
+  with periods (`clock::Every`, `due`, `next`) in one fixed order. Same history (series and months byte for byte);
+  golden re-pinned and `SNAPSHOT_VERSION` 5, since the saved time is now in seconds. Flow's own periods stay in
+  `flow::step` until Phase D.
 
 **Owner's decisions after Phase A**
 

@@ -10,6 +10,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
+use pcore::units::DAY_S;
 use pcore::{Ledger, World};
 
 /// Substances of chemistry 0: the common liquid.
@@ -231,9 +232,9 @@ pub fn warm(w: &mut World, b: &mut Body, t: f64) {
 
 /// Body `b` placed and taken out again, prepared, to call the laws on directly: its slot and the body.
 pub fn out(w: &mut World, b: Body) -> (usize, Body) {
-    let s = w.life.add(b, w.day, 1);
+    let s = w.life.add(b, w.day(), 1);
     pcore::survey::survey(w);
-    w.day += 1;
+    w.time += DAY_S;
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     b.prepare(&w.chem, &w.cfg.phys);
     (s, b)

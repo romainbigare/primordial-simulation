@@ -1,7 +1,8 @@
 //! The settings of a world (`Config`) and the free numbers of its laws (`Physics`). What each
 //! number is anchored to is in `docs/numbers.md`, one row per field.
 
-use crate::units::T_SURF;
+use crate::clock::Calendar;
+use crate::units::{DAY_S, T_SURF};
 use serde::{Deserialize, Serialize};
 
 /// The settings of a world: the planet, the calendar and time steps, the physics of its ground
@@ -369,9 +370,10 @@ impl Default for Physics {
 }
 
 impl Config {
-    /// Length of the world's year, s.
-    pub fn seconds_per_year(&self) -> f64 {
-        (self.days_per_month * self.months_per_year) as f64 * crate::units::DAY
+    /// The world's calendar: its day, month and year, s.
+    pub fn calendar(&self) -> Calendar {
+        let month = self.days_per_month as u64 * DAY_S;
+        Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
     /// Check a run's settings before it starts: the time steps fit together as the laws take them (`step_marked`,
     /// `flow::step`): physics runs every `phys_days`, and the wind, evaporation and liquid each at the first physics step

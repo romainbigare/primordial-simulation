@@ -72,11 +72,11 @@ pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, nois
 /// energy.
 pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
     let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id(slot));
-    let mut r = Rng::new(w.seed, w.day, id, Purpose::Resize);
+    let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };
     // The born and the shared rows get the same new weights (two streams of one key, the body's id turned over).
-    let rerow = |x: &[f32]| brain::rerow(x, lin.shape, l.shape, &mut Rng::new(w.seed, w.day, !id, Purpose::Resize), noise);
+    let rerow = |x: &[f32]| brain::rerow(x, lin.shape, l.shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
     let (born, shared) = (rerow(w.life.born(b)), rerow(&w.life.groups[b.group as usize].rows));
     let lineage = w.life.new_lineage(l);
     let group = w.life.fork_group(b.group, lineage, shared);

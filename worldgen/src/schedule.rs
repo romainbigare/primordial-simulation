@@ -33,7 +33,7 @@ impl Schedule {
     /// Place what is due in the world's year now (call at the start of each year): the soil, the kinds in their order,
     /// the big-brain test. Returns the lines to print.
     pub fn place(&self, w: &mut World) -> Vec<String> {
-        let year = w.day / w.days_per_year();
+        let year = w.cfg.calendar().years(w.time);
         let mut said = vec![];
         if self.life == Some(year) {
             said.push(life::soil(w, &crate::chemistry0().1.soil));

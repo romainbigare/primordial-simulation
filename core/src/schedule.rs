@@ -1,4 +1,4 @@
-//! The order of the laws in one month.
+//! The order of the laws in one month, as processes of the clock (`clock`).
 //!
 //! Every `Config::phys_days` days:
 //! 1. `survey::survey`: what each cell holds, its cover, light and heat set aside for its bodies;
@@ -11,7 +11,7 @@
 //! On the first day of the month `bond::step` (parts and structures), and every day `survey::day`
 //! (the bodies whose update is due: their physics, decisions and copying).
 
-use crate::units::DAY;
+use crate::clock::{self, Every};
 use crate::world::World;
 use crate::{bond, change, check, flow, survey};
 
@@ -33,53 +33,70 @@ pub fn step(w: &mut World) {
     step_marked(w, &mut |_| {});
 }
 
-/// Debug builds only: stop at the first stage that leaves the world broken (the yearly check of
-/// the shell comes too late to say which stage did it). Release builds skip this.
+/// After a stage: `mark(stage)`; and, in debug builds only, stop at the first stage that leaves the world broken
+/// (the yearly check of the shell comes too late to say which stage did it, `what`). Release builds skip the check.
 #[inline]
-fn audit(w: &World, stage: &str) {
+fn after(w: &World, stage: Stage, what: &str, mark: &mut dyn FnMut(Stage)) {
+    mark(stage);
     if cfg!(debug_assertions) {
         if let Some(e) = check::broken(w) {
-            panic!("broken after {stage} (day {}): {e}", w.day);
+            panic!("broken after {what} (day {}): {e}", w.day());
         }
     }
 }
 
 /// `step`, calling `mark(stage)` after each stage, e.g. to time them.
 pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(Stage)) {
-    for d in 0..w.cfg.days_per_month {
-        day_of_month(w, d, mark);
-    }
+    run_for(w, w.cfg.calendar().month, mark);
 }
 
-/// Advance the world by one day, the day of the month its clock is at: what `step` does on that day.
+/// Advance the world by one day: what `step` does on that day.
 pub fn day(w: &mut World) {
-    let d = (w.day % w.cfg.days_per_month as u64) as u32;
-    day_of_month(w, d, &mut |_| {});
+    run_for(w, w.cfg.calendar().day, &mut |_| {});
 }
 
-/// Day `d` of the month: the survey, Flow and Change every `phys_days` days from the month's start (the last
-/// span cut to the month's end), Bond on the first day, then the bodies due.
-fn day_of_month(w: &mut World, d: u32, mark: &mut dyn FnMut(Stage)) {
-    let dpm = w.cfg.days_per_month;
-    if d.is_multiple_of(w.cfg.phys_days) {
-        let dt = w.cfg.phys_days.min(dpm - d) as f64 * DAY;
-        survey::survey(w);
-        mark(Stage::Bodies);
-        audit(w, "survey");
-        flow::step(w, dt);
-        mark(Stage::Flow);
-        audit(w, "flow");
-        change::step(w, dt);
-        mark(Stage::Change);
-        audit(w, "change");
+/// What a process does at one time: the world, the seconds the run stands for, and the mark of its stages.
+type Run = fn(&mut World, u64, &mut dyn FnMut(Stage));
+
+/// The processes of the world in their fixed order at one time: the physics every `phys_days` days from the month's
+/// start (the last span cut to the month's end), Bond at the month's start, then the bodies due, every day.
+fn processes(w: &World) -> [(Every, Run); 3] {
+    let cal = w.cfg.calendar();
+    let every = |period| Every { period, within: cal.month };
+    [(every(w.cfg.phys_days as u64 * cal.day), physics), (every(cal.month), parts), (every(cal.day), bodies)]
+}
+
+/// Run the processes due from the world's time on, for `span` seconds.
+fn run_for(w: &mut World, span: u64, mark: &mut dyn FnMut(Stage)) {
+    let (list, end) = (processes(w), w.time + span);
+    while w.time < end {
+        let t = w.time;
+        for (run, span) in clock::due(&list, t) {
+            run(w, span, mark);
+        }
+        w.time = clock::next(&list, t).min(end);
     }
-    if d == 0 {
-        bond::step(w);
-        mark(Stage::Parts);
-        audit(w, "bond");
-    }
+}
+
+/// The survey, Flow and Change, for `span` seconds.
+fn physics(w: &mut World, span: u64, mark: &mut dyn FnMut(Stage)) {
+    let dt = span as f64;
+    survey::survey(w);
+    after(w, Stage::Bodies, "survey", mark);
+    flow::step(w, dt);
+    after(w, Stage::Flow, "flow", mark);
+    change::step(w, dt);
+    after(w, Stage::Change, "change", mark);
+}
+
+/// Bond: parts and structures (its own spans are months, `bond::step`).
+fn parts(w: &mut World, _: u64, mark: &mut dyn FnMut(Stage)) {
+    bond::step(w);
+    after(w, Stage::Parts, "bond", mark);
+}
+
+/// The bodies whose update is due (their own intervals are whole days, `survey::day`).
+fn bodies(w: &mut World, _: u64, mark: &mut dyn FnMut(Stage)) {
     survey::day(w);
-    w.day += 1;
-    mark(Stage::Bodies);
-    audit(w, "body day");
+    after(w, Stage::Bodies, "body day", mark);
 }

@@ -131,7 +131,7 @@ impl Recorder {
                 .find_map(|&(v, len, off)| v[k * len..(k + 1) * len].iter().position(|&x| x > 0.0).map(|p| (off + p, v[k * len + p])));
             if let Some((node, value)) = hit {
                 self.seen[k] = true;
-                w.events.push(Event { day: w.day, kind: EventKind::FirstSubstance(k as u16), node: node as u32, value });
+                w.events.push(Event { day: w.day(), kind: EventKind::FirstSubstance(k as u16), node: node as u32, value });
             }
         }
     }
@@ -139,8 +139,8 @@ impl Recorder {
     /// Call at the start and after every simulated month. A month the tape has already (the snapshot's month, in a
     /// resumed run) is not recorded again.
     pub fn record_month(&mut self, w: &mut World) {
-        let dpy = w.days_per_year();
-        let (year, yearly) = (w.day / dpy, w.day.is_multiple_of(dpy));
+        let cal = w.cfg.calendar();
+        let (year, yearly) = (cal.years(w.time), w.time.is_multiple_of(cal.year));
         if self.months.last().is_some_and(|r| (r.year, r.month) == months::year_month(w)) {
             return;
         }
@@ -162,7 +162,7 @@ impl Recorder {
             self.push_series(&c);
         }
         if framed {
-            self.frames.push(w.day);
+            self.frames.push(w.day());
             frame(&c, &mut self.bytes);
         }
     }

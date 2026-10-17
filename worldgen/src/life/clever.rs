@@ -54,32 +54,32 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
         let (store, e): (Vec<f64>, f64) = (b.store.iter().map(|a| a / m).collect(), b.e / m);
         let src_lin = w.life.brains[lin as usize].clone().expect("lineage");
         if !made.iter().any(|x| x.0 == lin) {
-            let mut r = Rng::new(w.seed, w.day, REBASE_STREAM | lin as u64, Purpose::Clever);
+            let mut r = Rng::new(w.seed, w.day(), REBASE_STREAM | lin as u64, Purpose::Clever);
             let base = brain::rebase(&src_lin.base, src_lin.shape, big, &mut r, noise);
             let a = w.life.new_lineage(Lineage { shape: big, seen: CLEVER_SIZES[2], sight: CLEVER_SIZES[3], base, root: CLEVER_ROOT });
             let c = w.life.new_lineage(Lineage { root: CONTROL_ROOT, ..src_lin.clone() });
             made.push((lin, a, c));
         }
         let (_, a, c) = *made.iter().find(|x| x.0 == lin).expect("made");
-        let mut r = Rng::new(w.seed, w.day, DELAY_STREAM | j as u64, Purpose::Clever);
+        let mut r = Rng::new(w.seed, w.day(), DELAY_STREAM | j as u64, Purpose::Clever);
         for (lineage, is_big) in [(a, true), (c, false)] {
             let (mut g, mut rows) = (genes.clone(), born.clone());
             if is_big {
                 for (k, gene) in body::BRAIN_SIZES.into_iter().enumerate() {
                     g[gene] = CLEVER_SIZES[k] as f32;
                 }
-                rows = brain::rerow(&born, src_lin.shape, big, &mut Rng::new(w.seed, w.day, REROW_STREAM | j as u64, Purpose::Clever), noise);
+                rows = brain::rerow(&born, src_lin.shape, big, &mut Rng::new(w.seed, w.day(), REROW_STREAM | j as u64, Purpose::Clever), noise);
             }
             let group = w.life.new_group(lineage, rows.clone());
             let genome = w.life.new_genome(rows);
-            let mut b = Body { cell: cell as u32, count: 1.0, lineage, group, near: u32::MAX, mark: w.light[cell], e, store: store.clone(), genes: g, genome, wear, wet, born: w.day, ..Default::default() };
+            let mut b = Body { cell: cell as u32, count: 1.0, lineage, group, near: u32::MAX, mark: w.light[cell], e, store: store.clone(), genes: g, genome, wear, wet, born: w.day(), ..Default::default() };
             b.vis = b.visible(&w.chem, &w.cfg.phys);
             book_body(&mut w.ledger, &w.chem, &b);
             if is_big {
                 (members, kg) = (members + 1.0, kg + b.mass(&w.chem));
             }
             let delay = 1 + r.below(b.interval() as usize) as u64;
-            w.life.add(b, w.day, delay);
+            w.life.add(b, w.day(), delay);
         }
     }
     format!(

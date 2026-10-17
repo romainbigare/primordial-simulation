@@ -5,6 +5,7 @@ use pcore::bond::{self, GROUND};
 use pcore::body::{Body, COPY_MASS, LIQ, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
+use pcore::units::DAY_S;
 use worldgen::testkit::{dry_land, plate, small_world, start as world, Books, Brain, Line};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
@@ -150,9 +151,9 @@ fn a_node_acts_on_bonds_through_one_member() {
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 2.0, b.count / 40.0);
         }
         let (n0, genes) = (b.count, b.genes.clone());
-        w.life.add(b, w.day, 1);
+        w.life.add(b, w.day(), 1);
         pcore::survey::survey(&mut w);
-        w.day += 1;
+        w.time += DAY_S;
         pcore::survey::day(&mut w);
         assert_eq!(w.counts.splits[1], 1.0, "no member split off");
         let one: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l && b.count == 1.0).collect();
