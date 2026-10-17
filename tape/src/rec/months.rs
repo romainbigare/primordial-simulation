@@ -68,8 +68,9 @@ impl Recorder {
             if let Some(l) = &w.life.brains[b.lineage as usize] {
                 bump(&mut y.stand, l.root as usize, b.n());
             }
-            // (The survey fills `env` before any body is placed.)
-            let [t, _, z] = w.life.env[i];
+            // The ground's temperature as the bodies feel it: the last flow step's (the monthly survey's before the
+            // first, as `body` takes it). The survey fills `env` before any body is placed.
+            let (t, z) = (w.t_ground_last(i).unwrap_or(w.life.env[i][0]), w.life.env[i][2]);
             let ctx = [t < SIGNAL_COLD_T, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0];
             let q = (b.sig[0] > 0.0) as usize * 2 + (b.sig[1] > 0.0) as usize;
             let tab = slot(&mut y.sig, b.lineage as usize);

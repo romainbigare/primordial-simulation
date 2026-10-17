@@ -6,12 +6,12 @@ use pcore::chem::Chemistry;
 use pcore::World;
 
 /// Mean absolute learned offset of each live group's rows (its rows less the mean of its members'
-/// born rows), averaged over groups by their members.
+/// born rows), averaged over groups by their members (`Group::count`, as the core weighs them).
 pub(crate) fn learned(w: &World) -> f64 {
     let (mut sum, mut members) = (0.0, 0.0);
     for g in w.life.groups.iter().filter(|g| g.members > 0 && !g.rows.is_empty()) {
         let d: f64 = g.learned().map(|x| x.abs() as f64).sum();
-        (sum, members) = (sum + d / g.rows.len() as f64 * g.members as f64, members + g.members as f64);
+        (sum, members) = (sum + d / g.rows.len() as f64 * g.count, members + g.count);
     }
     sum / members.max(1.0)
 }
