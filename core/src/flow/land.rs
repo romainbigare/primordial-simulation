@@ -22,7 +22,7 @@ pub(super) fn molten(s: &Scratch, k: usize, i: usize) -> f64 {
 /// Is substance `k` at or over its melting point in ground node `i` (`World::melt`, as of the last `ground_state`)?
 #[inline]
 pub(super) fn melted(s: &Scratch, k: usize, i: usize) -> bool {
-    (s.latent[i].molten as u64) >> k & 1 == 1
+    s.latent[i].molten >> k & 1 == 1
 }
 
 /// Liquid share of substance `k` in ground node `i`.
@@ -126,10 +126,9 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
         let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.ground[k * n + i] * s.sp[k].lf)));
         (s.pk[i], s.phi[i]) = th.on.unwrap_or((NONE, s.phi[i]));
-        let bits = th.bits;
-        s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, molten: bits as f64 };
+        s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, molten: th.bits };
         s.tg[i] = th.t;
-        if full || pk != NONE || s.pk[i] != NONE || bits as f64 != was {
+        if full || pk != NONE || s.pk[i] != NONE || th.bits != was {
             surface(w, s, i);
         }
     }

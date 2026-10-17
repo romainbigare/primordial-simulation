@@ -42,8 +42,8 @@ pub(super) struct Latent {
     /// `f64::MIN` on a plateau, or when `lift` marks the node for a new state)
     pub(super) lo: f64,
     pub(super) hi: f64,
-    /// What is at or over its melting point, one bit per substance (`melted`; in an f64, exact to 53 substances)
-    pub(super) molten: f64,
+    /// What is at or over its melting point, one bit per substance (`melted`)
+    pub(super) molten: u64,
 }
 
 /// The bonded ground of a ground node as of the last refresh (liquid wears `vol`).
@@ -309,7 +309,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
         return;
     }
     (s.pk, s.phi) = (vec![NONE; n], vec![0.0; n]);
-    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0.0 }; n];
+    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0 }; n];
     for v in [&mut s.skin, &mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
         *v = vec![0.0; n];
     }
