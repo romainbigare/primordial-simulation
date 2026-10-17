@@ -1,7 +1,9 @@
-//! Two tiny scenes for Law 3 (Bond).
+//! Law 3 (Bond): parts and the bonds between them, structures, and the bodies that make and hold parts.
 
 use pcore::bond::{self, GROUND};
-use worldgen::testkit::{plate, start as world, Books};
+use pcore::body::{Body, COPY_MASS, STRENGTH};
+use pcore::brain;
+use worldgen::testkit::{dry_land, plate, small_world, start as world, Books, Brain, Line};
 
 #[test]
 fn bond_breaks_under_too_much_load() {
@@ -115,4 +117,57 @@ fn forming_never_takes_more_than_is_left() {
     w.life.bodies[slot] = b;
     assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
     books.assert_within(&w, 1e-12, 1e-9);
+}
+
+/// A node whose brain draws an action of Bond splits one member off as an individual of its
+/// lineage, with its share of the stores, to act. One that holds a part after (its brain only
+/// holds parts, and its force bears the part's weight) lives on; one that holds nothing (too weak
+/// to bear the part, or its brain only breaks the ground) goes back into the node at once, which is
+/// then as it was.
+#[test]
+fn a_node_acts_on_bonds_through_one_member() {
+    // 0: holds a part of 5 kg, members of 40 kg at strength about 1 (they bear about 200 N, the
+    // part weighs 49 N); 1: the same with the light-eater's own members (1 kg at strength about
+    // 0.05: they bear about 0.25 N); 2: breaks the ground.
+    let scene = |case: u8| {
+        let hold = case < 2;
+        let mut w = small_world();
+        // (no member dies of age here, so the node's count is exact)
+        w.cfg.phys.e_life = 1e30;
+        let books = Books::now(&w);
+        let i = dry_land(&w);
+        // A part of 5 kg of the cell's most plentiful loose substance.
+        let p = plate(&mut w, i, 5.0, false);
+        let brain = if hold { Brain::verb(brain::VERBS) } else { Brain::only(brain::DIG) };
+        let line = Line::new(&mut w, &brain, 0);
+        let (l, mut b) = (line.lineage, line.founder(&mut w, 0, i));
+        b.spread = vec![0.01; b.genes.len()];
+        // (their mass stays: no liquid soaked up from the ground, which would add a third to it, and little lost through their
+        // pores, which since 16 Oct 2026 are a leaf's and would take a quarter of it in an update: the old gene)
+        (b.genes[pcore::body::LIQ], b.genes[pcore::body::GAS]) = (-4.0, 2.187);
+        if case == 0 {
+            // (copying at 100 kg, so they do not copy instead)
+            (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 2.0, b.count / 40.0);
+        }
+        let (n0, genes, kg) = (b.count, b.genes.clone(), b.mass(&w.chem) / b.count);
+        w.life.add(b, w.day, 1);
+        pcore::survey::survey(&mut w);
+        w.day += 1;
+        pcore::survey::day(&mut w);
+        assert_eq!(w.counts.splits[1], 1.0, "no member split off");
+        let one: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l && b.count == 1.0).collect();
+        let node = w.life.alive().find(|b| b.lineage == l && b.count > 1.0).expect("the node");
+        if case == 0 {
+            assert!(one.len() == 1 && w.parts.parts[p].id(p) == one[0].hold, "the member holds nothing");
+            assert!((node.count + 1.0 - n0).abs() < 1e-9 * n0 && (one[0].mass(&w.chem) / kg - 1.0).abs() < 0.1, "{} of {n0} members, {} kg against {kg}", node.count, one[0].mass(&w.chem));
+        } else {
+            assert!(one.is_empty() && (node.count - n0).abs() < 1e-9 * n0, "{} members", node.count);
+            assert!(node.genes.iter().zip(&genes).all(|(a, b)| (a - b).abs() < 1e-4), "genes changed");
+            assert!(w.parts.parts[p].held == pcore::bond::NOBODY, "the part is held");
+        }
+        books.assert_kept(&w, 1e-9);
+    };
+    scene(0);
+    scene(1);
+    scene(2);
 }

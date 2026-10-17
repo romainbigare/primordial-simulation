@@ -4,22 +4,30 @@
 //! its first 200 decisions, with learning on against off, over many seeds. Its children (it
 //! copies once it has eaten twice its copy mass) are taken out at once.
 
-use pcore::body::{self, INTERVAL, LEARN};
+use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::grid::DIRS;
+use pcore::rng::{Purpose, Rng};
 use pcore::World;
-use worldgen::testkit::{dry_land, founder, scale, Brain, OFF};
+use worldgen::testkit::{dry_land, founder, scale, start, Books, Brain, Line, OFF};
 
 const W: usize = 12;
+
 const H: usize = 8;
+
 /// First column of the strip, and the loose energy-rich solid on each of its cells, mol/m².
 const STRIP: usize = 6;
+
 const RICH: f64 = 20.0;
+
 const DECISIONS: usize = 200;
+
 /// 800 seeds, not 200, since the default `exchange_days` is 3, the row `ew` runs: the effect on the moves is
 /// about 3 points over chance, not 5, and 200 seeds could not tell it from the body that does not learn.
 const SEEDS: u64 = 1600;
+
 /// Learning rate genes (log10): on, and off.
 const LEARN_ON: f32 = -1.0;
+
 const LEARN_OFF: f32 = -4.0;
 
 /// A flat, warm world: every cell a copy of one dry land cell, the strip added on top.
@@ -174,4 +182,161 @@ fn body_learns_to_move_toward_what_it_can_take() {
     let (up_on, up_off) = (toward_on - chance_on, toward_off - chance_off);
     let se = (toward_on * (1.0 - toward_on) / m_on as f64 + toward_off * (1.0 - toward_off) / m_off as f64).sqrt();
     assert!(up_on > 0.01 && up_on > up_off + se, "{report}, standard error {se:.4}");
+}
+
+/// The same seed gives the same history, with brains shared by bodies that stayed together.
+#[test]
+fn same_seed_same_history_with_shared_brains() {
+    let run = || {
+        let mut w = worldgen::new_world(1, 32, 32);
+        pcore::step(&mut w);
+        worldgen::life::seed(&mut w, 0);
+        worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+        for _ in 0..30 {
+            pcore::step(&mut w);
+        }
+        w
+    };
+    let (a, b) = (run(), run());
+    assert_eq!(pcore::check::hash(&a), pcore::check::hash(&b));
+    let shared = a.life.groups.iter().filter(|g| g.members > 1).count();
+    assert!(shared > 0, "no shared brains among {} bodies", a.life.alive().count());
+    // Each group knows the mean of its members' born rows.
+    for (k, g) in a.life.groups.iter().enumerate().filter(|(_, g)| g.members > 0) {
+        let mut sum = vec![0f32; g.rows.len()];
+        for b in a.life.alive().filter(|b| b.group as usize == k) {
+            sum.iter_mut().zip(a.life.born(b)).for_each(|(s, x)| *s += x / g.members as f32);
+        }
+        let err = sum.iter().zip(g.innate()).map(|(x, y)| (x - y).abs()).fold(0.0, f32::max);
+        assert!(err < 1e-4, "group {k}: mean off by {err}");
+    }
+}
+
+/// A brain grown (more hidden units and memory) and shrunk back is the brain it was.
+#[test]
+fn brain_grown_and_shrunk_back_is_unchanged() {
+    let (a, b) = (pcore::lineage::shape(9, 12, 6), pcore::lineage::shape(9, 16, 8));
+    let mut r = Rng::new(1, 0, 0, Purpose::Body);
+    let w = pcore::brain::random(a, &mut r, 0.1, [0.0; 8], 0.0, [0.0; 9]);
+    let (base, rows) = w.split_at(a.base());
+    let grown = (pcore::brain::rebase(base, a, b, &mut r, 0.1), pcore::brain::rerow(rows, a, b, &mut r, 0.1));
+    assert_eq!((grown.0.len(), grown.1.len()), (b.base(), b.rows() * b.r()));
+    assert_eq!(pcore::brain::rebase(&grown.0, b, a, &mut r, 0.1), base);
+    assert_eq!(pcore::brain::rerow(&grown.1, b, a, &mut r, 0.1), rows);
+    // Down to no brain: no base, the rows' biases kept.
+    let z = pcore::lineage::shape(9, 0, 6);
+    let none = pcore::brain::rerow(rows, a, z, &mut r, 0.1);
+    assert!(pcore::brain::rebase(base, a, z, &mut r, 0.1).is_empty() && none.len() == z.rows());
+    assert_eq!(none[0], rows[a.h]);
+}
+
+/// Without shared brains every body keeps a group of its own, and matter and energy still add up.
+#[test]
+fn own_brains_keep_one_body_per_group() {
+    let mut w = worldgen::new_world(1, 32, 32);
+    let books = Books::now(&w);
+    w.cfg.share_brains = false;
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
+    let first = w.life.alive().count();
+    for _ in 0..30 {
+        pcore::step(&mut w);
+    }
+    let born = w.life.alive().filter(|b| b.born > 0).count();
+    assert!(born > 0 && w.life.alive().count() > 0, "{first} bodies placed, none born");
+    assert!(w.life.groups.iter().all(|g| g.members <= 1), "a group with more than one member");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// A body whose safe minimums are all off can give all its stores to a body with room (here handling costs nothing), but
+/// not its body: its matter (body and brood) and the liquid its body keeps stay (15 Oct 2026; before, it gave them too, and
+/// left with nothing of a member it died at once). Nothing breaks the ledger (taking from an empty body once gave NaN).
+#[test]
+fn a_body_gives_its_stores_but_not_its_body() {
+    use pcore::body::INTERVAL;
+    use pcore::brain;
+    use pcore::event::EventKind;
+    let (mut w, i) = start();
+    w.cfg.phys.c_handle = 0.0;
+    let lay = Layout::of(&w.chem);
+    // Brains that only give to a body they see, and that only rest.
+    let mut giver = founder(&mut w, 1, i, &Brain::verb(brain::GIVE));
+    // No safe minimums, and a long interval (316 days: the taker, of 30 kg, takes by 30^0.75 =
+    // 12.8 kg, 0.05 x 316 x 12.8 = 200 kg of a 30 kg giver's spare), so one give may move all it holds.
+    giver.genes[lay.min..lay.upt].fill(-0.1);
+    giver.genes[INTERVAL] = 2.5;
+    let mut taker = founder(&mut w, 1, i, &Brain::only(brain::REST));
+    taker.genes[lay.keep..].fill(0.95);
+    // (Body matter given is digested into the solid, so it fills the taker's room for the solid
+    // (`Body::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
+    let rich = w.chem.life_roles().expect("roles").1;
+    taker.genes[lay.keep + rich] = 2.0;
+    let (matter, liquid) = (w.chem.matter().expect("matter"), w.chem.life_roles().expect("roles").2);
+    let (m0, fuel0) = (giver.store[matter], giver.store[rich]);
+    let g = w.life.add(giver, w.day, 1);
+    w.life.add(taker, w.day, 1);
+    for _ in 0..3 {
+        pcore::day(&mut w);
+        for b in w.life.alive() {
+            assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);
+        }
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    assert!(w.events.iter().any(|e| matches!(e.kind, EventKind::Gave { .. })), "nothing was given");
+    let b = &w.life.bodies[g];
+    assert!(b.alive && b.store[matter] > 0.99 * m0 && b.store[rich] < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.store[matter], b.store[rich]);
+    assert!(b.store[liquid] >= 0.99 * b.level(&w.chem, liquid, b.mass(&w.chem)), "the liquid of its body was given");
+}
+
+/// A brain of no hidden units is no brain (review 3, Q2): a body of such a lineage takes no
+/// decision and pays nothing for a brain, but lives its physics at its updates and has offspring from its
+/// brood (W3). Matter and energy are kept exactly.
+#[test]
+fn a_body_with_no_brain_lives_and_copies() {
+    use pcore::body::{COPY_MASS, HIDDEN};
+    use pcore::event::EventKind;
+    let (mut w, i) = start();
+    // The light-eaters' sizes but no hidden units.
+    let line = Line::new(&mut w, &Brain { hidden: 0, ..Brain::neutral() }, 0);
+    assert!(w.life.brains[line.lineage as usize].as_ref().expect("its lineage").base.is_empty());
+    // A light-eater node whose members are mature: a body (0.7 kg of the 1 kg) of more than their copy mass (0.25 kg).
+    let mut b = line.founder(&mut w, 0, i);
+    (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.6);
+    let (n0, s) = (b.count, w.life.add(b, w.day, 1));
+    // It pays nothing for a brain, however costly brains are.
+    let mut x = w.life.bodies[s].clone();
+    x.prepare(&w.chem, &w.cfg.phys);
+    let (d, m, p0) = (x.interval() as f64, x.mass(&w.chem), w.cfg.phys);
+    let u0 = pcore::body::upkeep(&w, &x, d, m);
+    (w.cfg.phys.c_hidden, w.cfg.phys.c_memory, w.cfg.phys.c_seen, w.cfg.phys.c_sight, w.cfg.phys.c_learn) = (1e9, 1e9, 1e9, 1e9, 1e9);
+    assert_eq!(pcore::body::upkeep(&w, &x, d, m), u0);
+    w.cfg.phys = p0;
+    let (books, u) = (Books::now(&w), w.counts.updates);
+    for _ in 0..2 {
+        pcore::step(&mut w);
+        assert_eq!(pcore::check::broken(&w), None);
+    }
+    let b = &w.life.bodies[s];
+    let born: f64 = w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum();
+    println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.counts.updates - u, b.count);
+    // (Its children are small against its members, 0.075 kg against 0.7: another size class, so they are nodes of their own.)
+    let all: f64 = w.life.alive().map(|x| x.n()).sum();
+    assert!(b.alive && w.counts.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
+    assert!(w.counts.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// Moving costs the real cost of transport (14 Oct 2026, review 6, finding 2): per kg and m a 30 kg
+/// member pays `c_move`, a smaller one more and a bigger one less, as m^-0.32 (Taylor et al.), so a
+/// metre costs a member of 100 times the mass 100^0.68 = 23 times as much, not 100 times.
+#[test]
+fn moving_costs_the_real_cost_of_transport() {
+    let p = pcore::Physics::default();
+    assert_eq!(p.walk(30.0), p.c_move, "a 30 kg member pays c_move");
+    let (small, big) = (p.walk(0.3) * 0.3, p.walk(30.0) * 30.0);
+    assert!((big / small - 100f64.powf(0.68)).abs() < 1e-9, "100 times the mass, {} times the cost of a metre", big / small);
+    assert!((p.walk(0.18) / p.walk(44.0) - (0.18f64 / 44.0).powf(-0.32)).abs() < 1e-9);
+    // The real figure, 10.7 m^-0.32 J per kg per m, at 30 kg is 3.6: c_move 3 is the same order.
+    assert!(p.c_move > 0.7 * 10.7 * 30f64.powf(-0.32) && p.c_move < 1.0 * 10.7 * 30f64.powf(-0.32));
 }
