@@ -47,6 +47,11 @@ pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> f64 {
 /// What the radiation of one ground cell reads of the world.
 struct Ground<'a> {
     cfg: &'a Config,
+    /// Area (m²) and latitude (degrees) of each cell, from the mesh.
+    area: &'a [f64],
+    lat: &'a [f64],
+    /// Declination of the sun, radians.
+    decl: f64,
     ground: &'a [f64],
     e_ground: &'a [f64],
     canopy: &'a [f32],
@@ -67,22 +72,22 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
     let World { cfg, grid, ground, e_ground, e_air, counts, canopy, light, light_pool, life, .. } = w;
     light_pool.resize(grid.n(), 0.0);
-    let (n, na, adt) = (grid.n(), grid.na(), s.area * dt);
+    let (n, na, cells) = (grid.n(), grid.na(), grid.mesh().cells());
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
     s.node_tmp.fill(0.0);
-    let suns: Vec<f64> = (0..grid.h).map(|y| insolation(cfg.sun, grid.lat(y).to_radians(), decl)).collect();
     // Each cell's numbers depend on no other cell: computed in rows (in parallel, with `threads`),
     // applied in the order of the cells.
     let mut rows = std::mem::take(&mut s.rad);
     rows.resize(n * ROW, 0.0);
-    let (sc, at) = (&*s, Ground { cfg, ground, e_ground, canopy, life, dt });
+    let (sc, at) = (&*s, Ground { cfg, area: cells.area(), lat: cells.lat(), decl, ground, e_ground, canopy, life, dt });
     crate::par::rows(&mut rows, ROW, || (), |_, i, row| {
-        *<&mut [f64; ROW]>::try_from(row).unwrap() = cell(&at, sc, i, suns[i / grid.w]);
+        *<&mut [f64; ROW]>::try_from(row).unwrap() = cell(&at, sc, i);
     });
     for (i, row) in rows.chunks_exact(ROW).enumerate() {
         let &[tl, dl, kept, sw, gain, to_air, to_space, clamped] = <&[f64; ROW]>::try_from(row).unwrap();
         s.tl[i] = tl;
+        let adt = cells.area()[i] * dt;
         if canopy[i] as f64 > 0.0 {
             light[i] += dl;
             for &b in &life.at[i] {
@@ -108,13 +113,14 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     w.cross(Boundary::Space, [], -out);
 }
 
-/// The radiation of ground cell `i` under sunlight `q` (W/m²) over the step: [temperature of the
+/// The radiation of ground cell `i` under the sunlight of its latitude over the step: [temperature of the
 /// air touching the ground, K; light each unit of capture area of its bodies gets, J/m²; light set
 /// aside for them, W/m²; shortwave absorbed, W/m²; heat the node gains, J; heat given to its air
 /// node, J; heat sent to space, J; heat it could not pay, J].
-fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
+fn cell(at: &Ground, s: &Scratch, i: usize) -> [f64; ROW] {
     let (cfg, n, dt) = (at.cfg, at.e_ground.len(), at.dt);
-    let adt = s.area * dt;
+    let adt = at.area[i] * dt;
+    let q = insolation(cfg.sun, at.lat[i].to_radians(), at.decl);
     // The air this cell sees, and its temperature where it touches the ground.
     let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
     let ta = ta + s.ta[j] - s.ta0[j];

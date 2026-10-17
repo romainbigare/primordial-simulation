@@ -332,6 +332,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   golden re-pinned and `SNAPSHOT_VERSION` 5, since the saved time is now in seconds. Flow's own periods stay in
   `flow::step` until Phase D.
 
+**Phase D: the physics laws on the new base**
+
+- D4: radiation reads the latitude and the area of each cell from the mesh (`mesh().cells()`), not by rows of the
+  map; it works on any mesh. Same fingerprints.
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body
