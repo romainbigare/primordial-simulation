@@ -56,6 +56,7 @@ fn snapshot_round_trip_mid_cycle() {
     tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     assert_eq!(fingerprint(&a), fingerprint(&b));
+    assert!(b.table.ids().count() > 0 && b.table.ids().eq(a.table.ids()), "a load keeps every node's id");
     run(&mut b, 14);
     run(&mut whole, 31);
     assert_eq!(fingerprint(&b), fingerprint(&whole));

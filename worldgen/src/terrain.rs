@@ -6,6 +6,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::flow::scale_height;
 use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
+use pcore::store::Nodes;
 use pcore::units::P_REF;
 use pcore::{Config, Counters, Ledger, World};
 
@@ -173,6 +174,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let mut world = World {
         cfg,
         chem,
+        table: Nodes::of_grid(&grid),
         grid,
         seed,
         day: 0,

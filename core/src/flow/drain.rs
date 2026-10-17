@@ -12,10 +12,8 @@ use crate::World;
 /// in it, with its heat; the head it loses on the way (from a node's head or a store's table to where it goes)
 /// heats it there, as the liquid above does (`liquid`). Bodies and Law 2 do not reach the store.
 pub(super) fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
-    let (n, ns, area, p, g) = (w.grid.n(), w.chem.ns(), s.area, w.cfg.phys, w.cfg.gravity);
-    if w.deep.len() != ns * n {
-        (w.deep, w.e_deep) = (vec![0.0; ns * n], vec![0.0; n]);
-    }
+    let (n, area, p, g) = (w.grid.n(), s.area, w.cfg.phys, w.cfg.gravity);
+    w.fit_deep();
     let (tmin, tmax) = range(&s.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let full = p.bed_porosity * p.bed_depth * area;

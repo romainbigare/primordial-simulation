@@ -43,6 +43,12 @@ pub struct Counters {
     /// What bodies did with parts
     #[serde(skip)]
     pub parts: bond::Tally,
+    /// What `store::apply` left in place so that no node fell below zero: mol (of all substances), and J
+    #[serde(skip)]
+    pub scaled: [f64; 2],
+    /// What `store::apply` set from just below zero (rounding) to zero: mol, and J
+    #[serde(skip)]
+    pub rounded: [f64; 2],
 }
 
 /// One number per body slot, kept with the generation of the body that set it: a body reads only its own (0 for a new
@@ -73,6 +79,9 @@ pub struct World {
     pub cfg: Config,
     pub chem: Chemistry,
     pub grid: Grid,
+    /// The id, class, parent and cell of every node (built from the grid, `store::Nodes::of_grid`, so not saved)
+    #[serde(skip)]
+    pub table: crate::store::Nodes,
     /// Seed of every keyed random draw (`rng::Rng`)
     pub seed: u64,
     /// World clock, days since the start

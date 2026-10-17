@@ -292,3 +292,7 @@ The work of `docs/foundation/plan.md`, one line per task.
 - C1: `solve::spread`, one backward Euler step along links (conductance per link, capacity per node) by conjugate
   gradient with a Jacobi preconditioner, a bounded number of iterations in a fixed order; it returns the link fluxes
   and moves each node only by them, so the books are exact even unconverged. No law calls it yet (golden unchanged).
+- B3 and B5: the store `core/src/store/`. A node table gives each ground, air and deep node an id (`NodeId`: slot and
+  generation), a class, a parent and a cell; it follows from the grid, so a world builds it when made and when loaded,
+  with the same ids, and it is not saved. `store::apply` books moves, transforms and link fluxes in a fixed order and
+  scales down what takes from a node that holds too little (`Counters::scaled`). No law calls it yet; results unchanged.
