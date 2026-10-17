@@ -263,6 +263,9 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 **Phase A: prepare**
 
+- A4 (b): the north–south stripes of the rain map came from the wind's lines solved last (north–south); the wind now
+  solves both orders from the same start and keeps the mean. 5 years without life, 64 x 64, seeds 1 to 3: land rain
+  +0.7 to +2.5 %, temperatures within 0.03 K; golden re-pinned.
 - A6: the code-size test `cli/tests/core_size.rs` counts the code lines of `core/src` per folder and fails above
   9,500 (7,508 at its start); it replaces the `wc -l` command of handover 14.3.
 - A3: the key-number test `tape/tests/ranges.rs` runs seeds 1, 2 and 3 of `ew run --size 64` for 30 years and holds

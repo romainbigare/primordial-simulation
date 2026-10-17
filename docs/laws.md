@@ -218,9 +218,11 @@ each edge:
    lower half;
 3. eddies mix the two columns (`mix`).
 
-It is solved implicitly along lines (east–west, then north–south), so any speed is stable. Air
-in Flow moves as whole columns, so there is no wind near the ground; bodies use the anchored
-`wind_ground` (6.3).
+It is solved implicitly along lines, so any speed is stable. A call is long against the time the
+air takes to mix from node to node, so one order of the two directions would leave stripes along
+the lines solved last: the lines are solved in both orders (east–west then north–south, and the
+other way) from the same start, and the air keeps the mean of the two. Air in Flow moves as whole
+columns, so there is no wind near the ground; bodies use the anchored `wind_ground` (6.3).
 
 ### 1.7 Paths
 

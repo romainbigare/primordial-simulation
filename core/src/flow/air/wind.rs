@@ -177,16 +177,41 @@ impl Lines<'_> {
 /// column (p = nRT/V) drives gas from high to low; the warmth difference at equal height turns the
 /// columns over (the lower half flows to the warmer node and the upper half back, both turned
 /// sideways by rotation; condensable gases crowd in the lower half); eddies mix the two columns.
-/// Solved implicitly along lines (east-west, then north-south), so any speed is stable. The lines
-/// of one direction share no node, so each is solved from the amounts before the step (in
-/// parallel, with `threads`) into a row per line (`Lines`); the rows are applied in the order of
-/// the lines.
+/// Solved implicitly along lines, so any speed is stable. A call is long against the time the air
+/// takes to mix from node to node, so one order of the two directions would leave the air with
+/// stripes along the lines solved last. So the lines are solved in both orders from the same start
+/// (`sweep`), and the air keeps the mean of the two (symmetrically weighted sequential splitting:
+/// Strang 1968; Csomós, Faragó & Havasi 2005).
 pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
-    let World { cfg, grid, air, e_air, potential, .. } = w;
+    let start = (w.air.clone(), w.e_air.clone(), s.nt.clone(), s.capa.clone(), s.mass.clone());
+    let lift = sweep(w, s, dt, [0, 1]);
+    let one = (
+        std::mem::replace(&mut w.air, start.0),
+        std::mem::replace(&mut w.e_air, start.1),
+        std::mem::replace(&mut s.nt, start.2),
+        std::mem::replace(&mut s.capa, start.3),
+        std::mem::replace(&mut s.mass, start.4),
+    );
+    let lift = (lift + sweep(w, s, dt, [1, 0])) / 2.0;
+    for (now, other) in [(&mut w.air, &one.0), (&mut w.e_air, &one.1), (&mut s.nt, &one.2), (&mut s.capa, &one.3), (&mut s.mass, &one.4)] {
+        now.iter_mut().zip(other).for_each(|(x, y)| *x = (*x + y) / 2.0);
+    }
+    w.potential += lift;
+    for (j, &e) in w.e_air.iter().enumerate().take(w.grid.na()) {
+        s.ta[j] = air_temp(e, s.capa[j]);
+    }
+}
+
+/// The lines of both directions in `order` (0: east-west, 1: north-south), each direction from the
+/// amounts the one before left. The lines of one direction share no node, so each is solved from
+/// the amounts before the direction (in parallel, with `threads`) into a row per line (`Lines`);
+/// the rows are applied in the order of the lines. Returns the energy spent lifting, J.
+fn sweep(w: &mut World, s: &mut Scratch, dt: f64, order: [usize; 2]) -> f64 {
+    let World { cfg, grid, air, e_air, .. } = w;
     let (na, aw, ah, ng) = (grid.na(), grid.aw(), grid.ah(), s.gas.len());
     let mut rows = std::mem::take(&mut s.lanes);
     let mut lift = 0.0;
-    for dir in 0..2 {
+    for dir in order {
         s.nt_new.clone_from(&s.nt);
         warmth(s, e_air, aw, ah);
         let (lines, len) = if dir == 0 { (ah, aw) } else { (aw, ah) };
@@ -220,10 +245,7 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
         s.nt.clone_from(&s.nt_new);
     }
     s.lanes = rows;
-    *potential += lift;
-    for (j, &e) in e_air.iter().enumerate().take(na) {
-        s.ta[j] = air_temp(e, s.capa[j]);
-    }
+    lift
 }
 
 /// Temperature, pressure (in `node_tmp`, Pa) and warmth at equal height of each air node, and the
