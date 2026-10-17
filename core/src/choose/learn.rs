@@ -32,11 +32,13 @@ pub(super) fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32])
     let (h, c) = b.trace.split_at(nh);
     let v = |x: &[f32]| gr.rows[cr + nh] + brain::dot(&gr.rows[cr..cr + nh], x);
     let delta = wb - b.wb + w.cfg.phys.discount * v(now) - v(h);
-    gr.var = if gr.var > 0.0 { gr.var + CRITIC_RATE * (delta * delta - gr.var) } else { delta * delta };
-    let a = lr * delta / (gr.var.sqrt() + CRITIC_FLOOR);
-    if !a.is_finite() {
+    // (An error too big for a number teaches nothing and leaves the critic's average as it was.)
+    let var = if gr.var > 0.0 { gr.var + CRITIC_RATE * (delta * delta - gr.var) } else { delta * delta };
+    let a = lr * delta / (var.sqrt() + CRITIC_FLOOR);
+    if !(a.is_finite() && var.is_finite()) {
         return;
     }
+    gr.var = var;
     // The group's rows step by the rate split over its members, so a shared brain moves as fast
     // as one body's would (on the mean of what its members met): a node's decision is that of
     // all its members, so it weighs by its count, and an individual split off a node of thousands

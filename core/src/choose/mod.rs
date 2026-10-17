@@ -167,19 +167,24 @@ fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Cho
     }
 }
 
-/// Draw one action by its score (a softmax). Copying is not among them: a body makes children only from its brood
-/// (`copy::copy`), so no brain bias sets how often anything is born.
+/// Draw one action by its score (a softmax); with no option open at all, rest. Copying is not among them: a body makes
+/// children only from its brood (`copy::copy`), so no brain bias sets how often anything is born.
 fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
-    let top = c.logit.iter().cloned().fold(f32::MIN, f32::max);
-    c.p = c.logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
-    let sum = c.p.iter().sum::<f32>();
-    c.p.iter_mut().for_each(|v| *v /= sum);
-    let mut u = rng.f64() as f32;
-    let a = c.p.iter().position(|&v| {
-        u -= v;
-        u < 0.0
-    });
-    c.a = a.unwrap_or(REST);
+    let top = c.logit.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    if top == f32::NEG_INFINITY {
+        (c.p, c.a) = ([0.0; OPTS], REST);
+        c.p[REST] = 1.0;
+    } else {
+        c.p = c.logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
+        let sum = c.p.iter().sum::<f32>();
+        c.p.iter_mut().for_each(|v| *v /= sum);
+        let mut u = rng.f64() as f32;
+        let a = c.p.iter().position(|&v| {
+            u -= v;
+            u < 0.0
+        });
+        c.a = a.unwrap_or(REST);
+    }
     (w.counts.decisions, w.counts.greedy) = (w.counts.decisions + 1.0, w.counts.greedy + (c.logit[c.a] >= top) as u8 as f64);
 }
 
