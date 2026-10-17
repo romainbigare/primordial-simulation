@@ -254,12 +254,13 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     books.assert_kept(&w, 1e-9);
 
     // A node of five such members: the brood of 7.3 children makes 7.3 members, who are immature and so do not join
-    // their mature parents but start a young node of their own; the parents' stores and members stay what they were but
-    // for what they gave, and the mean member of the node is what it was.
+    // their mature parents but start a young node of their own, a third of them in a neighbour cell; the parents' stores
+    // and members stay what they were but for what they gave, the mean member of the node is what it was, and the
+    // children who left got what those who stayed got.
     let (mut w, i) = start();
     w.cfg.phys.c_copy = 1e18;
     let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
-    (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 0.0);
+    (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 1.0 / 3.0);
     scale(&mut w, &mut n, 5.0);
     n.count = 5.0;
     // A child is a body of half the copy mass: 5 kg, matter 1.25 kg.
@@ -273,12 +274,16 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     w.life.bodies[s] = std::mem::take(&mut n);
     let n = &w.life.bodies[s];
     let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
-    assert_eq!((kids.len(), w.life.alive().count()), (1, at + 2), "the children are a node of their own");
-    let c = &w.life.bodies[kids[0]];
-    assert!((c.count - 7.3).abs() < 1e-6 && !c.adult(&w.chem), "{} young members", c.count);
+    assert_eq!((kids.len(), w.life.alive().count()), (2, at + 3), "the children are two nodes of their own");
+    let (c, other) = (&w.life.bodies[kids[0]], &w.life.bodies[kids[1]]);
+    assert!(c.cell != other.cell && (c.count + other.count - 7.3).abs() < 1e-6 && !c.adult(&w.chem), "{} and {} young members", c.count, other.count);
+    for q in 0..w.chem.ns() {
+        let (x, y) = (c.store[q] / c.count, other.store[q] / other.count);
+        assert!((x - y).abs() <= 1e-9 * x.abs().max(1e-30), "substance {q}: {x} and {y} a child");
+    }
     assert_eq!(n.count, count0, "the parent node took its children in");
     assert!(n.brood == 0.0 && (n.built(&w.chem) / n.n() - built0).abs() < 1e-9 * built0, "the brood is left or the mean member fell: {built0} -> {}", n.built(&w.chem) / n.n());
-    let given = c.store[MATTER];
+    let given = c.store[MATTER] + other.store[MATTER];
     assert!((given - 7.3 * 1.25 / mm).abs() < 1e-6 * given && (before[MATTER] - n.store[MATTER] - given).abs() < 1e-9 * given);
     println!("node: {count0} members of {built0:.2} kg; children {} members of {:.2} kg", c.count, c.built(&w.chem) / c.n());
 }

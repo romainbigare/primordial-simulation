@@ -105,7 +105,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / o.store[k] } else { 0.0 });
     let weight = got / built0.max(1e-30);
     let eats_members = o.n() > 1.0 && weight * o.n() >= 1.0;
-    let f = if eats_members { o.store.iter().zip(&m).map(|(s, a)| if *s > 0.0 { a / s } else { 0.0 }).fold(weight, f64::max) } else { weight.max(eaten) }.min(1.0);
+    let f = (if eats_members { o.store.iter().zip(&m).map(|(s, a)| if *s > 0.0 { a / s } else { 0.0 }).fold(weight, f64::max) } else { weight.max(eaten) }).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
     let cost = w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f);
     if !body::pay(w, b, cost, b.interval() as f64) || away {

@@ -11,8 +11,9 @@ mod mix;
 
 pub use grow::grow;
 
-use crate::body::{alike_size, mutation_size, vary, within, Body, Layout, CHILD, COPY_MASS, DISPERSE, WET, WET_TISSUE};
+use crate::body::{alike_size, most, mutation_size, vary, within, Body, Layout, CHILD, COPY_MASS, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
+use crate::chem::Chemistry;
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::lineage::{own, resized};
@@ -21,12 +22,13 @@ use crate::rng::{Purpose, Rng};
 use crate::World;
 use mix::{mix, mix_rows, partner};
 
-/// What the children of one `copy` share: each one's body, kg, and its matter, mol (its body is that over 1 -
-/// `WET_TISSUE`); whether the parent is a node; whether they join no node (`nodes::may_be_node`); the partner; and the
-/// parent's id.
+/// What the children of one `copy` share: each one's body, kg, its matter, mol (its body is that over 1 -
+/// `WET_TISSUE`), and its provisions, mol of each store (none of the matter: `provisions`); whether the parent is a
+/// node; whether they join no node (`nodes::may_be_node`); the partner; and the parent's id.
 struct Litter {
     body: f64,
     matter: f64,
+    prov: Vec<f64>,
     node: bool,
     alone: bool,
     mate: Option<usize>,
@@ -34,13 +36,12 @@ struct Litter {
 }
 
 /// A mature body makes offspring from its brood. A child has a body of 10^`CHILD` of its parent's copy mass: matter of
-/// 1 - `WET_TISSUE` of that, taken from the brood, and provisions of every other store in the proportion the parent's
-/// body holds them to its matter (the key liquid times 10^`WET`), with its share of the heat. A child is made whenever
-/// the brood covers one: an individual has whole children, a node (members who all do the same) fractional members, as
-/// many as the brood makes. Their genes and born rows are one parent's or a partner's (`mix::partner`; the same partner
-/// for all the children of the call). A body that is not mature (`Body::adult`) makes none. A share of a node's children
-/// (the `DISPERSE` gene) starts in a random neighbour cell; an individual's children stay together, in a neighbour cell
-/// with that chance.
+/// 1 - `WET_TISSUE` of that, taken from the brood, and provisions of every other store (`provisions`), with its share of
+/// the heat. A child is made whenever the brood covers one: an individual has whole children, a node (members who all
+/// do the same) fractional members, as many as the brood makes. Their genes and born rows are one parent's or a
+/// partner's (`mix::partner`; the same partner for all the children of the call). A body that is not mature
+/// (`Body::adult`) makes none. A share of a node's children (the `DISPERSE` gene) starts in a random neighbour cell;
+/// an individual's children stay together, in a neighbour cell with that chance.
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.dec(COPY_MASS));
     let Some(mi) = chem.matter() else { return false };
@@ -65,7 +66,8 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if less than one member); an
     // individual's go together, by that chance.
     let d = b.gene_in_range(DISPERSE);
-    let litter = Litter { body, matter, node, alone: !may_be_node(w, &b.genes), mate, parent: id };
+    let prov = provisions(&w.chem, b, mi, matter, births);
+    let litter = Litter { body, matter, prov, node, alone: !may_be_node(w, &b.genes), mate, parent: id };
     let m = if node { if d * births >= 1.0 { d * births } else { 0.0 } } else { (r.f64() < d) as u8 as f64 };
     let to = if m > 0.0 { w.grid.step(i, DIRS[r.below(8)]) } else { None };
     let (cell, m) = match to {
@@ -100,7 +102,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
             return false;
         }
     }
-    w.events.push(Event { day: w.day, kind: EventKind::Born { root: w.life.root(b), mixed: l.mate.is_some() }, node: b.cell, value: m });
+    w.events.push(Event { day: w.day, kind: EventKind::Born { root: w.life.root(b), mixed: l.mate.is_some() }, node: cell as u32, value: m });
     // Its heat is that of its parent's temperature on the heat capacity it got, so it starts as warm as its parent (a dry
     // child would else be much hotter, a wet one colder); the parent keeps the rest.
     c.e = w.chem.heat_share(b.e, b.heat_cap(&w.chem).max(1e-9), &c.store);
@@ -128,9 +130,8 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
 }
 
 /// The body of `m` children of `b` in `cell` (not placed): their genes (`mix` with a partner, then `body::vary`), the
-/// matter of all `m` from the brood and their provisions, as a share of the parent's body matter (of the key liquid
-/// 10^`WET` times that: a child of a parent whose `WET` is below 0 is dry, and nearly dormant). Returns it, the mutation
-/// size of the genes it came from and the matter taken, mol.
+/// matter of all `m` from the brood and their provisions (`Litter::prov`). Returns it, the mutation size of the genes
+/// it came from and the matter taken, mol.
 fn provision(w: &World, b: &Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) -> (Body, f32, f64) {
     let lay = Layout::of(&w.chem);
     let mixed = l.mate.map(|t| mix(b, &w.life.bodies[t], m, r));
@@ -139,8 +140,6 @@ fn provision(w: &World, b: &Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) 
     let size = mutation_size(from);
     let mi = w.chem.matter().unwrap_or(0);
     let take = (m * l.matter).min(b.store[mi]);
-    let prov = take / (b.store[mi] - b.brooded(&w.chem)).max(1e-300);
-    let wet_prov = prov * 10f64.powf(b.gene(WET));
     let c = Body {
         cell: cell as u32,
         count: m,
@@ -148,7 +147,7 @@ fn provision(w: &World, b: &Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) 
         parent: l.parent,
         born: w.day,
         mark: w.light[cell],
-        store: b.store.iter().enumerate().map(|(k, a)| if k == mi { take } else { a * if b.wet >> k & 1 == 1 { wet_prov } else { prov }.min(1.0) }).collect(),
+        store: b.store.iter().zip(&l.prov).enumerate().map(|(k, (a, p))| if k == mi { take } else { (p * m).min(*a) }).collect(),
         genes,
         spread,
         genome: b.genome,
@@ -158,6 +157,16 @@ fn provision(w: &World, b: &Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) 
         ..Default::default()
     };
     (c, size, take)
+}
+
+/// What one of the `births` children of `b` takes of each store but the matter (`mi`), mol: of the parent's stores
+/// when the litter starts, the share the litter's `matter` is of the parent's body matter (of the key liquid 10^`WET`
+/// times that: a child of a parent whose `WET` is below 0 is dry, and nearly dormant), at most all, split over the
+/// births, so children who leave and children who stay get alike.
+fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -> Vec<f64> {
+    let share = (births * matter).min(b.store[mi]) / (b.store[mi] - b.brooded(chem)).max(1e-300);
+    let wet = share * 10f64.powf(b.gene(WET));
+    b.store.iter().enumerate().map(|(k, a)| if k == mi { 0.0 } else { a * (if b.wet >> k & 1 == 1 { wet } else { share }).min(1.0) / births }).collect()
 }
 
 /// The node children `c` join in their cell: of their size and immature (children are below their parents' copy mass,
@@ -177,8 +186,9 @@ fn target(w: &World, l: &Litter, c: &Body) -> Option<usize> {
 /// The born rows of children `c` of `b` (none: they share their parent's), and the spread left among them. A share
 /// `Physics::row_chance` of children change theirs by a step (`brain::row_step`), else share their parent's. Children
 /// drawn from a node whose rows differ, or a group of them, get the mean of the group drawn (noise of that variance and
-/// the generation's change, over `m`) and keep the variance left among them. With a partner each row is one parent's
-/// (`mix::mix_rows`), the group's spread pooled, then the same change. In a null run the rows do not change.
+/// the generation's change, over `m`) and keep the variance left among them (up to `body::most`, as a node keeps). With
+/// a partner each row is one parent's (`mix::mix_rows`), the group's spread pooled, then the same change. In a null run
+/// the rows do not change.
 fn child_rows(w: &World, b: &Body, l: &Litter, c: &mut Body, m: f64, size: f32, r: &mut Rng) -> Option<Vec<f32>> {
     let p = &w.cfg.phys;
     let mm = m.max(1.0) as f32;
@@ -200,7 +210,7 @@ fn child_rows(w: &World, b: &Body, l: &Litter, c: &mut Body, m: f64, size: f32, 
     } else {
         0.0
     };
-    c.row_spread = var * (1.0 - 1.0 / mm);
+    c.row_spread = (var * (1.0 - 1.0 / mm)).min(most(row_step(p, size), p.alike));
     match (pre, sd > 0.0) {
         (v, false) => v,
         (v, true) => {
