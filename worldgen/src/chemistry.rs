@@ -1,21 +1,25 @@
-//! Chemistry 0 loader. (Generator and richness checks live here too.)
+//! The loader of a chemistry file (chemistry 0, `chem0.toml`), and the latent heats where a file gives none.
 
 use pcore::chem::{Chemistry, Reaction, Substance};
 use serde::Deserialize;
 
+/// Trouton's rule: the vaporisation entropy of a liquid at its boiling point, J/(mol K) (lv = TROUTON x boil).
+pub(crate) const TROUTON: f64 = 88.0;
+/// Richards's rule: the fusion entropy of a solid at its melting point, J/(mol K) (lf = RICHARDS x melt).
+pub(crate) const RICHARDS: f64 = 9.5;
+
 #[derive(Deserialize)]
 struct File {
-    elements: usize,
+    /// g/mol of each element
+    element_masses: Vec<f64>,
     s: Vec<S>,
     r: Vec<R>,
-    #[serde(default)]
-    build: Option<B>,
-    #[serde(default)]
+    build: B,
     builds: Vec<B>,
     init: Init,
 }
 
-/// Growth: what bodies make of what they hold (`pcore::chem::Chemistry::build`).
+/// A conversion: what bodies make of what they hold (`pcore::chem::Chemistry::build`, `builds`).
 #[derive(Deserialize)]
 struct B {
     i: Vec<[u16; 2]>,
@@ -25,7 +29,6 @@ struct B {
 #[derive(Deserialize)]
 struct S {
     e: Vec<u16>,
-    m: f64,
     cp: f64,
     melt: f64,
     boil: f64,
@@ -34,18 +37,19 @@ struct S {
     str: f64,
     refl: [[f32; 3]; 2],
     ir: f64,
+    /// mol/m² (`Substance::ir_sat`); optional in the file (none: 0, the optical depth always in proportion)
     #[serde(default)]
     sat: f64,
     sol: f64,
     cond: f64,
     hf: f64,
-    /// kJ/mol; Trouton's rule (88 J/(mol K) × boil) when missing
+    /// kJ/mol; none: Trouton's rule (`TROUTON`), and Richards's rule (`RICHARDS`) for `lf`
     lv: Option<f64>,
     lf: Option<f64>,
-    /// GPa (`Substance::modulus`); none: 0
+    /// GPa (`Substance::modulus`); optional in the file (none: 0)
     #[serde(default)]
     modulus: f64,
-    /// MPa (`Substance::rupture`); none: 0
+    /// MPa (`Substance::rupture`); optional in the file (none: 0)
     #[serde(default)]
     rupture: f64,
 }
@@ -56,9 +60,10 @@ struct R {
     o: Vec<[u16; 2]>,
     k: f64,
     ea: f64,
+    /// Driven by light (`Reaction::light`); optional in the file (none: not)
     #[serde(default)]
     light: bool,
-    /// The power of each input's share in the rate law, where it is not its count (`Reaction::ord`)
+    /// The power of each input's share in the rate law (`Reaction::ord`); optional in the file (none: each its count)
     #[serde(default)]
     ord: Vec<u16>,
 }
@@ -76,53 +81,46 @@ pub struct Init {
     pub loose: Vec<(usize, f64)>,
     /// Extra volume fractions found in patches
     pub deposits: Vec<(usize, f64)>,
-    /// Amounts in the loose ground of every land cell when life starts, mol per m² (15 Oct 2026: the nitrogen mineral of the
-    /// soil; none where a chemistry has no such substance), `Chemistry::soil`
-    #[serde(default)]
+    /// Amounts in the loose ground of every land cell when life starts, mol per m² (`life::soil`; empty: none)
     pub soil: Vec<(usize, f64)>,
+}
+
+/// Molar mass of a substance of element counts `elems`, kg/mol: the sum of its elements' `grams` a mol, so every
+/// reaction that keeps elements keeps mass.
+pub(crate) fn molar_mass(elems: &[u16], grams: &[f64]) -> f64 {
+    elems.iter().zip(grams).map(|(&c, &x)| c as f64 * x).sum::<f64>() / 1000.0
 }
 
 pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
     let f: File = toml::from_str(text).map_err(|e| e.to_string())?;
     let pair = |v: &[[u16; 2]]| v.iter().map(|p| (p[0], p[1])).collect();
-    let mut air = vec![0.0; f.s.len()];
-    f.init.air.iter().for_each(|&(k, x)| air[k] = x);
-    let chem = Chemistry {
-        n_elements: f.elements,
-        subs: f
-            .s
-            .into_iter()
-            .map(|s| Substance {
-                elems: s.e,
-                molar_mass: s.m / 1000.0,
-                cp: s.cp,
-                melt: s.melt,
-                boil: s.boil,
-                density: s.rho,
-                hardness: s.hard,
-                strength: s.str,
-                refl: s.refl,
-                ir_abs: s.ir,
-                ir_sat: s.sat,
-                solubility: s.sol,
-                conductivity: s.cond,
-                hf: s.hf * 1000.0,
-                lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
-                lf: s.lf.map_or(9.5 * s.melt, |l| l * 1000.0),
-                modulus: s.modulus * 1e9,
-                rupture: s.rupture * 1e6,
-            })
-            .collect(),
-        reactions: f
-            .r
-            .into_iter()
-            .map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord })
-            .collect(),
-        build: f.build.map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }),
-        builds: f.builds.iter().map(|b| Reaction { inputs: pair(&b.i), outputs: pair(&b.o), k: 0.0, ea: 0.0, light: false, ord: Vec::new() }).collect(),
-        air,
-        soil: f.init.soil.clone(),
-    };
+    let subs = f
+        .s
+        .into_iter()
+        .map(|s| Substance {
+            molar_mass: molar_mass(&s.e, &f.element_masses),
+            elems: s.e,
+            cp: s.cp,
+            melt: s.melt,
+            boil: s.boil,
+            density: s.rho,
+            hardness: s.hard,
+            strength: s.str,
+            refl: s.refl,
+            ir_abs: s.ir,
+            ir_sat: s.sat,
+            solubility: s.sol,
+            conductivity: s.cond,
+            hf: s.hf * 1000.0,
+            lv: s.lv.map_or(TROUTON * s.boil, |l| l * 1000.0),
+            lf: s.lf.map_or(RICHARDS * s.melt, |l| l * 1000.0),
+            modulus: s.modulus * 1e9,
+            rupture: s.rupture * 1e6,
+        })
+        .collect();
+    let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord }).collect();
+    let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
+    let chem = Chemistry::new(f.element_masses.len(), subs, reactions, Some(conversion(&f.build)), f.builds.iter().map(conversion).collect(), &f.init.air);
     chem.validate()?;
     Ok((chem, f.init))
 }

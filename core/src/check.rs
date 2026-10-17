@@ -10,6 +10,8 @@ pub struct Totals {
     pub thermal: f64,
     /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air)
     pub chemical: f64,
+    /// J, potential energy gained since the start (`World::potential`)
+    pub potential: f64,
 }
 
 /// A sum that carries the rounding error of each addition (Neumaier): the chemical energy of
@@ -40,7 +42,7 @@ pub fn totals(w: &World) -> Totals {
             sum.add(s.get());
             // Air holds its gases' fusion and vaporisation enthalpy; the ground holds fusion in `e_ground`.
             if air {
-                held.add(s.get() * (chem.subs[k].lf + chem.subs[k].lv));
+                held.add(s.get() * chem.subs[k].latent_gas());
             }
         }
     }
@@ -60,7 +62,7 @@ pub fn totals(w: &World) -> Totals {
         chem.add_elems(k, s.get(), &mut elems);
         chemical.add(s.get() * chem.subs[k].hf);
     }
-    Totals { elems, thermal: thermal.get(), chemical: chemical.get() }
+    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.potential }
 }
 
 /// Compare now with a start point. Returns the worst relative drift of elements and of energy.
@@ -73,73 +75,48 @@ pub fn drift(w: &World, start: &Totals, start_ledger: &crate::Ledger) -> (f64, f
         let d = (now.elems[j] - start.elems[j] - imposed).abs() / start.elems[j].abs().max(1.0);
         worst_e = worst_e.max(d);
     }
-    let boundary = (l.sun_in - start_ledger.sun_in) - (l.space_out - start_ledger.space_out)
-        + (l.gravity - start_ledger.gravity)
-        + (l.imposed_energy - start_ledger.imposed_energy);
-    let change = (now.thermal + now.chemical) - (start.thermal + start.chemical);
+    let boundary = (l.sun_in - start_ledger.sun_in) - (l.space_out - start_ledger.space_out) + (l.imposed_energy - start_ledger.imposed_energy);
+    let change = (now.thermal + now.chemical + now.potential) - (start.thermal + start.chemical + start.potential);
     let scale = (l.sun_in - start_ledger.sun_in).abs().max(start.thermal.abs()).max(1.0);
     (worst_e, (change - boundary).abs() / scale)
 }
 
-/// True if any amount or energy is NaN, infinite or negative.
+/// The first element of `v` that `ok` refuses, as `name[i] = value`.
+fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool) -> Option<String> {
+    v.iter().position(|&x| !ok(x.into())).map(|i| format!("{name}[{i}] = {}", v[i].into()))
+}
+
+/// The first state value that is NaN or infinite, or below 0 where it cannot be (an amount, an energy, an area): None
+/// for a sound world.
 pub fn broken(w: &World) -> Option<String> {
-    for (name, v) in [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("light_pool", &w.light_pool), ("deep", &w.deep)] {
-        if let Some(i) = v.iter().position(|x| !x.is_finite() || *x < 0.0) {
-            return Some(format!("{name}[{i}] = {}", v[i]));
-        }
-    }
-    for (name, v) in [("e_ground", &w.e_ground), ("e_air", &w.e_air)] {
-        if let Some(i) = v.iter().position(|x| !x.is_finite() || *x <= 0.0) {
-            return Some(format!("{name}[{i}] = {}", v[i]));
-        }
+    let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
+    let above_0 = |x: f64| x.is_finite() && x > 0.0;
+    let amounts = [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("deep", &w.deep), ("light_pool", &w.light_pool)];
+    let found = (amounts.into_iter().chain([("e_deep", &w.e_deep), ("light", &w.light)]))
+        .find_map(|(name, v)| first_bad(name, v, at_least_0))
+        .or_else(|| [("e_ground", &w.e_ground), ("e_air", &w.e_air)].into_iter().find_map(|(name, v)| first_bad(name, v, above_0)))
+        // The heat pool goes below 0 where bodies gave the ground heat ahead.
+        .or_else(|| first_bad("heat_pool", &w.heat_pool, f64::is_finite))
+        .or_else(|| {
+            [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("pass", &w.pass)]
+                .into_iter()
+                .find_map(|(name, v)| first_bad(name, v, at_least_0))
+        });
+    if found.is_some() {
+        return found;
     }
     for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-        if !b.e.is_finite() || b.e <= 0.0 || b.store.iter().any(|x| !x.is_finite() || *x < 0.0) {
-            return Some(format!("body {s}: energy {}, stores {:?}", b.e, b.store));
+        if !above_0(b.e) || !above_0(b.count) || !b.store.iter().all(|&x| at_least_0(x)) {
+            return Some(format!("body {s}: energy {}, members {}, stores {:?}", b.e, b.count, b.store));
         }
     }
+    if let Some(g) = w.life.groups.iter().position(|g| !g.rows.iter().all(|x| x.is_finite())) {
+        return Some(format!("group {g}: a brain weight is not finite"));
+    }
     for (s, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
-        if !p.e.is_finite() || p.e <= 0.0 || p.wall.iter().chain(&p.fill).any(|x| !x.is_finite() || *x < 0.0) {
+        if !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x)) {
             return Some(format!("part {s}: energy {}, walls {:?}, fill {:?}", p.e, p.wall, p.fill));
         }
     }
     None
-}
-
-/// FNV-1a over the bits of the clock and every state array. Equal states give equal hashes.
-pub fn hash(w: &World) -> u64 {
-    fn eat(h: &mut u64, x: u64) {
-        for b in x.to_le_bytes() {
-            *h = (*h ^ b as u64).wrapping_mul(0x100_0000_01b3);
-        }
-    }
-    let mut h = 0xcbf2_9ce4_8422_2325u64;
-    eat(&mut h, w.day);
-    for v in [&w.ground, &w.bed, &w.e_ground, &w.air, &w.e_air, &w.light_pool] {
-        for x in v {
-            eat(&mut h, x.to_bits());
-        }
-    }
-    for b in w.life.alive() {
-        eat(&mut h, b.cell as u64);
-        if b.count != 1.0 {
-            eat(&mut h, b.count.to_bits());
-        }
-        for x in b.store.iter().chain([&b.e]) {
-            eat(&mut h, x.to_bits());
-        }
-    }
-    for &(g, k) in w.light_keep.iter().chain(&w.heat_keep) {
-        eat(&mut h, g as u64 | (k.to_bits() as u64) << 32);
-    }
-    for x in w.life.groups.iter().flat_map(|g| &g.rows) {
-        eat(&mut h, x.to_bits() as u64);
-    }
-    for p in w.parts.alive() {
-        eat(&mut h, p.cell as u64 | (p.links.len() as u64) << 32);
-        for x in p.wall.iter().chain(&p.fill).chain([&p.e]) {
-            eat(&mut h, x.to_bits());
-        }
-    }
-    h
 }

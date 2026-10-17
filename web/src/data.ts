@@ -1,13 +1,16 @@
-// Reader for the EWF1 tape: gzip( "EWF1" | u32 json_len | json | frames of u8 layers ).
+// Reader for the EWF1 tape: gzip( "EWF1" | u32 json_len | json | frames of u8 layers ), as tape/src/rec/ewf.rs writes it.
 
 export interface Layer { name: string; unit: string; scale: 'lin' | 'log' | 'raw'; min: number; max: number }
 export interface Meta {
   w: number; h: number; cell_m: number; seed: number; days_per_year: number;
   layers: Layer[];
   frames: { day: number; year: number }[];
-  series: Record<string, number[]>;
+  /** One value a year per column; null where the tape wrote NaN (none that year). */
+  series: Record<string, (number | null)[]>;
   series_units: Record<string, string>;
   events: { day: number; year: number; text: string }[];
+  /** The rows of months.csv (a resumed run reads them; the viewer does not show them). */
+  months: { year: number; month: number; values: number[]; births: number[]; deaths: number[] }[];
 }
 export interface World { meta: Meta; data: Uint8Array; base: number; frameBytes: number; lut: Float32Array[]; index: Map<string, number> }
 
@@ -30,7 +33,6 @@ export function parse(data: Uint8Array): World {
   if (String.fromCharCode(...data.subarray(0, 4)) !== 'EWF1') throw new Error('Not an EWF1 world file.');
   const jsonLen = new DataView(data.buffer, data.byteOffset).getUint32(4, true);
   const meta = JSON.parse(new TextDecoder().decode(data.subarray(8, 8 + jsonLen))) as Meta;
-  meta.series ??= {}; meta.series_units ??= {}; meta.events ??= [];
   const frameBytes = meta.w * meta.h * meta.layers.length;
   const base = 8 + jsonLen;
   const have = Math.floor((data.length - base) / frameBytes);
@@ -43,24 +45,27 @@ export function parse(data: Uint8Array): World {
   };
 }
 
-/** Raw bytes of one layer in one frame, or null if the file lacks it. */
-export function plane(w: World, f: number, name: string): Uint8Array | null {
+/** Raw bytes of one layer in one frame (the tape writes every layer of tape/src/layers.rs in every frame). */
+export function plane(w: World, f: number, name: string): Uint8Array {
   const k = w.index.get(name);
-  if (k === undefined) return null;
+  if (k === undefined) throw new Error(`The file has no layer ${name}.`);
   const n = w.meta.w * w.meta.h, o = w.base + f * w.frameBytes + k * n;
   return w.data.subarray(o, o + n);
 }
 
-/** Decoded values of one layer in one frame, or null. */
-export function decode(w: World, f: number, name: string): Float32Array | null {
+/** Decoded values of one layer in one frame. */
+export function decode(w: World, f: number, name: string): Float32Array {
   const p = plane(w, f, name);
-  if (!p) return null;
   const lut = w.lut[w.index.get(name)!], out = new Float32Array(p.length);
   for (let i = 0; i < p.length; i++) out[i] = lut[p[i]];
   return out;
 }
 
-export function fmt(v: number): string {
+/** A missing value: null (a NaN the tape wrote) or NaN. */
+export const missing = (v: number | null): v is null => v === null || Number.isNaN(v);
+
+export function fmt(v: number | null): string {
+  if (missing(v)) return '–';
   const a = Math.abs(v);
   if (a === 0) return '0';
   if (a >= 1e7 || a < 1e-3) return v.toExponential(2).replace('e+', 'e');

@@ -2,5 +2,4 @@
 /out
 node_modules
 web/dist
-*.tape
 /.claude/worktrees

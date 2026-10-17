@@ -1,0 +1,345 @@
+//! What the tests of the laws share (the `testkit` feature, turned on only by the crates' dev-dependencies): a small
+//! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked in the ledger, the books
+//! of a world, the books of one reacting node, sums of the day's events, and the substances of chemistry 0 by number.
+
+use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
+use pcore::bond;
+use pcore::brain::{self, FIXED, OVERBS, VERBS};
+use pcore::check::{self, Totals};
+use pcore::chem::{Chemistry, Phase};
+use pcore::event::EventKind;
+use pcore::lineage::{self, Lineage};
+use pcore::rng::{Purpose, Rng};
+use pcore::{Ledger, World};
+
+/// Substances of chemistry 0: the common liquid.
+pub const LIQUID: usize = 0;
+/// The gas the fixing reaction (24) takes from the air.
+pub const FIX_GAS: usize = 1;
+/// The gas the energy-rich solid burns with.
+pub const OX: usize = 2;
+/// The heat-absorbing gas.
+pub const ABSORBER: usize = 3;
+/// A gas that burns with `OX` (reaction 8).
+pub const BURNING_GAS: usize = 4;
+/// The energy-rich solid the light reaction makes.
+pub const RICH: usize = 5;
+/// The rock that dissolves in the liquid with the absorbing gas (reactions 22 and 23).
+pub const ROCK: usize = 10;
+/// What `ROCK` leaves when it gives off the absorbing gas (reaction 15).
+pub const BURNT_ROCK: usize = 11;
+/// The gas the fixing reaction gives off.
+pub const FIX_OUT: usize = 21;
+/// Body matter.
+pub const MATTER: usize = 22;
+/// The mineral that exists only dissolved in the liquid, its store of the absorbing gas.
+pub const DISSOLVED: usize = 23;
+/// The mineral of the fixed gas.
+pub const MINERAL: usize = 24;
+/// The frame, a solid bodies build.
+pub const FRAME: usize = 25;
+/// The reaction that burns the energy-rich solid with `OX`.
+pub const BURN: usize = 1;
+
+/// The world most tests stand in: seed 1, 16 x 16 cells, after one month (so its cells have their surroundings).
+pub fn small_world() -> World {
+    let mut w = crate::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    w
+}
+
+/// The land cells with no liquid standing on them.
+pub fn dry_lands(w: &World) -> Vec<usize> {
+    (0..w.grid.n()).filter(|&i| w.is_land(i) && w.life.env[i][1] < 1e-3).collect()
+}
+
+/// The first land cell with no liquid standing on it.
+pub fn dry_land(w: &World) -> usize {
+    dry_lands(w).first().copied().expect("dry land")
+}
+
+/// `small_world` and its first dry land cell.
+pub fn start() -> (World, usize) {
+    let w = small_world();
+    let i = dry_land(&w);
+    (w, i)
+}
+
+/// The bias that turns an action of a brain on, and off.
+pub const ON: f32 = 8.0;
+pub const OFF: f32 = -8.0;
+/// Hidden units and memory of the founders' brains, and the size of their random weights.
+const HIDDEN: usize = 12;
+const MEMORY: usize = 6;
+const WEIGHTS: f32 = 0.1;
+
+/// A brain to found a lineage with: the biases of its fixed actions, of its move and of its verbs, its hidden units,
+/// and the seed of its random weights.
+#[derive(Clone, Copy, Debug)]
+pub struct Brain {
+    pub fixed: [f32; FIXED],
+    pub dir: f32,
+    pub verbs: [f32; VERBS + OVERBS],
+    pub hidden: usize,
+    pub seed: u64,
+}
+
+impl Brain {
+    /// A brain that only does fixed action `act`.
+    pub fn only(act: usize) -> Self {
+        let mut fixed = [OFF; FIXED];
+        fixed[act] = ON;
+        Brain { fixed, dir: OFF, verbs: [OFF; VERBS + OVERBS], hidden: HIDDEN, seed: 1 }
+    }
+
+    /// A brain that only does verb `verb` (`brain::GIVE`, ..., or `brain::VERBS + k` for the verbs on parts).
+    pub fn verb(verb: usize) -> Self {
+        let mut verbs = [OFF; VERBS + OVERBS];
+        verbs[verb] = ON;
+        Brain { fixed: [OFF; FIXED], dir: OFF, verbs, hidden: HIDDEN, seed: 1 }
+    }
+
+    /// Every bias 0: nothing preferred.
+    pub fn neutral() -> Self {
+        Brain { fixed: [0.0; FIXED], dir: 0.0, verbs: [0.0; VERBS + OVERBS], hidden: HIDDEN, seed: 1 }
+    }
+}
+
+/// A lineage made for a test, and the born rows of its brain.
+pub struct Line {
+    pub lineage: u32,
+    pub rows: Vec<f32>,
+}
+
+impl Line {
+    /// A new lineage of `brain`, labelled with starting kind `root`.
+    pub fn new(w: &mut World, brain: &Brain, root: u32) -> Line {
+        let shape = lineage::shape(w.chem.ns(), brain.hidden, MEMORY);
+        let mut base = brain::random(shape, &mut Rng::new(brain.seed, 0, 0, Purpose::Brain), WEIGHTS, brain.fixed, brain.dir, brain.verbs);
+        let rows = base.split_off(shape.base());
+        let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root });
+        Line { lineage, rows }
+    }
+
+    /// A founder of starting kind `kind` (a row of `life::KINDS`) in cell `i`, of this lineage, born with its rows; not
+    /// yet placed, its matter and energy booked as an edit.
+    pub fn founder(&self, w: &mut World, kind: usize, i: usize) -> Body {
+        let genome = w.life.new_genome(self.rows.clone());
+        crate::life::make(w, kind, i, self.lineage, genome).expect("a founder")
+    }
+}
+
+/// A founder of starting kind `kind` in cell `i`, of a lineage of its own with `brain`.
+pub fn founder(w: &mut World, kind: usize, i: usize, brain: &Brain) -> Body {
+    Line::new(w, brain, kind as u32).founder(w, kind, i)
+}
+
+/// The mass the tests' starting eaters are scaled to, kg: 9 kg of fuel, 15.75 kg of liquid, 5.25 kg of body matter, a
+/// body of 21 kg.
+pub const EATER_KG: f64 = 30.0;
+
+/// A starting eater of `EATER_KG` in cell `i`, of a brain that only does fixed action `act`, weak (strength 0), staying
+/// where it is, soaking no liquid up, mature at 10^`copy` kg of body.
+pub fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
+    let mut b = founder(w, 1, i, &Brain::only(act));
+    let m = b.mass(&w.chem);
+    scale(w, &mut b, EATER_KG / m);
+    (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
+    b
+}
+
+/// Body `b` made `f` times as big: its stores and heat (booked as an edit).
+pub fn scale(w: &mut World, b: &mut Body, f: f64) {
+    for k in 0..w.chem.ns() {
+        w.chem.add_elems(k, (f - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
+        w.ledger.imposed_energy += (f - 1.0) * b.store[k] * w.chem.subs[k].hf;
+        b.store[k] *= f;
+    }
+    w.ledger.imposed_energy += (f - 1.0) * b.e;
+    b.e *= f;
+}
+
+/// `kg` of substance `k` added to body `b` at its temperature (booked as an edit), or taken out if negative.
+pub fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
+    let (a, t, e0) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem), b.e);
+    w.chem.add_elems(k, a, &mut w.ledger.imposed_elems);
+    b.store[k] += a;
+    b.e = b.energy_at(&w.chem, t);
+    w.ledger.imposed_energy += a * w.chem.subs[k].hf + b.e - e0;
+}
+
+/// What body `b` holds of substance `k`, kg.
+pub fn kg(w: &World, b: &Body, k: usize) -> f64 {
+    b.store[k] * w.chem.subs[k].molar_mass
+}
+
+/// `mol` of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
+pub fn put(w: &mut World, k: usize, i: usize, mol: f64) {
+    let (t, n) = (w.t_ground(i), w.grid.n());
+    w.ground[k * n + i] += mol;
+    w.chem.add_elems(k, mol, &mut w.ledger.imposed_elems);
+    let e = w.energy_ground(i, t);
+    (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + mol * w.chem.subs[k].hf, e);
+}
+
+/// `kg` per m² of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
+pub fn put_kg_m2(w: &mut World, k: usize, i: usize, kg: f64) {
+    let mol = kg * w.grid.area() / w.chem.subs[k].molar_mass;
+    put(w, k, i, mol);
+}
+
+/// All of substance `k` in the world's ground, the store of its bed and its bodies, mol.
+pub fn in_all(w: &World, k: usize) -> f64 {
+    let n = w.grid.n();
+    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
+}
+
+/// The rock element (element 5) outside body matter on the ground of cell `i`, mol.
+pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
+    let n = w.grid.n();
+    (0..w.chem.ns()).filter(|&k| k != MATTER).map(|k| w.chem.subs[k].elems[5] as f64 * w.ground[k * n + i]).sum()
+}
+
+/// The ground of cell `i` brought to `t` K (booked as an edit).
+pub fn hold_ground(w: &mut World, i: usize, t: f64) {
+    let e = w.energy_ground(i, t);
+    w.ledger.imposed_energy += e - w.e_ground[i];
+    w.e_ground[i] = e;
+}
+
+/// Body `b` brought to `t` K (booked as an edit).
+pub fn warm(w: &mut World, b: &mut Body, t: f64) {
+    let e = b.energy_at(&w.chem, t);
+    w.ledger.imposed_energy += e - b.e;
+    b.e = e;
+}
+
+/// Body `b` placed and taken out again, prepared, to call the laws on directly: its slot and the body.
+pub fn out(w: &mut World, b: Body) -> (usize, Body) {
+    let s = w.life.add(b, w.day, 1);
+    pcore::survey::survey(w);
+    w.day += 1;
+    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    b.prepare(&w.chem, &w.cfg.phys);
+    (s, b)
+}
+
+/// Body `b` placed and prepared where it is: its slot.
+pub fn place(w: &mut World, b: Body) -> usize {
+    let (s, b) = out(w, b);
+    w.life.bodies[s] = b;
+    s
+}
+
+/// The brood of `k` children for body `b` (all its members together), of the matter a child is made of.
+pub fn brood(w: &World, b: &mut Body, k: f64) {
+    b.brood = k * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - WET_TISSUE) / w.chem.subs[MATTER].molar_mass;
+}
+
+/// The live children of the body of id `id`.
+pub fn children(w: &World, id: u64) -> Vec<usize> {
+    (0..w.life.bodies.len()).filter(|&k| w.life.bodies[k].alive && w.life.bodies[k].parent == id).collect()
+}
+
+/// An eater that burns only the energy-rich solid: no catalyst for burning body matter, no roots for it.
+pub fn only_the_solid(w: &World, b: &mut Body) {
+    let lay = Layout::of(&w.chem);
+    let (m, burn_matter) = w.chem.matter_roles().expect("body matter");
+    (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
+}
+
+/// The volume of the loose solids of cell `i`, m³.
+pub fn loose_volume(w: &World, i: usize) -> f64 {
+    let t = w.t_ground(i);
+    (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Solid).map(|k| w.g(k, i) * w.chem.molar_volume(k, Phase::Solid)).sum()
+}
+
+/// A part of `kg` of the cell's most plentiful loose substance, taken from the ground at its temperature: flat, or a
+/// block if `thick`.
+pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
+    let n = w.grid.n();
+    let k = (0..w.chem.ns()).max_by(|&a, &b| w.ground[a * n + i].total_cmp(&w.ground[b * n + i])).unwrap();
+    let mut wall = vec![0.0; w.chem.ns()];
+    wall[k] = kg / w.chem.subs[k].molar_mass;
+    assert!(w.ground[k * n + i] > wall[k], "the cell holds less than the part");
+    let e = wall[k] * w.chem.subs[k].cp * w.life.env[i][0];
+    w.ground[k * n + i] -= wall[k];
+    w.e_ground[i] -= e;
+    bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0)
+}
+
+/// The books of a world at a moment: its totals and its ledger.
+pub struct Books {
+    totals: Totals,
+    ledger: Ledger,
+}
+
+impl Books {
+    pub fn now(w: &World) -> Self {
+        Books { totals: check::totals(w), ledger: w.ledger.clone() }
+    }
+
+    /// The worst relative drift of elements and of energy since then.
+    pub fn drift(&self, w: &World) -> (f64, f64) {
+        check::drift(w, &self.totals, &self.ledger)
+    }
+
+    /// Nothing is broken, and elements and energy are kept since then within `tol`.
+    pub fn assert_kept(&self, w: &World, tol: f64) {
+        self.assert_within(w, tol, tol);
+    }
+
+    /// Nothing is broken, elements are kept within `elems` and energy within `energy`.
+    pub fn assert_within(&self, w: &World, elems: f64, energy: f64) {
+        assert_eq!(check::broken(w), None);
+        let (de, dq) = self.drift(w);
+        assert!(de < elems && dq < energy, "element drift {de:e}, energy drift {dq:e}");
+    }
+}
+
+/// Elements and energy (heat and formation enthalpy) of one reacting node with its gas.
+pub fn node_totals(chem: &Chemistry, n: &[f64], gas: &[f64], e: f64) -> (Vec<f64>, f64) {
+    let mut el = vec![0.0; chem.n_elements];
+    let mut en = e;
+    for k in 0..chem.ns() {
+        chem.add_elems(k, n[k] + gas[k], &mut el);
+        en += (n[k] + gas[k]) * chem.subs[k].hf;
+    }
+    (el, en)
+}
+
+/// The air over 1 m² at the reference pressure, mol (its weight over g, at the mean molar mass of the starting air).
+pub const AIR_COLUMN: f64 = 101_325.0 / (9.81 * 0.0288);
+
+/// The heat capacity of an open-air node, J/K: so large that its temperature stays put.
+pub const OPEN_CAP: f64 = 1e15;
+
+/// An open-air node at `t` K: no substance, the starting air in plenty (10^9 times its mole fractions), and its heat
+/// at the capacity `OPEN_CAP`. Returns the amounts, the gas and the heat.
+pub fn open_air(chem: &Chemistry, init: &crate::Init, t: f64) -> (Vec<f64>, Vec<f64>, f64) {
+    let mut gas = vec![0.0; chem.ns()];
+    for &(g, x) in &init.air {
+        gas[g] = x * 1e9;
+    }
+    (vec![0.0; chem.ns()], gas, t * OPEN_CAP)
+}
+
+/// What the bodies took from the ground in the day's events, kg.
+pub fn took_from_ground(w: &World) -> f64 {
+    w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, .. } = e.kind { e.value } else { 0.0 }).sum()
+}
+
+/// What the bodies took that they can burn, in the day's events, kg.
+pub fn took_to_burn(w: &World) -> f64 {
+    w.events.iter().filter_map(|e| if let EventKind::Took { burn, .. } = e.kind { Some(burn as f64) } else { None }).sum()
+}
+
+/// The members born in the day's events.
+pub fn born(w: &World) -> f64 {
+    w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum()
+}
+
+/// The members that died of `cause` in the day's events.
+pub fn died(w: &World, cause: u8) -> f64 {
+    w.events.iter().filter(|e| matches!(e.kind, EventKind::Died { cause: c, .. } if c == cause)).map(|e| e.value).sum()
+}

@@ -8,19 +8,38 @@ fn mix(mut z: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// Purposes keep independent streams apart (the numbers are part of the streams: do not renumber).
+/// Purposes keep independent streams apart: each place that draws has its own (the numbers are part of the streams: do
+/// not renumber).
 #[derive(Clone, Copy)]
 #[repr(u64)]
 pub enum Purpose {
     Terrain = 1,
-    Body = 4,
-    Mutate,
+    /// A child's genes and its mate (`copy::copy`)
+    Mutate = 5,
     Choose,
     Bond = 8,
     Chem,
+    /// The gene a node splits along (`nodes::split`)
     Split,
     /// Whether a frozen individual dies (`body::live`)
     Frost,
+    /// The order among equally alike mates (`copy::partner`)
+    Partner,
+    /// The born rows of a body joining a node, carried over to its brain (`nodes::merge`)
+    Merge,
+    /// Members drawn from a node as individuals (`nodes::open`)
+    Open,
+    /// The new weights of a resized brain (`lineage::resize`)
+    Resize,
+    /// The random base of a founder lineage's brain and where its founders go (`worldgen`)
+    Brain,
+    /// The mutation rounds of a founder's born rows and of its genes (`worldgen`)
+    Spray,
+    Make,
+    /// Which founders carry the fixing reaction's gene (`worldgen`)
+    Fixer,
+    /// The fair test of a big brain (`worldgen`)
+    Clever,
 }
 
 pub struct Rng(u64);
@@ -43,7 +62,7 @@ impl Rng {
     }
     #[inline]
     pub fn below(&mut self, n: usize) -> usize {
-        ((self.u64() >> 32) * n as u64 >> 32) as usize
+        (((self.u64() >> 32) * n as u64) >> 32) as usize
     }
     /// Standard normal (Box-Muller).
     pub fn normal(&mut self) -> f64 {

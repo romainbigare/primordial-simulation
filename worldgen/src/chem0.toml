@@ -1,14 +1,14 @@
-# Chemistry 0. Numbers only. m g/mol, cp J/(mol K), melt/boil K, rho kg/m3 [solid, liquid],
-# hard/str 0..1, refl [[solid rgb], [liquid rgb]], ir m2/mol, sat mol/m2 (column past which the
-# optical depth grows as the square root of the amount; none: always in proportion), sol mole fraction
-# (for a gas that cannot condense on the ground: dissolved under 101 kPa of it at 298 K; for a solid that melts above the
-# ground's warmth: the mole fraction of the solution at saturation, and it moves with the liquid, Flow; 5 and 10 are 0, plant
-# matter and rock do not dissolve: they had 0.1 and 0.001, a number nothing read until 15 Oct 2026), cond W/(m K), hf kJ/mol.
-elements = 9
+# Chemistry 0. Numbers only. element_masses g/mol (a substance's molar mass is the sum over its elements e),
+# cp J/(mol K), melt/boil K, rho kg/m3 [solid, liquid], hard/str 0..1,
+# refl [[solid rgb], [liquid rgb]], ir m2/mol, sat mol/m2 (column past which the optical depth grows as the square root of
+# the amount; none: always in proportion), sol mole fraction (for a gas that cannot condense on the ground: dissolved under
+# 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
+# which moves with the liquid), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
+# less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), modulus GPa, rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
+element_masses = [1, 12, 14, 16, 28, 40, 55.85, 63.5, 118.7]
 
 [[s]] # 0
 e = [2,0,0,1,0,0,0,0,0]
-m = 18.0
 cp = 75
 melt = 273
 boil = 373
@@ -20,13 +20,12 @@ ir = 0.0022
 sat = 100
 sol = 1.0
 cond = 2.2
-hf = -286
+hf = -292
 lv = 40.7
 lf = 6.0
 
 [[s]] # 1
 e = [0,0,2,0,0,0,0,0,0]
-m = 28.0
 cp = 29
 melt = 63
 boil = 77
@@ -37,11 +36,10 @@ refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
 ir = 0.0
 sol = 1.2e-5
 cond = 0.03
-hf = 0
+hf = -7.3745
 
 [[s]] # 2
 e = [0,0,0,2,0,0,0,0,0]
-m = 32.0
 cp = 29
 melt = 54
 boil = 90
@@ -52,11 +50,10 @@ refl = [[0.8,0.85,0.95],[0.7,0.8,0.95]]
 ir = 0.0
 sol = 2.3e-5
 cond = 0.03
-hf = 0
+hf = -8.433
 
 [[s]] # 3
 e = [0,1,0,2,0,0,0,0,0]
-m = 44.0
 cp = 37
 melt = 194
 boil = 195
@@ -68,11 +65,10 @@ ir = 0.0114
 sat = 10
 sol = 6e-4
 cond = 0.02
-hf = -393.5
+hf = -412.503
 
 [[s]] # 4
 e = [4,1,0,0,0,0,0,0,0]
-m = 16.0
 cp = 35
 melt = 91
 boil = 112
@@ -84,11 +80,10 @@ ir = 0.25
 sat = 0.1
 sol = 2.5e-5
 cond = 0.03
-hf = -74.8
+hf = -85.5205
 
 [[s]] # 5
 e = [2,1,0,1,0,0,0,0,0]
-m = 30.0
 cp = 40
 melt = 460
 boil = 700
@@ -103,7 +98,6 @@ hf = -212
 
 [[s]] # 6
 e = [2,1,0,0,0,0,0,0,0]
-m = 14.0
 cp = 30
 melt = 260
 boil = 600
@@ -114,11 +108,10 @@ refl = [[0.25,0.22,0.15],[0.10,0.08,0.05]]
 ir = 0.0
 sol = 0.0
 cond = 0.15
-hf = -25
+hf = -27.47
 
 [[s]] # 7
 e = [0,1,0,0,0,0,0,0,0]
-m = 12.0
 cp = 8.5
 melt = 3900
 boil = 4100
@@ -133,7 +126,6 @@ hf = 0
 
 [[s]] # 8
 e = [0,0,0,2,1,0,0,0,0]
-m = 60.0
 cp = 44
 melt = 1986
 boil = 2500
@@ -148,7 +140,6 @@ hf = -911
 
 [[s]] # 9
 e = [0,0,0,3,1,1,0,0,0]
-m = 116.0
 cp = 86
 melt = 1800
 boil = 3000
@@ -163,7 +154,6 @@ hf = -1635
 
 [[s]] # 10
 e = [0,1,0,3,0,1,0,0,0]
-m = 100.0
 cp = 82
 melt = 1600
 boil = 3000
@@ -175,15 +165,13 @@ ir = 0.0
 sol = 0.0
 cond = 2.5
 hf = -1207
-# Young's modulus, GPa (`Body::height`): calcite about 70 to 80 (marble and shell nacre 50 to 70; bone, lime in a soft matrix, 18;
-# from memory): 70.
+# docs/numbers.md: "modulus of substances 22, 25 and 10".
 modulus = 70
-# The stress it breaks at, MPa (`Body::solids`): calcite as marble 70 to 140 in compression, shells 100 to 300, bone 170 (from memory): 100.
+# docs/numbers.md: "rupture of substances 22, 25 and 10".
 rupture = 100
 
 [[s]] # 11
 e = [0,0,0,1,0,1,0,0,0]
-m = 56.0
 cp = 43
 melt = 2886
 boil = 3120
@@ -198,7 +186,6 @@ hf = -635
 
 [[s]] # 12
 e = [2,0,0,2,0,1,0,0,0]
-m = 74.0
 cp = 87
 melt = 853
 boil = 3000
@@ -213,7 +200,6 @@ hf = -986
 
 [[s]] # 13
 e = [0,0,0,3,0,0,2,0,0]
-m = 159.7
 cp = 104
 melt = 1838
 boil = 3000
@@ -228,7 +214,6 @@ hf = -824
 
 [[s]] # 14
 e = [0,0,0,0,0,0,1,0,0]
-m = 55.85
 cp = 25
 melt = 1811
 boil = 3134
@@ -243,7 +228,6 @@ hf = 0
 
 [[s]] # 15
 e = [0,1,0,0,0,0,20,0,0]
-m = 1129.0
 cp = 508
 melt = 1700
 boil = 3100
@@ -258,7 +242,6 @@ hf = -10
 
 [[s]] # 16
 e = [0,0,0,1,0,0,0,1,0]
-m = 79.5
 cp = 42
 melt = 1600
 boil = 2300
@@ -273,7 +256,6 @@ hf = -157
 
 [[s]] # 17
 e = [0,0,0,0,0,0,0,1,0]
-m = 63.5
 cp = 24.4
 melt = 1358
 boil = 2835
@@ -288,7 +270,6 @@ hf = 0
 
 [[s]] # 18
 e = [0,0,0,2,0,0,0,0,1]
-m = 150.7
 cp = 53
 melt = 1900
 boil = 2100
@@ -303,7 +284,6 @@ hf = -578
 
 [[s]] # 19
 e = [0,0,0,0,0,0,0,0,1]
-m = 118.7
 cp = 27
 melt = 505
 boil = 2875
@@ -318,7 +298,6 @@ hf = 0
 
 [[s]] # 20
 e = [0,0,0,0,0,0,0,7,1]
-m = 563.2
 cp = 198
 melt = 1220
 boil = 2800
@@ -333,7 +312,6 @@ hf = -15
 
 [[s]] # 21
 e = [0,1,0,1,0,0,0,0,0]
-m = 28.0
 cp = 29
 melt = 68
 boil = 82
@@ -344,20 +322,11 @@ refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
 ir = 0.0
 sol = 1.7e-5
 cond = 0.03
-hf = -110.5
+hf = -118.362
 
-# 22: body matter, what bodies are built of: 118 of 5 (CH2O), 3 of 24 (the nitrogen mineral) and one of 23 (the rock salt) less 27 of 0,
-# C120H196N6O106Ca, so that 118 of 5 + 3 of 24 + 1 of 23 -> 1 of 22 + 27 of 0 is thermoneutral (hf = 118 x -212 + 3 x -365 + -1926.8 -
-# 27 x -286 = -20315.8: it holds the energy of what it was made of; burning it gives 55,100 kJ/mol = 15.9 MJ/kg, against 15.6 for 5).
-# The salt brings its two carbons into the matter, so growth gives off nothing but the liquid. Carbon to nitrogen 20 (see 24), nitrogen
-# 2.4% of the mass, as before. The rock element is 40 of the 3,456 g: 1.16% of the dry mass, as the dry matter of land plants, 0.5 to
-# 2% (Marschner, Mineral Nutrition of Higher Plants: 0.5% is enough for most; leaves of plants with broad leaves hold 1 to 2%; from
-# memory, unchecked). One matter for all bodies, so the plant's figure (an animal holds more, in bone). The unit of matter is three
-# times the unit it was (C40, N2), the smallest whole formula under 2% with one atom of the rock element (two times gives 1.7%, one 3.5%).
-# H/C 1.63 and O/C 0.88, as cellulose's 1.67 and 0.83. A high melting point: it chars before it melts. Reflectance as 5's.
+# 22: body matter, what bodies are built of (`build`), holding the energy of what it is made of: docs/numbers.md, "substance 22".
 [[s]] # 22
 e = [196,120,6,106,0,1,0,0,0]
-m = 3456.0
 cp = 4266
 melt = 1500
 boil = 3000
@@ -369,22 +338,14 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -20315.8
-# Young's modulus, GPa, of living soft tissue with its liquid (`Body::height`): 0.1 to 10 MPa (muscle and fat about 0.1, skin and
-# turgid plant tissue 1 to 10: potato and apple flesh 3 to 6; from memory): 1 MPa, the middle of that range on a log scale.
+# Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 22, 25 and 10".
 modulus = 0.001
-# The stress it breaks at, MPa, as living soft tissue (`Body::solids`): 0.1 to 10 (muscle 0.1 to 0.5, skin 5 to 20, turgid plant tissue
-# about 1; from memory): 1.
+# Living soft tissue: docs/numbers.md, "rupture of substances 22, 25 and 10".
 rupture = 1
 
-# 23: a salt that exists only dissolved in the liquid, Ca(HCO3)2 (162 g/mol; the real compound is calcium bicarbonate): it
-# holds the liquid's carbon beyond the free gas. CaCO3 + CO2 + H2O -> Ca(HCO3)2, dH -40.3 kJ/mol (Ca2+(aq) -542.8 and
-# HCO3-(aq) -692.0 kJ/mol: hf = -542.8 - 2 x 692.0 = -1926.8; the others -1207, -393.5, -286). It melts at 271 K, the
-# freezing point of a salty liquid, so it is liquid where the liquid is; it never boils (3000 K), so evaporation leaves it
-# behind. Heat capacity as its parts (Kopp's rule: 82 + 37 + 75 = 194), so dH does not change with temperature. Its liquid
-# density is set to the volume it adds to the liquid, about 30 cm3/mol (the partial molar volume of the dissolved ions, rough).
+# 23: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 22: docs/numbers.md, "substance 23".
 [[s]] # 23
 e = [2,2,0,6,0,1,0,0,0]
-m = 162.1
 cp = 194
 melt = 271
 boil = 3000
@@ -395,16 +356,11 @@ refl = [[0.5,0.5,0.5],[0.05,0.07,0.10]]
 ir = 0.0
 sol = 0.0
 cond = 0.6
-hf = -1926.8
+hf = -1929.3745
 
-# 24: the nitrogen mineral of the ground, N2H4O3 (a salt of the two forms of fixed nitrogen), the only way into body matter
-# for the nitrogen that is in the air as 1 (22 is built of it, 24 -> 22). Like 23 it is a salt that lives dissolved in the liquid
-# of the ground: written as a liquid (it melts at 255 K, the freezing point of its solution, so it is liquid where the liquid is) that
-# never boils (3000 K; it breaks down hot, 25), so Flow carries it with the liquid by its share and evaporation leaves it behind.
-# hf -365 kJ/mol, cp 140, about 55 cm3/mol of the liquid.
+# 24: the mineral of the gas reaction 24 fixes (1), that gas's only way into body matter: docs/numbers.md, "substance 24".
 [[s]] # 24
 e = [4,0,2,3,0,0,0,0,0]
-m = 80.0
 cp = 140
 melt = 255
 boil = 3000
@@ -415,17 +371,12 @@ refl = [[0.85,0.85,0.85],[0.6,0.6,0.6]]
 ir = 0.0
 sol = 0.0
 cond = 0.6
-hf = -365
+hf = -370.9
 lf = 5.9
 
-# 25: a frame, (C6H10O5)n (cellulose; 162 g/mol a unit, six units of the energy-rich solid less one of the liquid, so 6 of 5 -> 1 of 25
-# + 1 of 0 is thermoneutral: hf = 6 x -212 + 286 = -986 kJ/mol, the energy per carbon of the solid). It holds no nitrogen and no
-# rock element. Bodies can build it (the first of `[[builds]]` below, `copy::grow`), in the share their keep gene of it sets. It breaks
-# down only by 26 (it rots, as litter) and 27 (an enzyme splits it into the solid). Real plant dry mass is 40 to 50% cellulose, and
-# lignin besides (from memory). Heat capacity about 1.3 J/(g K); it chars before it melts; reflectance as 5's; rho of the cell wall.
+# 25: the frame, a solid bodies build of 6 units of the energy-rich solid (5, `builds`): docs/numbers.md, "substance 25".
 [[s]] # 25
 e = [10,6,0,5,0,0,0,0,0]
-m = 162.0
 cp = 210
 melt = 1500
 boil = 3000
@@ -437,14 +388,12 @@ ir = 0.0
 sol = 0.0
 cond = 0.2
 hf = -986
-# Young's modulus, GPa (`Body::height`): the stems of trees are about 10 GPa along their fibres at 500 kg/m3 (Gibson and Ashby, from
-# memory), a specific stiffness of about 20 MJ/kg, so the cell wall (1,500 kg/m3) about 30.
+# docs/numbers.md: "modulus of substances 22, 25 and 10".
 modulus = 30
-# The stress it breaks at, MPa (`Body::solids`): the stems of trees about 40 to 50 along their fibres in compression at 500 kg/m3 (from
-# memory), so the cell wall (1,500 kg/m3) about 120.
+# docs/numbers.md: "rupture of substances 22, 25 and 10".
 rupture = 120
 
-# Reactions: i/o = [[substance, count]], k 1/s, ea K.
+# Reactions: i/o = [[substance, count]], k 1/s, ea K, ord the power of each input in the rate law (`Reaction::ord`).
 [[r]] # 0
 i = [[3,1],[0,1]]
 o = [[5,1],[2,1]]
@@ -452,11 +401,7 @@ k = 1e-6
 ea = 5800
 light = true
 
-# 1: burning the energy-rich solid. In the open this is also how dead plant matter rots, so its rate at 290 K is a
-# litter decay constant: k exp(-ea/290) x 0.21 = 8.7e-9 /s = 0.27 a year (24% of it in a year), the figure measured
-# for litter on a forest floor (docs/numbers.md has the source and the range). It was 4.3e3, 0.068 a year (6.6%):
-# 4 times slower. Inside bodies the founders' genes are 4 times lower (log10 4 = 0.602, worldgen::life::LITTER_X)
-# so a body's own burning, and the cost of its enzyme, are what they were.
+# 1: burning the energy-rich solid; in the open also the decay of dead matter, 0.27 a year at 290 K: docs/numbers.md, "reaction 1".
 [[r]] # 1
 i = [[5,1],[2,1]]
 o = [[3,1],[0,1]]
@@ -577,14 +522,7 @@ o = [[16,2]]
 k = 0.1
 ea = 8000
 
-# 21: burning body matter, C120H196N6O106Ca + 118 O2 -> 119 CO2 + 92 H2O + 3 N2H4O3 (as 1, for the mineral, 24) + CaCO3 (as 10, lime): the
-# nitrogen goes back to the ground as the mineral and the rock element as lime (it has no liquid to dissolve in here; in the ground it
-# meets the liquid and the gas and becomes the salt 23 by reaction 22). Open world: first order in the matter, the oxygen to its 6th power
-# (ord: the power the rate law of the 6-unit matter had, 0.21^6 = 8.6e-5; 40 meetings at once are no mass action), so for 0.2 of it a year at 290 K (rate 6.5e-9 /s,
-# 18.6% lost in a year) k exp(-ea/290) = 6.5e-9 / 8.6e-5 = 7.6e-5 /s; ea 9000 K (7760 for 1: structure resists), k = 7.6e-5 x
-# exp(9000/290) = 2.28e9. The litter constant of 1 (0.27 a year), a little lower for the tissue that resists. It was
-# 5% a year (k 5.7e8): the figure for standing dead stems, not for the litter of plants that live a month. (A rate per mol of matter,
-# so the same per kg when the unit of matter grew three times, 15 Oct 2026.)
+# 21: burning body matter, orders 1 and 6 (`ord`): docs/numbers.md, "reaction 21".
 [[r]] # 21
 i = [[22,1],[2,118]]
 o = [[3,119],[0,92],[24,3],[10,1]]
@@ -592,25 +530,8 @@ ord = [1,6]
 k = 2.28e9
 ea = 9000
 
-# 22 and 23: the liquid's store of carbon, CaCO3 + CO2 + H2O <-> Ca(HCO3)2 both ways. Plain mass action. The way back is
-# written for three of the salt (3 Ca(HCO3)2 -> 3 CaCO3 + 3 CO2 + 3 H2O) because the real way back takes one Ca2+ and two
-# HCO3-, three particles whose shares in the liquid multiply: its rate per unit of the salt goes with the salt's share of
-# the liquid to the power 3 - 1 = 2. So the liquid holds salt in proportion to its own amount (to the power 2/3; a dry cell
-# holds none) and to the cube root of the gas over it (the real law, [Ca2+][HCO3-]^2 = K pCO2, gives the cube root too).
-# - Ea: 22 is gas transfer, 1.4 times faster per 10 K -> 2,800 K. 23 is 2,800 + dH/R = 2,800 + 40.3e3/8.314 = 7,647 K, so
-#   the balance moves with warmth as dH says (the liquid holds less when warm).
-# - k of 22: a deep liquid takes the air's gas at the Earth's gross exchange between air and its liquid cover, 80 of 589 PgC a year
-#   (Ciais et al. 2013) over the 71% of the planet that the liquid covers: 0.19 a year per unit of the gas over it at 288 K
-#   (6.0e-9 /s). By mass action (Law 2) the contact of the rock, the air and the liquid is the rock, the smallest: the rate per
-#   unit of the gas is k exp(-2800 / T) x (the liquid's share) x the rock / the air over the cell. The anchor's floor is the loose
-#   ground of the start, 1 m of it a tenth rock by volume (2,710 mol/m2), less the 500 mol/m2 the salt took at 500 m: 2,210 mol/m2
-#   under 3.59e5 mol/m2 of air (the column at 101 kPa). k = 6.0e-9 exp(2800 / 288) x 3.59e5 / 2210 = 1.62e-2 (1.0e-4 when the
-#   rate went per unit of the scarce gas whatever the rock).
-# - k of 23: set so the balance at 288 K, 400 ppm of the gas and a liquid 500 m deep (the depth of this map's low ground:
-#   median 660 m, mean 540 m) is 1.0 mol of salt per m3 of liquid (2.0 mol/m3 of dissolved carbon, the measured amount in
-#   the liquid cover of the Earth; pure calcite and gas give 0.6). The balance is S^3 = (k22 / k23) exp(4847 / T) x (the gas over the cell) x
-#   (the liquid)^2, so k23 exp(-7647 / 288) = k22 exp(-2800 / 288) x 144 x (2.78e7)^2 / 500^3 = 5.36 /s, k = 1.8e12.
-#   Worldgen finds the balance of each cell from these two (`pcore::change::Reactor::balance`).
+# 22 and 23: the liquid's store of the gas of 22, both ways, at balance with the air (`pcore::change::Reactor::balance`):
+# docs/numbers.md, "reaction 22" and "reaction 23".
 [[r]] # 22
 i = [[10,1],[3,1],[0,1]]
 o = [[23,1]]
@@ -624,21 +545,8 @@ k = 1.8e12
 ea = 7647
 
 
-# 24: fixing the air's nitrogen into the mineral, paid by the fuel it really burns: N2 + 14 CH2O + 14 O2 -> N2H4O3 + CO + 13 CO2 +
-# 12 H2O, dH -6,055 kJ (15 Oct 2026). Its heart takes energy, N2 + 2 H2O + CO2 -> N2H4O3 + CO, dH = -365 + -110.5 - (2 x -286 +
-# -393.5) = +490 kJ per mol of 1 (real nitrogenase spends 16 ATP per N2, 16 x 30.5 kJ = 488); the reduced carbon gas leaves with a
-# part of the energy, as the hydrogen gas of the enzyme does. 14 units of the energy-rich solid are burnt for it (CH2O + O2 -> CO2 +
-# H2O, -467.5 kJ, reaction 1): what a symbiosis spends for the nitrogen it fixes, 6 g of carbon per g of nitrogen (6 x 28 / 12 = 14;
-# models use 6; measured 4.7 in cowpea, 1.5 respired and 3.1 built into the nodules, to 6.6 in lupin, Layzell et al.
-# 1979, Plant Physiol 64: 888; free-living fixers spend more). The enzyme alone would take 5 (the 16 ATP made at 32%, 30 ATP of 30.5 kJ
-# from 2,880 kJ of glucose, 3 units, and its 8 electrons, 2); the rest is the nodule and the mass of a slow enzyme, which the reaction
-# carries since a body has no nodule (its catalyst's capacity costs a little more, about 0.4 of a unit a mol, `Physics::c_cat`).
-# It releases heat, but less from each unit of the solid than burning it does, so it keeps the rest in what it makes and is no
-# burning: a body runs it at its catalyst's pace and its heat pays no upkeep (`Chemistry::keeps`). Before (15 Oct 2026) it burnt one unit (+22.5 kJ), 0.43 g of carbon a g of nitrogen; the first version
-# (+490, the ground's heat paying) cost the fixer only its enzyme and flooded the world with the mineral (170 times the soil's gift).
-# Orders 1 (`ord`: 14 molecules do not meet at once). A high barrier: ea 6600 K (55 kJ/mol, a factor e^23 at 290 K), k 8e-8: 1e-17 /s
-# per mol of the contact at 290 K, nothing in the open, and 1e-10 /s at 1000 K: a burning node does not fix its air. Only a body
-# whose genes speed it up fixes any, and it pays for the enzyme by capacity.
+# 24: fixing the gas 1 into the mineral 24, paid by the fuel it burns; it keeps energy (`Chemistry::keeps`):
+# docs/numbers.md, "reaction 24".
 [[r]] # 24
 i = [[1,1],[5,14],[2,14]]
 o = [[24,1],[21,1],[3,13],[0,12]]
@@ -646,22 +554,14 @@ ord = [1,1,1]
 k = 8e-8
 ea = 6600
 
-# 25: the mineral breaking down hot, 2 N2H4O3 -> 2 N2 + 4 H2O + O2 (the salt breaks down above 450 K, exothermic: -2 x -365 + 4 x -286
-# = -414 kJ): the nitrogen of burning matter that went to the mineral (21) leaves as the gas where the heat is, to the air (real
-# fires lose most of the nitrogen of what they burn). A barrier ea 20000 K (170 kJ/mol, as the salt's): 2.6e9 exp(-20000 / T) /s,
-# nothing at 290 K (3e-21 /s), 1e-8 /s at 500 K, 1e-3 /s at 700 K, 5 /s at 1000 K.
+# 25: the mineral 24 breaking down hot, its gas back to the air: docs/numbers.md, "reaction 25".
 [[r]] # 25
 i = [[24,2]]
 o = [[1,2],[0,4],[2,1]]
 k = 2.6e9
 ea = 20000
 
-# 26: the frame rots: C6H10O5 + 6 O2 -> 6 CO2 + 5 H2O, -2,805 kJ (6 x 467.5, as burning the solid per carbon). In the open this is how
-# dead frame decays, the work of the soil's small life, which the open world stands for (as 1 and 21 for the solid and the matter):
-# Olson's litter constant, 0.27 a year at 290 K, the figure reaction 1 had for all dead plant matter (docs/numbers.md); a litter is
-# mostly cellulose and lignin, so the constant is the frame's. The oxygen at order 1, so the same k and ea as 1: k exp(-7760/290)
-# x 0.21 = 8.6e-9 /s. It makes no fuel: what rots goes to the air. Inside a body it runs too (as 21 does for the matter), so a body
-# rebuilds about a quarter of its frame a year. It burns where it is hot.
+# 26: the frame rots, as reaction 1: docs/numbers.md, "reaction 26".
 [[r]] # 26
 i = [[25,1],[2,6]]
 o = [[3,6],[0,5]]
@@ -669,28 +569,21 @@ ord = [1,1]
 k = 1.72e4
 ea = 7760
 
-# 27: an enzyme splits the frame into the energy-rich solid: C6H10O5 + H2O -> 6 CH2O, thermoneutral (the reverse of the frame's growth).
-# Without an enzyme it does not go: the spontaneous hydrolysis of the bond between sugar units has a half-life of about 5 million years
-# at 25 C, 4.7e-15 /s (Wolfenden, Lu and Young 1998, J. Am. Chem. Soc. 120: 6814; from memory), so k exp(-ea/298) = 4.7e-15 /s; ea
-# 7760 K, that of the body's other chemistry, as a body's catalyst multiplies the rate and keeps its ea (the enzyme's rate goes with
-# warmth as the rest of life's, Gillooly et al. 2001); k = 4.7e-15 exp(7760/298) = 9.6e-4, 2.3e-15 /s at 290 K. A body whose
-# genes speed it up about 10^9 splits what it holds within days, and pays for that enzyme by its capacity (`Physics::c_cat`), as
-# for every enzyme; it splits its own frame too. No founder has it.
+# 27: an enzyme splits the frame into the energy-rich solid; nothing without a catalyst: docs/numbers.md, "reaction 27".
 [[r]] # 27
 i = [[25,1],[0,1]]
 o = [[5,6]]
 k = 9.6e-4
 ea = 7760
 
-# Growth, which is not a reaction of the open world: what bodies make of the energy-rich solid, the nitrogen mineral and the rock salt, paid by work (Copy): [inputs], [outputs]; the first output is the matter that builds bodies.
+# Growth (`Chemistry::build`), no reaction of the open world: body matter (the first output) of 5, 24 and 23, paid by work
+# (Copy): docs/numbers.md, "Chemistry::build".
 [build]
 i = [[5,118],[24,3],[23,1]]
 o = [[22,1],[0,27]]
 
-# The other solids bodies can build (16 Oct 2026, `Chemistry::builds`), each paid by the same work per kg as matter (`copy::grow`), in the
-# share of what a body builds that its keep gene of the solid sets; the first output is the solid. Neither pays upkeep: the cells that
-# keep them are matter. The frame (25) of 6 of the energy-rich solid; lime (10) of the rock salt bodies take (the reverse of 22, as 23
-# runs, +40.3 kJ: Ca(HCO3)2 -> CaCO3 + CO2 + H2O; the gas leaves to the air), as shells and bones are made of the calcium of the liquid.
+# The other solids bodies build (`Chemistry::builds`), the first output each: the frame 25 of 5, and 10 of the dissolved
+# mineral 23: docs/numbers.md, "Chemistry::builds".
 [[builds]]
 i = [[5,6]]
 o = [[25,1],[0,1]]
@@ -699,8 +592,7 @@ o = [[25,1],[0,1]]
 i = [[23,1]]
 o = [[10,1],[3,1],[0,1]]
 
-# Starting world: [substance, fraction]; soil: [substance, mol per m2 of land], the nitrogen mineral: 0.357 mol of 24 is 0.714 mol
-# of nitrogen, 10 g of it per m2 (mineral nitrogen of a soil: 1 to 10 g per m2, the top of it, as the start has no humus).
+# Starting world: [substance, fraction]; soil: [substance, mol per m2 of land] (`Init::soil`): docs/numbers.md, "soil".
 [init]
 air = [[1,0.78],[2,0.21],[3,0.0004],[4,1.8e-6],[0,0.004]]
 low = 0

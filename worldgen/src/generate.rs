@@ -1,9 +1,12 @@
 //! Random chemistry: element-count vectors, properties derived from the elements plus noise,
 //! and reactions that balance by construction (two different ways to make the same element totals).
 
+use crate::chemistry::{molar_mass, RICHARDS, TROUTON};
+use crate::richness::{liquid_temps, IGNITION_RATE};
 use crate::Init;
-use pcore::chem::{Chemistry, Reaction, Substance, R_GAS};
+use pcore::chem::{Chemistry, Reaction, Substance};
 use pcore::rng::{Purpose, Rng};
+use pcore::units::{R_GAS, T_SURF};
 use std::collections::BTreeMap;
 
 type Side = Vec<(u16, u16)>;
@@ -57,7 +60,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
             let band = |r: &mut Rng, f: f64| [0; 3].map(|_| (bright * f * (0.8 + 0.4 * r.f64())) as f32);
             Substance {
                 elems: e.clone(),
-                molar_mass: sum(&mass) / 1000.0,
+                molar_mass: molar_mass(e, &mass),
                 cp: (21.0 + 4.0 * n).min(150.0),
                 melt,
                 boil,
@@ -65,13 +68,13 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
                 hardness: (strength * (0.5 + 0.7 * r.f64())).min(1.0),
                 strength,
                 refl: [band(&mut r, 1.0), band(&mut r, 0.3)],
-                ir_abs: if boil < 290.0 && used.len() >= 2 && n >= 3.0 { 10f64.powf(-3.0 + 2.0 * r.f64()) } else { 0.0 },
+                ir_abs: if boil < T_SURF && used.len() >= 2 && n >= 3.0 { 10f64.powf(-3.0 + 2.0 * r.f64()) } else { 0.0 },
                 ir_sat: 0.0,
                 solubility: r.f64().powi(3),
-                conductivity: if melt > 290.0 { 0.5 + 60.0 * coh * coh } else { 0.03 },
+                conductivity: if melt > T_SURF { 0.5 + 60.0 * coh * coh } else { 0.03 },
                 hf: -120e3 * n * spread * (0.4 + 0.7 * r.f64()),
-                lv: 88.0 * boil * (0.9 + 0.4 * r.f64()),
-                lf: 9.5 * melt,
+                lv: TROUTON * boil * (0.9 + 0.4 * r.f64()),
+                lf: RICHARDS * melt,
                 modulus: 0.0,
                 rupture: 0.0,
             }
@@ -80,15 +83,14 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
     let ns = subs.len();
 
     // Starting world: the lightest gases make the air, the best liquid fills low ground, solids make the ground.
-    let gas = |k: usize| subs[k].boil < 290.0;
+    let gas = |k: usize| subs[k].boil < T_SURF;
     let mut gases: Vec<usize> = (0..ns).filter(|&k| gas(k)).collect();
     shuffle(&mut r, &mut gases);
     let mut air: Vec<(usize, f64)> = gases.iter().take(2).zip([0.78, 0.21]).map(|(&k, f)| (k, f)).collect();
     if let Some(&k) = gases.iter().find(|&&k| subs[k].ir_abs > 0.0 && !air.iter().any(|p| p.0 == k)) {
         air.push((k, 4e-4));
     }
-    let liquid_temps = |k: usize| (0..=10).filter(|i| (subs[k].melt..subs[k].boil).contains(&(260.0 + 5.0 * *i as f64))).count();
-    let low = (0..ns).filter(|k| !air.iter().any(|p| p.0 == *k)).max_by_key(|&k| (liquid_temps(k), ns - k)).unwrap();
+    let low = (0..ns).filter(|k| !air.iter().any(|p| p.0 == *k)).max_by_key(|&k| (liquid_temps(&subs[k]), ns - k)).unwrap();
     air.push((low, 0.004));
     let mut solids: Vec<usize> = (0..ns).filter(|&k| subs[k].melt > 320.0).collect();
     if solids.is_empty() {
@@ -165,13 +167,12 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         let k = 10f64.powf(3.0 + 5.0 * r.f64());
         let top = if burn { 700.0 } else { 1500.0 };
         let t_start = 340.0 * (top / 340.0f64).powf(r.f64());
-        let (k, ea) = if light { (1e-9, 5800.0 * noise(&mut r, 0.1)) } else { (k, t_start * (k / 1e-6).ln() + dh.max(0.0) / R_GAS) };
+        // A reaction not driven by light ignites at `t_start` (`richness::ignition`), warmer the more heat it takes.
+        let (k, ea) = if light { (1e-9, 5800.0 * noise(&mut r, 0.1)) } else { (k, t_start * (k / IGNITION_RATE).ln() + dh.max(0.0) / R_GAS) };
         reactions.push(Reaction { inputs: a, outputs: b, k, ea, light, ord: Vec::new() });
     }
     // (No growth in a random chemistry yet: its bodies are their mass, `Chemistry::build`.)
-    let mut air = vec![0.0; ns];
-    init.air.iter().for_each(|&(k, x)| air[k] = x);
-    let chem = Chemistry { n_elements: ne, subs, reactions, build: None, builds: Vec::new(), air, soil: Vec::new() };
+    let chem = Chemistry::new(ne, subs, reactions, None, Vec::new(), &init.air);
     debug_assert!(chem.validate().is_ok());
     (chem, init)
 }

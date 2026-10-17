@@ -1,17 +1,16 @@
-//! The big-brain test (`worldgen::life::seed_clever`, review 6, finding 3): copies of living eaters
+//! The big-brain test (`worldgen::life::seed_clever`): copies of living eaters
 //! in two new lineages that differ in brain size only, with the same cells, genes, born rows and
 //! stores; the world stays whole.
 
-use worldgen::life::{seed_clever, seed_with, Seeding, CLEVER_ROOT, CLEVER_SIZES, CONTROL_ROOT};
+use worldgen::life::{seed, seed_clever, CLEVER_ROOT, CLEVER_SIZES, CONTROL_ROOT};
 
 #[test]
 fn the_big_brain_and_its_control_differ_in_brain_size_only() {
     let mut w = worldgen::new_world(1, 32, 32);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     pcore::step(&mut w);
-    let old = Seeding::old();
-    seed_with(&mut w, 0, &old);
-    seed_with(&mut w, 1, &old);
+    seed(&mut w, 0);
+    seed(&mut w, 1);
     for _ in 0..12 {
         pcore::step(&mut w);
     }
@@ -28,15 +27,13 @@ fn the_big_brain_and_its_control_differ_in_brain_size_only() {
         assert_eq!((a.cell, &a.store, a.e), (c.cell, &c.store, c.e));
         let diff: Vec<usize> = (0..a.genes.len()).filter(|&g| a.genes[g] != c.genes[g]).collect();
         assert!(diff.iter().all(|g| (pcore::body::HIDDEN..=pcore::body::SIGHT).contains(g)), "genes differ at {diff:?}");
-        assert_eq!(pcore::choose::sizes(&a.genes), CLEVER_SIZES);
+        assert_eq!(pcore::lineage::sizes(&a.genes), CLEVER_SIZES);
         let (la, lc) = (w.life.brains[a.lineage as usize].as_ref().expect("lineage"), w.life.brains[c.lineage as usize].as_ref().expect("lineage"));
-        assert_eq!(pcore::choose::sizes_of(la), CLEVER_SIZES);
-        assert_ne!(pcore::choose::sizes_of(lc), CLEVER_SIZES, "the control has the big brain");
+        assert_eq!(pcore::lineage::sizes_of(la), CLEVER_SIZES);
+        assert_ne!(pcore::lineage::sizes_of(lc), CLEVER_SIZES, "the control has the big brain");
         assert_eq!(a.genes[pcore::body::MUT], c.genes[pcore::body::MUT]);
     }
-    for _ in 0..12 {
-        pcore::step(&mut w);
-    }
+    pcore::step(&mut w);
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");

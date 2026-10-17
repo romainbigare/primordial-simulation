@@ -10,16 +10,29 @@
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
 
-/// Fixed actions: rest, copy, put to the node, take from the node, form a part, let go (or
-/// leave the inside), join the held part to the ground, break the bonded ground.
-pub const FIXED: usize = 8;
+/// The fixed actions, by their rows: rest; put to the node; take from the node; form a part; let go (or leave the
+/// inside); join the held part to the ground; break the bonded ground. There is no copy: children are made from the
+/// brood (`copy::copy`).
+pub const REST: usize = 0;
+pub const PUT: usize = 1;
+pub const TAKE: usize = 2;
+pub const FORM: usize = 3;
+pub const RELEASE: usize = 4;
+pub const ANCHOR: usize = 5;
+pub const DIG: usize = 6;
+pub const FIXED: usize = 7;
 /// Verbs toward a perceived body: take from it, put to it, watch it.
+pub const TAKE_FROM: usize = 0;
+pub const GIVE: usize = 1;
+pub const WATCH: usize = 2;
 pub const VERBS: usize = 3;
 /// Verbs toward a perceived part: hold it, take from it, put to it, join the held part to it,
 /// break its bonds, enter the inside of its structure.
 pub const OVERBS: usize = 6;
 /// Signal outputs.
-pub const SIG: usize = 2;
+pub(crate) const SIG: usize = 2;
+/// Outputs for the shape of a part made: elongation, hollowness.
+pub(crate) const FORM_OUT: usize = 2;
 
 /// Sizes of a brain: hidden units, memory numbers, inputs (the memory last), direction
 /// features, body features and part features. A row is `h` weights, then a bias.
@@ -59,16 +72,17 @@ impl Shape {
     }
     /// Rows that learn within a life (all but the memory rows).
     pub fn learned(&self) -> usize {
-        self.form() + 2
+        self.form() + FORM_OUT
     }
     /// The row that estimates how well-being will go from here (the critic).
-    pub fn critic(&self) -> usize {
+    pub(crate) fn critic(&self) -> usize {
         self.learned() + self.mem
     }
     pub fn rows(&self) -> usize {
         self.critic() + 1
     }
-    pub fn len(&self) -> usize {
+    /// Number of weights: the base and every row.
+    pub fn weights(&self) -> usize {
         self.base() + self.rows() * self.r()
     }
 }
@@ -95,7 +109,7 @@ pub fn dot(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// `base` is the lineage's, `rows` the group's.
-pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
+pub(crate) fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
     let b1 = s.h * s.ni;
     t.h.clear();
     t.h.extend((0..s.h).map(|m| squash(base[b1 + m] + dot(&base[m * s.ni..(m + 1) * s.ni], x))));
@@ -118,10 +132,14 @@ pub fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
 
 /// A cheap tanh (error below 0.025).
 #[inline]
-pub fn squash(x: f32) -> f32 {
+pub(crate) fn squash(x: f32) -> f32 {
     let x = x.clamp(-3.0, 3.0);
     x * (27.0 + x * x) / (27.0 + 9.0 * x * x)
 }
+
+/// A brain perceives the ln of a mass over this: of a member, kg; of another body, a part or what it holds over its own
+/// mass; of a cell's mean member (e^7, a factor of about 1,100, is one unit of input).
+pub(crate) const LN_MASS: f32 = 7.0;
 
 /// A cheap natural log (error below 0.005), enough for what a brain perceives.
 #[inline]
@@ -175,7 +193,7 @@ fn step(r: &mut [f32], h: &[f32], c: f32) {
 }
 
 /// Move `w` a share `a` of the way toward `o`.
-pub fn blend(w: &mut [f32], o: &[f32], a: f32) {
+pub(crate) fn blend(w: &mut [f32], o: &[f32], a: f32) {
     for (x, y) in w.iter_mut().zip(o) {
         *x += a * (y - *x);
     }
@@ -184,7 +202,7 @@ pub fn blend(w: &mut [f32], o: &[f32], a: f32) {
 /// Small random weights, then the biases given for the fixed actions, moving and the verbs
 /// (toward bodies, then toward parts).
 pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, verbs: [f32; VERBS + OVERBS]) -> Vec<f32> {
-    let mut w: Vec<f32> = (0..s.len()).map(|_| size * r.normal() as f32).collect();
+    let mut w: Vec<f32> = (0..s.weights()).map(|_| size * r.normal() as f32).collect();
     let row = |q: usize| s.base() + q * s.r() + s.h;
     for (a, b) in fixed.iter().enumerate() {
         w[row(a)] = *b;
@@ -231,4 +249,36 @@ pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> 
         o.push(src.map_or(size * r.normal() as f32, |s| s[a.h]));
     }
     o
+}
+
+/// The step of a node's born rows: that of a child whose rows changed, for mutation size `size` (`Physics::row_noise`
+/// made bigger by 1 / sqrt(`Physics::row_chance`), as only that share of children change theirs).
+pub fn row_step(p: &crate::Physics, size: f32) -> f32 {
+    p.row_noise * size / (p.row_chance as f32).sqrt()
+}
+
+/// The number of values of an 8-bit uniform.
+const U8_SPAN: f32 = 256.0;
+
+/// Add noise near a normal of spread `size` to each weight: a sum of four 8-bit uniforms (mean 2 (`U8_SPAN` - 1),
+/// variance about `U8_SPAN`²/3), centred and scaled, two weights from one draw. Cheap, as a brain has many weights and a
+/// node's dispersing children shake them all.
+pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
+    const B: u64 = 0x00ff_00ff_00ff_00ff;
+    let (k, mean) = (size * 3f32.sqrt() / U8_SPAN, 2.0 * (U8_SPAN - 1.0));
+    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits (the first and the third lane of
+    // `a + (a >> 16)`).
+    let sums = |u: u64| {
+        let a = (u & B) + (u >> 8 & B);
+        let t = a + (a >> 16);
+        [(t & 0xffff) as f32 - mean, (t >> 32 & 0xffff) as f32 - mean]
+    };
+    let mut pairs = w.chunks_exact_mut(2);
+    for p in &mut pairs {
+        let s = sums(r.u64());
+        (p[0], p[1]) = (p[0] + k * s[0], p[1] + k * s[1]);
+    }
+    if let [x] = pairs.into_remainder() {
+        *x += k * sums(r.u64())[0];
+    }
 }

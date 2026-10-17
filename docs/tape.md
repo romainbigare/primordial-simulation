@@ -1,0 +1,107 @@
+# What a run records (the tape)
+
+The code that writes it is `tape/src/rec/` (the yearly columns in `tape/src/rec/cols/`). Names use numbers, never
+Earth names: `<j>` is an element, `<k>` a substance, `<r>` a reaction, `<q>` a mineral (`Chemistry::minerals`: 0
+the mineral of the fixing reaction's gas, 1 the second), `<K>` a starting kind (a row of `worldgen::life::KINDS`).
+A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap).
+
+## Files of a run (`ew run --out DIR`)
+
+| File | What it holds |
+|---|---|
+| `snap_NNNNN.bin.gz` | every 10 years and at the end: the whole world, the run's plan of what is placed when, and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one |
+| `series.csv` | one row a year, the columns below |
+| `months.csv` | one row a month (below) |
+| `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |
+| `world.ewf.gz` | the viewer's file: `EWF1`, the header's length, the header (JSON: size, layers, frames, series and units, events, the months rows), then the frames |
+| `yearNNNN.png` | map, temperature, rain, life and traffic every `--every` years |
+
+**Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
+the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
+
+**Map layers** in the frames (`tape/src/layers.rs`, one byte a cell): height, liquid depth, ice, liquid flux, loose
+ground, ground and air temperature, rain, vapour, absorber, light-eater and other body mass per m², bodies, traffic,
+worn edges, structures, true colour (r, g, b).
+
+## `series.csv`: the world
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `year`, `null` | yr, | the year; 1 in a null run |
+| `elem_<j>` | mol | element j in the world (must not change) |
+| `energy` | J | heat and chemical energy in the world |
+| `min<q>_land`, `min<q>_sea` | kg/m² | mineral q in the ground of land and of the sea floor |
+| `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_bodies`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea, in bodies, in the bed's stores |
+| `t_ground`, `t_air` | K | mean ground and air temperature |
+| `t_land_summer`, `t_land_winter` | K | the land's ground in its warmest and coldest month |
+| `absorber` | | mean absorption of the heat-absorbing gases |
+| `air_<k>` | | mole fraction of heat-absorbing gas k in the air |
+| `ice_frac` | | share of cells under ice |
+| `liquid_land` | km³ | liquid on land |
+| `rain` | mol/m²/s | mean rain |
+| `bodies`, `plants` | | bodies (nodes and individuals), of them light-eaters |
+| `plant_members`, `animal_members`, `animal_nodes` | | members of light-eaters and of the others; nodes of the others |
+| `cover_median`, `cover_max` | kg/m² | light-eater mass on a land cell: median and largest |
+| `body_mass` | t | mass of all bodies |
+| `dead_<k>` | kg/m² | dead fuel, matter and built solids on the ground of the land |
+| `births`, `died_<cause>` | 1/yr | members born; died by cause (`lack`, `phase`, `spent`, `taken`, `broken`, `age`) |
+| `lineages`, `lineages_ever`, `updates` | , , 1/yr | brain lineages alive and ever; body updates |
+| `cat_<r>` | log10 | mean catalyst gene of reaction r over all members (mixes kinds; read the per-kind columns) |
+
+**Brains and kinds**
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `learned`, `greedy` | | how far learning moved the brains; share of decisions that drew the top-scored action |
+| `hidden`, `memory`, `seen`, `sight`, `hidden_max` | , , , cells, | mean brain and sense sizes; the largest hidden layer |
+| `mi_cold`, `mi_hurt`, `mi_low` | bit | how much signals say about cold ground, harm met and low well-being |
+| `kinds`, `kinds_members` | | kinds found by clustering genes and diet (bodies; members) |
+| `mass_min`, `mass_median`, `mass_max`, `mass_max_root` | kg | member mass; the kind of the heaviest |
+| `trophic_max`, `trophic_high` | | share of what a kind took from bodies that came from eaters: the kind with most bodies; the highest |
+
+**Movement, imitation, giving**
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `eat_animals` | | bodies that took more from eaters than from light-eaters in their life |
+| `crossings`, `traffic_top2`, `traffic_persist` | 1/yr, , | moves to a neighbour cell; share on the busiest 2% of cells; overlap with ten years before |
+| `worn_edges`, `worn_new`, `worn_persist` | , 1/yr, | edges cleared by movers (path-like), new ones, kept from ten years before |
+| `mass_top2`, `mass_land` | kg/m² | body mass on the busiest cells and on other land |
+| `groups`, `watched`, `watched_kin`, `watched_groups`, `spread_max` | , 1/yr, 1/yr, , groups | groups; watches (imitation), of them within a lineage; groups watched; most watchers of one |
+| `gave`, `gave_kg`, `gave_eaters`, `gave_pairs`, `gave_reciprocal` | 1/yr, kg/yr, 1/yr, , | gifts, kg given, gifts by eaters, giving pairs, pairs giving both ways |
+| `ate_light_eaters`, `ate_others`, `ate_ground` | kg/yr | what eaters could burn of what they took, by source |
+
+**Parts and structures**
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `parts`, `parts_held`, `parts_mass`, `parts_formed` | , , t, 1/yr | made objects, of them held; their mass; formed in the year |
+| `put_to_parts`, `taken_from_parts` | kg/yr | stores put into and taken from parts |
+| `bonds_joined`, `bonds_ground`, `structures`, `enclosed` | | bonds between parts and to the ground; structures of more than one part; enclosed ones |
+| `made_held`, `made_joined`, `made_ground`, `bonds_broken`, `bonds_failed` | 1/yr | bonds made by kind; broken by bodies; failed by load |
+| `inside_now`, `inside_cold`, `inside_warm`, `cold_months` | , , , 1/yr | bodies inside walls now; share of the eaters' body-months inside in the cold and the warm; their cold months |
+| `holding_liquid`, `liquid_held`, `afloat`, `afloat_moves` | , kg, , 1/yr | parts holding liquid and how much; structures afloat; moves afloat |
+
+## `series.csv`: by starting kind
+
+`root_<K>_*`, for every kind up to the largest seen; a kind that died out reads 0 (its means `NaN`). Means are by
+members.
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `members`, `kg`, `bodies` | , kg, | members, their mass, bodies |
+| `life`, `life_real` | yr | the life the genes allow at the upkeep now (the age law's wear of the built body); members standing over deaths in the year |
+| `births`, `mixed`, `died_<cause>` | 1/yr, , 1/yr | births; share with two parents; deaths by cause (they sum to the world columns) |
+| `mass`, `copy_mass`, `body`, `matter` | kg, kg, kg, | mean member mass, copy mass, body (`Body::size`); body matter's share of the mass |
+| `activity`, `dry` | | mean activity; share below 0.5 |
+| `alloc`, `child`, `brood` | , log10, | genes of reproduction; brood as a share of the mass |
+| `gas`, `leaf`, `copy_log`, `interval`, `heat`, `repair`, `wet_gene` | log10 | gene means |
+| `hidden`, `keep_t` | , K | gene means |
+| `cat_<r>`, `cat_<r>_on` | log10, | catalyst gene of reaction r over the members that carry it on; share that do |
+
+## `months.csv`
+
+One row a month: `year`, `month`; the bodies that are not light-eaters: `mobile` (how many), `mean_y`, `mean_z` (mean
+row and height), `mean_dy`, `mean_dz` (mean move since last month), `inside` (inside walls), `t_mobile` (mean ground
+temperature under them, K), `spent`, `spent_y` (members died of `spent`, and their mean row); then for each starting
+kind `root_<K>_births` and `root_<K>_died_<cause>` (members in the month), so seasons of births and deaths show.

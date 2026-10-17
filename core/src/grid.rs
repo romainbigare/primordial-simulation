@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Forward edge offsets (dx, dy). Every undirected edge is visited once as (i, i + offset).
-pub const FORWARD: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (-1, 1)];
+pub(crate) const FORWARD: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (-1, 1)];
 /// All 8 neighbour offsets, clockwise from east.
 pub const DIRS: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
 
@@ -38,17 +38,21 @@ impl Grid {
         (nx >= 0 && ny >= 0 && (nx as usize) < self.w && (ny as usize) < self.h).then(|| self.idx(nx as usize, ny as usize))
     }
     /// Distance between centres for an offset, metres.
-    pub fn dist(&self, d: (i32, i32)) -> f64 {
+    pub(crate) fn dist(&self, d: (i32, i32)) -> f64 {
         if d.0 != 0 && d.1 != 0 { self.cell_m * std::f64::consts::SQRT_2 } else { self.cell_m }
     }
     pub fn aw(&self) -> usize {
         self.w.div_ceil(self.air_scale)
     }
-    pub fn ah(&self) -> usize {
+    pub(crate) fn ah(&self) -> usize {
         self.h.div_ceil(self.air_scale)
     }
     pub fn na(&self) -> usize {
         self.aw() * self.ah()
+    }
+    /// The share of an air node over one ground cell (1 / `air_scale`²).
+    pub fn air_share(&self) -> f64 {
+        1.0 / (self.air_scale * self.air_scale) as f64
     }
     /// Air node above ground cell `i`.
     pub fn air_of(&self, i: usize) -> usize {

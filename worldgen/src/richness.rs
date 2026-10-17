@@ -1,21 +1,34 @@
-//! Richness checks (handover 6.0): physical possibilities a chemistry must offer.
+//! Richness checks: physical possibilities a chemistry must offer.
 //! They look at numbers only, never at names or fixed substance indices.
 
 use crate::Init;
-use pcore::chem::{Chemistry, Phase, Reaction};
-use pcore::T_SURF;
+use pcore::chem::{Chemistry, Phase, Reaction, Substance};
+use pcore::units::T_SURF;
 
 /// Smallest mole fraction that counts as abundant.
 const ABUNDANT: f64 = 0.01;
 
-/// Temperature where a reaction runs at 1e-6 per second: `k exp(-ea/T) = 1e-6`.
+/// The rate at which a reaction counts as running (its ignition), 1/s.
+pub(crate) const IGNITION_RATE: f64 = 1e-6;
+/// The surface temperatures a liquid is looked for at: `WINDOW_STEPS` + 1 of them, `WINDOW_STEP` K apart from
+/// `WINDOW_LOW` K (260 to 310 K).
+const WINDOW_LOW: f64 = 260.0;
+const WINDOW_STEP: f64 = 5.0;
+const WINDOW_STEPS: usize = 10;
+
+/// Temperature where a reaction runs at `IGNITION_RATE`: `k exp(-ea/T) = IGNITION_RATE`.
 pub fn ignition(rx: &Reaction) -> f64 {
-    let l = (rx.k / 1e-6).ln();
+    let l = (rx.k / IGNITION_RATE).ln();
     if l > 0.0 {
         rx.ea / l
     } else {
         f64::INFINITY
     }
+}
+
+/// At how many of the surface temperatures of the window (`WINDOW_LOW`) substance `s` is liquid.
+pub(crate) fn liquid_temps(s: &Substance) -> usize {
+    (0..=WINDOW_STEPS).filter(|i| (s.melt..s.boil).contains(&(WINDOW_LOW + WINDOW_STEP * *i as f64))).count()
 }
 
 pub fn richness(chem: &Chemistry, init: &Init) -> Vec<(&'static str, bool)> {
@@ -28,7 +41,7 @@ pub fn richness(chem: &Chemistry, init: &Init) -> Vec<(&'static str, bool)> {
     all.push(init.low);
     let in_air = |k: u16| air.contains(&(k as usize));
 
-    let liquid_often = all.iter().any(|&k| (0..=10).filter(|i| chem.phase(k, 260.0 + 5.0 * *i as f64) == Phase::Liquid).count() > 5);
+    let liquid_often = all.iter().any(|&k| liquid_temps(&chem.subs[k]) > WINDOW_STEPS / 2);
     let greenhouse = air.len() >= 2 && init.air.iter().any(|&(k, _)| at(k) == Phase::Gas && chem.subs[k].ir_abs > 0.0);
     let stores_light = chem.reactions.iter().enumerate().any(|(r, rx)| {
         rx.light
@@ -98,14 +111,19 @@ mod tests {
         }
     }
 
+    /// Every generated chemistry is valid, and the generator makes rich ones: some of them pass every check.
     #[test]
-    fn generated_chemistries_validate() {
-        let mut pass = 0;
+    fn generated_chemistries_validate_and_some_are_rich() {
+        let (mut all, mut each) = (0, Vec::new());
         for seed in 0..200 {
             let (c, i) = crate::generate(seed);
             c.validate().unwrap();
-            pass += richness(&c, &i).iter().all(|p| p.1) as u32;
+            let checks = richness(&c, &i);
+            each.resize(checks.len(), 0);
+            checks.iter().zip(&mut each).for_each(|(p, n)| *n += p.1 as u32);
+            all += checks.iter().all(|p| p.1) as u32;
         }
-        println!("generated chemistries passing all richness checks: {pass} of 200");
+        println!("of 200 generated chemistries, {all} pass all richness checks; each check: {each:?}");
+        assert!(all > 0, "no generated chemistry passes every check; each check: {each:?}");
     }
 }

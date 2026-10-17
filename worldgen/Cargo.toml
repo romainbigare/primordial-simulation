@@ -7,3 +7,7 @@ version.workspace = true
 pcore = { path = "../core" }
 serde.workspace = true
 toml = "0.8"
+
+[features]
+# The shared setup of the tests (`testkit`): turned on only by the dev-dependencies of the crates that test with it.
+testkit = []
