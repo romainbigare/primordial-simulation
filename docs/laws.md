@@ -17,6 +17,8 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | Law or part | Files |
 |---|---|
 | time and the month's order | `clock/` (the calendar, processes with periods; `sleep`: the sleep and wake of nodes), `schedule.rs` (`step`, `step_marked`, `day`) |
+| the shape of the world | `space/` (`Mesh`: levels of cells and links with their widths, parents and children; `square`: the square map; `stack`: layers above and below a cell); `grid.rs` is a thin view on it |
+| the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `lines`: the implicit step along a line) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`) |
 | 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind`, `sky`); `lanes.rs` (paths) |

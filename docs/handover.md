@@ -462,11 +462,16 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
               one folder per law (core/src/<law>/; the air in flow/air/)
   src/body/   bodies: genes, tissue, metabolism, exchange, the update, its physics, paying, death, intake
   src/chem/   the chemistry: its data, its physics (phases, melting), the roles of reactions
-  src/clock/  time in whole seconds, the calendar, processes with periods
+  src/space/  the shape of the world: the mesh (cells, links, levels), the square map, stacks of layers
+  src/store/  the nodes (ids, classes, the boundary nodes sun, space and outside) and the one way to change them
+              (`apply`: moves, transforms, link fluxes)
+  src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
+  src/solve/  the shared maths: spread (implicit step on links), downhill, lines
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
               life (the registry of bodies), lineage, nodes (population nodes), lanes (paths), survey (the cells
               bodies see), brain, grid, rng, event, math, units, par
-  tests/      one file per law (flow, change, bond, copy, choose, body), chemistry0, numbers
+  tests/      one file per law (flow, change, bond, copy, choose, body), one per base part (space, store, clock,
+              solve), chemistry0, numbers
 worldgen/   terrain, chemistry 0 (chem0.toml) and the chemistry generator, richness checks, first life (life/), what is
               placed when (schedule.rs); the test kit (worldgen::testkit, behind the `testkit` feature)
 tape/       the recorder (rec/, its yearly columns in rec/cols/), snapshots (snapshot.rs), map layers, measures,
@@ -867,7 +872,7 @@ What the tests must cover:
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) takes about 15 seconds. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs`, with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the big-brain test, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
+- **The normal suite** (`cargo test --release --workspace`) takes about 15 seconds. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs`, one per part of the foundation's base (`core/tests/{space, store, clock, solve}.rs`), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the big-brain test, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
 - **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked from the outside node, the rock of a cell, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
 - **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). Only a bug fix may change a fingerprint: `GOLDEN=print` prints the new values. CI runs it again with the `threads` feature, which must give the same fingerprints.
 - **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes, nodes and the island's erosion, and the key-number test (`tape/tests/ranges.rs`: ten numbers of climate, land and life of three 30-year runs, each near its reference of `docs/foundation/plan.md` 6.3). CI runs them (`cargo test --release --workspace -- --ignored`).
