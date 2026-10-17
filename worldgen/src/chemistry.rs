@@ -10,7 +10,8 @@ pub(crate) const RICHARDS: f64 = 9.5;
 
 #[derive(Deserialize)]
 struct File {
-    elements: usize,
+    /// g/mol of each element
+    element_masses: Vec<f64>,
     s: Vec<S>,
     r: Vec<R>,
     #[serde(default)]
@@ -30,7 +31,6 @@ struct B {
 #[derive(Deserialize)]
 struct S {
     e: Vec<u16>,
-    m: f64,
     cp: f64,
     melt: f64,
     boil: f64,
@@ -85,6 +85,12 @@ pub struct Init {
     pub soil: Vec<(usize, f64)>,
 }
 
+/// Molar mass of a substance of element counts `elems`, kg/mol: the sum of its elements' `grams` a mol, so every
+/// reaction that keeps elements keeps mass.
+pub(crate) fn molar_mass(elems: &[u16], grams: &[f64]) -> f64 {
+    elems.iter().zip(grams).map(|(&c, &x)| c as f64 * x).sum::<f64>() / 1000.0
+}
+
 pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
     let f: File = toml::from_str(text).map_err(|e| e.to_string())?;
     let pair = |v: &[[u16; 2]]| v.iter().map(|p| (p[0], p[1])).collect();
@@ -92,8 +98,8 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
         .s
         .into_iter()
         .map(|s| Substance {
+            molar_mass: molar_mass(&s.e, &f.element_masses),
             elems: s.e,
-            molar_mass: s.m / 1000.0,
             cp: s.cp,
             melt: s.melt,
             boil: s.boil,
@@ -114,7 +120,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
         .collect();
     let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord }).collect();
     let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
-    let chem = Chemistry::new(f.elements, subs, reactions, f.build.as_ref().map(conversion), f.builds.iter().map(conversion).collect(), &f.init.air);
+    let chem = Chemistry::new(f.element_masses.len(), subs, reactions, f.build.as_ref().map(conversion), f.builds.iter().map(conversion).collect(), &f.init.air);
     chem.validate()?;
     Ok((chem, f.init))
 }

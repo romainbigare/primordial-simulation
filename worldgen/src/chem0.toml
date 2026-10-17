@@ -1,14 +1,14 @@
-# Chemistry 0. Numbers only. m g/mol, cp J/(mol K), melt/boil K, rho kg/m3 [solid, liquid], hard/str 0..1,
+# Chemistry 0. Numbers only. element_masses g/mol (a substance's molar mass is the sum over its elements e),
+# cp J/(mol K), melt/boil K, rho kg/m3 [solid, liquid], hard/str 0..1,
 # refl [[solid rgb], [liquid rgb]], ir m2/mol, sat mol/m2 (column past which the optical depth grows as the square root of
 # the amount; none: always in proportion), sol mole fraction (for a gas that cannot condense on the ground: dissolved under
 # 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
 # which moves with the liquid), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
 # less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), modulus GPa, rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
-elements = 9
+element_masses = [1, 12, 14, 16, 28, 40, 55.85, 63.5, 118.7]
 
 [[s]] # 0
 e = [2,0,0,1,0,0,0,0,0]
-m = 18.0
 cp = 75
 melt = 273
 boil = 373
@@ -26,7 +26,6 @@ lf = 6.0
 
 [[s]] # 1
 e = [0,0,2,0,0,0,0,0,0]
-m = 28.0
 cp = 29
 melt = 63
 boil = 77
@@ -41,7 +40,6 @@ hf = -7.3745
 
 [[s]] # 2
 e = [0,0,0,2,0,0,0,0,0]
-m = 32.0
 cp = 29
 melt = 54
 boil = 90
@@ -56,7 +54,6 @@ hf = -8.433
 
 [[s]] # 3
 e = [0,1,0,2,0,0,0,0,0]
-m = 44.0
 cp = 37
 melt = 194
 boil = 195
@@ -72,7 +69,6 @@ hf = -412.503
 
 [[s]] # 4
 e = [4,1,0,0,0,0,0,0,0]
-m = 16.0
 cp = 35
 melt = 91
 boil = 112
@@ -88,7 +84,6 @@ hf = -85.5205
 
 [[s]] # 5
 e = [2,1,0,1,0,0,0,0,0]
-m = 30.0
 cp = 40
 melt = 460
 boil = 700
@@ -103,7 +98,6 @@ hf = -212
 
 [[s]] # 6
 e = [2,1,0,0,0,0,0,0,0]
-m = 14.0
 cp = 30
 melt = 260
 boil = 600
@@ -118,7 +112,6 @@ hf = -27.47
 
 [[s]] # 7
 e = [0,1,0,0,0,0,0,0,0]
-m = 12.0
 cp = 8.5
 melt = 3900
 boil = 4100
@@ -133,7 +126,6 @@ hf = 0
 
 [[s]] # 8
 e = [0,0,0,2,1,0,0,0,0]
-m = 60.0
 cp = 44
 melt = 1986
 boil = 2500
@@ -148,7 +140,6 @@ hf = -911
 
 [[s]] # 9
 e = [0,0,0,3,1,1,0,0,0]
-m = 116.0
 cp = 86
 melt = 1800
 boil = 3000
@@ -163,7 +154,6 @@ hf = -1635
 
 [[s]] # 10
 e = [0,1,0,3,0,1,0,0,0]
-m = 100.0
 cp = 82
 melt = 1600
 boil = 3000
@@ -182,7 +172,6 @@ rupture = 100
 
 [[s]] # 11
 e = [0,0,0,1,0,1,0,0,0]
-m = 56.0
 cp = 43
 melt = 2886
 boil = 3120
@@ -197,7 +186,6 @@ hf = -635
 
 [[s]] # 12
 e = [2,0,0,2,0,1,0,0,0]
-m = 74.0
 cp = 87
 melt = 853
 boil = 3000
@@ -212,7 +200,6 @@ hf = -986
 
 [[s]] # 13
 e = [0,0,0,3,0,0,2,0,0]
-m = 159.7
 cp = 104
 melt = 1838
 boil = 3000
@@ -227,7 +214,6 @@ hf = -824
 
 [[s]] # 14
 e = [0,0,0,0,0,0,1,0,0]
-m = 55.85
 cp = 25
 melt = 1811
 boil = 3134
@@ -242,7 +228,6 @@ hf = 0
 
 [[s]] # 15
 e = [0,1,0,0,0,0,20,0,0]
-m = 1129.0
 cp = 508
 melt = 1700
 boil = 3100
@@ -257,7 +242,6 @@ hf = -10
 
 [[s]] # 16
 e = [0,0,0,1,0,0,0,1,0]
-m = 79.5
 cp = 42
 melt = 1600
 boil = 2300
@@ -272,7 +256,6 @@ hf = -157
 
 [[s]] # 17
 e = [0,0,0,0,0,0,0,1,0]
-m = 63.5
 cp = 24.4
 melt = 1358
 boil = 2835
@@ -287,7 +270,6 @@ hf = 0
 
 [[s]] # 18
 e = [0,0,0,2,0,0,0,0,1]
-m = 150.7
 cp = 53
 melt = 1900
 boil = 2100
@@ -302,7 +284,6 @@ hf = -578
 
 [[s]] # 19
 e = [0,0,0,0,0,0,0,0,1]
-m = 118.7
 cp = 27
 melt = 505
 boil = 2875
@@ -317,7 +298,6 @@ hf = 0
 
 [[s]] # 20
 e = [0,0,0,0,0,0,0,7,1]
-m = 563.2
 cp = 198
 melt = 1220
 boil = 2800
@@ -332,7 +312,6 @@ hf = -15
 
 [[s]] # 21
 e = [0,1,0,1,0,0,0,0,0]
-m = 28.0
 cp = 29
 melt = 68
 boil = 82
@@ -348,7 +327,6 @@ hf = -118.362
 # 22: body matter, what bodies are built of (`build`), holding the energy of what it is made of: docs/numbers.md, "substance 22".
 [[s]] # 22
 e = [196,120,6,106,0,1,0,0,0]
-m = 3456.0
 cp = 4266
 melt = 1500
 boil = 3000
@@ -368,7 +346,6 @@ rupture = 1
 # 23: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 22: docs/numbers.md, "substance 23".
 [[s]] # 23
 e = [2,2,0,6,0,1,0,0,0]
-m = 162.0
 cp = 194
 melt = 271
 boil = 3000
@@ -384,7 +361,6 @@ hf = -1929.3745
 # 24: the mineral of the gas reaction 24 fixes (1), that gas's only way into body matter: docs/numbers.md, "substance 24".
 [[s]] # 24
 e = [4,0,2,3,0,0,0,0,0]
-m = 80.0
 cp = 140
 melt = 255
 boil = 3000
@@ -401,7 +377,6 @@ lf = 5.9
 # 25: the frame, a solid bodies build of 6 units of the energy-rich solid (5, `builds`): docs/numbers.md, "substance 25".
 [[s]] # 25
 e = [10,6,0,5,0,0,0,0,0]
-m = 162.0
 cp = 210
 melt = 1500
 boil = 3000

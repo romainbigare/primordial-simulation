@@ -1,7 +1,7 @@
 //! Random chemistry: element-count vectors, properties derived from the elements plus noise,
 //! and reactions that balance by construction (two different ways to make the same element totals).
 
-use crate::chemistry::{RICHARDS, TROUTON};
+use crate::chemistry::{molar_mass, RICHARDS, TROUTON};
 use crate::richness::{liquid_temps, IGNITION_RATE};
 use crate::Init;
 use pcore::chem::{Chemistry, Reaction, Substance};
@@ -60,7 +60,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
             let band = |r: &mut Rng, f: f64| [0; 3].map(|_| (bright * f * (0.8 + 0.4 * r.f64())) as f32);
             Substance {
                 elems: e.clone(),
-                molar_mass: sum(&mass) / 1000.0,
+                molar_mass: molar_mass(e, &mass),
                 cp: (21.0 + 4.0 * n).min(150.0),
                 melt,
                 boil,
