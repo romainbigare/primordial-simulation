@@ -37,6 +37,31 @@ fn line_step_solves_its_system_and_keeps_the_total() {
     assert!(after.iter().all(|&v| v > 0.0), "an amount went negative");
 }
 
+/// One implicit step along a line with shares s is close to 100 steps with shares s / 100 (the same total time), and
+/// both keep the total. On the slowest mode of a line (equal shares s both ways, so it decays at rate r = 2 s (1 -
+/// cos(pi / n)) per unit share), one step keeps 1 / (1 + r) and 100 steps keep (1 + r / 100)^-100, about exp(-r); the
+/// two differ by less than r^2 / 2, the first error term of backward Euler.
+#[test]
+fn line_big_step_is_close_to_small_steps() {
+    let n = 40;
+    let mode: Vec<f64> = (0..n).map(|i| (std::f64::consts::PI * (i as f64 + 0.5) / n as f64).cos()).collect();
+    let before: Vec<f64> = mode.iter().map(|m| 10.0 + m).collect();
+    let rate = 0.2;
+    let s = rate / (2.0 * (1.0 - (std::f64::consts::PI / n as f64).cos()));
+    let step = |share: f64, x: &mut [f64]| along_line(&vec![share; n - 1], &vec![share; n - 1], x, &mut vec![0.0; n]);
+    let (mut big, mut small) = (before.clone(), before.clone());
+    step(s, &mut big);
+    (0..100).for_each(|_| step(s / 100.0, &mut small));
+    let total = |x: &[f64]| x.iter().sum::<f64>();
+    assert!((total(&big) - total(&before)).abs() < 1e-12 * total(&before));
+    assert!((total(&small) - total(&before)).abs() < 1e-12 * total(&before));
+    let (keep_big, keep_small) = (1.0 / (1.0 + rate), (1.0 + rate / 100.0).powi(-100));
+    for i in 0..n {
+        assert!((big[i] - 10.0 - keep_big * mode[i]).abs() < 1e-12 && (small[i] - 10.0 - keep_small * mode[i]).abs() < 1e-12);
+        assert!((big[i] - small[i]).abs() < rate * rate / 2.0 * mode[i].abs());
+    }
+}
+
 // ---- spread: the implicit step along links (backward Euler, conjugate gradient) ----
 
 mod spread {
@@ -327,6 +352,47 @@ fn downhill_moves_surface_liquid_as_the_sweep_does() {
     assert!(moved > n / 4, "only {moved} of {n} cells changed");
     let (before, after) = (q0.iter().sum::<f64>(), q.iter().sum::<f64>());
     assert!((after - before).abs() <= 1e-14 * before, "the pass holds {after} mol of {before}");
+}
+
+/// Rain is the same whether it falls at once or in 4 parts, each followed by a pass, when the rule is linear in the
+/// amounts: here all that a cell holds leaves in equal shares to its lower neighbours (by ground height), so one pass
+/// carries it all the way to the cells with no lower neighbour. The cells with a lower neighbour end empty, the
+/// sinks hold the same amounts, the link fluxes add up to those of the one pass, and every amount is kept.
+#[test]
+fn downhill_one_rain_in_one_pass_or_in_parts() {
+    let w = worldgen::new_world(1, 32, 32);
+    let n = w.grid.n();
+    let z: Vec<f64> = (0..n).map(|i| w.surface_z(i)).collect();
+    let GridLinks { start, link, other, a, .. } = grid_links(&w);
+    let adj = Adjacency { start: &start, link: &link, other: &other, a: &a };
+    let mut order = Order::default();
+    order.update(&z);
+    let rule = |i: usize, _: &mut [f64], share: &mut [f64]| {
+        let es = start[i] as usize..start[i + 1] as usize;
+        let lower = es.clone().filter(|&e| z[other[e] as usize] < z[i]).count();
+        es.zip(share.iter_mut()).filter(|(e, _)| z[other[*e] as usize] < z[i]).for_each(|(_, s)| *s = 1.0 / lower as f64);
+    };
+    let rain: Vec<f64> = (0..n).map(|i| 1.0 + (i * 37 % 11) as f64).collect();
+    let total: f64 = rain.iter().sum();
+    let (mut whole, mut whole_flux) = (rain.clone(), vec![0.0; a.len()]);
+    downhill::pass(&order, &adj, &mut whole, &mut whole_flux, rule);
+    let (mut parts, mut flux, mut part_flux) = (vec![0.0; n], vec![0.0; a.len()], vec![0.0; a.len()]);
+    for _ in 0..4 {
+        parts.iter_mut().zip(&rain).for_each(|(q, r)| *q += r / 4.0);
+        downhill::pass(&order, &adj, &mut parts, &mut part_flux, rule);
+        flux.iter_mut().zip(&part_flux).for_each(|(f, p)| *f += p);
+    }
+    let sinks = (0..n).filter(|&i| (start[i]..start[i + 1]).all(|e| z[other[e as usize] as usize] >= z[i])).count();
+    assert!(sinks < n / 2 && whole.iter().filter(|&&q| q > 1e-12 * total).count() == sinks, "only the sinks hold liquid");
+    for i in 0..n {
+        assert!((whole[i] - parts[i]).abs() <= 1e-12 * total, "cell {i}: {} against {}", whole[i], parts[i]);
+    }
+    for (l, (f, g)) in whole_flux.iter().zip(&flux).enumerate() {
+        assert!((f - g).abs() <= 1e-12 * total, "link {l}: {f} against {g}");
+    }
+    for q in [&whole, &parts] {
+        assert!((q.iter().sum::<f64>() - total).abs() <= 1e-14 * total);
+    }
 }
 
 /// The order is the order of the heads now, highest first and ties by cell (heads of both signs, many equal), also

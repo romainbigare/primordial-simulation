@@ -287,6 +287,8 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 **Phase B and C: the base layers and the shared maths**
 
+- C4: tests that one big step is close to many small steps for `solve::lines` and, for `solve::downhill`, that one
+  rain in one pass equals the same rain in parts with a pass each (linear rule); tests only.
 - C3: the wind's tridiagonal solve moves from `flow/air/wind.rs` to `solve::lines::along_line`; results unchanged
   (golden kept).
 - C1: `solve::spread`, one backward Euler step along links (conductance per link, capacity per node) by conjugate
