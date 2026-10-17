@@ -64,7 +64,7 @@ pub fn run(args: &Args) {
             "{r:>3}  {:<26} {:<24} {:>10.1} {t:>9}",
             rnames.get(r).map_or("", |n| n.as_str()),
             format!("{} -> {}", side(&rx.inputs), side(&rx.outputs)),
-            c.dh(r) / 1000.0
+            c.dh_at(r, pcore::units::T_SURF) / 1000.0
         );
     }
     balances(&c, &init);

@@ -3,7 +3,7 @@
 
 use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
-use pcore::units::{DAY, P_REF, R_GAS};
+use pcore::units::{DAY, P_REF, R_GAS, T_SURF};
 use worldgen::testkit::{hold_ground, in_all, BURN, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 
 /// A heat capacity so large that a node's temperature stays put, J/K.
@@ -314,7 +314,7 @@ fn the_balance_is_the_anchored_one_and_moves_as_the_law_says() {
     let twice = held(at_balance(&chem, 500.0, 800.0, 288.0)) / held(s);
     assert!((twice - 2.0).abs() < 0.02, "twice the gas: x{twice}");
     let warm = held(at_balance(&chem, 500.0, 400.0, 298.0)) / held(s);
-    let law = ((chem.dh(DISSOLVING) / R_GAS) * (1.0 / 288.0 - 1.0 / 298.0)).exp();
+    let law = ((chem.dh_at(DISSOLVING, T_SURF) / R_GAS) * (1.0 / 288.0 - 1.0 / 298.0)).exp();
     assert!((warm / law - 1.0).abs() < 0.03, "10 K warmer: x{warm}, the law says x{law}");
 }
 

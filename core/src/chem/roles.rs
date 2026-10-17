@@ -20,6 +20,23 @@ impl Chemistry {
         sum(&rx.outputs) - sum(&rx.inputs)
     }
 
+    /// Enthalpy change of one unit of reaction `r` with each substance in its phase at `t` by its own melting and boiling
+    /// points (`phase`), J: `dh` with the fusion enthalpy of what is liquid or gas there and the vaporisation enthalpy of
+    /// what is gas. At `T_SURF` it is the reaction heat as measured, from and to the states the substances are found in.
+    pub fn dh_at(&self, r: usize, t: f64) -> f64 {
+        let h = |k: usize| {
+            let s = &self.subs[k];
+            s.hf + match self.phase(k, t) {
+                Phase::Solid => 0.0,
+                Phase::Liquid => s.lf,
+                Phase::Gas => s.latent_gas(),
+            }
+        };
+        let sum = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * h(k as usize)).sum::<f64>();
+        let rx = &self.reactions[r];
+        sum(&rx.outputs) - sum(&rx.inputs)
+    }
+
     /// Does reaction `r` burn: release heat taking a gas (at `T_SURF`)?
     pub fn burning(&self, r: usize) -> bool {
         self.dh(r) < 0.0 && self.reactions[r].inputs.iter().any(|p| self.gas_at_surface(p.0 as usize))

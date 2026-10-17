@@ -50,7 +50,8 @@ pub struct Substance {
     pub lv: f64,
     /// Fusion enthalpy, J/mol
     pub lf: f64,
-    /// Formation enthalpy, J/mol. Chemical energy held by one mole.
+    /// Formation enthalpy of the solid, J/mol: the chemical energy one mole holds (a liquid holds `lf` more, in its holder's
+    /// heat; a gas also `lv`, in the air: `check::totals`).
     pub hf: f64,
     /// Young's modulus of the solid as a material, Pa (0: none given): how stiff what bodies build of it is
     /// (`Body::height`). For body matter, that of living soft tissue with its liquid.
