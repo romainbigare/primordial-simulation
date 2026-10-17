@@ -93,9 +93,13 @@ pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
 /// Heat capacity, temperature, surface, head and reflectance of every ground node. Between full
 /// steps only nodes whose phases change (on or off a melting plateau, past a melting point) get a new surface.
 pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
-    // Heat capacity from the amounts now, at every step: bodies and Law 2 move loose matter
-    // (with its heat) between liquid steps, and a stale capacity would read a node far too hot or cold.
+    // Heat capacity from the amounts now, at every step, as `World::heat_cap_ground` sums it: bodies and Law 2 move loose
+    // matter (with its heat) between liquid steps, liquid wears the bed and bodies dig it, and a stale capacity would read a
+    // node far too hot or cold.
     let n = w.grid.n();
+    for (i, bed) in s.bed.iter_mut().enumerate() {
+        bed[0] = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
+    }
     let mut cap: Vec<f64> = s.bed.iter().map(|b| b[0]).collect();
     for &k in &s.loose {
         let cp = s.sp[k].cp;

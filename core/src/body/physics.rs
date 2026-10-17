@@ -5,7 +5,7 @@ use super::exchange::{breath, film, surface, through};
 use super::live::{LiveTmp, Site};
 use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
-use crate::change::Reactor;
+use crate::change::{send_gas, GasMove, Reactor};
 use crate::chem::Phase;
 use crate::ground::{draw, heat_above_floor, share, take_paid};
 use crate::math::{mean_decay, one_minus_exp};
@@ -52,7 +52,7 @@ impl Soil {
 pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, mass: f64, upkeep_heat: f64) -> f64 {
     let keep = w.light_keep.get(slot, b.gen) as f64;
     // (The ground's capacity is needed by the first liquid it soaks or loses; it is the same when taken first.)
-    let gcap = crate::ground::cap_ground(&w.chem, &w.grid, &w.cfg, &w.ground, &w.bed, s.i);
+    let gcap = w.heat_cap_ground(s.i);
     let (chem, cfg) = (&w.chem, &w.cfg);
     let fall = rain_caught(w, slot, b, s);
     // It soaks through the mass that works; its conductance is taken at its temperature at the start.
@@ -136,23 +136,14 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 /// The gas its reactions took brings its heat at the air's temperature and gives up its latent heat; gas they put out
 /// takes its latent heat, as far as `GAS_HEAT_SHARE` of the heat pays for it (the rest stays in the body).
 fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
-    let World { chem, grid, air, e_air, .. } = w;
-    let (ns, na, j) = (chem.ns(), grid.na(), s.j);
-    let ta = e_air[j] / (0..ns).map(|k| air[k * na + j] * chem.subs[k].cp).sum::<f64>().max(1.0);
-    let (mut heat, mut pay, mut q_in, mut c_out) = (h.heat, 0.0, 0.0, 0.0);
-    for k in 0..ns {
-        let d = tmp.pool[k] - tmp.pool0[k];
-        (pay, heat, q_in) = (pay + d.max(0.0) * chem.subs[k].latent_gas(), heat - d.min(0.0) * chem.subs[k].latent_gas(), q_in - d.min(0.0) * chem.subs[k].cp * ta);
-    }
-    (b.e, e_air[j]) = (b.e + q_in, e_air[j] - q_in);
-    let paid = share(GAS_HEAT_SHARE * (b.e + heat + h.g * s.dt * s.tg).max(0.0), pay);
-    for k in 0..ns {
-        let d = tmp.pool[k] - tmp.pool0[k];
-        let sent = if d > 0.0 { d * paid } else { d };
-        (b.store[k], air[k * na + j]) = (b.store[k] + d - sent, air[k * na + j] + sent);
-        (heat, c_out) = (heat - sent.max(0.0) * chem.subs[k].latent_gas(), c_out + sent.max(0.0) * chem.subs[k].cp);
-    }
-    (h.heat, h.c_out) = (heat, c_out);
+    let (na, j) = (w.grid.na(), s.j);
+    let gas = GasMove::of(&w.chem, &tmp.pool, &tmp.pool0, w.t_air(j));
+    (b.e, w.e_air[j]) = (b.e + gas.q_in, w.e_air[j] - gas.q_in);
+    let heat = h.heat + gas.back;
+    let paid = share(GAS_HEAT_SHARE * (b.e + heat + h.g * s.dt * s.tg).max(0.0), gas.pay);
+    let store = &mut b.store;
+    send_gas(&tmp.pool, &tmp.pool0, paid, &mut w.air, na, j, |k, kept| store[k] += kept);
+    (h.heat, h.c_out) = (heat - paid * gas.pay, paid * gas.c_out);
 }
 
 /// What its light reactions stored (`LIGHT_YIELD` of the light they used) is paid by the light set aside for it, by the

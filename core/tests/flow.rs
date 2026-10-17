@@ -55,7 +55,8 @@ fn hot_plateau_cools_but_not_to_the_floor() {
     (0..ns).for_each(|x| w.ground[x * n + i] = 0.0);
     w.ground[k * n + i] = w.grid.area();
     let melt = w.chem.subs[k].melt;
-    w.e_ground[i] = w.energy_ground(i, melt) + 0.5 * w.ground[k * n + i] * w.chem.subs[k].lf;
+    // (At its melting point all of it holds its fusion enthalpy, `World::energy_ground`: half of it frozen.)
+    w.e_ground[i] = w.energy_ground(i, melt) - 0.5 * w.ground[k * n + i] * w.chem.subs[k].lf;
     assert_eq!(w.thaw(i).1.map(|p| p.0), Some(k));
     let books = Books::now(&w);
     pcore::flow::step(&mut w, DT);
@@ -84,7 +85,7 @@ fn a_pool_with_a_solute_freezes_lower() {
     let dt = (w.chem.subs[k].melt - tm[1]) / 1.86;
     assert!((dt - 1.0).abs() < 0.03, "{dt} of the textbook lowering");
     for (i, t) in [pure, mixed].into_iter().zip(tm) {
-        w.e_ground[i] = w.energy_ground(i, t) + 0.5 * w.ground[k * n + i] * w.chem.subs[k].lf;
+        w.e_ground[i] = w.energy_ground(i, t) - 0.5 * w.ground[k * n + i] * w.chem.subs[k].lf;
         let (at, plateau) = w.thaw(i);
         assert!(at == t && plateau.is_some_and(|(q, f)| q == k && (f - 0.5).abs() < 1e-9), "{at} K, {plateau:?}");
     }

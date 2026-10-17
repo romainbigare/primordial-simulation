@@ -2,7 +2,6 @@
 //! ground, and drawing heat from a node without taking it below `T_FLOOR`.
 
 use crate::chem::{self, Chemistry};
-use crate::grid::Grid;
 use crate::params::Config;
 use crate::units::T_FLOOR;
 use crate::world::{Counters, World};
@@ -36,29 +35,11 @@ pub(crate) fn take_paid(e: &mut f64, counts: &mut Counters, cap: f64, d: f64, cp
     (d * share(took, want), took)
 }
 
-/// Heat capacity of a ground node's active layer, J/K: its loose amounts, and `skin_m` of its bed.
-pub(crate) fn cap_ground(chem: &Chemistry, grid: &Grid, cfg: &Config, ground: &[f64], bed: &[f64], i: usize) -> f64 {
-    let n = grid.n();
-    let (mut c, mut bc, mut bv) = (0.0, 0.0, 0.0);
-    for k in 0..chem.ns() {
-        let s = &chem.subs[k];
-        c += ground[k * n + i] * s.cp;
-        let b = bed[k * n + i];
-        bc += b * s.cp;
-        bv += b * s.molar_mass / s.density[0];
-    }
-    // (The skin of `skin_cap`, but its volume rounded as b·M/ρ, not b·(M/ρ): kept apart so results stay the same.)
-    if bv > 0.0 {
-        c += bc / bv * cfg.skin_m * grid.area();
-    }
-    c
-}
-
-/// Heat capacity of the skin of a ground node's bed, J/K: `skin_m` of its bonded amounts `b(k)` (mol), at their mean heat
-/// capacity per volume.
-pub(crate) fn skin_cap(chem: &Chemistry, cfg: &Config, area: f64, b: impl Fn(usize) -> f64) -> f64 {
+/// Heat capacity of the skin of a ground node's bed, J/K: `skin_m` of its bonded amounts `b(k)` (mol) of the substances
+/// `ks` (any that may be there, in order), at their mean heat capacity per volume.
+pub(crate) fn skin_cap(chem: &Chemistry, cfg: &Config, area: f64, ks: impl IntoIterator<Item = usize>, b: impl Fn(usize) -> f64) -> f64 {
     let (mut c, mut v) = (0.0, 0.0);
-    for k in 0..chem.ns() {
+    for k in ks {
         c += b(k) * chem.subs[k].cp;
         v += b(k) * chem.molar_volume(k, chem::Phase::Solid);
     }
@@ -109,9 +90,12 @@ pub(crate) fn heat_above_floor(e: f64, cap: f64) -> f64 {
 }
 
 impl World {
-    /// Heat capacity of a ground node's active layer, J/K.
+    /// Heat capacity of a ground node's active layer, J/K: the skin of its bed (`skin_cap`), then its loose amounts in the
+    /// order of the substances (the sum `flow::land::ground_state` keeps for every node).
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
-        cap_ground(&self.chem, &self.grid, &self.cfg, &self.ground, &self.bed, i)
+        let (n, ns) = (self.grid.n(), self.chem.ns());
+        let skin = skin_cap(&self.chem, &self.cfg, self.grid.area(), 0..ns, |k| self.bed[k * n + i]);
+        (0..ns).fold(skin, |c, k| c + self.ground[k * n + i] * self.chem.subs[k].cp)
     }
     /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
     pub fn melt(&self, k: usize, i: usize) -> f64 {
@@ -158,9 +142,10 @@ impl World {
     pub fn t_ground(&self, i: usize) -> f64 {
         self.thaw(i).0
     }
-    /// Thermal energy of a ground node at temperature `t` (with the fusion enthalpy of what is molten): the inverse of `thaw` (`melting`).
+    /// Thermal energy of a ground node at temperature `t` with the fusion enthalpy of what is molten there
+    /// (`Chemistry::fused_heat`: all of it at its melting point): the inverse of `thaw` (`melting`).
     pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
-        let held: f64 = (0..self.chem.ns()).filter(|&k| self.melt(k, i) < t).map(|k| self.g(k, i) * self.chem.subs[k].lf).sum();
+        let held: f64 = (0..self.chem.ns()).map(|k| self.g(k, i) * self.chem.fused_heat(k, t, |j| self.g(j, i))).sum();
         self.heat_cap_ground(i) * t + held
     }
     /// Molten share of substance `k` in ground node `i` at temperature `t` (from `thaw`).

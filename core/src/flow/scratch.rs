@@ -75,7 +75,7 @@ pub struct Scratch {
     /// The numbers of each substance.
     #[serde(skip)]
     pub(super) sp: Vec<Sp>,
-    /// Substances present in loose ground (`refresh`; exchange and liquid add new ones).
+    /// Substances present in loose ground, in order (`refresh`; exchange and liquid add new ones).
     pub(super) loose: Vec<usize>,
     /// Loose substances that stay solid and cannot evaporate, and the others in order of melting point.
     pub(super) fixed: Vec<usize>,
@@ -85,8 +85,8 @@ pub struct Scratch {
     /// Substances present in bonded ground, and in the air (or able to evaporate into it).
     pub(super) bedk: Vec<usize>,
     pub(super) gas: Vec<usize>,
-    /// Bonded ground of each ground node (as of the last refresh; liquid wears `[1]`): heat
-    /// capacity of its skin, J/K; volume, m³; reflectance; heat conductivity, W/(m K).
+    /// Bonded ground of each ground node: heat capacity of its skin, J/K (at every step, `land::ground_state`); as of the
+    /// last refresh (liquid wears `[1]`), its volume, m³, reflectance and heat conductivity, W/(m K).
     pub(super) bed: Vec<[f64; 4]>,
     /// Heat capacity of each ground node, J/K (from the amounts at every step; moves keep it).
     pub(super) cap: Vec<f64>,
@@ -222,7 +222,8 @@ impl Scratch {
         if self.loose.contains(&k) {
             return;
         }
-        self.loose.push(k);
+        let at = self.loose.partition_point(|&x| x < k);
+        self.loose.insert(at, k);
         if in_order {
             let at = self.vary.partition_point(|&x| self.sp[x].melt < self.sp[k].melt);
             self.vary.insert(at, k);
@@ -275,7 +276,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
                 r += b * s.sp[k].v[0] * s.sp[k].refl[0];
                 kc += b * s.sp[k].v[0] * w.chem.subs[k].conductivity;
             }
-            let c = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, |k| w.bed[k * n + i]);
+            let c = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
             [c, v, r / v.max(V_MIN), kc / v.max(V_MIN)]
         })
         .collect();

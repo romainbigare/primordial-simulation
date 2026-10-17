@@ -14,13 +14,16 @@
 //! liquid, which the liquid's film renews (`Reactor::film`).
 //!
 //! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `screen`: which nodes react now.
+//! `gas`: the gas a reactor exchanged with the air around it.
 //! Here: the step over the ground and air nodes.
 
 mod balance;
+mod gas;
 mod kernel;
 mod screen;
 
 pub use balance::reversible;
+pub(crate) use gas::{send_gas, GasMove};
 pub use kernel::Reactor;
 pub(crate) use kernel::{denature, frac, pace, scarce, LIGHT_YIELD};
 
@@ -62,7 +65,7 @@ type Fallback = (Vec<f64>, Vec<[f64; 4]>, Vec<u32>, Vec<f64>);
 
 fn fallback(w: &World) -> Fallback {
     let (n, na) = (w.grid.n(), w.grid.na());
-    let skin = |i: usize| crate::ground::skin_cap(&w.chem, &w.cfg, w.grid.area(), |k| w.b(k, i));
+    let skin = |i: usize| crate::ground::skin_cap(&w.chem, &w.cfg, w.grid.area(), 0..w.chem.ns(), |k| w.b(k, i));
     ((0..n).map(|i| w.t_ground(i)).collect(), (0..n).map(|i| [skin(i), 0.0, 0.0, 0.0]).collect(), (0..n).map(|i| w.grid.air_of(i) as u32).collect(), (0..na).map(|j| w.t_air(j)).collect())
 }
 
@@ -165,26 +168,17 @@ fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &Nodes, i:
     let fused: f64 = (0..ns).map(|k| h.amt[k] * chem.fused_heat(k, t, |j| h.amt[j])).sum();
     let mut e = w.e_ground[i] - fused;
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.bed[i][0], None, 0.0, time);
-    let (mut pay, mut back, mut c_out, mut q_in) = (0.0, 0.0, 0.0, 0.0);
-    for k in 0..ns {
-        let (d, cp) = (h.pool[k] - h.pool0[k], chem.subs[k].cp);
-        (pay, back) = (pay + d.max(0.0) * chem.subs[k].latent_gas(), back - d.min(0.0) * chem.subs[k].latent_gas());
-        (c_out, q_in) = (c_out + d.max(0.0) * cp, q_in - d.min(0.0) * cp * nodes.ta[j]);
-    }
+    let gas = GasMove::of(chem, &h.pool, &h.pool0, nodes.ta[j]);
     let c_r = nodes.bed[i][0] + (0..ns).map(|k| h.amt[k] * chem.subs[k].cp).sum::<f64>();
-    let q_out = e.max(0.0) * c_out / (c_r + c_out).max(1e-9);
-    w.e_ground[i] = e + fused + back + q_in - q_out;
-    w.e_air[j] += q_out - q_in;
+    let q_out = e.max(0.0) * gas.c_out / (c_r + gas.c_out).max(1e-9);
+    w.e_ground[i] = e + fused + gas.back + gas.q_in - q_out;
+    w.e_air[j] += q_out - gas.q_in;
     let cap = w.heat_cap_ground(i);
-    let paid = if pay > 0.0 { share(draw(&mut w.e_ground[i], &mut w.counts, cap, pay), pay) } else { 1.0 };
+    let paid = share(draw(&mut w.e_ground[i], &mut w.counts, cap, gas.pay), gas.pay);
     // The heat of the gas that stays behind stays with it.
     (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
-    for k in 0..ns {
-        let d = h.pool[k] - h.pool0[k];
-        let sent = if d > 0.0 { d * paid } else { d };
-        w.ground[k * n + i] = h.amt[k] + (d - sent);
-        w.air[k * na + j] += sent;
-    }
+    let (ground, amt) = (&mut w.ground, &h.amt);
+    send_gas(&h.pool, &h.pool0, paid, &mut w.air, na, j, |k, kept| ground[k * n + i] = amt[k] + kept);
 }
 
 /// The air nodes' turn: each on its own, so from the amounts before (in parallel with the `threads` feature) into a row

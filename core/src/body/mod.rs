@@ -17,6 +17,7 @@ mod tissue;
 
 pub use death::{die, wound};
 use death::thin;
+pub(crate) use death::to_ground;
 pub use exchange::conductance_to_ground;
 pub use genes::*;
 pub(crate) use live::{live, LiveTmp};

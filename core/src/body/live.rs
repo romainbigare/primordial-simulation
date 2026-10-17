@@ -4,7 +4,7 @@
 use super::exchange::{cover_of, ground_t};
 use super::pay::{hold, pay_at, plan, spend, upkeep};
 use super::physics::physics;
-use super::{thin, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
+use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::rng::{Purpose, Rng};
@@ -215,17 +215,17 @@ fn starve(w: &mut World, b: &mut Body, dead: &mut Vec<f64>) -> bool {
 /// than it builds with (its burning makes its key liquid): an eater that kept them would grow without end and, its room
 /// full, stop taking matter. Gases leave by breath.
 fn shed(w: &mut World, b: &mut Body) {
-    let (i, n, mass, minerals) = (b.cell as usize, w.grid.n(), b.mass(&w.chem), w.chem.minerals());
-    for k in 0..w.chem.ns() {
-        let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || w.chem.is_material(k);
-        let over = b.store[k] - if kept { b.level(&w.chem, k, mass) } else { 0.0 };
-        if over <= 0.0 || w.chem.gas_at_surface(k) || w.chem.matter() == Some(k) || b.burns(&w.chem, k) {
-            continue;
-        }
-        let q = b.e * over * w.chem.subs[k].cp / b.heat_cap(&w.chem).max(1e-9);
-        b.store[k] -= over;
-        w.ground[k * n + i] += over;
-        b.e -= q;
-        w.e_ground[i] += q;
+    let (chem, mass) = (&w.chem, b.mass(&w.chem));
+    let minerals = chem.minerals();
+    let over: Vec<f64> = (0..chem.ns())
+        .map(|k| {
+            let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || chem.is_material(k);
+            let over = b.store[k] - if kept { b.level(chem, k, mass) } else { 0.0 };
+            let stays = over <= 0.0 || chem.gas_at_surface(k) || chem.matter() == Some(k) || b.burns(chem, k);
+            if stays { 0.0 } else { over }
+        })
+        .collect();
+    if over.iter().any(|&a| a > 0.0) {
+        to_ground(w, b, &over);
     }
 }

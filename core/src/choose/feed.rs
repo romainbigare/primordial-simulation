@@ -57,21 +57,13 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
 pub(super) fn put(w: &mut World, b: &mut Body) {
-    let (i, n) = (b.cell as usize, w.grid.n());
     let mass = b.mass(&w.chem);
     let m: Vec<f64> = (0..w.chem.ns()).map(|k| (b.store[k] - b.level(&w.chem, k, mass)).clamp(0.0, b.store[k])).collect();
     if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval() as f64) {
         return;
     }
-    let t = b.temp(&w.chem);
-    for (k, &a) in m.iter().enumerate() {
-        let a = a.min(b.store[k]);
-        let q = a * w.chem.subs[k].cp * t;
-        w.ground[k * n + i] += a;
-        b.store[k] -= a;
-        w.e_ground[i] += q;
-        b.e -= q;
-    }
+    let m: Vec<f64> = m.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
+    body::to_ground(w, b, &m);
 }
 
 /// Move amounts `m` (mol) from `from` to `to`, with their share of `from`'s heat.
