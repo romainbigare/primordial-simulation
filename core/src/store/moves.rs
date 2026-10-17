@@ -1,7 +1,7 @@
 //! The three ways a law changes the world (`docs/foundation/plan.md`, Idea 2): a move between two nodes, a transform
 //! of the amounts inside one node, and a link flux over a whole field; and `apply`, which books them.
 
-use super::nodes::{Class, NodeId, Nodes, CLASSES};
+use super::nodes::{Class, NodeId, Nodes, BOUNDARIES, CLASSES};
 use crate::chem::Chemistry;
 use crate::ground::share;
 use crate::World;
@@ -61,6 +61,13 @@ impl Slot {
     fn unit(self) -> usize {
         matches!(self, Slot::Heat(..)) as usize
     }
+}
+
+/// Whether a change of `x` to number `s` takes from what a node holds, so it may have to be scaled down: a boundary node
+/// gives all it is asked (`Class::Boundary`).
+fn takes(&(s, x): &(Slot, f64)) -> bool {
+    let (Slot::Amount(c, _) | Slot::Heat(c, _)) = s;
+    x < 0.0 && c != Class::Boundary as usize
 }
 
 /// One array per class for the amounts and one for the heat: the world's, or `apply`'s own of the same shape.
@@ -134,14 +141,15 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 /// Book the link fluxes, then the moves, then the transforms, each in its order. Where all that would leave a number
 /// (an amount of a node, or its heat) is more than it holds, each change that takes from it is scaled down by the
 /// share it holds (the least share over all it takes from), so no amount and no heat falls below zero
-/// (`docs/handover.md` 6.1). What the scaling left in place is counted in `Counters::scaled`, and the last rounding
-/// below zero, set to zero, in `Counters::rounded`. Panics on a transform that does not keep its elements, and on the
+/// (`docs/handover.md` 6.1); a boundary node gives all it is asked. What the scaling left in place is counted in
+/// `Counters::scaled`, and the last rounding below zero, set to zero, in `Counters::rounded`. Panics on a transform that does not keep its elements, and on the
 /// id of a node that is gone.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
-    let World { chem, table, counts, grid, ground, e_ground, air, e_air, deep, e_deep, .. } = w;
-    let len = [grid.n(), grid.na(), grid.n()];
-    let mut books = Field { amount: [&mut ground[..], &mut air[..], &mut deep[..]], heat: [&mut e_ground[..], &mut e_air[..], &mut e_deep[..]] };
+    let World { chem, table, counts, grid, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, .. } = w;
+    let len = [grid.n(), grid.na(), grid.n(), BOUNDARIES];
+    let amount = [&mut ground[..], &mut air[..], &mut deep[..], &mut boundary[..]];
+    let mut books = Field { amount, heat: [&mut e_ground[..], &mut e_air[..], &mut e_deep[..], &mut e_boundary[..]] };
     let zeros = |v: &[&mut [f64]; CLASSES]| v.each_ref().map(|a| vec![0.0; a.len()]);
     let mut share_of = Field { amount: zeros(&books.amount), heat: zeros(&books.heat) };
     let items = || {
@@ -159,7 +167,7 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
             assert!(keeps_elements(chem, &t.dmol, &mut sums), "a transform that does not keep its elements: {t:?}");
         }
         deltas(item, table, chem, &len, &mut d);
-        d.iter().filter(|e| e.1 < 0.0).for_each(|&(s, x)| *share_of.at(s) -= x);
+        d.iter().filter(|e| takes(e)).for_each(|&(s, x)| *share_of.at(s) -= x);
     }
     // The share of it each number can give.
     let mut asked = Vec::new();
@@ -177,7 +185,7 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     // Each change, scaled by the least share of what it takes from.
     for item in items() {
         deltas(item, table, chem, &len, &mut d);
-        let f = d.iter().filter(|e| e.1 < 0.0).fold(1.0, |f: f64, &(s, _)| f.min(*share_of.at(s)));
+        let f = d.iter().filter(|e| takes(e)).fold(1.0, |f: f64, &(s, _)| f.min(*share_of.at(s)));
         for &(s, x) in &d {
             *books.at(s) += x * f;
             if x < 0.0 {

@@ -1,10 +1,11 @@
-//! The store: every node of a cell has one id, and `apply` keeps the books and every amount and heat at zero or above.
+//! The store: every node has one id, `apply` keeps the books and every amount and heat at zero or above, and what
+//! crosses the world's boundary is booked on its boundary nodes.
 
 use pcore::check;
 use pcore::rng::{Purpose, Rng};
-use pcore::store::{apply, Class, LinkFlux, Move, NodeId, Transform};
+use pcore::store::{apply, Boundary, Class, LinkFlux, Move, NodeId, Transform, BOUNDARIES};
 use pcore::World;
-use worldgen::testkit::small_world;
+use worldgen::testkit::{put, small_world, Books, LIQUID, ROCK};
 
 /// Random changes the books test makes, in all (rounds of `PER_ROUND`).
 const CHANGES: usize = 1_000_000;
@@ -12,6 +13,7 @@ const PER_ROUND: usize = 10_000;
 /// The most a random change asks of what its node holds (so many ask too much and are scaled).
 const GREED: f64 = 1.5;
 
+/// The classes of the nodes of a cell.
 const CLASSES: [Class; 3] = [Class::Ground, Class::Air, Class::Deep];
 
 /// The amounts (`[k * len + index]`) and heats of the nodes of `class`, and their count.
@@ -20,14 +22,15 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
         Class::Ground => (&w.ground, &w.e_ground, w.grid.n()),
         Class::Air => (&w.air, &w.e_air, w.grid.na()),
         Class::Deep => (&w.deep, &w.e_deep, w.grid.n()),
+        Class::Boundary => (&w.boundary, &w.e_boundary[..], BOUNDARIES),
     }
 }
 
 #[test]
-fn every_node_of_a_cell_has_one_id() {
+fn every_node_has_one_id() {
     let w = small_world();
     let mut ids: Vec<NodeId> = w.table.ids().collect();
-    for class in CLASSES {
+    for class in CLASSES.into_iter().chain([Class::Boundary]) {
         for i in 0..arrays(&w, class).2 {
             let id = w.table.id(class, i);
             assert_eq!((w.table.place(id), w.table.cell(id), w.table.parent(id)), ((class, i), i, None));
@@ -35,7 +38,7 @@ fn every_node_of_a_cell_has_one_id() {
     }
     let n = ids.len();
     ids.dedup();
-    assert_eq!((ids.len(), n), (n, 2 * w.grid.n() + w.grid.na()), "one id for each ground, air and deep node");
+    assert_eq!((ids.len(), n), (n, 2 * w.grid.n() + w.grid.na() + BOUNDARIES), "one id for each ground, air, deep and boundary node");
 }
 
 /// Two moves that each ask for all a node holds each get half of it.
@@ -159,4 +162,23 @@ fn node_streams_are_apart() {
         first(Rng::new(1, 86_400, 3, Purpose::Choose)),
     ];
     assert!(others.iter().all(|&x| x != base));
+}
+
+/// Each crossing of the boundary keeps the books: matter and heat from outside (a move, and an edit), light in from the
+/// sun, heat out to space. Heat that crosses unbooked does not.
+#[test]
+fn what_crosses_the_boundary_keeps_the_books() {
+    let mut w = small_world();
+    let books = Books::now(&w);
+    let (from, to) = (w.table.id(Class::Boundary, Boundary::Outside as usize), w.table.id(Class::Ground, 0));
+    apply(&mut w, &[], &[Move { from, to, k: LIQUID as u16, mol: 1e3, heat: 1e6 }], &[]);
+    put(&mut w, ROCK, 1, 1e2);
+    let q = 1e-3 * w.e_air[0];
+    w.e_ground[2] += q;
+    w.cross(Boundary::Sun, [], q);
+    w.e_air[0] -= q;
+    w.cross(Boundary::Space, [], -q);
+    books.assert_kept(&w, 1e-12);
+    w.e_ground[3] += q;
+    assert!(books.drift(&w).1 > 1e-9, "heat that crossed unbooked was not seen");
 }

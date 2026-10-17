@@ -1,5 +1,6 @@
 //! Conservation and sanity checks.
 
+use crate::store::{Boundary, BOUNDARIES};
 use crate::World;
 
 #[derive(Clone, Debug)]
@@ -12,6 +13,10 @@ pub struct Totals {
     pub chemical: f64,
     /// J, potential energy gained since the start (`World::potential`)
     pub potential: f64,
+    /// J, the energy each boundary node holds (`store::Boundary`): its heat and its amounts' formation enthalpy
+    pub boundary_energy: [f64; BOUNDARIES],
+    /// mol of each element the boundary nodes hold
+    pub boundary_elems: Vec<f64>,
 }
 
 /// A sum that carries the rounding error of each addition (Neumaier): the chemical energy of
@@ -62,23 +67,29 @@ pub fn totals(w: &World) -> Totals {
         chem.add_elems(k, s.get(), &mut elems);
         chemical.add(s.get() * chem.subs[k].hf);
     }
-    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.potential }
+    let (mut boundary_energy, mut boundary_elems) = (w.e_boundary, vec![0.0; chem.n_elements]);
+    for (x, &a) in w.boundary.iter().enumerate() {
+        let (k, b) = (x / BOUNDARIES, x % BOUNDARIES);
+        chem.add_elems(k, a, &mut boundary_elems);
+        boundary_energy[b] += a * chem.subs[k].hf;
+    }
+    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.potential, boundary_energy, boundary_elems }
 }
 
-/// Compare now with a start point. Returns the worst relative drift of elements and of energy.
-pub fn drift(w: &World, start: &Totals, start_ledger: &crate::Ledger) -> (f64, f64) {
+/// Compare now with a start point: the world's elements and energy change only by what the boundary nodes gave it.
+/// Returns the worst relative drift of elements and of energy.
+pub fn drift(w: &World, start: &Totals) -> (f64, f64) {
     let now = totals(w);
-    let l = &w.ledger;
     let mut worst_e: f64 = 0.0;
     for j in 0..start.elems.len() {
-        let imposed = l.imposed_elems.get(j).copied().unwrap_or(0.0) - start_ledger.imposed_elems.get(j).copied().unwrap_or(0.0);
-        let d = (now.elems[j] - start.elems[j] - imposed).abs() / start.elems[j].abs().max(1.0);
+        let given = start.boundary_elems[j] - now.boundary_elems[j];
+        let d = (now.elems[j] - start.elems[j] - given).abs() / start.elems[j].abs().max(1.0);
         worst_e = worst_e.max(d);
     }
-    let boundary = (l.sun_in - start_ledger.sun_in) - (l.space_out - start_ledger.space_out) + (l.imposed_energy - start_ledger.imposed_energy);
+    let given: [f64; BOUNDARIES] = std::array::from_fn(|b| start.boundary_energy[b] - now.boundary_energy[b]);
     let change = (now.thermal + now.chemical + now.potential) - (start.thermal + start.chemical + start.potential);
-    let scale = (l.sun_in - start_ledger.sun_in).abs().max(start.thermal.abs()).max(1.0);
-    (worst_e, (change - boundary).abs() / scale)
+    let scale = given[Boundary::Sun as usize].abs().max(start.thermal.abs()).max(1.0);
+    (worst_e, (change - given.iter().sum::<f64>()).abs() / scale)
 }
 
 /// The first element of `v` that `ok` refuses, as `name[i] = value`.

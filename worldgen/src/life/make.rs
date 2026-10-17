@@ -82,7 +82,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, KINDS.get(which)?, genes(w, which)?);
     let group = w.life.new_group(lineage, w.life.genomes[genome as usize].rows.clone());
     let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
-    let (chem, ledger, t) = (&w.chem, &mut w.ledger, w.life.env[i][0]);
+    let (chem, t) = (&w.chem, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();
@@ -118,9 +118,9 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     // It holds what its shares make of its matter (`Body::level`).
     chem.materials().for_each(|k| b.store[k] = b.level(chem, k, 0.0));
     b.e = b.energy_at(chem, t);
-    book_body(ledger, chem, &b);
     // Its key liquids first: `visible` reads the body (`Body::size`) through them.
     b.wet = b.key_liquids(chem);
     b.vis = b.visible(chem, &w.cfg.phys);
+    book_body(w, &b);
     Some(b)
 }

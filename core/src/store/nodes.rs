@@ -21,10 +21,28 @@ pub enum Class {
     Air,
     /// The store of the bed under a cell: `World::deep`, `World::e_deep`
     Deep,
+    /// A node beyond the world's boundary (`Boundary`): `World::boundary`, `World::e_boundary`. It may hold less than
+    /// nothing: what it holds is what crossed, with the sign of a node (the sun's heat falls by the light it gives).
+    Boundary,
 }
 
 /// The number of classes.
-pub(crate) const CLASSES: usize = 3;
+pub(crate) const CLASSES: usize = 4;
+
+/// The three nodes beyond the world's boundary, by their index among the `Class::Boundary` nodes: what the world
+/// gains from them and gives them is all its energy and matter may change by (`check::drift`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Boundary {
+    /// Gives the sunlight the world absorbs
+    Sun,
+    /// Takes the heat the world radiates away
+    Space,
+    /// Gives and takes what edits put in the world and take out
+    Outside,
+}
+
+/// The number of boundary nodes.
+pub const BOUNDARIES: usize = 3;
 
 #[derive(Clone, Copy, Debug)]
 struct Node {
@@ -32,7 +50,8 @@ struct Node {
     class: Class,
     /// The node it lies inside; none for the nodes of a cell
     parent: Option<NodeId>,
-    /// Its cell (an air cell for an air node); for the nodes of a cell also the index of its amounts and heat
+    /// Its cell (an air cell for an air node), which is also the index of its amounts and heat; for a boundary node
+    /// its index among them (`Boundary`)
     cell: u32,
 }
 
@@ -46,10 +65,11 @@ pub struct Nodes {
 
 impl Nodes {
     /// The table of a world on `grid`: its ground nodes, then its air nodes, then its deep stores, each in the order of
-    /// its cells. It follows from the grid's sizes alone, so a loaded world rebuilds it with the same ids.
+    /// its cells, then the boundary nodes. It follows from the grid's sizes alone, so a loaded world rebuilds it with the
+    /// same ids.
     pub fn of_grid(grid: &Grid) -> Self {
         let mut t = Nodes::default();
-        for (class, len) in [(Class::Ground, grid.n()), (Class::Air, grid.na()), (Class::Deep, grid.n())] {
+        for (class, len) in [(Class::Ground, grid.n()), (Class::Air, grid.na()), (Class::Deep, grid.n()), (Class::Boundary, BOUNDARIES)] {
             t.first[class as usize] = t.nodes.len() as u32;
             t.nodes.extend((0..len as u32).map(|cell| Node { gen: 0, class, parent: None, cell }));
         }

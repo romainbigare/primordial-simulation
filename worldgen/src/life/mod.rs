@@ -18,8 +18,8 @@ pub use seeding::{seed, seed_with, Seeding, FIXERS, FIX_GENE};
 pub use soil::soil;
 
 use pcore::body::Body;
-use pcore::chem::Chemistry;
-use pcore::{survey, Ledger, World};
+use pcore::store::Boundary;
+use pcore::{survey, World};
 
 /// Land under more standing liquid than this, m, gets no soil and no founder (a basin of standing liquid).
 const MAX_STANDING_M: f64 = 0.5;
@@ -30,17 +30,7 @@ fn open_land(w: &World, i: usize) -> bool {
     w.is_land(i) && survey::env_of(w, i)[1] <= MAX_STANDING_M
 }
 
-/// Book new matter like an edit: `amount` mol of substance `k` with `heat` J of heat (its formation enthalpy is
-/// added).
-fn book(ledger: &mut Ledger, chem: &Chemistry, k: usize, amount: f64, heat: f64) {
-    chem.add_elems(k, amount, &mut ledger.imposed_elems);
-    ledger.imposed_energy += heat + amount * chem.subs[k].hf;
-}
-
-/// Book a new body like an edit: its heat, then each of its stores.
-fn book_body(ledger: &mut Ledger, chem: &Chemistry, b: &Body) {
-    ledger.imposed_energy += b.e;
-    for (k, &a) in b.store.iter().enumerate() {
-        book(ledger, chem, k, a, 0.0);
-    }
+/// Book a new body like an edit: its stores and its heat, from outside the world.
+fn book_body(w: &mut World, b: &Body) {
+    w.cross(Boundary::Outside, b.store.iter().copied().enumerate(), b.e);
 }

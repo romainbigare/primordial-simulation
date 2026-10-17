@@ -287,6 +287,12 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 **Phase B and C: the base layers and the shared maths**
 
+- B6: the `Ledger` goes. Sun, space and outside are three boundary nodes of the store (`Class::Boundary`, saved in
+  `World::boundary` and `World::e_boundary`); radiation and edits book what crosses on them (`World::cross`, or a
+  `Move` from or to one, which `apply` never scales), and `check::drift` reads the world's totals with theirs. The
+  history is unchanged (`series.csv`, `months.csv` byte-identical) and the drift printed is the same (in full, the
+  energy drift bit for bit, the element drift to 6 digits: the outside node sums substances, not elements); snapshot
+  version 6, golden re-pinned (the saved state changed).
 - B9: `Rng::of_node(seed, seconds, NodeId, purpose)`, a second key beside `Rng::new(seed, day, index, purpose)`. It packs
   slot and generation into one number and tags the key, so it never gives the stream of `new` for the same inputs. No
   draw uses it yet; every old draw keeps its key (golden unchanged).

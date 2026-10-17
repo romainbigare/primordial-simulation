@@ -31,4 +31,4 @@ mod world;
 
 pub use params::{Config, Physics};
 pub use schedule::{day, step, step_marked, Stage};
-pub use world::{Counters, Ledger, PerSlot, World};
+pub use world::{Counters, PerSlot, World};

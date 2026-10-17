@@ -2,6 +2,7 @@
 //! liquid carries, erosion, and the edges that moving bodies clear.
 
 use pcore::chem::Phase;
+use pcore::store::Boundary;
 use pcore::units::{DAY, T_FLOOR};
 use pcore::{body, brain, choose, lanes, World};
 use worldgen::testkit::{ground_of, loose_volume as loose, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
@@ -151,7 +152,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     assert!(h1 > 0.5 * want && h1 < 2.0 * want, "{h1} dissolved per mol, Henry's share {want}");
     let e = w.energy_ground(i, w.t_ground(i) + 20.0) - w.e_ground[i];
     w.e_ground[i] += e;
-    w.ledger.imposed_energy += e;
+    w.cross(Boundary::Outside, [], e);
     (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
     assert!(held(&w) < 0.9 * h1, "{} dissolved per mol after warming, {h1} before", held(&w));
     books.assert_within(&w, 1e-12, 1e-9);
@@ -409,8 +410,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         let e = 1e6 * w.chem.subs[MINERAL].cp * w.t_ground(top);
         w.ground[MINERAL * n + top] += 1e6;
         w.e_ground[top] += e;
-        w.chem.add_elems(MINERAL, 1e6, &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy += e + 1e6 * w.chem.subs[MINERAL].hf;
+        w.cross(Boundary::Outside, [(MINERAL, 1e6)], e);
         w
     };
     // (No evaporation and no vapour in the air to rain, which would add or take liquid and not the mineral: the liquid

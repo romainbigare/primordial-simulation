@@ -7,7 +7,7 @@ use worldgen::life::{seed, seed_clever, CLEVER_ROOT, CLEVER_SIZES, CONTROL_ROOT}
 #[test]
 fn the_big_brain_and_its_control_differ_in_brain_size_only() {
     let mut w = worldgen::new_world(1, 32, 32);
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let t0 = pcore::check::totals(&w);
     pcore::step(&mut w);
     seed(&mut w, 0);
     seed(&mut w, 1);
@@ -35,6 +35,6 @@ fn the_big_brain_and_its_control_differ_in_brain_size_only() {
     }
     pcore::step(&mut w);
     assert_eq!(pcore::check::broken(&w), None);
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    let (de, dq) = pcore::check::drift(&w, &t0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }

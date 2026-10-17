@@ -1,25 +1,13 @@
-//! The world's state: the fields of ground and air, the bodies and parts, the books of what
-//! crossed its boundary, and the counters the shell reads.
+//! The world's state: the fields of ground and air, the bodies and parts, the nodes beyond its
+//! boundary that book what crossed it, and the counters the shell reads.
 
 use crate::chem::Chemistry;
 use crate::event::Event;
 use crate::grid::Grid;
 use crate::params::Config;
+use crate::store::BOUNDARIES;
 use crate::{bond, flow};
 use serde::{Deserialize, Serialize};
-
-/// Energy and matter that crossed the world's boundary, for conservation checks.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Ledger {
-    /// Sunlight absorbed, J
-    pub sun_in: f64,
-    /// Radiation lost to space, J
-    pub space_out: f64,
-    /// Energy added by player edits, J
-    pub imposed_energy: f64,
-    /// Elements added by player edits, mol
-    pub imposed_elems: Vec<f64>,
-}
 
 /// Counts and slow averages for the shell: the laws never read them. The fields not saved (`serde(skip)`) count since
 /// the shell last read them.
@@ -105,7 +93,10 @@ pub struct World {
     /// (`bond::load`)
     pub liquid_flux: Vec<f32>,
     pub counts: Counters,
-    pub ledger: Ledger,
+    /// Amounts in the boundary nodes (`store::Boundary`: sun, space, outside), [k * BOUNDARIES + b], mol, and their heat,
+    /// J: what crossed the world's boundary, as a node holds it (below 0 for what it gave; `World::cross`)
+    pub boundary: Vec<f64>,
+    pub e_boundary: [f64; BOUNDARIES],
     /// Bodies, and the parts they made: the sparse graph
     pub life: crate::life::Life,
     pub parts: bond::Parts,

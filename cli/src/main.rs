@@ -53,7 +53,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
     if let Some(kept) = kept {
         rec.resume(&mut w, kept, &out).unwrap_or_else(|e| panic!("load the tape: {e}"));
     }
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let t0 = pcore::check::totals(&w);
     let y0 = w.cfg.calendar().years(w.time);
     render::save(&w, &format!("{out}/year{y0:04}.png"));
     rec.record_month(&mut w);
@@ -84,7 +84,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             std::process::exit(1);
         }
         if y % every == 0 || y == y0 + years {
-            println!("{}", report::year(&w, y, pcore::check::drift(&w, &t0, &l0), &clock, &rec));
+            println!("{}", report::year(&w, y, pcore::check::drift(&w, &t0), &clock, &rec));
             busy += clock.stages.iter().sum::<Duration>() + clock.tape;
             clock = Clock { stages: [Duration::ZERO; 4], tape: Duration::ZERO, since: y, updates: w.counts.updates };
             render::save(&w, &format!("{out}/year{y:04}.png"));

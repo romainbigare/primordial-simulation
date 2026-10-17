@@ -1,11 +1,12 @@
 //! STORE (`docs/foundation/plan.md`, Ideas 1 and 2): the table of the world's nodes, and the one way the laws change
-//! their amounts and heat (moves, transforms and link fluxes, booked by `apply`). The store decides nothing physical.
+//! their amounts and heat (moves, transforms and link fluxes, booked by `apply`), with the three nodes beyond the
+//! world's boundary that book what crosses it. The store decides nothing physical.
 
 pub mod moves;
 pub mod nodes;
 
 pub use moves::{apply, held, LinkFlux, Move, Transform};
-pub use nodes::{Class, NodeId, Nodes};
+pub use nodes::{Boundary, Class, NodeId, Nodes, BOUNDARIES};
 
 use crate::World;
 
@@ -16,5 +17,14 @@ impl World {
         if self.deep.len() != ns * n {
             (self.deep, self.e_deep) = (vec![0.0; ns * n], vec![0.0; n]);
         }
+    }
+    /// `(k, mol)` of substances and `heat` J cross into the world from boundary node `b` (out to it where negative):
+    /// the books of a law or an edit that changes the world without a `Move`. The caller puts them in the world; the
+    /// node gives them as the ground holds them (`held`), so the world gains `heat` and the mol's formation enthalpy.
+    pub fn cross(&mut self, b: Boundary, mol: impl IntoIterator<Item = (usize, f64)>, heat: f64) {
+        for (k, m) in mol {
+            self.boundary[k * BOUNDARIES + b as usize] -= m;
+        }
+        self.e_boundary[b as usize] -= heat;
     }
 }

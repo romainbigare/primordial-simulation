@@ -168,7 +168,7 @@ On `claude/sanitise-m0-m3`. About 9,000 lines in `core`, 1,500 in `worldgen`, 1,
 
 | Part | Files | What it is |
 |---|---|---|
-| The world's state | `core/src/world.rs` | `World`: `ground`, `bed`, `e_ground` (per cell, `[k * n + i]`), `air`, `e_air` (per air node), `deep`, `e_deep`, `rain`, `liquid_flux`, `canopy`, `light`, `pass`, `light_pool`, `heat_pool`, `life`, `parts`, `ledger`, `counts`, `scratch` |
+| The world's state | `core/src/world.rs` | `World`: `ground`, `bed`, `e_ground` (per cell, `[k * n + i]`), `air`, `e_air` (per air node), `deep`, `e_deep`, `rain`, `liquid_flux`, `canopy`, `light`, `pass`, `light_pool`, `heat_pool`, `life`, `parts`, `boundary`, `e_boundary`, `counts`, `scratch` |
 | Space | `core/src/grid.rs` | `Grid`: `w × h` squares of `cell_m` (2,000 m); 8 neighbours (`DIRS`), 4 forward edges (`FORWARD`); air nodes on a coarser grid (`air_scale` 4); latitude from the row |
 | The month | `core/src/schedule.rs` | `step` = 30 days; every `phys_days` (3): `survey`, `flow::step`, `change::step`; day 0: `bond::step`; every day: `survey::day` (bodies due) |
 | Flow | `core/src/flow/` | `land`, `liquid`, `drain`, `creep`, `scratch`; `air/{radiation, exchange, wind}` |

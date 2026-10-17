@@ -6,6 +6,7 @@ use super::super::Scratch;
 use super::air_temp;
 use crate::life::Life;
 use crate::math::one_minus_exp;
+use crate::store::Boundary;
 use crate::units::SIGMA;
 use crate::{Config, World};
 use std::f64::consts::{PI, TAU};
@@ -60,10 +61,11 @@ const ROW: usize = 8;
 /// σT⁴, of which the air absorbs its share and emits by its layers (`column`); and
 /// contact heat with the air touching the ground (warmer than the air's mean by the drop
 /// from the air's mean height). The ground temperature is solved implicitly. All the air
-/// absorbs and emits is booked to its node.
+/// absorbs and emits is booked to its node; the sunlight absorbed is booked from the sun node,
+/// the heat that leaves to space to the space node.
 pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, ground, e_ground, e_air, ledger, counts, canopy, light, light_pool, life, .. } = w;
+    let World { cfg, grid, ground, e_ground, e_air, counts, canopy, light, light_pool, life, .. } = w;
     light_pool.resize(grid.n(), 0.0);
     let (n, na, adt) = (grid.n(), grid.na(), s.area * dt);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
@@ -102,8 +104,8 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         *e += s.node_tmp[j];
         s.ta[j] = air_temp(*e, s.capa[j]);
     }
-    ledger.sun_in += sun;
-    ledger.space_out += out;
+    w.cross(Boundary::Sun, [], sun);
+    w.cross(Boundary::Space, [], -out);
 }
 
 /// The radiation of ground cell `i` under sunlight `q` (W/m²) over the step: [temperature of the

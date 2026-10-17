@@ -40,7 +40,7 @@ fn the_soil_is_given_to_the_land_and_booked() {
     }
     let (mineral, _) = w.chem.minerals()[0];
     let soil = worldgen::chemistry0().1.soil;
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let t0 = pcore::check::totals(&w);
     let before = total(&w, mineral);
     println!("{}", worldgen::life::soil(&mut w, &soil));
     let (k, per_m2) = soil[0];
@@ -48,7 +48,7 @@ fn the_soil_is_given_to_the_land_and_booked() {
     assert!(k == mineral && (cells - cells.round()).abs() < 1e-9 && cells >= 10.0 && cells <= w.grid.n() as f64, "{cells} cells' worth");
     let grams = per_m2 * w.chem.subs[k].elems[2] as f64 * 14.0;
     assert!((grams - 10.0).abs() < 0.05, "{grams} g of the gas's element to the m²");
-    let (de, dq) = pcore::check::drift(&w, &t0, &l0);
+    let (de, dq) = pcore::check::drift(&w, &t0);
     assert!(de < 1e-12 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 

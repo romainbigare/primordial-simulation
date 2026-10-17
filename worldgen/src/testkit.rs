@@ -1,5 +1,5 @@
 //! What the tests of the laws share (the `testkit` feature, turned on only by the crates' dev-dependencies): a small
-//! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked in the ledger, the rock
+//! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked from outside, the rock
 //! of a cell, the books of a world, the books of one reacting node, sums of the day's events, and the substances of chemistry 0 by number.
 
 use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
@@ -10,8 +10,9 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
+use pcore::store::Boundary;
 use pcore::units::DAY_S;
-use pcore::{Ledger, World};
+use pcore::World;
 
 /// Substances of chemistry 0: the common liquid.
 pub const LIQUID: usize = 0;
@@ -151,22 +152,17 @@ pub fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
 
 /// Body `b` made `f` times as big: its stores and heat (booked as an edit).
 pub fn scale(w: &mut World, b: &mut Body, f: f64) {
-    for k in 0..w.chem.ns() {
-        w.chem.add_elems(k, (f - 1.0) * b.store[k], &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy += (f - 1.0) * b.store[k] * w.chem.subs[k].hf;
-        b.store[k] *= f;
-    }
-    w.ledger.imposed_energy += (f - 1.0) * b.e;
+    w.cross(Boundary::Outside, b.store.iter().map(|&a| (f - 1.0) * a).enumerate(), (f - 1.0) * b.e);
+    b.store.iter_mut().for_each(|a| *a *= f);
     b.e *= f;
 }
 
 /// `kg` of substance `k` added to body `b` at its temperature (booked as an edit), or taken out if negative.
 pub fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
     let (a, t, e0) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem), b.e);
-    w.chem.add_elems(k, a, &mut w.ledger.imposed_elems);
     b.store[k] += a;
     b.e = b.energy_at(&w.chem, t);
-    w.ledger.imposed_energy += a * w.chem.subs[k].hf + b.e - e0;
+    w.cross(Boundary::Outside, [(k, a)], b.e - e0);
 }
 
 /// What body `b` holds of substance `k`, kg.
@@ -178,9 +174,9 @@ pub fn kg(w: &World, b: &Body, k: usize) -> f64 {
 pub fn put(w: &mut World, k: usize, i: usize, mol: f64) {
     let (t, n) = (w.t_ground(i), w.grid.n());
     w.ground[k * n + i] += mol;
-    w.chem.add_elems(k, mol, &mut w.ledger.imposed_elems);
     let e = w.energy_ground(i, t);
-    (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + mol * w.chem.subs[k].hf, e);
+    w.cross(Boundary::Outside, [(k, mol)], e - w.e_ground[i]);
+    w.e_ground[i] = e;
 }
 
 /// `kg` per m² of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
@@ -219,14 +215,14 @@ pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
 /// The ground of cell `i` brought to `t` K (booked as an edit).
 pub fn hold_ground(w: &mut World, i: usize, t: f64) {
     let e = w.energy_ground(i, t);
-    w.ledger.imposed_energy += e - w.e_ground[i];
+    w.cross(Boundary::Outside, [], e - w.e_ground[i]);
     w.e_ground[i] = e;
 }
 
 /// Body `b` brought to `t` K (booked as an edit).
 pub fn warm(w: &mut World, b: &mut Body, t: f64) {
     let e = b.energy_at(&w.chem, t);
-    w.ledger.imposed_energy += e - b.e;
+    w.cross(Boundary::Outside, [], e - b.e);
     b.e = e;
 }
 
@@ -284,20 +280,17 @@ pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
     bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0)
 }
 
-/// The books of a world at a moment: its totals and its ledger.
-pub struct Books {
-    totals: Totals,
-    ledger: Ledger,
-}
+/// The books of a world at a moment: its totals and its boundary nodes' (`check::totals`).
+pub struct Books(Totals);
 
 impl Books {
     pub fn now(w: &World) -> Self {
-        Books { totals: check::totals(w), ledger: w.ledger.clone() }
+        Books(check::totals(w))
     }
 
     /// The worst relative drift of elements and of energy since then.
     pub fn drift(&self, w: &World) -> (f64, f64) {
-        check::drift(w, &self.totals, &self.ledger)
+        check::drift(w, &self.0)
     }
 
     /// Nothing is broken, and elements and energy are kept since then within `tol`.

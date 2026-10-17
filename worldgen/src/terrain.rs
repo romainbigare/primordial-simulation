@@ -8,7 +8,8 @@ use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
 use pcore::store::Nodes;
 use pcore::units::P_REF;
-use pcore::{Config, Counters, Ledger, World};
+use pcore::store::BOUNDARIES;
+use pcore::{Config, Counters, World};
 
 /// Cell size, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
@@ -187,7 +188,8 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         counts: Counters::default(),
         rain: vec![0.0; n],
         liquid_flux: vec![0.0; n],
-        ledger: Ledger::default(),
+        boundary: vec![0.0; ns * BOUNDARIES],
+        e_boundary: [0.0; BOUNDARIES],
         life: Default::default(),
         parts: Default::default(),
         canopy: vec![0.0; n],
@@ -203,7 +205,6 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         heat_pool: vec![0.0; n],
         heat_keep: Default::default(),
     };
-    world.ledger.imposed_elems = vec![0.0; world.chem.n_elements];
 
     for (i, &z) in hz.iter().enumerate().take(n) {
         let (_, y) = world.grid.xy(i);

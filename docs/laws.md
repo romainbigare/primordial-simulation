@@ -17,7 +17,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | Law or part | Files |
 |---|---|
 | time and the month's order | `clock/` (the calendar, processes with periods), `schedule.rs` (`step`, `step_marked`, `day`) |
-| settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Ledger`, `Counters`), `check.rs` (the books) |
+| settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`) |
 | 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind`, `sky`); `lanes.rs` (paths) |
 | 2 Change | `change/` (`mod`, `kernel`, `balance`, `screen`, `gas`); the chemistry in `chem/` (`mod`, `thermo`, `roles`) |
@@ -73,9 +73,13 @@ of `phys_days`, and `Physics::validate` (`dormancy` above 1, `light_yield` above
 conversion keeps its elements and its mass.
 
 **The books.** Every move takes from one node exactly what it gives to another, with its heat.
-Elements are never made or lost. Energy changes only by the sun, the heat that leaves to space,
-and edits from outside (booked as edits). `core/src/check.rs` counts all of it. A run prints
-the drift every year; it must stay near the rounding of the numbers.
+Elements are never made or lost. Three boundary nodes stand for what lies beyond the world
+(`store::Boundary`): the sun gives the light the world absorbs, space takes the heat it
+radiates, and outside gives and takes what edits put in and take out. They hold what crossed,
+with the sign of a node (the sun's heat falls by what it gave), and every crossing is booked
+on them (a `Move` from or to one, or `World::cross`). So the world and the three nodes
+together keep every element and the energy: `check::drift` counts it in one check. A run
+prints the drift every year; it must stay near the rounding of the numbers.
 
 ---
 

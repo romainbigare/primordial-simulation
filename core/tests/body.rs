@@ -4,6 +4,7 @@
 
 use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::rng::{Purpose, Rng};
+use pcore::store::Boundary;
 use pcore::units::{DAY, DAY_S};
 use pcore::{bond, brain, change, choose, World};
 use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
@@ -1262,8 +1263,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let mut idle = plant.clone();
         for b in [&mut plant, &mut idle] {
             let a = b.store[mineral];
-            w.chem.add_elems(mineral, -a, &mut w.ledger.imposed_elems);
-            w.ledger.imposed_energy -= a * w.chem.subs[mineral].hf;
+            w.cross(Boundary::Outside, [(mineral, -a)], 0.0);
             b.store[mineral] = 0.0;
         }
         idle.genes[lay.upt + mineral] = -0.1;
@@ -1291,8 +1291,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         // the dissolved mineral: the rock element in the ground, in all its forms, rises by what was over).
         let mut twin = w.clone();
         let more = 10.0 * lvl;
-        w.chem.add_elems(mineral, more, &mut w.ledger.imposed_elems);
-        w.ledger.imposed_energy += more * (w.chem.subs[mineral].hf + w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem));
+        w.cross(Boundary::Outside, [(mineral, more)], more * w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem));
         w.life.bodies[sp].e += more * w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem);
         w.life.bodies[sp].store[mineral] += more;
         for _ in 0..40 {
