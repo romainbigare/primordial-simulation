@@ -170,7 +170,7 @@ pub fn day(w: &mut World) {
     let bodies = &w.life.bodies;
     let mut list: Vec<(u64, u32, u32)> = due.iter().filter(|&&(s, g)| bodies[s as usize].alive && bodies[s as usize].gen == g).map(|&(s, g)| ((bodies[s as usize].group as u64) << 32 | bodies[s as usize].cell as u64, s, g)).collect();
     list.sort_unstable();
-    let mut rc = Reactor::new(&w.chem);
+    let mut rc = Reactor::new(&w.chem, w.cfg.seconds_per_year());
     let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());
     for (_, slot, gen) in list {
         let s = slot as usize;

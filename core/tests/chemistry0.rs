@@ -1,9 +1,10 @@
-//! Chemistry 0 as its numbers say: what body matter is made of and burns for, the minerals, fixing, and the reversible
-//! pair that stores the heat-absorbing gas in the liquid.
+//! Chemistry 0 as its numbers say: what body matter is made of and burns for, the minerals, fixing, the reversible
+//! pair that stores the heat-absorbing gas in the liquid, and what the liquid freezes at.
 
 use pcore::change::reversible;
 use pcore::chem::Phase;
-use worldgen::testkit::{ABSORBER, BURNT_ROCK, DISSOLVED, FIX_GAS, MATTER, MINERAL, OX, RICH, ROCK};
+use pcore::units::T_SURF;
+use worldgen::testkit::{ABSORBER, BURNT_ROCK, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OX, RICH, ROCK};
 
 /// Elements of chemistry 0: the one in the heat-absorbing gas and the energy-rich solid, the fixed gas's, and the rock's.
 const SOLID_ELEMENT: usize = 1;
@@ -16,7 +17,7 @@ const SETTLING: usize = 23;
 /// What the chemistry says: body matter holds one atom of the fixed gas's element to 20 of the solid's (120 and 6 in
 /// its formula unit) and one atom of the rock element, 1.16% of its mass, in the range of the dry matter of land plants
 /// (0.5 to 2%); it is made of 118 of the energy-rich solid, 3 of the fixed mineral and 1 of the dissolved one without
-/// a gain or loss of heat, and burns for 15.9 MJ a kg giving the fixed gas's element back as its mineral and the rock
+/// a gain or loss of heat, and burns for 16.0 MJ a kg giving the fixed gas's element back as its mineral and the rock
 /// element as the rock; the minerals live dissolved in the liquid; fixing the gas takes 490 kJ a mol of it, what 16
 /// molecules of the carrier of the enzyme's energy (30.5 kJ each) hold; every reaction and growth balance in elements.
 #[test]
@@ -40,10 +41,11 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     let growth = chem.dh_of(build);
     assert!(growth.abs() < 1.0, "growth takes {growth} J");
     assert!(build.outputs.iter().all(|p| p.0 == m as u16 || chem.phase(p.0 as usize, 290.0) == Phase::Liquid));
-    // Rotting: 55,124.7 kJ a mol (15.9 MJ a kg).
+    // Rotting: 55,266.4 kJ a mol (16.0 MJ a kg), from and to the states found at the surface (`Chemistry::dh_at`).
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m) && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == MINERAL)).expect("rotting");
-    assert!((chem.dh(burn) / -55124.7e3 - 1.0).abs() < 1e-6, "body matter burns for {} J a mol", -chem.dh(burn));
-    let per_kg = -chem.dh(burn) / chem.subs[m].molar_mass / 1e6;
+    let heat = -chem.dh_at(burn, T_SURF);
+    assert!((heat / 55266.425e3 - 1.0).abs() < 1e-6, "body matter burns for {heat} J a mol");
+    let per_kg = heat / chem.subs[m].molar_mass / 1e6;
     println!("body matter burns for {per_kg:.2} MJ/kg");
     assert!(per_kg > 15.5 && per_kg < 17.0, "{per_kg} MJ/kg");
     // Rotting gives back the fixed mineral (3 a mol) and the rock (1 a mol), and none of the dissolved mineral (no liquid
@@ -65,11 +67,11 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     let (_, rich, _, burn1) = chem.life_roles().expect("roles");
     assert_eq!(rich, RICH);
     let units = |r: usize| chem.reactions[r].inputs.iter().find(|p| p.0 as usize == rich).map_or(0.0, |p| p.1 as f64);
-    let (unit, n) = (-chem.dh(burn1) / units(burn1), units(fix));
+    let (unit, n, dh_fix) = (-chem.dh_at(burn1, T_SURF) / units(burn1), units(fix), chem.dh_at(fix, T_SURF));
     let ratio = n * 12.0 / 28.0;
-    println!("fixing burns {n} units of the solid a mol of the gas ({ratio:.1} g a g), {:.1} kJ; less the {:.1} kJ of each unit, {:.0}: 16 x 30.5 = {:.0}", chem.dh(fix) / 1e3, unit / 1e3, (chem.dh(fix) + n * unit) / 1e3, 16.0 * 30.5);
+    println!("fixing burns {n} units of the solid a mol of the gas ({ratio:.1} g a g), {:.1} kJ; less the {:.1} kJ of each unit, {:.0}: 16 x 30.5 = {:.0}", dh_fix / 1e3, unit / 1e3, (dh_fix + n * unit) / 1e3, 16.0 * 30.5);
     assert!((4.7..=6.6).contains(&ratio), "{ratio} g of the solid's element a g of the fixed gas's");
-    assert!(((chem.dh(fix) + n * unit) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", chem.dh(fix) + n * unit);
+    assert!(((dh_fix + n * unit) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", dh_fix + n * unit);
     assert!(chem.dh(fix) < 0.0 && chem.keeps(fix) && !chem.keeps(burn1) && !chem.keeps(burn));
     // The fixed mineral lives dissolved in the liquid and never boils; nothing burns it in a gas, and hot it breaks down
     // into the fixed gas (releasing heat).
@@ -86,4 +88,20 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
 fn the_pair_is_found_from_the_chemistry_alone() {
     let (chem, _) = worldgen::chemistry0();
     assert!(reversible(&chem).contains(&(DISSOLVING, SETTLING, ABSORBER as u16, DISSOLVED)), "{:?}", reversible(&chem));
+}
+
+/// The liquid freezes lower by what is dissolved in it (1.86 K for a mol of the mineral in a kg, the measured cryoscopic
+/// constant), not by a gas it holds; where there is none of it, it melts at its own melting point.
+#[test]
+fn the_liquid_freezes_lower_by_what_is_dissolved_in_it() {
+    let (chem, _) = worldgen::chemistry0();
+    let melt = chem.subs[LIQUID].melt;
+    let mut a = vec![0.0; chem.ns()];
+    (a[LIQUID], a[DISSOLVED]) = (1.0 / chem.subs[LIQUID].molar_mass, 1.0);
+    let salty = chem.melt_in(LIQUID, |k| a[k]);
+    assert!((1.7..2.0).contains(&(melt - salty)), "{} K lower", melt - salty);
+    a[ABSORBER] = 10.0;
+    assert_eq!(chem.melt_in(LIQUID, |k| a[k]), salty);
+    a[LIQUID] = 0.0;
+    assert_eq!(chem.melt_in(LIQUID, |k| a[k]), melt);
 }

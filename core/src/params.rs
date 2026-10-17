@@ -354,6 +354,10 @@ impl Default for Physics {
 }
 
 impl Config {
+    /// Length of the world's year, s.
+    pub fn seconds_per_year(&self) -> f64 {
+        (self.days_per_month * self.months_per_year) as f64 * crate::units::DAY
+    }
     /// Spread of the new weights of a brain carried over to other sizes (`Physics::new_noise`; none in a null run, whose
     /// brains never change at a copy).
     pub(crate) fn new_noise(&self) -> f32 {

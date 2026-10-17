@@ -9,6 +9,9 @@ mod thermo;
 use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
 
+/// A reaction keeps mass where its two sides differ by no more than this share (the sums of molar masses round).
+const MASS_ROUNDING: f64 = 1e-12;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
     Solid,
@@ -50,7 +53,8 @@ pub struct Substance {
     pub lv: f64,
     /// Fusion enthalpy, J/mol
     pub lf: f64,
-    /// Formation enthalpy, J/mol. Chemical energy held by one mole.
+    /// Formation enthalpy of the solid, J/mol: the chemical energy one mole holds (a liquid holds `lf` more, in its holder's
+    /// heat; a gas also `lv`, in the air: `check::totals`).
     pub hf: f64,
     /// Young's modulus of the solid as a material, Pa (0: none given): how stiff what bodies build of it is
     /// (`Body::height`). For body matter, that of living soft tissue with its liquid.
@@ -138,9 +142,20 @@ impl Chemistry {
         e
     }
 
+    /// Mass of a reaction side, kg.
+    fn side_mass(&self, v: &[(u16, u16)]) -> f64 {
+        v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].molar_mass).sum()
+    }
+
+    /// Does a reaction or conversion keep mass (its molar masses agree with its elements), to rounding?
+    fn keeps_mass(&self, rx: &Reaction) -> bool {
+        let (a, b) = (self.side_mass(&rx.inputs), self.side_mass(&rx.outputs));
+        (a - b).abs() <= MASS_ROUNDING * a.max(b)
+    }
+
     /// Is the chemistry one the laws can run? At most `MAX_SUBSTANCES` substances, each with its element counts, a
     /// vapour pressure curve and densities; every reaction and conversion names substances that exist and balances its
-    /// elements; every conversion has inputs and a product.
+    /// elements and its mass; every conversion has inputs and a product.
     pub fn validate(&self) -> Result<(), String> {
         let ns = self.ns();
         if ns > MAX_SUBSTANCES {
@@ -168,6 +183,9 @@ impl Chemistry {
             if self.side_elems(&rx.inputs) != self.side_elems(&rx.outputs) {
                 return Err(format!("reaction {r} does not balance"));
             }
+            if !self.keeps_mass(rx) {
+                return Err(format!("reaction {r} does not keep mass"));
+            }
         }
         let named = self.build.iter().map(|b| (String::from("build"), b));
         for (name, b) in named.chain(self.builds.iter().enumerate().map(|(q, b)| (format!("builds {q}"), b))) {
@@ -179,6 +197,9 @@ impl Chemistry {
             }
             if self.side_elems(&b.inputs) != self.side_elems(&b.outputs) {
                 return Err(format!("{name} does not balance"));
+            }
+            if !self.keeps_mass(b) {
+                return Err(format!("{name} does not keep mass"));
             }
         }
         Ok(())

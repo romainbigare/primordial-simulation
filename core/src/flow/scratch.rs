@@ -66,6 +66,9 @@ pub(crate) struct FlowView<'a> {
     /// Per air node: its temperature, K; the mean height of its air, m
     pub ta: &'a [f64],
     pub zair: &'a [f64],
+    /// Per ground node: the fusion enthalpy held off a plateau, and the substance on its plateau (or `NONE`)
+    latent: &'a [Latent],
+    pk: &'a [usize],
 }
 
 impl FlowView<'_> {
@@ -74,6 +77,17 @@ impl FlowView<'_> {
     #[inline]
     pub(crate) fn lift(&self, i: usize, g: f64) -> f64 {
         g * (self.zair[self.air_of[i] as usize] - self.head[i])
+    }
+    /// Fusion enthalpy ground node `i` holds when its energy is `e`, J, as Flow's last solve of its plateaus has it
+    /// (`ground::melting`): that of what is molten off a plateau and, on one, as much of the fusion enthalpy of the
+    /// substance there (`lat(k)` J for all of it) as the energy above the plateau's temperature at heat capacity `c` melts.
+    #[inline]
+    pub(crate) fn fused(&self, i: usize, e: f64, c: f64, lat: impl Fn(usize) -> f64) -> f64 {
+        let held = self.latent[i].held;
+        match self.pk[i] {
+            NONE => held,
+            k => held + (e - c * self.tg[i] - held).clamp(0.0, lat(k)),
+        }
     }
 }
 
@@ -237,7 +251,7 @@ impl Scratch {
     }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, head: &self.head, ta: &self.ta, zair: &self.zair }
+        FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.pk }
     }
     /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
     /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that

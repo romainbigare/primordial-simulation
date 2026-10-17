@@ -2,8 +2,8 @@
 # refl [[solid rgb], [liquid rgb]], ir m2/mol, sat mol/m2 (column past which the optical depth grows as the square root of
 # the amount; none: always in proportion), sol mole fraction (for a gas that cannot condense on the ground: dissolved under
 # 101 kPa of it at 298 K; for a solid that melts above the ground's warmth: the mole fraction of its solution at saturation,
-# which moves with the liquid), cond W/(m K), hf kJ/mol, lv/lf kJ/mol (none: Trouton's and Richards's rules), modulus GPa,
-# rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
+# which moves with the liquid), cond W/(m K), hf kJ/mol of the solid (of a substance that is liquid at 290 K: its measured value less lf; gas:
+# less lf and lv), lv/lf kJ/mol (none: Trouton's and Richards's rules), modulus GPa, rupture MPa. Where a number is derived, the derivation is in docs/numbers.md.
 elements = 9
 
 [[s]] # 0
@@ -20,7 +20,7 @@ ir = 0.0022
 sat = 100
 sol = 1.0
 cond = 2.2
-hf = -286
+hf = -292
 lv = 40.7
 lf = 6.0
 
@@ -37,7 +37,7 @@ refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
 ir = 0.0
 sol = 1.2e-5
 cond = 0.03
-hf = 0
+hf = -7.3745
 
 [[s]] # 2
 e = [0,0,0,2,0,0,0,0,0]
@@ -52,7 +52,7 @@ refl = [[0.8,0.85,0.95],[0.7,0.8,0.95]]
 ir = 0.0
 sol = 2.3e-5
 cond = 0.03
-hf = 0
+hf = -8.433
 
 [[s]] # 3
 e = [0,1,0,2,0,0,0,0,0]
@@ -68,7 +68,7 @@ ir = 0.0114
 sat = 10
 sol = 6e-4
 cond = 0.02
-hf = -393.5
+hf = -412.503
 
 [[s]] # 4
 e = [4,1,0,0,0,0,0,0,0]
@@ -84,7 +84,7 @@ ir = 0.25
 sat = 0.1
 sol = 2.5e-5
 cond = 0.03
-hf = -74.8
+hf = -85.5205
 
 [[s]] # 5
 e = [2,1,0,1,0,0,0,0,0]
@@ -114,7 +114,7 @@ refl = [[0.25,0.22,0.15],[0.10,0.08,0.05]]
 ir = 0.0
 sol = 0.0
 cond = 0.15
-hf = -25
+hf = -27.47
 
 [[s]] # 7
 e = [0,1,0,0,0,0,0,0,0]
@@ -343,7 +343,7 @@ refl = [[0.9,0.9,0.9],[0.9,0.9,0.9]]
 ir = 0.0
 sol = 1.7e-5
 cond = 0.03
-hf = -110.5
+hf = -118.362
 
 # 22: body matter, what bodies are built of (`build`), holding the energy of what it is made of: docs/numbers.md, "substance 22".
 [[s]] # 22
@@ -359,7 +359,7 @@ refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
 ir = 0.0
 sol = 0.0
 cond = 0.2
-hf = -20315.8
+hf = -20174.0745
 # Living soft tissue with its liquid: docs/numbers.md, "modulus of substances 22, 25 and 10".
 modulus = 0.001
 # Living soft tissue: docs/numbers.md, "rupture of substances 22, 25 and 10".
@@ -368,7 +368,7 @@ rupture = 1
 # 23: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 22: docs/numbers.md, "substance 23".
 [[s]] # 23
 e = [2,2,0,6,0,1,0,0,0]
-m = 162.1
+m = 162.0
 cp = 194
 melt = 271
 boil = 3000
@@ -379,7 +379,7 @@ refl = [[0.5,0.5,0.5],[0.05,0.07,0.10]]
 ir = 0.0
 sol = 0.0
 cond = 0.6
-hf = -1926.8
+hf = -1929.3745
 
 # 24: the mineral of the gas reaction 24 fixes (1), that gas's only way into body matter: docs/numbers.md, "substance 24".
 [[s]] # 24
@@ -395,7 +395,7 @@ refl = [[0.85,0.85,0.85],[0.6,0.6,0.6]]
 ir = 0.0
 sol = 0.0
 cond = 0.6
-hf = -365
+hf = -370.9
 lf = 5.9
 
 # 25: the frame, a solid bodies build of 6 units of the energy-rich solid (5, `builds`): docs/numbers.md, "substance 25".
@@ -412,7 +412,7 @@ refl = [[0.35,0.30,0.20],[0.30,0.25,0.15]]
 ir = 0.0
 sol = 0.0
 cond = 0.2
-hf = -986
+hf = -980
 # docs/numbers.md: "modulus of substances 22, 25 and 10".
 modulus = 30
 # docs/numbers.md: "rupture of substances 22, 25 and 10".

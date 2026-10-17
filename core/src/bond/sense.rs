@@ -2,11 +2,11 @@
 
 use super::{held, NO, NOBODY};
 use crate::body::Body;
+use crate::brain::LN_MASS;
 use crate::chem::Phase;
 use crate::World;
 
-/// A body perceives the ln of a part's mass over its own, and the ln of its length (m), over these.
-const LN_MASS_SCALE: f32 = 7.0;
+/// A body perceives the ln of a part's length (m) over this (its mass as every mass, `brain::LN_MASS`).
 const LN_SIZE_SCALE: f32 = 3.0;
 
 /// The structure body `b` is inside: its root, how closed it is, its conductance (W/K).
@@ -52,13 +52,16 @@ pub fn depth(w: &World, b: &Body, d: f64) -> f64 {
 pub(crate) const SENSE: usize = 5;
 
 /// What a body perceives of what it holds (whether, ln mass ratio, hardness, hollowness) and
-/// of the walls around it.
+/// of the walls around it. Its mass ratio is read one unit up, so that holding nothing (0) reads as holding a part
+/// about 1,100 times lighter than the body (e^`LN_MASS`), and one as heavy as the body as 1: the input fades to nothing
+/// with what is held. A part looked at (`features`) is always there, so its mass ratio is read as it is, 0 for one as
+/// heavy as the body.
 pub(crate) fn sense(w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
     let mut x = [0f32; SENSE];
     if let Some(p) = held(w, b) {
         let pt = &w.parts.parts[p];
         let walls = pt.walls(&w.chem);
-        x[..4].copy_from_slice(&[1.0, crate::brain::ln((walls.mass / mb) as f32) / LN_MASS_SCALE + 1.0, walls.hardness as f32, pt.hollow]);
+        x[..4].copy_from_slice(&[1.0, crate::brain::ln((walls.mass / mb) as f32) / LN_MASS + 1.0, walls.hardness as f32, pt.hollow]);
     }
     x[4] = room(w, b).map_or(0.0, |r| r.1);
     x
@@ -72,7 +75,7 @@ pub fn features(w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
     let m = pt.mass(chem);
     let want: f64 = b.k.upt.iter().map(|&(k, u)| u as f64 * (pt.wall[k] + pt.fill[k]) * chem.subs[k].molar_mass).sum();
     let ln = crate::brain::ln;
-    [ln((m / mb) as f32) / LN_MASS_SCALE, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, s.encl, s.anchored as u8 as f32, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
+    [ln((m / mb) as f32) / LN_MASS, pt.walls(chem).hardness as f32, pt.hollow, ln(pt.size[0]) / LN_SIZE_SCALE, s.encl, s.anchored as u8 as f32, (pt.held != NOBODY) as u8 as f32, (want / m.max(1e-9)) as f32]
 }
 
 /// Can verb `v` be done to part `p` at all (as the body sees it)?
