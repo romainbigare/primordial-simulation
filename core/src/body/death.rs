@@ -23,8 +23,8 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
 pub(crate) fn to_ground(w: &mut World, b: &mut Body, m: &[f64]) {
     let (n, i) = (w.grid.n(), b.cell as usize);
     let q = w.chem.heat_share(b.e, b.heat_cap(&w.chem).max(1e-9), m);
+    b.lose(&w.chem, m);
     for (k, &a) in m.iter().enumerate() {
-        b.store[k] -= a;
         w.ground[k * n + i] += a;
     }
     b.e -= q;
@@ -32,16 +32,12 @@ pub(crate) fn to_ground(w: &mut World, b: &mut Body, m: &[f64]) {
 }
 
 /// Some of a body's matter goes to its cell's ground as loose amounts: `dead` (mol of each substance), with its share of
-/// the heat and of the brood. In a node these are the remains of a share `f` of its members, who died of `cause` (the
+/// the heat and of the brood (`Body::lose`). In a node these are the remains of a share `f` of its members, who died of `cause` (the
 /// count falls). False if less than one member is left (the caller lets the node die).
 pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> bool {
     let dead: Vec<f64> = dead.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
-    let matter = w.chem.matter().map(|m| (m, b.store[m]));
     to_ground(w, b, &dead);
     let chem = &w.chem;
-    if let Some((m, before)) = matter.filter(|x| x.1 > 0.0) {
-        b.brood = b.brooded(chem).min(before) * (b.store[m] / before);
-    }
     if b.n() > 1.0 && f > 0.0 {
         let (cat, root) = (light_cat(chem, &b.genes), w.life.root(b));
         w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count * f });

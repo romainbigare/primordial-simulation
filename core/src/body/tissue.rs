@@ -4,7 +4,6 @@
 use super::{Body, Layout, COPY_MASS, WET_TISSUE};
 use crate::chem::{Chemistry, Phase};
 
-
 /// The most share of a body its keep gene of a key liquid, or the solids it builds together, may make up.
 pub(crate) const MAX_KEEP: f64 = 0.95;
 
@@ -28,6 +27,17 @@ impl Body {
     /// The brood, mol of body matter (all members), no more than the matter there is.
     pub fn brooded(&self, chem: &Chemistry) -> f64 {
         chem.matter().map_or(0.0, |m| self.brood.max(0.0).min(self.store[m].max(0.0)))
+    }
+    /// Amounts `m` (mol of each substance, at most what it holds) leave the stores; the brood falls in the share of the
+    /// body matter that left (it is part of it).
+    pub(crate) fn lose(&mut self, chem: &Chemistry, m: &[f64]) {
+        let matter = chem.matter().map(|k| (k, self.store[k], self.brooded(chem)));
+        for (s, a) in self.store.iter_mut().zip(m) {
+            *s -= a;
+        }
+        if let Some((k, before, brood)) = matter.filter(|x| x.1 > 0.0) {
+            self.brood = brood * (self.store[k] / before);
+        }
     }
     /// The matter of the body itself, kg (all members): the matter in the store less the brood.
     pub fn matter_kg(&self, chem: &Chemistry) -> f64 {

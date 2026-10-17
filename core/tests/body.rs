@@ -1428,20 +1428,21 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
 }
 
 /// A bite of one member's body or more takes whole members: the count falls by the share of the node that was eaten
-/// (the body falls by the same share), the survivors keep their bodies.
+/// (the body and the brood fall by the same share), the survivors keep their bodies.
 #[test]
 fn a_big_bite_takes_whole_members() {
     let (mut w, i) = bite_start();
-    // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg.
+    // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg; most of their matter is brood.
     let mut a = resting(&mut w, i, 6.0, 1.0);
     scale(&mut w, &mut a, 8.0);
     let mut m = resting(&mut w, i, 6.0, 0.0);
     scale(&mut w, &mut m, 0.01);
-    let v = node(&mut w, m, 1000.0);
+    let mut v = node(&mut w, m, 1000.0);
+    v.brood = 0.5 * v.store[MATTER];
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
     let b = &w.life.bodies[v];
-    let (n0, mean0) = (b.n(), b.built(&w.chem) / b.n());
+    let (n0, mean0, brood0) = (b.n(), b.built(&w.chem) / b.n(), b.brood);
     let before = seen(&w, v);
     bite(&mut w, a, v);
     let (b, after) = (&w.life.bodies[v], seen(&w, v));
@@ -1449,6 +1450,7 @@ fn a_big_bite_takes_whole_members() {
     println!("{n0} members of {mean0:.4} kg: {:.1} members left of {mean1:.4} kg ({:.2}% of the body torn)", b.n(), 100.0 * share);
     assert!(b.n() < n0 && (b.n() / n0 - (1.0 - share)).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
     assert!((mean1 / mean0 - 1.0).abs() < 1e-9, "survivors changed: {mean0} -> {mean1} kg");
+    assert!((b.brood / brood0 - b.n() / n0).abs() < 1e-9, "brood {} of {brood0}, count {} of {n0}", b.brood, b.n());
     books.assert_kept(&w, 1e-9);
 }
 

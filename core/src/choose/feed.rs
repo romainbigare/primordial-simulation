@@ -66,11 +66,11 @@ pub(super) fn put(w: &mut World, b: &mut Body) {
     body::to_ground(w, b, &m);
 }
 
-/// Move amounts `m` (mol) from `from` to `to`, with their share of `from`'s heat.
+/// Move amounts `m` (mol) from `from` to `to`, with their share of `from`'s heat and brood (`Body::lose`).
 fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
     let q = w.chem.heat_share(from.e, from.heat_cap(&w.chem).max(1e-9), m);
+    from.lose(&w.chem, m);
     for (k, &a) in m.iter().enumerate() {
-        from.store[k] -= a;
         to.store[k] += a;
     }
     from.e -= q;
