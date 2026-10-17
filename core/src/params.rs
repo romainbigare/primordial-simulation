@@ -267,6 +267,14 @@ impl Physics {
     pub fn walk(&self, m1: f64) -> f64 {
         self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
     }
+    /// Check the numbers the laws need in their range: `dormancy` above 1 (a drying body's pores close as u^n, solved
+    /// with n - 1 in a divisor: `body::exchange::closing`).
+    pub fn validate(&self) -> Result<(), String> {
+        if self.dormancy.is_nan() || self.dormancy <= 1.0 {
+            return Err(format!("dormancy ({}) must be above 1", self.dormancy));
+        }
+        Ok(())
+    }
 }
 
 impl Default for Physics {
@@ -358,6 +366,21 @@ impl Config {
     pub fn seconds_per_year(&self) -> f64 {
         (self.days_per_month * self.months_per_year) as f64 * crate::units::DAY
     }
+    /// Check a run's settings before it starts: the time steps fit together as the laws take them (`step_marked`,
+    /// `flow::step`): physics runs every `phys_days`, and the wind, evaporation and liquid each at the first physics step
+    /// `air_days`, `exchange_days` and `flow_days` after their last, so each must be a whole multiple of `phys_days` (or it
+    /// runs at another interval than the one asked); and the physics (`Physics::validate`).
+    pub fn validate(&self) -> Result<(), String> {
+        if self.phys_days == 0 {
+            return Err("phys_days must be at least 1".into());
+        }
+        for (name, x) in [("air_days", self.air_days), ("exchange_days", self.exchange_days), ("flow_days", self.flow_days)] {
+            if x == 0 || x % self.phys_days != 0 {
+                return Err(format!("{name} ({x}) must be a whole multiple of phys_days ({})", self.phys_days));
+            }
+        }
+        self.phys.validate()
+    }
     /// Spread of the new weights of a brain carried over to other sizes (`Physics::new_noise`; none in a null run, whose
     /// brains never change at a copy).
     pub(crate) fn new_noise(&self) -> f32 {
@@ -398,6 +421,20 @@ impl Default for Config {
             two_parents: true,
             null: false,
             phys: Physics::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Config, Physics};
+
+    #[test]
+    fn the_default_settings_pass_and_a_step_off_its_base_or_a_dormancy_of_1_is_refused() {
+        assert_eq!(Config::default().validate(), Ok(()));
+        let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
+        for c in [Config { flow_days: 4, ..Default::default() }, Config { exchange_days: 4, ..Default::default() }, Config { air_days: 2, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
+            assert!(c.validate().is_err(), "{} {} {} {} {}", c.phys_days, c.air_days, c.exchange_days, c.flow_days, c.phys.dormancy);
         }
     }
 }

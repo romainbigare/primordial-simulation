@@ -95,7 +95,8 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
     (caught, caught * reach)
 }
 
-/// The air the body exchanges gas with in this time (`breath`), at the air's shares, at most `MAX_TAKE_SHARE` of each.
+/// The air the body exchanges gas with in this time (`breath`), at the air's shares (none of an empty air node), at most
+/// `MAX_TAKE_SHARE` of each.
 fn gas_pool(w: &World, b: &Body, s: &Site, mass: f64, tmp: &mut LiveTmp) -> f64 {
     let (chem, air, na, j) = (&w.chem, &w.air, w.grid.na(), s.j);
     let tot: f64 = (0..chem.ns()).map(|k| air[k * na + j]).sum();
@@ -103,7 +104,8 @@ fn gas_pool(w: &World, b: &Body, s: &Site, mass: f64, tmp: &mut LiveTmp) -> f64 
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..chem.ns() {
-        let (a, x) = (air[k * na + j], air[k * na + j] / tot);
+        let a = air[k * na + j];
+        let x = if tot > 0.0 { a / tot } else { 0.0 };
         tmp.x.push(x);
         tmp.pool.push((x * reach).min(MAX_TAKE_SHARE * a));
     }

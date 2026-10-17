@@ -91,7 +91,7 @@ pub(super) fn breath(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64,
 /// What a key liquid of `l` mol loses over an update in which it would lose `e` mol with its pores open, when they open
 /// as far as it is wet (`Body::activity`: min(1, l / `ls`)^n, `ls` the level it keeps): at the full rate down to its
 /// level, then du/dt = -r u^n (u = l / `ls`), solved exactly: u^(1 - n) grows by (n - 1) times what is left of `e` over
-/// `ls`. (`n` = 1 divides by 0: `Physics::dormancy` must be above 1.)
+/// `ls` (`n` above 1, `Physics::validate`).
 fn closing(l: f64, ls: f64, e: f64, n: f64) -> f64 {
     if ls <= 0.0 || e <= (l - ls).max(0.0) || l <= 0.0 {
         return e.min(l.max(0.0));

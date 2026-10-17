@@ -23,7 +23,7 @@ fn main() {
             let size = args.get("--size", 128usize);
             let mut w = worldgen::new_world(args.get("--seed", 1u64), size, size);
             args.apply(&mut w);
-            if let Err(e) = args::check_steps(&w.cfg) {
+            if let Err(e) = w.cfg.validate() {
                 eprintln!("ew run: {e}");
                 std::process::exit(2);
             }
