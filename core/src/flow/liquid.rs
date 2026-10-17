@@ -240,14 +240,17 @@ fn send(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, (liq, wa): (&[usi
     let (n, g) = (w.grid.n(), w.cfg.gravity);
     let (mut power, mut sent) = (0.0, 0.0);
     let qsum: f64 = o.q[..o.cnt].iter().sum();
-    let (part, inv) = ((qsum / lvol).min(1.0), 1.0 / qsum);
+    let part = (qsum / lvol).min(1.0);
     for (&a, &k) in wa.iter().zip(liq).filter(|p| *p.0 > 0.0) {
         let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
         let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.counts, s.cap[i], m, p.cp, m * (p.cp * tcur + p.lf));
         s.put(&mut w.ground, k, i, -m);
         sent += m;
         for ((&(j, _), &dh), &q) in o.nb[..o.cnt].iter().zip(&o.fall).zip(&o.q).filter(|p| *p.1 > 0.0) {
-            let (m, e) = (m * q * inv, e * q * inv);
+            // Each outlet's share, q / qsum, is at most 1 however little leaves (the last of a store draining away
+            // goes below 1 / f64::MAX m³, whose reciprocal is infinite).
+            let f = q / qsum;
+            let (m, e) = (m * f, e * f);
             w.e_ground[j] += e;
             s.put(&mut w.ground, k, j, m);
             power += m * p.mm * g * dh;

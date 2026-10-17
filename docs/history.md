@@ -274,3 +274,7 @@ The work of `docs/foundation/plan.md`, one line per task.
 - A4 (b): the north–south stripes of the rain map came from the wind's lines solved last (north–south); the wind now
   solves both orders from the same start and keeps the mean. 5 years without life, 64 x 64, seeds 1 to 3: land rain
   +0.7 to +2.5 %, temperatures within 0.03 K; golden re-pinned.
+- A2, 128 x 128: seed 1 stopped in year 285 on a NaN in the wind. The bed's store under a hill top drains by a share
+  each liquid step, so its last liquid fell below 1e-308 m³; `liquid::send` shared what left by 1 / (sum of the
+  flows), which was then infinite, and 0 x infinity put NaN into the ground, then the air. Each outlet now takes
+  q / (sum of the flows); golden re-pinned (rounding only).
