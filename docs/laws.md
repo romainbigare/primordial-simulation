@@ -237,8 +237,8 @@ each edge:
 
 1. the pressure of the whole column (p = nRT/V), from high to low;
 2. overturning: at equal height, the lower half flows to the warmer column and the upper half
-   back; both are turned sideways by the planet's rotation (`rotation`); vapour crowds in the
-   lower half;
+   back; both are turned sideways by the planet's rotation (`rotation`, at the latitude of the
+   edge: the mean of its two nodes'); vapour crowds in the lower half;
 3. eddies mix the two columns (`mix`).
 
 It is solved implicitly along lines (`solve::lines`), so any speed is stable. A call is long against the time the

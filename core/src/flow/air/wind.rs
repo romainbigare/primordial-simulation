@@ -2,7 +2,7 @@
 
 use super::super::Scratch;
 use super::air_temp;
-use crate::grid::Grid;
+use crate::grid::{Grid, AIR};
 use crate::solve::lines::along_line;
 use crate::units::R_GAS;
 use crate::{Config, World};
@@ -72,8 +72,8 @@ impl Lines<'_> {
             let (a, b) = (self.node(line, p), self.node(line, p + 1));
             let rho = (sc.nt[a] / sc.vol[a] + sc.nt[b] / sc.vol[b]) / 2.0;
             let depth = cfg.air_top_m - (sc.za[a] + sc.za[b]) / 2.0;
-            let lat_row = if dir == 0 { line * grid.air_scale + grid.air_scale / 2 } else { (p + 1) * grid.air_scale };
-            let turn = cfg.rotation * grid.lat(lat_row.min(grid.h - 1)).to_radians().sin();
+            let lat = grid.mesh().level(AIR).lat();
+            let turn = cfg.rotation * ((lat[a] + lat[b]) / 2.0).to_radians().sin();
             let across = (sc.grad[a][1 - dir] + sc.grad[b][1 - dir]) / 2.0;
             let cap = OVER * sc.nt[a].min(sc.nt[b]) / dt;
             let over = (cfg.wind * (sc.warmth[b] - sc.warmth[a] + turn * across) * rho * side * depth / 2.0).clamp(-cap, cap);

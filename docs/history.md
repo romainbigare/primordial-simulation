@@ -357,6 +357,9 @@ The work of `docs/foundation/plan.md`, one line per task.
   one link (`bond::Enclosure`: how closed, heat conductance) that the body's heat, light, rain and evaporation read
   (`bond::enclosure`, was `walls_around`). Same physics; only the drift of a floating structure draws from a new key
   (`Rng::of_node`); golden re-pinned.
+- D3 (a), the law: the wind turns by the latitude of each edge between two air nodes, the mean of the two nodes'
+  latitudes (it took the latitude of one row of cells near the edge). 64 x 64, seed 1, years 11 to 20: land
+  -0.03 K, rain on land +0.1%, carbon gas +0.6%; golden re-pinned.
 
 **Owner's decisions after Phase A**
 
