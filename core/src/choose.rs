@@ -184,7 +184,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
             }
         }
     }
-    let (o0, mut fo, vol) = (FIXED + 8 + VERBS * MAX_SEEN, [0f32; PARTS * bond::NO], bond::volume(&w.chem, b) / b.n());
+    let (o0, mut fo, vol) = (FIXED + 8 + VERBS * MAX_SEEN, [0f32; PARTS * bond::NO], b.volume(&w.chem) / b.n());
     for (q, &p) in parts[..np].iter().enumerate() {
         let fq = &mut fo[q * bond::NO..(q + 1) * bond::NO];
         fq.copy_from_slice(&bond::features(w, b, p, pm));

@@ -237,6 +237,11 @@ impl Body {
     pub fn temp(&self, chem: &Chemistry) -> f64 {
         self.e / self.heat_cap(chem).max(1e-9)
     }
+    /// Volume of its solids and liquids, m³.
+    pub fn volume(&self, chem: &Chemistry) -> f64 {
+        let t = self.temp(chem);
+        self.store.iter().enumerate().map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
+    }
     /// Heat conductance to the surface, W/K: through each member's surface, which grows as
     /// mass^(2/3), so a small body cools faster per kg than a big one. Needs `prepare`.
     pub fn conductance(&self, m_ref: f64, mass: f64) -> f64 {
