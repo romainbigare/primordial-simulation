@@ -10,16 +10,29 @@
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
 
-/// Fixed actions: rest, copy, put to the node, take from the node, form a part, let go (or
-/// leave the inside), join the held part to the ground, break the bonded ground.
+/// The fixed actions, by their rows: rest; copy (never drawn: children are made from the brood); put to the node; take
+/// from the node; form a part; let go (or leave the inside); join the held part to the ground; break the bonded ground.
+pub const REST: usize = 0;
+pub const COPY: usize = 1;
+pub const PUT: usize = 2;
+pub const TAKE: usize = 3;
+pub const FORM: usize = 4;
+pub const RELEASE: usize = 5;
+pub const ANCHOR: usize = 6;
+pub const DIG: usize = 7;
 pub const FIXED: usize = 8;
 /// Verbs toward a perceived body: take from it, put to it, watch it.
+pub const TAKE_FROM: usize = 0;
+pub const GIVE: usize = 1;
+pub const WATCH: usize = 2;
 pub const VERBS: usize = 3;
 /// Verbs toward a perceived part: hold it, take from it, put to it, join the held part to it,
 /// break its bonds, enter the inside of its structure.
 pub const OVERBS: usize = 6;
 /// Signal outputs.
 pub(crate) const SIG: usize = 2;
+/// Outputs for the shape of a part made: elongation, hollowness.
+pub(crate) const FORM_OUT: usize = 2;
 
 /// Sizes of a brain: hidden units, memory numbers, inputs (the memory last), direction
 /// features, body features and part features. A row is `h` weights, then a bias.
@@ -59,7 +72,7 @@ impl Shape {
     }
     /// Rows that learn within a life (all but the memory rows).
     pub fn learned(&self) -> usize {
-        self.form() + 2
+        self.form() + FORM_OUT
     }
     /// The row that estimates how well-being will go from here (the critic).
     pub(crate) fn critic(&self) -> usize {

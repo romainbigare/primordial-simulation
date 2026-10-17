@@ -5,7 +5,7 @@
 use pcore::body;
 use pcore::lineage::Lineage;
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, lineage, World};
+use pcore::{brain, choose, lanes, lineage, World};
 
 /// Cover per area in the two cells, kg/m².
 const COVER: f64 = 20.0;
@@ -40,7 +40,7 @@ fn scene() -> (World, usize, usize, usize) {
 fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     let (mut w, a, b, slot) = scene();
     pcore::survey::survey(&mut w);
-    assert!((choose::eased(&w, a, 0) - 1.0).abs() < 1e-9);
+    assert!((lanes::eased(&w, a, 0) - 1.0).abs() < 1e-9);
     let (rich, mut crossed) = (w.chem.life_roles().expect("roles").1, 0);
     // Moving needs force (review 7 fix 7): with the strength of the starting plants (0.05: a force of 0.025 of its weight)
     // the mover cannot give the push of a mover (`bump`, 0.05 of its weight) and stays; with its own (0.6) it goes, below.
@@ -60,18 +60,18 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         crossed += (m.cell as usize == to) as u32;
         w.life.bodies[slot] = m;
         pcore::survey::survey(&mut w);
-        if choose::eased(&w, a, 0) > 3.0 {
+        if lanes::eased(&w, a, 0) > 3.0 {
             break;
         }
     }
-    let worn = choose::eased(&w, a, 0);
+    let worn = lanes::eased(&w, a, 0);
     assert!(crossed > 10 && worn > 3.0, "{crossed} crossings, edge {worn} times easier");
     // Moving stops: the cover grows back into the cleared ground over some decades.
     let year = 360.0 * 86_400.0;
     let mut left = vec![worn];
     for _ in 0..40 {
-        choose::regrow(&mut w, year);
-        left.push(choose::eased(&w, a, 0));
+        lanes::regrow(&mut w, year);
+        left.push(lanes::eased(&w, a, 0));
     }
     assert!(left[1] > 1.2, "recovers slowly: {left:?}");
     assert!(left.windows(2).all(|p| p[1] <= p[0] + 1e-9) && left[40] < 1.01, "and fully: {left:?}");

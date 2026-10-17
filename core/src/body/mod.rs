@@ -7,6 +7,7 @@
 mod death;
 mod exchange;
 mod genes;
+mod intake;
 mod live;
 mod metab;
 mod pay;

@@ -1,0 +1,386 @@
+//! Law 5: Choose. A body perceives a little of itself, what it holds, its memory, its cell, the cells around it in 8
+//! directions (as far as its sight), up to a few other bodies in or next to its cell (their looks, signals and
+//! well-being, and how past dealings with them went; walls and cover hide them) and up to 3 parts in its cell. How much
+//! it remembers, sees and thinks is set by genes, and each costs energy per decision (`Lineage::cost`). The brain of its
+//! group, plus a few numbers of its own, scores every action; one is drawn by those scores, and the body emits a signal
+//! and writes its memory. Actions are physical: move (`go`), take from the ground or a body, put to the ground or give
+//! to a body (`feed`), watch a body (`learn::watch`), rest, and the actions of Bond. Each costs energy paid by the body's
+//! own reactions; if it cannot pay, it fails. At its next decision the brain learns from the change of the body's own
+//! well-being (`learn`).
+
+mod feed;
+mod go;
+mod learn;
+
+pub use feed::take_body;
+pub use go::{go, wear};
+pub(crate) use learn::regroup;
+
+use crate::body::{Body, Lived};
+use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
+use crate::grid::DIRS;
+use crate::rng::{Purpose, Rng};
+use crate::{bond, nodes, lanes, World};
+
+/// Features of a neighbour direction and of a perceived body.
+pub(crate) const NF: usize = 10;
+pub(crate) const NT: usize = 11;
+/// Most bodies perceived (the `SEEN` gene sets how many); parts perceived; moves (one per neighbour); options.
+const MAX_SEEN: usize = 6;
+const PARTS: usize = 3;
+const MOVES: usize = DIRS.len();
+const OPTS: usize = FIXED + MOVES + VERBS * MAX_SEEN + OVERBS * PARTS;
+/// The first option toward a perceived body, and toward a perceived part.
+const TO_BODY: usize = FIXED + MOVES;
+const TO_PART: usize = TO_BODY + VERBS * MAX_SEEN;
+/// Inputs of a brain besides two per substance (its stores, the cell's loose amounts) and its memory: the eight numbers
+/// of its own state, its cell and the season, the signals heard, and what Bond senses (`bond::sense`).
+pub(crate) const INPUTS: usize = 8 + SIG + bond::SENSE;
+const NONE: u32 = u32::MAX;
+
+/// Per direction, the offsets of the cells seen that way and their weights.
+pub type Sector = [Vec<(i32, i32, f32)>; 8];
+
+/// The cells within `sight` of a cell, by the nearest of the 8 directions they lie in: offsets and weights (nearer
+/// cells more, 1 / distance², distance counted in rings).
+fn sector(sight: usize) -> Sector {
+    let (mut s, r): (Sector, i32) = (Default::default(), sight as i32);
+    for dy in -r..=r {
+        for dx in -r..=r {
+            let k = dx.abs().max(dy.abs());
+            if k > 0 {
+                let d = ((dy as f64).atan2(dx as f64) / std::f64::consts::FRAC_PI_4).round() as i32;
+                s[d.rem_euclid(8) as usize].push((dx, dy, 1.0 / (k * k) as f32));
+            }
+        }
+    }
+    s
+}
+
+/// Working memory of `act`, kept from body to body.
+#[derive(Default)]
+pub struct ActTmp {
+    pub input: Vec<f32>,
+    pub thought: Thought,
+    /// Features of each direction (flat), for learning
+    pub feat: Vec<f32>,
+    /// By sight, the cells seen in each direction
+    pub sector: Vec<Sector>,
+}
+
+/// One decision: what the body perceives (bodies, with whether each is in its cell; parts; the room it is in and the
+/// part it holds), its options (the score of each, the cell each move goes to, the features of each body and part), the
+/// chance of each and the action drawn.
+struct Choice {
+    seen: [(usize, bool); MAX_SEEN],
+    nseen: usize,
+    parts: [usize; PARTS],
+    nparts: usize,
+    room: Option<(usize, f32, f64)>,
+    held: Option<usize>,
+    logit: [f32; OPTS],
+    p: [f32; OPTS],
+    to: [usize; MOVES],
+    fb: [f32; MAX_SEEN * NT],
+    fo: [f32; PARTS * bond::NO],
+    a: usize,
+}
+
+/// A body's decision at its update: it perceives (`perceive`, `inputs`), its brain thinks and learns from the last
+/// decision (`learn`), scores its options (`options`), draws one (`pick`), keeps the trace for learning and emits its
+/// signal (`trace`), and acts (`dispatch`).
+pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
+    let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
+    // Mass and heat capacity are as `body::live` just left them.
+    let temp = b.e / lived.cap.max(1e-9);
+    // A brain perceives sizes per member.
+    let pm = lived.mass / b.n();
+    let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS)), temp, lived.spare);
+    let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
+    let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
+    b.mem.resize(s.mem, 0.0);
+    while t.sector.len() <= sight {
+        t.sector.push(sector(t.sector.len()));
+    }
+    let mut c = perceive(w, slot, b, nseen, &mut rng);
+    inputs(w, b, lived, temp, &c, &mut t.input);
+    brain::think(&lin.base, &w.life.groups[b.group as usize].rows, s, &t.input, &mut t.thought);
+    learn::learn(w, b, s, wb, &t.thought.h);
+    options(w, b, s, (pm, sight), &mut c, t);
+    pick(w, &mut c, &mut rng);
+    let form = trace(w, b, s, &c, t, &mut rng);
+    b.wb = wb;
+    dispatch(w, slot, b, &c, form, &mut rng);
+}
+
+/// Bodies perceived: in its own cell first, then next to it from a random side, up to `nseen`. Walls between two bodies
+/// hide them from each other by how closed they are; cover hides a body as it shades the ground: it is seen through the
+/// others' capture area per m² of its cell, a, with chance exp(-a). Parts perceived in its cell (not the one it holds),
+/// from a random one on; a node perceives them as one of its members would.
+fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
+    let i = b.cell as usize;
+    let (mut seen, mut cnt, side) = ([(0usize, false); MAX_SEEN], 0, rng.below(8));
+    let room = bond::room(w, b);
+    for q in 0..9 {
+        if cnt == nseen {
+            break;
+        }
+        let Some(j) = (if q == 0 { Some(i) } else { w.grid.step(i, DIRS[(side + q) % 8]) }) else { continue };
+        for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
+            let ob = &w.life.bodies[o as usize];
+            let their = bond::room(w, ob);
+            let walls = if room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { room.map_or(0.0, |r| r.1).max(their.map_or(0.0, |r| r.1)) };
+            let cover = (w.canopy[j] as f64 - ob.vis[1] as f64 * ob.n() / w.grid.area()).max(0.0);
+            if cnt < nseen && (walls == 0.0 || rng.f64() as f32 >= walls) && (cover <= 0.0 || rng.f64() < (-cover).exp()) {
+                (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);
+            }
+        }
+    }
+    let (held, list) = (bond::held(w, b), &w.parts.at[i][..]);
+    let (mut parts, mut np, off) = ([0usize; PARTS], 0, if list.is_empty() { 0 } else { rng.below(list.len()) });
+    for q in 0..list.len() {
+        let p = list[(off + q) % list.len()] as usize;
+        if np == PARTS {
+            break;
+        }
+        if Some(p) != held {
+            (parts[np], np) = (p, np + 1);
+        }
+    }
+    Choice {
+        seen,
+        nseen: cnt,
+        parts,
+        nparts: np,
+        room,
+        held,
+        logit: [f32::NEG_INFINITY; OPTS],
+        p: [0.0; OPTS],
+        to: [usize::MAX; MOVES],
+        fb: [0.0; MAX_SEEN * NT],
+        fo: [0.0; PARTS * bond::NO],
+        a: REST,
+    }
+}
+
+/// The brain's inputs: own stores against their safe minimums, the cell's loose substances, warmth, size and light,
+/// the cell's liquid, temperature and crowding, the season, signals heard, what Bond senses, memory.
+fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, x: &mut Vec<f32>) {
+    let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
+    let (env, pm) = (w.life.env[i], mass / b.n());
+    let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, &(o, _)| [0, 1].map(|k| h[k] + w.life.bodies[o].sig[k] / c.nseen as f32));
+    x.clear();
+    let none = 0.25 * ln(1e-4);
+    x.extend((0..ns).map(|k| if b.store[k] > 0.0 { 0.25 * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + 1e-4) } else { none } - b.k.minln[k]));
+    x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
+    let crowd = ln(1.0 + (w.life.sum[i][1] / w.grid.area()) as f32);
+    let (dt, lit, sun) = ((temp - env[0]) as f32, lived.lit as f32, w.season() as f32 * std::f32::consts::TAU);
+    x.extend([dt / 10.0, ln(pm as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
+    x.extend(heard);
+    x.extend(bond::sense(w, b, pm));
+    x.extend_from_slice(&b.mem);
+}
+
+/// The score of each option: the fixed actions, a move to each neighbour (each direction's features are the weighted
+/// mean over the cells it sees that way), each verb toward each perceived body and part. Letting go needs something
+/// held or walls around; joining to the ground, a held part. A node does the actions of Bond through one member split
+/// off (`dispatch`): with less than two members it has none to spare. `pm` is the mass of a member, kg.
+fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Choice, t: &mut ActTmp) {
+    let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
+    for a in 0..FIXED {
+        c.logit[a] = out[a] + b.adj[a];
+    }
+    // What the body can take (by its uptake selectivity) in a cell, as it perceives it.
+    let smell = |j: usize| b.k.upt.iter().map(|&(k, u)| u * w.life.seen[j * ns + k]).sum::<f32>();
+    let (here, f, sec) = (smell(i), &mut t.feat, &t.sector[sight]);
+    f.clear();
+    f.resize(MOVES * NF, 0.0);
+    for (d, &off) in DIRS.iter().enumerate() {
+        let Some(j) = w.grid.step(i, off) else { continue };
+        let (fd, mut sum) = (&mut f[d * NF..(d + 1) * NF], 0.0);
+        for &(dx, dy, wt) in &sec[d] {
+            let Some(k) = w.grid.step(i, (dx, dy)) else { continue };
+            let (ck, e) = (&w.life.cellf[k], w.life.env[k]);
+            fd[..8].iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
+            fd[0] += wt * ((e[2] - env[2]) / 200.0) as f32;
+            fd[6] += wt * ((e[0] - env[0]) / 5.0) as f32;
+            fd[8] += wt * smell(k);
+            fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
+            // The step into the next cell is felt along its edge, worn or not.
+            if (dx, dy) == off {
+                fd[7] += wt * (ln(lanes::resist(w, i, d, j) as f32) - ck[7]);
+            }
+            sum += wt;
+        }
+        fd.iter_mut().for_each(|x| *x /= sum);
+        fd[8] -= here;
+        c.logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd) + b.adj[FIXED];
+        c.to[d] = j;
+    }
+    for (q, &(o, same)) in c.seen[..c.nseen].iter().enumerate() {
+        let ob = &w.life.bodies[o];
+        let v = ob.vis;
+        let known = b.recall(ob.id(o));
+        let fq = &mut c.fb[q * NT..(q + 1) * NT];
+        fq.copy_from_slice(&[ln(v[0] / pm as f32) / 7.0, ln(v[1] / v[0]) / 5.0, v[2], v[3], v[4], v[5], ob.sig[0], ob.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, ob.wb / 4.0]);
+        for verb in 0..VERBS {
+            if same || verb == WATCH {
+                c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq) + b.adj[FIXED + 1 + verb];
+            }
+        }
+    }
+    let vol = b.volume(&w.chem) / b.n();
+    for (q, &p) in c.parts[..c.nparts].iter().enumerate() {
+        let fq = &mut c.fo[q * bond::NO..(q + 1) * bond::NO];
+        fq.copy_from_slice(&bond::features(w, b, p, pm));
+        for v in (0..OVERBS).filter(|&v| bond::possible(w, b, v, p, vol)) {
+            let r = s.verb(VERBS + v);
+            c.logit[TO_PART + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq) + b.adj[FIXED + 1 + VERBS + v];
+        }
+    }
+    if b.n() > 1.0 && b.count < 2.0 {
+        c.logit[FORM..FIXED].fill(f32::NEG_INFINITY);
+        c.logit[TO_PART..].fill(f32::NEG_INFINITY);
+    }
+    if c.held.is_none() {
+        c.logit[ANCHOR] = f32::NEG_INFINITY;
+        if c.room.is_none() {
+            c.logit[RELEASE] = f32::NEG_INFINITY;
+        }
+    }
+}
+
+/// Draw one action by its score (a softmax). Copying is not among them: a body makes children only from its brood
+/// (`copy::copy`), so no brain bias sets how often anything is born. The draw that once decided a copy stays: dropping
+/// it would shift every later draw.
+fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
+    rng.f64();
+    c.logit[brain::COPY] = f32::NEG_INFINITY;
+    let top = c.logit.iter().cloned().fold(f32::MIN, f32::max);
+    c.p = c.logit.map(|l| if l == f32::NEG_INFINITY { 0.0 } else { (l - top).exp() });
+    let sum = c.p.iter().sum::<f32>();
+    c.p.iter_mut().for_each(|v| *v /= sum);
+    let mut u = rng.f64() as f32;
+    let a = c.p.iter().position(|&v| {
+        u -= v;
+        u < 0.0
+    });
+    c.a = a.unwrap_or(REST);
+    (w.diag.decisions, w.diag.greedy) = (w.diag.decisions + 1.0, w.diag.greedy + (c.logit[c.a] >= top) as u8 as f64);
+}
+
+/// The trace of the decision for learning: the hidden layer, and per learned row how its output moves the log-chance of
+/// what was done and of the signal. For the values drawn around a mean (signal, shape) that is the natural gradient
+/// (times the spread squared), so their noise does not use up the step allowed to the actions. Then the signal and the
+/// shape of a part made (elongation, hollowness), drawn around the brain's means, and the next memory. Returns the
+/// shape.
+fn trace(w: &World, b: &mut Body, s: Shape, c: &Choice, t: &ActTmp, rng: &mut Rng) -> [f32; FORM_OUT] {
+    let (l, nh, learning, out) = (s.learned(), s.h, b.learn_rate() > 0.0 && !w.cfg.null, &t.thought.out);
+    let (a, p) = (c.a, &c.p);
+    b.trace.resize(if learning { nh + l } else { 0 }, 0.0);
+    if learning {
+        let (th, cr) = b.trace.split_at_mut(nh);
+        th.copy_from_slice(&t.thought.h);
+        cr.fill(0.0);
+        let g = |o: usize| (o == a) as u8 as f32 - p[o];
+        for (q, cq) in cr[..FIXED].iter_mut().enumerate() {
+            *cq = g(q);
+        }
+        let mut add = |row: usize, gq: f32, fq: &[f32]| {
+            cr[row] += gq;
+            for (x, f) in cr[row + 1..].iter_mut().zip(fq) {
+                *x += gq * f;
+            }
+        };
+        for d in (0..MOVES).filter(|&d| c.to[d] != usize::MAX) {
+            add(s.dir(), g(FIXED + d), &t.feat[d * NF..(d + 1) * NF]);
+        }
+        for q in 0..c.nseen {
+            for verb in 0..VERBS {
+                add(s.verb(verb), g(TO_BODY + q * VERBS + verb), &c.fb[q * NT..(q + 1) * NT]);
+            }
+        }
+        for q in 0..c.nparts {
+            for v in 0..OVERBS {
+                add(s.verb(VERBS + v), g(TO_PART + q * OVERBS + v), &c.fo[q * bond::NO..(q + 1) * bond::NO]);
+            }
+        }
+    }
+    for k in 0..SIG {
+        let (mu, z) = (squash(out[s.sig() + k]), rng.normal() as f32);
+        b.sig[k] = mu + w.cfg.phys.signal_noise * z;
+        if learning {
+            b.trace[nh + s.sig() + k] = z * w.cfg.phys.signal_noise * (1.0 - mu * mu);
+        }
+    }
+    let mut form = [0f32; FORM_OUT];
+    for k in 0..FORM_OUT {
+        let (mu, z) = (squash(out[s.form() + k]), rng.normal() as f32);
+        form[k] = mu + w.cfg.phys.shape_noise * z;
+        if learning {
+            b.trace[nh + s.form() + k] = if a == FORM { z * w.cfg.phys.shape_noise * (1.0 - mu * mu) } else { 0.0 };
+        }
+    }
+    for (k, m) in b.mem.iter_mut().enumerate() {
+        *m = squash(out[l + k]);
+    }
+    form
+}
+
+/// Do the action drawn. A node does an action of Bond through one member, split off as an individual that acts
+/// (`nodes::one`). If it then holds or is inside something it lives on as one (`nodes::crowd` never merges it); else it
+/// has no reason to stay apart and goes back into the node at once, with what it got.
+fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32; FORM_OUT], rng: &mut Rng) {
+    let a = c.a;
+    let (me, mut one) = if node.n() > 1.0 && ((FORM..FIXED).contains(&a) || a >= TO_PART) {
+        let s = nodes::one(w, node, rng);
+        (s, Some(std::mem::take(&mut w.life.bodies[s])))
+    } else {
+        (slot, None)
+    };
+    let (b, slot) = (one.as_mut().unwrap_or(&mut *node), me);
+    match a {
+        // (Copying is never drawn.)
+        REST | brain::COPY => {}
+        PUT => feed::put(w, b),
+        TAKE => feed::take_node(w, slot, b),
+        FORM => bond::form(w, slot, b, [form[0], 0.5 * (form[1] + 1.0)]),
+        RELEASE => bond::release(w, b),
+        ANCHOR => bond::anchor(w, b),
+        DIG => bond::dig(w, b),
+        a if a < TO_BODY => go(w, slot, b, a - FIXED, c.to[a - FIXED]),
+        a if a >= TO_PART => bond::act(w, slot, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
+        a => {
+            let (q, verb) = ((a - TO_BODY) / VERBS, (a - TO_BODY) % VERBS);
+            match verb {
+                TAKE_FROM => take_body(w, slot, b, c.seen[q].0, rng),
+                GIVE => feed::give(w, slot, b, c.seen[q].0),
+                _ => learn::watch(w, b, c.seen[q].0),
+            }
+        }
+    }
+    if let Some(mut o) = one {
+        o.vis = o.visible(&w.chem, &w.cfg.phys);
+        w.life.bodies[me] = o;
+        if w.life.bodies[me].hold == 0 && w.life.bodies[me].inside == 0 {
+            let o = w.life.bodies[me].clone();
+            w.life.remove(me);
+            nodes::take_in(w, node, o, None);
+        }
+    }
+}
+
+/// After each survey: what a brain perceives of each cell as a place to move to (liquid depth, members, their mean mass,
+/// light-capture area and strength, the resistance they give to moving through; the height and temperature differences
+/// are added per move, in places 0 and 6).
+pub fn cells(w: &mut World) {
+    let (life, area) = (&mut w.life, w.grid.area() as f32);
+    life.cellf.clear();
+    life.cellf.extend(life.sum.iter().zip(&life.env).map(|(c, e)| {
+        let c = c.map(|v| v as f32);
+        let n = c[0].max(1.0);
+        let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / 5.0 } else { 0.0 };
+        let resist = 1.0 + c[1] / area / w.cfg.phys.rho_pass as f32;
+        [0.0, ln(1.0 + e[1] as f32), ln(1.0 + c[0]) / 10.0, ln((c[1] / n).max(1.0)) / 7.0 - 1.0, leaf, c[3] / n, 0.0, ln(resist)]
+    }));
+}

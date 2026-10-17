@@ -135,6 +135,11 @@ impl Chemistry {
         m.iter().zip(&self.subs).map(|(a, s)| a * s.cp).sum()
     }
 
+    /// Mass of amounts `m` (mol of each substance), kg.
+    pub fn mass_of(&self, m: &[f64]) -> f64 {
+        m.iter().zip(&self.subs).map(|(a, s)| a * s.molar_mass).sum()
+    }
+
     /// The heat that goes with amounts `m` (mol of each substance) when they leave a holder of heat `e` (J) and heat capacity
     /// `cap` (J/K): their share of it by heat capacity, J.
     #[inline]

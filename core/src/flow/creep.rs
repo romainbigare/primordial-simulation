@@ -19,7 +19,7 @@ const CREEP_MOST: f64 = 0.25;
 
 /// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more;
 /// heat conducts between ground nodes; bodies spread back into ground cleared along edges
-/// (`choose::regrow`, here only, so it closes at the documented speed).
+/// (`lanes::regrow`, here only, so it closes at the documented speed).
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let n = w.grid.n();
     let sol = s.solids(range(&s.tg).0);
@@ -40,7 +40,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
         }
     }
     w.ledger.gravity += heat;
-    crate::choose::regrow(w, dt);
+    crate::lanes::regrow(w, dt);
 }
 
 /// Heat conducts between ground nodes `i` and `j` (neighbours along `d`) through the skins of

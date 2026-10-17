@@ -5,7 +5,6 @@ use super::sense::room;
 use super::{dissolve, event, held, holder, link, make, restructure, strength, unlink, GROUND, HELD, LOAD, NOBODY};
 use crate::body::{self, Body, Layout, STRENGTH};
 use crate::chem::{Chemistry, Phase};
-use crate::choose::{kg, wanted};
 use crate::World;
 
 /// Taking hold of a part costs this share of the work of handling its mass (`Physics::c_handle`).
@@ -120,8 +119,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
 /// `w.cfg.phys.min_kg` fall apart.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
-    let m = wanted(w, b, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys), mb);
-    let got = kg(w, &m);
+    let m = b.wanted(&w.chem, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys), mb);
+    let got = w.chem.mass_of(&m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;
     }
@@ -158,7 +157,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let (chem, lay, t) = (&w.chem, Layout::of(&w.chem), b.temp(&w.chem));
     let size = b.size(chem);
     let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Gas { 0.0 } else { spare(chem, &lay, b, k, size) }).collect();
-    let all = kg(w, &spare);
+    let all = w.chem.mass_of(&spare);
     if all <= 0.0 {
         return;
     }
@@ -167,7 +166,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let lv: f64 = (0..chem.ns()).filter(|&k| wet[k]).map(|k| m[k] * chem.molar_volume(k, Phase::Liquid)).sum();
     let fit = (w.parts.parts[p].room(chem) / lv.max(1e-12)).min(1.0);
     (0..chem.ns()).filter(|&k| wet[k]).for_each(|k| m[k] *= fit);
-    let got = kg(w, &m);
+    let got = w.chem.mass_of(&m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;
     }
@@ -194,10 +193,10 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let (chem, lay, mb, t) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem), b.temp(&w.chem));
     let size = b.size(chem);
     let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Solid { spare(chem, &lay, b, k, size) } else { 0.0 }).collect();
-    let all = kg(w, &spare);
+    let all = w.chem.mass_of(&spare);
     let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
     let wall: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * f).min(MOST_SHARE * s)).collect();
-    let got = kg(w, &wall);
+    let got = w.chem.mass_of(&wall);
     if got < w.cfg.phys.min_kg || !body::pay(w, b, w.cfg.phys.c_form * got, b.interval() as f64) {
         return;
     }
@@ -254,7 +253,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
             if f <= s.strength || a <= 0.0 { 0.0 } else { (most * a * chem.molar_volume(k, Phase::Solid) / vol * (1.0 - s.strength / f) / s.molar_mass).min(MOST_SHARE * a) }
         })
         .collect();
-    let got = kg(w, &m);
+    let got = w.chem.mass_of(&m);
     if !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
         return;
     }

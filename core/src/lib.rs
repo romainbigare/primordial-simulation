@@ -12,6 +12,7 @@ pub mod event;
 pub mod flow;
 mod ground;
 pub mod grid;
+pub mod lanes;
 pub mod life;
 pub mod lineage;
 mod math;
