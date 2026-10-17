@@ -2,7 +2,8 @@
 //! viewer file, the yearly series and the monthly rows, resuming into the same folder, and the null run.
 
 use flate2::read::GzDecoder;
-use pcore::{check::hash, step, World};
+use pcore::{step, World};
+use tape::fingerprint;
 use std::io::Read;
 use std::sync::OnceLock;
 
@@ -54,10 +55,10 @@ fn snapshot_round_trip_mid_cycle() {
     run(&mut a, 17);
     tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
-    assert_eq!(hash(&a), hash(&b));
+    assert_eq!(fingerprint(&a), fingerprint(&b));
     run(&mut b, 14);
     run(&mut whole, 31);
-    assert_eq!(hash(&b), hash(&whole));
+    assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 
 /// A roster run resumed from a snapshot taken before some of its kinds are due places them as the unbroken run does:
@@ -85,7 +86,7 @@ fn a_resumed_run_places_the_kinds_still_due() {
     let (mut b, plan): (World, Schedule) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     years(&mut b, &plan, 1);
     assert!(late.iter().all(|k| b.life.brains.iter().flatten().any(|l| l.root == *k)), "the resumed run placed the later kinds");
-    assert_eq!(hash(&b), hash(&whole));
+    assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 
 /// The viewer file holds its header (the layers, the frames, the events) and a byte per cell, layer and frame.

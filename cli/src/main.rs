@@ -100,5 +100,5 @@ fn drive(mut w: World, a: &Args, plan: Schedule, resumed: bool) {
     clock.tape += t.elapsed();
     println!("{}", report::rivers(&w));
     let s = (busy + clock.stages.iter().sum::<Duration>() + clock.tape).as_secs_f64();
-    println!("{years} years in {s:.2} s ({:.1} ms per year), hash {:016x}", s * 1000.0 / years.max(1) as f64, pcore::check::hash(&w));
+    println!("{years} years in {s:.2} s ({:.1} ms per year), hash {:016x}", s * 1000.0 / years.max(1) as f64, tape::fingerprint(&w));
 }
