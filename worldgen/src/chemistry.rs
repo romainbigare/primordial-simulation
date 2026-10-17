@@ -1,7 +1,12 @@
-//! Chemistry 0 loader. (Generator and richness checks live here too.)
+//! The loader of a chemistry file (chemistry 0, `chem0.toml`), and the latent heats where a file gives none.
 
 use pcore::chem::{Chemistry, Reaction, Substance};
 use serde::Deserialize;
+
+/// Trouton's rule: the vaporisation entropy of a liquid at its boiling point, J/(mol K) (lv = TROUTON x boil).
+pub(crate) const TROUTON: f64 = 88.0;
+/// Richards's rule: the fusion entropy of a solid at its melting point, J/(mol K) (lf = RICHARDS x melt).
+pub(crate) const RICHARDS: f64 = 9.5;
 
 #[derive(Deserialize)]
 struct File {
@@ -15,7 +20,7 @@ struct File {
     init: Init,
 }
 
-/// Growth: what bodies make of what they hold (`pcore::chem::Chemistry::build`).
+/// A conversion: what bodies make of what they hold (`pcore::chem::Chemistry::build`, `builds`).
 #[derive(Deserialize)]
 struct B {
     i: Vec<[u16; 2]>,
@@ -39,7 +44,7 @@ struct S {
     sol: f64,
     cond: f64,
     hf: f64,
-    /// kJ/mol; Trouton's rule (88 J/(mol K) × boil) when missing
+    /// kJ/mol; none: Trouton's rule (`TROUTON`), and Richards's rule (`RICHARDS`) for `lf`
     lv: Option<f64>,
     lf: Option<f64>,
     /// GPa (`Substance::modulus`); none: 0
@@ -102,8 +107,8 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             solubility: s.sol,
             conductivity: s.cond,
             hf: s.hf * 1000.0,
-            lv: s.lv.map_or(88.0 * s.boil, |l| l * 1000.0),
-            lf: s.lf.map_or(9.5 * s.melt, |l| l * 1000.0),
+            lv: s.lv.map_or(TROUTON * s.boil, |l| l * 1000.0),
+            lf: s.lf.map_or(RICHARDS * s.melt, |l| l * 1000.0),
             modulus: s.modulus * 1e9,
             rupture: s.rupture * 1e6,
         })
