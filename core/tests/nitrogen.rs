@@ -7,7 +7,8 @@
 //! fixes the air's nitrogen makes the nitrogen mineral, at the energy cost of the reaction; roots take the minerals from the ground by
 //! the uptake genes; what a body holds of them past its level goes back to the ground; liquid carries them.
 
-use pcore::body::{self, Body, Layout, Lineage, DISPERSE, LIQ, REPAIR, STRENGTH};
+use pcore::body::{self, Body, Layout, DISPERSE, LIQ, REPAIR, STRENGTH};
+use pcore::life::Lineage;
 use pcore::chem::Chemistry;
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, change, check, choose, copy, flow, World};
@@ -48,7 +49,7 @@ fn body_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
 /// A body placed and taken out again, prepared, to call the laws on directly.
 fn out(w: &mut World, b: Body) -> (usize, Body) {
     let s = w.life.add(b, w.day, 1);
-    body::survey(w);
+    pcore::survey::survey(w);
     w.day += 1;
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     b.prepare(&w.chem, &w.cfg.phys);
@@ -59,12 +60,12 @@ fn out(w: &mut World, b: Body) -> (usize, Body) {
 fn day(w: &mut World) {
     let dt = w.cfg.phys_days as f64 * 86_400.0;
     if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
-        body::survey(w);
+        pcore::survey::survey(w);
         flow::step(w, dt);
         change::step(w, dt);
     }
     w.events.clear();
-    body::day(w);
+    pcore::survey::day(w);
     w.day += 1;
 }
 

@@ -43,7 +43,7 @@ fn eater(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
     fixed[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(body::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
     // (A founder is placed as an adult since 15 Oct 2026, 63 kg: these tests read a 30 kg one.)
     let m = b.mass(&w.chem);
@@ -73,7 +73,7 @@ fn node(w: &mut World, mut b: Body, n: f64) -> Body {
 /// The body placed in the world and prepared, where it is.
 fn place(w: &mut World, b: Body) -> usize {
     let s = w.life.add(b, w.day, 1);
-    body::survey(w);
+    pcore::survey::survey(w);
     w.day += 1;
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     b.prepare(&w.chem, &w.cfg.phys);
@@ -355,11 +355,11 @@ fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
         w.ledger.imposed_energy += e - w.e_ground[i];
         w.e_ground[i] = e;
         if d % w.cfg.phys_days as usize == 0 {
-            body::survey(&mut w);
+            pcore::survey::survey(&mut w);
             flow::step(&mut w, dt);
             change::step(&mut w, dt);
         }
-        body::day(&mut w);
+        pcore::survey::day(&mut w);
         w.day += 1;
         if !w.life.bodies[s].alive {
             let cause = w.events.iter().find_map(|e| if let pcore::event::EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None });

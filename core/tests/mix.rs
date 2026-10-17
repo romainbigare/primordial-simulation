@@ -33,7 +33,7 @@ fn eater(w: &mut World, i: usize, copy: f32) -> Body {
     fixed[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(body::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
     (b.genes[MUT], b.genes[CHILD]) = (-3.0, -3.0);
@@ -54,7 +54,7 @@ fn scale(w: &mut World, b: &mut Body, f: f64) {
 /// A body placed and taken out again, prepared, to call the laws on directly.
 fn out(w: &mut World, b: Body) -> (usize, Body) {
     let s = w.life.add(b, w.day, 1);
-    body::survey(w);
+    pcore::survey::survey(w);
     w.day += 1;
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     b.prepare(&w.chem, &w.cfg.phys);

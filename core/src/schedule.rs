@@ -13,7 +13,7 @@
 
 use crate::units::DAY;
 use crate::world::World;
-use crate::{body, bond, change, check, flow};
+use crate::{bond, change, check, flow, survey};
 
 /// A stage of the month, as `step_marked` reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,7 +50,7 @@ pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(Stage)) {
     for d in 0..dpm {
         if d % w.cfg.phys_days == 0 {
             let dt = w.cfg.phys_days.min(dpm - d) as f64 * DAY;
-            body::survey(w);
+            survey::survey(w);
             mark(Stage::Bodies);
             audit(w, "survey");
             flow::step(w, dt);
@@ -65,7 +65,7 @@ pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(Stage)) {
             mark(Stage::Parts);
             audit(w, "bond");
         }
-        body::day(w);
+        survey::day(w);
         w.day += 1;
         mark(Stage::Bodies);
         audit(w, "body day");

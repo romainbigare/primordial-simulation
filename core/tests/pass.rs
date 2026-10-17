@@ -2,7 +2,8 @@
 //! ground along their edge (it gets cheaper to cross), and the cover grows back over years
 //! once the moving stops. A body too weak to give the push of a mover does not move.
 
-use pcore::body::{self, Lineage};
+use pcore::body;
+use pcore::life::Lineage;
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, choose, World};
 
@@ -38,7 +39,7 @@ fn scene() -> (World, usize, usize, usize) {
 #[test]
 fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     let (mut w, a, b, slot) = scene();
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     assert!((choose::eased(&w, a, 0) - 1.0).abs() < 1e-9);
     let (rich, mut crossed) = (worldgen::life::roles(&w.chem).expect("roles").1, 0);
     // Moving needs force (review 7 fix 7): with the strength of the starting plants (0.05: a force of 0.025 of its weight)
@@ -58,7 +59,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         choose::go(&mut w, slot, &mut m, d, to);
         crossed += (m.cell as usize == to) as u32;
         w.life.bodies[slot] = m;
-        body::survey(&mut w);
+        pcore::survey::survey(&mut w);
         if choose::eased(&w, a, 0) > 3.0 {
             break;
         }

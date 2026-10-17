@@ -45,7 +45,7 @@ fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
     fixed[act] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(body::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
     // (A founder is placed as an adult since 15 Oct 2026, 63 kg: these tests read a 30 kg one.)
     let m = b.mass(&w.chem);
@@ -98,12 +98,12 @@ fn feed_minerals(w: &mut World, s: usize) {
 fn day(w: &mut World) {
     let dt = w.cfg.phys_days as f64 * 86_400.0;
     if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
-        body::survey(w);
+        pcore::survey::survey(w);
         flow::step(w, dt);
         change::step(w, dt);
     }
     w.events.clear();
-    body::day(w);
+    pcore::survey::day(w);
     w.day += 1;
 }
 
@@ -117,7 +117,7 @@ fn start() -> (World, usize) {
 /// A body placed and taken out again, prepared, to call the laws on directly.
 fn out(w: &mut World, b: Body) -> (usize, Body) {
     let s = w.life.add(b, w.day, 1);
-    body::survey(w);
+    pcore::survey::survey(w);
     w.day += 1;
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     b.prepare(&w.chem, &w.cfg.phys);
@@ -198,7 +198,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     }
     // (Not at a month's start: alike nodes of a cell merge then.)
     w.day += 1;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     let (a, b) = (&w.life.bodies[sa], &w.life.bodies[sb]);
     let (ma, mb) = (a.mass(&w.chem) / n, b.mass(&w.chem) / n);
     println!("shade: A (member mass {ma:.0} kg, body {:.1}) {:.3}, B (member mass {mb:.0} kg, body {:.1}) {:.3}; leaf per ground area {:.2} and {:.2}", a.size(&w.chem) / n, w.life.shade[sa], b.size(&w.chem) / n, w.life.shade[sb], a.vis[1] as f64 * n / w.grid.area(), b.vis[1] as f64 * n / w.grid.area());
@@ -544,7 +544,7 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     let s = w.life.add(n, w.day, 1);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     w.day += 1;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     let lay = Layout::of(&w.chem);
     let mut built0 = 0.0;
     for round in 0..3 {
@@ -573,7 +573,7 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     let month = w.cfg.days_per_month as u64;
     // A month's merge: alike in genes and in size class (3 kg and the parents' about 20), but the young are immature.
     w.day = (w.day / month + 1) * month;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 2, "the young merged into the mature node");
     // Grown to 8 kg a member (under the copy mass 10 kg, within the size class of the parents' 20): still apart.
     let grow_to = |w: &mut World, k: usize, body: f64| {
@@ -588,13 +588,13 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     assert!(!w.life.bodies[k].adult(&w.chem) && copy::alike_size(&lay, w.cfg.phys.alike, 8.0, w.life.bodies[s].built(&w.chem) / 5.0));
     assert!(!near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]));
     w.day += month;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 2, "an immature node merged into a mature one");
     // Mature (11 kg), it joins.
     grow_to(&mut w, k, 11.0);
     assert!(w.life.bodies[k].adult(&w.chem));
     w.day += month;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 1, "the mature young did not merge in");
     let all: f64 = w.life.alive().map(|b| b.n()).sum();
     assert!((all - 17.0).abs() < 1e-4, "members {all}");
@@ -722,7 +722,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     // (One body: a month's start would otherwise be the day of the survey; not yet.)
     w.day += 1;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     let mut n = std::mem::take(&mut w.life.bodies[s]);
     n.prepare(&w.chem, &w.cfg.phys);
     let parent_body = n.built(&w.chem) / n.n();
@@ -743,7 +743,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     // A month's start: they are alike in genes but not in size: they stay two.
     let month = w.cfg.days_per_month as u64;
     w.day = (w.day / month + 1) * month;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 2, "the young and the old merged");
     // The young grow: matter and the liquid it keeps with it added (an edit, booked) up to the members' size, and the next
     // month's merge takes them back.
@@ -755,7 +755,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     w.life.bodies[k] = c;
     assert!(near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]), "grown to {} kg a member, not yet of the size class", w.life.bodies[k].built(&w.chem) / 12.6);
     w.day += month;
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 1, "the grown young did not merge back");
     let all: f64 = w.life.alive().map(|b| b.n()).sum();
     assert!((all - 17.6).abs() < 1e-9, "members {all}");

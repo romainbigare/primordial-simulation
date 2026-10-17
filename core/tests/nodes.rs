@@ -1,6 +1,7 @@
 //! Population nodes (plan 7.1): how their members differ, how they split, how they act on bonds.
 
-use pcore::body::{Body, Layout, Lineage, CHILD, COPY_MASS, DISPERSE, GAS, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
+use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, GAS, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
+use pcore::life::Lineage;
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, check, choose, copy};
 
@@ -111,7 +112,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     for _ in 0..updates {
         w.day += 10;
         if w.day.is_multiple_of(w.cfg.days_per_month as u64) {
-            pcore::body::survey(&mut w);
+            pcore::survey::survey(&mut w);
         }
         // In a random order, so no body is first by its slot.
         let (mut order, mut r) = (live(&w), Rng::new(1, w.day, 0, Purpose::Body));
@@ -290,9 +291,9 @@ fn a_node_acts_on_bonds_through_one_member() {
         }
         let (n0, genes, kg) = (b.count, b.genes.clone(), b.mass(&w.chem) / b.count);
         w.life.add(b, w.day, 1);
-        pcore::body::survey(&mut w);
+        pcore::survey::survey(&mut w);
         w.day += 1;
-        pcore::body::day(&mut w);
+        pcore::survey::day(&mut w);
         assert_eq!(w.diag.splits[1], 1.0, "no member split off");
         let one: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l && b.count == 1.0).collect();
         let node = w.life.alive().find(|b| b.lineage == l && b.count > 1.0).expect("the node");
@@ -506,7 +507,7 @@ fn individuals_mode_merges_no_animal() {
         w.life.add(b, w.day, 1);
     }
     let n = here(&w);
-    pcore::body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     assert_eq!(here(&w), n, "animals merged");
     // Animals alive at the end of each month, and animals born in the window (members).
     let (mut alive, mut born) = (Vec::new(), 0.0);

@@ -150,11 +150,11 @@ fn hot_cover_burns() {
                 w.e_ground[i] = e;
             }
             if d % w.cfg.phys_days == 0 {
-                pcore::body::survey(&mut w);
+                pcore::survey::survey(&mut w);
                 pcore::flow::step(&mut w, dt);
                 pcore::change::step(&mut w, dt);
             }
-            pcore::body::day(&mut w);
+            pcore::survey::day(&mut w);
             w.day += 1;
         }
         assert_eq!(pcore::check::broken(&w), None);
@@ -183,7 +183,7 @@ fn crowded_individuals_merge_into_a_node() {
     }
     // At the month's start (looked at before they act: within the month the node may give its
     // members up one at a time to the actions of Bond, as the draws go).
-    pcore::body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
     assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
     assert_eq!(w.diag.wide, 0.0, "alike bodies merged and some were counted wide");
@@ -211,7 +211,7 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     }
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.n()).collect::<Vec<f64>>();
     let before: f64 = here(&w).iter().sum();
-    pcore::body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     let after = here(&w);
     // Copy masses 0.3 apart are 1.5 steps apart each (`alike` is 4): the most alike pairs merge
     // first, so the cell may reach `crowd` with no wide merge; every unlike merge (past twice
@@ -262,9 +262,10 @@ fn cold_bodies_release_and_pay_less() {
 /// left with nothing of a member it died at once). Nothing breaks the ledger (taking from an empty body once gave NaN).
 #[test]
 fn a_body_gives_its_stores_but_not_its_body() {
-    use pcore::body::{Lineage, INTERVAL};
+    use pcore::body::{INTERVAL};
+    use pcore::life::Lineage;
     use pcore::event::EventKind;
-    use pcore::{body, bond, brain, change, choose, flow};
+    use pcore::{bond, brain, change, choose, flow};
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     w.cfg.phys.c_handle = 0.0;
@@ -303,14 +304,14 @@ fn a_body_gives_its_stores_but_not_its_body() {
     for _ in 0..3 {
         let d = w.day % w.cfg.days_per_month as u64;
         if d.is_multiple_of(w.cfg.phys_days as u64) {
-            body::survey(&mut w);
+            pcore::survey::survey(&mut w);
             flow::step(&mut w, dt);
             change::step(&mut w, dt);
         }
         if d == 0 {
             bond::step(&mut w);
         }
-        body::day(&mut w);
+        pcore::survey::day(&mut w);
         w.day += 1;
         for b in w.life.alive() {
             assert!(b.mass(&w.chem) >= 1e-3 * b.n(), "an empty body is alive: energy {}, stores {:?}", b.e, b.store);
@@ -434,7 +435,7 @@ fn a_tall_member_shades_a_short_one() {
     (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg.phys), tall.visible(&w.chem, &w.cfg.phys));
     let slots = [w.life.add(tall, w.day, 1), short];
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
-    pcore::body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * 86_400.0);
     pcore::flow::step(&mut w, dt);
     let bs = &w.life.bodies;
@@ -458,7 +459,8 @@ fn a_tall_member_shades_a_short_one() {
 /// brood (W3). Matter and energy are kept exactly.
 #[test]
 fn a_body_with_no_brain_lives_and_copies() {
-    use pcore::body::{Lineage, COPY_MASS, HIDDEN};
+    use pcore::body::{COPY_MASS, HIDDEN};
+    use pcore::life::Lineage;
     use pcore::event::EventKind;
     use pcore::{brain, choose};
     let mut w = worldgen::new_world(1, 16, 16);
@@ -505,7 +507,8 @@ fn a_body_with_no_brain_lives_and_copies() {
 /// per unit) at a higher upkeep (the repair share, a quarter at gene 0, doubles per unit). Matter and energy are kept exactly.
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
-    use pcore::body::{Lineage, AGE, DISPERSE, LEARN, REPAIR, STRENGTH};
+    use pcore::body::{AGE, DISPERSE, LEARN, REPAIR, STRENGTH};
+    use pcore::life::Lineage;
     use pcore::event::EventKind;
     use pcore::{brain, choose};
     let mut w = worldgen::new_world(1, 16, 16);
@@ -562,12 +565,12 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         }
         if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
             let dt = w.cfg.phys_days as f64 * 86_400.0;
-            pcore::body::survey(w);
+            pcore::survey::survey(w);
             pcore::flow::step(w, dt);
             pcore::change::step(w, dt);
         }
         w.events.clear();
-        pcore::body::day(w);
+        pcore::survey::day(w);
         deaths.extend(w.events.iter().filter(|e| matches!(e.kind, EventKind::Died { cause: AGE, .. })).map(|e| (e.day, e.value)));
         w.day += 1;
     };
@@ -671,7 +674,7 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
     let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
     let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::body::Lineage { shape, seen: 3, sight: 1, base, root: 5 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 5 }), w.life.new_genome(rows));
     // Eaters of remains (kind 5: strength 0, 1 kg); repair 0 so the factor is 1.
     let mut b = worldgen::life::make(&mut w, 5, i, l, g).expect("body");
     assert_eq!(b.genes[STRENGTH], 0.0);
@@ -724,7 +727,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
     let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::body::Lineage { shape, seen: 3, sight: 1, base, root: 1 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 1 }), w.life.new_genome(rows));
     // A starting eater: strength 0.6, a burning catalyst, learning on.
     let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
     (b.genes[STRENGTH], b.genes[LEARN], b.genes[REPAIR]) = (0.6, -1.0, 0.0);

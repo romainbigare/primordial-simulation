@@ -3,7 +3,8 @@
 //! `Physics::dormancy`); upkeep and the cost of a decision, the speed-up of catalysts, building and
 //! the share a freezing kills go with it. A child may get less liquid than its parent (`WET`).
 
-use pcore::body::{Body, Lineage, CHILD, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
+use pcore::body::{Body, CHILD, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
+use pcore::life::Lineage;
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, choose, World};

@@ -5,7 +5,8 @@
 //! work release leaves through its surface by the conductance of its genes, cover and walls, so the
 //! body stands above its ground by that heat over that conductance (`body::live`, `body::pay`).
 
-use pcore::body::{Body, Lineage, DISPERSE, LIQ, REPAIR};
+use pcore::body::{Body, DISPERSE, LIQ, REPAIR};
+use pcore::life::Lineage;
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, choose, World};
 
@@ -100,9 +101,9 @@ fn a_cold_body_ages_slower() {
     let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass), pcore::body::upkeep(w, &warm, days, mass));
     let (c, k) = (w.life.add(cold, w.day, 1), w.life.add(warm, w.day, 1));
     let (t0, l0) = (pcore::check::totals(w), w.ledger.clone());
-    pcore::body::survey(w);
+    pcore::survey::survey(w);
     w.day += 1;
-    pcore::body::day(w);
+    pcore::survey::day(w);
     assert!(w.life.bodies[c].alive && w.life.bodies[k].alive);
     let (wc, wk) = (w.life.bodies[c].wear, w.life.bodies[k].wear);
     println!("wear after a day: cold (270 K) {wc:.4e}, warm (300 K) {wk:.4e}; upkeep {uc:.4e} and {uw:.4e} J");
@@ -195,12 +196,12 @@ fn held_days(w: &mut World, cells: &[usize], temps: &[f64], days: usize) {
         }
         if (w.day % w.cfg.days_per_month as u64).is_multiple_of(w.cfg.phys_days as u64) {
             let dt = w.cfg.phys_days as f64 * 86_400.0;
-            pcore::body::survey(w);
+            pcore::survey::survey(w);
             pcore::flow::step(w, dt);
             pcore::change::step(w, dt);
         }
         w.events.clear();
-        pcore::body::day(w);
+        pcore::survey::day(w);
         w.day += 1;
     }
 }
@@ -389,14 +390,14 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         w.ledger.imposed_energy += a * w.chem.subs[rich].hf + en - w.e_ground[i];
         w.e_ground[i] = en;
         let slot = w.life.add(b, w.day, 1);
-        pcore::body::survey(w);
+        pcore::survey::survey(w);
         w.day += 1;
         let mut b = std::mem::take(&mut w.life.bodies[slot]);
         b.prepare(&w.chem, &w.cfg.phys);
         let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
         let (up, pace) = (pcore::body::upkeep(w, &b, days, mass), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
         w.events.clear();
-        pcore::choose::act(w, slot, &mut b, &mut pcore::body::Tmp::default());
+        pcore::choose::act(w, slot, &mut b, &Default::default(), &mut Default::default());
         let id = b.id(slot);
         took.push(w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>());
         ups.push(up);

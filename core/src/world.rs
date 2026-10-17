@@ -5,7 +5,7 @@ use crate::chem::Chemistry;
 use crate::event::Event;
 use crate::grid::Grid;
 use crate::params::Config;
-use crate::{body, bond, flow};
+use crate::{bond, flow};
 use serde::{Deserialize, Serialize};
 
 /// Energy and matter that crossed the world's boundary, for conservation checks.
@@ -150,7 +150,7 @@ pub struct World {
     pub diag: Diag,
     pub ledger: Ledger,
     /// Bodies, and the parts they made: the sparse graph
-    pub life: body::Life,
+    pub life: crate::life::Life,
     pub parts: bond::Parts,
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
     pub canopy: Vec<f32>,

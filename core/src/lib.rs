@@ -12,11 +12,14 @@ pub mod event;
 pub mod flow;
 mod ground;
 pub mod grid;
+pub mod life;
 mod math;
+mod nodes;
 pub mod par;
 mod params;
 pub mod rng;
 mod schedule;
+pub mod survey;
 pub mod units;
 mod world;
 

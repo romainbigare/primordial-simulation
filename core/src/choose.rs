@@ -17,8 +17,8 @@
 //! copy and starts a group; one that stays a year near a bigger group of its lineage joins it.
 //! What a group learned fades at the mean forgetting rate of its members.
 
-use crate::body::{self, Body, Layout, Lineage, Tmp, BROKEN, STRENGTH, TAKEN};
-use crate::brain::{self, ln, score, squash, Shape, FIXED, OVERBS, SIG, VERBS};
+use crate::body::{self, Body, Layout, LiveTmp, Lineage, BROKEN, STRENGTH, TAKEN};
+use crate::brain::{self, ln, score, squash, Shape, Thought, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::Phase;
 use crate::event::{Event, EventKind};
 use crate::grid::{DIRS, FORWARD};
@@ -41,7 +41,7 @@ pub fn shape(ns: usize, h: usize, mem: usize) -> Shape {
 
 /// The sizes the genes give: hidden units, memory numbers, bodies perceived, sight (cells).
 pub fn sizes(genes: &[f32]) -> [usize; 4] {
-    [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| genes[g].round().max(0.0) as usize)
+    body::BRAIN_SIZES.map(|g| genes[g].round().max(0.0) as usize)
 }
 
 /// The sizes of a lineage.
@@ -68,14 +68,25 @@ fn sector(sight: usize) -> Sector {
     s
 }
 
-pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
+/// Working memory of `act`, kept from body to body.
+#[derive(Default)]
+pub struct ActTmp {
+    pub input: Vec<f32>,
+    pub thought: Thought,
+    /// Features of each option a scorer scored (flat), for learning
+    pub feat: Vec<f32>,
+    /// By sight, the cells seen in each direction
+    pub sector: Vec<Sector>,
+}
+
+pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &LiveTmp, t: &mut ActTmp) {
     let (i, ns) = (b.cell as usize, w.chem.ns());
     let mut rng = Rng::new(w.seed, w.day, b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
-    let (mass, env, temp) = (t.mass, w.life.env[i], b.e / t.cap.max(1e-9));
+    let (mass, env, temp) = (lived.mass, w.life.env[i], b.e / lived.cap.max(1e-9));
     // A brain perceives sizes per member.
     let pm = mass / b.n();
-    let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(body::COPY_MASS)), temp, t.spare);
+    let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(body::COPY_MASS)), temp, lived.spare);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, base, nseen, sight) = (lin.shape, &lin.base, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
@@ -128,7 +139,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
     x.extend((0..ns).map(|k| if b.store[k] > 0.0 { 0.25 * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + 1e-4) } else { none } - b.k.minln[k]));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = ln(1.0 + (w.life.sum[i][1] / w.grid.area()) as f32);
-    let (dt, lit, sun) = ((temp - env[0]) as f32, t.lit as f32, w.season() as f32 * std::f32::consts::TAU);
+    let (dt, lit, sun) = ((temp - env[0]) as f32, lived.lit as f32, w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / 10.0, ln(pm as f32) / 7.0 - 1.0, ln(1.0 + lit) / 15.0, ln(1.0 + env[1] as f32), (env[0] as f32 - 285.0) / 15.0, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
     x.extend(bond::sense(w, b, pm));
@@ -374,7 +385,7 @@ fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 /// alone, what it learned is blended in by its share. (No joining unless brains are shared.)
 pub(crate) fn regroup(w: &mut World) {
     let (gw, gh, day, share, life) = (w.grid.w, w.grid.h, w.day, w.cfg.share_brains, &mut w.life);
-    let at = |g: &body::Group| {
+    let at = |g: &crate::life::Group| {
         let (x, y) = g.centre();
         (y.round() as usize).min(gh - 1) * gw + (x.round() as usize).min(gw - 1)
     };

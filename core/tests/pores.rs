@@ -46,7 +46,7 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
     let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.grid.area());
     // The loose layer of the generated land is 1 m of a mix of grains, 0.4 of it pores (anchor: random packing, 0.36 to 0.44).
     assert!((pores / area / 0.4 - 1.0).abs() < 0.05, "{} m of pore depth under a metre of loose ground", pores / area);
-    let depth = |w: &World| pcore::body::env_of(w, i)[1];
+    let depth = |w: &World| pcore::survey::env_of(w, i)[1];
     assert_eq!(depth(&w), 0.0);
     pour(&mut w, init.low, i, 0.5 * pores);
     assert_eq!(depth(&w), 0.0, "liquid that fits in the pores does not stand");
@@ -143,7 +143,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
     assert!(p.seep * w0.grid.cell_m * 1e-3 * 3.156e7 / (p.porosity * area) < 2e-4);
     let mv = w0.chem.molar_volume(k, Phase::Liquid);
     let full = p.bed_porosity * p.bed_depth * area;
-    let stands = |w: &World, i: usize| w.surface_z(i) + pcore::body::env_of(w, i)[1];
+    let stands = |w: &World, i: usize| w.surface_z(i) + pcore::survey::env_of(w, i)[1];
     // The slope down to the steepest lower neighbour, as the sweep reads it.
     let slope = |w: &World, i: usize| {
         let (x, y) = ((i % gw) as i64, (i / gw) as i64);
@@ -185,7 +185,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
     assert!(s > 1e-3 && (drained / want - 1.0).abs() < 0.02, "drained {drained} m³, want {want}");
     assert!(g1 - g0 < 0.05 * want, "{} m³ stayed in the cell", g1 - g0);
     // Under the deep liquid, level with its neighbours: nothing drains to channels.
-    let under = (0..n).find(|&i| pcore::body::env_of(&w0, i)[1] > 20.0 && slope(&w0, i) == 0.0).expect("a cell under deep liquid");
+    let under = (0..n).find(|&i| pcore::survey::env_of(&w0, i)[1] > 20.0 && slope(&w0, i) == 0.0).expect("a cell under deep liquid");
     let ((d1, _), (d0, _)) = (run(under, p.hill), run(under, 1e15));
     assert!((d1 - d0).abs() <= 1e-9 * d0, "{d1} against {d0}");
 }

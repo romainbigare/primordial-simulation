@@ -40,76 +40,16 @@
 //! With `Config::nodes` off the animals (bodies that are not light-eaters, `body::light_eater`)
 //! are never nodes: their children start as individuals and join nothing, and none splits.
 
-use crate::body::{self, Body, Layout, Lineage};
+use crate::body::{self, range, Body, Layout, Lineage, BRAIN_SIZES, LOG_HALF};
 use crate::{brain, choose};
 use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
 use crate::{Physics, World};
-use std::f32::consts::{FRAC_2_PI, FRAC_PI_8, LOG10_2};
+use std::f32::consts::{FRAC_2_PI, FRAC_PI_8};
 
 /// Reach of the noise `noise` draws (a sum of four uniforms, centred and scaled): 2·sqrt(3).
 const REACH: f32 = 3.464_101_6;
-
-/// log10 of one half: the largest child, a share of its parent's copy mass (`body::CHILD`).
-const LOG_HALF: f32 = -LOG10_2;
-
-/// Mutation step (times the body's mutation size) and range of a gene. Catalysts, safe minimums
-/// and uptake are off below 0 (they cost nothing and do nothing there), and their ranges go 20
-/// steps below 0, so an off gene wanders as far as the noise of a node's spread reaches (about 10
-/// steps, `most`) without meeting a wall, whose clamp would push it up. A catalyst
-/// step is 0.3 decades, so nodes alike within `phys.alike` steps differ by a factor 16 at most.
-fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
-    match g {
-        g if g < body::NSCALAR => SCALARS[g],
-        g if g < lay.min => (0.3, -6.0, 18.0),
-        g if g < lay.upt => (0.05, -1.0, 0.9),
-        g if g < lay.keep => (0.2, -4.0, 2.0),
-        _ => (0.2, -0.5, 6.0),
-    }
-}
-
-/// `range` of the scalar genes as a table: it is asked a hundred times in each likeness test and
-/// each draw of children, and a look-up is cheaper than the match.
-const SCALARS: [(f32, f32, f32); body::NSCALAR] = {
-    let (mut t, mut g) = ([(0.0, 0.0, 0.0); body::NSCALAR], 0);
-    while g < body::NSCALAR {
-        t[g] = scalar(g);
-        g += 1;
-    }
-    t
-};
-
-const fn scalar(g: usize) -> (f32, f32, f32) {
-    match g {
-        body::GAS => (0.3, -1.0, 6.0),
-        body::LIQ => (0.3, -4.0, 1.0),
-        body::HEAT => (0.3, -2.5, 3.5),
-        body::LEAF => (0.3, -4.0, 1.0),
-        body::STRENGTH => (0.1, 0.0, 1.0),
-        body::CHILD => (0.1, -6.0, LOG_HALF),
-        body::WET => (0.05, -3.0, 0.5),
-        body::ALLOC => (0.05, 0.0, 1.0),
-        body::COPY_MASS => (0.2, -3.0, 6.0),
-        body::INTERVAL => (0.2, 0.7, 2.556),
-        body::MUT => (0.2, -3.0, 0.0),
-        body::LEARN => (0.2, -4.0, 0.0),
-        body::FORGET => (0.2, -4.0, -1.7),
-        // Down to no brain: below 0.5 it rounds to 0 hidden units; the room below 0 lets a node's
-        // mean reach it without meeting the wall.
-        body::HIDDEN => (0.3, -1.0, 64.0),
-        body::MEMORY => (0.15, 0.0, 12.0),
-        body::SEEN => (0.1, 1.0, 6.0),
-        body::SIGHT => (0.07, 1.0, 4.0),
-        body::DISPERSE => (0.05, 0.0, 1.0),
-        body::DENATURE => (5.0, 250.0, 450.0),
-        body::REPAIR => (0.2, -3.0, 3.0),
-        // Up to the warmest real bodies keep (birds about 315 K) and down far enough below the coldest ground for an unused
-        // level to wander without meeting the wall.
-        body::KEEP_T | body::COOL_T => (5.0, 200.0, 320.0),
-        _ => (0.3, -6.0, 18.0),
-    }
-}
 
 /// Genes no more than `limit` steps apart in each gene (`step`: genes that are off count as 0, the
 /// sizes of brain and senses by whole units). Nodes merge each month only if their means are alike
@@ -742,7 +682,7 @@ fn own(w: &mut World, b: &Body, c: &mut Body) {
 /// overlap (`brain::rebase`, new weights of spread `noise`).
 fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, noise: f32) -> Option<Lineage> {
     let (old, want) = (choose::sizes_of(lin), choose::sizes(genes));
-    let gene = [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].map(|g| genes[g]);
+    let gene = BRAIN_SIZES.map(|g| genes[g]);
     let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
     let to = choose::shape(ns, new[0], new[1]);
     (new != old).then(|| Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, r, noise), root: lin.root })

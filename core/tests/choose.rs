@@ -4,7 +4,8 @@
 //! its first 200 decisions, with learning on against off, over many seeds. Its children (it
 //! copies once it has eaten twice its copy mass) are taken out at once.
 
-use pcore::body::{self, Lineage, INTERVAL, LEARN};
+use pcore::body::{self, INTERVAL, LEARN};
+use pcore::life::Lineage;
 use pcore::grid::DIRS;
 use pcore::rng::{Purpose, Rng};
 use pcore::{bond, brain, change, choose, flow, World};
@@ -79,7 +80,7 @@ fn scene(seed: u64) -> (World, usize) {
         w.ground[rich * n + i] += RICH * w.grid.area();
     }
     w.life.env.clear();
-    body::survey(&mut w);
+    pcore::survey::survey(&mut w);
     (w, rich)
 }
 
@@ -125,7 +126,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     while log.len() < DECISIONS && w.life.bodies[slot].alive {
         let d = w.day % w.cfg.days_per_month as u64;
         if d.is_multiple_of(w.cfg.phys_days as u64) {
-            body::survey(&mut w);
+            pcore::survey::survey(&mut w);
             flow::step(&mut w, dt);
             change::step(&mut w, dt);
         }
@@ -135,7 +136,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         let (u, from) = (w.life.updates, w.life.bodies[slot].cell as usize);
         let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.grid.step(from, d)).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, rich, j) > seen(&w, rich, from) + 0.02).collect();
-        body::day(&mut w);
+        pcore::survey::day(&mut w);
         w.day += 1;
         // A body that grew past twice its copy mass has children: they die at once, their matter
         // back to the ground where they were born, so the scene stays one body.

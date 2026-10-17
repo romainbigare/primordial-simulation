@@ -3,7 +3,7 @@
 
 use super::super::land::NONE;
 use super::super::Scratch;
-use crate::body::Life;
+use crate::life::Life;
 use crate::math::one_minus_exp;
 use crate::units::SIGMA;
 use crate::{Config, World};
