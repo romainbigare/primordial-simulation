@@ -1,0 +1,179 @@
+# History of M0 to M3, in short
+
+This file is the short history of version 2 up to the end of M3. The laws as they are now are
+in `docs/laws.md`; the plan is in `docs/handover.md`. Git keeps everything: to read an old file,
+run `git show <commit>:<path>`. Commit 154554a is the last state before the M3 clean-up; all the
+old handover rows, reports and patches are in it.
+
+## 1. What changed, day by day
+
+One line per decision or change: date, what changed, and the merge (or the commit, when it went
+straight to main).
+
+**11 October 2026: M0 to M3 built**
+
+- Workspace, chemistry 0, terrain, CLI pictures: `3b98e84`.
+- History tape (snapshots, series, events, frames; run and resume): `1f44959`.
+- Richness checks, chemistry generator, word-ban test, CI: `4c01fb9`.
+- Web viewer (2D atlas map): `e16b9e6`.
+- Law 2, Change: reaction solver with sub-steps: `29185c6`.
+- Law 1, Flow: radiation, wind, rain, rivers, carving: `be38674`; latent heat, clouds, multi-rate: `12643b9`.
+- M1: bodies, catalysts, Copy with mutation, simple Choose: `e8d6899`.
+- M2: group brains, learning, memory, signals, watching, giving, movement wear: `58a9f06`.
+- M3: Bond v1 (parts, bonds, structures, load, inside, floating): `c6ab9be`.
+
+**12 October 2026: after the M3 check point review**
+
+- Bodies are real-sized; population nodes with a member count; no density cap: `3812b5f`, `a96a108`.
+- Nodes merge when alike; a cell keeps at most `crowd` nodes: `95f6f69`, `ab6f04a`.
+- Watch reports and the M0–M3 review kept in `docs/reports/`: `869dafa`.
+
+**13 October 2026: review 2 and review 3**
+
+- Nodes keep a spread, split when too varied, act on bonds through one member: `2e2d56d`.
+- A body holds a part only while its own force bears it: `0778c27`.
+- Reaction rate first order in the scarce input: `22c291f`.
+- Snapshot buffer, kinds by diet, the null run: `d5479cf`.
+- Catalysts cost by capacity; catalysts unfold when hot; charcoal no longer burns cold: `c57f7d8`.
+- Node math keeps gene means without selection; brain size can evolve in nodes: `94cefbd`.
+- Greenhouse in four layers, island latitudes match its size, gases dissolve in liquid: `f78e891`.
+- Light passes bodies from the tallest down (shade): `9a8bec6`.
+- The roster of ten starting kinds (`--roster`): `b18f50e`.
+- Gifts bounded by the receiver; a brain can shrink to nothing: `9089704`.
+
+**14 October 2026: reviews 4 to 7, watch reports 3 to 8**
+
+- Intake goes with the body, not what it holds; children join their own kind's node: `5944414`.
+- Bodies die of age by their rate of living (`REPAIR` gene): `da375d7`.
+- Catalysts cost a tenth of an eater's upkeep (`c_cat`): `444dabf`.
+- A child costs what it is built of, not its liquid: `5dda2ff`.
+- Per-kind tape columns and the land's season: `023717c`; more columns: `8f654c8`, `4ba6b7f`.
+- Breathing through the open surface; intake with mass^0.75: `34a7bfe`.
+- A node can split along its brain-size genes: `475ad38`.
+- One reference mass; build rate; basal upkeep; leaf with mass^0.75: `851ac26`.
+- Every number gets a row in `docs/numbers.md`, held by a test: `0546a17`.
+- Individuals mode (`--individuals`) and `copy::open`: `33ef14a`.
+- Likeness counts brain sizes by whole units: `d902f24`.
+- A fair big-brain test (`--clever-year`): `551d0d4`.
+- Nodes mix only with their own kind (`WITHIN` 2 → 0.5): `863ceab`.
+- Hand-set eater brains at the start (neutral founders were a lottery): review 6, `03a5d01`; numbers marked honestly: `07bc5a3`.
+- Body matter: growth is building, storing fuel is cheap; digestion; stores bounded by the body: `afdf3fc`, `c19a846`, `02ee75c`, `a15251a`.
+- Bodies copy by physics only: `1d5358c`.
+- Digested matter fills the room of what it becomes; a fuel's minimum is a reserve: `ccfbde9`.
+- Activity needs liquid (dormancy; `WET` gene): `cab28ea`.
+- Reproduction by surplus (maturity, `ALLOC`, brood, `CHILD`); size and maturity classes in nodes: `53586fe`.
+- Body size by an energy ceiling (tissue costs by the kg of the body): `d2374d0`.
+
+**15 October 2026: the queued mechanics, carbon, soil**
+
+- Supply and wear go by the built body too: `f02d4c2`.
+- Partial damage and healing (hits break body matter, force reads the body): `d143782`.
+- Upkeep, intake and building follow temperature; work heat stays in the body: `8074ad6`.
+- Two-parent copying: `47bae74`.
+- Dead plant matter rots at a litter constant: `77c3ca7`.
+- The sea's carbon store (salt 23, reactions 22 and 23), at balance at the start: `6048a5f`.
+- Soil water (pores, Darcy's law): `32d2817`.
+- Soil nitrogen with fixing founders: `8bdfbcc`, counted as a rule chosen for a run: `03123d8`.
+- The rock nutrient; erosion at real rates: `ba9ec80` (commits `f17e86a`, `b5e6847`).
+- Law 2 by mass action with the contact of the phases (no jump): `b147ca2`.
+- Real figures in `numbers.md` checked against sources: `81ad832`.
+- Nitrogen fixing pays its real cost; its heat pays no upkeep: `d9af1d7`.
+- `c_build` anchored to real production (P/B): `bdab246`.
+- Moving needs force: `a6d7926`.
+- Drainage into a store in the bed: `de1c134`.
+- Kleiber across kinds, adult founders, the living body at 75% water (R4): `1c7e5d1`.
+- Law 2's step follows the rate law; gifts never give body matter: `5282e76`.
+- Two simplify passes on core: `f2d6791`, `5413336`.
+
+**16 October 2026: body physics**
+
+- A body keeps a temperature (`KEEP_T`): `0fb9f3e`.
+- End-product inhibition of catalysts: `12a8bf1`.
+- Drainage to channels inside a cell; wet ground evaporates at the open rate; the sea floor reacts with the dissolved gas: `5de4eed`.
+- Liquid past the level drains out (R11); rain caught by leaf area: `cc86483`.
+- Bodies built of several materials; height by self-buckling; breaking by strength: `9967317`; its energy leak fixed: `6aa6ccd`.
+- One heat network; cooling by evaporating (`COOL_T`); roots that refill; air films by wind and size; real leaf pores: `4a3c4fc`.
+- The heat a body draws from the ground is set aside as it flows: `30737df` (commit `f03056d`).
+- One freezing law for bodies, ground, lakes and the sea: `154554a`.
+
+## 2. Tried and not kept
+
+Each item names where its code or its record can be found.
+
+- **Built mass** (a body's whole dry mass as its size; every animal died):
+  `git show 154554a:docs/reports/watch-7-before-m4/built-mass-not-merged.patch`.
+- **First nitrogen build** (one gift of the mineral, no input; it collapsed):
+  `git show 154554a:docs/reports/nitrogen-not-merged.patch` (commit `d3819ac`).
+- **Review 7 prototypes** (the reviewers' own code; the fixes were rewritten and landed):
+  `git show 154554a:docs/reports/review-7-plants.patch`, `…:docs/reports/review-7-lives.patch`.
+- **Review 8 carbon prototypes** (a litter patch and a rough sea store):
+  `git show 154554a:docs/reports/review-8-carbon-litter.patch`, `…:docs/reports/review-8-carbon-sea-prototype.patch`.
+- **Law 2 smooth rate, the study's code** (the law itself was then rebuilt and adopted in `b147ca2`):
+  `git show 154554a:docs/reports/law2-smooth-rate-not-merged.patch`.
+- **Eater density probe** (a diagnostic, no taking from the ground):
+  `git show 154554a:docs/reports/eater-density-probe.patch`.
+- **Cold-blooded resting rate** (tissue costs × 0.068; strength became free and plants walked):
+  commit `c8a56ad`, reverted in `f3d3650`.
+- **Convex catalyst stand-in** (cost by the square of the genes): replaced by cost by capacity in `c57f7d8`.
+- **First-order rate law** (per unit of the scarce input; it jumped when the scarce input changed):
+  `22c291f`, replaced by `b147ca2`.
+- **Catalyst costs by mass^0.75** (review 6): `a3d31a0`, replaced by `d2374d0`.
+- **Satiety at every size** (killed every animal, twice): `e9705b1`; still the switch
+  `Config::sate_all`, to be removed. The gate "satiety only past `full`" went in `a15251a`.
+- **The `full` factor and copying when full** (a body copied at 2 × its copy mass): replaced by
+  reproduction by surplus, `2b6c8a9`.
+- **The child store** (`Body::paid`, work paid ahead for children): `9089704`, removed in `c19a846`.
+- **Copying by the brain's choice**: off since `1d5358c` (`choose::COPY_BY_CHOICE`).
+- **Splitting nodes along their brain rows**: `Config::split_rows`, off; to be removed.
+- **R11, the first two tries** (draining the liquid past the level killed the eaters, then cost
+  the big kinds): `12aaf60` reverted in `915b051`; `e13d911` reverted in `e9176f7`; landed as `0639392`.
+- **Damage by the weight of the bite in nodes**: commit `5679524`; the old node rule was kept.
+- **Frame enzyme in the founders** (the eaters of remains became 10,000 times fewer): removed in `7953f69`.
+- **Freezing prototype 2** (only bodies): `a013312`; the general law landed in `154554a`.
+- Measured and dropped, recorded in the old handover (`git show 154554a:docs/handover.md`,
+  Section 4): the textbook coat (still air always outside the coat), one temperature level instead
+  of `KEEP_T` and `COOL_T`, the linear form of product inhibition, lowering the salts' own melting
+  points, the film with only the dissolved stock, and `c_build` at 3 × 10⁴.
+
+## 3. Reports that were deleted
+
+All are in commit 154554a. Read one with `git show 154554a:<path>`. Pictures are in the folder
+of the same name.
+
+| Path | What it was |
+|---|---|
+| `docs/session-summary-2026-10-15.md` | summary of the 14–16 October sessions |
+| `docs/reports/watch-pre-m4.md` (+ folder) | the fix list before M4, three 300-year runs |
+| `docs/reports/review-2-before-m4.md` | second review of Part 1 |
+| `docs/reports/watch-2-before-m4.md` (+ folder) | second fix list, 300-year runs |
+| `docs/reports/review-3-before-m4.md` | third review (math, physics, chemistry) |
+| `docs/reports/watch-3-before-m4.md` (+ folder) | third fix list, 300-year runs |
+| `docs/reports/watch-4-before-m4.md` (+ folder) | ageing, enzyme cost, 300-year runs |
+| `docs/reports/review-4-before-m4.md` | fourth review |
+| `docs/reports/watch-5-before-m4.md` (+ folder) | review 4 done, 100-year checks |
+| `docs/reports/review-5-before-m4.md` | fifth review (lives, the roster) |
+| `docs/reports/watch-6-before-m4.md` (+ folder) | review 5 done |
+| `docs/reports/review-6-adversarial.md` | adversarial review |
+| `docs/reports/review-6-life-size.md` (+ folder) | lives and sizes |
+| `docs/reports/watch-7-before-m4.md` (+ folder) | review 6 fixes, built mass tried |
+| `docs/reports/watch-8-before-m4.md` (+ folder) | body matter and food storage |
+| `docs/reports/review-7-plants.md`, `review-7-lives.md` | review 7 (with patches) |
+| `docs/reports/review-8-carbon.md` | review 8, carbon (with patches) |
+| `docs/reports/sea-carbon.md` | the sea's carbon store |
+| `docs/reports/soil-water-nitrogen.md` | soil water and nitrogen |
+| `docs/reports/rock-nutrient.md` | the rock nutrient, erosion anchored |
+| `docs/reports/law2-smooth-rate.md` | Law 2 without a jump |
+| `docs/reports/big-animals.md` | why the roster's big animals died |
+| `docs/reports/eater-density.md` | how crowded the eaters are |
+| `docs/reports/frost.md` | frost deaths, two prototypes |
+
+The watch reports of M0, M1, M2 and the M3 check point were shared as separate files and were
+never in the repository.
+
+## 4. How M0 to M3 were worked
+
+M0 to M3 used many review rounds (reviews 2 to 8, each followed by a watch report), done by
+the agent and the owner together. Each round found real faults, and the fixes are in the list
+above. The old handover kept every result of every round in Section 4; at the end of M3 it was
+397 KB. The clean-up moved the laws to `docs/laws.md`, this history here, and left the handover
+as the plan.
