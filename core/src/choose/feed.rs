@@ -31,7 +31,7 @@ fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
 /// node's members each work their own area: it is the node's total), and no more than its stores have room for.
 pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
-    let tg = w.life.env[i][0];
+    let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
     let mass = b.mass(&w.chem);
     let m = b.wanted(&w.chem, free, reach(w, b, free) * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mass);
