@@ -276,7 +276,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         (w.ground[k * n + i], w.e_ground[i]) = (w.ground[k * n + i] - wall[k], w.e_ground[i] - e);
         let p = pcore::bond::make(&mut w, i, wall, e, -1.0, 0.0);
         let (shape, mut fixed, mut verbs) = (lineage::shape(ns, 12, 6), [-8.0; brain::FIXED], [-8.0; brain::VERBS + brain::OVERBS]);
-        if hold { verbs[brain::VERBS] = 8.0 } else { fixed[7] = 8.0 }
+        if hold { verbs[brain::VERBS] = 8.0 } else { fixed[brain::DIG] = 8.0 }
         let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, verbs);
         let rows = base.split_off(shape.base());
         let (l, g) = (w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));

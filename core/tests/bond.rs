@@ -69,7 +69,7 @@ fn walls_keep_a_body_warm() {
     let k = (0..b.store.len()).max_by(|&x, &y| b.store[x].total_cmp(&b.store[y])).unwrap();
     // It rests (its own adjustment of the action scores), so it stays where it is put.
     b.adj.fill(-3.0);
-    b.adj[0] = 3.0;
+    b.adj[pcore::brain::REST] = 3.0;
     let t = b.temp(&w.chem);
     b.e += 0.3 * b.store[k] * w.chem.subs[k].cp * t;
     b.store[k] *= 1.3;

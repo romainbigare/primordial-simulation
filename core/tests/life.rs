@@ -278,7 +278,7 @@ fn a_body_gives_its_stores_but_not_its_body() {
     give[1] = 8.0;
     let (gl, gg) = lineage(&mut w, [-8.0; brain::FIXED], give);
     let mut rest = [-8.0; brain::FIXED];
-    rest[0] = 8.0;
+    rest[brain::REST] = 8.0;
     let (rl, rg) = lineage(&mut w, rest, [-8.0; brain::VERBS + brain::OVERBS]);
     let mut giver = worldgen::life::make(&mut w, 1, i, gl, gg).expect("body");
     // No safe minimums, and a long interval (316 days: the taker, of 30 kg, takes by 30^0.75 =
@@ -345,7 +345,7 @@ fn cover_keeps_a_body_warm() {
             // It rests, so it stays where it is.
             let b = &mut w.life.bodies[slot];
             b.adj.fill(-3.0);
-            b.adj[0] = 3.0;
+            b.adj[pcore::brain::REST] = 3.0;
             let mut covered = w.clone();
             // Cover: a node of light-eaters, 10 kg/m² over the cell.
             let mut c = covered.life.alive().find(|b| pcore::body::light_cat(&w.chem, &b.genes) > 5.0).expect("a light-eater").clone();
@@ -355,7 +355,7 @@ fn cover_keeps_a_body_warm() {
             c.count = c.n() * f;
             c.cell = i as u32;
             c.adj.fill(-3.0);
-            c.adj[0] = 3.0;
+            c.adj[pcore::brain::REST] = 3.0;
             // (With the old pores, 16 Oct 2026: with a leaf's, 10 kg/m² of plants transpire more than the soil gives, dry out and thin to
             // 5.7 kg/m² in the month, and the test is of the cover, not of their liquid.)
             (c.genes[pcore::body::GAS], c.k) = (2.187, Default::default());
@@ -521,7 +521,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // Starting eaters (30 kg, under their copy mass) whose brain only rests, weak so their stores last.
     let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut rest = [-8.0; brain::FIXED];
-    rest[0] = 8.0;
+    rest[brain::REST] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     let l = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });

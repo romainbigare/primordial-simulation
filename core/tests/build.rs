@@ -137,7 +137,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     let (mut w, i) = start();
     let r = roles(&w);
     let lay = Layout::of(&w.chem);
-    let mut b = eater(&mut w, i, 0, 6.0);
+    let mut b = eater(&mut w, i, brain::REST, 6.0);
     // 4 kg of matter and 12 kg of liquid: the liquid is the share 0.75 the keep gene sets, so a body of 16 kg.
     b.store.iter_mut().for_each(|x| *x = 0.0);
     b.store[r.matter] = 4.0 / w.chem.subs[r.matter].molar_mass;
@@ -167,7 +167,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     assert!((b.size(&plain) - b.mass(&plain)).abs() < 1e-9);
 
     // Leaf and open surface follow the size: the same body with 100 kg more fuel has the same leaf.
-    let (mut a, mut c) = (eater(&mut w, i, 0, 6.0), eater(&mut w, i, 0, 6.0));
+    let (mut a, mut c) = (eater(&mut w, i, brain::REST, 6.0), eater(&mut w, i, brain::REST, 6.0));
     (a.genes[body::LEAF], c.genes[body::LEAF]) = (0.0, 0.0);
     add(&mut w, &mut c, r.rich, 100.0);
     a.prepare(&w.chem, &w.cfg.phys);
@@ -183,7 +183,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     // a member more): by mass A is the taller, by body B. Leaf area is set so that each catches a
     // good part of the cell's light and the layers differ.
     let n = 100.0;
-    let (mut ha, mut hb) = (eater(&mut w, i, 0, 6.0), eater(&mut w, i, 0, 6.0));
+    let (mut ha, mut hb) = (eater(&mut w, i, brain::REST, 6.0), eater(&mut w, i, brain::REST, 6.0));
     (ha.genes[body::LEAF], hb.genes[body::LEAF]) = (4.0, 4.0);
     scale(&mut w, &mut hb, 3.0 * n);
     scale(&mut w, &mut ha, n);
@@ -217,7 +217,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let (mut w, i) = start();
     let r = roles(&w);
     w.cfg.phys.c_build = 1e6;
-    let b = eater(&mut w, i, 0, 6.0);
+    let b = eater(&mut w, i, brain::REST, 6.0);
     let (_, mut b) = out(&mut w, b);
     let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
     let (matter0, rich0, liquid0, e0) = (b.store[r.matter], b.store[r.rich], b.store[r.liquid], w.e_ground.iter().sum::<f64>());
@@ -266,7 +266,7 @@ fn growth_is_limited_by_c_build() {
         let (mut w, i) = start();
         let r = roles(&w);
         w.cfg.phys.c_build = c_build;
-        let mut b = eater(&mut w, i, 0, copy);
+        let mut b = eater(&mut w, i, brain::REST, copy);
         b.genes[ALLOC] = alloc;
         scale(&mut w, &mut b, 5.0);
         let (s, mut b) = out(&mut w, b);
@@ -313,7 +313,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
     let mut results = Vec::new();
     for keep in [0.0, 0.08, 0.15, 1.0] {
         let mut w = w.clone();
-        let mut b = eater(&mut w, i, 0, 6.0);
+        let mut b = eater(&mut w, i, brain::REST, 6.0);
         // (This measures the spare rule: the solid's minimum, the reserve growth keeps, is set to
         // the 0.02 of the body it was before the starting kinds got 0.25, so it does not bind.)
         b.genes[Layout::of(&w.chem).min + r.rich] = 0.02;
@@ -350,7 +350,7 @@ fn storing_the_solid_costs_no_build() {
     // A mature body (copy mass 10 kg of body, its body 21 kg) with 100 kg more fuel and no allowance to build with: it pays
     // no work for the fuel and builds nothing.
     w.cfg.phys.c_build = 0.0;
-    let mut b = eater(&mut w, i, 0, 1.0);
+    let mut b = eater(&mut w, i, brain::REST, 1.0);
     add(&mut w, &mut b, r.rich, 100.0);
     assert!(b.size(&w.chem) > 20.0);
     let (_, mut b) = out(&mut w, b);
@@ -367,7 +367,7 @@ fn storing_the_solid_costs_no_build() {
     w.chem.add_elems(r.rich, a, &mut w.ledger.imposed_elems);
     let e = w.energy_ground(i, t);
     (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[r.rich].hf, e);
-    let mut b = eater(&mut w, i, 3, 6.0);
+    let mut b = eater(&mut w, i, brain::TAKE, 6.0);
     // (An eater of the solid only: it does not burn body matter, which would be burnt for its upkeep.)
     let lay = Layout::of(&w.chem);
     let (m, burn_matter) = w.chem.matter_roles().expect("matter");
@@ -409,7 +409,7 @@ fn digested_matter_fills_the_room_of_the_solid() {
     w.chem.add_elems(r.matter, a, &mut w.ledger.imposed_elems);
     let e = w.energy_ground(i, t);
     (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[r.matter].hf, e);
-    let b = eater(&mut w, i, 3, 6.0);
+    let b = eater(&mut w, i, brain::TAKE, 6.0);
     let keep = b.gene(Layout::of(&w.chem).keep + r.rich);
     let s = w.life.add(b, w.day, 1);
     let (mut took, mut most) = (0.0, 0.0f64);
@@ -443,7 +443,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     // (A copy cost nobody could pay, no allowance: a child costs its parent no work.)
     (w.cfg.phys.c_copy, w.cfg.phys.c_build) = (1e18, 0.0);
     // A mature eater: a body of 21 kg, matter 5.25 kg and the liquid it keeps, its copy mass 10 kg; a child is 0.1 of that, a body of 1 kg.
-    let mut b = eater(&mut w, i, 0, 10f32.log10());
+    let mut b = eater(&mut w, i, brain::REST, 10f32.log10());
     b.genes[CHILD] = -1.0;
     let (mm, h) = (w.chem.subs[r.matter].molar_mass, 0.75);
     // A brood of 2.5 children: matter 0.25 kg each (a body of 1 kg is its matter over 1 - h).
@@ -499,7 +499,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     // they gave, and the mean member of the node is what it was.
     let (mut w, i) = start();
     w.cfg.phys.c_copy = 1e18;
-    let mut n = eater(&mut w, i, 0, 10f32.log10());
+    let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
     (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 0.0);
     scale(&mut w, &mut n, 5.0);
     n.count = 5.0;
@@ -534,7 +534,7 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     let (mut w, i) = start();
     let r = roles(&w);
     w.cfg.phys.c_copy = 1e18;
-    let mut n = eater(&mut w, i, 0, 10f32.log10());
+    let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
     // Children of 0.3 of the copy mass: 3 kg a body, a quarter of that matter (h 0.75).
     (n.genes[CHILD], n.genes[DISPERSE]) = (0.3f32.log10(), 0.0);
     scale(&mut w, &mut n, 5.0);
@@ -613,7 +613,7 @@ fn a_mature_body_splits_its_building_by_alloc() {
         let (mut w, i) = start();
         let r = roles(&w);
         w.cfg.phys.c_build = 1e5;
-        let mut b = eater(&mut w, i, 0, copy);
+        let mut b = eater(&mut w, i, brain::REST, copy);
         b.genes[ALLOC] = alloc;
         let (s, mut b) = out(&mut w, b);
         let (m0, built0, mm) = (b.store[r.matter], b.built(&w.chem), w.chem.subs[r.matter].molar_mass);
@@ -640,7 +640,7 @@ fn a_mature_body_splits_its_building_by_alloc() {
     // Copy mass such that the body (matter 5.25 kg) lacks 0.2 made of the matter of maturity: needs 0.2 x made.
     let matter0 = {
         let (mut w, i) = start();
-        let b = eater(&mut w, i, 0, 1.0);
+        let b = eater(&mut w, i, brain::REST, 1.0);
         b.matter_kg(&w.chem)
     };
     let mc = (matter0 + 0.2 * made) / (1.0 - 0.75);
@@ -655,7 +655,7 @@ fn a_mature_body_splits_its_building_by_alloc() {
 #[test]
 fn an_immature_body_never_reproduces() {
     let brain_less = |w: &mut World, i: usize| {
-        let mut b = eater(w, i, 0, 24f32.log10());
+        let mut b = eater(w, i, brain::REST, 24f32.log10());
         b.genes[CHILD] = -1.0;
         b
     };
@@ -710,7 +710,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
     let (mut w, i) = start();
     let r = roles(&w);
     w.cfg.phys.c_copy = 1e18;
-    let mut n = eater(&mut w, i, 0, 10f32.log10());
+    let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
     (n.genes[CHILD], n.genes[DISPERSE]) = (-2.0, 0.0);
     scale(&mut w, &mut n, 5.0);
     n.count = 5.0;
@@ -770,7 +770,7 @@ fn a_small_child_in_a_node_starts_its_own_size_class_and_merges_back_once_grown(
 fn reproducing_updates_keep_elements_and_energy() {
     let (mut w, i) = start();
     w.cfg.phys.c_build = 1e5;
-    let mut b = eater(&mut w, i, 0, 5f32.log10());
+    let mut b = eater(&mut w, i, brain::REST, 5f32.log10());
     // Children of 0.1 of the copy mass (0.5 kg) from a mature body of 21 kg.
     (b.genes[CHILD], b.genes[ALLOC]) = (-1.0, 0.8);
     let id = {
@@ -846,7 +846,7 @@ fn a_body_cannot_store_more_than_keep_times_body() {
     let (mut w, i) = start();
     let r = roles(&w);
     let lay = Layout::of(&w.chem);
-    let mut b = eater(&mut w, i, 3, 6.0);
+    let mut b = eater(&mut w, i, brain::TAKE, 6.0);
     let (mm_rich, mm_liq) = (w.chem.subs[r.rich].molar_mass, w.chem.subs[r.liquid].molar_mass);
     let (keep_rich, h) = (b.genes[lay.keep + r.rich] as f64, b.genes[lay.keep + r.liquid] as f64);
     let mass = b.mass(&w.chem);
@@ -905,7 +905,7 @@ fn the_safe_minimum_is_a_share_of_the_body() {
     let (mut w, i) = start();
     let r = roles(&w);
     let lay = Layout::of(&w.chem);
-    let mut b = eater(&mut w, i, 0, 6.0);
+    let mut b = eater(&mut w, i, brain::REST, 6.0);
     b.genes[lay.min + r.liquid] = 0.7;
     let (size, mass) = (b.size(&w.chem), b.mass(&w.chem));
     println!("body {size:.2} kg of {mass:.2}: liquid {:.2} kg against a minimum of {:.2} kg", kg(&w, &b, r.liquid), 0.7 * size);
@@ -935,7 +935,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         w.chem.add_elems(r.matter, a, &mut w.ledger.imposed_elems);
         let e = w.energy_ground(i, t);
         (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[r.matter].hf, e);
-        let mut b = eater(&mut w, i, 3, 6.0);
+        let mut b = eater(&mut w, i, brain::TAKE, 6.0);
         let lay = Layout::of(&w.chem);
         let (_, burn_matter) = w.chem.matter_roles().expect("matter");
         if !digests {
@@ -969,7 +969,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     // The reverse of growth, exactly, called directly.
     let (mut w, i) = start();
     let r = roles(&w);
-    let mut b = eater(&mut w, i, 0, 6.0);
+    let mut b = eater(&mut w, i, brain::REST, 6.0);
     add(&mut w, &mut b, r.matter, 34.56);
     let (s, mut b) = out(&mut w, b);
     let (t0, l0, before) = (pcore::check::totals(&w), w.ledger.clone(), b.store.clone());
@@ -1009,7 +1009,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal] {
             *c *= cost;
         }
-        let mut b = eater(&mut w, i, 3, 0.0);
+        let mut b = eater(&mut w, i, brain::TAKE, 0.0);
         // A body that is wet (soaking), breathes freely and sheds its heat, so that only its energy limits it. (Since 16 Oct 2026
         // a bare body sheds no more than its still air and radiation take, and growing past 30 kg its upkeep warmed it past any
         // steady state: it sheds the rest by evaporating above 295 K, `COOL_T`, and soaks fast to stay wet.)
@@ -1082,7 +1082,7 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     let (mut w, i) = start();
     let (lay, r) = (Layout::of(&w.chem), roles(&w));
     let mats: Vec<usize> = w.chem.materials().collect();
-    let mut b = eater(&mut w, i, 0, 6.0);
+    let mut b = eater(&mut w, i, brain::REST, 6.0);
     // Shares of 0.2 and 0.1, none of either held yet, the rock salt the lime is made of in plenty.
     for (&k, s) in mats.iter().zip([0.2, 0.1]) {
         b.genes[lay.keep + k] = s;
@@ -1129,7 +1129,7 @@ fn a_body_takes_and_digests_the_frame_only_with_its_enzyme() {
         w.chem.add_elems(f, a, &mut w.ledger.imposed_elems);
         let e = w.energy_ground(i, t);
         (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[f].hf, e);
-        let mut b = eater(&mut w, i, 3, 6.0);
+        let mut b = eater(&mut w, i, brain::TAKE, 6.0);
         // Only the frame to take, and the enzyme at the speed that splits what it holds within its interval, or off.
         (b.genes[lay.upt + r.liquid], b.genes[lay.upt + r.rich], b.genes[lay.upt + r.matter], b.genes[lay.upt + f]) = (-0.1, -0.1, -0.1, 1.0);
         b.genes[lay.cat + split] = if enzyme { 8.7 } else { -1.0 };

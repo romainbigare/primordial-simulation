@@ -156,7 +156,7 @@ fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: bool, r: &mut
         kind.hand
     } else {
         let mut fixed = [0.0; brain::FIXED];
-        fixed[1] = kind.hand.0[1];
+        fixed[brain::COPY] = kind.hand.0[brain::COPY];
         (fixed, 0.0, [0.0; brain::VERBS + brain::OVERBS])
     };
     let mut base = brain::random(shape, r, BRAIN_NOISE, fixed, dir, verbs);

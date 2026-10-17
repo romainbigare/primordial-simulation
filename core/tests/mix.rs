@@ -30,7 +30,7 @@ fn start() -> (World, usize) {
 fn eater(w: &mut World, i: usize, copy: f32) -> Body {
     let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut fixed = [-8.0; brain::FIXED];
-    fixed[0] = 8.0;
+    fixed[brain::REST] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));

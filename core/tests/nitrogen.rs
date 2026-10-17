@@ -212,7 +212,7 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     w.cfg.phys.c_build = 1e6;
     let minerals = w.chem.minerals();
     let m = w.chem.matter().expect("matter");
-    let b = body_of(&mut w, 1, i, 0);
+    let b = body_of(&mut w, 1, i, brain::REST);
     let (_, b) = out(&mut w, b);
     assert!(minerals.iter().all(|&(k, _)| b.store[k] > 0.0), "a starting body holds the minerals its matter was made of");
     let days = b.interval() as f64;
@@ -307,7 +307,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     let run = |cat: f32| {
         let (mut w, i) = start();
         let lay = Layout::of(&w.chem);
-        let mut b = body_of(&mut w, 0, i, 0);
+        let mut b = body_of(&mut w, 0, i, brain::REST);
         // Its own mineral just short of nothing: what it holds past its level goes to the ground and is counted there.
         b.genes[lay.cat + fix] = cat;
         // (No rock salt, so neither builds: the two differ by the fixing alone. Before 15 Oct 2026 the salt fell out of the
@@ -367,7 +367,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let n = w.grid.n();
         let lime = 10;
         // A plant with its store of this mineral emptied, the ground full of it.
-        let mut plant = body_of(&mut w, 0, i, 0);
+        let mut plant = body_of(&mut w, 0, i, brain::REST);
         // (It soaks as a plant does, 1 a day, the rate roots take what is dissolved at.)
         plant.genes[LIQ] = 0.0;
         let mut idle = plant.clone();
@@ -436,7 +436,7 @@ fn an_eater_digests_matter_into_the_solid_and_the_minerals_and_sheds_the_excess(
     let n = w.grid.n();
     // A great store of matter on its ground, an eater that only takes from the ground.
     put(&mut w, m, i, 1e5);
-    let mut b = body_of(&mut w, 1, i, 3);
+    let mut b = body_of(&mut w, 1, i, brain::TAKE);
     // It keeps little of the minerals (a thousandth of its body): what digestion makes of the matter it takes is many times that.
     for &(k, _) in &minerals {
         b.genes[Layout::of(&w.chem).keep + k] = 0.001;
@@ -548,7 +548,7 @@ fn a_catalyst_is_slowed_by_the_product_the_body_holds() {
     let (mineral, _) = w.chem.minerals()[0];
     let fix = w.chem.fixing().expect("fixing");
     let (light, rich, _, burn) = w.chem.life_roles().expect("roles");
-    let b = body_of(&mut w, 0, i, 0);
+    let b = body_of(&mut w, 0, i, brain::REST);
     let (_, mut b) = out(&mut w, b);
     let (t, mass) = (b.temp(&w.chem), b.mass(&w.chem));
     for (r, k) in [(fix, mineral), (light, rich)] {

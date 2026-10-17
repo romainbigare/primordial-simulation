@@ -26,7 +26,7 @@ fn set() -> Set {
     let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
     let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut rest = [-8.0; brain::FIXED];
-    rest[0] = 8.0;
+    rest[brain::REST] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 1 });
