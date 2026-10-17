@@ -142,3 +142,21 @@ fn random_changes_keep_the_books() {
     }
     assert!(w.counts.scaled.iter().all(|&s| s > 0.0), "the changes asked too much and were scaled");
 }
+
+/// A stream keyed by node id and seconds differs for every part of its key and from the stream keyed by day and index.
+#[test]
+fn node_streams_are_apart() {
+    let first = |mut r: Rng| r.u64();
+    let id = |slot, gen| NodeId { slot, gen };
+    let base = first(Rng::of_node(1, 86_400, id(3, 0), Purpose::Choose));
+    assert_eq!(base, first(Rng::of_node(1, 86_400, id(3, 0), Purpose::Choose)));
+    let others = [
+        first(Rng::of_node(2, 86_400, id(3, 0), Purpose::Choose)),
+        first(Rng::of_node(1, 86_401, id(3, 0), Purpose::Choose)),
+        first(Rng::of_node(1, 86_400, id(3, 1), Purpose::Choose)),
+        first(Rng::of_node(1, 86_400, id(1, 3), Purpose::Choose)),
+        first(Rng::of_node(1, 86_400, id(3, 0), Purpose::Bond)),
+        first(Rng::new(1, 86_400, 3, Purpose::Choose)),
+    ];
+    assert!(others.iter().all(|&x| x != base));
+}

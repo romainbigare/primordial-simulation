@@ -287,6 +287,9 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 **Phase B and C: the base layers and the shared maths**
 
+- B9: `Rng::of_node(seed, seconds, NodeId, purpose)`, a second key beside `Rng::new(seed, day, index, purpose)`. It packs
+  slot and generation into one number and tags the key, so it never gives the stream of `new` for the same inputs. No
+  draw uses it yet; every old draw keeps its key (golden unchanged).
 - C4: tests that one big step is close to many small steps for `solve::lines` and, for `solve::downhill`, that one
   rain in one pass equals the same rain in parts with a pass each (linear rule); tests only.
 - C3: the wind's tridiagonal solve moves from `flow/air/wind.rs` to `solve::lines::along_line`; results unchanged

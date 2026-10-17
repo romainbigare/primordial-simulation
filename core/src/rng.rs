@@ -1,6 +1,8 @@
 //! Counter-based random numbers keyed by (seed, tick, node, purpose).
 //! The same key always gives the same stream, so parts of the world can run in any order.
 
+use crate::store::NodeId;
+
 #[inline]
 fn mix(mut z: u64) -> u64 {
     z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
@@ -44,11 +46,25 @@ pub enum Purpose {
 
 pub struct Rng(u64);
 
+/// Tag of the stream keys by node id and seconds (`Rng::of_node`); it is never zero, so they differ from `Rng::new`.
+const NODE_STREAM: u64 = 0x5851f42d4c957f2d;
+
 impl Rng {
+    fn key(seed: u64, tick: u64, node: u64, purpose: Purpose) -> u64 {
+        mix(seed ^ mix(tick.wrapping_add(0x9e3779b97f4a7c15)))
+            ^ mix(node.wrapping_mul(0xd1b54a32d192ed03) ^ (purpose as u64).wrapping_mul(0xa24baed4963ee407))
+    }
+    /// The stream of a purpose at a day and a node index.
     pub fn new(seed: u64, tick: u64, node: u64, purpose: Purpose) -> Self {
-        let k = mix(seed ^ mix(tick.wrapping_add(0x9e3779b97f4a7c15)))
-            ^ mix(node.wrapping_mul(0xd1b54a32d192ed03) ^ (purpose as u64).wrapping_mul(0xa24baed4963ee407));
-        Rng(mix(k))
+        Rng(mix(Self::key(seed, tick, node, purpose)))
+    }
+    /// The stream of a purpose for a node (slot and generation) at a time in seconds. The id packs into one `u64`
+    /// without loss, so two ids or two times never give the same key. The tag is XORed into the key before the last
+    /// mix, which is a bijection: the same inputs in `new` and here give different streams, and any other pair of
+    /// keys meets only by chance of 2^-64 (as two `new` keys do).
+    pub fn of_node(seed: u64, time: u64, id: NodeId, purpose: Purpose) -> Self {
+        let node = (id.gen as u64) << 32 | id.slot as u64;
+        Rng(mix(Self::key(seed, time, node, purpose) ^ NODE_STREAM))
     }
     #[inline]
     pub fn u64(&mut self) -> u64 {
