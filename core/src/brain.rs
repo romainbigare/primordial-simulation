@@ -137,6 +137,10 @@ pub(crate) fn squash(x: f32) -> f32 {
     x * (27.0 + x * x) / (27.0 + 9.0 * x * x)
 }
 
+/// A brain perceives the ln of a mass over this: of a member, kg; of another body, a part or what it holds over its own
+/// mass; of a cell's mean member (e^7, a factor of about 1,100, is one unit of input).
+pub(crate) const LN_MASS: f32 = 7.0;
+
 /// A cheap natural log (error below 0.005), enough for what a brain perceives.
 #[inline]
 pub fn ln(x: f32) -> f32 {

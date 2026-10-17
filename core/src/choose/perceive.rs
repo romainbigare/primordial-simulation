@@ -13,8 +13,8 @@ use crate::{bond, World};
 const STORE_FLOOR: f32 = 1e-4;
 /// The body's temperature over its cell's ground, K.
 const WARM_SCALE: f32 = 10.0;
-/// ln of a mass: of a member, kg (less 1), of a perceived body's member over its own, of a cell's mean member.
-pub(super) const LN_MASS: f32 = 7.0;
+// ln of a mass: of a member, kg (less 1), of a perceived body's member over its own, of a cell's mean member.
+pub(super) use crate::brain::LN_MASS;
 /// ln(1 + the light it absorbed, J per kg per day).
 const LN_LIGHT: f32 = 15.0;
 /// The ground temperature, from `T_MID` over `T_SPAN`, K.
