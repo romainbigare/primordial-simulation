@@ -81,7 +81,7 @@ const FIX_STREAM: u64 = 0xf1;
 /// brings (none where bodies do not grow, or the mineral comes from nowhere else).
 pub fn fixing(chem: &Chemistry) -> Option<usize> {
     let minerals = chem.minerals();
-    let gas = |k: u16| chem.phase(k as usize, T_SURF) == Phase::Gas;
+    let gas = |k: u16| chem.gas_at_surface(k as usize);
     let has = |k: u16, e: usize| chem.subs[k as usize].elems[e] > 0;
     (0..chem.reactions.len()).find(|&r| {
         let i = &chem.reactions[r].inputs;
@@ -97,20 +97,14 @@ pub fn roles(chem: &Chemistry) -> Option<(usize, usize, usize, usize)> {
     let rx = &chem.reactions[r_light];
     let rich = rx.outputs.iter().find(|p| at(p.0) == Phase::Solid)?.0 as usize;
     let liquid = rx.inputs.iter().find(|p| at(p.0) == Phase::Liquid)?.0 as usize;
-    let burn = (0..chem.reactions.len()).find(|&r| {
-        let i = &chem.reactions[r].inputs;
-        chem.dh(r) < 0.0 && i.iter().any(|p| p.0 as usize == rich) && i.iter().any(|p| at(p.0) == Phase::Gas)
-    })?;
+    let burn = (0..chem.reactions.len()).find(|&r| chem.burning(r) && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == rich))?;
     Some((r_light, rich, liquid, burn))
 }
 
 /// Body matter and the reaction that burns it with a gas (none where bodies do not grow).
 pub fn matter_roles(chem: &Chemistry) -> Option<(usize, usize)> {
     let m = chem.matter()?;
-    let burn = (0..chem.reactions.len()).find(|&r| {
-        let i = &chem.reactions[r].inputs;
-        chem.dh(r) < 0.0 && i.iter().any(|p| p.0 as usize == m) && i.iter().any(|p| chem.phase(p.0 as usize, T_SURF) == Phase::Gas)
-    })?;
+    let burn = (0..chem.reactions.len()).find(|&r| chem.burning(r) && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m))?;
     Some((m, burn))
 }
 

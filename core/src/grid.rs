@@ -50,6 +50,10 @@ impl Grid {
     pub fn na(&self) -> usize {
         self.aw() * self.ah()
     }
+    /// The share of an air node over one ground cell (1 / `air_scale`²).
+    pub fn air_share(&self) -> f64 {
+        1.0 / (self.air_scale * self.air_scale) as f64
+    }
     /// Air node above ground cell `i`.
     pub fn air_of(&self, i: usize) -> usize {
         let (x, y) = self.xy(i);

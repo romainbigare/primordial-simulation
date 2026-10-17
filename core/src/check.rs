@@ -40,7 +40,7 @@ pub fn totals(w: &World) -> Totals {
             sum.add(s.get());
             // Air holds its gases' fusion and vaporisation enthalpy; the ground holds fusion in `e_ground`.
             if air {
-                held.add(s.get() * (chem.subs[k].lf + chem.subs[k].lv));
+                held.add(s.get() * chem.subs[k].latent_gas());
             }
         }
     }

@@ -116,7 +116,8 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     let share = rock / chem.subs[m].molar_mass;
     println!("the rock element is {:.2}% of the dry matter ({} g of {} g)", 100.0 * share, 1e3 * rock, 1e3 * chem.subs[m].molar_mass);
     assert!(share > 0.005 && share < 0.02, "{share}");
-    assert!(chem.dh_build().abs() < 1.0, "growth takes {} J", chem.dh_build());
+    let growth = chem.dh_of(chem.build.as_ref().unwrap());
+    assert!(growth.abs() < 1.0, "growth takes {growth} J");
     // Growth gives off only the liquid (the salt's carbon goes into the matter): nothing to the air.
     assert!(chem.build.as_ref().expect("growth").outputs.iter().all(|p| p.0 == m as u16 || chem.phase(p.0 as usize, 290.0) == pcore::chem::Phase::Liquid));
     let burn = (0..chem.reactions.len()).find(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == m) && chem.reactions[r].outputs.iter().any(|p| p.0 as usize == mineral)).expect("rotting");
@@ -524,7 +525,7 @@ fn the_pores_of_the_land_hold_the_rock_salt_where_lime_and_liquid_meet() {
             let (t, j) = (w.t_ground(i), w.grid.air_of(i));
             let mut amt: Vec<f64> = (0..w.chem.ns()).map(|k| w.ground[k * n + i]).collect();
             amt[salt] = 0.0;
-            let share = 1.0 / (w.grid.air_scale * w.grid.air_scale) as f64;
+            let share = w.grid.air_share();
             let gas: Vec<f64> = (0..w.chem.ns()).map(|k| w.air[k * na + j] * share).collect();
             rc.balance(&w.chem, &mut amt, &gas, t);
             if amt[salt] > 0.0 {

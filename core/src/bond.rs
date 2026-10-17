@@ -674,7 +674,7 @@ pub fn step(w: &mut World) {
     }
     let (dpm, ns, na) = (w.cfg.days_per_month as u64, w.chem.ns(), w.grid.na());
     let react = (w.day / dpm).is_multiple_of(REACT_MONTHS);
-    let (mut rc, share) = (Reactor::new(&w.chem), 1.0 / (w.grid.air_scale * w.grid.air_scale) as f64);
+    let (mut rc, share) = (Reactor::new(&w.chem), w.grid.air_share());
     let (mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns]);
     let dt = (REACT_MONTHS * dpm) as f64 * DAY;
     for s in 0..w.parts.parts.len() {
@@ -694,11 +694,10 @@ pub fn step(w: &mut World) {
             rc.react(chem, &mut p.wall, Some(&mut pool), &mut p.e, fixed, None, 0.0, dt);
             // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas
             // taken back returns it); gas the ground cannot pay for goes to the ground instead.
-            let held = |k: usize| chem.subs[k].lf + chem.subs[k].lv;
             let (mut pay, mut back) = (0.0, 0.0);
             for k in 0..ns {
-                let d = pool[k] - pool0[k];
-                (pay, back) = (pay + d.max(0.0) * held(k), back - d.min(0.0) * held(k));
+                let (d, latent) = (pool[k] - pool0[k], chem.subs[k].latent_gas());
+                (pay, back) = (pay + d.max(0.0) * latent, back - d.min(0.0) * latent);
             }
             w.e_ground[i] += back;
             let paid = if pay > 0.0 { crate::ground::share(w.take_heat(i, pay), pay) } else { 1.0 };

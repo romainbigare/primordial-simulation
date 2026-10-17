@@ -248,7 +248,8 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let heat = w.e_ground.iter().sum::<f64>() - e0;
     assert!(heat > 0.0 && (heat / (burnt * -w.chem.dh(r.burn)) - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {:e} J", burnt * -w.chem.dh(r.burn));
     // Growth is thermoneutral: the matter holds the energy of the solid it was made of.
-    assert!(w.chem.dh_build().abs() < 1.0, "growth takes {} J", w.chem.dh_build());
+    let growth = w.chem.dh_of(w.chem.build.as_ref().unwrap());
+    assert!(growth.abs() < 1.0, "growth takes {growth} J");
     w.life.bodies[0] = b;
     assert_eq!(pcore::check::broken(&w), None);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);

@@ -454,7 +454,7 @@ impl Body {
         for &(k, nu) in &bl.inputs {
             self.store[k as usize] += nu as f64 * x;
         }
-        self.e -= -chem.dh_build() * x;
+        self.e -= -chem.build.as_ref().map_or(0.0, |b| chem.dh_of(b)) * x;
         x
     }
     /// Energy a mole of `k` gives its body's catalysed reactions at temperature `t` (J; 0 for a gas
@@ -514,7 +514,7 @@ impl Body {
         let share = |f: f64| f.clamp(0.0, 0.95) / (1.0 - f.clamp(0.0, 0.95));
         match chem.matter() {
             // (A solid it builds: what its share in what it builds makes of its matter, `share`.)
-            Some(_) if chem.materials().any(|x| x == k) => self.share(chem, k) / (1.0 - self.share(chem, usize::MAX)) * self.matter_kg(chem) / mm,
+            Some(_) if chem.is_material(k) => self.share(chem, k) / (1.0 - self.share(chem, usize::MAX)) * self.matter_kg(chem) / mm,
             Some(m) if k != m => {
                 if self.wet >> k & 1 == 1 {
                     share(f) * self.matter_kg(chem) / mm
@@ -637,7 +637,11 @@ impl Body {
     /// floor that growth and giving keep (`copy::grow`, `choose::give`): a reserve, not a death line.
     /// False before `prepare`.
     pub fn burns(&self, chem: &Chemistry, k: usize) -> bool {
-        self.k.burn.iter().any(|&(r, _)| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k && chem.phase(k, T_SURF) != Phase::Gas))
+        self.burns_at(chem, k, T_SURF)
+    }
+    /// `burns` with the phase of `k` taken at `t`.
+    pub(crate) fn burns_at(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
+        chem.phase(k, t) != Phase::Gas && self.k.burn.iter().any(|&(r, _)| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 }
 
@@ -997,18 +1001,6 @@ impl Life {
         self.shift(g, to as u32, 1);
         self.shift(g, from as u32, -1);
     }
-}
-
-/// Energy a mole of `k` carries apart from its heat while in the air (fusion and vaporisation).
-#[inline]
-pub(crate) fn held(chem: &Chemistry, k: usize) -> f64 {
-    chem.subs[k].lf + chem.subs[k].lv
-}
-
-/// Fusion enthalpy a mole of `k` holds in the ground's heat at temperature `t`, among the ground's amounts `a(j)`.
-#[inline]
-pub(crate) fn fused(chem: &Chemistry, k: usize, t: f64, a: impl Fn(usize) -> f64) -> f64 {
-    if chem.phase_in(k, t, a) != Phase::Solid { chem.subs[k].lf } else { 0.0 }
 }
 
 /// Temperature (as of the last flow step), depth of the liquid that stands (what the pores of the loose ground
@@ -1630,7 +1622,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     let (mut pay, mut q_in, mut c_out) = (0.0, 0.0, 0.0);
     for k in 0..ns {
         let d = tmp.pool[k] - tmp.pool0[k];
-        (pay, heat, q_in) = (pay + d.max(0.0) * held(chem, k), heat - d.min(0.0) * held(chem, k), q_in - d.min(0.0) * chem.subs[k].cp * ta);
+        (pay, heat, q_in) = (pay + d.max(0.0) * chem.subs[k].latent_gas(), heat - d.min(0.0) * chem.subs[k].latent_gas(), q_in - d.min(0.0) * chem.subs[k].cp * ta);
     }
     (b.e, e_air[j]) = (b.e + q_in, e_air[j] - q_in);
     let paid = crate::ground::share(0.5 * (b.e + heat + g * dt * tg).max(0.0), pay);
@@ -1638,7 +1630,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let d = tmp.pool[k] - tmp.pool0[k];
         let sent = if d > 0.0 { d * paid } else { d };
         (b.store[k], air[k * na + j]) = (b.store[k] + d - sent, air[k * na + j] + sent);
-        (heat, c_out) = (heat - sent.max(0.0) * held(chem, k), c_out + sent.max(0.0) * chem.subs[k].cp);
+        (heat, c_out) = (heat - sent.max(0.0) * chem.subs[k].latent_gas(), c_out + sent.max(0.0) * chem.subs[k].cp);
     }
     // What its light reactions stored (`LIGHT_YIELD` of the light they used) is paid by the
     // light set aside for it, as far as its share goes (the share it stored last time, of the
@@ -1702,15 +1694,15 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let (ct, x) = (b.heat_cap(chem) + c_out, g * dt / (b.heat_cap(chem) + c_out));
         let bx = if x < 1e-9 { 1.0 } else { -(-x).exp_m1() / x };
         let e1 = -(-x).exp_m1() * ct * tg + (-x).exp() * b.e + bx * heat;
-        let need = ((e1 - ct * b.gene(COOL_T)) / bx / held(chem, k)).max(0.0);
+        let need = ((e1 - ct * b.gene(COOL_T)) / bx / chem.subs[k].latent_gas()).max(0.0);
         let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
         let r = if in_ground > 0.0 && liq(k) { rate * chem.subs[k].solubility * ground[k * n + i] / in_ground } else { 0.0 };
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach_mol, r * days, cfg.phys.dormancy) } else { push * reach_mol };
-        let m = open_m.max((push * wide).min(need).min(spare)).min(paid / held(chem, k));
+        let m = open_m.max((push * wide).min(need).min(spare)).min(paid / chem.subs[k].latent_gas());
         // What flows through it past what it holds comes from the ground as it goes, as far as the ground has it (the ground pays
         // its heat and fusion enthalpy, as for what it soaks below, which then takes back the rest of what it lost).
         let d = if r > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(0.5 * ground[k * n + i]) } else { 0.0 };
-        let f = fused(chem, k, tg, |j| ground[j * n + i]);
+        let f = chem.fused_heat(k, tg, |j| ground[j * n + i]);
         let want = d * (chem.subs[k].cp * tg + f);
         let pre = if want > 0.0 { d * crate::ground::share(crate::ground::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
         (b.store[k], ground[k * n + i], b.e, heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, heat + pre * f);
@@ -1720,7 +1712,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
             moved = true;
             let q = m * chem.subs[k].cp * t0;
             (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
-            heat -= m * held(chem, k);
+            heat -= m * chem.subs[k].latent_gas();
             lost[k] = (m - pre).max(0.0);
             diag.liquid_land[3 - plant as usize] += m * chem.molar_volume(k, Phase::Liquid);
         }
@@ -1745,7 +1737,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let d = ((uptake + fall) * x).min(room).min(0.5 * ground[k * n + i]).max(0.0);
         // The ground pays the heat that goes with the liquid and its fusion enthalpy; if it
         // cannot pay it all, the body soaks up less.
-        let (per, f) = (chem.subs[k].cp * tg, fused(chem, k, tg, |j| ground[j * n + i]));
+        let (per, f) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
         let want = d * (per + f);
         let d = if want > 0.0 { d * crate::ground::share(crate::ground::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
         b.store[k] += d;
@@ -1877,9 +1869,9 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
 fn shed(w: &mut World, b: &mut Body) {
     let (i, n, mass, minerals) = (b.cell as usize, w.grid.n(), b.mass(&w.chem), w.chem.minerals());
     for k in 0..w.chem.ns() {
-        let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || w.chem.materials().any(|x| x == k);
+        let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || w.chem.is_material(k);
         let over = b.store[k] - if kept { b.level(&w.chem, k, mass) } else { 0.0 };
-        if over <= 0.0 || w.chem.phase(k, T_SURF) == Phase::Gas || w.chem.matter() == Some(k) || b.burns(&w.chem, k) {
+        if over <= 0.0 || w.chem.gas_at_surface(k) || w.chem.matter() == Some(k) || b.burns(&w.chem, k) {
             continue;
         }
         let q = b.e * over * w.chem.subs[k].cp / b.heat_cap(&w.chem).max(1e-9);
@@ -2050,14 +2042,14 @@ fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, cap: f64
             let d = (nu as f64 * ext[q]).min(*a);
             *a -= d;
             if gas(k) {
-                latent -= d * held(chem, k);
+                latent -= d * chem.subs[k].latent_gas();
             }
         }
         for &(k, nu) in &rx.outputs {
             let (k, d) = (k as usize, nu as f64 * ext[q]);
             *if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] } += d;
             if gas(k) {
-                latent += d * held(chem, k);
+                latent += d * chem.subs[k].latent_gas();
             }
         }
     }

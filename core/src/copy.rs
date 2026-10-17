@@ -471,9 +471,9 @@ fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, p
     for &(k, nu) in &outs {
         let (k, x) = (k as usize, nu as f64 * ext);
         if w.chem.phase(k, t) == crate::chem::Phase::Gas {
-            // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `body::held`.)
+            // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `Substance::latent_gas`.)
             let q = x * w.chem.subs[k].cp * t;
-            (w.air[k * na + j], w.e_air[j], b.e) = (w.air[k * na + j] + x, w.e_air[j] + q, b.e - q - x * body::held(&w.chem, k));
+            (w.air[k * na + j], w.e_air[j], b.e) = (w.air[k * na + j] + x, w.e_air[j] + q, b.e - q - x * w.chem.subs[k].latent_gas());
         } else {
             b.store[k] += x;
         }

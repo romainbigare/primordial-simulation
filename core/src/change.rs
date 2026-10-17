@@ -493,7 +493,7 @@ impl Cand {
 pub fn step(w: &mut World, dt: f64) {
     let mut s = std::mem::take(&mut w.scratch);
     let chem = &w.chem;
-    let (ns, n, na, sc) = (chem.ns(), w.grid.n(), w.grid.na(), w.grid.air_scale);
+    let (ns, n, na) = (chem.ns(), w.grid.n(), w.grid.na());
     let tick = (w.day / w.cfg.phys_days as u64) as u32;
     if s.slow.len() != n {
         // Blocks take turns: block `b` first reacts when `(b + tick) % LAZY == 0`.
@@ -514,9 +514,7 @@ pub fn step(w: &mut World, dt: f64) {
         (tg, bed, air_of, ta) = (&fallback.0, &fallback.1, &fallback.2, &fallback.3);
     }
     let turn = ((LAZY - tick as u64 % LAZY) % LAZY) as usize;
-    let share = 1.0 / (sc * sc) as f64;
-    // Gas held by the air carries its fusion and vaporisation enthalpy (see `check::totals`).
-    let held: Vec<f64> = chem.subs.iter().map(|b| b.lf + b.lv).collect();
+    let share = w.grid.air_share();
     let mut rc = Reactor::new(chem);
     let bit = |k: usize| 1u64 << k.min(63);
     // Per reaction not driven by light: its inputs (a bit per substance), frozen below `thr`,
@@ -712,7 +710,7 @@ pub fn step(w: &mut World, dt: f64) {
             rc.film = if wet > w.cfg.phys.porosity * vol(Phase::Solid) { wet / (w.grid.area() * w.cfg.dissolve) } else { 0.0 };
             let all = amt.iter().sum::<f64>();
             // The reactor sees sensible heat: molten amounts hold their fusion enthalpy apart.
-            let fused: f64 = (0..ns).map(|k| amt[k] * crate::body::fused(chem, k, t, |j| amt[j])).sum();
+            let fused: f64 = (0..ns).map(|k| amt[k] * chem.fused_heat(k, t, |j| amt[j])).sum();
             let mut e = w.e_ground[i] - fused;
             rc.react(chem, &mut amt, Some(&mut pool), &mut e, bed[i][0], None, 0.0, ticks as f64 * dt);
             // Gas sent to the air takes its fusion and vaporisation enthalpy from the ground (gas
@@ -722,7 +720,7 @@ pub fn step(w: &mut World, dt: f64) {
             let (mut pay, mut back, mut c_out, mut q_in) = (0.0, 0.0, 0.0, 0.0);
             for k in 0..ns {
                 let (d, cp) = (pool[k] - pool0[k], chem.subs[k].cp);
-                (pay, back) = (pay + d.max(0.0) * held[k], back - d.min(0.0) * held[k]);
+                (pay, back) = (pay + d.max(0.0) * chem.subs[k].latent_gas(), back - d.min(0.0) * chem.subs[k].latent_gas());
                 (c_out, q_in) = (c_out + d.max(0.0) * cp, q_in - d.min(0.0) * cp * ta[j]);
             }
             let c_r = bed[i][0] + (0..ns).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
@@ -769,7 +767,7 @@ pub fn step(w: &mut World, dt: f64) {
         let mut e = e_now[j];
         rc.react(chem, amt, None, &mut e, 0.0, None, 0.0, time);
         for k in 0..ns {
-            e -= (amt[k] - air_now[k * na + j]) * held[k];
+            e -= (amt[k] - air_now[k * na + j]) * chem.subs[k].latent_gas();
         }
         row[0] = 1.0;
         row[1] = e;

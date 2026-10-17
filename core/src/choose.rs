@@ -582,7 +582,7 @@ pub fn regrow(w: &mut World, dt: f64) {
 /// Can the body take in substance `k`: body matter and the solids bodies build only if it breaks them (`Body::breaks`), as it
 /// digests what it can break and nothing else; a body without the catalyst takes none.
 fn can_take(chem: &crate::chem::Chemistry, b: &Body, k: usize) -> bool {
-    (chem.matter() != Some(k) && !chem.materials().any(|x| x == k)) || b.breaks(chem, k)
+    (chem.matter() != Some(k) && !chem.is_material(k)) || b.breaks(chem, k)
 }
 
 /// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all, for a
@@ -594,7 +594,7 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
     let sum: f64 = (0..chem.ns()).map(up).sum();
     // (A solid bodies build it takes past its own level, 16 Oct 2026: it holds it until its reactions break it down, and what is
     // left passes back to the ground at its update, `body::shed`.)
-    let room = |k: usize| if chem.materials().any(|x| x == k) { f64::MAX } else { (b.level(chem, k, mass) - b.store[k]).max(0.0) };
+    let room = |k: usize| if chem.is_material(k) { f64::MAX } else { (b.level(chem, k, mass) - b.store[k]).max(0.0) };
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect();
     digest_room(chem, b, &mut m, mass);
     m
@@ -631,8 +631,7 @@ pub(crate) fn kg(w: &World, m: &[f64]) -> f64 {
 /// Mass of the amounts `m` that the body's reactions can burn, kg.
 fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
     let t = b.temp(&w.chem);
-    let fuel = |k: usize| w.chem.phase(k, t) != Phase::Gas && b.k.burn.iter().any(|&(r, _)| w.chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k));
-    m.iter().enumerate().filter(|&(k, _)| fuel(k)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
+    m.iter().enumerate().filter(|&(k, _)| b.burns_at(&w.chem, k, t)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
 }
 
 /// Most a body takes per day per kg of its mass from amounts `from` (mol) spread over a cell:
@@ -661,7 +660,7 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let mut matter = 0.0;
     for (k, &a) in m.iter().enumerate() {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
-        let q = a * (w.chem.subs[k].cp * tg + body::fused(&w.chem, k, tg, |j| w.g(j, i)));
+        let q = a * (w.chem.subs[k].cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i)));
         let took = w.take_heat_with(i, q, a * w.chem.subs[k].cp);
         let a = if q > 0.0 { a * crate::ground::share(took, q) } else { a };
         w.ground[k * n + i] -= a;
@@ -782,7 +781,7 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     // level, the liquid of its living body.)
     let (size, mass) = (b.size(chem), b.mass(chem));
     let keep = |k: usize| if b.wet >> k & 1 == 1 { b.level(chem, k, mass) } else { 0.0 };
-    let spare = |k: usize| if chem.matter() == Some(k) || chem.materials().any(|x| x == k) { 0.0 } else { (b.store[k] - keep(k).max(2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
+    let spare = |k: usize| if chem.matter() == Some(k) || chem.is_material(k) { 0.0 } else { (b.store[k] - keep(k).max(2.0 * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
     let mo = o.mass(chem);

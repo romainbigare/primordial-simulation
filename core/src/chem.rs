@@ -54,6 +54,15 @@ pub struct Substance {
     pub rupture: f64,
 }
 
+impl Substance {
+    /// Energy a mole holds apart from its heat while it is a gas in the air: its fusion and vaporisation
+    /// enthalpy, J/mol (`check::totals` counts it in the air).
+    #[inline]
+    pub fn latent_gas(&self) -> f64 {
+        self.lf + self.lv
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Reaction {
     /// (substance, count)
@@ -104,6 +113,12 @@ pub struct Chemistry {
 impl Chemistry {
     pub fn ns(&self) -> usize {
         self.subs.len()
+    }
+
+    /// Is `k` a gas at `T_SURF`?
+    #[inline]
+    pub fn gas_at_surface(&self, k: usize) -> bool {
+        self.phase(k, T_SURF) == Phase::Gas
     }
 
     pub fn phase(&self, k: usize, t: f64) -> Phase {
@@ -191,6 +206,13 @@ impl Chemistry {
         }
     }
 
+    /// Fusion enthalpy a mole of `k` holds in the heat of a node or body at `t` among its amounts `a(j)`, J/mol: none
+    /// while it is solid there (`phase_in`).
+    #[inline]
+    pub fn fused_heat(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> f64 {
+        if self.phase_in(k, t, a) != Phase::Solid { self.subs[k].lf } else { 0.0 }
+    }
+
     /// Mole fraction of gas `k` that a liquid at `t` holds under its partial pressure `p`, Pa
     /// (Henry's law). It falls with warmth by van 't Hoff's law, with the heat of solution taken
     /// as the vaporisation enthalpy: dissolving is like condensing (for the carbon gas of
@@ -207,39 +229,43 @@ impl Chemistry {
         s.ir_abs * if s.ir_sat > 0.0 && c > s.ir_sat { (s.ir_sat * c).sqrt() } else { c }
     }
 
-    /// Enthalpy change of one reaction unit, J (positive takes energy).
+    /// Enthalpy change of one unit of reaction `r`, J (positive takes energy).
     pub fn dh(&self, r: usize) -> f64 {
-        let rx = &self.reactions[r];
+        self.dh_of(&self.reactions[r])
+    }
+
+    /// Enthalpy change of one unit of a reaction or a conversion (`build`, `builds`), J (positive takes energy).
+    pub fn dh_of(&self, rx: &Reaction) -> f64 {
         let sum = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].hf).sum::<f64>();
         sum(&rx.outputs) - sum(&rx.inputs)
+    }
+
+    /// Does reaction `r` burn: release heat taking a gas (at `T_SURF`)?
+    pub fn burning(&self, r: usize) -> bool {
+        self.dh(r) < 0.0 && self.reactions[r].inputs.iter().any(|p| self.gas_at_surface(p.0 as usize))
+    }
+
+    /// Is `k` an input of a reaction that burns (`burning`)?
+    pub fn burnt(&self, k: usize) -> bool {
+        (0..self.reactions.len()).any(|r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 
     /// Does reaction `r` get less heat out of a solid or liquid it takes than a burning of it does (a reaction that releases heat
     /// from it with a gas)? Then it keeps the rest in what it makes (a fuel gas, a mineral): it is no burning, and a body runs it at
     /// its catalyst's pace and never pays its upkeep with its heat (`Body::prepare`).
     pub fn keeps(&self, r: usize) -> bool {
-        let gas = |k: u16| self.phase(k as usize, T_SURF) == Phase::Gas;
         let per = |q: usize, k: u16| self.reactions[q].inputs.iter().find(|p| p.0 == k).map_or(f64::NEG_INFINITY, |p| -self.dh(q) / p.1 as f64);
-        let burning = |q: usize| self.dh(q) < 0.0 && self.reactions[q].inputs.iter().any(|p| gas(p.0));
-        self.reactions[r].inputs.iter().filter(|p| !gas(p.0)).any(|p| (0..self.reactions.len()).any(|q| burning(q) && per(q, p.0) > (1.0 + 1e-9) * per(r, p.0)))
-    }
-
-    /// Enthalpy change of one unit of growth, J (positive takes energy): 0 in
-    /// chemistry 0, where 6 of the energy-rich solid make 1 of matter and 1 of liquid (hf of the
-    /// matter = 6 hf of the solid less hf of the liquid).
-    pub fn dh_build(&self) -> f64 {
-        self.build.as_ref().map_or(0.0, |b| self.dh_of(b))
-    }
-
-    /// Enthalpy change of one unit of a conversion (`build`, `builds`), J.
-    pub(crate) fn dh_of(&self, b: &Reaction) -> f64 {
-        let sum = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].hf).sum::<f64>();
-        sum(&b.outputs) - sum(&b.inputs)
+        (self.reactions[r].inputs.iter().filter(|p| !self.gas_at_surface(p.0 as usize))).any(|p| (0..self.reactions.len()).any(|q| self.burning(q) && per(q, p.0) > (1.0 + 1e-9) * per(r, p.0)))
     }
 
     /// The solids bodies build besides their matter (the first output of each of `builds`).
     pub fn materials(&self) -> impl Iterator<Item = usize> + '_ {
         self.builds.iter().filter_map(|b| b.outputs.first()).map(|p| p.0 as usize)
+    }
+
+    /// Is `k` one of the solids bodies build besides their matter (`materials`)?
+    pub fn is_material(&self, k: usize) -> bool {
+        self.materials().any(|x| x == k)
     }
 
     /// The body matter: the first output of growth (`build`), if bodies grow.
@@ -253,9 +279,7 @@ impl Chemistry {
     /// ground or what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.
     pub fn minerals(&self) -> Vec<(usize, f64)> {
         let Some(bl) = self.build.as_ref() else { return Vec::new() };
-        let gas = |k: u16| self.phase(k as usize, T_SURF) == Phase::Gas;
-        let burns = |k: u16| self.reactions.iter().enumerate().any(|(r, rx)| self.dh(r) < 0.0 && rx.inputs.iter().any(|p| p.0 == k) && rx.inputs.iter().any(|p| gas(p.0)));
-        bl.inputs.iter().filter(|p| !burns(p.0)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect()
+        bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect()
     }
 
     /// Element counts of a reaction side.
