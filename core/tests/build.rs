@@ -32,7 +32,7 @@ struct Roles {
 }
 
 fn roles(w: &World) -> Roles {
-    let (_, rich, liquid, burn) = worldgen::life::roles(&w.chem).expect("roles");
+    let (_, rich, liquid, burn) = w.chem.life_roles().expect("roles");
     Roles { rich, liquid, matter: w.chem.matter().expect("body matter"), burn }
 }
 
@@ -370,7 +370,7 @@ fn storing_the_solid_costs_no_build() {
     let mut b = eater(&mut w, i, 3, 6.0);
     // (An eater of the solid only: it does not burn body matter, which would be burnt for its upkeep.)
     let lay = Layout::of(&w.chem);
-    let (m, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
+    let (m, burn_matter) = w.chem.matter_roles().expect("matter");
     (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
     // Less of the solid than it holds at once, so that it has room to store.
     let out_kg = 0.5 * kg(&w, &b, r.rich);
@@ -937,7 +937,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         (w.ledger.imposed_energy, w.e_ground[i]) = (w.ledger.imposed_energy + e - w.e_ground[i] + a * w.chem.subs[r.matter].hf, e);
         let mut b = eater(&mut w, i, 3, 6.0);
         let lay = Layout::of(&w.chem);
-        let (_, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
+        let (_, burn_matter) = w.chem.matter_roles().expect("matter");
         if !digests {
             b.genes[lay.cat + burn_matter] = -1.0;
         }

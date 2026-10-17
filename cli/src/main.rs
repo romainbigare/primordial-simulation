@@ -104,7 +104,7 @@ fn drive(mut w: World, a: &Args, resumed: bool) {
     }
     // What is placed and when: the two starting kinds, or with `--roster` the ten of `worldgen::life::ROSTER`; the big-brain test (`seed_clever`) at its own year.
     let kinds: Vec<usize> = if a.has("--roster") { worldgen::life::ROSTER.to_vec() } else { vec![0, 1] };
-    let plan: Vec<(usize, i64)> = kinds.iter().map(|&k| (k, life_year + worldgen::life::KINDS[k].year)).collect();
+    let plan: Vec<(usize, i64)> = kinds.iter().map(|&k| (k, life_year + worldgen::life::KINDS[k].year as i64)).collect();
     for y in y0 + 1..=y0 + years {
         // The soil gets its mineral when life starts (`worldgen::life::soil`).
         if life_year >= 0 && y as i64 - 1 == life_year {

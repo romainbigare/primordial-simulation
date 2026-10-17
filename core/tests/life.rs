@@ -136,7 +136,7 @@ fn hot_cover_burns() {
         w.cfg.phys.c_move = 1e12;
         pcore::step(&mut w);
         worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-        let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");
+        let (_, rich, _, _) = w.chem.life_roles().expect("roles");
         let i = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node").cell as usize;
         let n = w.grid.n();
         let held = |w: &pcore::World| w.ground[rich * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[rich]).sum::<f64>();
@@ -293,9 +293,9 @@ fn a_body_gives_its_stores_but_not_its_body() {
     taker.genes[lay.keep..].fill(0.95);
     // (Body matter given is digested into the solid, so it fills the taker's room for the solid
     // (`choose::digest_room`): room for all the giver's solid and matter, 2 kg per kg of body.)
-    let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+    let rich = w.chem.life_roles().expect("roles").1;
     taker.genes[lay.keep + rich] = 2.0;
-    let (matter, liquid) = (w.chem.matter().expect("matter"), worldgen::life::roles(&w.chem).expect("roles").2);
+    let (matter, liquid) = (w.chem.matter().expect("matter"), w.chem.life_roles().expect("roles").2);
     let (m0, fuel0) = (giver.store[matter], giver.store[rich]);
     let g = w.life.add(giver, w.day, 1);
     w.life.add(taker, w.day, 1);
@@ -535,7 +535,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ], b.genes[LEARN]) = (0.0, 0.0, repair, -4.0, -6.0);
         // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel (the
         // two months they settle and the long life of one of them cost more than the 9 kg a starting eater holds).
-        let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+        let rich = w.chem.life_roles().expect("roles").1;
         b.store[rich] *= 3.0;
         w.chem.add_elems(rich, 2.0 * b.store[rich] / 3.0, &mut w.ledger.imposed_elems);
         w.ledger.imposed_energy += 2.0 * b.store[rich] / 3.0 * w.chem.subs[rich].hf;
@@ -645,7 +645,7 @@ fn equiv_goes_with_mass_to_the_power() {
     // the energy ceiling): the same body holding three times the fuel has the same supply.
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
-    let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+    let rich = w.chem.life_roles().expect("roles").1;
     let mut b = Body { count: 1.0, genes: vec![0.0; pcore::body::Layout::of(&w.chem).len], store: vec![0.0; w.chem.ns()], ..Default::default() };
     b.genes[COPY_MASS] = 1.0;
     let matter = w.chem.matter().expect("body matter");
@@ -733,7 +733,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     b.e = b.heat_cap(&w.chem) * w.cfg.phys.t_cat;
     let p = &mut w.cfg.phys;
     (p.c_brain, p.c_hidden, p.c_memory, p.c_seen, p.c_sight, p.c_leaf) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-    let rich = worldgen::life::roles(&w.chem).expect("roles").1;
+    let rich = w.chem.life_roles().expect("roles").1;
     let days = 10.0;
     let up = |w: &pcore::World, x: &pcore::body::Body| pcore::body::upkeep(w, x, days, x.mass(&w.chem));
     let per_kg: Vec<f64> = [1.0, 10.0, 100.0, 1e4]

@@ -29,7 +29,7 @@ fn set() -> Set {
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 1 });
-    let (_, rich, liquid, _) = worldgen::life::roles(&w.chem).expect("roles");
+    let (_, rich, liquid, _) = w.chem.life_roles().expect("roles");
     Set { w, lineage, rows, land, liquid, rich }
 }
 

@@ -74,7 +74,7 @@ fn scene(seed: u64) -> (World, usize) {
     }
     let e = w.e_ground[land];
     w.e_ground.iter_mut().for_each(|x| *x = e);
-    let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");
+    let (_, rich, _, _) = w.chem.life_roles().expect("roles");
     for i in (0..n).filter(|&i| i % W >= STRIP) {
         w.ground[rich * n + i] += RICH * w.grid.area();
     }
@@ -114,7 +114,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     }
     (w.ledger.imposed_energy, b.e) = (w.ledger.imposed_energy + (f - 1.0) * b.e, f * b.e);
     // (The founders' burning gene as it was with the old rates of the open air, see `scene`.)
-    let (_, _, _, burn) = worldgen::life::roles(&w.chem).expect("roles");
+    let (_, _, _, burn) = w.chem.life_roles().expect("roles");
     b.genes[pcore::body::Layout::of(&w.chem).cat + burn] += worldgen::life::LITTER_X;
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);

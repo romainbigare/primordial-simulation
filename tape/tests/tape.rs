@@ -303,7 +303,7 @@ fn yearly_series_counts_the_minerals() {
     worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
     worldgen::life::seed(&mut w, 0);
     // (The founders that fix are put back to none, so that the mineral in all can stay what the soil gave.)
-    let (lay, fix) = (pcore::body::Layout::of(&w.chem), worldgen::life::fixing(&w.chem).expect("the fixing reaction"));
+    let (lay, fix) = (pcore::body::Layout::of(&w.chem), w.chem.fixing().expect("the fixing reaction"));
     w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
     // The land and sea cells at each yearly row, to turn the ground's kg/m² back into mol.
     let cells = |w: &pcore::World| {

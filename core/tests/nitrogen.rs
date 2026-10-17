@@ -138,8 +138,8 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     // (Layzell et al. 1979; models take 6). It
     // releases heat, but less from each unit of the solid than burning does: it keeps a part (`Chemistry::keeps`), so it is no burning
     // and a body never pays its upkeep with it; burning itself is a burning.
-    let fix = worldgen::life::fixing(&chem).expect("fixing");
-    let (_, rich, _, burn1) = worldgen::life::roles(&chem).expect("roles");
+    let fix = chem.fixing().expect("fixing");
+    let (_, rich, _, burn1) = chem.life_roles().expect("roles");
     let units = |r: usize| chem.reactions[r].inputs.iter().find(|p| p.0 as usize == rich).map_or(0.0, |p| p.1 as f64);
     let (unit, n) = (-chem.dh(burn1) / units(burn1), units(fix));
     let carbon = n * 12.0 / 28.0;
@@ -292,8 +292,8 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
 fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
     let (chem, init) = worldgen::chemistry0();
     let (mineral, _) = chem.minerals()[0];
-    let fix = worldgen::life::fixing(&chem).expect("fixing");
-    let (_, rich, _, _) = worldgen::life::roles(&chem).expect("roles");
+    let fix = chem.fixing().expect("fixing");
+    let (_, rich, _, _) = chem.life_roles().expect("roles");
     // In the open: ten years at 290 K, the air in plenty and the liquid and the fuel there.
     let mut rc = change::Reactor::new(&chem);
     let mut n = vec![0.0; chem.ns()];
@@ -436,7 +436,7 @@ fn an_eater_digests_matter_into_the_solid_and_the_minerals_and_sheds_the_excess(
     let (mut w, i) = start();
     let minerals = w.chem.minerals();
     let m = w.chem.matter().expect("matter");
-    let (_, rich, _, _) = worldgen::life::roles(&w.chem).expect("roles");
+    let (_, rich, _, _) = w.chem.life_roles().expect("roles");
     let n = w.grid.n();
     // A great store of matter on its ground, an eater that only takes from the ground.
     put(&mut w, m, i, 1e5);
@@ -550,8 +550,8 @@ fn the_pores_of_the_land_hold_the_rock_salt_where_lime_and_liquid_meet() {
 fn a_catalyst_is_slowed_by_the_product_the_body_holds() {
     let (mut w, i) = start();
     let (mineral, _) = w.chem.minerals()[0];
-    let fix = worldgen::life::fixing(&w.chem).expect("fixing");
-    let (light, rich, _, burn) = worldgen::life::roles(&w.chem).expect("roles");
+    let fix = w.chem.fixing().expect("fixing");
+    let (light, rich, _, burn) = w.chem.life_roles().expect("roles");
     let b = body_of(&mut w, 0, i, 0);
     let (_, mut b) = out(&mut w, b);
     let (t, mass) = (b.temp(&w.chem), b.mass(&w.chem));
