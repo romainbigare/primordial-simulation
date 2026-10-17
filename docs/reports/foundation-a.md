@@ -113,9 +113,39 @@ Maps of year 60 (map, temperature, rain, life, traffic):
 
 ![s1-64-roster, year 60](foundation-a/s1-64-roster/year0060.png)
 
-**128 × 128, 300 years, seeds 1, 5, 7** (`s1-128`, `s5-128`, `s7-128`, with `--features threads`):
+**128 × 128, 300 years, seeds 1, 5, 7** (`s1-128`, `s5-128`, `s7-128`, with `--features threads`; the three ran
+at the same time, 2 threads each):
 
-(The runs are still going. This part comes when they end.)
+![128 x 128 runs](foundation-a/ref-128.png)
+
+| Run | Years | Bodies at the end | Light-eater members | Animal members | Drift of elements, energy | Time per year |
+|---|---|---|---|---|---|---|
+| s1-128 | **280, then a crash** (below) | 24,899 | 9.0e10 | 1.2e7 | 1.4e-13, 5.5e-14 | about 30 s |
+| s5-128 | 300 | 25,386 | 5.7e10 | 1.3e8 | 1.4e-13, 5.2e-14 | 28 s |
+| s7-128 | 300 | 26,042 | 1.2e11 | 6.0e7 | 9.1e-14, 4.0e-14 | 40 s |
+
+**Seed 1 crashed between years 281 and 290** with an undefined number (NaN) in the wind: an air node's total amount
+became NaN. The yearly check passed at year 280. This is a real bug that only the long run found; see "A bug found by
+the long runs" below.
+
+The handover (13.2, "Long runs") asked five questions about these runs:
+
+| Question | Answer (seeds 1, 5, 7) |
+|---|---|
+| Does life last? | Yes. Light-eaters hold at about 10¹¹ kg from year 30 to the end; eaters settle at 10⁹ to 10¹⁰ kg from year 100. Three or four kinds by the clustering. |
+| Do plants evolve their light gene? | Slowly: the mean light catalyst gene goes from 11.30 to 11.40–11.46 (log10) in 300 years. |
+| Does fixing fall by itself? | Not clearly. 10% of the founders carry the fixing gene; by year 10 it is 48–65% of the members; at the end 58%, 22% and 58%. It goes up and down, without a trend. |
+| Do the seasons hold? | Yes: summer 293–294 K, winter 283–285 K on land, the same at year 100 and year 300. |
+| Where does the carbon gas settle? | Seeds 5 and 7: about 290–300 ppm from year 30 on. **Seed 1 does not settle**: 245 ppm at year 100, 190 ppm at year 280, still falling. |
+
+In seed 5, the share of plant members dying "taken" rises from 3% to 25% after year 100: there, animals take from
+plants, which is the law at work (the eater mass is the highest of the three seeds).
+
+Maps of year 300 (seed 1: year 280):
+
+![s5-128, year 300](foundation-a/s5-128/year0300.png)
+
+![s1-128, year 280](foundation-a/s1-128/year0280.png)
 
 ## A3: the key-number test
 
@@ -222,7 +252,21 @@ Phase A added 16 lines to `core` (the wind fix). The rest of the work was in `ta
 
 ## Speed (the base line for the plan's goals, 6.5)
 
-(The runs are still going. This part comes when they end.)
+Measured on a quiet machine (4 cores), one run at a time, with the release build of `5671305` (before the wind fix):
+
+| World | Flow | Change | Bodies | Tape | Time per year |
+|---|---|---|---|---|---|
+| 64 × 64 without life (5 years) | 354 ms | 280 ms | 25 ms | 42 ms | 0.73 s |
+| 128 × 128 without life (5 years) | 1,436 ms | 1,166 ms | 116 ms | 162 ms | 2.9 s |
+| 64 × 64 roster, years 40 to 43 (8,500 bodies) | 475 ms | 237 ms | 6,183 ms | 153 ms | 7.2 s (46 µs per body update) |
+| 128 × 128, years 100 to 300 (19,000 to 26,000 bodies; three runs at once) | 2.2–2.5 s | 0.9–1.2 s | 20–40 s | 0.4 s | 28–40 s (48–52 µs per body update) |
+
+The speed benchmark of the tests (`speed`: 32 × 32, every kind, 5 years) on main after the wind fix: **0.40 years per
+second** (3,157 bodies at the end).
+
+The plan's goals against these numbers: the island without life 3 times faster in Flow and Change (from 2.6 s a year
+at 128 × 128 to under 0.9 s); the island with life 10 times faster per year at the same number of bodies (from about
+30 s a year at 128 × 128 to about 3 s).
 
 ## What comes next
 
