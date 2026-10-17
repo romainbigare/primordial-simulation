@@ -8,7 +8,7 @@
 //! a body, put to the node or a body, watch a body (copy part of its brain), rest, and the
 //! actions of Bond (`bond`): form a part, hold, let go, join, break, enter (a population node
 //! perceives parts as one of its members would, and does these through one member split off,
-//! `copy::one`). Each costs energy paid by the body's own reactions; if it cannot pay, it fails.
+//! `nodes::one`). Each costs energy paid by the body's own reactions; if it cannot pay, it fails.
 //! At its next decision the brain learns from the change of the body's own well-being (a policy
 //! gradient whose baseline is the brain's own estimate of how well-being will go).
 //!
@@ -17,37 +17,26 @@
 //! copy and starts a group; one that stays a year near a bigger group of its lineage joins it.
 //! What a group learned fades at the mean forgetting rate of its members.
 
-use crate::body::{self, Body, Layout, Lived, Lineage, BROKEN, STRENGTH, TAKEN};
+use crate::body::{self, Body, Layout, Lived, BROKEN, STRENGTH, TAKEN};
 use crate::brain::{self, ln, score, squash, Shape, Thought, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::Phase;
 use crate::event::{Event, EventKind};
 use crate::grid::{DIRS, FORWARD};
 use crate::rng::{Purpose, Rng};
-use crate::{bond, copy, World};
+use crate::{bond, nodes, World};
 
 /// Features of a neighbour direction and of a perceived body; most bodies perceived (the
 /// `SEEN` gene sets how many), parts perceived; options.
-const NF: usize = 10;
-const NT: usize = 11;
+pub(crate) const NF: usize = 10;
+pub(crate) const NT: usize = 11;
 const MAX_SEEN: usize = 6;
 const PARTS: usize = 3;
 const OPTS: usize = FIXED + 8 + VERBS * MAX_SEEN + OVERBS * PARTS;
 const NONE: u32 = u32::MAX;
 
-/// The brain's sizes for `ns` substances, `h` hidden units and `mem` memory numbers.
-pub fn shape(ns: usize, h: usize, mem: usize) -> Shape {
-    Shape { h, mem, ni: 2 * ns + 15 + mem, nf: NF, nt: NT, no: bond::NO }
-}
-
-/// The sizes the genes give: hidden units, memory numbers, bodies perceived, sight (cells).
-pub fn sizes(genes: &[f32]) -> [usize; 4] {
-    body::BRAIN_SIZES.map(|g| genes[g].round().max(0.0) as usize)
-}
-
-/// The sizes of a lineage.
-pub fn sizes_of(l: &Lineage) -> [usize; 4] {
-    [l.shape.h, l.shape.mem, l.seen, l.sight]
-}
+/// Inputs of a brain besides two per substance (its stores, the cell's loose amounts) and its memory: the eight numbers
+/// of its own state, its cell and the season, the signals heard, and what Bond senses (`bond::sense`).
+pub(crate) const INPUTS: usize = 8 + SIG + bond::SENSE;
 
 /// Per direction, the offsets of the cells seen that way and their weights.
 pub type Sector = [Vec<(i32, i32, f32)>; 8];
@@ -295,7 +284,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     // merges it); else it has no reason to stay apart and goes back into the node at once, with
     // what it got, as the next month's merge would take it back.
     let (me, mut one) = if b.n() > 1.0 && ((4..FIXED).contains(&a) || a >= o0) {
-        let s = copy::one(w, b, &mut rng);
+        let s = nodes::one(w, b, &mut rng);
         (s, Some(std::mem::take(&mut w.life.bodies[s])))
     } else {
         (slot, None)
@@ -328,7 +317,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
         if w.life.bodies[me].hold == 0 && w.life.bodies[me].inside == 0 {
             let o = w.life.bodies[me].clone();
             w.life.remove(me);
-            copy::take_in(w, node, o, None);
+            nodes::take_in(w, node, o, None);
         }
     }
 }
@@ -501,9 +490,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     let gr = &w.life.groups[b.group as usize];
     let ((cx, cy), (x, y)) = (gr.centre(), w.grid.xy(j));
     if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > w.cfg.phys.leave {
-        let (rows, var, ms) = (gr.rows.clone(), gr.var, gr.ms.clone());
-        let g = w.life.new_group(b.lineage, rows);
-        (w.life.groups[g as usize].var, w.life.groups[g as usize].ms) = (var, ms);
+        let g = w.life.fork_group(b.group, b.lineage, gr.rows.clone());
         w.life.enrol(g, b, 1);
         w.life.enrol(b.group, b, -1);
         (b.group, b.near) = (g, NONE);

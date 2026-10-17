@@ -55,7 +55,7 @@ impl Recorder {
         let [n, g] = self.year.decisions;
         let (mut sz, mut top, mut k) = ([0.0; 4], 0.0f64, 0.0);
         for l in w.life.alive().filter_map(|b| w.life.brains[b.lineage as usize].as_ref()) {
-            let x = pcore::choose::sizes_of(l);
+            let x = pcore::lineage::sizes_of(l);
             sz.iter_mut().zip(x).for_each(|(s, v)| *s += v as f64);
             (top, k) = (top.max(x[0] as f64), k + 1.0);
         }

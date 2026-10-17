@@ -1,5 +1,5 @@
 //! Two-parent copying (15 Oct 2026, handover 6.4): when a mature body makes children it looks in its cell for a
-//! partner, another mature body alike to it (the likeness that lets bodies join, `copy::alike`); each gene of the
+//! partner, another mature body alike to it (the likeness that lets bodies join, `body::alike`); each gene of the
 //! children is one parent's, a keyed draw gene by gene, and each born brain row too, then the generation's
 //! mutation as for one parent. Unlike bodies never mix; with no partner a child is a copy of one parent; the
 //! partner loses nothing; a node's children get the spread a merge of the two would pool.
@@ -7,7 +7,7 @@
 use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, LIQ, MUT, STRENGTH};
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
-use pcore::{body, brain, choose, copy, World};
+use pcore::{body, brain, copy, lineage, World};
 
 /// Gene value of the first body in the genes under test, and the step the catalyst genes move in (0.3).
 const BASE: f32 = 3.0;
@@ -28,12 +28,12 @@ fn start() -> (World, usize) {
 /// 10^`copy` kg of body, mutating little (so the noise on a gene is far less than the steps tested), with children
 /// 10^-3 of its copy mass.
 fn eater(w: &mut World, i: usize, copy: f32) -> Body {
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut fixed = [-8.0; brain::FIXED];
     fixed[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
     (b.genes[MUT], b.genes[CHILD]) = (-3.0, -3.0);

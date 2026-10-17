@@ -3,10 +3,11 @@
 
 use super::kinds::{light, Kind, KINDS};
 use super::make::{make_with, split, KEEP_LIQUID};
-use pcore::body::{self, Body, Layout, Lineage};
+use pcore::body::{self, Body, Layout};
+use pcore::lineage::Lineage;
 use pcore::brain::{self, Shape};
 use pcore::rng::{Purpose, Rng};
-use pcore::{choose, World};
+use pcore::{lineage, World};
 use serde::{Deserialize, Serialize};
 
 /// The share of the starting light-eaters that carry the gene of the fixing reaction (`Chemistry::fixing`), chosen
@@ -41,7 +42,7 @@ fn founder_id(which: usize, i: usize, k: usize) -> u64 {
 /// from the hand-set brains is the copy logit (the body's own chance to copy): copying is already gated by physics (a
 /// member must hold its copy mass and pay for it), and a neutral 0 would make every body that holds the mass copy on
 /// half of its decisions, a rate nobody chose. Then every body gets `rounds` rounds of mutation (genes by
-/// `copy::mutate`, born brain rows by `copy::shake`), each body its own random walk and genome, so the first
+/// `body::mutate`, born brain rows by `brain::shake`), each body its own random walk and genome, so the first
 /// generation is already a spray of variants. A neutral start gets more than one generation's step, which is too
 /// small to give selection anything to pick from: the bias of every row gets rounds of `size` (after 20 rounds of 0.2
 /// they span about 0.9), the other row entries keep the step of one generation so the features do not swamp the
@@ -149,8 +150,8 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
 /// The founders' lineage (labelled with the kind's row) and its brain: hand-set biases, or neutral ones that keep the
 /// copy logit. Returns its shape, the lineage and the born rows of its brain.
 fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: bool, r: &mut Rng) -> (Shape, u32, Vec<f32>) {
-    let [h, mem, seen, sight] = choose::sizes(&kind.scalars);
-    let shape = choose::shape(w.chem.ns(), h, mem);
+    let [h, mem, seen, sight] = lineage::sizes(&kind.scalars);
+    let shape = lineage::shape(w.chem.ns(), h, mem);
     let (fixed, dir, verbs) = if hand {
         kind.hand
     } else {
@@ -171,11 +172,11 @@ fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding
     let mut rr = Rng::new(w.seed, w.day, id, Purpose::Mutate);
     let size = w.cfg.phys.row_noise * 10f32.powf(kind.scalars[body::MUT]) / (w.cfg.phys.row_chance as f32).sqrt();
     for _ in 0..how.rounds {
-        pcore::copy::shake(&mut v, &mut rr, size);
+        pcore::brain::shake(&mut v, &mut rr, size);
     }
     if !hand {
         let (r, extra) = (shape.r(), how.size * (how.rounds as f32).sqrt());
-        v.chunks_exact_mut(r).for_each(|row| pcore::copy::shake(&mut row[shape.h..], &mut rr, extra));
+        v.chunks_exact_mut(r).for_each(|row| pcore::brain::shake(&mut row[shape.h..], &mut rr, extra));
     }
     w.life.new_genome(v)
 }

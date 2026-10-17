@@ -233,3 +233,35 @@ pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> 
     }
     o
 }
+
+/// The step of a node's born rows: that of a child whose rows changed, for mutation size `size` (`Physics::row_noise`
+/// made bigger by 1 / sqrt(`Physics::row_chance`), as only that share of children change theirs).
+pub(crate) fn row_step(p: &crate::Physics, size: f32) -> f32 {
+    p.row_noise * size / (p.row_chance as f32).sqrt()
+}
+
+/// The number of values of an 8-bit uniform.
+const U8_SPAN: f32 = 256.0;
+
+/// Add noise near a normal of spread `size` to each weight: a sum of four 8-bit uniforms (mean 2 (`U8_SPAN` - 1),
+/// variance about `U8_SPAN`²/3), centred and scaled, two weights from one draw. Cheap, as a brain has many weights and a
+/// node's dispersing children shake them all.
+pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
+    const B: u64 = 0x00ff_00ff_00ff_00ff;
+    let (k, mean) = (size * 3f32.sqrt() / U8_SPAN, 2.0 * (U8_SPAN - 1.0));
+    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits (the first and the third lane of
+    // `a + (a >> 16)`).
+    let sums = |u: u64| {
+        let a = (u & B) + (u >> 8 & B);
+        let t = a + (a >> 16);
+        [(t & 0xffff) as f32 - mean, (t >> 32 & 0xffff) as f32 - mean]
+    };
+    let mut pairs = w.chunks_exact_mut(2);
+    for p in &mut pairs {
+        let s = sums(r.u64());
+        (p[0], p[1]) = (p[0] + k * s[0], p[1] + k * s[1]);
+    }
+    if let [x] = pairs.into_remainder() {
+        *x += k * sums(r.u64())[0];
+    }
+}

@@ -28,7 +28,7 @@ mod verbs;
 
 pub use month::step;
 pub use sense::{afloat, depth, features, room};
-pub(crate) use sense::{possible, sense, walls_around};
+pub(crate) use sense::{possible, sense, walls_around, SENSE};
 pub use verbs::{act, anchor, carry, dig, force, form, moved, release};
 pub(crate) use verbs::{bears, let_go, lever};
 

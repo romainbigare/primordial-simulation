@@ -5,10 +5,10 @@
 //! copies once it has eaten twice its copy mass) are taken out at once.
 
 use pcore::body::{self, INTERVAL, LEARN};
-use pcore::life::Lineage;
+use pcore::lineage::Lineage;
 use pcore::grid::DIRS;
 use pcore::rng::{Purpose, Rng};
-use pcore::{bond, brain, change, choose, flow, World};
+use pcore::{bond, brain, change, flow, lineage, World};
 
 const W: usize = 12;
 const H: usize = 8;
@@ -100,7 +100,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // other bodies kept rare, as they are not part of this scene.
     let mut r = Rng::new(seed, 0, 0, Purpose::Body);
     let fixed = [0.0, -8.0, 0.0, 0.0, -8.0, -8.0, -8.0, -8.0];
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut base = brain::random(shape, &mut r, 0.1, fixed, 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });

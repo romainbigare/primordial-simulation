@@ -6,9 +6,9 @@
 //! body stands above its ground by that heat over that conductance (`body::live`, `body::pay`).
 
 use pcore::body::{Body, DISPERSE, LIQ, REPAIR};
-use pcore::life::Lineage;
+use pcore::lineage::Lineage;
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, World};
+use pcore::{brain, lineage, World};
 
 /// A world with a lineage of brains that only rest, and the land cells with no liquid on them.
 struct Set {
@@ -22,7 +22,7 @@ fn set() -> Set {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut rest = [-8.0; brain::FIXED];
     rest[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
@@ -361,7 +361,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
     s.w.cfg.phys.sweep = 1e12;
     s.w.cfg.phys.c_build = 0.0;
     // A starting eater whose brain only takes from the ground.
-    let shape = choose::shape(s.w.chem.ns(), 12, 6);
+    let shape = lineage::shape(s.w.chem.ns(), 12, 6);
     let mut fixed = [-8.0; brain::FIXED];
     fixed[3] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);

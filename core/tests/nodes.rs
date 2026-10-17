@@ -1,9 +1,9 @@
 //! Population nodes (plan 7.1): how their members differ, how they split, how they act on bonds.
 
 use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, GAS, HIDDEN, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
-use pcore::life::Lineage;
+use pcore::lineage::Lineage;
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, check, choose, copy};
+use pcore::{body, brain, check, copy, lineage, nodes};
 
 /// Set aside a brood of `k` children for `b` (all its members together) out of the matter it holds: what
 /// `copy::grow` would have put there (14 Oct 2026: a body makes children from its brood).
@@ -17,8 +17,8 @@ fn live(w: &pcore::World) -> Vec<usize> {
     (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).collect()
 }
 
-/// A mature node's children start a node of their own (they are immature, `copy::class`) that carries the variance left
-/// among them; when they have grown and join their parents' node (the month's merge, `copy::merge`) its spread
+/// A mature node's children start a node of their own (they are immature, `body::class`) that carries the variance left
+/// among them; when they have grown and join their parents' node (the month's merge, `nodes::merge`) its spread
 /// is widened by it; a node whose members differ so much that its halves would not be alike splits in
 /// two along that gene, keeping its members, stores, heat and pooled spread.
 #[test]
@@ -44,7 +44,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     assert!((c.count - n0).abs() < 1e-6 * n0 && !c.adult(&w.chem), "{} young members", c.count);
     assert!(c.spread.iter().all(|&v| v >= 0.0) && c.spread.iter().any(|&v| v > 0.0) && c.row_spread > 0.0, "children keep no spread");
     // Grown, they join the node (as the month's merge does): its spread is widened.
-    copy::merge(&mut w, kids[0], s);
+    nodes::merge(&mut w, kids[0], s);
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     assert!(b.count > 1.5 * n0 && b.spread.iter().any(|&v| v > 0.0) && b.row_spread > 0.0, "the merge widened nothing");
 
@@ -52,7 +52,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     b.spread[COPY_MASS] = 1.0;
     let (count, store, e, m) = (b.count, b.store.clone(), b.e, b.genes[COPY_MASS]);
     let before = live(&w);
-    copy::split(&mut w, s, &mut b);
+    nodes::split(&mut w, s, &mut b);
     w.life.bodies[s] = b;
     let new: Vec<usize> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
     assert_eq!(new.len(), 1, "not split in two");
@@ -129,14 +129,14 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             brood(&w, &mut b, n);
             let (before, id) = (live(&w), b.id(s));
             copy::copy(&mut w, s, &mut b);
-            copy::resize(&mut w, s, &mut b);
-            copy::split(&mut w, s, &mut b);
+            lineage::resize(&mut w, s, &mut b);
+            nodes::split(&mut w, s, &mut b);
             w.life.bodies[s] = b;
-            // The children are young nodes of their own (immature, `copy::class`); here they grow up at once, and the month's
+            // The children are young nodes of their own (immature, `body::class`); here they grow up at once, and the month's
             // merge would take them back into their parent's node: they do now, so the update's node math is the same.
             let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life.bodies[*k].parent == id).collect();
             for k in kids {
-                copy::merge(&mut w, k, s);
+                nodes::merge(&mut w, k, s);
             }
         }
         for s in live(&w) {
@@ -161,7 +161,7 @@ fn genes_do_not_drift_without_selection() {
         let lay = Layout::of(&w0.chem);
         // Gene steps (from `steps` of all ones: 1 / step; the brain's sizes, which `steps` leaves
         // out of likeness, by their own steps).
-        let mut inv = copy::steps(&lay, &vec![1.0; lay.len]);
+        let mut inv = body::steps(&lay, &vec![1.0; lay.len]);
         for (g, step) in [(HIDDEN, 0.3), (MEMORY, 0.15), (SEEN, 0.1), (SIGHT, 0.07)] {
             inv[g] = 1.0 / step;
         }
@@ -209,8 +209,8 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
     (w.cfg.phys.c_copy, w.cfg.crowd) = (0.0, 64);
     let lay = Layout::of(&w.chem);
-    // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`copy::most`).
-    let inv = copy::steps(&lay, &vec![1.0; lay.len]);
+    // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`body::most`).
+    let inv = body::steps(&lay, &vec![1.0; lay.len]);
     let a = w.cfg.phys.alike;
     let spread: Vec<f32> = inv.iter().map(|&x| if x > 0.0 { (a * a * std::f32::consts::FRAC_PI_8 + 1.0) / (x * x) } else { 0.0 }).collect();
     let s = live(&w).into_iter().find(|&s| {
@@ -224,7 +224,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
         w.life.bodies[t].k = Default::default();
         // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes of
-        // children are: a child joins no mature node (`copy::class`).
+        // children are: a child joins no mature node (`body::class`).
         if t != s {
             let m = w.chem.matter().expect("matter");
             w.life.bodies[t].store[m] *= 0.5;
@@ -275,7 +275,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         let e = wall[k] * w.chem.subs[k].cp * w.life.env[i][0];
         (w.ground[k * n + i], w.e_ground[i]) = (w.ground[k * n + i] - wall[k], w.e_ground[i] - e);
         let p = pcore::bond::make(&mut w, i, wall, e, -1.0, 0.0);
-        let (shape, mut fixed, mut verbs) = (choose::shape(ns, 12, 6), [-8.0; brain::FIXED], [-8.0; brain::VERBS + brain::OVERBS]);
+        let (shape, mut fixed, mut verbs) = (lineage::shape(ns, 12, 6), [-8.0; brain::FIXED], [-8.0; brain::VERBS + brain::OVERBS]);
         if hold { verbs[brain::VERBS] = 8.0 } else { fixed[7] = 8.0 }
         let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, verbs);
         let rows = base.split_off(shape.base());
@@ -330,10 +330,10 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     w.life.groups[g0 as usize].rows[0] += 0.5;
     let learned = w.life.groups[g0 as usize].rows[0] - w.life.born(&b)[0];
     b.genes[HIDDEN] += 0.9;
-    copy::resize(&mut w, s, &mut b);
+    lineage::resize(&mut w, s, &mut b);
     assert_eq!(b.lineage, lin0, "moved for less than a unit");
     b.genes[HIDDEN] += 0.3;
-    copy::resize(&mut w, s, &mut b);
+    lineage::resize(&mut w, s, &mut b);
     w.life.bodies[s] = b;
     let b = &w.life.bodies[s];
     let lin = w.life.brains[b.lineage as usize].as_ref().expect("its lineage");
@@ -387,7 +387,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     w.life.bodies[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
     let (before, count0, cell) = (held(&w), w.life.bodies[s].count, w.life.bodies[s].cell);
     let n = 400;
-    let drawn = copy::open(&mut w, s, n);
+    let drawn = nodes::open(&mut w, s, n);
     assert_eq!(drawn.len(), n);
     same(&before, &held(&w));
     assert!((held(&w).0 - before.0).abs() <= 1e-9 * before.0, "members {} then {}", before.0, held(&w).0);
@@ -412,7 +412,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     }
     // A node keeps one member: asked for more than it has, it gives all but one.
     let rest = w.life.bodies[s].count.floor() as usize;
-    assert_eq!(copy::open(&mut w, s, rest + 5).len(), rest - 1);
+    assert_eq!(nodes::open(&mut w, s, rest + 5).len(), rest - 1);
     assert!(w.life.bodies[s].count < 2.0);
     assert_eq!(check::broken(&w), None);
     let (de, dq) = check::drift(&w, &t0, &l0);

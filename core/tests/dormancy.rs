@@ -4,10 +4,10 @@
 //! the share a freezing kills go with it. A child may get less liquid than its parent (`WET`).
 
 use pcore::body::{Body, CHILD, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
-use pcore::life::Lineage;
+use pcore::lineage::Lineage;
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, World};
+use pcore::{brain, lineage, World};
 
 /// A world with a lineage of brains that only rest, and the land cells with no liquid on them.
 struct Set {
@@ -24,7 +24,7 @@ fn set() -> Set {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect();
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut rest = [-8.0; brain::FIXED];
     rest[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);

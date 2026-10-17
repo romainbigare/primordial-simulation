@@ -218,7 +218,7 @@ pub struct Physics {
     pub row_noise: f32,
     /// Spread of the weights a bigger brain adds
     pub new_noise: f32,
-    /// Nodes of a cell whose genes differ by at most this many mutation steps merge (`copy::alike`)
+    /// Nodes of a cell whose genes differ by at most this many mutation steps merge (`body::alike`)
     pub alike: f32,
 
     // Flow, as ground cover and moving liquid feel it

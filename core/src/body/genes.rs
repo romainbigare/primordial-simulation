@@ -1,8 +1,11 @@
-//! The genes: what each scalar gene means, its mutation step and range, and where the genes of each kind start.
+//! The genes: what each scalar gene means, its mutation step and range, where the genes of each kind start
+//! (`Layout`), how alike two sets of genes are (in steps, `alike`, `within`, size classes), and how a generation
+//! changes them (`vary`).
 
 use super::Body;
 use crate::chem::Chemistry;
-use std::f32::consts::LOG10_2;
+use crate::rng::Rng;
+use std::f32::consts::{FRAC_PI_8, LOG10_2};
 
 // Scalar genes, then one per reaction (catalyst, log10 speed-up) and three per substance (safe minimum as a share of
 // mass; take selectivity; most share of mass kept): `Layout`. Below zero a gene is off.
@@ -34,7 +37,7 @@ pub const LEARN: usize = 9;
 pub(crate) const FORGET: usize = 10;
 /// Sizes of the brain and the senses (each rounded): hidden units (0..64; 0 is no brain, `Lineage::none`), memory
 /// numbers (0..12), bodies perceived (1..6), sight in cells (1..4). A body whose size genes are a whole unit away from
-/// its lineage's sizes starts a new lineage with those sizes (`copy::resize`).
+/// its lineage's sizes starts a new lineage with those sizes (`lineage::resize`).
 pub const HIDDEN: usize = 11;
 pub const MEMORY: usize = 12;
 pub const SEEN: usize = 13;
@@ -75,7 +78,7 @@ pub(crate) const LOG_HALF: f32 = -LOG10_2;
 
 /// Mutation step (times the body's mutation size) and range of a gene. Catalysts, safe minimums and uptake are off
 /// below 0 (they cost and do nothing there), and their ranges go 20 steps below 0, so an off gene wanders as far as the
-/// noise of a node's spread reaches (`copy::most`) without meeting a wall, whose clamp would push it up.
+/// noise of a node's spread reaches (`body::most`) without meeting a wall, whose clamp would push it up.
 pub(crate) fn range(lay: &Layout, g: usize) -> (f32, f32, f32) {
     match g {
         g if g < NSCALAR => SCALARS[g],
@@ -158,6 +161,11 @@ impl Body {
     fn rate_gene(&self, g: usize) -> f32 {
         if self.genes[g] <= GENE_OFF { 0.0 } else { 10f32.powf(self.genes[g]) }
     }
+    /// Scalar gene `g` kept within its range.
+    pub(crate) fn gene_in_range(&self, g: usize) -> f64 {
+        let (_, lo, hi) = SCALARS[g];
+        self.gene(g).clamp(lo as f64, hi as f64)
+    }
 }
 
 /// The highest speed-up (log10) of any reaction driven by light in the genes (0 if the chemistry has none).
@@ -172,4 +180,155 @@ pub const LIGHT_EATER: f32 = 5.0;
 /// Does a body of these genes live on light (`LIGHT_EATER`)?
 pub fn light_eater(chem: &Chemistry, genes: &[f32]) -> bool {
     light_cat(chem, genes) >= LIGHT_EATER
+}
+
+/// The step gene `g` is measured in for likeness: its mutation step, but a whole unit for the sizes of brain and senses.
+/// In their mutation steps (0.07 to 0.3) a split's halves (1.3 units apart) would be unlike; not counted at all, the
+/// children of small brains would join a big-brained kind and average its brain down.
+fn like(lay: &Layout, g: usize) -> f32 {
+    if (HIDDEN..=SIGHT).contains(&g) { 1.0 } else { range(lay, g).0 }
+}
+
+/// Gene `g` of value `x` in steps of `like` (a gene that is off counts as 0).
+fn step(lay: &Layout, g: usize, x: f32) -> f32 {
+    (if g < lay.cat { x } else { x.max(0.0) }) / like(lay, g)
+}
+
+/// Genes in steps of `like`.
+pub fn steps(lay: &Layout, a: &[f32]) -> Vec<f32> {
+    a.iter().enumerate().map(|(g, &x)| step(lay, g, x)).collect()
+}
+
+/// The variance of gene `g` in a node's spread (0 past its end).
+pub(crate) fn spread_at(spread: &[f32], g: usize) -> f32 {
+    spread.get(g).map_or(0.0, |&v| v.max(0.0))
+}
+
+/// A body's spread per gene in steps of `like`, squared.
+pub(crate) fn spread_steps(lay: &Layout, b: &Body) -> Vec<f32> {
+    (0..b.genes.len()).map(|g| spread_at(&b.spread, g) / like(lay, g).powi(2)).collect()
+}
+
+/// How far apart genes `a` and `b` are: the sum of their squared gaps in steps (`step`), if in every gene `g` the gap
+/// is at most `reach(g)` steps; else none.
+pub(crate) fn distance(lay: &Layout, a: &[f32], b: &[f32], reach: impl Fn(usize) -> f32) -> Option<f32> {
+    let mut sum = 0.0;
+    for (g, (&x, &y)) in a.iter().zip(b).enumerate() {
+        let d = step(lay, g, x) - step(lay, g, y);
+        if d.abs() <= reach(g) {
+            sum += d * d;
+        } else {
+            return None;
+        }
+    }
+    Some(sum)
+}
+
+/// Genes no more than `limit` steps apart in every gene (`distance`). Nodes merge each month only if their means are
+/// alike (`nodes::crowd`), and bodies mix their genes only if they are (`copy::partner`).
+pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
+    distance(lay, a, b, |_| limit).is_some()
+}
+
+/// Standard deviations of the pooled spread, beyond `Physics::alike` steps, within which children join a node, or the
+/// nodes of a full cell merge (`within`, `nodes::crowd`). Kept small so kinds stay apart: a node only saves time, so it
+/// must not mix genes that individuals of two kinds would never mix.
+pub(crate) const WITHIN: f32 = 0.5;
+
+/// Children `c` (one, or a group drawn from a node with the spread left among them) belong to node `o`: in each gene
+/// their mean is within `limit` steps of its mean plus `WITHIN` standard deviations of both spreads together. Each
+/// gene alone, so kinds that differ in a few genes stay apart; the spreads count, as a few children drawn from a node
+/// differ from its mean by its spread over their number.
+pub(crate) fn within(lay: &Layout, limit: f32, o: &Body, c: &Body) -> bool {
+    let reach = |g: usize| limit + WITHIN * (spread_at(&o.spread, g) + spread_at(&c.spread, g)).sqrt() / like(lay, g);
+    distance(lay, &o.genes, &c.genes, reach).is_some()
+}
+
+/// Bodies are compared in log10 of their mass from this many kg up.
+const LEAST_KG: f64 = 1e-30;
+/// Slack of a size-class bound for rounding, decades.
+const CLASS_SLACK: f64 = 1e-9;
+
+/// The step of the copy-mass gene that sizes are alike in (`alike_size`).
+pub(crate) fn size_step(lay: &Layout) -> f32 {
+    like(lay, COPY_MASS)
+}
+
+/// A body's size class: log10 of its member's body (`Body::member_body`) and whether it is mature (`Body::mature`).
+/// Two bodies are in one class when they are alike in size (`alike_log`) and both mature or both not: a node's mean
+/// must stay at or past its copy mass for its members to reproduce, so the young join and merge with the young until
+/// they have grown.
+pub fn class(chem: &Chemistry, b: &Body) -> (f64, bool) {
+    let x = b.member_body(chem);
+    (x.max(LEAST_KG).log10(), b.mature(x))
+}
+
+/// Two member bodies (kg) are alike in size: within `alike` steps of the copy-mass gene of each other in log10 (0.2
+/// decades a step: with `alike` 4 about a factor 6.3).
+pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
+    alike_log(lay, alike, x.max(LEAST_KG).log10(), y.max(LEAST_KG).log10())
+}
+
+/// `alike_size` of two bodies given as log10 (`class`).
+pub fn alike_log(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
+    (x - y).abs() <= (alike * size_step(lay)) as f64 + CLASS_SLACK
+}
+
+/// Reach of `noise` (a sum of four uniforms, centred and scaled): 2 sqrt(3).
+pub(crate) const REACH: f32 = 3.464_101_6;
+/// The number of values of a 16-bit uniform.
+const U16_SPAN: f32 = 65536.0;
+
+/// Noise near a standard normal: a sum of four 16-bit uniforms from one draw (mean 2 (`U16_SPAN` - 1), variance about
+/// `U16_SPAN`²/3), centred and scaled; within `REACH`. One draw instead of four, as a node's dispersing children draw
+/// it for every gene.
+pub(crate) fn noise(r: &mut Rng) -> f32 {
+    let u = r.u64();
+    (((u & 0xffff) + (u >> 16 & 0xffff) + (u >> 32 & 0xffff) + (u >> 48)) as f32 - 2.0 * (U16_SPAN - 1.0)) * (3f32.sqrt() / U16_SPAN)
+}
+
+/// How far `x` lies inside the walls `lo` and `hi` (0 outside).
+pub(crate) fn wall_room(x: f32, lo: f32, hi: f32) -> f32 {
+    (x - lo).min(hi - x).max(0.0)
+}
+
+/// The mutation size of genes `genes`: 10 to the power of their `MUT` gene.
+pub(crate) fn mutation_size(genes: &[f32]) -> f32 {
+    10f32.powf(genes[MUT])
+}
+
+/// Most variance a node keeps along a gene (or its rows) of mutation step `step`, in its units squared: the split
+/// threshold, where its halves (means `2 sqrt(2/π)` standard deviations apart) are `alike` steps apart,
+/// `(alike step)² π / 8`, plus one step². A node held there is past it and splits (`nodes::split`), while one that
+/// cannot split along it (a gene that is off, or near a wall) widens no further. Nothing else takes variance out of a
+/// node, so without it the spread would grow with every generation and merge.
+pub(crate) fn most(step: f32, alike: f32) -> f32 {
+    step * step * (alike * alike * FRAC_PI_8 + 1.0)
+}
+
+/// The genes of `m` members drawn from a node of mean `genes` and variance `spread` per gene (empty: none), each changed
+/// by a generation's mutation: their mean (the node's, plus noise of that variance over `m`), and the variance left
+/// among them ((1 - 1/m) of it, up to `most` for `alike`; none for one). The spread's share of the noise is shrunk
+/// where it could cross a wall, so the mean drawn is never clamped: a clamp would move the mean of a node's children
+/// away from the wall, a drift no selection made. A generation's own change may still be clamped (one small step).
+pub(crate) fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
+    let (size, m, mut left) = (mutation_size(genes), m.max(1.0) as f32, Vec::with_capacity(genes.len()));
+    let genes = (genes.iter().enumerate())
+        .map(|(g, &v)| {
+            let (step, lo, hi) = range(lay, g);
+            let (u2, s2) = ((step * size).powi(2), spread_at(spread, g));
+            if m > 1.0 {
+                left.push(((u2 + s2) * (1.0 - 1.0 / m)).min(most(step, alike)));
+            }
+            let room = wall_room(v, lo, hi) / REACH;
+            let s2 = s2.min((room * room * m - u2).max(0.0));
+            (v + ((u2 + s2) / m).sqrt() * noise(r)).clamp(lo, hi)
+        })
+        .collect();
+    (genes, left)
+}
+
+/// Parent genes plus a generation's noise, kept in range.
+pub fn mutate(lay: &Layout, genes: &[f32], r: &mut Rng) -> Vec<f32> {
+    vary(lay, genes, &[], 1.0, 0.0, r).0
 }

@@ -1,7 +1,10 @@
 //! The registry of bodies: slots, cells, lineages, brain groups, born rows, and the ring of updates due.
 
-use crate::body::{Body, Consts, HIDDEN, MAX_INTERVAL, MEMORY, SEEN, SIGHT};
-use crate::brain::Shape;
+use crate::body::{Body, Consts, MAX_INTERVAL};
+use crate::brain::{self, Shape};
+use crate::lineage::Lineage;
+use crate::rng::Rng;
+use crate::World;
 use serde::{Deserialize, Serialize};
 
 /// Updates are kept in a ring of this many days (more than the longest interval).
@@ -53,36 +56,6 @@ pub struct Life {
 pub struct Genome {
     pub rows: Vec<f32>,
     pub bodies: u32,
-}
-
-/// What the bodies of a lineage share: the sizes of their brain and senses, the base of the brain (its hidden layer),
-/// and where it came from.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Lineage {
-    pub shape: Shape,
-    pub seen: usize,
-    pub sight: usize,
-    pub base: Vec<f32>,
-    /// The starting kind this lineage descends from (inherited by every lineage made from it): a label for tallies
-    pub root: u32,
-}
-
-impl Lineage {
-    /// A brain of no hidden units is no brain: its bodies take no decisions and pay nothing for a brain; their update is
-    /// their physics only (`survey::day`).
-    pub fn none(&self) -> bool {
-        self.shape.h == 0
-    }
-    /// Energy one decision takes, J per kg of a member of `Physics::m_ref` kg (`Physics::think`); none without a brain.
-    /// It goes with the body's own size genes, not the lineage's rounded sizes, so a smaller brain pays less at once and
-    /// selection can lead a node's sizes down, to none.
-    pub fn cost(&self, p: &crate::Physics, genes: &[f32]) -> f64 {
-        if self.none() {
-            return 0.0;
-        }
-        let g = |k: usize| genes[k].max(0.0) as f64;
-        p.c_hidden * g(HIDDEN) + p.c_memory * g(MEMORY) + p.c_seen * g(SEEN) + p.c_sight * g(SIGHT).powi(2)
-    }
 }
 
 /// Bodies that stayed near each other share the rows of one brain (`rows`): the mean of the rows they were born with,
@@ -143,6 +116,26 @@ impl Life {
         let i = free_place(&mut self.groups, &mut self.free_groups);
         self.groups[i] = Group { lineage, rows, ..Default::default() };
         i as u32
+    }
+    /// A new group of `lineage` with these rows that keeps what group `from` knows of its learning (`Group::var`,
+    /// `Group::ms`).
+    pub(crate) fn fork_group(&mut self, from: u32, lineage: u32, rows: Vec<f32>) -> u32 {
+        let (var, ms) = (self.groups[from as usize].var, self.groups[from as usize].ms.clone());
+        let g = self.new_group(lineage, rows);
+        (self.groups[g as usize].var, self.groups[g as usize].ms) = (var, ms);
+        g
+    }
+    /// The brain shape of `lineage` (none once it died out).
+    pub(crate) fn shape_of(&self, lineage: u32) -> Option<Shape> {
+        self.brains[lineage as usize].as_ref().map(|l| l.shape)
+    }
+    /// Brain rows of a body of lineage `from` carried over to the shape of lineage `to` where they differ
+    /// (`brain::rerow`, new weights of spread `noise`).
+    pub(crate) fn carry_rows(&self, rows: Vec<f32>, from: u32, to: u32, r: &mut Rng, noise: f32) -> Vec<f32> {
+        match (self.shape_of(from), self.shape_of(to)) {
+            (Some(x), Some(y)) if x != y => brain::rerow(&rows, x, y, r, noise),
+            _ => rows,
+        }
     }
     /// New born rows (not yet given to a body).
     pub fn new_genome(&mut self, rows: Vec<f32>) -> u32 {
@@ -319,6 +312,19 @@ impl Life {
         self.at[to].push(slot as u32);
         self.shift(g, to as u32, 1);
         self.shift(g, from as u32, -1);
+    }
+}
+
+impl World {
+    /// Place body `c`, its first update after its interval; `keep` is the share of light the reactions of the body it
+    /// came from stored (`World::light_keep`), which it inherits.
+    pub(crate) fn place(&mut self, c: Body, keep: Option<f32>) -> usize {
+        let delay = c.interval();
+        let s = self.life.add(c, self.day, delay);
+        if let Some(k) = keep {
+            self.light_keep.set(s, self.life.bodies[s].gen, k);
+        }
+        s
     }
 }
 

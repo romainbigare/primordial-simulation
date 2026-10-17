@@ -7,7 +7,7 @@ fn child_has_parent_genes_plus_noise() {
     worldgen::life::seed(&mut w, 0);
     let parent = w.life.alive().next().expect("a body").genes.clone();
     let lay = Layout::of(&w.chem);
-    let child = pcore::copy::mutate(&lay, &parent, &mut Rng::new(1, 0, 0, Purpose::Mutate));
+    let child = pcore::body::mutate(&lay, &parent, &mut Rng::new(1, 0, 0, Purpose::Mutate));
     let size = 10f32.powf(parent[MUT]);
     let diff: Vec<f32> = parent.iter().zip(&child).map(|(a, b)| (a - b).abs()).collect();
     assert!(diff.iter().any(|&d| d > 0.0), "no change");
@@ -87,7 +87,7 @@ fn take_heat_never_takes_a_node_below_the_floor() {
 /// A brain grown (more hidden units and memory) and shrunk back is the brain it was.
 #[test]
 fn brain_grown_and_shrunk_back_is_unchanged() {
-    let (a, b) = (pcore::choose::shape(9, 12, 6), pcore::choose::shape(9, 16, 8));
+    let (a, b) = (pcore::lineage::shape(9, 12, 6), pcore::lineage::shape(9, 16, 8));
     let mut r = Rng::new(1, 0, 0, Purpose::Body);
     let w = pcore::brain::random(a, &mut r, 0.1, [0.0; 8], 0.0, [0.0; 9]);
     let (base, rows) = w.split_at(a.base());
@@ -96,7 +96,7 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
     assert_eq!(pcore::brain::rebase(&grown.0, b, a, &mut r, 0.1), base);
     assert_eq!(pcore::brain::rerow(&grown.1, b, a, &mut r, 0.1), rows);
     // Down to no brain: no base, the rows' biases kept.
-    let z = pcore::choose::shape(9, 0, 6);
+    let z = pcore::lineage::shape(9, 0, 6);
     let none = pcore::brain::rerow(rows, a, z, &mut r, 0.1);
     assert!(pcore::brain::rebase(base, a, z, &mut r, 0.1).is_empty() && none.len() == z.rows());
     assert_eq!(none[0], rows[a.h]);
@@ -258,9 +258,9 @@ fn cold_bodies_release_and_pay_less() {
 #[test]
 fn a_body_gives_its_stores_but_not_its_body() {
     use pcore::body::{INTERVAL};
-    use pcore::life::Lineage;
+    use pcore::lineage::Lineage;
     use pcore::event::EventKind;
-    use pcore::{bond, brain, change, choose, flow};
+    use pcore::{bond, brain, change, flow, lineage};
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     w.cfg.phys.c_handle = 0.0;
@@ -268,7 +268,7 @@ fn a_body_gives_its_stores_but_not_its_body() {
     let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
     // Brains that only give to a body they see, and that only rest.
     let mut r = Rng::new(1, 0, 0, Purpose::Body);
-    let shape = choose::shape(ns, 12, 6);
+    let shape = lineage::shape(ns, 12, 6);
     let mut lineage = |w: &mut pcore::World, fixed: [f32; brain::FIXED], verbs: [f32; brain::VERBS + brain::OVERBS]| {
         let mut base = brain::random(shape, &mut r, 0.1, fixed, -8.0, verbs);
         let rows = base.split_off(shape.base());
@@ -455,15 +455,15 @@ fn a_tall_member_shades_a_short_one() {
 #[test]
 fn a_body_with_no_brain_lives_and_copies() {
     use pcore::body::{COPY_MASS, HIDDEN};
-    use pcore::life::Lineage;
+    use pcore::lineage::Lineage;
     use pcore::event::EventKind;
-    use pcore::{brain, choose};
+    use pcore::{brain, lineage};
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     let n = w.grid.n();
     let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
     // The light-eaters' sizes but no hidden units.
-    let shape = choose::shape(w.chem.ns(), 0, 6);
+    let shape = lineage::shape(w.chem.ns(), 0, 6);
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     assert!(base.is_empty());
@@ -503,9 +503,9 @@ fn a_body_with_no_brain_lives_and_copies() {
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
     use pcore::body::{AGE, DISPERSE, LEARN, REPAIR, STRENGTH};
-    use pcore::life::Lineage;
+    use pcore::lineage::Lineage;
     use pcore::event::EventKind;
-    use pcore::{brain, choose};
+    use pcore::{brain, lineage};
     let mut w = worldgen::new_world(1, 16, 16);
     // Bodies that neither grow nor soak liquid up (their mass, which the wear goes by, stays): no
     // building work, and no liquid exchange with the ground (14 Oct 2026: growth is building).
@@ -519,7 +519,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let air = w.grid.air_of(land[0]);
     let cells = [land[0], *land.iter().find(|&&i| w.grid.air_of(i) != air).expect("another air node")];
     // Starting eaters (30 kg, under their copy mass) whose brain only rests, weak so their stores last.
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut rest = [-8.0; brain::FIXED];
     rest[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, rest, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
@@ -666,10 +666,10 @@ fn a_body_with_no_strength_pays_a_basal_upkeep() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
-    let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
+    let shape = pcore::lineage::shape(w.chem.ns(), 12, 6);
     let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 5 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 5 }), w.life.new_genome(rows));
     // Eaters of remains (kind 5: strength 0, 1 kg); repair 0 so the factor is 1.
     let mut b = worldgen::life::make(&mut w, 5, i, l, g).expect("body");
     assert_eq!(b.genes[STRENGTH], 0.0);
@@ -719,10 +719,10 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
-    let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
+    let shape = pcore::lineage::shape(w.chem.ns(), 12, 6);
     let mut base = pcore::brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, [0.0; pcore::brain::FIXED], 0.0, [0.0; pcore::brain::VERBS + pcore::brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 1 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 1 }), w.life.new_genome(rows));
     // A starting eater: strength 0.6, a burning catalyst, learning on.
     let mut b = worldgen::life::make(&mut w, 1, i, l, g).expect("body");
     (b.genes[STRENGTH], b.genes[LEARN], b.genes[REPAIR]) = (0.6, -1.0, 0.0);

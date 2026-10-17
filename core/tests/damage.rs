@@ -7,7 +7,7 @@
 
 use pcore::body::{Body, COPY_MASS, DISPERSE, LIQ, STRENGTH};
 use pcore::rng::{Purpose, Rng};
-use pcore::{body, bond, brain, change, check, choose, copy, flow, World};
+use pcore::{body, bond, brain, change, check, choose, copy, flow, lineage, World};
 
 fn dry_land(w: &World) -> usize {
     (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land")
@@ -38,12 +38,12 @@ fn roles(w: &World) -> Roles {
 /// A starting eater (30 kg: 9 kg of fuel, 15.75 kg of liquid, 5.25 kg of body matter, a body of 21 kg) that does
 /// nothing by its brain, staying where it is, soaking no liquid up, of strength `strength`, copying at 10^`copy` kg.
 fn eater(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut fixed = [-8.0; brain::FIXED];
     fixed[0] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
     // (A founder is placed as an adult since 15 Oct 2026, 63 kg: these tests read a 30 kg one.)
     let m = b.mass(&w.chem);

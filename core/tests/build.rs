@@ -9,12 +9,12 @@
 
 use pcore::body::{Body, Layout, ALLOC, CHILD, COPY_MASS, DISPERSE, GAS, HEAT, LIQ, STRENGTH};
 use pcore::rng::{Purpose, Rng};
-use pcore::{body, brain, change, choose, copy, flow, World};
+use pcore::{body, brain, change, copy, flow, lineage, World};
 
-/// Bodies `a` and `b` are in one size class (`copy::class`): alike in size and in maturity.
+/// Bodies `a` and `b` are in one size class (`body::class`): alike in size and in maturity.
 fn near(lay: &Layout, chem: &pcore::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
-    let (x, y) = (copy::class(chem, a), copy::class(chem, b));
-    x.1 == y.1 && copy::alike_log(lay, alike, x.0, y.0)
+    let (x, y) = (body::class(chem, a), body::class(chem, b));
+    x.1 == y.1 && body::alike_log(lay, alike, x.0, y.0)
 }
 
 /// A land cell with dry ground.
@@ -40,12 +40,12 @@ fn roles(w: &World) -> Roles {
 /// 21 kg) of a brain that only does fixed action `act` (0 rests, 3 takes from the ground), weak
 /// (strength 0), staying where it is, soaking no liquid up, copying at 10^`copy` kg of body.
 fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut fixed = [-8.0; brain::FIXED];
     fixed[act] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
-    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
+    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base, root: 0 }), w.life.new_genome(rows));
     let mut b = worldgen::life::make(w, 1, i, l, g).expect("body");
     // (A founder is placed as an adult since 15 Oct 2026, 63 kg: these tests read a 30 kg one.)
     let m = b.mass(&w.chem);
@@ -526,7 +526,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
 
 /// A mature node's children never lower its mean under maturity: they gather in a young node of their own
 /// (the second brood joins the first), and the young node merges into the adult only once it is mature
-/// itself (`copy::class`: the same size class and both mature, or both immature). Grown to the size of the
+/// itself (`body::class`: the same size class and both mature, or both immature). Grown to the size of the
 /// adults' class but under the size of maturity, the young stay apart at the month's merge; mature, they join.
 /// Members, matter and energy are kept.
 #[test]
@@ -585,7 +585,7 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
         w.life.bodies[k] = c;
     };
     grow_to(&mut w, k, 8.0);
-    assert!(!w.life.bodies[k].adult(&w.chem) && copy::alike_size(&lay, w.cfg.phys.alike, 8.0, w.life.bodies[s].built(&w.chem) / 5.0));
+    assert!(!w.life.bodies[k].adult(&w.chem) && body::alike_size(&lay, w.cfg.phys.alike, 8.0, w.life.bodies[s].built(&w.chem) / 5.0));
     assert!(!near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]));
     w.day += month;
     pcore::survey::survey(&mut w);

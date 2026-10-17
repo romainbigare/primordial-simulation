@@ -193,8 +193,8 @@ pub fn day(w: &mut World) {
                         continue;
                     }
                 }
-                crate::copy::resize(w, s, &mut b);
-                crate::copy::split(w, s, &mut b);
+                crate::lineage::resize(w, s, &mut b);
+                crate::nodes::split(w, s, &mut b);
                 b.vis = b.visible(&w.chem, &w.cfg.phys);
                 w.life.schedule(w.day + b.interval(), slot, gen);
                 w.life.bodies[s] = b;

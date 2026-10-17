@@ -48,10 +48,13 @@ pub fn depth(w: &World, b: &Body, d: f64) -> f64 {
     if d > 0.0 && b.hold != 0 && afloat(w, b, b.cell as usize, b.mass(&w.chem)) { 0.0 } else { d }
 }
 
+/// Numbers a body perceives of what it holds and of the walls around it (`sense`).
+pub(crate) const SENSE: usize = 5;
+
 /// What a body perceives of what it holds (whether, ln mass ratio, hardness, hollowness) and
 /// of the walls around it.
-pub(crate) fn sense(w: &World, b: &Body, mb: f64) -> [f32; 5] {
-    let mut x = [0f32; 5];
+pub(crate) fn sense(w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
+    let mut x = [0f32; SENSE];
     if let Some(p) = held(w, b) {
         let pt = &w.parts.parts[p];
         let walls = pt.walls(&w.chem);

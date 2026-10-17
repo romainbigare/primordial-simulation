@@ -8,10 +8,10 @@
 //! the uptake genes; what a body holds of them past its level goes back to the ground; liquid carries them.
 
 use pcore::body::{self, Body, Layout, DISPERSE, LIQ, REPAIR, STRENGTH};
-use pcore::life::Lineage;
+use pcore::lineage::Lineage;
 use pcore::chem::Chemistry;
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, change, check, choose, copy, flow, World};
+use pcore::{brain, change, check, copy, flow, lineage, World};
 
 /// A small world after one month, and a land cell with dry ground.
 fn start() -> (World, usize) {
@@ -35,7 +35,7 @@ fn start_wet() -> (World, usize) {
 /// A starting body of kind `which` (0 light-eaters, 1 eaters) of a brain that only does fixed action `act` (0 rests, 3 takes
 /// from the ground), weak, staying where it is, soaking no liquid up, repair 0.
 fn body_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut fixed = [-8.0; brain::FIXED];
     fixed[act] = 8.0;
     let mut base = brain::random(shape, &mut Rng::new(1, 0, 0, Purpose::Body), 0.1, fixed, -8.0, [-8.0; brain::VERBS + brain::OVERBS]);

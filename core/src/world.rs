@@ -39,7 +39,7 @@ pub struct Diag {
     pub decisions: f64,
     #[serde(skip)]
     pub greedy: f64,
-    /// Population nodes split since the start: in two (`copy::split`), and one member off to act
+    /// Population nodes split since the start: in two (`nodes::split`), and one member off to act
     /// alone (`copy::one`)
     pub splits: [f64; 2],
 }

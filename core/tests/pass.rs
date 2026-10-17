@@ -3,9 +3,9 @@
 //! once the moving stops. A body too weak to give the push of a mover does not move.
 
 use pcore::body;
-use pcore::life::Lineage;
+use pcore::lineage::Lineage;
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, World};
+use pcore::{brain, choose, lineage, World};
 
 /// Cover per area in the two cells, kg/m².
 const COVER: f64 = 20.0;
@@ -18,7 +18,7 @@ fn scene() -> (World, usize, usize, usize) {
     let n = w.grid.n();
     let a = (0..n - 1).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i + 1][2] > 0.0 && i % 12 < 11).expect("two land cells");
     let mut r = Rng::new(3, 0, 0, Purpose::Body);
-    let shape = choose::shape(w.chem.ns(), 12, 6);
+    let shape = lineage::shape(w.chem.ns(), 12, 6);
     let mut base = brain::random(shape, &mut r, 0.1, [0.0; 8], 0.0, [-8.0; brain::VERBS + brain::OVERBS]);
     let rows = base.split_off(shape.base());
     let lineage = w.life.new_lineage(Lineage { shape, seen: 3, sight: 1, base, root: 0 });

@@ -117,8 +117,8 @@ fn the_light_shift_is_the_founders_gas_over_their_liquid() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     let i = (0..w.grid.n()).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).expect("dry land");
-    let shape = pcore::choose::shape(w.chem.ns(), 12, 6);
-    let (l, g) = (w.life.new_lineage(pcore::life::Lineage { shape, seen: 3, sight: 1, base: vec![], root: 0 }), w.life.new_genome(vec![]));
+    let shape = pcore::lineage::shape(w.chem.ns(), 12, 6);
+    let (l, g) = (w.life.new_lineage(pcore::lineage::Lineage { shape, seen: 3, sight: 1, base: vec![], root: 0 }), w.life.new_genome(vec![]));
     let mut b = worldgen::life::make(&mut w, 0, i, l, g).expect("a founder");
     b.prepare(&w.chem, &w.cfg.phys);
     let reach = 10f64.powf(2.187) * b.open_area(&w.chem, &w.cfg.phys, b.mass(&w.chem)) * b.interval() as f64;

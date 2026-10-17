@@ -2,9 +2,10 @@
 
 use super::book_body;
 use super::kinds::KINDS;
-use pcore::body::{self, Body, Lineage};
+use pcore::body::{self, Body};
+use pcore::lineage::Lineage;
 use pcore::rng::{Purpose, Rng};
-use pcore::{brain, choose, World};
+use pcore::{brain, lineage, World};
 
 /// The root label of the big-brain lineage `seed_clever` places (the row of the clever kind) and of its control, past
 /// the rows of `KINDS`: each is its own kind on the tape.
@@ -23,7 +24,7 @@ const REROW_STREAM: u64 = 3 << 40;
 /// A fair test of a big brain (`ew run --clever-year`): copy `n` living ordinary eaters (an even sample of the bodies
 /// of the eaters' root, one member of each; if there are fewer, some are copied again) twice, into the same cells
 /// with the same stores per member. One set gets the big brain (`CLEVER_SIZES`; the lineage's base and the born rows
-/// carried over by `brain::rebase` and `brain::rerow`, as `copy::resize` does), a new lineage of root `CLEVER_ROOT`;
+/// carried over by `brain::rebase` and `brain::rerow`, as `lineage::resize` does), a new lineage of root `CLEVER_ROOT`;
 /// the other keeps its sizes, a new lineage of root `CONTROL_ROOT`. Genes and born rows are the source's, no brain
 /// bias is set by hand, and the sets differ in brain size only (and what that costs). The copies are new matter,
 /// booked like an edit. Returns what was placed, in one line.
@@ -38,7 +39,7 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
         return format!("year {:.1}: no living ordinary eaters to copy for the big-brain test", w.year());
     }
     let (ns, noise) = (w.chem.ns(), w.cfg.phys.new_noise);
-    let big = choose::shape(ns, CLEVER_SIZES[0], CLEVER_SIZES[1]);
+    let big = lineage::shape(ns, CLEVER_SIZES[0], CLEVER_SIZES[1]);
     // The two new lineages made from each source lineage: (source, big, control).
     let mut made: Vec<(u32, u32, u32)> = Vec::new();
     let (mut members, mut kg, mut sources) = (0.0f64, 0.0f64, 0usize);

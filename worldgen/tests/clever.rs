@@ -28,10 +28,10 @@ fn the_big_brain_and_its_control_differ_in_brain_size_only() {
         assert_eq!((a.cell, &a.store, a.e), (c.cell, &c.store, c.e));
         let diff: Vec<usize> = (0..a.genes.len()).filter(|&g| a.genes[g] != c.genes[g]).collect();
         assert!(diff.iter().all(|g| (pcore::body::HIDDEN..=pcore::body::SIGHT).contains(g)), "genes differ at {diff:?}");
-        assert_eq!(pcore::choose::sizes(&a.genes), CLEVER_SIZES);
+        assert_eq!(pcore::lineage::sizes(&a.genes), CLEVER_SIZES);
         let (la, lc) = (w.life.brains[a.lineage as usize].as_ref().expect("lineage"), w.life.brains[c.lineage as usize].as_ref().expect("lineage"));
-        assert_eq!(pcore::choose::sizes_of(la), CLEVER_SIZES);
-        assert_ne!(pcore::choose::sizes_of(lc), CLEVER_SIZES, "the control has the big brain");
+        assert_eq!(pcore::lineage::sizes_of(la), CLEVER_SIZES);
+        assert_ne!(pcore::lineage::sizes_of(lc), CLEVER_SIZES, "the control has the big brain");
         assert_eq!(a.genes[pcore::body::MUT], c.genes[pcore::body::MUT]);
     }
     for _ in 0..12 {

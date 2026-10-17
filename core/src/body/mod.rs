@@ -22,7 +22,7 @@ pub use live::Lived;
 pub use pay::{pay, release, upkeep};
 pub use tissue::WET_TISSUE;
 // (Re-exported for worldgen and tape.)
-pub use crate::life::Lineage;
+pub use crate::lineage::Lineage;
 pub use crate::survey::{env_of, survey};
 
 use crate::brain::{ln, FIXED, OVERBS, SIG, VERBS};

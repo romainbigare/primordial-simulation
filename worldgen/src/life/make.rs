@@ -87,7 +87,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();
     for _ in 0..rounds {
-        genes = pcore::copy::mutate(&lay, &genes, &mut rg);
+        genes = pcore::body::mutate(&lay, &genes, &mut rg);
     }
     genes[body::MUT] -= gmul.log10();
     // A founder is an adult of its kind: its body (`Body::built`, its matter at the liquid share of living tissue) is
