@@ -7,10 +7,10 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-/// Start of every snapshot file, before the bincode body: a tag, then the format version
-/// (little-endian `u32`). Raise `SNAPSHOT_VERSION` whenever `World` or the shell's state changes shape.
+/// Start of every snapshot file, before the bincode body: a tag, then the format version (little-endian `u32`).
 const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
-const SNAPSHOT_VERSION: u32 = 2;
+/// Raise it whenever the serialized layout of `World` (or of the shell's state) changes.
+const SNAPSHOT_VERSION: u32 = 3;
 /// Buffer between bincode and the compressor, bytes: bincode reads and writes 8 bytes at a time, and each call into
 /// the compressor is slow.
 const BUFFER: usize = 1 << 20;
