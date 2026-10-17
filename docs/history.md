@@ -284,3 +284,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   q / (sum of the flows); golden re-pinned (rounding only).
   The drainage between stores (`drain::stores`) had the same risk (0 / 0 when such a flow rounds to 0): there
   nothing comes in, so nothing spills.
+
+**Phase B and C: the base layers and the shared maths**
+
+- C3: the wind's tridiagonal solve moves from `flow/air/wind.rs` to `solve::lines::along_line`; results unchanged
+  (golden kept).

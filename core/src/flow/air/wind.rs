@@ -3,6 +3,7 @@
 use super::super::Scratch;
 use super::air_temp;
 use crate::grid::Grid;
+use crate::solve::lines::along_line;
 use crate::units::R_GAS;
 use crate::{Config, World};
 
@@ -10,22 +11,6 @@ use crate::{Config, World};
 const EVEN: f64 = 0.25;
 /// Most of a node's amount the overturning may exchange over one edge per call.
 const OVER: f64 = 3.0;
-
-/// Solve x' + (out − in) = x along a line of nodes, in place, where edge p (between nodes
-/// p and p + 1) carries al[p]·x'[p] − be[p]·x'[p + 1]. `c` is work space.
-fn thomas(al: &[f64], be: &[f64], x: &mut [f64], c: &mut [f64]) {
-    let len = x.len();
-    for p in 0..len {
-        let lo = if p > 0 { -al[p - 1] } else { 0.0 };
-        let di = 1.0 + if p > 0 { be[p - 1] } else { 0.0 } + if p + 1 < len { al[p] } else { 0.0 };
-        let m = di - if p > 0 { lo * c[p - 1] } else { 0.0 };
-        c[p] = if p + 1 < len { -be[p] / m } else { 0.0 };
-        x[p] = (x[p] - if p > 0 { lo * x[p - 1] } else { 0.0 }) / m;
-    }
-    for p in (0..len - 1).rev() {
-        x[p] -= c[p] * x[p + 1];
-    }
-}
 
 /// Work space of the solver for one line of air nodes: per edge the three pushes [mixing,
 /// overturning, pressure], mol/s; per node its gas in the [lower, upper] half, mol; the shares
@@ -126,7 +111,7 @@ impl Lines<'_> {
             for p in 0..len {
                 ln.x[p] = self.air[k * na + self.node(line, p)];
             }
-            thomas(&ln.to_next[..len - 1], &ln.to_prev[..len - 1], &mut ln.x[..len], &mut ln.c[..len]);
+            along_line(&ln.to_next[..len - 1], &ln.to_prev[..len - 1], &mut ln.x[..len], &mut ln.c[..len]);
             ln.gas[t * len..(t + 1) * len].copy_from_slice(&ln.x[..len]);
             for p in 0..len - 1 {
                 row[flux + t * len + p] = ln.to_next[p] * ln.x[p] - ln.to_prev[p] * ln.x[p + 1];
@@ -164,7 +149,7 @@ impl Lines<'_> {
         for p in 0..len {
             ln.x[p] = self.e_air[self.node(line, p)];
         }
-        thomas(&ln.to_next[..len - 1], &ln.to_prev[..len - 1], &mut ln.x[..len], &mut ln.c[..len]);
+        along_line(&ln.to_next[..len - 1], &ln.to_prev[..len - 1], &mut ln.x[..len], &mut ln.c[..len]);
         for p in 0..len - 1 {
             let (a, b) = (self.node(line, p), self.node(line, p + 1));
             row[heat + p] = ln.to_next[p] * ln.x[p] - ln.to_prev[p] * ln.x[p + 1];
