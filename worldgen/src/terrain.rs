@@ -6,7 +6,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
 use pcore::units::P_REF;
-use pcore::{Config, Diag, Ledger, World};
+use pcore::{Config, Counters, Ledger, World};
 
 /// Cell size, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
@@ -171,7 +171,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         air,
         e_air: vec![0.0; na],
         base_z: BASE_Z,
-        diag: Diag::default(),
+        counts: Counters::default(),
         rain: vec![0.0; n],
         liquid_flux: vec![0.0; n],
         ledger: Ledger::default(),

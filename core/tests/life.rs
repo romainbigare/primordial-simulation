@@ -69,11 +69,11 @@ fn take_heat_never_takes_a_node_below_the_floor() {
     let (i, e0) = (5, w.e_ground[5]);
     let floor = w.heat_cap_ground(i).max(1.0) * pcore::units::T_FLOOR;
     assert_eq!(w.take_heat(i, 0.25 * e0), 0.25 * e0);
-    assert_eq!(w.ledger.clamped_heat, 0.0);
+    assert_eq!(w.counts.clamped_heat, 0.0);
     // Asking for more than there is gives what is above the floor and counts the rest.
     let took = w.take_heat(i, 10.0 * e0);
     assert!((w.e_ground[i] - floor).abs() <= 1e-9 * e0, "{} vs {floor}", w.e_ground[i]);
-    assert!((took + w.ledger.clamped_heat - 10.0 * e0).abs() <= 1e-9 * e0);
+    assert!((took + w.counts.clamped_heat - 10.0 * e0).abs() <= 1e-9 * e0);
     assert!(pcore::check::broken(&w).is_none());
     // A negative request gives heat and is returned whole.
     assert_eq!(w.take_heat(i, -5.0), -5.0);
@@ -389,12 +389,12 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
     b.e *= 1e3;
     // It decides once a year: a year's stored light at once.
     (b.genes[pcore::body::INTERVAL], b.k) = (2.556, Default::default());
-    let (t0, l0) = (pcore::check::totals(&w), w.ledger.clone());
+    let (t0, l0, h0) = (pcore::check::totals(&w), w.ledger.clone(), w.counts.clamped_heat);
     for _ in 0..14 {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
-    assert!(w.light_pool.iter().sum::<f64>() > 0.0 && w.ledger.clamped_heat == l0.clamped_heat, "heat not given {:e} J", w.ledger.clamped_heat - l0.clamped_heat);
+    assert!(w.light_pool.iter().sum::<f64>() > 0.0 && w.counts.clamped_heat == h0, "heat not given {:e} J", w.counts.clamped_heat - h0);
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
@@ -480,18 +480,18 @@ fn a_body_with_no_brain_lives_and_copies() {
     (w.cfg.phys.c_hidden, w.cfg.phys.c_memory, w.cfg.phys.c_seen, w.cfg.phys.c_sight, w.cfg.phys.c_learn) = (1e9, 1e9, 1e9, 1e9, 1e9);
     assert_eq!(pcore::body::upkeep(&w, &x, d, m), u0);
     w.cfg.phys = p0;
-    let (t0, l0, u) = (pcore::check::totals(&w), w.ledger.clone(), w.life.updates);
+    let (t0, l0, u) = (pcore::check::totals(&w), w.ledger.clone(), w.counts.updates);
     for _ in 0..2 {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
     let b = &w.life.bodies[s];
     let born: f64 = w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).map(|e| e.value).sum();
-    println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.life.updates - u, b.count);
+    println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.counts.updates - u, b.count);
     // (Its children are small against its members, 0.075 kg against 0.7: another size class, so they are nodes of their own.)
     let all: f64 = w.life.alive().map(|x| x.n()).sum();
-    assert!(b.alive && w.life.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
-    assert!(w.diag.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
+    assert!(b.alive && w.counts.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
+    assert!(w.counts.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");
     let (de, dq) = pcore::check::drift(&w, &t0, &l0);
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }

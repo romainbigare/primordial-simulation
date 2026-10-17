@@ -56,13 +56,13 @@ pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder)
     let years = (y - clock.since) as f64;
     let ms = clock.stages.map(|d| d.as_secs_f64() * 1000.0 / years);
     // Microseconds per body update: the cost of one decision, whatever their number.
-    let us = clock.stages[2].as_secs_f64() * 1e6 / (w.life.updates - clock.updates).max(1) as f64;
+    let us = clock.stages[2].as_secs_f64() * 1e6 / (w.counts.updates - clock.updates).max(1) as f64;
     let ms_tape = clock.tape.as_secs_f64() * 1000.0 / years;
     let most = w.life.at.iter().map(|v| v.len()).max().unwrap_or(0);
     let born = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count();
     format!(
         "year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {ms_tape:.0}; {us:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), gifts {}/yr, watches {}/yr",
-        w.ledger.clamped_heat,
+        w.counts.clamped_heat,
         m[0],
         m[1],
         m[2],
@@ -73,8 +73,8 @@ pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder)
         ms[2],
         ms[3],
         w.parts.alive().count(),
-        w.diag.splits[0],
-        w.diag.splits[1],
+        w.counts.splits[0],
+        w.counts.splits[1],
         rec.last("kinds"),
         rec.last("kinds_members"),
         rec.last("gave"),

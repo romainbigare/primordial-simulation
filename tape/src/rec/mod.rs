@@ -101,7 +101,7 @@ impl Recorder {
     pub fn resume(&mut self, w: &mut World, dir: impl AsRef<Path>) -> io::Result<()> {
         self.detect(w);
         w.events.clear();
-        self.updates = w.life.updates;
+        self.updates = w.counts.updates;
         self.read_ewf(dir.as_ref(), w)
     }
 
@@ -136,8 +136,8 @@ impl Recorder {
             return;
         }
         if yearly {
-            self.year.decisions = [std::mem::take(&mut w.diag.decisions), std::mem::take(&mut w.diag.greedy)];
-            self.year.parts = std::mem::take(&mut w.parts.tally);
+            self.year.decisions = [std::mem::take(&mut w.counts.decisions), std::mem::take(&mut w.counts.greedy)];
+            self.year.parts = std::mem::take(&mut w.counts.parts);
         }
         let c = Ctx::new(w);
         // A resumed run finds the snapshot's own row and frame already in the tape it loaded.

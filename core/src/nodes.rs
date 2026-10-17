@@ -206,7 +206,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     c.spread[g] = b.spread[g];
     w.life.reborn(b, genes, rows);
     own(w, b, &mut c);
-    w.diag.splits[0] += 1.0;
+    w.counts.splits[0] += 1.0;
     w.place(c, Some(w.light_keep.get(slot, b.gen)));
 }
 
@@ -217,7 +217,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 /// live as long are of all ages evenly, so members split off die at the rate the node's members die (`body::live`).
 /// Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
-    w.diag.splits[1] += 1.0;
+    w.counts.splits[1] += 1.0;
     draw(w, b, r, None)
 }
 

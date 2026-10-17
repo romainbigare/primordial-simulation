@@ -22,7 +22,7 @@ impl Recorder {
         row.push("eat_animals", "1", eat as f64);
         // Traffic: the share of crossings on the busiest cells, their overlap with the busiest a decade ago, and the
         // body mass per area there and on other land.
-        let traffic = &w.diag.traffic;
+        let traffic = &w.counts.traffic;
         let mut order: Vec<usize> = (0..gn).filter(|&i| traffic.get(i).is_some_and(|&t| t > 0.0)).collect();
         order.sort_by(|&a, &b| traffic[b].total_cmp(&traffic[a]).then(a.cmp(&b)));
         let top = &order[..(gn / TOP_PER).min(order.len())];

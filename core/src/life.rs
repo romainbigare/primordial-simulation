@@ -47,8 +47,6 @@ pub struct Life {
     free_genomes: Vec<u32>,
     /// Grid width (for the groups' centres)
     pub gw: u32,
-    /// Body updates since the start
-    pub updates: u64,
 }
 
 /// Born brain rows and how many living bodies were born with them (most children share their parent's, `copy`).

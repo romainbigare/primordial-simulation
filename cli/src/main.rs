@@ -57,7 +57,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, resumed: bool) {
     rec.record_month(&mut w);
     // Time spent in flow, change, bodies and parts, and in the tape (the recorder each month, the files each
     // decade), since the last print; and in all.
-    let mut clock = Clock { stages: [Duration::ZERO; 4], tape: Duration::ZERO, since: y0, updates: w.life.updates };
+    let mut clock = Clock { stages: [Duration::ZERO; 4], tape: Duration::ZERO, since: y0, updates: w.counts.updates };
     let mut busy = Duration::ZERO;
     println!("{}", report::config(&w, &plan.seeding));
     if !resumed {
@@ -84,7 +84,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, resumed: bool) {
         if y % every == 0 || y == y0 + years {
             println!("{}", report::year(&w, y, pcore::check::drift(&w, &t0, &l0), &clock, &rec));
             busy += clock.stages.iter().sum::<Duration>() + clock.tape;
-            clock = Clock { stages: [Duration::ZERO; 4], tape: Duration::ZERO, since: y, updates: w.life.updates };
+            clock = Clock { stages: [Duration::ZERO; 4], tape: Duration::ZERO, since: y, updates: w.counts.updates };
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }
         if y % SNAP_EVERY == 0 || y == y0 + years {

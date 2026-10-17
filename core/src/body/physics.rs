@@ -189,7 +189,7 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
 /// surface further, as far as that brings the end of `relax_heat` to the gene, its still air carries the vapour away
 /// (`film`, the Lewis relation) and its liquid stays above its safe minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
-    let World { cfg, chem, grid, ground, e_ground, air, e_air, ledger, .. } = w;
+    let World { cfg, chem, grid, ground, e_ground, air, e_air, counts, .. } = w;
     let (ns, n, na, i, j, tg, dt, days) = (chem.ns(), grid.n(), grid.na(), s.i, s.j, s.tg, s.dt, s.days);
     let (g, t0) = (h.g, h.t0);
     let mut moved = false;
@@ -215,7 +215,7 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         // What flows through it comes from the ground, which pays its heat and fusion enthalpy.
         let inflow = if soak_rate > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(MAX_TAKE_SHARE * ground[k * n + i]) } else { 0.0 };
         let (fused, cp) = (chem.fused_heat(k, tg, |j| ground[j * n + i]), chem.subs[k].cp);
-        let pre = take_paid(&mut e_ground[i], ledger, h.gcap, inflow, cp, inflow * (cp * tg + fused)).0;
+        let pre = take_paid(&mut e_ground[i], counts, h.gcap, inflow, cp, inflow * (cp * tg + fused)).0;
         (b.store[k], ground[k * n + i], b.e, h.heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, h.heat + pre * fused);
         let m = m.min(b.store[k]);
         if m > 0.0 {
@@ -234,7 +234,7 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
 /// capture area caught (`fall`). The ground pays their heat and fusion enthalpy, or the body soaks less.
 #[allow(clippy::too_many_arguments)]
 fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
-    let World { chem, grid, ground, e_ground, ledger, .. } = w;
+    let World { chem, grid, ground, e_ground, counts, .. } = w;
     let (n, i, tg, days) = (grid.n(), s.i, s.tg, s.days);
     for k in (0..chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
         let (x, room) = (ground[k * n + i] / soil.in_ground, b.level(chem, k, mass2) - b.store[k]);
@@ -245,7 +245,7 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
         let uptake = if rate * days > 1e-9 { (room - lost[k]) * f + lost[k] * (1.0 - f / (rate * days)) } else { 0.0 };
         let want = ((uptake + fall) * x).min(room).min(MAX_TAKE_SHARE * ground[k * n + i]).max(0.0);
         let (per, fused) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
-        let d = take_paid(&mut e_ground[i], ledger, h.gcap, want, chem.subs[k].cp, want * (per + fused)).0;
+        let d = take_paid(&mut e_ground[i], counts, h.gcap, want, chem.subs[k].cp, want * (per + fused)).0;
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += d * per;
@@ -256,7 +256,7 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
 /// Roots take what is liquid in the ground but does not dissolve itself, for the uptake genes that are on, up to its
 /// level, at the rate it soaks liquids (without the surface's wetness) through the mass that works (`wk`).
 fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
-    let World { chem, grid, ground, e_ground, ledger, .. } = w;
+    let World { chem, grid, ground, e_ground, counts, .. } = w;
     let (n, i, tg) = (grid.n(), s.i, s.tg);
     let soak = one_minus_exp(b.k.liq * s.days) * wk;
     for &(k, u) in &b.k.upt {
@@ -264,7 +264,7 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
             continue;
         }
         let want = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(MAX_TAKE_SHARE * ground[k * n + i]);
-        let d = take_paid(&mut e_ground[i], ledger, h.gcap, want, chem.subs[k].cp, want * chem.subs[k].cp * tg).0;
+        let d = take_paid(&mut e_ground[i], counts, h.gcap, want, chem.subs[k].cp, want * chem.subs[k].cp * tg).0;
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += d * chem.subs[k].cp * tg;
@@ -276,7 +276,7 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
 /// first from what the cell held aside for it (`survey`); if it cannot, the body ends colder. The gas its reactions put
 /// out leaves at the end with its share of the heat.
 fn relax_heat(w: &mut World, slot: usize, b: &mut Body, s: &Site, h: &Heat) {
-    let World { cfg, chem, e_ground, e_air, ledger, heat_pool, heat_keep, .. } = w;
+    let World { cfg, chem, e_ground, e_air, counts, heat_pool, heat_keep, .. } = w;
     let (i, j, tg, dt, g, heat) = (s.i, s.j, s.tg, s.dt, h.g, h.heat);
     let (_, c) = b.mass_cap(chem);
     if c <= 0.0 {
@@ -293,7 +293,7 @@ fn relax_heat(w: &mut World, slot: usize, b: &mut Body, s: &Site, h: &Heat) {
     if from != 0.0 {
         heat_pool[i] -= from;
     }
-    let drawn = from + draw(&mut e_ground[i], ledger, h.gcap, give - from);
+    let drawn = from + draw(&mut e_ground[i], counts, h.gcap, give - from);
     heat_keep.set(slot, b.gen, (drawn / dt) as f32);
     let e1 = if drawn == give { e1 } else { e1 - (give - drawn) };
     let out = e1 * h.c_out / ct;

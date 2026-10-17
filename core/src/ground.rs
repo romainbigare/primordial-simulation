@@ -5,16 +5,16 @@ use crate::chem::{self, Chemistry};
 use crate::grid::Grid;
 use crate::params::Config;
 use crate::units::T_FLOOR;
-use crate::world::{Ledger, World};
+use crate::world::{Counters, World};
 
 /// `World::take_heat` for callers that hold other parts of the world borrowed: take up to `q` from
 /// a node with energy `e` and heat capacity `cap` (at most what it holds above `T_FLOOR`), count
 /// the shortfall, return what was taken.
 #[inline]
-pub(crate) fn draw(e: &mut f64, ledger: &mut Ledger, cap: f64, q: f64) -> f64 {
+pub(crate) fn draw(e: &mut f64, counts: &mut Counters, cap: f64, q: f64) -> f64 {
     let took = if q > 0.0 { q.min(heat_above_floor(*e, cap)) } else { q };
     *e -= took;
-    ledger.clamped_heat += q - took;
+    counts.clamped_heat += q - took;
     took
 }
 
@@ -28,11 +28,11 @@ pub(crate) fn share(took: f64, want: f64) -> f64 {
 /// them (the heat and latent enthalpy they take): it pays as far as it holds heat above `T_FLOOR` without their heat
 /// capacity (`draw`), and as much less is taken. Returns the mol taken and the heat paid (nothing when `want` <= 0).
 #[inline]
-pub(crate) fn take_paid(e: &mut f64, ledger: &mut Ledger, cap: f64, d: f64, cp: f64, want: f64) -> (f64, f64) {
+pub(crate) fn take_paid(e: &mut f64, counts: &mut Counters, cap: f64, d: f64, cp: f64, want: f64) -> (f64, f64) {
     if want <= 0.0 {
         return (0.0, 0.0);
     }
-    let took = draw(e, ledger, cap - d * cp, want);
+    let took = draw(e, counts, cap - d * cp, want);
     (d * share(took, want), took)
 }
 
@@ -128,7 +128,7 @@ impl World {
         (th.t, th.on)
     }
     /// Take up to `q` J from ground node `i`, never more than it holds above `T_FLOOR`, and return what was
-    /// really taken. The shortfall is counted in `ledger.clamped_heat`. Whoever wanted `q` must
+    /// really taken. The shortfall is counted in `counts.clamped_heat`. Whoever wanted `q` must
     /// pass on only the returned amount (evaporate less, carry less), so energy stays exact.
     /// A negative `q` gives heat to the node and is returned whole.
     pub fn take_heat(&mut self, i: usize, q: f64) -> f64 {
@@ -140,7 +140,7 @@ impl World {
         // Only a take needs the capacity (a walk over the node's substances): a body taking from
         // the ground asks once per substance, mostly for nothing.
         let cap = if q > 0.0 { self.heat_cap_ground(i) - c } else { 0.0 };
-        draw(&mut self.e_ground[i], &mut self.ledger, cap, q)
+        draw(&mut self.e_ground[i], &mut self.counts, cap, q)
     }
     /// `take_paid` from ground node `i`.
     pub(crate) fn take_paid(&mut self, i: usize, d: f64, cp: f64, want: f64) -> (f64, f64) {
@@ -148,7 +148,7 @@ impl World {
             return (0.0, 0.0);
         }
         let cap = self.heat_cap_ground(i);
-        take_paid(&mut self.e_ground[i], &mut self.ledger, cap, d, cp, want)
+        take_paid(&mut self.e_ground[i], &mut self.counts, cap, d, cp, want)
     }
     /// Temperature of ground node `i` as of the last flow step, K (none before the first).
     pub fn t_ground_last(&self, i: usize) -> Option<f64> {

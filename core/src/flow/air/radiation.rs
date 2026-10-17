@@ -62,7 +62,7 @@ const ROW: usize = 8;
 /// absorbs and emits is booked to its node.
 pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, ground, e_ground, e_air, ledger, canopy, light, light_pool, life, .. } = w;
+    let World { cfg, grid, ground, e_ground, e_air, ledger, counts, canopy, light, light_pool, life, .. } = w;
     light_pool.resize(grid.n(), 0.0);
     let (n, na, adt) = (grid.n(), grid.na(), s.area * dt);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
@@ -89,7 +89,7 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         light_pool[i] += adt * kept;
         sun += adt * kept;
         if clamped != 0.0 {
-            ledger.clamped_heat += clamped;
+            counts.clamped_heat += clamped;
         }
         e_ground[i] += gain;
         s.node_tmp[s.air_of[i] as usize] += to_air;

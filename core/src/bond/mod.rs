@@ -112,8 +112,6 @@ pub struct Parts {
     free: Vec<u32>,
     /// Parts in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
-    #[serde(skip)]
-    pub tally: Tally,
 }
 
 /// Of a part's walls: their mass, kg, and volume, m³, and by volume their hardness, bond strength (0..1) and heat

@@ -227,7 +227,7 @@ fn send(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, (liq, wa): (&[usi
     let (part, inv) = ((qsum / lvol).min(1.0), 1.0 / qsum);
     for (&a, &k) in wa.iter().zip(liq).filter(|p| *p.0 > 0.0) {
         let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
-        let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], m, p.cp, m * (p.cp * tcur + p.lf));
+        let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.counts, s.cap[i], m, p.cp, m * (p.cp * tcur + p.lf));
         s.put(&mut w.ground, k, i, -m, true);
         sent += m;
         for ((&(j, _), &dh), &q) in o.nb[..o.cnt].iter().zip(&o.fall).zip(&o.q).filter(|p| *p.1 > 0.0) {

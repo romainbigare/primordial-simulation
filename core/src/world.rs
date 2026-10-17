@@ -21,17 +21,13 @@ pub struct Ledger {
     pub imposed_energy: f64,
     /// Elements added by player edits, mol
     pub imposed_elems: Vec<f64>,
-    /// Heat a ground node could not give (it would have fallen below `T_FLOOR`), J: whoever asked
-    /// received that much less, so this is not a loss of energy.
-    pub clamped_heat: f64,
 }
 
-/// Counts and slow averages for the shell only: the laws never read them. The fields not saved
-/// (`serde(skip)`) count since the shell last read them.
+/// Counts and slow averages for the shell: the laws never read them. The fields not saved (`serde(skip)`) count since
+/// the shell last read them.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Diag {
-    /// Members moving into each ground cell, per year (moving average over about a year), and
-    /// since the last month
+pub struct Counters {
+    /// Members moving into each ground cell, per year (moving average over about a year), and since the last month
     pub traffic: Vec<f32>,
     pub crossings: Vec<f32>,
     /// Decisions drawn, and of them those where the action drawn had the highest score
@@ -39,9 +35,16 @@ pub struct Diag {
     pub decisions: f64,
     #[serde(skip)]
     pub greedy: f64,
-    /// Population nodes split since the start: in two (`nodes::split`), and one member off to act
-    /// alone (`copy::one`)
+    /// Population nodes split since the start: in two (`nodes::split`), and one member off to act alone (`nodes::one`)
     pub splits: [f64; 2],
+    /// Body updates since the start
+    pub updates: u64,
+    /// Heat a ground node could not give (it would have fallen below `T_FLOOR`), J: whoever asked received that much
+    /// less, so this is not a loss of energy
+    pub clamped_heat: f64,
+    /// What bodies did with parts
+    #[serde(skip)]
+    pub parts: bond::Tally,
 }
 
 /// One number per body slot, kept with the generation of the body that set it: a body reads only its own (0 for a new
@@ -94,7 +97,7 @@ pub struct World {
     /// Liquid moved out of each ground cell, mol/s, a moving average over about a year (`flow::liquid`); it pushes parts
     /// (`bond::load`)
     pub liquid_flux: Vec<f32>,
-    pub diag: Diag,
+    pub counts: Counters,
     pub ledger: Ledger,
     /// Bodies, and the parts they made: the sparse graph
     pub life: crate::life::Life,

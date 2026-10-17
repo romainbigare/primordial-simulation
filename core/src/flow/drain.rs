@@ -35,7 +35,7 @@ pub(super) fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
         for &k in &liq {
             let sp = s.sp[k];
             let m = w.ground[k * n + i] * if sp.boil <= tmin { 1.0 } else { wet(s, k, i) } * v / lvol;
-            let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], m, sp.cp, m * (sp.cp * tcur + sp.lf));
+            let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.counts, s.cap[i], m, sp.cp, m * (sp.cp * tcur + sp.lf));
             (w.deep[k * n + i], w.e_deep[i]) = (w.deep[k * n + i] + m, w.e_deep[i] + e);
             s.put(&mut w.ground, k, i, -m, true);
         }

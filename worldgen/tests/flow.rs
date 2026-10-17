@@ -49,7 +49,7 @@ fn hot_plateau_cools_but_not_to_the_floor() {
     pcore::flow::step(&mut w, DT);
     let t = w.t_ground(i);
     assert!(t > 150.0 && t < melt, "{t} K after a step from {melt} K");
-    assert_eq!(w.ledger.clamped_heat, 0.0);
+    assert_eq!(w.counts.clamped_heat, 0.0);
     let (de, dq) = drift(&w, &t0, &l0);
     assert!(de < 1e-12 && dq < 1e-9, "drift {de} {dq}");
 }

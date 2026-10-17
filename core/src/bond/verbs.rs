@@ -134,7 +134,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     }
     b.digest(chem, chem.matter().map_or(0.0, |k| m[k]));
     (pt.e, b.e) = (pt.e - q, b.e + q);
-    w.parts.tally.from_parts += got;
+    w.counts.parts.from_parts += got;
     if pt.walls(chem).mass < w.cfg.phys.min_kg {
         if b.hold == pt.id(p) {
             let_go(w, b, false);
@@ -179,7 +179,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
         b.store[k] -= a;
     }
     (pt.e, b.e) = (pt.e + q, b.e - q);
-    w.parts.tally.to_parts += got;
+    w.counts.parts.to_parts += got;
     pt.resize(chem);
     restructure(w, p);
 }
@@ -208,7 +208,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     }
     b.e -= e;
     let p = make(w, i, wall, e, shape[0], shape[1]);
-    w.parts.tally.formed += 1.0;
+    w.counts.parts.formed += 1.0;
     if held(w, b).is_none() {
         grab(w, slot, b, p);
     }

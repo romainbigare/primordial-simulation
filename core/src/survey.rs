@@ -117,9 +117,9 @@ fn hold_heat(w: &mut World) {
     }
 }
 
-/// The yearly moving average of the crossings of each cell (`Diag::traffic`), once a month.
+/// The yearly moving average of the crossings of each cell (`Counters::traffic`), once a month.
 fn traffic(w: &mut World) {
-    let (n, d) = (w.grid.n(), &mut w.diag);
+    let (n, d) = (w.grid.n(), &mut w.counts);
     d.traffic.resize(n, 0.0);
     d.crossings.resize(n, 0.0);
     let a = 1.0 / w.cfg.months_per_year as f32;
@@ -179,7 +179,7 @@ pub fn day(w: &mut World) {
         }
         let mut b = std::mem::take(&mut w.life.bodies[s]);
         b.prepare(&w.chem, &w.cfg.phys);
-        w.life.updates += 1;
+        w.counts.updates += 1;
         match live(w, s, &mut b, &mut rc, &mut tmp) {
             Err(cause) => die(w, s, b, cause),
             Ok(lived) => {

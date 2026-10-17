@@ -44,7 +44,7 @@ impl Recorder {
         self.social_cols(c, &land, &mut row);
         self.parts_cols(c.w, &mut row);
         self.year = Default::default();
-        self.updates = c.w.life.updates;
+        self.updates = c.w.counts.updates;
         self.append(row);
     }
 

@@ -170,8 +170,8 @@ fn genes_do_not_drift_without_selection() {
         let (w, m0, m1) = churn(crowd, 1000, false, |_| 0.5);
         let worst = (0..lay.len).filter(|&g| inv[g] > 0.0).map(|g| ((m1[g] - m0[g]) * inv[g] as f64).abs()).fold(0.0, f64::max);
         let which = (0..lay.len).filter(|&g| inv[g] > 0.0).max_by(|&a, &b| ((m1[a] - m0[a]) * inv[a] as f64).abs().total_cmp(&((m1[b] - m0[b]) * inv[b] as f64).abs())).unwrap();
-        println!("crowd {crowd}: bodies {}, splits {}, largest move {worst:.3} steps (gene {which}: {} -> {})", live(&w).len(), w.diag.splits[0], m0[which], m1[which]);
-        assert!(crowd < 4 || w.diag.splits[0] > 10.0, "too few splits");
+        println!("crowd {crowd}: bodies {}, splits {}, largest move {worst:.3} steps (gene {which}: {} -> {})", live(&w).len(), w.counts.splits[0], m0[which], m1[which]);
+        assert!(crowd < 4 || w.counts.splits[0] > 10.0, "too few splits");
         assert!(worst < 1.0, "a gene moved {worst} steps without selection");
     }
 }
@@ -294,7 +294,7 @@ fn a_node_acts_on_bonds_through_one_member() {
         pcore::survey::survey(&mut w);
         w.day += 1;
         pcore::survey::day(&mut w);
-        assert_eq!(w.diag.splits[1], 1.0, "no member split off");
+        assert_eq!(w.counts.splits[1], 1.0, "no member split off");
         let one: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l && b.count == 1.0).collect();
         let node = w.life.alive().find(|b| b.lineage == l && b.count > 1.0).expect("the node");
         if case == 0 {

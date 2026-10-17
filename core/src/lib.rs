@@ -27,4 +27,4 @@ mod world;
 
 pub use params::{Config, Physics};
 pub use schedule::{step, step_marked, Stage};
-pub use world::{Diag, Ledger, PerSlot, World};
+pub use world::{Counters, Ledger, PerSlot, World};

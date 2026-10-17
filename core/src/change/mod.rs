@@ -176,7 +176,7 @@ fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &Nodes, i:
     w.e_ground[i] = e + fused + back + q_in - q_out;
     w.e_air[j] += q_out - q_in;
     let cap = w.heat_cap_ground(i);
-    let paid = if pay > 0.0 { share(draw(&mut w.e_ground[i], &mut w.ledger, cap, pay), pay) } else { 1.0 };
+    let paid = if pay > 0.0 { share(draw(&mut w.e_ground[i], &mut w.counts, cap, pay), pay) } else { 1.0 };
     // The heat of the gas that stays behind stays with it.
     (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
     for k in 0..ns {

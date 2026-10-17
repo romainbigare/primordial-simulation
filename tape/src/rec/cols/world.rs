@@ -62,7 +62,7 @@ impl Recorder {
         }
         row.push("lineages", "1", life.lineages() as f64);
         row.push("lineages_ever", "1", life.brains.len() as f64);
-        row.push("updates", "1/yr", life.updates.saturating_sub(self.updates) as f64);
+        row.push("updates", "1/yr", w.counts.updates.saturating_sub(self.updates) as f64);
         // The mean catalyst gene (log10 speed-up; below 0 counts as off, 0) of each reaction over the live members:
         // which reactions life speeds up.
         let (nr, cat) = (w.chem.reactions.len(), pcore::body::Layout::of(&w.chem).cat);

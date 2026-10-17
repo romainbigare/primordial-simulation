@@ -262,7 +262,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             } else {
                 // Coming out cools the node, no further than the boiling point; it pays what it can.
                 let q = (-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv));
-                -crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], q, sp.cp, q * (sp.cp * t + sp.lf + sp.lv)).0
+                -crate::ground::take_paid(&mut w.e_ground[i], &mut w.counts, s.cap[i], q, sp.cp, q * (sp.cp * t + sp.lf + sp.lv)).0
             };
             if m == 0.0 {
                 continue;

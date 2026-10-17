@@ -94,7 +94,7 @@ pub fn save(w: &World, path: &str) {
             },
             // Bodies moving into the cell per year, on a log scale, over the map in grey.
             {
-                let t = w.diag.traffic.get(i).copied().unwrap_or(0.0) as f64;
+                let t = w.counts.traffic.get(i).copied().unwrap_or(0.0) as f64;
                 let g = map_pixel(w, &f, i).map(|v| v / 3 + 40);
                 if t < 1.0 { g } else { ramp(&[(0.0, [90, 70, 120]), (1.0, [200, 60, 160]), (2.0, [255, 160, 40]), (3.0, [255, 255, 200])], t.log10()) }
             },

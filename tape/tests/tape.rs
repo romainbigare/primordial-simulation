@@ -312,7 +312,7 @@ fn null_run_freezes_the_brain_rows() {
         let out = |r: &Vec<f32>| r.len() == lo.len() && r.iter().enumerate().any(|(k, &x)| x < lo[k] - 1e-5 || x > hi[k] + 1e-5);
         let new = w.life.genomes.iter().filter(|g| !g.rows.is_empty() && out(&g.rows)).count();
         let moved = w.life.alive().filter(|b| b.adj.iter().any(|&x| x != 0.0)).count();
-        (new, moved, w.life.updates)
+        (new, moved, w.counts.updates)
     };
     let (real, null) = (go(false), go(true));
     assert!(null.2 > 100 && real.2 > 100, "life ran: {real:?} {null:?}");

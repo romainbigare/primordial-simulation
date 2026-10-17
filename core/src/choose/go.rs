@@ -34,12 +34,12 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
         return;
     }
     bond::moved(w, b, carried, j, mb);
-    w.parts.tally.afloat += afloat as u8 as f64;
+    w.counts.parts.afloat += afloat as u8 as f64;
     w.life.relocate(slot, b.group, i, j);
     b.cell = j as u32;
     b.mark = w.light[j];
-    w.diag.crossings.resize(w.grid.n(), 0.0);
-    w.diag.crossings[j] += b.n() as f32;
+    w.counts.crossings.resize(w.grid.n(), 0.0);
+    w.counts.crossings[j] += b.n() as f32;
     let cover = w.life.sum[j][1] / w.grid.area();
     let broken = wear(w, j, slot, cost * (1.0 - 1.0 / resist));
     if broken > 0.0 && cover > 0.0 {

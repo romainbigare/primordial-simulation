@@ -133,7 +133,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         if d == 0 {
             bond::step(&mut w);
         }
-        let (u, from) = (w.life.updates, w.life.bodies[slot].cell as usize);
+        let (u, from) = (w.counts.updates, w.life.bodies[slot].cell as usize);
         let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.grid.step(from, d)).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, rich, j) > seen(&w, rich, from) + 0.02).collect();
         pcore::survey::day(&mut w);
@@ -146,7 +146,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
                 body::die(&mut w, s, c, body::LACK);
             }
         }
-        if w.life.updates > u && w.life.bodies[slot].alive {
+        if w.counts.updates > u && w.life.bodies[slot].alive {
             let to = w.life.bodies[slot].cell as usize;
             log.push((from % W >= STRIP, to != from, !richer.is_empty(), richer.contains(&to), richer.len() as f64 / near.len() as f64));
         }

@@ -183,7 +183,7 @@ fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
         u < 0.0
     });
     c.a = a.unwrap_or(REST);
-    (w.diag.decisions, w.diag.greedy) = (w.diag.decisions + 1.0, w.diag.greedy + (c.logit[c.a] >= top) as u8 as f64);
+    (w.counts.decisions, w.counts.greedy) = (w.counts.decisions + 1.0, w.counts.greedy + (c.logit[c.a] >= top) as u8 as f64);
 }
 
 /// The trace of the decision for learning: the hidden layer, and per learned row how its output moves the log-chance of
