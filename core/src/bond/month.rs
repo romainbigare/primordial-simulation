@@ -3,7 +3,9 @@
 use super::sense::liquid;
 use super::verbs::{bears, torn_from};
 use super::{dissolve, holder, ready, restructure, unlink, GROUND};
-use crate::change::Reactor;
+use crate::change::{send_gas, GasMove, Reactor};
+use crate::flow::Sky;
+use crate::ground::share;
 use crate::chem::Phase;
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
@@ -45,35 +47,35 @@ pub fn step(w: &mut World) {
     }
 }
 
-/// Part `s` reacts with its share of the air of its cell for `dt` s (`pool0` that share before, `pool` after). Gas sent
-/// to the air takes its fusion and vaporisation enthalpy from the ground (gas taken back returns it); gas the ground
-/// cannot pay for goes to the ground instead.
+/// Part `s` reacts with its share of the air of its cell for `dt` s (`pool0` that share before, `pool` after), and settles
+/// the gas with the air as a ground node does (`change::GasMove`, `change::send_gas`): gas taken brings its heat at the
+/// air's temperature, gas sent leaves with its share of the part's heat by heat capacity. The ground under it pays the
+/// fusion and vaporisation enthalpy of the gas sent (gas taken gives it back); gas the ground cannot pay for goes to the
+/// ground, with its heat.
 fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
-    let (ns, n, na) = (w.chem.ns(), w.grid.n(), w.grid.na());
+    let (n, na) = (w.grid.n(), w.grid.na());
     let i = w.parts.parts[s].cell as usize;
-    let (j, share, lift) = (w.grid.air_of(i), w.grid.air_share(), w.lift(i));
+    let j = w.grid.air_of(i);
+    let (air_share, lift, ta) = (w.grid.air_share(), w.lift(i), w.t_air(j));
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
     for (k, p0) in pool0.iter_mut().enumerate() {
-        *p0 = w.air[k * na + j] * share;
+        *p0 = w.air[k * na + j] * air_share;
     }
     pool.copy_from_slice(pool0);
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
     rc.react(chem, &mut p.wall, Some(pool), &mut p.e, fixed, None, 0.0, dt);
-    // Bug B4: no sensible heat; fixed in the bug stage.
-    let (mut pay, mut back) = (0.0, 0.0);
-    for k in 0..ns {
-        let (d, latent) = (pool[k] - pool0[k], chem.subs[k].latent_gas());
-        (pay, back) = (pay + d.max(0.0) * latent, back - d.min(0.0) * latent);
-    }
-    w.e_ground[i] += back;
-    let paid = if pay > 0.0 { crate::ground::share(w.take_heat(i, pay), pay) } else { 1.0 };
-    for k in 0..ns {
-        let d = pool[k] - pool0[k];
-        let sent = if d > 0.0 { d * paid } else { d };
-        w.sky().cross(k, j, sent, lift);
-        w.ground[k * n + i] += d - sent;
-    }
+    let gas = GasMove::of(chem, pool, pool0, ta);
+    let c = p.heat_cap(chem);
+    let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);
+    p.e += gas.q_in - q_out;
+    (w.e_air[j], w.e_ground[i]) = (w.e_air[j] + q_out - gas.q_in, w.e_ground[i] + gas.back);
+    let paid = share(w.take_heat(i, gas.pay), gas.pay);
+    // The heat of the gas that goes to the ground goes with it.
+    (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
+    let ground = &mut w.ground;
+    let mut sky = Sky { chem: &w.chem, air: &mut w.air, e_air: &mut w.e_air, potential: &mut w.potential };
+    send_gas(pool, pool0, paid, &mut sky, (j, lift), |k, kept| ground[k * n + i] += kept);
 }
 
 /// Walls of part `s` that are no longer solid run off to the ground; the part takes the ground's temperature (if the
