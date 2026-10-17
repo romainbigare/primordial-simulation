@@ -76,7 +76,10 @@ fn stores(w: &mut World, s: &mut Scratch, dt: f64, tmin: f64) {
         w.e_deep[i] *= keep;
     }
     for (i, j, f) in moves {
-        let into = ((full - held[j] * (1.0 - out[j].min(1.0))) / inflow[j]).clamp(0.0, 1.0);
+        // The share of what comes in that the store has room for. A flow from a store drained to below the smallest
+        // number sums to 0: nothing comes in, so nothing spills (and no 0 / 0).
+        let room = full - held[j] * (1.0 - out[j].min(1.0));
+        let into = if inflow[j] > 0.0 { (room / inflow[j]).clamp(0.0, 1.0) } else { 1.0 };
         let (e, mut mass) = (e0[i] * f, 0.0);
         for k in (0..ns).filter(|&k| deep0[k * n + i] > 0.0) {
             let m = deep0[k * n + i] * f;

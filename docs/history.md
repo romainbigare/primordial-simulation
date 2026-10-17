@@ -278,3 +278,5 @@ The work of `docs/foundation/plan.md`, one line per task.
   each liquid step, so its last liquid fell below 1e-308 m³; `liquid::send` shared what left by 1 / (sum of the
   flows), which was then infinite, and 0 x infinity put NaN into the ground, then the air. Each outlet now takes
   q / (sum of the flows); golden re-pinned (rounding only).
+  The drainage between stores (`drain::stores`) had the same risk (0 / 0 when such a flow rounds to 0): there
+  nothing comes in, so nothing spills.
