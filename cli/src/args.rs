@@ -1,6 +1,6 @@
 //! The command line: `ew COMMAND --name value ...`, the usage text, and what the flags set.
 
-use pcore::World;
+use pcore::{Config, World};
 use worldgen::life::{Seeding, FIXERS};
 use worldgen::schedule::Schedule;
 
@@ -29,9 +29,9 @@ pub const USAGE: &str = "usage:
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --flow-days N         days between moves of liquid and creep
-    --air-days N          days between moves of the air
-    --exchange-days N     days between evaporation and condensation
+    --flow-days N         days between moves of liquid and creep (15; a multiple of the air's)
+    --air-days N          days between moves of the air (3; a multiple of the physics step's, 3)
+    --exchange-days N     days between evaporation and condensation (3; a multiple of the air's)
     --regrow X            Config::regrow
     --crowd N             Config::crowd
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
@@ -40,6 +40,22 @@ pub const USAGE: &str = "usage:
   ew chem     print chemistry 0 as a table
     --seed N              a generated chemistry instead
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";
+
+/// Check that the time steps fit together as the laws take them (`pcore::step_marked`, `flow::step`): physics runs
+/// every `phys_days`, the air at the first physics step `air_days` after its last, evaporation and liquid at the first
+/// air step `exchange_days` and `flow_days` after theirs. Each must be a whole multiple of the step it waits on, or it
+/// runs at another interval than the one asked.
+pub fn check_steps(c: &Config) -> Result<(), String> {
+    if c.phys_days == 0 {
+        return Err("phys_days must be at least 1".into());
+    }
+    for (name, x, of, y) in [("air_days", c.air_days, "phys_days", c.phys_days), ("exchange_days", c.exchange_days, "air_days", c.air_days), ("flow_days", c.flow_days, "air_days", c.air_days)] {
+        if x == 0 || x % y != 0 {
+            return Err(format!("{name} ({x}) must be a whole multiple of {of} ({y})"));
+        }
+    }
+    Ok(())
+}
 
 /// The command line's words.
 pub struct Args(pub Vec<String>);
@@ -71,8 +87,8 @@ impl Args {
         c.sun *= self.get("--sun", 1.0);
         c.share_brains = !self.has("--own-brains");
         c.flow_days = self.get("--flow-days", c.flow_days);
-        c.air_days = self.get("--air-days", c.air_days.min(c.flow_days));
-        c.exchange_days = self.get("--exchange-days", 3u32.min(c.flow_days).max(c.air_days));
+        c.air_days = self.get("--air-days", c.air_days);
+        c.exchange_days = self.get("--exchange-days", c.exchange_days);
         c.regrow = self.get("--regrow", c.regrow);
         c.crowd = self.get("--crowd", c.crowd);
         c.null = self.has("--null");
@@ -92,5 +108,19 @@ impl Args {
     pub fn schedule(&self) -> Schedule {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
         Schedule::new(year("--life-year", 2), self.has("--roster"), year("--clever-year", -1).map(|y| (y, self.get("--clever-n", 300))), self.seeding())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_steps;
+    use pcore::Config;
+
+    #[test]
+    fn the_default_steps_fit_and_a_step_off_its_base_is_refused() {
+        assert_eq!(check_steps(&Config::default()), Ok(()));
+        for c in [Config { flow_days: 4, ..Default::default() }, Config { exchange_days: 4, ..Default::default() }, Config { air_days: 2, ..Default::default() }, Config { phys_days: 0, ..Default::default() }] {
+            assert!(check_steps(&c).is_err(), "{} {} {} {}", c.phys_days, c.air_days, c.exchange_days, c.flow_days);
+        }
     }
 }
