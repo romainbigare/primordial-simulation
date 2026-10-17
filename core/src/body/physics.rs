@@ -4,7 +4,7 @@
 use super::exchange::{breath, film, surface, through};
 use super::live::{LiveTmp, Site};
 use super::pay::breathes;
-use super::{light_eater, Body, Layout, COOL_T, DENATURE};
+use super::{light_eater, Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
 use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::ground::{draw, heat_above_floor, share, take_paid};
@@ -12,6 +12,10 @@ use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
 use crate::units::{MAX_SUBSTANCES, P_REF};
 use crate::{Diag, World};
+
+/// The most share of the heat the body has (its own, what it released and what the surface can give it) that pays the
+/// enthalpy of the gas its reactions put out; what it cannot pay for stays in the body.
+const GAS_HEAT_SHARE: f64 = 0.5;
 
 /// The heat of an update as its stages go.
 struct Heat {
@@ -109,7 +113,7 @@ fn gas_pool(w: &World, b: &Body, s: &Site, mass: f64, tmp: &mut LiveTmp) -> f64 
     for k in 0..chem.ns() {
         let (a, x) = (air[k * na + j], air[k * na + j] / tot);
         tmp.x.push(x);
-        tmp.pool.push((x * reach).min(0.5 * a));
+        tmp.pool.push((x * reach).min(MAX_TAKE_SHARE * a));
     }
     tmp.pool0.clone_from(&tmp.pool);
     reach
@@ -155,7 +159,7 @@ fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat
         (pay, heat, q_in) = (pay + d.max(0.0) * chem.subs[k].latent_gas(), heat - d.min(0.0) * chem.subs[k].latent_gas(), q_in - d.min(0.0) * chem.subs[k].cp * ta);
     }
     (b.e, e_air[j]) = (b.e + q_in, e_air[j] - q_in);
-    let paid = share(0.5 * (b.e + heat + h.g * s.dt * s.tg).max(0.0), pay);
+    let paid = share(GAS_HEAT_SHARE * (b.e + heat + h.g * s.dt * s.tg).max(0.0), pay);
     for k in 0..ns {
         let d = tmp.pool[k] - tmp.pool0[k];
         let sent = if d > 0.0 { d * paid } else { d };
@@ -230,7 +234,7 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach, soak_rate * days, cfg.phys.dormancy) } else { push * reach };
         let m = open_m.max((push * wide).min(need).min(spare)).min(heat_paid / chem.subs[k].latent_gas());
         // What flows through it comes from the ground, which pays its heat and fusion enthalpy as for what it soaks.
-        let inflow = if soak_rate > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(0.5 * ground[k * n + i]) } else { 0.0 };
+        let inflow = if soak_rate > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(MAX_TAKE_SHARE * ground[k * n + i]) } else { 0.0 };
         let (fused, cp) = (chem.fused_heat(k, tg, |j| ground[j * n + i]), chem.subs[k].cp);
         let pre = take_paid(&mut e_ground[i], ledger, h.gcap, inflow, cp, inflow * (cp * tg + fused)).0;
         (b.store[k], ground[k * n + i], b.e, h.heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, h.heat + pre * fused);
@@ -265,7 +269,7 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
         let rate = soil.rate * chem.subs[k].solubility;
         let f = one_minus_exp(rate * days);
         let uptake = if rate * days > 1e-9 { (room - lost[k]) * f + lost[k] * (1.0 - f / (rate * days)) } else { 0.0 };
-        let want = ((uptake + fall) * x).min(room).min(0.5 * ground[k * n + i]).max(0.0);
+        let want = ((uptake + fall) * x).min(room).min(MAX_TAKE_SHARE * ground[k * n + i]).max(0.0);
         let (per, fused) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
         let d = take_paid(&mut e_ground[i], ledger, h.gcap, want, chem.subs[k].cp, want * (per + fused)).0;
         b.store[k] += d;
@@ -288,7 +292,7 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &Heat, mass2: f64, wk: f64) {
         if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| ground[j * n + i]) != Phase::Liquid || ground[k * n + i] <= 0.0 {
             continue;
         }
-        let want = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(0.5 * ground[k * n + i]);
+        let want = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(MAX_TAKE_SHARE * ground[k * n + i]);
         let d = take_paid(&mut e_ground[i], ledger, h.gcap, want, chem.subs[k].cp, want * chem.subs[k].cp * tg).0;
         b.store[k] += d;
         ground[k * n + i] -= d;

@@ -63,13 +63,16 @@ fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter0: f
     alive.then(|| if whole { 0.0 } else { (matter0 - b.matter_kg(&w.chem)).max(0.0) })
 }
 
+/// An individual dies when this share of its body or more is torn off.
+const TORN_TO_DEATH: f64 = 0.5;
+
 /// A hit tears the share `f` of the body in `slot` (`tear`, taken out of its slot). It dies if less than one member is left,
 /// or, as an individual, when half of its body (`Body::built`, `built0` before the hit) or more is torn or a store fell
 /// below its safe minimum; else it lives on, hurt (`hurt`), back in its slot. True if it lives.
 #[allow(clippy::too_many_arguments)]
 pub fn wound(w: &mut World, slot: usize, mut b: Body, f: f64, dead: &[f64], cause: u8, built0: f64, matter0: f64) -> bool {
     let torn = tear(w, &mut b, f, dead, cause, matter0);
-    if torn.is_none() || (b.n() <= 1.0 && (b.built(&w.chem) <= 0.5 * built0 * (1.0 + 1e-9) || b.lacking(&w.chem))) {
+    if torn.is_none() || (b.n() <= 1.0 && (b.built(&w.chem) <= TORN_TO_DEATH * built0 * (1.0 + 1e-9) || b.lacking(&w.chem))) {
         die(w, slot, b, cause);
         return false;
     }

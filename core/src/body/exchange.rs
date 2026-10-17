@@ -33,6 +33,11 @@ impl Body {
     }
 }
 
+/// Molar heat capacity of an ideal gas of two atoms, J/(mol K): the air's when none is known.
+const DIATOMIC_CP: f64 = 3.5 * R_GAS;
+/// Halvings of the interval in `through` (2^-40 of the level).
+const BISECT_STEPS: usize = 40;
+
 /// The cover of other bodies over a body's cell, kg/m²: the mass of the others per ground area.
 pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
     (w.life.sum[b.cell as usize][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.grid.area()
@@ -74,7 +79,7 @@ pub(super) fn film(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, c
 /// Molar heat capacity of the starting air, J/(mol K) (of an ideal gas of two atoms, 3.5 R, if none is known).
 fn air_cp(chem: &Chemistry) -> f64 {
     let c: f64 = chem.air.iter().zip(&chem.subs).map(|(x, s)| x * s.cp).sum();
-    if c > 0.0 { c } else { 3.5 * R_GAS }
+    if c > 0.0 { c } else { DIATOMIC_CP }
 }
 
 /// The air a body exchanges gas with in `days`, mol (`Body::open_area` times its conductance; 16 Oct 2026): its pores (the
@@ -111,7 +116,7 @@ pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
         return dry;
     }
     let (mut lo, mut hi) = (0.0f64, 1.0f64);
-    for _ in 0..40 {
+    for _ in 0..BISECT_STEPS {
         let u = 0.5 * (lo + hi);
         if rd * (1.0 - u) * ls > e * u.powf(n) { lo = u } else { hi = u }
     }

@@ -8,6 +8,9 @@ use crate::math::one_minus_exp;
 use crate::units::DAY;
 use crate::{bond, choose, World};
 
+/// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
+const LOOSE_SENSE: f32 = 0.2;
+
 /// Temperature (as of the last flow step), depth of the liquid that stands (what the pores of the loose ground
 /// do not hold, `flow::liquid`) and surface height of a ground cell (with whole phases: no plateau share, unlike
 /// `World::surface_z`).
@@ -105,7 +108,7 @@ pub fn survey(w: &mut World) {
     if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
         let (ns, area) = (w.chem.ns(), w.grid.area());
-        w.life.seen = (0..n * ns).map(|x| 0.2 * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
+        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
     }
     choose::cells(w);
 }

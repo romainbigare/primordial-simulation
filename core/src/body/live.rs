@@ -4,12 +4,17 @@
 use super::exchange::{cover_of, ground_t};
 use super::pay::{hold, pay_at, plan, spend, upkeep};
 use super::physics::physics;
-use super::{thin, Body, Layout, AGE, KEEP_T, LACK, PHASE, REPAIR, SPENT};
+use super::{thin, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::rng::{Purpose, Rng};
 use crate::units::DAY;
 use crate::{bond, World};
+
+/// Passes of `keep_warm`: its products take a part of the heat it burns at its temperature, so a second pass tops it up.
+const KEEP_T_PASSES: usize = 2;
+/// `keep_warm` burns nothing for a shortfall under this share of the body's heat.
+const KEEP_T_SLACK: f64 = 1e-6;
 
 /// Working memory of `live`, kept from body to body.
 #[derive(Default)]
@@ -100,7 +105,7 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
 /// in the update's heat), the span it was paid over, the mass left and the margin of its reactions over the upkeep.
 fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64), u8> {
     let (cost, span) = (upkeep(w, b, s.days, mass), s.days.max(b.interval() as f64));
-    let spare = plan(w, b, 2.0 * cost, span, mass, cap).1 / cost.max(1e-300);
+    let spare = plan(w, b, MARGIN * cost, span, mass, cap).1 / cost.max(1e-300);
     let (e_before, node) = (b.e, b.n() > 1.0);
     let short = pay_at(w, b, cost, span, mass, cap, node) / cost.max(1e-300);
     if short > 1e-9 && !node {
@@ -144,10 +149,10 @@ fn members_die(w: &mut World, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f6
 /// the heat its surface sheds at that level over the time (the share `hold` of a heat released over the time stays in
 /// it), as far as its reactions can release it. Twice, as its products take a part of the heat at its temperature.
 fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
-    for _ in 0..2 {
+    for _ in 0..KEEP_T_PASSES {
         let (m, c) = b.mass_cap(&w.chem);
         let short = c * b.gene(KEEP_T) - b.e;
-        if c <= 0.0 || short <= 1e-6 * b.e || spend(w, b, short / hold(w, b, m, b.e / c, dt), span, dt, true) > 0.0 {
+        if c <= 0.0 || short <= KEEP_T_SLACK * b.e || spend(w, b, short / hold(w, b, m, b.e / c, dt), span, dt, true) > 0.0 {
             break;
         }
     }

@@ -11,6 +11,12 @@ pub const WET_TISSUE: f64 = 0.75;
 /// The most share of a body's mass its keep gene of a key liquid, or of the solids it builds together, may make up.
 pub(crate) const MAX_KEEP: f64 = 0.95;
 
+/// Less than this of a member is nothing left of it, kg.
+const EMPTY_KG: f64 = 1e-3;
+
+/// A column standing under its own weight buckles past h^3 = this x E I / w (Greenhill 1881).
+const GREENHILL: f64 = 7.837;
+
 impl Body {
     /// Key stores (safe minimum above 0), one bit per substance.
     pub(crate) fn key_mask(&self, chem: &Chemistry) -> u64 {
@@ -188,7 +194,7 @@ impl Body {
             return (mass / n / cfg.phys.rho_body).cbrt();
         }
         let [v, ev, _] = self.solids(chem, cfg);
-        (7.837 / (4.0 * std::f64::consts::PI) * ev * v / (n * mass * cfg.gravity).max(1e-30)).max(0.0).powf(0.25)
+        (GREENHILL / (4.0 * std::f64::consts::PI) * ev * v / (n * mass * cfg.gravity).max(1e-30)).max(0.0).powf(0.25)
     }
     /// The energy to break the share `f` of the body, J (Bond, 16 Oct 2026): what it is built of times the stress each breaks at
     /// (`solids`, J per m^3: the work to crush a solid through its own size), so hard parts protect. A bite pays it
@@ -206,7 +212,7 @@ impl Body {
     }
     /// Nothing left of a member (under 1 g each) when the mass is `m`.
     pub(crate) fn empty_at(&self, m: f64) -> bool {
-        m < 1e-3 * self.n()
+        m < EMPTY_KG * self.n()
     }
     /// A store below its safe minimum, or nothing left of a member.
     pub fn lacking(&self, chem: &Chemistry) -> bool {

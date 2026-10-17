@@ -40,6 +40,18 @@ pub const TAKEN: u8 = 3;
 pub(crate) const BROKEN: u8 = 4;
 /// Worn out by living (`Body::wear`).
 pub const AGE: u8 = 5;
+/// The most share of what its air node or ground node holds that a body takes in one update (the bodies of a cell
+/// share it).
+pub(crate) const MAX_TAKE_SHARE: f64 = 0.5;
+/// Margins of well-being (`Body::wellbeing_at`) count up to this, and down to `MARGIN_MIN`: the margin of a key store
+/// (the log of its share over its minimum) and that of its reactions over its upkeep (`live` plans for this many upkeeps).
+pub(crate) const MARGIN: f64 = 2.0;
+const MARGIN_MIN: f64 = 1e-3;
+/// Well-being falls as a key liquid comes within this of freezing or boiling, K.
+const PHASE_MARGIN: f32 = 5.0;
+/// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a safe minimum with the floor `MIN_FLOOR`.
+pub(crate) const SHARE_SENSE: f32 = 0.25;
+const MIN_FLOOR: f32 = 1e-2;
 /// Others a body remembers.
 pub(crate) const KNOWN: usize = 4;
 
@@ -180,7 +192,7 @@ impl Body {
         let cat = lay.cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
         let burn = (0..chem.reactions.len()).filter(|&r| self.genes[cat + r] > 0.0 && chem.dh(r) < 0.0 && !chem.keeps(r)).map(|r| (r, -chem.dh(r))).collect();
-        let minln = (0..chem.ns()).map(|k| 0.25 * ln(self.genes[lay.min + k].max(0.0) + 1e-2)).collect();
+        let minln = (0..chem.ns()).map(|k| SHARE_SENSE * ln(self.genes[lay.min + k].max(0.0) + MIN_FLOOR)).collect();
         let upt = (0..chem.ns()).filter(|&k| self.genes[lay.upt + k] > 0.0).map(|k| (k, self.genes[lay.upt + k])).collect();
         // By capacity: the catalysed rate per unit of the contact of its phases (`change`) at
         // `t_cat`, over the genes that are on (`Physics::c_cat`), dearer if they keep their shape
@@ -226,15 +238,15 @@ impl Body {
     /// `prepare`.
     pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass) = (Layout::of(chem), self.size(chem));
-        let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(1e-3, 2.0) as f32 / 2.0);
+        let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(MARGIN_MIN, MARGIN) as f32 / MARGIN as f32);
         for k in 0..chem.ns() {
             let min = self.genes[lay.min + k];
             if min > 0.0 {
-                w += ln(ln((self.store[k] * chem.subs[k].molar_mass / mass) as f32 / min).clamp(1e-3, 2.0) / 2.0);
+                w += ln(ln((self.store[k] * chem.subs[k].molar_mass / mass) as f32 / min).clamp(MARGIN_MIN as f32, MARGIN as f32) / MARGIN as f32);
             }
             if self.wet >> k & 1 == 1 {
                 let s = &chem.subs[k];
-                w += (((t - self.melt(chem, k)).min(s.boil - t) as f32 - 5.0) / 5.0).min(0.0);
+                w += (((t - self.melt(chem, k)).min(s.boil - t) as f32 - PHASE_MARGIN) / PHASE_MARGIN).min(0.0);
             }
         }
         w

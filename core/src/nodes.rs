@@ -3,6 +3,10 @@
 use crate::body::{light_eater, Layout};
 use crate::World;
 
+/// Past this many times `Config::crowd` bodies in a cell, unlike nodes merge too (the most alike first): a numerical
+/// safeguard.
+const UNLIKE_CROWD: usize = 2;
+
 /// The speed shortcut of plan 7.1, not a law: it coarsens only how members are represented (as
 /// population nodes), never how many there are or where. Monthly, in each cell, among the bodies
 /// that hold and are inside nothing: a node joins the first larger one alike in genes
@@ -68,7 +72,7 @@ pub(crate) fn crowd(w: &mut World) {
         }
         for n in (max..m).rev() {
             let k = (0..m * m).fold(0, |k, x| if d[x] < d[k] { x } else { k });
-            if d[k].1 == f32::INFINITY || d[k].0 && n < 2 * max {
+            if d[k].1 == f32::INFINITY || d[k].0 && n < UNLIKE_CROWD * max {
                 break;
             }
             let (p, q) = (k / m, k % m);

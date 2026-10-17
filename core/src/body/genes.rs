@@ -69,6 +69,8 @@ pub const KEEP_T: usize = 20;
 /// keeps no temperature must be able to (with one level every body would always burn or always evaporate)
 pub const COOL_T: usize = 21;
 pub const NSCALAR: usize = 22;
+/// A rate gene (`LEARN`, `FORGET`) at or below this is off: the lower end of its range, -4, less a margin for rounding.
+const GENE_OFF: f32 = -3.9;
 /// The genes of the sizes of brain and senses.
 pub const BRAIN_SIZES: [usize; 4] = [HIDDEN, MEMORY, SEEN, SIGHT];
 
@@ -166,7 +168,7 @@ impl Body {
     }
     /// 10 to the power of gene `g`, 0 when it is off (at the lower end of its range).
     fn rate_gene(&self, g: usize) -> f32 {
-        if self.genes[g] <= -3.9 { 0.0 } else { 10f32.powf(self.genes[g]) }
+        if self.genes[g] <= GENE_OFF { 0.0 } else { 10f32.powf(self.genes[g]) }
     }
 }
 

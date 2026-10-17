@@ -1,7 +1,7 @@
 //! Upkeep, and paying a cost by running the reactions that breathe.
 
 use super::exchange::{breath, conductance_to_ground, cover_of};
-use super::{Body, COPY_MASS, DENATURE, REPAIR, STRENGTH};
+use super::{Body, COPY_MASS, DENATURE, MAX_TAKE_SHARE, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::math::mean_decay;
 use crate::units::{DAY, MAX_SUBSTANCES};
@@ -110,7 +110,7 @@ pub(super) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f6
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
     let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (breath(chem, &w.cfg, b, mass, cover_of(w, b), days, depth) / tot).min(0.5);
+    let share = (breath(chem, &w.cfg, b, mass, cover_of(w, b), days, depth) / tot).min(MAX_TAKE_SHARE);
     let t = b.e / cap.max(1e-9);
     let dry = b.activity(chem, &w.cfg.phys);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
