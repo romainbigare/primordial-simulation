@@ -77,8 +77,8 @@ impl Kind {
     }
 }
 
-/// Years a member of `b` lives at its upkeep now (`body::live`): `e_life` x 10^`REPAIR` per kg over its upkeep per
-/// kg.
+/// Years a member of `b` lives at its upkeep now, as the age law wears it (`body::live`): `e_life` x 10^`REPAIR` per kg
+/// of the body that is built (`Body::built`, at least 10^-9 of the mass as there) over its upkeep.
 fn life_years(w: &World, b: &Body) -> f64 {
     let mut x = Body::default();
     let b = if b.k.cat.is_empty() {
@@ -89,7 +89,7 @@ fn life_years(w: &World, b: &Body) -> f64 {
         b
     };
     let (m, d) = (b.mass(&w.chem), b.interval() as f64);
-    w.cfg.phys.e_life * b.dec(body::REPAIR) * m * d / body::upkeep(w, b, d, m).max(1e-300) / w.days_per_year() as f64
+    w.cfg.phys.e_life * b.dec(body::REPAIR) * b.built(&w.chem).max(1e-9 * m) * d / body::upkeep(w, b, d, m).max(1e-300) / w.days_per_year() as f64
 }
 
 impl Recorder {
