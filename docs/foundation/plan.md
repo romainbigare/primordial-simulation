@@ -2,8 +2,9 @@
 
 **Written:** 17 October 2026, from a review of the whole project with the owner.
 **Starts from:** branch `claude/sanitise-m0-m3` at `43efbc5` (the M3 clean-up). `main` was still at `154554a`.
-**Status:** a proposal. It starts only when the owner has taken the decisions of Section 3. Until then
-`docs/handover.md` wins wherever the two differ.
+**Status:** approved by the owner on 17 October 2026 (decisions D1 and D3 to D8 taken, Section 3). **D2, the code
+budget, is still open**: do not start work that depends on it (Phases B to L) until it is decided. Where this file and
+`docs/handover.md` differ, the handover wins until it is updated.
 
 This file is for the agents who will do the work, and for the owner. It is written in simple English (handover 0,
 "Working with the owner"). When a technical word is needed, it is explained the first time.
@@ -65,18 +66,20 @@ good. The base they run on holds them back.
 
 ---
 
-## 3. Decisions for the owner before work starts
+## 3. The owner's decisions
 
-| # | Decision | Suggestion |
+Decided on 17 October 2026, except D2.
+
+| # | Decision | Status |
 |---|---|---|
-| D1 | The M3 check point choice (handover 13.1). Write it in the handover. | "A foundation phase, then M4", with this plan |
-| D2 | The `core` code budget (handover 14.3: 8,000 lines through M7) | Raise it to about 20,000 lines. The shared solvers and the one split/join remove repeated code, but the new layers add more. |
-| D3 | The cell shape for the planet and for zoom | **Squares on a cube-shaped ball** (see 5.5): they nest exactly, so zoom keeps exact books, and today's square laws carry over. In the chat review hexagons were suggested; hexagons have 6 equal neighbours but do not nest exactly. |
-| D4 | Speed settings (when a zone opens, when a node sleeps, when a patch splits, how many nodes a cell keeps) | A new table "speed settings" in `docs/numbers.md`, outside the tuned budget. Each must pass an equivalence test (6.4): changing it 2× must not change the key numbers beyond their noise. |
-| D5 | Old snapshots | Keep the current rule: no backwards compatibility, snapshots carry a format version (`tape/src/snapshot.rs`) |
-| D6 | Body physics during this plan | Frozen: bug fixes only |
-| D7 | How the work merges | Phase by phase into `main`, after the owner reads the phase report. No long-lived branch. |
-| D8 | The safeguard that merges unlike nodes in a full cell (`nodes::crowd`) | Remove it once nodes are cheap (F3). If a cap is still needed for speed, it becomes a speed setting (D4). |
+| D1 | The M3 check point choice (handover 13.1) | **Decided:** a foundation phase (this plan), then M4. Written in handover 13.1. |
+| D2 | The `core` code budget (handover 14.3: 8,000 lines through M7) | **Open.** Today `core` is 9,962 lines: 7,236 of code, 2,142 of comments, 584 blank (on `43efbc5`). The owner wants no growth by patches and small rules. The choice is between counting only code lines, and a plan in which the general base replaces the special code instead of sitting on top of it. Do not start Phases B to L before it is decided. |
+| D3 | The cell shape for the planet and for zoom | **Decided:** squares on a cube-shaped ball (see 5.5). They nest exactly, so zoom keeps exact books, and today's square laws carry over. |
+| D4 | Speed settings (when a zone opens, when a node sleeps, when a patch splits, how many nodes a cell keeps) | **Decided:** a new table "speed settings" in `docs/numbers.md`, outside the tuned budget. Each must pass an equivalence test (6.4): changing it 2× must not change the key numbers beyond their noise. |
+| D5 | Old snapshots | **Decided:** no backwards compatibility; snapshots carry a format version (`tape/src/snapshot.rs`). |
+| D6 | Body physics during this plan | **Decided:** frozen, bug fixes only. Moving existing body physics onto the new base (same physics, new code) is part of the plan, not new physics. |
+| D7 | How the work merges | **Decided:** phase by phase into `main`, after the owner reads the phase report. No long-lived branch. |
+| D8 | The safeguard that merges unlike nodes in a full cell (`nodes::crowd`) | **Decided:** removed once nodes are cheap (F3). If a cap is still needed for speed, it becomes a speed setting (D4). |
 
 ---
 
@@ -137,7 +140,7 @@ speed benchmark (`tape/tests/golden.rs`, `speed`), a clear error for bad time st
             └──────────────────────────────────────────┘
 ```
 
-### 5.2 The contract between layers (must, once D1 is taken)
+### 5.2 The contract between layers (must)
 
 | Layer | May read | May write | Must not |
 |---|---|---|---|
@@ -360,7 +363,7 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | A2 | The reference runs (6.2) | `docs/reports/foundation-a/` | — | Saved, with pictures |
 | A3 | The key-number test (6.3) | `tape/tests/ranges.rs` | — | It passes on today's code and runs in CI |
 | A4 | Check two possible bugs: (a) plant members die "taken" in years 3 to 5 of a normal run, before any animal exists (light-eaters may take from each other); (b) the rain picture shows stripes on the 4 × 4 air grid | — | — | Each is explained or fixed (a fix is its own branch) |
-| A5 | The owner approves Section 5 (the architecture) and the decisions of Section 3 | `docs/handover.md` 13.1 and 14.3 updated | — | Written in the handover |
+| A5 | The owner's decisions of Section 3 written in the handover (D1 done on 17 October 2026; D2 when it is decided) | `docs/handover.md` 13.1 and 14.3 | — | Written in the handover |
 
 ### Phase B: the base layers (about 45 days)
 

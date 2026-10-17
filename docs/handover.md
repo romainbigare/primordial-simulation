@@ -14,7 +14,7 @@ The other documents:
 - `docs/tape.md`: what a run records.
 - `docs/history.md`: what changed in M0 to M3, what was tried and not kept, and where old files are in git.
 - `docs/reports/`: the watch reports (Section 12.4).
-- `docs/foundation/plan.md`: the proposed foundation work before M4. A proposal: it starts only after the owner's decisions in its Section 3; until then this document wins.
+- `docs/foundation/plan.md`: the foundation work before M4 (the owner's choice at the M3 check point, 13.1). Its decisions are in its Section 3; the code budget (D2) is still open. Where it and this document differ, this document wins until it is updated.
 
 ---
 
@@ -912,6 +912,9 @@ Then the owner decides one of:
 3. **Stop and polish** Part 1 as a smaller, finished thing: a living island with climate, life, trails and shelters that can be watched and poked in god mode. This is already a good result.
 
 Do not drift into Part 2 without this decision.
+
+**The owner's decision (17 October 2026):** first a foundation phase, then M4. The work, its decisions and its
+checks are in `docs/foundation/plan.md`.
 
 **Interest score (for M7), suggested ingredients:**
 - number of different repeated structures
