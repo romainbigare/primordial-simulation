@@ -195,7 +195,7 @@ impl Body {
     /// `lacking` when the mass `m` is known.
     pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
         // (A safe minimum is a share of the body, not of the whole mass: a body is not killed by holding fuel.)
-        let (lay, size) = (Layout::of(chem), self.size(chem));
-        self.empty_at(m) || (0..chem.ns()).any(|k| !self.burns(chem, k) && self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
+        let (lay, size, t) = (Layout::of(chem), self.size(chem), self.temp(chem));
+        self.empty_at(m) || (0..chem.ns()).any(|k| !self.burns_at(chem, k, t) && self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
     }
 }

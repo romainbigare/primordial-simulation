@@ -2,7 +2,6 @@
 
 use super::{Body, Layout};
 use crate::chem::{Chemistry, Phase};
-use crate::units::T_SURF;
 
 impl Body {
     /// How fast the body's chemistry runs at its temperature `t` against `Physics::t_cat`, where the costs are anchored:
@@ -75,14 +74,10 @@ impl Body {
         }
         e
     }
-    /// Does it burn substance `k` (an input, not a gas at `T_SURF`, of one of `Consts::burn`)? A store it burns is fuel: a
-    /// body short of fuel dies when it cannot pay its upkeep (`SPENT`), not when the store is below its safe minimum,
-    /// which is then only the floor that growth and giving keep. False before `prepare`.
-    pub fn burns(&self, chem: &Chemistry, k: usize) -> bool {
-        self.burns_at(chem, k, T_SURF)
-    }
-    /// `burns` with the phase of `k` taken at `t`.
-    pub(crate) fn burns_at(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
+    /// Does it burn substance `k` at its temperature `t`: is `k` an input, not a gas at `t`, of one of `Consts::burn`? A
+    /// store it burns is fuel: a body short of fuel dies when it cannot pay its upkeep (`SPENT`), not when the store is
+    /// below its safe minimum, which is then only the floor that growth and giving keep. False before `prepare`.
+    pub fn burns_at(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
         chem.phase(k, t) != Phase::Gas && self.k.burn.iter().any(|&(r, _)| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 }

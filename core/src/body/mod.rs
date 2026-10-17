@@ -117,7 +117,7 @@ pub struct Body {
     /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
     /// has none: its members are of all ages (`live`).
     pub wear: f64,
-    /// Numbers that follow from the genes (`prepare`; empty until its first update, and others read them: `burns`, `pace`)
+    /// Numbers that follow from the genes (`prepare`; empty until its first update, and others read them: `burns_at`, `pace`)
     pub k: Consts,
 }
 

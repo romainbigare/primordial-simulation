@@ -24,7 +24,7 @@ const CAT_OFF: f32 = -1.0;
 const GENE_OFF: f32 = -0.1;
 /// What a founder keeps, kg per kg of its body (`Body::level`): the liquid (also its share of the body,
 /// `Body::size`), the energy-rich solid (or what it is placed with and `KEEP_MARGIN` more, if more), every other store;
-/// and the minimums, the floor growth and giving keep (`Body::burns`): about three updates of upkeep of the solid.
+/// and the minimums, the floor growth and giving keep (`Body::burns_at`): about three updates of upkeep of the solid.
 pub(super) const KEEP_LIQUID: f32 = 0.75;
 const KEEP_SOLID: f32 = 0.9;
 const KEEP_MARGIN: f64 = 1.1;

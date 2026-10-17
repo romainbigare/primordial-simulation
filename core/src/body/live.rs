@@ -200,8 +200,8 @@ fn starve(w: &mut World, b: &mut Body, dead: &mut Vec<f64>) -> bool {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
-    let size = b.size(chem);
-    let short = |&k: &usize| !b.burns(chem, k) && x(k) < b.gene(lay.min + k) * size;
+    let (size, t) = (b.size(chem), b.temp(chem));
+    let short = |&k: &usize| !b.burns_at(chem, k, t) && x(k) < b.gene(lay.min + k) * size;
     let live = (0..chem.ns()).filter(short).map(|k| x(k) / (b.gene(lay.min + k) * size).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);
     dead.clear();
@@ -213,15 +213,15 @@ fn starve(w: &mut World, b: &mut Body, dead: &mut Vec<f64>) -> bool {
 /// it burns, its key liquids, the minerals (`Chemistry::minerals`) and the solids it builds (`Chemistry::materials`)
 /// past the level it keeps (`Body::level`), and all of anything else. Digestion and its own burning make more of them
 /// than it builds with (its burning makes its key liquid): an eater that kept them would grow without end and, its room
-/// full, stop taking matter. Gases leave by breath.
+/// full, stop taking matter. Gases (at its temperature) leave by breath.
 fn shed(w: &mut World, b: &mut Body) {
-    let (chem, mass) = (&w.chem, b.mass(&w.chem));
+    let (chem, mass, t) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem));
     let minerals = chem.minerals();
     let over: Vec<f64> = (0..chem.ns())
         .map(|k| {
             let kept = b.wet >> k & 1 == 1 || minerals.iter().any(|m| m.0 == k) || chem.is_material(k);
             let over = b.store[k] - if kept { b.level(chem, k, mass) } else { 0.0 };
-            let stays = over <= 0.0 || chem.gas_at_surface(k) || chem.matter() == Some(k) || b.burns(chem, k);
+            let stays = over <= 0.0 || chem.phase(k, t) == Phase::Gas || chem.matter() == Some(k) || b.burns_at(chem, k, t);
             if stays { 0.0 } else { over }
         })
         .collect();
