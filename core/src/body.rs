@@ -10,6 +10,7 @@ use crate::brain::{ln, Shape, Thought, FIXED, OVERBS, SIG, VERBS};
 use crate::change::Reactor;
 use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
+use crate::math::{mean_decay, one_minus_exp};
 use crate::rng::{Purpose, Rng};
 use crate::units::{DAY, MAX_SUBSTANCES, P_REF, R_GAS, SIGMA, T_SURF};
 use crate::{bond, choose, World};
@@ -1110,7 +1111,7 @@ pub fn survey(w: &mut World) {
 /// The share of what falls on a cell that a layer of capture area `x` per ground area intercepts, per unit of `x`:
 /// (1 - exp(-x)) / x.
 fn intercept(x: f64) -> f64 {
-    if x > 1e-9 { -(-x).exp_m1() / x } else { 1.0 - 0.5 * x }
+    if x > 1e-9 { one_minus_exp(x) / x } else { 1.0 - 0.5 * x }
 }
 
 /// Light passes through the bodies of a cell from the tallest member down: a member's height is what
@@ -1689,8 +1690,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         let (own, room) = (heat - lit + took, crate::ground::heat_above_floor(e_ground[i], cap!()));
         let paid = (own + (g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room)).max(0.0);
         let (ct, x) = (b.heat_cap(chem) + c_out, g * dt / (b.heat_cap(chem) + c_out));
-        let bx = if x < 1e-9 { 1.0 } else { -(-x).exp_m1() / x };
-        let e1 = -(-x).exp_m1() * ct * tg + (-x).exp() * b.e + bx * heat;
+        let bx = mean_decay(x);
+        let e1 = one_minus_exp(x) * ct * tg + (-x).exp() * b.e + bx * heat;
         let need = ((e1 - ct * b.gene(COOL_T)) / bx / chem.subs[k].latent_gas()).max(0.0);
         let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
         let r = if in_ground > 0.0 && liq(k) { rate * chem.subs[k].solubility * ground[k * n + i] / in_ground } else { 0.0 };
@@ -1728,7 +1729,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         // (Rate r per day over `days`, the loss e a day: what it takes is (gap at the start) f + e days (1 - f / (r days)),
         // f = 1 - exp(-r days); all the gap and the loss when r days is large.)
         let r = rate * chem.subs[k].solubility;
-        let f = -(-r * days).exp_m1();
+        let f = one_minus_exp(r * days);
         let uptake = if r * days > 1e-9 { (room - lost[k]) * f + lost[k] * (1.0 - f / (r * days)) } else { 0.0 };
         let d = ((uptake + fall) * x).min(room).min(0.5 * ground[k * n + i]).max(0.0);
         // The ground pays the heat that goes with the liquid and its fusion enthalpy; if it
@@ -1747,7 +1748,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
     // leaves, at the rate it soaks liquids (without the wetness of the surface: soil holds
     // moisture the surface does not show), through the mass that works, and no more than half of
     // what there is (the bodies of a cell share it).
-    let soak = -(-b.k.liq * days).exp_m1() * wk;
+    let soak = one_minus_exp(b.k.liq * days) * wk;
     for &(k, u) in &b.k.upt {
         if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| ground[j * n + i]) != Phase::Liquid || ground[k * n + i] <= 0.0 {
             continue;
@@ -1963,8 +1964,7 @@ fn spend(w: &mut World, b: &mut Body, cost: f64, days: f64, dt: f64, part: bool)
 /// The share of a heat released over `dt` s that a body of `mass` kg at `t` keeps: the mean over that time of a pulse that
 /// decays with its time constant, (1 - exp(-x)) / x, x = g dt / heat capacity (all of it if the time constant is the longer).
 fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
-    let x = conductance_to_ground(w, b, mass, t) * dt / b.heat_cap(&w.chem).max(1e-9);
-    if x < 1e-9 { 1.0 } else { -(-x).exp_m1() / x }
+    mean_decay(conductance_to_ground(w, b, mass, t) * dt / b.heat_cap(&w.chem).max(1e-9))
 }
 
 /// How far each reaction of `pay` runs (in the order of `Consts::burn`) to release up to `cost`

@@ -12,6 +12,7 @@ pub mod event;
 pub mod flow;
 mod ground;
 pub mod grid;
+mod math;
 pub mod par;
 mod params;
 pub mod rng;

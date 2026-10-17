@@ -13,6 +13,7 @@ pub(crate) mod air;
 pub use air::{column, glow};
 
 use crate::grid::{DIRS, FORWARD};
+use crate::math::one_minus_exp;
 use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::World;
 use serde::{Deserialize, Serialize};
@@ -567,7 +568,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         // its heat (below, from the loose ground over its field capacity, at `seep` through its pores).
         let mut hs = 0.0;
         if qmax > 0.0 && w.deep.len() == w.chem.ns() * n {
-            let f = -(-ph.bed_seep * qmax * dt / (ph.bed_porosity * ph.hill)).exp_m1();
+            let f = one_minus_exp(ph.bed_seep * qmax * dt / (ph.bed_porosity * ph.hill));
             let e = w.e_deep[i] * f;
             (w.e_deep[i], w.e_ground[i]) = (w.e_deep[i] - e, w.e_ground[i] + e);
             for k in 0..w.chem.ns() {
@@ -596,7 +597,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         let (pores, lv0) = (s.pd[i] * area, lvol - hs);
         if qmax > 0.0 && damp {
             let lp = lv0.min(pores);
-            hs += (lp - ph.field * pores).max(0.0).min(-lp * (-ph.seep * qmax * dt / (ph.porosity * ph.hill)).exp_m1());
+            hs += (lp - ph.field * pores).max(0.0).min(lp * one_minus_exp(ph.seep * qmax * dt / (ph.porosity * ph.hill)));
         }
         // Neighbours much less steep than the steepest get nothing.
         for qc in q[..cnt].iter_mut() {

@@ -15,6 +15,7 @@
 
 use crate::World;
 use crate::chem::{Chemistry, Phase, Reaction};
+use crate::math::one_minus_exp;
 use crate::units::P_REF;
 
 const YEAR_S: f64 = 3.156e7;
@@ -167,7 +168,7 @@ pub(crate) fn denature(f: f64, t: f64, td: f64, wk: f64) -> f64 {
 /// 1 - exp(-z), cheap when small.
 #[inline]
 pub(crate) fn frac(z: f64) -> f64 {
-    if z < 1e-3 { z * (1.0 - 0.5 * z) } else { -(-z).exp_m1() }
+    if z < 1e-3 { z * (1.0 - 0.5 * z) } else { one_minus_exp(z) }
 }
 
 /// The share of its scarcest input a reaction uses where it would use `z` at its starting rate, its rate per unit going
@@ -175,7 +176,7 @@ pub(crate) fn frac(z: f64) -> f64 {
 /// `frac`, the rate held over the step, so a salt far past its balance fell out to its last mol, exp(-250), not to 4.5%).
 #[inline]
 fn gone(z: f64, p: f64) -> f64 {
-    if p <= 0.0 || z < 1e-3 { frac(z) } else { -(-(p * z).ln_1p() / p).exp_m1() }
+    if p <= 0.0 || z < 1e-3 { frac(z) } else { one_minus_exp((p * z).ln_1p() / p) }
 }
 
 impl Reactor {

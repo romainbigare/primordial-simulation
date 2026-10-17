@@ -2,6 +2,7 @@
 //! and gas between air nodes.
 
 use super::{range, settle, wet, Scratch, NONE};
+use crate::math::one_minus_exp;
 use crate::units::{DAY, R_GAS, SIGMA};
 use crate::World;
 use std::f64::consts::{LN_2, PI, TAU};
@@ -108,7 +109,7 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
         }
         let o = s.air_of[i] as usize;
         s.lay[i] = column(v[2], v[0], (top - s.head[i]).max(100.0), R_GAS * s.ta[o] * s.nt[o] / (g * s.mass[o]));
-        s.seen[i] = [v[0], v[1], -(-v[2]).exp_m1(), s.seen[i][3], v[3]];
+        s.seen[i] = [v[0], v[1], one_minus_exp(v[2]), s.seen[i][3], v[3]];
     }
     s.ta0.copy_from_slice(&s.ta);
 }
@@ -130,7 +131,7 @@ pub(crate) const LAYERS: usize = 4;
 /// `glow`). More gas lifts the layers that reach space into colder air, so less leaves and the
 /// ground warms, with no ceiling (one slab at the mean temperature has one: 2^(1/4) times the bare ground's).
 pub fn column(x: f64, gam: f64, l: f64, h: f64) -> [[f64; LAYERS]; 2] {
-    let (f, e, mut out) = (-(-x).exp_m1(), (-l / h).exp(), [[0.0; LAYERS]; 2]);
+    let (f, e, mut out) = (one_minus_exp(x), (-l / h).exp(), [[0.0; LAYERS]; 2]);
     // Drop to the height with a share `above` of the absorber above it.
     let drop = |above: f64| gam * h * (e + (1.0 - e) * above).ln();
     for m in (0..LAYERS).filter(|_| x > 0.0) {
@@ -179,7 +180,7 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         // its share when it updates (`body::live`). Taller members shade smaller ones (`body::shade`).
         let (a, mut cover, mut caught, mut kept, mut dl) = (canopy_now[i] as f64, 0.0, 0.0, 0.0, 0.0);
         if a > 0.0 {
-            cover = -(-a).exp_m1();
+            cover = one_minus_exp(a);
             dl = q * (1.0 - c) * cover * dt / a;
             caught = cover * life.absorb.get(i).map_or(0.0, |&x| x as f64);
             kept = q * (1.0 - c) * caught * life.keep.get(i).map_or(0.0, |&x| x as f64);
@@ -428,7 +429,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             let (col, hk) = (lerp(s, &w.air[k * na..(k + 1) * na], i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
             let b = l * w.chem.henry(k, t, R_GAS * tl / (area * hk));
             let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
-            let m = (b * (a + col) / (1.0 + b) - a) * -(-dt * (1.0 + b) / tau).exp_m1();
+            let m = (b * (a + col) / (1.0 + b) - a) * one_minus_exp(dt * (1.0 + b) / tau);
             let m = if m >= 0.0 {
                 m.min(w.air[k * na + j])
             } else {
