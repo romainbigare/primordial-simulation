@@ -256,3 +256,12 @@ the agent and the owner together. Each round found real faults, and the fixes ar
 above. The old handover kept every result of every round in Section 4; at the end of M3 it was
 397 KB. The clean-up moved the laws to `docs/laws.md`, this history here, and left the handover
 as the plan.
+
+## 6. The foundation (from 17 October 2026)
+
+The work of `docs/foundation/plan.md`, one line per task.
+
+**Phase A: prepare**
+
+- A6: the code-size test `cli/tests/core_size.rs` counts the code lines of `core/src` per folder and fails above
+  9,500 (7,508 at its start); it replaces the `wc -l` command of handover 14.3.

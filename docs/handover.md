@@ -863,7 +863,7 @@ What the tests must cover:
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) takes about 15 seconds. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs`, with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the big-brain test, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4).
+- **The normal suite** (`cargo test --release --workspace`) takes about 15 seconds. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs`, with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the big-brain test, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
 - **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked in the ledger, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
 - **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). Only a bug fix may change a fingerprint: `GOLDEN=print` prints the new values. CI runs it again with the `threads` feature, which must give the same fingerprints.
 - **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes, nodes and the island's erosion. CI runs them (`cargo test --release --workspace -- --ignored`).
@@ -997,11 +997,11 @@ All of these must be true:
 **Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET` (**61** at the end of M3), or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
 
 **Code size at the end of M3:** `core` is 10,372 lines: 7,508 of code, 2,260 of comments, 604 blank. A comment line
-starts with `//` after its spaces; count the code lines with
-`git ls-files core/src | grep '\.rs$' | xargs grep -hvE '^\s*(//|$)' | wc -l`. Comments are not counted, so do not
-delete them to save lines. The
-foundation work keeps `core` at or under 8,000 code lines by replacing special code with general pieces, not by adding
-to it (`docs/foundation/plan.md`, "The main rule" and "The line budget"); a test will count the lines (its task A6).
+starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts the code lines of `core/src`, prints them
+per folder (`cargo test --release -p cli --test core_size -- --nocapture`) and fails above its ceiling: 9,500 to the
+end of the foundation's Phase D, 8,000 from the end of Phase E on. Comments are not counted, so do not delete them to
+save lines. The foundation work keeps `core` at or under 8,000 code lines by replacing special code with general
+pieces, not by adding to it (`docs/foundation/plan.md`, "The main rule" and "The line budget").
 
 If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
 

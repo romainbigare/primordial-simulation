@@ -42,7 +42,7 @@ ask the owner.
    carbon, salt, sugar...). Use numbers and physical words.
 10. `cargo clippy --release --workspace --all-targets` gives no warnings.
 11. **Size.** `core` holds at most 8,000 lines of code, not counting comments and blank lines (`docs/handover.md`
-    14.3). Simplify before you add. Never delete useful comments to save lines: they are not counted.
+    14.3; the test `cli/tests/core_size.rs` counts them). Simplify before you add. Never delete useful comments to save lines: they are not counted.
 12. **Replace, do not patch.** When you build a general piece, delete the special code it replaces in the same change
     (the main rule of `docs/foundation/plan.md`).
 
