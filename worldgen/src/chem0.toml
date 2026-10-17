@@ -368,7 +368,7 @@ rupture = 1
 # 23: a mineral that exists only dissolved in the liquid, its store of the gas of reaction 22: docs/numbers.md, "substance 23".
 [[s]] # 23
 e = [2,2,0,6,0,1,0,0,0]
-m = 162.1
+m = 162.0
 cp = 194
 melt = 271
 boil = 3000
