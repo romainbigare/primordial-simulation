@@ -7,10 +7,10 @@ use pcore::lineage::Lineage;
 use pcore::rng::{Purpose, Rng};
 use pcore::{brain, lineage, World};
 
-/// The root label of the big-brain lineage `seed_clever` places (the row of the clever kind) and of its control, past
-/// the rows of `KINDS`: each is its own kind on the tape.
-pub const CLEVER_ROOT: u32 = 2;
-pub const CONTROL_ROOT: u32 = KINDS.len() as u32;
+/// The root labels of the big-brain lineage `seed_clever` places and of its control, past the rows of `KINDS`: each
+/// is its own kind on the tape.
+pub const CLEVER_ROOT: u32 = KINDS.len() as u32;
+pub const CONTROL_ROOT: u32 = CLEVER_ROOT + 1;
 /// The brain sizes of the big-brain lineage: hidden units, memory numbers, bodies perceived, sight.
 pub const CLEVER_SIZES: [usize; 4] = [48, 12, 6, 3];
 /// The root of the ordinary eaters copied (`KINDS[1]`).

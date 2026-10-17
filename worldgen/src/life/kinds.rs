@@ -83,7 +83,7 @@ const EATER: Kind = Kind {
 };
 
 /// Starting kinds; the row is the root label of the lineages a kind starts (`Lineage::root`, the `root_<k>_*` columns
-/// of the tape). Rows 0 and 1 are the two kinds of `ew run`, rows 3 to 10 with them the roster (`ROSTER`).
+/// of the tape). Rows 0 and 1 are the two kinds of `ew run`, rows 2 to 9 with them the roster (`ROSTER`).
 ///
 /// A row sets only what the laws read: the genes (the mass a member copies at, strength, interval, the exchange
 /// genes, mutation, learning, brain sizes, dispersal, the temperature its catalysts hold to, repair), the catalysts
@@ -102,12 +102,9 @@ const EATER: Kind = Kind {
 /// brain must find what to take within the few decisions its store lasts, so the kinds that live long between
 /// decisions are placed in hundreds, and the two big slow eater kinds start with 60% of their mass as the energy-rich
 /// solid, not 30%.
-pub const KINDS: [Kind; 11] = [
+pub const KINDS: [Kind; 10] = [
     LIGHT,
     EATER,
-    // Kept so the rows after it keep their numbers (root labels and random streams); `seed_clever` labels its big
-    // brains with this row (`CLEVER_ROOT`).
-    Kind { name: "clever eaters (48 hidden, 12 memory, 6 seen, sight 3, learning on)", year: 0, scalars: with(EATER.scalars, &[(LEARN, -1.5), (HIDDEN, 48.0), (MEMORY, 12.0), (SEEN, 6.0), (SIGHT, 3.0)]), per: 1, ..EATER },
     // Light-eaters, small and fast, children spread wide; big and slow, less capture area per kg, children stay.
     Kind { name: "small fast light-eaters", scalars: with(LIGHT.scalars, &[(LEAF, 0.716), (COPY_MASS, -1.155), (INTERVAL, 1.0), (DISPERSE, 0.3), (REPAIR, -1.2)]), cover: 0.05, chance: 0.6, ..LIGHT },
     Kind { name: "big slow light-eaters", scalars: with(LIGHT.scalars, &[(LEAF, -0.184), (COPY_MASS, 1.445), (INTERVAL, 1.78), (DISPERSE, 0.05), (REPAIR, -0.5)]), cover: 0.3, chance: 0.4, ..LIGHT },
@@ -125,7 +122,7 @@ pub const KINDS: [Kind; 11] = [
 /// The roster of `ew run --roster`: ten kinds with rungs from the first day (rows of `KINDS`, each placed at its
 /// `year`): light-eaters of three sizes, eaters of remains of two, eaters of light-eaters of three and eaters of
 /// eaters of two.
-pub const ROSTER: [usize; 10] = [3, 0, 4, 5, 6, 7, 1, 8, 9, 10];
+pub const ROSTER: [usize; 10] = [2, 0, 3, 4, 5, 6, 1, 7, 8, 9];
 
 /// Whether a kind is a light-eater (its light catalyst at or above `body::LIGHT_EATER`).
 pub(super) fn light(kind: &Kind) -> bool {
