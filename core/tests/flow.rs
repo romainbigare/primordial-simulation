@@ -240,7 +240,8 @@ fn liquid_runs_on_its_own_period_between_turns_of_the_wind() {
 
 /// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the
 /// thickness it fills x the width, in the time. With `seep` at 0 the neighbour gets none; the flow goes with `seep`,
-/// with the liquid table's slope and with the thickness; matter and energy are kept.
+/// with the liquid table's slope and with the thickness; pores under their field capacity (`field`, 0.6) give none;
+/// matter and energy are kept.
 #[test]
 fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     // One liquid step with the liquid of cell `i` filling the share `share` of its pores and `j` dry: what `j` gained,
@@ -262,20 +263,23 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let ti = bi + share * depth;
         (liquid_m3(&w, j), ti - bj, ti - bi.max(bj))
     };
-    let (none, ..) = gained(0.0, 0.5);
-    let (some, dh, b) = gained(1e-6, 0.5);
+    let (none, ..) = gained(0.0, 0.8);
+    let (some, dh, b) = gained(1e-6, 0.8);
     let want = 1e-6 * b * dh * LIQUID_STEP;
     println!("slope {dh:.2} m over one cell, thickness {b:.3} m: Darcy {want:.3} m³, gained {:.3} m³", some - none);
     assert!(dh > 0.0 && b > 0.0, "the table of the wet cell is higher: {dh} {b}");
     assert!(((some - none) / want - 1.0).abs() < 0.05, "gained {} m³, Darcy says {want}", some - none);
     // Ten times the conductivity, ten times the flow.
-    let (more, ..) = gained(1e-5, 0.5);
+    let (more, ..) = gained(1e-5, 0.8);
     assert!(((more - none) / (some - none) / 10.0 - 1.0).abs() < 0.05, "x10 gave x{}", (more - none) / (some - none));
     // More liquid, a thicker flow: the thickness that carries it, and the slope, are bigger.
-    let (full, dh2, b2) = gained(1e-6, 0.9);
+    let (full, dh2, b2) = gained(1e-6, 0.95);
     let want2 = 1e-6 * b2 * dh2 * LIQUID_STEP;
     assert!(b2 > b && dh2 > dh);
     assert!(((full - none) / want2 - 1.0).abs() < 0.05, "gained {} m³, Darcy says {want2}", full - none);
+    // Under field capacity the ground holds its pore liquid against gravity.
+    let (held, ..) = gained(1e-6, 0.5);
+    assert_eq!(held, none, "under field capacity the pores gave {} m³", held - none);
 }
 
 /// Darcy's law across a 2 km cell moves under 0.02% of its pores a year (`seep`, a metre of ground, a slope of 1 in
@@ -426,10 +430,9 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         assert!((downstream + w.ground[MINERAL * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + w.ground[MINERAL * n + top]);
         (1.0 - w.ground[MINERAL * n + top] / 1e6, 1.0 - w.ground[LIQUID * n + top] / liquid0)
     };
-    // Half the pores' worth: nothing runs off over the ground; what moves is Darcy's flow, a little (from the highest
-    // cell of the map, far above its neighbours), and the mineral goes with the liquid in the same share.
+    // Half the pores' worth, under their field capacity: the ground holds all of it against gravity, and the mineral.
     let (m_in, l_in) = run(0.5, 8);
-    assert!(m_in < 0.1 && l_in < 0.1 && (m_in / l_in - 1.0).abs() < 0.05, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
+    assert!(m_in.abs() < 1e-12 && l_in.abs() < 1e-12, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
     // Twice: the half over the pores runs off, and the mineral with it, in the same share.
     let (m_out, l_out) = run(2.0, 8);
     println!("pores half full: {:.2}% of the mineral and {:.2}% of the liquid moved; twice full: {:.1}% of the mineral and {:.1}% of the liquid left the cell in 8 steps", 100.0 * m_in, 100.0 * l_in, 100.0 * m_out, 100.0 * l_out);

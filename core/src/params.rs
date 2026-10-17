@@ -236,7 +236,7 @@ pub struct Physics {
     pub porosity: f64,
     /// Hydraulic conductivity of the loose ground (Darcy's law), m/s
     pub seep: f64,
-    /// Share of its pores the loose ground holds against gravity, its field capacity (`flow::drain`)
+    /// Share of its pores the loose ground holds against gravity, its field capacity (`flow::drain`, `flow::liquid`)
     pub field: f64,
     /// Depth of the store under the loose ground (the weathered zone of the bed), m
     pub bed_depth: f64,

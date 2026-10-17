@@ -229,6 +229,12 @@ impl Scratch {
     pub fn temps(&self) -> (&[f64], &[f64]) {
         (&self.tg, &self.ta)
     }
+    /// Temperature of ground node `i` at the last flow step, K, and the substance on its melting
+    /// plateau with its molten share (none before the first step).
+    pub(crate) fn plateau(&self, i: usize) -> Option<(f64, Option<(usize, f64)>)> {
+        let t = *self.tg.get(i)?;
+        Some((t, (self.pk[i] != NONE).then(|| (self.pk[i], self.phi[i]))))
+    }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
         FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, head: &self.head, ta: &self.ta, zair: &self.zair }
@@ -260,11 +266,17 @@ impl Scratch {
     }
 }
 
-/// A refresh judges what may melt or evaporate until the next one at the warmest ground node
-/// now plus this, K.
+/// What may melt or evaporate until the next refresh is judged at the warmest ground node now plus
+/// this, K.
 const T_MARGIN: f64 = 20.0;
 /// A loose substance whose saturation pressure there is over this can evaporate, Pa.
-pub(super) const P_UP: f64 = 1.0;
+const P_UP: f64 = 1.0;
+
+/// May loose substance `k` evaporate before the next refresh, the warmest ground node being at
+/// `tmax` K now (`refresh` and `air::exchange` judge it alike)?
+pub(super) fn may_evaporate(w: &World, k: usize, tmax: f64) -> bool {
+    w.chem.p_sat(k, tmax + T_MARGIN) > P_UP
+}
 /// Least bed volume a mean over the bed is taken over, m³ (a node with no bed).
 const V_MIN: f64 = 1e-9;
 /// Least heat conductivity of a substance, W/(m K) (the soft cover's resistance divides by it).
@@ -275,10 +287,10 @@ const COND_MIN: f64 = 1e-3;
 pub(super) fn refresh(w: &World, s: &mut Scratch) {
     let (n, na, ns) = (w.grid.n(), w.grid.na(), w.chem.ns());
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
-    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) } + T_MARGIN;
-    let up = |k: usize| w.chem.p_sat(k, tmax) > P_UP;
+    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) };
+    let up = |k: usize| may_evaporate(w, k, tmax);
     s.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
-    s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax && !up(k)).collect();
+    s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax + T_MARGIN && !up(k)).collect();
     s.vary = s.loose.iter().copied().filter(|k| !s.fixed.contains(k)).collect();
     s.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
     s.order.clear();

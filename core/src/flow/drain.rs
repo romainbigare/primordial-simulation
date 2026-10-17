@@ -33,7 +33,7 @@ pub(super) fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
             let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.counts, s.cap[i], m, sp.cp, m * (sp.cp * tcur + sp.lf));
             (w.deep[k * n + i], w.e_deep[i]) = (w.deep[k * n + i] + m, w.e_deep[i] + e + m * sp.mm * fall);
             w.potential -= m * sp.mm * fall;
-            s.put(&mut w.ground, k, i, -m, true);
+            s.put(&mut w.ground, k, i, -m);
         }
     }
     stores(w, s, dt, tmin);
@@ -81,7 +81,7 @@ fn stores(w: &mut World, s: &mut Scratch, dt: f64, tmin: f64) {
             let m = deep0[k * n + i] * f;
             w.deep[k * n + j] += m * into;
             if into < 1.0 {
-                s.put(&mut w.ground, k, j, m * (1.0 - into), true);
+                s.put(&mut w.ground, k, j, m * (1.0 - into));
             }
             mass += m * s.sp[k].mm;
         }

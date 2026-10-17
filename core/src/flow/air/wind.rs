@@ -1,6 +1,7 @@
 //! Wind: gas and heat between neighbouring air nodes, solved implicitly along lines of nodes.
 
 use super::super::Scratch;
+use super::air_temp;
 use crate::grid::Grid;
 use crate::units::R_GAS;
 use crate::{Config, World};
@@ -198,7 +199,9 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
             for t in 0..ng {
                 let (k, sp) = (s.gas[t], s.sp[s.gas[t]]);
                 for p in 0..len - 1 {
-                    let (a, b, f) = (node(line, p), node(line, p + 1), row[flux + t * len + p]);
+                    let (a, b) = (node(line, p), node(line, p + 1));
+                    // (A node gives no more than it holds: the solve keeps every amount at 0 or more but for rounding.)
+                    let f = row[flux + t * len + p].clamp(-air[k * na + b], air[k * na + a]);
                     air[k * na + a] -= f;
                     air[k * na + b] += f;
                     (s.nt_new[a], s.nt_new[b]) = (s.nt_new[a] - f, s.nt_new[b] + f);
@@ -218,15 +221,8 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
     }
     s.lanes = rows;
     *potential += lift;
-    for &k in &s.gas {
-        for x in &mut air[k * na..(k + 1) * na] {
-            if *x < 0.0 {
-                *x = 0.0;
-            }
-        }
-    }
     for (j, &e) in e_air.iter().enumerate().take(na) {
-        s.ta[j] = e / s.capa[j];
+        s.ta[j] = air_temp(e, s.capa[j]);
     }
 }
 
@@ -235,7 +231,7 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
 fn warmth(s: &mut Scratch, e_air: &[f64], aw: usize, ah: usize) {
     let na = aw * ah;
     for (j, &e) in e_air.iter().enumerate().take(na) {
-        s.ta[j] = e / s.capa[j];
+        s.ta[j] = air_temp(e, s.capa[j]);
         s.node_tmp[j] = s.nt[j] * R_GAS * s.ta[j] / s.vol[j];
         s.warmth[j] = s.ta[j] + s.gam[j] * s.zair[j];
     }

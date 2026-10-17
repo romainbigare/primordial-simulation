@@ -88,6 +88,8 @@ builds these layers; `flow::ground_state` and `World::thaw` find the temperature
 - **Pore water.** The liquid in the pores flows by **Darcy's law**: flow = `seep` × slope of the
   liquid table × the thickness of ground it fills × the width of the edge. It goes to the
   neighbour with the lower table, and never more than half way to a level table (`flow::table`).
+  Only what the pores hold over their field capacity (`field`) flows; the rest is held against
+  gravity.
 - **Channels inside a cell.** Real land drains to small channels a few hundred metres apart.
   So the loose ground above its field capacity (`field` of its pores) and the deep store also
   drain by Darcy's law down the slope of the cell, over a hillslope of `hill` metres, into the

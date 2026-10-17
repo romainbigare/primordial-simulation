@@ -19,7 +19,7 @@ mod drain;
 mod land;
 mod liquid;
 mod scratch;
-pub(crate) use air::Sky;
+pub(crate) use air::{air_temp, Sky};
 pub use air::{column, glow};
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;

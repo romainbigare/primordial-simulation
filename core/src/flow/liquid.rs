@@ -2,7 +2,7 @@
 //! store, pore flow by Darcy's law, and the work moving liquid does on its bed.
 
 use super::drain::store_table;
-use super::land::{darcy, solid, stand, t_now, table, wet, HALF_WAY};
+use super::land::{darcy, lift, solid, stand, t_now, table, wet, HALF_WAY};
 use super::{bare_share, follow, range, year_weight, Scratch};
 use crate::grid::DIRS;
 use crate::math::one_minus_exp;
@@ -85,10 +85,13 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
         }
         let lvol = mobile(w, s, i, &liq, tmin, &mut wa);
         let (pores, lv0) = (s.pd[i] * area, lvol - hs);
-        // (The loose ground's share of the runoff `hs`: what its pores hold over their field capacity, at `seep`.)
+        // What the pores hold over their field capacity drains (m³): to the channels inside the cell, at `seep`, into
+        // the runoff `hs`, and through the pores to the neighbours (`pore_flow`).
+        let lp = lv0.min(pores);
+        let mut free = if damp { (lp - ph.field * pores).max(0.0) } else { 0.0 };
         if out.qmax > 0.0 && damp {
-            let lp = lv0.min(pores);
-            hs += (lp - ph.field * pores).max(0.0).min(lp * one_minus_exp(ph.seep * out.qmax * dt / (ph.porosity * ph.hill)));
+            let hill = free.min(lp * one_minus_exp(ph.seep * out.qmax * dt / (ph.porosity * ph.hill)));
+            (hs, free) = (hs + hill, free - hill);
         }
         // Neighbours much less steep than the steepest get nothing.
         for qc in out.q[..out.cnt].iter_mut() {
@@ -104,7 +107,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             runoff(&mut out, lv0 - pores, hs, area);
         }
         if lvol > 0.0 && damp {
-            pore_flow(w, s, i, &mut out, dt);
+            pore_flow(w, s, i, &mut out, dt, free);
         }
         let (power, sent) = if lvol > 0.0 && out.cnt > 0 { send(w, s, i, &out, (&liq, &wa), lvol, tcur) } else { (0.0, 0.0) };
         w.e_ground[i] += power;
@@ -157,7 +160,7 @@ fn spring(w: &mut World, s: &mut Scratch, i: usize, qmax: f64, dt: f64, tmin: f6
             let (m, sp) = (w.deep[k * n + i] * f, s.sp[k]);
             if m > 0.0 {
                 w.deep[k * n + i] -= m;
-                s.put(&mut w.ground, k, i, m, true);
+                s.put(&mut w.ground, k, i, m);
                 (w.e_ground[i], w.potential) = (w.e_ground[i] - m * sp.mm * rise, w.potential + m * sp.mm * rise);
                 hs += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
             }
@@ -191,10 +194,13 @@ fn runoff(o: &mut Outlets, over: f64, hs: f64, area: f64) {
 }
 
 /// Pore liquid of node `i` flows by Darcy's law: through the ground the table fills, at `seep`
-/// times the slope of its head (toward a lower table, no more than half way to a level one).
-fn pore_flow(w: &World, s: &Scratch, i: usize, o: &mut Outlets, dt: f64) {
+/// times the slope of its head (toward a lower table, no more than half way to a level one), all
+/// of it no more than the pores hold over their field capacity, `free` m³ (the loose ground holds
+/// the rest against gravity, as it does against drainage).
+fn pore_flow(w: &World, s: &Scratch, i: usize, o: &mut Outlets, dt: f64, free: f64) {
     let (area, zi, por) = (s.area, s.z[i], w.cfg.phys.porosity);
     let ti = table(s, i, por);
+    let (mut flows, mut cnt, mut sum) = ([(0, 0.0, 0.0); 8], 0, 0.0);
     for (d, &j) in s.nbr[i].iter().enumerate() {
         if j == u32::MAX {
             continue;
@@ -207,9 +213,16 @@ fn pore_flow(w: &World, s: &Scratch, i: usize, o: &mut Outlets, dt: f64) {
         }
         let (si, sj) = (area * if s.head[i] - zi >= s.pd[i] { 1.0 } else { por }, area * if s.head[j] - s.z[j] >= s.pd[j] { 1.0 } else { por });
         let v = darcy(w.cfg.phys.seep * b, &w.grid, DIRS[d], dh, dt).min(HALF_WAY * dh / (1.0 / si + 1.0 / sj));
-        if v <= 0.0 {
-            continue;
+        if v > 0.0 {
+            (flows[cnt], cnt, sum) = ((j, v, dh), cnt + 1, sum + v);
         }
+    }
+    if free <= 0.0 {
+        return;
+    }
+    let scale = if sum > free { free / sum } else { 1.0 };
+    for &(j, v, dh) in &flows[..cnt] {
+        let v = v * scale;
         let c = (0..o.cnt).find(|&c| o.nb[c].0 == j).unwrap_or_else(|| {
             (o.nb[o.cnt], o.q[o.cnt], o.fall[o.cnt]) = ((j, 0.0), 0.0, 0.0);
             o.cnt += 1;
@@ -231,12 +244,12 @@ fn send(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, (liq, wa): (&[usi
     for (&a, &k) in wa.iter().zip(liq).filter(|p| *p.0 > 0.0) {
         let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
         let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.counts, s.cap[i], m, p.cp, m * (p.cp * tcur + p.lf));
-        s.put(&mut w.ground, k, i, -m, true);
+        s.put(&mut w.ground, k, i, -m);
         sent += m;
         for ((&(j, _), &dh), &q) in o.nb[..o.cnt].iter().zip(&o.fall).zip(&o.q).filter(|p| *p.1 > 0.0) {
             let (m, e) = (m * q * inv, e * q * inv);
             w.e_ground[j] += e;
-            s.put(&mut w.ground, k, j, m, true);
+            s.put(&mut w.ground, k, j, m);
             power += m * p.mm * g * dh;
         }
     }
@@ -269,7 +282,7 @@ fn drop_load(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], f: f64) {
     for (si, &k) in sol.iter().enumerate() {
         let m = s.sed[i * ns + si] * f;
         s.sed[i * ns + si] -= m;
-        s.put(&mut w.ground, k, i, m, false);
+        s.put(&mut w.ground, k, i, m);
     }
     w.e_ground[i] += s.sed_e[i] * f;
     s.sed_e[i] -= s.sed_e[i] * f;
@@ -285,7 +298,7 @@ fn pick_up(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], room: f64, t
         if f > 0.0 {
             let m = solid(w, s, k, i) * f;
             let (m, e) = w.take_paid(i, m, s.sp[k].cp, m * s.sp[k].cp * tcur);
-            s.put(&mut w.ground, k, i, -m, false);
+            s.put(&mut w.ground, k, i, -m);
             s.sed[i * ns + si] += m;
             s.sed_e[i] += e;
         }
@@ -293,7 +306,9 @@ fn pick_up(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], room: f64, t
 }
 
 /// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each
-/// substance by its share of the bed's volume, no more than half of it.
+/// substance by its share of the bed's volume, no more than half of it. What breaks off was in
+/// the bed's skin, whose heat is the node's: it keeps it, and joins the loose ground with its heat
+/// capacity (`Scratch::put`); the bed's surface falls by its volume.
 fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
     let n = w.grid.n();
     for bi in 0..s.bedk.len() {
@@ -302,11 +317,12 @@ fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
             let m = (v / s.sp[k].v[0]).min(MOST_TAKEN * b);
+            let dz = m * s.sp[k].v[0] / s.area;
             w.bed[k * n + i] -= m;
-            w.ground[k * n + i] += m;
             s.bed[i].vol -= m * s.sp[k].v[0];
-            s.cap[i] += m * s.sp[k].cp;
             s.add_loose(k, false);
+            s.put(&mut w.ground, k, i, m);
+            lift(s, i, [-dz, -dz]);
         }
     }
 }
@@ -324,7 +340,7 @@ fn carry(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, sol: &[usize], h
             }
             mass += m * s.sp[k].mm;
             if s.done[j] {
-                s.put(&mut w.ground, k, j, m, false);
+                s.put(&mut w.ground, k, j, m);
             } else {
                 s.sed[j * ns + si] += m;
             }

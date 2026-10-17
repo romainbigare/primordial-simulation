@@ -2,9 +2,9 @@
 //! gases dissolving in the ground's liquid.
 
 use super::super::land::{melted, settle, wet};
-use super::super::scratch::P_UP;
+use super::super::scratch::may_evaporate;
 use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};
-use super::lerp;
+use super::{air_temp, lerp};
 use crate::math::one_minus_exp;
 use crate::units::{P_REF, R_GAS};
 use crate::World;
@@ -100,7 +100,7 @@ fn active(w: &World, s: &Scratch, henry: &[(usize, usize)], (dt, turn, since): (
     (0..s.gas.len())
         .filter_map(|gi| {
             let k = s.gas[gi];
-            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > P_UP && !henry.iter().any(|h| h.1 == k);
+            let up = s.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
             let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
             ((up || s.cond[gi]) && (turn || !trace)).then(|| Active { gi, k, up, sat: Sat::new(w, k, lo, hi), c_evap: w.cfg.evap * s.area * if trace { since } else { dt } / R_GAS })
         })
@@ -184,7 +184,7 @@ fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> Vec<bool> {
                 continue;
             }
             let sp = s.sp[k];
-            let tair = w.e_air[j] / s.capa[j];
+            let tair = air_temp(w.e_air[j], s.capa[j]);
             settle(s, k, i, m);
             ground_to_air(w, s, k, (i, j), -m);
             // Condensing frees the vaporisation enthalpy into the air; the liquid keeps its fusion.
@@ -216,10 +216,11 @@ fn clouds(w: &mut World, s: &mut Scratch, dt: f64) {
 }
 
 /// Move `m` mol of gas `k` from ground node `i` to air node `j` (negative `m`: from the air to the
-/// ground) with its lift (`Sky::cross`), its heat capacity and mass. The caller moves the heat
-/// and the surface.
+/// ground) with its lift (`Sky::cross`), its heat capacity, the fusion enthalpy it holds in the
+/// node (`Scratch::fusion`) and its mass. The caller moves the heat and the surface.
 fn ground_to_air(w: &mut World, s: &mut Scratch, k: usize, (i, j): (usize, usize), m: f64) {
     let (n, p, lift) = (w.grid.n(), s.sp[k], s.view().lift(i, w.cfg.gravity));
+    s.latent[i].held -= s.fusion(k, i, m);
     w.ground[k * n + i] -= m;
     w.sky().cross(k, j, m, lift);
     (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * p.cp, s.capa[j] + m * p.cp, s.nt[j] + m, s.mass[j] + m * p.mm);
@@ -260,7 +261,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             if m == 0.0 {
                 continue;
             }
-            let heat = m * sp.cp * if m > 0.0 { w.e_air[j] / s.capa[j] } else { t };
+            let heat = m * sp.cp * if m > 0.0 { air_temp(w.e_air[j], s.capa[j]) } else { t };
             w.e_air[j] -= heat;
             if m > 0.0 {
                 w.e_ground[i] += heat + m * (sp.lf + sp.lv);

@@ -3,7 +3,7 @@
 
 use super::scratch::{Latent, Scratch, Sp};
 use crate::grid::Grid;
-use crate::units::MAX_SUBSTANCES;
+use crate::units::{MAX_SUBSTANCES, T_FLOOR};
 use crate::World;
 
 /// No substance on a melting plateau (`Scratch::pk`).
@@ -62,17 +62,23 @@ pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
 
 impl Scratch {
     /// Put `m` mol of `k` into ground node `i` (negative `m`: take), with its heat capacity, the
-    /// fusion enthalpy it holds there when `latent` (unless `k` is on its plateau there), and the
-    /// rise of the surface. The caller moves the heat.
+    /// fusion enthalpy it holds there (`fusion`), and the rise of the surface. The caller moves the heat.
     #[inline]
-    pub(super) fn put(&mut self, ground: &mut [f64], k: usize, i: usize, m: f64, latent: bool) {
+    pub(super) fn put(&mut self, ground: &mut [f64], k: usize, i: usize, m: f64) {
+        if m == 0.0 {
+            return;
+        }
         let (n, p) = (self.cap.len(), self.sp[k]);
         ground[k * n + i] += m;
         self.cap[i] += m * p.cp;
-        if latent {
-            self.latent[i].held += if self.pk[i] != k { m * p.lf } else { 0.0 };
-        }
+        self.latent[i].held += self.fusion(k, i, m);
         settle(self, k, i, m);
+    }
+    /// Fusion enthalpy `m` mol of `k` hold in ground node `i`, J: theirs where `k` is molten there,
+    /// none where it is solid or on its plateau (whose molten share `phi` holds its own).
+    #[inline]
+    pub(super) fn fusion(&self, k: usize, i: usize, m: f64) -> f64 {
+        if self.pk[i] != k && melted(self, k, i) { m * self.sp[k].lf } else { 0.0 }
     }
 }
 
@@ -87,7 +93,7 @@ pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
 /// mixes in at its own temperature.
 #[inline]
 pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
-    s.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(0.0)
+    s.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR)
 }
 
 /// Heat capacity, temperature, surface, head and reflectance of every ground node. Between full

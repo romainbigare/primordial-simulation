@@ -23,6 +23,15 @@ const COLUMN_MIN: f64 = 100.0;
 /// The fall of a saturation pressure per K is taken from this far below to this far above, K.
 const HALF_K: f64 = 0.5;
 
+/// Least heat capacity an air node's temperature divides by, J/K (a node emptied of gas reads 0 K).
+const CAPA_MIN: f64 = 1.0;
+
+/// Temperature of an air node of energy `e`, J, and heat capacity `capa`, J/K.
+#[inline]
+pub(crate) fn air_temp(e: f64, capa: f64) -> f64 {
+    e / capa.max(CAPA_MIN)
+}
+
 /// The air seen by ground cell `i`: a node field interpolated from the four nearest nodes.
 #[inline]
 pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
@@ -42,7 +51,7 @@ fn scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
 pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
     if !full {
         for j in 0..w.grid.na() {
-            s.ta[j] = w.e_air[j] / s.capa[j];
+            s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
         }
         return;
     }
@@ -74,8 +83,8 @@ fn nodes(w: &World, s: &mut Scratch) {
         s.za[j] /= s.cells[j];
         let (a, l) = (s.area * s.cells[j], (top - s.za[j]).max(COLUMN_MIN));
         s.vol[j] = a * l;
-        s.ta[j] = w.e_air[j] / s.capa[j];
-        s.gam[j] = g * s.mass[j] / s.capa[j];
+        s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
+        s.gam[j] = g * s.mass[j] / s.capa[j].max(CAPA_MIN);
         let h = scale_height(s, j, g);
         s.zair[j] = s.za[j] + h - l / (l / h).exp_m1();
     }
@@ -106,7 +115,7 @@ fn heights(w: &World, s: &mut Scratch) {
         }
     }
     for j in 0..na {
-        s.gam[j] = g * s.mass[j] / (s.capa[j] + s.node_tmp[j]);
+        s.gam[j] = g * s.mass[j] / (s.capa[j] + s.node_tmp[j]).max(CAPA_MIN);
         s.node_tmp[j] = 0.0;
     }
     // (The vapour pressure falls by a factor exp(lv/R (1/(t-½) - 1/(t+½))) per K.)

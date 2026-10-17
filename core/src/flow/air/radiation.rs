@@ -3,6 +3,7 @@
 
 use super::super::land::NONE;
 use super::super::Scratch;
+use super::air_temp;
 use crate::life::Life;
 use crate::math::one_minus_exp;
 use crate::units::SIGMA;
@@ -99,7 +100,7 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     s.rad = rows;
     for (j, e) in e_air.iter_mut().enumerate().take(na) {
         *e += s.node_tmp[j];
-        s.ta[j] = *e / s.capa[j];
+        s.ta[j] = air_temp(*e, s.capa[j]);
     }
     ledger.sun_in += sun;
     ledger.space_out += out;
