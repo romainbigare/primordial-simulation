@@ -56,7 +56,7 @@ impl Reactor {
                 let eps = |rc: &Self, r: usize| {
                     let rx = &chem.reactions[r];
                     let lim = scarce(&rx.inputs, |k| rc.av[k]).0;
-                    if lim > 0.0 { lim * rx.k * (-rx.ea / t).exp() * rc.pace(rx, lim, &tot) } else { 0.0 }
+                    if lim > 0.0 { lim * rx.arrhenius(t) * rc.pace(rx, lim, &tot) } else { 0.0 }
                 };
                 made * eps(rc, f) - took * eps(rc, b)
             };

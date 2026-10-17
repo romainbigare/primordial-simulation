@@ -5,7 +5,7 @@ use crate::body::{die, live, LiveTmp, LACK};
 use crate::chem::Phase;
 use crate::change::Reactor;
 use crate::life::Life;
-use crate::math::one_minus_exp;
+use crate::math::mean_decay;
 use crate::units::DAY;
 use crate::{bond, choose, World};
 
@@ -130,9 +130,9 @@ fn traffic(w: &mut World) {
 }
 
 /// The share of what falls on a cell that a layer of capture area `x` per ground area intercepts, per unit of `x`:
-/// (1 - exp(-x)) / x.
+/// (1 - exp(-x)) / x (`mean_decay`).
 pub(crate) fn intercept(x: f64) -> f64 {
-    if x > 1e-9 { one_minus_exp(x) / x } else { 1.0 - 0.5 * x }
+    mean_decay(x)
 }
 
 /// Light passes through the bodies of a cell from the tallest member down (`Body::height`), and

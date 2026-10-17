@@ -20,7 +20,11 @@ impl Body {
     }
     /// Its light-capture area, all members', m²: `LEAF` per kg-equivalent of its body (`equiv` of `built`). Needs `prepare`.
     pub(crate) fn leaf_area(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
-        self.equiv(p, self.built(chem)) * self.k.leaf
+        self.leaf_area_at(chem, p, self.k.leaf)
+    }
+    /// `leaf_area` at `leaf` m² per kg-equivalent (the `LEAF` gene's value, `dec`).
+    pub(super) fn leaf_area_at(&self, chem: &Chemistry, p: &crate::Physics, leaf: f64) -> f64 {
+        self.equiv(p, self.built(chem)) * leaf
     }
     /// Its skin at a whole mass of `mass` kg, all members', m²: each member a cube of its volume at `rho_body`.
     pub(crate) fn skin_area(&self, p: &crate::Physics, mass: f64) -> f64 {

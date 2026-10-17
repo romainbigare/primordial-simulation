@@ -2,7 +2,7 @@
 //! a node splitting in two (`split`), and members drawn from a node as individuals (`one`, `open`). Members, stores and
 //! heat are kept exactly in every join and split.
 
-use crate::body::{self, alike, alike_log, class, light_eater, most, noise, range, size_step, spread_at, spread_steps, steps, wall_room, Body, Layout, REACH, WITHIN};
+use crate::body::{self, alike, alike_log, class, light_eater, most, noise, range, size_step, spread_at, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::row_step;
 use crate::lineage::own;
 use crate::rng::{Purpose, Rng};
@@ -55,7 +55,7 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread in steps and its size class (`merge_closest`).
+/// A body's genes in steps (`body::steps`), its spread (`body::spreads`) and its size class (`merge_closest`).
 type Likeness = (Vec<f32>, Vec<f32>, (f64, bool));
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
@@ -64,11 +64,11 @@ type Likeness = (Vec<f32>, Vec<f32>, (f64, bool));
 /// not, then the squared distance of their genes in steps.
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
-    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spread_steps(lay, &w.life.bodies[s]), class(&w.chem, &w.life.bodies[s]));
+    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), class(&w.chem, &w.life.bodies[s]));
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
     let reach = lim as f64 * size_step(lay) as f64;
     let dist = |p: &Likeness, q: &Likeness| {
-        let gap = |g: usize| (p.0[g] - q.0[g]).abs() > lim + WITHIN * (p.1[g] + q.1[g]).sqrt();
+        let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
         (p.2 .1 != q.2 .1 || (p.2 .0 - q.2 .0).abs() > reach || (0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
     };
     let mut d = vec![(true, f32::INFINITY); m * m];

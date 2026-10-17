@@ -29,7 +29,7 @@ pub(crate) fn clear(w: &mut World, i: usize, d: usize, j: usize, m2: f64) {
 /// `j` over `Physics::rho_pass` for the share of the passage not yet cleared.
 pub(crate) fn resist(w: &World, i: usize, d: usize, j: usize) -> f64 {
     let open = w.pass.get(edge(i, d, j)).map_or(0.0, |&a| (a as f64 / (w.cfg.phys.lane * w.grid.dist(DIRS[d]))).min(1.0));
-    1.0 + (1.0 - open) * w.life.sum[j][1] / w.grid.area() / w.cfg.phys.rho_pass
+    1.0 + (1.0 - open) * thickness(w, w.life.sum[j][1])
 }
 
 /// How much cheaper the edge from `i` along `FORWARD[f]` is than uncleared ground, for the mean cover of its two cells

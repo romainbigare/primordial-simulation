@@ -83,6 +83,12 @@ impl Reaction {
         Reaction { inputs, outputs, k: 0.0, ea: 0.0, light: false, ord: Vec::new() }
     }
 
+    /// Its rate constant at `t` K (Arrhenius): k exp(-Ea / T), per second.
+    #[inline]
+    pub fn arrhenius(&self, t: f64) -> f64 {
+        self.k * (-self.ea / t).exp()
+    }
+
     /// The power of the share of input `q` in the rate law (`ord`, else its count).
     #[inline]
     pub fn order(&self, q: usize) -> u16 {

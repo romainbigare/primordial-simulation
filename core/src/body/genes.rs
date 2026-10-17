@@ -72,6 +72,9 @@ pub const BRAIN_SIZES: [usize; 4] = [HIDDEN, MEMORY, SEEN, SIGHT];
 /// Shortest and longest interval between updates, days (the shortest is a speed safeguard).
 pub(crate) const MIN_INTERVAL: f64 = 5.0;
 pub(crate) const MAX_INTERVAL: f64 = 360.0;
+/// log10 of `MIN_INTERVAL` (log10 5 = 1 - log10 2) and of `MAX_INTERVAL` (log10 360): the range of the `INTERVAL` gene.
+const LOG_MIN_INTERVAL: f32 = 1.0 - LOG10_2;
+const LOG_MAX_INTERVAL: f32 = 2.556_302_5;
 
 /// log10 of one half: the largest child, a share of its parent's copy mass (`CHILD`).
 pub(crate) const LOG_HALF: f32 = -LOG10_2;
@@ -110,8 +113,7 @@ const fn scalar(g: usize) -> (f32, f32, f32) {
         WET => (0.05, -3.0, 0.5),
         ALLOC => (0.05, 0.0, 1.0),
         COPY_MASS => (0.2, -3.0, 6.0),
-        // (log10 of `MIN_INTERVAL` and `MAX_INTERVAL`, rounded.)
-        INTERVAL => (0.2, 0.7, 2.556),
+        INTERVAL => (0.2, LOG_MIN_INTERVAL, LOG_MAX_INTERVAL),
         MUT => (0.2, -3.0, 0.0),
         LEARN => (0.2, -4.0, 0.0),
         FORGET => (0.2, -4.0, -1.7),
@@ -204,9 +206,9 @@ pub(crate) fn spread_at(spread: &[f32], g: usize) -> f32 {
     spread.get(g).map_or(0.0, |&v| v.max(0.0))
 }
 
-/// A body's spread per gene in steps of `like`, squared.
-pub(crate) fn spread_steps(lay: &Layout, b: &Body) -> Vec<f32> {
-    (0..b.genes.len()).map(|g| spread_at(&b.spread, g) / like(lay, g).powi(2)).collect()
+/// A body's spread per gene (`spread_at`).
+pub(crate) fn spreads(b: &Body) -> Vec<f32> {
+    (0..b.genes.len()).map(|g| spread_at(&b.spread, g)).collect()
 }
 
 /// How far apart genes `a` and `b` are: the sum of their squared gaps in steps (`step`), if in every gene `g` the gap
@@ -233,14 +235,20 @@ pub fn alike(lay: &Layout, limit: f32, a: &[f32], b: &[f32]) -> bool {
 /// Standard deviations of the pooled spread, beyond `Physics::alike` steps, within which children join a node, or the
 /// nodes of a full cell merge (`within`, `nodes::crowd`). Kept small so kinds stay apart: a node only saves time, so it
 /// must not mix genes that individuals of two kinds would never mix.
-pub(crate) const WITHIN: f32 = 0.5;
+const WITHIN: f32 = 0.5;
+
+/// The most steps gene `g` of two bodies may be apart for one to belong to the other (`within`): `limit`, plus `WITHIN`
+/// standard deviations of their spreads together (`var`, the sum of their variances).
+pub(crate) fn within_steps(lay: &Layout, limit: f32, var: f32, g: usize) -> f32 {
+    limit + WITHIN * var.sqrt() / like(lay, g)
+}
 
 /// Children `c` (one, or a group drawn from a node with the spread left among them) belong to node `o`: in each gene
 /// their mean is within `limit` steps of its mean plus `WITHIN` standard deviations of both spreads together. Each
 /// gene alone, so kinds that differ in a few genes stay apart; the spreads count, as a few children drawn from a node
 /// differ from its mean by its spread over their number.
 pub(crate) fn within(lay: &Layout, limit: f32, o: &Body, c: &Body) -> bool {
-    let reach = |g: usize| limit + WITHIN * (spread_at(&o.spread, g) + spread_at(&c.spread, g)).sqrt() / like(lay, g);
+    let reach = |g: usize| within_steps(lay, limit, spread_at(&o.spread, g) + spread_at(&c.spread, g), g);
     distance(lay, &o.genes, &c.genes, reach).is_some()
 }
 

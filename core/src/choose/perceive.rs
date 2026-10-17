@@ -5,6 +5,7 @@ use super::{Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
 use crate::body::{Body, Lived, SHARE_SENSE};
 use crate::brain::{ln, REST, SIG};
 use crate::grid::DIRS;
+use crate::lanes::thickness;
 use crate::rng::Rng;
 use crate::{bond, World};
 
@@ -120,13 +121,13 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
 /// light-capture area and strength, the resistance they give to moving through; the height and temperature differences
 /// are added per move, in places 0 and 6).
 pub fn cells(w: &mut World) {
-    let (life, area) = (&mut w.life, w.grid.area() as f32);
-    life.cellf.clear();
-    life.cellf.extend(life.sum.iter().zip(&life.env).map(|(c, e)| {
+    let life = &w.life;
+    let cellf = life.sum.iter().zip(&life.env).map(|(c, e)| {
+        let resist = 1.0 + thickness(w, c[1]) as f32;
         let c = c.map(|v| v as f32);
         let n = c[0].max(1.0);
         let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / LN_LEAF } else { 0.0 };
-        let resist = 1.0 + c[1] / area / w.cfg.phys.rho_pass as f32;
         [0.0, ln(1.0 + e[1] as f32), ln(1.0 + c[0]) / LN_MEMBERS, ln((c[1] / n).max(1.0)) / LN_MASS - 1.0, leaf, c[3] / n, 0.0, ln(resist)]
-    }));
+    });
+    w.life.cellf = cellf.collect();
 }

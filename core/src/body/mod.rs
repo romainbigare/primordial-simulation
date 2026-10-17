@@ -201,7 +201,7 @@ impl Body {
         let open = |rx: &crate::chem::Reaction| -> f64 {
             rx.inputs.iter().enumerate().filter(|(_, x)| chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
         };
-        let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.k * (-rx.ea / p.t_cat).exp() * open(rx)).sum();
+        let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.arrhenius(p.t_cat) * open(rx)).sum();
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
     }
@@ -225,7 +225,7 @@ impl Body {
                 }
             }
         }
-        let leaf = self.equiv(p, self.built(chem)) / self.n() * self.dec(LEAF);
+        let leaf = self.leaf_area_at(chem, p, self.dec(LEAF)) / self.n();
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
     }
     /// Well-being at temperature `t`: the energy its catalysed reactions could release from a member's stores (log, in

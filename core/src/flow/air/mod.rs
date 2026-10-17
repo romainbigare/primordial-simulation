@@ -108,12 +108,11 @@ fn heights(w: &World, s: &mut Scratch) {
         s.node_tmp[j] = 0.0;
     }
     // (The vapour pressure falls by a factor exp(lv/R (1/(t-½) - 1/(t+½))) per K.)
-    // A gas that does not condense is spread like the air: the `split` below with `hk` = `h`.
-    let half = (-LN_2).exp();
+    // A gas that does not condense is spread like the air: the `split` below with `hk` = `h`, one half.
     for (gi, &k) in s.gas.iter().enumerate() {
         for j in 0..na {
             let h = scale_height(s, j, g).min((top - s.za[j]).max(COLUMN_MIN));
-            let (mut hk, mut split) = (h, half);
+            let (mut hk, mut split) = (h, 0.5);
             if s.cond[gi] {
                 let t = s.ta[j] + s.gam[j] * (s.zair[j] - s.za[j]);
                 let fall = s.sp[k].lv / R_GAS * (1.0 / (t - HALF_K).max(1.0) - 1.0 / (t + HALF_K).max(1.0));

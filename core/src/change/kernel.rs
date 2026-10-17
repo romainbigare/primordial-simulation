@@ -196,7 +196,7 @@ impl Reactor {
             let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
             let k = rx.inputs[who].0 as usize;
             if lim > 0.0 && (self.ph[k] == 0 || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
-                best = best.max(rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, &tot));
+                best = best.max(rx.arrhenius(t) * self.pace(rx, lim, &tot));
             }
         }
         best
@@ -308,7 +308,7 @@ impl Reactor {
             }
             let (lim, q) = scarce(&rx.inputs, |k| self.av[k]);
             if lim > 0.0 {
-                self.kap[r] = cr * rx.k * (-rx.ea / t).exp() * self.pace(rx, lim, tot);
+                self.kap[r] = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
                 self.lim[r] = lim;
                 any = true;
                 // (In a liquid or a gas that power is its order less 1, as far as it is not most of its phase.)
