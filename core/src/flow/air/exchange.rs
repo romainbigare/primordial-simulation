@@ -79,12 +79,11 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     }
     let act = active(w, s, &henry, (dt, turn, since));
     // Each pass sees the air as it was before it.
-    let mut lifted = evaporate(w, s, &act);
-    let rained = condense(w, s, &act, &mut lifted);
+    evaporate(w, s, &act);
+    let rained = condense(w, s, &act);
     if turn {
-        lifted += dissolve(w, s, since, &henry, (tmin, tmax));
+        dissolve(w, s, since, &henry, (tmin, tmax));
     }
-    w.ledger.gravity -= lifted;
     for (a, _) in act.iter().zip(&rained).filter(|(_, &r)| r) {
         s.add_loose(a.k, false);
     }
@@ -123,10 +122,10 @@ fn above(s: &Scratch, a: &Active, x: usize, na: usize, i: usize) -> (f64, f64) {
     (lerp(s, &s.snap[x * na..(x + 1) * na], i) * s.per[i], lerp(s, &s.hk[a.gi * na..(a.gi + 1) * na], i))
 }
 
-/// Evaporation from every ground node; returns the energy spent lifting the gas, J.
-fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) -> f64 {
-    let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
-    let (c_cond, mut lifted) = (area / R_GAS, 0.0);
+/// Evaporation from every ground node.
+fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
+    let (n, na, area) = (w.grid.n(), w.grid.na(), s.area);
+    let c_cond = area / R_GAS;
     snap(w, s, act);
     for i in 0..n {
         let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
@@ -159,21 +158,17 @@ fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) -> f64 {
             if m <= 0.0 {
                 continue;
             }
-            let (heat, lift) = (m * sp.cp * t, m * g * sp.mm * (s.zair[j] - s.head[i]));
             settle(s, k, i, -m);
-            to_air(w, s, k, (i, j), m);
-            w.e_air[j] += heat - lift;
-            lifted += lift;
+            w.e_air[j] += m * sp.cp * t;
+            ground_to_air(w, s, k, (i, j), m);
         }
     }
-    lifted
 }
 
 /// Condensation onto every ground node of what the air it sees cannot hold at the temperature of
-/// the air touching it; adds the energy spent lifting (negative: freed by the fall) to `lifted`.
-/// Returns which gases of `act` rained.
-fn condense(w: &mut World, s: &mut Scratch, act: &[Active], lifted: &mut f64) -> Vec<bool> {
-    let (n, na, g, c_cond) = (w.grid.n(), w.grid.na(), w.cfg.gravity, s.area / R_GAS);
+/// the air touching it. Returns which gases of `act` rained.
+fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> Vec<bool> {
+    let (n, na, c_cond) = (w.grid.n(), w.grid.na(), s.area / R_GAS);
     snap(w, s, act);
     let mut rained = vec![false; act.len()];
     for i in 0..n {
@@ -189,13 +184,12 @@ fn condense(w: &mut World, s: &mut Scratch, act: &[Active], lifted: &mut f64) ->
                 continue;
             }
             let sp = s.sp[k];
-            let (tair, lift) = (w.e_air[j] / s.capa[j], m * g * sp.mm * (s.head[i] - s.zair[j]));
+            let tair = w.e_air[j] / s.capa[j];
             settle(s, k, i, m);
-            to_air(w, s, k, (i, j), -m);
+            ground_to_air(w, s, k, (i, j), -m);
             // Condensing frees the vaporisation enthalpy into the air; the liquid keeps its fusion.
-            w.e_ground[i] += m * (sp.cp * tair + sp.lf) - lift;
+            w.e_ground[i] += m * (sp.cp * tair + sp.lf);
             w.e_air[j] += m * (sp.lv - sp.cp * tair);
-            *lifted += lift;
             s.rain[i] += m;
             s.cloud[j] = [s.cloud[j][0] + m, s.cloud[j][1] + m * sp.refl[0]];
             rained[x] = true;
@@ -222,11 +216,12 @@ fn clouds(w: &mut World, s: &mut Scratch, dt: f64) {
 }
 
 /// Move `m` mol of gas `k` from ground node `i` to air node `j` (negative `m`: from the air to the
-/// ground), with its heat capacity and mass. The caller moves the heat and the surface.
-fn to_air(w: &mut World, s: &mut Scratch, k: usize, (i, j): (usize, usize), m: f64) {
-    let (n, na, p) = (w.grid.n(), w.grid.na(), s.sp[k]);
+/// ground) with its lift (`Sky::cross`), its heat capacity and mass. The caller moves the heat
+/// and the surface.
+fn ground_to_air(w: &mut World, s: &mut Scratch, k: usize, (i, j): (usize, usize), m: f64) {
+    let (n, p, lift) = (w.grid.n(), s.sp[k], s.view().lift(i, w.cfg.gravity));
     w.ground[k * n + i] -= m;
-    w.air[k * na + j] += m;
+    w.sky().cross(k, j, m, lift);
     (s.cap[i], s.capa[j], s.nt[j], s.mass[j]) = (s.cap[i] - m * p.cp, s.capa[j] + m * p.cp, s.nt[j] + m, s.mass[j] + m * p.mm);
 }
 
@@ -238,11 +233,9 @@ fn to_air(w: &mut World, s: &mut Scratch, k: usize, (i, j): (usize, usize), m: f
 /// and column. Dissolving frees the vaporisation enthalpy into the node (the heat of solution) and
 /// the gas brings its heat; coming out takes them back. Dissolved gas moves with the liquid
 /// (`liquid`), may feed ground reactions (Law 2), and goes back to the air only here.
-/// Returns the energy spent lifting gas, J.
-fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) -> f64 {
-    let (n, na, area, g) = (w.grid.n(), w.grid.na(), s.area, w.cfg.gravity);
+fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
+    let (n, na, area) = (w.grid.n(), w.grid.na(), s.area);
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
-    let mut lifted = 0.0;
     for i in 0..n {
         let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
         let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.ground[k * n + i] * wet(s, k, i), v + w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
@@ -267,13 +260,12 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             if m == 0.0 {
                 continue;
             }
-            let (heat, lift) = (m * sp.cp * if m > 0.0 { w.e_air[j] / s.capa[j] } else { t }, m * g * sp.mm * (s.head[i] - s.zair[j]));
-            w.e_air[j] -= heat + if m < 0.0 { lift } else { 0.0 };
+            let heat = m * sp.cp * if m > 0.0 { w.e_air[j] / s.capa[j] } else { t };
+            w.e_air[j] -= heat;
             if m > 0.0 {
-                w.e_ground[i] += heat + m * (sp.lf + sp.lv) - lift;
+                w.e_ground[i] += heat + m * (sp.lf + sp.lv);
             }
-            to_air(w, s, k, (i, j), -m);
-            lifted += lift;
+            ground_to_air(w, s, k, (i, j), -m);
         }
     }
     for &(_, k) in henry {
@@ -281,5 +273,4 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             s.add_loose(k, true);
         }
     }
-    lifted
 }

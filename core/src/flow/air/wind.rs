@@ -181,7 +181,7 @@ impl Lines<'_> {
 /// parallel, with `threads`) into a row per line (`Lines`); the rows are applied in the order of
 /// the lines.
 pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
-    let World { cfg, grid, air, e_air, ledger, .. } = w;
+    let World { cfg, grid, air, e_air, potential, .. } = w;
     let (na, aw, ah, ng) = (grid.na(), grid.aw(), grid.ah(), s.gas.len());
     let mut rows = std::mem::take(&mut s.lanes);
     let mut lift = 0.0;
@@ -217,7 +217,7 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
         s.nt.clone_from(&s.nt_new);
     }
     s.lanes = rows;
-    ledger.gravity -= lift;
+    *potential += lift;
     for &k in &s.gas {
         for x in &mut air[k * na..(k + 1) * na] {
             if *x < 0.0 {

@@ -91,13 +91,14 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
         b.store[k as usize] = (b.store[k as usize] - nu as f64 * ext).max(0.0);
     }
     b.e -= dh * ext;
-    let (j, na, t) = (w.grid.air_of(b.cell as usize), w.grid.na(), b.temp(&w.chem));
+    let (j, lift, t) = (w.grid.air_of(b.cell as usize), w.lift(b.cell as usize), b.temp(&w.chem));
     for &(k, nu) in &outs {
         let (k, x) = (k as usize, nu as f64 * ext);
         if w.chem.phase(k, t) == Phase::Gas {
             // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `Substance::latent_gas`.)
             let q = x * w.chem.subs[k].cp * t;
-            (w.air[k * na + j], w.e_air[j], b.e) = (w.air[k * na + j] + x, w.e_air[j] + q, b.e - q - x * w.chem.subs[k].latent_gas());
+            (w.e_air[j], b.e) = (w.e_air[j] + q, b.e - q - x * w.chem.subs[k].latent_gas());
+            w.sky().cross(k, j, x, lift);
         } else {
             b.store[k] += x;
         }

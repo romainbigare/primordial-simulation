@@ -15,8 +15,6 @@ pub struct Ledger {
     pub sun_in: f64,
     /// Radiation lost to space, J
     pub space_out: f64,
-    /// Potential energy turned into heat (negative when matter is lifted), J
-    pub gravity: f64,
     /// Energy added by player edits, J
     pub imposed_energy: f64,
     /// Elements added by player edits, mol
@@ -127,6 +125,9 @@ pub struct World {
     /// thermal energy with the fusion enthalpy of what is molten, J (`flow::drain`; empty until first used)
     pub deep: Vec<f64>,
     pub e_deep: Vec<f64>,
+    /// Potential energy the world's matter has gained since the start, J: what lifting it took from heat (gas into the
+    /// air, `flow::Sky::cross`, and between air nodes) less what falls gave back (rain, liquid and solids downhill)
+    pub potential: f64,
     /// Heat set aside in each cell for what its bodies draw from the ground between their updates, J (below 0: given to the
     /// ground ahead): each survey holds here what each body drew a second at its last update times the time since
     /// (`survey::survey`), so the ground pays it as it goes and a body's update settles only the difference (`body::live`).

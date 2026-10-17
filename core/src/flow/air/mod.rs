@@ -3,11 +3,13 @@
 
 mod exchange;
 mod radiation;
+mod sky;
 mod wind;
 pub(super) use exchange::exchange;
 pub(crate) use radiation::LAYERS;
 pub(super) use radiation::radiation;
 pub use radiation::{column, glow};
+pub(crate) use sky::Sky;
 pub(super) use wind::wind;
 
 use super::Scratch;

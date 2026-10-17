@@ -7,7 +7,8 @@
 //! loose solids and breaking weak bonds; loose solids creep downhill. Air nodes
 //! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
 //! overturning and mixing. Every move takes from one node exactly what it gives to another, with
-//! its heat, and books matter lifted or dropped in the gravity ledger, so elements and energy are kept.
+//! its heat; lifting matter takes heat and a fall gives it back, the difference held as the world's
+//! potential energy (`World::potential`), so elements and energy are kept.
 //!
 //! Files: `scratch` (the law's working memory and its tables), `land` (state, phases and surface of
 //! ground nodes), `liquid`, `drain`, `creep`, and `air` (`state`, `radiation`, `exchange`, `wind`).
@@ -18,6 +19,7 @@ mod drain;
 mod land;
 mod liquid;
 mod scratch;
+pub(crate) use air::Sky;
 pub use air::{column, glow};
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;

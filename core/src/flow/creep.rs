@@ -34,7 +34,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             slide(w, s, (a, b), d, (&sol, &soft), dt, &mut heat);
         }
     }
-    w.ledger.gravity += heat;
+    w.potential -= heat;
     crate::lanes::regrow(w, dt);
 }
 

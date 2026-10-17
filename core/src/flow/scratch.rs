@@ -57,12 +57,24 @@ pub(super) struct Bed {
 
 /// What Law 2 reads of the last flow step (`Scratch::view`).
 pub(crate) struct FlowView<'a> {
-    /// Per ground node: its temperature, K; the heat capacity of the skin of its bed, J/K; its air node
+    /// Per ground node: its temperature, K; the heat capacity of the skin of its bed, J/K; its air node; the head of
+    /// its liquid, m
     pub tg: &'a [f64],
     pub skin: &'a [f64],
     pub air_of: &'a [u32],
-    /// Per air node: its temperature, K
+    pub head: &'a [f64],
+    /// Per air node: its temperature, K; the mean height of its air, m
     pub ta: &'a [f64],
+    pub zair: &'a [f64],
+}
+
+impl FlowView<'_> {
+    /// Energy to lift a kg from the head of ground node `i` to the mean height of its air node, J/kg, under a gravity
+    /// of `g` m/s² (`Sky::cross`).
+    #[inline]
+    pub(crate) fn lift(&self, i: usize, g: f64) -> f64 {
+        g * (self.zair[self.air_of[i] as usize] - self.head[i])
+    }
 }
 
 /// Working memory of the law, rebuilt from the world when missing. It is saved with the world
@@ -219,7 +231,7 @@ impl Scratch {
     }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, ta: &self.ta }
+        FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, head: &self.head, ta: &self.ta, zair: &self.zair }
     }
     /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
     /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that

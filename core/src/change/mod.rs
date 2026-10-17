@@ -28,7 +28,7 @@ pub use kernel::Reactor;
 pub(crate) use kernel::{denature, frac, pace, scarce, LIGHT_YIELD};
 
 use crate::chem::Phase;
-use crate::flow::FlowView;
+use crate::flow::{FlowView, Sky};
 use crate::ground::{draw, share};
 use crate::World;
 use screen::{bit, Plan};
@@ -155,8 +155,9 @@ fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView,
     let paid = share(draw(&mut w.e_ground[i], &mut w.counts, cap, gas.pay), gas.pay);
     // The heat of the gas that stays behind stays with it.
     (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
-    let (ground, amt) = (&mut w.ground, &h.amt);
-    send_gas(&h.pool, &h.pool0, paid, &mut w.air, na, j, |k, kept| ground[k * n + i] = amt[k] + kept);
+    let (ground, amt, lift) = (&mut w.ground, &h.amt, nodes.lift(i, w.cfg.gravity));
+    let mut sky = Sky { chem: &w.chem, air: &mut w.air, e_air: &mut w.e_air, potential: &mut w.potential };
+    send_gas(&h.pool, &h.pool0, paid, &mut sky, (j, lift), |k, kept| ground[k * n + i] = amt[k] + kept);
 }
 
 /// The air nodes' turn: each on its own, so from the amounts before (in parallel with the `threads` feature) into a row

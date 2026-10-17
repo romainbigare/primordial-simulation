@@ -1,6 +1,7 @@
 //! Liquid over and in the loose ground: one ordered sweep by head, the springs of the bed's
 //! store, pore flow by Darcy's law, and the work moving liquid does on its bed.
 
+use super::drain::store_table;
 use super::land::{darcy, solid, stand, t_now, table, wet, HALF_WAY};
 use super::{bare_share, follow, range, year_weight, Scratch};
 use crate::grid::DIRS;
@@ -115,7 +116,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             carry(w, s, i, &out, &sol, &mut heat);
         }
     }
-    w.ledger.gravity += heat;
+    w.potential -= heat;
 }
 
 /// Lower neighbours of node `i` and how far its head may fall for each: to one still to come
@@ -143,19 +144,21 @@ fn lower(s: &Scratch, i: usize, inv: &[f64; 8], still: f64) -> Outlets {
 /// Inside node `i` the liquid drains to its channels, `hill` from the divides, by Darcy's law down
 /// the slope of its surface (`qmax`, to the steepest lower neighbour), and runs off. From the
 /// bed's store a share 1 - exp(-`bed_seep` x slope x time / (`bed_porosity` x `hill`)) comes up
-/// into the node with its heat (a spring); returns the volume of it that runs off, m³.
+/// into the node with its heat (a spring), which pays its rise from the store's table to the node's head; returns
+/// the volume of it that runs off, m³.
 fn spring(w: &mut World, s: &mut Scratch, i: usize, qmax: f64, dt: f64, tmin: f64) -> f64 {
     let (n, ph) = (w.grid.n(), w.cfg.phys);
     let mut hs = 0.0;
     if qmax > 0.0 && w.deep.len() == w.chem.ns() * n {
         let f = one_minus_exp(ph.bed_seep * qmax * dt / (ph.bed_porosity * ph.hill));
-        let e = w.e_deep[i] * f;
+        let (e, rise) = (w.e_deep[i] * f, w.cfg.gravity * (s.head[i] - store_table(w, s, i, tmin)));
         (w.e_deep[i], w.e_ground[i]) = (w.e_deep[i] - e, w.e_ground[i] + e);
         for k in 0..w.chem.ns() {
             let (m, sp) = (w.deep[k * n + i] * f, s.sp[k]);
             if m > 0.0 {
                 w.deep[k * n + i] -= m;
                 s.put(&mut w.ground, k, i, m, true);
+                (w.e_ground[i], w.potential) = (w.e_ground[i] - m * sp.mm * rise, w.potential + m * sp.mm * rise);
                 hs += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
             }
         }

@@ -6,6 +6,7 @@ use super::live::{LiveTmp, Site};
 use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
 use crate::change::{send_gas, GasMove, Reactor};
+use crate::flow::Sky;
 use crate::chem::Phase;
 use crate::ground::{draw, heat_above_floor, share, take_paid};
 use crate::math::{mean_decay, one_minus_exp};
@@ -136,13 +137,13 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 /// The gas its reactions took brings its heat at the air's temperature and gives up its latent heat; gas they put out
 /// takes its latent heat, as far as `GAS_HEAT_SHARE` of the heat pays for it (the rest stays in the body).
 fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
-    let (na, j) = (w.grid.na(), s.j);
+    let (j, lift) = (s.j, w.lift(s.i));
     let gas = GasMove::of(&w.chem, &tmp.pool, &tmp.pool0, w.t_air(j));
     (b.e, w.e_air[j]) = (b.e + gas.q_in, w.e_air[j] - gas.q_in);
     let heat = h.heat + gas.back;
     let paid = share(GAS_HEAT_SHARE * (b.e + heat + h.g * s.dt * s.tg).max(0.0), gas.pay);
     let store = &mut b.store;
-    send_gas(&tmp.pool, &tmp.pool0, paid, &mut w.air, na, j, |k, kept| store[k] += kept);
+    send_gas(&tmp.pool, &tmp.pool0, paid, &mut w.sky(), (j, lift), |k, kept| store[k] += kept);
     (h.heat, h.c_out) = (heat - paid * gas.pay, paid * gas.c_out);
 }
 
@@ -180,8 +181,9 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
 /// surface further, as far as that brings the end of `relax_heat` to the gene, its still air carries the vapour away
 /// (`film`, the Lewis relation) and its liquid stays above its safe minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
-    let World { cfg, chem, grid, ground, e_ground, air, e_air, counts, .. } = w;
-    let (ns, n, na, i, j, tg, dt, days) = (chem.ns(), grid.n(), grid.na(), s.i, s.j, s.tg, s.dt, s.days);
+    let lift = w.lift(s.i);
+    let World { cfg, chem, grid, ground, e_ground, air, e_air, counts, potential, .. } = w;
+    let (ns, n, i, j, tg, dt, days) = (chem.ns(), grid.n(), s.i, s.j, s.tg, s.dt, s.days);
     let (g, t0) = (h.g, h.t0);
     let mut moved = false;
     let cpa: f64 = (0..ns).map(|k| tmp.x[k] * chem.subs[k].cp).sum();
@@ -212,7 +214,8 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         if m > 0.0 {
             moved = true;
             let q = m * chem.subs[k].cp * t0;
-            (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
+            (b.store[k], e_air[j], b.e) = (b.store[k] - m, e_air[j] + q, b.e - q);
+            Sky { chem, air, e_air, potential }.cross(k, j, m, lift);
             h.heat -= m * chem.subs[k].latent_gas();
             lost[k] = (m - pre).max(0.0);
         }
