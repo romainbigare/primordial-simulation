@@ -1,10 +1,10 @@
-//! Chemistry 0 as its numbers say: what body matter is made of and burns for, the minerals, fixing, and the reversible
-//! pair that stores the heat-absorbing gas in the liquid.
+//! Chemistry 0 as its numbers say: what body matter is made of and burns for, the minerals, fixing, the reversible
+//! pair that stores the heat-absorbing gas in the liquid, and what the liquid freezes at.
 
 use pcore::change::reversible;
 use pcore::chem::Phase;
 use pcore::units::T_SURF;
-use worldgen::testkit::{ABSORBER, BURNT_ROCK, DISSOLVED, FIX_GAS, MATTER, MINERAL, OX, RICH, ROCK};
+use worldgen::testkit::{ABSORBER, BURNT_ROCK, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OX, RICH, ROCK};
 
 /// Elements of chemistry 0: the one in the heat-absorbing gas and the energy-rich solid, the fixed gas's, and the rock's.
 const SOLID_ELEMENT: usize = 1;
@@ -88,4 +88,20 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
 fn the_pair_is_found_from_the_chemistry_alone() {
     let (chem, _) = worldgen::chemistry0();
     assert!(reversible(&chem).contains(&(DISSOLVING, SETTLING, ABSORBER as u16, DISSOLVED)), "{:?}", reversible(&chem));
+}
+
+/// The liquid freezes lower by what is dissolved in it (1.86 K for a mol of the mineral in a kg, the measured cryoscopic
+/// constant), not by a gas it holds; where there is none of it, it melts at its own melting point.
+#[test]
+fn the_liquid_freezes_lower_by_what_is_dissolved_in_it() {
+    let (chem, _) = worldgen::chemistry0();
+    let melt = chem.subs[LIQUID].melt;
+    let mut a = vec![0.0; chem.ns()];
+    (a[LIQUID], a[DISSOLVED]) = (1.0 / chem.subs[LIQUID].molar_mass, 1.0);
+    let salty = chem.melt_in(LIQUID, |k| a[k]);
+    assert!((1.7..2.0).contains(&(melt - salty)), "{} K lower", melt - salty);
+    a[ABSORBER] = 10.0;
+    assert_eq!(chem.melt_in(LIQUID, |k| a[k]), salty);
+    a[LIQUID] = 0.0;
+    assert_eq!(chem.melt_in(LIQUID, |k| a[k]), melt);
 }

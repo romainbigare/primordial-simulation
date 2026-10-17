@@ -156,12 +156,13 @@ fn spare(chem: &Chemistry, lay: &Layout, b: &Body, k: usize, size: f64) -> f64 {
 fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let (chem, lay, t) = (&w.chem, Layout::of(&w.chem), b.temp(&w.chem));
     let size = b.size(chem);
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Gas { 0.0 } else { spare(chem, &lay, b, k, size) }).collect();
+    let phase: Vec<Phase> = (0..chem.ns()).map(|k| chem.phase_in(k, t, |j| b.store[j])).collect();
+    let spare: Vec<f64> = (0..chem.ns()).map(|k| if phase[k] == Phase::Gas { 0.0 } else { spare(chem, &lay, b, k, size) }).collect();
     let all = w.chem.mass_of(&spare);
     if all <= 0.0 {
         return;
     }
-    let wet: Vec<bool> = (0..chem.ns()).map(|k| chem.phase_in(k, t, |j| b.store[j]) == Phase::Liquid).collect();
+    let wet: Vec<bool> = phase.iter().map(|&p| p == Phase::Liquid).collect();
     let mut m: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * (w.cfg.phys.take * days * mb / all).min(1.0)).min(MOST_SHARE * s)).collect();
     let lv: f64 = (0..chem.ns()).filter(|&k| wet[k]).map(|k| m[k] * chem.molar_volume(k, Phase::Liquid)).sum();
     let fit = (w.parts.parts[p].room(chem) / lv.max(1e-12)).min(1.0);
@@ -192,7 +193,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
     let (chem, lay, mb, t) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem), b.temp(&w.chem));
     let size = b.size(chem);
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase(k, t) == Phase::Solid { spare(chem, &lay, b, k, size) } else { 0.0 }).collect();
+    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase_in(k, t, |j| b.store[j]) == Phase::Solid { spare(chem, &lay, b, k, size) } else { 0.0 }).collect();
     let all = w.chem.mass_of(&spare);
     let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
     let wall: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * f).min(MOST_SHARE * s)).collect();

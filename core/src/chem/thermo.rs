@@ -74,9 +74,11 @@ impl Chemistry {
     /// Melting point of `k` among the amounts `a(j)` (mol) of one node or body, K: `t_melt` at the share of `k` among
     /// itself and what is dissolved in it, where `k` is the solvent there: a liquid of the world (liquid at `T_SURF`) and
     /// the most of them. Dissolved in it is what melts below its melting point and is liquid there (the minerals that live
-    /// in the liquid) or is a gas that dissolves; a solid there (the energy-rich solid) is not, nor `k` itself. A solute
-    /// keeps its own melting point: the data give a dissolved mineral that of its solution. Bodies and ground nodes (their
-    /// pores, the liquid that stands on them, its ice) freeze by it; `phase_in` reads phases through it.
+    /// in the liquid); a solid there (the energy-rich solid) is not, nor `k` itself, nor a gas: a gas dissolves only to
+    /// Henry's share (a few parts in 100,000 of the air's, a thousandth of a kelvin lower), and what a node or body holds
+    /// of it beyond that is not dissolved. A solute keeps its own melting point: the data give a dissolved mineral that of
+    /// its solution. Bodies and ground nodes (their pores, the liquid that stands on them, its ice) freeze by it;
+    /// `phase_in` reads phases through it. Where `k` is absent it melts at its own melting point.
     pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
         match self.mixes(k) {
             Some(js) => self.melt_with(k, a, js),
@@ -88,7 +90,7 @@ impl Chemistry {
     /// the world; none: `k` is not a liquid of the world.
     pub fn mixes(&self, k: usize) -> Option<impl Iterator<Item = (usize, bool, bool)> + '_> {
         let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < T_SURF && d.boil > T_SURF);
-        let mix = move |j: usize, d: &Substance| (j, d.melt < s.melt && (d.boil > s.melt || d.solubility > 0.0), liquid(d));
+        let mix = move |j: usize, d: &Substance| (j, d.melt < s.melt && d.boil > s.melt, liquid(d));
         liquid(s).then(move || (0..self.ns()).filter(move |&j| j != k).map(move |j| mix(j, &self.subs[j])).filter(|m| m.1 || m.2))
     }
 
@@ -100,7 +102,7 @@ impl Chemistry {
             other += if dissolved { y } else { 0.0 };
             most = if liquid { most.max(y) } else { most };
         }
-        if most > x { self.subs[k].melt } else { self.t_melt(k, x / (x + other).max(LEAST_MOL)) }
+        if most > x || x <= 0.0 { self.subs[k].melt } else { self.t_melt(k, x / (x + other).max(LEAST_MOL)) }
     }
 
     /// Phase of `k` at `t` among the amounts `a(j)` (mol) of one node or body: as `phase`, at its melting point there
