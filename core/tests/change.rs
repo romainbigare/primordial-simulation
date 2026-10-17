@@ -97,6 +97,37 @@ fn hot_node_reacts_in_the_next_step() {
     }
 }
 
+/// Gas a ground reaction exchanges with the air crosses the height from the ground to the air's mean height: in a world
+/// whose only reaction is the burning of the energy-rich solid, a hot node of it burns and takes more gas from the air
+/// than it gives; the world's potential energy changes by the weight the air gained times a height within the air
+/// (kilometres: the air's scale height), the air's heat pays for the difference, and energy is kept with the potential
+/// energy counted.
+#[test]
+fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
+    let (mut chem, init) = worldgen::chemistry0();
+    let at = |k: u16| chem.phase(k as usize, 290.0);
+    let burn = (0..chem.reactions.len())
+        .find(|&r| chem.dh(r) < 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == RICH) && chem.reactions[r].inputs.iter().any(|p| at(p.0) == Phase::Gas))
+        .expect("a burning reaction");
+    chem.reactions = vec![chem.reactions[burn].clone()];
+    let mut w = worldgen::terrain::build(1, 16, 16, chem, &init, pcore::Config::default());
+    let (n, g) = (w.grid.n(), w.cfg.gravity);
+    let i = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
+    for k in 0..w.chem.ns() {
+        (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
+    }
+    w.ground[RICH * n + i] = 1000.0;
+    w.e_ground[i] = w.energy_ground(i, 600.0);
+    let (books, air0, pot0) = (Books::now(&w), w.air.clone(), w.potential);
+    change::step(&mut w, 3.0 * DAY);
+    let na = w.grid.na();
+    let kg: f64 = (0..w.chem.ns()).map(|k| (0..na).map(|j| w.air[k * na + j] - air0[k * na + j]).sum::<f64>() * w.chem.subs[k].molar_mass).sum();
+    let height = (w.potential - pot0) / (g * kg);
+    println!("the air gained {kg:.2} kg across {height:.0} m");
+    assert!(kg.abs() > 1.0 && height > 1e3 && height < w.cfg.air_top_m, "{kg} kg across {height} m");
+    books.assert_kept(&w, 1e-12);
+}
+
 /// A body's catalyst works below the temperature where it loses its shape, and a few K above it the reaction goes
 /// about as fast as bare.
 #[test]

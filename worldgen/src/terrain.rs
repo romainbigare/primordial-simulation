@@ -186,6 +186,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         light_keep: Default::default(),
         deep: Vec::new(),
         e_deep: Vec::new(),
+        potential: 0.0,
         heat_pool: vec![0.0; n],
         heat_keep: Default::default(),
     };

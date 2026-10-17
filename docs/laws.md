@@ -88,6 +88,8 @@ builds these layers; `flow::ground_state` and `World::thaw` find the temperature
 - **Pore water.** The liquid in the pores flows by **Darcy's law**: flow = `seep` × slope of the
   liquid table × the thickness of ground it fills × the width of the edge. It goes to the
   neighbour with the lower table, and never more than half way to a level table (`flow::table`).
+  Only what the pores hold over their field capacity (`field`) flows; the rest is held against
+  gravity.
 - **Channels inside a cell.** Real land drains to small channels a few hundred metres apart.
   So the loose ground above its field capacity (`field` of its pores) and the deep store also
   drain by Darcy's law down the slope of the cell, over a hillslope of `hill` metres, into the
@@ -99,8 +101,9 @@ builds these layers; `flow::ground_state` and `World::thaw` find the temperature
   dissolved in it (salts, dissolved gases), with its heat. A salt is written in the data as a
   liquid that never boils (substances 23 and 24): it goes with the liquid by its share, and
   stays behind when the liquid evaporates. There is no other rule for dissolved solids.
-- **Lost head is heat.** The height a liquid loses becomes heat in the ground, and does work
-  (1.3). Matter lifted or dropped is booked in a gravity ledger, so energy stays exact.
+- **Lost head is heat.** The height a liquid loses becomes heat in the ground (or in the deep
+  store), and does work (1.3). Lifting matter takes heat and a fall gives it back; the world
+  holds the difference as potential energy (`World::potential`), so energy stays exact.
 
 ### 1.3 Erosion and creep
 
@@ -157,6 +160,10 @@ same way (6.4).
 - **Rain.** Where the air a cell sees holds more vapour than it can at its temperature (colder
   on higher ground), the rest rains out. Condensing air makes clouds that cover part of the sky
   (`cloud`).
+- **Lift.** Gas that goes up into the air, from the ground or from bodies, parts, ground
+  reactions and growth, is lifted from the ground's head to the air's mean height: the air's
+  heat pays for it (`air::Sky::cross`, the one way in and out of the air). Gas that comes down
+  (rain, gas taken by reactions or bodies) gives that back to the air's heat.
 - **Gases dissolve** (`air::dissolve`). A gas that cannot condense on the ground dissolves in
   the liquid there toward Henry's share (solubility × partial pressure × the liquid's amount),
   and comes out when the liquid warms, thins or freezes. It crosses the surface through the

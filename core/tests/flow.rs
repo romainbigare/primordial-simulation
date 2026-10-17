@@ -223,9 +223,25 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     assert!(full < 1.05 && full > 0.55, "the ground holds {full} of its pore volume after the excess ran off");
 }
 
+/// Each part of Flow runs on its own period: with the wind every 15 days and liquid every 3, liquid poured on a slope
+/// (four times what the pores hold) runs off at the next 3-day step, between two turns of the wind.
+#[test]
+fn liquid_runs_on_its_own_period_between_turns_of_the_wind() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    (w.cfg.air_days, w.cfg.flow_days) = (15, 3);
+    pcore::flow::step(&mut w, DT);
+    let (i, _) = pair(&w);
+    let pores = w.cfg.phys.porosity * loose(&w, i);
+    pour(&mut w, i, 4.0 * pores);
+    let v0 = liquid_m3(&w, i);
+    pcore::flow::step(&mut w, DT);
+    assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed", liquid_m3(&w, i));
+}
+
 /// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the
 /// thickness it fills x the width, in the time. With `seep` at 0 the neighbour gets none; the flow goes with `seep`,
-/// with the liquid table's slope and with the thickness; matter and energy are kept.
+/// with the liquid table's slope and with the thickness; pores under their field capacity (`field`, 0.6) give none;
+/// matter and energy are kept.
 #[test]
 fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
     // One liquid step with the liquid of cell `i` filling the share `share` of its pores and `j` dry: what `j` gained,
@@ -247,20 +263,23 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let ti = bi + share * depth;
         (liquid_m3(&w, j), ti - bj, ti - bi.max(bj))
     };
-    let (none, ..) = gained(0.0, 0.5);
-    let (some, dh, b) = gained(1e-6, 0.5);
+    let (none, ..) = gained(0.0, 0.8);
+    let (some, dh, b) = gained(1e-6, 0.8);
     let want = 1e-6 * b * dh * LIQUID_STEP;
     println!("slope {dh:.2} m over one cell, thickness {b:.3} m: Darcy {want:.3} m³, gained {:.3} m³", some - none);
     assert!(dh > 0.0 && b > 0.0, "the table of the wet cell is higher: {dh} {b}");
     assert!(((some - none) / want - 1.0).abs() < 0.05, "gained {} m³, Darcy says {want}", some - none);
     // Ten times the conductivity, ten times the flow.
-    let (more, ..) = gained(1e-5, 0.5);
+    let (more, ..) = gained(1e-5, 0.8);
     assert!(((more - none) / (some - none) / 10.0 - 1.0).abs() < 0.05, "x10 gave x{}", (more - none) / (some - none));
     // More liquid, a thicker flow: the thickness that carries it, and the slope, are bigger.
-    let (full, dh2, b2) = gained(1e-6, 0.9);
+    let (full, dh2, b2) = gained(1e-6, 0.95);
     let want2 = 1e-6 * b2 * dh2 * LIQUID_STEP;
     assert!(b2 > b && dh2 > dh);
     assert!(((full - none) / want2 - 1.0).abs() < 0.05, "gained {} m³, Darcy says {want2}", full - none);
+    // Under field capacity the ground holds its pore liquid against gravity.
+    let (held, ..) = gained(1e-6, 0.5);
+    assert_eq!(held, none, "under field capacity the pores gave {} m³", held - none);
 }
 
 /// Darcy's law across a 2 km cell moves under 0.02% of its pores a year (`seep`, a metre of ground, a slope of 1 in
@@ -351,6 +370,27 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// The stores of the bed flow from where they stand before the step, so no direction goes first: in one liquid step
+/// the full store of a cell (among empty ones, with nothing sinking into them) reaches its neighbours and no further.
+#[test]
+fn a_store_reaches_only_its_neighbours_in_a_step() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    w.cfg.phys.seep = 0.0;
+    pcore::flow::step(&mut w, LIQUID_STEP);
+    let (n, gw, p) = (w.grid.n(), w.grid.w, w.cfg.phys);
+    let (x, y) = (gw / 2, w.grid.h / 2);
+    let i = y * gw + x;
+    w.deep.fill(0.0);
+    w.e_deep.fill(0.0);
+    let (mv, sub) = (w.chem.molar_volume(LIQUID, Phase::Liquid), &w.chem.subs[LIQUID]);
+    w.deep[LIQUID * n + i] = p.bed_porosity * p.bed_depth * w.grid.area() / mv;
+    w.e_deep[i] = w.deep[LIQUID * n + i] * (sub.cp * 290.0 + sub.lf);
+    pcore::flow::step(&mut w, LIQUID_STEP);
+    let near = |j: usize| (j % gw).abs_diff(x) <= 1 && (j / gw).abs_diff(y) <= 1;
+    let reached: Vec<usize> = (0..n).filter(|&j| j != i && w.deep[LIQUID * n + j] > 0.0).collect();
+    assert!(!reached.is_empty() && reached.iter().all(|&j| near(j)), "reached {reached:?} from {i}");
+}
+
 /// A solid that dissolves in the liquid (the fixed gas's mineral) is in the liquid of the pores, and moves with the
 /// liquid that runs off the cell: the share of the mineral that leaves is the share of the liquid that leaves, down
 /// the slope, and it is deposited nowhere as sediment. Liquid that fits in the pores does not run off and the mineral
@@ -390,10 +430,9 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         assert!((downstream + w.ground[MINERAL * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + w.ground[MINERAL * n + top]);
         (1.0 - w.ground[MINERAL * n + top] / 1e6, 1.0 - w.ground[LIQUID * n + top] / liquid0)
     };
-    // Half the pores' worth: nothing runs off over the ground; what moves is Darcy's flow, a little (from the highest
-    // cell of the map, far above its neighbours), and the mineral goes with the liquid in the same share.
+    // Half the pores' worth, under their field capacity: the ground holds all of it against gravity, and the mineral.
     let (m_in, l_in) = run(0.5, 8);
-    assert!(m_in < 0.1 && l_in < 0.1 && (m_in / l_in - 1.0).abs() < 0.05, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
+    assert!(m_in.abs() < 1e-12 && l_in.abs() < 1e-12, "liquid that fits in the pores moved: mineral {m_in}, liquid {l_in}");
     // Twice: the half over the pores runs off, and the mineral with it, in the same share.
     let (m_out, l_out) = run(2.0, 8);
     println!("pores half full: {:.2}% of the mineral and {:.2}% of the liquid moved; twice full: {:.1}% of the mineral and {:.1}% of the liquid left the cell in 8 steps", 100.0 * m_in, 100.0 * l_in, 100.0 * m_out, 100.0 * l_out);

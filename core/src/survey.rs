@@ -16,7 +16,7 @@ const LOOSE_SENSE: f32 = 0.2;
 /// do not hold, `flow::liquid`) and surface height of a ground cell (with whole phases: no plateau share, unlike
 /// `World::surface_z`).
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
-    let t = w.t_ground_last(i).unwrap_or_else(|| w.t_ground(i));
+    let t = w.t_ground_last(i);
     let (mut z, mut d, mut loose) = (0.0, 0.0, 0.0);
     for k in 0..w.chem.ns() {
         z += w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);

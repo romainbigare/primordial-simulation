@@ -51,7 +51,7 @@ pub fn step(w: &mut World) {
 fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
     let (ns, n, na) = (w.chem.ns(), w.grid.n(), w.grid.na());
     let i = w.parts.parts[s].cell as usize;
-    let (j, share) = (w.grid.air_of(i), w.grid.air_share());
+    let (j, share, lift) = (w.grid.air_of(i), w.grid.air_share(), w.lift(i));
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
     for (k, p0) in pool0.iter_mut().enumerate() {
@@ -71,7 +71,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     for k in 0..ns {
         let d = pool[k] - pool0[k];
         let sent = if d > 0.0 { d * paid } else { d };
-        w.air[k * na + j] += sent;
+        w.sky().cross(k, j, sent, lift);
         w.ground[k * n + i] += d - sent;
     }
 }
@@ -81,7 +81,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
 fn settle(w: &mut World, s: usize) {
     let (ns, n) = (w.chem.ns(), w.grid.n());
     let i = w.parts.parts[s].cell as usize;
-    let tg = w.life.env[i][0];
+    let tg = w.t_ground_last(i);
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
     let t = p.e / p.heat_cap(chem).max(1e-9);

@@ -38,7 +38,7 @@ pub fn fields(w: &World) -> Fields {
     let (n, ns, area) = (w.grid.n(), w.chem.ns(), w.grid.area());
     let mut f = Fields { z: vec![0.0; n], depth: vec![0.0; n], ice: vec![0.0; n], loose: vec![0.0; n], t: vec![0.0; n], rgb: vec![[0.0; 3]; n] };
     for i in 0..n {
-        let (t, pl) = w.thaw(i);
+        let (t, pl) = w.thaw_last(i);
         // Kinds of cover in order of priority: frozen, liquid, loose, bonded. Each: volume, volume * colour.
         let mut acc = [[0.0f64; 4]; 4];
         let mut add = |kind: usize, vol: f64, refl: [f32; 3]| {

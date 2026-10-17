@@ -10,6 +10,8 @@ pub struct Totals {
     pub thermal: f64,
     /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air)
     pub chemical: f64,
+    /// J, potential energy gained since the start (`World::potential`)
+    pub potential: f64,
 }
 
 /// A sum that carries the rounding error of each addition (Neumaier): the chemical energy of
@@ -60,7 +62,7 @@ pub fn totals(w: &World) -> Totals {
         chem.add_elems(k, s.get(), &mut elems);
         chemical.add(s.get() * chem.subs[k].hf);
     }
-    Totals { elems, thermal: thermal.get(), chemical: chemical.get() }
+    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.potential }
 }
 
 /// Compare now with a start point. Returns the worst relative drift of elements and of energy.
@@ -73,10 +75,8 @@ pub fn drift(w: &World, start: &Totals, start_ledger: &crate::Ledger) -> (f64, f
         let d = (now.elems[j] - start.elems[j] - imposed).abs() / start.elems[j].abs().max(1.0);
         worst_e = worst_e.max(d);
     }
-    let boundary = (l.sun_in - start_ledger.sun_in) - (l.space_out - start_ledger.space_out)
-        + (l.gravity - start_ledger.gravity)
-        + (l.imposed_energy - start_ledger.imposed_energy);
-    let change = (now.thermal + now.chemical) - (start.thermal + start.chemical);
+    let boundary = (l.sun_in - start_ledger.sun_in) - (l.space_out - start_ledger.space_out) + (l.imposed_energy - start_ledger.imposed_energy);
+    let change = (now.thermal + now.chemical + now.potential) - (start.thermal + start.chemical + start.potential);
     let scale = (l.sun_in - start_ledger.sun_in).abs().max(start.thermal.abs()).max(1.0);
     (worst_e, (change - boundary).abs() / scale)
 }

@@ -3,7 +3,7 @@
 
 use super::scratch::{Latent, Scratch, Sp};
 use crate::grid::Grid;
-use crate::units::MAX_SUBSTANCES;
+use crate::units::{MAX_SUBSTANCES, T_FLOOR};
 use crate::World;
 
 /// No substance on a melting plateau (`Scratch::pk`).
@@ -22,7 +22,7 @@ pub(super) fn molten(s: &Scratch, k: usize, i: usize) -> f64 {
 /// Is substance `k` at or over its melting point in ground node `i` (`World::melt`, as of the last `ground_state`)?
 #[inline]
 pub(super) fn melted(s: &Scratch, k: usize, i: usize) -> bool {
-    (s.latent[i].molten as u64) >> k & 1 == 1
+    s.latent[i].molten >> k & 1 == 1
 }
 
 /// Liquid share of substance `k` in ground node `i`.
@@ -62,17 +62,23 @@ pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
 
 impl Scratch {
     /// Put `m` mol of `k` into ground node `i` (negative `m`: take), with its heat capacity, the
-    /// fusion enthalpy it holds there when `latent` (unless `k` is on its plateau there), and the
-    /// rise of the surface. The caller moves the heat.
+    /// fusion enthalpy it holds there (`fusion`), and the rise of the surface. The caller moves the heat.
     #[inline]
-    pub(super) fn put(&mut self, ground: &mut [f64], k: usize, i: usize, m: f64, latent: bool) {
+    pub(super) fn put(&mut self, ground: &mut [f64], k: usize, i: usize, m: f64) {
+        if m == 0.0 {
+            return;
+        }
         let (n, p) = (self.cap.len(), self.sp[k]);
         ground[k * n + i] += m;
         self.cap[i] += m * p.cp;
-        if latent {
-            self.latent[i].held += if self.pk[i] != k { m * p.lf } else { 0.0 };
-        }
+        self.latent[i].held += self.fusion(k, i, m);
         settle(self, k, i, m);
+    }
+    /// Fusion enthalpy `m` mol of `k` hold in ground node `i`, J: theirs where `k` is molten there,
+    /// none where it is solid or on its plateau (whose molten share `phi` holds its own).
+    #[inline]
+    pub(super) fn fusion(&self, k: usize, i: usize, m: f64) -> f64 {
+        if self.pk[i] != k && melted(self, k, i) { m * self.sp[k].lf } else { 0.0 }
     }
 }
 
@@ -87,7 +93,7 @@ pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
 /// mixes in at its own temperature.
 #[inline]
 pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
-    s.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(0.0)
+    s.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR)
 }
 
 /// Heat capacity, temperature, surface, head and reflectance of every ground node. Between full
@@ -97,10 +103,10 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // matter (with its heat) between liquid steps, liquid wears the bed and bodies dig it, and a stale capacity would read a
     // node far too hot or cold.
     let n = w.grid.n();
-    for (i, bed) in s.bed.iter_mut().enumerate() {
-        bed[0] = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
+    for (i, skin) in s.skin.iter_mut().enumerate() {
+        *skin = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
     }
-    let mut cap: Vec<f64> = s.bed.iter().map(|b| b[0]).collect();
+    let mut cap = s.skin.clone();
     for &k in &s.loose {
         let cp = s.sp[k].cp;
         for (c, &a) in cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
@@ -126,10 +132,9 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
         let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.ground[k * n + i] * s.sp[k].lf)));
         (s.pk[i], s.phi[i]) = th.on.unwrap_or((NONE, s.phi[i]));
-        let bits = th.bits;
-        s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, molten: bits as f64 };
+        s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, molten: th.bits };
         s.tg[i] = th.t;
-        if full || pk != NONE || s.pk[i] != NONE || bits as f64 != was {
+        if full || pk != NONE || s.pk[i] != NONE || th.bits != was {
             surface(w, s, i);
         }
     }
@@ -142,7 +147,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     let (n, area, t) = (w.grid.n(), s.area, s.tg[i]);
     let mut l = [0.0, 0.0, 0.0, 0.0, s.fix[i][0], s.fix[i][1]];
-    let (mut z, mut rc) = (w.base_z + (s.bed[i][1] + s.fix[i][0]) / area, 0.0);
+    let (mut z, mut rc) = (w.base_z + (s.bed[i].vol + s.fix[i][0]) / area, 0.0);
     for &k in &s.vary {
         let (p, a) = (&s.sp[k], w.ground[k * n + i]);
         if a <= 0.0 || t >= p.boil {
@@ -167,7 +172,7 @@ pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
             seen *= 1.0 - cover;
         }
     }
-    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, a + seen * s.bed[i][2]);
+    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, a + seen * s.bed[i].refl);
     s.pd[i] = w.cfg.phys.porosity * (l[0] + l[4]) / area;
 }
 

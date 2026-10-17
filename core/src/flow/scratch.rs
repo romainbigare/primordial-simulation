@@ -42,13 +42,40 @@ pub(super) struct Latent {
     /// `f64::MIN` on a plateau, or when `lift` marks the node for a new state)
     pub(super) lo: f64,
     pub(super) hi: f64,
-    /// What is at or over its melting point, one bit per substance (`melted`; in an f64, exact to 53 substances)
-    pub(super) molten: f64,
+    /// What is at or over its melting point, one bit per substance (`melted`)
+    pub(super) molten: u64,
 }
 
-/// What Law 2 reads of the last flow step (`Scratch::view`): ground temperatures, bed skins,
-/// the air node of each ground node, air temperatures.
-pub(crate) type FlowView<'a> = (&'a [f64], &'a [[f64; 4]], &'a [u32], &'a [f64]);
+/// The bonded ground of a ground node as of the last refresh (liquid wears `vol`).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub(super) struct Bed {
+    /// Volume, m³
+    pub(super) vol: f64,
+    /// Mean reflectance
+    pub(super) refl: f64,
+}
+
+/// What Law 2 reads of the last flow step (`Scratch::view`).
+pub(crate) struct FlowView<'a> {
+    /// Per ground node: its temperature, K; the heat capacity of the skin of its bed, J/K; its air node; the head of
+    /// its liquid, m
+    pub tg: &'a [f64],
+    pub skin: &'a [f64],
+    pub air_of: &'a [u32],
+    pub head: &'a [f64],
+    /// Per air node: its temperature, K; the mean height of its air, m
+    pub ta: &'a [f64],
+    pub zair: &'a [f64],
+}
+
+impl FlowView<'_> {
+    /// Energy to lift a kg from the head of ground node `i` to the mean height of its air node, J/kg, under a gravity
+    /// of `g` m/s² (`Sky::cross`).
+    #[inline]
+    pub(crate) fn lift(&self, i: usize, g: f64) -> f64 {
+        g * (self.zair[self.air_of[i] as usize] - self.head[i])
+    }
+}
 
 /// Working memory of the law, rebuilt from the world when missing. It is saved with the world
 /// (but for the fields marked `serde(skip)`: tables `tables` rebuilds and space used within a
@@ -56,11 +83,11 @@ pub(crate) type FlowView<'a> = (&'a [f64], &'a [[f64; 4]], &'a [u32], &'a [f64])
 /// matches an unbroken one. Ground fields are per ground node, air fields per air node.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
-    /// The month of the last air step, and the creep period (`CREEP_YEARS`) of the last liquid step.
+    /// The month of the last step, and the creep period (`CREEP_YEARS`) of the last liquid step.
     pub(super) month: Option<u64>,
     pub(super) year: Option<u64>,
-    /// Seconds since air and rain last moved, since liquid (and creep) last moved, and since the
-    /// ground last exchanged with the air.
+    /// Seconds since the wind last moved gas between air nodes, since liquid (and creep) last
+    /// moved, and since the ground last exchanged with the air.
     pub(super) pending: f64,
     pub(super) pending_liq: f64,
     pub(super) pending_exc: f64,
@@ -85,9 +112,10 @@ pub struct Scratch {
     /// Substances present in bonded ground, and in the air (or able to evaporate into it).
     pub(super) bedk: Vec<usize>,
     pub(super) gas: Vec<usize>,
-    /// Bonded ground of each ground node: heat capacity of its skin, J/K (at every step, `land::ground_state`); as of the
-    /// last refresh (liquid wears `[1]`), its volume, m³, reflectance and heat conductivity, W/(m K).
-    pub(super) bed: Vec<[f64; 4]>,
+    /// Heat capacity of the skin of each ground node's bed, J/K (at every step, `land::ground_state`).
+    pub(super) skin: Vec<f64>,
+    /// Bonded ground of each ground node.
+    pub(super) bed: Vec<Bed>,
     /// Heat capacity of each ground node, J/K (from the amounts at every step; moves keep it).
     pub(super) cap: Vec<f64>,
     /// Temperature of each ground node, K.
@@ -201,10 +229,15 @@ impl Scratch {
     pub fn temps(&self) -> (&[f64], &[f64]) {
         (&self.tg, &self.ta)
     }
-    /// For Law 2, from the last flow step: per ground node its temperature, the heat capacity of
-    /// its bonded skin (as of the last refresh) and its air node; per air node its temperature.
+    /// Temperature of ground node `i` at the last flow step, K, and the substance on its melting
+    /// plateau with its molten share (none before the first step).
+    pub(crate) fn plateau(&self, i: usize) -> Option<(f64, Option<(usize, f64)>)> {
+        let t = *self.tg.get(i)?;
+        Some((t, (self.pk[i] != NONE).then(|| (self.pk[i], self.phi[i]))))
+    }
+    /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        (&self.tg, &self.bed, &self.air_of, &self.ta)
+        FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, head: &self.head, ta: &self.ta, zair: &self.zair }
     }
     /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
     /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that
@@ -233,11 +266,17 @@ impl Scratch {
     }
 }
 
-/// A refresh judges what may melt or evaporate until the next one at the warmest ground node
-/// now plus this, K.
+/// What may melt or evaporate until the next refresh is judged at the warmest ground node now plus
+/// this, K.
 const T_MARGIN: f64 = 20.0;
 /// A loose substance whose saturation pressure there is over this can evaporate, Pa.
-pub(super) const P_UP: f64 = 1.0;
+const P_UP: f64 = 1.0;
+
+/// May loose substance `k` evaporate before the next refresh, the warmest ground node being at
+/// `tmax` K now (`refresh` and `air::exchange` judge it alike)?
+pub(super) fn may_evaporate(w: &World, k: usize, tmax: f64) -> bool {
+    w.chem.p_sat(k, tmax + T_MARGIN) > P_UP
+}
 /// Least bed volume a mean over the bed is taken over, m³ (a node with no bed).
 const V_MIN: f64 = 1e-9;
 /// Least heat conductivity of a substance, W/(m K) (the soft cover's resistance divides by it).
@@ -248,10 +287,10 @@ const COND_MIN: f64 = 1e-3;
 pub(super) fn refresh(w: &World, s: &mut Scratch) {
     let (n, na, ns) = (w.grid.n(), w.grid.na(), w.chem.ns());
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
-    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) } + T_MARGIN;
-    let up = |k: usize| w.chem.p_sat(k, tmax) > P_UP;
+    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) };
+    let up = |k: usize| may_evaporate(w, k, tmax);
     s.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
-    s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax && !up(k)).collect();
+    s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax + T_MARGIN && !up(k)).collect();
     s.vary = s.loose.iter().copied().filter(|k| !s.fixed.contains(k)).collect();
     s.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
     s.order.clear();
@@ -269,23 +308,21 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     }
     s.bed = (0..n)
         .map(|i| {
-            let (mut v, mut r, mut kc) = (0.0, 0.0, 0.0);
+            let (mut v, mut r) = (0.0, 0.0);
             for &k in &s.bedk {
                 let b = w.bed[k * n + i];
                 v += b * s.sp[k].v[0];
                 r += b * s.sp[k].v[0] * s.sp[k].refl[0];
-                kc += b * s.sp[k].v[0] * w.chem.subs[k].conductivity;
             }
-            let c = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
-            [c, v, r / v.max(V_MIN), kc / v.max(V_MIN)]
+            Bed { vol: v, refl: r / v.max(V_MIN) }
         })
         .collect();
     if s.cap.len() == n {
         return;
     }
     (s.pk, s.phi) = (vec![NONE; n], vec![0.0; n]);
-    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0.0 }; n];
-    for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
+    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0 }; n];
+    for v in [&mut s.skin, &mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
         *v = vec![0.0; n];
     }
     for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {

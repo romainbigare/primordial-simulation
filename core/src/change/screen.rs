@@ -3,7 +3,8 @@
 //! reaction at a time over all nodes).
 
 use super::kernel::{frozen_below, pow, warm_at};
-use super::{Nodes, FAR, TRACE};
+use super::{FAR, TRACE};
+use crate::flow::FlowView;
 use crate::chem::{Chemistry, Phase};
 use crate::units::MAX_SUBSTANCES;
 use crate::World;
@@ -94,7 +95,7 @@ fn up(gas: &[(usize, u16)], f: &dyn Fn(usize) -> f64) -> f64 {
 }
 
 /// The ground and air nodes that may go far within a step of `dt` seconds, at the temperatures of `nodes`.
-pub(super) fn screen(w: &World, nodes: &Nodes, dt: f64) -> Plan {
+pub(super) fn screen(w: &World, nodes: &FlowView, dt: f64) -> Plan {
     let (chem, ns, na) = (&w.chem, w.chem.ns(), w.grid.na());
     let gates: Vec<Gate> = (0..chem.reactions.len())
         .filter(|&r| !chem.reactions[r].light)
@@ -135,7 +136,7 @@ struct Screen<'a> {
 }
 
 impl<'a> Screen<'a> {
-    fn new(w: &'a World, nodes: &Nodes<'a>, gates: &[Gate], in_air: &[u64], dt: f64) -> Self {
+    fn new(w: &'a World, nodes: &FlowView<'a>, gates: &[Gate], in_air: &[u64], dt: f64) -> Self {
         let (chem, ns, n, na) = (&w.chem, w.chem.ns(), w.grid.n(), w.grid.na());
         let warmest = |v: &[f64]| v.iter().fold(f64::MIN, |a, &t| a.max(t));
         let (gmax, thi) = (warmest(nodes.tg), warmest(nodes.tg).max(warmest(nodes.ta)));

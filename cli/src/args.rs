@@ -42,14 +42,14 @@ pub const USAGE: &str = "usage:
   ew numbers OLD NEW      the fields of Physics and Config that differ between two runs (directories or physics.json)";
 
 /// Check that the time steps fit together as the laws take them (`pcore::step_marked`, `flow::step`): physics runs
-/// every `phys_days`, the air at the first physics step `air_days` after its last, evaporation and liquid at the first
-/// air step `exchange_days` and `flow_days` after theirs. Each must be a whole multiple of the step it waits on, or it
-/// runs at another interval than the one asked.
+/// every `phys_days`, and the wind, evaporation and liquid each at the first physics step `air_days`, `exchange_days`
+/// and `flow_days` after their last. Each must be a whole multiple of `phys_days`, or it runs at another interval than
+/// the one asked.
 pub fn check_steps(c: &Config) -> Result<(), String> {
     if c.phys_days == 0 {
         return Err("phys_days must be at least 1".into());
     }
-    for (name, x, of, y) in [("air_days", c.air_days, "phys_days", c.phys_days), ("exchange_days", c.exchange_days, "air_days", c.air_days), ("flow_days", c.flow_days, "air_days", c.air_days)] {
+    for (name, x, of, y) in [("air_days", c.air_days, "phys_days", c.phys_days), ("exchange_days", c.exchange_days, "phys_days", c.phys_days), ("flow_days", c.flow_days, "phys_days", c.phys_days)] {
         if x == 0 || x % y != 0 {
             return Err(format!("{name} ({x}) must be a whole multiple of {of} ({y})"));
         }

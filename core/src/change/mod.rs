@@ -28,6 +28,7 @@ pub use kernel::Reactor;
 pub(crate) use kernel::{denature, frac, pace, scarce, LIGHT_YIELD};
 
 use crate::chem::Phase;
+use crate::flow::{FlowView, Sky};
 use crate::ground::{draw, share};
 use crate::World;
 use screen::{bit, Plan};
@@ -51,24 +52,6 @@ const FAR: f64 = 0.05;
 /// lumping a reaction that runs out of a trace over `LAZY` steps is exact for a first-order decay.
 const TRACE: f64 = 1e-6;
 
-/// What Law 2 reads of the last flow step (`Scratch::view`): per ground node its temperature, the heat capacity of its
-/// bonded skin (the first of four) and its air node; per air node its temperature.
-struct Nodes<'a> {
-    tg: &'a [f64],
-    bed: &'a [[f64; 4]],
-    air_of: &'a [u32],
-    ta: &'a [f64],
-}
-
-/// `Nodes` made from the world where Flow has not run yet (a test that calls this law alone).
-type Fallback = (Vec<f64>, Vec<[f64; 4]>, Vec<u32>, Vec<f64>);
-
-fn fallback(w: &World) -> Fallback {
-    let (n, na) = (w.grid.n(), w.grid.na());
-    let skin = |i: usize| crate::ground::skin_cap(&w.chem, &w.cfg, w.grid.area(), 0..w.chem.ns(), |k| w.b(k, i));
-    ((0..n).map(|i| w.t_ground(i)).collect(), (0..n).map(|i| [skin(i), 0.0, 0.0, 0.0]).collect(), (0..n).map(|i| w.grid.air_of(i) as u32).collect(), (0..na).map(|j| w.t_air(j)).collect())
-}
-
 /// Per ground node: the tick it last reacted at its turn, the tick of its next turn, and the steps it reacted on its own
 /// since. Blocks take turns: block `b` first reacts when `(b + tick) % LAZY == 0`.
 fn turns(n: usize, tick: u32) -> Vec<[u32; 3]> {
@@ -84,20 +67,15 @@ fn turns(n: usize, tick: u32) -> Vec<[u32; 3]> {
 /// for all the time since it last did, unless all its reactions are frozen. Air nodes go far by
 /// their exact rates, else react at their turn.
 pub fn step(w: &mut World, dt: f64) {
+    crate::flow::ensure(w);
     let mut s = std::mem::take(&mut w.scratch);
-    let (n, na) = (w.grid.n(), w.grid.na());
+    let n = w.grid.n();
     let tick = (w.day / w.cfg.phys_days as u64) as u32;
     if s.slow.len() != n {
         s.slow = turns(n, tick);
     }
     let mut slow = std::mem::take(&mut s.slow);
-    let made: Fallback;
-    let (mut tg, mut bed, mut air_of, mut ta) = s.view();
-    if tg.len() != n || bed.len() != n || air_of.len() != n || ta.len() != na {
-        made = fallback(w);
-        (tg, bed, air_of, ta) = (&made.0, &made.1, &made.2, &made.3);
-    }
-    let nodes = Nodes { tg, bed, air_of, ta };
+    let nodes = s.view();
     let plan = screen::screen(w, &nodes, dt);
     ground(w, &nodes, &plan, &mut slow, tick, dt);
     air(w, &nodes, &plan, tick, dt);
@@ -114,7 +92,7 @@ struct Held {
 
 /// The ground nodes' turn: each that may go far (`Plan::ground`) reacts for this step (at least; a first turn has no
 /// earlier turn to count from); at its turn, for all the time since its last turn it has not reacted for.
-fn ground(w: &mut World, nodes: &Nodes, plan: &Plan, slow: &mut [[u32; 3]], tick: u32, dt: f64) {
+fn ground(w: &mut World, nodes: &FlowView, plan: &Plan, slow: &mut [[u32; 3]], tick: u32, dt: f64) {
     let (ns, n) = (w.chem.ns(), w.grid.n());
     let mut rc = Reactor::new(&w.chem);
     let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], pool0: vec![0.0; ns] };
@@ -157,7 +135,7 @@ fn film(w: &World, amt: &[f64], t: f64) -> f64 {
 /// and vaporisation enthalpy from the ground (gas taken back returns it); gas the ground cannot pay for stays behind.
 /// Gas taken from the air brings its heat at the air's temperature; gas sent leaves with its share of the node's heat by
 /// heat capacity.
-fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &Nodes, i: usize, time: f64) {
+fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64) {
     let (chem, ns, n, na) = (&w.chem, w.chem.ns(), w.grid.n(), w.grid.na());
     let (t, j, air_share) = (nodes.tg[i], nodes.air_of[i] as usize, w.grid.air_share());
     for (k, p0) in h.pool0.iter_mut().enumerate() {
@@ -167,9 +145,9 @@ fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &Nodes, i:
     rc.film = film(w, &h.amt, t);
     let fused: f64 = (0..ns).map(|k| h.amt[k] * chem.fused_heat(k, t, |j| h.amt[j])).sum();
     let mut e = w.e_ground[i] - fused;
-    rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.bed[i][0], None, 0.0, time);
+    rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], None, 0.0, time);
     let gas = GasMove::of(chem, &h.pool, &h.pool0, nodes.ta[j]);
-    let c_r = nodes.bed[i][0] + (0..ns).map(|k| h.amt[k] * chem.subs[k].cp).sum::<f64>();
+    let c_r = nodes.skin[i] + (0..ns).map(|k| h.amt[k] * chem.subs[k].cp).sum::<f64>();
     let q_out = e.max(0.0) * gas.c_out / (c_r + gas.c_out).max(1e-9);
     w.e_ground[i] = e + fused + gas.back + gas.q_in - q_out;
     w.e_air[j] += q_out - gas.q_in;
@@ -177,15 +155,16 @@ fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &Nodes, i:
     let paid = share(draw(&mut w.e_ground[i], &mut w.counts, cap, gas.pay), gas.pay);
     // The heat of the gas that stays behind stays with it.
     (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
-    let (ground, amt) = (&mut w.ground, &h.amt);
-    send_gas(&h.pool, &h.pool0, paid, &mut w.air, na, j, |k, kept| ground[k * n + i] = amt[k] + kept);
+    let (ground, amt, lift) = (&mut w.ground, &h.amt, nodes.lift(i, w.cfg.gravity));
+    let mut sky = Sky { chem: &w.chem, air: &mut w.air, e_air: &mut w.e_air, potential: &mut w.potential };
+    send_gas(&h.pool, &h.pool0, paid, &mut sky, (j, lift), |k, kept| ground[k * n + i] = amt[k] + kept);
 }
 
 /// The air nodes' turn: each on its own, so from the amounts before (in parallel with the `threads` feature) into a row
 /// [reacted, heat, amounts], then applied in order. A node that may go far (`Plan::air`) and does by its exact rates
 /// reacts for this step; else at its turn, every `LAZY` steps, for `LAZY` steps, unless all its reactions are frozen.
 /// Gas it makes or takes changes its latent heat held in the air.
-fn air(w: &mut World, nodes: &Nodes, plan: &Plan, tick: u32, dt: f64) {
+fn air(w: &mut World, nodes: &FlowView, plan: &Plan, tick: u32, dt: f64) {
     let (chem, ns, na) = (&w.chem, w.chem.ns(), w.grid.na());
     let turn = ((LAZY - tick as u64 % LAZY) % LAZY) as usize;
     let mut rows = vec![0.0; na * (ns + 2)];

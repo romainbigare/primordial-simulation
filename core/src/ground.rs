@@ -134,11 +134,18 @@ impl World {
         let cap = self.heat_cap_ground(i);
         take_paid(&mut self.e_ground[i], &mut self.counts, cap, d, cp, want)
     }
-    /// Temperature of ground node `i` as of the last flow step, K (none before the first).
-    pub fn t_ground_last(&self, i: usize) -> Option<f64> {
-        self.scratch.temps().0.get(i).copied()
+    /// Temperature of ground node `i` as every law and the shell read it, K, and the substance on its melting plateau with
+    /// its molten share: Flow's solve of the plateaus at its last step (`flow::land::ground_state`), which keeps it for its
+    /// own moves; before Flow has run, the same solve from the amounts now (`thaw`).
+    pub fn thaw_last(&self, i: usize) -> (f64, Option<(usize, f64)>) {
+        self.scratch.plateau(i).unwrap_or_else(|| self.thaw(i))
     }
-    /// Temperature of ground node `i`, K.
+    /// Temperature of ground node `i` as every law and the shell read it, K (`thaw_last`).
+    pub fn t_ground_last(&self, i: usize) -> f64 {
+        self.thaw_last(i).0
+    }
+    /// Temperature of ground node `i` from its amounts and energy now, K (`thaw`): for building a world and for tests
+    /// that set a node's state by hand.
     pub fn t_ground(&self, i: usize) -> f64 {
         self.thaw(i).0
     }
@@ -161,7 +168,7 @@ impl World {
     }
     /// Temperature of air node `j`, K.
     pub fn t_air(&self, j: usize) -> f64 {
-        self.e_air[j] / self.heat_cap_air(j).max(1.0)
+        crate::flow::air_temp(self.e_air[j], self.heat_cap_air(j))
     }
     /// Height of the solid surface (bonded + loose solids), m, at the node's temperature now and with the solid share of a
     /// substance on its plateau (`survey::env_of` reads the last flow step's temperature and whole phases; `flow::land::surface`

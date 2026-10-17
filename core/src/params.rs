@@ -31,9 +31,9 @@ pub struct Config {
     pub phys_days: u32,
     /// Gas moves between air nodes (wind) every this many days
     pub air_days: u32,
-    /// Evaporation and condensation run every this many days (a multiple of `air_days`)
+    /// Evaporation and condensation run every this many days (a multiple of `phys_days`)
     pub exchange_days: u32,
-    /// Liquid and creep move every this many days (a multiple of `air_days`)
+    /// Liquid and creep move every this many days (a multiple of `phys_days`)
     pub flow_days: u32,
     /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
     pub crowd: usize,
@@ -236,7 +236,7 @@ pub struct Physics {
     pub porosity: f64,
     /// Hydraulic conductivity of the loose ground (Darcy's law), m/s
     pub seep: f64,
-    /// Share of its pores the loose ground holds against gravity, its field capacity (`flow::drain`)
+    /// Share of its pores the loose ground holds against gravity, its field capacity (`flow::drain`, `flow::liquid`)
     pub field: f64,
     /// Depth of the store under the loose ground (the weathered zone of the bed), m
     pub bed_depth: f64,
