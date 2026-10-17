@@ -951,7 +951,7 @@ Use it only to **choose worlds and tune free physics numbers**. Never use it to 
 Only items that are still open. Do not build them before M4 starts unless the owner asks.
 
 - **Nodes against individuals.** The check of Section 7.1 is M4's first job. It needs a small test world where the animals stay near 10⁵ members.
-- **Long runs.** All late results are 60 years at 64×64. The 300-year runs at 128×128 are not made: check that life lasts, whether plants evolve their light gene, whether fixing falls by itself, whether the seasons hold, and where the carbon gas settles.
+- **Long runs.** Three 300-year runs at 128×128 (seeds 1, 5, 7) are in `docs/reports/foundation-a.md`: life lasts, the seasons hold, the light gene rises only a little (11.30 to about 11.45), fixing does not fall by itself (22% to 58% of plant members at year 300). Open: the carbon gas settles near 300 ppm in seeds 5 and 7, but falls to about 200 ppm in seed 1 (see "Carbon").
 - **No people-like kind is expected from M4 itself.** Nothing on the island pays for a tool, a shelter or a bigger brain yet, and planning is not built (6.5). The intelligence step is option 2 of the check point (13.1), after M4. The big-brain test (`--clever-year`) cannot tell: its control merges away in a year; it needs a control that does not merge.
 - **What eaters eat.** Eaters live almost only on dead plant matter, digested in full; nothing stops them before they eat most of the plants' production. A structural plant matter that only a priced catalyst breaks is an option (the owner decides).
 - **Warm blood.** A body whose upkeep rises about 9% a kelvin has no steady warmth with real fur, because no body can raise its conductance (no sweating or blood flow to the skin). `KEEP_T` and `COOL_T` are not selected on the mild island; M4's cold and seasons will test them.
@@ -962,7 +962,7 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters still grow about 0.2 a year at year 60, so report log10 kg at year 60 with the growth rate over years 30 to 60, three seeds at least. Under 2 times is noise.
-- **Core size.** `core` has 7,508 code lines against its budget of 8,000 (14.3); the foundation's new base must fit in what is left as the old code goes.
+- **Core size.** `core` has 7,526 code lines against its budget of 8,000 (14.3, counted by `cli/tests/core_size.rs`); the foundation's new base must fit in what is left as the old code goes.
 
 ---
 

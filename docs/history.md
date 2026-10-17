@@ -263,6 +263,10 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 **Phase A: prepare**
 
+- A1: where the time goes, measured with `perf` on 64 x 64 worlds with life (`docs/reports/foundation-a.md`): bodies
+  about 70% of a year; inside them the group brain sums 15%, the reactions 3%.
+- A2: the reference runs of `5671305` (64 x 64 x 60 years, seeds 1 to 3, normal and roster; 128 x 128 x 300 years,
+  seeds 1, 5, 7) in `docs/reports/foundation-a/`.
 - A6: the code-size test `cli/tests/core_size.rs` counts the code lines of `core/src` per folder and fails above
   9,500 (7,508 at its start); it replaces the `wc -l` command of handover 14.3.
 - A3: the key-number test `tape/tests/ranges.rs` runs seeds 1, 2 and 3 of `ew run --size 64` for 30 years and holds

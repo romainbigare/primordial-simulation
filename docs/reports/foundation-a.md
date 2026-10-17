@@ -5,16 +5,19 @@ Watch report for the owner (handover 12.4; `docs/foundation/plan.md`, Phase A). 
 
 ## In short
 
-- Phase A is done: the base line is measured and saved, and two possible bugs are checked. Phase B can start.
+- Phase A is done: the base line is measured and saved, two possible bugs are checked, and a third bug, found by the
+  long runs, is fixed. Phase B can start when you have read this.
 - **Where the time goes:** bodies take about 70% of a year. Inside a body update, the biggest single cost is not the
   reactions (under 3%) but **the sums of the group brains** (`Group::weigh`, 15%): every time a node's member count
   changes, all the rows of its group's brain are summed again.
-- **The reference runs** are saved: six 64 × 64 runs of 60 years and three 128 × 128 runs of 300 years.
+- **The reference runs** are saved: six 64 × 64 runs of 60 years and three 128 × 128 runs of 300 years. Life lasts
+  300 years; the seasons hold; the carbon gas settles near 300 ppm in two seeds and falls to 200 ppm in the third.
 - **The key-number test** (`tape/tests/ranges.rs`) holds ten numbers near the reference. It passes.
 - **Bug (a), plants "taken" before any animal:** not a code bug. Plants take from each other, and one node rule (that
   you kept before) makes each bite kill many members. You may want to decide this rule again (see below).
-- **Bug (b), stripes in the rain:** a real bug in the wind's solver. Fixed. Rain on land changes by +1 to +2.5%.
-- **The code-size test** counts the code lines of `core`: 7,524 now (ceiling 9,500 until the end of Phase D).
+- **Bug (b), stripes in the rain:** a real bug in the wind's solver. Fixed. Rain on land changes by +0.7% to +2.5%.
+- **A bug found by the long runs:** a store that drains forever reached 10⁻³⁰⁸ and a division gave NaN. Fixed.
+- **The code-size test** counts the code lines of `core`: 7,526 now (ceiling 9,500 until the end of Phase D).
 
 ## The tasks
 
@@ -120,32 +123,32 @@ at the same time, 2 threads each):
 
 | Run | Years | Bodies at the end | Light-eater members | Animal members | Drift of elements, energy | Time per year |
 |---|---|---|---|---|---|---|
-| s1-128 | **280, then a crash** (below) | 24,899 | 9.0e10 | 1.2e7 | 1.4e-13, 5.5e-14 | about 30 s |
+| s1-128 | 300 (crash in 285, fixed, years 281–300 run again) | 27,614 | 9.0e10 | 1.4e7 | 1.1e-14, 1.6e-14 (from 280) | about 30 s |
 | s5-128 | 300 | 25,386 | 5.7e10 | 1.3e8 | 1.4e-13, 5.2e-14 | 28 s |
 | s7-128 | 300 | 26,042 | 1.2e11 | 6.0e7 | 9.1e-14, 4.0e-14 | 40 s |
 
-**Seed 1 crashed between years 281 and 290** with an undefined number (NaN) in the wind: an air node's total amount
-became NaN. The yearly check passed at year 280. This is a real bug that only the long run found; see "A bug found by
-the long runs" below.
+**Seed 1 crashed in year 285** with an undefined number (NaN) in the wind. This is a real bug that only the long run
+found (see "A bug found by the long runs" below). After the fix, seed 1 ran on from its year-280 snapshot to year 300
+(the code of main with both fixes), so its last 20 years are on the new code.
 
 The handover (13.2, "Long runs") asked five questions about these runs:
 
 | Question | Answer (seeds 1, 5, 7) |
 |---|---|
 | Does life last? | Yes. Light-eaters hold at about 10¹¹ kg from year 30 to the end; eaters settle at 10⁹ to 10¹⁰ kg from year 100. Three or four kinds by the clustering. |
-| Do plants evolve their light gene? | Slowly: the mean light catalyst gene goes from 11.30 to 11.40–11.46 (log10) in 300 years. |
-| Does fixing fall by itself? | Not clearly. 10% of the founders carry the fixing gene; by year 10 it is 48–65% of the members; at the end 58%, 22% and 58%. It goes up and down, without a trend. |
+| Do plants evolve their light gene? | Slowly: the mean light catalyst gene goes from 11.30 to 11.40–11.49 (log10) in 300 years. |
+| Does fixing fall by itself? | Not clearly. 10% of the founders carry the fixing gene; by year 10 it is 48–65% of the members; at year 300 55%, 22% and 58%. It goes up and down, without a trend. |
 | Do the seasons hold? | Yes: summer 293–294 K, winter 283–285 K on land, the same at year 100 and year 300. |
-| Where does the carbon gas settle? | Seeds 5 and 7: about 290–300 ppm from year 30 on. **Seed 1 does not settle**: 245 ppm at year 100, 190 ppm at year 280, still falling. |
+| Where does the carbon gas settle? | Seeds 5 and 7: about 290–300 ppm from year 30 on. **Seed 1 does not settle**: 245 ppm at year 100, 190 ppm at year 280, 197 ppm at year 300. |
 
 In seed 5, the share of plant members dying "taken" rises from 3% to 25% after year 100: there, animals take from
 plants, which is the law at work (the eater mass is the highest of the three seeds).
 
-Maps of year 300 (seed 1: year 280):
+Maps of year 300:
 
 ![s5-128, year 300](foundation-a/s5-128/year0300.png)
 
-![s1-128, year 280](foundation-a/s1-128/year0280.png)
+![s1-128, year 300](foundation-a/s1-128/year0300.png)
 
 ## A3: the key-number test
 
@@ -231,6 +234,21 @@ mean of the two (Strang 1968). The books stay exact. Left before, right after (s
 Effect (5 years without life, 64 × 64): rain on land +0.7% to +2.5%; temperatures change by 0.03 K or less; Flow is
 about 5% slower (the wind runs twice). Golden fingerprints re-pinned.
 
+## A bug found by the long runs: NaN from a store that drains forever
+
+Seed 1 at 128 × 128 stopped in year 285. The chain of causes:
+1. Under a hill top, the store of liquid in the bed loses a share at every liquid step and nothing refills it. A share
+   of a share never reaches 0: after 285 years it held about 10⁻³⁰³ mol.
+2. Its spring was the only flow out, of 5 × 10⁻³⁰⁹ m³. `liquid::send` shared what leaves by `1 / (sum of the flows)`,
+   which is infinite for such a small number, and 0 × infinity is NaN (undefined).
+3. The NaN went into the ground of the cell and its 8 neighbours, then radiation put it into their air, and the wind
+   stopped on it.
+
+The fix (`core/src/flow/liquid.rs`): each outlet takes `q / (sum of the flows)`, which is never more than 1. The same
+risk was in `drain::stores` (0 / 0 when such a flow rounds to 0); there nothing comes in, so nothing spills. The law
+is the same; only the rounding changes (golden fingerprints re-pinned). Main without the fix also breaks in year 285;
+with it, the run passes and keeps its books (drift 1e-14 at year 300).
+
 ## A6: code size
 
 `cli/tests/core_size.rs` counts the code lines of `core/src` (not blank, not comments) and fails above 9,500 (8,000
@@ -239,16 +257,17 @@ from the end of Phase E).
 | Folder | Code lines |
 |---|---|
 | `core/src/*.rs` (top level) | 1,805 |
-| `flow/` | 1,631 |
+| `flow/` | 1,633 |
 | `body/` | 1,314 |
 | `change/` | 759 |
 | `bond/` | 715 |
 | `choose/` | 630 |
 | `copy/` | 356 |
 | `chem/` | 314 |
-| **core** | **7,524** |
+| **core** | **7,526** |
 
-Phase A added 16 lines to `core` (the wind fix). The rest of the work was in `tape/`, `cli/` and the tests.
+Phase A added 18 lines to `core` (the wind fix and the NaN fix). The rest of the work was in `tape/`, `cli/` and the
+tests.
 
 ## Speed (the base line for the plan's goals, 6.5)
 
@@ -277,5 +296,6 @@ Phase B: the base layers (space, store, clock). From A1, two things to keep in m
 
 Open for you:
 1. The bite rule of (a): keep, or by the weight of the bite?
-2. The carbon gas still falls at year 60 in roster runs (to about 140 ppm). This is the known missing carbon source
-   (handover 13.2), not new.
+2. The carbon gas still falls at year 60 in roster runs (to about 140 ppm), and in the 128 × 128 run of seed 1 it falls
+   to about 200 ppm in 300 years. This is the known missing carbon source (handover 13.2, "Carbon"), not new; M4's
+   slow carbon source is the place for it.
