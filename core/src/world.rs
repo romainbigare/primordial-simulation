@@ -29,7 +29,8 @@ pub struct Ledger {
 }
 
 /// Per-cell slow averages and counts for the shell. Bodies read `rain` and parts read
-/// `liquid_flux`; the rest is only seen.
+/// `liquid_flux`; the rest is only seen. The fields not saved (`serde(skip)`) count since the
+/// shell last read them.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Diag {
     /// Liquid moved out of each ground cell, mol/s (moving average)
@@ -40,8 +41,7 @@ pub struct Diag {
     /// since the last month
     pub traffic: Vec<f32>,
     pub crossings: Vec<f32>,
-    /// Decisions drawn since the shell last read them, and of them those where the action drawn
-    /// had the highest score (not saved)
+    /// Decisions drawn, and of them those where the action drawn had the highest score
     #[serde(skip)]
     pub decisions: f64,
     #[serde(skip)]
@@ -50,39 +50,40 @@ pub struct Diag {
     /// alone (`copy::one`)
     pub splits: [f64; 2],
     /// Members merged by the monthly merge however unlike (the safeguard past twice `Config::crowd`
-    /// nodes in a cell, `body::crowd`), since the shell last read them. A count only, not saved.
+    /// nodes in a cell, `body::crowd`)
     #[serde(skip)]
     pub unlike: f64,
     /// Members that joined a node (the monthly merge, `body::crowd`, and a child's join, `copy::copy`)
     /// whose means differ from the node's by more than `Physics::alike` steps in some gene
-    /// (`copy::alike`), since the shell last read them. A count only, not saved.
+    /// (`copy::alike`)
     #[serde(skip)]
     pub wide: f64,
-    /// Members that moved to a neighbour cell since the shell last read them, by starting kind
-    /// (`Lineage::root`): a node moving counts all its members (`choose::go`). A count only, not saved.
+    /// Members that moved to a neighbour cell, by starting kind (`Lineage::root`): a node moving
+    /// counts all its members (`choose::go`)
     #[serde(skip)]
     pub moves: Vec<f64>,
     /// Body matter, kg, that hits tore off members who lived on (bites that left them smaller, bodies
-    /// trampled, `body::tear`), since the shell last read it, by starting kind. A count only, not saved.
+    /// trampled, `body::tear`), by starting kind
     #[serde(skip)]
     pub hurt: Vec<f64>,
     /// Members that could build body matter in an update, by starting kind, as [tried, held back by any mineral, by
     /// the first, by the second...]: held back are those whose store of a mineral (`Chemistry::minerals`) bound what they built,
-    /// below what their fuels, their allowance and their spare allowed (`copy::grow`). A count only, not saved.
+    /// below what their fuels, their allowance and their spare allowed (`copy::grow`)
     #[serde(skip)]
     pub nlim: Vec<Vec<f64>>,
-    /// The land's liquid since the shell last read it, m³: rain on land cells, evaporation from their ground,
-    /// evaporation from light-eaters and from the other bodies, and what light-eaters took of the ground's liquid (rain they
-    /// caught and what they soaked). A count only, not saved.
+    /// The land's liquid, m³: rain on land cells, evaporation from their ground, evaporation from light-eaters and
+    /// from the other bodies, and what light-eaters took of the ground's liquid (rain they caught and what they soaked)
     #[serde(skip)]
     pub liquid_land: [f64; 5],
 }
 
+/// The whole state of a world: what `step` advances, and what a snapshot saves.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct World {
     pub cfg: Config,
     pub chem: Chemistry,
     pub grid: Grid,
+    /// Seed of every keyed random draw (`rng::Rng`)
     pub seed: u64,
     /// World clock, days since the start
     pub day: u64,
@@ -100,7 +101,7 @@ pub struct World {
     pub base_z: f64,
     pub diag: Diag,
     pub ledger: Ledger,
-    /// Bodies and made parts (the sparse graph)
+    /// Bodies, and the parts they made: the sparse graph
     pub life: body::Life,
     pub parts: bond::Parts,
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))

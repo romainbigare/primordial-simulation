@@ -18,9 +18,13 @@ use crate::{body, bond, change, check, flow};
 /// A stage of the month, as `step_marked` reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
+    /// `flow::step`
     Flow,
+    /// `change::step`
     Change,
+    /// `body::survey` and `body::day`
     Bodies,
+    /// `bond::step`
     Parts,
 }
 
