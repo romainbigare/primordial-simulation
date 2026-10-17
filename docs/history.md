@@ -360,6 +360,14 @@ The work of `docs/foundation/plan.md`, one line per task.
 - D3 (a), the law: the wind turns by the latitude of each edge between two air nodes, the mean of the two nodes'
   latitudes (it took the latitude of one row of cells near the edge). 64 x 64, seed 1, years 11 to 20: land
   -0.03 K, rain on land +0.1%, carbon gas +0.6%; golden re-pinned.
+- D3 (b): the air on the mesh. The exchange of ground and air reads each cell's air node from the mesh's parent
+  relation and the areas of cells and air nodes from the mesh (`Scratch::cells` and `per` deleted); a cell's share of
+  its air node is its area over the node's (`Grid::air_share(i)`; it was 1/16 also where an edge node covers fewer
+  cells). The wind runs on the links of the air level: along lines where they form lines (`wind/along`), by
+  `solve::spread` on any other mesh (`wind/mesh`, with a test on a mesh of triangles); booked per node, not by
+  `store::apply` (its scaling cuts gas passing through a node). Without life the same to rounding (2 years of the
+  golden seeds, 64 x 64 and 128 x 128 within 5e-11); maps whose side is not a multiple of 4 change at their edges;
+  golden re-pinned (with life, any rounding changes the bodies' history).
 
 **Owner's decisions after Phase A**
 

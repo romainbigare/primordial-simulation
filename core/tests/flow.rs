@@ -152,6 +152,42 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     books.assert_within(&w, 1e-12, 1e-12);
 }
 
+/// The wind on a mesh that is not square: the air nodes of a square map with a link across each block of four, so
+/// that they make triangles and no lines (the wind solves them by `solve::spread`). Gas put into one node at its
+/// temperature raises its pressure: the wind keeps the books, takes at least 30% of the excess out of the node in one
+/// call, and gives it to the nodes it is linked to, across the diagonal too, more than to a node two links away.
+#[test]
+fn the_wind_runs_on_a_mesh_that_is_not_square() {
+    let mut base = worldgen::new_world(3, 16, 16);
+    let (aw, na, ns) = (base.grid.aw(), base.grid.na(), base.chem.ns());
+    let air = base.grid.mesh().level(pcore::grid::AIR);
+    let (side, c) = (air.area()[0].sqrt(), air.centre());
+    let mut links: Vec<(u32, u32, f64, f64)> = (0..air.a().len()).filter(|&l| air.width()[l] > 0.0).map(|l| (air.a()[l], air.b()[l], air.dist()[l], air.width()[l])).collect();
+    for j in (0..na).filter(|&j| j % aw + 1 < aw && j / aw + 1 < na / aw) {
+        let k = j + aw + 1;
+        links.push((j as u32, k as u32, (c[k][0] - c[j][0]).hypot(c[k][1] - c[j][1]), side));
+    }
+    let tri = pcore::space::Level::new(air.area().to_vec(), c.to_vec(), air.lat().to_vec(), links);
+    let mut more = base.clone();
+    let j = aw + 1;
+    for k in 0..ns {
+        more.air[k * na + j] *= 1.2;
+    }
+    more.e_air[j] *= 1.2;
+    let e = more.e_air[j] - base.e_air[j];
+    let added: Vec<(usize, f64)> = (0..ns).map(|k| (k, more.air[k * na + j] - base.air[k * na + j])).collect();
+    more.cross(Boundary::Outside, added, e);
+    let books = Books::now(&more);
+    let total = |w: &World, j: usize| (0..ns).map(|k| w.air[k * na + j]).sum::<f64>();
+    let put = total(&more, j) - total(&base, j);
+    pcore::flow::wind_on(&mut base, &tri, DT);
+    pcore::flow::wind_on(&mut more, &tri, DT);
+    let gain = |i: usize| (total(&more, i) - total(&base, i)) / put;
+    let (kept, beside, across, far) = (gain(j), gain(j + 1), gain(j + aw + 1), gain(j + aw - 1));
+    assert!(kept < 0.7 && beside > 0.03 && across > 0.03 && far < 0.5 * across, "kept {kept}, beside {beside}, across {across}, two links away {far}");
+    books.assert_kept(&more, 1e-12);
+}
+
 /// More heat-absorbing gas keeps warming the ground: under 240 W/m² of sunlight, with the air following the ground by
 /// the lapse rate, the balance at optical depth 17 is clearly warmer than at 9 (one slab at the air's mean temperature
 /// would give both the same).

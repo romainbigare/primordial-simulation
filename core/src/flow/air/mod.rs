@@ -11,8 +11,10 @@ pub(super) use radiation::radiation;
 pub use radiation::{column, glow};
 pub(crate) use sky::Sky;
 pub(super) use wind::wind;
+pub use wind::wind_on;
 
 use super::Scratch;
+use crate::grid::AIR;
 use crate::math::one_minus_exp;
 use crate::units::R_GAS;
 use crate::World;
@@ -37,6 +39,13 @@ pub(crate) fn air_temp(e: f64, capa: f64) -> f64 {
 pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
     let (j, w) = (&s.near[i], &s.wt[i]);
     w[0] * v[j[0] as usize] + w[1] * v[j[1] as usize] + w[2] * v[j[2] as usize] + w[3] * v[j[3] as usize]
+}
+
+/// The share of the air ground cell `i` sees that lies over it: its area over the area of the air it sees (`lerp`).
+#[inline]
+pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {
+    let mesh = w.grid.mesh();
+    mesh.cells().area()[i] / lerp(s, mesh.level(AIR).area(), i)
 }
 
 /// Scale height of air at `t` K whose `mol` mol weigh `kg` kg under gravity `g` (RT/(Mg), with the mean molar mass
@@ -68,14 +77,16 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
     s.ta0.copy_from_slice(&s.ta);
 }
 
-/// Amounts, heat capacity, mass, optical depth, volume, temperature and mean height of each air node.
+/// Amounts, heat capacity, mass, optical depth, volume, temperature and mean height of each air node; the height of
+/// its ground is the mean of its cells' by area.
 fn nodes(w: &World, s: &mut Scratch) {
-    let (n, na, g, top) = (w.grid.n(), w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
+    let (na, g, top) = (w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
+    let (cells, air) = (w.grid.mesh().cells(), w.grid.mesh().level(AIR));
     for j in 0..na {
         (s.za[j], s.nt[j], s.capa[j], s.mass[j], s.fabs[j], s.node_tmp[j]) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     }
-    for i in 0..n {
-        s.za[s.air_of[i] as usize] += s.head[i];
+    for (i, &j) in cells.parent().iter().enumerate() {
+        s.za[j as usize] += s.head[i] * cells.area()[i];
     }
     for &k in &s.gas {
         let (sp, ir) = (s.sp[k], w.chem.subs[k].ir_abs > 0.0);
@@ -83,12 +94,12 @@ fn nodes(w: &World, s: &mut Scratch) {
             s.nt[j] += a;
             s.capa[j] += a * sp.cp;
             s.mass[j] += a * sp.mm;
-            s.fabs[j] += if ir { w.chem.depth(k, a / (s.area * s.cells[j])) } else { 0.0 };
+            s.fabs[j] += if ir { w.chem.depth(k, a / air.area()[j]) } else { 0.0 };
         }
     }
     for j in 0..na {
-        s.za[j] /= s.cells[j];
-        let (a, l) = (s.area * s.cells[j], (top - s.za[j]).max(COLUMN_MIN));
+        s.za[j] /= air.area()[j];
+        let (a, l) = (air.area()[j], (top - s.za[j]).max(COLUMN_MIN));
         s.vol[j] = a * l;
         s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
         s.gam[j] = g * s.mass[j] / s.capa[j].max(CAPA_MIN);
@@ -147,9 +158,9 @@ fn heights(w: &World, s: &mut Scratch) {
 fn seen(w: &World, s: &mut Scratch) {
     let (n, g, top) = (w.grid.n(), w.cfg.gravity, w.cfg.air_top_m);
     s.lay.resize(n, [[0.0; LAYERS]; 2]);
-    for i in 0..n {
+    for (i, &j) in w.grid.mesh().cells().parent().iter().enumerate() {
         let (gam, zair, fabs, ta) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i), lerp(s, &s.ta, i));
-        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, s.air_of[i] as usize, g));
+        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, j as usize, g));
         s.seen[i] = [gam, zair, one_minus_exp(fabs), s.seen[i][3], ta];
     }
 }

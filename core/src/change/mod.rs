@@ -138,7 +138,7 @@ fn film(w: &World, amt: &[f64], t: f64) -> f64 {
 /// heat capacity.
 fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64) {
     let (chem, ns, n, na) = (&w.chem, w.chem.ns(), w.grid.n(), w.grid.na());
-    let (t, j, air_share) = (nodes.tg[i], nodes.air_of[i] as usize, w.grid.air_share());
+    let (t, j, air_share) = (nodes.tg[i], nodes.air_of[i] as usize, w.grid.air_share(i));
     for (k, p0) in h.pool0.iter_mut().enumerate() {
         *p0 = w.air[k * na + j] * air_share;
     }

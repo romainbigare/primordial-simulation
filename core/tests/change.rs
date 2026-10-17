@@ -450,7 +450,7 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
             let (t, j) = (w.t_ground(i), w.grid.air_of(i));
             let mut amt: Vec<f64> = (0..w.chem.ns()).map(|k| w.ground[k * n + i]).collect();
             amt[DISSOLVED] = 0.0;
-            let share = w.grid.air_share();
+            let share = w.grid.air_share(i);
             let gas: Vec<f64> = (0..w.chem.ns()).map(|k| w.air[k * na + j] * share).collect();
             rc.balance(&w.chem, &mut amt, &gas, t);
             if amt[DISSOLVED] > 0.0 {

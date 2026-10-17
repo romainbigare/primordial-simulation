@@ -21,7 +21,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `lines`: the implicit step along a line) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`); `flow::land::conduct` (sideways) |
-| 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind`, `sky`); `lanes.rs` (paths) |
+| 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind` with `wind/along` and `wind/mesh`, `sky`); `lanes.rs` (paths) |
 | 2 Change | `change/` (`mod`, `kernel`, `balance`, `screen`, `gas`); the chemistry in `chem/` (`mod`, `thermo`, `roles`) |
 | 3 Bond | `bond/` (`mod`, `verbs`, `sense`, `month`) |
 | 4 Copy | `copy/` (`mod`, `mix`, `grow`); population nodes in `nodes.rs`; lineages in `lineage.rs` |
@@ -32,7 +32,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 
 | Word | Meaning |
 |---|---|
-| cell | one square of the map (2 km × 2 km). It has a ground node and sees an air node. |
+| cell | one square of the map (2 km × 2 km). It has a ground node and sees an air node: its parent at the mesh's air level (`grid::AIR`), whose share over it is its area over the node's (`Grid::air_share`). |
 | node | anything that holds stuff: the ground of a cell, an air column, a body, a part |
 | body | a living node with genes and (maybe) a brain |
 | member | one living thing inside a body. A body with 1 member is an **individual**. A body with many members is a **population node** (all members alike, counted together). |
@@ -232,19 +232,30 @@ layer. Height is what the body's materials hold up (3.6). Rain on bodies is shar
 
 ### 1.6 Wind
 
-`flow::air::wind`, every `air_days`. Gas moves between neighbouring air nodes by three pushes on
-each edge:
+`flow::air::wind`, every `air_days`. The air nodes are the coarser level of the mesh
+(`grid::AIR`); the wind runs on that level's links (the cells of two nodes that share a border).
+Gas moves over each link by three pushes:
 
 1. the pressure of the whole column (p = nRT/V), from high to low;
 2. overturning: at equal height, the lower half flows to the warmer column and the upper half
-   back; both are turned sideways by the planet's rotation (`rotation`, at the latitude of the
-   edge: the mean of its two nodes'); vapour crowds in the lower half;
-3. eddies mix the two columns (`mix`).
+   back, through half the column across the link's width; both are turned sideways by the
+   planet's rotation (`rotation`, by the warmth's gradient across the link, at the latitude of
+   the link: the mean of its two nodes'); vapour crowds in the lower half;
+3. eddies mix the two columns (`mix`, across the link's width over its length).
 
-It is solved implicitly along lines (`solve::lines`), so any speed is stable. A call is long against the time the
-air takes to mix from node to node, so one order of the two directions would leave stripes along
-the lines solved last: the lines are solved in both orders (east–west then north–south, and the
-other way) from the same start, and the air keeps the mean of the two. Air in Flow moves as whole
+It is solved implicitly, so any speed is stable. Where the links form lines (the rows and
+columns of the square map) it is solved along them (`wind/along`, `solve::lines`). A call is long
+against the time the air takes to mix from node to node, so one order of the two directions would
+leave stripes along the lines solved last: the lines are solved in both orders (east–west then
+north–south, and the other way) from the same start, and the air keeps the mean of the two. On
+any other mesh (`wind/mesh`) three steps of `solve::spread` on the links do it: the mixing and
+the overturning carry each gas by its share of the column, and the heat per mol; the evening of
+pressure moves the amount by the pressure, each gas and the heat going with it at the share of
+the node it leaves. There the overturning is an exchange of whole columns, so the vapour it
+brings to the warmer column on lines is not carried.
+
+What crosses the links is booked on each node at once (`wind::book`; `store::apply` would cut a
+node that passes on more gas than it holds, which a long call does). Air in Flow moves as whole
 columns, so there is no wind near the ground; bodies use the anchored `wind_ground` (6.3).
 
 ### 1.7 Paths

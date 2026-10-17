@@ -6,6 +6,7 @@ use super::kernel::{frozen_below, pow, warm_at};
 use super::{FAR, TRACE};
 use crate::flow::FlowView;
 use crate::chem::{Chemistry, Phase};
+use crate::grid::Grid;
 use crate::units::MAX_SUBSTANCES;
 use crate::World;
 use std::cell::Cell;
@@ -124,8 +125,8 @@ struct Screen<'a> {
     air_of: &'a [u32],
     n: usize,
     na: usize,
-    /// One ground node's share of its air node (`Grid::air_share`).
-    share: f64,
+    /// The map, for each ground node's share of its air node (`Grid::air_share`).
+    grid: &'a Grid,
     /// Per air node, the gas that is gas wherever a reaction may go far, mol.
     pool_lo: Vec<f64>,
     /// The commonest substances of the ground, most first.
@@ -160,7 +161,7 @@ impl<'a> Screen<'a> {
         let most = most.iter().take(COMMONEST).map(|m| m.1).collect();
         let gmin = nodes.tg.iter().fold(f64::MAX, |a, &t| a.min(t));
         let liquids = (0..ns).filter(|&k| chem.subs[k].melt <= gmax && chem.subs[k].boil > gmin).collect();
-        Screen { chem, ground: &w.ground, air: &w.air, tg: nodes.tg, air_of: nodes.air_of, n, na, share: w.grid.air_share(), pool_lo, most, liquids, cand }
+        Screen { chem, ground: &w.ground, air: &w.air, tg: nodes.tg, air_of: nodes.air_of, n, na, grid: &w.grid, pool_lo, most, liquids, cand }
     }
 
     /// The amounts of substance `k` in the ground nodes.
@@ -178,7 +179,7 @@ impl<'a> Screen<'a> {
 
     /// Does ground node `i` hold more of gas `k` than `OWN` of the air's over it?
     fn own_gas(&self, k: usize, i: usize) -> bool {
-        self.col(k)[i] > OWN * self.share * self.air[k * self.na + self.air_of[i] as usize]
+        self.col(k)[i] > OWN * self.grid.air_share(i) * self.air[k * self.na + self.air_of[i] as usize]
     }
 
     /// Ground nodes that may go far: warm enough; holding the inputs that are not gas beyond a
@@ -259,8 +260,9 @@ impl<'a> Screen<'a> {
         }
         // Vapour of what the node holds thins the gas too.
         let vapour = self.most.iter().filter(|&&k| t >= self.chem.subs[k].boil).map(|&k| col(k)).sum::<f64>();
-        let d = self.pool_lo[j] + vapour / self.share;
-        let x = |k: usize| act(col(k) / self.share + self.air[k * self.na + j], d);
+        let share = self.grid.air_share(i);
+        let d = self.pool_lo[j] + vapour / share;
+        let x = |k: usize| act(col(k) / share + self.air[k * self.na + j], d);
         if (own || vapour > 0.0) && t < c.warm(c.kdt * up(&c.gas, &x)) {
             return false;
         }
@@ -272,7 +274,7 @@ impl<'a> Screen<'a> {
             let hold = (c.held.iter().filter(|h| t < h.1)).map(|&(k, _, nu, _)| (if liquid(k) { wet() } else { col(k) }) / nu as f64).fold(f64::MAX, f64::min);
             let gnu = c.held.iter().filter(|h| t >= h.1).fold(c.gnu, |m, h| m.max(h.2 as f64));
             let full: f64 = airy.iter().map(|&(k, o)| pow(x(k), o)).product();
-            if t < c.warm(c.kdt * full.max((gnu * hold / (d * self.share)).min(1.0) * up(&airy, &x))) {
+            if t < c.warm(c.kdt * full.max((gnu * hold / (d * share)).min(1.0) * up(&airy, &x))) {
                 return false;
             }
         }

@@ -67,9 +67,9 @@ impl Grid {
     pub fn na(&self) -> usize {
         self.mesh.level(AIR).n()
     }
-    /// The share of an air node over one ground cell (1 / `air_scale`²).
-    pub fn air_share(&self) -> f64 {
-        1.0 / (self.air_scale * self.air_scale) as f64
+    /// The share of its air node over ground cell `i`: the cell's area over the node's.
+    pub fn air_share(&self, i: usize) -> f64 {
+        self.mesh.cells().area()[i] / self.mesh.level(AIR).area()[self.air_of(i)]
     }
     /// Air node above ground cell `i`: its parent at the air level.
     pub fn air_of(&self, i: usize) -> usize {

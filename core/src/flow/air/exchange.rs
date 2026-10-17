@@ -4,8 +4,9 @@
 use super::super::land::{melted, settle, wet};
 use super::super::scratch::may_evaporate;
 use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};
-use super::{air_temp, lerp};
+use super::{air_temp, lerp, over_cell};
 use crate::math::one_minus_exp;
+use crate::grid::AIR;
 use crate::units::{P_REF, R_GAS};
 use crate::World;
 
@@ -60,7 +61,7 @@ struct Active {
     up: bool,
     /// Its saturation pressure.
     sat: Sat,
-    /// Evaporation per unit of deficit over the time it moves for, mol K/Pa.
+    /// Evaporation per unit of deficit and of area over the time it moves for, mol K/(Pa m²).
     c_evap: f64,
 }
 
@@ -102,7 +103,7 @@ fn active(w: &World, s: &Scratch, henry: &[(usize, usize)], (dt, turn, since): (
             let k = s.gas[gi];
             let up = s.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
             let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
-            ((up || s.cond[gi]) && (turn || !trace)).then(|| Active { gi, k, up, sat: Sat::new(w, k, lo, hi), c_evap: w.cfg.evap * s.area * if trace { since } else { dt } / R_GAS })
+            ((up || s.cond[gi]) && (turn || !trace)).then(|| Active { gi, k, up, sat: Sat::new(w, k, lo, hi), c_evap: w.cfg.evap * if trace { since } else { dt } / R_GAS })
         })
         .collect()
 }
@@ -118,23 +119,24 @@ fn snap(w: &World, s: &mut Scratch, act: &[Active]) {
 
 /// The amount of gas `x` of `act` in the column above ground cell `i` (of the air as `snap`
 /// saw it), mol, and the height it fills near the ground, m.
-fn above(s: &Scratch, a: &Active, x: usize, na: usize, i: usize) -> (f64, f64) {
-    (lerp(s, &s.snap[x * na..(x + 1) * na], i) * s.per[i], lerp(s, &s.hk[a.gi * na..(a.gi + 1) * na], i))
+fn above(w: &World, s: &Scratch, a: &Active, x: usize, i: usize) -> (f64, f64) {
+    let na = w.grid.na();
+    (lerp(s, &s.snap[x * na..(x + 1) * na], i) * over_cell(w, s, i), lerp(s, &s.hk[a.gi * na..(a.gi + 1) * na], i))
 }
 
 /// Evaporation from every ground node.
 fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
-    let (n, na, area) = (w.grid.n(), w.grid.na(), s.area);
-    let c_cond = area / R_GAS;
+    let n = w.grid.n();
     snap(w, s, act);
     for i in 0..n {
-        let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
+        let (t, j, tl, area) = (s.tg[i], w.grid.air_of(i), s.tl[i], w.grid.mesh().cells().area()[i]);
+        let c_cond = area / R_GAS;
         for (x, ac) in act.iter().enumerate() {
             let (k, a) = (ac.k, w.ground[ac.k * n + i]);
             if !ac.up || a <= 0.0 {
                 continue;
             }
-            let (share, hk) = above(s, ac, x, na, i);
+            let (share, hk) = above(w, s, ac, x, i);
             let (sp, pa) = (s.sp[k], share * tl / (c_cond * hk));
             let ps = if t >= sp.boil { f64::INFINITY } else { ac.sat.at(t) };
             if ps <= pa {
@@ -147,7 +149,7 @@ fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
                 // A wet surface evaporates at the open rate: liquid stands on it, or its loose ground holds its field
                 // capacity or more (stage 1); a drier one goes with its liquid over that (stage 2: the bucket of Manabe 1969).
                 // No more than fills the column above the cell to saturation (the rest would rain back at once).
-                (ac.c_evap * (ps - pa) / t * (d / (w.cfg.phys.field * s.pd[i])).min(1.0)).min(a).min((ps - pa) * c_cond * hk / tl)
+                (ac.c_evap * area * (ps - pa) / t * (d / (w.cfg.phys.field * s.pd[i])).min(1.0)).min(a).min((ps - pa) * c_cond * hk / tl)
             };
             // Evaporating cools the node, no further than where the vapour pressure falls to the
             // partial pressure (the boiling point, when it boils): only heat above that pays.
@@ -168,17 +170,17 @@ fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
 /// Condensation onto every ground node of what the air it sees cannot hold at the temperature of
 /// the air touching it. Returns which gases of `act` rained.
 fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> Vec<bool> {
-    let (n, na, c_cond) = (w.grid.n(), w.grid.na(), s.area / R_GAS);
+    let (n, na) = (w.grid.n(), w.grid.na());
     snap(w, s, act);
     let mut rained = vec![false; act.len()];
     for i in 0..n {
-        let (j, tl) = (s.air_of[i] as usize, s.tl[i]);
+        let (j, tl, c_cond) = (w.grid.air_of(i), s.tl[i], w.grid.mesh().cells().area()[i] / R_GAS);
         for (x, ac) in act.iter().enumerate() {
             if !s.cond[ac.gi] {
                 continue;
             }
             let k = ac.k;
-            let (share, hk) = above(s, ac, x, na, i);
+            let (share, hk) = above(w, s, ac, x, i);
             let m = (share - ac.sat.at(tl) * c_cond * hk / tl).min(w.air[k * na + j]);
             if m <= 0.0 {
                 continue;
@@ -201,15 +203,16 @@ fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> Vec<bool> {
 /// Condensate in the air scatters sunlight like the powder of its solid; the faster a node
 /// condenses, the more of its sky it covers. Also the yearly average of the rain on each cell.
 fn clouds(w: &mut World, s: &mut Scratch, dt: f64) {
-    let (n, na, area) = (w.grid.n(), w.grid.na(), s.area);
+    let (n, na) = (w.grid.n(), w.grid.na());
     for j in 0..na {
         let [m, mr] = std::mem::take(&mut s.cloud[j]);
-        let rate = m / (area * s.cells[j] * dt);
+        let rate = m / (w.grid.mesh().level(AIR).area()[j] * dt);
         s.node_tmp[j] = if m > 0.0 { rate / (rate + w.cfg.cloud) * mr / m } else { 0.0 };
     }
     let ema = year_weight(w, dt);
     for i in 0..n {
         s.seen[i][3] = lerp(s, &s.node_tmp, i);
+        let area = w.grid.mesh().cells().area()[i];
         follow(&mut w.rain[i], (s.rain[i] / (area * dt)) as f32, ema);
         s.rain[i] = 0.0;
     }
@@ -235,10 +238,10 @@ fn ground_to_air(w: &mut World, s: &mut Scratch, k: usize, (i, j): (usize, usize
 /// the gas brings its heat; coming out takes them back. Dissolved gas moves with the liquid
 /// (`liquid`), may feed ground reactions (Law 2), and goes back to the air only here.
 fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
-    let (n, na, area) = (w.grid.n(), w.grid.na(), s.area);
+    let (n, na) = (w.grid.n(), w.grid.na());
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
     for i in 0..n {
-        let (t, j, tl) = (s.tg[i], s.air_of[i] as usize, s.tl[i]);
+        let (t, j, tl, area) = (s.tg[i], w.grid.air_of(i), s.tl[i], w.grid.mesh().cells().area()[i]);
         let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.ground[k * n + i] * wet(s, k, i), v + w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
         for &(gi, k) in henry {
             let (a, sp) = (w.ground[k * n + i], s.sp[k]);
@@ -247,7 +250,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             }
             // The column over the cell, the height it fills, mol dissolved per mol at balance, and the
             // time to balance through the two films.
-            let (col, hk) = (lerp(s, &w.air[k * na..(k + 1) * na], i) * s.per[i], lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
+            let (col, hk) = (lerp(s, &w.air[k * na..(k + 1) * na], i) * over_cell(w, s, i), lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
             let b = l * w.chem.henry(k, t, R_GAS * tl / (area * hk));
             let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
             let m = (b * (a + col) / (1.0 + b) - a) * one_minus_exp(dt * (1.0 + b) / tau);

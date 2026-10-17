@@ -169,16 +169,14 @@ pub struct Scratch {
     /// Volume of loose solid able to creep, weighted by softness, m³.
     #[serde(skip)]
     pub(super) mob: Vec<f64>,
-    /// Air node over each ground cell; the four nearest air nodes and their weights (`air::lerp`);
-    /// 1 over the number of ground cells under the air the cell sees.
+    /// Air node over each ground cell (radiation and Law 2 read it); the four nearest air nodes and their weights
+    /// (`air::lerp`).
     #[serde(skip)]
     pub(super) air_of: Vec<u32>,
     #[serde(skip)]
     pub(super) near: Vec<[u32; 4]>,
     #[serde(skip)]
     pub(super) wt: Vec<[f64; 4]>,
-    #[serde(skip)]
-    pub(super) per: Vec<f64>,
     /// Temperature of the air touching the ground, K (radiation; exchange reads it).
     pub(super) tl: Vec<f64>,
     /// The air each ground cell sees (`air::state`): temperature drop, K/m; mean height of the air,
@@ -195,9 +193,6 @@ pub struct Scratch {
     /// The air's amounts of the exchanged gases at the start of a pass, mol.
     #[serde(skip)]
     pub(super) snap: Vec<f64>,
-    /// Ground cells under each air node.
-    #[serde(skip)]
-    pub(super) cells: Vec<f64>,
     /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
     pub(super) vol: Vec<f64>,
@@ -212,27 +207,17 @@ pub struct Scratch {
     pub(super) zair: Vec<f64>,
     pub(super) ta: Vec<f64>,
     /// Per air node, reused by each part for its own sums: J/K (state), J (radiation),
-    /// reflectance (exchange), Pa (wind).
+    /// reflectance (exchange).
     #[serde(skip)]
     pub(super) node_tmp: Vec<f64>,
-    /// Work space of the wind: warmth at equal height, K; its gradient [east, south], K per node.
-    #[serde(skip)]
-    pub(super) warmth: Vec<f64>,
-    #[serde(skip)]
-    pub(super) grad: Vec<[f64; 2]>,
     /// Per gas [g * na + j]: may it condense in the column; height its amount fills near the
     /// ground, m; share of it in the upper half of the column.
     pub(super) cond: Vec<bool>,
     pub(super) hk: Vec<f64>,
     pub(super) split: Vec<f64>,
-    /// Work space of the wind (amounts after a direction; a row of fluxes per line) and of
-    /// radiation (a row per ground cell).
-    #[serde(skip)]
-    pub(super) nt_new: Vec<f64>,
+    /// Work space of radiation (a row per ground cell).
     #[serde(skip)]
     pub(super) rad: Vec<f64>,
-    #[serde(skip)]
-    pub(super) lanes: Vec<f64>,
     /// Time since trace gases last evaporated and condensed, s, and the calls since.
     pub(super) trace: [f64; 2],
     /// Law 2 (`change`): per ground node, the tick it last reacted slowly, the tick it next does,
@@ -351,7 +336,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
 /// Tables that depend on the grid and the chemistry alone: ground cell area, substance constants,
 /// and the map from ground cells to air nodes. Rebuilt when missing (they are not saved).
 pub(super) fn tables(w: &World, s: &mut Scratch) {
-    let (n, na, g) = (w.grid.n(), w.grid.na(), &w.grid);
+    let (n, g) = (w.grid.n(), &w.grid);
     let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
     s.area = g.area();
     s.sp = (w.chem.subs.iter())
@@ -381,11 +366,6 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             ([j(x0, y0), j(x1, y0), j(x0, y1), j(x1, y1)], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
         })
         .unzip();
-    s.cells = vec![0.0; na];
-    for &j in &s.air_of {
-        s.cells[j as usize] += 1.0;
-    }
-    s.per = (0..n).map(|i| 1.0 / air::lerp(s, &s.cells, i)).collect();
 }
 
 /// Space used only within a call, and the neighbour table (not saved).
@@ -395,6 +375,6 @@ pub(super) fn space(w: &World, s: &mut Scratch) {
     for v in [&mut s.rain, &mut s.sed_e, &mut s.mob] {
         *v = vec![0.0; n];
     }
-    (s.node_tmp, s.warmth) = (vec![0.0; na], vec![0.0; na]);
-    (s.done, s.grad, s.cloud) = (vec![false; n], vec![[0.0; 2]; na], vec![[0.0; 2]; na]);
+    s.node_tmp = vec![0.0; na];
+    (s.done, s.cloud) = (vec![false; n], vec![[0.0; 2]; na]);
 }

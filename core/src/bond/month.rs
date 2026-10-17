@@ -55,7 +55,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     let (n, na) = (w.grid.n(), w.grid.na());
     let i = cell(w, s);
     let j = w.grid.air_of(i);
-    let (air_share, lift, ta) = (w.grid.air_share(), w.lift(i), w.t_air(j));
+    let (air_share, lift, ta) = (w.grid.air_share(i), w.lift(i), w.t_air(j));
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
     for (k, p0) in pool0.iter_mut().enumerate() {

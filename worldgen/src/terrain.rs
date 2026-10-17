@@ -222,9 +222,8 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     // rates at the cell's temperature and the air's start (`Reactor::balance`: from the chemistry's
     // own rate constants and barriers). A cell with no liquid holds none. The air stays as it is.
     let mut rc = Reactor::new(&world.chem, &world.cfg);
-    let share = world.grid.air_share();
     for i in 0..n {
-        let (t, j) = (world.t_ground(i), world.grid.air_of(i));
+        let (t, j, share) = (world.t_ground(i), world.grid.air_of(i), world.grid.air_share(i));
         let mut amt: Vec<f64> = (0..ns).map(|k| world.ground[k * n + i]).collect();
         let gas: Vec<f64> = (0..ns).map(|k| world.air[k * na + j] * share).collect();
         if !rc.balance(&world.chem, &mut amt, &gas, t).is_empty() {

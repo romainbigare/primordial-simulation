@@ -37,7 +37,7 @@ pub struct Level {
 }
 
 /// A link while a level is built: the two cells (`a < b`), the distance and the width, m.
-pub(crate) type LinkSpec = (u32, u32, f64, f64);
+pub type LinkSpec = (u32, u32, f64, f64);
 
 /// Compressed lists of the members of each group: `start` (len `groups + 1`) and the members in the order given.
 fn compress(groups: usize, members: impl Iterator<Item = (u32, u32)> + Clone) -> (Vec<u32>, Vec<u32>) {
@@ -58,7 +58,7 @@ fn compress(groups: usize, members: impl Iterator<Item = (u32, u32)> + Clone) ->
 
 impl Level {
     /// A level of cells and links (each link once, `a < b`).
-    pub(crate) fn new(area: Vec<f64>, centre: Vec<[f64; 2]>, lat: Vec<f64>, links: Vec<LinkSpec>) -> Level {
+    pub fn new(area: Vec<f64>, centre: Vec<[f64; 2]>, lat: Vec<f64>, links: Vec<LinkSpec>) -> Level {
         let n = area.len();
         assert!(centre.len() == n && lat.len() == n, "a level needs a centre and a latitude for each cell");
         assert!(links.iter().all(|&(a, b, ..)| a < b && (b as usize) < n), "each link joins two cells a < b of the level");
