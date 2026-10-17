@@ -1,3 +1,6 @@
+//! The working memory of Flow (`Scratch`), its tables, and the every-few-months recheck of what
+//! is present (`refresh`).
+
 use super::air;
 use super::land::NONE;
 use super::range;
@@ -5,64 +8,58 @@ use crate::grid::DIRS;
 use crate::World;
 use serde::{Deserialize, Serialize};
 
-/// Numbers of one substance the laws read often: heat capacity, molar mass, fusion and
-/// vaporisation enthalpy, molar volume as [solid, liquid], melting and boiling point,
-/// reflectance as [solid, liquid].
+/// Numbers of one substance Flow reads often (from `chem::Substance`).
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub(super) struct Sp {
+    /// Heat capacity, J/(mol K)
     pub(super) cp: f64,
+    /// Molar mass, kg/mol
     pub(super) mm: f64,
+    /// Fusion enthalpy, J/mol
     pub(super) lf: f64,
+    /// Vaporisation enthalpy, J/mol
     pub(super) lv: f64,
+    /// Heat conductivity, W/(m K), no less than `COND_MIN`
     pub(super) cond: f64,
+    /// Molar volume [solid, liquid], m³/mol
     pub(super) v: [f64; 2],
+    /// Melting point, K
     pub(super) melt: f64,
+    /// Boiling point, K
     pub(super) boil: f64,
+    /// Mean reflectance [solid, liquid]
     pub(super) refl: [f64; 2],
 }
 
-/// Working memory of the law, rebuilt from the world when missing. It is saved with the world
-/// (but for the space used within a call and the tables `tables` rebuilds on load): the slower
-/// parts of the law run from what it held at their last turn, so a resumed run matches an unbroken one.
-///
-/// Who writes and reads each field (R `refresh`, G `ground_state`, S `air::state`, Rad
-/// `air::radiation`, X `air::exchange`, W `air::wind`, L `liquid`, C `creep`, Law 2 `change`
-/// through `view`). Ground fields are per ground node, air fields per air node.
-///
-/// | field | unit | written by | read by |
-/// | --- | --- | --- | --- |
-/// | `month`, `year`, `pending`, `pending_liq`, `pending_exc`, `owe_work` | month, year, s, s, s, flag | `step` | `step` |
-/// | `area`, `sp`, `cells`, `air_of`, `near`, `wt`, `per` | m², `Sp` per substance, count, ground cell to air nodes, weights, share | `tables` (on load) | all |
-/// | `loose`, `fixed`, `vary`, `bedk`, `gas` | substance lists | R (`loose`, `vary` also X, L) | all |
-/// | `fix` | m³ (volume, volume × reflectance) | R | `surface` |
-/// | `bed` | [J/K skin, m³, reflectance, W/(m K)] | R (L wears `[1]`) | G, Rad (via `alb`), C, Law 2 |
-/// | `cap` | J/K | G (every step), X, L, C (moves of heat capacity) | G, Rad, X, L, C |
-/// | `tg` | K | G | all, Law 2, bodies (`temps`) |
-/// | `pk`, `phi` | substance, share | G | `molten`, Rad |
-/// | `hold` | [J held, J low, J high, molten bits] | G, L (`[0]`), `lift` (marks stale) | G, L |
-/// | `z`, `head` | m (solid surface, surface of all the liquid, pores filled first) | `surface`, `settle`, `lift` | S, Rad, X, L, C |
-/// | `pd`, `alb`, `rc` | m (pore liquid over the cell), reflectance, m² K/W | `surface` | L; Rad |
-/// | `order`, `done`, `sed`, `sed_e` | cell keys by head, visited flag, mol carried, J carried | L | L |
-/// | `nbr`, `mob` | neighbour cells, m³ mobile | `space`; C | L; C |
-/// | `tl`, `ta0` | K, air touching the ground; K, air at the last S | Rad; S | X; Rad |
-/// | `seen`, `lay` | [drop/m, air height, absorbing share, cloud reflectance, air K]; K below the ground's air, per layer | S (X sets `[3]`) | Rad |
-/// | `rain`, `cloud`, `snap`, `trace` | mol condensed, [mol, mol × reflectance], mol per gas, s and calls | X | X (`rain` to `World::rain`) |
-/// | `za`, `vol` | m, m³ | S | S, W |
-/// | `nt`, `capa`, `mass` | mol, J/K, kg | S; X, W (moves) | X, W, Rad |
-/// | `fabs`, `gam`, `zair`, `ta` | optical depth, K/m, m, K | S (`ta` also Rad, W) | Rad, X, W |
-/// | `node_tmp` | reused: J/K (S), J (Rad), reflectance (X), Pa (W) | S, Rad, X, W | the same part |
-/// | `cond`, `hk`, `split` | may condense, m, share (per gas) | S | X, W |
-/// | `warmth`, `grad`, `nt_new`, `lanes`, `rad` | work space of W (warmth, gradient, amounts after a direction, a row of fluxes per line) and Rad (a row per ground cell) | W; Rad | W; Rad |
-/// | `slow` | [tick last, tick next, count] | Law 2 | Law 2 |
+/// The fusion enthalpy a ground node holds off a plateau, and the energies between which it
+/// holds it (until the amounts change).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub(super) struct Latent {
+    /// Fusion enthalpy held by what is molten, J
+    pub(super) held: f64,
+    /// The node keeps this `held` while its energy is at least `lo` and below `hi`, J (`hi` is
+    /// `f64::MIN` on a plateau, or when `lift` marks the node for a new state)
+    pub(super) lo: f64,
+    pub(super) hi: f64,
+    /// What is at or over its melting point, one bit per substance (`melted`; in an f64, exact to 53 substances)
+    pub(super) molten: f64,
+}
+
 /// What Law 2 reads of the last flow step (`Scratch::view`): ground temperatures, bed skins,
 /// the air node of each ground node, air temperatures.
 pub(crate) type FlowView<'a> = (&'a [f64], &'a [[f64; 4]], &'a [u32], &'a [f64]);
 
+/// Working memory of the law, rebuilt from the world when missing. It is saved with the world
+/// (but for the fields marked `serde(skip)`: tables `tables` rebuilds and space used within a
+/// call): the slower parts of the law run from what it held at their last turn, so a resumed run
+/// matches an unbroken one. Ground fields are per ground node, air fields per air node.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
+    /// The month and the year of the last air step.
     pub(super) month: Option<u64>,
     pub(super) year: Option<u64>,
-    /// Seconds since air and rain last moved, and since liquid (and creep) last moved.
+    /// Seconds since air and rain last moved, since liquid (and creep) last moved, and since the
+    /// ground last exchanged with the air.
     pub(super) pending: f64,
     pub(super) pending_liq: f64,
     pub(super) pending_exc: f64,
@@ -71,51 +68,64 @@ pub struct Scratch {
     pub(super) stale: bool,
     /// Moving liquid's work on its bed is due at the next liquid step.
     pub(super) owe_work: bool,
-    /// Tables of the grid and the chemistry alone (not saved): cell area, substance constants,
-    /// and the map from ground cells to air nodes (own node, four nearest and weights, share).
+    /// Area of a ground cell, m².
     #[serde(skip)]
     pub(super) area: f64,
+    /// The numbers of each substance.
     #[serde(skip)]
     pub(super) sp: Vec<Sp>,
-    /// Substances present in ground, bonded ground and air nodes. Loose ones that stay solid and
-    /// cannot evaporate are `fixed` (volume and volume × reflectance kept in `fix`); the others `vary`.
+    /// Substances present in loose ground (`refresh`; exchange and liquid add new ones).
     pub(super) loose: Vec<usize>,
+    /// Loose substances that stay solid and cannot evaporate, and the others in order of melting point.
     pub(super) fixed: Vec<usize>,
     pub(super) vary: Vec<usize>,
+    /// Volume of the `fixed` solids of each ground node, and volume × reflectance, m³.
     pub(super) fix: Vec<[f64; 2]>,
+    /// Substances present in bonded ground, and in the air (or able to evaporate into it).
     pub(super) bedk: Vec<usize>,
     pub(super) gas: Vec<usize>,
+    /// Bonded ground of each ground node (as of the last refresh; liquid wears `[1]`): heat
+    /// capacity of its skin, J/K; volume, m³; reflectance; heat conductivity, W/(m K).
     pub(super) bed: Vec<[f64; 4]>,
+    /// Heat capacity of each ground node, J/K (from the amounts at every step; moves keep it).
     pub(super) cap: Vec<f64>,
+    /// Temperature of each ground node, K.
     pub(super) tg: Vec<f64>,
     /// Substance held at its melting point in each ground node (or `NONE`), and its molten share.
     pub(super) pk: Vec<usize>,
     pub(super) phi: Vec<f64>,
-    /// Off a plateau: the fusion enthalpy held, and the energies between which it holds
-    /// (until the amounts change); and what is molten, one bit per substance (`melted`).
-    pub(super) hold: Vec<[f64; 4]>,
+    /// Fusion enthalpy held off a plateau, per ground node.
+    pub(super) latent: Vec<Latent>,
+    /// Height of the solid surface, and of the surface of all the liquid (pores filled first), m.
     pub(super) z: Vec<f64>,
     pub(super) head: Vec<f64>,
-    /// Pore space of the loose ground, as a depth of liquid over the cell: the first liquid fills it.
+    /// Pore space of the loose ground, as a depth of liquid over the cell, m: the first liquid fills it.
     pub(super) pd: Vec<f64>,
+    /// Reflectance of the ground's surface.
     pub(super) alb: Vec<f64>,
     /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
     pub(super) rc: Vec<f64>,
+    /// Condensed on each ground node in this exchange, mol.
     #[serde(skip)]
     pub(super) rain: Vec<f64>,
+    /// Cells by head, highest first: the order of the liquid sweep (`order_key`).
     pub(super) order: Vec<u64>,
-    /// Neighbours of each ground node along `DIRS` (`NONE` off the map).
+    /// Neighbours of each ground node along `DIRS` (`u32::MAX` off the map).
     #[serde(skip)]
     pub(super) nbr: Vec<[u32; 8]>,
+    /// The liquid sweep has passed this node.
     #[serde(skip)]
     pub(super) done: Vec<bool>,
-    /// Loose solids carried by liquid, [cell * carried kinds + kind], and their heat.
+    /// Loose solids carried by liquid, mol, [cell * carried kinds + kind], and their heat, J.
     #[serde(skip)]
     pub(super) sed: Vec<f64>,
     #[serde(skip)]
     pub(super) sed_e: Vec<f64>,
+    /// Volume of loose solid able to creep, weighted by softness, m³.
     #[serde(skip)]
     pub(super) mob: Vec<f64>,
+    /// Air node over each ground cell; the four nearest air nodes and their weights (`air::lerp`);
+    /// 1 over the number of ground cells under the air the cell sees.
     #[serde(skip)]
     pub(super) air_of: Vec<u32>,
     #[serde(skip)]
@@ -124,27 +134,43 @@ pub struct Scratch {
     pub(super) wt: Vec<[f64; 4]>,
     #[serde(skip)]
     pub(super) per: Vec<f64>,
+    /// Temperature of the air touching the ground, K (radiation; exchange reads it).
     pub(super) tl: Vec<f64>,
+    /// The air each ground cell sees (`air::state`): temperature drop, K/m; mean height of the air,
+    /// m; share of heat radiation it absorbs; cloud reflectance (exchange sets it); temperature, K.
     pub(super) seen: Vec<[f64; 5]>,
+    /// How much colder than the air touching the ground each layer of the air over a cell is,
+    /// [down, up], K (`air::column`).
     pub(super) lay: Vec<[[f64; air::LAYERS]; 2]>,
+    /// Temperature of each air node at the last `air::state`, K.
     pub(super) ta0: Vec<f64>,
+    /// Condensed in each air node in this exchange, mol, and mol × reflectance.
     #[serde(skip)]
     pub(super) cloud: Vec<[f64; 2]>,
+    /// The air's amounts of the exchanged gases at the start of a pass, mol.
     #[serde(skip)]
     pub(super) snap: Vec<f64>,
+    /// Ground cells under each air node.
     #[serde(skip)]
     pub(super) cells: Vec<f64>,
+    /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
     pub(super) vol: Vec<f64>,
+    /// Amount, mol; heat capacity, J/K; and mass, kg, of each air node (moves keep them).
     pub(super) nt: Vec<f64>,
     pub(super) capa: Vec<f64>,
     pub(super) mass: Vec<f64>,
+    /// Optical depth for heat radiation; temperature drop with height, K/m; mean height of the
+    /// air, m; temperature, K; of each air node.
     pub(super) fabs: Vec<f64>,
     pub(super) gam: Vec<f64>,
     pub(super) zair: Vec<f64>,
     pub(super) ta: Vec<f64>,
+    /// Per air node, reused by each part for its own sums: J/K (state), J (radiation),
+    /// reflectance (exchange), Pa (wind).
     #[serde(skip)]
     pub(super) node_tmp: Vec<f64>,
+    /// Work space of the wind: warmth at equal height, K; its gradient [east, south], K per node.
     #[serde(skip)]
     pub(super) warmth: Vec<f64>,
     #[serde(skip)]
@@ -154,6 +180,8 @@ pub struct Scratch {
     pub(super) cond: Vec<bool>,
     pub(super) hk: Vec<f64>,
     pub(super) split: Vec<f64>,
+    /// Work space of the wind (amounts after a direction; a row of fluxes per line) and of
+    /// radiation (a row per ground cell).
     #[serde(skip)]
     pub(super) nt_new: Vec<f64>,
     #[serde(skip)]
@@ -173,13 +201,11 @@ impl Scratch {
         (&self.tg, &self.ta)
     }
     /// For Law 2, from the last flow step: per ground node its temperature, the heat capacity of
-    /// its bonded skin (as of the last refresh) and its air node; per air node its temperature
-    /// (`FlowView`).
+    /// its bonded skin (as of the last refresh) and its air node; per air node its temperature.
     pub(crate) fn view(&self) -> FlowView<'_> {
         (&self.tg, &self.bed, &self.air_of, &self.ta)
     }
 }
-
 /// Neighbours of cell `i` along `dirs`, or `usize::MAX` off the map.
 #[inline]
 pub(super) fn around<const N: usize>(dirs: &[(i32, i32); N], gw: usize, gh: usize, i: usize) -> [usize; N] {
@@ -235,7 +261,8 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     if s.cap.len() == n {
         return;
     }
-    (s.pk, s.phi, s.hold) = (vec![NONE; n], vec![0.0; n], vec![[0.0, 0.0, f64::MIN, 0.0]; n]);
+    (s.pk, s.phi) = (vec![NONE; n], vec![0.0; n]);
+    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0.0 }; n];
     for v in [&mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
         *v = vec![0.0; n];
     }

@@ -1,4 +1,4 @@
-use super::scratch::{Scratch, Sp};
+use super::scratch::{Latent, Scratch, Sp};
 use crate::units::MAX_SUBSTANCES;
 use crate::World;
 
@@ -13,7 +13,7 @@ pub(super) fn molten(s: &Scratch, k: usize, i: usize) -> f64 {
 /// Is substance `k` at or over its melting point in ground node `i` (`World::melt`, as of the last `ground_state`)?
 #[inline]
 pub(super) fn melted(s: &Scratch, k: usize, i: usize) -> bool {
-    (s.hold[i][3] as u64) >> k & 1 == 1
+    (s.latent[i].molten as u64) >> k & 1 == 1
 }
 
 /// Liquid share of substance `k` in ground node `i`.
@@ -39,7 +39,7 @@ pub(super) fn rise(p: &Sp, t: f64, liq: bool, m: f64, area: f64) -> [f64; 2] {
 /// Raise (or lower) the surface of ground node `i` by `[solid, head]` m, and mark it for a new surface.
 #[inline]
 pub(super) fn lift(s: &mut Scratch, i: usize, [dz, dh]: [f64; 2]) {
-    s.hold[i][2] = f64::MIN;
+    s.latent[i].hi = f64::MIN;
     s.z[i] += dz;
     s.head[i] += dh;
 }
@@ -71,7 +71,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     for (i, &ci) in cap.iter().enumerate().take(n) {
         let same = (ci - s.cap[i]).abs() <= 1e-9 * ci;
         s.cap[i] = ci;
-        let (c, e, [held, lo, hi, was]) = (s.cap[i].max(1.0), w.e_ground[i], s.hold[i]);
+        let (c, e, Latent { held, lo, hi, molten: was }) = (s.cap[i].max(1.0), w.e_ground[i], s.latent[i]);
         if !full && same && e >= lo && e < hi {
             s.tg[i] = (e - held) / c;
             continue;
@@ -84,7 +84,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.ground[k * n + i] * s.sp[k].lf)));
         (s.pk[i], s.phi[i]) = th.on.unwrap_or((NONE, s.phi[i]));
         let bits = th.bits;
-        s.hold[i] = [th.held, th.lo, th.hi, bits as f64];
+        s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, molten: bits as f64 };
         s.tg[i] = th.t;
         if full || pk != NONE || s.pk[i] != NONE || bits as f64 != was {
             surface(w, s, i);

@@ -28,13 +28,13 @@ pub(super) fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
         if v <= 0.0 {
             continue;
         }
-        let tcur = s.tg[i].min((w.e_ground[i] - s.hold[i][0]) / s.cap[i].max(1.0)).max(0.0);
+        let tcur = s.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(0.0);
         for &k in &liq {
             let sp = s.sp[k];
             let m = w.ground[k * n + i] * if sp.boil <= tmin { 1.0 } else { wet(s, k, i) } * v / lvol;
             let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], m, sp.cp, m * (sp.cp * tcur + sp.lf));
             (w.ground[k * n + i], w.deep[k * n + i], w.e_deep[i], s.cap[i]) = (w.ground[k * n + i] - m, w.deep[k * n + i] + m, w.e_deep[i] + e, s.cap[i] - m * sp.cp);
-            s.hold[i][0] -= if s.pk[i] != k { m * sp.lf } else { 0.0 };
+            s.latent[i].held -= if s.pk[i] != k { m * sp.lf } else { 0.0 };
             settle(s, k, i, -m);
         }
     }
@@ -58,7 +58,7 @@ pub(super) fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
                 }
                 let out = m * (1.0 - into);
                 (w.deep[k * n + i], w.deep[k * n + j], w.ground[k * n + j], s.cap[j]) = (w.deep[k * n + i] - m, w.deep[k * n + j] + m * into, w.ground[k * n + j] + out, s.cap[j] + out * sp.cp);
-                s.hold[j][0] += if s.pk[j] != k { out * sp.lf } else { 0.0 };
+                s.latent[j].held += if s.pk[j] != k { out * sp.lf } else { 0.0 };
                 settle(s, k, j, out);
             }
         }
