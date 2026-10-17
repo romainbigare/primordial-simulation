@@ -494,11 +494,11 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
 }
 
 /// Take from a part by the body's uptake selectivity, the held liquid first, as much as it takes by its
-/// mass (`Body::equiv`) in the time, as far as it can use it (`choose::sate`). Walls taken below
+/// mass (`Body::equiv`) in the time, as far as its stores have room (`Body::level`). Walls taken below
 /// `w.cfg.phys.min_kg` fall apart.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
-    let m = wanted(w, b, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys), mb, days);
+    let m = wanted(w, b, |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys), mb);
     let got = kg(w, &m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;

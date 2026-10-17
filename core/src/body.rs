@@ -428,14 +428,6 @@ impl Body {
         }
         (liquid, h)
     }
-    /// The fuel growth converts into one kg of body matter, J (what its catalysed reactions would
-    /// release from the inputs of `Chemistry::build`; 0 where bodies do not grow): 1.11 kg of the
-    /// energy-rich solid, 17.3 MJ, in chemistry 0 for a body that burns it. Needs `prepare`.
-    pub fn build_fuel(&self, chem: &Chemistry, t: f64) -> f64 {
-        let Some(bl) = chem.build.as_ref() else { return 0.0 };
-        let mm = chem.subs[bl.outputs[0].0 as usize].molar_mass * bl.outputs[0].1 as f64;
-        bl.inputs.iter().map(|&(k, nu)| nu as f64 * self.heat_of(chem, k as usize, t)).sum::<f64>() / mm
-    }
     /// Can it digest body matter: does it break it (`breaks`: its catalyst for the reaction that burns the matter is on)? A body
     /// that cannot takes none in (`choose::wanted`).
     pub fn digests(&self, chem: &Chemistry) -> bool {
@@ -483,7 +475,7 @@ impl Body {
     /// pays to be does not (mass^1.0 of its body, `body::upkeep`). A member of `m_ref` (1 kg) is
     /// 1 kg; one of 30 kg 12.8 kg-equivalents, 2.3 times less per kg; of 10 t 1,778, so it takes 180
     /// times what a 10 kg one (10^0.75 = 5.6) does, not 1,000. Light, rain, liquid and gas go by
-    /// area. How much of what it takes it can use is `choose::sate`, not a size.
+    /// area. What it carries is bounded by its body (`Body::level`): a full store is its satiety.
     pub fn equiv(&self, p: &crate::Physics, mass: f64) -> f64 {
         let n = self.n();
         n * p.m_ref * (mass / n / p.m_ref).powf(p.intake_exp)

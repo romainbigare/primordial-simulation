@@ -851,38 +851,30 @@ fn part(b: &mut Body, f: f64) -> Body {
 }
 
 /// At its update, a node whose members differ so much that its two halves would not be alike
-/// splits in two (plan 7.1). The halves of a normal spread have means `d = sqrt(2/π)` standard
-/// deviations from the mean, so it splits when the halves' gap passes `phys.alike` steps along
-/// the gene where it is widest, in its steps (so not along a gene that is off in both halves; the
-/// brain's sizes count here in their mutation steps, in likeness by whole units), or, with
-/// `cfg.split_rows`, of the born rows in row steps (the step of a changed child); among genes as
-/// wide (a spread held at `most` is as wide in every gene), a keyed random pick. `d` is shrunk to
-/// the room left to the gene's walls, so the mean is kept exactly. Each half has half the
-/// members, stores and heat; their means are the mean ± `d`, and the variance along it falls by
-/// `d²`, so the spread of both together is kept.
-/// The rows, whose spread is one number for all, split all at once along a random direction of
-/// signs; the new half gets a genome of its own. Selection then acts between the halves until
-/// the next month's merge (`body::crowd`): the one that fits grows, the other shrinks. Halves of
-/// a gene are not alike, so the merge leaves them apart until they grow alike again; halves of
-/// the rows are alike (likeness is in genes), so it takes them back, the mean moved toward the
-/// one that grew, and the node splits again while its rows still differ that much. Halves of a
-/// brain size are alike too (likeness counts the sizes by whole units, `like`), so they go the
-/// same round, each paying for its own size (`Lineage::cost` goes with the body's genes), and a
-/// mean that reaches a whole unit from its lineage's size moves the node to a lineage of that
-/// size (`resize`). A node splits only while its cell keeps a free place after it (fewer than
-/// `cfg.crowd` - 1 bodies): a node held at `most` in its neutral genes is past the threshold at
-/// every update, and its halves (unlike, so never merged back) split again, so with no such limit
-/// the nodes of a cell doubled at each update (one 64x64 world reached about 146,000 in one cell).
-/// Blocking it does not bias the genes: the spread stops at `most` and a split keeps the mean.
+/// splits in two. The halves of a normal spread have means `d = sqrt(2/π)` standard deviations
+/// from the mean, so it splits when the halves' gap passes `phys.alike` steps along the gene where
+/// it is widest, in its steps (so not along a gene that is off in both halves; the brain's sizes
+/// count in their mutation steps); among genes as wide (a spread held at `most` is as wide in
+/// every gene), a keyed random pick. `d` is shrunk to the room left to the gene's walls, so the
+/// mean is kept exactly. Each half has half the members, stores and heat; their means are the
+/// mean ± `d`, and the variance along it falls by `d²`, so the spread of both together is kept.
+/// Selection then acts between the halves. Halves of a gene are not alike, so the monthly merge
+/// (`body::crowd`) leaves them apart until they grow alike again; halves of a brain size are
+/// alike (likeness counts the sizes by whole units, `like`), so the merge takes them back, each
+/// having paid for its own size (`Lineage::cost`), and a mean that reaches a whole unit from its
+/// lineage's size moves the node to a lineage of that size (`resize`). A node splits only while
+/// its cell keeps a free place after it (fewer than `cfg.crowd` - 1 bodies): a node held at
+/// `most` in its neutral genes is past the threshold at every update and its unlike halves split
+/// again, so without that limit the nodes of a cell would double at each update. Blocking it does
+/// not bias the genes: the spread stops at `most` and a split keeps the mean.
 pub fn split(w: &mut World, slot: usize, b: &mut Body) {
-    if b.count < 2.0 || b.spread.is_empty() && b.row_spread <= 0.0 || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
+    if b.count < 2.0 || b.spread.is_empty() || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
         return;
     }
     if !w.cfg.nodes && !body::light_eater(&w.chem, &b.genes) {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
-    let row = row_step(p, 10f32.powf(b.genes[body::MUT]));
     // Per gene the halves' shift from the mean (within the walls) and their gap in steps (as
     // `step` counts them, with one look-up of the range: most updates do not split).
     let half = |g: usize| {
@@ -891,37 +883,23 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
         let (x, y) = if g < lay.cat { (m + d, m - d) } else { ((m + d).max(0.0), (m - d).max(0.0)) };
         (d, x / u - y / u)
     };
-    let rows = if w.cfg.split_rows { 2.0 * (FRAC_2_PI * b.row_spread).sqrt() / row } else { 0.0 };
-    let top = (0..b.spread.len()).fold(0.0f32, |a, g| a.max(half(g).1)).max(rows);
+    let top = (0..b.spread.len()).fold(0.0f32, |a, g| a.max(half(g).1));
     if top <= p.alike {
         return;
     }
-    let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).chain([(usize::MAX, rows)]).collect();
+    let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).collect();
     // As wide but for rounding (a spread held at `most` is the same in steps in every gene).
     gap.retain(|x| x.1 >= top * (1.0 - 1e-4));
     let mut r = Rng::new(w.seed, w.day, b.id(slot), Purpose::Split);
     let g = gap[r.below(gap.len())].0;
-    let d = if g == usize::MAX { (FRAC_2_PI * b.row_spread).sqrt() } else { half(g).0 };
+    let d = half(g).0;
     let mut c = part(b, 0.5);
-    let (mut genes, mut rows) = (b.genes.clone(), w.life.born(b).to_vec());
-    if g == usize::MAX {
-        let mut bits = 0;
-        let mut theirs = rows.clone();
-        for (k, (x, y)) in rows.iter_mut().zip(theirs.iter_mut()).enumerate() {
-            bits = if k % 64 == 0 { r.u64() } else { bits >> 1 };
-            let s = if bits & 1 == 1 { d } else { -d };
-            (*x, *y) = (*x + s, *y - s);
-        }
-        c.genome = w.life.new_genome(theirs);
-        b.row_spread *= 1.0 - FRAC_2_PI;
-        c.row_spread = b.row_spread;
-    } else {
-        // Which half keeps the slot (and so is first in the order of updates) is drawn.
-        let d = if r.below(2) == 0 { d } else { -d };
-        (genes[g], c.genes[g]) = (genes[g] + d, genes[g] - d);
-        b.spread[g] = (b.spread[g] - d * d).max(0.0);
-        c.spread[g] = b.spread[g];
-    }
+    let (mut genes, rows) = (b.genes.clone(), w.life.born(b).to_vec());
+    // Which half keeps the slot (and so is first in the order of updates) is drawn.
+    let d = if r.below(2) == 0 { d } else { -d };
+    (genes[g], c.genes[g]) = (genes[g] + d, genes[g] - d);
+    b.spread[g] = (b.spread[g] - d * d).max(0.0);
+    c.spread[g] = b.spread[g];
     w.life.reborn(b, genes, rows);
     own(w, b, &mut c);
     w.diag.splits[0] += 1.0;

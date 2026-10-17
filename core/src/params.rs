@@ -67,14 +67,10 @@ pub struct Config {
     // Run switches (control runs to compare with)
     /// Bodies that stay near each other share one brain's rows (off: each keeps its own)
     pub share_brains: bool,
-    /// A node also splits along its born rows (`copy::split`)
-    pub split_rows: bool,
     /// Animals may be population nodes (off, `--individuals`: they are always individuals)
     pub nodes: bool,
     /// A mature body's children may have a second, alike parent (off, `--no-mix`: one parent)
     pub two_parents: bool,
-    /// Satiety at every size: a body takes no more than it can use (`choose::sate`)
-    pub sate_all: bool,
     /// A null run: no learning, no imitation, born rows and brain bases never change at a copy
     pub null: bool,
 
@@ -386,10 +382,8 @@ impl Default for Config {
             regrow: 1e-9,
             creep: 6.3e-11,
             share_brains: true,
-            split_rows: false,
             nodes: true,
             two_parents: true,
-            sate_all: false,
             null: false,
             phys: Physics::default(),
         }

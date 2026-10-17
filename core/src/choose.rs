@@ -597,8 +597,8 @@ fn can_take(chem: &crate::chem::Chemistry, b: &Body, k: usize) -> bool {
 }
 
 /// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all, for a
-/// body of `mass` kg, and no more than it can use in `days` (`sate`).
-pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, mass: f64, days: f64) -> Vec<f64> {
+/// body of `mass` kg, within the room of its stores (`Body::level`).
+pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, mass: f64) -> Vec<f64> {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let from = |k: usize| from(k).max(0.0);
     let up = |k: usize| if from(k) > 0.0 && can_take(chem, b, k) { b.gene(lay.upt + k).max(0.0) } else { 0.0 };
@@ -608,7 +608,6 @@ pub(crate) fn wanted(w: &World, b: &Body, from: impl Fn(usize) -> f64, kg: f64, 
     let room = |k: usize| if chem.materials().any(|x| x == k) { f64::MAX } else { (b.level(chem, k, mass) - b.store[k]).max(0.0) };
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(0.5 * from(k)).min(room(k)) } else { 0.0 }).collect();
     digest_room(chem, b, &mut m, mass);
-    sate(w, b, &mut m, days, mass);
     m
 }
 
@@ -636,48 +635,6 @@ pub(crate) fn digest_room(chem: &crate::chem::Chemistry, b: &Body, m: &mut [f64]
     }
 }
 
-/// Satiety, **off unless `Config::sate_all`** (`ew run --sate-all`): a body
-/// takes no more of what it burns than its reactions can use over `days`, counted by the heat of
-/// the amounts `m` (mol) it burns (`Consts::burn`): its upkeep plus what it can build in the
-/// interval, which is the work (`Physics::c_build` x its `equiv` / `m_ref` x days) and the
-/// energy-rich solid converted into the matter that work makes (`Body::build_fuel` per kg, `c_copy`
-/// of work a kg: 2.7 J of fuel for each J of work in chemistry 0). Its reactions release a share of
-/// what it holds over the interval (first order in the fuel, `release`), not all of it, so what
-/// they can use is a store: it refills its fuel until that share of it covers that (`need` / share,
-/// less what it holds). The substances it burns are cut to that together; the others (liquid, which
-/// comes by area and stops at the level the body keeps) are not counted. Never less than the
-/// upkeep's worth, so a body never stops short of what it burns; a body with no fuel takes what
-/// it reaches. The target is capped at what the body could take by its size in the time.
-///
-/// **Why it is off.** What a body takes is bounded by its intake (`Physics::take`) and by what it
-/// can carry: `Body::level` is a share of its body, so a full store is the satiety. Satiety on top
-/// of that only starves: a body takes on only some of its decisions and can take no more than its
-/// upkeep at each, so its store falls faster than it is refilled (234 starting eaters of seed 1
-/// took 1.0 kg each in ten days against 3.0 without it).
-pub fn sate(w: &World, b: &Body, m: &mut [f64], days: f64, mass: f64) {
-    let (p, t) = (&w.cfg.phys, b.temp(&w.chem));
-    let heat = |k: usize| b.heat_of(&w.chem, k, t);
-    let got: f64 = m.iter().enumerate().map(|(k, a)| a * heat(k)).sum();
-    if got <= 0.0 || !w.cfg.sate_all {
-        return;
-    }
-    let (up, fuel, rel) = (body::upkeep(w, b, days, mass), b.fuel(&w.chem, t), body::release(w, b, days));
-    if fuel <= 0.0 || rel <= 0.0 {
-        return;
-    }
-    // `rel` is small for a large `fuel` when gas or catalysts, not the fuel, limit the burning
-    // (under liquid, unfolded): the target then grows without bound. A body takes no more than
-    // its size allows (`Physics::take` x days x `equiv`, the cap of every take) whatever it could
-    // use, so `can` stops at the heat of that much of the best fuel taken.
-    let best = m.iter().enumerate().filter(|&(_, &a)| a > 0.0).map(|(k, _)| heat(k) / w.chem.subs[k].molar_mass).fold(0.0, f64::max);
-    let work = p.c_build * b.supply(&w.chem, p) / p.m_ref * days;
-    let need = up + work * (1.0 + b.build_fuel(&w.chem, t) / p.c_copy);
-    let can = (need * fuel / rel - fuel).min(p.take * days * b.supply(&w.chem, p) * best).max(up);
-    if got > can {
-        m.iter_mut().enumerate().filter(|&(k, _)| heat(k) > 0.0).for_each(|(_, a)| *a *= can / got);
-    }
-}
-
 pub(crate) fn kg(w: &World, m: &[f64]) -> f64 {
     m.iter().zip(&w.chem.subs).map(|(a, s)| a * s.molar_mass).sum()
 }
@@ -700,13 +657,13 @@ fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
 
 /// Take loose solids and liquids from the cell's ground, as `reach` allows for the mass it
 /// takes by (`Body::equiv`; a node's members each work their own area: it is the node's total), and
-/// no more than it can use (`sate`).
+/// no more than its stores have room for (`Body::level`).
 fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let (i, n) = (b.cell as usize, w.grid.n());
     let tg = w.life.env[i][0];
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
     let mass = b.mass(&w.chem);
-    let m = wanted(w, b, free, reach(w, b, free) * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mass, b.interval() as f64);
+    let m = wanted(w, b, free, reach(w, b, free) * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mass);
     if !body::pay(w, b, w.cfg.phys.c_handle * kg(w, &m), b.interval() as f64) {
         return;
     }
@@ -760,8 +717,8 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 }
 
 /// Take from another body in the cell, by uptake selectivity, as much as its mass (`Body::equiv`),
-/// what it can use (`sate`) and its force against the other's allow (a member's force: strength x what a
-/// held part adds x its body, `Body::built`, as `bond::force`: a hurt body is weaker), and its room. The
+/// its stores' room and its force against the other's (a member's force: strength x what a
+/// held part adds x its body, `Body::built`, as `bond::force`: a hurt body is weaker) allow. The
 /// quicker body acts first: one that decides more often than the taker has acted again within part of the
 /// taker's interval and gets away with chance 1 - its interval / the taker's (the taker has paid). From
 /// a node (its members lie spread over the cell) the taker also reaches only the area it works (`reach`);
@@ -784,7 +741,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let lever = bond::lever(w, b);
     let (fb, fo) = (b.gene(STRENGTH) * lever * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
-    let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mb, b.interval() as f64);
+    let m = wanted(w, b, |k| o.store[k], rate * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mb);
     let resist = 1.0 + w.life.sum[b.cell as usize][1] / w.grid.area() / w.cfg.phys.rho_pass;
     let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
     // The bite tears this share of the body; the stores it held spill in proportion, less what the taker
@@ -823,7 +780,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
 
 /// Put to another body in the cell: from the stores held above twice their safe minimum (never its matter, nor a key
 /// liquid below its level), by their shares, up to what the other could take by its own size in the time
-/// (`phys.take` x interval x its mass, `Body::equiv`, and use, `sate`), as far as it has room. A node gives as one
+/// (`phys.take` x interval x its mass, `Body::equiv`), as far as it has room. A node gives as one
 /// member: a share 1/count of its spare (its members cannot all reach one body). It remembers this for the giver.
 fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     // The receiver's numbers (`supply` goes by its pace, `can_take` by its genes' catalysts) need `prepare`: a body of a
@@ -843,7 +800,6 @@ fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let share = (w.cfg.phys.take * b.interval() as f64 * o.supply(&w.chem, &w.cfg.phys) / all.max(1e-9)).min(1.0 / b.n());
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if can_take(chem, o, k) { (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0)) } else { 0.0 }).collect();
     digest_room(chem, o, &mut m, mo);
-    sate(w, o, &mut m, b.interval() as f64, mo);
     let got = kg(w, &m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
         return;

@@ -784,75 +784,6 @@ fn reproducing_updates_keep_elements_and_energy() {
     assert!(de < 1e-9 && dq < 1e-9, "element drift {de:e}, energy drift {dq:e}");
 }
 
-/// Satiety holds at every size with `Config::sate_all` (the decision after watch report 7; the
-/// default holds it past `full` only, below) and counts what a body can build: asked for twice what
-/// its size can take, bodies of 0.1, 1, 10 and 100 times a starting eater's mass (below and past
-/// `full`) are left with the fuel their upkeep and their building use, never the size cap, and the
-/// solid converted into the matter they build counts: the same body with a copy cost a million times
-/// lower is left with more.
-#[test]
-fn satiety_caps_every_size_and_counts_the_matter_built() {
-    let (mut w, i) = start();
-    let r = roles(&w);
-    w.cfg.phys.c_build = 3e4;
-    w.cfg.sate_all = true;
-    for times in [0.1, 1.0, 10.0, 100.0] {
-        let mut b = eater(&mut w, i, 0, 6.0);
-        scale(&mut w, &mut b, times);
-        // Matter is not an eater's fuel here: it burns the solid only.
-        let lay = Layout::of(&w.chem);
-        let (m, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
-        (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
-        b.prepare(&w.chem, &w.cfg.phys);
-        let (p, days, mass) = (w.cfg.phys, b.interval() as f64, b.mass(&w.chem));
-        let (equiv, up) = (b.supply(&w.chem, &p), body::upkeep(&w, &b, days, mass));
-        let cap = p.take * days * equiv;
-        let jpk = -w.chem.dh(r.burn) / w.chem.reactions[r.burn].inputs.iter().find(|x| x.0 as usize == r.rich).unwrap().1 as f64 / w.chem.subs[r.rich].molar_mass;
-        let left = |w: &World, b: &Body| {
-            let mut m = vec![0.0; w.chem.ns()];
-            m[r.rich] = 2.0 * cap / w.chem.subs[r.rich].molar_mass;
-            choose::sate(w, b, &mut m, days, mass);
-            m[r.rich] * w.chem.subs[r.rich].molar_mass
-        };
-        let dear = left(&w, &b);
-        let cheap = {
-            let mut w2 = w.clone();
-            w2.cfg.phys.c_copy = 1e-6 * w.cfg.phys.c_copy;
-            left(&w2, &b)
-        };
-        println!("{times} x 30 kg: left {dear:.3} kg (upkeep {:.3} kg, size cap {cap:.3} kg), with a copy cost 10^6 lower {cheap:.3} kg", up / jpk);
-        assert!(dear < cap && cheap <= cap + 1e-9, "the size cap {cap} binds: {dear}, {cheap}");
-        assert!(dear >= up / jpk * (1.0 - 1e-9), "less than its upkeep's worth: {dear} of {}", up / jpk);
-        assert!(cheap >= dear, "{cheap} against {dear}");
-    }
-    // A starved body (a store under the target) is the case where the building term shows: with
-    // the conversion of the solid into the matter built counted, it is left more than with the
-    // conversion nearly free (a copy cost 10^6 higher).
-    for keep in [0.04] {
-        let mut b = eater(&mut w, i, 0, 6.0);
-        scale(&mut w, &mut b, 10.0);
-        let out_kg = (1.0 - keep) * kg(&w, &b, r.rich);
-        add(&mut w, &mut b, r.rich, -out_kg);
-        let lay = Layout::of(&w.chem);
-        let (m, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
-        (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
-        b.prepare(&w.chem, &w.cfg.phys);
-        let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
-        let left = |w: &World| {
-            let mut m = vec![0.0; w.chem.ns()];
-            m[r.rich] = 40.0 * w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys) / w.chem.subs[r.rich].molar_mass;
-            choose::sate(w, &b, &mut m, days, mass);
-            m[r.rich] * w.chem.subs[r.rich].molar_mass
-        };
-        let with = left(&w);
-        let mut w2 = w.clone();
-        w2.cfg.phys.c_copy *= 1e6;
-        let without = left(&w2);
-        println!("a starved body (fuel {:.0}% of the target's): left {with:.3} kg with the conversion counted, {without:.3} kg with a copy cost 10^6 higher", 100.0 * keep);
-        assert!(with > without * 1.5, "{with} and {without}");
-    }
-}
-
 /// Dead body matter on the ground oxidises in the open at the rate chemistry 0 sets: 0.2 of it a
 /// year at 290 K in the starting air (18.6% lost in a year; a little slower than the energy-rich
 /// solid's 0.27 a year, 24%: structure resists; both are litter decay constants, forest floor
@@ -895,40 +826,6 @@ fn dead_body_matter_oxidises_at_the_set_rate() {
     let (c_matter, c_solid) = (cost(burn), cost(1));
     println!("enzyme capacity at a speed-up of 10^2.6: body matter {c_matter:.2e}, the solid {c_solid:.2e} per s");
     assert!(c_matter > 0.5 * c_solid && c_matter < 1.0 * c_solid, "{c_matter} and {c_solid}");
-}
-
-/// By default there is no satiety (14 Oct 2026, after watch report 8): a body is left everything it
-/// is asked to take, up to its size cap, young or past `full`; what it carries is bounded by its
-/// body (`Body::level`, below), so a full store is the satiety. With `Config::sate_all` it is held
-/// to its upkeep and what it builds at every size. (With satiety at every size and the keep genes a
-/// share of the whole mass, all the animals of the 64x64 runs died in their first year.)
-#[test]
-fn no_satiety_by_default_and_every_size_with_the_switch() {
-    let (mut w, i) = start();
-    let r = roles(&w);
-    let left = |w: &World, copy: f32| {
-        let mut w = w.clone();
-        let mut b = eater(&mut w, i, 0, copy);
-        let lay = Layout::of(&w.chem);
-        let (m, burn_matter) = worldgen::life::matter_roles(&w.chem).expect("matter");
-        (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
-        b.prepare(&w.chem, &w.cfg.phys);
-        let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
-        let cap = w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys);
-        let mut m = vec![0.0; w.chem.ns()];
-        m[r.rich] = 2.0 * cap / w.chem.subs[r.rich].molar_mass;
-        choose::sate(&w, &b, &mut m, days, mass);
-        (m[r.rich] * w.chem.subs[r.rich].molar_mass, cap)
-    };
-    // A body of 21 kg: copy mass 100 kg (below full, 200 kg) or 5 kg (past full, 10 kg).
-    let (young, cap) = left(&w, 2.0);
-    let (grown, _) = left(&w, 5f32.log10());
-    println!("no satiety: left {young:.3} kg of {:.3} asked below full, {grown:.3} kg past it (size cap {cap:.3} kg)", 2.0 * cap);
-    assert!((young / (2.0 * cap) - 1.0).abs() < 1e-9 && (grown / (2.0 * cap) - 1.0).abs() < 1e-9, "a body is held: {young} and {grown} of {}", 2.0 * cap);
-    w.cfg.sate_all = true;
-    let (young_all, _) = left(&w, 2.0);
-    let (grown_all, _) = left(&w, 5f32.log10());
-    assert!(young_all < 0.2 * cap && grown_all < 0.2 * cap, "satiety at every size holds the young and the grown: {young_all}, {grown_all}");
 }
 
 /// What a body carries is bounded by its body, not its whole mass (14 Oct 2026, after watch report
