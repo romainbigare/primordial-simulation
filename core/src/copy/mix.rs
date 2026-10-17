@@ -21,7 +21,7 @@ pub(super) fn partner(w: &World, slot: usize, b: &Body, r: &mut Rng) -> Option<u
     }
     let (lay, lim) = (Layout::of(&w.chem), w.cfg.phys.alike);
     // Among equals the one with the least key (a draw keyed by the call and the slot, not by the order of the cell's list).
-    let (mut best, mut pick, salt) = (f32::INFINITY, None, r.u64());
+    let (mut best, mut pick, draw) = (f32::INFINITY, None, r.u64());
     for &s in &w.life.at[b.cell as usize] {
         let (s, t) = (s as usize, &w.life.bodies[s as usize]);
         if s == slot || !t.alive {
@@ -32,7 +32,7 @@ pub(super) fn partner(w: &World, slot: usize, b: &Body, r: &mut Rng) -> Option<u
         if !t.adult(&w.chem) {
             continue;
         }
-        let key = Rng::new(salt, 0, s as u64, Purpose::Partner).u64();
+        let key = Rng::new(draw, 0, s as u64, Purpose::Partner).u64();
         if d < best || pick.is_some_and(|(_, k)| key < k) {
             (best, pick) = (d, Some((s, key)));
         }

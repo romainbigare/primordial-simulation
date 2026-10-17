@@ -186,7 +186,7 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (i, _) = pair(&w);
     let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.grid.area());
-    // The loose layer of the generated land is 1 m of a mix of grains, 0.4 of it pores (random packing: 0.36 to 0.44).
+    // The loose layer of the generated land is 1 m of a mix of loose solids, 0.4 of it pores (random packing: 0.36 to 0.44).
     assert!((pores / area / 0.4 - 1.0).abs() < 0.05, "{} m of pore depth under a metre of loose ground", pores / area);
     let depth = |w: &World| pcore::survey::env_of(w, i)[1];
     assert_eq!(depth(&w), 0.0);
