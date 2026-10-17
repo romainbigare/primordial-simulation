@@ -1,6 +1,6 @@
 # Handover: Emergent World, version 2
 
-Revised: 16 October 2026, after M3 clean-up.
+Revised: 17 October 2026, after the M3 clean-up.
 
 **For:** an AI agent (or engineer) who works on version 2.
 **From:** a design conversation between the project owner and Claude, after a review of version 1, an earlier attempt with the same goal. You do not have version 1. Everything useful from it is written in this document.
@@ -446,7 +446,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 | Individual bodies in detailed areas | 1 day |
 | Snapshots for the history tape | every 10 years (and before every god action) |
 
-As built: ground and air physics every 3 days, liquid every 15, the reactor every physics step, bodies every 5 to 360 days (their `INTERVAL` gene), parts and loads once a month.
+As built: ground and air physics every 3 days (radiation at every step; evaporation, rain and wind every 3 days), liquid every 15, the reactor every physics step, bodies every 5 to 360 days (their `INTERVAL` gene), the loads of parts once a month and their reactions every 6 months. Each part of Flow keeps its own period.
 
 There is **one world clock**. Fast processes in detailed areas sub-step inside a month. Seasons must exist, because they matter for food and migration.
 
@@ -458,10 +458,20 @@ There is **one world clock**. Fast processes in detailed areas sub-step inside a
 
 ```
 core/       the five laws, world state, random numbers. No IO, no Earth words.
-worldgen/   terrain, chemistry 0 and the chemistry generator, richness checks, first life
-tape/       snapshots, yearly series, raw events, viewer frames; save and load
+  src/flow/ src/change/ src/bond/ src/copy/ src/choose/
+              one folder per law (core/src/<law>/; the air in flow/air/)
+  src/body/   bodies: genes, tissue, metabolism, exchange, the update, its physics, paying, death, intake
+  src/chem/   the chemistry: its data, its physics (phases, melting), the roles of reactions
+  src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
+              life (the registry of bodies), lineage, nodes (population nodes), lanes (paths), survey (the cells
+              bodies see), brain, grid, rng, event, math, units, par
+  tests/      one file per law (flow, change, bond, copy, choose, body), chemistry0, numbers
+worldgen/   terrain, chemistry 0 (chem0.toml) and the chemistry generator, richness checks, first life (life/), what is
+              placed when (schedule.rs); the test kit (worldgen::testkit, behind the `testkit` feature)
+tape/       the recorder (rec/, its yearly columns in rec/cols/), snapshots (snapshot.rs), map layers, measures,
+              the fingerprint of a world; tests: tape.rs, golden.rs
 library/    the recognition library (data files); today the Earth names of chemistry 0
-cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`), pictures
+cli/        headless runs (`ew run`, `ew resume`, `ew chem`, `ew numbers`; flags in args.rs), pictures; the word ban test
 web/        the 2D map viewer (TypeScript)
 analyze/    not built yet (M5): pattern finder, fact cards, recognition matching, interest score
 ```
@@ -480,7 +490,7 @@ analyze/    not built yet (M5): pattern finder, fact cards, recognition matching
 - **Snapshots:** every 10 years, and before every god action, save the full state, compressed (bincode, then gzip). A run can go on from any snapshot (`ew resume`).
 - **Raw physical events:** body born, body died (and cause: lacking a store, frozen or boiled, could not pay, taken, broken, age), taken from, given to, watched, bond made or broken, first time a substance appears in the world, god action applied. Only raw physical facts. **"A city was founded" is not a raw event.** The pattern finder detects that later.
 - **Summary series** every year (`series.csv`): totals per element, energy, temperatures, absorbing-gas amounts, population counts, births and deaths by cause, traffic, gifts, imitation and signals. Columns are named by index, never by Earth names (`elem_<j>`, `air_<k>`, `cat_<r>`).
-- **Columns by starting kind** (`root_<k>_*`): `<k>` is the starting kind a body descends from. Members, mass, births and deaths by cause, real life and adult life, and the means of the main genes, counted by members (a node of 10⁸ members counts 10⁸ times). In a roster run, read the number of kinds alive from these columns, not from the clustering column `kinds` (it can count at most 6).
+- **Columns by starting kind** (`root_<k>_*`): `<k>` is the starting kind a body descends from. Members, mass, births and deaths by cause, the life the genes allow and the life lived, and the means of the main genes, counted by members (a node of 10⁸ members counts 10⁸ times). In a roster run, read the number of kinds alive from these columns, not from the clustering column `kinds` (it can count at most 6).
 - **Months** (`months.csv`): births and deaths by kind and cause each month, so seasons show.
 - **The run's numbers** (`physics.json`): every field of `Physics` and `Config`. `ew numbers OLD NEW` prints the fields that differ between two runs, so no number changes without the reader seeing it.
 - **Viewer frames** (`world.ewf.gz`): map layers every few years, with the series and the events.
@@ -842,12 +852,21 @@ Log any drift. A drift above a small tolerance is a bug and stops the run in deb
 
 ### 12.3 Tests (keep few, fast and meaningful)
 
+What the tests must cover:
+
 - **Conservation** (as above) on a small world for 100 years.
 - **No NaN, no infinity, no negative amounts.**
-- **Repeatability:** run the same seed twice on the same machine, and the state hashes must match.
+- **Repeatability:** run the same seed twice on the same machine, and the state must be the same, bit for bit.
 - **Snapshot round-trip:** save, load, continue. The result must match an unbroken run.
 - **One tiny scene per law** showing basic physical behaviour: liquid flows downhill; heat spreads; a reaction runs faster when hot; a bond breaks under too much load; a child has its parent's genes plus noise; a body learns to move towards food.
 - **Speed benchmark:** years per second on the reference island. Track it over time.
+
+How the suite is built:
+
+- **The normal suite** (`cargo test --release --workspace`) takes about 15 seconds. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs`, with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the big-brain test, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4).
+- **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked in the ledger, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
+- **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). Only a bug fix may change a fingerprint: `GOLDEN=print` prints the new values. CI runs it again with the `threads` feature, which must give the same fingerprints.
+- **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes and nodes. CI runs them (`cargo test --release --workspace -- --ignored`).
 
 That is the core of testing, until something emerges. Reviews of the code and of the laws happen in rounds, by the agent and the owner together (M0 to M3 used several). What stays banned is proof machinery: receipts, proof campaigns, cross-machine determinism, replay proofs.
 
@@ -937,13 +956,13 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **What eaters eat.** Eaters live almost only on dead plant matter, digested in full; nothing stops them before they eat most of the plants' production. A structural plant matter that only a priced catalyst breaks is an option (the owner decides).
 - **Warm blood.** A body whose upkeep rises about 9% a kelvin has no steady warmth with real fur, because no body can raise its conductance (no sweating or blood flow to the skin). `KEEP_T` and `COOL_T` are not selected on the mild island; M4's cold and seasons will test them.
 - **Carbon.** The carbon cycle has no source (a volcano-like input is the same physics as the god action). The sea's store goes with its depth to the power 2/3, the Revelle factor is 3, and the whole depth is one mixed layer (6.1), so the sea answers the air in years, not centuries.
-- **Inside bodies.** The litter constants also run inside living bodies (real living stems and bones do not rot). The rock salt cannot be kept in a body (real bodies bind calcium in solids). A stronger form of product inhibition (a full store stops the enzyme) was measured. Bodies hold their liquid without its fusion heat. Each is the owner's choice.
+- **Inside bodies.** The litter constants also run inside living bodies (real living stems and bones do not rot). The rock salt cannot be kept in a body (real bodies bind calcium in solids). A stronger form of product inhibition (a full store stops the enzyme) was measured. Each is the owner's choice.
 - **Water and air.** Transpiration is set by the breath (`GAS`), not by the liquid or the heat. Still air is forced convection at one anchored wind; free convection (calm air) is not modelled.
 - **Tuned numbers that matter.** `bump` (tuned) decides whether a body can move; `c_brain` sets most of what plants pay.
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters still grow about 0.2 a year at year 60, so report log10 kg at year 60 with the growth rate over years 30 to 60, three seeds at least. Under 2 times is noise.
-- **Core size** is over its goal (14.3).
+- **Core size.** `core` has 7,508 code lines against its budget of 8,000 (14.3); the foundation's new base must fit in what is left as the old code goes.
 
 ---
 
@@ -975,10 +994,12 @@ All of these must be true:
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
 
-**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET` (**62** at the end of M3), or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
+**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET` (**62** at the end of M3; 61 rows are tuned), or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
 
-**Code size at the end of M3:** `core` is 9,962 lines on `43efbc5`: 7,236 of code, 2,142 of comments, 584 blank. A
-comment line starts with `//` after its spaces. Comments are not counted, so do not delete them to save lines. The
+**Code size at the end of M3:** `core` is 10,372 lines: 7,508 of code, 2,260 of comments, 604 blank. A comment line
+starts with `//` after its spaces; count the code lines with
+`git ls-files core/src | grep '\.rs$' | xargs grep -hvE '^\s*(//|$)' | wc -l`. Comments are not counted, so do not
+delete them to save lines. The
 foundation work keeps `core` at or under 8,000 code lines by replacing special code with general pieces, not by adding
 to it (`docs/foundation/plan.md`, "The main rule" and "The line budget"); a test will count the lines (its task A6).
 
