@@ -399,7 +399,8 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         pcore::choose::act(w, slot, &mut b, &mut pcore::body::Tmp::default());
         let id = b.id(slot);
         took.push(w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>());
-        (ups.push(up), paces.push(pace));
+        ups.push(up);
+        paces.push(pace);
         w.life.bodies[slot] = b;
     }
     println!("took {took:?} kg at 280 K and 300 K; pace {paces:?}; upkeep {ups:?}");

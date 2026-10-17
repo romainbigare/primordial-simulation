@@ -230,9 +230,9 @@ pub(super) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         out += to_space;
     }
     s.rad = rows;
-    for j in 0..na {
-        e_air[j] += s.node_tmp[j];
-        s.ta[j] = e_air[j] / s.capa[j];
+    for (j, e) in e_air.iter_mut().enumerate().take(na) {
+        *e += s.node_tmp[j];
+        s.ta[j] = *e / s.capa[j];
     }
     ledger.sun_in += sun;
     ledger.space_out += out;
@@ -506,8 +506,8 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
     let mut lift = 0.0;
     for dir in 0..2 {
         s.nt_new.clone_from(&s.nt);
-        for j in 0..na {
-            s.ta[j] = e_air[j] / s.capa[j];
+        for (j, &e) in e_air.iter().enumerate().take(na) {
+            s.ta[j] = e / s.capa[j];
             s.node_tmp[j] = s.nt[j] * R_GAS * s.ta[j] / s.vol[j];
             s.warmth[j] = s.ta[j] + s.gam[j] * s.zair[j];
         }
@@ -639,7 +639,7 @@ pub(super) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
             }
         }
     }
-    for j in 0..na {
-        s.ta[j] = e_air[j] / s.capa[j];
+    for (j, &e) in e_air.iter().enumerate().take(na) {
+        s.ta[j] = e / s.capa[j];
     }
 }

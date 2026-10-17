@@ -162,15 +162,15 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         let lat = w.grid.lat(y, w.cfg.lat_south, w.cfg.lat_north).to_radians();
         302.0 - 45.0 * lat.sin().powi(2) - 0.0065 * z.max(0.0)
     };
-    for i in 0..n {
+    for (i, &z) in hz.iter().enumerate().take(n) {
         let (_, y) = world.grid.xy(i);
         // Low ground starts with its liquid molten.
-        let t = t_at(&world, y, hz[i]).max(if hz[i] < 0.0 { world.chem.subs[init.low].melt + 2.0 } else { 0.0 });
+        let t = t_at(&world, y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + 2.0 } else { 0.0 });
         world.e_ground[i] = world.energy_ground(i, t);
     }
-    for j in 0..na {
+    for (j, &z) in zmean.iter().enumerate().take(na) {
         let y = (j / world.grid.aw()) * world.grid.air_scale + world.grid.air_scale / 2;
-        let t = t_at(&world, y.min(h - 1), zmean[j]);
+        let t = t_at(&world, y.min(h - 1), z);
         world.e_air[j] = world.heat_cap_air(j) * t;
     }
     // The liquid starts at balance with the air: of each pair of reactions that undo each other, the
@@ -184,8 +184,8 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         let mut amt: Vec<f64> = (0..ns).map(|k| world.ground[k * n + i]).collect();
         let gas: Vec<f64> = (0..ns).map(|k| world.air[k * na + j] * share).collect();
         if !rc.balance(&world.chem, &mut amt, &gas, t).is_empty() {
-            for k in 0..ns {
-                world.ground[k * n + i] = amt[k];
+            for (k, &a) in amt.iter().enumerate() {
+                world.ground[k * n + i] = a;
             }
             world.e_ground[i] = world.energy_ground(i, t);
         }

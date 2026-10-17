@@ -376,8 +376,8 @@ impl Body {
     /// min(1, l / l*)^n, l the key liquids it holds, l* what `level` keeps of them (h / (1 - h) of
     /// its matter). A body that holds all it keeps (or more) has 1; a dry one is nearly dormant
     /// (n = 5.7: a third of the liquid is 512 times less). The ratio is the mean over the members
-    /// of a node. A body with no key liquid, or none that it keeps a level of, has nothing to dry:
-    /// 1. Upkeep and its decisions' cost (`body::upkeep`), the speed-up of its catalysts
+    /// of a node. A body with no key liquid, or none that it keeps a level of, has nothing to dry
+    /// and has 1. Upkeep and its decisions' cost (`body::upkeep`), the speed-up of its catalysts
     /// (`catalyst`) and its building (`copy::grow`) go with it; so does the share of a freezing that
     /// kills (`body::live`).
     pub fn activity(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
@@ -393,7 +393,7 @@ impl Body {
         if keep <= 0.0 {
             return 1.0;
         }
-        (have / keep).min(1.0).max(0.0).powf(p.dormancy)
+        (have / keep).clamp(0.0, 1.0).powf(p.dormancy)
     }
     /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::melt_in`).
     pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {
@@ -955,14 +955,14 @@ impl Life {
         let (gr, was, now) = (&mut self.groups[g as usize], &self.genomes[old.genome as usize].rows, &self.genomes[new.genome as usize].rows);
         // Members n, then n + 1 with the new body in, then n again.
         let (n, more) = (gr.members as f32, (gr.members + 1) as f32);
-        gr.forget += 1.0 * new.forget();
-        gr.forget += -1.0 * old.forget();
+        gr.forget += new.forget();
+        gr.forget -= old.forget();
         gr.sum.resize(gr.rows.len(), 0.0);
         let (k1, k0) = (1.0 / more, 1.0 / n);
         for (((r, s), &x), &y) in gr.rows.iter_mut().zip(gr.sum.iter_mut()).zip(now).zip(was) {
-            let s1 = *s + 1.0 * x;
+            let s1 = *s + x;
             *r += s1 * k1 - *s * k0;
-            let s2 = s1 + -1.0 * y;
+            let s2 = s1 - y;
             *r += s2 * k0 - s1 * k1;
             *s = s2;
         }
@@ -1043,7 +1043,7 @@ pub fn survey(w: &mut World) {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
     bond::ready(w);
-    let monthly = w.day % w.cfg.days_per_month as u64 == 0;
+    let monthly = w.day.is_multiple_of(w.cfg.days_per_month as u64);
     if monthly {
         w.life.resum();
         crowd(w);
@@ -1066,7 +1066,9 @@ pub fn survey(w: &mut World) {
     }
     let World { life, grid, canopy, light_pool, e_ground, .. } = w;
     life.sum = sum;
-    (life.absorb.resize(n, 0.0), life.keep.resize(n, 0.0), light_pool.resize(n, 0.0));
+    life.absorb.resize(n, 0.0);
+    life.keep.resize(n, 0.0);
+    light_pool.resize(n, 0.0);
     let area = grid.area();
     for i in 0..n {
         let s = life.sum[i][2];
@@ -1086,8 +1088,8 @@ pub fn survey(w: &mut World) {
         owed[b.cell as usize] += q * w.day.saturating_sub(b.last) as f64 * DAY;
     }
     w.heat_pool.resize(n, 0.0);
-    for i in 0..n {
-        let mut d = owed[i] - w.heat_pool[i];
+    for (i, &o) in owed.iter().enumerate() {
+        let mut d = o - w.heat_pool[i];
         if d > 0.0 {
             d = d.min(crate::ground::heat_above_floor(w.e_ground[i], w.heat_cap_ground(i)));
         }
@@ -1160,6 +1162,9 @@ fn shade(w: &mut World) {
 /// lineage, brain group and memory are the larger's. A node that grew too varied splits again at
 /// its next update (`copy::split`). With `cfg.nodes` off it leaves animals out of the list: they
 /// never merge and never count toward `crowd`.
+/// A body's genes in mutation steps, its spread in steps and its size class (`crowd`).
+type Likeness = (Vec<f32>, Vec<f32>, (f64, bool));
+
 fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.grid.n() {
@@ -1192,9 +1197,9 @@ fn crowd(w: &mut World) {
         // pair's key: unlike or not, then its squared distance in steps.
         let (m, lim) = (left.len(), w.cfg.phys.alike);
         let steps = |w: &World, s: usize| (crate::copy::steps(&lay, &w.life.bodies[s].genes), crate::copy::spread_steps(&lay, &w.life.bodies[s]), crate::copy::class(&w.chem, &w.life.bodies[s]));
-        let mut v: Vec<(Vec<f32>, Vec<f32>, (f64, bool))> = left.iter().map(|&s| steps(w, s)).collect();
+        let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
         let reach = lim as f64 * crate::copy::size_step(&lay) as f64;
-        let dist = |p: &(Vec<f32>, Vec<f32>, (f64, bool)), q: &(Vec<f32>, Vec<f32>, (f64, bool))| {
+        let dist = |p: &Likeness, q: &Likeness| {
             let gap = |g: usize| (p.0[g] - q.0[g]).abs() > lim + crate::copy::WITHIN * (p.1[g] + q.1[g]).sqrt();
             (p.2 .1 != q.2 .1 || (p.2 .0 - q.2 .0).abs() > reach || (0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
         };

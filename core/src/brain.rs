@@ -68,7 +68,8 @@ impl Shape {
     pub fn rows(&self) -> usize {
         self.critic() + 1
     }
-    pub fn len(&self) -> usize {
+    /// Number of weights: the base and every row.
+    pub fn weights(&self) -> usize {
         self.base() + self.rows() * self.r()
     }
 }
@@ -184,7 +185,7 @@ pub(crate) fn blend(w: &mut [f32], o: &[f32], a: f32) {
 /// Small random weights, then the biases given for the fixed actions, moving and the verbs
 /// (toward bodies, then toward parts).
 pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, verbs: [f32; VERBS + OVERBS]) -> Vec<f32> {
-    let mut w: Vec<f32> = (0..s.len()).map(|_| size * r.normal() as f32).collect();
+    let mut w: Vec<f32> = (0..s.weights()).map(|_| size * r.normal() as f32).collect();
     let row = |q: usize| s.base() + q * s.r() + s.h;
     for (a, b) in fixed.iter().enumerate() {
         w[row(a)] = *b;

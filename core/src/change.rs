@@ -689,8 +689,8 @@ pub fn step(w: &mut World, dt: f64) {
             continue;
         }
         let (t, j) = (tg[i], air_of[i] as usize);
-        for k in 0..ns {
-            amt[k] = w.ground[k * n + i];
+        for (k, a) in amt.iter_mut().enumerate() {
+            *a = w.ground[k * n + i];
         }
         let has = || (0..ns).filter(|&k| amt[k] > 0.0).fold(in_air[j], |m, k| m | bit(k));
         // A node that may go far reacts for this step (at least; a first turn has no earlier turn to
@@ -699,8 +699,8 @@ pub fn step(w: &mut World, dt: f64) {
         let ticks = if due && !cold(t, has()) { (tick - last).saturating_sub(fasts).max(maybe[i] as u32) } else { maybe[i] as u32 };
         let mut next = LAZY;
         if ticks > 0 {
-            for k in 0..ns {
-                pool0[k] = w.air[k * na + j] * share;
+            for (k, p0) in pool0.iter_mut().enumerate() {
+                *p0 = w.air[k * na + j] * share;
             }
             pool.copy_from_slice(&pool0);
             // Liquid stands over it (more than the pores of its loose ground hold): it reacts with

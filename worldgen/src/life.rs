@@ -159,8 +159,8 @@ pub fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
 /// log10(member mass / area per member at the start), so a kind breathes at its start what it did
 /// per kg. Reset a second time the same day when leaf went with mass^0.75 like intake (review 5,
 /// row 3; `Body::equiv`): new = old + log10(old area / new area), with area = (min(m, 2 x copy
-/// mass) / 1 kg)^0.75 x 10^LEAF + 6 (m / 1000)^(2/3), m² (old: min(m, 2 x copy mass) x 10^LEAF
-/// + the same skin). Light-eaters 1 kg: 1.995 + 0.060 = 2.055 either way, gene 2.187; small fast
+/// mass) / 1 kg)^0.75 x 10^LEAF + 6 (m / 1000)^(2/3), m² (old: min(m, 2 x copy mass) x 10^LEAF +
+/// the same skin). Light-eaters 1 kg: 1.995 + 0.060 = 2.055 either way, gene 2.187; small fast
 /// 0.05 kg: leaf 0.199 -> 0.421 (0.05^0.75 x 10^0.6), area 0.207 -> 0.429, 1.883 -> 1.567; big
 /// slow 20 kg: leaf 10.02 -> 4.74 (20^0.75 = 9.46 x 10^-0.3), area 10.47 -> 5.18, 2.781 -> 3.086;
 /// eaters 30 kg: 0.030 -> 0.013, area 0.609 -> 0.592, 2.292 -> 2.304; eaters of remains 1 kg:
@@ -596,6 +596,7 @@ pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32) ->
 
 /// `make` after `rounds` rounds of mutation of its genes, `gmul` times a generation's step (a
 /// random walk keyed by `id`).
+#[allow(clippy::too_many_arguments)]
 fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, gmul: f32, id: u64) -> Option<Body> {
     let ((r_light, rich, liquid, burn), kind) = (roles(&w.chem)?, KINDS.get(which)?);
     let group = w.life.new_group(lineage, w.life.genomes[genome as usize].rows.clone());

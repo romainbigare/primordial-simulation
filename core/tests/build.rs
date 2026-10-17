@@ -476,9 +476,9 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
         assert!((c.temp(&w.chem) / temp0 - 1.0).abs() < 1e-9, "the child is as warm as the parent was");
     }
     assert!((given - 2.0 * child_mol).abs() < 1e-9 * child_mol, "the children got {given} mol of matter, not {}", 2.0 * child_mol);
-    for q in 0..w.chem.ns() {
+    for (q, &was) in before.iter().enumerate().take(w.chem.ns()) {
         let kids_hold: f64 = kids.iter().map(|&k| w.life.bodies[k].store[q]).sum();
-        assert!((b.store[q] + kids_hold - before[q]).abs() <= 1e-9 * before[q].max(1.0), "substance {q} not kept");
+        assert!((b.store[q] + kids_hold - was).abs() <= 1e-9 * was.max(1.0), "substance {q} not kept");
     }
     assert_eq!(w.e_ground.iter().sum::<f64>(), ground0, "work was paid for a child");
     // The parent's body does not fall: the matter it built is what it was (the brood left its matter and its brood together), and
@@ -499,7 +499,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let (mut w, i) = start();
     w.cfg.phys.c_copy = 1e18;
     let mut n = eater(&mut w, i, 0, 10f32.log10());
-    (n.genes[CHILD], n.genes[DISPERSE]) = (-0.301_029_995_7, 0.0);
+    (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 0.0);
     scale(&mut w, &mut n, 5.0);
     n.count = 5.0;
     // A child is a body of half the copy mass: 5 kg, matter 1.25 kg.

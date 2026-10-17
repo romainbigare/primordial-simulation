@@ -235,8 +235,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, t: &mut Tmp) {
         th.copy_from_slice(&t.thought.h);
         c.fill(0.0);
         let g = |o: usize| (o == a) as u8 as f32 - p[o];
-        for q in 0..FIXED {
-            c[q] = g(q);
+        for (q, cq) in c[..FIXED].iter_mut().enumerate() {
+            *cq = g(q);
         }
         let mut add = |row: usize, gq: f32, fq: &[f32]| {
             c[row] += gq;

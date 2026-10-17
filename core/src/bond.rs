@@ -673,7 +673,7 @@ pub fn step(w: &mut World) {
         return;
     }
     let (dpm, ns, na) = (w.cfg.days_per_month as u64, w.chem.ns(), w.grid.na());
-    let react = (w.day / dpm) % REACT_MONTHS == 0;
+    let react = (w.day / dpm).is_multiple_of(REACT_MONTHS);
     let (mut rc, share) = (Reactor::new(&w.chem), 1.0 / (w.grid.air_scale * w.grid.air_scale) as f64);
     let (mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns]);
     let dt = (REACT_MONTHS * dpm) as f64 * DAY;
@@ -686,8 +686,8 @@ pub fn step(w: &mut World) {
         let chem = &w.chem;
         let p = &mut w.parts.parts[s];
         if react {
-            for k in 0..ns {
-                pool0[k] = w.air[k * na + j] * share;
+            for (k, p0) in pool0.iter_mut().enumerate() {
+                *p0 = w.air[k * na + j] * share;
             }
             pool.copy_from_slice(&pool0);
             let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();

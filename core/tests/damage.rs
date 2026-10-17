@@ -188,7 +188,6 @@ fn a_bite_of_more_than_half_the_body_kills() {
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let (t0, l0) = (check::totals(&w), w.ledger.clone());
     w.events.clear();
-    let built0 = w.life.bodies[v].built(&w.chem);
     bite(&mut w, a, v);
     let died = w.events.iter().any(|e| matches!(e.kind, pcore::event::EventKind::Died { cause, .. } if cause == body::TAKEN));
     assert!(!w.life.bodies[v].alive && died, "a victim bitten by a body 8 times its size lived");

@@ -43,7 +43,7 @@ impl Rng {
     }
     #[inline]
     pub fn below(&mut self, n: usize) -> usize {
-        ((self.u64() >> 32) * n as u64 >> 32) as usize
+        (((self.u64() >> 32) * n as u64) >> 32) as usize
     }
     /// Standard normal (Box-Muller).
     pub fn normal(&mut self) -> f64 {

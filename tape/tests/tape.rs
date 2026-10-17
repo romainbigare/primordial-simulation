@@ -48,7 +48,7 @@ fn a_file_without_the_snapshot_header_is_refused() {
     let mut z = GzEncoder::new(std::fs::File::create(&path).unwrap(), Compression::fast());
     z.write_all(&bincode::serialize(&world()).unwrap()).unwrap();
     z.finish().unwrap();
-    let e = tape::load_snapshot(&path).err().expect("refused");
+    let e = tape::load_snapshot(&path).expect_err("refused");
     assert!(e.to_string().contains("not a snapshot"), "{e}");
 }
 

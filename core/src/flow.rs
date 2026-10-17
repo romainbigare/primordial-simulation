@@ -77,6 +77,10 @@ struct Sp {
 /// | `cond`, `hk`, `split` | may condense, m, share (per gas) | S | X, W |
 /// | `warmth`, `grad`, `nt_new`, `lanes`, `rad` | work space of W (warmth, gradient, amounts after a direction, a row of fluxes per line) and Rad (a row per ground cell) | W; Rad | W; Rad |
 /// | `slow` | [tick last, tick next, count] | Law 2 | Law 2 |
+/// What Law 2 reads of the last flow step (`Scratch::view`): ground temperatures, bed skins,
+/// the air node of each ground node, air temperatures.
+pub(crate) type FlowView<'a> = (&'a [f64], &'a [[f64; 4]], &'a [u32], &'a [f64]);
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Scratch {
     month: Option<u64>,
@@ -192,8 +196,9 @@ impl Scratch {
         (&self.tg, &self.ta)
     }
     /// For Law 2, from the last flow step: per ground node its temperature, the heat capacity of
-    /// its bonded skin (as of the last refresh) and its air node; per air node its temperature.
-    pub(crate) fn view(&self) -> (&[f64], &[[f64; 4]], &[u32], &[f64]) {
+    /// its bonded skin (as of the last refresh) and its air node; per air node its temperature
+    /// (`FlowView`).
+    pub(crate) fn view(&self) -> FlowView<'_> {
         (&self.tg, &self.bed, &self.air_of, &self.ta)
     }
 }
@@ -440,9 +445,9 @@ fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // the node, lowered by what is dissolved in its liquid (`World::melt`), in the order of those.
     let mut ord = [(0.0, 0); MAX_SUBSTANCES];
     let mix: Vec<Option<Vec<_>>> = s.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect();
-    for i in 0..n {
-        let same = (cap[i] - s.cap[i]).abs() <= 1e-9 * cap[i];
-        s.cap[i] = cap[i];
+    for (i, &ci) in cap.iter().enumerate().take(n) {
+        let same = (ci - s.cap[i]).abs() <= 1e-9 * ci;
+        s.cap[i] = ci;
         let (c, e, [held, lo, hi, was]) = (s.cap[i].max(1.0), w.e_ground[i], s.hold[i]);
         if !full && same && e >= lo && e < hi {
             s.tg[i] = (e - held) / c;
@@ -611,10 +616,10 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             hs += (lp - ph.field * pores).max(0.0).min(-lp * (-ph.seep * qmax * dt / (ph.porosity * ph.hill)).exp_m1());
         }
         // Neighbours much less steep than the steepest get nothing.
-        for c in 0..cnt {
-            if q[c] < w.cfg.phys.split * qmax {
-                wsum -= q[c];
-                q[c] = 0.0;
+        for qc in q[..cnt].iter_mut() {
+            if *qc < w.cfg.phys.split * qmax {
+                wsum -= *qc;
+                *qc = 0.0;
             }
         }
         // What leaves carries the node's heat at its temperature now: earlier radiation and

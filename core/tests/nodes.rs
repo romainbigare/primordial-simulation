@@ -57,8 +57,8 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     assert_eq!(new.len(), 1, "not split in two");
     let (a, c) = (&w.life.bodies[s], &w.life.bodies[new[0]]);
     assert_eq!((a.count + c.count, a.lineage, a.group, a.cell), (count, c.lineage, c.group, c.cell));
-    for k in 0..store.len() {
-        assert!((a.store[k] + c.store[k] - store[k]).abs() <= 1e-12 * store[k], "store {k}");
+    for (k, &x) in store.iter().enumerate() {
+        assert!((a.store[k] + c.store[k] - x).abs() <= 1e-12 * x, "store {k}");
     }
     assert!((a.e + c.e - e).abs() <= 1e-12 * e);
     let d = (2.0 / std::f32::consts::PI).sqrt();
@@ -93,7 +93,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     let b0 = &w.life.bodies[live(&w)[0]];
     let (per, e1) = (b0.store.iter().map(|a| 100.0 * a / b0.count).collect::<Vec<f64>>(), 100.0 * b0.e / b0.count);
     for s in live(&w) {
-        (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT], w.life.bodies[s].genes[CHILD]) = (1.45, -0.8, -0.301_03);
+        (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT], w.life.bodies[s].genes[CHILD]) = (1.45, -0.8, -std::f32::consts::LOG10_2);
         if wide {
             // (the first children that stay bring every spread down to the split threshold)
             w.life.bodies[s].spread = vec![1e9; len];
@@ -110,7 +110,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     let m0 = mean(&w);
     for _ in 0..updates {
         w.day += 10;
-        if w.day % w.cfg.days_per_month as u64 == 0 {
+        if w.day.is_multiple_of(w.cfg.days_per_month as u64) {
             pcore::body::survey(&mut w);
         }
         // In a random order, so no body is first by its slot.
@@ -124,7 +124,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             b.prepare(&w.chem, &w.cfg.phys);
             // Mature with a body of twice its copy mass after the brood, children half the copy mass: of its size class.
             let (body, n) = (b.built(&w.chem) / b.n(), b.count);
-            (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -0.301_03, 0.0);
+            (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -std::f32::consts::LOG10_2, 0.0);
             brood(&w, &mut b, n);
             let (before, id) = (live(&w), b.id(s));
             copy::copy(&mut w, s, &mut b);

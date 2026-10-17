@@ -249,7 +249,7 @@ fn the_salt_runs_with_the_liquid_and_stays_when_the_liquid_leaves() {
     // A thin film on warm ground in dry air: the liquid evaporates, the salt stays where it is.
     let mut w = worldgen::new_world(3, 16, 16);
     // (A pit of dry land, lower than all its neighbours: nothing runs off it.)
-    let pit = |w: &pcore::World, i: usize| pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).map_or(false, |j| w.surface_z(j) > w.surface_z(i)));
+    let pit = |w: &pcore::World, i: usize| pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| w.surface_z(j) > w.surface_z(i)));
     let i = (0..n).find(|&i| w.ground[LIQ * n + i] == 0.0 && w.surface_z(i) > 20.0 && pit(&w, i)).expect("a pit of dry land");
     (w.ground[LIQ * n + i], w.ground[SALT * n + i]) = (0.05 * area / 0.018e-3 * 1.0, 1e3);
     w.e_ground[i] = w.energy_ground(i, 330.0);

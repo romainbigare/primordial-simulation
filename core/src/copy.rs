@@ -46,13 +46,13 @@ use crate::event::{Event, EventKind};
 use crate::grid::DIRS;
 use crate::rng::{Purpose, Rng};
 use crate::{Physics, World};
-use std::f32::consts::{FRAC_2_PI, FRAC_PI_8};
+use std::f32::consts::{FRAC_2_PI, FRAC_PI_8, LOG10_2};
 
 /// Reach of the noise `noise` draws (a sum of four uniforms, centred and scaled): 2·sqrt(3).
 const REACH: f32 = 3.464_101_6;
 
 /// log10 of one half: the largest child, a share of its parent's copy mass (`body::CHILD`).
-const LOG_HALF: f32 = -0.301_029_995_7;
+const LOG_HALF: f32 = -LOG10_2;
 
 /// Mutation step (times the body's mutation size) and range of a gene. Catalysts, safe minimums
 /// and uptake are off below 0 (they cost nothing and do nothing there), and their ranges go 20
