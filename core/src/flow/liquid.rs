@@ -1,11 +1,30 @@
 //! Liquid over and in the loose ground: one ordered sweep by head, the springs of the bed's
 //! store, pore flow by Darcy's law, and the work moving liquid does on its bed.
 
-use super::land::{darcy, solid, stand, t_now, table, wet};
+use super::land::{darcy, solid, stand, t_now, table, wet, HALF_WAY};
 use super::{bare_share, follow, range, year_weight, Scratch};
 use crate::grid::DIRS;
 use crate::math::one_minus_exp;
 use crate::World;
+
+/// Heads are ordered from this height down, m (heads above it come first, in cell order).
+const ORDER_TOP: f64 = 2e4;
+/// Steps of the order per m of head (heads to 0.1 m, then by cell).
+const ORDER_PER_M: f64 = 10.0;
+/// Bits of an order key that hold the cell (so grids up to 2^20 cells).
+const CELL_BITS: u32 = 20;
+const CELL_MASK: u64 = (1 << CELL_BITS) - 1;
+/// A node with no load and less carrying capacity than this does no work on its bed, m³.
+const CARRY_MIN: f64 = 1.0;
+/// Most of each loose solid picked up, and of each bonded substance worn, per call.
+const MOST_TAKEN: f64 = 0.5;
+/// Least bond strength wear divides by.
+const STRENGTH_MIN: f64 = 0.05;
+
+/// Key of cell `i` in the order of the sweep, highest head first.
+fn order_key(s: &Scratch, i: usize) -> u64 {
+    (((ORDER_TOP - stand(s, i)).max(0.0) * ORDER_PER_M) as u64) << CELL_BITS | i as u64
+}
 
 /// The lower neighbours of a node in the sweep, and what it sends each.
 #[derive(Default)]
@@ -40,10 +59,10 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let (tmin, tmax) = range(&s.tg);
     let (liq, sol) = (s.liquids(&w.chem, (tmin, tmax), true), s.solids(tmin));
     s.sed.resize(n * sol.len(), 0.0);
-    // Highest head first (heads to 0.1 m, then by cell); kept between refreshes (any order is safe,
-    // it only sets how far liquid gets in one call).
+    // Highest head first; kept between refreshes (any order is safe, it only sets how far liquid
+    // gets in one call).
     if s.order.len() != n {
-        s.order = (0..n).map(|i| (((2e4 - stand(s, i)).max(0.0) * 10.0) as u64) << 20 | i as u64).collect();
+        s.order = (0..n).map(|i| order_key(s, i)).collect();
         s.order.sort_unstable();
     }
     s.done.fill(false);
@@ -51,7 +70,7 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
     let mut heat = 0.0;
     let mut wa = vec![0.0; liq.len()];
     for r in 0..n {
-        let i = (s.order[r] & 0xf_ffff) as usize;
+        let i = (s.order[r] & CELL_MASK) as usize;
         let (hd, zi) = (stand(s, i), s.z[i]);
         s.done[i] = true;
         let mut out = lower(s, i, &inv, ph.still);
@@ -109,7 +128,7 @@ fn lower(s: &Scratch, i: usize, inv: &[f64; 8], still: f64) -> Outlets {
             continue;
         }
         let (j, hj) = (j as usize, stand(s, j as usize));
-        let (dh, r) = (hd - hj, if hd <= zi { 0.0 } else if s.done[j] { 0.5 * (hd - hj) } else { hd - hj.max(zi) });
+        let (dh, r) = (hd - hj, if hd <= zi { 0.0 } else if s.done[j] { HALF_WAY * (hd - hj) } else { hd - hj.max(zi) });
         if dh > still {
             let c = o.cnt;
             (o.nb[c], o.room[c], o.q[c]) = ((j, dh), r, dh * inv[d]);
@@ -183,7 +202,7 @@ fn pore_flow(w: &World, s: &Scratch, i: usize, o: &mut Outlets, dt: f64) {
             continue;
         }
         let (si, sj) = (area * if s.head[i] - zi >= s.pd[i] { 1.0 } else { por }, area * if s.head[j] - s.z[j] >= s.pd[j] { 1.0 } else { por });
-        let v = darcy(w.cfg.phys.seep * b, &w.grid, DIRS[d], dh, dt).min(0.5 * dh / (1.0 / si + 1.0 / sj));
+        let v = darcy(w.cfg.phys.seep * b, &w.grid, DIRS[d], dh, dt).min(HALF_WAY * dh / (1.0 / si + 1.0 / sj));
         if v <= 0.0 {
             continue;
         }
@@ -227,7 +246,7 @@ fn work_on_bed(w: &mut World, s: &mut Scratch, i: usize, o: &Outlets, sol: &[usi
     let ns = sol.len();
     let load: f64 = sol.iter().enumerate().map(|(si, &k)| s.sed[i * ns + si] * s.sp[k].v[0]).sum();
     let capv = w.cfg.carry * bedwork * bare_share(w, i);
-    if load <= 0.0 && capv < 1.0 {
+    if load <= 0.0 && capv < CARRY_MIN {
         return false;
     }
     if load > capv || o.qss <= 0.0 {
@@ -257,7 +276,7 @@ fn drop_load(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], f: f64) {
 fn pick_up(w: &mut World, s: &mut Scratch, i: usize, sol: &[usize], room: f64, tcur: f64) {
     let ns = sol.len();
     let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
-    let f = if avail > 0.0 { (room / avail).min(0.5) } else { 0.0 };
+    let f = if avail > 0.0 { (room / avail).min(MOST_TAKEN) } else { 0.0 };
     for (si, &k) in sol.iter().enumerate() {
         if f > 0.0 {
             let m = solid(w, s, k, i) * f;
@@ -277,8 +296,8 @@ fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
         let (k, bv) = (s.bedk[bi], s.bed[i][1]);
         let b = w.bed[k * n + i];
         if b > 0.0 && bv > 0.0 {
-            let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(0.05);
-            let m = (v / s.sp[k].v[0]).min(0.5 * b);
+            let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
+            let m = (v / s.sp[k].v[0]).min(MOST_TAKEN * b);
             w.bed[k * n + i] -= m;
             w.ground[k * n + i] += m;
             s.bed[i][1] -= m * s.sp[k].v[0];

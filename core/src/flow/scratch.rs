@@ -232,13 +232,23 @@ impl Scratch {
     }
 }
 
+/// A refresh judges what may melt or evaporate until the next one at the warmest ground node
+/// now plus this, K.
+const T_MARGIN: f64 = 20.0;
+/// A loose substance whose saturation pressure there is over this can evaporate, Pa.
+pub(super) const P_UP: f64 = 1.0;
+/// Least bed volume a mean over the bed is taken over, m³ (a node with no bed).
+const V_MIN: f64 = 1e-9;
+/// Least heat conductivity of a substance, W/(m K) (the soft cover's resistance divides by it).
+const COND_MIN: f64 = 1e-3;
+
 /// Every few months: which substances are present, the slow-changing bonded ground and fixed
 /// solids, and (once) the state vectors.
 pub(super) fn refresh(w: &World, s: &mut Scratch) {
     let (n, na, ns) = (w.grid.n(), w.grid.na(), w.chem.ns());
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
-    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) } + 20.0;
-    let up = |k: usize| w.chem.p_sat(k, tmax) > 1.0;
+    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) } + T_MARGIN;
+    let up = |k: usize| w.chem.p_sat(k, tmax) > P_UP;
     s.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
     s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax && !up(k)).collect();
     s.vary = s.loose.iter().copied().filter(|k| !s.fixed.contains(k)).collect();
@@ -266,7 +276,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
                 kc += b * s.sp[k].v[0] * w.chem.subs[k].conductivity;
             }
             let c = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, |k| w.bed[k * n + i]);
-            [c, v, r / v.max(1e-9), kc / v.max(1e-9)]
+            [c, v, r / v.max(V_MIN), kc / v.max(V_MIN)]
         })
         .collect();
     if s.cap.len() == n {
@@ -295,7 +305,7 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             mm: b.molar_mass,
             lf: b.lf,
             lv: b.lv,
-            cond: b.conductivity.max(1e-3),
+            cond: b.conductivity.max(COND_MIN),
             v: [b.molar_mass / b.density[0], b.molar_mass / b.density[1]],
             melt: b.melt,
             boil: b.boil,

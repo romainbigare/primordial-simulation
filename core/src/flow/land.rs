@@ -3,7 +3,12 @@ use crate::grid::Grid;
 use crate::units::MAX_SUBSTANCES;
 use crate::World;
 
+/// No substance on a melting plateau (`Scratch::pk`).
 pub(super) const NONE: usize = usize::MAX;
+/// A node whose heat capacity changed by less than this share keeps its state off a plateau.
+const CAP_SAME: f64 = 1e-9;
+/// Liquid between two nodes goes no more than this share of the way to level (so heads never cross).
+pub(super) const HALF_WAY: f64 = 0.5;
 
 /// Molten share of substance `k` in ground node `i` (liquid, or gas above boiling).
 #[inline]
@@ -99,7 +104,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     let mut ord = [(0.0, 0); MAX_SUBSTANCES];
     let mix: Vec<Option<Vec<_>>> = s.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect();
     for (i, &ci) in cap.iter().enumerate().take(n) {
-        let same = (ci - s.cap[i]).abs() <= 1e-9 * ci;
+        let same = (ci - s.cap[i]).abs() <= CAP_SAME * ci;
         s.cap[i] = ci;
         let (c, e, Latent { held, lo, hi, molten: was }) = (s.cap[i].max(1.0), w.e_ground[i], s.latent[i]);
         if !full && same && e >= lo && e < hi {

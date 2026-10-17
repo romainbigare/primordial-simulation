@@ -1,6 +1,6 @@
 //! Drainage of the loose ground into the store of the bed below, and the flow of the stores.
 
-use super::land::{darcy, t_now, wet};
+use super::land::{darcy, t_now, wet, HALF_WAY};
 use super::{range, Scratch};
 use crate::grid::DIRS;
 use crate::World;
@@ -49,7 +49,7 @@ pub(super) fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
             if dh <= p.still || held <= 0.0 {
                 continue;
             }
-            let v = darcy(p.bed_seep * held / sy, &w.grid, DIRS[d], dh, dt).min(0.25 * dh * sy).min(held);
+            let v = darcy(p.bed_seep * held / sy, &w.grid, DIRS[d], dh, dt).min(HALF_WAY / 2.0 * dh * sy).min(held);
             // The share of the store that moves, and the share of that the neighbour's store has room for.
             let (f, into) = (v / held, ((full - dv(w, j)) / v).clamp(0.0, 1.0));
             let e = w.e_deep[i] * f;

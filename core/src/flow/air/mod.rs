@@ -16,6 +16,11 @@ use crate::units::R_GAS;
 use crate::World;
 use std::f64::consts::LN_2;
 
+/// Least depth of the air over the ground, m (the air's top is `Config::air_top_m`).
+const COLUMN_MIN: f64 = 100.0;
+/// The fall of a saturation pressure per K is taken from this far below to this far above, K.
+const HALF_K: f64 = 0.5;
+
 /// The air seen by ground cell `i`: a node field interpolated from the four nearest nodes.
 #[inline]
 pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
@@ -65,7 +70,7 @@ fn nodes(w: &World, s: &mut Scratch) {
     }
     for j in 0..na {
         s.za[j] /= s.cells[j];
-        let (a, l) = (s.area * s.cells[j], (top - s.za[j]).max(100.0));
+        let (a, l) = (s.area * s.cells[j], (top - s.za[j]).max(COLUMN_MIN));
         s.vol[j] = a * l;
         s.ta[j] = w.e_air[j] / s.capa[j];
         s.gam[j] = g * s.mass[j] / s.capa[j];
@@ -106,11 +111,11 @@ fn heights(w: &World, s: &mut Scratch) {
     let half = (-LN_2).exp();
     for (gi, &k) in s.gas.iter().enumerate() {
         for j in 0..na {
-            let h = scale_height(s, j, g).min((top - s.za[j]).max(100.0));
+            let h = scale_height(s, j, g).min((top - s.za[j]).max(COLUMN_MIN));
             let (mut hk, mut split) = (h, half);
             if s.cond[gi] {
                 let t = s.ta[j] + s.gam[j] * (s.zair[j] - s.za[j]);
-                let fall = s.sp[k].lv / R_GAS * (1.0 / (t - 0.5).max(1.0) - 1.0 / (t + 0.5).max(1.0));
+                let fall = s.sp[k].lv / R_GAS * (1.0 / (t - HALF_K).max(1.0) - 1.0 / (t + HALF_K).max(1.0));
                 hk = (1.0 / (s.gam[j] * fall)).min(h);
                 split = (-(h / hk) * LN_2).exp();
             }
@@ -126,7 +131,7 @@ fn seen(w: &World, s: &mut Scratch) {
     s.lay.resize(n, [[0.0; LAYERS]; 2]);
     for i in 0..n {
         let (gam, zair, fabs, ta) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i), lerp(s, &s.ta, i));
-        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(100.0), scale_height(s, s.air_of[i] as usize, g));
+        s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), scale_height(s, s.air_of[i] as usize, g));
         s.seen[i] = [gam, zair, one_minus_exp(fabs), s.seen[i][3], ta];
     }
 }

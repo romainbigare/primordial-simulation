@@ -6,13 +6,24 @@ use super::{bare_share, range, Scratch};
 use crate::grid::FORWARD;
 use crate::World;
 
+/// Added to a substance's hardness before its softness (1 / hardness) is taken.
+const HARD_MIN: f64 = 0.05;
+/// Most heat conducted over an edge per call, as a share of the temperature difference times the
+/// smaller heat capacity (so it never overshoots level).
+const COND_STEP: f64 = 0.2;
+/// Most volume that creeps over an edge per call, as a share of the step between the surfaces
+/// times the cell's area (the higher node goes no further than half way to level).
+const CREEP_LEVEL: f64 = 0.25;
+/// Most of each loose solid that creeps over an edge per call.
+const CREEP_MOST: f64 = 0.25;
+
 /// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more;
 /// heat conducts between ground nodes; bodies spread back into ground cleared along edges
 /// (`choose::regrow`, here only, so it closes at the documented speed).
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let n = w.grid.n();
     let sol = s.solids(range(&s.tg).0);
-    let soft: Vec<f64> = (0..w.chem.ns()).map(|k| 1.0 / (w.chem.subs[k].hardness + 0.05)).collect();
+    let soft: Vec<f64> = (0..w.chem.ns()).map(|k| 1.0 / (w.chem.subs[k].hardness + HARD_MIN)).collect();
     s.mob.fill(0.0);
     for &k in &sol {
         for i in 0..n {
@@ -37,7 +48,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
 fn conduct(w: &mut World, s: &Scratch, i: usize, j: usize, d: (i32, i32), dt: f64) {
     let (ti, tj) = (s.tg[i], s.tg[j]);
     let gk = (s.bed[i][3] + s.bed[j][3]) / 2.0 * w.cfg.skin_m * w.grid.cell_m / w.grid.dist(d);
-    let qmax = 0.2 * (ti - tj).abs() * s.cap[i].min(s.cap[j]);
+    let qmax = COND_STEP * (ti - tj).abs() * s.cap[i].min(s.cap[j]);
     let qh = (gk * (ti - tj) * dt).clamp(-qmax, qmax);
     let (from, to) = if qh >= 0.0 { (i, j) } else { (j, i) };
     let took = w.take_heat(from, qh.abs());
@@ -53,14 +64,14 @@ fn slide(w: &mut World, s: &mut Scratch, (a, b): (usize, usize), d: (i32, i32), 
         return;
     }
     let r = w.cfg.creep * dz / dist * cell * dt / area * bare_share(w, a);
-    let f = (area * dz / 4.0 / (r * s.mob[a])).min(1.0);
+    let f = (area * dz * CREEP_LEVEL / (r * s.mob[a])).min(1.0);
     let (ta, tb) = (s.tg[a], s.tg[b]);
     // What moves, summed over substances: heat capacity, mass, mobility, rise of each surface and head.
     let (mut c, mut mass, mut mob, mut ua, mut ub) = (0.0, 0.0, 0.0, [0.0; 2], [0.0; 2]);
     for &k in sol {
         let x = solid(w, s, k, a);
         if x > 0.0 {
-            let (p, m) = (&s.sp[k], (x * r * f * soft[k]).min(0.25 * x));
+            let (p, m) = (&s.sp[k], (x * r * f * soft[k]).min(CREEP_MOST * x));
             w.ground[k * n + a] -= m;
             w.ground[k * n + b] += m;
             let (da, db) = (rise(p, ta, melted(s, k, a), -m, area), rise(p, tb, melted(s, k, b), m, area));

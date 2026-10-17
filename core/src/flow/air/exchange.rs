@@ -1,30 +1,39 @@
 use super::super::land::{melted, settle, wet};
-use super::super::{follow, range, year_weight, Scratch};
+use super::super::scratch::P_UP;
+use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};
 use super::lerp;
 use crate::math::one_minus_exp;
-use crate::units::R_GAS;
+use crate::units::{P_REF, R_GAS};
 use crate::World;
 
 /// A gas making up less than this share of the air is a trace: it evaporates and condenses
-/// only every `TRACE_TURN`-th call, for all the time since.
+/// only every `TRACE_TURN`-th exchange, for all the time since.
 const TRACE_AIR: f64 = 1e-7;
-const TRACE_TURN: u32 = 4;
+/// Entries of the table of a saturation pressure (`Sat`) per K, and the step between them, K.
+const SAT_PER_K: f64 = 20.0;
+const SAT_STEP: f64 = 0.05;
+/// Every this many entries the table is exact.
+const SAT_EXACT: usize = 64;
+/// The table reaches this far below the coldest and above the warmest temperature, K, and starts
+/// no lower than `SAT_LOWEST`, K.
+const SAT_MARGIN: f64 = 1.0;
+const SAT_LOWEST: f64 = 1.0;
 
-/// Saturation pressure of one substance, tabulated every 0.05 K over a range of temperatures.
+/// Saturation pressure of one substance, tabulated every `SAT_STEP` over a range of temperatures, Pa.
 struct Sat(f64, Vec<f64>);
 
 impl Sat {
-    /// Exact every 64 entries; between, each from the last by their ratio, exp(b (1/t' - 1/t)),
+    /// Exact every `SAT_EXACT` entries; between, each from the last by their ratio, exp(b (1/t' - 1/t)),
     /// summed to its fifth term (ln p is linear in 1/t).
     fn new(w: &World, k: usize, lo: f64, hi: f64) -> Self {
-        let (t0, b) = (lo.max(2.0) - 1.0, w.chem.subs[k].lv / R_GAS);
+        let (t0, b) = ((lo - SAT_MARGIN).max(SAT_LOWEST), w.chem.subs[k].lv / R_GAS);
         let mut p = 0.0;
-        let v = (0..((hi + 1.0 - t0) * 20.0) as usize + 2).map(|i| {
-            let t = t0 + i as f64 / 20.0;
-            if i % 64 == 0 {
+        let v = (0..((hi + SAT_MARGIN - t0) * SAT_PER_K) as usize + 2).map(|i| {
+            let t = t0 + i as f64 / SAT_PER_K;
+            if i % SAT_EXACT == 0 {
                 p = w.chem.p_sat(k, t);
             } else {
-                let x = b * 0.05 / (t * (t - 0.05));
+                let x = b * SAT_STEP / (t * (t - SAT_STEP));
                 p *= 1.0 + x * (1.0 + x / 2.0 * (1.0 + x / 3.0 * (1.0 + x / 4.0)));
             }
             p
@@ -32,7 +41,7 @@ impl Sat {
         Sat(t0, v.collect())
     }
     fn at(&self, t: f64) -> f64 {
-        let x = ((t - self.0) * 20.0).clamp(0.0, (self.1.len() - 2) as f64);
+        let x = ((t - self.0) * SAT_PER_K).clamp(0.0, (self.1.len() - 2) as f64);
         let i = x as usize;
         let f = x - i as f64;
         self.1[i] + (self.1[i + 1] - self.1[i]) * f
@@ -60,7 +69,7 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
     let act: Vec<(usize, usize, bool, Sat, f64)> = (0..s.gas.len())
         .filter_map(|gi| {
             let k = s.gas[gi];
-            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > 1.0 && !henry.iter().any(|h| h.1 == k);
+            let up = s.loose.contains(&k) && w.chem.p_sat(k, tmax) > P_UP && !henry.iter().any(|h| h.1 == k);
             let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
             ((up || s.cond[gi]) && (turn || !trace)).then(|| (gi, k, up, Sat::new(w, k, lo, hi), w.cfg.evap * area * if trace { since } else { dt } / R_GAS))
         })
@@ -98,7 +107,7 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             };
             // Evaporating cools the node, no further than where the vapour pressure falls to the
             // partial pressure (the boiling point, when it boils): only heat above that pays.
-            let over = t - if t >= sp.boil { sp.boil } else { w.chem.t_sat(k, pa / crate::units::P_REF).min(t) };
+            let over = t - if t >= sp.boil { sp.boil } else { w.chem.t_sat(k, pa / P_REF).min(t) };
             let m = m.min(s.cap[i].max(1.0) * over / (sp.cp * over + sp.lv));
             // The ground also pays the fusion and vaporisation enthalpy and the gas's heat; if it cannot, less evaporates.
             let m = w.take_paid(i, m, sp.cp, m * (sp.cp * t + sp.lf + sp.lv)).0;
