@@ -81,8 +81,13 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let mut rows = std::mem::take(&mut s.rad);
     rows.resize(n * ROW, 0.0);
     let (sc, at) = (&*s, Ground { cfg, area: cells.area(), lat: cells.lat(), decl, ground, e_ground, canopy, life, dt });
-    crate::par::rows(&mut rows, ROW, || (), |_, i, row| {
-        *<&mut [f64; ROW]>::try_from(row).unwrap() = cell(&at, sc, i);
+    // Each task keeps the last latitude and its sunlight: neighbouring cells often share a latitude (a row of the
+    // square map), and the sunlight is the same function of it.
+    crate::par::rows(&mut rows, ROW, || (f64::NAN, 0.0), |last, i, row| {
+        if at.lat[i] != last.0 {
+            *last = (at.lat[i], insolation(at.cfg.sun, at.lat[i].to_radians(), at.decl));
+        }
+        *<&mut [f64; ROW]>::try_from(row).unwrap() = cell(&at, sc, i, last.1);
     });
     for (i, row) in rows.chunks_exact(ROW).enumerate() {
         let &[tl, dl, kept, sw, gain, to_air, to_space, clamped] = <&[f64; ROW]>::try_from(row).unwrap();
@@ -113,14 +118,13 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     w.cross(Boundary::Space, [], -out);
 }
 
-/// The radiation of ground cell `i` under the sunlight of its latitude over the step: [temperature of the
+/// The radiation of ground cell `i` under the sunlight `q` of its latitude (W/m²) over the step: [temperature of the
 /// air touching the ground, K; light each unit of capture area of its bodies gets, J/m²; light set
 /// aside for them, W/m²; shortwave absorbed, W/m²; heat the node gains, J; heat given to its air
 /// node, J; heat sent to space, J; heat it could not pay, J].
-fn cell(at: &Ground, s: &Scratch, i: usize) -> [f64; ROW] {
+fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
     let (cfg, n, dt) = (at.cfg, at.e_ground.len(), at.dt);
     let adt = at.area[i] * dt;
-    let q = insolation(cfg.sun, at.lat[i].to_radians(), at.decl);
     // The air this cell sees, and its temperature where it touches the ground.
     let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
     let ta = ta + s.ta[j] - s.ta0[j];
