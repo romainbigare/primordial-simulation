@@ -1190,7 +1190,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     let spread: Vec<f32> = inv.iter().map(|&x| if x > 0.0 { (a * a * std::f32::consts::FRAC_PI_8 + 1.0) / (x * x) } else { 0.0 }).collect();
     let s = live(&w).into_iter().find(|&s| {
         let i = w.life.bodies[s].cell as usize;
-        pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
+        pcore::space::square::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
     }).expect("a node with nodes all around");
     // Members mature from 0.65 of their body, all children leave.
     let mut genes = w.life.bodies[s].genes.clone();

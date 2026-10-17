@@ -69,7 +69,7 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let (mut sun, mut out) = (0.0, 0.0);
     s.node_tmp.fill(0.0);
-    let suns: Vec<f64> = (0..grid.h).map(|y| insolation(cfg.sun, grid.lat(y, cfg.lat_south, cfg.lat_north).to_radians(), decl)).collect();
+    let suns: Vec<f64> = (0..grid.h).map(|y| insolation(cfg.sun, grid.lat(y).to_radians(), decl)).collect();
     // Each cell's numbers depend on no other cell: computed in rows (in parallel, with `threads`),
     // applied in the order of the cells.
     let mut rows = std::mem::take(&mut s.rad);

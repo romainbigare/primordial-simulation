@@ -15,7 +15,7 @@ use crate::body::{alike_size, most, mutation_size, vary, within, Body, Layout, C
 use crate::brain::{self, row_step, shake};
 use crate::chem::Chemistry;
 use crate::event::{Event, EventKind};
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::lineage::{own, resized};
 use crate::nodes::{join, may_be_node, open, COUNT_SLACK};
 use crate::rng::{Purpose, Rng};

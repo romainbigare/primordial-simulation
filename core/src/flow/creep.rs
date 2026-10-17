@@ -2,7 +2,7 @@
 
 use super::land::{lift, melted, rise, solid};
 use super::{bare_share, range, Scratch};
-use crate::grid::FORWARD;
+use crate::space::square::FORWARD;
 use crate::World;
 
 /// Added to a substance's hardness before its softness (1 / hardness) is taken.

@@ -7,7 +7,7 @@
 //! once.
 
 use pcore::body::{self, Layout, INTERVAL, LEARN};
-use pcore::grid::DIRS;
+use pcore::space::square::DIRS;
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use worldgen::testkit::{self, dry_land, founder, scale, start, Books, Brain, Line, LIQUID, MATTER, OFF, RICH};

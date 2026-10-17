@@ -4,7 +4,7 @@
 use super::{Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
 use crate::body::{Body, Lived, SHARE_SENSE};
 use crate::brain::{ln, REST, SIG};
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::lanes::thickness;
 use crate::rng::Rng;
 use crate::{bond, World};

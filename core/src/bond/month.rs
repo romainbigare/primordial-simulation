@@ -7,7 +7,7 @@ use crate::change::{send_gas, GasMove, Reactor};
 use crate::flow::Sky;
 use crate::ground::share;
 use crate::chem::Phase;
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
 use crate::units::DAY;
 use crate::World;

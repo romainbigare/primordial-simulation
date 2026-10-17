@@ -3,7 +3,7 @@
 use super::NONE;
 use crate::body::{self, Body, BROKEN};
 use crate::chem::Phase;
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::{bond, lanes, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`Physics::bump` of what it moves): cost by mass (with

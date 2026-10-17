@@ -296,3 +296,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   generation), a class, a parent and a cell; it follows from the grid, so a world builds it when made and when loaded,
   with the same ids, and it is not saved. `store::apply` books moves, transforms and link fluxes in a fixed order and
   scales down what takes from a node that holds too little (`Counters::scaled`). No law calls it yet; results unchanged.
+- B1, B2: `core/src/space/`: a `Mesh` of levels (cells with area, centre and latitude; links each once with their two
+  cells, distance and width; compressed adjacency; parents and children), the square builder (`space::square`, which
+  now holds `DIRS`, `FORWARD` and the square layout) and stacks of layers with vertical links. `Grid` is a thin view
+  on the mesh: cell count, area, air nodes (`air_of` is the parent at the air level) and latitude come from it; the
+  mesh is built from the grid's numbers and `Config`'s latitudes, not saved. Results unchanged (golden fingerprints).

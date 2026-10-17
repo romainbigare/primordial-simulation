@@ -451,7 +451,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
 fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (n, na, area) = (w.grid.n(), w.grid.na(), w.grid.area());
-    let pit = |w: &World, i: usize| pcore::grid::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| w.surface_z(j) > w.surface_z(i)));
+    let pit = |w: &World, i: usize| pcore::space::square::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| w.surface_z(j) > w.surface_z(i)));
     let i = (0..n).find(|&i| w.ground[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && pit(&w, i)).expect("a pit of dry land");
     // 5 cm of the liquid.
     (w.ground[LIQUID * n + i], w.ground[DISSOLVED * n + i]) = (0.05 * area / w.chem.molar_volume(LIQUID, Phase::Liquid), 1e3);

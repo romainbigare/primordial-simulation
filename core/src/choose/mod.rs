@@ -22,7 +22,7 @@ use perceive::{inputs, perceive, sector, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB
 
 use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
 use crate::{bond, lanes, nodes, World};
 

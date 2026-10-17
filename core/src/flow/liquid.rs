@@ -4,7 +4,7 @@
 use super::drain::store_table;
 use super::land::{darcy, lift, solid, stand, t_now, table, wet, HALF_WAY};
 use super::{bare_share, follow, range, year_weight, Scratch};
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::math::one_minus_exp;
 use crate::World;
 

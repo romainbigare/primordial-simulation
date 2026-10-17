@@ -34,8 +34,8 @@ pub fn save_snapshot<P: Serialize>(w: &World, plan: &P, path: impl AsRef<Path>) 
 }
 
 /// Load a snapshot written by `save_snapshot` of this format version. Skipped scratch fields
-/// come back as their defaults; the groups' sums of born rows are rebuilt, as each month does, and the node table from the
-/// grid.
+/// come back as their defaults; the mesh is rebuilt from the grid's numbers, the node table from the grid, and the
+/// groups' sums of born rows, as each month does.
 pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<(World, P)> {
     let mut z = BufReader::with_capacity(BUFFER, GzDecoder::new(std::fs::File::open(path)?));
     let mut head = [0u8; 8];
@@ -49,6 +49,8 @@ pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<
     }
     let mut w: World = bincode::deserialize_from(&mut z).map_err(bad)?;
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
+    let g = &w.grid;
+    w.grid = pcore::grid::Grid::new(g.w, g.h, g.cell_m, g.air_scale, &w.cfg);
     w.life.resum();
     w.table = pcore::store::Nodes::of_grid(&w.grid);
     Ok((w, plan))

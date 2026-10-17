@@ -22,6 +22,7 @@ mod params;
 pub mod rng;
 mod schedule;
 pub mod solve;
+pub mod space;
 pub mod store;
 pub mod survey;
 pub mod units;

@@ -2,7 +2,7 @@
 //! clear it (`clear`, from `choose::go`), which makes the step cheaper (`resist`, `eased`), and bodies spread back into
 //! it (`regrow`, yearly from Flow).
 
-use crate::grid::{DIRS, FORWARD};
+use crate::space::square::{DIRS, FORWARD};
 use crate::World;
 
 /// Body mass `kg` per area of a cell, over `Physics::rho_pass`: how thick bodies are to pass through.

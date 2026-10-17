@@ -5,7 +5,7 @@ use super::air;
 use super::land::NONE;
 use super::range;
 use crate::chem::Chemistry;
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::World;
 use serde::{Deserialize, Serialize};
 

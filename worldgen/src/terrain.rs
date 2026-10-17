@@ -91,8 +91,8 @@ pub fn air_column(chem: &Chemistry, init: &Init, gravity: f64) -> f64 {
 }
 
 /// Starting temperature at row `y` and height `z`, K: warm low latitudes, cooler poles and heights.
-fn t_start(grid: &Grid, cfg: &Config, y: usize, z: f64) -> f64 {
-    let lat = grid.lat(y, cfg.lat_south, cfg.lat_north).to_radians();
+fn t_start(grid: &Grid, y: usize, z: f64) -> f64 {
+    let lat = grid.lat(y).to_radians();
     T_EQUATOR - POLE_DROP * lat.sin().powi(2) - LAPSE * z.max(0.0)
 }
 
@@ -115,7 +115,7 @@ pub fn new_world(seed: u64, w: usize, h: usize) -> World {
 }
 
 pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: Config) -> World {
-    let grid = Grid { w, h, cell_m: CELL_M, air_scale: AIR_SCALE };
+    let grid = Grid::new(w, h, CELL_M, AIR_SCALE, &cfg);
     let (n, na, ns) = (grid.n(), grid.na(), chem.ns());
     let area = grid.area();
     let hz = heights(seed, w, h);
@@ -164,7 +164,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     for j in 0..na {
         zmean[j] /= cnt[j];
         let y = (j / grid.aw()) * grid.air_scale + grid.air_scale / 2;
-        t_air[j] = t_start(&grid, &cfg, y.min(h - 1), zmean[j]);
+        t_air[j] = t_start(&grid, y.min(h - 1), zmean[j]);
         let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * area * cnt[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;
@@ -208,7 +208,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     for (i, &z) in hz.iter().enumerate().take(n) {
         let (_, y) = world.grid.xy(i);
         // Low ground starts with its liquid molten.
-        let t = t_start(&world.grid, &world.cfg, y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
+        let t = t_start(&world.grid, y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
         world.e_ground[i] = world.energy_ground(i, t);
     }
     for (j, &t) in t_air.iter().enumerate() {

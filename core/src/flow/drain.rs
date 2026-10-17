@@ -2,7 +2,7 @@
 
 use super::land::{darcy, t_now, wet, HALF_WAY};
 use super::{range, Scratch};
-use crate::grid::DIRS;
+use crate::space::square::DIRS;
 use crate::World;
 
 /// Drainage: the loose ground holds its liquid against gravity up to a share `field` of its pores; the
