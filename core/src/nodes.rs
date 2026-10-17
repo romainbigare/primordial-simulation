@@ -108,7 +108,7 @@ pub(crate) fn may_be_node(w: &World, genes: &[f32]) -> bool {
 pub fn merge(w: &mut World, s: usize, t: usize) {
     let c = w.life.bodies[s].clone();
     let mut r = Rng::new(w.seed, w.day, c.id(s), Purpose::Merge);
-    let rows = w.life.carry_rows(w.life.born(&c).to_vec(), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.phys.new_noise);
+    let rows = w.life.carry_rows(w.life.born(&c).to_vec(), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.new_noise());
     w.life.remove(s);
     join(w, t, c, &rows);
 }

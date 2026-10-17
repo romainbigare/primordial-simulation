@@ -71,7 +71,7 @@ pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, nois
 /// individual's child does this at birth (`copy::copy`); a node's children start no lineage. Moves no matter and no
 /// energy.
 pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
-    let (ns, noise, id) = (w.chem.ns(), w.cfg.phys.new_noise, b.id(slot));
+    let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id(slot));
     let mut r = Rng::new(w.seed, w.day, id, Purpose::Resize);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };

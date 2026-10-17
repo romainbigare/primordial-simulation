@@ -53,7 +53,7 @@ Some numbers in this file were found by reading doc comments and reports, not by
 | `share_brains` | on/off | bodies that stay near each other share one brain's rows (off: each body keeps its own, a child starts with its parent's and no body joins another's group) | a setting, to check that sharing gives the same patterns | switch |
 | `nodes` | on/off | animals live in population nodes (on) or only as individuals (off, `--individuals`) | a setting, for the check that nodes give the same patterns as individuals (handover 7.1, review 5 row 8) | switch |
 | `two_parents` | on/off | a mature body's children have a second parent, each gene from one of the two, when a mature alike body is in its cell (on, the default), or are copies of one parent (off, `--no-mix`) | a setting, not a number: it exists for the check that nodes keep the mean of their genes without selection (`core/tests/nodes.rs`), since a partner not chosen in return pulls that mean, and to measure what mixing changes (15 Oct 2026, two-parent copying, handover 6.4) | switch |
-| `null` | on/off | a null run: no learning, no imitation (a watch is drawn and counted but moves no rows), born rows and brain bases never change at a copy; genes still mutate | the run to compare a seed with (review 3, M6) | switch |
+| `null` | on/off | a null run: no learning, no imitation (a watch is drawn and counted but moves no rows), born rows and brain bases never change at a copy or a merge (a brain carried over to other sizes gets new weights of 0); genes still mutate | the run to compare a seed with (review 3, M6) | switch |
 | `phys` | (a `Physics`) | holds the numbers below | | container |
 
 ## Physics

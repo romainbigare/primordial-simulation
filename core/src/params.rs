@@ -71,7 +71,7 @@ pub struct Config {
     pub nodes: bool,
     /// A mature body's children may have a second, alike parent (off, `--no-mix`: one parent)
     pub two_parents: bool,
-    /// A null run: no learning, no imitation, born rows and brain bases never change at a copy
+    /// A null run: no learning, no imitation, born rows and brain bases never change at a copy or a merge
     pub null: bool,
 
     /// The free numbers of the laws
@@ -350,6 +350,14 @@ impl Default for Physics {
             bed_seep: 3e-6,
             hill: 250.0,
         }
+    }
+}
+
+impl Config {
+    /// Spread of the new weights of a brain carried over to other sizes (`Physics::new_noise`; none in a null run, whose
+    /// brains never change at a copy).
+    pub(crate) fn new_noise(&self) -> f32 {
+        if self.null { 0.0 } else { self.phys.new_noise }
     }
 }
 

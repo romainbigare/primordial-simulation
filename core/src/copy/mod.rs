@@ -118,7 +118,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     if c.lineage == b.lineage && !l.alone {
         if let Some(t) = hit.or_else(|| target(w, l, &c)) {
             let rows = rows.unwrap_or_else(|| w.life.born(b).to_vec());
-            let rows = w.life.carry_rows(rows, c.lineage, w.life.bodies[t].lineage, r, w.cfg.phys.new_noise);
+            let rows = w.life.carry_rows(rows, c.lineage, w.life.bodies[t].lineage, r, w.cfg.new_noise());
             join(w, t, c, &rows);
             return true;
         }
@@ -213,10 +213,11 @@ fn child_rows(w: &World, b: &Body, l: &Litter, c: &mut Body, m: f64, size: f32, 
 
 /// An individual's child whose brain-size genes are a whole unit away from its lineage's sizes starts a new lineage
 /// with the new sizes, its brain carried over where they overlap (`lineage::resized`, its rows by `brain::rerow`);
-/// rarely (`Physics::new_lineage`) the base of its lineage's brain is copied with small noise (none in a null run),
-/// which starts a new lineage too. A new lineage starts a new group with the child's rows.
+/// rarely (`Physics::new_lineage`) the base of its lineage's brain is copied with small noise, which starts a new
+/// lineage too (in a null run neither adds noise, `Config::new_noise`). A new lineage starts a new group with the
+/// child's rows.
 fn child_lineage(w: &mut World, b: &Body, c: &mut Body, rows: &mut Option<Vec<f32>>, r: &mut Rng) {
-    let (noise, base_noise) = (w.cfg.phys.new_noise, if w.cfg.null { 0.0 } else { w.cfg.phys.base_noise });
+    let (noise, base_noise) = (w.cfg.new_noise(), if w.cfg.null { 0.0 } else { w.cfg.phys.base_noise });
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let fresh = if let Some(l) = resized(lin, &c.genes, w.chem.ns(), r, noise) {
         *rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, l.shape, r, noise));
