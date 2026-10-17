@@ -50,7 +50,7 @@ pub fn small_world() -> World {
 
 /// The land cells with no liquid standing on them.
 pub fn dry_lands(w: &World) -> Vec<usize> {
-    (0..w.grid.n()).filter(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3).collect()
+    (0..w.grid.n()).filter(|&i| w.is_land(i) && w.life.env[i][1] < 1e-3).collect()
 }
 
 /// The first land cell with no liquid standing on it.

@@ -147,6 +147,10 @@ impl World {
     pub fn season(&self) -> f64 {
         (self.day % self.days_per_year()) as f64 / self.days_per_year() as f64
     }
+    /// Whether ground node `i` is land: its solid surface above 0 m (`surface_z`).
+    pub fn is_land(&self, i: usize) -> bool {
+        self.surface_z(i) > 0.0
+    }
     /// Loose amount of substance `k` in ground node `i`, mol.
     #[inline]
     pub fn g(&self, k: usize, i: usize) -> f64 {

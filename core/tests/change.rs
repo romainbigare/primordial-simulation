@@ -517,7 +517,7 @@ fn hot_cover_burns() {
         w.cfg.phys.c_build = 0.0;
         w.cfg.phys.c_move = 1e12;
         pcore::step(&mut w);
-        worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+        worldgen::life::seed(&mut w, 0);
         let i = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node").cell as usize;
         let n = w.grid.n();
         let held = |w: &pcore::World| w.ground[RICH * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[RICH]).sum::<f64>();

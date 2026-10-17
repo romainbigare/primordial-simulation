@@ -2,6 +2,7 @@
 //! (`u32`, little-endian), the header (JSON: the world's size, the layers, the day of each frame, the series and
 //! their units, the events and the rows of `months.csv`) and the frames (one byte a cell and layer, `layers::frame`).
 
+use super::months::year_month;
 use super::{Column, MonthRow, Recorder};
 use crate::layers::LAYERS;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
@@ -76,8 +77,7 @@ impl Recorder {
             })
             .collect::<io::Result<_>>()?;
         // Months: the rows up to this month.
-        let (dpm, mpy) = (w.cfg.days_per_month as u64, w.cfg.months_per_year as u64);
-        let now = (w.day / s.days_per_year, (w.day / dpm) % mpy);
+        let now = year_month(w);
         let months: Vec<MonthRow> = serde_json::from_value(g["months"].clone())?;
         self.months = months.into_iter().take_while(|r| (r.year, r.month) <= now).collect();
         Ok(())

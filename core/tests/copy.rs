@@ -1005,7 +1005,7 @@ fn live(w: &pcore::World) -> Vec<usize> {
 fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed(&mut w, 0);
     let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
@@ -1066,7 +1066,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     // not choose it in return, so children are pulled toward the nodes that are many bodies' nearest, and the mean over
     // all members wanders by more than the bound below.
     w.cfg.two_parents = false;
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed(&mut w, 0);
     let len = Layout::of(&w.chem).len;
     let b0 = &w.life.bodies[live(&w)[0]];
     let (per, e1) = (b0.store.iter().map(|a| 100.0 * a / b0.count).collect::<Vec<f64>>(), 100.0 * b0.e / b0.count);
@@ -1177,7 +1177,7 @@ fn selection_moves_a_nodes_brain_size() {
 #[test]
 fn dispersing_children_of_a_varied_node_join_their_kind() {
     let mut w = small_world();
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
     (w.cfg.phys.c_copy, w.cfg.crowd) = (0.0, 64);
     let lay = Layout::of(&w.chem);
     // Every gene's spread at the split threshold, (alike step)² π / 8 + step² (`body::most`).
@@ -1226,7 +1226,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
 #[test]
 fn a_node_whose_size_genes_moved_changes_lineage() {
     let mut w = small_world();
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
     let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
@@ -1281,7 +1281,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed(&mut w, 0);
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1000.0).expect("a node");
     // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene.
     let (lay, genes0) = (Layout::of(&w.chem), w.life.bodies[s].genes.clone());
@@ -1339,7 +1339,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
 fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
+    worldgen::life::seed(&mut w, 0);
     let t = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1.0).expect("a node");
     w.life.bodies[t].count = 3.0;
     let (o, before) = (w.life.bodies[t].clone(), held(&w).0);
@@ -1416,8 +1416,8 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
 
 /// With `Config::nodes` off, more than `crowd` alike animals in one cell stay individuals at the month's start (with
 /// nodes on they merge, `crowded_individuals_merge_into_a_node`), and over three years of the whole world no animal
-/// becomes a node; light-eaters still are nodes. The animals are the hand-set eaters (`Seeding::old`, which find what
-/// they eat), so that some live and breed through the window: the check would be empty with none (neutral animal
+/// becomes a node; light-eaters still are nodes. The animals are hand-set eaters (as `ew run` places them, which find
+/// what they eat), so that some live and breed through the window: the check would be empty with none (neutral animal
 /// founders mostly die in their first year). Matter and energy are kept.
 #[test]
 #[ignore = "slow: three years of a 32 x 32 world"]
@@ -1426,9 +1426,8 @@ fn individuals_mode_merges_no_animal() {
     w.cfg.nodes = false;
     let books = Books::now(&w);
     pcore::step(&mut w);
-    let old = worldgen::life::Seeding::old();
-    worldgen::life::seed_with(&mut w, 0, &old);
-    worldgen::life::seed_with(&mut w, 1, &old);
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
     let animal = |w: &pcore::World, b: &Body| !pcore::body::light_eater(&w.chem, &b.genes);
     assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal was placed as a node");
     let a = w.life.alive().find(|b| animal(&w, b)).expect("an animal");

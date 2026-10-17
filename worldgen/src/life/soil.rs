@@ -1,19 +1,17 @@
 //! The soil: the mineral the loose ground of the land gets when life starts.
 
-use super::book;
-use super::seeding::MAX_STANDING_M;
-use pcore::{survey, World};
+use super::{book, open_land};
+use pcore::World;
 
 /// Give the loose ground of every land cell the soil `soil` (substance, mol per m²: `Init::soil`, the mineral of the
 /// fixing reaction's gas in chemistry 0) at this moment, which is when life starts: booked as new matter and energy
-/// like an edit, at the cell's own temperature. Land under more than `MAX_STANDING_M` of standing liquid (the cells
-/// no body is placed on) is no soil and gets none. It is not placed at year 0: the first years of a world are the
-/// liquid's, before any body, and rain washes a dissolved mineral from the slopes into the basins in the first year.
+/// like an edit, at the cell's own temperature. Only the land founders are placed on gets it (`open_land`: not a basin
+/// of standing liquid). It is not placed at year 0: the first years of a world are the liquid's, before any body, and
+/// rain washes a dissolved mineral from the slopes into the basins in the first year.
 /// Returns what was placed, in one line.
 pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
     let (n, area) = (w.grid.n(), w.grid.area());
-    // (The liquid that stands, not what the pores of the ground hold: `survey::env_of`.)
-    let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0 && survey::env_of(w, i)[1] <= MAX_STANDING_M).collect();
+    let land: Vec<usize> = (0..n).filter(|&i| open_land(w, i)).collect();
     let mut said = Vec::new();
     for &(s, per) in soil {
         let a = per * area;

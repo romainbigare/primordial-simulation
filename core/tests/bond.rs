@@ -31,8 +31,8 @@ fn bond_breaks_under_too_much_load() {
 #[test]
 fn walls_keep_a_body_warm() {
     let (mut w, i) = world();
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
     // Six blocks joined around a small space, one bonded to the ground.
     let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 2e3, true)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);
@@ -72,8 +72,8 @@ fn walls_keep_a_body_warm() {
 #[test]
 fn a_small_body_can_make_parts_and_a_cell_holds_many() {
     let (mut w, i) = world();
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
     let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
     b.cell = i as u32;
@@ -95,8 +95,8 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
 #[test]
 fn forming_never_takes_more_than_is_left() {
     let (mut w, _) = world();
-    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::old());
-    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::old());
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed(&mut w, 1);
     let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
     let (chem, b) = (&w.chem, &mut w.life.bodies[slot]);
     b.prepare(chem, &w.cfg.phys);

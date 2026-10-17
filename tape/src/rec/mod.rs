@@ -11,6 +11,7 @@ use crate::layers::{frame, Ctx};
 use months::MonthRow;
 use pcore::event::{Event, EventKind};
 use pcore::World;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::io;
 use std::path::Path;
@@ -34,6 +35,14 @@ struct Shape {
     cell_m: f64,
     seed: u64,
     days_per_year: u64,
+}
+
+/// What the recorder keeps across years and a snapshot carries (`Recorder::kept`), so that a resumed run's series
+/// go on as the unbroken run's: the substances seen so far and `Social`.
+#[derive(Serialize, Deserialize)]
+pub struct Kept {
+    seen: Vec<bool>,
+    social: Social,
 }
 
 pub struct Recorder {
@@ -94,12 +103,17 @@ impl Recorder {
         }
     }
 
-    /// Start a run resumed from a snapshot: treat substances already present as known, and load
-    /// what an earlier run wrote to `dir` (series, months, frames, events) up to the snapshot's
-    /// day, so the files go on from there. What it wrote after that day is dropped (a resume
-    /// from an earlier snapshot replays it). A `dir` without a tape starts the tape empty.
-    pub fn resume(&mut self, w: &mut World, dir: impl AsRef<Path>) -> io::Result<()> {
-        self.detect(w);
+    /// What the recorder keeps across years, for a snapshot (taken at a year's end, after its row).
+    pub fn kept(&self) -> Kept {
+        Kept { seen: self.seen.clone(), social: self.social.clone() }
+    }
+
+    /// Start a run resumed from a snapshot: take back what the recorder kept (`kept`), and load what an earlier run
+    /// wrote to `dir` (series, months, frames, events) up to the snapshot's day, so the files go on from there. What it
+    /// wrote after that day is dropped (a resume from an earlier snapshot replays it). A `dir` without a tape starts the
+    /// tape empty. The events before the snapshot are the earlier run's, already counted.
+    pub fn resume(&mut self, w: &mut World, kept: Kept, dir: impl AsRef<Path>) -> io::Result<()> {
+        (self.seen, self.social) = (kept.seen, kept.social);
         w.events.clear();
         self.updates = w.counts.updates;
         self.read_ewf(dir.as_ref(), w)
@@ -122,14 +136,18 @@ impl Recorder {
         }
     }
 
-    /// Call at the start and after every simulated month.
+    /// Call at the start and after every simulated month. A month the tape has already (the snapshot's month, in a
+    /// resumed run) is not recorded again.
     pub fn record_month(&mut self, w: &mut World) {
+        let dpy = w.days_per_year();
+        let (year, yearly) = (w.day / dpy, w.day.is_multiple_of(dpy));
+        if self.months.last().is_some_and(|r| (r.year, r.month) == months::year_month(w)) {
+            return;
+        }
         self.detect(w);
         for e in std::mem::take(&mut w.events) {
             self.count(&e, w);
         }
-        let dpy = w.days_per_year();
-        let (year, yearly) = (w.day / dpy, w.day.is_multiple_of(dpy));
         let framed = year < self.monthly || (yearly && self.every > 0 && year % self.every == 0);
         self.month(w);
         if !yearly && !framed {
@@ -140,11 +158,10 @@ impl Recorder {
             self.year.parts = std::mem::take(&mut w.counts.parts);
         }
         let c = Ctx::new(w);
-        // A resumed run finds the snapshot's own row and frame already in the tape it loaded.
-        if yearly && self.series.iter().find(|c| c.name == "year").and_then(|c| c.values.last()) != Some(&w.year()) {
+        if yearly {
             self.push_series(&c);
         }
-        if framed && self.frames.last() != Some(&w.day) {
+        if framed {
             self.frames.push(w.day);
             frame(&c, &mut self.bytes);
         }

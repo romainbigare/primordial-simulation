@@ -49,6 +49,11 @@ pub(super) fn csv(rows: &[MonthRow]) -> String {
     out + "\n"
 }
 
+/// The world's year and month of the year now.
+pub(super) fn year_month(w: &World) -> (u64, u64) {
+    (w.day / w.days_per_year(), (w.day / w.cfg.days_per_month as u64) % w.cfg.months_per_year as u64)
+}
+
 impl Recorder {
     /// The month: its row (where the mobile bodies are and how they moved since last month), and what the year
     /// counts at month ends: standing members by kind, signals by context, bodies inside walls, the land's
@@ -63,8 +68,8 @@ impl Recorder {
             if let Some(l) = &w.life.brains[b.lineage as usize] {
                 bump(&mut y.stand, l.root as usize, b.n());
             }
-            // (The survey fills `env` before any body is placed.)
-            let [t, _, z] = w.life.env[i];
+            // The ground's temperature as the bodies feel it (`World::t_ground_last`).
+            let (t, z) = (w.t_ground_last(i), w.life.env[i][2]);
             let ctx = [t < SIGNAL_COLD_T, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0];
             let q = (b.sig[0] > 0.0) as usize * 2 + (b.sig[1] > 0.0) as usize;
             let tab = slot(&mut y.sig, b.lineage as usize);
@@ -90,18 +95,14 @@ impl Recorder {
         s.last = last;
         // The land's mean ground temperature this month (the land is listed again each year).
         if y.t_land.is_empty() {
-            y.land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).map(|i| i as u32).collect();
+            y.land = (0..w.grid.n()).filter(|&i| w.is_land(i)).map(|i| i as u32).collect();
         }
         y.t_land.push(y.land.iter().map(|&i| w.t_ground_last(i as usize)).sum::<f64>() / y.land.len().max(1) as f64);
-        let dpm = w.cfg.days_per_month as u64;
-        let (year, month) = (w.day / w.days_per_year(), (w.day / dpm) % w.cfg.months_per_year as u64);
+        let (year, month) = year_month(w);
         let mean = sum.map(|v| v / n.max(1.0));
         let [sp, sy] = std::mem::take(&mut self.month.spent);
         let values = [n, mean[0], mean[1], mean[2], mean[3], inside, tm / n.max(1.0), sp, sy / sp.max(MIN_SPENT)];
         let (births, deaths) = (std::mem::take(&mut self.month.births), std::mem::take(&mut self.month.deaths));
-        // (A resumed run has this month's row already, from the tape it loaded.)
-        if self.months.last().is_none_or(|r| (r.year, r.month) != (year, month)) {
-            self.months.push(MonthRow { year, month, values, births, deaths });
-        }
+        self.months.push(MonthRow { year, month, values, births, deaths });
     }
 }

@@ -87,7 +87,7 @@ pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder)
 pub fn rivers(w: &World) -> String {
     let f = tape::fields(w);
     let flux = |i: usize| w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
-    let land: Vec<usize> = (0..w.grid.n()).filter(|&i| f.z[i] > 0.0).collect();
+    let land: Vec<usize> = (0..w.grid.n()).filter(|&i| w.is_land(i)).collect();
     let dry: Vec<usize> = land.iter().copied().filter(|&i| f.depth[i] <= STANDING_M).collect();
     let over = |t: f64| dry.iter().filter(|&&i| flux(i) > t).count();
     let rain = land.iter().map(|&i| w.rain[i] as f64).sum::<f64>() / land.len().max(1) as f64;

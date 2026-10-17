@@ -139,7 +139,7 @@ fn recording() -> &'static Recording {
         w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let cells = |w: &World| {
-            let land = (0..w.grid.n()).filter(|&i| w.surface_z(i) > 0.0).count() as f64;
+            let land = (0..w.grid.n()).filter(|&i| w.is_land(i)).count() as f64;
             [land, w.grid.n() as f64 - land]
         };
         let mpy = w.cfg.months_per_year;
@@ -265,30 +265,32 @@ fn read_tape(dir: &std::path::Path) -> (serde_json::Value, usize, Vec<String>, V
     (meta, raw.len() - 8 - n, series, months.lines().skip(1).map(ym).collect())
 }
 
-/// A run written for 3 years and resumed from its year 2 snapshot into the same folder keeps
-/// the years 0..2 it had, replays 3 and goes on to 4: series, months, frames and events with no
-/// gap and no repeat.
+/// A run with life written for 4 years and resumed from its year 2 snapshot into the same folder keeps the years 0..2
+/// it had and replays 3 and 4 as the unbroken run wrote them: series rows, months, frames and events, with no gap and no
+/// repeat (the snapshot carries what the recorder keeps across years: where bodies were, what they took, worn edges).
 #[test]
 fn resume_into_the_same_folder_continues_the_tape() {
     let dir = tmp("resume");
     let mut w = world();
+    worldgen::life::seed(&mut w, 0);
+    worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let (mpy, dpy) = (w.cfg.months_per_year as u64, w.days_per_year());
     let mut rec = tape::Recorder::new(&w, 1, 0);
     rec.record_month(&mut w);
-    for m in 1..=3 * mpy {
+    for m in 1..=4 * mpy {
         run(&mut w, 1);
         rec.record_month(&mut w);
         if m == 2 * mpy {
-            tape::save_snapshot(&w, &(), dir.join("snap.bin.gz")).unwrap();
+            tape::save_snapshot(&w, &rec.kept(), dir.join("snap.bin.gz")).unwrap();
         }
     }
     rec.finish(&dir).unwrap();
-    let (first, ..) = read_tape(&dir);
-    let first_series = std::fs::read_to_string(dir.join("series.csv")).unwrap();
+    let whole = read_tape(&dir);
+    let whole_months = std::fs::read_to_string(dir.join("months.csv")).unwrap();
 
-    let (mut w, ()) = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
+    let (mut w, kept) = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
     let mut rec = tape::Recorder::new(&w, 1, 0);
-    rec.resume(&mut w, &dir).unwrap();
+    rec.resume(&mut w, kept, &dir).unwrap();
     rec.record_month(&mut w);
     for _ in 0..2 * mpy {
         run(&mut w, 1);
@@ -299,16 +301,16 @@ fn resume_into_the_same_folder_continues_the_tape() {
     let (meta, bytes, series, months) = read_tape(&dir);
     let years: Vec<&str> = series[1..].iter().map(|r| r.split(',').next().unwrap()).collect();
     assert_eq!(years, ["0", "1", "2", "3", "4"]);
-    // The row of the snapshot's year is the one the first run wrote, not a new one.
-    assert_eq!(series[..4], first_series.lines().take(4).map(String::from).collect::<Vec<_>>());
+    assert!(series[0].contains("eat_animals") && series[0].contains("worn_new"));
+    for (row, (resumed, unbroken)) in series.iter().zip(&whole.2).enumerate() {
+        assert_eq!(resumed, unbroken, "series row {row}");
+    }
+    assert_eq!(std::fs::read_to_string(dir.join("months.csv")).unwrap(), whole_months);
     assert_eq!(months, (0..=4 * mpy).map(|i| (i / mpy, i % mpy)).collect::<Vec<_>>());
     let days: Vec<u64> = meta["frames"].as_array().unwrap().iter().map(|f| f["day"].as_u64().unwrap()).collect();
     assert_eq!(days, (0..5).map(|y| y * dpy).collect::<Vec<_>>());
     assert_eq!(bytes, 5 * SIDE * SIDE * tape::LAYERS.len());
-    assert_eq!(meta["events"], first["events"]);
-    for col in meta["series"].as_object().unwrap().values() {
-        assert_eq!(col.as_array().unwrap().len(), 5);
-    }
+    assert_eq!((meta["events"].clone(), meta["series_units"].clone()), (whole.0["events"].clone(), whole.0["series_units"].clone()));
 }
 
 /// A null run: with life about and copies made, nobody learns (the bodies' own adjustments stay

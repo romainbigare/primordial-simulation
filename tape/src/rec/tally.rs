@@ -6,6 +6,7 @@ use super::{Recorder, CAUSES};
 use pcore::body::{light_eater, LIGHT_EATER, SPENT};
 use pcore::event::{Event, EventKind};
 use pcore::World;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Death causes counted (`CAUSES`).
@@ -53,7 +54,7 @@ pub(super) struct YearTally {
     pub stand: Vec<f64>,
     pub months: f64,
     /// The land's mean ground temperature at each month end, K, and the land cells it is of (listed at the first
-    /// month of the year: solid surface above 0 m, as everywhere on the tape)
+    /// month of the year, `World::is_land`)
     pub t_land: Vec<f64>,
     pub land: Vec<u32>,
     /// Watch events, of them within a lineage; watcher groups per watched group
@@ -93,8 +94,8 @@ pub(super) struct MonthTally {
     pub spent: [f64; 2],
 }
 
-/// What the recorder keeps across years.
-#[derive(Default)]
+/// What the recorder keeps across years of what bodies do (a snapshot carries it: `Kept`).
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub(super) struct Social {
     /// Per body slot: its generation and cell at the last month, for the bodies that are not light-eaters (for
     /// movement by month); generation `u32::MAX`: none
