@@ -99,10 +99,6 @@ pub struct Info {
 /// What bodies did with parts since the shell last read it (not saved).
 #[derive(Clone, Debug, Default)]
 pub struct Tally {
-    /// Takes from bodies and breaks of the bonded ground, [without, with] a held part: count, and
-    /// what they yielded as a share of the body's own mass
-    pub take: [[f64; 2]; 2],
-    pub dig: [[f64; 2]; 2],
     /// Moves into deep liquid afloat; parts formed; kg put into and taken from parts
     pub afloat: f64,
     pub formed: f64,

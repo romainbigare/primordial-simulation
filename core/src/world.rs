@@ -21,8 +21,6 @@ pub struct Ledger {
     pub imposed_energy: f64,
     /// Elements added by player edits, mol
     pub imposed_elems: Vec<f64>,
-    /// Tiny negative amounts clamped to zero, mol
-    pub clamped: f64,
     /// Heat a ground node could not give (it would have fallen below `T_FLOOR`), J: whoever asked
     /// received that much less, so this is not a loss of energy.
     pub clamped_heat: f64,
@@ -44,57 +42,6 @@ pub struct Diag {
     /// Population nodes split since the start: in two (`copy::split`), and one member off to act
     /// alone (`copy::one`)
     pub splits: [f64; 2],
-    /// Members merged by the monthly merge however unlike (the safeguard past twice `Config::crowd`
-    /// nodes in a cell, `nodes::crowd`)
-    #[serde(skip)]
-    pub unlike: f64,
-    /// Members that joined a node (the monthly merge, `nodes::crowd`, and a child's join, `copy::copy`)
-    /// whose means differ from the node's by more than `Physics::alike` steps in some gene
-    /// (`copy::alike`)
-    #[serde(skip)]
-    pub wide: f64,
-    /// Members that moved to a neighbour cell, by starting kind (`Lineage::root`): a node moving
-    /// counts all its members (`choose::go`)
-    #[serde(skip)]
-    pub moves: Vec<f64>,
-    /// Body matter, kg, that hits tore off members who lived on (bites that left them smaller, bodies
-    /// trampled, `body::wound`), by starting kind
-    #[serde(skip)]
-    pub hurt: Vec<f64>,
-    /// Members that could build body matter in an update, by starting kind, as [tried, held back by any mineral, by
-    /// the first, by the second...]: held back are those whose store of a mineral (`Chemistry::minerals`) bound what they built,
-    /// below what their fuels, their allowance and their spare allowed (`copy::grow`)
-    #[serde(skip)]
-    pub nlim: Vec<Vec<f64>>,
-    /// The land's liquid, m³, by the indices `LAND_*`
-    #[serde(skip)]
-    pub liquid_land: [f64; 5],
-}
-
-impl Diag {
-    /// `liquid_land`: rain on land cells
-    pub const LAND_RAIN: usize = 0;
-    /// evaporation from their ground
-    pub const LAND_GROUND: usize = 1;
-    /// evaporation from light-eaters
-    pub const LAND_PLANTS: usize = 2;
-    /// evaporation from the other bodies
-    pub const LAND_OTHERS: usize = 3;
-    /// what light-eaters took of the ground's liquid (rain they caught and what they soaked)
-    pub const LAND_PLANTS_TOOK: usize = 4;
-
-    /// The entry of starting kind `root` (`Lineage::root`) in a tally by kind, grown to hold it; none for a body of no
-    /// starting kind (`u32::MAX`).
-    pub(crate) fn of_root<T: Clone + Default>(v: &mut Vec<T>, root: u32) -> Option<&mut T> {
-        let r = root as usize;
-        if root == u32::MAX {
-            return None;
-        }
-        if v.len() <= r {
-            v.resize(r + 1, T::default());
-        }
-        Some(&mut v[r])
-    }
 }
 
 /// One number per body slot, kept with the generation of the body that set it: a body reads only its own (0 for a new

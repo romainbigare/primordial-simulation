@@ -4,14 +4,14 @@
 use super::exchange::{breath, film, surface, through};
 use super::live::{LiveTmp, Site};
 use super::pay::breathes;
-use super::{light_eater, Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
+use super::{Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
 use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::ground::{draw, heat_above_floor, share, take_paid};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
 use crate::units::{MAX_SUBSTANCES, P_REF};
-use crate::{Diag, World};
+use crate::World;
 
 /// The most share of the heat the body has and can get from the surface that pays the enthalpy of the gas it puts out.
 const GAS_HEAT_SHARE: f64 = 0.5;
@@ -31,7 +31,6 @@ struct Heat {
     /// Light it absorbed, J; light set aside for it that it took (`World::light_pool`), J; it lives on light
     lit: f64,
     took: f64,
-    plant: bool,
 }
 
 /// What the ground of a cell offers to soak up: its liquids that dissolve (bits), their sum, mol, and the rate, per day.
@@ -55,7 +54,6 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     // (The ground's capacity is needed by the first liquid it soaks or loses; it is the same when taken first.)
     let gcap = crate::ground::cap_ground(&w.chem, &w.grid, &w.cfg, &w.ground, &w.bed, s.i);
     let (chem, cfg) = (&w.chem, &w.cfg);
-    let plant = light_eater(chem, &b.genes);
     let fall = rain_caught(w, slot, b, s);
     // It soaks through the mass that works; its conductance is taken at its temperature at the start.
     let wk = b.size(chem) / mass;
@@ -64,7 +62,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let t0 = b.e / c0;
     let g = surface(chem, cfg, b, mass, s.cover, s.walls, t0, s.tg);
     let (caught, lit) = catch_light(w, b, s, leaf);
-    let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0, plant };
+    let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0 };
     let reach = gas_pool(w, b, s, mass, tmp);
     let used = react(w, b, rc, tmp, s, &mut h, c0, upkeep_heat);
     settle_gas(w, b, tmp, s, &mut h);
@@ -191,7 +189,7 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
 /// surface further, as far as that brings the end of `relax_heat` to the gene, its still air carries the vapour away
 /// (`film`, the Lewis relation) and its liquid stays above its safe minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
-    let World { cfg, chem, grid, ground, e_ground, air, e_air, ledger, diag, .. } = w;
+    let World { cfg, chem, grid, ground, e_ground, air, e_air, ledger, .. } = w;
     let (ns, n, na, i, j, tg, dt, days) = (chem.ns(), grid.n(), grid.na(), s.i, s.j, s.tg, s.dt, s.days);
     let (g, t0) = (h.g, h.t0);
     let mut moved = false;
@@ -220,14 +218,12 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         let pre = take_paid(&mut e_ground[i], ledger, h.gcap, inflow, cp, inflow * (cp * tg + fused)).0;
         (b.store[k], ground[k * n + i], b.e, h.heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, h.heat + pre * fused);
         let m = m.min(b.store[k]);
-        diag.liquid_land[Diag::LAND_PLANTS_TOOK] += if h.plant { pre * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
         if m > 0.0 {
             moved = true;
             let q = m * chem.subs[k].cp * t0;
             (air[k * na + j], b.store[k], e_air[j], b.e) = (air[k * na + j] + m, b.store[k] - m, e_air[j] + q, b.e - q);
             h.heat -= m * chem.subs[k].latent_gas();
             lost[k] = (m - pre).max(0.0);
-            diag.liquid_land[if h.plant { Diag::LAND_PLANTS } else { Diag::LAND_OTHERS }] += m * chem.molar_volume(k, Phase::Liquid);
         }
     }
     (lost, moved)
@@ -238,7 +234,7 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
 /// capture area caught (`fall`). The ground pays their heat and fusion enthalpy, or the body soaks less.
 #[allow(clippy::too_many_arguments)]
 fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
-    let World { chem, grid, ground, e_ground, ledger, diag, .. } = w;
+    let World { chem, grid, ground, e_ground, ledger, .. } = w;
     let (n, i, tg, days) = (grid.n(), s.i, s.tg, s.days);
     for k in (0..chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
         let (x, room) = (ground[k * n + i] / soil.in_ground, b.level(chem, k, mass2) - b.store[k]);
@@ -254,7 +250,6 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
         ground[k * n + i] -= d;
         b.e += d * per;
         h.heat += d * fused;
-        diag.liquid_land[Diag::LAND_PLANTS_TOOK] += if h.plant { d * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
     }
 }
 

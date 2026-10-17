@@ -221,7 +221,6 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
     for &k in &s.gas {
         for x in &mut air[k * na..(k + 1) * na] {
             if *x < 0.0 {
-                ledger.clamped -= *x;
                 *x = 0.0;
             }
         }

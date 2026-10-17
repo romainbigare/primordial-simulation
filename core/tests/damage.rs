@@ -150,8 +150,6 @@ fn an_attacked_individual_loses_body_and_lives_on_weaker_then_rebuilds() {
     assert!((after.force / before.force - after.built / before.built).abs() < 1e-9, "force {} -> {} N", before.force, after.force);
     // What the taker did not take went to the ground as dead matter.
     assert!(w.ground[r.rich * n + i] > ground0, "no dead matter on the ground");
-    // It is counted as hurt, by the kind.
-    assert!((w.diag.hurt[0] - (before.matter - after.matter)).abs() < 1e-9, "hurt {:?}", w.diag.hurt);
     drift_ok(&w, &t0, &l0);
 
     // It rebuilds, at c_copy within c_build: each update by no more than the allowance, and over time to what it
@@ -223,7 +221,6 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
     // A hurt adult node: below its copy mass, so immature until it has healed; still one node.
     let copy_mass = b.dec(COPY_MASS);
     assert!(adult0 && (b.adult(&w.chem) == (mean1 >= copy_mass * (1.0 - 1e-9))));
-    assert!(w.diag.hurt[0] > 0.0, "nothing counted as hurt");
     drift_ok(&w, &t0, &l0);
 }
 
@@ -250,7 +247,6 @@ fn a_big_bite_takes_whole_members() {
     println!("{n0} members of {mean0:.4} kg: {:.1} members left of {mean1:.4} kg ({:.2}% of the body torn)", b.n(), 100.0 * share);
     assert!(b.n() < n0 && (b.n() / n0 - (1.0 - share)).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
     assert!((mean1 / mean0 - 1.0).abs() < 1e-9, "survivors changed: {mean0} -> {mean1} kg");
-    assert_eq!(w.diag.hurt.first().copied().unwrap_or(0.0), 0.0, "members that died were counted as hurt");
     drift_ok(&w, &t0, &l0);
 }
 

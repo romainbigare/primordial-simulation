@@ -204,9 +204,8 @@ fn rotting_gives_the_minerals_back_and_burning_hot_gives_the_gas_to_the_air() {
     assert!((ca / lost - 1.0).abs() < 1e-6, "the rock element in solids {ca} for {lost} mol of matter");
 }
 
-/// A body without a mineral cannot build body matter (not a gram of it, whichever of the two is missing), the tally says which one
-/// held it back (the nitrogen mineral, or the rock salt); with both, it builds, and each falls by its count for the matter made (3 and 1
-/// for 1); with a part of one, the matter made binds to it in proportion.
+/// A body without a mineral cannot build body matter (not a gram of it, whichever of the two is missing); with both, it
+/// builds, and each falls by its count for the matter made (3 and 1 for 1); with a part of one, the matter made binds to it in proportion.
 #[test]
 fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     let (mut w, i) = start();
@@ -225,16 +224,12 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     for &(k, per) in &minerals {
         assert!(made > 0.0 && ((b.store[k] - with.store[k]) / (per * made) - 1.0).abs() < 1e-9, "{made} mol of matter for {} of substance {k}", b.store[k] - with.store[k]);
     }
-    for (q, &(k, per)) in minerals.iter().enumerate() {
-        // Without it, none: not a gram of matter, and the tally of the year counts it held back by that mineral and not the other.
+    for &(k, per) in &minerals {
+        // Without it, none: not a gram of matter.
         let mut b = b.clone();
         b.store[k] = 0.0;
-        w.diag.nlim.clear();
         assert!(!copy::grow(&mut w, &mut b, days), "it grew without substance {k}");
         assert_eq!(b.store[m], m0);
-        let tally = w.diag.nlim[w.life.root(&b) as usize].clone();
-        println!("without substance {k}: held back {} (by the nitrogen mineral {}, by the rock salt {}) of {} members that could build", tally[1], tally[2], tally[3], tally[0]);
-        assert!(tally[0] > 0.0 && tally[1] == tally[0] && tally[2 + q] == tally[0] && tally[3 - q] == 0.0);
         // A little of it, a little matter: it binds, in proportion.
         b.store[k] = 0.5 * made * per;
         assert!(copy::grow(&mut w, &mut b, days));

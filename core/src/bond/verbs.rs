@@ -262,8 +262,6 @@ pub fn dig(w: &mut World, b: &mut Body) {
         w.bed[k * n + i] -= a;
         w.ground[k * n + i] += a;
     }
-    let t = &mut w.parts.tally.dig[(lev > 1.0) as usize];
-    (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
 }
 
 /// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets

@@ -483,9 +483,6 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
         return;
     }
     bond::moved(w, b, carried, j, mb);
-    if let Some(m) = crate::Diag::of_root(&mut w.diag.moves, w.life.root(b)) {
-        *m += b.n();
-    }
     w.parts.tally.afloat += afloat as u8 as f64;
     w.life.relocate(slot, b.group, i, j);
     b.cell = j as u32;
@@ -751,8 +748,6 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
     transfer(w, &mut o, b, &m);
     b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
-    let t = &mut w.parts.tally.take[(lever > 1.0) as usize];
-    (t[0], t[1]) = (t[0] + 1.0, t[1] + got / mb);
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [body::light_cat(&w.chem, &b.genes), body::light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day, kind: ev, node: b.cell, value: got });
     if body::wound(w, s, o, f, &rest, TAKEN, built0, matter0) {

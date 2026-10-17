@@ -348,14 +348,13 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
 /// One conversion of growth (`Chemistry::build` or one of `builds`): up to `most` kg of its first output with the share `part` of
 /// `room` J of the work allowance and of what the body can spare, as `grow` says; a gas it makes leaves to the air with its heat
 /// and its latent heat.
-/// Returns the kg made. `full` (kg of matter of the size of maturity) only for the tape's count of the minerals that held building
-/// back (0: not counted).
+/// Returns the kg made. Less than a trillionth of `full` (kg of matter of the size of maturity; 0 for the other solids) is none.
 #[allow(clippy::too_many_arguments)]
 fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, part: f64, most: f64, full: f64) -> f64 {
     let (chem, p) = (&w.chem, &w.cfg.phys);
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
-    let (n, nu0, mm) = (b.n(), bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
+    let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
     let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
     let r = 0.999 * body::release(w, b, ivl);
     if room <= 0.0 || r <= 0.0 || most <= 0.0 {
@@ -378,19 +377,6 @@ fn convert(w: &mut World, b: &mut Body, bl: &crate::chem::Reaction, room: f64, p
     }).collect();
     let free = part * (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
     let kg = free.min(reach.iter().copied().fold(f64::MAX, f64::min)).min(most);
-    // Counted for the tape: a body that could build (all its fuels, its allowance and its spare allow it) and the
-    // minerals' stores that held it back (any of them, each).
-    let minerals = chem.minerals();
-    let place = |k: u16| minerals.iter().position(|m| m.0 == k as usize);
-    let able = free.min(ins.iter().zip(&reach).filter(|(x, _)| place(x.0).is_none()).map(|x| *x.1).fold(f64::MAX, f64::min));
-    let root = if minerals.is_empty() || full <= 0.0 || able <= 1e-12 * full { u32::MAX } else { w.life.root(b) };
-    if let Some(t) = crate::Diag::of_root(&mut w.diag.nlim, root) {
-        let held: Vec<bool> = (0..minerals.len()).map(|q| ins.iter().zip(&reach).any(|(x, &r)| place(x.0) == Some(q) && r < able)).collect();
-        t.resize(2 + minerals.len(), 0.0);
-        t[0] += n;
-        t[1] += n * held.contains(&true) as u8 as f64;
-        held.iter().enumerate().for_each(|(q, &h)| t[2 + q] += n * h as u8 as f64);
-    }
     if kg <= 1e-12 * full.max(1e-12 * mass) {
         return 0.0;
     }
@@ -565,8 +551,8 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
             return false;
         }
     }
-    let (cat, root) = (body::light_cat(&w.chem, &b.genes), w.life.root(b));
-    w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root, mixed: mate.is_some() }, node: b.cell, value: m });
+    let root = w.life.root(b);
+    w.events.push(Event { day: w.day, kind: EventKind::Born { root, mixed: mate.is_some() }, node: b.cell, value: m });
     // Its heat is that of its parent's temperature on the heat capacity it got, so it starts as warm
     // as its parent (a dry child would else be much hotter, a wet one colder); the parent keeps the rest.
     c.e = w.chem.heat_share(b.e, b.heat_cap(&w.chem).max(1e-9), &c.store);
@@ -734,11 +720,6 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 /// genes stay in the spread, not only in the mean.
 pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
-    // A tally for the tape: the members joined whose means are not alike (the monthly merge only
-    // joins alike nodes below twice `crowd`; children join within their spreads).
-    if !alike(&Layout::of(&w.chem), w.cfg.phys.alike, &o.genes, &c.genes) {
-        w.diag.wide += c.n();
-    }
     take_in(w, &mut o, c, Some(rows));
     w.life.bodies[t] = o;
 }

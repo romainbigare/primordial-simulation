@@ -78,10 +78,6 @@ fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) 
         }
         let (p, q) = (k / m, k % m);
         let (s, t) = if w.life.bodies[left[q]].n() > w.life.bodies[left[p]].n() { (p, q) } else { (q, p) };
-        // The members of the smaller node of an unlike pair are counted (`Diag::unlike`).
-        if d[k].0 {
-            w.diag.unlike += w.life.bodies[left[s]].n();
-        }
         crate::copy::merge(w, left[s], left[t]);
         (left[s], v[t]) = (usize::MAX, steps(w, left[t]));
         for o in 0..m {

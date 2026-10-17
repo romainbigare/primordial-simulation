@@ -511,11 +511,12 @@ fn individuals_mode_merges_no_animal() {
     assert_eq!(here(&w), n, "animals merged");
     // Animals alive at the end of each month, and animals born in the window (members).
     let (mut alive, mut born) = (Vec::new(), 0.0);
+    let roots: Vec<u32> = w.life.alive().filter(|b| animal(&w, b)).map(|b| w.life.root(b)).collect();
     w.events.clear();
     for _ in 0..36 {
         pcore::step(&mut w);
         assert!(w.life.alive().filter(|b| animal(&w, b)).all(|b| b.count == 1.0), "an animal became a node");
-        born += w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { cat, .. } if cat < pcore::body::LIGHT_EATER)).map(|e| e.value).sum::<f64>();
+        born += w.events.iter().filter(|e| matches!(e.kind, EventKind::Born { root, .. } if roots.contains(&root))).map(|e| e.value).sum::<f64>();
         w.events.clear();
         alive.push(w.life.alive().filter(|b| animal(&w, b)).count());
     }

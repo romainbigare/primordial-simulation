@@ -2,7 +2,7 @@
 
 use super::{light_cat, Body};
 use crate::event::{Event, EventKind};
-use crate::{bond, Diag, World};
+use crate::{bond, World};
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
 pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
@@ -12,8 +12,8 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
         w.ground[k * n + i] += a;
     }
     w.e_ground[i] += b.e;
-    let (cat, root, adult) = (light_cat(&w.chem, &b.genes), w.life.root(&b), b.adult(&w.chem));
-    w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root, adult }, node: b.cell, value: b.count });
+    let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
+    w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
     w.life.bodies[slot] = b;
     w.life.remove(slot);
 }
@@ -23,8 +23,6 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
 /// count falls). False if less than one member is left (the caller lets the node die).
 pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> bool {
     let (n, i, chem) = (w.grid.n(), b.cell as usize, &w.chem);
-    // Whether the members who die were grown, judged before their matter leaves the node.
-    let adult = b.adult(chem);
     let q = chem.heat_share(b.e, b.heat_cap(chem).max(1e-9), dead);
     let matter = chem.matter().map(|m| (m, b.store[m]));
     for (k, &a) in dead.iter().enumerate() {
@@ -39,7 +37,7 @@ pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8)
     w.e_ground[i] += q;
     if b.n() > 1.0 && f > 0.0 {
         let (cat, root) = (light_cat(chem, &b.genes), w.life.root(b));
-        w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root, adult }, node: b.cell, value: b.count * f });
+        w.events.push(Event { day: w.day, kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count * f });
         b.count *= 1.0 - f;
     }
     b.count >= 1.0
@@ -69,17 +67,7 @@ pub fn wound(w: &mut World, slot: usize, mut b: Body, f: f64, dead: &[f64], caus
         die(w, slot, b, cause);
         return false;
     }
-    hurt(w, &b, torn.unwrap_or(0.0));
     b.vis = b.visible(&w.chem, &w.cfg.phys);
     w.life.bodies[slot] = b;
     true
-}
-
-/// Count `kg` of body matter torn off a body that lived on (`tear`) for its starting kind (`Diag::hurt`).
-fn hurt(w: &mut World, b: &Body, kg: f64) {
-    if kg > 0.0 {
-        if let Some(h) = Diag::of_root(&mut w.diag.hurt, w.life.root(b)) {
-            *h += kg;
-        }
-    }
 }
