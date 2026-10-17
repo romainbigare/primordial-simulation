@@ -249,7 +249,7 @@ pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> 
 
 /// The step of a node's born rows: that of a child whose rows changed, for mutation size `size` (`Physics::row_noise`
 /// made bigger by 1 / sqrt(`Physics::row_chance`), as only that share of children change theirs).
-pub(crate) fn row_step(p: &crate::Physics, size: f32) -> f32 {
+pub fn row_step(p: &crate::Physics, size: f32) -> f32 {
     p.row_noise * size / (p.row_chance as f32).sqrt()
 }
 

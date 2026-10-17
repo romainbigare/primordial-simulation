@@ -65,7 +65,7 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
         for (lineage, is_big) in [(a, true), (c, false)] {
             let (mut g, mut rows) = (genes.clone(), born.clone());
             if is_big {
-                for (k, gene) in [body::HIDDEN, body::MEMORY, body::SEEN, body::SIGHT].into_iter().enumerate() {
+                for (k, gene) in body::BRAIN_SIZES.into_iter().enumerate() {
                     g[gene] = CLEVER_SIZES[k] as f32;
                 }
                 rows = brain::rerow(&born, src_lin.shape, big, &mut Rng::new(w.seed, w.day, REROW_STREAM | j as u64, Purpose::Body), noise);

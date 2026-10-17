@@ -170,7 +170,7 @@ fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: bool, r: &mut
 fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding, hand: bool, id: u64) -> u32 {
     let mut v = rows.to_vec();
     let mut rr = Rng::new(w.seed, w.day, id, Purpose::Mutate);
-    let size = w.cfg.phys.row_noise * 10f32.powf(kind.scalars[body::MUT]) / (w.cfg.phys.row_chance as f32).sqrt();
+    let size = pcore::brain::row_step(&w.cfg.phys, body::mutation_size(&kind.scalars));
     for _ in 0..how.rounds {
         pcore::brain::shake(&mut v, &mut rr, size);
     }

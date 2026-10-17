@@ -293,7 +293,7 @@ pub(crate) fn wall_room(x: f32, lo: f32, hi: f32) -> f32 {
 }
 
 /// The mutation size of genes `genes`: 10 to the power of their `MUT` gene.
-pub(crate) fn mutation_size(genes: &[f32]) -> f32 {
+pub fn mutation_size(genes: &[f32]) -> f32 {
     10f32.powf(genes[MUT])
 }
 

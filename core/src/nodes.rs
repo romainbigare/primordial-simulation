@@ -128,8 +128,7 @@ pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.n() / (o.n() + c.n())) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    let s = |b: &Body, g: usize| b.spread.get(g).copied().unwrap_or(0.0);
-    o.spread = (0..o.genes.len()).map(|g| pool(s(o, g), s(&c, g), (c.genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
+    o.spread = (0..o.genes.len()).map(|g| pool(spread_at(&o.spread, g), spread_at(&c.spread, g), (c.genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
     let born = w.life.born(o);
     let gap = rows.map_or(0.0, |rows| born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32);
     o.row_spread = pool(o.row_spread, c.row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
@@ -185,7 +184,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     // most updates do not split).
     let half = |g: usize| {
         let ((u, lo, hi), m) = (range(&lay, g), b.genes[g]);
-        let d = (FRAC_2_PI * b.spread[g].max(0.0)).sqrt().min(m - lo).min(hi - m).max(0.0);
+        let d = (FRAC_2_PI * b.spread[g].max(0.0)).sqrt().min(wall_room(m, lo, hi));
         let (x, y) = if g < lay.cat { (m + d, m - d) } else { ((m + d).max(0.0), (m - d).max(0.0)) };
         (d, x / u - y / u)
     };
