@@ -503,7 +503,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
         return;
     }
     let (chem, pt) = (&w.chem, &mut w.parts.parts[p]);
-    let q = pt.e * m.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / pt.heat_cap(chem);
+    let q = chem.heat_share(pt.e, pt.heat_cap(chem), &m);
     for (k, &a) in m.iter().enumerate() {
         let f = a.min(pt.fill[k]);
         pt.fill[k] -= f;
@@ -545,7 +545,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     }
     let chem = &w.chem;
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let q = b.e * m.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / b.heat_cap(chem);
+    let q = chem.heat_share(b.e, b.heat_cap(chem), &m);
     let pt = &mut w.parts.parts[p];
     for (k, &a) in m.iter().enumerate() {
         *if wet[k] { &mut pt.fill[k] } else { &mut pt.wall[k] } += a;
@@ -575,7 +575,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     }
     // Paying may have used some of what was to be put out.
     let wall: Vec<f64> = wall.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let e = b.e * wall.iter().zip(&w.chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / b.heat_cap(&w.chem);
+    let e = w.chem.heat_share(b.e, b.heat_cap(&w.chem), &wall);
     for (s, a) in b.store.iter_mut().zip(&wall) {
         *s -= a;
     }

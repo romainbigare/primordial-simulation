@@ -24,6 +24,18 @@ pub(crate) fn share(took: f64, want: f64) -> f64 {
     if took >= want { 1.0 } else { took / want }
 }
 
+/// Take `d` mol (of `cp` J/(mol K) each) from a ground node of energy `e` and heat capacity `cap`, which pays `want` J with
+/// them (the heat and latent enthalpy they take): it pays as far as it holds heat above `T_FLOOR` without their heat
+/// capacity (`draw`), and as much less is taken. Returns the mol taken and the heat paid (nothing when `want` <= 0).
+#[inline]
+pub(crate) fn take_paid(e: &mut f64, ledger: &mut Ledger, cap: f64, d: f64, cp: f64, want: f64) -> (f64, f64) {
+    if want <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let took = draw(e, ledger, cap - d * cp, want);
+    (d * share(took, want), took)
+}
+
 /// Heat capacity of a ground node's active layer, J/K: its loose amounts, and `skin_m` of its bed.
 pub(crate) fn cap_ground(chem: &Chemistry, grid: &Grid, cfg: &Config, ground: &[f64], bed: &[f64], i: usize) -> f64 {
     let n = grid.n();
@@ -129,6 +141,14 @@ impl World {
         // the ground asks once per substance, mostly for nothing.
         let cap = if q > 0.0 { self.heat_cap_ground(i) - c } else { 0.0 };
         draw(&mut self.e_ground[i], &mut self.ledger, cap, q)
+    }
+    /// `take_paid` from ground node `i`.
+    pub(crate) fn take_paid(&mut self, i: usize, d: f64, cp: f64, want: f64) -> (f64, f64) {
+        if want <= 0.0 {
+            return (0.0, 0.0);
+        }
+        let cap = self.heat_cap_ground(i);
+        take_paid(&mut self.e_ground[i], &mut self.ledger, cap, d, cp, want)
     }
     /// Temperature of ground node `i` as of the last flow step, K (none before the first).
     pub fn t_ground_last(&self, i: usize) -> Option<f64> {

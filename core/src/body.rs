@@ -227,7 +227,7 @@ impl Body {
         self.store.iter().zip(&chem.subs).map(|(a, s)| a * s.molar_mass).sum()
     }
     pub fn heat_cap(&self, chem: &Chemistry) -> f64 {
-        self.store.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum()
+        chem.heat_cap_of(&self.store)
     }
     /// `mass` and `heat_cap` in one pass over the stores (the same sums).
     pub(crate) fn mass_cap(&self, chem: &Chemistry) -> (f64, f64) {
@@ -1317,8 +1317,7 @@ pub fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> boo
     let (n, i, chem) = (w.grid.n(), b.cell as usize, &w.chem);
     // Whether the members who die were grown, judged before their matter leaves the node.
     let adult = b.adult(chem);
-    let cap = b.heat_cap(chem).max(1e-9);
-    let q = b.e * dead.iter().zip(&chem.subs).map(|(a, s)| a * s.cp).sum::<f64>() / cap;
+    let q = chem.heat_share(b.e, b.heat_cap(chem).max(1e-9), dead);
     // The brood of the members who die goes with them: the same share of it as of the matter.
     let matter = chem.matter().map(|m| (m, b.store[m]));
     for (k, &a) in dead.iter().enumerate() {
@@ -1703,9 +1702,8 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         // What flows through it past what it holds comes from the ground as it goes, as far as the ground has it (the ground pays
         // its heat and fusion enthalpy, as for what it soaks below, which then takes back the rest of what it lost).
         let d = if r > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(0.5 * ground[k * n + i]) } else { 0.0 };
-        let f = chem.fused_heat(k, tg, |j| ground[j * n + i]);
-        let want = d * (chem.subs[k].cp * tg + f);
-        let pre = if want > 0.0 { d * crate::ground::share(crate::ground::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
+        let (f, cp) = (chem.fused_heat(k, tg, |j| ground[j * n + i]), chem.subs[k].cp);
+        let pre = crate::ground::take_paid(&mut e_ground[i], ledger, cap!(), d, cp, d * (cp * tg + f)).0;
         (b.store[k], ground[k * n + i], b.e, heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, heat + pre * f);
         let m = m.min(b.store[k]);
         diag.liquid_land[4] += if plant { pre * chem.molar_volume(k, Phase::Liquid) } else { 0.0 };
@@ -1739,8 +1737,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
         // The ground pays the heat that goes with the liquid and its fusion enthalpy; if it
         // cannot pay it all, the body soaks up less.
         let (per, f) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
-        let want = d * (per + f);
-        let d = if want > 0.0 { d * crate::ground::share(crate::ground::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
+        let d = crate::ground::take_paid(&mut e_ground[i], ledger, cap!(), d, chem.subs[k].cp, d * (per + f)).0;
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += d * per;
@@ -1759,8 +1756,7 @@ fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut Tm
             continue;
         }
         let d = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(0.5 * ground[k * n + i]);
-        let want = d * chem.subs[k].cp * tg;
-        let d = if want > 0.0 { d * crate::ground::share(crate::ground::draw(&mut e_ground[i], ledger, cap!() - d * chem.subs[k].cp, want), want) } else { 0.0 };
+        let d = crate::ground::take_paid(&mut e_ground[i], ledger, cap!(), d, chem.subs[k].cp, d * chem.subs[k].cp * tg).0;
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += d * chem.subs[k].cp * tg;

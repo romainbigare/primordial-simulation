@@ -329,8 +329,7 @@ pub(super) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
             let over = t - if t >= sp.boil { sp.boil } else { w.chem.t_sat(k, pa / crate::units::P_REF).min(t) };
             let m = m.min(s.cap[i].max(1.0) * over / (sp.cp * over + sp.lv));
             // The ground also pays the fusion and vaporisation enthalpy and the gas's heat; if it cannot, less evaporates.
-            let want = m * (sp.cp * t + sp.lf + sp.lv);
-            let m = if want > 0.0 { m * crate::ground::share(w.take_heat_with(i, want, m * sp.cp), want) } else { 0.0 };
+            let m = w.take_paid(i, m, sp.cp, m * (sp.cp * t + sp.lf + sp.lv)).0;
             if m <= 0.0 {
                 continue;
             }
@@ -435,8 +434,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             } else {
                 // Coming out cools the node, no further than the boiling point; it pays what it can.
                 let q = (-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv));
-                let want = q * (sp.cp * t + sp.lf + sp.lv);
-                -q * if want > 0.0 { crate::ground::share(crate::ground::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - q * sp.cp, want), want) } else { 0.0 }
+                -crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], q, sp.cp, q * (sp.cp * t + sp.lf + sp.lv)).0
             };
             if m == 0.0 {
                 continue;

@@ -656,9 +656,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
             for (&a, &k) in wa.iter().zip(&liq).filter(|p| *p.0 > 0.0) {
                 let (p, m) = (s.sp[k], (a * part).min(w.ground[k * n + i]));
                 // The liquid leaves with its heat and fusion enthalpy; less leaves if the node cannot pay.
-                let want = m * (p.cp * tcur + p.lf);
-                let e = crate::ground::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * p.cp, want);
-                let m = if want > 0.0 { m * crate::ground::share(e, want) } else { m };
+                let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], m, p.cp, m * (p.cp * tcur + p.lf));
                 (w.ground[k * n + i], s.cap[i]) = (w.ground[k * n + i] - m, s.cap[i] - m * p.cp);
                 s.hold[i][0] -= if s.pk[i] != k { m * p.lf } else { 0.0 };
                 settle(s, k, i, -m);
@@ -706,9 +704,7 @@ fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
                 if f > 0.0 {
                     let m = w.ground[k * n + i] * (1.0 - molten(s, k, i)) * f;
                     // Picked up with its heat; less is picked up if the node cannot pay.
-                    let want = m * s.sp[k].cp * tcur;
-                    let e = w.take_heat_with(i, want, m * s.sp[k].cp);
-                    let m = if want > 0.0 { m * crate::ground::share(e, want) } else { m };
+                    let (m, e) = w.take_paid(i, m, s.sp[k].cp, m * s.sp[k].cp * tcur);
                     w.ground[k * n + i] -= m;
                     s.sed[i * ns + si] += m;
                     s.cap[i] -= m * s.sp[k].cp;
@@ -795,9 +791,7 @@ fn drain(w: &mut World, s: &mut Scratch, dt: f64) {
         for &k in &liq {
             let sp = s.sp[k];
             let m = w.ground[k * n + i] * if sp.boil <= tmin { 1.0 } else { wet(s, k, i) } * v / lvol;
-            let want = m * (sp.cp * tcur + sp.lf);
-            let e = crate::ground::draw(&mut w.e_ground[i], &mut w.ledger, s.cap[i] - m * sp.cp, want);
-            let m = if want > 0.0 { m * crate::ground::share(e, want) } else { m };
+            let (m, e) = crate::ground::take_paid(&mut w.e_ground[i], &mut w.ledger, s.cap[i], m, sp.cp, m * (sp.cp * tcur + sp.lf));
             (w.ground[k * n + i], w.deep[k * n + i], w.e_deep[i], s.cap[i]) = (w.ground[k * n + i] - m, w.deep[k * n + i] + m, w.e_deep[i] + e, s.cap[i] - m * sp.cp);
             s.hold[i][0] -= if s.pk[i] != k { m * sp.lf } else { 0.0 };
             settle(s, k, i, -m);

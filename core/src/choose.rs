@@ -660,9 +660,8 @@ fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let mut matter = 0.0;
     for (k, &a) in m.iter().enumerate() {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
-        let q = a * (w.chem.subs[k].cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i)));
-        let took = w.take_heat_with(i, q, a * w.chem.subs[k].cp);
-        let a = if q > 0.0 { a * crate::ground::share(took, q) } else { a };
+        let cp = w.chem.subs[k].cp;
+        let (a, took) = w.take_paid(i, a, cp, a * (cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i))));
         w.ground[k * n + i] -= a;
         b.store[k] += a;
         b.e += took;
@@ -694,8 +693,7 @@ fn put(w: &mut World, b: &mut Body) {
 
 /// Move amounts `m` (mol) from `from` to `to`, with their share of `from`'s heat.
 fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
-    let chem = &w.chem;
-    let q = from.e * m.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum::<f64>() / from.heat_cap(chem).max(1e-9);
+    let q = w.chem.heat_share(from.e, from.heat_cap(&w.chem).max(1e-9), m);
     for (k, &a) in m.iter().enumerate() {
         from.store[k] -= a;
         to.store[k] += a;

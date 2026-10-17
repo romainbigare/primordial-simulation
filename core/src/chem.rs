@@ -223,6 +223,19 @@ impl Chemistry {
         s.solubility * p / P_REF * (s.lv / R_GAS * (1.0 / t.max(1.0) - 1.0 / T_SOL)).exp()
     }
 
+    /// Heat capacity of the amounts `m` (mol of each substance), J/K.
+    #[inline]
+    pub fn heat_cap_of(&self, m: &[f64]) -> f64 {
+        m.iter().zip(&self.subs).map(|(a, s)| a * s.cp).sum()
+    }
+
+    /// The heat that goes with amounts `m` (mol of each substance) when they leave a holder of heat `e` (J) and heat capacity
+    /// `cap` (J/K): their share of it by heat capacity, J.
+    #[inline]
+    pub fn heat_share(&self, e: f64, cap: f64, m: &[f64]) -> f64 {
+        e * self.heat_cap_of(m) / cap
+    }
+
     /// Optical depth to outgoing heat radiation of a column of `c` mol/m² of substance `k`.
     pub fn depth(&self, k: usize, c: f64) -> f64 {
         let s = &self.subs[k];

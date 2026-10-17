@@ -631,7 +631,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, cell: usize, m: f64, kid: &Kid
     w.events.push(Event { day: w.day, kind: EventKind::Born { cat, root, mixed: mate.is_some() }, node: b.cell, value: m });
     // Its heat is that of its parent's temperature on the heat capacity it got, so it starts as warm
     // as its parent (a dry child would else be much hotter, a wet one colder); the parent keeps the rest.
-    c.e = b.e * c.heat_cap(&w.chem) / b.heat_cap(&w.chem).max(1e-9);
+    c.e = w.chem.heat_share(b.e, b.heat_cap(&w.chem).max(1e-9), &c.store);
     b.e -= c.e;
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;
