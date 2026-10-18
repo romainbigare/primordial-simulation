@@ -20,8 +20,8 @@
 //! reaches it outside `apply` (radiation and the exchange with the air, Flow's; what bodies take and give) and the
 //! change of its temperature do not wake it: `sleep_days` bounds how long it reacts without them.
 //!
-//! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `gas`: the gas a reactor
-//! exchanged with the air around it. Here: the step over the ground and air nodes.
+//! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `gas`: the gas a body or a part
+//! exchanged with the air around it. Here: the step over the ground and air nodes, booked by `store::apply`.
 
 mod balance;
 mod gas;
@@ -32,10 +32,9 @@ pub(crate) use gas::{send_gas, GasMove};
 pub use kernel::Reactor;
 pub(crate) use kernel::{denature, frac, pace, scarce};
 
-use crate::chem::Phase;
-use crate::flow::{FlowView, Sky};
-use crate::ground::{draw, share};
-use crate::store::Class;
+use crate::chem::{Chemistry, Phase};
+use crate::flow::FlowView;
+use crate::store::{apply, Class, Move, NodeId, Transform};
 use crate::World;
 
 /// A node sleeps until its reactions would go further than this share of their inputs (but for reactions on a `SPECK`
@@ -46,15 +45,14 @@ const SPECK: f64 = 1e-12;
 
 /// Run Law 2 for the step of `dt` seconds from the world's time, at the temperatures of the last flow step: each ground
 /// node (loose amounts, gas from the air above), then each air node, that is due, in the order of their cells, for all
-/// the time since it last reacted to the end of this step. Then it sleeps until the last step that starts before its
-/// reactions may have to run again (`Reactor::rest`, at most `sleep_days`): the next step, for a rest within one.
+/// the time since it last reacted to the end of this step, each from the world as it was before the nodes of its class
+/// reacted; booked by `store::apply` (`Booked`). Then it sleeps until the last step that starts before its reactions may have to run again
+/// (`Reactor::rest`, at most `sleep_days`): the next step, for a rest within one.
 pub fn step(w: &mut World, dt: f64) {
     crate::flow::ensure(w);
-    let s = std::mem::take(&mut w.scratch);
-    let nodes = s.view();
     let (end, most) = (w.time + dt as u64, w.cfg.sleep_days as u64 * w.cfg.calendar().day);
     let (mut rc, ns) = (Reactor::new(&w.chem, &w.cfg), w.chem.ns());
-    let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], pool0: vec![0.0; ns] };
+    let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], made: vec![0.0; ns] };
     for (class, len) in [(Class::Ground, w.grid.n()), (Class::Air, w.grid.na())] {
         // Before the law first runs, every node is due.
         if w.sleep.none(class) {
@@ -64,82 +62,118 @@ pub fn step(w: &mut World, dt: f64) {
         }
         let mut due: Vec<_> = w.sleep.due(class, w.time).into_iter().map(|id| (w.table.place(id).1, id)).collect();
         due.sort_unstable();
-        for (i, id) in due {
-            let (span, amounts) = (end.saturating_sub(w.sleep.since(id)) as f64, if class == Class::Ground { &w.ground } else { &w.air });
-            for (k, a) in h.amt.iter_mut().enumerate() {
-                *a = amounts[k * len + i];
-            }
-            let all = h.amt.iter().sum::<f64>();
-            if class == Class::Ground {
-                react_ground(w, &mut rc, &mut h, &nodes, i, span);
-            } else {
-                react_air(w, &mut rc, &mut h.amt, i, span);
-            }
-            let rest = (rc.rest(CALM, SPECK * all, CALM_K).max(0.0) as u64).min(most);
+        let (mut b, nodes) = (Booked { lift: vec![0.0; w.grid.na()], ..Booked::default() }, w.scratch.view());
+        let rests: Vec<u64> = (due.iter())
+            .map(|&(i, id)| {
+                let (span, amounts) = (end.saturating_sub(w.sleep.since(id)) as f64, if class == Class::Ground { &w.ground } else { &w.air });
+                for (k, a) in h.amt.iter_mut().enumerate() {
+                    *a = amounts[k * len + i];
+                }
+                let all = h.amt.iter().sum::<f64>();
+                if class == Class::Ground {
+                    react_ground(w, &mut rc, &mut h, &nodes, (i, id), span, &mut b);
+                } else {
+                    rc.react(&w.chem, &mut h.amt, None, &mut { w.e_air[i] }, 0.0, None, 0.0, span);
+                    b.transform(&w.chem, id, &mut rc, &mut h.made);
+                }
+                (rc.rest(CALM, SPECK * all, CALM_K).max(0.0) as u64).min(most)
+            })
+            .collect();
+        b.book(w);
+        for (&(_, id), rest) in due.iter().zip(rests) {
             w.sleep.sleep(class, id, end, (end + rest).saturating_sub(dt as u64));
         }
     }
-    w.scratch = s;
 }
 
-/// A ground node's amounts and the gas of the air over it (its share of its air node) before and after it reacts, mol.
+/// A node's amounts and the gas around it (a ground node's share of its air node) as it reacts, and what its reactions
+/// made less what they used of each substance, mol.
 struct Held {
     amt: Vec<f64>,
     pool: Vec<f64>,
-    pool0: Vec<f64>,
+    made: Vec<f64>,
+}
+
+/// What the nodes of one class that react in a step change, booked by `store::apply` after they all reacted: the gas
+/// the ground nodes take from the air, their reactions, then the gas they give it, each in its own call, as each takes
+/// what the one before brought (`apply` scales a change by what a node holds before the call). Each air node pays the
+/// lift of the gas that goes up into it into the world's potential energy, outside `apply` (as `Sky::cross` books it).
+#[derive(Default)]
+struct Booked {
+    taken: Vec<Move>,
+    reactions: Vec<Transform>,
+    given: Vec<Move>,
+    /// Per air node, J
+    lift: Vec<f64>,
+}
+
+impl Booked {
+    /// The reactions of node `at` in the last `rc.react`: what they made less what they used of each substance, mol,
+    /// into `made` (`Reactor::made`), noted as one transform.
+    fn transform(&mut self, chem: &Chemistry, at: NodeId, rc: &mut Reactor, made: &mut [f64]) {
+        rc.made(chem, made);
+        let dmol: Vec<(u16, f64)> = made.iter().enumerate().filter(|e| *e.1 != 0.0).map(|(k, &d)| (k as u16, d)).collect();
+        if !dmol.is_empty() {
+            self.reactions.push(Transform { at, dmol });
+        }
+    }
+    /// Book it all on the world.
+    fn book(self, w: &mut World) {
+        for (moves, transforms) in [(&self.taken[..], &[][..]), (&[], &self.reactions[..]), (&self.given[..], &[])] {
+            if !(moves.is_empty() && transforms.is_empty()) {
+                apply(w, &[], moves, transforms);
+            }
+        }
+        for (e, lift) in w.e_air.iter_mut().zip(self.lift) {
+            (*e, w.potential) = (*e - lift, w.potential + lift);
+        }
+    }
 }
 
 /// Time the liquid standing over ground amounts `amt` at `t` (more than the pores of its loose ground hold) takes to
 /// renew its gas through its film over its whole depth, s (`Reactor::film`; Flow's law, `air::dissolve`: depth /
 /// `dissolve`; the air's side of the film is faster by 100 times or more for every gas and left out). 0: no liquid stands.
 fn film(w: &World, amt: &[f64], t: f64) -> f64 {
-    let chem = &w.chem;
-    let vol = |p: Phase| (0..chem.ns()).filter(|&k| chem.phase_in(k, t, |j| amt[j]) == p).map(|k| amt[k] * chem.molar_volume(k, p)).sum::<f64>();
-    let wet = vol(Phase::Liquid);
-    if wet > w.cfg.phys.porosity * vol(Phase::Solid) { wet / (w.grid.area() * w.cfg.dissolve) } else { 0.0 }
+    let (chem, mut vol) = (&w.chem, [0.0; 3]);
+    for k in (0..chem.ns()).filter(|&k| amt[k] != 0.0) {
+        let p = chem.phase_in(k, t, |j| amt[j]);
+        vol[p as usize] += if p != Phase::Gas { amt[k] * chem.molar_volume(k, p) } else { 0.0 };
+    }
+    let wet = vol[Phase::Liquid as usize];
+    if wet > w.cfg.phys.porosity * vol[Phase::Solid as usize] { wet / (w.grid.area() * w.cfg.dissolve) } else { 0.0 }
 }
 
-/// React ground node `i` (its amounts in `h.amt`) for `time` s with the gas over it, and settle the gas with its air node.
+/// React ground node `i` (its amounts in `h.amt`) for `time` s with the gas over it, and note in `b` what it changes.
 /// The reactor sees sensible heat: the fusion enthalpy the node holds by Flow's solve of its plateaus stays apart
-/// (`FlowView::fused`), so a node on a plateau reacts at its melting point. Gas sent to the air takes its fusion
-/// and vaporisation enthalpy from the ground (gas taken back returns it); gas the ground cannot pay for stays behind.
-/// Gas taken from the air brings its heat at the air's temperature; gas sent leaves with its share of the node's heat by
-/// heat capacity.
-fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64) {
-    let (chem, ns, n, na) = (&w.chem, w.chem.ns(), w.grid.n(), w.grid.na());
+/// (`FlowView::fused`), so a node on a plateau reacts at its melting point. Gas taken from the air brings its heat at the
+/// air's temperature and gives back its fusion and vaporisation enthalpy (`store::held`); gas given to it takes its
+/// share of the node's heat by heat capacity and that enthalpy, so gas the node cannot pay for stays in it
+/// (`store::apply` scales the move).
+fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i, id): (usize, NodeId), time: f64, b: &mut Booked) {
+    let (chem, na) = (&w.chem, w.grid.na());
     let (t, j, air_share) = (nodes.tg[i], nodes.air_of[i] as usize, w.grid.air_share(i));
-    for (k, p0) in h.pool0.iter_mut().enumerate() {
-        *p0 = w.air[k * na + j] * air_share;
+    for (k, p) in h.pool.iter_mut().enumerate() {
+        *p = w.air[k * na + j] * air_share;
     }
-    h.pool.copy_from_slice(&h.pool0);
     rc.film = film(w, &h.amt, t);
-    let cap = |amt: &[f64]| nodes.skin[i] + (0..ns).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
+    let cap = |amt: &[f64]| nodes.skin[i] + (0..chem.ns()).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
     let fused = nodes.fused(i, w.e_ground[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.e_ground[i] - fused;
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], None, 0.0, time);
-    let gas = GasMove::of(chem, &h.pool, &h.pool0, nodes.ta[j]);
-    let c_r = cap(&h.amt);
-    let q_out = e.max(0.0) * gas.c_out / (c_r + gas.c_out).max(1e-9);
-    w.e_ground[i] = e + fused + gas.back + gas.q_in - q_out;
-    w.e_air[j] += q_out - gas.q_in;
-    let cap = w.heat_cap_ground(i);
-    let paid = share(draw(&mut w.e_ground[i], &mut w.counts, cap, gas.pay), gas.pay);
-    // The heat of the gas that stays behind stays with it.
-    (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
-    let (ground, amt, lift) = (&mut w.ground, &h.amt, nodes.lift(i, w.cfg.gravity));
-    let mut sky = Sky { chem: &w.chem, air: &mut w.air, e_air: &mut w.e_air, potential: &mut w.potential };
-    send_gas(&h.pool, &h.pool0, paid, &mut sky, (j, lift), |k, kept| ground[k * n + i] = amt[k] + kept);
-}
-
-/// React air node `j` (its amounts in `amt`) for `time` s. Gas it makes or takes changes its latent heat held in the
-/// air.
-fn react_air(w: &mut World, rc: &mut Reactor, amt: &mut [f64], j: usize, time: f64) {
-    let (chem, na) = (&w.chem, w.grid.na());
-    let mut e = w.e_air[j];
-    rc.react(chem, amt, None, &mut e, 0.0, None, 0.0, time);
-    for (k, &a) in amt.iter().enumerate() {
-        e -= (a - w.air[k * na + j]) * chem.subs[k].latent_gas();
-        w.air[k * na + j] = a;
+    b.transform(chem, id, rc, &mut h.made);
+    // What they gave to the gas around the node, or took from it, mol: the rest of what they made was in the node.
+    let gas = |k: usize| if rc.pooled[k] { h.made[k] - rc.own[k] } else { 0.0 };
+    // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.
+    let c_out = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].cp).sum::<f64>();
+    let per_c = e.max(0.0) / (cap(&h.amt) + c_out).max(1e-9);
+    let (air, lift) = (w.table.id(Class::Air, j), nodes.lift(i, w.cfg.gravity));
+    for (k, m) in (0..chem.ns()).map(|k| (k, gas(k))).filter(|e| e.1 != 0.0) {
+        let s = &chem.subs[k];
+        b.lift[j] += m * s.molar_mass * lift;
+        if m > 0.0 {
+            b.given.push(Move { from: id, to: air, k: k as u16, mol: m, heat: m * (s.latent_gas() + s.cp * per_c) });
+        } else {
+            b.taken.push(Move { from: air, to: id, k: k as u16, mol: -m, heat: -m * s.cp * nodes.ta[j] });
+        }
     }
-    w.e_air[j] = e;
 }

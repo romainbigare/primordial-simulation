@@ -405,6 +405,15 @@ The work of `docs/foundation/plan.md`, one line per task.
   Sleep against no sleep, x2 and /2 (`tape/tests/ranges.rs`): the chemistry within its noise. 64 x 64, seeds 1 to 3,
   years 21 to 30: carbon gas 248.4 ppm (was 252.2), land 289.45 K (289.47), eaters 4.26 log10 kg (4.49), drift
   near 1e-14. Snapshot version 13, golden re-pinned.
+- D9 (Change): Change books through `store::apply`: each node's reactions are one `Transform` (from the extent of
+  each reaction, `Reactor::made`, summed exactly where its terms cancel: a fast pair that undoes itself beside a slow
+  reaction left a transform unbalanced by 1e-129 against 1e-33 mol), the gas between a ground node and its air node
+  `Move`s (`change::step`'s writes to the arrays, its own guard on paying for gas and its use of `send_gas` deleted).
+  The ground nodes due in a step react from the same air, each from its share, not one after the other: without
+  life (16 x 16, seed 1, 2 years) carbon gas -0.003%, methane -1.4% (as much as a sleep with no wake changes it);
+  64 x 64, seed 1, years 11 to 20: land -0.05 K, rain on land +1.0%, carbon gas 272.6 to 268.8 ppm, plant members
+  +12%. Change at 128 x 128 without life 1,047 to 1,265 ms a year (the cost of `apply` for its moves and transforms).
+  Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

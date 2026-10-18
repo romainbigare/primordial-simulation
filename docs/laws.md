@@ -328,12 +328,21 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
   change it outside `apply`, and its temperature does not wake it: `sleep_days` bounds how long it
   reacts without those changes. This is a speed tool, not physics (`sleep_days` 0: every node
   reacts every step). A reaction too slow to matter over the world's year is frozen.
+- **Booked by the store.** The nodes due in a step react from the world as it was before any of
+  them did (each ground node from its share of its air node), and `store::apply` books them
+  together. A node's reactions are one `store::Transform`: what they made less what they used of
+  each substance, from how far each reaction went (`Reactor::made`; summed exactly where its
+  terms cancel, so the transform keeps every element). The heat of reaction follows from the
+  formation enthalpies (`store::held`).
 - **A ground node reacts at Flow's last temperature.** On a melting plateau that is the melting
   point: the fusion heat it holds is set aside while it reacts (`FlowView::fused`).
-- **Gas a node takes or gives** goes through `change::GasMove` and `change::send_gas`
-  (`change/gas.rs`): gas taken brings its heat at the air's temperature, gas sent takes its share
-  of the node's heat and its latent heat, and the lift (1.5). Gas the node cannot pay for stays
-  in it.
+- **Gas a ground node takes or gives** moves between it and its air node as `store::Move`s: first
+  the gas it takes, then its reactions, then the gas it gives, each booked in its own call, as
+  each needs what the one before brought. Gas taken brings its heat at the air's temperature and
+  gives the node back its latent heat; gas given takes its share of the node's heat by heat
+  capacity and its latent heat. The air node pays the lift (1.5). `apply` scales the gas the node
+  cannot pay for, so it stays in the node. Parts and bodies settle their gas through
+  `change::GasMove` and `change::send_gas` (`change/gas.rs`) in the same way.
 - **Parts** (`bond::step`): every 6 months, for that time, at their cell's temperature, with
   the air; their gas is settled with the air as a ground node's is.
 - **Bodies** (`body::physics`): at each update, with catalysts (2.4).
