@@ -34,6 +34,7 @@ pub const USAGE: &str = "usage:
     --exchange-days N     days between evaporation and condensation (3; a multiple of the physics step's, 3)
     --regrow X            Config::regrow
     --crowd N             Config::crowd
+    --node-days N         a population node updates at most every N days (36; Config::node_days)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
     --from FILE           the snapshot (snap_NNNNN.bin.gz)
     --years N, --every N, --out DIR, --frames-every N, --monthly-years N   as for run
@@ -76,6 +77,7 @@ impl Args {
         c.exchange_days = self.get("--exchange-days", c.exchange_days);
         c.regrow = self.get("--regrow", c.regrow);
         c.crowd = self.get("--crowd", c.crowd);
+        c.node_days = self.get("--node-days", c.node_days);
         c.null = self.has("--null");
         c.nodes = !self.has("--individuals");
         c.two_parents = !self.has("--no-mix");

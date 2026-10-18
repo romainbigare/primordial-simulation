@@ -101,13 +101,13 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
 }
 
 /// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but
-/// at least an interval (a decision takes one). In a node the members whose upkeep could not be paid die; an
-/// individual that cannot pay dies. Living wears the body (`Body::wear`). Returns the heat the paying released (held
+/// at least an interval (a decision takes one). In a node the members whose upkeep could not be paid die (that share of
+/// an interval of its gene, at that rate over a longer update, `Body::over_span`); an individual that cannot pay dies. Living wears the body (`Body::wear`). Returns the heat the paying released (held
 /// in the update's heat), the span it was paid over, the mass left and the margin of its reactions over the upkeep.
 fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64), u8> {
     // (One temperature for the stages that see the body as it came: the upkeep, the plan and the paying.)
     let (th, node) = (b.thermal(&w.chem, cap), b.n() > 1.0);
-    let (cost, span) = (upkeep_at(w, b, s.days, mass, th.t), s.days.max(b.interval() as f64));
+    let (cost, span) = (upkeep_at(w, b, s.days, mass, th.t), s.days.max(b.interval(w) as f64));
     let p = Payer::at(w, b, span, mass, th);
     let spare = plan(w, b, MARGIN * cost, &p).1 / cost.max(1e-300);
     let short = pay_at(w, b, cost, &p, node) / cost.max(1e-300);
@@ -124,7 +124,7 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
     let kept = b.energy_in(&w.chem, &p.th);
     let upkeep_heat = b.e - kept;
     b.e = kept;
-    for (f, cause) in [(short, SPENT), (if node { one_minus_exp(worn) } else { 0.0 }, AGE)] {
+    for (f, cause) in [(b.over_span(short, w), SPENT), (if node { one_minus_exp(worn) } else { 0.0 }, AGE)] {
         if f > 1e-9 {
             if !members_die(w, b, f, cause, &mut tmp.dead) {
                 b.e += upkeep_heat;
@@ -169,8 +169,8 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
 /// A store below its safe minimum kills the body (a node loses its poorest members, `starve`). A key liquid that boiled
 /// kills it; one that froze kills the share of it that is free liquid to freeze: the share frozen (all of it below its
 /// melting point, the body being at one temperature; on its melting plateau, the share frozen there) times its
-/// activity, as a dry body holds little liquid to freeze. A node loses that share of its members (`thin`); an
-/// individual dies with that chance.
+/// activity, as a dry body holds little liquid to freeze. A node loses that share of its members (`thin`; that share of
+/// an interval of its gene, at that rate over a longer update, `Body::over_span`); an individual dies with that chance.
 fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<(), u8> {
     let (mass, c) = b.mass_cap(&w.chem);
     let mut th = b.thermal(&w.chem, c);
@@ -196,7 +196,7 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
             return Err(PHASE);
         }
         if b.n() > 1.0 {
-            if !members_die(w, b, f, PHASE, &mut tmp.dead) {
+            if !members_die(w, b, b.over_span(f, w), PHASE, &mut tmp.dead) {
                 return Err(PHASE);
             }
         } else if Rng::new(w.seed, w.day(), b.id(slot), Purpose::Frost).f64() < f {

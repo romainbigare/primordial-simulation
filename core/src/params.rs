@@ -42,6 +42,8 @@ pub struct Config {
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
     pub sleep_days: u32,
+    /// Speed setting: a population node (more than one member) updates at most every this many days (`Body::interval`)
+    pub node_days: u32,
 
     // Ground and air physics
     /// Depth of ground that exchanges heat with the surface, m
@@ -392,6 +394,9 @@ impl Config {
                 return Err(format!("{name} ({x}) must be a whole multiple of phys_days ({})", self.phys_days));
             }
         }
+        if self.node_days as f64 > crate::body::MAX_INTERVAL {
+            return Err(format!("node_days ({}) must be at most {} days, the longest interval", self.node_days, crate::body::MAX_INTERVAL));
+        }
         if !(self.wake_share > 0.0 && self.wake_share.is_finite()) {
             return Err(format!("wake_share ({}) must be above 0", self.wake_share));
         }
@@ -422,6 +427,7 @@ impl Default for Config {
             crowd: 4,
             wake_share: 0.05,
             sleep_days: 90,
+            node_days: 36,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,

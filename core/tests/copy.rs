@@ -48,7 +48,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     // (Counts of the chemistry's growth: the solid in, the liquid out.)
     let bl = w.chem.build.as_ref().expect("growth");
     let (n_rich, n_liquid) = (bl.inputs.iter().find(|p| p.0 as usize == RICH).expect("the solid").1 as f64, bl.outputs.iter().find(|p| p.0 as usize == LIQUID).expect("the liquid").1 as f64);
-    let days = b.interval() as f64;
+    let days = b.interval(&w) as f64;
     assert!(copy::grow(&mut w, &mut b, days), "it did not grow");
     let (x, c_copy) = (b.store[MATTER] - matter0, w.cfg.phys.c_copy);
     assert!(x > 0.0);
@@ -93,7 +93,7 @@ fn growth_is_limited_by_c_build() {
         scale(&mut w, &mut b, 5.0);
         let (s, mut b) = out(&mut w, b);
         let m0 = b.store[MATTER];
-        let days = b.interval() as f64;
+        let days = b.interval(&w) as f64;
         let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         let (built0, grew) = (b.built(&w.chem), copy::grow(&mut w, &mut b, days));
         let kg_matter = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
@@ -131,7 +131,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         let out_kg = (1.0 - keep) * kg(&w, &b, RICH);
         add(&mut w, &mut b, RICH, -out_kg);
         let (s, mut b) = out(&mut w, b);
-        let days = b.interval() as f64;
+        let days = b.interval(&w) as f64;
         let m0 = b.store[MATTER];
         let grew = copy::grow(&mut w, &mut b, days);
         let built = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
@@ -164,7 +164,7 @@ fn storing_the_solid_costs_no_build() {
     add(&mut w, &mut b, RICH, 100.0);
     assert!(b.size(&w.chem) > 20.0);
     let (_, mut b) = out(&mut w, b);
-    let (stores, heat, days) = (b.store.clone(), b.e, b.interval() as f64);
+    let (stores, heat, days) = (b.store.clone(), b.e, b.interval(&w) as f64);
     assert!(!copy::grow(&mut w, &mut b, days) && b.store == stores && b.e == heat, "a body with no allowance built");
 
     // A body taking the solid from the ground, with no allowance to build.
@@ -376,7 +376,7 @@ fn a_mature_body_splits_its_building_by_alloc() {
         b.genes[ALLOC] = alloc;
         let (s, mut b) = out(&mut w, b);
         let (m0, built0, mm) = (b.store[MATTER], b.built(&w.chem), w.chem.subs[MATTER].molar_mass);
-        let days = b.interval() as f64;
+        let days = b.interval(&w) as f64;
         assert!(copy::grow(&mut w, &mut b, days), "it did not build");
         let made = (b.store[MATTER] - m0) * mm;
         let (brood, grown) = (b.brood * mm, (b.built(&w.chem) - built0) * (1.0 - 0.75));
@@ -472,7 +472,7 @@ fn a_hurt_body_rebuilds_within_its_allowance_and_is_immature_until_healed() {
     pcore::choose::wear(&mut w, i, mv, e);
     let mut b = std::mem::take(&mut w.life.bodies[v]);
     assert!(!b.adult(&w.chem), "a body torn by 40% is still mature: {} kg", b.built(&w.chem));
-    let days = b.interval() as f64;
+    let days = b.interval(&w) as f64;
     // (Counted in all the matter it holds: the update that crosses maturity puts a share of what it builds into a brood.)
     let (mut last, mut updates) = (kg(&w, &b, MATTER), 0);
     while !b.adult(&w.chem) && updates < 2000 {
@@ -615,7 +615,7 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     let (s, mut b) = out(&mut w, b);
     let books = Books::now(&w);
     let before: Vec<f64> = mats.iter().chain([&MATTER]).map(|&k| kg(&w, &b, k)).collect();
-    let days = b.interval() as f64;
+    let days = b.interval(&w) as f64;
     assert!(copy::grow(&mut w, &mut b, days));
     let made: Vec<f64> = mats.iter().chain([&MATTER]).zip(&before).map(|(&k, x)| kg(&w, &b, k) - x).collect();
     let all: f64 = made.iter().sum();
@@ -644,7 +644,7 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     let b = eater(&mut w, i, brain::REST, 6.0);
     let (_, b) = out(&mut w, b);
     assert!(minerals.iter().all(|&(k, _)| b.store[k] > 0.0), "a starting body holds the minerals its matter was made of");
-    let days = b.interval() as f64;
+    let days = b.interval(&w) as f64;
     // With them it builds, and for the matter made it spends each by its count.
     let m0 = b.store[m];
     let mut with = b.clone();

@@ -138,7 +138,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
                 p.fixers += 1;
             }
             p.add(w, &b, [lay.cat + r_light, lay.cat + burn], take);
-            let delay = 1 + r.below(b.interval() as usize) as u64;
+            let delay = 1 + r.below(b.interval(w) as usize) as u64;
             w.life.add(b, w.day(), delay);
         }
     }

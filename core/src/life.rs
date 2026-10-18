@@ -378,7 +378,7 @@ impl World {
     /// (`survey::shade`) through `Body::vis` before its first update.
     pub(crate) fn place(&mut self, mut c: Body, keep: Option<f32>) -> usize {
         c.vis = c.visible(&self.chem, &self.cfg);
-        let delay = c.interval();
+        let delay = c.interval(self);
         let s = self.life.add(c, self.day(), delay);
         if let Some(k) = keep {
             self.light_keep.set(s, self.life.bodies[s].gen, k);

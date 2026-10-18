@@ -26,7 +26,7 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let full = b.dec(COPY_MASS) * n * (1.0 - WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
-    let room0 = p.c_build * b.supply(chem, p) / p.m_ref * days.min(b.interval() as f64) * b.activity(chem, p);
+    let room0 = p.c_build * b.supply(chem, p) / p.m_ref * days.min(b.interval(w) as f64) * b.activity(chem, p);
     // The other solids it builds first, each with its share (`Body::share`) of the allowance and of what it can spare, and up
     // to the level that share makes of its matter (`Body::level`), by the same work; then matter with the rest.
     let (mut room, mut built) = (room0, false);
@@ -59,7 +59,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
     let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
-    let ivl = b.interval() as f64;
+    let ivl = b.interval(w) as f64;
     let payer = body::Payer::of(w, b, ivl);
     let (mass, t) = (payer.mass, payer.th.t);
     let r = RELEASE_MARGIN * body::plan(w, b, f64::MAX, &payer).1;

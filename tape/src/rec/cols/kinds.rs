@@ -88,7 +88,7 @@ fn life_years(w: &World, b: &Body) -> f64 {
     } else {
         b
     };
-    let (m, d) = (b.mass(&w.chem), b.interval() as f64);
+    let (m, d) = (b.mass(&w.chem), b.interval(w) as f64);
     w.cfg.phys.e_life * b.dec(body::REPAIR) * b.built(&w.chem).max(1e-9 * m) * d / body::upkeep(w, b, d, m).max(1e-300) / w.days_per_year() as f64
 }
 

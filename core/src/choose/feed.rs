@@ -34,8 +34,8 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
     let mass = b.mass(&w.chem);
-    let m = b.wanted(&w.chem, free, reach(w, b, free) * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mass);
-    if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval() as f64) {
+    let m = b.wanted(&w.chem, b.paces(w), free, reach(w, b, free) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys), mass);
+    if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
     let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
@@ -59,7 +59,7 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
 pub(super) fn put(w: &mut World, b: &mut Body) {
     let mass = b.mass(&w.chem);
     let m: Vec<f64> = (0..w.chem.ns()).map(|k| (b.store[k] - b.level(&w.chem, k, mass)).clamp(0.0, b.store[k])).collect();
-    if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval() as f64) {
+    if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
@@ -98,9 +98,9 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
-    let m = b.wanted(&w.chem, |k| o.store[k], rate * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mb);
+    let m = b.wanted(&w.chem, b.paces(w), |k| o.store[k], rate * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
-    let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
+    let away = rng.f64() < 1.0 - o.interval(w) as f64 / b.interval(w) as f64;
     // The bite tears this share of the body; the stores it held spill in proportion, less what the taker took of them (a
     // taker that takes more of a store than the share holds takes it from the rest).
     let (built0, matter0, got) = (o.built(&w.chem), o.matter_kg(&w.chem), w.chem.mass_of(&m));
@@ -108,7 +108,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let f = (got / built0.max(1e-30)).max(eaten).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
     let cost = w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f);
-    if !body::pay(w, b, cost, b.interval() as f64) || away {
+    if !body::pay(w, b, cost, b.interval(w) as f64) || away {
         return;
     }
     let mut o = std::mem::take(&mut w.life.bodies[s]);
@@ -138,12 +138,12 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let spare = |k: usize| if chem.matter() == Some(k) || chem.is_material(k) { 0.0 } else { (b.store[k] - keep(k).max(GIVE_KEEPS * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
-    let mo = o.mass(chem);
-    let share = (w.cfg.phys.take * b.interval() as f64 * o.supply(&w.chem, &w.cfg.phys) / all.max(1e-9)).min(1.0 / b.n());
-    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.can_take(chem, k) { (spare(k) * share).min((o.level(chem, k, mo) - o.store[k]).max(0.0)) } else { 0.0 }).collect();
-    o.digest_room(chem, &mut m, mo);
+    let (mo, paces) = (o.mass(chem), o.paces(w));
+    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys) / all.max(1e-9)).min(1.0 / b.n());
+    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.can_take(chem, k) { (spare(k) * share).min(o.room(chem, paces, k, mo)) } else { 0.0 }).collect();
+    o.digest_room(chem, paces, &mut m, mo);
     let got = w.chem.mass_of(&m);
-    if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
+    if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
         return;
     }
     // Paying may have used some of what was to be put.

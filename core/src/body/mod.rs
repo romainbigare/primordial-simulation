@@ -135,6 +135,7 @@ pub struct Consts {
     pub leaf: f64,
     /// Catalyst factor of each reaction (1 when off)
     pub cat: Vec<f64>,
+    /// Days between the updates its `INTERVAL` gene asks for (`Body::interval`)
     pub interval: u64,
     /// Catalysed reactions that release heat, with the heat per unit, J (not those that keep a part of a fuel's heat,
     /// `Chemistry::keeps`)
@@ -240,7 +241,26 @@ impl Body {
     pub(crate) fn volume_at(&self, chem: &Chemistry, t: f64) -> f64 {
         self.store.iter().enumerate().map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
     }
-    pub fn interval(&self) -> u64 {
+    /// Days between its updates: its `INTERVAL` gene; a population node without a brain's at least `Config::node_days`,
+    /// as a node of many members that takes no decisions needs no update more often (its update integrates the time
+    /// since). A body with a brain keeps its gene's pace: its actions and its learning go by decisions.
+    pub fn interval(&self, w: &crate::World) -> u64 {
+        let own = self.own_interval();
+        if self.n() > 1.0 && w.life.brainless(self) { own.max(w.cfg.node_days as u64) } else { own }
+    }
+    /// How many of the intervals its `INTERVAL` gene asks for one update spans (1 but for a node that updates less often).
+    pub(crate) fn paces(&self, w: &crate::World) -> f64 {
+        self.interval(w) as f64 / self.own_interval() as f64
+    }
+    /// The share of a node's members that dies in an update when the share `f` would die in one interval of its gene:
+    /// they die at the rate -ln(1 - f) per such interval, so over the update 1 - (1 - f)^`paces`, as many in a time
+    /// whatever the length of its updates.
+    pub(crate) fn over_span(&self, f: f64, w: &crate::World) -> f64 {
+        let d = self.paces(w);
+        if d == 1.0 { f } else { 1.0 - (1.0 - f).powf(d) }
+    }
+    /// Days between the updates its `INTERVAL` gene asks for.
+    fn own_interval(&self) -> u64 {
         if self.k.interval > 0 {
             return self.k.interval;
         }
@@ -265,7 +285,7 @@ impl Body {
         };
         let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.arrhenius(p.t_cat) * open(rx)).sum();
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
-        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.interval(), burn, minln, upt, cats };
+        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.own_interval(), burn, minln, upt, cats };
     }
     /// The reflectance of a member, the mean of its colour's three bands (`visible`).
     pub(crate) fn reflectance(&self) -> f64 {

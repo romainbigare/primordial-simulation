@@ -64,7 +64,7 @@ fn upkeep_and_supply_follow_the_rate_law_of_the_reactions() {
     let mut s = set();
     let b = s.eater(0);
     let (w, p) = (&s.w, s.w.cfg.phys);
-    let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
+    let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
     let up = |x: &Body| pcore::body::upkeep(w, x, days, mass);
     let ea = w.chem.reactions[b.k.burn[0].0].ea;
     let (b0, u0) = (at(w, &b, p.t_cat), up(&at(w, &b, p.t_cat)));
@@ -135,7 +135,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     let cost = 2e6;
     assert!(pcore::body::pay(w, &mut b, cost, days), "it can pay");
     let (temp1, g) = (b.temp(&w.chem), pcore::body::conductance_to_ground(w, &b, mass, temp0));
-    let (cap, dt) = (b.heat_cap(&w.chem), b.interval() as f64 * DAY);
+    let (cap, dt) = (b.heat_cap(&w.chem), b.interval(w) as f64 * DAY);
     let (rise, kept) = (temp1 - temp0, cap * (temp1 - temp0));
     println!("a cost of {cost:.1e} J warms a body of {mass:.0} kg by {rise:.4} K (g {g:.2} W/K, {:.1} h time constant): the rate law says {:.4} K", cap / g / 3600.0, cost / (g * dt));
     // Its time constant is hours, far under the days to the next update: the warmth is the heat made over the heat lost per K.
@@ -243,7 +243,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     let mut rises = [0.0; 2];
     for (n, &slot) in slots.iter().enumerate() {
         // The world and the body as its next update finds them, and the body as that update leaves it.
-        let next = w.life.bodies[slot].last + w.life.bodies[slot].interval();
+        let next = w.life.bodies[slot].last + w.life.bodies[slot].interval(w);
         while w.day() < next {
             held_day(w, &held(w), t_cat);
         }
@@ -252,7 +252,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         assert!(w.life.bodies[slot].alive, "it lives");
         let w0 = &w0;
         b.prepare(&w0.chem, &w0.cfg.phys);
-        let (i, mass, days) = (b.cell as usize, b.mass(&w0.chem), b.interval() as f64);
+        let (i, mass, days) = (b.cell as usize, b.mass(&w0.chem), b.interval(w0) as f64);
         let (tg, chem) = (w0.scratch.temps().0[i], &w0.chem);
         let (ns, na, j) = (chem.ns(), w0.mesh.level(AIR).n(), w0.mesh.up(i, 0, AIR));
         // The temperature where heat made = heat lost. The heat made is what its reactions release at that temperature to
@@ -323,7 +323,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         w.time += DAY_S;
         let mut b = std::mem::take(&mut w.life.bodies[slot]);
         b.prepare(&w.chem, &w.cfg.phys);
-        let (days, mass) = (b.interval() as f64, b.mass(&w.chem));
+        let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
         let (up, pace) = (pcore::body::upkeep(w, &b, days, mass), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
         w.events.clear();
         pcore::choose::act(w, slot, &mut b, &Default::default(), &mut Default::default());
@@ -371,12 +371,12 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     fur.prepare(&w.chem, &w.cfg.phys);
     let g_fur = g(w, &fur);
     assert!(g_fur < 3.0, "with fur {g_fur} W/K for {} kg", fur.mass(&w.chem));
-    let (fuel0, g0, next) = (b.store[RICH], g(w, &b), b.last + b.interval());
+    let (fuel0, g0, next) = (b.store[RICH], g(w, &b), b.last + b.interval(w));
     held_days(w, &[cell], &[tg], (next - w.day()) as usize + 1);
     let (y, twin) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
     assert!(y.alive && twin.alive && y.last == next);
     let (t, t_twin) = (y.temp(&w.chem), twin.temp(&w.chem));
-    let lost = (t - tg) * 0.5 * (g0 + g(w, y)) * y.interval() as f64 * DAY;
+    let lost = (t - tg) * 0.5 * (g0 + g(w, y)) * y.interval(w) as f64 * DAY;
     let burned = (fuel0 - y.store[RICH]) * y.k.burn[0].1;
     println!("keeps 300 K: {t:.3} K (its twin {t_twin:.2} K) on {tg} K ground; burned {burned:.4e} J in an update, lost {lost:.4e} J ({:.3}); with fur {g_fur:.2} W/K", burned / lost);
     assert!((t - 300.0).abs() < 0.1 && t_twin < 290.0, "{t} K, its twin {t_twin} K");
@@ -454,7 +454,7 @@ fn a_dry_body_pays_upkeep_times_activity_and_ages_slower() {
     s.w.cfg.phys.c_build = 0.0;
     let wet = s.eater(0);
     let dry = s.dried(&wet, 0.5);
-    let (d, m) = (wet.interval() as f64, wet.mass(&s.w.chem));
+    let (d, m) = (wet.interval(&s.w) as f64, wet.mass(&s.w.chem));
     let a = dry.activity(&s.w.chem, &s.w.cfg.phys);
     let (uw, ud) = (pcore::body::upkeep(&s.w, &wet, d, m), pcore::body::upkeep(&s.w, &dry, d, m));
     println!("upkeep {uw:.4e} J wet, {ud:.4e} dry, activity {a:.4}");
@@ -1000,7 +1000,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let per_kg = |w: &mut pcore::World, s: usize| {
         let mut b = std::mem::take(&mut w.life.bodies[s]);
         b.prepare(&w.chem, &w.cfg.phys);
-        let (d, m) = (b.interval() as f64, b.mass(&w.chem));
+        let (d, m) = (b.interval(w) as f64, b.mass(&w.chem));
         let u = pcore::body::upkeep(w, &b, d, m) / (d * b.built(&w.chem));
         let act = b.activity(&w.chem, &w.cfg.phys);
         b.wear = 0.0;
@@ -1029,7 +1029,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // days; it may die of other causes later, so only its age deaths count).
     let (mut n, mut t, mut lived) = (n0, node_last as f64 - start as f64, 0.0);
     for &(day, dead) in &node {
-        (lived, n, t) = (lived + dead * (day as f64 - t) / (n / (n - dead)).ln(), n - dead, day as f64);
+        (lived, n, t) = (lived + dead * (day as f64 - t) / (n / (n - dead).max(f64::MIN_POSITIVE)).ln(), n - dead, day as f64);
     }
     let dc = lived / (n0 - n);
     println!("lives, days: individuals {ones:?} at genes 0 and 0.5 (predicted {life} and {:.0}); node {dc:.1} ({:.0} of {n0} members died of age)", life * x, n0 - n);

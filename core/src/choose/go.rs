@@ -29,7 +29,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
         return;
     }
     let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.mesh.cells().dist()[lanes::link(w, i, j)] + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
-    if !body::pay(w, b, cost, b.interval() as f64) {
+    if !body::pay(w, b, cost, b.interval(w) as f64) {
         return;
     }
     bond::moved(w, b, carried, j, mb);

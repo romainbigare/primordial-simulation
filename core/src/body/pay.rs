@@ -79,7 +79,7 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
         return true;
     }
     b.prepare(&w.chem, &w.cfg.phys);
-    spend(w, b, cost, b.interval() as f64 * DAY, false, &Payer::of(w, b, days)) == 0.0
+    spend(w, b, cost, b.interval(w) as f64 * DAY, false, &Payer::of(w, b, days)) == 0.0
 }
 
 /// `pay` by the payer `p` (body `b` as it stands) with the heat released held over `dt` s; returns what was not paid

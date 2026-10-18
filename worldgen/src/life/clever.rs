@@ -78,7 +78,7 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
             if is_big {
                 (members, kg) = (members + 1.0, kg + b.mass(&w.chem));
             }
-            let delay = 1 + r.below(b.interval() as usize) as u64;
+            let delay = 1 + r.below(b.interval(w) as usize) as u64;
             w.life.add(b, w.day(), delay);
         }
     }

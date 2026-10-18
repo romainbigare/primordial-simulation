@@ -233,16 +233,17 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
     (lost, moved)
 }
 
-/// Liquids of the ground soak in by solubility up to the level the body keeps, at the rate of `Soil` x solubility,
+/// Liquids of the ground soak in by solubility up to the level the body keeps (its room, `Body::room`), at the rate of `Soil` x solubility,
 /// while it loses what it evaporated (`lost`) at a steady rate, solved exactly over the time; with them the rain its
 /// capture area caught (`fall`). The ground (of heat capacity `gcap`) pays their heat and fusion enthalpy, or the body
 /// soaks less; the fusion enthalpy goes into `heat`.
 #[allow(clippy::too_many_arguments)]
 fn soak(w: &mut World, b: &mut Body, s: &Site, gcap: f64, heat: &mut f64, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
+    let paces = b.paces(w);
     let World { chem, mesh, ground, e_ground, counts, .. } = w;
     let (n, i, tg, days) = (mesh.cells().n(), s.i, s.tg, s.days);
     for k in (0..chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
-        let (x, room) = (ground[k * n + i] / soil.in_ground, b.level(chem, k, mass2) - b.store[k]);
+        let (x, room) = (ground[k * n + i] / soil.in_ground, b.room(chem, paces, k, mass2));
         // (Rate r per day over `days`, the loss e a day: it takes (gap at the start) f + e days (1 - f / (r days)),
         // f = 1 - exp(-r days); all the gap and the loss when r days is large.)
         let rate = soil.rate * chem.subs[k].solubility;
@@ -272,9 +273,10 @@ pub(super) fn soak_again(w: &mut World, b: &mut Body, s: &Site) {
 }
 
 /// Roots take what is liquid in the ground but does not dissolve itself, for the uptake genes that are on, up to its
-/// level, at the rate it soaks liquids (without the surface's wetness) through the mass that works (`wk`). The ground
+/// level (its room, `Body::room`), at the rate it soaks liquids (without the surface's wetness) through the mass that works (`wk`). The ground
 /// pays their heat and fusion enthalpy, or the body takes less.
 fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f64) {
+    let paces = b.paces(w);
     let World { chem, mesh, ground, e_ground, counts, .. } = w;
     let (n, i, tg) = (mesh.cells().n(), s.i, s.tg);
     let soak = one_minus_exp(b.k.liq * s.days) * wk;
@@ -282,7 +284,7 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f6
         if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| ground[j * n + i]) != Phase::Liquid || ground[k * n + i] <= 0.0 {
             continue;
         }
-        let want = ((b.level(chem, k, mass2) - b.store[k]).max(0.0) * soak).min(MAX_TAKE_SHARE * ground[k * n + i]);
+        let want = (b.room(chem, paces, k, mass2) * soak).min(MAX_TAKE_SHARE * ground[k * n + i]);
         let (per, fused) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
         let d = take_paid(&mut e_ground[i], counts, h.gcap, want, chem.subs[k].cp, want * (per + fused)).0;
         b.store[k] += d;

@@ -629,6 +629,17 @@ The work of `docs/foundation/plan.md`, one line per task.
   over them, not the cell's sum of the last survey less the body's mass now (its mass had changed since the sum, so the
   others' cover was off by that change). 64 x 64, seed 1, years 11 to 20: plant members -8%, body mass -5%, life of
   plants 1.7 to 1.6 yr, land +0.1 K, carbon gas 250 to 254 ppm; golden re-pinned.
+- E4, speed: a population node without a brain updates at most every `Config::node_days` (36 days, a new speed
+  setting); a body with a brain keeps its `INTERVAL` gene (eaters slowed to 36 days fell from 4.6 to 3.9 log10 kg).
+  The rules that counted by the gene's interval become rates over the update (`Body::paces`): the stores it uses
+  refill a level per interval of the gene (`Body::room`), and frost and a shortfall of upkeep kill at the rate their
+  share per interval gives (`Body::over_span`). 64 x 64, seed 1, 20 years: body updates 97,200 to 54,200 a year,
+  bodies 1713 to 1053 ms/yr (1.6 times less; 16.6 to 18.4 us per update, as each does more), plant members +15%, body
+  mass +12%, life of plants 2.3 to 2.8 yr, land -0.1 K, carbon gas 243 to 242 ppm. The key numbers hold (life of
+  plants 2.61 to 3.10 yr, eaters 4.64 to 4.65 log10 kg) and so does the pace test (32 x 32, 8 years), but 64 x 64,
+  30 years, seeds 1 and 2 (years 21 to 30) still show a step error larger than the seeds' noise (2% in life, 0.03
+  in log10 mass): life of plants +7 to +9% at 18 days, +14 to +24% at 36, +7 to +18% at 72; plant mass +0.01 to
+  +0.08 log10.
 
 **Phase J: the long physics step**
 

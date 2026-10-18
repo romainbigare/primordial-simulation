@@ -64,6 +64,7 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
 | `wake_share` | share | a sleeping node one of whose amounts has grown by more than this share of what it held when it fell asleep wakes before its alarm (`clock::Sleep::watch`, looked at by Change at its step) | the share of its inputs a calm ground node's own reactions may use while it sleeps (`change`, `CALM`, 0.05): a gain larger than that changes the node more than its sleep allowed (x2 and /2: `tape/tests/ranges.rs`, the sleep test) | speed |
+| `node_days` | days | a population node (more than one member) without a brain updates at most every this many days; a body with a brain by its `INTERVAL` gene (`Body::interval`) | about 10 updates a year (decision D13; handover 7.3 suggests a month for population nodes): the bodies' time per year falls about 1.6 times (x2 and /2: `tape/tests/ranges.rs`, the pace test) | speed |
 | `sleep_days` | days | the longest a ground or air node's reactions sleep before they run again for the time since (`change::step`); 0: every node reacts at every physics step | a season, a quarter of the 360-day year: a node does not react through a whole season at the temperature of another (x2 and /2: `tape/tests/ranges.rs`, the sleep test) | speed |
 
 ## Physics
@@ -250,7 +251,7 @@ The 110 rows of `Config` and `Physics` are their 110 fields.
 | tuned (run or reason named) | 18, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 4 | `share_brains`, `nodes`, `two_parents`, `null` |
-| speed | 2 | `wake_share`, `sleep_days` |
+| speed | 3 | `wake_share`, `sleep_days`, `node_days` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 61 (54 in the structs, 7 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

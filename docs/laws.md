@@ -63,7 +63,8 @@ one month per call of `step` (`core/src/schedule.rs`). Each process has a period
    `flow::REFRESH_MONTHS` months, 3); then Change (`change::step`).
 2. On the first day of the month: Bond (`bond::step`): parts, loads, breaking.
 3. Every day: `survey::day` updates the bodies whose interval ends that day (each body every 5 to
-   360 days, set by its `INTERVAL` gene).
+   360 days, set by its `INTERVAL` gene; a population node without a brain at least every
+   `node_days`, 36, 4.4).
 
 Each run stands for the time to the process's next run (the last one in a month to the month's end), so
 a part of Flow moves for its own period, counted from the start of the month (the yearly and the
@@ -656,6 +657,18 @@ the same patterns as individuals.
   away from its lineage's size moves itself to a new lineage of that size, its brain carried over.
 - **Age in nodes.** A node has no single age: its members die of age at the rate of the wear an
   individual would take (6.7).
+- **The pace of nodes** (`Body::interval`, decision D13). A node without a brain updates at most every
+  `node_days` (36 days, a speed setting): a node of many members that takes no decisions needs no
+  update more often, and its update integrates the time since, as any body's does. A body with a
+  brain, node or individual, keeps its `INTERVAL` gene: its actions and its learning go by decisions,
+  and they do not add up over a longer span. The rules of an update that count by the gene's interval
+  become rates over the update (`Body::paces`, the update over the gene's interval): the stores it uses
+  refill a level per interval of its gene (`Body::room`; what is not used is shed), and frost and a
+  shortfall of upkeep kill at the rate their share per interval gives (`Body::over_span`, 6.5, 6.2).
+  The update is still an integration by steps, with an error larger than the seeds' noise: on
+  64 × 64, 30 years, seeds 1 and 2, the light-eaters live 7 to 9% longer at 18 days, 14 to 24% at
+  36 and 7 to 18% at 72 than at their gene's pace, with 0.01 to 0.08 more log10 kg (all key numbers
+  in range; the pace test of `tape/tests/ranges.rs` holds).
 - **Individuals mode** (`Config::nodes` off, `ew run --individuals`): bodies with a brain are
   never nodes. Bodies without one (the light-eaters) stay nodes in both modes: the check compares
   brains in nodes and alone. Siblings born together as individuals each get born rows
@@ -814,7 +827,7 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Paying** (`body::pay`, `body::plan`): the body runs its burnings one after the other, each as
   far as the rate law allows at its temperature with the air it breathes in the time. A cold body
   releases little. If they cannot pay, the body dies of `SPENT` (a node loses the members it
-  cannot pay for).
+  cannot pay for, at that rate over an update longer than its gene's interval, 4.4).
 - The products of burning take their heat at the body's temperature, so the body keeps its
   temperature as its stores change.
 
@@ -873,7 +886,8 @@ at all and can hardly act, but still takes its updates and decisions.
 
 - **Frost**: if a key liquid freezes (at its lowered melting point, 2.5), the frozen share (all
   of it below that point; on its plateau, the share frozen there) times the activity dies (a node
-  loses that share of its members, an individual dies with that chance; cause `PHASE`). A dry body
+  loses that share of its members, at that rate over an update longer than its gene's interval,
+  4.4; an individual dies with that chance; cause `PHASE`). A dry body
   holds little free liquid to freeze.
 - **Boiling**: a key liquid that boils kills the body.
 

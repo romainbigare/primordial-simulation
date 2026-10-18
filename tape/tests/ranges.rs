@@ -5,7 +5,9 @@
 //! Each run also keeps its books.
 //!
 //! The sleep of Change's nodes is a speed tool (plan 6.4): a small world with life keeps the chemistry's key numbers
-//! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2.
+//! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
+//! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
+//! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
 //! The steps of Flow are speed settings too (plan 6.4, the long step against the short one): a small world with life
 //! keeps its climate within its noise at the default steps and at the short ones (every part of Flow every 3 days but
@@ -172,16 +174,37 @@ const SLEEP_FROM: u64 = 5;
 /// and lime.
 const CHEMISTRY: [&str; 7] = ["air_3", "min0_land", "min0_sea", "min1_land", "min1_sea", "dead_22", "dead_10"];
 
-/// The `CHEMISTRY` columns at the end of each year from `SLEEP_FROM`, with Change's nodes sleeping at most `sleep_days`
-/// and woken by a gain of `wake_share`.
-fn chemistry((sleep_days, wake_share): (u32, f64)) -> Vec<Vec<f64>> {
+/// The `columns` at the end of each year from `SLEEP_FROM` of the sleep test's world with the settings `set` makes.
+fn yearly(columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64>> {
     let mut years = vec![];
-    run(1, SLEEP_SIDE, SLEEP_YEARS, |c| (c.sleep_days, c.wake_share) = (sleep_days, wake_share), |y, _, rec| {
+    run(1, SLEEP_SIDE, SLEEP_YEARS, set, |y, _, rec| {
         if y >= SLEEP_FROM {
-            years.push(CHEMISTRY.map(|c| rec.last(c)).to_vec());
+            years.push(columns.iter().map(|c| rec.last(c)).collect());
         }
     });
     years
+}
+
+/// For each of `columns`, the mean over the years of each run of `runs` after the first, against the first's: it must
+/// move by less than its noise, the spread of the first run's values over those years. Prints each; returns the
+/// columns and settings (named by `name`) that moved more.
+fn off_by_noise<S: Copy>(columns: &[&str], runs: &[Vec<Vec<f64>>], settings: &[S], name: impl Fn(S) -> String) -> Vec<String> {
+    let mut out = vec![];
+    for (q, column) in columns.iter().enumerate() {
+        let values = |run: &[Vec<f64>]| run.iter().map(|y| y[q]).collect::<Vec<f64>>();
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let first = values(&runs[0]);
+        let noise = first.iter().fold(f64::MIN, |m, &x| m.max(x)) - first.iter().fold(f64::MAX, |m, &x| m.min(x));
+        for (run, &set) in runs.iter().zip(settings).skip(1) {
+            let off = mean(&values(run)) - mean(&first);
+            let ok = off.abs() <= noise;
+            println!("{column}, {}: {:.6e}, against {:.6e}, off by {off:.3e}, noise {noise:.3e}{}", name(set), mean(&values(run)), mean(&first), if ok { "" } else { ": OUT" });
+            if !ok {
+                out.push(format!("{column}, {}", name(set)));
+            }
+        }
+    }
+    out
 }
 
 /// Sleep against no sleep, and each speed setting of the sleep x2 and /2 (`docs/numbers.md`, speed settings): the
@@ -194,42 +217,16 @@ fn the_sleep_of_change_keeps_the_chemistry() {
     let (set, share) = (Config::default().sleep_days, Config::default().wake_share);
     let settings = [(0, share), (set, share), (2 * set, share), (set / 2, share), (set, 2.0 * share), (set, share / 2.0)];
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = settings.iter().map(|&d| s.spawn(move || chemistry(d))).collect();
+        let runs: Vec<_> = settings.iter().map(|&(days, wake)| s.spawn(move || yearly(&CHEMISTRY, |c| (c.sleep_days, c.wake_share) = (days, wake)))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
-    let mut out = vec![];
-    for (q, name) in CHEMISTRY.iter().enumerate() {
-        let column = |run: &[Vec<f64>]| run.iter().map(|y| y[q]).collect::<Vec<f64>>();
-        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
-        let awake = column(&runs[0]);
-        let noise = awake.iter().fold(f64::MIN, |m, &x| m.max(x)) - awake.iter().fold(f64::MAX, |m, &x| m.min(x));
-        for (run, (days, wake)) in runs.iter().zip(settings).skip(1) {
-            let off = mean(&column(run)) - mean(&awake);
-            let ok = off.abs() <= noise;
-            println!("{name}, sleep {days} days, wake at {wake}: {:.6e}, awake {:.6e}, off by {off:.3e}, noise {noise:.3e}{}", mean(&column(run)), mean(&awake), if ok { "" } else { ": OUT" });
-            if !ok {
-                out.push((*name, days, wake));
-            }
-        }
-    }
+    let out = off_by_noise(&CHEMISTRY, &runs, &settings, |(days, wake)| format!("sleep {days} days, wake at {wake}"));
     assert!(out.is_empty(), "the sleep changed: {out:?}");
 }
 
 /// The climate's key numbers (series columns): the ground temperature on land, the warmest and the coldest month's,
 /// the rain on land, the heat-absorbing gas and the river cells.
 const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
-
-/// The `CLIMATE` columns at the end of each year from `SLEEP_FROM`, on the sleep test's world, with the steps of Flow
-/// that `set` makes.
-fn climate(set: fn(&mut Config)) -> Vec<Vec<f64>> {
-    let mut years = vec![];
-    run(1, SLEEP_SIDE, SLEEP_YEARS, set, |y, _, rec| {
-        if y >= SLEEP_FROM {
-            years.push(CLIMATE.map(|c| rec.last(c)).to_vec());
-        }
-    });
-    years
-}
 
 /// The long step against the short one: at the default steps of Flow (`phys_days`, `air_days`, `exchange_days`,
 /// `flow_days`) the mean of each of the climate's key numbers over the last years moves by less than its noise, the
@@ -240,21 +237,29 @@ fn the_long_step_keeps_the_climate() {
     let short: fn(&mut Config) = |c| (c.phys_days, c.air_days, c.exchange_days, c.flow_days) = (3, 3, 3, 15);
     let default: fn(&mut Config) = |_| {};
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = [short, default].into_iter().map(|set| s.spawn(move || climate(set))).collect();
+        let runs: Vec<_> = [short, default].into_iter().map(|set| s.spawn(move || yearly(&CLIMATE, set))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
-    let mut out = vec![];
-    for (q, name) in CLIMATE.iter().enumerate() {
-        let column = |run: &[Vec<f64>]| run.iter().map(|y| y[q]).collect::<Vec<f64>>();
-        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
-        let (base, long) = (column(&runs[0]), column(&runs[1]));
-        let noise = base.iter().fold(f64::MIN, |m, &x| m.max(x)) - base.iter().fold(f64::MAX, |m, &x| m.min(x));
-        let off = mean(&long) - mean(&base);
-        let ok = off.abs() <= noise;
-        println!("{name}: {:.6e} at the default steps, {:.6e} at the short ones, off by {off:.3e}, noise {noise:.3e}{}", mean(&long), mean(&base), if ok { "" } else { ": OUT" });
-        if !ok {
-            out.push(*name);
-        }
-    }
+    let out = off_by_noise(&CLIMATE, &runs, &["the short steps", "the default steps"], |name| name.to_string());
     assert!(out.is_empty(), "the long step changed: {out:?}");
+}
+
+/// Life's key numbers (series columns): the members and the mass of the light-eaters, the births of the year, the life
+/// light-eaters live, and the heat-absorbing gas they take from the air.
+const LIFE: [&str; 5] = ["plant_members", "root_0_kg", "births", "root_0_life_real", "air_3"];
+
+/// Every population node at the pace of its own `INTERVAL` gene against the pace of nodes (`Config::node_days`), and
+/// that setting x2 and /2 (`docs/numbers.md`, speed settings): the mean of each of life's key numbers over the last
+/// years moves by less than its noise, the spread of its values over those years with every node at its own pace.
+#[test]
+#[ignore = "slow: four 8-year runs of a 32 x 32 world with life"]
+fn the_pace_of_nodes_keeps_life() {
+    let set = Config::default().node_days;
+    let settings = [0, set, 2 * set, set / 2];
+    let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
+        let runs: Vec<_> = settings.iter().map(|&days| s.spawn(move || yearly(&LIFE, |c| c.node_days = days))).collect();
+        runs.into_iter().map(|r| r.join().expect("a run")).collect()
+    });
+    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("nodes every {days} days at most"));
+    assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
 }

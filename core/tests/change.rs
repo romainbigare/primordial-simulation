@@ -531,7 +531,7 @@ fn hot_cover_burns() {
         pcore::step(&mut w);
         worldgen::life::seed(&mut w, 0);
         let node = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node");
-        let (i, days) = (node.cell as usize, node.interval() + 1);
+        let (i, days) = (node.cell as usize, node.interval(&w) + 1);
         let n = w.mesh.cells().n();
         let held = |w: &pcore::World| w.ground[RICH * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[RICH]).sum::<f64>();
         let before = held(&w);
