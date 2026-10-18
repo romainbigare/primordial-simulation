@@ -82,7 +82,7 @@ pub fn wind_on(w: &mut World, air: &Level, dt: f64) {
 fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
     super::sums(w, s);
     let na = air.n();
-    let x = s.gas.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
+    let x = s.state.gas.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
     let start = State { x, e: w.e_air.clone(), nt: s.nt.clone(), capa: s.capa.clone() };
     let mut spread = std::mem::take(&mut s.spread);
     let at = Ctx { cfg: &w.cfg, s, air, dt };
@@ -98,7 +98,7 @@ fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
 /// of the node the mass enters into the world's potential energy (as `Sky::cross` books it); then the sums the state
 /// keeps of each air node, from its amounts (`air::sums`).
 fn book(w: &mut World, s: &mut Scratch, air: &Level, m: &Moved) {
-    let ks: Vec<u16> = s.gas.iter().map(|&k| k as u16).collect();
+    let ks: Vec<u16> = s.state.gas.iter().map(|&k| k as u16).collect();
     let mut lift = Batch::falls(Class::Air);
     m.paid.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
     apply(w, &[LinkFlux { class: [Class::Air; 2], a: air.a(), b: air.b(), ks: &ks, mol: &m.mol, heat: &m.heat }, lift.flux()], &[], &[]);

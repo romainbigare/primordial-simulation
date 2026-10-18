@@ -82,7 +82,7 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
 pub(super) fn sums(w: &World, s: &mut Scratch) {
     let na = w.mesh.level(AIR).n();
     (s.nt, s.capa, s.mass) = (vec![0.0; na], vec![0.0; na], vec![0.0; na]);
-    for &k in &s.gas {
+    for &k in &s.state.gas {
         let sp = s.sp[k];
         for (j, &a) in w.air[k * na..(k + 1) * na].iter().enumerate() {
             s.nt[j] += a;
@@ -104,7 +104,7 @@ fn nodes(w: &World, s: &mut Scratch) {
     for (i, &j) in cells.parent().iter().enumerate() {
         s.za[j as usize] += s.head[i] * cells.area()[i];
     }
-    for &k in s.gas.iter().filter(|&&k| w.chem.subs[k].ir_abs > 0.0) {
+    for &k in s.state.gas.iter().filter(|&&k| w.chem.subs[k].ir_abs > 0.0) {
         for (j, &a) in w.air[k * na..(k + 1) * na].iter().enumerate() {
             s.fabs[j] += w.chem.depth(k, a / air.area()[j]);
         }
@@ -125,11 +125,11 @@ fn nodes(w: &World, s: &mut Scratch) {
 /// upper half of the column.
 fn heights(w: &World, s: &mut Scratch) {
     let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
-    let ng = s.gas.len();
+    let ng = s.state.gas.len();
     (s.cond, s.hk, s.split) = (vec![false; ng], vec![0.0; ng * na], vec![0.0; ng * na]);
     // The heat capacity each node gains from the vaporisation enthalpy of what condenses as it cools, J/K.
     let mut held = vec![0.0; na];
-    for (gi, &k) in s.gas.iter().enumerate() {
+    for (gi, &k) in s.state.gas.iter().enumerate() {
         s.cond[gi] = (0..na).any(|j| {
             let t = (s.ta[j] - s.gam[j] * (top - s.zair[j])).max(1.0);
             w.chem.p_sat(k, t) < w.air[k * na + j] * R_GAS * s.ta[j] / s.vol[j]
@@ -137,7 +137,7 @@ fn heights(w: &World, s: &mut Scratch) {
     }
     // Rising air in which a gas condenses cools slower: its vaporisation enthalpy is freed as
     // the share it can hold falls with the temperature (Clausius-Clapeyron).
-    for (gi, &k) in s.gas.iter().enumerate() {
+    for (gi, &k) in s.state.gas.iter().enumerate() {
         if s.cond[gi] {
             for (j, h) in held.iter_mut().enumerate() {
                 let (t, lv) = (s.ta[j], s.sp[k].lv);
@@ -151,7 +151,7 @@ fn heights(w: &World, s: &mut Scratch) {
     }
     // (The vapour pressure falls by a factor exp(lv/R (1/(t-½) - 1/(t+½))) per K.)
     // A gas that does not condense is spread like the air: the `split` below with `hk` = `h`, one half.
-    for (gi, &k) in s.gas.iter().enumerate() {
+    for (gi, &k) in s.state.gas.iter().enumerate() {
         for j in 0..na {
             let h = node_scale_height(s, j, g).min((top - s.za[j]).max(COLUMN_MIN));
             let (mut hk, mut split) = (h, 0.5);
@@ -174,6 +174,6 @@ fn seen(w: &World, s: &mut Scratch) {
     for (i, &j) in w.mesh.cells().parent().iter().enumerate() {
         let (gam, zair, fabs, ta) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i), lerp(s, &s.ta, i));
         s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, j as usize, g));
-        s.seen[i] = [gam, zair, one_minus_exp(fabs), s.seen[i][3], ta];
+        s.seen[i] = [gam, zair, one_minus_exp(fabs), ta];
     }
 }

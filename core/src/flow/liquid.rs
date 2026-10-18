@@ -59,7 +59,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
 
 /// One liquid step of `dt` seconds.
 pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
-    let (tmin, tmax) = range(&s.tg);
+    let (tmin, tmax) = range(&s.state.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let slope = slopes(w, s);
     let runs = springs(w, s, tmin, &slope, dt);
@@ -157,7 +157,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             (c, held) = (c + d * ss.sp[k].cp, held + ss.fusion(k, i, d));
         }
         let q = &mut q[cell];
-        let t = ((ww.e_ground[i] + q[heat] - held) / c.max(1.0)).min(ss.tg[i]).max(T_FLOOR);
+        let t = ((ww.e_ground[i] + q[heat] - held) / c.max(1.0)).min(ss.state.tg[i]).max(T_FLOOR);
         let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * ss.sp[ks[r]].mm).sum::<f64>();
         // The work, on the bed below the liquid left standing (which hides it).
         let left = sv * (1.0 - out) / area[i];
@@ -236,8 +236,8 @@ fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops:
 /// its heat capacity (`Scratch::note`); the bed's surface falls by its volume.
 fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
     let n = w.mesh.cells().n();
-    for bi in 0..s.bedk.len() {
-        let (k, bv) = (s.bedk[bi], s.bed[i].vol);
+    for bi in 0..s.state.bedk.len() {
+        let (k, bv) = (s.state.bedk[bi], s.state.bed[i].vol);
         let b = w.bed[k * n + i];
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
@@ -245,7 +245,7 @@ fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
             let area = w.mesh.cells().area()[i];
             let dz = m * s.sp[k].v[0] / area;
             w.loosen(k, i, m);
-            s.bed[i].vol -= m * s.sp[k].v[0];
+            s.state.bed[i].vol -= m * s.sp[k].v[0];
             s.add_loose(k, false);
             s.note(k, i, m, area);
             lift(s, i, [-dz, -dz]);

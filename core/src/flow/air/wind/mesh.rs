@@ -15,7 +15,7 @@ use crate::solve::spread::{within, Net, Spread};
 /// brings to the warmer column on a square map is not carried on another mesh. The evening of pressure closes
 /// `EVEN`/(1 + `EVEN`) of a lone pair's difference, as the implicit step closes it, not `EVEN`.
 pub(super) fn on_mesh(at: &Ctx, st: &State, solver: &mut Spread) -> Moved {
-    let (s, air, ng, na, nl) = (at.s, at.air, at.s.gas.len(), at.air.n(), at.air.a().len());
+    let (s, air, ng, na, nl) = (at.s, at.air, at.s.state.gas.len(), at.air.n(), at.air.a().len());
     let (a, b) = (air.a(), air.b());
     let col = at.columns(st);
     let (mut g_mix, mut g_even) = (vec![0.0; nl], vec![0.0; nl]);
@@ -47,7 +47,7 @@ pub(super) fn on_mesh(at: &Ctx, st: &State, solver: &mut Spread) -> Moved {
         within(a, b, &mut m.mol[t * nl..(t + 1) * nl], &st.x[t * na..(t + 1) * na]);
     }
     for l in 0..nl {
-        let moved = (0..ng).map(|t| m.mol[t * nl + l] * s.sp[s.gas[t]].mm).sum();
+        let moved = (0..ng).map(|t| m.mol[t * nl + l] * s.sp[s.state.gas[t]].mm).sum();
         let (j, lift) = at.lift(a[l] as usize, b[l] as usize, moved);
         m.paid[j] += lift;
     }

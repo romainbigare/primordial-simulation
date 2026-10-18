@@ -77,8 +77,8 @@ struct Active {
 /// that cannot condense dissolve in the ground's liquid (`dissolve`, slow: with the trace gases). With `trace` (a
 /// trace turn, `flow::TRACE_TURN`) the trace gases move, and gases dissolve, for that many seconds.
 pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64, trace: Option<f64>) {
-    let (tmin, tmax) = range(&s.tg);
-    let henry: Vec<(usize, usize)> = s.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
+    let (tmin, tmax) = range(&s.state.tg);
+    let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
     let act = active(w, s, &henry, dt, trace);
     // Each pass sees the air as it was before it.
     evaporate(w, s, &act);
@@ -96,12 +96,12 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64, trace: Option<f6
 /// their evaporation per unit of deficit, and their saturation pressures up to the warmest ground or air touching it
 /// (`Scratch::sat`): a trace gas only at a `trace` turn, for its seconds, the others for `dt`.
 fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)], dt: f64, trace: Option<f64>) -> Vec<Active> {
-    let (na, tmax) = (w.mesh.level(AIR).n(), range(&s.tg).1);
+    let (na, tmax) = (w.mesh.level(AIR).n(), range(&s.state.tg).1);
     let (hi, all) = (tmax.max(range(&s.tl).1), s.nt.iter().sum::<f64>());
     s.sat.resize(w.chem.ns(), Sat::default());
     let mut act = Vec::new();
-    for (gi, &k) in s.gas.iter().enumerate() {
-        let up = s.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
+    for (gi, &k) in s.state.gas.iter().enumerate() {
+        let up = s.state.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
         let span = if w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all { trace } else { Some(dt) };
         if let Some(span) = span.filter(|_| up || s.cond[gi]) {
             s.sat[k].fit(&w.chem, k, hi);
@@ -168,7 +168,7 @@ fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
     let n = w.mesh.cells().n();
     let mut pass = Pass::new(w, s, act.iter().map(|a| a.k).collect());
     for i in 0..n {
-        let (t, j, tl, area) = (s.tg[i], w.mesh.up(i, 0, AIR), s.tl[i], w.mesh.cells().area()[i]);
+        let (t, j, tl, area) = (s.state.tg[i], w.mesh.up(i, 0, AIR), s.tl[i], w.mesh.cells().area()[i]);
         let c_cond = area / R_GAS;
         for (x, ac) in act.iter().enumerate() {
             let (k, a) = (ac.k, w.ground[ac.k * n + i]);
@@ -249,7 +249,7 @@ fn clouds(w: &mut World, s: &mut Scratch, dt: f64, (rain, cloud): (&[f64], &[[f6
         .collect();
     let ema = year_weight(w, dt);
     for (i, r) in rain.iter().enumerate() {
-        s.seen[i][3] = lerp(s, &refl, i);
+        s.state.cloud[i] = lerp(s, &refl, i);
         let area = w.mesh.cells().area()[i];
         follow(&mut w.rain[i], (r / (area * dt)) as f32, ema);
     }
@@ -268,7 +268,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
     let mut pass = Pass::new(w, s, henry.iter().map(|h| h.1).collect());
     for i in 0..n {
-        let (t, j, tl, area) = (s.tg[i], w.mesh.up(i, 0, AIR), s.tl[i], w.mesh.cells().area()[i]);
+        let (t, j, tl, area) = (s.state.tg[i], w.mesh.up(i, 0, AIR), s.tl[i], w.mesh.cells().area()[i]);
         let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.ground[k * n + i] * wet(s, k, i), v + w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
         for (x, &(gi, k)) in henry.iter().enumerate() {
             let (a, sp) = (w.ground[k * n + i], s.sp[k]);

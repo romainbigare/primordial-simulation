@@ -274,7 +274,7 @@ pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
     let mut wall = vec![0.0; w.chem.ns()];
     wall[k] = kg / w.chem.subs[k].molar_mass;
     assert!(w.ground[k * n + i] > wall[k], "the cell holds less than the part");
-    let e = wall[k] * w.chem.subs[k].cp * w.life.env[i][0];
+    let e = wall[k] * w.chem.subs[k].cp * w.t_ground_last(i);
     w.ground[k * n + i] -= wall[k];
     w.e_ground[i] -= e;
     bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0)

@@ -83,7 +83,7 @@ impl Ctx<'_> {
     /// share no node, so each is solved from the state before the direction (in parallel, with `threads`) into a row
     /// per line, and the rows are booked in the order of the lines.
     fn sweep(&self, lines: &[Vec<Line>; 2], mut st: State, order: [usize; 2]) -> Moved {
-        let (s, air, ng, na, nl) = (self.s, self.air, self.s.gas.len(), self.air.n(), self.air.a().len());
+        let (s, air, ng, na, nl) = (self.s, self.air, self.s.state.gas.len(), self.air.n(), self.air.a().len());
         let mut m = Moved { mol: vec![0.0; ng * nl], heat: vec![0.0; nl], paid: vec![0.0; na] };
         let mut push = vec![[0.0; 3]; nl];
         for dir in order {
@@ -104,7 +104,7 @@ impl Ctx<'_> {
                     let (a, b) = (air.a()[l] as usize, air.b()[l] as usize);
                     let mut moved = 0.0;
                     for t in 0..ng {
-                        let (f, sp) = (sign * row[t * len + p], s.sp[s.gas[t]]);
+                        let (f, sp) = (sign * row[t * len + p], s.sp[s.state.gas[t]]);
                         (st.x[t * na + a], st.x[t * na + b]) = (st.x[t * na + a] - f, st.x[t * na + b] + f);
                         (st.nt[a], st.nt[b]) = (st.nt[a] - f, st.nt[b] + f);
                         (st.capa[a], st.capa[b]) = (st.capa[a] - f * sp.cp, st.capa[b] + f * sp.cp);
@@ -126,7 +126,7 @@ impl Ctx<'_> {
     /// Solve `line` from `st` into `row`: per link p of the line and gas t the amount it carries along the line,
     /// `row[t * len + p]`, mol, and the heat, `row[gases * len + p]`, J.
     fn solve(&self, st: &State, push: &[[f64; 3]], line: &Line, ln: &mut Lane, len: usize, row: &mut [f64]) {
-        let (s, air, n, ng, na, dt) = (self.s, self.air, line.nodes.len(), self.s.gas.len(), self.air.n(), self.dt);
+        let (s, air, n, ng, na, dt) = (self.s, self.air, line.nodes.len(), self.s.state.gas.len(), self.air.n(), self.dt);
         let node = |p: usize| line.nodes[p] as usize;
         ln.push.clear();
         for (p, &l) in line.links.iter().enumerate() {

@@ -131,7 +131,7 @@ fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
     let (cfg, n, dt) = (at.cfg, at.area.len(), at.dt);
     let adt = at.area[i] * dt;
     // The air this cell sees, and its temperature where it touches the ground.
-    let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], at.air_of[i] as usize);
+    let ([gam, zair, f, ta], c, t, j) = (s.seen[i], s.state.cloud[i], s.state.tg[i], at.air_of[i] as usize);
     let ta = ta + s.ta[j] - s.ta0[j];
     let tl = (ta - gam * (s.head[i] - zair)).max(1.0);
     let (down, emit) = (glow(f, tl, &s.lay[i][0]), glow(f, tl, &s.lay[i][1]));
@@ -152,13 +152,13 @@ fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
     let t3 = SIGMA * t * t * t;
     let surface = |r: f64| if r > 0.0 { (t / r + sw + down + 3.0 * t3 * t + cfg.sensible * tl) / (1.0 / r + 4.0 * t3 + cfg.sensible) } else { t };
     let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), cfg.sensible * (ts - tl));
-    let mut ts = surface(if s.pk[i] != NONE { 0.0 } else { adt / s.cap[i] } + s.rc[i]);
+    let mut ts = surface(if s.state.pk[i] != NONE { 0.0 } else { adt / s.cap[i] } + s.rc[i]);
     // A plateau holds the node only while its fusion enthalpy lasts: a step that would freeze
     // (or melt) more than the node holds takes it off, and its heat capacity holds it back.
-    if s.pk[i] != NONE {
-        let ((up, hs), lat) = (flux(ts), at.ground[s.pk[i] * n + i] * s.sp[s.pk[i]].lf);
+    if s.state.pk[i] != NONE {
+        let ((up, hs), lat) = (flux(ts), at.ground[s.state.pk[i] * n + i] * s.sp[s.state.pk[i]].lf);
         let net = adt * (sw + down - up - hs);
-        if net < -s.phi[i] * lat || net > (1.0 - s.phi[i]) * lat {
+        if net < -s.state.phi[i] * lat || net > (1.0 - s.state.phi[i]) * lat {
             ts = surface(adt / s.cap[i] + s.rc[i]);
         }
     }

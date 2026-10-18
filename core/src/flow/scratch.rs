@@ -8,10 +8,10 @@ use crate::chem::Chemistry;
 use crate::solve::downhill::Order;
 use crate::solve::spread::Spread;
 use crate::{World, AIR};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Sp {
     /// Heat capacity, J/(mol K)
     pub(super) cp: f64,
@@ -35,7 +35,7 @@ pub(super) struct Sp {
 
 /// The fusion enthalpy a ground node holds off a plateau, and the energies between which it
 /// holds it (until the amounts change).
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Latent {
     /// Fusion enthalpy held by what is molten, J
     pub(super) held: f64,
@@ -92,18 +92,19 @@ impl FlowView<'_> {
     }
 }
 
-/// Working memory of the law, rebuilt from the world when missing. It is saved with the world
-/// (but for the fields marked `serde(skip)`: tables `tables` rebuilds and space used within a
-/// call): the slower parts of the law run from what it held at their last turn, so a resumed run
-/// matches an unbroken one. Ground fields are per ground node, air fields per air node.
+/// What Flow keeps from one step to a later one, and so saves with the world: the plateaus of its ground nodes as its
+/// last step solved them (every law and the tape read that temperature, `World::t_ground_last`, the survey before
+/// Flow's next step), the clouds its last exchange left (the next radiation reads them), and what its last refresh
+/// found present (read until the next refresh). Fields per ground node.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Scratch {
-    /// The substances present changed: rebuild the state of ground and air at the next step.
-    #[serde(skip)]
-    pub(super) stale: bool,
-    /// The numbers of each substance.
-    #[serde(skip)]
-    pub(super) sp: Vec<Sp>,
+pub(super) struct State {
+    /// Temperature of each ground node, K.
+    pub(super) tg: Vec<f64>,
+    /// Substance held at its melting point in each ground node (or `NONE`), and its molten share.
+    pub(super) pk: Vec<usize>,
+    pub(super) phi: Vec<f64>,
+    /// Reflectance of the clouds over each ground cell.
+    pub(super) cloud: Vec<f64>,
     /// Substances present in loose ground, in order (`refresh`; exchange and liquid add new ones).
     pub(super) loose: Vec<usize>,
     /// Loose substances that stay solid and cannot evaporate, and the others in order of melting point.
@@ -114,17 +115,25 @@ pub struct Scratch {
     /// Substances present in bonded ground, and in the air (or able to evaporate into it).
     pub(super) bedk: Vec<usize>,
     pub(super) gas: Vec<usize>,
-    /// Heat capacity of the skin of each ground node's bed, J/K (at every step, `land::ground_state`).
-    pub(super) skin: Vec<f64>,
     /// Bonded ground of each ground node.
     pub(super) bed: Vec<Bed>,
+}
+
+/// Working memory of the law: its state (`State`), the only part saved with the world, and caches. A cache is rebuilt
+/// from the world and the state at each liquid step (`flow::radiate`), and at once when missing (`flow::ensure`): a
+/// snapshot is taken at a month's start, where a liquid step comes first (`docs/tape.md`), so a resumed run matches an
+/// unbroken one. Ground fields are per ground node, air fields per air node.
+#[derive(Clone, Debug, Default)]
+pub struct Scratch {
+    pub(super) state: State,
+    /// The substances present changed: rebuild the state of ground and air at the next step.
+    pub(super) stale: bool,
+    /// The numbers of each substance.
+    pub(super) sp: Vec<Sp>,
+    /// Heat capacity of the skin of each ground node's bed, J/K (at every step, `land::ground_state`).
+    pub(super) skin: Vec<f64>,
     /// Heat capacity of each ground node, J/K (from the amounts at every step; moves keep it).
     pub(super) cap: Vec<f64>,
-    /// Temperature of each ground node, K.
-    pub(super) tg: Vec<f64>,
-    /// Substance held at its melting point in each ground node (or `NONE`), and its molten share.
-    pub(super) pk: Vec<usize>,
-    pub(super) phi: Vec<f64>,
     /// Fusion enthalpy held off a plateau, per ground node.
     pub(super) latent: Vec<Latent>,
     /// Height of the solid surface, and of the surface of all the liquid (pores filled first), m.
@@ -137,24 +146,19 @@ pub struct Scratch {
     /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
     pub(super) rc: Vec<f64>,
     /// Cells by the head of the liquid that may run off, highest first: the order of the liquid's pass (`liquid`).
-    #[serde(skip)]
     pub(super) order: Order,
     /// The work space of `solve::spread` (heat through the ground, the liquid under the surface, the wind on a mesh).
-    #[serde(skip)]
     pub(super) spread: Spread,
     /// The table of the saturation pressure of each substance, as far up as the exchange has asked (`air::Sat`).
-    #[serde(skip)]
     pub(super) sat: Vec<air::Sat>,
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
-    #[serde(skip)]
     pub(super) near: Vec<[u32; 4]>,
-    #[serde(skip)]
     pub(super) wt: Vec<[f64; 4]>,
     /// Temperature of the air touching the ground, K (radiation; exchange reads it).
     pub(super) tl: Vec<f64>,
     /// The air each ground cell sees (`air::state`): temperature drop, K/m; mean height of the air,
-    /// m; share of heat radiation it absorbs; cloud reflectance (exchange sets it); temperature, K.
-    pub(super) seen: Vec<[f64; 5]>,
+    /// m; share of heat radiation it absorbs; temperature, K.
+    pub(super) seen: Vec<[f64; 4]>,
     /// How much colder than the air touching the ground each layer of the air over a cell is,
     /// [down, up], K (`air::column`).
     pub(super) lay: Vec<[[f64; air::LAYERS]; 2]>,
@@ -179,48 +183,61 @@ pub struct Scratch {
     pub(super) hk: Vec<f64>,
     pub(super) split: Vec<f64>,
     /// Work space of radiation (a row per ground cell).
-    #[serde(skip)]
     pub(super) rad: Vec<f64>,
+}
+
+/// Only the state is saved (`Scratch`).
+impl Serialize for Scratch {
+    fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
+        self.state.serialize(to)
+    }
+}
+
+/// A loaded world has the state and no cache.
+impl<'de> Deserialize<'de> for Scratch {
+    fn deserialize<D: Deserializer<'de>>(from: D) -> Result<Self, D::Error> {
+        Ok(Scratch { state: State::deserialize(from)?, ..Default::default() })
+    }
 }
 
 impl Scratch {
     /// Temperature of each ground node and of each air node at the last flow step, K (empty before it).
     pub fn temps(&self) -> (&[f64], &[f64]) {
-        (&self.tg, &self.ta)
+        (&self.state.tg, &self.ta)
     }
     /// Temperature of ground node `i` at the last flow step, K, and the substance on its melting
     /// plateau with its molten share (none before the first step).
     pub(crate) fn plateau(&self, i: usize) -> Option<(f64, Option<(usize, f64)>)> {
-        let t = *self.tg.get(i)?;
-        Some((t, (self.pk[i] != NONE).then(|| (self.pk[i], self.phi[i]))))
+        let t = *self.state.tg.get(i)?;
+        Some((t, (self.state.pk[i] != NONE).then(|| (self.state.pk[i], self.state.phi[i]))))
     }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        FlowView { tg: &self.tg, skin: &self.skin, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.pk }
+        FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.state.pk }
     }
     /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
     /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that
     /// dissolve in the liquid (`air::dissolve`), which move with it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {
-        self.loose.iter().copied().filter(|&k| self.sp[k].melt <= tmax && (self.sp[k].boil > tmin || dissolved && chem.subs[k].solubility > 0.0)).collect()
+        self.state.loose.iter().copied().filter(|&k| self.sp[k].melt <= tmax && (self.sp[k].boil > tmin || dissolved && chem.subs[k].solubility > 0.0)).collect()
     }
     /// Loose substances solid in some node: melting above the coldest, `tmin`, K.
     pub(super) fn solids(&self, tmin: f64) -> Vec<usize> {
-        self.loose.iter().copied().filter(|&k| self.sp[k].melt > tmin).collect()
+        self.state.loose.iter().copied().filter(|&k| self.sp[k].melt > tmin).collect()
     }
     /// `k` has come into the loose ground: add it to `loose` and `vary` (at the end of `vary`,
     /// whose order sets the order of sums over it, or `in_order` of melting point).
     pub(super) fn add_loose(&mut self, k: usize, in_order: bool) {
-        if self.loose.contains(&k) {
+        if self.state.loose.contains(&k) {
             return;
         }
-        let at = self.loose.partition_point(|&x| x < k);
-        self.loose.insert(at, k);
+        let at = self.state.loose.partition_point(|&x| x < k);
+        self.state.loose.insert(at, k);
         if in_order {
-            let at = self.vary.partition_point(|&x| self.sp[x].melt < self.sp[k].melt);
-            self.vary.insert(at, k);
+            let at = self.state.vary.partition_point(|&x| self.sp[x].melt < self.sp[k].melt);
+            self.state.vary.insert(at, k);
         } else {
-            self.vary.push(k);
+            self.state.vary.push(k);
         }
     }
 }
@@ -242,32 +259,32 @@ const V_MIN: f64 = 1e-9;
 const COND_MIN: f64 = 1e-3;
 
 /// Every few months: which substances are present, the slow-changing bonded ground and fixed
-/// solids, and (once) the state vectors.
+/// solids.
 pub(super) fn refresh(w: &World, s: &mut Scratch) {
     let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
-    let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) };
+    let tmax = if s.state.tg.len() == n { range(&s.state.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) };
     let up = |k: usize| may_evaporate(w, k, tmax);
-    s.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
-    s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax + T_MARGIN && !up(k)).collect();
-    s.vary = s.loose.iter().copied().filter(|k| !s.fixed.contains(k)).collect();
-    s.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
-    s.bedk = (0..ns).filter(|&k| any(&w.bed, n, k)).collect();
-    let gas = (0..ns).filter(|&k| any(&w.air, na, k) || (s.loose.contains(&k) && up(k))).collect();
-    s.stale |= gas != s.gas;
-    s.gas = gas;
-    s.fix = vec![[0.0; 2]; n];
-    for &k in &s.fixed {
+    s.state.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
+    s.state.fixed = s.state.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax + T_MARGIN && !up(k)).collect();
+    s.state.vary = s.state.loose.iter().copied().filter(|k| !s.state.fixed.contains(k)).collect();
+    s.state.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
+    s.state.bedk = (0..ns).filter(|&k| any(&w.bed, n, k)).collect();
+    let gas = (0..ns).filter(|&k| any(&w.air, na, k) || (s.state.loose.contains(&k) && up(k))).collect();
+    s.stale |= gas != s.state.gas;
+    s.state.gas = gas;
+    s.state.fix = vec![[0.0; 2]; n];
+    for &k in &s.state.fixed {
         let (v, r) = (s.sp[k].v[0], s.sp[k].refl[0]);
-        for (f, &a) in s.fix.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
+        for (f, &a) in s.state.fix.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
             f[0] += a * v;
             f[1] += a * v * r;
         }
     }
-    s.bed = (0..n)
+    s.state.bed = (0..n)
         .map(|i| {
             let (mut v, mut r, mut c) = (0.0, 0.0, 0.0);
-            for &k in &s.bedk {
+            for &k in &s.state.bedk {
                 let (b, p) = (w.bed[k * n + i], &s.sp[k]);
                 v += b * p.v[0];
                 r += b * p.v[0] * p.refl[0];
@@ -276,18 +293,26 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
             Bed { vol: v, refl: r / v.max(V_MIN), cond: c / v.max(V_MIN) }
         })
         .collect();
-    if s.cap.len() == n {
-        return;
-    }
-    (s.pk, s.phi) = (vec![NONE; n], vec![0.0; n]);
+}
+
+/// The state of a new world's ground nodes, before its first step: no plateau, no clouds.
+pub(super) fn fresh(w: &World, s: &mut Scratch) {
+    let n = w.mesh.cells().n();
+    let st = &mut s.state;
+    (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![NONE; n], vec![0.0; n], vec![0.0; n]);
+}
+
+/// Room for the caches of every ground and air node (`ensure` then builds them).
+pub(super) fn room(w: &World, s: &mut Scratch) {
+    let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0 }; n];
-    for v in [&mut s.skin, &mut s.cap, &mut s.tg, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
+    for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
         *v = vec![0.0; n];
     }
     for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {
         *v = vec![0.0; na];
     }
-    s.seen = vec![[0.0; 5]; n];
+    s.seen = vec![[0.0; 4]; n];
 }
 
 /// Tables that depend on the map and the chemistry alone: substance constants, and the four air nodes each ground

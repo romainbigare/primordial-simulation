@@ -571,6 +571,13 @@ The work of `docs/foundation/plan.md`, one line per task.
   (it stood for 3), creep also runs at the world's start (it waited a year), and the trace gases turn at days 0, 12,
   24 of each month (at every fourth exchange since the start before). 64 x 64, seed 1, 20 years: land within 0.02 K,
   rain on land within 0.4%, rivers +2%, plant members within 1.3%. Snapshot version 18, golden re-pinned.
+- State apart from cache: Flow's scratch saves only its state (`flow::scratch::State`: the plateaus of its last step,
+  the clouds, what the last refresh found present); its caches are rebuilt at the next liquid step, which comes first
+  at a month's start, where snapshots are taken. The survey's `Life::sum`, `env` and `seen` are not saved either.
+  `Body::k` stays saved: a body's numbers are empty until its first update and other bodies read them so, which a
+  rebuild on load would change. Same history (`series.csv` and `months.csv` byte for byte, 64 x 64, seed 1, 20 years;
+  a resume from year 10 ends on the same world); the year-20 snapshot 43.97 to 42.93 MB. Snapshot version 19, golden
+  re-pinned (the saved world changed).
 
 **Owner's decisions after Phase A**
 

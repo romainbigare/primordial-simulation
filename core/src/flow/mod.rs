@@ -112,20 +112,21 @@ fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
     w.scratch = s;
 }
 
-/// Build the working memory of the law where it is missing (a new world, a resumed one, a test
-/// that calls another law alone): its tables and, where it has none, the state of every ground and
-/// air node from the world now. Every law then reads the same state of the last flow step.
+/// Build the working memory of the law where it is missing (a new world, a loaded one, a test that calls another law
+/// alone): its tables; for a new world its state (`scratch::State`); and its caches, from the world now as at a liquid
+/// step. Every law then reads the same state of the last flow step.
 pub(crate) fn ensure(w: &mut World) {
     let n = w.mesh.cells().n();
     let mut s = std::mem::take(&mut w.scratch);
     if s.near.len() != n {
         tables(w, &mut s);
     }
-    let new = s.cap.len() != n;
-    if new {
+    if s.state.tg.len() != n {
         scratch::refresh(w, &mut s);
+        scratch::fresh(w, &mut s);
     }
-    if new {
+    if s.cap.len() != n {
+        scratch::room(w, &mut s);
         ground_state(w, &mut s, true);
         air::state(w, &mut s, true);
     }

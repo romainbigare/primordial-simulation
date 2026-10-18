@@ -115,7 +115,7 @@ pub struct World {
     /// Raw physical facts since the shell last drained them (not part of the saved state)
     #[serde(skip)]
     pub events: Vec<Event>,
-    /// Working memory of the laws, rebuilt when missing (saved, so a resumed run goes on the same)
+    /// Flow's working memory: its state (saved) and its caches (rebuilt when missing, `flow::Scratch`)
     pub scratch: flow::Scratch,
     /// What Change books at a step, kept between steps (not saved)
     #[serde(skip)]

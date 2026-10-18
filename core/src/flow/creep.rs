@@ -29,7 +29,7 @@ struct Slides {
 /// documented speed).
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let n = w.mesh.cells().n();
-    let sol = s.solids(range(&s.tg).0);
+    let sol = s.solids(range(&s.state.tg).0);
     let soft: Vec<f64> = sol.iter().map(|&k| 1.0 / (w.chem.subs[k].hardness + HARD_MIN)).collect();
     let amt: Vec<f64> = sol.iter().flat_map(|&k| w.ground[k * n..(k + 1) * n].iter().copied()).collect();
     let mut mob = vec![0.0; n];
@@ -62,7 +62,7 @@ fn slide(w: &World, s: &mut Scratch, (a, b): (usize, usize), dist: f64, (sol, so
     }
     let r = w.cfg.creep * dz / dist * area[a].sqrt() * dt / area[a] * bare_share(w, a);
     let f = (area[a] * dz * CREEP_LEVEL / (r * mob[a])).min(1.0);
-    let (ta, tb) = (s.tg[a], s.tg[b]);
+    let (ta, tb) = (s.state.tg[a], s.state.tg[b]);
     // What moves, summed over substances: heat capacity, mass, mobility, rise of each surface and head.
     let (mut c, mut mass, mut moved, mut ua, mut ub) = (0.0, 0.0, 0.0, [0.0; 2], [0.0; 2]);
     let mut out = vec![0.0; sol.len()];

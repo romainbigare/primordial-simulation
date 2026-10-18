@@ -16,7 +16,10 @@ pub struct Life {
     free: Vec<u32>,
     /// Bodies in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
-    /// Per cell, from the last survey: members, then their visible traits summed (mass and capture area are totals)
+    /// Per cell, from the last survey: members, then their visible traits summed (mass and capture area are totals).
+    /// The survey's caches here are not saved: a snapshot is taken at a month's start, where the survey builds them
+    /// all before any law reads them.
+    #[serde(skip)]
     pub sum: Vec<[f64; 7]>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
     #[serde(skip)]
@@ -28,8 +31,10 @@ pub struct Life {
     #[serde(skip)]
     pub keep: Vec<f32>,
     /// Per cell, from the last monthly survey: ground temperature, liquid depth, surface height
+    #[serde(skip)]
     pub env: Vec<[f64; 3]>,
     /// Per cell, from the last monthly survey: its loose substances as a brain perceives them, [cell * substances + k]
+    #[serde(skip)]
     pub seen: Vec<f32>,
     /// Per cell, from the last survey: what a brain perceives of it as a place to move to
     #[serde(skip)]
