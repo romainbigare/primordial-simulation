@@ -308,7 +308,8 @@ whose conductance became high because it was used a lot".
   one. The order inside one time is fixed and written once (as `schedule.rs` does now).
 - **One sleep and wake** for all nodes. A calm node sleeps until an alarm time, or until one of its amounts has grown
   by more than a share of what it held when it fell asleep (`Config::wake_share`, a speed setting). The look is a cheap
-  scan at the node's own law's step, not part of `apply`, so what Flow moves does not make Change slower. This replaces
+  scan at the node's own law's step, not part of `apply`, so the store does no work for the sleep, and a node wakes by
+  whatever brought the gain (Flow, bodies, parts). This replaces
   `change/screen.rs` and the bodies' due ring (`life.rs`, `RING`).
 
 **Idea 7. Shared maths that stays stable with big steps.**
@@ -538,9 +539,9 @@ stays only as a thin view until D9 removes it.
 | D8 | `World::pass` and `lanes.rs` become the first link field | `lanes.rs`, `world.rs` | 1 | Fingerprints unchanged |
 | D9 | Every law moves through the store: no law writes the arrays directly (the grep test of 5.2); `Grid` removed from the laws | all laws | 2 | The contract test passes |
 | — | **Phase check:** the island without life, against A2 | | 3 | Ranges hold; flow and change at least 2 times faster |
-| D11 | **The store only adds** (D9): each law that could ask a node for more than it holds stops doing so in its own code (a node limits only its own outgoing links); `apply` adds, sets rounding below zero to zero and counts it. Its copies, restores, rescans and the scaling of whole fluxes go | `store/`, the laws that call `apply` | 3 | Books exact; the golden runs re-pinned; `store/` about 300 code lines or fewer |
+| D11 | **The store only adds** (D9): each law that could ask a node for more than it holds stops doing so in its own code (a node limits only its own outgoing links); `apply` adds, sets rounding below zero to zero and counts it. Its copies, restores, rescans and the scaling of whole fluxes go | `store/`, the laws that call `apply` | 3 | Books exact; the golden runs re-pinned; `store/` within its allowance (400 code lines) |
 | D12 | **Wake by what a node gained since it fell asleep**, looked at by a scan at its law's step, not by `apply` (Idea 6); what bodies bring wakes a node too | `clock/sleep.rs`, `change/` | 3 | The sleep-against-no-sleep test passes, also with `wake_share` × 2 and ÷ 2 (D4) |
-| D13 | The work spaces kept between steps: `Spread` (land, pore liquid, wind), the vapour-pressure tables, Change's batches | `flow/`, `change/` | 1 | Fingerprints unchanged |
+| D13 | The work spaces kept between steps: `Spread` (land, pore liquid, wind), the vapour-pressure tables (one per gas, on a fixed grid of temperatures), Change's batches | `flow/`, `change/` | 2 | Same to rounding of the tables |
 
 **Deleted in this phase:** `change/screen.rs`; most of `flow/scratch.rs`; the sorted sweep, `pore_flow` and the
 sampled work (`WORK_MONTHS`) of `flow/liquid.rs`; the movers of `flow/drain.rs`; `ground.rs`'s `take_heat`; `grid.rs`;
