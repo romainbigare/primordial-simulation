@@ -27,7 +27,7 @@ pub(super) struct Mobile {
 
 /// The mobile liquid of every ground node, of the liquids `liq`; what boils below the coldest node, `tmin`, is gas.
 pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64) -> Mobile {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let mut m = Mobile { mol: vec![0.0; liq.len() * n], vol: vec![0.0; n] };
     for (q, &k) in liq.iter().enumerate() {
         let gas = s.sp[k].boil <= tmin;
@@ -43,7 +43,7 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64) -> Mobile
 /// Book `fluxes` through the store (`store::apply`), and bring the state of the ground nodes up to date for what that
 /// changed of their amounts (`Scratch::note`).
 pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
     ks.sort_unstable();
     ks.dedup();
@@ -51,7 +51,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     apply(w, fluxes, &[], &[]);
     for (q, &k) in ks.iter().enumerate() {
         for (i, (&now, &was)) in w.ground[k * n..(k + 1) * n].iter().zip(&before[q * n..(q + 1) * n]).enumerate().filter(|p| p.1 .0 != p.1 .1) {
-            s.note(k, i, now - was);
+            s.note(k, i, now - was, w.mesh.cells().area()[i]);
         }
     }
 }
@@ -68,12 +68,12 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
 
 /// The slope of the surface of each ground node down to its steepest lower neighbour (by more than `still`), 0 for none.
 fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
-    let cells = w.grid.mesh().cells();
+    let cells = w.mesh.cells();
     let lower = |i: usize, l: u32, j: u32| {
         let dh = stand(s, i) - stand(s, j as usize);
         if dh > w.cfg.phys.still { dh / cells.dist()[l as usize] } else { 0.0 }
     };
-    (0..w.grid.n()).map(|i| (cells.around(i).0.iter().zip(cells.around(i).1)).map(|(&l, &j)| lower(i, l, j)).fold(0.0, f64::max)).collect()
+    (0..w.mesh.cells().n()).map(|i| (cells.around(i).0.iter().zip(cells.around(i).1)).map(|(&l, &j)| lower(i, l, j)).fold(0.0, f64::max)).collect()
 }
 
 /// The liquid that may run off, down the cells in order of their heads, highest first, in one pass (`solve::downhill`):
@@ -86,7 +86,7 @@ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
 /// (with what came in), and the head it loses heats the node from the world's potential energy. The power lost also carries loose solids, drops what is
 /// over capacity and breaks bonded ground (`load`, `wear`).
 fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
-    let (n, area, ph, g) = (w.grid.n(), s.area, w.cfg.phys, w.cfg.gravity);
+    let (n, area, ph, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.phys, w.cfg.gravity);
     let mob = mobile(w, s, liq, tmin);
     // Rows that move together, side by side for each node (`q[i * width + r]`): the liquid that may run off, of each of
     // `liq`; the load, of each of `sol`; their heat, J; and the volume of the liquid, m³ (for the heads).
@@ -96,7 +96,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let (heat, vol, width) = (rows, rows + 1, rows + 2);
     let mut q = vec![0.0; width * n];
     for i in 0..n {
-        let (pores, own) = (s.pd[i] * area, mob.vol[i] - runs[i]);
+        let (pores, own) = (s.pd[i] * area[i], mob.vol[i] - runs[i]);
         let lp = own.min(pores);
         let free = if s.head[i] > s.z[i] { lp - ph.field * pores } else { 0.0 };
         let hill = if free > 0.0 && slope[i] > 0.0 { free.min(lp * one_minus_exp(ph.seep * slope[i] * dt / (ph.porosity * ph.hill))) } else { 0.0 };
@@ -106,10 +106,10 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         }
         q[i * width + vol] = mob.vol[i] * off;
     }
-    let head = |q: &[f64], j: usize| s.z[j] + q[j * width + vol] / area;
+    let head = |q: &[f64], j: usize| s.z[j] + q[j * width + vol] / area[j];
     let mut order = std::mem::take(&mut s.order);
     order.update(&(0..n).map(|i| head(&q, i)).collect::<Vec<_>>());
-    let (q0, cells) = (q.clone(), w.grid.mesh().cells());
+    let (q0, cells) = (q.clone(), w.mesh.cells());
     let adj = Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
     let (mut power, mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], Vec::new());
     let mut crossed = Crossed::default();
@@ -145,7 +145,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         }
         let (mut out, mut drop) = (0.0, 0.0);
         for (sh, o) in share.iter_mut().zip(&outs).filter(|p| p.1[0] > 0.0) {
-            *sh = (sv * o[0] / wsum).min(area * o[1]) / sv;
+            *sh = (sv * o[0] / wsum).min(area[i] * o[1]) / sv;
             (out, drop) = (out + *sh, drop + *sh * o[2]);
         }
         // The node's temperature with what came in (no warmer than at the last `ground_state`).
@@ -159,7 +159,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         let t = ((ww.e_ground[i] + q[heat] - held) / c.max(1.0)).min(ss.tg[i]).max(T_FLOOR);
         let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * ss.sp[ks[r]].mm).sum::<f64>();
         // The work, on the bed below the liquid left standing (which hides it).
-        let left = sv * (1.0 - out) / area;
+        let left = sv * (1.0 - out) / area[i];
         let bedwork = g * drop * kg(q, 0..nl) * ph.hide[1] / (ph.hide[1] + left);
         worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
         q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
@@ -234,18 +234,19 @@ fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops:
 /// off was in the bed's skin, whose heat is the node's: it keeps it, and joins the loose ground with
 /// its heat capacity (`Scratch::note`); the bed's surface falls by its volume.
 fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     for bi in 0..s.bedk.len() {
         let (k, bv) = (s.bedk[bi], s.bed[i].vol);
         let b = w.bed[k * n + i];
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
             let m = (v / s.sp[k].v[0]).min(MOST_TAKEN * b);
-            let dz = m * s.sp[k].v[0] / s.area;
+            let area = w.mesh.cells().area()[i];
+            let dz = m * s.sp[k].v[0] / area;
             w.loosen(k, i, m);
             s.bed[i].vol -= m * s.sp[k].v[0];
             s.add_loose(k, false);
-            s.note(k, i, m);
+            s.note(k, i, m, area);
             lift(s, i, [-dz, -dz]);
         }
     }

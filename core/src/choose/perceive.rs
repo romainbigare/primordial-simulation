@@ -61,12 +61,12 @@ pub(super) fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut
         if cnt == nseen {
             break;
         }
-        let Some(j) = (if q == 0 { Some(i) } else { w.grid.step(i, DIRS[(side + q) % 8]) }) else { continue };
+        let Some(j) = (if q == 0 { Some(i) } else { w.map.step(i, DIRS[(side + q) % 8]) }) else { continue };
         for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
             let ob = &w.life.bodies[o as usize];
             let their = bond::room(w, ob);
             let walls = if room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { room.map_or(0.0, |r| r.1.closed).max(their.map_or(0.0, |r| r.1.closed)) };
-            let cover = (w.canopy[j] as f64 - ob.vis[1] as f64 * ob.n() / w.grid.area()).max(0.0);
+            let cover = (w.canopy[j] as f64 - ob.vis[1] as f64 * ob.n() / w.mesh.cells().area()[j]).max(0.0);
             if cnt < nseen && (walls == 0.0 || rng.f64() as f32 >= walls) && (cover <= 0.0 || rng.f64() < (-cover).exp()) {
                 (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);
             }
@@ -109,7 +109,7 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
     let none = SHARE_SENSE * ln(STORE_FLOOR);
     x.extend((0..ns).map(|k| if b.store[k] > 0.0 { SHARE_SENSE * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - b.k.minln[k]));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
-    let crowd = ln(1.0 + (w.life.sum[i][1] / w.grid.area()) as f32);
+    let crowd = ln(1.0 + (w.life.sum[i][1] / w.mesh.cells().area()[i]) as f32);
     let (dt, lit, sun) = ((temp - env[0]) as f32, lived.lit as f32, w.season() as f32 * std::f32::consts::TAU);
     x.extend([dt / WARM_SCALE, ln(pm as f32) / LN_MASS - 1.0, ln(1.0 + lit) / LN_LIGHT, ln(1.0 + env[1] as f32), (env[0] as f32 - T_MID) / T_SPAN, crowd, sun.sin(), sun.cos()]);
     x.extend(heard);
@@ -122,8 +122,8 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
 /// are added per move, in places 0 and 6).
 pub fn cells(w: &mut World) {
     let life = &w.life;
-    let cellf = life.sum.iter().zip(&life.env).map(|(c, e)| {
-        let resist = 1.0 + thickness(w, c[1]) as f32;
+    let cellf = life.sum.iter().zip(&life.env).zip(w.mesh.cells().area()).map(|((c, e), &area)| {
+        let resist = 1.0 + thickness(w, c[1], area) as f32;
         let c = c.map(|v| v as f32);
         let n = c[0].max(1.0);
         let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / LN_LEAF } else { 0.0 };

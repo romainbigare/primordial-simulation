@@ -5,7 +5,7 @@ use super::super::land::{melted, wet};
 use super::super::scratch::may_evaporate;
 use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};
 use super::{air_temp, lerp, over_cell};
-use crate::grid::AIR;
+use crate::AIR;
 use crate::math::one_minus_exp;
 use crate::store::{apply, Batch, Class};
 use crate::units::{P_REF, R_GAS};
@@ -96,7 +96,7 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
 /// their saturation pressures and evaporation per unit of deficit: a trace gas only at its `turn`,
 /// for the time `since` it last moved, the others for `dt`.
 fn active(w: &World, s: &Scratch, henry: &[(usize, usize)], (dt, turn, since): (f64, bool, f64)) -> Vec<Active> {
-    let (na, (tmin, tmax), tl) = (w.grid.na(), range(&s.tg), range(&s.tl));
+    let (na, (tmin, tmax), tl) = (w.mesh.level(AIR).n(), range(&s.tg), range(&s.tl));
     let (lo, hi) = (tmin.min(tl.0), tmax.max(tl.1));
     let all: f64 = s.nt.iter().sum();
     (0..s.gas.len())
@@ -129,21 +129,21 @@ struct Pass {
 impl Pass {
     /// A pass of the gases `ks`, from the air now.
     fn new(w: &World, s: &Scratch, ks: Vec<usize>) -> Pass {
-        let na = w.grid.na();
+        let na = w.mesh.level(AIR).n();
         let left: Vec<f64> = ks.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
         let ta = (0..na).map(|j| air_temp(w.e_air[j], s.capa[j])).collect();
         let links = Batch::new([Class::Ground, Class::Air], &ks.iter().map(|&k| k as u16).collect::<Vec<_>>());
         Pass { ks, g: w.cfg.gravity, links, lift: vec![0.0; na], ta, seen: left.clone(), left }
     }
-    /// `m` mol of gas `x` of the pass go from ground node `i` up into air node `j` (negative `m`: down) with `heat` J
-    /// that leaves the ground; the state of both nodes follows (`Scratch::note`, or for a gas that was `dissolved`,
-    /// `Scratch::hold`; and the air's sums).
-    fn cross(&mut self, s: &mut Scratch, x: usize, (i, j): (usize, usize), (m, heat): (f64, f64), dissolved: bool) {
+    /// `m` mol of gas `x` of the pass go from ground node `i`, of `area` m², up into its air node `j` (negative `m`:
+    /// down) with `heat` J that leaves the ground; the state of both nodes follows (`Scratch::note`, or for a gas that
+    /// was `dissolved`, `Scratch::hold`; and the air's sums).
+    fn cross(&mut self, s: &mut Scratch, x: usize, (i, j, area): (usize, usize, f64), (m, heat): (f64, f64), dissolved: bool) {
         let (na, k) = (self.lift.len(), self.ks[x]);
         let p = s.sp[k];
         self.links.add((i, j), k as u16, (m, heat));
-        (self.lift[j], self.left[x * na + j]) = (self.lift[j] + m * p.mm * s.view().lift(i, self.g), self.left[x * na + j] + m);
-        if dissolved { s.hold(k, i, -m) } else { s.note(k, i, -m) }
+        (self.lift[j], self.left[x * na + j]) = (self.lift[j] + m * p.mm * s.view().lift(i, j, self.g), self.left[x * na + j] + m);
+        if dissolved { s.hold(k, i, -m) } else { s.note(k, i, -m, area) }
         (s.capa[j], s.nt[j], s.mass[j]) = (s.capa[j] + m * p.cp, s.nt[j] + m, s.mass[j] + m * p.mm);
     }
     /// Book the pass through the store.
@@ -157,16 +157,16 @@ impl Pass {
 /// The amount of gas `x` of `act` in the column above ground cell `i` (of the air as `pass` sees
 /// it), mol, and the height it fills near the ground, m.
 fn above(w: &World, s: &Scratch, pass: &Pass, (a, x): (&Active, usize), i: usize) -> (f64, f64) {
-    let na = w.grid.na();
+    let na = w.mesh.level(AIR).n();
     (lerp(s, &pass.seen[x * na..(x + 1) * na], i) * over_cell(w, s, i), lerp(s, &s.hk[a.gi * na..(a.gi + 1) * na], i))
 }
 
 /// Evaporation from every ground node, booked as one pass (`Pass`).
 fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let mut pass = Pass::new(w, s, act.iter().map(|a| a.k).collect());
     for i in 0..n {
-        let (t, j, tl, area) = (s.tg[i], w.grid.air_of(i), s.tl[i], w.grid.mesh().cells().area()[i]);
+        let (t, j, tl, area) = (s.tg[i], w.mesh.up(i, 0, AIR), s.tl[i], w.mesh.cells().area()[i]);
         let c_cond = area / R_GAS;
         for (x, ac) in act.iter().enumerate() {
             let (k, a) = (ac.k, w.ground[ac.k * n + i]);
@@ -196,7 +196,7 @@ fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
                 continue;
             }
             // The ground pays the gas's heat and its fusion and vaporisation enthalpy; the air gets the gas's heat.
-            pass.cross(s, x, (i, j), (m, m * (sp.cp * t + sp.lf + sp.lv)), false);
+            pass.cross(s, x, (i, j, area), (m, m * (sp.cp * t + sp.lf + sp.lv)), false);
         }
     }
     pass.book(w);
@@ -206,11 +206,12 @@ fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
 /// the air touching it, booked as one pass (`Pass`). Returns which gases of `act` rained, what
 /// condensed on each ground node, mol, and in each air node, mol and mol × reflectance.
 fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> (Vec<bool>, Vec<f64>, Vec<[f64; 2]>) {
-    let (n, na) = (w.grid.n(), w.grid.na());
+    let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let (mut rained, mut pass) = (vec![false; act.len()], Pass::new(w, s, act.iter().map(|a| a.k).collect()));
     let (mut rain, mut cloud) = (vec![0.0; n], vec![[0.0; 2]; na]);
     for (i, rain) in rain.iter_mut().enumerate() {
-        let (j, tl, c_cond) = (w.grid.air_of(i), s.tl[i], w.grid.mesh().cells().area()[i] / R_GAS);
+        let (j, tl, area) = (w.mesh.up(i, 0, AIR), s.tl[i], w.mesh.cells().area()[i]);
+        let c_cond = area / R_GAS;
         for (x, ac) in act.iter().enumerate() {
             if !s.cond[ac.gi] {
                 continue;
@@ -223,7 +224,7 @@ fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> (Vec<bool>, Vec<f
             }
             let (sp, tair) = (s.sp[k], pass.ta[j]);
             // Condensing frees the vaporisation enthalpy into the air; the liquid keeps its fusion.
-            pass.cross(s, x, (i, j), (-m, -m * (sp.cp * tair + sp.lf)), false);
+            pass.cross(s, x, (i, j, area), (-m, -m * (sp.cp * tair + sp.lf)), false);
             *rain += m;
             cloud[j] = [cloud[j][0] + m, cloud[j][1] + m * sp.refl[0]];
             rained[x] = true;
@@ -237,7 +238,7 @@ fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> (Vec<bool>, Vec<f
 /// condenses, the more of its sky it covers (`cloud`: condensed in each air node, mol and mol ×
 /// reflectance). Also the yearly average of the rain on each cell (`rain`, mol).
 fn clouds(w: &mut World, s: &mut Scratch, dt: f64, (rain, cloud): (&[f64], &[[f64; 2]])) {
-    let air = w.grid.mesh().level(AIR).area();
+    let air = w.mesh.level(AIR).area();
     let refl: Vec<f64> = (cloud.iter().zip(air))
         .map(|(&[m, mr], a)| {
             let rate = m / (a * dt);
@@ -247,7 +248,7 @@ fn clouds(w: &mut World, s: &mut Scratch, dt: f64, (rain, cloud): (&[f64], &[[f6
     let ema = year_weight(w, dt);
     for (i, r) in rain.iter().enumerate() {
         s.seen[i][3] = lerp(s, &refl, i);
-        let area = w.grid.mesh().cells().area()[i];
+        let area = w.mesh.cells().area()[i];
         follow(&mut w.rain[i], (r / (area * dt)) as f32, ema);
     }
 }
@@ -261,11 +262,11 @@ fn clouds(w: &mut World, s: &mut Scratch, dt: f64, (rain, cloud): (&[f64], &[[f6
 /// the gas brings its heat; coming out takes them back. Dissolved gas moves with the liquid
 /// (`liquid`), may feed ground reactions (Law 2), and goes back to the air only here.
 fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
-    let (n, na) = (w.grid.n(), w.grid.na());
+    let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
     let mut pass = Pass::new(w, s, henry.iter().map(|h| h.1).collect());
     for i in 0..n {
-        let (t, j, tl, area) = (s.tg[i], w.grid.air_of(i), s.tl[i], w.grid.mesh().cells().area()[i]);
+        let (t, j, tl, area) = (s.tg[i], w.mesh.up(i, 0, AIR), s.tl[i], w.mesh.cells().area()[i]);
         let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.ground[k * n + i] * wet(s, k, i), v + w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
         for (x, &(gi, k)) in henry.iter().enumerate() {
             let (a, sp) = (w.ground[k * n + i], s.sp[k]);
@@ -286,7 +287,7 @@ fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (
             // The gas brings its heat (at the air's temperature, or the ground's when it comes out), and dissolving frees
             // its fusion and vaporisation enthalpy into the node.
             let tq = if m > 0.0 { pass.ta[j] } else { t };
-            pass.cross(s, x, (i, j), (-m, -m * (sp.cp * tq + sp.lf + sp.lv)), true);
+            pass.cross(s, x, (i, j, area), (-m, -m * (sp.cp * tq + sp.lf + sp.lv)), true);
         }
     }
     pass.book(w);

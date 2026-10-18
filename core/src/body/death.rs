@@ -7,7 +7,7 @@ use crate::{bond, World};
 /// Remains go to the ground node as loose amounts, with the body's heat.
 pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
     bond::let_go(w, &mut b, false);
-    let (n, i) = (w.grid.n(), b.cell as usize);
+    let (n, i) = (w.mesh.cells().n(), b.cell as usize);
     for (k, &a) in b.store.iter().enumerate() {
         w.ground[k * n + i] += a;
     }
@@ -21,7 +21,7 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
 /// Amounts `m` (mol of each substance, at most what it holds) go from body `b` to its cell's ground as loose amounts, with
 /// their heat and fusion enthalpy (`Body::heat_with`).
 pub(crate) fn to_ground(w: &mut World, b: &mut Body, m: &[f64]) {
-    let (n, i) = (w.grid.n(), b.cell as usize);
+    let (n, i) = (w.mesh.cells().n(), b.cell as usize);
     let q = b.heat_with(&w.chem, m);
     b.lose(&w.chem, m);
     for (k, &a) in m.iter().enumerate() {

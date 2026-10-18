@@ -2,7 +2,7 @@
 
 use crate::body::{self, Body, Layout, ALLOC, COPY_MASS, WET_TISSUE};
 use crate::chem::{Phase, Reaction};
-use crate::World;
+use crate::{World, AIR};
 
 /// Growth is building body matter, and past the size of maturity a share of it is offspring. A member makes matter
 /// (`Chemistry::build`) and pays `Physics::c_copy` per kg of matter made, through `body::pay` (the work leaves as heat),
@@ -91,7 +91,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
         b.store[k as usize] = (b.store[k as usize] - nu as f64 * ext).max(0.0);
     }
     b.e -= dh * ext;
-    let (j, lift, t) = (w.grid.air_of(b.cell as usize), w.lift(b.cell as usize), b.temp(&w.chem));
+    let (j, lift, t) = (w.mesh.up(b.cell as usize, 0, AIR), w.lift(b.cell as usize), b.temp(&w.chem));
     for &(k, nu) in &outs {
         let (k, x) = (k as usize, nu as f64 * ext);
         if w.chem.phase(k, t) == Phase::Gas {

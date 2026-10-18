@@ -1,7 +1,7 @@
 //! Conservation and sanity checks.
 
 use crate::store::{Boundary, BOUNDARIES};
-use crate::World;
+use crate::{World, AIR};
 
 #[derive(Clone, Debug)]
 pub struct Totals {
@@ -40,7 +40,7 @@ pub fn totals(w: &World) -> Totals {
     let (chem, ns) = (&w.chem, w.chem.ns());
     // mol of each substance, and the energy held as latent heat in the air
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
-    for (store, len, air) in [(&w.ground, w.grid.n(), false), (&w.bed, w.grid.n(), false), (&w.air, w.grid.na(), true), (&w.deep, w.grid.n(), false)] {
+    for (store, len, air) in [(&w.ground, w.mesh.cells().n(), false), (&w.bed, w.mesh.cells().n(), false), (&w.air, w.mesh.level(AIR).n(), true), (&w.deep, w.mesh.cells().n(), false)] {
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
             store.get(k * len..(k + 1) * len).unwrap_or(&[]).iter().for_each(|&a| s.add(a));

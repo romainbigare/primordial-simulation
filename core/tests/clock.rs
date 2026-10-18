@@ -92,7 +92,7 @@ fn a_calm_node_sleeps_until_its_alarm() {
 #[test]
 fn a_large_move_into_a_node_wakes_it() {
     let mut w = small_world();
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let (k, i) = (0..w.chem.ns()).flat_map(|k| (0..n - 1).map(move |i| (k, i))).find(|&(k, i)| w.g(k, i) > 0.0 && w.g(k, i + 1) > 0.0).unwrap();
     let (from, to, now) = (w.table.id(Class::Ground, i), w.table.id(Class::Ground, i + 1), w.time);
     // Only these two nodes sleep.

@@ -445,6 +445,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   `World::potential` deleted; `cli/tests/contract.rs` covers `change/`). `check::broken` lets a heat reach 0 J, where
   `apply` stops what takes from it. Without life the same (16 x 16, seeds 1 to 3, 2 years: series equal); with life
   the gas wakes an air node by its net change. Golden re-pinned.
+- D9 (second half): `grid.rs` deleted. `World` holds the mesh (`World::mesh`, not saved) and the map it is built
+  from (`World::map`, `World::air_scale`, saved as the grid's numbers were); the laws read cells, links, areas and air
+  nodes from the mesh (`Mesh::share` for a cell's share of its air node), creep walks the cell level's links, and
+  `flow::Scratch` keeps no copy of the cell area or the air node of each cell. The square map stays for what is about
+  its layout (`docs/laws.md`). `cli/tests/contract.rs` covers all of `core/src`, with each exempt file named. Same
+  results bit for bit (golden unchanged).
 
 **Owner's decisions after Phase A**
 

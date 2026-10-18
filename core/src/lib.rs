@@ -12,7 +12,6 @@ pub mod copy;
 pub mod event;
 pub mod flow;
 mod ground;
-pub mod grid;
 pub mod lanes;
 pub mod life;
 pub mod lineage;
@@ -31,4 +30,4 @@ mod world;
 
 pub use params::{Config, Physics};
 pub use schedule::{day, step, step_marked, Stage};
-pub use world::{Counters, PerSlot, World};
+pub use world::{Counters, PerSlot, World, AIR};

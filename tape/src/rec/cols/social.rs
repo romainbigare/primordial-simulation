@@ -15,7 +15,7 @@ const WORN_EASE: f64 = 2.0;
 
 impl Recorder {
     pub(super) fn social_cols(&mut self, c: &Ctx, land: &[usize], row: &mut Row) {
-        let (w, gn) = (c.w, c.w.grid.n());
+        let (w, gn) = (c.w, c.w.mesh.cells().n());
         let life = &w.life;
         // Bodies that took more from other eaters than from light-eaters in their life.
         let eat = life.bodies.iter().enumerate().filter(|(i, b)| b.alive && self.social.eaten(b.id(*i)).is_some_and(|t| t[1] > t[0])).count();

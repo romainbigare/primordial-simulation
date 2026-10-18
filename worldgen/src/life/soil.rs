@@ -11,7 +11,7 @@ use pcore::World;
 /// rain washes a dissolved mineral from the slopes into the basins in the first year.
 /// Returns what was placed, in one line.
 pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
-    let (n, area) = (w.grid.n(), w.grid.area());
+    let (n, area) = (w.mesh.cells().n(), w.map.area());
     let land: Vec<usize> = (0..n).filter(|&i| open_land(w, i)).collect();
     let mut said = Vec::new();
     for &(s, per) in soil {

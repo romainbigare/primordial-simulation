@@ -162,8 +162,8 @@ fn recording() -> &'static Recording {
         w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let cells = |w: &World| {
-            let land = (0..w.grid.n()).filter(|&i| w.is_land(i)).count() as f64;
-            [land, w.grid.n() as f64 - land]
+            let land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).count() as f64;
+            [land, w.mesh.cells().n() as f64 - land]
         };
         let mpy = w.cfg.months_per_year;
         let mut rec = tape::Recorder::new(&w, 0, 0);
@@ -380,7 +380,7 @@ fn yearly_series_counts_the_minerals() {
     assert_eq!(col("min0_sea", first), 0.0);
     // (The second: where the liquid lies on the rock that holds it, and the sea holds it from the start at balance with the air.)
     assert!(col("min1_sea", first) > 1.0 && col("min1_land", first) >= 0.0);
-    let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.grid.area());
+    let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.map.area());
     let all = |r: &Vec<f64>, c: [f64; 2]| {
         let ground = (col("min0_land", r) * c[0].max(1.0) + col("min0_sea", r) * c[1].max(1.0)) * area / mm / 1e9;
         ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()

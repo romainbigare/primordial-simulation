@@ -23,14 +23,14 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
 /// more than the area it works per day per kg (`Physics::sweep`) holds of what it takes by its uptake: the mass per m²
 /// of the cell of those substances. So a thin cover is as hard to find as it is thin, whatever the body could carry.
 fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
-    let dens: f64 = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k)).map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.grid.area();
+    let dens: f64 = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k)).map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.mesh.cells().area()[b.cell as usize];
     w.cfg.phys.take.min(w.cfg.phys.sweep * dens)
 }
 
 /// Take loose solids and liquids from the cell's ground, as `reach` allows for the mass it takes by (`Body::supply`; a
 /// node's members each work their own area: it is the node's total), and no more than its stores have room for.
 pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
-    let (i, n) = (b.cell as usize, w.grid.n());
+    let (i, n) = (b.cell as usize, w.mesh.cells().n());
     let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
     let mass = b.mass(&w.chem);
@@ -99,7 +99,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
     let m = b.wanted(&w.chem, |k| o.store[k], rate * b.interval() as f64 * b.supply(&w.chem, &w.cfg.phys), mb);
-    let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1]);
+    let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
     let away = rng.f64() < 1.0 - o.interval() as f64 / b.interval() as f64;
     // The bite tears this share of the body; the stores it held spill in proportion, less what the taker took of them (a
     // taker that takes more of a store than the share holds takes it from the rest).

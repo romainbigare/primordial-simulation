@@ -1,5 +1,6 @@
 //! The contract between the layers (`docs/foundation/plan.md` 5.2): a law changes the world's amounts and heat only by
-//! handing moves and link fluxes to the store (`store::apply`); it never writes the arrays of `World` itself.
+//! handing moves and link fluxes to the store (`store::apply`); no code of `core/src` outside the store writes the
+//! arrays of `World` itself, but the places named in `EXEMPT`.
 
 use std::path::Path;
 
@@ -8,10 +9,21 @@ const ARRAYS: [&str; 9] = ["ground", "e_ground", "air", "e_air", "deep", "e_deep
 /// The names a `World` goes by before a `.` (a field of anything else, as `Scratch::bed`, is not the world's).
 const WORLD: [&str; 3] = ["w", "ww", "self"];
 
-/// The folders and files of `core/src` that keep the contract, and the files there that may not yet: `Sky::cross` is
-/// the way bodies, parts and growth change the air until they move through the store (plan E7).
-const KEPT: [&str; 2] = ["flow", "change"];
-const NOT_YET: [&str; 1] = ["flow/air/sky.rs"];
+/// The folder and the files of `core/src` that may write the arrays, each with its reason. Each must still write them
+/// (an exemption no longer needed goes).
+const EXEMPT: [(&str, &str); 11] = [
+    ("store", "the store itself: `apply`, the boundary's books (`World::cross`), and the bed's one change, `World::loosen` (until plan F6)"),
+    ("flow/air/sky.rs", "`Sky::cross`, the way bodies, parts and growth change the air until they move through the store (plan E7)"),
+    ("ground.rs", "`World::take_paid`, the guard bodies take the ground's heat through (plan E7)"),
+    ("body/death.rs", "a dead body's matter and heat go to its ground node (plan E7)"),
+    ("body/pay.rs", "a body's heat released goes to the ground, its breath to the air (plan E7)"),
+    ("body/physics.rs", "a body's trades with its ground and air node (plan E7)"),
+    ("choose/feed.rs", "a body takes from the ground (plan E7)"),
+    ("copy/grow.rs", "growth's gas brings its heat to the air (plan E7)"),
+    ("survey.rs", "the light and the heat a cell holds aside for its bodies (plan E7)"),
+    ("bond/mod.rs", "a part's own trade: a dissolved part's matter and heat go to its ground node (their amounts live in parts)"),
+    ("bond/month.rs", "a part's own trades with its ground and air node each month (their amounts live in parts)"),
+];
 
 /// Does `line` (code, without its comment) write one of `ARRAYS`: an index of it on the left of an assignment, the
 /// array lent as `&mut`, or a method that changes it?
@@ -65,21 +77,24 @@ fn assigned(rest: &str) -> bool {
     false
 }
 
-/// Every line under `path` (a folder or a file) that writes the world's arrays, but in `NOT_YET`.
-fn scan(root: &Path, path: &Path, hits: &mut Vec<String>) {
+/// Every line under `path` (a folder or a file) that writes the world's arrays: the place it is in (its path from
+/// `root`), and the line.
+fn scan(root: &Path, path: &Path, hits: &mut Vec<(String, String)>) {
     let rel = path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
-    if NOT_YET.contains(&rel.as_str()) {
-        return;
-    }
     if path.is_dir() {
         for e in std::fs::read_dir(path).unwrap().flatten() {
             scan(root, &e.path(), hits);
         }
     } else if rel.ends_with(".rs") {
         for (i, line) in std::fs::read_to_string(path).unwrap().lines().enumerate().filter(|(_, l)| writes(l)) {
-            hits.push(format!("{rel}:{}: {}", i + 1, line.trim()));
+            hits.push((rel.clone(), format!("{rel}:{}: {}", i + 1, line.trim())));
         }
     }
+}
+
+/// The exemption `rel` falls under, if any: a file named, or a file in a folder named.
+fn exempt(rel: &str) -> Option<&'static str> {
+    EXEMPT.iter().map(|e| e.0).find(|&p| rel == p || rel.starts_with(&format!("{p}/")))
 }
 
 #[test]
@@ -89,8 +104,9 @@ fn laws_on_the_store_write_no_array_of_the_world() {
     assert!(caught.iter().all(|l| writes(l)) && !passed.iter().any(|l| writes(l)), "the scanner");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../core/src");
     let mut hits = Vec::new();
-    for p in KEPT {
-        scan(&root, &root.join(p), &mut hits);
-    }
-    assert!(hits.is_empty(), "laws that write the world's arrays (book them through store::apply):\n{}", hits.join("\n"));
+    scan(&root, &root, &mut hits);
+    let broken: Vec<&str> = hits.iter().filter(|h| exempt(&h.0).is_none()).map(|h| h.1.as_str()).collect();
+    assert!(broken.is_empty(), "code that writes the world's arrays (book it through store::apply):\n{}", broken.join("\n"));
+    let stale: Vec<&str> = EXEMPT.iter().map(|e| e.0).filter(|&p| !hits.iter().any(|h| exempt(&h.0) == Some(p))).collect();
+    assert!(stale.is_empty(), "exemptions no longer needed (delete them): {stale:?}");
 }

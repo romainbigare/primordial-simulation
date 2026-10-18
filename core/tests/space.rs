@@ -1,7 +1,7 @@
-//! Space: the square mesh is today's grid (areas, links, the air as a coarser level), and stacks give each cell its
-//! column of nodes.
+//! Space: the square mesh has the map's squares (areas, links, the air as a coarser level), and stacks give each cell
+//! its column of nodes.
 
-use pcore::grid::{Grid, AIR};
+use pcore::{World, AIR};
 use pcore::space::square::Square;
 use pcore::space::{Layer, Level, Mesh, Stack};
 use std::collections::BTreeSet;
@@ -34,7 +34,7 @@ fn links_once(lv: &Level) {
 }
 
 #[test]
-fn the_square_mesh_has_the_grids_cells_and_links() {
+fn the_square_mesh_has_the_maps_cells_and_links() {
     for (sq, mesh) in maps() {
         let (w, h) = (sq.w as i64, sq.h as i64);
         for l in 0..mesh.levels() {
@@ -64,16 +64,16 @@ fn the_square_mesh_has_the_grids_cells_and_links() {
 #[test]
 fn air_of_is_the_parent_at_the_air_level_and_levels_agree() {
     for (sq, mesh) in maps() {
-        let grid = Grid::new(sq.w, sq.h, SIDE, SCALE, &pcore::Config::default());
-        let parent = grid.mesh().cells().parent();
+        let world = World::mesh_of(&sq, SCALE, &pcore::Config::default());
+        let parent = world.cells().parent();
         for (i, &p) in parent.iter().enumerate() {
-            let (x, y) = grid.xy(i);
-            assert_eq!(grid.air_of(i), (y / SCALE) * grid.aw() + x / SCALE, "the air block over the cell");
-            assert_eq!(grid.air_of(i), p as usize);
+            let (x, y) = sq.xy(i);
+            assert_eq!(world.up(i, 0, AIR), (y / SCALE) * sq.w.div_ceil(SCALE) + x / SCALE, "the air block over the cell");
+            assert_eq!(world.up(i, 0, AIR), p as usize);
             assert_eq!(p, mesh.cells().parent()[i]);
+            assert_eq!(world.share(i, AIR), 1.0 / world.level(AIR).children(p as usize).len() as f64, "a square's share of its block");
         }
-        assert_eq!(parent.len(), grid.n());
-        assert_eq!(grid.na(), grid.mesh().level(AIR).n());
+        assert_eq!(parent.len(), sq.n());
         let mut seen = vec![0; sq.n()];
         for j in 0..mesh.level(1).n() {
             for &c in mesh.level(1).children(j) {

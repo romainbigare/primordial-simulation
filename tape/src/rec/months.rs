@@ -59,7 +59,7 @@ impl Recorder {
     /// counts at month ends: standing members by kind, signals by context, bodies inside walls, the land's
     /// temperature.
     pub(super) fn month(&mut self, w: &World) {
-        let (chem, gw, y, s) = (&w.chem, w.grid.w as u32, &mut self.year, &mut self.social);
+        let (chem, gw, y, s) = (&w.chem, w.map.w as u32, &mut self.year, &mut self.social);
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
         let mut last = vec![(u32::MAX, 0); w.life.bodies.len()];
         y.months += 1.0;
@@ -95,7 +95,7 @@ impl Recorder {
         s.last = last;
         // The land's mean ground temperature this month (the land is listed again each year).
         if y.t_land.is_empty() {
-            y.land = (0..w.grid.n()).filter(|&i| w.is_land(i)).map(|i| i as u32).collect();
+            y.land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| i as u32).collect();
         }
         y.t_land.push(y.land.iter().map(|&i| w.t_ground_last(i as usize)).sum::<f64>() / y.land.len().max(1) as f64);
         let (year, month) = year_month(w);

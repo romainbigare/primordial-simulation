@@ -41,7 +41,7 @@ const BISECT_STEPS: usize = 40;
 
 /// The cover of other bodies over a body's cell, kg/m²: the mass of the others per ground area.
 pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
-    (w.life.sum[b.cell as usize][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.grid.area()
+    (w.life.sum[b.cell as usize][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.mesh.cells().area()[b.cell as usize]
 }
 
 /// A body's heat conductance to the ground it stands on, at its temperature `t` and the ground's `tg`, W/K: one network

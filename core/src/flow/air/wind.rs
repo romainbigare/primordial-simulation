@@ -1,4 +1,4 @@
-//! Wind: gas and heat between neighbouring air nodes, along the links of the air level (`grid::AIR`): the pushes on
+//! Wind: gas and heat between neighbouring air nodes, along the links of the air level (`AIR`): the pushes on
 //! each link and the booking, here. Where the links form lines (the rows and columns of a square map) the wind is
 //! solved along them (`along`, by `solve::lines`); on any other mesh by `solve::spread` on the links (`mesh`).
 
@@ -7,7 +7,7 @@ mod mesh;
 
 use super::super::Scratch;
 use super::air_temp;
-use crate::grid::AIR;
+use crate::AIR;
 use crate::space::Level;
 use crate::store::{apply, Batch, Class, LinkFlux};
 use crate::units::R_GAS;
@@ -62,7 +62,7 @@ struct Ctx<'a> {
 /// (`book`).
 pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
     // (The level is copied: the booking changes the world that holds it.)
-    let air = w.grid.mesh().level(AIR).clone();
+    let air = w.mesh.level(AIR).clone();
     let moved = blow(w, s, &air, dt);
     book(w, s, &air, &moved);
 }

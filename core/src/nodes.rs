@@ -23,7 +23,7 @@ const UNLIKE_CROWD: usize = 2;
 /// `crowd`.
 pub(crate) fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
-    for i in 0..w.grid.n() {
+    for i in 0..w.mesh.cells().n() {
         if w.life.at[i].len() <= 1 {
             continue;
         }

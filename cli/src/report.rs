@@ -2,7 +2,7 @@
 
 use crate::render::RIVER_PNG;
 use pcore::body::light_eater;
-use pcore::World;
+use pcore::{World, AIR};
 use std::time::Duration;
 use tape::{Recorder, RIVER_WEB};
 use worldgen::life::Seeding;
@@ -15,13 +15,13 @@ pub fn config(w: &World, how: &Seeding) -> String {
     let parents = if w.cfg.two_parents { "on (a mature alike body of the cell is a second parent)" } else { "OFF (--no-mix: one parent)" };
     let animals = if how.hand[1] { "HAND-SET eater biases (default; --neutral-eaters for neutral brains)" } else { "NEUTRAL brains (--neutral-eaters)" };
     let plants = if how.hand[0] { "hand-set biases (--plant-bias)" } else { "neutral brains but the hand-set bias against taking from a body (default)" };
-    format!("config: seed {}, {}x{}, {run}, nodes {nodes}, two parents {parents}, start: animals {animals}, plants {plants}", w.seed, w.grid.w, w.grid.h)
+    format!("config: seed {}, {}x{}, {run}, nodes {nodes}, two parents {parents}, start: animals {animals}, plants {plants}", w.seed, w.map.w, w.map.h)
 }
 
 /// The liquid's store at the start, set at balance with the air (`Reactor::balance`): what each reversible pair makes,
 /// in the ground, and the gas it holds over the air's.
 pub fn balances(w: &World) -> Vec<String> {
-    let (n, na) = (w.grid.n(), w.grid.na());
+    let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let mut out = vec![];
     for (f, _, _, u) in pcore::change::reversible(&w.chem) {
         let held: f64 = w.ground[u * n..(u + 1) * n].iter().sum();

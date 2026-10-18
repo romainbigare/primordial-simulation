@@ -123,7 +123,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
     // One action bias, "take from a body": its range and spread over the bodies placed.
     let take = shape.verb(brain::TAKE_FROM) * shape.r() + shape.h;
     let mut p = Placed { bodies: 0, members: 0.0, kg: 0.0, fixers: 0, cat: [(f32::MAX, f32::MIN); 2], copy_mass: (f32::MAX, f32::MIN), take: (f32::MAX, f32::MIN, 0.0, 0.0) };
-    for i in 0..w.grid.n() {
+    for i in 0..w.mesh.cells().n() {
         if !open_land(w, i) || r.f64() >= kind.chance || (!kind.anywhere && w.life.at[i].is_empty()) {
             continue;
         }

@@ -55,20 +55,20 @@ pub(super) fn lift(s: &mut Scratch, i: usize, [dz, dh]: [f64; 2]) {
     s.head[i] += dh;
 }
 
-/// Raise (or with negative `m`, lower) the surface of ground node `i` for `m` mol of `k`.
+/// Raise (or with negative `m`, lower) the surface of ground node `i`, of `area` m², for `m` mol of `k`.
 #[inline]
-pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
-    let d = rise(&s.sp[k], s.tg[i], melted(s, k, i), m, s.area);
+pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64, area: f64) {
+    let d = rise(&s.sp[k], s.tg[i], melted(s, k, i), m, area);
     lift(s, i, d);
 }
 
 impl Scratch {
-    /// Ground node `i` gained `m` mol of `k` (negative `m`: lost): its heat capacity, the fusion enthalpy it holds there
-    /// (`fusion`), and the rise of the surface.
+    /// Ground node `i`, of `area` m², gained `m` mol of `k` (negative `m`: lost): its heat capacity, the fusion enthalpy
+    /// it holds there (`fusion`), and the rise of the surface.
     #[inline]
-    pub(super) fn note(&mut self, k: usize, i: usize, m: f64) {
+    pub(super) fn note(&mut self, k: usize, i: usize, m: f64, area: f64) {
         self.hold(k, i, m);
-        settle(self, k, i, m);
+        settle(self, k, i, m, area);
     }
     /// `note` but for the surface: for a gas dissolved in the liquid, which takes no room.
     #[inline]
@@ -87,7 +87,7 @@ impl Scratch {
 /// Solid amount of `k` in ground node `i`, mol.
 #[inline]
 pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
-    w.ground[k * w.grid.n() + i] * (1.0 - molten(s, k, i))
+    w.ground[k * w.mesh.cells().n() + i] * (1.0 - molten(s, k, i))
 }
 
 /// Temperature of ground node `i` now, K, no warmer than at the last `ground_state` (`tg`):
@@ -104,9 +104,9 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // Heat capacity from the amounts now, at every step, as `World::heat_cap_ground` sums it: bodies and Law 2 move loose
     // matter (with its heat) between liquid steps, liquid wears the bed and bodies dig it, and a stale capacity would read a
     // node far too hot or cold.
-    let n = w.grid.n();
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
     for (i, skin) in s.skin.iter_mut().enumerate() {
-        *skin = crate::ground::skin_cap(&w.chem, &w.cfg, s.area, s.bedk.iter().copied(), |k| w.bed[k * n + i]);
+        *skin = crate::ground::skin_cap(&w.chem, &w.cfg, area[i], s.bedk.iter().copied(), |k| w.bed[k * n + i]);
     }
     let mut cap = s.skin.clone();
     for &k in &s.loose {
@@ -150,7 +150,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 /// mean of its nodes' conductivity times thickness (two half cells in series, Patankar 1980, 4.2) times its width
 /// over its length: a corner-only diagonal (width 0) passes nothing and is left out.
 pub(super) fn conduct(w: &mut World, s: &Scratch, dt: f64) {
-    let (n, cells) = (w.grid.n(), w.grid.mesh().cells());
+    let (n, cells) = (w.mesh.cells().n(), w.mesh.cells());
     // Conductivity times thickness of each node's active layer, W/K: the skin of its bed and the solid and liquid
     // of its loose ground, side by side.
     let mut kt: Vec<f64> = s.bed.iter().map(|b| b.cond * w.cfg.skin_m).collect();
@@ -159,7 +159,7 @@ pub(super) fn conduct(w: &mut World, s: &Scratch, dt: f64) {
         for (i, x) in kt.iter_mut().enumerate() {
             let a = w.ground[k * n + i];
             if a > 0.0 {
-                *x += a * ((1.0 - molten(s, k, i)) * p.v[0] + wet(s, k, i) * p.v[1]) * p.cond / s.area;
+                *x += a * ((1.0 - molten(s, k, i)) * p.v[0] + wet(s, k, i) * p.v[1]) * p.cond / cells.area()[i];
             }
         }
     }
@@ -184,7 +184,7 @@ pub(super) fn conduct(w: &mut World, s: &Scratch, dt: f64) {
 /// down: each covers a share depth / (depth + `hide`) of what lies below. A solid is soft over
 /// `soft` times its melting point. The pores of the solids hold the first liquid (`pd`).
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
-    let (n, area, t) = (w.grid.n(), s.area, s.tg[i]);
+    let (n, area, t) = (w.mesh.cells().n(), w.mesh.cells().area()[i], s.tg[i]);
     let mut l = [0.0, 0.0, 0.0, 0.0, s.fix[i][0], s.fix[i][1]];
     let (mut z, mut rc) = (w.base_z + (s.bed[i].vol + s.fix[i][0]) / area, 0.0);
     for &k in &s.vary {

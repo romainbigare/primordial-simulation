@@ -56,7 +56,7 @@ pub(super) fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32])
 /// within `phys.join` cells of the centre of a group of its lineage with more members joins it; if it was alone, what it
 /// learned is blended in by its share of the members. (No joining unless brains are shared.)
 pub(crate) fn regroup(w: &mut World) {
-    let (gw, gh, day, share, life) = (w.grid.w, w.grid.h, w.day(), w.cfg.share_brains, &mut w.life);
+    let (gw, gh, day, share, life) = (w.map.w, w.map.h, w.day(), w.cfg.share_brains, &mut w.life);
     let at = |g: &crate::life::Group| {
         let (x, y) = g.centre();
         (y.round() as usize).min(gh - 1) * gw + (x.round() as usize).min(gw - 1)

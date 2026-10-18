@@ -35,7 +35,7 @@ fn ratio(a: f64, b: f64) -> f64 {
 impl Recorder {
     /// Write the yearly row, then start the sums of the year again.
     pub(super) fn push_series(&mut self, c: &Ctx) {
-        let land: Vec<usize> = (0..c.w.grid.n()).filter(|&i| c.w.is_land(i)).collect();
+        let land: Vec<usize> = (0..c.w.mesh.cells().n()).filter(|&i| c.w.is_land(i)).collect();
         let mut row = Row::default();
         self.world_cols(c, &land, &mut row);
         self.kind_cols(c, &mut row);

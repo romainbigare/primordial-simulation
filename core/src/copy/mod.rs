@@ -69,7 +69,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let prov = provisions(&w.chem, b, mi, matter, births);
     let litter = Litter { body, matter, prov, node, alone: !may_be_node(w, &b.genes), mate, parent: id };
     let m = if node { if d * births >= 1.0 { d * births } else { 0.0 } } else { (r.f64() < d) as u8 as f64 };
-    let to = if m > 0.0 { w.grid.step(i, DIRS[r.below(8)]) } else { None };
+    let to = if m > 0.0 { w.map.step(i, DIRS[r.below(8)]) } else { None };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),
         Some(j) => (j, m),

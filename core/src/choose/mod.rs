@@ -113,10 +113,10 @@ fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Cho
     f.clear();
     f.resize(MOVES * NF, 0.0);
     for (d, &off) in DIRS.iter().enumerate() {
-        let Some(j) = w.grid.step(i, off) else { continue };
+        let Some(j) = w.map.step(i, off) else { continue };
         let (fd, mut sum) = (&mut f[d * NF..(d + 1) * NF], 0.0);
         for &(dx, dy, wt) in &sec[d] {
-            let Some(k) = w.grid.step(i, (dx, dy)) else { continue };
+            let Some(k) = w.map.step(i, (dx, dy)) else { continue };
             let (ck, e) = (&w.life.cellf[k], w.life.env[k]);
             fd[..8].iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
             fd[0] += wt * ((e[2] - env[2]) / DZ_SCALE) as f32;
@@ -266,7 +266,7 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
         RELEASE => bond::release(w, b),
         ANCHOR => bond::anchor(w, b),
         DIG => bond::dig(w, b),
-        a if a < TO_BODY => go(w, slot, b, a - FIXED, c.to[a - FIXED]),
+        a if a < TO_BODY => go(w, slot, b, c.to[a - FIXED]),
         a if a >= TO_PART => bond::act(w, slot, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
         a => {
             let (q, verb) = ((a - TO_BODY) / VERBS, (a - TO_BODY) % VERBS);

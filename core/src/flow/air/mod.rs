@@ -14,7 +14,7 @@ pub(super) use wind::wind;
 pub use wind::wind_on;
 
 use super::Scratch;
-use crate::grid::AIR;
+use crate::AIR;
 use crate::math::one_minus_exp;
 use crate::units::R_GAS;
 use crate::World;
@@ -44,7 +44,7 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
 /// The share of the air ground cell `i` sees that lies over it: its area over the area of the air it sees (`lerp`).
 #[inline]
 pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {
-    let mesh = w.grid.mesh();
+    let mesh = &w.mesh;
     mesh.cells().area()[i] / lerp(s, mesh.level(AIR).area(), i)
 }
 
@@ -66,7 +66,7 @@ fn node_scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
 /// higher up is held near the ground, by how fast its vapour pressure falls as the air cools upwards.
 pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
     if !full {
-        for j in 0..w.grid.na() {
+        for j in 0..w.mesh.level(AIR).n() {
             s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
         }
         return;
@@ -79,7 +79,7 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
 
 /// Amount, mol, heat capacity, J/K, and mass, kg, of the gases of each air node, from its amounts now.
 pub(super) fn sums(w: &World, s: &mut Scratch) {
-    let na = w.grid.na();
+    let na = w.mesh.level(AIR).n();
     (s.nt, s.capa, s.mass) = (vec![0.0; na], vec![0.0; na], vec![0.0; na]);
     for &k in &s.gas {
         let sp = s.sp[k];
@@ -94,8 +94,8 @@ pub(super) fn sums(w: &World, s: &mut Scratch) {
 /// Amounts, heat capacity, mass, optical depth, volume, temperature and mean height of each air node; the height of
 /// its ground is the mean of its cells' by area.
 fn nodes(w: &World, s: &mut Scratch) {
-    let (na, g, top) = (w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
-    let (cells, air) = (w.grid.mesh().cells(), w.grid.mesh().level(AIR));
+    let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
+    let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     sums(w, s);
     for j in 0..na {
         (s.za[j], s.fabs[j]) = (0.0, 0.0);
@@ -123,7 +123,7 @@ fn nodes(w: &World, s: &mut Scratch) {
 /// where a gas condenses), and per gas and node the height its amount fills and its share in the
 /// upper half of the column.
 fn heights(w: &World, s: &mut Scratch) {
-    let (na, g, top) = (w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
+    let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
     let ng = s.gas.len();
     (s.cond, s.hk, s.split) = (vec![false; ng], vec![0.0; ng * na], vec![0.0; ng * na]);
     // The heat capacity each node gains from the vaporisation enthalpy of what condenses as it cools, J/K.
@@ -168,9 +168,9 @@ fn heights(w: &World, s: &mut Scratch) {
 
 /// The air each ground cell sees (from the four nearest nodes, `lerp`) and the layers of its column.
 fn seen(w: &World, s: &mut Scratch) {
-    let (n, g, top) = (w.grid.n(), w.cfg.gravity, w.cfg.air_top_m);
+    let (n, g, top) = (w.mesh.cells().n(), w.cfg.gravity, w.cfg.air_top_m);
     s.lay.resize(n, [[0.0; LAYERS]; 2]);
-    for (i, &j) in w.grid.mesh().cells().parent().iter().enumerate() {
+    for (i, &j) in w.mesh.cells().parent().iter().enumerate() {
         let (gam, zair, fabs, ta) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i), lerp(s, &s.ta, i));
         s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, j as usize, g));
         s.seen[i] = [gam, zair, one_minus_exp(fabs), s.seen[i][3], ta];

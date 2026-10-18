@@ -12,7 +12,7 @@ use crate::ground::{draw, heat_above_floor, share, take_paid};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
 use crate::units::{MAX_SUBSTANCES, P_REF};
-use crate::World;
+use crate::{World, AIR};
 
 /// The most share of the heat the body has and can get from the surface that pays the enthalpy of the gas it puts out.
 const GAS_HEAT_SHARE: f64 = 0.5;
@@ -104,7 +104,7 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
 /// The air the body exchanges gas with in this time (`breath`), at the air's shares (none of an empty air node), at most
 /// `MAX_TAKE_SHARE` of each.
 fn gas_pool(w: &World, b: &Body, s: &Site, mass: f64, tmp: &mut LiveTmp) -> f64 {
-    let (chem, air, na, j) = (&w.chem, &w.air, w.grid.na(), s.j);
+    let (chem, air, na, j) = (&w.chem, &w.air, w.mesh.level(AIR).n(), s.j);
     let tot: f64 = (0..chem.ns()).map(|k| air[k * na + j]).sum();
     let reach = breath(chem, &w.cfg, b, mass, s.cover, s.days, s.depth);
     tmp.x.clear();
@@ -170,12 +170,12 @@ fn store_light(w: &mut World, slot: usize, b: &Body, s: &Site, keep: f64, caught
 /// The liquids of the cell's ground a body soaks up (`Soil`): whatever the cell holds counts for the wetness, but a
 /// body afloat on standing liquid reaches the ground through none.
 fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
-    let (chem, ground, n, i, tg) = (&w.chem, &w.ground, w.grid.n(), s.i, s.tg);
+    let (chem, ground, n, i, tg) = (&w.chem, &w.ground, w.mesh.cells().n(), s.i, s.tg);
     let ns = chem.ns();
     let standing = if s.stands && s.depth == 0.0 {
         0.0
     } else {
-        (0..ns).filter(|&k| chem.phase_in(k, tg, |j| ground[j * n + i]) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / w.grid.area()
+        (0..ns).filter(|&k| chem.phase_in(k, tg, |j| ground[j * n + i]) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / w.mesh.cells().area()[i]
     };
     let wet = standing / (standing + w.cfg.phys.wet_depth);
     let wets = (0..ns).filter(|&k| chem.phase_in(k, tg, |j| ground[j * n + i]) == Phase::Liquid && chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
@@ -190,8 +190,8 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
 /// (`film`, the Lewis relation) and its liquid stays above its safe minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
     let lift = w.lift(s.i);
-    let World { cfg, chem, grid, ground, e_ground, air, e_air, counts, potential, .. } = w;
-    let (ns, n, i, j, tg, dt, days) = (chem.ns(), grid.n(), s.i, s.j, s.tg, s.dt, s.days);
+    let World { cfg, chem, mesh, ground, e_ground, air, e_air, counts, potential, .. } = w;
+    let (ns, n, i, j, tg, dt, days) = (chem.ns(), mesh.cells().n(), s.i, s.j, s.tg, s.dt, s.days);
     let (g, t0) = (h.g, h.t0);
     let mut moved = false;
     let cpa: f64 = (0..ns).map(|k| tmp.x[k] * chem.subs[k].cp).sum();
@@ -236,8 +236,8 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
 /// capture area caught (`fall`). The ground pays their heat and fusion enthalpy, or the body soaks less.
 #[allow(clippy::too_many_arguments)]
 fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
-    let World { chem, grid, ground, e_ground, counts, .. } = w;
-    let (n, i, tg, days) = (grid.n(), s.i, s.tg, s.days);
+    let World { chem, mesh, ground, e_ground, counts, .. } = w;
+    let (n, i, tg, days) = (mesh.cells().n(), s.i, s.tg, s.days);
     for k in (0..chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
         let (x, room) = (ground[k * n + i] / soil.in_ground, b.level(chem, k, mass2) - b.store[k]);
         // (Rate r per day over `days`, the loss e a day: it takes (gap at the start) f + e days (1 - f / (r days)),
@@ -259,8 +259,8 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
 /// level, at the rate it soaks liquids (without the surface's wetness) through the mass that works (`wk`). The ground
 /// pays their heat and fusion enthalpy, or the body takes less.
 fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f64) {
-    let World { chem, grid, ground, e_ground, counts, .. } = w;
-    let (n, i, tg) = (grid.n(), s.i, s.tg);
+    let World { chem, mesh, ground, e_ground, counts, .. } = w;
+    let (n, i, tg) = (mesh.cells().n(), s.i, s.tg);
     let soak = one_minus_exp(b.k.liq * s.days) * wk;
     for &(k, u) in &b.k.upt {
         if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| ground[j * n + i]) != Phase::Liquid || ground[k * n + i] <= 0.0 {

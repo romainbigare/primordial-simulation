@@ -36,9 +36,9 @@ fn ramp(stops: &[(f64, Rgb)], v: f64) -> Rgb {
 fn map_pixel(w: &World, f: &Fields, i: usize) -> Rgb {
     let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     let shade = {
-        let zl = f.z[w.grid.step(i, (-1, 0)).unwrap_or(i)];
-        let zu = f.z[w.grid.step(i, (0, -1)).unwrap_or(i)];
-        let s = ((zl - f.z[i]) + (zu - f.z[i])) / w.grid.cell_m;
+        let zl = f.z[w.map.step(i, (-1, 0)).unwrap_or(i)];
+        let zu = f.z[w.map.step(i, (0, -1)).unwrap_or(i)];
+        let s = ((zl - f.z[i]) + (zu - f.z[i])) / w.map.side;
         (1.0 - s * 6.0).clamp(0.6, 1.3)
     };
     let c = if f.ice[i] > ICE_M {
@@ -61,23 +61,23 @@ fn map_pixel(w: &World, f: &Fields, i: usize) -> Rgb {
 
 pub fn save(w: &World, path: &str) {
     let f = fields(w);
-    let (gw, gh) = (w.grid.w, w.grid.h);
+    let (gw, gh) = (w.map.w, w.map.h);
     let (s, panels) = (PX, PANELS);
     // Life: mass per area of light-eaters (green) and of the other bodies (orange dots), kg/m².
-    let (mut green, mut other) = (vec![0.0; w.grid.n()], vec![0.0; w.grid.n()]);
+    let (mut green, mut other) = (vec![0.0; w.mesh.cells().n()], vec![0.0; w.mesh.cells().n()]);
     for b in w.life.alive() {
-        let m = b.mass(&w.chem) / w.grid.area();
+        let m = b.mass(&w.chem) / w.map.area();
         *if pcore::body::light_eater(&w.chem, &b.genes) { &mut green[b.cell as usize] } else { &mut other[b.cell as usize] } += m;
     }
-    let mut made = vec![false; w.grid.n()];
+    let mut made = vec![false; w.mesh.cells().n()];
     for x in (0..w.parts.parts.len()).filter(|&x| w.parts.parts[x].alive) {
         made[pcore::bond::cell(w, x)] = true;
     }
     let (pw, ph) = (gw * s * panels + (panels - 1) * GAP, gh * s);
     let mut img = vec![255u8; pw * ph * 3];
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     for i in 0..n {
-        let (x, y) = w.grid.xy(i);
+        let (x, y) = w.map.xy(i);
         let cols = [
             map_pixel(w, &f, i),
             ramp(&[(240.0, [40, 40, 160]), (273.0, [200, 220, 255]), (288.0, [250, 220, 120]), (305.0, [200, 40, 30])], f.t[i]),

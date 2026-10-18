@@ -224,42 +224,9 @@ mod spread {
     }
 }
 
-use pcore::space::square::DIRS;
 use pcore::solve::downhill::{self, Adjacency, Crossed, Order};
-use pcore::World;
-use std::collections::BTreeMap;
 
 // ---- downhill: the order of cells by head, and the pass down it ----
-
-/// The links of a square grid to all 8 neighbours, each once, as plain slices.
-#[derive(Default)]
-struct GridLinks {
-    /// The first entry of each cell; the link and the other cell of each entry (in the order of `DIRS`).
-    start: Vec<u32>,
-    link: Vec<u32>,
-    other: Vec<u32>,
-    /// The first cell of each link.
-    a: Vec<u32>,
-}
-
-/// The links of the grid of `w`.
-fn grid_links(w: &World) -> GridLinks {
-    let (mut g, mut ids) = (GridLinks { start: vec![0], ..Default::default() }, BTreeMap::new());
-    for i in 0..w.grid.n() {
-        for d in DIRS {
-            if let Some(j) = w.grid.step(i, d) {
-                let l = *ids.entry((i.min(j), i.max(j))).or_insert_with(|| {
-                    g.a.push(i as u32);
-                    g.a.len() as u32 - 1
-                });
-                g.link.push(l);
-                g.other.push(j as u32);
-            }
-        }
-        g.start.push(g.link.len() as u32);
-    }
-    g
-}
 
 /// Rain is the same whether it falls at once or in 4 parts, each followed by a pass, when the rule is linear in the
 /// amounts: here all that a cell holds leaves in equal shares to its lower neighbours (by ground height), so one pass
@@ -268,10 +235,11 @@ fn grid_links(w: &World) -> GridLinks {
 #[test]
 fn downhill_one_rain_in_one_pass_or_in_parts() {
     let w = worldgen::new_world(1, 32, 32);
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let z: Vec<f64> = (0..n).map(|i| w.surface_z(i)).collect();
-    let GridLinks { start, link, other, a, .. } = grid_links(&w);
-    let adj = Adjacency { start: &start, link: &link, other: &other, a: &a };
+    let cells = w.mesh.cells();
+    let (start, other, a) = (cells.start(), cells.adj_cell(), cells.a());
+    let adj = Adjacency { start, link: cells.adj_link(), other, a };
     let mut order = Order::default();
     order.update(&z);
     let rule = |i: usize, _: &mut [f64], share: &mut [f64]| {

@@ -120,7 +120,7 @@ fn key_numbers(seed: u64) -> [f64; KEYS.len()] {
     let span = (YEARS - FROM + 1) as f64;
     let (w, rec) = run(seed, SIDE, YEARS, |_| {}, |y, w, rec| {
         if y == FROM - 1 {
-            land = (0..w.grid.n()).filter(|&i| w.is_land(i)).collect();
+            land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
             rock_from = rock(w, &land);
         }
         if y >= FROM {

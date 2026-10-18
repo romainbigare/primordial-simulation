@@ -52,7 +52,7 @@ pub fn small_world() -> World {
 
 /// The land cells with no liquid standing on them.
 pub fn dry_lands(w: &World) -> Vec<usize> {
-    (0..w.grid.n()).filter(|&i| w.is_land(i) && w.life.env[i][1] < 1e-3).collect()
+    (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && w.life.env[i][1] < 1e-3).collect()
 }
 
 /// The first land cell with no liquid standing on it.
@@ -172,7 +172,7 @@ pub fn kg(w: &World, b: &Body, k: usize) -> f64 {
 
 /// `mol` of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
 pub fn put(w: &mut World, k: usize, i: usize, mol: f64) {
-    let (t, n) = (w.t_ground(i), w.grid.n());
+    let (t, n) = (w.t_ground(i), w.mesh.cells().n());
     w.ground[k * n + i] += mol;
     let e = w.energy_ground(i, t);
     w.cross(Boundary::Outside, [(k, mol)], e - w.e_ground[i]);
@@ -181,19 +181,19 @@ pub fn put(w: &mut World, k: usize, i: usize, mol: f64) {
 
 /// `kg` per m² of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
 pub fn put_kg_m2(w: &mut World, k: usize, i: usize, kg: f64) {
-    let mol = kg * w.grid.area() / w.chem.subs[k].molar_mass;
+    let mol = kg * w.map.area() / w.chem.subs[k].molar_mass;
     put(w, k, i, mol);
 }
 
 /// All of substance `k` in the world's ground, the store of its bed and its bodies, mol.
 pub fn in_all(w: &World, k: usize) -> f64 {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
 }
 
 /// The rock element (element 5) outside body matter on the ground of cell `i`, mol.
 pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     (0..w.chem.ns()).filter(|&k| k != MATTER).map(|k| w.chem.subs[k].elems[5] as f64 * w.ground[k * n + i]).sum()
 }
 
@@ -201,7 +201,7 @@ pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
 /// loose ground of cell `i` and the bed below it, m, and the mean softness (1 / (hardness + 0.05)) of the loose ones, by
 /// volume.
 pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
-    let (n, area) = (w.grid.n(), w.grid.area());
+    let (n, area) = (w.mesh.cells().n(), w.map.area());
     let (mut loose, mut bed, mut soft) = (0.0, 0.0, 0.0);
     for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0 && Some(k) != w.chem.matter()) {
         let v = w.chem.molar_volume(k, Phase::Solid);
@@ -269,7 +269,7 @@ pub fn loose_volume(w: &World, i: usize) -> f64 {
 /// A part of `kg` of the cell's most plentiful loose substance, taken from the ground at its temperature: flat, or a
 /// block if `thick`.
 pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let k = (0..w.chem.ns()).max_by(|&a, &b| w.ground[a * n + i].total_cmp(&w.ground[b * n + i])).unwrap();
     let mut wall = vec![0.0; w.chem.ns()];
     wall[k] = kg / w.chem.subs[k].molar_mass;

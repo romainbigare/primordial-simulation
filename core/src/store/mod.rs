@@ -19,7 +19,7 @@ use crate::World;
 impl World {
     /// Size the deep stores (empty until first used).
     pub(crate) fn fit_deep(&mut self) {
-        let (n, ns) = (self.grid.n(), self.chem.ns());
+        let (n, ns) = (self.mesh.cells().n(), self.chem.ns());
         if self.deep.len() != ns * n {
             (self.deep, self.e_deep) = (vec![0.0; ns * n], vec![0.0; n]);
         }
@@ -28,7 +28,7 @@ impl World {
     /// bed's skin is the node's already). The bed is not a node of its own, so this is the one place its amounts change,
     /// until the ground of a cell becomes nodes of its own (patches, `docs/foundation/plan.md` F6).
     pub(crate) fn loosen(&mut self, k: usize, i: usize, m: f64) {
-        let at = k * self.grid.n() + i;
+        let at = k * self.mesh.cells().n() + i;
         (self.bed[at], self.ground[at]) = (self.bed[at] - m, self.ground[at] + m);
     }
     /// `(k, mol)` of substances and `heat` J cross into the world from boundary node `b` (out to it where negative):

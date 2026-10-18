@@ -4,11 +4,12 @@ use crate::chemistry::{chemistry0, Init};
 use pcore::change::Reactor;
 use pcore::chem::{Chemistry, Phase};
 use pcore::flow::scale_height;
-use pcore::grid::Grid;
 use pcore::rng::{Purpose, Rng};
+use pcore::space::square::Square;
+use pcore::space::Mesh;
 use pcore::store::{Links, Nodes, BOUNDARIES};
 use pcore::units::P_REF;
-use pcore::{Config, Counters, World};
+use pcore::{Config, Counters, World, AIR};
 
 /// Cell size, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
@@ -90,15 +91,15 @@ pub fn air_column(chem: &Chemistry, init: &Init, gravity: f64) -> f64 {
     P_REF / (gravity * m_air)
 }
 
-/// Starting temperature at row `y` and height `z`, K: warm low latitudes, cooler poles and heights.
-fn t_start(grid: &Grid, y: usize, z: f64) -> f64 {
-    let lat = grid.lat(y).to_radians();
+/// Starting temperature at row `y` of `map` and height `z`, K: warm low latitudes, cooler poles and heights.
+fn t_start((map, mesh): (&Square, &Mesh), y: usize, z: f64) -> f64 {
+    let lat = mesh.cells().lat()[map.idx(0, y)].to_radians();
     T_EQUATOR - POLE_DROP * lat.sin().powi(2) - LAPSE * z.max(0.0)
 }
 
 /// Scale the heat-absorbing gases of the air by `factor` (`ew run --absorber`), each air node keeping its temperature.
 pub fn scale_absorbers(w: &mut World, factor: f64) {
-    let na = w.grid.na();
+    let na = w.mesh.level(AIR).n();
     for j in 0..na {
         let t = w.t_air(j);
         for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
@@ -115,16 +116,17 @@ pub fn new_world(seed: u64, w: usize, h: usize) -> World {
 }
 
 pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: Config) -> World {
-    let grid = Grid::new(w, h, CELL_M, AIR_SCALE, &cfg);
-    let (n, na, ns) = (grid.n(), grid.na(), chem.ns());
-    let area = grid.area();
+    let map = Square { w, h, side: CELL_M };
+    let mesh = World::mesh_of(&map, AIR_SCALE, &cfg);
+    let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
+    let area = map.area();
     let hz = heights(seed, w, h);
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);
 
     for i in 0..n {
-        let (x, y) = grid.xy(i);
+        let (x, y) = map.xy(i);
         let z = hz[i];
         // Patchy deposits, more common in high ground.
         let mut fr: Vec<(usize, f64)> = init.bed.clone();
@@ -153,8 +155,8 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let mut zmean = vec![0.0; na];
     let mut cnt = vec![0.0; na];
     for i in 0..n {
-        zmean[grid.air_of(i)] += hz[i].max(0.0);
-        cnt[grid.air_of(i)] += 1.0;
+        zmean[mesh.up(i, 0, AIR)] += hz[i].max(0.0);
+        cnt[mesh.up(i, 0, AIR)] += 1.0;
     }
     // The column over high ground is thinner by exp(-z / H), H the scale height of the air at the node's starting
     // temperature (`flow::scale_height`, as Flow's law takes it).
@@ -163,21 +165,23 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let mut t_air = vec![0.0; na];
     for j in 0..na {
         zmean[j] /= cnt[j];
-        let y = (j / grid.aw()) * grid.air_scale + grid.air_scale / 2;
-        t_air[j] = t_start(&grid, y.min(h - 1), zmean[j]);
+        let y = (j / w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
+        t_air[j] = t_start((&map, &mesh), y.min(h - 1), zmean[j]);
         let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * area * cnt[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;
         }
     }
 
-    let links = Links::new(grid.mesh().cells().a().len());
+    let links = Links::new(mesh.cells().a().len());
     let mut world = World {
         cfg,
         chem,
-        table: Nodes::of_grid(&grid),
+        table: Nodes::of_mesh(&mesh),
         booking: Default::default(),
-        grid,
+        map,
+        air_scale: AIR_SCALE,
+        mesh,
         seed,
         time: 0,
         sleep: Default::default(),
@@ -209,9 +213,9 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     };
 
     for (i, &z) in hz.iter().enumerate().take(n) {
-        let (_, y) = world.grid.xy(i);
+        let (_, y) = world.map.xy(i);
         // Low ground starts with its liquid molten.
-        let t = t_start(&world.grid, y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
+        let t = t_start((&world.map, &world.mesh), y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
         world.e_ground[i] = world.energy_ground(i, t);
     }
     for (j, &t) in t_air.iter().enumerate() {
@@ -223,7 +227,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     // own rate constants and barriers). A cell with no liquid holds none. The air stays as it is.
     let mut rc = Reactor::new(&world.chem, &world.cfg);
     for i in 0..n {
-        let (t, j, share) = (world.t_ground(i), world.grid.air_of(i), world.grid.air_share(i));
+        let (t, j, share) = (world.t_ground(i), world.mesh.up(i, 0, AIR), world.mesh.share(i, AIR));
         let mut amt: Vec<f64> = (0..ns).map(|k| world.ground[k * n + i]).collect();
         let gas: Vec<f64> = (0..ns).map(|k| world.air[k * na + j] * share).collect();
         if !rc.balance(&world.chem, &mut amt, &gas, t).is_empty() {

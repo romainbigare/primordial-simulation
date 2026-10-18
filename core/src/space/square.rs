@@ -3,14 +3,16 @@
 //! real borders while the downhill path of surface liquid may use all 8.
 
 use super::{LinkSpec, Mesh};
+use serde::{Deserialize, Serialize};
+use std::f64::consts::SQRT_2;
 
 /// Forward link offsets (dx, dy). Every link is met once as (i, i + offset).
-pub const FORWARD: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (-1, 1)];
+const FORWARD: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (-1, 1)];
 /// All 8 neighbour offsets, clockwise from east.
 pub const DIRS: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
 
 /// A map of `w × h` squares of side `side`, m.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Square {
     pub w: usize,
     pub h: usize,
@@ -20,6 +22,10 @@ pub struct Square {
 impl Square {
     pub fn n(&self) -> usize {
         self.w * self.h
+    }
+    /// Area of a square, m².
+    pub fn area(&self) -> f64 {
+        self.side * self.side
     }
     pub fn idx(&self, x: usize, y: usize) -> usize {
         y * self.w + x
@@ -34,10 +40,6 @@ impl Square {
         let (nx, ny) = (x as i32 + d.0, y as i32 + d.1);
         (nx >= 0 && ny >= 0 && (nx as usize) < self.w && (ny as usize) < self.h).then(|| self.idx(nx as usize, ny as usize))
     }
-    /// Distance between the centres of two squares `d` apart, m.
-    pub fn dist(&self, d: (i32, i32)) -> f64 {
-        if d.0 != 0 && d.1 != 0 { self.side * std::f64::consts::SQRT_2 } else { self.side }
-    }
     /// The mesh of the map: the squares, their rows spread evenly from latitude `north` (row 0) to `south` (degrees),
     /// and a coarser level for each of `scales` (each a multiple of the one before), whose cell holds the `scale`²
     /// squares of a block (fewer along the south and east edges when `scale` does not divide the map).
@@ -50,9 +52,12 @@ impl Square {
         };
         let links: Vec<LinkSpec> = (0..n)
             .flat_map(|i| FORWARD.iter().filter_map(move |&d| self.step(i, d).map(|j| (i, j, d))))
-            .map(|(i, j, d)| (i as u32, j as u32, self.dist(d), if d.0 != 0 && d.1 != 0 { 0.0 } else { self.side }))
+            .map(|(i, j, d)| {
+                let corner = d.0 != 0 && d.1 != 0;
+                (i as u32, j as u32, if corner { self.side * SQRT_2 } else { self.side }, if corner { 0.0 } else { self.side })
+            })
             .collect();
-        let cells = super::Level::new(vec![self.side * self.side; n], (0..n).map(centre).collect(), (0..n).map(|i| lat(self.xy(i).1)).collect(), links);
+        let cells = super::Level::new(vec![self.area(); n], (0..n).map(centre).collect(), (0..n).map(|i| lat(self.xy(i).1)).collect(), links);
         let mut mesh = Mesh::new(cells);
         let mut fine = 1;
         for &scale in scales {

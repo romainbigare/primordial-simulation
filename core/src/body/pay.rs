@@ -5,7 +5,7 @@ use super::{Body, COPY_MASS, DENATURE, MAX_TAKE_SHARE, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::math::mean_decay;
 use crate::units::{DAY, MAX_SUBSTANCES};
-use crate::{bond, World};
+use crate::{bond, World, AIR};
 
 /// Upkeep over `days` of a body of `mass` kg, J: per kg of the body that is built (`Body::built`, mass^1.0, not the
 /// fuel it stores), basal upkeep, its catalysts' capacity (`Consts::cats`), strength, learning and signalling; its
@@ -74,7 +74,7 @@ pub(super) fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
 pub(super) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, cap: f64) -> (Vec<f64>, f64) {
     let (chem, i) = (&w.chem, b.cell as usize);
     let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
-    let (ns, na, j, air) = (chem.ns(), w.grid.na(), w.grid.air_of(i), &w.air);
+    let (ns, na, j, air) = (chem.ns(), w.mesh.level(AIR).n(), w.mesh.up(i, 0, AIR), &w.air);
     let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
     let share = (breath(chem, &w.cfg, b, mass, cover_of(w, b), days, depth) / tot).min(MAX_TAKE_SHARE);
     let t = b.temp_at(chem, cap);
@@ -120,8 +120,8 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f6
     if left > 1e-9 * cost && !part {
         return cost;
     }
-    let World { chem, grid, air, .. } = w;
-    let (na, j, t) = (grid.na(), grid.air_of(b.cell as usize), b.temp_at(chem, cap));
+    let World { chem, mesh, air, .. } = w;
+    let (na, j, t) = (mesh.level(AIR).n(), mesh.up(b.cell as usize, 0, AIR), b.temp_at(chem, cap));
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut latent = 0.0;
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {

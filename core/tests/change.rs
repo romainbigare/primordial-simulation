@@ -6,6 +6,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::store::Class;
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
 use worldgen::testkit::{hold_ground, in_all, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -75,14 +76,14 @@ fn hot_energy_rich_node_keeps_burning() {
 #[test]
 fn a_node_sleeps_by_its_own_rates() {
     let mut w = worldgen::new_world(1, 16, 16);
-    let (n, na, hot, cold) = (w.grid.n(), w.grid.na(), 17, 40);
+    let (n, na, hot, cold) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), 17, 40);
     for i in [hot, cold] {
         for k in 0..w.chem.ns() {
             (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
         }
     }
     (w.ground[RICH * n + hot], w.ground[ROCK * n + cold]) = (1000.0, 1e5);
-    let j = w.grid.air_of(hot);
+    let j = w.mesh.up(hot, 0, AIR);
     let tot: f64 = (0..w.chem.ns()).map(|k| w.air[k * na + j]).sum();
     w.air[OX * na + j] += 0.2 * tot;
     w.air[BURNING_GAS * na..(BURNING_GAS + 1) * na].fill(0.0);
@@ -117,7 +118,7 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
         .expect("a burning reaction");
     chem.reactions = vec![chem.reactions[burn].clone()];
     let mut w = worldgen::terrain::build(1, 16, 16, chem, &init, pcore::Config::default());
-    let (n, g) = (w.grid.n(), w.cfg.gravity);
+    let (n, g) = (w.mesh.cells().n(), w.cfg.gravity);
     let i = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
     for k in 0..w.chem.ns() {
         (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
@@ -126,7 +127,7 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
     w.e_ground[i] = w.energy_ground(i, 600.0);
     let (books, air0, pot0) = (Books::now(&w), w.air.clone(), w.potential);
     change::step(&mut w, 3.0 * DAY);
-    let na = w.grid.na();
+    let na = w.mesh.level(AIR).n();
     let kg: f64 = (0..w.chem.ns()).map(|k| (0..na).map(|j| w.air[k * na + j] - air0[k * na + j]).sum::<f64>() * w.chem.subs[k].molar_mass).sum();
     let height = (w.potential - pot0) / (g * kg);
     println!("the air gained {kg:.2} kg across {height:.0} m");
@@ -142,7 +143,7 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
     let (mut chem, init) = worldgen::chemistry0();
     chem.reactions = vec![chem.reactions[BURN].clone()];
     let base = worldgen::terrain::build(1, 16, 16, chem, &init, pcore::Config::default());
-    let (n, i, liquid) = (base.grid.n(), 17, 2000.0);
+    let (n, i, liquid) = (base.mesh.cells().n(), 17, 2000.0);
     let burned = |half: bool| {
         let mut w = base.clone();
         for k in 0..w.chem.ns() {
@@ -413,7 +414,7 @@ fn the_liquid_gives_back_the_gas_it_holds_when_the_air_thins() {
 #[test]
 fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet() {
     let mut w = worldgen::new_world(1, 16, 16);
-    let (n, na) = (w.grid.n(), w.grid.na());
+    let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0).collect();
     assert!(land.iter().all(|&i| w.ground[DISSOLVED * n + i] == 0.0), "land started with the mineral");
     for _ in 0..12 {
@@ -424,10 +425,10 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
     for &i in &land {
         if w.ground[LIQUID * n + i] > 1e6 {
             // The balance at the cell's own liquid, warmth and gas.
-            let (t, j) = (w.t_ground(i), w.grid.air_of(i));
+            let (t, j) = (w.t_ground(i), w.mesh.up(i, 0, AIR));
             let mut amt: Vec<f64> = (0..w.chem.ns()).map(|k| w.ground[k * n + i]).collect();
             amt[DISSOLVED] = 0.0;
-            let share = w.grid.air_share(i);
+            let share = w.mesh.share(i, AIR);
             let gas: Vec<f64> = (0..w.chem.ns()).map(|k| w.air[k * na + j] * share).collect();
             rc.balance(&w.chem, &mut amt, &gas, t);
             if amt[DISSOLVED] > 0.0 {
@@ -532,7 +533,7 @@ fn hot_cover_burns() {
         pcore::step(&mut w);
         worldgen::life::seed(&mut w, 0);
         let i = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node").cell as usize;
-        let n = w.grid.n();
+        let n = w.mesh.cells().n();
         let held = |w: &pcore::World| w.ground[RICH * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[RICH]).sum::<f64>();
         let before = held(&w);
         // A month, the cell heated back to 700 K before each day (booked as an edit).

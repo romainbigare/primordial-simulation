@@ -67,7 +67,7 @@ pub fn step(w: &mut World, dt: f64) {
     let exc_due = first || due(s.pending_exc, cfg.exchange_days as f64);
     let (air_due, liq_due) = (first || due(s.pending, cfg.air_days as f64), first || due(s.pending_liq, cfg.flow_days as f64));
     // The state of ground and air is rebuilt at liquid steps and when a refresh changed what is present.
-    let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.grid.n();
+    let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.cells().n();
     ground_state(w, &mut s, full);
     air::state(w, &mut s, full);
     air::radiation(w, &mut s, dt);
@@ -113,9 +113,9 @@ pub fn conduct(w: &mut World, dt: f64) {
 /// that calls another law alone): its tables and, where it has none, the state of every ground and
 /// air node from the world now. Every law then reads the same state of the last flow step.
 pub(crate) fn ensure(w: &mut World) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let mut s = std::mem::take(&mut w.scratch);
-    if s.air_of.len() != n {
+    if s.near.len() != n {
         tables(w, &mut s);
     }
     let new = s.cap.len() != n;
@@ -142,7 +142,7 @@ fn range(v: &[f64]) -> (f64, f64) {
 
 /// Share of carrying and creep the bodies on cell `i` leave there (1 when bare).
 fn bare_share(w: &World, i: usize) -> f64 {
-    1.0 / (1.0 + w.life.sum.get(i).map_or(0.0, |s| s[1]) / w.grid.area() / w.cfg.phys.hold)
+    1.0 / (1.0 + w.life.sum.get(i).map_or(0.0, |s| s[1]) / w.mesh.cells().area()[i] / w.cfg.phys.hold)
 }
 
 /// Weight of a step of `dt` seconds in a moving average over about a year.

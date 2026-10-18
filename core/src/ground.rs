@@ -104,8 +104,8 @@ impl World {
     /// Heat capacity of a ground node's active layer, J/K: the skin of its bed (`skin_cap`), then its loose amounts in the
     /// order of the substances (the sum `flow::land::ground_state` keeps for every node).
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
-        let (n, ns) = (self.grid.n(), self.chem.ns());
-        let skin = skin_cap(&self.chem, &self.cfg, self.grid.area(), 0..ns, |k| self.bed[k * n + i]);
+        let (n, ns) = (self.mesh.cells().n(), self.chem.ns());
+        let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, |k| self.bed[k * n + i]);
         (0..ns).fold(skin, |c, k| c + self.ground[k * n + i] * self.chem.subs[k].cp)
     }
     /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
@@ -176,6 +176,6 @@ impl World {
             let mv = self.chem.molar_volume(k, chem::Phase::Solid);
             v += (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, i, t, pl))) * mv;
         }
-        self.base_z + v / self.grid.area()
+        self.base_z + v / self.mesh.cells().area()[i]
     }
 }

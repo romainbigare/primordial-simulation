@@ -6,7 +6,7 @@ use super::nodes::{Class, NodeId, Nodes, BOUNDARIES};
 use super::held;
 use crate::chem::Chemistry;
 use crate::ground::share;
-use crate::World;
+use crate::{World, AIR};
 
 /// What a transform may lose or gain of an element to rounding, relative to all the elements it changes.
 const ELEMENT_ROUNDING: f64 = 1e-9;
@@ -155,8 +155,8 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 /// first and checked after (`book_first`), and booked with care only where that finds a number short.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
-    let World { cfg, chem, table, sleep, time, counts, grid, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
-    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, saved, marks, first, woken, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES, 1], booking);
+    let World { cfg, chem, table, sleep, time, counts, mesh, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
+    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, saved, marks, first, woken, sums }) = ([mesh.cells().n(), mesh.level(AIR).n(), mesh.cells().n(), BOUNDARIES, 1], booking);
     let mut books = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..], &mut [], std::slice::from_mut(potential)];
     for ((n, s), b) in need.iter_mut().zip(net.iter_mut()).zip(&books) {
         if n.len() != b.len() {

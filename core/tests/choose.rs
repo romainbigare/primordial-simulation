@@ -31,7 +31,7 @@ fn scene(seed: u64) -> World {
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
     let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
     pcore::step(&mut w);
-    let (n, ns) = (w.grid.n(), w.chem.ns());
+    let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
     let land = dry_land(&w);
     for k in 0..ns {
         let (g, b) = (w.ground[k * n + land], w.bed[k * n + land]);
@@ -40,7 +40,7 @@ fn scene(seed: u64) -> World {
     let e = w.e_ground[land];
     w.e_ground.iter_mut().for_each(|x| *x = e);
     for i in (0..n).filter(|&i| i % W >= STRIP) {
-        w.ground[RICH * n + i] += STRIP_MOL * w.grid.area();
+        w.ground[RICH * n + i] += STRIP_MOL * w.map.area();
     }
     w.life.env.clear();
     pcore::survey::survey(&mut w);
@@ -63,7 +63,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // all start equally likely); the actions on parts and on other bodies kept rare, as they are not part of this
     // scene. The body scaled to `BODY_KG` (booked as an edit).
     let brain = Brain { fixed: [0.0, 0.0, 0.0, OFF, OFF, OFF, OFF], verbs: [OFF; pcore::brain::VERBS + pcore::brain::OVERBS], seed, ..Brain::neutral() };
-    let start = w.grid.idx(STRIP - 1, H / 2);
+    let start = w.map.idx(STRIP - 1, H / 2);
     let mut b = founder(&mut w, 1, start, &brain);
     let f = BODY_KG / b.mass(&w.chem);
     scale(&mut w, &mut b, f);
@@ -74,7 +74,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // Day by day, to see each decision.
     while log.len() < DECISIONS && w.life.bodies[slot].alive {
         let (u, from) = (w.counts.updates, w.life.bodies[slot].cell as usize);
-        let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.grid.step(from, d)).collect();
+        let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.map.step(from, d)).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
         pcore::day(&mut w);
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene

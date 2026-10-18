@@ -10,7 +10,7 @@ mod tally;
 use crate::layers::{frame, Ctx};
 use months::MonthRow;
 use pcore::event::{Event, EventKind};
-use pcore::World;
+use pcore::{World, AIR};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::io;
@@ -84,9 +84,9 @@ fn physics_json(w: &World) -> String {
 impl Recorder {
     /// Frames are kept every `every` years, and every month in the first `monthly` years.
     pub fn new(w: &World, every: u64, monthly: u64) -> Self {
-        let g = &w.grid;
+        let g = &w.map;
         Recorder {
-            shape: Shape { w: g.w, h: g.h, cell_m: g.cell_m, seed: w.seed, days_per_year: w.days_per_year() },
+            shape: Shape { w: g.w, h: g.h, cell_m: g.side, seed: w.seed, days_per_year: w.days_per_year() },
             every,
             monthly,
             seen: vec![false; w.chem.ns()],
@@ -121,7 +121,7 @@ impl Recorder {
 
     /// A substance with a non-zero amount anywhere that was zero everywhere before.
     fn detect(&mut self, w: &mut World) {
-        let (n, na) = (w.grid.n(), w.grid.na());
+        let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
         for k in 0..self.seen.len() {
             if self.seen[k] {
                 continue;

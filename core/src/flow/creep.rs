@@ -2,7 +2,6 @@
 
 use super::land::{lift, melted, molten, rise};
 use super::{bare_share, range, Scratch};
-use crate::space::square::FORWARD;
 use crate::store::{apply, Batch, Class};
 use crate::World;
 
@@ -24,11 +23,12 @@ struct Slides {
     fall: Batch,
 }
 
-/// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more, edge by edge in a fixed
-/// order, each from the amounts the edges before it left; the store books them in one call (`store::apply`). Bodies
-/// spread back into ground cleared along edges (`lanes::regrow`, here only, so it closes at the documented speed).
+/// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more, link by link of the cell
+/// level in their order, each from the amounts the links before it left; the store books them in one call
+/// (`store::apply`). Bodies spread back into ground cleared along links (`lanes::regrow`, here only, so it closes at the
+/// documented speed).
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let sol = s.solids(range(&s.tg).0);
     let soft: Vec<f64> = sol.iter().map(|&k| 1.0 / (w.chem.subs[k].hardness + HARD_MIN)).collect();
     let amt: Vec<f64> = sol.iter().flat_map(|&k| w.ground[k * n..(k + 1) * n].iter().copied()).collect();
@@ -40,28 +40,28 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     }
     let ks: Vec<u16> = sol.iter().map(|&k| k as u16).collect();
     let mut sl = Slides { amt, mob, moved: Batch::new([Class::Ground; 2], &ks), fall: Batch::falls(Class::Ground) };
-    for i in 0..n {
-        for d in FORWARD {
-            let Some(j) = w.grid.step(i, d) else { continue };
-            let (a, b) = if s.z[i] > s.z[j] { (i, j) } else { (j, i) };
-            slide(w, s, (a, b), d, (&sol, &soft), dt, &mut sl);
-        }
+    let cells = w.mesh.cells();
+    for (l, (&i, &j)) in cells.a().iter().zip(cells.b()).enumerate() {
+        let (i, j) = (i as usize, j as usize);
+        let (a, b) = if s.z[i] > s.z[j] { (i, j) } else { (j, i) };
+        slide(w, s, (a, b), cells.dist()[l], (&sol, &soft), dt, &mut sl);
     }
     apply(w, &[sl.moved.flux(), sl.fall.flux()], &[], &[]);
     crate::lanes::regrow(w, dt);
 }
 
-/// Loose solids `sol` (with softness `soft`) creep from the higher node `a` to its neighbour `b` (along `d`) with their
-/// heat; the mass's fall heats `b`.
-fn slide(w: &World, s: &mut Scratch, (a, b): (usize, usize), d: (i32, i32), (sol, soft): (&[usize], &[f64]), dt: f64, sl: &mut Slides) {
-    let (n, area, g, cell, dist) = (w.grid.n(), s.area, w.cfg.gravity, w.grid.cell_m, w.grid.dist(d));
+/// Loose solids `sol` (with softness `soft`) creep from the higher node `a` to its neighbour `b`, `dist` m between their
+/// centres, with their heat; the mass's fall heats `b`. They cross a border as wide as the side of `a` (the square root
+/// of its area), across a corner too.
+fn slide(w: &World, s: &mut Scratch, (a, b): (usize, usize), dist: f64, (sol, soft): (&[usize], &[f64]), dt: f64, sl: &mut Slides) {
+    let (n, area, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.gravity);
     let Slides { amt, mob, .. } = sl;
     let dz = s.z[a] - s.z[b];
     if mob[a] <= 0.0 || dz <= 0.0 {
         return;
     }
-    let r = w.cfg.creep * dz / dist * cell * dt / area * bare_share(w, a);
-    let f = (area * dz * CREEP_LEVEL / (r * mob[a])).min(1.0);
+    let r = w.cfg.creep * dz / dist * area[a].sqrt() * dt / area[a] * bare_share(w, a);
+    let f = (area[a] * dz * CREEP_LEVEL / (r * mob[a])).min(1.0);
     let (ta, tb) = (s.tg[a], s.tg[b]);
     // What moves, summed over substances: heat capacity, mass, mobility, rise of each surface and head.
     let (mut c, mut mass, mut moved, mut ua, mut ub) = (0.0, 0.0, 0.0, [0.0; 2], [0.0; 2]);
@@ -71,7 +71,7 @@ fn slide(w: &World, s: &mut Scratch, (a, b): (usize, usize), d: (i32, i32), (sol
         if x > 0.0 {
             let (p, m) = (&s.sp[k], (x * r * f * soft[q]).min(CREEP_MOST * x));
             (amt[q * n + a], amt[q * n + b], out[q]) = (amt[q * n + a] - m, amt[q * n + b] + m, m);
-            let (da, db) = (rise(p, ta, melted(s, k, a), -m, area), rise(p, tb, melted(s, k, b), m, area));
+            let (da, db) = (rise(p, ta, melted(s, k, a), -m, area[a]), rise(p, tb, melted(s, k, b), m, area[b]));
             (c, mass, moved) = (c + m * p.cp, mass + m * p.mm, moved + m * p.v[0] * soft[q]);
             (ua, ub) = ([ua[0] + da[0], ua[1] + da[1]], [ub[0] + db[0], ub[1] + db[1]]);
         }

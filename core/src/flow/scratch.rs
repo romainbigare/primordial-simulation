@@ -6,7 +6,7 @@ use super::land::NONE;
 use super::range;
 use crate::chem::Chemistry;
 use crate::solve::downhill::Order;
-use crate::World;
+use crate::{World, AIR};
 use serde::{Deserialize, Serialize};
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
@@ -59,11 +59,9 @@ pub(super) struct Bed {
 
 /// What Law 2 reads of the last flow step (`Scratch::view`).
 pub(crate) struct FlowView<'a> {
-    /// Per ground node: its temperature, K; the heat capacity of the skin of its bed, J/K; its air node; the head of
-    /// its liquid, m
+    /// Per ground node: its temperature, K; the heat capacity of the skin of its bed, J/K; the head of its liquid, m
     pub tg: &'a [f64],
     pub skin: &'a [f64],
-    pub air_of: &'a [u32],
     pub head: &'a [f64],
     /// Per air node: its temperature, K; the mean height of its air, m
     pub ta: &'a [f64],
@@ -74,11 +72,11 @@ pub(crate) struct FlowView<'a> {
 }
 
 impl FlowView<'_> {
-    /// Energy to lift a kg from the head of ground node `i` to the mean height of its air node, J/kg, under a gravity
-    /// of `g` m/s² (`Sky::cross`).
+    /// Energy to lift a kg from the head of ground node `i` to the mean height of air node `j` (its own), J/kg, under a
+    /// gravity of `g` m/s² (`Sky::cross`).
     #[inline]
-    pub(crate) fn lift(&self, i: usize, g: f64) -> f64 {
-        g * (self.zair[self.air_of[i] as usize] - self.head[i])
+    pub(crate) fn lift(&self, i: usize, j: usize, g: f64) -> f64 {
+        g * (self.zair[j] - self.head[i])
     }
     /// Fusion enthalpy ground node `i` holds when its energy is `e`, J, as Flow's last solve of its plateaus has it
     /// (`ground::melting`): that of what is molten off a plateau and, on one, as much of the fusion enthalpy of the
@@ -110,9 +108,6 @@ pub struct Scratch {
     /// The substances present changed: rebuild the state of ground and air at the next step.
     #[serde(skip)]
     pub(super) stale: bool,
-    /// Area of a ground cell, m².
-    #[serde(skip)]
-    pub(super) area: f64,
     /// The numbers of each substance.
     #[serde(skip)]
     pub(super) sp: Vec<Sp>,
@@ -151,10 +146,7 @@ pub struct Scratch {
     /// Cells by the head of the liquid that may run off, highest first: the order of the liquid's pass (`liquid`).
     #[serde(skip)]
     pub(super) order: Order,
-    /// Air node over each ground cell (radiation and Law 2 read it); the four nearest air nodes and their weights
-    /// (`air::lerp`).
-    #[serde(skip)]
-    pub(super) air_of: Vec<u32>,
+    /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
     #[serde(skip)]
     pub(super) near: Vec<[u32; 4]>,
     #[serde(skip)]
@@ -207,7 +199,7 @@ impl Scratch {
     }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        FlowView { tg: &self.tg, skin: &self.skin, air_of: &self.air_of, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.pk }
+        FlowView { tg: &self.tg, skin: &self.skin, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.pk }
     }
     /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
     /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that
@@ -255,7 +247,7 @@ const COND_MIN: f64 = 1e-3;
 /// Every few months: which substances are present, the slow-changing bonded ground and fixed
 /// solids, and (once) the state vectors.
 pub(super) fn refresh(w: &World, s: &mut Scratch) {
-    let (n, na, ns) = (w.grid.n(), w.grid.na(), w.chem.ns());
+    let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
     let tmax = if s.tg.len() == n { range(&s.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) };
     let up = |k: usize| may_evaporate(w, k, tmax);
@@ -301,12 +293,10 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     s.seen = vec![[0.0; 5]; n];
 }
 
-/// Tables that depend on the grid and the chemistry alone: ground cell area, substance constants,
-/// and the map from ground cells to air nodes. Rebuilt when missing (they are not saved).
+/// Tables that depend on the map and the chemistry alone: substance constants, and the four air nodes each ground
+/// cell reads between. Rebuilt when missing (they are not saved).
 pub(super) fn tables(w: &World, s: &mut Scratch) {
-    let (n, g) = (w.grid.n(), &w.grid);
     let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
-    s.area = g.area();
     s.sp = (w.chem.subs.iter())
         .map(|b| Sp {
             cp: b.cp,
@@ -320,17 +310,20 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             refl: [mean(b.refl[0]), mean(b.refl[1])],
         })
         .collect();
-    s.air_of = (0..n).map(|i| g.air_of(i) as u32).collect();
+    // The air nodes lie on the square map in blocks of `air_scale`² squares, `aw × ah` of them: a cell reads between
+    // the four whose centres are nearest (bilinear weights).
+    let (map, scale) = (w.map, w.air_scale);
+    let (aw, ah) = (map.w.div_ceil(scale), map.h.div_ceil(scale));
     let axis = |c: usize, len: usize| {
-        let f = ((c as f64 + 0.5) / g.air_scale as f64 - 0.5).clamp(0.0, (len - 1) as f64);
+        let f = ((c as f64 + 0.5) / scale as f64 - 0.5).clamp(0.0, (len - 1) as f64);
         let a = (f as usize).min(len.saturating_sub(2));
         (a, (a + 1).min(len - 1), f - a as f64)
     };
-    (s.near, s.wt) = (0..n)
+    (s.near, s.wt) = (0..map.n())
         .map(|i| {
-            let (x, y) = g.xy(i);
-            let ((x0, x1, tx), (y0, y1, ty)) = (axis(x, g.aw()), axis(y, g.ah()));
-            let j = |x: usize, y: usize| (y * g.aw() + x) as u32;
+            let (x, y) = map.xy(i);
+            let ((x0, x1, tx), (y0, y1, ty)) = (axis(x, aw), axis(y, ah));
+            let j = |x: usize, y: usize| (y * aw + x) as u32;
             ([j(x0, y0), j(x1, y0), j(x0, y1), j(x1, y1)], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
         })
         .unzip();

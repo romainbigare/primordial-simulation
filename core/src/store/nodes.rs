@@ -1,8 +1,9 @@
 //! The node table: each node of the world has a stable id, a class (which arrays of `World` hold its amounts and its
-//! heat), the node it lies inside and its cell. The nodes of the grid are fixed; parts come and go, so their slots are
+//! heat), the node it lies inside and its cell. The nodes of the mesh are fixed; parts come and go, so their slots are
 //! reused with a new generation, and the table is saved with the world.
 
-use crate::grid::Grid;
+use crate::space::Mesh;
+use crate::AIR;
 use crate::life::free_place;
 use serde::{Deserialize, Serialize};
 
@@ -80,11 +81,11 @@ pub struct Nodes {
 }
 
 impl Nodes {
-    /// The table of a world on `grid`: its ground nodes, then its air nodes, then its deep stores, each in the order of
+    /// The table of a world on `mesh`: its ground nodes, then its air nodes, then its deep stores, each in the order of
     /// its cells, then the boundary nodes and the potential; the parts come after them.
-    pub fn of_grid(grid: &Grid) -> Self {
+    pub fn of_mesh(mesh: &Mesh) -> Self {
         let mut t = Nodes::default();
-        for (class, len) in [(Class::Ground, grid.n()), (Class::Air, grid.na()), (Class::Deep, grid.n()), (Class::Boundary, BOUNDARIES), (Class::Potential, 1)] {
+        for (class, len) in [(Class::Ground, mesh.cells().n()), (Class::Air, mesh.level(AIR).n()), (Class::Deep, mesh.cells().n()), (Class::Boundary, BOUNDARIES), (Class::Potential, 1)] {
             t.first[class as usize] = t.nodes.len() as u32;
             t.nodes.extend((0..len as u32).map(|cell| Node { gen: 0, class, parent: None, cell }));
         }

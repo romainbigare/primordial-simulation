@@ -4,7 +4,7 @@
 use super::{Row, GIGA};
 use crate::layers::{dry_land_flux, Ctx, COVER_MIN, RIVER_WEB};
 use crate::rec::{Recorder, CAUSES};
-use pcore::World;
+use pcore::{World, AIR};
 
 fn mean(v: &[f64]) -> f64 {
     v.iter().sum::<f64>() / v.len() as f64
@@ -12,8 +12,8 @@ fn mean(v: &[f64]) -> f64 {
 
 impl Recorder {
     pub(super) fn world_cols(&self, c: &Ctx, land: &[usize], row: &mut Row) {
-        let (w, n) = (c.w, c.w.grid.n() as f64);
-        let (life, area) = (&w.life, w.grid.area());
+        let (w, n) = (c.w, c.w.mesh.cells().n() as f64);
+        let (life, area) = (&w.life, w.map.area());
         let tot = pcore::check::totals(w);
         row.push("year", "yr", w.year());
         row.push("null", "1", w.cfg.null as u8 as f64);
@@ -32,7 +32,7 @@ impl Recorder {
         // The mole fraction in the air of each heat-absorbing gas (`absorber` is their total absorption, so the
         // one that rises shows in these).
         row.push("absorber", "1", mean(&c.absorber));
-        let (na, all) = (w.grid.na(), w.air.iter().sum::<f64>());
+        let (na, all) = (w.mesh.level(AIR).n(), w.air.iter().sum::<f64>());
         for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
             row.push(format!("air_{k}"), "1", w.air[k * na..(k + 1) * na].iter().sum::<f64>() / all);
         }
@@ -85,7 +85,7 @@ impl Recorder {
 /// and the stores of the bed (`World::deep`).
 fn minerals(c: &Ctx, row: &mut Row) {
     let w = c.w;
-    let (n, area, matter, minerals) = (w.grid.n(), w.grid.area(), w.chem.matter(), w.chem.minerals());
+    let (n, area, matter, minerals) = (w.mesh.cells().n(), w.map.area(), w.chem.matter(), w.chem.minerals());
     let mut bodies = vec![0.0f64; minerals.len()];
     for b in w.life.alive() {
         for (x, &(k, per)) in bodies.iter_mut().zip(&minerals) {
@@ -113,10 +113,10 @@ fn minerals(c: &Ctx, row: &mut Row) {
 
 /// Dead fuel, matter and each solid bodies build on the ground of the land, kg/m².
 fn dead(w: &World, land: &[usize], row: &mut Row) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let fuel = w.chem.build.as_ref().map(|b| b.inputs[0].0 as usize);
     for k in fuel.into_iter().chain(w.chem.matter()).chain(w.chem.materials()) {
         let kg = land.iter().map(|&i| w.ground[k * n + i]).sum::<f64>() * w.chem.subs[k].molar_mass;
-        row.push(format!("dead_{k}"), "kg/m2", kg / (land.len().max(1) as f64 * w.grid.area()));
+        row.push(format!("dead_{k}"), "kg/m2", kg / (land.len().max(1) as f64 * w.map.area()));
     }
 }

@@ -17,7 +17,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | Law or part | Files |
 |---|---|
 | time and the month's order | `clock/` (the calendar, processes with periods; `sleep`: the sleep and wake of nodes), `schedule.rs` (`step`, `step_marked`, `day`) |
-| the shape of the world | `space/` (`Mesh`: levels of cells and links with their widths, parents and children; `square`: the square map; `stack`: layers above and below a cell); `grid.rs` is a thin view on it |
+| the shape of the world | `space/` (`Mesh`: levels of cells and links with their widths, parents and children; `square`: the square map; `stack`: layers above and below a cell). `World::mesh` is built from the saved map (`World::map`, `World::air_scale`; `World::mesh_of`), and the laws read cells, links, areas and air nodes from it. The square map is read only where a law is about its layout: the eight moves and sides a brain sees (`choose`), the side a child lands on (`copy`), the lowest neighbour a drifting part goes to (`bond::month`, first in compass order on a tie), the groups' centres (`life`, `choose::learn`), and the four air nodes a cell reads the air between (`flow::scratch::tables`) |
 | the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `lines`: the implicit step along a line) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`); `flow::land::conduct` (sideways) |
@@ -32,7 +32,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 
 | Word | Meaning |
 |---|---|
-| cell | one square of the map (2 km × 2 km). It has a ground node and sees an air node: its parent at the mesh's air level (`grid::AIR`), whose share over it is its area over the node's (`Grid::air_share`). |
+| cell | one square of the map (2 km × 2 km). It has a ground node and sees an air node: its parent at the mesh's air level (`AIR`), whose share over it is its area over the node's (`Mesh::share`). |
 | node | anything that holds stuff: the ground of a cell, an air column, a body, a part |
 | body | a living node with genes and (maybe) a brain |
 | member | one living thing inside a body. A body with 1 member is an **individual**. A body with many members is a **population node** (all members alike, counted together). |
@@ -182,7 +182,8 @@ Moving liquid loses energy (its lost head). That energy does work where it is lo
 - Bodies on a cell hold the ground: they cut carrying and creep by 1 / (1 + their mass per
   area / `hold`).
 - **Creep** (`flow::creep`, once a year): loose ground slides downhill like a slow diffusion,
-  `creep` × softness × thickness × slope, edge by edge, each from what the edges before it left;
+  `creep` × softness × thickness × slope, link by link of the cells (corners too, as wide as a side), each from
+  what the links before it left;
   the store books it all in one call.
 
 `carry`, `wear` and `creep` come from real erosion rates (`docs/numbers.md`). Most rock that
@@ -250,7 +251,7 @@ layer. Height is what the body's materials hold up (3.6). Rain on bodies is shar
 ### 1.6 Wind
 
 `flow::air::wind`, every `air_days`. The air nodes are the coarser level of the mesh
-(`grid::AIR`); the wind runs on that level's links (the cells of two nodes that share a border).
+(`AIR`); the wind runs on that level's links (the cells of two nodes that share a border).
 Gas moves over each link by three pushes:
 
 1. the pressure of the whole column (p = nRT/V), from high to low;

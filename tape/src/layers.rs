@@ -2,7 +2,7 @@
 //! To add a layer, add one line to `LAYERS` (and the data it needs to `Ctx`).
 
 use pcore::chem::{Phase, Substance};
-use pcore::World;
+use pcore::{World, AIR};
 
 /// Thinnest cover (m) that hides what lies below it.
 pub(crate) const COVER_MIN: f64 = 0.01;
@@ -35,7 +35,7 @@ pub struct Fields {
 }
 
 pub fn fields(w: &World) -> Fields {
-    let (n, ns, area) = (w.grid.n(), w.chem.ns(), w.grid.area());
+    let (n, ns, area) = (w.mesh.cells().n(), w.chem.ns(), w.map.area());
     let mut f = Fields { z: vec![0.0; n], depth: vec![0.0; n], ice: vec![0.0; n], loose: vec![0.0; n], t: vec![0.0; n], rgb: vec![[0.0; 3]; n] };
     for i in 0..n {
         let (t, pl) = w.thaw_last(i);
@@ -75,7 +75,7 @@ pub const RIVER_WEB: f64 = 9.0e3;
 
 /// The liquid flux of each dry land cell (land under no more than `STANDING_M` of liquid), mol/s: where a river may be.
 pub fn dry_land_flux(w: &World, f: &Fields) -> Vec<f64> {
-    let dry = (0..w.grid.n()).filter(|&i| w.is_land(i) && f.depth[i] <= STANDING_M);
+    let dry = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i) && f.depth[i] <= STANDING_M);
     dry.map(|i| w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64).collect()
 }
 
@@ -100,26 +100,26 @@ pub(crate) struct Ctx<'a> {
 
 impl<'a> Ctx<'a> {
     pub(crate) fn new(w: &'a World) -> Self {
-        let (na, ns) = (w.grid.na(), w.chem.ns());
+        let (na, ns) = (w.mesh.level(AIR).n(), w.chem.ns());
         let mut cells = vec![0.0; na];
-        for i in 0..w.grid.n() {
-            cells[w.grid.air_of(i)] += 1.0;
+        for i in 0..w.mesh.cells().n() {
+            cells[w.mesh.up(i, 0, AIR)] += 1.0;
         }
-        let n = w.grid.n();
+        let n = w.mesh.cells().n();
         let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
         let light = w.life.bodies.iter().map(|b| b.alive && pcore::body::light_eater(&w.chem, &b.genes)).collect();
         let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light };
         for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
-            c.parts[pcore::bond::cell(w, x)] += p.mass(&w.chem) / w.grid.area();
+            c.parts[pcore::bond::cell(w, x)] += p.mass(&w.chem) / w.map.area();
         }
         for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let i = b.cell as usize;
-            let m = b.mass(&w.chem) / w.grid.area();
+            let m = b.mass(&w.chem) / w.map.area();
             *if c.light[s] { &mut c.plants[i] } else { &mut c.animals[i] } += m;
             c.bodies[i] += 1.0;
         }
         for (j, &count) in cells.iter().enumerate() {
-            let area = count * w.grid.area();
+            let area = count * w.map.area();
             for k in 0..ns {
                 let (s, n) = (&w.chem.subs[k], w.a(k, j));
                 c.absorber[j] += w.chem.depth(k, n / area);
@@ -131,7 +131,7 @@ impl<'a> Ctx<'a> {
         c
     }
     fn air(&self, i: usize) -> usize {
-        self.w.grid.air_of(i)
+        self.w.mesh.up(i, 0, AIR)
     }
 }
 
@@ -164,7 +164,7 @@ pub const LAYERS: &[Layer] = &[
     l("animals", "kg/m2", "log", 1e-4, 10.0, |c, i| c.animals[i]),
     l("bodies", "1", "lin", 0.0, 32.0, |c, i| c.bodies[i]),
     l("traffic", "1/yr", "log", 1.0, 1e4, |c, i| c.w.counts.traffic.get(i).copied().unwrap_or(0.0) as f64),
-    l("worn", "1", "log", 1.0, 100.0, |c, i| c.w.grid.mesh().cells().around(i).0.iter().map(|&l| pcore::lanes::eased(c.w, l as usize)).fold(1.0, f64::max)),
+    l("worn", "1", "log", 1.0, 100.0, |c, i| c.w.mesh.cells().around(i).0.iter().map(|&l| pcore::lanes::eased(c.w, l as usize)).fold(1.0, f64::max)),
     l("structures", "kg/m2", "log", 1e-6, 1.0, |c, i| c.parts[i]),
     l("true_r", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][0]),
     l("true_g", "", "raw", 0.0, 1.0, |c, i| c.f.rgb[i][1]),
@@ -185,6 +185,6 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
 /// Append one frame: every layer in table order, row-major.
 pub(crate) fn frame(c: &Ctx, out: &mut Vec<u8>) {
     for l in LAYERS {
-        out.extend((0..c.w.grid.n()).map(|i| quantise(l, (l.val)(c, i))));
+        out.extend((0..c.w.mesh.cells().n()).map(|i| quantise(l, (l.val)(c, i))));
     }
 }

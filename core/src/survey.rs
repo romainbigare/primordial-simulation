@@ -29,15 +29,15 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
             Phase::Gas => {}
         }
     }
-    let area = w.grid.area();
+    let area = w.mesh.cells().area()[i];
     [t, (d - w.cfg.phys.porosity * loose).max(0.0) / area, w.base_z + z / area]
 }
 
 /// Before each physics step: what each cell holds (`sum_cells`), the light and heat it holds aside for its bodies
 /// (`hold_heat`), and once a month the merge of alike nodes, the brain groups, the traffic and each cell's surroundings.
 pub fn survey(w: &mut World) {
-    let n = w.grid.n();
-    w.life.fit_grid(n, w.grid.w as u32);
+    let n = w.mesh.cells().n();
+    w.life.fit_map(n, w.map.w as u32);
     if w.canopy.len() != n {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
@@ -56,8 +56,8 @@ pub fn survey(w: &mut World) {
     }
     if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
-        let (ns, area) = (w.chem.ns(), w.grid.area());
-        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area) as f32)).collect();
+        let (ns, area) = (w.chem.ns(), w.mesh.cells().area());
+        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area[x / ns]) as f32)).collect();
     }
     choose::cells(w);
 }
@@ -67,7 +67,7 @@ pub fn survey(w: &mut World) {
 /// light reactions (`Life::absorb`, `Life::keep`). Set-aside light its bodies can no longer claim at their updates (one
 /// died, moved or merged before its update, or caught less than its share; walls aside) becomes the ground's heat.
 fn sum_cells(w: &mut World) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let keep = |s: usize, g: u32| w.light_keep.get(s, g) as f64;
     let (mut abs, mut kept, mut claim) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     let mut sum = vec![[0.0; 7]; n];
@@ -81,15 +81,15 @@ fn sum_cells(w: &mut World) {
         let s = a * w.life.shade[slot];
         (abs[i], kept[i], claim[i]) = (abs[i] + s, kept[i] + s * k, claim[i] + a * k * (w.light[i] - b.mark));
     }
-    let World { life, grid, canopy, light_pool, e_ground, .. } = w;
+    let World { life, mesh, canopy, light_pool, e_ground, .. } = w;
     life.sum = sum;
     life.absorb.resize(n, 0.0);
     life.keep.resize(n, 0.0);
     light_pool.resize(n, 0.0);
-    let area = grid.area();
+    let area = mesh.cells().area();
     for i in 0..n {
         let s = life.sum[i][2];
-        canopy[i] = (s / area) as f32;
+        canopy[i] = (s / area[i]) as f32;
         life.absorb[i] = if s > 0.0 { (abs[i] / s) as f32 } else { 0.0 };
         life.keep[i] = if abs[i] > 0.0 { (kept[i] / abs[i]) as f32 } else { 0.0 };
         let over = (light_pool[i] - claim[i]).max(0.0);
@@ -101,7 +101,7 @@ fn sum_cells(w: &mut World) {
 /// aside what each would settle now at that rate (`World::heat_pool`; it gives back what none can claim), as far as
 /// the ground has it.
 fn hold_heat(w: &mut World) {
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let mut owed = vec![0.0; n];
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         let q = w.heat_keep.get(slot, b.gen) as f64;
@@ -119,7 +119,7 @@ fn hold_heat(w: &mut World) {
 
 /// The yearly moving average of the crossings of each cell (`Counters::traffic`), once a month.
 fn traffic(w: &mut World) {
-    let (n, d) = (w.grid.n(), &mut w.counts);
+    let (n, d) = (w.mesh.cells().n(), &mut w.counts);
     d.traffic.resize(n, 0.0);
     d.crossings.resize(n, 0.0);
     let a = 1.0 / w.cfg.months_per_year as f32;
@@ -142,12 +142,12 @@ pub(crate) fn intercept(x: f64) -> f64 {
 /// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
 fn shade(w: &mut World) {
     let g = intercept;
-    let (Life { bodies, at, shade, .. }, area, chem, cfg) = (&mut w.life, w.grid.area(), &w.chem, &w.cfg);
+    let (Life { bodies, at, shade, .. }, area, chem, cfg) = (&mut w.life, w.mesh.cells().area(), &w.chem, &w.cfg);
     shade.resize(bodies.len(), 1.0);
     let mut l: Vec<(f32, f64, usize)> = Vec::new();
-    for s in at.iter() {
+    for (i, s) in at.iter().enumerate() {
         l.clear();
-        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.height(chem, cfg) as f32, b.vis[1] as f64 * b.n() / area, s)));
+        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.height(chem, cfg) as f32, b.vis[1] as f64 * b.n() / area[i], s)));
         l.sort_by(|a, b| b.0.total_cmp(&a.0));
         let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
         while k < l.len() {

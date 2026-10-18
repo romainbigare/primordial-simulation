@@ -20,7 +20,7 @@ fn near(lay: &Layout, chem: &pcore::chem::Chemistry, alike: f32, a: &Body, b: &B
 /// dissolved mineral falls out of the liquid inside a body within days, so a store given from outside is gone by the
 /// next update; roots give it at the update, just before the body builds.)
 fn feed_minerals(w: &mut World, s: usize) {
-    let (i, n, lay) = (w.life.bodies[s].cell as usize, w.grid.n(), Layout::of(&w.chem));
+    let (i, n, lay) = (w.life.bodies[s].cell as usize, w.mesh.cells().n(), Layout::of(&w.chem));
     for (mk, _) in w.chem.minerals() {
         let b = &mut w.life.bodies[s];
         (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
@@ -545,7 +545,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         b.genes[COPY_MASS] = 1.645;
         let (s, b0) = out(&mut w, b);
         w.life.bodies[s] = b0;
-        let area = w.grid.area();
+        let area = w.map.area();
         let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {
@@ -1191,7 +1191,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     let spread: Vec<f32> = inv.iter().map(|&x| if x > 0.0 { (a * a * std::f32::consts::FRAC_PI_8 + 1.0) / (x * x) } else { 0.0 }).collect();
     let s = live(&w).into_iter().find(|&s| {
         let i = w.life.bodies[s].cell as usize;
-        pcore::space::square::DIRS.iter().all(|&d| w.grid.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
+        pcore::space::square::DIRS.iter().all(|&d| w.map.step(i, d).is_some_and(|j| !w.life.at[j].is_empty()))
     }).expect("a node with nodes all around");
     // Members mature from 0.65 of their body, all children leave.
     let mut genes = w.life.bodies[s].genes.clone();

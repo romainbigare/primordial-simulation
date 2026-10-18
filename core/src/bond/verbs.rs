@@ -222,7 +222,7 @@ pub fn release(w: &mut World, b: &mut Body) {
 
 /// Bond the held part to the cell's bonded ground and let go of it.
 pub fn anchor(w: &mut World, b: &mut Body) {
-    let (Some(p), i, n) = (held(w, b), b.cell as usize, w.grid.n()) else { return };
+    let (Some(p), i, n) = (held(w, b), b.cell as usize, w.mesh.cells().n()) else { return };
     let (mut v, mut sv) = (0.0, 0.0);
     for k in 0..w.chem.ns() {
         let vol = w.bed[k * n + i] * w.chem.molar_volume(k, Phase::Solid);
@@ -240,7 +240,7 @@ pub fn anchor(w: &mut World, b: &mut Body) {
 /// strength (times what a held part adds) comes loose, the more the weaker it is, as far as the body
 /// can work in the time (`Physics::dig` x its body, `Body::built`, as force goes by the body).
 pub fn dig(w: &mut World, b: &mut Body) {
-    let (i, n, mb) = (b.cell as usize, w.grid.n(), b.built(&w.chem));
+    let (i, n, mb) = (b.cell as usize, w.mesh.cells().n(), b.built(&w.chem));
     let (lev, chem) = (lever(w, b), &w.chem);
     let f = b.gene(STRENGTH) * lev;
     let vol: f64 = (0..chem.ns()).map(|k| w.bed[k * n + i] * chem.molar_volume(k, Phase::Solid)).sum();

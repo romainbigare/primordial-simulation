@@ -229,8 +229,8 @@ fn move_structure(w: &mut World, r: usize, to: usize) {
 
 /// Size the per-cell lists.
 pub(crate) fn ready(w: &mut World) {
-    if w.parts.at.len() != w.grid.n() {
-        w.parts.at = vec![Vec::new(); w.grid.n()];
+    if w.parts.at.len() != w.mesh.cells().n() {
+        w.parts.at = vec![Vec::new(); w.mesh.cells().n()];
     }
 }
 
@@ -325,7 +325,7 @@ fn dissolve(w: &mut World, s: usize) {
     if let Some(h) = holder(w, s) {
         w.life.bodies[h].hold = None;
     }
-    let (n, i, node, p) = (w.grid.n(), cell(w, s), id(w, s), std::mem::take(&mut w.parts.parts[s]));
+    let (n, i, node, p) = (w.mesh.cells().n(), cell(w, s), id(w, s), std::mem::take(&mut w.parts.parts[s]));
     for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate() {
         w.ground[k * n + i] += a + f;
     }

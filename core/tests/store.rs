@@ -4,7 +4,7 @@
 use pcore::check;
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{apply, Boundary, Class, LinkFlux, Move, NodeId, Transform, BOUNDARIES};
-use pcore::World;
+use pcore::{World, AIR};
 use worldgen::testkit::{put, small_world, Books, LIQUID, ROCK};
 
 /// Random changes the books test makes, in all (rounds of `PER_ROUND`).
@@ -19,9 +19,9 @@ const CLASSES: [Class; 3] = [Class::Ground, Class::Air, Class::Deep];
 /// The amounts (`[k * len + index]`) and heats of the nodes of `class`, and their count.
 fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
     match class {
-        Class::Ground => (&w.ground, &w.e_ground, w.grid.n()),
-        Class::Air => (&w.air, &w.e_air, w.grid.na()),
-        Class::Deep => (&w.deep, &w.e_deep, w.grid.n()),
+        Class::Ground => (&w.ground, &w.e_ground, w.mesh.cells().n()),
+        Class::Air => (&w.air, &w.e_air, w.mesh.level(AIR).n()),
+        Class::Deep => (&w.deep, &w.e_deep, w.mesh.cells().n()),
         Class::Boundary => (&w.boundary, &w.e_boundary[..], BOUNDARIES),
         Class::Potential => (&[], std::slice::from_ref(&w.potential), 1),
         Class::Part => unreachable!("a part's amounts lie in the part"),
@@ -40,20 +40,20 @@ fn every_node_has_one_id() {
     }
     let n = ids.len();
     ids.dedup();
-    assert_eq!((ids.len(), n), (n, 2 * w.grid.n() + w.grid.na() + BOUNDARIES + 1), "one id for each ground, air, deep and boundary node, and the potential");
+    assert_eq!((ids.len(), n), (n, 2 * w.mesh.cells().n() + w.mesh.level(AIR).n() + BOUNDARIES + 1), "one id for each ground, air, deep and boundary node, and the potential");
 }
 
 /// Two moves that each ask for all a node holds each get half of it.
 #[test]
 fn what_leaves_a_node_that_holds_too_little_is_scaled_down() {
     let mut w = small_world();
-    let (k, i) = (0..w.chem.ns()).flat_map(|k| (0..w.grid.n()).map(move |i| (k, i))).find(|&(k, i)| w.g(k, i) > 0.0).unwrap();
+    let (k, i) = (0..w.chem.ns()).flat_map(|k| (0..w.mesh.cells().n()).map(move |i| (k, i))).find(|&(k, i)| w.g(k, i) > 0.0).unwrap();
     let (have, from) = (w.g(k, i), w.table.id(Class::Ground, i));
     let to = |j| Move { from, to: w.table.id(Class::Deep, j), k: k as u16, mol: have, heat: 0.0 };
     let (m0, m1) = (to(i), to(i + 1));
-    let deep0 = [i, i + 1].map(|j| w.deep.get(k * w.grid.n() + j).copied().unwrap_or(0.0));
+    let deep0 = [i, i + 1].map(|j| w.deep.get(k * w.mesh.cells().n() + j).copied().unwrap_or(0.0));
     apply(&mut w, &[], &[m0, m1], &[]);
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     assert_eq!(w.g(k, i), 0.0);
     for (j, d0) in [i, i + 1].into_iter().zip(deep0) {
         assert!((w.deep[k * n + j] - d0 - have / 2.0).abs() <= 1e-12 * w.deep[k * n + j], "deep store {j}");
@@ -67,7 +67,7 @@ fn what_leaves_a_node_that_holds_too_little_is_scaled_down() {
 fn what_passes_through_a_node_is_not_scaled() {
     const CHAIN: usize = 6;
     let mut w = small_world();
-    let (n, have) = (w.grid.n(), 1e3);
+    let (n, have) = (w.mesh.cells().n(), 1e3);
     let held: Vec<f64> = (0..CHAIN).map(|i| if i == 0 { have } else { 1e-3 * have * (i % 2) as f64 }).collect();
     w.ground[LIQUID * n..LIQUID * n + CHAIN].copy_from_slice(&held);
     let (a, b): (Vec<u32>, Vec<u32>) = (0..CHAIN as u32 - 1).map(|i| (i, i + 1)).unzip();
@@ -89,7 +89,7 @@ fn what_passes_through_a_node_is_not_scaled() {
 fn a_link_joins_a_ground_node_to_its_store() {
     let mut w = small_world();
     w.booking = Default::default();
-    let (n, i) = (w.grid.n(), 3);
+    let (n, i) = (w.mesh.cells().n(), 3);
     let (have, deep, heat) = (w.g(LIQUID, i), w.deep[LIQUID * n + i], 1e-3 * w.e_ground[i]);
     let books = Books::now(&w);
     let cell = [i as u32];
@@ -105,7 +105,7 @@ fn a_link_joins_a_ground_node_to_its_store() {
 fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
     let mut w = small_world();
     let i = 3;
-    let (j, latent) = (w.grid.air_of(i) as u32, w.chem.subs[LIQUID].latent_gas());
+    let (j, latent) = (w.mesh.up(i, 0, AIR) as u32, w.chem.subs[LIQUID].latent_gas());
     let (e_air, e_ground, pot, books) = (w.e_air[j as usize], w.e_ground[i], w.potential, Books::now(&w));
     let (heat, lift) = (1e-6 * e_ground, 1e-9 * e_ground);
     let m = 0.5 * heat / latent;
@@ -124,7 +124,7 @@ fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
 fn a_flux_booked_first_is_booked_as_with_care() {
     for greed in [0.1, GREED] {
         let w0 = small_world();
-        let (cells, mut r) = (w0.grid.mesh().cells(), Rng::new(2, 0, 0, Purpose::Chem));
+        let (cells, mut r) = (w0.mesh.cells(), Rng::new(2, 0, 0, Purpose::Chem));
         let (a, b) = (cells.a().to_vec(), cells.b().to_vec());
         // Each link carries up to `greed` of the difference of what its ends hold (a node has up to 8 links).
         let (mut mol, mut heat) = (Vec::new(), Vec::new());

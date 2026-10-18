@@ -156,6 +156,11 @@ impl Mesh {
         }
         i
     }
+    /// The share of the cell at level `to` that holds cell `i` of the finest level which cell `i` covers: their areas'
+    /// ratio.
+    pub fn share(&self, i: usize, to: usize) -> f64 {
+        self.cells().area[i] / self.levels[to].area[self.up(i, 0, to)]
+    }
     /// Add a coarser level over the coarsest, given the parent of each of its cells (parents numbered 0..m, each with
     /// at least one child). A coarse cell holds the area of its children, at their area-weighted centre and latitude;
     /// two coarse cells are linked where any of their children are, across the sum of those children's widths.

@@ -1,7 +1,7 @@
 //! Gas crossing between the ground (or what lives on it) and the air: the one way in and out.
 
 use crate::chem::Chemistry;
-use crate::World;
+use crate::{World, AIR};
 
 /// What gas crossing into or out of the air changes: the air's amounts and heat, and the world's potential energy.
 ///
@@ -38,6 +38,6 @@ impl World {
     }
     /// Energy to lift a kg from ground cell `i` into its air node, J/kg (`FlowView::lift`).
     pub(crate) fn lift(&self, i: usize) -> f64 {
-        self.scratch.view().lift(i, self.cfg.gravity)
+        self.scratch.view().lift(i, self.mesh.up(i, 0, AIR), self.cfg.gravity)
     }
 }

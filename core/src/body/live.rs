@@ -10,7 +10,7 @@ use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::rng::{Purpose, Rng};
 use crate::units::DAY;
-use crate::World;
+use crate::{World, AIR};
 
 /// Passes of `keep_warm`: its products take a part of the heat it burns at its temperature, so a second pass tops it up.
 const KEEP_T_PASSES: usize = 2;
@@ -70,7 +70,7 @@ fn site(w: &World, b: &Body) -> Site {
     let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.closed as f64);
     let days = w.day().saturating_sub(b.last).max(1) as f64;
-    Site { i, j: w.grid.air_of(i), tg, stands, depth, walls, cover, open, days, dt: days * DAY }
+    Site { i, j: w.mesh.up(i, 0, AIR), tg, stands, depth, walls, cover, open, days, dt: days * DAY }
 }
 
 /// Flow and Change on one body since its last update: upkeep, the physics of the time (`physics`), the heat it keeps,

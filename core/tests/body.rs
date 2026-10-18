@@ -6,7 +6,7 @@ use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, S
 use pcore::rng::{Purpose, Rng};
 use pcore::store::Boundary;
 use pcore::units::{DAY, DAY_S};
-use pcore::{bond, brain, change, choose, World};
+use pcore::{bond, brain, change, choose, World, AIR};
 use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -223,8 +223,8 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     // Two cells of high ground (rain does not flood it) in other air nodes (a body would take the air the other breathes).
     let mut land = s.land.clone();
     land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
-    let air = w.grid.air_of(land[0]);
-    let cells = [land[0], *land.iter().find(|&&i| w.grid.air_of(i) != air).expect("another air node")];
+    let air = w.mesh.up(land[0], 0, AIR);
+    let cells = [land[0], *land.iter().find(|&&i| w.mesh.up(i, 0, AIR) != air).expect("another air node")];
     let t_cat = w.cfg.phys.t_cat;
     let (mut small, mut big) = (small, big);
     small.cell = cells[0] as u32;
@@ -254,7 +254,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         b.prepare(&w0.chem, &w0.cfg.phys);
         let (i, mass, days) = (b.cell as usize, b.mass(&w0.chem), b.interval() as f64);
         let (tg, chem) = (w0.scratch.temps().0[i], &w0.chem);
-        let (ns, na, j) = (chem.ns(), w0.grid.na(), w0.grid.air_of(i));
+        let (ns, na, j) = (chem.ns(), w0.mesh.level(AIR).n(), w0.mesh.up(i, 0, AIR));
         // The temperature where heat made = heat lost. The heat made is what its reactions release at that temperature to
         // their products where they go: the gases to the air with their latent heat, the rest held at its temperature (each
         // mol of `k` holds `h`). Its upkeep burns its fuel (`body::pay`), and the open air burns its stores bare at any
@@ -730,7 +730,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     pcore::survey::survey(&mut w);
     let (a, b) = (&w.life.bodies[sa], &w.life.bodies[sb]);
     let (ma, mb) = (a.mass(&w.chem) / n, b.mass(&w.chem) / n);
-    println!("shade: A (member mass {ma:.0} kg, body {:.1}) {:.3}, B (member mass {mb:.0} kg, body {:.1}) {:.3}; leaf per ground area {:.2} and {:.2}", a.size(&w.chem) / n, w.life.shade[sa], b.size(&w.chem) / n, w.life.shade[sb], a.vis[1] as f64 * n / w.grid.area(), b.vis[1] as f64 * n / w.grid.area());
+    println!("shade: A (member mass {ma:.0} kg, body {:.1}) {:.3}, B (member mass {mb:.0} kg, body {:.1}) {:.3}; leaf per ground area {:.2} and {:.2}", a.size(&w.chem) / n, w.life.shade[sa], b.size(&w.chem) / n, w.life.shade[sb], a.vis[1] as f64 * n / w.map.area(), b.vis[1] as f64 * n / w.map.area());
     assert!(ma > 1.3 * mb && a.size(&w.chem) < b.size(&w.chem), "A is heavier and smaller in body");
     assert!(w.life.shade[sb] > 1.2 * w.life.shade[sa], "the body of more matter is the taller: shade {} against {}", w.life.shade[sb], w.life.shade[sa]);
 }
@@ -904,7 +904,7 @@ fn a_tall_member_shades_a_short_one() {
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     let short = (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).max_by(|&a, &b| w.life.bodies[a].count.total_cmp(&w.life.bodies[b].count)).expect("a node");
-    let (i, area) = (w.life.bodies[short].cell as usize, w.grid.area());
+    let (i, area) = (w.life.bodies[short].cell as usize, w.map.area());
     // The cell's other nodes move next door.
     for s in w.life.at[i].clone().into_iter().map(|s| s as usize).filter(|&s| s != short) {
         let (g, j) = (w.life.bodies[s].group, i ^ 1);
@@ -960,8 +960,8 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // does not flood it) with other air nodes (a node would take the air an individual breathes).
     let mut land = dry_lands(&w);
     land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
-    let air = w.grid.air_of(land[0]);
-    let cells = [land[0], *land.iter().find(|&&i| w.grid.air_of(i) != air).expect("another air node")];
+    let air = w.mesh.up(land[0], 0, AIR);
+    let cells = [land[0], *land.iter().find(|&&i| w.mesh.up(i, 0, AIR) != air).expect("another air node")];
     // Starting eaters whose brain only rests, weak so their stores last.
     let line = Line::new(&mut w, &Brain::only(brain::REST), 1);
     let make = |w: &mut pcore::World, i: usize, repair: f32, count: f64| {
@@ -1162,7 +1162,7 @@ fn start_wet() -> (World, usize) {
     for _ in 0..12 {
         pcore::step(&mut w);
     }
-    let n = w.grid.n();
+    let n = w.mesh.cells().n();
     let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3 && w.ground[DISSOLVED * n + i] > 1e5).expect("wet land");
     (w, i)
 }
@@ -1205,7 +1205,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         b.store[w.chem.minerals()[1].0] = 0.0;
         let s = w.life.add(b, w.day(), 1);
         let books = Books::now(&w);
-        let na = w.grid.na();
+        let na = w.mesh.level(AIR).n();
         let air = |w: &World, k: usize| w.air[k * na..(k + 1) * na].iter().sum::<f64>();
         let before = (in_all(&w, mineral), air(&w, FIX_OUT));
         let mut up = 0.0;
@@ -1255,7 +1255,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         // on this ground, it has its own.)
         let (mut w, i) = start_wet();
         let lay = Layout::of(&w.chem);
-        let n = w.grid.n();
+        let n = w.mesh.cells().n();
         // A plant with its store of this mineral emptied, the ground full of it.
         let mut plant = eater_of(&mut w, 0, i, brain::REST);
         // (It soaks as a plant does, 1 a day, the rate roots take what is dissolved at.)
@@ -1390,7 +1390,7 @@ fn an_attacked_individual_loses_body_and_lives_on_weaker() {
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
     let before = seen(&w, v);
-    let (n, ground0, gained0) = (w.grid.n(), w.ground[RICH * w.grid.n() + i], kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER));
+    let (n, ground0, gained0) = (w.mesh.cells().n(), w.ground[RICH * w.mesh.cells().n() + i], kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER));
     bite(&mut w, a, v);
     assert!(w.life.bodies[v].alive, "the victim died of a bite of {} kg", before.built);
     let after = seen(&w, v);
@@ -1506,7 +1506,7 @@ fn trampling_breaks_body_matter() {
     let books = Books::now(&w);
     let (b0, nb0, ns0) = (seen(&w, v), w.life.bodies[big].n(), w.life.bodies[small].n());
     let (bb0, bs0) = (seen(&w, big), seen(&w, small));
-    let (g0, e0) = (w.ground[MATTER * w.grid.n() + i], w.e_ground[i]);
+    let (g0, e0) = (w.ground[MATTER * w.mesh.cells().n() + i], w.e_ground[i]);
     let broken = choose::wear(&mut w, i, mv, 2_000.0);
     let (b1, bb1, bs1) = (seen(&w, v), seen(&w, big), seen(&w, small));
     let (sv, sb, ss) = (1.0 - b1.built / b0.built, 1.0 - bb1.built / bb0.built, 1.0 - bs1.built / bs0.built);
@@ -1519,7 +1519,7 @@ fn trampling_breaks_body_matter() {
     // The same energy over a node of members each lighter than the hit: members lost; of heavier: all hurt.
     assert!(w.life.bodies[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life.bodies[big].n());
     assert!(w.life.bodies[small].n() < ns0, "a node of light members kept all {ns0}");
-    assert!(w.ground[MATTER * w.grid.n() + i] > g0 && w.e_ground[i] > e0, "nothing went to the ground");
+    assert!(w.ground[MATTER * w.mesh.cells().n() + i] > g0 && w.e_ground[i] > e0, "nothing went to the ground");
     books.assert_kept(&w, 1e-9);
 }
 

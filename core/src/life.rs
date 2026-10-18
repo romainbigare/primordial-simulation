@@ -45,7 +45,7 @@ pub struct Life {
     /// Born brain rows, each shared by the bodies born with them (none: free)
     pub genomes: Vec<Genome>,
     free_genomes: Vec<u32>,
-    /// Grid width (for the groups' centres)
+    /// Width of the square map, cells (for the groups' centres)
     pub gw: u32,
 }
 
@@ -284,8 +284,8 @@ impl Life {
         (b.lineage, b.group, b.genome) = (lineage, group, self.new_genome(rows));
         self.enter(b);
     }
-    /// Size the cell lists and the ring of updates for a grid of `n` cells, `gw` wide (once, on a new grid).
-    pub(crate) fn fit_grid(&mut self, n: usize, gw: u32) {
+    /// Size the cell lists and the ring of updates for a square map of `n` cells, `gw` wide (once, on a new map).
+    pub(crate) fn fit_map(&mut self, n: usize, gw: u32) {
         if self.at.len() != n {
             (self.at, self.due, self.gw) = (vec![Vec::new(); n], vec![Vec::new(); RING as usize], gw);
         }

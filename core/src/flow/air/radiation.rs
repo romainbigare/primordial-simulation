@@ -8,7 +8,7 @@ use crate::life::Life;
 use crate::math::one_minus_exp;
 use crate::store::{apply, Boundary, Class, LinkFlux};
 use crate::units::SIGMA;
-use crate::{Config, World};
+use crate::{Config, World, AIR};
 use std::f64::consts::{PI, TAU};
 
 /// Daily-mean sunlight at the top of the air, W/m².
@@ -47,9 +47,10 @@ pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> f64 {
 /// What the radiation of one ground cell reads of the world.
 struct Ground<'a> {
     cfg: &'a Config,
-    /// Area (m²) and latitude (degrees) of each cell, from the mesh.
+    /// Area (m²), latitude (degrees) and air node of each cell, from the mesh.
     area: &'a [f64],
     lat: &'a [f64],
+    air_of: &'a [u32],
     /// Declination of the sun, radians.
     decl: f64,
     ground: &'a [f64],
@@ -70,16 +71,16 @@ const ROW: usize = 6;
 /// leaves to space through it); and what leaves each air node to the space node.
 pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, ground, canopy, light, light_pool, life, .. } = w;
-    light_pool.resize(grid.n(), 0.0);
-    let (n, cells) = (grid.n(), grid.mesh().cells());
+    let World { cfg, mesh, ground, canopy, light, light_pool, life, .. } = w;
+    let (n, cells) = (mesh.cells().n(), mesh.cells());
+    light_pool.resize(n, 0.0);
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
     let mut kept_all = 0.0;
     // Each cell's numbers depend on no other cell: computed in rows (in parallel, with `threads`),
     // applied in the order of the cells.
     let mut rows = std::mem::take(&mut s.rad);
     rows.resize(n * ROW, 0.0);
-    let (sc, at) = (&*s, Ground { cfg, area: cells.area(), lat: cells.lat(), decl, ground, canopy, life, dt });
+    let (sc, at) = (&*s, Ground { cfg, area: cells.area(), lat: cells.lat(), air_of: cells.parent(), decl, ground, canopy, life, dt });
     // Each task keeps the last latitude and its sunlight: neighbouring cells often share a latitude (a row of the
     // square map), and the sunlight is the same function of it.
     crate::par::rows(&mut rows, ROW, || (f64::NAN, 0.0), |last, i, row| {
@@ -90,7 +91,7 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     });
     // The links: from the sun to each ground node, from each ground node to its air node, and from each air node to
     // space (`ids`: the nodes 0, 1, ... of the cells, and of the fewer air nodes).
-    let (na, mut heat, mut out) = (grid.na(), vec![0.0; 2 * n], vec![0.0; grid.na()]);
+    let (na, mut heat, mut out) = (mesh.level(AIR).n(), vec![0.0; 2 * n], vec![0.0; mesh.level(AIR).n()]);
     let (sun, ids) = (vec![Boundary::Sun as u32; n], (0..n as u32).collect::<Vec<_>>());
     for (i, row) in rows.chunks_exact(ROW).enumerate() {
         let &[tl, dl, kept, sw, to_air, to_space] = <&[f64; ROW]>::try_from(row).unwrap();
@@ -105,19 +106,19 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         light_pool[i] += adt * kept;
         kept_all += adt * kept;
         (heat[i], heat[n + i]) = (adt * sw, to_air + to_space);
-        out[s.air_of[i] as usize] += to_space;
+        out[cells.parent()[i] as usize] += to_space;
     }
     s.rad = rows;
     // The light set aside for bodies is no heat of a node yet: it crosses from the sun as it falls.
     w.cross(Boundary::Sun, [], kept_all);
-    let space = vec![Boundary::Space as u32; na];
+    let (space, air_of) = (vec![Boundary::Space as u32; na], w.mesh.cells().parent().to_vec());
     let fluxes = [
         LinkFlux { class: [Class::Boundary, Class::Ground], a: &sun, b: &ids, ks: &[], mol: &[], heat: &heat[..n] },
-        LinkFlux { class: [Class::Ground, Class::Air], a: &ids, b: &s.air_of, ks: &[], mol: &[], heat: &heat[n..] },
+        LinkFlux { class: [Class::Ground, Class::Air], a: &ids, b: &air_of, ks: &[], mol: &[], heat: &heat[n..] },
         LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
     ];
     apply(w, &fluxes, &[], &[]);
-    for j in 0..w.grid.na() {
+    for j in 0..w.mesh.level(AIR).n() {
         s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
     }
 }
@@ -130,7 +131,7 @@ fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
     let (cfg, n, dt) = (at.cfg, at.area.len(), at.dt);
     let adt = at.area[i] * dt;
     // The air this cell sees, and its temperature where it touches the ground.
-    let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
+    let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], at.air_of[i] as usize);
     let ta = ta + s.ta[j] - s.ta0[j];
     let tl = (ta - gam * (s.head[i] - zair)).max(1.0);
     let (down, emit) = (glow(f, tl, &s.lay[i][0]), glow(f, tl, &s.lay[i][1]));

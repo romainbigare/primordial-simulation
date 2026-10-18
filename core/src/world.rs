@@ -3,8 +3,9 @@
 
 use crate::chem::Chemistry;
 use crate::event::Event;
-use crate::grid::Grid;
 use crate::params::Config;
+use crate::space::square::Square;
+use crate::space::Mesh;
 use crate::store::BOUNDARIES;
 use crate::{bond, flow};
 use serde::{Deserialize, Serialize};
@@ -66,8 +67,14 @@ impl PerSlot {
 pub struct World {
     pub cfg: Config,
     pub chem: Chemistry,
-    pub grid: Grid,
-    /// The id, class, parent and cell of every node (`store::Nodes`): the grid's, and the parts', which come and go
+    /// The map of squares the world is laid out on, and the ground cells along a side of the block under each air node
+    pub map: Square,
+    pub air_scale: usize,
+    /// The shape of the world (`World::mesh_of`): its cells are the ground nodes, the cells of its level `AIR` the air
+    /// nodes. Built from `map` and `air_scale`, so not saved (a loaded world rebuilds it).
+    #[serde(skip)]
+    pub mesh: Mesh,
+    /// The id, class, parent and cell of every node (`store::Nodes`): the mesh's, and the parts', which come and go
     pub table: crate::store::Nodes,
     /// The working space of `store::apply`, kept between its calls (not saved)
     #[serde(skip)]
@@ -139,7 +146,15 @@ pub struct World {
     pub heat_keep: PerSlot,
 }
 
+/// The level of the world's mesh its air nodes live on.
+pub const AIR: usize = 1;
+
 impl World {
+    /// The mesh of `map`, with air nodes over blocks of `air_scale`² squares, its rows spread between the latitudes of
+    /// `cfg`.
+    pub fn mesh_of(map: &Square, air_scale: usize, cfg: &Config) -> Mesh {
+        map.mesh(&[air_scale], cfg.lat_south, cfg.lat_north)
+    }
     pub fn days_per_year(&self) -> u64 {
         let cal = self.cfg.calendar();
         cal.days(cal.year)
@@ -167,16 +182,16 @@ impl World {
     /// Loose amount of substance `k` in ground node `i`, mol.
     #[inline]
     pub fn g(&self, k: usize, i: usize) -> f64 {
-        self.ground[k * self.grid.n() + i]
+        self.ground[k * self.mesh.cells().n() + i]
     }
     /// Bonded amount of substance `k` in ground node `i`, mol.
     #[inline]
     pub fn b(&self, k: usize, i: usize) -> f64 {
-        self.bed[k * self.grid.n() + i]
+        self.bed[k * self.mesh.cells().n() + i]
     }
     /// Amount of substance `k` in air node `j`, mol.
     #[inline]
     pub fn a(&self, k: usize, j: usize) -> f64 {
-        self.air[k * self.grid.na() + j]
+        self.air[k * self.mesh.level(AIR).n() + j]
     }
 }

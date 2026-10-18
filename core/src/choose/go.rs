@@ -3,7 +3,6 @@
 use super::NONE;
 use crate::body::{self, Body, BROKEN};
 use crate::chem::Phase;
-use crate::space::square::DIRS;
 use crate::{bond, lanes, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`Physics::bump` of what it moves): cost by mass (with
@@ -14,9 +13,9 @@ use crate::{bond, lanes, World};
 /// What it moves is the whole mass it carries, fuel too; what it can carry and hold goes by its force, of its body
 /// (`bond::carry`, `Body::built`). A body that strays from its group's centre leaves with a copy of its rows. A node
 /// moves as one: all its members go (they drew the same action), and it stays one node.
-pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
+pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
-    if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.grid.area() {
+    if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.mesh.cells().area()[j] {
         return;
     }
     let carried = bond::carry(w, b);
@@ -29,7 +28,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     if bond::bears(w, b) < w.cfg.phys.bump * mass * w.cfg.gravity {
         return;
     }
-    let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.grid.dist(DIRS[d]) + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
+    let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.mesh.cells().dist()[lanes::link(w, i, j)] + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
     if !body::pay(w, b, cost, b.interval() as f64) {
         return;
     }
@@ -38,16 +37,16 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, d: usize, j: usize) {
     w.life.relocate(slot, b.group, i, j);
     b.cell = j as u32;
     b.mark = w.light[j];
-    w.counts.crossings.resize(w.grid.n(), 0.0);
+    w.counts.crossings.resize(w.mesh.cells().n(), 0.0);
     w.counts.crossings[j] += b.n() as f32;
-    let cover = w.life.sum[j][1] / w.grid.area();
+    let cover = w.life.sum[j][1] / w.mesh.cells().area()[j];
     let broken = wear(w, j, slot, cost * (1.0 - 1.0 / resist));
     if broken > 0.0 && cover > 0.0 {
         // The cover broken along the way was the lane's: that much ground is now clear.
         lanes::clear(w, i, j, broken / cover);
     }
     let gr = &w.life.groups[b.group as usize];
-    let ((cx, cy), (x, y)) = (gr.centre(), w.grid.xy(j));
+    let ((cx, cy), (x, y)) = (gr.centre(), w.map.xy(j));
     if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > w.cfg.phys.leave {
         let g = w.life.fork_group(b.group, b.lineage, gr.rows.clone());
         w.life.enrol(g, b, 1);

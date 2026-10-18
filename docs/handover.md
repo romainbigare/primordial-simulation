@@ -469,7 +469,7 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
   src/solve/  the shared maths: spread (implicit step on links), downhill, lines
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
               life (the registry of bodies), lineage, nodes (population nodes), lanes (paths), survey (the cells
-              bodies see), brain, grid, rng, event, math, units, par
+              bodies see), brain, rng, event, math, units, par
   tests/      one file per law (flow, change, bond, copy, choose, body), one per base part (space, store, clock,
               solve), chemistry0, numbers
 worldgen/   terrain, chemistry 0 (chem0.toml) and the chemistry generator, richness checks, first life (life/), what is

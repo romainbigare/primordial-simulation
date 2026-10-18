@@ -9,7 +9,7 @@ use crate::ground::{draw, share};
 use crate::chem::Phase;
 use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
-use crate::World;
+use crate::{World, AIR};
 
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
@@ -52,10 +52,10 @@ pub fn step(w: &mut World) {
 /// fusion and vaporisation enthalpy of the gas sent (gas taken gives it back); gas the ground cannot pay for goes to the
 /// ground, with its heat.
 fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
-    let (n, na) = (w.grid.n(), w.grid.na());
+    let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let i = cell(w, s);
-    let j = w.grid.air_of(i);
-    let (air_share, lift, ta) = (w.grid.air_share(i), w.lift(i), w.t_air(j));
+    let j = w.mesh.up(i, 0, AIR);
+    let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), w.t_air(j));
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
     for (k, p0) in pool0.iter_mut().enumerate() {
@@ -81,7 +81,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
 /// Walls of part `s` that are no longer solid run off to the ground; the part takes the ground's temperature (if the
 /// ground cannot pay the heat, it ends colder); walls lighter than `Physics::min_kg` fall apart.
 fn settle(w: &mut World, s: usize) {
-    let (ns, n) = (w.chem.ns(), w.grid.n());
+    let (ns, n) = (w.chem.ns(), w.mesh.cells().n());
     let i = cell(w, s);
     let tg = w.t_ground_last(i);
     let chem = &w.chem;
@@ -113,7 +113,7 @@ fn load(w: &mut World, r: usize) {
     let (list, i, g) = (members(w, r), cell(w, r), w.cfg.gravity);
     let (depth, rho, molv) = liquid(w, i);
     let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
-    let v = if depth > STILL_DEPTH { flux / (molv * w.grid.cell_m * depth) } else { 0.0 };
+    let v = if depth > STILL_DEPTH { flux / (molv * w.map.side * depth) } else { 0.0 };
     let bump = std::mem::take(&mut w.parts.parts[r].push) as f64 / list.len() as f64;
     let (mut wt, mut push, mut lift) = (vec![0.0; list.len()], vec![0.0; list.len()], 0.0);
     for (x, &p) in list.iter().enumerate() {
@@ -179,8 +179,8 @@ fn load(w: &mut World, r: usize) {
     }
     let mut rng = Rng::of_node(w.seed, w.time, id(w, r), Purpose::Bond);
     let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
-    let to = DIRS.iter().filter_map(|&d| w.grid.step(i, d)).filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
-    if let Some(j) = to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / w.grid.cell_m) {
+    let to = DIRS.iter().filter_map(|&d| w.map.step(i, d)).filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
+    if let Some(j) = to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / w.map.side) {
         move_structure(w, r, j);
     }
 }
