@@ -351,7 +351,7 @@ Add v2 and v3 only when the world is ready for them (Section 9.4).
 - **Bodies have children.**
   - A body builds its own matter from food, paying work (growth). Once mature, it puts a share of what it builds into a brood; whenever the brood covers a child, a child is made. The child gets that matter and provisions of the parent's other stores. The parent keeps its body.
   - The child's genes are the parent's genes plus small noise.
-  - **Two parents.** A mature body may find an alike mature partner in its cell; each gene of the children is then one parent's. With no partner, one parent.
+  - **Two parents.** A mature individual may find an alike mature partner in its cell; each gene of the children is then one parent's. With no partner, one parent. A population node's children have one parent: its members already mix their genes inside it.
 - **Imitation.** A body that watches another body can copy part of its brain, its learned behaviour. This costs time and attention. It is how culture, skills and designs spread.
 - **Matter is never copied for free.** Copying a body costs real substances (Law 1 and Law 2 still hold). Copying behaviour costs time.
 - **Structures are not copied directly.** Bodies that learned to build will build again. Bodies that imitate them will build similar things. That is how "designs" spread.
@@ -424,7 +424,7 @@ Thousands of years with millions of individual brains will not run on one comput
 - **Split** it back into individuals when the player looks closely, or when its members start to differ a lot.
 - Conservation must hold exactly when merging and splitting.
 
-Population nodes are built (since M3): a node keeps its spread, joins and merges only alike bodies of one size and maturity class, splits when its halves would no longer be alike, and does the actions of Bond through one member split off. How it works: `docs/laws.md` 4.4. `ew run --individuals` turns nodes off for bodies with a brain, for the check below.
+Population nodes are built (since M3): a node keeps its spread, joins and merges only alike bodies of one stage (young or adult), lets its young members mature into the adult node of their kind one by one at the rate their growth gives, selects inside itself through a sample member (the breeder's equation; nodes without a brain), splits when its halves would no longer be alike, and does the actions of Bond through one member split off. How it works: `docs/laws.md` 4.4. `ew run --individuals` turns nodes off for bodies with a brain, for the check below.
 
 **The check of nodes against individuals (M4's first job, fixed before it runs).** Seeds 1 and 5 at 32×32 for 100 years, with nodes and with `--individuals`, then with `--roster`; one seed with `--crowd 4` and `--crowd 8` beside them as the noise. On the `root_<k>_*` columns (means of years 41–50 and 91–100), the modes agree if: (a) each kind's mass and real life are within a factor of two, and no kind lives in one mode only; (b) the main gene means move the same way wherever one moves more than 0.3; (c) the same kind wins (most mass, heaviest member, the order of what eaters eat). A difference larger than the `--crowd` noise is a bug in the node rules.
 
