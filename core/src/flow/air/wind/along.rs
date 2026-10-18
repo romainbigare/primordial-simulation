@@ -1,8 +1,8 @@
-//! The wind along lines: the links of the air level as lines of nodes, each solved implicitly in one piece
-//! (`solve::lines`).
+//! The wind along lines: the links of the air level as lines of nodes, open or closed on themselves (rings), each
+//! solved implicitly in one piece (`solve::lines`).
 
 use super::{Ctx, Moved, State};
-use crate::solve::lines::along_line;
+use crate::solve::lines::{along_line, along_ring};
 use crate::space::Level;
 
 /// No link (`u32::MAX`).
@@ -19,7 +19,8 @@ pub(super) fn along(at: &Ctx, lines: &[Vec<Line>; 2], start: State) -> Moved {
     Moved { mol: mean(&one.mol, &two.mol), heat: mean(&one.heat, &two.heat), paid: mean(&one.paid, &two.paid) }
 }
 
-/// A line of air nodes in order, and the link from each to the next.
+/// A line of air nodes in order, and the link from each to the next; a ring has one link more, from its last node to
+/// its first.
 pub(super) struct Line {
     nodes: Vec<u32>,
     links: Vec<u32>,
@@ -33,8 +34,8 @@ impl Line {
 }
 
 /// The links of `air` that have a width, as the lines of two directions (0: more east-west than north-south, 1: the
-/// other way), each line in the direction east or south. None when a node has more than one such link one way in a
-/// direction, or a direction closes on itself: then the level is solved on the mesh (`mesh::on_mesh`).
+/// other way), each line in the direction east or south; a line that closes on itself is a ring. None when a node has
+/// more than one such link one way in a direction.
 pub(super) fn lines(air: &Level) -> Option<[Vec<Line>; 2]> {
     let (n, c) = (air.n(), air.centre());
     let (mut next, mut entered, mut count) = ([vec![NO_LINK; n], vec![NO_LINK; n]], [vec![false; n], vec![false; n]], [0; 2]);
@@ -49,24 +50,40 @@ pub(super) fn lines(air: &Level) -> Option<[Vec<Line>; 2]> {
         (next[f][from], entered[f][to], count[f]) = (l as u32, true, count[f] + 1);
     }
     let lines = [0, 1].map(|f| {
-        let starts = (0..n).filter(|&j| !entered[f][j] && next[f][j] != NO_LINK);
-        starts.map(|mut j| {
-            let mut line = Line { nodes: vec![j as u32], links: Vec::new() };
-            while next[f][j] != NO_LINK {
-                let l = next[f][j];
-                j = (air.a()[l as usize] + air.b()[l as usize]) as usize - j;
-                line.nodes.push(j as u32);
-                line.links.push(l);
+        // Each open line from the node no link enters, then each ring from its first node not yet in a line.
+        let mut seen = vec![false; n];
+        let mut out: Vec<Line> = (0..n).filter(|&j| !entered[f][j] && next[f][j] != NO_LINK).map(|j| trace(air, &next[f], &mut seen, j)).collect();
+        for j in 0..n {
+            if !seen[j] && next[f][j] != NO_LINK {
+                out.push(trace(air, &next[f], &mut seen, j));
             }
-            line
-        }).collect::<Vec<_>>()
+        }
+        out
     });
     (0..2).all(|f| lines[f].iter().map(|ln| ln.links.len()).sum::<usize>() == count[f]).then_some(lines)
 }
 
+/// The line of `air` that starts at node `j` and follows the links `next` until a node has none, or until it comes back
+/// to a node `seen` (a ring); marks its nodes seen.
+fn trace(air: &Level, next: &[u32], seen: &mut [bool], mut j: usize) -> Line {
+    let mut line = Line { nodes: vec![j as u32], links: Vec::new() };
+    seen[j] = true;
+    while next[j] != NO_LINK {
+        let l = next[j];
+        j = (air.a()[l as usize] + air.b()[l as usize]) as usize - j;
+        line.links.push(l);
+        if seen[j] {
+            break;
+        }
+        seen[j] = true;
+        line.nodes.push(j as u32);
+    }
+    line
+}
+
 /// Work space of the solve of one line: per link the three pushes [mixing, overturning, pressure] along the line,
 /// mol/s; per node its gas in the [lower, upper] half, mol; the shares each link carries on and back; the amounts
-/// solved and the solver's work space; the amount of each gas solved, [gas * len + node].
+/// solved and the solver's work space (a second on a ring); the amount of each gas solved, [gas * len + node].
 #[derive(Default)]
 struct Lane {
     push: Vec<[f64; 3]>,
@@ -75,6 +92,7 @@ struct Lane {
     to_prev: Vec<f64>,
     x: Vec<f64>,
     c: Vec<f64>,
+    corner: Vec<f64>,
     gas: Vec<f64>,
 }
 
@@ -127,6 +145,8 @@ impl Ctx<'_> {
     /// `row[t * len + p]`, mol, and the heat, `row[gases * len + p]`, J.
     fn solve(&self, st: &State, push: &[[f64; 3]], line: &Line, ln: &mut Lane, len: usize, row: &mut [f64]) {
         let (s, air, n, ng, na, dt) = (self.s, self.air, line.nodes.len(), self.s.state.gas.len(), self.air.n(), self.dt);
+        // Link p joins node p to the next, `up(p)` (on a ring the last link comes back to node 0).
+        let (links, up) = (line.links.len(), |p: usize| (p + 1) % n);
         let node = |p: usize| line.nodes[p] as usize;
         ln.push.clear();
         for (p, &l) in line.links.iter().enumerate() {
@@ -134,7 +154,7 @@ impl Ctx<'_> {
             ln.push.push([mix, sign * over, sign * even]);
         }
         ln.halves.resize(n, [0.0; 2]);
-        for v in [&mut ln.to_next, &mut ln.to_prev, &mut ln.x, &mut ln.c] {
+        for v in [&mut ln.to_next, &mut ln.to_prev, &mut ln.x, &mut ln.c, &mut ln.corner] {
             v.resize(n, 0.0);
         }
         ln.gas.resize(ng * n, 0.0);
@@ -148,50 +168,55 @@ impl Ctx<'_> {
             }
         }
         for t in 0..ng {
-            for p in 0..n - 1 {
-                let (a, b) = (node(p), node(p + 1));
+            for p in 0..links {
+                let (a, b) = (node(p), node(up(p)));
                 let [mix, over, even] = ln.push[p];
                 let (fp, fm, ep, em) = (over.max(0.0), (-over).max(0.0), even.max(0.0), (-even).max(0.0));
-                let ([la, ua], [lb, ub]) = (ln.halves[p], ln.halves[p + 1]);
+                let ([la, ua], [lb, ub]) = (ln.halves[p], ln.halves[up(p)]);
                 let (sa, sb) = (s.split[t * na + a], s.split[t * na + b]);
                 ln.to_next[p] = dt * ((mix + ep) / st.nt[a] + fp * (1.0 - sa) / la + fm * sa / ua);
                 ln.to_prev[p] = dt * ((mix + em) / st.nt[b] + fp * sb / ub + fm * (1.0 - sb) / lb);
             }
-            ln.carry(n, |p| st.x[t * na + node(p)], &mut row[t * len..]);
+            ln.carry(n, links, |p| st.x[t * na + node(p)], &mut row[t * len..]);
             ln.gas[t * n..(t + 1) * n].copy_from_slice(&ln.x[..n]);
         }
         for p in 0..n {
             ln.x[p] = (0..ng).map(|t| ln.gas[t * n + p]).sum();
         }
-        for p in 0..n - 1 {
-            let (a, b, even) = (node(p), node(p + 1), ln.push[p][2]);
-            let want = dt * (even.max(0.0) * ln.x[p] / st.nt[a] - (-even).max(0.0) * ln.x[p + 1] / st.nt[b]);
+        for p in 0..links {
+            let (a, b, even) = (node(p), node(up(p)), ln.push[p][2]);
+            let want = dt * (even.max(0.0) * ln.x[p] / st.nt[a] - (-even).max(0.0) * ln.x[up(p)] / st.nt[b]);
             let extra = (0..ng).map(|t| row[t * len + p]).sum::<f64>() - want;
-            let src = if extra > 0.0 { p + 1 } else { p };
+            let src = if extra > 0.0 { up(p) } else { p };
             for t in 0..ng {
                 row[t * len + p] -= extra * ln.gas[t * n + src] / ln.x[src];
             }
         }
         // Heat moves with the gas, per mol its node's mean.
-        for p in 0..n - 1 {
-            let (a, b, [mix, over, even]) = (node(p), node(p + 1), ln.push[p]);
+        for p in 0..links {
+            let (a, b, [mix, over, even]) = (node(p), node(up(p)), ln.push[p]);
             ln.to_next[p] = dt * (mix + over.abs() + even.max(0.0)) / st.nt[a];
             ln.to_prev[p] = dt * (mix + over.abs() + (-even).max(0.0)) / st.nt[b];
         }
-        ln.carry(n, |p| st.e[node(p)], &mut row[ng * len..]);
+        ln.carry(n, links, |p| st.e[node(p)], &mut row[ng * len..]);
     }
 }
 
 impl Lane {
-    /// The amounts `x0(p)` of the `n` nodes of a line moved by `to_next` and `to_prev` (`solve::lines`), into `x`; what
-    /// each link carries forward, into `out`.
-    fn carry(&mut self, n: usize, x0: impl Fn(usize) -> f64, out: &mut [f64]) {
+    /// The amounts `x0(p)` of the `n` nodes of a line with `links` links (`n` on a ring, else `n` - 1) moved by
+    /// `to_next` and `to_prev` (`solve::lines`), into `x`; what each link carries forward, into `out`.
+    fn carry(&mut self, n: usize, links: usize, x0: impl Fn(usize) -> f64, out: &mut [f64]) {
         for p in 0..n {
             self.x[p] = x0(p);
         }
-        along_line(&self.to_next[..n - 1], &self.to_prev[..n - 1], &mut self.x[..n], &mut self.c[..n]);
-        for (p, o) in out[..n - 1].iter_mut().enumerate() {
-            *o = self.to_next[p] * self.x[p] - self.to_prev[p] * self.x[p + 1];
+        let (to_next, to_prev) = (&self.to_next[..links], &self.to_prev[..links]);
+        if links == n {
+            along_ring(to_next, to_prev, &mut self.x[..n], &mut self.c[..n], &mut self.corner[..n]);
+        } else {
+            along_line(to_next, to_prev, &mut self.x[..n], &mut self.c[..n]);
+        }
+        for (p, o) in out[..links].iter_mut().enumerate() {
+            *o = self.to_next[p] * self.x[p] - self.to_prev[p] * self.x[(p + 1) % n];
         }
     }
 }

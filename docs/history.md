@@ -611,6 +611,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   64 x 64, seed 1, 30 years: the same world (plant mass 10.676 to 10.678 log10 kg, plant life 4.01 to 4.02 yr, eaters
   4.78 to 4.75, land +0.04 K); born-row sets at year 30 5,455 to 134; snapshot 12.9 to 10.6 MB; a body update a few
   per cent faster (side by side, busy machine). Golden re-pinned.
+- The wind's solver on a mesh that is not square goes (`wind/mesh`, `wind_on` and its test): the planet is a grid of
+  squares (D3), so the wind always runs along lines. A row that closes on itself (round the globe, G1) is solved as a
+  ring by the cyclic form of the line step (`solve::lines::along_ring`, Sherman–Morrison). Same history (golden
+  unchanged).
 
 **Owner's decisions after Phase A**
 

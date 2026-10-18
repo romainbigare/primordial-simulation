@@ -23,7 +23,7 @@ mod land;
 mod liquid;
 mod scratch;
 pub(crate) use air::{air_temp, Sky};
-pub use air::{column, glow, scale_height, wind_on};
+pub use air::{column, glow, scale_height};
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 

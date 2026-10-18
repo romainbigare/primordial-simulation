@@ -21,7 +21,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `lines`: the implicit step along a line) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`); `flow::land::conduct` (sideways) |
-| 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind` with `wind/along` and `wind/mesh`, `sky`); `lanes.rs` (paths) |
+| 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind` with `wind/along`, `sky`); `lanes.rs` (paths) |
 | 2 Change | `change/` (`mod`, `kernel`, `balance`, `gas`); the chemistry in `chem/` (`mod`, `thermo`, `roles`) |
 | 3 Bond | `bond/` (`mod`, `verbs`, `sense`, `month`) |
 | 4 Copy | `copy/` (`mod`, `mix`, `grow`); population nodes in `nodes.rs`; lineages in `lineage.rs` |
@@ -271,17 +271,13 @@ Gas moves over each link by three pushes:
    the link: the mean of its two nodes'); vapour crowds in the lower half;
 3. eddies mix the two columns (`mix`, across the link's width over its length).
 
-It is solved implicitly, so any speed is stable. Where the links form lines (the rows and
-columns of the square map) it is solved along them (`wind/along`, `solve::lines`). A call is long
+It is solved implicitly, so any speed is stable. The links form lines (the rows and columns of
+the square map) and it is solved along them (`wind/along`, `solve::lines`); a row that closes on
+itself (round the globe) is a ring, solved by the cyclic form of the same step (`along_ring`). A
+level whose links do not form lines stops the run with a clear message. A call is long
 against the time the air takes to mix from node to node, so one order of the two directions would
 leave stripes along the lines solved last: the lines are solved in both orders (east–west then
-north–south, and the other way) from the same start, and the air keeps the mean of the two. On
-any other mesh (`wind/mesh`) three steps of `solve::spread` on the links do it: the mixing and
-the overturning carry each gas by its share of the column, and the heat per mol; the evening of
-pressure moves the amount by the pressure, each gas and the heat going with it at the share of
-the node it leaves. There the overturning is an exchange of whole columns, so the vapour it
-brings to the warmer column on lines is not carried, and a node gives no more of a gas than it holds
-(`solve::spread::within`).
+north–south, and the other way) from the same start, and the air keeps the mean of the two.
 
 Each call starts from the air nodes' amounts as they are (`air::sums`), with what Law 2 and bodies
 changed. What crosses the links over the whole solve is booked at once by `store::apply` (gas and

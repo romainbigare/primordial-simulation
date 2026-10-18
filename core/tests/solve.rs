@@ -2,39 +2,44 @@
 
 // ---- lines: the implicit step along one line (the wind) ----
 
-use pcore::solve::lines::along_line;
+use pcore::solve::lines::{along_line, along_ring};
 
-/// A line of 40 nodes with uneven amounts and shares that span four orders of magnitude.
-fn line_system() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+/// A line of 40 nodes with uneven amounts and shares that span four orders of magnitude; a ring has one link more.
+fn line_system(ring: bool) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     let len = 40;
+    let links = if ring { len } else { len - 1 };
     let share = |p: usize, k: f64| 10f64.powf(4.0 * ((p as f64 * 1.7 + k).sin() * 0.5 - 0.5));
-    let to_next = (0..len - 1).map(|p| share(p, 0.3)).collect();
-    let to_prev = (0..len - 1).map(|p| share(p, 2.1)).collect();
+    let to_next = (0..links).map(|p| share(p, 0.3)).collect();
+    let to_prev = (0..links).map(|p| share(p, 2.1)).collect();
     let x = (0..len).map(|p| 1.0 + 5.0 * ((p as f64 * 0.9).cos() + 1.0)).collect();
     (to_next, to_prev, x)
 }
 
+/// The step along an open line and along a ring (the last link back to node 0) solves its system: the answer put
+/// back in gives the amounts before; the total is kept and no amount goes negative.
 #[test]
 fn line_step_solves_its_system_and_keeps_the_total() {
-    let (to_next, to_prev, before) = line_system();
-    let len = before.len();
-    let mut after = before.clone();
-    along_line(&to_next, &to_prev, &mut after, &mut vec![0.0; len]);
-    // Put the answer back in: x' + (out - in) must give the amounts before.
-    let mut flux = vec![0.0; len - 1];
-    for p in 0..len - 1 {
-        flux[p] = to_next[p] * after[p] - to_prev[p] * after[p + 1];
+    for ring in [false, true] {
+        let (to_next, to_prev, before) = line_system(ring);
+        let (len, links) = (before.len(), to_next.len());
+        let mut after = before.clone();
+        if ring {
+            along_ring(&to_next, &to_prev, &mut after, &mut vec![0.0; len], &mut vec![0.0; len]);
+        } else {
+            along_line(&to_next, &to_prev, &mut after, &mut vec![0.0; len]);
+        }
+        // Put the answer back in: x' + (out - in) must give the amounts before.
+        let flux: Vec<f64> = (0..links).map(|p| to_next[p] * after[p] - to_prev[p] * after[(p + 1) % len]).collect();
+        let mut gain = vec![0.0; len];
+        for (p, &f) in flux.iter().enumerate() {
+            (gain[p], gain[(p + 1) % len]) = (gain[p] - f, gain[(p + 1) % len] + f);
+        }
+        let worst = (0..len).map(|p| (after[p] - gain[p] - before[p]).abs()).fold(0.0, f64::max);
+        assert!(worst < 1e-12, "ring {ring}: residual {worst}");
+        let (sum_before, sum_after): (f64, f64) = (before.iter().sum(), after.iter().sum());
+        assert!((sum_after - sum_before).abs() < 1e-12 * sum_before, "ring {ring}: total {sum_before} became {sum_after}");
+        assert!(after.iter().all(|&v| v > 0.0), "ring {ring}: an amount went negative");
     }
-    let mut worst: f64 = 0.0;
-    for p in 0..len {
-        let out = if p + 1 < len { flux[p] } else { 0.0 };
-        let into = if p > 0 { flux[p - 1] } else { 0.0 };
-        worst = worst.max((after[p] + out - into - before[p]).abs());
-    }
-    assert!(worst < 1e-12, "residual {worst}");
-    let (sum_before, sum_after): (f64, f64) = (before.iter().sum(), after.iter().sum());
-    assert!((sum_after - sum_before).abs() < 1e-12 * sum_before, "total {sum_before} became {sum_after}");
-    assert!(after.iter().all(|&v| v > 0.0), "an amount went negative");
 }
 
 /// One implicit step along a line with shares s is close to 100 steps with shares s / 100 (the same total time), and

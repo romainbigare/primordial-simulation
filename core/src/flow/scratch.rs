@@ -147,7 +147,7 @@ pub struct Scratch {
     pub(super) rc: Vec<f64>,
     /// Cells by the head of the liquid that may run off, highest first: the order of the liquid's pass (`liquid`).
     pub(super) order: Order,
-    /// The work space of `solve::spread` (heat through the ground, the liquid under the surface, the wind on a mesh).
+    /// The work space of `solve::spread` (heat through the ground, the liquid under the surface).
     pub(super) spread: Spread,
     /// The table of the saturation pressure of each substance, as far up as the exchange has asked (`air::Sat`).
     pub(super) sat: Vec<air::Sat>,

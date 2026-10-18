@@ -1,9 +1,8 @@
 //! Wind: gas and heat between neighbouring air nodes, along the links of the air level (`AIR`): the pushes on
-//! each link and the booking, here. Where the links form lines (the rows and columns of a square map) the wind is
-//! solved along them (`along`, by `solve::lines`); on any other mesh by `solve::spread` on the links (`mesh`).
+//! each link and the booking, here. The links form lines (the rows and columns of the square map, a row closed on
+//! itself where it goes round the globe), and the wind is solved along them (`along`, by `solve::lines`).
 
 mod along;
-mod mesh;
 
 use super::super::Scratch;
 use super::air_temp;
@@ -67,31 +66,15 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
     book(w, s, &air, &moved);
 }
 
-/// The wind of one call of `dt` seconds over the air level `air`, which has the nodes of the world's air level and
-/// may have other links (`wind` uses the world's own).
-pub fn wind_on(w: &mut World, air: &Level, dt: f64) {
-    crate::flow::ensure(w);
-    let mut s = std::mem::take(&mut w.scratch);
-    let moved = blow(w, &mut s, air, dt);
-    book(w, &mut s, air, &moved);
-    w.scratch = s;
-}
-
-/// What the wind moves over the links of `air` in a call: along lines where they form lines (`along`), else on the
-/// mesh (`mesh`); from the sums of the air nodes' amounts now (`air::sums`: Law 2 and bodies change them too).
+/// What the wind moves over the links of `air` in a call, along its lines (`along`), from the sums of the air nodes'
+/// amounts now (`air::sums`: Law 2 and bodies change them too).
 fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
     super::sums(w, s);
     let na = air.n();
     let x = s.state.gas.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
     let start = State { x, e: w.e_air.clone(), nt: s.nt.clone(), capa: s.capa.clone() };
-    let mut spread = std::mem::take(&mut s.spread);
-    let at = Ctx { cfg: &w.cfg, s, air, dt };
-    let moved = match along::lines(air) {
-        Some(lines) => along::along(&at, &lines, start),
-        None => mesh::on_mesh(&at, &start, &mut spread),
-    };
-    s.spread = spread;
-    moved
+    let lines = along::lines(air).expect("the links of the air level form lines (a square map), each node with at most one link each way along a direction");
+    along::along(&Ctx { cfg: &w.cfg, s, air, dt }, &lines, start)
 }
 
 /// Book `m` on the world over the links of `air` through `store::apply`: the gas and heat, then the lift from the heat

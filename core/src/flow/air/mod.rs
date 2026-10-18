@@ -12,7 +12,6 @@ pub(super) use radiation::radiation;
 pub use radiation::{column, glow};
 pub(crate) use sky::Sky;
 pub(super) use wind::wind;
-pub use wind::wind_on;
 
 use super::Scratch;
 use crate::AIR;
