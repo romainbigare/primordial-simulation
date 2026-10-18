@@ -12,7 +12,7 @@ use worldgen::testkit::Books;
 /// A world of seed `seed`, `side` x `side` cells, and the schedule of `ew run --roster` with life from year 0; with
 /// `soon`, every kind due by year 1.
 fn scheduled(seed: u64, side: usize, soon: bool) -> (World, Schedule) {
-    let mut plan = Schedule::new(Some(0), true, None, worldgen::life::Seeding::default());
+    let mut plan = Schedule::new(Some(0), true, worldgen::life::Seeding::default());
     if soon {
         plan.kinds.iter_mut().for_each(|k| k.1 = k.1.min(1));
     }

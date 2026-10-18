@@ -22,6 +22,10 @@ pub const FIXERS: f64 = 0.1;
 pub const FIX_GENE: f32 = 9.8;
 /// Size of the random weights of a founder lineage's brain.
 const BRAIN_NOISE: f32 = 0.1;
+/// Step of one round of the spray on the bias of every row of a neutral start.
+const ROW_SPRAY: f32 = 0.2;
+/// How many times the step of one generation the genes of a neutral start get in all.
+const GENE_SPRAY: f32 = 3.0;
 /// A founder's id (the key of its random streams): 1 + its kind above `KIND_BIT`, its cell above `CELL_BIT`, its
 /// number in the cell below.
 const KIND_BIT: u32 = 48;
@@ -40,9 +44,9 @@ fn founder_id(which: usize, i: usize, k: usize) -> u64 {
 /// `rounds` rounds of mutation (genes by `body::mutate`, born brain rows by `brain::shake`), each body its own random
 /// walk and genome, so the first generation is already a spray of variants. A neutral start gets more than one
 /// generation's step, which is too small to give selection anything to pick from: the bias of every row gets rounds of
-/// `size` (after 20 rounds of 0.2 they span about 0.9), the other row entries keep the step of one generation so the
-/// features do not swamp the brain, and the genes get `genes` times the step of one generation. Hand-set starts keep
-/// the step of one generation for everything.
+/// `ROW_SPRAY` (after 20 rounds of 0.2 they span about 0.9), the other row entries keep the step of one generation so
+/// the features do not swamp the brain, and the genes get `GENE_SPRAY` times the step of one generation. Hand-set
+/// starts keep the step of one generation for everything.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Seeding {
     /// Hand-set brain biases for the kinds that have them (the animals). The default, what `ew run` uses, sets them:
@@ -50,10 +54,6 @@ pub struct Seeding {
     pub hand: bool,
     /// Rounds of mutation given to every body placed (0: all bodies of a kind are the same)
     pub rounds: u32,
-    /// Step of one round on the bias of every row (neutral starts)
-    pub size: f32,
-    /// How many times the step of one generation the genes get in all (neutral starts)
-    pub genes: f32,
     /// The share of the light-eaters placed that carry the gene of the fixing reaction (`FIXERS`)
     pub fixers: f64,
 }
@@ -62,7 +62,7 @@ impl Seeding {
     /// Every body of a kind alike: hand-set brain biases, no mutation and no fixers (for tests of the laws that need
     /// the same body every time).
     pub fn alike() -> Self {
-        Seeding { hand: true, rounds: 0, fixers: 0.0, ..Default::default() }
+        Seeding { hand: true, rounds: 0, fixers: 0.0 }
     }
 
     /// Neutral brains for the animals too (for tests that start every kind from no behaviour).
@@ -73,7 +73,7 @@ impl Seeding {
 
 impl Default for Seeding {
     fn default() -> Self {
-        Seeding { hand: true, rounds: 20, size: 0.2, genes: 3.0, fixers: FIXERS }
+        Seeding { hand: true, rounds: 20, fixers: FIXERS }
     }
 }
 
@@ -131,7 +131,7 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
         for k in 0..kind.per {
             let id = founder_id(which, i, k);
             let genome = shared.unwrap_or_else(|| sprayed(w, kind, shape, &rows, how, hand, id));
-            let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { how.genes }, id) else { return String::new() };
+            let Some(mut b) = make_with(w, which, i, lineage, genome, how.rounds, if hand { 1.0 } else { GENE_SPRAY }, id) else { return String::new() };
             // A share `fixers` of the light-eaters carry the gene of the fixing reaction; the draw is by the body's own id.
             if let Some(fx) = fix.filter(|_| Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers) {
                 b.genes[lay.cat + fx] = FIX_GENE;
@@ -161,7 +161,7 @@ fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: Option<Hand>,
 }
 
 /// A genome of its own for founder `id`: the born rows after `rounds` rounds of mutation, and for a neutral start the
-/// bias of each row (its last entry) as far as `rounds` rounds of `size` go.
+/// bias of each row (its last entry) as far as `rounds` rounds of `ROW_SPRAY` go.
 #[allow(clippy::too_many_arguments)]
 fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding, hand: bool, id: u64) -> u32 {
     let mut v = rows.to_vec();
@@ -171,7 +171,7 @@ fn sprayed(w: &mut World, kind: &Kind, shape: Shape, rows: &[f32], how: &Seeding
         pcore::brain::shake(&mut v, &mut rr, size);
     }
     if !hand {
-        let (r, extra) = (shape.r(), how.size * (how.rounds as f32).sqrt());
+        let (r, extra) = (shape.r(), ROW_SPRAY * (how.rounds as f32).sqrt());
         v.chunks_exact_mut(r).for_each(|row| pcore::brain::shake(&mut row[shape.h..], &mut rr, extra));
     }
     w.life.new_genome(v)
@@ -193,7 +193,7 @@ fn line(w: &World, kind: &Kind, how: &Seeding, hand: bool, fix: Option<usize>, p
     } else if hand {
         ", row and gene steps of one generation".to_string()
     } else {
-        format!(", row biases {} x {} (spread {:.2}), other row entries and genes at one generation's step (genes x{})", how.rounds, how.size, how.size * (how.rounds as f32).sqrt(), how.genes)
+        format!(", row biases {} x {ROW_SPRAY} (spread {:.2}), other row entries and genes at one generation's step (genes x{GENE_SPRAY})", how.rounds, ROW_SPRAY * (how.rounds as f32).sqrt())
     };
     let fixing = match fix {
         Some(r) => format!("; {} of them ({:.1}%) carry the gene of reaction {r}, the fixing reaction (log10 speed-up {FIX_GENE}, share {} chosen before any run), the others have it off", p.fixers, 100.0 * p.fixers as f64 / p.bodies.max(1) as f64, how.fixers),

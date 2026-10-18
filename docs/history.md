@@ -640,6 +640,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   30 years, seeds 1 and 2 (years 21 to 30) still show a step error larger than the seeds' noise (2% in life, 0.03
   in log10 mass): life of plants +7 to +9% at 18 days, +14 to +24% at 36, +7 to +18% at 72; plant mass +0.01 to
   +0.08 log10.
+- E10 (c): the experiment flags of old questions go: the big-brain test (`--clever-year`, `--clever-n`,
+  `life::seed_clever`, its random stream and its test), `--spray-size` and `--spray-genes` (now `ROW_SPRAY` and
+  `GENE_SPRAY` in `worldgen`) and `--regrow` (`Config::regrow` stays). Same history (golden unchanged); snapshot
+  version 22 (the schedule a snapshot carries changed).
 
 **Phase J: the long physics step**
 

@@ -1012,5 +1012,3 @@ run places what is still due); the laws never read a kind.
   (`worldgen::life::FIXERS`, `FIX_GENE`; `--fixers`). The share comes from real floras.
 - **Founder genes**: some are measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's
   `GAS`); `HEAT`, `KEEP_T`, `COOL_T`, `CHILD` and `ALLOC` are the same for every kind.
-- **The big-brain test** (`--clever-year N`, `worldgen::life::seed_clever`) copies living eaters
-  twice: once with a big brain, once unchanged.

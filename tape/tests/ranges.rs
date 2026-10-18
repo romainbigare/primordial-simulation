@@ -106,7 +106,7 @@ fn run(seed: u64, side: usize, years: u64, set: impl Fn(&mut Config), mut each_y
     set(&mut w.cfg);
     // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
     worldgen::terrain::scale_absorbers(&mut w, 1.0);
-    let plan = Schedule::new(Some(LIFE_YEAR), false, None, Seeding::default());
+    let plan = Schedule::new(Some(LIFE_YEAR), false, Seeding::default());
     let (books, mut rec) = (Books::now(&w), Recorder::new(&w, 0, 0));
     rec.record_month(&mut w);
     for y in 1..=years {

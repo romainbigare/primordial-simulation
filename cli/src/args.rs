@@ -15,11 +15,7 @@ pub const USAGE: &str = "usage:
     --monthly-years N     a viewer frame every month in the first N years (2)
     --life-year N         the year life starts: soil, then the kinds (2; -1: no life)
     --roster              the ten kinds of worldgen::life::ROSTER, each at its year after the first life, not the two
-    --clever-year N       the big-brain test at year N: copies of living eaters with a big brain and without (-1: none)
-    --clever-n N          eaters copied by the big-brain test (300)
     --spray N             rounds of mutation of every founder (20)
-    --spray-size X        step of one round on the row biases of a neutral start (0.2)
-    --spray-genes X       the genes' spray, times the step of one generation (3)
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
     --neutral-eaters      animals start with neutral brains, not hand-set biases
     --own-brains          each body learns alone (no shared brain rows in a group)
@@ -32,7 +28,6 @@ pub const USAGE: &str = "usage:
     --flow-days N         days between moves of liquid (30; a multiple of the physics step's, 3)
     --air-days N          days between moves of the air (3; a multiple of the physics step's, 3)
     --exchange-days N     days between evaporation and condensation (3; a multiple of the physics step's, 3)
-    --regrow X            Config::regrow
     --crowd N             Config::crowd
     --node-days N         a population node updates at most every N days (36; Config::node_days)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due
@@ -75,7 +70,6 @@ impl Args {
         c.flow_days = self.get("--flow-days", c.flow_days);
         c.air_days = self.get("--air-days", c.air_days);
         c.exchange_days = self.get("--exchange-days", c.exchange_days);
-        c.regrow = self.get("--regrow", c.regrow);
         c.crowd = self.get("--crowd", c.crowd);
         c.node_days = self.get("--node-days", c.node_days);
         c.null = self.has("--null");
@@ -88,12 +82,12 @@ impl Args {
     /// have no brain).
     pub fn seeding(&self) -> Seeding {
         let hand = !self.has("--neutral-eaters");
-        Seeding { hand, rounds: self.get("--spray", 20), size: self.get("--spray-size", 0.2), genes: self.get("--spray-genes", 3.0), fixers: self.get("--fixers", FIXERS) }
+        Seeding { hand, rounds: self.get("--spray", 20), fixers: self.get("--fixers", FIXERS) }
     }
 
-    /// What is placed when (`--life-year`, `--roster`, `--clever-year`, `--clever-n`, and the seeding flags).
+    /// What is placed when (`--life-year`, `--roster`, and the seeding flags).
     pub fn schedule(&self) -> Schedule {
         let year = |name: &str, default: i64| u64::try_from(self.get(name, default)).ok();
-        Schedule::new(year("--life-year", 2), self.has("--roster"), year("--clever-year", -1).map(|y| (y, self.get("--clever-n", 300))), self.seeding())
+        Schedule::new(year("--life-year", 2), self.has("--roster"), self.seeding())
     }
 }

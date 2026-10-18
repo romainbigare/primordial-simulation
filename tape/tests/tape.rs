@@ -91,7 +91,7 @@ fn a_resumed_run_places_the_kinds_still_due() {
     use worldgen::schedule::Schedule;
     let dir = tmp("resume_plan");
     // The roster from year 0, its later kinds due at year 1, after the snapshot.
-    let mut plan = Schedule::new(Some(0), true, None, Seeding::default());
+    let mut plan = Schedule::new(Some(0), true, Seeding::default());
     plan.kinds.iter_mut().for_each(|k| k.1 = k.1.min(1));
     let late: Vec<u32> = ROSTER.iter().filter(|&&k| KINDS[k].year > 0).map(|&k| k as u32).collect();
     let years = |w: &mut World, plan: &Schedule, n: u64| {

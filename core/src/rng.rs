@@ -40,8 +40,6 @@ pub enum Purpose {
     Make,
     /// Which founders carry the fixing reaction's gene (`worldgen`)
     Fixer,
-    /// The fair test of a big brain (`worldgen`)
-    Clever,
 }
 
 pub struct Rng(u64);
