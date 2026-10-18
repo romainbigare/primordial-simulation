@@ -34,8 +34,9 @@ pub struct Reactor {
     thr: Vec<f64>,
     /// Enthalpy change per reaction unit, J.
     dh: Vec<f64>,
-    /// Per reaction: does it store absorbed light (light-driven and taking energy)?
+    /// Per reaction: does it store absorbed light (light-driven and taking energy)? And its inputs, a bit per substance.
     lit: Vec<bool>,
+    needs: Vec<u64>,
     /// Share of the light a light-driven reaction takes that it stores (`Physics::light_yield`).
     light_yield: f64,
     /// Per substance: heat capacity, melting and boiling point.
@@ -44,10 +45,14 @@ pub struct Reactor {
     boil: Vec<f64>,
     /// Phase of each substance at the current temperature (`Phase as usize` indexes the totals of the phases).
     ph: Vec<Phase>,
-    /// Amount of each substance that can react now (the node's plus, for gas, the surrounding gas).
+    /// Amount of each substance that can react now (the node's plus, for gas, the surrounding gas), and a bit for each
+    /// above 0 (as of the last `phases`).
     pub(super) av: Vec<f64>,
-    /// Effective rate of each reaction in this sub-step, 1/s (0 = idle).
+    held: u64,
+    /// Effective rate of each reaction in this sub-step, 1/s (0 = idle), and the reactions with all their inputs, in
+    /// order: the others are idle.
     kap: Vec<f64>,
+    on: Vec<usize>,
     /// Limiting input amount of each reaction at the start of the sub-step, in reaction units,
     /// and the share of it that reacts over the sub-step.
     lim: Vec<f64>,
@@ -57,10 +62,12 @@ pub struct Reactor {
     /// Per reaction: is its scarcest input a trace of its phase (`TRACE`)?
     minor: Vec<bool>,
     /// At the start of the last `react`: the heat capacity, J/K, and the rate of each reaction
-    /// not driven by light nor on a trace (`minor`), 1/s, with its limiting input in reaction units.
+    /// not driven by light nor on a trace (`minor`), 1/s, with its limiting input in reaction units;
+    /// those reactions, in order.
     cap0: f64,
     kap0: Vec<f64>,
     lim0: Vec<f64>,
+    on0: Vec<usize>,
     /// Time, s, the liquid standing over the node takes to renew its gas through its film (Flow's
     /// law, `air::dissolve`); 0: the node touches the gas around it. Its gas is then the gas
     /// dissolved in the liquid, held where the film and its reactions balance: Henry's share `eq`
@@ -70,9 +77,11 @@ pub struct Reactor {
     pub film: f64,
     /// Per substance, used and made, mol/s (scratch for `film`).
     flux: Vec<[f64; 2]>,
-    /// Over the last `react`: per reaction, how far it went, in reaction units; per substance, what they made less what
-    /// they used of the node's own amounts, mol, and whether they took or gave any of it in the gas around it.
+    /// Over the last `react`: per reaction, how far it went, in reaction units, and those that went, in order; per
+    /// substance, what they made less what they used of the node's own amounts, mol, and whether they took or gave any
+    /// of it in the gas around it.
     done: Vec<f64>,
+    ran: Vec<usize>,
     pub(super) own: Vec<f64>,
     pub(super) pooled: Vec<bool>,
     /// Per substance, the sum of the terms of its change and of their sizes, mol, and room for an exact sum (`made`).
@@ -176,6 +185,7 @@ impl Reactor {
         Reactor {
             thr: chem.reactions.iter().map(|rx| frozen_below(rx, year)).collect(),
             lit: chem.reactions.iter().zip(&dh).map(|(rx, &d)| rx.light && d > 0.0).collect(),
+            needs: chem.reactions.iter().map(|rx| rx.inputs.iter().fold(0, |m, &(k, _)| m | 1 << k)).collect(),
             light_yield: cfg.phys.light_yield,
             dh,
             cp: chem.subs.iter().map(|s| s.cp).collect(),
@@ -183,7 +193,9 @@ impl Reactor {
             boil: chem.subs.iter().map(|s| s.boil).collect(),
             ph: vec![Phase::Solid; ns],
             av: vec![0.0; ns],
+            held: 0,
             kap: vec![0.0; nr],
+            on: Vec::with_capacity(nr),
             lim: vec![0.0; nr],
             far: vec![0.0; nr],
             pw: vec![0.0; nr],
@@ -191,9 +203,11 @@ impl Reactor {
             cap0: 0.0,
             kap0: vec![0.0; nr],
             lim0: vec![0.0; nr],
+            on0: Vec::with_capacity(nr),
             film: 0.0,
             flux: vec![[0.0; 2]; ns],
             done: vec![0.0; nr],
+            ran: Vec::with_capacity(nr),
             own: vec![0.0; ns],
             pooled: vec![false; ns],
             sums: vec![[0.0; 2]; ns],
@@ -207,7 +221,8 @@ impl Reactor {
     /// nothing reacts.
     pub(super) fn rest(&self, far: f64, trace: f64, dt_k: f64) -> f64 {
         let (mut most, mut heat) = (f64::INFINITY, 0.0);
-        for (r, &k) in self.kap0.iter().enumerate().filter(|e| *e.1 > 0.0) {
+        for &r in &self.on0 {
+            let k = self.kap0[r];
             most = most.min((far / k).max(trace / (self.lim0[r] * k)));
             heat += self.dh[r].abs() * self.lim0[r] * k;
         }
@@ -218,10 +233,9 @@ impl Reactor {
     /// each went. Where the terms of one cancel (a pair of reactions that undo each other, fast, beside a slow one) they
     /// are summed exactly and rounded once (`math::add_times`), so the changes keep every element to rounding.
     pub(super) fn made(&mut self, chem: &Chemistry, made: &mut [f64]) {
-        let ran = |r: &(usize, &Reaction)| self.done[r.0] > 0.0;
         self.sums.fill([0.0; 2]);
-        for (r, rx) in chem.reactions.iter().enumerate().filter(ran) {
-            for (k, nu) in terms(rx) {
+        for &r in &self.ran {
+            for (k, nu) in terms(&chem.reactions[r]) {
                 let (x, s) = (nu * self.done[r], &mut self.sums[k]);
                 *s = [s[0] + x, s[1] + x.abs()];
             }
@@ -230,8 +244,8 @@ impl Reactor {
             *d = sum;
             if all > CANCEL * sum.abs() {
                 self.parts.clear();
-                for (r, rx) in chem.reactions.iter().enumerate().filter(ran) {
-                    terms(rx).filter(|t| t.0 == k).for_each(|(_, nu)| add_times(&mut self.parts, nu, self.done[r]));
+                for &r in &self.ran {
+                    terms(&chem.reactions[r]).filter(|t| t.0 == k).for_each(|(_, nu)| add_times(&mut self.parts, nu, self.done[r]));
                 }
                 *d = self.parts.iter().sum();
             }
@@ -242,7 +256,8 @@ impl Reactor {
     /// reaction goes with the liquid's share of Henry's of each gas it takes, to its order.
     fn through_film(&mut self, chem: &Chemistry, tot: &[f64; 3], t: f64) {
         self.flux.fill([0.0; 2]);
-        for (r, rx) in chem.reactions.iter().enumerate() {
+        for &r in &self.on {
+            let rx = &chem.reactions[r];
             for (side, &(k, nu)) in rx.inputs.iter().map(|p| (0, p)).chain(rx.outputs.iter().map(|p| (1, p))) {
                 self.flux[k as usize][side] += nu as f64 * (self.kap[r] * self.lim[r]) * (self.ph[k as usize] == Phase::Gas) as u8 as f64;
             }
@@ -252,7 +267,8 @@ impl Reactor {
             let eq = if used > 0.0 { tot[1] * chem.henry(k, t, self.av[k] / tot[2] * P_REF) } else { 0.0 };
             self.flux[k][0] = if eq > 0.0 { (1.0 + made * self.film / eq) / (1.0 + used * self.film / eq) } else { 1.0 };
         }
-        for (r, rx) in chem.reactions.iter().enumerate() {
+        for &r in &self.on {
+            let rx = &chem.reactions[r];
             for (q, p) in rx.inputs.iter().enumerate() {
                 self.kap[r] *= self.flux[p.0 as usize][0].powi(rx.order(q) as i32);
             }
@@ -268,7 +284,7 @@ impl Reactor {
     /// around it), and the total of each phase: in a gas or a liquid the mole fraction is a
     /// substance's activity; a solid is a phase of its own (activity 1).
     pub(super) fn phases(&mut self, chem: &Chemistry, n: &[f64], gas: Option<&[f64]>, t: f64) -> [f64; 3] {
-        let mut tot = [0.0; 3];
+        let (mut tot, mut held) = ([0.0; 3], 0);
         for k in 0..n.len() {
             let p = (t >= self.melt[k] || n[k] > 0.0 && t >= chem.melt_in(k, |j| n[j])) as usize + (t >= self.boil[k]) as usize;
             let a = match gas {
@@ -277,8 +293,10 @@ impl Reactor {
             };
             self.ph[k] = PHASES[p];
             self.av[k] = a;
+            held |= ((a > 0.0) as u64) << k;
             tot[p] += a;
         }
+        self.held = held;
         tot
     }
 
@@ -308,8 +326,11 @@ impl Reactor {
         let pool: &mut [f64] = gas.unwrap_or(&mut []);
         let mut light = light_j;
         let mut left = dt;
-        self.kap0.fill(0.0);
-        self.done.fill(0.0);
+        self.on0.clear();
+        for &r in &self.ran {
+            self.done[r] = 0.0;
+        }
+        self.ran.clear();
         self.own.fill(0.0);
         self.pooled.fill(false);
         for iter in 0..=MAX_SUBSTEPS {
@@ -332,15 +353,21 @@ impl Reactor {
             self.apply(chem, n, pool, energy, &mut light);
             left -= sub;
         }
+        // A later sub-step may run a reaction an earlier one did not.
+        self.ran.sort_unstable();
         light_j - light
     }
 
     /// The rate `kap`, limit `lim` and power `pw` of each reaction at `t` that is not frozen and has all its inputs (with
     /// light, for one that stores it). Returns whether any can run.
     fn rates(&mut self, chem: &Chemistry, tot: &[f64; 3], t: f64, cat: Option<(&[f64], f64, f64)>, light: f64) -> bool {
-        let mut any = false;
+        self.on.clear();
         for (r, rx) in chem.reactions.iter().enumerate() {
             self.kap[r] = 0.0;
+            // One whose inputs are not all here has none of the scarcest.
+            if self.needs[r] & !self.held != 0 {
+                continue;
+            }
             let cr = cat.map_or(1.0, |(c, td, wk)| denature(c[r], t, td, wk));
             if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (self.lit[r] && light <= 0.0) {
                 continue;
@@ -349,14 +376,14 @@ impl Reactor {
             if lim > 0.0 {
                 self.kap[r] = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
                 self.lim[r] = lim;
-                any = true;
+                self.on.push(r);
                 // (In a liquid or a gas that power is its order less 1, as far as it is not most of its phase.)
                 let k = rx.inputs[q].0 as usize;
                 let share = if self.ph[k] != Phase::Solid { self.av[k] / tot[self.ph[k] as usize] } else { 1.0 };
                 (self.pw[r], self.minor[r]) = ((rx.order(q) as f64 - 1.0) * (1.0 - share), share < TRACE);
             }
         }
-        any
+        !self.on.is_empty()
     }
 
     /// The length of sub-step `iter` of the `left` seconds still to go, at heat capacity `c`: all of them, halved while the
@@ -364,12 +391,13 @@ impl Reactor {
     /// sub-step). Sets the share `far` each reaction goes in it, and on the first the rates `kap0` and limits `lim0`.
     fn sub_step(&mut self, left: f64, c: f64, iter: usize) -> f64 {
         let mut heat = 0.0;
-        for r in (0..self.kap.len()).filter(|&r| self.kap[r] > 0.0) {
+        for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
             self.far[r] = gone(self.kap[r] * left, self.pw[r]);
             if !self.lit[r] {
                 heat += self.dh[r].abs() * self.lim[r] * self.far[r];
                 if iter == 0 && !self.minor[r] {
                     (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
+                    self.on0.push(r);
                 }
             }
         }
@@ -377,14 +405,14 @@ impl Reactor {
         if iter < MAX_SUBSTEPS {
             while heat > MAX_DT_K * c && sub > left * MIN_SUB {
                 sub *= 0.5;
-                heat = (0..self.kap.len())
+                heat = (self.on.iter().copied())
                     .filter(|&r| self.kap[r] > 0.0 && !self.lit[r])
                     .map(|r| self.dh[r].abs() * self.lim[r] * gone(self.kap[r] * sub, self.pw[r]))
                     .sum();
             }
         }
         if sub != left {
-            for r in (0..self.kap.len()).filter(|&r| self.kap[r] > 0.0) {
+            for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
                 self.far[r] = gone(self.kap[r] * sub, self.pw[r]);
             }
         }
@@ -397,7 +425,8 @@ impl Reactor {
     /// from `light`.
     fn apply(&mut self, chem: &Chemistry, n: &mut [f64], pool: &mut [f64], energy: &mut f64, light: &mut f64) {
         let has_pool = !pool.is_empty();
-        for (r, rx) in chem.reactions.iter().enumerate() {
+        for x in 0..self.on.len() {
+            let (r, rx) = (self.on[x], &chem.reactions[self.on[x]]);
             if self.kap[r] <= 0.0 {
                 continue;
             }
@@ -431,6 +460,9 @@ impl Reactor {
                     (n[k], self.own[k]) = (n[k] + d, self.own[k] + d);
                 }
                 self.av[k] += d;
+            }
+            if self.done[r] == 0.0 {
+                self.ran.push(r);
             }
             self.done[r] += ext;
             if self.lit[r] {

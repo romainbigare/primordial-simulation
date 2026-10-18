@@ -465,6 +465,10 @@ The work of `docs/foundation/plan.md`, one line per task.
 - D10 (speed): `Chemistry::add_elems` adds only the elements a substance holds, and `store::apply` counts the atoms of
   each substance once a call to check its transforms; `flow::liquid::book` copies the amounts before a call one
   substance at a time. Same results (golden unchanged).
+- D10 (speed), `change::Reactor`: a reaction whose inputs are not all in the node is passed over at once (a bit per
+  substance held, `Reactor::needs`), and the reactor's later loops run over the reactions that can run (`on`), went
+  (`ran`) or set the rest (`on0`), not over all of them. Same results (golden unchanged); Change at 64 x 64 without
+  life 13% fewer instructions.
 
 **Owner's decisions after Phase A**
 
