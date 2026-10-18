@@ -21,7 +21,7 @@ fn near(lay: &Layout, chem: &pcore::chem::Chemistry, alike: f32, a: &Body, b: &B
 /// next update; roots give it at the update, just before the body builds.)
 fn feed_minerals(w: &mut World, s: usize) {
     let (i, n, lay) = (w.life.bodies[s].cell as usize, w.mesh.cells().n(), Layout::of(&w.chem));
-    for (mk, _) in w.chem.minerals() {
+    for (mk, _) in w.chem.minerals().to_vec() {
         let b = &mut w.life.bodies[s];
         (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
         b.k.cat.clear();
@@ -43,7 +43,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let (_, mut b) = out(&mut w, b);
     let books = Books::now(&w);
     let (matter0, rich0, liquid0, e0) = (b.store[MATTER], b.store[RICH], b.store[LIQUID], w.e_ground.iter().sum::<f64>());
-    let minerals = w.chem.minerals();
+    let minerals = w.chem.minerals().to_vec();
     let mineral0: Vec<f64> = minerals.iter().map(|m| b.store[m.0]).collect();
     // (Counts of the chemistry's growth: the solid in, the liquid out.)
     let bl = w.chem.build.as_ref().expect("growth");
@@ -639,7 +639,7 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
 fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     let (mut w, i) = start();
     w.cfg.phys.c_build = 1e6;
-    let minerals = w.chem.minerals();
+    let minerals = w.chem.minerals().to_vec();
     let m = w.chem.matter().expect("matter");
     let b = eater(&mut w, i, brain::REST, 6.0);
     let (_, b) = out(&mut w, b);

@@ -8,6 +8,7 @@ mod thermo;
 
 use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 /// A reaction keeps mass where its two sides differ by no more than this share (the sums of molar masses round).
 const MASS_ROUNDING: f64 = 1e-12;
@@ -117,6 +118,16 @@ pub struct Chemistry {
     /// Mole fractions of the starting air, per substance (empty: none known). The cost of a
     /// catalyst counts the gases of a reaction beyond first order at these shares (`Body::prepare`).
     pub air: Vec<f64>,
+    /// What follows from the fields above, made at its first use (a chemistry does not change once made; not saved)
+    #[serde(skip)]
+    derived: OnceLock<Derived>,
+}
+
+/// Numbers that follow from a chemistry, made once (`Chemistry::derived`).
+#[derive(Clone, Debug)]
+struct Derived {
+    /// `Chemistry::minerals`
+    minerals: Vec<(usize, f64)>,
 }
 
 impl Chemistry {
@@ -124,11 +135,16 @@ impl Chemistry {
     pub fn new(n_elements: usize, subs: Vec<Substance>, reactions: Vec<Reaction>, build: Option<Reaction>, builds: Vec<Reaction>, air: &[(usize, f64)]) -> Self {
         let mut shares = vec![0.0; subs.len()];
         air.iter().for_each(|&(k, x)| shares[k] = x);
-        Chemistry { n_elements, subs, reactions, build, builds, air: shares }
+        Chemistry { n_elements, subs, reactions, build, builds, air: shares, derived: OnceLock::new() }
     }
 
     pub fn ns(&self) -> usize {
         self.subs.len()
+    }
+
+    /// What follows from the chemistry (`Derived`), made at the first call.
+    fn derived(&self) -> &Derived {
+        self.derived.get_or_init(|| Derived { minerals: self.find_minerals() })
     }
 
     /// Element counts of a reaction side.

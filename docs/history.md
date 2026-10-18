@@ -535,6 +535,9 @@ The work of `docs/foundation/plan.md`, one line per task.
   paying: `spend` takes the mass and the plateau state); a conversion with no room or nothing to make stops before
   any solve. 31 solves per body update fall to 15. Same results bit for bit (golden unchanged; 64 x 64, seed 1, 20
   years: same fingerprint); a body update about 3% faster (year 20: 40.8 to 38.3 µs, year 10 within the noise).
+- E1 (d), speed: `Chemistry::minerals` is made once, at its first use, and kept beside the chemistry (`Derived`, not
+  saved: a chemistry loaded makes it again), not as a new list at every body's shedding and every intake. Same
+  results bit for bit (golden unchanged; 64 x 64, seed 1, 20 years: same fingerprint); a body update 1 to 2% faster.
 
 **Owner's decisions after Phase A**
 

@@ -88,7 +88,7 @@ fn minerals(c: &Ctx, row: &mut Row) {
     let (n, area, matter, minerals) = (w.mesh.cells().n(), w.map.area(), w.chem.matter(), w.chem.minerals());
     let mut bodies = vec![0.0f64; minerals.len()];
     for b in w.life.alive() {
-        for (x, &(k, per)) in bodies.iter_mut().zip(&minerals) {
+        for (x, &(k, per)) in bodies.iter_mut().zip(minerals) {
             *x += b.store[k] + matter.map_or(0.0, |m| b.store[m]) * per;
         }
     }

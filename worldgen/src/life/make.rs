@@ -106,7 +106,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     // light-eater takes them from the ground (an animal has them from the matter it digests).
     if let Some((m, _)) = matter {
         store[m] = mat * count * mass / chem.subs[m].molar_mass;
-        for (k, per) in chem.minerals() {
+        for &(k, per) in chem.minerals() {
             store[k] = store[m] * per;
             genes[lay.keep + k] = (MINERAL_KEEP * per * chem.subs[k].molar_mass / chem.subs[m].molar_mass * (1.0 - h)) as f32;
             if light(kind) {

@@ -74,7 +74,12 @@ impl Chemistry {
     /// the rock element, both of the ground): each one's substance and the mol of it a mol of matter is made of. They are
     /// the inputs that no reaction of the chemistry burns (releases heat from with a gas, as a fuel burns), so a body takes
     /// them from the ground or what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.
-    pub fn minerals(&self) -> Vec<(usize, f64)> {
+    pub fn minerals(&self) -> &[(usize, f64)] {
+        &self.derived().minerals
+    }
+
+    /// `minerals`, made from the chemistry (once, `Derived`).
+    pub(super) fn find_minerals(&self) -> Vec<(usize, f64)> {
         let Some(bl) = self.build.as_ref() else { return Vec::new() };
         bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect()
     }

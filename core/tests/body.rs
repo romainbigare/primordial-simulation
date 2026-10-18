@@ -1250,7 +1250,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
 #[test]
 fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
     let (w0, _) = start();
-    for (q, (mineral, _)) in w0.chem.minerals().into_iter().enumerate() {
+    for (q, &(mineral, _)) in w0.chem.minerals().iter().enumerate() {
         // (The dissolved mineral lives only in the liquid of the pores, which the rock and the gas make it in: none is put
         // on this ground, it has its own.)
         let (mut w, i) = start_wet();

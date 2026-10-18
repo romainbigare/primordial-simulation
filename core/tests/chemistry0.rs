@@ -25,7 +25,7 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     let (chem, _) = worldgen::chemistry0();
     assert!(chem.validate().is_ok());
     let (m, minerals) = (chem.matter().expect("matter"), chem.minerals());
-    assert_eq!((m, minerals.clone()), (MATTER, vec![(MINERAL, 3.0), (DISSOLVED, 1.0)]));
+    assert_eq!((m, minerals.to_vec()), (MATTER, vec![(MINERAL, 3.0), (DISSOLVED, 1.0)]));
     let elems = &chem.subs[m].elems;
     assert_eq!((elems[SOLID_ELEMENT], elems[FIX_ELEMENT], elems[ROCK_ELEMENT]), (120, 6, 1));
     // Its mass share: the rock element's mass found from the burnt rock (56 g a mol) less the half of the burning gas
