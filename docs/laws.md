@@ -66,9 +66,11 @@ when that period is over, for all the time since: evaporation and rain every `ex
 (15), heat conducted sideways through the ground and creep once a year.
 
 **Sleep and wake** (`clock::Sleep`). A node's own process may sleep while the node is calm: until an
-alarm time, or until a call of `store::apply` brings the node, net, more than `wake_share` (5%) of
-what it holds of an amount (heat wakes no node; what only passes through a node wakes nothing). When it is due, its law brings it up to date for all
-the time since it last did, in one span. Change's reactions in ground and air nodes sleep so (2.2).
+alarm time, or until one of its amounts has grown by more than `wake_share` (5%) of what it held when it
+fell asleep, whatever brought it (Flow, bodies, parts) and in as many gains as it took. Its law looks
+for such gains once at its own step (`Sleep::watch`), not at every move (heat wakes no node; what only
+passes through a node wakes nothing). When it is due, its law brings it up to date for all the time since
+it last did, in one span. Change's reactions in ground and air nodes sleep so (2.2).
 
 **One ground temperature.** Every law and the tape read the ground temperature of Flow's last
 step (`World::t_ground_last`). Where Flow has not run yet, `flow::ensure` builds that state from
@@ -277,7 +279,7 @@ brings to the warmer column on lines is not carried, and a node gives no more of
 
 Each call starts from the air nodes' amounts as they are (`air::sums`), with what Law 2 and bodies
 changed. What crosses the links over the whole solve is booked at once by `store::apply` (gas and
-heat; a node gives only its net loss, so gas that passes through it needs nothing held). Air in
+heat; only what a node holds at the end counts, so gas that passes through it needs nothing held). Air in
 Flow moves as whole columns, so there is no wind near the ground; bodies use the anchored
 `wind_ground` (6.3).
 
@@ -291,9 +293,12 @@ into cleared links (`lanes::regrow`, rate `regrow`). This one rule is what can m
 
 ### 1.8 Stability
 
-No amount goes below zero: a node never gives more than it has. `store::apply` is the one guard
-of Flow's moves: what would take more from a node than it holds is scaled down, and what the
-scaling left is counted (`Counters::scaled`). The moves the store does not book yet (bodies, parts,
+No amount goes below zero: a law never asks a node for more than it holds. `spread` keeps amounts
+positive by its implicit step, `downhill` by its pass, the reactor by going no further than its scarcest
+input, and where a law could still ask too much it cuts that node's own outgoing links
+(`solve::spread::within`), never a whole field. `store::apply` only adds: what the rounding of its sums
+leaves just below zero it sets to zero and counts (`Counters::rounded`); a debug build checks that it is
+rounding, and a real overdraw breaks the books. The moves the store does not book yet (bodies, parts,
 ground reactions) take heat from a ground node no further than `T_FLOOR` (`ground::draw`);
 whoever asked gets that much less, and it is counted (`Counters::clamped_heat`).
 
@@ -340,9 +345,10 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
   (`clock::Sleep`), for all the time since it last reacted, with sub-steps when the temperature
   changes fast. Then it sleeps until its reactions, at their rates, would use 5% of their inputs
   or warm it by 0.5 K (`Reactor::rest`), at most `sleep_days` (90): a node where a reaction goes
-  that far within a step reacts every step. A call of `store::apply` that brings it, net, more
-  than `wake_share` of an amount wakes it. The bodies change it outside `apply`, and its
-  temperature does not wake it: `sleep_days` bounds how long it reacts without those changes. This is a speed tool, not physics (`sleep_days` 0: every node
+  that far within a step reacts every step. It wakes when one of its amounts has grown by more
+  than `wake_share` of what it held when it fell asleep, whatever brought it (Flow, bodies, parts),
+  looked at once a step (1, "Sleep and wake"). Its temperature does not wake it: `sleep_days`
+  bounds how long it reacts at an old one. This is a speed tool, not physics (`sleep_days` 0: every node
   reacts every step). A reaction too slow to matter over the world's year is frozen.
 - **Booked by the store.** The nodes due in a step react from the world as it was before any of
   them did (each ground node from its share of its air node), and `store::apply` books them
@@ -353,8 +359,8 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
 - **A ground node reacts at Flow's last temperature.** On a melting plateau that is the melting
   point: the fusion heat it holds is set aside while it reacts (`FlowView::fused`).
 - **Gas a ground node takes or gives** crosses the link between it and its air node, one link
-  flux for each substance (`store::Batch`): first the gas the nodes take, then their reactions,
-  then the gas they give, each booked in its own call, as each needs what the one before brought. Gas taken brings its heat at the air's temperature and
+  flux for each substance (`store::Batch`), booked in one call with the reactions (a node gives the
+  gas its reactions made, and they use the gas it took). Gas taken brings its heat at the air's temperature and
   gives the node back its latent heat; gas given takes its share of the node's heat by heat
   capacity and its latent heat. The air node pays the lift (1.5), a link flux to the potential.
   A node gives no more heat than it holds: where its gas would take more, each gas it gives is cut by the

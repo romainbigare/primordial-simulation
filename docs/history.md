@@ -488,6 +488,16 @@ The work of `docs/foundation/plan.md`, one line per task.
   than it holds (`solve::spread::within`). A probe found that no Flow call ever needed the store's scaling (golden
   runs; 64 x 64 seed 1, 12 years with life); only Change's transforms did, for rounding of trace substances. Same
   results (golden unchanged; 64 x 64, 12 years: same fingerprint).
+- D11 (b) and D12: `store::apply` only adds: it books each link flux, move and transform as given, sets what ends
+  below zero to zero and counts it (`Counters::rounded`; a debug build asserts that it is rounding). Its scaling of
+  whole fluxes, the fast path that booked first and restored, the copies of what a flux may change and `Booking`,
+  `Counters::scaled` and `World::booking` go: `store/` 686 -> 349 code lines. The wake leaves `apply`: a sleeping
+  node wakes when one of its amounts has grown by more than `wake_share` of what it held when it fell asleep
+  (`Sleep::keep`, `Sleep::watch`, looked at by Change at its step), whatever brought it, bodies too. Change books its
+  gas and its reactions in one call. A node's reactions are no longer scaled away for the rounding of a trace
+  substance (a whole air node's transform was cut to 8% of it or less for 1e-30 mol). 64 x 64, seed 1, years 7 to 12 with
+  life: land 288.58 -> 288.57 K, rain on land +0.1%, carbon gas -0.1%, plant mass +1.2%; air nodes due per year
+  119 -> 100 with life, 114 -> 8.5 without; ground nodes as before. Snapshot version 16, golden re-pinned.
 
 **Owner's decisions after Phase A**
 

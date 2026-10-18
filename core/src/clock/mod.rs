@@ -5,7 +5,7 @@
 //! fast process runs several times inside a slow one. A list of processes is their fixed order at one time: `due`
 //! gives the ones that run at a time in that order, and `next` the next time any of them runs.
 //!
-//! `sleep`: a calm node's own process sleeps until an alarm, or until a large move into the node wakes it.
+//! `sleep`: a calm node's own process sleeps until an alarm, or until a large gain since it fell asleep wakes it.
 
 pub mod sleep;
 

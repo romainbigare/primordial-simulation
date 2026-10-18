@@ -32,9 +32,6 @@ pub struct Counters {
     /// What bodies did with parts
     #[serde(skip)]
     pub parts: bond::Tally,
-    /// What `store::apply` left in place so that no node fell below zero: mol (of all substances), and J
-    #[serde(skip)]
-    pub scaled: [f64; 2],
     /// What `store::apply` set from just below zero (rounding) to zero: mol, and J
     #[serde(skip)]
     pub rounded: [f64; 2],
@@ -76,9 +73,6 @@ pub struct World {
     pub mesh: Mesh,
     /// The id, class, parent and cell of every node (`store::Nodes`): the mesh's, and the parts', which come and go
     pub table: crate::store::Nodes,
-    /// The working space of `store::apply`, kept between its calls (not saved)
-    #[serde(skip)]
-    pub booking: crate::store::Booking,
     /// Seed of every keyed random draw (`rng::Rng`)
     pub seed: u64,
     /// World clock, seconds since the start (`clock`)

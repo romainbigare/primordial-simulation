@@ -63,7 +63,6 @@ fn hot_plateau_cools_but_not_to_the_floor() {
     pcore::flow::step(&mut w, DT);
     let t = w.t_ground(i);
     assert!(t > 150.0 && t < melt, "{t} K after a step from {melt} K");
-    assert_eq!(w.counts.scaled, [0.0; 2]);
     books.assert_within(&w, 1e-12, 1e-9);
 }
 

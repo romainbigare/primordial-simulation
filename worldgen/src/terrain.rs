@@ -178,7 +178,6 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         cfg,
         chem,
         table: Nodes::of_mesh(&mesh),
-        booking: Default::default(),
         map,
         air_scale: AIR_SCALE,
         mesh,

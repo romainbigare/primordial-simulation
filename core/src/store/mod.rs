@@ -1,6 +1,7 @@
 //! STORE (`docs/foundation/plan.md`, Ideas 1 and 2): the table of the world's nodes, and the one way the laws change
 //! their amounts and heat (moves, transforms and link fluxes, booked by `apply`), with the three nodes beyond the
-//! world's boundary that book what crosses it. The store decides nothing physical.
+//! world's boundary that book what crosses it. The store decides nothing physical: it adds what the laws give it (a
+//! law never asks a node for more than it holds) and counts the rounding it sets to zero.
 
 mod apply;
 mod batch;
@@ -8,8 +9,8 @@ pub mod links;
 pub mod moves;
 pub mod nodes;
 
+pub use apply::apply;
 pub use links::Links;
-pub use apply::{apply, Booking};
 pub use batch::Batch;
 pub use moves::{held, LinkFlux, Move, Transform};
 pub use nodes::{Boundary, Class, NodeId, Nodes, BOUNDARIES};

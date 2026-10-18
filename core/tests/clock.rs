@@ -1,11 +1,11 @@
 //! The clock: processes run at their periods inside longer ones, in a fixed order at one time; the day, the month and
-//! the season come from the seconds; the month of `step` is built on it. A calm node sleeps until its alarm or until a
-//! large move into it, and then catches up.
+//! the season come from the seconds; the month of `step` is built on it. A calm node sleeps until its alarm or until
+//! it has gained more than a share of what it held, and then catches up.
 
 use pcore::clock::{self, Every, Sleep};
-use pcore::store::{apply, Boundary, Class, LinkFlux, Move, NodeId};
+use pcore::store::{Class, NodeId};
 use pcore::units::DAY_S;
-use pcore::{Config, Stage, World};
+use pcore::{Config, Stage};
 use worldgen::testkit::small_world;
 
 /// A fast process runs a whole number of times inside a slow one, each run standing for the time to the next; a span
@@ -86,37 +86,25 @@ fn a_calm_node_sleeps_until_its_alarm() {
     assert_eq!(s.due(Class::Air, 10), [node(5)]);
 }
 
-/// A move into a sleeping node that brings less than `wake_share` of what it holds leaves it asleep; one that brings
-/// more wakes it (it is due at once). The node the move leaves sleeps on; so does a node that a link flux brings as
-/// much as it takes (it wakes by its net change); a boundary node, which runs no process, gives and is never woken.
+/// A sleeping node wakes when one of its amounts has grown by more than `wake_share` of what it held when it fell
+/// asleep, in as many gains as it took and whatever brought them: gains that add up to less leave it asleep, and so
+/// does a loss.
 #[test]
-fn a_large_move_into_a_node_wakes_it() {
-    let mut w = small_world();
-    let n = w.mesh.cells().n();
-    let (k, i) = (0..w.chem.ns()).flat_map(|k| (0..n - 1).map(move |i| (k, i))).find(|&(k, i)| w.g(k, i) > 0.0 && w.g(k, i + 1) > 0.0).unwrap();
-    let (from, to, now) = (w.table.id(Class::Ground, i), w.table.id(Class::Ground, i + 1), w.time);
-    // Only these two nodes sleep.
-    w.sleep = Default::default();
-    for id in [from, to] {
-        w.sleep.sleep(Class::Ground, id, now, now + DAY_S);
+fn a_node_that_gained_more_than_its_share_wakes() {
+    let (len, share, now) = (3, 0.05, 0);
+    let (mut s, mut amounts) = (Sleep::default(), vec![1.0; 2 * len]);
+    for i in 0..len {
+        s.sleep(Class::Ground, node(i as u32), now, now + DAY_S);
+        s.keep(Class::Ground, i, len, &amounts);
     }
-    let send = |w: &World, share: f64| Move { from, to, k: k as u16, mol: share * w.cfg.wake_share * w.g(k, i + 1), heat: 0.0 };
-    let small = send(&w, 0.5);
-    apply(&mut w, &[], &[small], &[]);
-    assert!(w.sleep.due(Class::Ground, now).is_empty());
-    let large = send(&w, 2.0);
-    apply(&mut w, &[], &[large], &[]);
-    assert_eq!(w.sleep.due(Class::Ground, now), [to]);
-    w.sleep.sleep(Class::Ground, to, now, now + DAY_S);
-    let outside = w.table.id(Class::Boundary, Boundary::Outside as usize);
-    let back = Move { from: outside, to, k: k as u16, mol: 2.0 * w.cfg.wake_share * w.g(k, i + 1), heat: 0.0 };
-    let (cell, mol) = ([i as u32 + 1; 2], [back.mol, -back.mol]);
-    let through = LinkFlux { class: [Class::Boundary, Class::Ground], a: &[Boundary::Outside as u32; 2], b: &cell, ks: &[k as u16], mol: &mol, heat: &[] };
-    apply(&mut w, &[through], &[], &[]);
-    assert!(w.sleep.due(Class::Ground, now).is_empty() && w.sleep.due(Class::Boundary, now).is_empty());
-    apply(&mut w, &[], &[back], &[]);
-    assert_eq!(w.sleep.due(Class::Ground, now), [to]);
-    assert_eq!(w.sleep.due(Class::Ground, now + DAY_S), [from]);
+    let gain = 0.6 * share;
+    amounts[len] += gain;
+    s.watch(Class::Ground, |i| node(i as u32), len, &amounts, share, now);
+    assert!(s.due(Class::Ground, now).is_empty(), "one small gain");
+    (amounts[len], amounts[1], amounts[2]) = (amounts[len] + gain, amounts[1] + gain, amounts[2] - 0.5);
+    s.watch(Class::Ground, |i| node(i as u32), len, &amounts, share, now);
+    assert_eq!(s.due(Class::Ground, now), [node(0)], "two small gains of node 0");
+    assert_eq!(s.due(Class::Ground, now + DAY_S), [node(1), node(2)]);
 }
 
 /// What a law's own step may differ by between one span and many steps of the same time, relative: rounding, as the
@@ -124,7 +112,7 @@ fn a_large_move_into_a_node_wakes_it() {
 const CATCH_UP: f64 = 1e-12;
 
 /// A law that relaxes a node's amount towards 1 at a rate of 1e-7 /s, run on two nodes: one due every step of 3 days,
-/// one asleep for a year but woken once by a move. Each time it is due it is brought up to date for the time since
+/// one asleep for a year but woken once by a gain. Each time it is due it is brought up to date for the time since
 /// (`Sleep::since`) in one span; at the year's end both hold the same.
 #[test]
 fn a_sleeping_node_catches_up_as_an_awake_node_steps() {

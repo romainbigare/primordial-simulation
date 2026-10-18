@@ -38,7 +38,7 @@ pub struct Config {
     pub flow_days: u32,
     /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
     pub crowd: usize,
-    /// Speed setting: a call of `store::apply` bringing a node, net, over this share of an amount it holds wakes it
+    /// Speed setting: a sleeping node that has gained over this share of an amount it held when it fell asleep wakes
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
     pub sleep_days: u32,

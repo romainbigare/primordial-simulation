@@ -16,9 +16,9 @@
 //! A ground or an air node reacts when it is due (`clock::Sleep`), for all the time since it last did: the kernel
 //! integrates the rate law over a span. Then it sleeps until its own rates would change it by more than a share `CALM`
 //! (`Reactor::rest`), at most `Config::sleep_days`; a node where a reaction goes that far within a step reacts every
-//! step. A call of `store::apply` that brings it more than `Config::wake_share` of an amount wakes it. What reaches it
-//! outside `apply` (what bodies take and give) and the change of its temperature do not wake it: `sleep_days` bounds
-//! how long it reacts without them.
+//! step. It wakes when one of its amounts has grown by more than `Config::wake_share` of what it held when it fell
+//! asleep, whatever brought it (Flow, bodies, parts), looked at once a step (`clock::Sleep::watch`). The change of its
+//! temperature does not wake it: `sleep_days` bounds how long it reacts at an old one.
 //!
 //! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `gas`: the gas a body or a part
 //! exchanged with the air around it. Here: the step over the ground and air nodes, booked by `store::apply`.
@@ -45,7 +45,8 @@ const CALM_K: f64 = 0.5;
 const SPECK: f64 = 1e-12;
 
 /// Run Law 2 for the step of `dt` seconds from the world's time, at the temperatures of the last flow step: each ground
-/// node (loose amounts, gas from the air above), then each air node, that is due, in the order of their cells, for all
+/// node (loose amounts, gas from the air above), then each air node, that is due (its alarm rang, or it gained more than
+/// `wake_share` of an amount since it fell asleep, `clock::Sleep::watch`), in the order of their cells, for all
 /// the time since it last reacted to the end of this step, each from the world as it was before the nodes of its class
 /// reacted; booked by `store::apply` (`Booked`). Then it sleeps until the last step that starts before its reactions may have to run again
 /// (`Reactor::rest`, at most `sleep_days`): the next step, for a rest within one.
@@ -55,6 +56,8 @@ pub fn step(w: &mut World, dt: f64) {
     let (mut rc, ns) = (Reactor::new(&w.chem, &w.cfg), w.chem.ns());
     let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], made: vec![0.0; ns] };
     for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n())] {
+        let ground = class == Class::Ground;
+        w.sleep.watch(class, |i| w.table.id(class, i), len, if ground { &w.ground } else { &w.air }, w.cfg.wake_share, w.time);
         // Before the law first runs, every node is due.
         if w.sleep.none(class) {
             for i in 0..len {
@@ -66,12 +69,12 @@ pub fn step(w: &mut World, dt: f64) {
         let (mut b, nodes) = (Booked::new(w.mesh.level(AIR).n(), ns), w.scratch.view());
         let rests: Vec<u64> = (due.iter())
             .map(|&(i, id)| {
-                let (span, amounts) = (end.saturating_sub(w.sleep.since(id)) as f64, if class == Class::Ground { &w.ground } else { &w.air });
+                let (span, amounts) = (end.saturating_sub(w.sleep.since(id)) as f64, if ground { &w.ground } else { &w.air });
                 for (k, a) in h.amt.iter_mut().enumerate() {
                     *a = amounts[k * len + i];
                 }
                 let all = h.amt.iter().sum::<f64>();
-                if class == Class::Ground {
+                if ground {
                     react_ground(w, &mut rc, &mut h, &nodes, (i, id), span, &mut b);
                 } else {
                     // An air node holds its gas itself: no liquid's film stands between them.
@@ -83,8 +86,9 @@ pub fn step(w: &mut World, dt: f64) {
             })
             .collect();
         b.book(w);
-        for (&(_, id), rest) in due.iter().zip(rests) {
+        for (&(i, id), rest) in due.iter().zip(rests) {
             w.sleep.sleep(class, id, end, (end + rest).saturating_sub(dt as u64));
+            w.sleep.keep(class, i, len, if ground { &w.ground } else { &w.air });
         }
     }
 }
@@ -97,17 +101,16 @@ struct Held {
     made: Vec<f64>,
 }
 
-/// What the nodes of one class that react in a step change, booked by `store::apply` after they all reacted: the gas
-/// the ground nodes take from the air, their reactions, then the gas they give it, each in its own call, as each takes
-/// what the one before brought (`apply` scales a change by what a node holds before the call). The gas crosses the
-/// links from each ground node to its air node, + up into the air: the air receives the heat that leaves the ground
+/// What the nodes of one class that react in a step change, booked by `store::apply` in one call after they all
+/// reacted: the gas the ground nodes take from the air and give it, and their reactions (a node gives the gas its
+/// reactions made, and they use the gas it took, so only what it holds at the end of the call counts). The gas crosses
+/// the links from each ground node to its air node, + up into the air: the air receives the heat that leaves the ground
 /// less the latent heat it holds of the gas (`store::held`). Each air node pays the lift of the gas that goes up into
 /// it into the world's potential energy (as `Sky::cross` books it). The gas is a flux for each substance (indexed by
 /// it): a node exchanges a few of them, so no link carries the others.
 struct Booked {
-    taken: Vec<Batch>,
+    gas: Vec<Batch>,
     reactions: Vec<Transform>,
-    given: Vec<Batch>,
     /// Per air node, J
     lift: Vec<f64>,
 }
@@ -115,8 +118,8 @@ struct Booked {
 impl Booked {
     /// Nothing booked yet, for a world of `na` air nodes and `ns` substances.
     fn new(na: usize, ns: usize) -> Booked {
-        let gas = || (0..ns as u16).map(|k| Batch::new([Class::Ground, Class::Air], &[k])).collect();
-        Booked { taken: gas(), reactions: Vec::new(), given: gas(), lift: vec![0.0; na] }
+        let gas = (0..ns as u16).map(|k| Batch::new([Class::Ground, Class::Air], &[k])).collect();
+        Booked { gas, reactions: Vec::new(), lift: vec![0.0; na] }
     }
     /// The reactions of node `at` in the last `rc.react`: what they made less what they used of each substance, mol,
     /// into `made` (`Reactor::made`), noted as one transform.
@@ -133,15 +136,8 @@ impl Booked {
     fn book(mut self, w: &mut World) {
         let mut lift = Batch::falls(Class::Air);
         self.lift.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
-        fn gas(v: &mut [Batch]) -> Vec<LinkFlux<'_>> {
-            v.iter_mut().filter(|b| !b.is_empty()).map(|b| b.flux()).collect()
-        }
-        apply(w, &gas(&mut self.taken), &[], &[]);
-        if !self.reactions.is_empty() {
-            apply(w, &[], &[], &self.reactions);
-        }
-        let given = [gas(&mut self.given), vec![lift.flux()]].concat();
-        apply(w, &given, &[], &[]);
+        let fluxes: Vec<LinkFlux> = self.gas.iter_mut().filter(|b| !b.is_empty()).map(|b| b.flux()).chain([lift.flux()]).collect();
+        apply(w, &fluxes, &[], &self.reactions);
     }
 }
 
@@ -187,10 +183,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i,
     for (k, m) in (0..chem.ns()).map(|k| (k, gas(k))).filter(|e| e.1 != 0.0) {
         let (s, m) = (&chem.subs[k], if m > 0.0 { m * paid } else { m });
         b.lift[j] += m * s.molar_mass * lift;
-        if m > 0.0 {
-            b.given[k].add((i, j), k as u16, (m, m * (s.latent_gas() + s.cp * per_c)));
-        } else {
-            b.taken[k].add((i, j), k as u16, (m, m * (s.cp * nodes.ta[j] + s.latent_gas())));
-        }
+        let heat = if m > 0.0 { m * (s.latent_gas() + s.cp * per_c) } else { m * (s.cp * nodes.ta[j] + s.latent_gas()) };
+        b.gas[k].add((i, j), k as u16, (m, heat));
     }
 }
