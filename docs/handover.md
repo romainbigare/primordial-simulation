@@ -399,8 +399,8 @@ Having children is not a choice: it is physics (Section 6.4). There is no "farm"
 **Planning** (not built yet): bodies learn a small model of "what happens if I do X" and look a few steps ahead. This makes long plans much easier to find. Taming an animal, for example, pays off only after many seasons.
 
 **Implementation:**
-- A small neural network per body: a base per lineage, rows that are genes of each body, plus what its group learned. Keep the brain code apart from the rest, so it can be swapped.
-- **Shared group brains (decision, for speed).** Bodies that **stay near each other for a long time** share **one brain**, plus a small per-body adjustment. The group is found by **physics only** (distance, time together); the core never names it. A body that leaves takes a copy. It is a **speed tool** and must give the same patterns as one brain per body (`Config::share_brains` off, for the comparison). It makes coordination inside a group easier for free; cooperation **between** groups must still be learned.
+- A small neural network per body: a base per lineage, rows that are genes of each body, plus what the body (or its population node) learned. Keep the brain code apart from the rest, so it can be swapped.
+- **One brain per body or population node.** Each body has its own brain rows; a population node's members share the node's.
 - **A brain has a size and a cost.** Its sizes are genes, and zero is a size: a body with no hidden units takes no decisions and pays nothing for a brain. A brain is paid per decision, so a body that decides less often pays less (a speed incentive dressed as physics, kept on purpose).
 - Simple learning is enough to start: a policy gradient against a learned baseline (actor-critic), plus evolution.
 
@@ -415,10 +415,6 @@ These must emerge. If one does not, improve physics, perception, memory or learn
 ## 7. Speed: groups and coarse regions
 
 Thousands of years with millions of individual brains will not run on one computer. Two tools solve this. **Both are speed tools, not new laws.** They must give the same patterns as the detailed form.
-
-### 7.0 Shared group brains
-
-The first and cheapest speed tool: one brain per group of bodies that stay close for a long time, plus small per-body adjustments. See Section 6.5, "Shared group brains". Use it before population nodes.
 
 ### 7.1 Population nodes
 
@@ -910,7 +906,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 
 **Be honest about these targets.** They are hard. For example, 50,000 bodies with one step per day for 1,000 years in 10 minutes means about 30 million brain decisions per second, plus physics. Expect to miss the M1–M3 target at first. Report the real number (years per second) in every watch report, and do not slow down the project to chase the target before something has emerged.
 
-If a target fails, use the speed tools of Section 7 (shared group brains first, then population nodes and coarse regions), profile, or move the field laws to the GPU. **Never remove a law to get speed.**
+If a target fails, use the speed tools of Section 7 (population nodes, coarse regions, multi-rate steps), profile, or move the field laws to the GPU. **Never remove a law to get speed.**
 
 ---
 
@@ -1051,7 +1047,7 @@ Note: words like `liquid`, `gas`, `solid`, `energy`, `heat`, `body`, `bond`, `fl
 | Emergence stalls at "animals and trails" | M3 or M7 watch-for fails for a long time | Improve Choose: planning, memory, imitation. Search more worlds (M7). Check that the physics allows the wanted thing (Section 9.4). |
 | Long-term behaviours (taming, farming) never appear | No lasting flows between kinds | Planning and longer memory; check that tended kinds really change under Copy; check that seasons give a reason to store |
 | Bond physics too slow | Profile shows load computation dominates | Simpler load approximation; update loads only when a structure changes |
-| Brains too slow | Bodies dominate the step time | Shared brains per lineage; shared group brains (Section 6.5); batch evaluation; population nodes; GPU later |
+| Brains too slow | Bodies dominate the step time | Shared brain bases per lineage; no brain where nothing is decided (light-eaters); population nodes; fewer updates; GPU later |
 | Long chains of actions never learned (for example heat rock with fuel, wait, get a new solid) | Bodies find food and shelter but never make new substances | This is the main research risk. Planning (look-ahead), curiosity-like exploration in the brain, longer memory, imitation. Use the M3 check point (Section 13.1). Do not add a named recipe |
 | Boring chemistry | Few reactions happen; nothing new is made | Stronger richness checks; world search |
 | Pattern finder too slow | Analysis falls far behind the simulation | Analyse fewer snapshots; analyse changed chunks only; run in the background |
@@ -1164,7 +1160,7 @@ War, epidemics, addiction, hunger and displacement may emerge. Present them:
 
 A list of interesting patterns to look for in long runs. **Each one is something that may emerge, never something to build.** For each, an equally valid different outcome is listed. A world that only ever produces the familiar story is a warning sign that something was tuned too much.
 
-**Null run:** neutral brains draw every action by chance, so many "yes" verdicts (gifts, watching reaching most groups, busy crossing cells) are what chance predicts. Run the same seed with `ew run --null` (`Config::null`: learning off, a watch is drawn and counted but moves no rows, born rows and brain bases never mutate or split; genes still mutate and evolve). The config line printed at the start and the series column `null` say which run it is. An item counts as emerged only where the real run beats the null run clearly, on the same columns (`gave`, `watched`, `watched_groups`, `kinds`...). The column `learned` is not zero in a null run (it also moves when members of a group die or leave), so read it as a floor.
+**Null run:** neutral brains draw every action by chance, so many "yes" verdicts (gifts, watching reaching many lineages, busy crossing cells) are what chance predicts. Run the same seed with `ew run --null` (`Config::null`: learning off, a watch is drawn and counted but moves no rows, born rows and brain bases never mutate or split; genes still mutate and evolve). The config line printed at the start and the series column `null` say which run it is. An item counts as emerged only where the real run beats the null run clearly, on the same columns (`gave`, `watched`, `watched_groups`, `kinds`...). The column `learned` is not zero in a null run (it also moves when members of a node die or leave), so read it as a floor.
 
 | Might emerge | Equally valid other outcome |
 |---|---|

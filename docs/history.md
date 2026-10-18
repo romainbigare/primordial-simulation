@@ -590,6 +590,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   +1.4 K, plant members +20%; the mesh's overturning carries a vapour as if it filled its column, so the vapour the
   lower half brings to the warmer column is lost. Not kept (a probe on a branch).
 - A fix, the tape: a resumed tape reads the viewer file's series without the columns that had no value yet at the snapshot, as the unbroken run did not have them, so a kind's catalyst column that first appears later reads NaN, not 0, in the years replayed. No world change; the golden fingerprints stay.
+- The plan and the handover follow an ablation hunt (64 x 64, 32 and 60 years, two seeds): E10 culls shared group
+  brains (one brain per body gives the same world at the same cost per decision; a node already shares one brain),
+  the `FORGET` gene (never on), old experiment flags, the 3-day shade sort and repeated temperature solves, and saved
+  caches; E6 aims at child placement for every body (29% of the bodies' time after E9); Bond's joins of parts, never
+  seen in any run, stay for now (the owner decides).
 
 **Owner's decisions after Phase A**
 
