@@ -6,6 +6,7 @@ mod radiation;
 mod sky;
 mod wind;
 pub(super) use exchange::exchange;
+pub(super) use exchange::Sat;
 pub(crate) use radiation::LAYERS;
 pub(super) use radiation::radiation;
 pub use radiation::{column, glow};

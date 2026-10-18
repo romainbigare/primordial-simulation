@@ -502,6 +502,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   ground, the liquid under the surface and the wind on a mesh (each call made a new one); Change's batches of gas and
   reactions (`change::Batches`, `World::batches`, not saved); a `store::Batch` reuses its flat column. Same results
   (golden unchanged; 64 x 64, 12 years with life and 6 without: same fingerprints).
+- D13 (b): the table of each gas's saturation pressure is built once and kept (`Scratch::sat`, not saved), from 1 K
+  up to the warmest ground or air it is asked for (built again further up when needed); it was built for every gas
+  at every exchange, from the coldest temperature. Its entries now lie on a fixed grid, so a value between them moves
+  by up to about 1e-6. 64 x 64, seed 1, 6 years without life: rain on land within 5e-5, every series column within
+  4e-4. Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

@@ -150,6 +150,9 @@ pub struct Scratch {
     /// The work space of `solve::spread` (heat through the ground, the liquid under the surface, the wind on a mesh).
     #[serde(skip)]
     pub(super) spread: Spread,
+    /// The table of the saturation pressure of each substance, as far up as the exchange has asked (`air::Sat`).
+    #[serde(skip)]
+    pub(super) sat: Vec<air::Sat>,
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
     #[serde(skip)]
     pub(super) near: Vec<[u32; 4]>,

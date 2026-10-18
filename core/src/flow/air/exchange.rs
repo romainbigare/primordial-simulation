@@ -5,6 +5,7 @@ use super::super::land::{melted, wet};
 use super::super::scratch::may_evaporate;
 use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};
 use super::{air_temp, lerp, over_cell};
+use crate::chem::Chemistry;
 use crate::AIR;
 use crate::math::one_minus_exp;
 use crate::store::{apply, Batch, Class};
@@ -19,37 +20,43 @@ const SAT_PER_K: f64 = 20.0;
 const SAT_STEP: f64 = 0.05;
 /// Every this many entries the table is exact.
 const SAT_EXACT: usize = 64;
-/// The table reaches this far below the coldest and above the warmest temperature, K, and starts
-/// no lower than `SAT_LOWEST`, K.
+/// The table starts at `SAT_LOWEST`, K, and reaches this far above the warmest temperature it is asked for, K.
 const SAT_MARGIN: f64 = 1.0;
 const SAT_LOWEST: f64 = 1.0;
 
-/// Saturation pressure of one substance, tabulated every `SAT_STEP` over a range of temperatures, Pa.
-struct Sat(f64, Vec<f64>);
+/// Saturation pressure of one substance, tabulated every `SAT_STEP` from `SAT_LOWEST`, Pa. Each entry depends only on
+/// its place, so a table built again further up holds the same numbers, and it is kept between calls (`Scratch::sat`).
+#[derive(Clone, Debug, Default)]
+pub(in crate::flow) struct Sat(Vec<f64>);
 
 impl Sat {
-    /// Exact every `SAT_EXACT` entries; between, each from the last by their ratio, exp(b (1/t' - 1/t)),
-    /// summed to its fifth term (ln p is linear in 1/t).
-    fn new(w: &World, k: usize, lo: f64, hi: f64) -> Self {
-        let (t0, b) = ((lo - SAT_MARGIN).max(SAT_LOWEST), w.chem.subs[k].lv / R_GAS);
-        let mut p = 0.0;
-        let v = (0..((hi + SAT_MARGIN - t0) * SAT_PER_K) as usize + 2).map(|i| {
-            let t = t0 + i as f64 / SAT_PER_K;
-            if i % SAT_EXACT == 0 {
-                p = w.chem.p_sat(k, t);
-            } else {
-                let x = b * SAT_STEP / (t * (t - SAT_STEP));
-                p *= 1.0 + x * (1.0 + x / 2.0 * (1.0 + x / 3.0 * (1.0 + x / 4.0)));
-            }
-            p
-        });
-        Sat(t0, v.collect())
+    /// Reaches `hi` + `SAT_MARGIN` K at least, for substance `k` (built again further up when it does not): exact every
+    /// `SAT_EXACT` entries; between, each from the last by their ratio, exp(b (1/t' - 1/t)), summed to its fifth term
+    /// (ln p is linear in 1/t).
+    fn fit(&mut self, chem: &Chemistry, k: usize, hi: f64) {
+        let len = ((hi + SAT_MARGIN - SAT_LOWEST) * SAT_PER_K) as usize + 2;
+        if self.0.len() >= len {
+            return;
+        }
+        let (b, mut p) = (chem.subs[k].lv / R_GAS, 0.0);
+        self.0 = (0..len)
+            .map(|i| {
+                let t = SAT_LOWEST + i as f64 / SAT_PER_K;
+                if i % SAT_EXACT == 0 {
+                    p = chem.p_sat(k, t);
+                } else {
+                    let x = b * SAT_STEP / (t * (t - SAT_STEP));
+                    p *= 1.0 + x * (1.0 + x / 2.0 * (1.0 + x / 3.0 * (1.0 + x / 4.0)));
+                }
+                p
+            })
+            .collect();
     }
     fn at(&self, t: f64) -> f64 {
-        let x = ((t - self.0) * SAT_PER_K).clamp(0.0, (self.1.len() - 2) as f64);
+        let x = ((t - SAT_LOWEST) * SAT_PER_K).clamp(0.0, (self.0.len() - 2) as f64);
         let i = x as usize;
         let f = x - i as f64;
-        self.1[i] + (self.1[i + 1] - self.1[i]) * f
+        self.0[i] + (self.0[i + 1] - self.0[i]) * f
     }
 }
 
@@ -60,8 +67,6 @@ struct Active {
     k: usize,
     /// It may evaporate from the ground.
     up: bool,
-    /// Its saturation pressure.
-    sat: Sat,
     /// Evaporation per unit of deficit and of area over the time it moves for, mol K/(Pa m²).
     c_evap: f64,
 }
@@ -93,20 +98,22 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
 }
 
 /// The gases that leave the ground or may condense (not those of `henry`, which dissolve), with
-/// their saturation pressures and evaporation per unit of deficit: a trace gas only at its `turn`,
-/// for the time `since` it last moved, the others for `dt`.
-fn active(w: &World, s: &Scratch, henry: &[(usize, usize)], (dt, turn, since): (f64, bool, f64)) -> Vec<Active> {
-    let (na, (tmin, tmax), tl) = (w.mesh.level(AIR).n(), range(&s.tg), range(&s.tl));
-    let (lo, hi) = (tmin.min(tl.0), tmax.max(tl.1));
-    let all: f64 = s.nt.iter().sum();
-    (0..s.gas.len())
-        .filter_map(|gi| {
-            let k = s.gas[gi];
-            let up = s.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
-            let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
-            ((up || s.cond[gi]) && (turn || !trace)).then(|| Active { gi, k, up, sat: Sat::new(w, k, lo, hi), c_evap: w.cfg.evap * if trace { since } else { dt } / R_GAS })
-        })
-        .collect()
+/// their evaporation per unit of deficit, and their saturation pressures up to the warmest ground or air touching it
+/// (`Scratch::sat`): a trace gas only at its `turn`, for the time `since` it last moved, the others for `dt`.
+fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)], (dt, turn, since): (f64, bool, f64)) -> Vec<Active> {
+    let (na, tmax) = (w.mesh.level(AIR).n(), range(&s.tg).1);
+    let (hi, all) = (tmax.max(range(&s.tl).1), s.nt.iter().sum::<f64>());
+    s.sat.resize(w.chem.ns(), Sat::default());
+    let mut act = Vec::new();
+    for (gi, &k) in s.gas.iter().enumerate() {
+        let up = s.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
+        let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
+        if (up || s.cond[gi]) && (turn || !trace) {
+            s.sat[k].fit(&w.chem, k, hi);
+            act.push(Active { gi, k, up, c_evap: w.cfg.evap * if trace { since } else { dt } / R_GAS });
+        }
+    }
+    act
 }
 
 /// What a pass of the exchange moves, booked at its end in one call (`Pass::book`): a link from each ground node that
@@ -175,7 +182,7 @@ fn evaporate(w: &mut World, s: &mut Scratch, act: &[Active]) {
             }
             let (share, hk) = above(w, s, &pass, (ac, x), i);
             let (sp, pa) = (s.sp[k], share * tl / (c_cond * hk));
-            let ps = if t >= sp.boil { f64::INFINITY } else { ac.sat.at(t) };
+            let ps = if t >= sp.boil { f64::INFINITY } else { s.sat[k].at(t) };
             if ps <= pa {
                 continue;
             }
@@ -218,7 +225,7 @@ fn condense(w: &mut World, s: &mut Scratch, act: &[Active]) -> (Vec<bool>, Vec<f
             }
             let k = ac.k;
             let (share, hk) = above(w, s, &pass, (ac, x), i);
-            let m = (share - ac.sat.at(tl) * c_cond * hk / tl).min(pass.left[x * na + j]);
+            let m = (share - s.sat[k].at(tl) * c_cond * hk / tl).min(pass.left[x * na + j]);
             if m <= 0.0 {
                 continue;
             }
