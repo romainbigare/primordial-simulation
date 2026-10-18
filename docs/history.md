@@ -642,8 +642,14 @@ The work of `docs/foundation/plan.md`, one line per task.
   +0.08 log10.
 - E10 (c): the experiment flags of old questions go: the big-brain test (`--clever-year`, `--clever-n`,
   `life::seed_clever`, its random stream and its test), `--spray-size` and `--spray-genes` (now `ROW_SPRAY` and
-  `GENE_SPRAY` in `worldgen`) and `--regrow` (`Config::regrow` stays). Same history (golden unchanged); snapshot
-  version 22 (the schedule a snapshot carries changed).
+  `GENE_SPRAY` in `worldgen`) and `--regrow` (`Config::regrow` stays). Golden unchanged; snapshot version 22 (the
+  schedule a snapshot carries changed). `ew run` takes another path from year 2: the founders' gene spray now uses
+  log10 3 rounded right by the compiler (the command line's 3 went through the library's log10, one unit in the last
+  place lower), so its runs differ by chance: the same world.
+- E10 (d), speed: the survey shares out the light of a cell again only when its bodies changed since (`Life::stir`:
+  a body came, went, moved, changed its members, or was seen anew, `World::see`), not every cell at every physics
+  step. Same history (golden unchanged; 64 x 64, seed 1, 35 years: same fingerprint); bodies 3 to 8% less time per
+  year (side by side).
 
 **Phase J: the long physics step**
 

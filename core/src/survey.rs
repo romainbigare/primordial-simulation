@@ -140,13 +140,17 @@ pub(crate) fn intercept(x: f64) -> f64 {
 /// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
 /// `1 - exp(-x)` of what reaches it, so a tall member shades a low one and holding up pays. Together
 /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
-/// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
+/// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it. Only the cells whose
+/// bodies changed since are worked out again (`Life::stir`): the others' shades are what they were.
 fn shade(w: &mut World) {
     let g = intercept;
-    let (Life { bodies, at, shade, .. }, area) = (&mut w.life, w.mesh.cells().area());
+    let (Life { bodies, at, shade, stale, .. }, area) = (&mut w.life, w.mesh.cells().area());
     shade.resize(bodies.len(), 1.0);
+    if stale.len() != at.len() {
+        *stale = vec![true; at.len()];
+    }
     let mut l: Vec<(f32, f64, usize)> = Vec::new();
-    for (i, s) in at.iter().enumerate() {
+    for (i, s) in at.iter().enumerate().filter(|&(i, _)| std::mem::take(&mut stale[i])) {
         l.clear();
         l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / area[i], s)));
         l.sort_by(|a, b| b.0.total_cmp(&a.0));
@@ -196,7 +200,7 @@ pub fn day(w: &mut World) {
                 }
                 crate::lineage::resize(w, s, &mut b);
                 crate::nodes::split(w, s, &mut b);
-                b.vis = b.visible(&w.chem, &w.cfg);
+                w.see(&mut b);
                 w.life.schedule(w.day() + b.interval(w), slot, gen);
                 w.life.bodies[s] = b;
             }

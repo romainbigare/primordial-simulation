@@ -29,6 +29,9 @@ pub struct Life {
     /// Per body slot, from the last survey: its light per m² of capture area over its cell's mean (`survey::shade`)
     #[serde(skip)]
     pub shade: Vec<f64>,
+    /// Per cell: whether its bodies changed since the survey last shared out its light (`Life::stir`; empty: all)
+    #[serde(skip)]
+    pub stale: Vec<bool>,
     /// Per cell, from the last survey: the share of that absorbed light set aside for its bodies' light reactions
     #[serde(skip)]
     pub keep: Vec<f32>,
@@ -205,6 +208,7 @@ impl Life {
     pub(crate) fn set_count(&mut self, b: &mut Body, count: f64) {
         let n0 = b.n();
         b.count = count;
+        self.stir(b.cell);
         self.weigh(b.group, b.genome, b.forget(), b.n() - n0);
     }
     /// `n` members (fewer: `n` below 0) born with the rows of `genome` and of forgetting rate `forget` in group `g`: its
@@ -280,6 +284,7 @@ impl Life {
         let slot = free_place(&mut self.bodies, &mut self.free);
         (b.gen, b.alive, b.last, b.count) = (self.bodies[slot].gen, true, day, b.n());
         self.at[b.cell as usize].push(slot as u32);
+        self.stir(b.cell);
         self.enter(&b);
         self.schedule(day + delay.clamp(1, MAX_INTERVAL as u64), slot as u32, b.gen);
         self.bodies[slot] = b;
@@ -293,6 +298,7 @@ impl Life {
         b.gen += 1;
         self.bodies[slot] = b;
         self.at[cell].retain(|&s| s as usize != slot);
+        self.stir(cell as u32);
         self.free.push(slot as u32);
     }
     /// Count body `b` into its lineage, its born rows and its group.
@@ -348,6 +354,13 @@ impl Life {
         (b.lineage, b.group, b.genome) = (lineage, group, self.new_genome(rows));
         self.enter(b);
     }
+    /// The bodies of `cell` changed (one came, went, or changed its members or what others see of it): the survey
+    /// shares out its light again (`survey::shade`).
+    pub(crate) fn stir(&mut self, cell: u32) {
+        if let Some(x) = self.stale.get_mut(cell as usize) {
+            *x = true;
+        }
+    }
     /// Size the cell lists and the ring of updates for a square map of `n` cells, `gw` wide (once, on a new map).
     pub(crate) fn fit_map(&mut self, n: usize, gw: u32) {
         if self.at.len() != n {
@@ -366,6 +379,8 @@ impl Life {
     pub fn relocate(&mut self, slot: usize, g: u32, from: usize, to: usize) {
         self.at[from].retain(|&s| s as usize != slot);
         self.at[to].push(slot as u32);
+        self.stir(from as u32);
+        self.stir(to as u32);
         self.shift(g, to as u32, 1);
         self.shift(g, from as u32, -1);
     }
@@ -377,13 +392,19 @@ impl World {
     /// now: a child or a part split off a node has its own stores and genes, and others see it and its shade
     /// (`survey::shade`) through `Body::vis` before its first update.
     pub(crate) fn place(&mut self, mut c: Body, keep: Option<f32>) -> usize {
-        c.vis = c.visible(&self.chem, &self.cfg);
+        self.see(&mut c);
         let delay = c.interval(self);
         let s = self.life.add(c, self.day(), delay);
         if let Some(k) = keep {
             self.light_keep.set(s, self.life.bodies[s].gen, k);
         }
         s
+    }
+    /// What others see of body `b` is worked out again from what it holds now (`Body::visible`), and its cell's light
+    /// is shared out again.
+    pub(crate) fn see(&mut self, b: &mut Body) {
+        b.vis = b.visible(&self.chem, &self.cfg);
+        self.life.stir(b.cell);
     }
 }
 

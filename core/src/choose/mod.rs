@@ -283,7 +283,7 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
         // A member that stays apart is seen as what its action left of it; one that goes back is seen in the node.
         let apart = o.hold.is_some() || o.inside.is_some();
         if apart {
-            o.vis = o.visible(&w.chem, &w.cfg);
+            w.see(&mut o);
         }
         w.life.bodies[me] = o;
         if !apart {

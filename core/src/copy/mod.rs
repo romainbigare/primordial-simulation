@@ -269,7 +269,7 @@ fn place_child(w: &mut World, slot: usize, b: &Body, l: &Litter, mut c: Body, ro
         (c.spread, c.row_spread) = (Vec::new(), 0.0);
         w.life.set_count(&mut c, 1.0);
         // (The members drawn took their stores: what is seen of it is what is left.)
-        c.vis = c.visible(&w.chem, &w.cfg);
+        w.see(&mut c);
         w.life.bodies[s] = c;
     }
 }

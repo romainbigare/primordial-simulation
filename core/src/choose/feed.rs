@@ -152,7 +152,7 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     transfer(w, b, &mut o, &m);
     o.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
     o.note(b.id(slot), (NOTE_SCALE * got / mo) as f32);
-    o.vis = o.visible(&w.chem, &w.cfg);
+    w.see(&mut o);
     w.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id(slot), to: o.id(s) }, node: b.cell, value: got });
     w.life.bodies[s] = o;
 }

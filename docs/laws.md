@@ -228,8 +228,9 @@ the ground at once.
 layer of leaf area x per ground area takes 1 − exp(−x) of what reaches it. Equal heights share a
 layer. Height is what the body's materials hold up (3.6), kept with the other visible traits
 (`Body::vis`, set at each body's update, when a body is placed, as a child or a part split off a
-node, and wherever its stores or members change outside its update). Rain on bodies is shared the
-same way (6.4).
+node, and wherever its stores or members change outside its update: `World::see`). Rain on bodies
+is shared the same way (6.4). The survey shares out a cell's light again only when its bodies
+changed since (one came, went, or changed its members or what others see of it: `Life::stir`).
 
 ### 1.5 Evaporation, rain and dissolved gases
 
