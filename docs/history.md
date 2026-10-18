@@ -516,6 +516,13 @@ The work of `docs/foundation/plan.md`, one line per task.
 
 **Phase E: the life engine**
 
+- The plan follows an architecture review and the owner's answers: a time budget sets the planet's size (D12); a
+  population node updates at most about 10 times a year (D13); zones, automatic zoom, patches, more link memories,
+  threads over bodies, the chunk layout, a query layer and snapshots of changes wait until after the foundation
+  (D14); the globe is a lat-lon grid that wraps (D3); E2 and E3 only if a profile asks, E4 (bodies sleep by the
+  clock) dropped, E5 with a private `Store`, new E6 (born rows), E7 (members split off), E8 (one clock, state apart
+  from cache, fixed nodes by index); F7 first; the long step (J1) right after E; the cost model (5.7).
+
 - E1 (a), speed: a change of a group's members changes its count at once and waits, by born rows, in the group
   (`Group::due`, holding its born rows); the sum of born rows and the rows follow in one pass when the rows are read
   (`Life::settle`: before a body thinks, before a reader of the rows, and at the end of each run of the clock),

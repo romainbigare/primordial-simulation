@@ -32,14 +32,14 @@ light between a body and its cell exactly as it moves them between two cells. Ma
 | Light caught and stored, and the pools that hold light and heat for bodies between their updates | `survey.rs` (`hold_heat`), `World::light_pool`, `heat_pool`, `light_keep`, `heat_keep`, `PerSlot` | **One body node per cell** for all its bodies (the collapsed form of handover 5.2): Flow passes light and heat into it at every step, as into any node (work in the number of cells, not of bodies); each body settles with it at its own update by moves. The pools become a real node of the store with exact books (E5). |
 | The walls of a shelter keep a body warm | `bond/` (enclosure conductance, `walls_around`) | Links that pass heat badly. Nothing else. |
 | The chemistry's own lazy timer: which nodes react now | `change/screen.rs` | The clock's one sleep and wake. |
-| The bodies' own ring of updates due | `life.rs` (`RING`, `due`) | The clock. |
-| Merging, splitting and opening population nodes | `nodes.rs` (`merge`, `join`, `take_in`, `split`, `one`, `open`) | The store's one `split` and `join`. |
-| Ground cleared along edges | `lanes.rs`, `World::pass` | The memory of a link. |
-| Heat moving sideways between cells once a year | `flow/creep.rs` | `spread` on links, every step. |
+| Flow's own timers (`pending`, `pending_liq`, `pending_exc` and the yearly and monthly turns) | `flow/mod.rs`, `flow::Scratch` | The clock's one list of processes (`schedule.rs`). The bodies' due ring stays: it is the clock's queue for bodies and costs only the bodies due. |
+| Merging, splitting and opening population nodes | `nodes.rs` (`merge`, `join`, `take_in`, `split`, `one`, `open`) | One small helper that splits and joins amounts and heat by shares; what differs by class (genes, born rows) stays with the class (F1). |
+| Ground cleared along edges | `lanes.rs`, `World::pass` | A field of the links (`store::Links`, built). A new field comes only with the law that needs it. |
+| Heat moving sideways between cells once a year | `flow/creep.rs` | `spread` on links (built). |
 | Pore liquid between cells (Darcy's law) | `flow/liquid.rs` (`pore_flow`), `flow/drain.rs` | `spread` on links; the deep store is a node in the cell's stack. |
 | The surface liquid's sorted sweep, and erosion sampled every 7 months | `flow/liquid.rs`, `WORK_MONTHS` | The `downhill` tree, every step. |
 | Taking heat from a node with a guard in each place | `ground.rs` (`draw`, `take_paid`, `take_heat`) | A law never asks a node for more than it holds; `apply` only adds (Idea 2). |
-| Caches the laws keep between steps | `flow/scratch.rs` (most of it) | The mesh and the store hold what is needed. |
+| Caches the laws keep between steps, saved with the state | `flow/scratch.rs`, `Life` (`sum`, `env`, `seen`), `Body::k` | A small saved state, named as state; a cache that is never saved and is rebuilt on load (E8). |
 
 This table is the plan's promise. Each row is a task (Section 7). When the task is done, **the special code on the left
 is deleted in the same change.**
@@ -68,13 +68,11 @@ is deleted in the same change.**
 
 | New part | Allowance (code lines) |
 |---|---|
-| `space/` (meshes, levels, stacks, zoom) | 500 |
-| `store/` (nodes, amounts, moves, links, split and join) | 400 |
+| `space/` (meshes, levels, stacks, the globe, a refined region) | 500 |
+| `store/` (nodes, amounts, moves, links, the split and join helper) | 400 |
 | `clock/` (processes, sleep and wake) | 250 |
 | `solve/` (`spread`, `downhill`, `lines`) | 350 |
-| `zone/` | 400 |
-| `query/` | 150 |
-| **Total** | **2,050** |
+| **Total** | **1,500** |
 
 - Most of the old laws' "moving code" turned out to be physics (rates, conductances, heads), so the laws shrink less
   than the base grows. The savings come from keeping the base small (the store only adds, Idea 2) and from deleting
@@ -83,6 +81,25 @@ is deleted in the same change.**
   **8,000 at its end (Phase L)**. The 8,000 is never a reason to build a task that costs speed or honesty (it is why
   a body is not a node in Flow's steps, Phase E).
 - A phase may not end with more code than it started with, unless its report gives the reason.
+
+### The time budget (the owner's rule, decision D12)
+
+**The foundation aims at time, not at a size. A run between phases never waits hours.**
+
+| Run | Budget, on the owner's machine (4 cores) |
+|---|---|
+| The normal test suite | under 30 seconds |
+| The key-number test (3 seeds × 30 years, 64 × 64) | under 10 minutes |
+| **A planet run of 1,000 years** | **under 15 minutes** (about 0.9 s per simulated year; threads for Flow and Change) |
+
+- **The planet's size is not fixed.** It is the largest number of cells (on the globe of Phase G) whose cost fits the
+  budget, by the cost model (5.7). It is measured again at the end of each phase. Faster code buys a bigger planet.
+- Speed comes first among the goals of the foundation: a faster world means more runs watched and more work done in
+  the same time. A task that costs speed says how much, and the phase report gives the cost per cell and per body
+  node.
+- Speed never comes from removing a law or from a rule named after an outcome (handover 12.6). It comes from doing
+  less work for the same physics: longer steps where the physics allows them, fewer updates where nothing changes,
+  cheaper bookkeeping, cheap cells where little happens.
 
 ---
 
@@ -114,15 +131,15 @@ good. The base they run on holds them back.
 
 | Problem found | Where it comes from | Fixed in |
 |---|---|---|
-| Too slow: about 15 s per year with life on 128 × 128, against a goal of 0.6 s; it gets slower as life grows | Each body update costs about 36 µs; bodies are about 80% of the time | Phases E, J |
+| Too slow: about 15 s per year with life on 128 × 128, against a goal of 0.6 s; it gets slower as life grows | Each body update costs about 36 µs; bodies are about 80% of the time | Phases E, J, G3 |
 | Heat moves sideways between cells once a year, so a burning front cannot spread | `flow/creep.rs` runs lateral heat yearly | C1, D1 |
 | Erosion is a 15-day sample every 7 months, multiplied | `WORK_MONTHS` in `flow/mod.rs` | D5 |
 | Water crosses the map in one sweep; it is sorted again every time | `flow/liquid.rs` | C2, D2 |
-| Links between cells hold almost nothing; only cleared lanes remember use | `World::pass`, `lanes.rs` | H |
-| No levels of detail: the plan's "rough far away, detailed where it matters" (handover 5.2, 7.2) is not built | One flat grid | F, G |
+| Links between cells hold almost nothing; only cleared lanes remember use | `World::pass`, `lanes.rs` | D8; more after the foundation (10) |
+| No levels of detail: the plan's "rough far away, detailed where it matters" (handover 5.2, 7.2) is not built | One flat grid | G3, G4 |
 | Population nodes change biology: selection inside a node runs at about 3%; unlike nodes are forced to merge in full cells | `nodes.rs` | F2 to F5 |
-| One decision per 5 days or more, one cell per move: chases, building and tool use are almost impossible | Bodies live only at the world's coarse time | I |
-| A flat grid cannot become a planet | `grid.rs` is rows and columns | B1, G2 |
+| One decision per 5 days or more, one cell per move: chases, building and tool use are almost impossible | Bodies live only at the world's coarse time | after the foundation (zones, 10) |
+| A flat grid cannot become a planet | `grid.rs` is rows and columns | B1, G1 |
 | Every law writes straight into the arrays; heat bugs came from this (19 unguarded places at M3) | No single way to change the world | B5, B6 |
 | Each speed trick has its own code: the chemistry's lazy screen, the bodies' ring, node merges | No shared clock or split/join | B7, B8, F1 |
 
@@ -150,7 +167,7 @@ All decided on 17 October 2026.
 |---|---|---|
 | D1 | The M3 check point choice (handover 13.1) | **Decided:** a foundation phase (this plan), then M4. Written in handover 13.1. |
 | D2 | The `core` code budget (handover 14.3) | **Decided:** at most 8,000 lines of code in `core`, not counting comments and blank lines, at the end of the foundation (9,000 until then). The foundation replaces the special code, it does not sit on top of it (see "The main rule" at the top). The new base has fixed allowances; a test keeps the ceiling (A6). |
-| D3 | The cell shape for the planet and for zoom | **Decided:** squares on a cube-shaped ball (see 5.5). They nest exactly, so zoom keeps exact books, and today's square laws carry over. |
+| D3 | The cell shape for the planet | **Decided:** a latitude-longitude grid of squares that wraps east to west (5.5). It keeps today's square laws, the brain's 8 directions, the exact split of a cell into 4, and the viewer (the grid is the map). |
 | D4 | Speed settings (when a zone opens, when a node sleeps, when a patch splits, how many nodes a cell keeps) | **Decided:** a new table "speed settings" in `docs/numbers.md`, outside the tuned budget. Each must pass an equivalence test (6.4): changing it 2× must not change the key numbers beyond their noise. |
 | D5 | Old snapshots | **Decided:** no backwards compatibility; snapshots carry a format version (`tape/src/snapshot.rs`). |
 | D6 | Body physics during this plan | **Decided:** frozen, bug fixes only. Moving existing body physics onto the new base (same physics, new code) is part of the plan, not new physics. |
@@ -159,6 +176,9 @@ All decided on 17 October 2026.
 | D9 | Who keeps amounts at or above zero | **Decided:** the law. A law never asks a node for more than it holds; `store::apply` only adds, clamps rounding and counts it (Idea 2). |
 | D10 | The check level of speed work | **Decided:** level 2 (the same to rounding) is the normal level for speed work: it may change the order of sums, and it re-pins the golden runs in the same commit. Level 1 stays for pure clean-ups. |
 | D11 | Bodies and Flow | **Decided:** a body is not a node in Flow's steps (that would make every Flow step touch every body, 120 times a year, through stiff heat links: a 1 kg body against a ground of gigajoules). Bodies book their trades as moves at their own updates, and one body node per cell holds what Flow brings them between updates (E5). |
+| D12 | The size of the planet | **Decided:** set by the time budget (top of this file), not fixed. |
+| D13 | How often a population node updates | **Decided:** at most about 10 times a year (the speed setting `node_days`; handover 7.3 suggests one month for population nodes). An individual keeps its `INTERVAL` gene. Checked by the speed-setting test (× 2 and ÷ 2) and by F7. |
+| D14 | What waits until after the foundation | **Decided:** focus zones, automatic zoom while running, patches, more memories on links, threads over bodies, the chunk layout, a query layer and snapshots of changes only (Section 10). Each adds realism or speed later, but costs speed or code before M4 needs it. |
 
 ---
 
@@ -195,18 +215,17 @@ speed benchmark (`tape/tests/golden.rs`, `speed`), a clear error for bad time st
 
 ```
             ┌──────────────────────────────────────────┐
-  tape,  ←──│  QUERY: read only                         │   tape/, cli/, web/, tests read only this
+  tape,  ←──│  READERS: the tape, the CLI, the viewer   │   they read `&World` only
   viewer    └──────────────────────────────────────────┘
             ┌──────────────────────────────────────────┐
             │  THE FIVE LAWS                            │   core/src/{flow, change, bond, copy, choose}/
             │  they compute; they change the world only │   and body/
             │  through moves and link fluxes            │
             └──────────────────────────────────────────┘
-            ┌──────────────┬──────────────┬────────────┐
-            │ SOLVE        │ LIFE         │ ZONE       │   core/src/solve/, core/src/life/, core/src/zone/
-            │ shared maths │ bodies as    │ fine space │
-            │              │ columns      │ and time   │
-            └──────────────┴──────────────┴────────────┘
+            ┌─────────────────────┬────────────────────┐
+            │ SOLVE               │ LIFE               │   core/src/solve/; life.rs, nodes.rs, body/
+            │ shared maths        │ bodies and nodes   │
+            └─────────────────────┴────────────────────┘
             ┌──────────────────────────────────────────┐
             │  CLOCK: who runs when; sleep and wake     │   core/src/clock/
             └──────────────────────────────────────────┘
@@ -223,24 +242,27 @@ speed benchmark (`tape/tests/golden.rs`, `speed`), a clear error for bad time st
 
 | Layer | May read | May write | Must not |
 |---|---|---|---|
-| SPACE | nothing else | its own mesh, when cells zoom | know about substances, heat or bodies |
-| STORE | SPACE | amounts, heat, links' state, through `apply`, `split`, `join` only | decide anything physical |
+| SPACE | nothing else | its own mesh, when it is built or rebuilt (a refined region, G4) | know about substances, heat or bodies |
+| STORE | SPACE | amounts, heat, links' state, through `apply` and the split and join helper only | decide anything physical |
 | CLOCK | STORE (wake marks) | the time, the queue of what is due | change amounts |
 | SOLVE | inputs given to it | its outputs (fluxes, new values) | touch `World` directly |
 | LAWS | everything below | moves and link fluxes, given to STORE | write an amount or a heat directly |
-| LIFE, ZONE | everything below | through STORE and CLOCK, as the laws do | hold a second copy of anything the store holds |
-| QUERY | everything | nothing | be used by the laws |
+| LIFE | everything below | through STORE and CLOCK, as the laws do | hold a second copy of anything the store holds |
+| READERS | everything, through `&World` | nothing (they take the events and counters through two small methods) | be used by the laws |
 
-A test checks the contract where it can: a grep test that no law outside `store/` writes `ground[`, `e_ground[`,
-`air[` or `e_air[` with `=`, `+=` or `-=`, like the word-ban test.
+Today a text test (`cli/tests/contract.rs`) checks that no law outside `store/` writes the store's arrays. With E5 the
+compiler checks it instead: the arrays become private fields of a `Store`, written only by `apply`, and the text test
+goes.
 
 ### 5.3 The ten ideas
 
 **Idea 1. Everything is a node; nodes live inside nodes.**
-A node is anything that holds amounts and heat: the ground of a cell, a patch of it, a soil layer, an air layer, a deep
-store, a body (one member or a population), a part, a zone. Each node has a **class** (how it is stored: `Ground`,
-`Air`, `Deep`, `Patch`, `Body`, `Part`, `Zone`; a storage word, not an Earth word), a **parent** and a stable
-`NodeId` (slot + generation, as bodies have today). This is handover 5.2 ("graph inside a graph").
+A node is anything that holds amounts and heat: the ground of a cell, a soil layer, an air layer, a deep store, the
+bodies' node of a cell, a body (one member or a population), a part. Each node has a **class** (how it is stored:
+`Ground`, `Air`, `Deep`, `Body`, `Part`, ...; a storage word, not an Earth word). A fixed node (ground, air, deep, the
+boundary nodes) is named by its class and index; only what comes and goes (parts, bodies) has a slot and a generation
+(E8). This is handover 5.2 ("graph inside a graph"), kept as simple as the data allows: "everything is a node" means
+one way to book amounts and heat, not one table for every kind of thing.
 
 **Idea 2. One way to change the world: moves and link fluxes.**
 A law never writes an amount or a heat. It hands the store one of:
@@ -266,51 +288,49 @@ pub struct Reaction { at: NodeId, dmol: SmallVec<[(u16, f64); 8]>, heat: f64 }
 pub struct LinkFlux<'a> { k: u16, per_link: &'a [f64], heat: &'a [f64] }   // + = from a to b
 ```
 
-**Idea 3. One split and one join for everything.**
-Zoom (a cell splits into children), population nodes (a node splits, nodes merge), zones (cells split down to the
-finest level and come back), patches (a cell's ground splits by its kinds of surface): they are all one operation.
-
-```rust
-fn split(store, node: NodeId, shares: &[Share]) -> Vec<NodeId>  // Share: area or members, per substance if needed
-fn join(store, nodes: &[NodeId]) -> NodeId
-```
-
-Rules: each substance is split by its shares, and the **last child gets the remainder** (parent minus the others), so
-the sum is exact to rounding. Heat is split so every child has the parent's temperature, unless a share says
-otherwise. Genes join as the member-weighted mean, with the pooled spread (today's `nodes::take_in`). Links split by the
-length of border each child gets, and join by length-weighted means. This is the most important code of the plan: it
-gets the most tests (F1).
+**Idea 3. One small split and join.**
+Population nodes split and merge, and a refined region (G4) splits cells when the mesh is rebuilt. What is the same in
+every case is small: **each amount and the heat are split by shares, and the last child gets the remainder** (parent
+minus the others), so the sum is exact to rounding; heat is split so every child has the parent's temperature unless a
+share says otherwise; a join is a sum. That is one helper of a few tens of lines (F1). What differs by class stays with
+the class: a body's genes and spread join as the member-weighted mean with the pooled spread (`nodes::take_in`), its
+born rows as E6 decides; a cell's links, stack and air parent come from the rebuilt mesh. No framework knows every
+class.
 
 **Idea 4. Space is any mesh, with levels and stacks.**
 The laws see only:
 - cells, with area, centre (and latitude, longitude), height;
 - links, with the two cells, the distance between centres, and the **width** (the length of the shared border);
-- each cell's parent and children (levels of zoom);
+- each cell's parent and children (levels: the air today, later the sea, G3);
 - each cell's stack: the nodes above and below (air layers, soil layers, deep store).
 
 The **width** keeps today's square results: a diagonal link has width 0 (squares touch only at a corner), so heat,
 creep and pore liquid cross only real borders, while the downhill route of surface liquid may still use all 8. The air
 mesh is a coarser level of the same mesh: `Grid::air_of` becomes "the parent at the air level".
 
+Levels serve fixed coarse layers (the air, then the sea). Detail in places is a **refined region built into the mesh**
+at the start, or rebuilt at a god action (G4); cells do not split and join by themselves while the world runs (D14).
+
 Suggested storage: compressed lists (one array of all links, and for each cell the start of its links in it), built
 once per mesh change.
 
-**Idea 5. Links are real and have memory.**
-Each link holds, besides its geometry: an ease of passing for liquid, for bodies, and (later) for signals; the wear
-that raised them; what was carried along it in the last year. Use raises an ease; physics (creep, regrowth) lowers it
-slowly. `World::pass` and `lanes.rs` become the first of these fields. This is handover 5.1: "a route is simply an edge
-whose conductance became high because it was used a lot".
+**Idea 5. Links are real.**
+Each link holds its geometry and its fields. Today one field, the ground cleared by movers (`store::Links`), does what
+lanes need. This is handover 5.1: "a route is simply an edge whose conductance became high because it was used a lot".
+A new field (a channel worn by liquid, an ease for signals) comes only with the law that needs it (Section 10).
 
 **Idea 6. Every process has its own clock.**
 - Time is a whole number of **seconds** (`u64`). Days and months are derived (the tape still writes months).
 - Each process (a law, or a part of one, at a level) has a period, for example: radiation and heat 3 days, liquid
-  15 days, bodies by their `INTERVAL` gene, a zone's bodies minutes. A fast process runs several times inside a slow
-  one. The order inside one time is fixed and written once (as `schedule.rs` does now).
+  15 days, bodies by their `INTERVAL` gene (a population node at most about 10 times a year, D13). A fast process runs
+  several times inside a slow one. The order inside one time is fixed and written once, in `schedule.rs`: every part
+  of Flow is a process of that one list, with no timer of its own (E8).
 - **One sleep and wake** for all nodes. A calm node sleeps until an alarm time, or until one of its amounts has grown
   by more than a share of what it held when it fell asleep (`Config::wake_share`, a speed setting). The look is a cheap
   scan at the node's own law's step, not part of `apply`, so the store does no work for the sleep, and a node wakes by
   whatever brought the gain (Flow, bodies, parts). This replaces
-  `change/screen.rs` and the bodies' due ring (`life.rs`, `RING`).
+  `change/screen.rs`. The bodies keep their due ring (`life.rs`, `RING`): it is the clock's queue for bodies, and it
+  costs only the bodies due, where a look over all alarms would cost every body.
 
 **Idea 7. Shared maths that stays stable with big steps.**
 `core/src/solve/`:
@@ -327,13 +347,14 @@ whose conductance became high because it was used a lot".
 - **Columns:** each quantity of a node class in one array (as the ground already is). Bodies too, where threads need
   them (Idea 9, E7).
 - **Chunks:** blocks of about 64 cells. A chunk can sleep and run on a thread. Threads run chunks in colour passes
-  (5.6). Same history with and without threads.
+  (5.6). Same history with and without threads. **Not built in the foundation** (D14).
 - **The chunk layout of amounts:** today an amount lies at `[k * n + i]`. Flow likes that (one substance over all
   cells), but Change and the bodies read one node at a time, so each node read touches 26 cache lines for 208 bytes.
   The layout `[chunk][k][cell in chunk]` keeps a chunk's amounts in one block (about 13 KB for 64 cells and 26
   substances) that fits in the first cache: a law that goes substance by substance (Flow) or node by node (Change,
-  bodies) works in the cache, and a thread owns one block. This is the memory idea that pays most. Its chunks are the
-  chunks of the thread design (5.6), so it is built with it (E7).
+  bodies) works in the cache, and a thread owns one block. Its chunks are the chunks of the thread design (5.6), so
+  it waits with it (D14). Before any chunk layout, measure the plain node-major layout `[cell][k]` (a node's amounts
+  side by side), which is simpler and helps Change and the bodies most.
 - **No sparse amounts:** at 26 substances a dense column costs little, and a sparse one adds code.
 
 **Idea 9. A fast life engine.**
@@ -342,7 +363,11 @@ whose conductance became high because it was used a lot".
   changes, a temperature solve run again and again, the survey recomputing every body's height. These go first (E1).
 - Each lineage or gene set gets its **list of active reactions** once, when its genes change, not at every update.
 - Lookup tables for the slow maths: the rate's temperature factor, vapour pressure.
-- Bodies as columns (today `Body` holds its own `store`, `genes`, `spread` vectors), where the threads need them.
+- **Fewer updates where nothing needs them**: a population node of millions of members does not need an update every
+  20 days. It updates at most about 10 times a year (D13); its update integrates its physics, growth and children over
+  the span, as a body's update already does for intervals up to 360 days.
+- **Cheap born rows and a cheap child join** (E6): today each body carries its own born brain rows (about 6 KB, almost
+  never shared), and placing a child is about 25% of the time of body updates.
 - The brain's own maths (`think`) is a small share of the time: it stays as it is.
 - **Selection inside population nodes at full speed** by sample members (F4): a node runs its update also for two
   sample members, one step of spread above and below its mean on one gene (a different gene each update, by the keyed
@@ -350,40 +375,41 @@ whose conductance became high because it was used a lot".
   equation (the change of a mean is the spread times the strength of selection), not a new law. It must pass the
   nodes-against-individuals check (handover 7.1).
 
-**Idea 10. A read-only window.**
-`core/src/query/` (or a small crate): what the tape, the viewer, the CLI report and the tests read. They never borrow
-`World` mutably. Today the tape reads the core's internals directly.
+**Idea 10. Readers read `&World`.**
+The tape, the viewer, the CLI report and the tests take `&World`, which Rust keeps read only. The events and counters
+they use are taken through two small methods (`World::drain_events`, `World::take_counters`). No query layer is built.
 
-### 5.4 Focus zones (Phase I)
+### 5.4 Focus zones (after the foundation, D14)
 
-A **zone** is a node that holds a set of cells taken down to the finest level (about 30 m: 2,000 m halved 6 times) with
-its own fast clock (minutes to an hour for bodies). Inside a zone:
-- population nodes give out single members (`nodes::open` today), and take them back when the zone closes;
-- a body has a position inside its cell and a speed; how fast it can go comes from the power it can pay (the cost of
-  transport already in Choose);
-- the sun moves (day and night) for the zone's cells;
-- actions take time, and a body can keep doing one action;
-- catching and escaping come from speed and distance, instead of today's chance from the two intervals
-  (`choose/feed.rs`, `take_body`).
+Zones are not built in the foundation: they add realism (chases, actions that take time), not speed, and M4's
+watch-for does not need them. They are the target for after M4, with the mind (handover 13.1, option 2). The design:
 
-A zone opens on **physical facts only**: a body that takes from bodies is near bodies it can take; a body holds a part;
-many members are in one cell; heat is spreading fast; the player looks there. It closes when these facts are gone for a
-while. What crosses its border is booked as moves, applied at the outside's step. **The coarse rule outside zones must
-be the average of the fine rule inside**: the zone-against-no-zone test (I9) measures that.
+A **zone** is a set of cells taken down to a fine level (about 30 m) with its own fast clock (minutes to an hour for
+bodies). Inside a zone: population nodes give out single members, and take them back when the zone closes; a body has
+a position inside its cell and a speed, its top speed from the power it can pay; the sun moves (day and night); actions
+take time; catching and escaping come from speed and distance. A zone opens and closes on physical facts only. What
+crosses its border is booked as moves on the `Outside` node. **The coarse rule outside zones must
+be the average of the fine rule inside**: a zone-against-no-zone test will measure that.
 
 ### 5.5 The shape of cells (decision D3)
 
-| | Squares on a cube-shaped ball | Hexagons on an icosahedral ball |
+| | A lat-lon grid of squares that wraps east to west | Squares on a cube-shaped ball |
 |---|---|---|
-| Zoom | A square splits into 4 exactly; books exact by area | Hexagons do not nest; children only cover their parent approximately |
-| Neighbours | 4 by border, 4 more by corner | 6, all equal |
-| Today's laws | carry over (they are square) | need new neighbour handling everywhere |
-| Distortion | some at the cube's 8 corners | small everywhere |
-| Viewer | easy (6 square faces) | harder |
+| Today's code | carries over: `Square` with a wrap flag; the area and width of each row from its latitude | a new mesh builder, seams between 6 faces |
+| The brain's 8 directions | the same everywhere | turned at each face's edge; 7 neighbours at the 8 corners |
+| Split into 4 | exact | exact |
+| Viewer | the grid is the map | the faces must be unfolded |
+| Weak point | cells near the poles are narrow (3 times longer than wide above about 70°); no link crosses the pole at first | some distortion at the 8 corners |
 
-Suggestion: squares on a cube-shaped ball, with a flat square island as the first mesh (it reproduces today).
+**Decided: the lat-lon grid.** The implicit solvers do not mind narrow cells, and life near the poles is rare. If the
+narrow cells cost too much, rows near the poles can be merged later.
 
-### 5.6 Threads over bodies (the design of E6; written before the columns of E7, which follow it)
+### 5.6 Threads over bodies (after the foundation, D14)
+
+Not built in the foundation. The game runs as WebAssembly in one browser thread, so for the game all speed must come
+from one thread. For batches of experiments (seeds, checks, the M7 world search), one world per core gives the same
+throughput with no code. Threads over bodies come when a profile of the planet shows that one native thread for the
+bodies limits a long run. Flow and Change keep their threads by rows (`par.rs`). The design, for then:
 
 Bodies are most of a living year, and one thread can make a body update about 2.5 to 3 times faster (E1 to E3).
 The rest of the plan's 10 times (6.5) must come from threads. A body update is not local to its cell: a body sees up to
@@ -419,7 +445,33 @@ of its brain group, and opens new slots, groups and lineages. So:
    come from a colouring of the chunks' neighbour graph. The rule stays: two chunks of one colour are never within a
    sight of each other.
 
-Flow and Change already run cells in parallel by rows (`par.rs`); J1 moves them onto the same chunks.
+### 5.7 The cost model
+
+The time of a run is the cost of one cell and of one body node for one simulated year, times their numbers. This
+sets the planet's size under the time budget (D12).
+
+| | Today (64 × 64, seed 1, year 20, main after E1) |
+|---|---|
+| One cell, Flow and Change, per simulated year | about 290 µs |
+| One body node, per simulated year | about 650 µs (about 18 updates of about 36 µs) |
+| A planet of 512 × 256 cells (handover 5.4; about 134,000 body nodes) | about 130 s per year |
+| The budget | 0.9 s per year |
+
+What closes the gap, with rough estimates:
+
+| Lever | Task | Estimate |
+|---|---|---|
+| A longer physics step (15 to 30 days, implicit column) | J1 | about 5 times on the physics |
+| Cheap sea cells (the sea on a coarser level, as the air) | G3 | about 2 to 3 times on a planet's physics (70% of it is sea) |
+| A population node updates at most about 10 times a year | E4 | about 2 times on the bodies |
+| The child join and the born rows; the members split off and back | E6, E7 | about 1.3 to 1.5 times on the bodies |
+| Threads for Flow and Change (native) | as today | up to about 3.5 times on the physics |
+
+With all of these, a cell costs about 20 µs a year and a body node about 250 µs: the bodies set the size. At about
+one body node per cell, the budget holds a planet of about 3,000 to 5,000 cells (cells of about 300 to 400 km); every
+later gain on the bodies grows it. Threads over bodies (5.6) would give up to about 3.5 times more on a native run:
+they are the first lever after the foundation if the planet is too small to watch. Each phase report measures these
+numbers again and gives the planet size they allow.
 
 ---
 
@@ -467,21 +519,22 @@ A speed tool must not make the world. Each one gets a test that runs a small wor
 | Test | Compares | Task |
 |---|---|---|
 | nodes against individuals | handover 7.1, exactly as written there | F7 |
-| coarse against fine | the same island at one level and zoomed one level finer everywhere | G5 |
-| zone against no zone | the same world with zones allowed and with none | I9 |
-| sleep against no sleep | sleep on, and every node awake every step | B8, D12, E4 |
-| threads against no threads | fingerprints equal | every phase (CI already does it for the golden runs) |
-| a speed setting ×2 and ÷2 | key numbers within their noise | D4, each setting |
+| coarse against fine | the same island at one level and one level finer everywhere | G5 |
+| long step against short step | the key numbers at the long physics step and at 3 days | J1 |
+| sleep against no sleep | sleep on, and every node awake every step | B8, D12 |
+| threads against no threads | fingerprints equal | every phase (the golden runs, by hand before the last push of a phase) |
+| a speed setting ×2 and ÷2 | key numbers within their noise | D4, each setting (`wake_share`, `node_days`, ...) |
 
 ### 6.5 Speed
 
-The benchmark `speed` (`tape/tests/golden.rs`) and the CLI's per-stage times are recorded at the end of each phase,
-on the same machine, in the phase report. So are the code lines of `core` (A6), per folder, with what the phase
-added and deleted. Goals for the end of this plan, against A1:
-- the island without life: flow and change at least **3 times** faster. At today's step they are within 2 to 3 times
-  of a tight one-thread floor (about 1 µs per cell per step), so this needs threads (J1) or a longer step (J2);
-- the island with life: at least **10 times** faster per year, at the same body count. One thread can give about 2.5
-  to 3 times (E1 to E3); the rest needs threads over bodies (E6: on 4 cores about 3.5 times).
+The benchmark `speed` (`tape/tests/golden.rs`), the CLI's per-stage times and the cost model (5.7: the cost of a cell
+and of a body node per simulated year) are recorded at the end of each phase, on the same machine, in the phase
+report, with the planet size the time budget then allows. So are the code lines of `core` (A6), per folder, with
+what the phase added and deleted. Goals, against A1:
+- **the time budget** (top of this file), on the largest planet that fits;
+- by the end of Phase E: a body node at least **3 times** cheaper per simulated year (E1, E4, E6, E7);
+- by the end of Phase J: a cell's physics at least **5 times** cheaper per simulated year without threads (J1),
+  more on the planet with cheap sea cells (G3).
 
 ---
 
@@ -547,135 +600,95 @@ stays only as a thin view until D9 removes it.
 sampled work (`WORK_MONTHS`) of `flow/liquid.rs`; the movers of `flow/drain.rs`; `ground.rs`'s `take_heat`; `grid.rs`;
 the scaling, copies and restores of `store::apply` (D11). D1 to D10 are reported in `docs/reports/foundation-d.md`.
 
-### Phase E: the life engine (about 50 days)
+### Phase E: the life engine (about 40 days)
 
-The tasks are in the order of the profile (Idea 9): the bookkeeping first, then the reactor, then threads.
+The tasks follow the profile of a living year (Idea 9): the bookkeeping first, then fewer updates, then the child join.
 
 | ID | What | Files | Level | Done when |
 |---|---|---|---|---|
-| E1 | **The bookkeeping of a body update.** A change of a group's members changes its count at once and waits in the group by born rows; the sum of born rows and the rows follow in one pass when the rows are read (`Life::settle`), not at every change (re-summing every row at each change was the hottest function of a living year, about 9%). Each body's height is kept with its mass and leaf area (`Body::vis`), so the survey's shade sort does not solve every body's temperature again. The temperature solve (`Body::thermal`) runs once per stage of an update and is passed along. The upkeep plan (`pay::plan`) shares the breath, cover and depth that the body's physics computes. The chemistry's mineral list is made once | `life.rs`, `survey.rs`, `body/`, `chem/roles.rs` | 2 | The same world (key numbers); the time per body update falls. **Built:** about 15% less per body update (64 × 64, seed 1, year 20: 42.5 to 35.5 µs) |
-| E2 | A list of active reactions per gene set, made when the genes change | `body/metab.rs`, `change/kernel.rs` | 2 | Same to rounding; the time of reactions in A1's table falls |
-| E3 | Lookup tables for the rate's temperature factor and vapour pressure | `chem/thermo.rs` | 2 | Within 1e-6; faster |
-| E4 | Calm bodies sleep through the clock (instead of the due ring) | `life.rs`, `survey.rs` | 3 | The sleep-against-no-sleep test passes |
-| E5 | **Bodies book through moves; one body node per cell** (D11). What a body takes from and gives to the ground and the air, its heat, its breath, its liquid, its death and its growth's gas are `Move`s booked by `apply` at its update; the formulas of `body/exchange.rs` and `body/physics.rs` stay (they are the physics). One body node per cell holds the light and the heat Flow brings its bodies between their updates (the collapsed form of handover 5.2: Flow touches one more node per cell, never each body); each body settles with it at its update | `body/`, `choose/feed.rs`, `copy/grow.rs`, `survey.rs`, `world.rs`, `ground.rs` | 3 | Ranges hold; the heat-balance, pores, dormancy and frost tests pass; books exact; the contract test has no exemption for bodies |
-| E6 | **Bodies on threads by chunks in colour passes**, as designed in 5.6 | `par.rs`, `survey.rs`, `life.rs` | 3 once for the new order, then 1 between threads and none | Fingerprints equal with and without threads; all cores used |
-| E7 | Columns where E6 needs them: the chunk layout of amounts `[chunk][k][cell in chunk]` for the ground, air and deep nodes, and the bodies' hot numbers as columns by chunk (Idea 8) | `store/`, `life.rs`, `body/` | 2 | Same to rounding; Change and the body update faster |
-| — | **Phase check:** the island with life, against A2 | | 3 | Ranges hold; a body update at least 2.5 times faster on one thread; with threads, a living year about as many times faster again as there are cores, up to 4 |
+| E1 | **The bookkeeping of a body update.** A change of a group's members changes its count at once and waits in the group by born rows; the sum of born rows and the rows follow in one pass when the rows are read (`Life::settle`). Each body's height is kept with its mass and leaf area (`Body::vis`). The temperature solve (`Body::thermal`) runs once per stage of an update. The upkeep plan (`pay::Payer`) shares the body's air. The chemistry's mineral list is made once | `life.rs`, `survey.rs`, `body/`, `chem/roles.rs` | 2 | **Built:** about 15% less per body update (64 × 64, seed 1, year 20: 42.5 to 35.5 µs) |
+| E2 | A list of active reactions per gene set, made when the genes change, **only if** a profile of a living year puts the reactor above 5% of the bodies' time | `body/metab.rs`, `change/kernel.rs` | 2 | Same to rounding; faster |
+| E3 | Lookup tables for the rate's temperature factor, on the same condition | `chem/thermo.rs` | 2 | Within 1e-6; faster |
+| E4 | **The pace of population nodes** (D13): a node updates at most every `node_days` (about 36 days, a speed setting); an individual by its `INTERVAL` gene. The update already integrates the body's physics, growth and children over its span | `life.rs`, `body/live.rs`, `copy/` | 3 | Ranges hold; `node_days` × 2 and ÷ 2 within noise; the bodies' time per simulated year falls about 2 times |
+| E5 | **Bodies book through moves; one body node per cell; a private `Store`** (D11). What a body takes from and gives to the ground and the air, its heat, its breath, its liquid, its death and its growth's gas are `Move`s, gathered in one buffer per update and booked by one `apply`; the formulas of `body/exchange.rs` and `body/physics.rs` stay (they are the physics). One body node per cell holds the light and the heat Flow brings its bodies between their updates (handover 5.2's collapsed form: Flow touches one more node per cell, never each body). The store's arrays become private fields of a `Store` written only by `apply`; the bed becomes a class like the others | `body/`, `choose/feed.rs`, `copy/grow.rs`, `survey.rs`, `world.rs`, `ground.rs`, `store/` | 3 | Ranges hold; the heat-balance, pores, dormancy and frost tests pass; books exact; `cli/tests/contract.rs` deleted (the compiler checks the contract) |
+| E6 | **Cheap born rows and child join.** Today each body carries its own born brain rows (about 1,550 numbers, 6 KB; 5,220 sets for 5,221 bodies), each join copies and re-sums them, and placing a child is about 25% of the bodies' time. The fix is chosen by measurement for the most speed with honest inheritance (selection on brains must still work): a node keeps its born rows as member weights over a few shared sets instead of a new mean copy at each join; a child's noise drawn only on the weights it changes; rows in 16 bits | `life.rs`, `nodes.rs`, `copy/`, `brain.rs` | 2 or 3 | Child placement at most half of today's share; the brain-selection tests pass; snapshots smaller |
+| E7 | **A member split off a node is a real body only when it keeps something** (it holds a part or is inside a structure). Today about 150,000 members split off and come back in 20 years of 64 × 64 (about 8% of updates), each a copy of a whole body | `nodes.rs`, `bond/` | 2 | Fewer copies; the same world |
+| E8 | **One clock, state apart from cache, fixed nodes by class and index, one wind solver.** Flow's parts become processes of the clock's list; Flow's scratch, `Life`'s monthly sums and `Body::k` split into a small saved state and an unsaved cache; ground, air, deep, boundary and potential nodes are named by class and index (only what comes and goes keeps a slot and generation); the wind keeps one solver if the other costs little | `schedule.rs`, `flow/`, `store/`, `clock/`, `life.rs` | 1 (the wind: 3) | Fingerprints unchanged; snapshots smaller |
+| — | **Phase check:** the island with life, against A2 | | 3 | Ranges hold; a body node at least 3 times cheaper per simulated year; the cost model updated |
 
 **Deleted in this phase:** `survey.rs`'s `hold_heat`; `World::light_pool`, `heat_pool`, `light_keep`, `heat_keep` and
-`PerSlot`; `ground.rs`'s `draw` and `take_paid`; every exemption of bodies in `cli/tests/contract.rs`; the direct
-writes of `Sky::cross` by bodies; the due ring of `life.rs`. The code that only moves things in `body/physics.rs` goes;
-the formulas stay.
+`PerSlot`; `ground.rs`'s `draw` and `take_paid`; `cli/tests/contract.rs`; the direct writes of `Sky::cross` by bodies;
+Flow's own timers; the node table for fixed nodes. The code that only moves things in `body/physics.rs` goes; the
+formulas stay.
 
-### Phase F: split, join, population nodes and patches (about 45 days)
+### Phase F: population nodes (about 20 days)
 
 | ID | What | Files | Level | Done when |
 |---|---|---|---|---|
-| F1 | **The one `split` and `join`** for every class (5.3, Idea 3). Designed for cost as much as for exact books: placing a child is about 25% of the time of body updates (64 × 64, seed 1, years 0 to 10: 0.82 litters per update, 11 µs each). Inside it: `nodes::take_in` 4.0 µs (mixing genes, spreads and born rows), `copy::child_rows` 2.7 µs (of which `brain::shake` of all about 1,550 weights 1.4 µs), `provision` 1.7 µs, `copy::target` searching the cell 1.6 µs, `Life::reborn` 0.6 µs. Almost every join makes a new vector of born rows (5,220 for 5,221 bodies), so each copies and re-sums about 6 KB. A join keeps its members' rows as weights instead of a new mean copy, and touches no more than the numbers it changes | `core/src/store/split.rs` | — | A random test: 10⁵ random splits and joins of every class keep the books to rounding; split then join gives back the node; a join of one child into a node costs less than today's |
+| F7 | **First: the nodes-against-individuals check** (handover 7.1, as written there), as a slow test and a report. It runs during Phase E, after E4, and decides F3 to F5 | `tape/tests/`, report | — | The modes agree by the handover's three rules, or the difference is found and fixed |
+| F1 | **The small split and join helper** (Idea 3): amounts and heat by shares, the last child takes the remainder; used by `nodes.rs` and by the mesh rebuild (G4) | `store/` | — | A random test: 10⁵ random splits and joins keep the books to rounding; split then join gives back the node |
 | F2 | `nodes::{merge, join, split, one, open}` use F1 | `nodes.rs` | 2 | Copy tests pass |
-| F3 | No merge of unlike nodes in a full cell (decision D8): nodes are cheap now, so a cell may hold more; if a cap stays, it is a speed setting | `nodes.rs` | 3 | No unlike merges are counted; ranges hold |
-| F4 | Selection inside a node at full speed by sample members (5.3, Idea 9) | `nodes.rs`, `copy/` | 3 | `genes_do_not_drift_without_selection` and `selection_moves_a_nodes_brain_size` pass; selection inside nodes measured near the individuals' rate |
-| F5 | Age classes inside nodes beyond young and adult, if F7 shows they matter | `nodes.rs` | 3 | Measured, kept or dropped with a reason |
-| F6 | **Patches:** a cell's ground splits into 2 to 4 patch nodes when its surface differs a lot (cover, liquid, what was burnt), and joins back when they are alike; Flow and bodies treat patches as nodes | `store/`, `flow/land.rs`, `survey.rs` | 3 | A test cell holds two kinds of ground; ranges hold |
-| F7 | **The nodes-against-individuals check** (handover 7.1, as written there), as a slow test and a report | `tape/tests/`, report | — | The modes agree by the handover's three rules, or the difference is found and fixed |
+| F3 | No merge of unlike nodes in a full cell (decision D8), after F7; if a cap stays, it is a speed setting | `nodes.rs` | 3 | No unlike merges are counted; ranges hold |
+| F4 | Selection inside a node by sample members (Idea 9), **only if F7 shows** selection inside nodes too slow | `nodes.rs`, `copy/` | 3 | Selection inside nodes measured near the individuals' rate |
+| F5 | Age classes inside nodes, **only if F7 shows** they matter | `nodes.rs` | 3 | Measured, kept or dropped with a reason |
 
-**Deleted in this phase:** the merge, join, take-in, split, one and open code of `nodes.rs` (each becomes a call to
-the store's `split` or `join` with its shares); the unlike-merge safeguard of `nodes::crowd`. Patches use `split` and
-`join`, with no code of their own for creating or merging.
+**Deleted in this phase:** the amount and heat splitting of `nodes.rs` (it calls F1); the unlike-merge safeguard of
+`nodes::crowd`.
 
-### Phase G: new shapes and zoom (about 40 days)
+### Phase J: the long physics step (about 25 days; right after Phase E)
 
 | ID | What | Files | Level | Done when |
 |---|---|---|---|---|
-| G1 | **Zoom on the flat island:** a cell splits into 4 and joins back through F1; links between cells of different levels (a big cell beside two small ones) with the right widths | `space/`, `store/split.rs` | 3 | Liquid and heat cross a level border correctly (tests); books exact |
-| G2 | The cube-shaped ball (or hexagons, D3): a mesh builder with latitude and longitude per cell; worldgen samples its noise at cell centres on any mesh | `space/cube.rs`, `worldgen/src/terrain.rs` | — | A test ball without life runs 10 years; books exact; the sun is right at every latitude |
-| G3 | Fine heights kept small: rebuilt from the seed's noise plus a list of changes (erosion, edits), so a cell can zoom anywhere | `worldgen/`, `space/` | — | Memory measured; zooming twice gives the same heights |
-| G4 | When to zoom, from physical facts only: fast change, many moves, many members, the player's view | `space/zoom.rs` | — (speed settings) | Zoom follows activity in a test |
+| J1 | **A longer physics step.** Heat, air and rain run every 3 days, about 10 times more steps than handover 7.3 suggests (one month). Simply making the steps longer does not hold: with liquid every 30 days and the air and exchange every 15, Flow is 2.5 times faster, but the rain on land halves and the summers warm by about 3 K. Radiation already solves the surface implicitly; the air's side and the exchange hold the step. An implicit step of each cell's ground-and-air column (with `spread` on the stack, Idea 7) lets them step 15 to 30 days | `flow/air/`, `flow/land.rs`, `solve/` | 3 | The key numbers hold at the long step (the long-against-short test, 6.4); a cell's physics at least 5 times cheaper without threads |
+| J2 | Flow and Change keep their threads by rows (`par.rs`) on the globe's wrapping rows | `par.rs` | 1 between threads and none | Fingerprints equal |
+
+### Phase G: the globe (about 35 days)
+
+| ID | What | Files | Level | Done when |
+|---|---|---|---|---|
+| G1 | **The lat-lon grid** (D3): squares that wrap east to west; the area and the border widths of each row from its latitude; latitude and longitude per cell; the wind's lines wrap; worldgen samples its noise on the sphere | `space/square.rs`, `flow/air/wind*`, `worldgen/src/terrain.rs` | — | A test globe without life runs 10 years; books exact; the sun is right at every latitude |
+| G2 | **Life on the mesh's links**: Choose, Copy, Bond's drift and the brain groups step on the mesh's links (each link a bearing for the brain's 8 direction slots), not on `Square::step` and `DIRS`; the air's four-point mix reads the mesh | `choose/`, `copy/`, `bond/`, `life.rs`, `flow/scratch.rs` | 2 on the island | The same world on the island |
+| G3 | **Cheap sea cells**: the sea on a coarser level (as the air), so that a sea cell costs a small share of a land cell | `flow/`, `space/` | 3 | The key numbers hold on the island; the cost of a sea cell measured |
+| G4 | **A refined region built into the mesh**: finer cells in one region, at the start or rebuilt at a god action; amounts split by F1 on a rebuild, summed back | `space/`, `store/` | 3 | Books exact through a rebuild; liquid and heat cross the border of the region correctly (tests) |
 | G5 | **The coarse-against-fine test** | `tape/tests/` | 3 | Key numbers agree within their ranges |
 | G6 | Remove old limits: the 20-bit cell key of the liquid sort, the 64-substance bit masks (`u64`), the sea level fixed at 0 in the land and sea counts | `flow/`, `body/`, `tape/` | 1 | Tests with more than 10⁶ cells and more than 64 substances |
 
-### Phase H: links with memory (about 20 days)
+### Phase K: recording and viewer (about 20 days)
 
 | ID | What | Files | Level | Done when |
 |---|---|---|---|---|
-| H1 | Link fields: ease for liquid, ease for bodies, wear, carried last year | `store/links.rs` | 1 | Saved and loaded |
-| H2 | Use raises an ease: liquid's lost power wears a channel on the link; movers' pushing clears a lane (today's `lanes::clear`); creep and regrowth lower them slowly | `flow/liquid.rs`, `lanes.rs` | 3 | A test: repeated use makes a lasting easy link, which fades without use |
-| H3 | Links through zoom: a split gives a link's memory to the child links along its border; a join takes their width-weighted mean | `store/split.rs` | 3 | A channel survives zoom out and in |
-
-**Deleted in this phase:** `lanes.rs` and `World::pass` (the link's memory does it). A channel, a lane and any later
-"easy link" are the same field rule, not separate code.
-
-### Phase I: focus zones (about 45 days)
-
-| ID | What | Files | Level | Done when |
-|---|---|---|---|---|
-| I1 | A zone node: cells zoomed to the finest level (about 30 m), its own clock, opening and closing through F1 and G1 | `core/src/zone/` | — | A zone opens and closes; books exact |
-| I2 | What crosses a zone's border is booked as moves and applied at the outside's step | `zone/` | — | Books exact with a zone open for a year |
-| I3 | Single members out of nodes, and back in (`nodes::open`, `nodes::join`) | `nodes.rs`, `zone/` | — | No member, gene or matter lost |
-| I4 | A position inside the cell and a speed for bodies in a zone; the top speed from the power the body can pay | `body/`, `choose/go.rs` | — | A body walks and runs smoothly in a test |
-| I5 | Day and night for the zone's cells | `flow/air/radiation.rs`, `zone/` | — | The sun moves in a zone; the day's mean equals today's light |
-| I6 | Actions that take time, and keeping an action going | `choose/`, `brain.rs` | — | A long action finishes over many zone steps |
-| I7 | Catching and escaping by speed and distance inside zones (instead of the chance from intervals in `choose/feed.rs`) | `choose/feed.rs` | — | Fast prey escapes slow takers in a test |
-| I8 | A computer-time budget: zones wait in a queue when the budget is full (a speed setting) | `zone/` | — | Speed stays inside the budget |
-| I9 | **The zone-against-no-zone test** | `tape/tests/` | 3 | Key numbers agree; what differs is reported |
-
-**Rule for this phase:** a zone is the same laws on finer nodes with a faster clock. It may not hold its own copy of a
-law. The only zone code is opening, closing and the border (within the `zone/` allowance of 400 code lines).
-
-### Phase J: speed on the machine (about 30 days)
-
-| ID | What | Files | Level | Done when |
-|---|---|---|---|---|
-| J1 | Every law on threads by the chunks of 5.6 in colour passes | `par.rs`, laws | 1 between threads and none | All cores used; fingerprints equal |
-| J2 | **A longer physics step.** Heat, air and rain run every 3 days, about 10 times more steps than handover 7.3 suggests (one month). Radiation already solves the surface implicitly; the air's side and the exchange hold the step at 3 days. An implicit step of each cell's ground-and-air column (with `spread` on the stack, 5.3 Idea 7) lets them step 15 to 30 days. It is the only way to about 5 times on the physics without threads | `flow/air/`, `flow/land.rs`, `solve/` | 3 | The key numbers hold (6.3) at the longer step; Flow at least 3 times faster without threads |
-| J3 | Speed numbers written by CI on every run, and compared each night | `.github/workflows/ci.yml` | — | A slower change shows up |
-
-### Phase K: recording, saving, viewer (about 30 days)
-
-| ID | What | Files | Level | Done when |
-|---|---|---|---|---|
-| K1 | **QUERY:** the read-only window; the tape, CLI report and viewer frames use only it | `core/src/query/`, `tape/`, `cli/` | 1 | The tape builds without access to the store's internals |
-| K2 | Snapshots: format version kept (D5); only the changes since the last snapshot | `tape/src/snapshot.rs` | 1 | Under 30 MB per snapshot at 128 × 128 |
-| K3 | The tape for levels, patches, links and zones; the viewer file carries the mesh | `tape/src/rec/` | — | Every level recorded; `docs/tape.md` updated |
-| K4 | The viewer: any mesh (mixed levels, the ball as a map), the link layer (channels, lanes), zones; charts grouped and searchable | `web/src/` | — | You can go from the whole world down to a zone |
-| K5 | Time per process, per level and per zone in the tape | `tape/`, `cli/src/report.rs` | — | Speed problems visible in the viewer |
+| K1 | The tape takes `&World` everywhere (Idea 10): `World::drain_events` and `World::take_counters` | `tape/`, `cli/`, `world.rs` | 1 | No reader borrows `World` mutably |
+| K2 | The tape and the viewer file for the globe and a refined region | `tape/src/rec/` | — | `docs/tape.md` updated |
+| K3 | The viewer: the globe as a map, the refined region, the link layer (lanes); charts grouped and searchable | `web/src/` | — | You can go from the whole globe to a refined region |
+| K4 | Time per process in the tape | `tape/`, `cli/src/report.rs` | — | Speed problems visible in the viewer |
 
 ### Phase L: the final check (about 15 days)
 
 | ID | What | Done when |
 |---|---|---|
 | L1 | A2's reference runs on the new engine | Ranges hold; every larger difference explained |
-| L2 | Speed | The goals of 6.5 met, or the real numbers reported |
-| L3 | Books | Elements and energy exact over 1,000 years, with threads, zoom, patches and zones |
-| L4 | Show worlds: the ball, a zoom, a zone with a chase, a channel that lasts | Each one runs, with pictures |
+| L2 | Speed | The time budget met on the largest planet that fits, with the cost model's numbers |
+| L3 | Books | Elements and energy exact over 1,000 years, with threads and a refined region |
+| L4 | Show worlds: the globe, a refined region | Each one runs, with pictures |
 | L5 | The foundation watch report; then the owner decides M4 | The owner's choice is written in the handover |
-
----
 
 ## 8. Order, parallel work and size
 
 ```
-A ─► B ─► C ─► D ─► E ─► F ─► G ─► H ─► I ─► L
-          (C can start during B)    (H can run with G)
-                         J (from E on, beside the others)
-                         K (from F on, beside the others)
+E (E1 to E8) ─► J (the long step) ─► G1 to G3 (the globe) ─► F1 to F5 (as F7 asks) ─► G4, G5 ─► K ─► L
+F7 runs during E, after E4.   E8 can run beside E4 to E7.
 ```
 
 | Phase | Days (rough guess) |
 |---|---|
-| A prepare | 10 |
-| B base layers | 45 |
-| C shared maths | 25 |
-| D physics laws | 45 |
-| E life engine | 50 |
-| F split, join, nodes, patches | 45 |
-| G shapes and zoom | 40 |
-| H links with memory | 20 |
-| I focus zones | 45 |
-| J machine speed | 30 |
-| K recording and viewer | 30 |
+| A to D (done) | 125 |
+| E life engine | 40 |
+| F population nodes | 20 |
+| J long step | 25 |
+| G globe | 35 |
+| K recording and viewer | 20 |
 | L final check | 15 |
-| **Total** | **about 400 days** |
+| **Left after D** | **about 155 days** |
 
 Work like this usually takes longer than planned. Report the real days in each phase report.
 
@@ -686,31 +699,48 @@ Work like this usually takes longer than planned. Report the real days in each p
 | Risk | What to do |
 |---|---|
 | **The rebuild never ends and nothing is watched** (the version 1 trap: handover 2, lesson 4) | The island runs after every task. A phase more than 50% over its days stops, and the owner decides. |
-| Exact books across split, join and zoom | F1's random test is the gate: no later phase starts while it fails. |
+| Exact books across split, join and a mesh rebuild | F1's random test is the gate: G4 does not start while it fails. |
 | The new engine gives a different world | Level-3 differences are allowed only when the report explains them. A range broken without a reason stops the phase. |
-| A speed tool makes the world (nodes, zones, sleep, zoom, patches) | Its equivalence test (6.4) is part of its "done when". |
+| A speed tool makes the world (nodes, the node pace, sleep, the long step, cheap sea cells, a refined region) | Its equivalence test (6.4) is part of its "done when". |
 | The new base becomes one more layer on top of the old code (the opposite of the main rule) | Each phase's "Deleted in this phase" list is part of its "done when". The code-size test (A6) fails above the ceiling. Each phase report gives the lines added and removed per folder. |
 | Code size grows past the budget (D2: 8,000 code lines at the end) | Simplify before adding (handover 14.3). A new part past its allowance needs the owner's agreement. The ceiling never justifies a task that costs speed or honesty. |
 | Speed work aimed at the wrong half | Each speed task starts from a profile of a living year; the order of Phase E follows it. |
+| The planet that fits the time budget is too small to watch | Report it with the cost model; the owner chooses a longer budget, threads over bodies (5.6), or a change of the laws' cost. |
 | New tuned numbers creep in | The tuned budget test (`core/tests/numbers.rs`) stays; speed settings go in their own table (D4). |
 | Body physics changes sneak in | D6: bug fixes only, each its own branch. |
 
 ---
 
-## 10. After the foundation: what M4 still needs
+## 10. After the foundation
+
+### 10.1 Waiting on purpose (D14)
+
+These ideas add realism, or speed later, but before M4 they cost speed or code more than they give. Each comes back
+with the work that needs it.
+
+| Idea | Why it waits | When it comes back |
+|---|---|---|
+| Focus zones (5.4): fine cells and a fast clock where things happen | Realism (chases, actions that take time), not speed; finer cells and minutes cost more | After M4, with the mind |
+| Automatic zoom while running | A refined region built into the mesh (G4) gives detail in places with much less code | When a player must zoom anywhere, at any time |
+| Patches: parts of a cell's ground with their own surface | Their first use is a burning share of a cell | With fire (M4) |
+| More memories on links (a channel worn by liquid, an ease for signals) | A channel would repeat what erosion already does to a cell's height | With the law that needs one |
+| Threads over bodies (5.6) and the chunk layout (Idea 8) | The game runs on one thread; batches run one world per core | When a planet profile shows one native thread for the bodies limits a long run (the first lever if the planet is too small) |
+| Snapshots of changes only | In 10 years almost everything changes; saving less (E6, E8) gives more | If snapshots are still too big after E6 and E8 |
+
+### 10.2 What M4 still needs
 
 The foundation gives the machinery. M4 then adds the content (handover 13), which becomes much smaller:
 
-- **The planet:** real latitudes, continents and basins on the ball (G2 gives the mesh).
+- **The planet:** real latitudes, continents and basins on the globe (G1 gives the mesh).
 - **Air in 2 or 3 layers** with momentum and the planet's turning; clouds that travel with the wind and keep heat in
   (uses B2 stacks, C1).
 - **The sea in 2 layers** with a salt substance (owner's choice), currents from wind, heat and salt, thin ice on top
-  (B2, C1).
+  (B2, C1, G3).
 - **Snow and ice that flow**; a slow carbon source like volcanoes; slow uplift.
-- **A burning share of a patch** that spreads along links, with sparks from strong storms booked like the sun (F6, H,
+- **A burning share of a cell** that spreads along links, with sparks from strong storms booked like the sun (patches,
   D1; handover 13.2, "Fire and disease").
 - **The mind** (handover 13.1, option 2): memory of places, a short look-ahead, learning in the hidden layer, used in
-  zones (I).
+  zones.
 - **Long watch runs** on the planet, 1,000 years and more, several seeds, against null runs (handover 18.3).
 
 ---
@@ -720,15 +750,18 @@ The foundation gives the machinery. M4 then adds the content (handover 13), whic
 | Word | Meaning |
 |---|---|
 | mesh | the set of cells and the links between them: the shape of the world |
-| level | a zoom level: a cell of one level holds 4 cells of the next |
+| level | a coarser layer of the mesh (the air, the sea) or a refined region: a cell of one level holds 4 cells of the next |
 | stack | the nodes above and below a cell: air layers, soil layers, the deep store |
 | patch | a part of a cell's ground with its own soil, liquid, heat and cover |
-| zone | a small area taken to the finest level, with its own fast clock |
+| zone | a small area taken to the finest level, with its own fast clock (after the foundation) |
+| refined region | a region of finer cells built into the mesh at the start or at a god action |
+| time budget | how long a run may take on the owner's machine; it sets the planet's size |
+| cost model | the cost of a cell and of a body node per simulated year, times their numbers |
 | move | a change the store applies: amounts and heat from one node to another |
 | link flux | what crosses each link for one substance, for a whole field at once |
 | boundary node | the sun, space or outside: where energy and matter enter or leave the world |
 | implicit step | a way to do a time step that stays stable for any step length |
 | columns | each quantity in one array for all nodes of a class (fast for the computer) |
-| chunk | a block of about 64 cells that can sleep or run on its own thread |
+| chunk | a block of about 64 cells that can sleep or run on its own thread (after the foundation) |
 | fingerprint | one number made from the whole saved state (`tape::fingerprint`); equal fingerprints mean the same history |
 | equivalence test | a test that a speed tool gives the same world as running without it |

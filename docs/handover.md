@@ -184,8 +184,11 @@ This is the main tool for speed. Do not build it first (see milestones). Build t
 ### 5.4 Suggested world sizes
 
 - **Prototype island:** 128 × 128 cells, about 1 km per cell. Up to about 10,000–50,000 individual bodies.
-- **Later, planet:** about 512 × 256 coarse cells (about 80 km each), with detailed sub-graphs only where needed.
-- Exact numbers must be chosen by measuring speed (Section 12.6).
+- **Later, planet:** a latitude-longitude grid of squares that wraps east to west, with finer cells only where needed.
+- **The size follows a time budget, not the other way round:** the planet has as many cells as fit in the time a run
+  may take (a planet run of 1,000 years in under 15 minutes on the owner's machine). The cost of one cell and of one
+  body node per simulated year, measured at each step of the work, gives that size (`docs/foundation/plan.md`, "The
+  time budget" and 5.7). Faster code buys a bigger planet.
 
 ---
 
@@ -431,8 +434,9 @@ Population nodes are built (since M3): a node keeps its spread, joins and merges
 
 ### 7.2 Coarse regions
 
-- Far from activity, merge blocks of cells (for example 4×4) into one node with summed contents and combined conductances.
-- Expand again when needed.
+- The planet is coarse everywhere, and finer where it matters: a region of finer cells is built into the mesh at the
+  start, or rebuilt at a god action. The sea lives on a coarser level, as the air does, so its cells are cheap.
+- Cells that split and join by themselves while the world runs come later, when a player must zoom anywhere.
 
 ### 7.3 Time steps (multi-rate)
 
@@ -900,7 +904,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 |---|---|
 | M0 island physics | 1 simulated year in under 50 ms |
 | M1–M3 island with life | 1,000 years in under 10 minutes |
-| M4 planet, coarse with detail in places | 10,000 years in under 30 minutes |
+| M4 planet, coarse with detail in places | 1,000 years in under 15 minutes, on the largest planet that fits (the size follows the budget, 5.4) |
 | M6 god mode | 200 years of one region in about 1–2 minutes |
 
 **Be honest about these targets.** They are hard. For example, 50,000 bodies with one step per day for 1,000 years in 10 minutes means about 30 million brain decisions per second, plus physics. Expect to miss the M1–M3 target at first. Report the real number (years per second) in every watch report, and do not slow down the project to chase the target before something has emerged.
