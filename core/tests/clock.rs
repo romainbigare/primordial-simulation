@@ -71,8 +71,8 @@ fn node(slot: u32) -> NodeId {
     NodeId { slot, gen: 0 }
 }
 
-/// A sleeping node is not due before its alarm; at its alarm it is, after the nodes whose alarms rang earlier and
-/// with those of the same alarm in slot order. A node with no alarm is never due by itself.
+/// A sleeping node is not due before its alarm; at its alarm it is, with the other nodes due, in slot order. A node
+/// with no alarm is never due by itself.
 #[test]
 fn a_calm_node_sleeps_until_its_alarm() {
     let mut s = Sleep::default();
@@ -81,7 +81,7 @@ fn a_calm_node_sleeps_until_its_alarm() {
     }
     s.sleep(Class::Air, node(5), 0, 10);
     assert!(s.due(Class::Ground, 49).is_empty());
-    assert_eq!(s.due(Class::Ground, 120), [node(2), node(3), node(1)]);
+    assert_eq!(s.due(Class::Ground, 120), [node(1), node(2), node(3)]);
     assert!(s.due(Class::Ground, u64::MAX - 1).is_empty());
     assert_eq!(s.due(Class::Air, 10), [node(5)]);
 }

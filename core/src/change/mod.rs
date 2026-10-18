@@ -60,8 +60,8 @@ pub fn step(w: &mut World, dt: f64) {
                 w.sleep.sleep(class, w.table.id(class, i), w.time, w.time);
             }
         }
-        let mut due: Vec<_> = w.sleep.due(class, w.time).into_iter().map(|id| (w.table.place(id).1, id)).collect();
-        due.sort_unstable();
+        // By slot, so in the order of their cells.
+        let due: Vec<_> = w.sleep.due(class, w.time).into_iter().map(|id| (w.table.place(id).1, id)).collect();
         let (mut b, nodes) = (Booked::new(w.mesh.level(AIR).n(), ns), w.scratch.view());
         let rests: Vec<u64> = (due.iter())
             .map(|&(i, id)| {
@@ -121,8 +121,10 @@ impl Booked {
     /// into `made` (`Reactor::made`), noted as one transform.
     fn transform(&mut self, chem: &Chemistry, at: NodeId, rc: &mut Reactor, made: &mut [f64]) {
         rc.made(chem, made);
-        let dmol: Vec<(u16, f64)> = made.iter().enumerate().filter(|e| *e.1 != 0.0).map(|(k, &d)| (k as u16, d)).collect();
-        if !dmol.is_empty() {
+        let changed = made.iter().filter(|&&d| d != 0.0).count();
+        if changed > 0 {
+            let mut dmol = Vec::with_capacity(changed);
+            dmol.extend(made.iter().enumerate().filter(|e| *e.1 != 0.0).map(|(k, &d)| (k as u16, d)));
             self.reactions.push(Transform { at, dmol });
         }
     }

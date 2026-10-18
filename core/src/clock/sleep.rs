@@ -5,8 +5,8 @@
 //! time since it last did (`since`) in one span, as its integration over a long step allows, and sets its next alarm.
 //!
 //! A node sleeps or wakes by its own alarm alone; the nodes due at one time are found by a look over all the alarms (a
-//! few numbers a node, once a step) and come in a fixed order: by alarm time, then node. The alarms are saved, so a
-//! resumed run sleeps the same.
+//! few numbers a node, once a step) and come in a fixed order, by slot. The alarms are saved, so a resumed run sleeps
+//! the same.
 
 use crate::store::{Class, NodeId};
 use serde::{Deserialize, Serialize};
@@ -54,18 +54,15 @@ impl Sleep {
         }
     }
 
-    /// The nodes of `class` due at `now` (their alarm rang or a move woke them), in the order of their alarms, then of
-    /// their slots (none for a boundary node). Each runs; its law puts it back to sleep (`sleep`) with its next alarm.
+    /// The nodes of `class` due at `now` (their alarm rang or a move woke them), in the order of their slots (none for
+    /// a boundary node). Each runs; its law puts it back to sleep (`sleep`) with its next alarm.
     pub fn due(&mut self, class: Class, now: u64) -> Vec<NodeId> {
-        let mut due: Vec<(u64, NodeId)> = (self.asleep.iter().zip(&self.alarm))
-            .filter_map(|(n, &t)| n.filter(|&(_, c)| c == class && t <= now).map(|(id, _)| (t, id)))
-            .collect();
-        due.sort_unstable();
-        due.iter().for_each(|&(_, id)| self.asleep[id.slot as usize] = None);
+        let due: Vec<NodeId> = (self.asleep.iter().zip(&self.alarm)).filter_map(|(n, &t)| n.filter(|&(_, c)| c == class && t <= now).map(|e| e.0)).collect();
+        due.iter().for_each(|id| self.asleep[id.slot as usize] = None);
         if let Some(n) = self.count.get_mut(class as usize) {
             *n -= due.len();
         }
-        due.into_iter().map(|e| e.1).collect()
+        due
     }
 
     /// Whether no node of `class` sleeps: its law has not run yet (after a run, it puts every node it ran back to sleep).

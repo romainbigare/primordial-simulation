@@ -460,6 +460,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   `BTreeSet` per class, goes); the nodes due are found by a look over all the alarms, in the same order. Same
   history (`series.csv` and `months.csv` byte for byte); snapshot version 15, golden re-pinned (the saved state
   changed). Change at 128 x 128 without life about 9% faster.
+- D10 (speed): `Sleep::due` gives the nodes due by slot (Change's sort of them goes); Change allocates each node's
+  transform once. Same results (golden unchanged).
 
 **Owner's decisions after Phase A**
 
