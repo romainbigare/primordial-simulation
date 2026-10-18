@@ -424,7 +424,7 @@ Thousands of years with millions of individual brains will not run on one comput
 - **Split** it back into individuals when the player looks closely, or when its members start to differ a lot.
 - Conservation must hold exactly when merging and splitting.
 
-Population nodes are built (since M3): a node keeps its spread, joins and merges only alike bodies of one size and maturity class, splits when its halves would no longer be alike, and does the actions of Bond through one member split off. How it works: `docs/laws.md` 4.4. `ew run --individuals` turns nodes off for animals, for the check below.
+Population nodes are built (since M3): a node keeps its spread, joins and merges only alike bodies of one size and maturity class, splits when its halves would no longer be alike, and does the actions of Bond through one member split off. How it works: `docs/laws.md` 4.4. `ew run --individuals` turns nodes off for bodies with a brain, for the check below.
 
 **The check of nodes against individuals (M4's first job, fixed before it runs).** Seeds 1 and 5 at 32×32 for 100 years, with nodes and with `--individuals`, then with `--roster`; one seed with `--crowd 4` and `--crowd 8` beside them as the noise. On the `root_<k>_*` columns (means of years 41–50 and 91–100), the modes agree if: (a) each kind's mass and real life are within a factor of two, and no kind lives in one mode only; (b) the main gene means move the same way wherever one moves more than 0.3; (c) the same kind wins (most mass, heaviest member, the order of what eaters eat). A difference larger than the `--crowd` noise is a bug in the node rules.
 

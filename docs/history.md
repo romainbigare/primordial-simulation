@@ -602,6 +602,9 @@ The work of `docs/foundation/plan.md`, one line per task.
   239.5 to 236.4 ppm; members split off 238,734 to 488; a plant update about twice cheaper (year 20, side by side on
   a busy machine: 72 to 35 µs; bodies 7.0 to 3.6 s per year). The series test turns off the mineral's breakdown
   (reaction 25), which grew past its tolerance with more mineral in bodies. Golden re-pinned.
+- E9 (b): a body may be a node in individuals mode (`--individuals`) when it has no brain, not when it is a
+  light-eater: the check compares brains in nodes and alone, and no law reads the light-eater threshold any more.
+  Same results (golden unchanged).
 
 **Owner's decisions after Phase A**
 

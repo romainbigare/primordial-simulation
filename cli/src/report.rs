@@ -11,7 +11,7 @@ use worldgen::life::Seeding;
 /// and which start the animals and the light-eaters had.
 pub fn config(w: &World, how: &Seeding) -> String {
     let run = if w.cfg.null { "NULL RUN (learning off, imitation off, brain rows frozen)" } else { "real run" };
-    let nodes = if w.cfg.nodes { "on (animals may be nodes)" } else { "OFF (--individuals: animals are individuals, light-eaters nodes)" };
+    let nodes = if w.cfg.nodes { "on (animals may be nodes)" } else { "OFF (--individuals: bodies with a brain are individuals, those without nodes)" };
     let parents = if w.cfg.two_parents { "on (a mature alike body of the cell is a second parent)" } else { "OFF (--no-mix: one parent)" };
     let animals = if how.hand { "HAND-SET eater biases (default; --neutral-eaters for neutral brains)" } else { "NEUTRAL brains (--neutral-eaters)" };
     format!("config: seed {}, {}x{}, {run}, nodes {nodes}, two parents {parents}, start: animals {animals}, plants no brain", w.seed, w.map.w, w.map.h)

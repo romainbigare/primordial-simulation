@@ -72,7 +72,7 @@ pub struct Config {
     // Run switches (control runs to compare with)
     /// Bodies that stay near each other share one brain's rows (off: each keeps its own)
     pub share_brains: bool,
-    /// Animals may be population nodes (off, `--individuals`: they are always individuals)
+    /// Bodies with a brain may be population nodes (off, `--individuals`: they are always individuals)
     pub nodes: bool,
     /// A mature body's children may have a second, alike parent (off, `--no-mix`: one parent)
     pub two_parents: bool,

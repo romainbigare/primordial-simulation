@@ -176,7 +176,7 @@ pub fn light_cat(chem: &Chemistry, genes: &[f32]) -> f32 {
 }
 
 /// A body whose light reactions are sped up at least this much (log10) is a light-eater; the others are eaters. The tape
-/// counts by this, and so does `Config::nodes`.
+/// and the reports count by this; no law reads it.
 pub const LIGHT_EATER: f32 = 5.0;
 
 /// Does a body of these genes live on light (`LIGHT_EATER`)?

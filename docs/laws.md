@@ -660,8 +660,9 @@ the same patterns as individuals.
   away from its lineage's size moves itself to a new lineage of that size, its brain carried over.
 - **Age in nodes.** A node has no single age: at each update a share of its members dies of age,
   equal to the wear an individual would take in that time (6.7).
-- **Individuals mode** (`Config::nodes` off, `ew run --individuals`): animals are never nodes.
-  Light-eaters stay nodes in both modes. Siblings born together as individuals each get born rows
+- **Individuals mode** (`Config::nodes` off, `ew run --individuals`): bodies with a brain are
+  never nodes. Bodies without one (the light-eaters) stay nodes in both modes: the check compares
+  brains in nodes and alone. Siblings born together as individuals each get born rows
   of their own. It is for the M4 check of nodes against individuals.
 
 ---

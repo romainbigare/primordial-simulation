@@ -2,7 +2,7 @@
 //! a node splitting in two (`split`), and members drawn from a node as individuals (`one`, `open`). Members, stores and
 //! heat are kept exactly in every join and split.
 
-use crate::body::{self, alike, alike_log, class, light_eater, most, noise, range, size_step, spread_at, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
+use crate::body::{self, alike, alike_log, class, most, noise, range, size_step, spread_at, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{row_step, shake};
 use crate::lineage::own;
 use crate::rng::{Purpose, Rng};
@@ -19,8 +19,8 @@ const UNLIKE_CROWD: usize = 2;
 /// joins the first larger one alike to it (`join_alike`); then, while more than `Config::crowd` remain, the most alike
 /// pairs merge (`merge_closest`). Stores and heat add up, genes and born rows become the means by count, and the spread
 /// of both is kept (`merge`); lineage, brain group and memory are the larger's. A node that grew too varied splits
-/// again at its next update (`split`). With `Config::nodes` off, eaters never merge and never count toward
-/// `crowd`.
+/// again at its next update (`split`). With `Config::nodes` off, bodies with a brain never merge and never count
+/// toward `crowd`.
 pub(crate) fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.mesh.cells().n() {
@@ -38,7 +38,7 @@ pub(crate) fn crowd(w: &mut World) {
 /// a split's halves stay apart for selection) and of its size class (`body::class`). Returns the bodies left.
 fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     let b = &w.life.bodies;
-    let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold.is_none() && b[s].inside.is_none() && may_be_node(w, &b[s].genes)).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
+    let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold.is_none() && b[s].inside.is_none() && may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_unstable();
     let mut head: Vec<usize> = (0..list.len()).collect();
     // Each one's class once, tested before the genes.
@@ -98,9 +98,10 @@ fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) 
     }
 }
 
-/// A body of these genes may be or join a population node: any body with `Config::nodes`, else only a light-eater.
-pub(crate) fn may_be_node(w: &World, genes: &[f32]) -> bool {
-    w.cfg.nodes || light_eater(&w.chem, genes)
+/// Body `b` may be or join a population node: any body with `Config::nodes`, else only one without a brain (the check
+/// of nodes against individuals compares brains in nodes and alone; a body with no brain decides nothing).
+pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
+    w.cfg.nodes || w.life.brainless(b)
 }
 
 /// The body in slot `s` joins the body in slot `t` (`join`), its born rows carried over to the sizes of the other's brain
@@ -183,7 +184,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     if b.count < 2.0 || b.spread.is_empty() || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
         return;
     }
-    if !may_be_node(w, &b.genes) {
+    if !may_be_node(w, b) {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);

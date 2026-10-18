@@ -3,8 +3,8 @@
 //! whatever its brain does. A child's genes are its parent's plus small noise, or with two parents each gene is one
 //! parent's (`mix`). A population node keeps how its members differ (`Body::spread`, `Body::row_spread`); its children
 //! join an immature node of their kind and size class where they start, or start one (`nodes`). Only individuals'
-//! children start new lineages. With `Config::nodes` off the animals (bodies that are not light-eaters) are never
-//! nodes: their children start as individuals and join nothing.
+//! children start new lineages. With `Config::nodes` off bodies with a brain are never nodes: their children start
+//! as individuals and join nothing.
 
 mod grow;
 mod mix;
@@ -67,7 +67,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     // individual's go together, by that chance.
     let d = b.gene_in_range(DISPERSE);
     let prov = provisions(&w.chem, b, mi, matter, births);
-    let litter = Litter { body, matter, prov, node, alone: !may_be_node(w, &b.genes), mate, parent: id };
+    let litter = Litter { body, matter, prov, node, alone: !may_be_node(w, b), mate, parent: id };
     let m = if node { if d * births >= 1.0 { d * births } else { 0.0 } } else { (r.f64() < d) as u8 as f64 };
     let to = if m > 0.0 { w.map.step(i, DIRS[r.below(8)]) } else { None };
     let (cell, m) = match to {
