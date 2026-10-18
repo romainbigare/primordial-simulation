@@ -27,85 +27,88 @@ pub use air::{column, glow, scale_height, wind_on};
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 
-use crate::units::DAY;
 use crate::World;
-use creep::creep;
 use land::ground_state;
-use liquid::liquid;
-use scratch::{refresh, tables};
+use scratch::tables;
 
-// The cadences of the law (the order of its parts is in `step`).
-/// The slow-changing ground and the substances present are rechecked this often, months.
-const REFRESH_MONTHS: u64 = 3;
-/// A trace gas (`air::exchange`) evaporates and condenses only at every this many exchanges,
-/// for all the time since.
-const TRACE_TURN: u32 = 4;
-/// Heat conducted sideways through the ground, and creep (with the regrowth of bodies), run once in
-/// this many years, at the first liquid step of the year, for all that time: on cells of kilometres
-/// both are slow, and the implicit spread holds for any step.
-const CREEP_YEARS: u64 = 1;
-/// A part of the law is due this many seconds before its period is full (so that a period made
-/// of whole steps is not missed by rounding).
-const DUE_SLACK: f64 = 1.0;
+/// The slow-changing ground and the substances present are rechecked this often, months (`schedule`).
+pub(crate) const REFRESH_MONTHS: u64 = 3;
+/// A trace gas (`air::exchange`) evaporates and condenses only at every this many exchanges, for the time to the next
+/// such turn (`schedule`).
+pub(crate) const TRACE_TURN: u32 = 4;
+/// Heat conducted sideways through the ground, and creep (with the regrowth of bodies), run once in this many years,
+/// for all that time (`schedule`): on cells of kilometres both are slow, and the implicit spread holds for any step.
+pub(crate) const CREEP_YEARS: u64 = 1;
 
-/// Advance flow by `dt` seconds. At every call: the state of ground nodes (`ground_state`) and of
-/// air nodes (`air::state`), then radiation (`air::radiation`). Each other part runs once its own
-/// period has passed, for all the time since: the exchange of the ground with the air
-/// (`air::exchange`, every `cfg.exchange_days`), the wind (`air::wind`, every `cfg.air_days`),
-/// liquid with its drainage and its work on the bed (`liquid`) every `cfg.flow_days`, and heat
-/// conducted sideways through the ground (`land::conduct`) and creep every `CREEP_YEARS`
-/// (`creep`); every `REFRESH_MONTHS` the slow
-/// ground is rechecked (`refresh`).
+/// Each part of the law runs on its own period, as the world's clock calls it (`schedule`, which writes their order
+/// once): `radiate`, `exchange`, `wind`, `liquid`, `creep` and `refresh`.
+///
+/// The state of ground nodes (`ground_state`) and of air nodes (`air::state`), then radiation (`air::radiation`) for
+/// `dt` seconds. With `full` (at each liquid step) every node's state is rebuilt from its amounts; between, only what
+/// the moves changed.
+pub(crate) fn radiate(w: &mut World, dt: f64, full: bool) {
+    with(w, |w, s| {
+        // (Also rebuilt when a refresh changed what is present.)
+        let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.cells().n();
+        ground_state(w, s, full);
+        air::state(w, s, full);
+        air::radiation(w, s, dt);
+    });
+}
+
+/// The exchange of the ground with the air for `dt` seconds (`air::exchange`); with `trace` (seconds) also the
+/// evaporation and condensation of trace gases, and gases dissolving, for that time.
+pub(crate) fn exchange(w: &mut World, dt: f64, trace: Option<f64>) {
+    with(w, |w, s| air::exchange(w, s, dt, trace));
+}
+
+/// The wind for `dt` seconds (`air::wind`).
+pub(crate) fn wind(w: &mut World, dt: f64) {
+    with(w, |w, s| air::wind(w, s, dt));
+}
+
+/// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`).
+pub(crate) fn liquid(w: &mut World, dt: f64) {
+    with(w, |w, s| liquid::liquid(w, s, dt));
+}
+
+/// Heat conducted sideways through the ground (`land::conduct`), then creep (`creep::creep`), for `dt` seconds.
+pub(crate) fn creep(w: &mut World, dt: f64) {
+    with(w, |w, s| {
+        land::conduct(w, s, dt);
+        creep::creep(w, s, dt);
+    });
+}
+
+/// The slow ground and the substances present are rechecked (`scratch::refresh`).
+pub(crate) fn refresh(w: &mut World) {
+    with(w, |w, s| scratch::refresh(w, s));
+}
+
+/// Every part of the law but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, radiation,
+/// the exchange with the trace gases, the wind, liquid, and the refresh. A law of Flow on its own, for tests.
 pub fn step(w: &mut World, dt: f64) {
-    ensure(w);
-    let mut s = std::mem::take(&mut w.scratch);
-    let cfg = &w.cfg;
-    // The first step runs every part.
-    let (first, month) = (s.month.is_none(), w.month());
-    let monthly = s.month != Some(month);
-    (s.pending_exc, s.pending, s.pending_liq) = (s.pending_exc + dt, s.pending + dt, s.pending_liq + dt);
-    let exc_due = first || due(s.pending_exc, cfg.exchange_days as f64);
-    let (air_due, liq_due) = (first || due(s.pending, cfg.air_days as f64), first || due(s.pending_liq, cfg.flow_days as f64));
-    // The state of ground and air is rebuilt at liquid steps and when a refresh changed what is present.
-    let full = liq_due || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.cells().n();
-    ground_state(w, &mut s, full);
-    air::state(w, &mut s, full);
-    air::radiation(w, &mut s, dt);
-    if exc_due {
-        let dt = std::mem::take(&mut s.pending_exc);
-        air::exchange(w, &mut s, dt);
-    }
-    if air_due {
-        let dt = std::mem::take(&mut s.pending);
-        air::wind(w, &mut s, dt);
-    }
-    if liq_due {
-        let dt = std::mem::take(&mut s.pending_liq);
-        liquid(w, &mut s, dt);
-        let period = CREEP_YEARS * w.cfg.calendar().year;
-        let year = w.time / period;
-        if s.year != Some(year) {
-            if s.year.is_some() {
-                land::conduct(w, &mut s, period as f64);
-                creep(w, &mut s, period as f64);
-            }
-            s.year = Some(year);
-        }
-    }
-    if monthly && month % REFRESH_MONTHS == 0 {
-        refresh(w, &mut s);
-    }
-    s.month = Some(month);
-    w.scratch = s;
+    radiate(w, dt, true);
+    exchange(w, dt, Some(dt));
+    wind(w, dt);
+    liquid(w, dt);
+    refresh(w);
 }
 
 /// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`) from the world as it is, and nothing
 /// else of Flow moves.
 pub fn conduct(w: &mut World, dt: f64) {
+    with(w, |w, s| {
+        ground_state(w, s, false);
+        land::conduct(w, s, dt);
+    });
+}
+
+/// Run `f` on the world and the law's working memory (`ensure`d).
+fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
     ensure(w);
     let mut s = std::mem::take(&mut w.scratch);
-    ground_state(w, &mut s, false);
-    land::conduct(w, &mut s, dt);
+    f(w, &mut s);
     w.scratch = s;
 }
 
@@ -120,19 +123,13 @@ pub(crate) fn ensure(w: &mut World) {
     }
     let new = s.cap.len() != n;
     if new {
-        refresh(w, &mut s);
+        scratch::refresh(w, &mut s);
     }
     if new {
         ground_state(w, &mut s, true);
         air::state(w, &mut s, true);
     }
     w.scratch = s;
-}
-
-/// Is a part with a period of `days` due, `pending` seconds after it last ran?
-#[inline]
-fn due(pending: f64, days: f64) -> bool {
-    pending >= days * DAY - DUE_SLACK
 }
 
 /// Lowest and highest of `v`.

@@ -564,6 +564,13 @@ The work of `docs/foundation/plan.md`, one line per task.
   known. 64 x 64, seed 1, years 11 to 20: plant members +1.6%, body
   mass -1.0%, land -0.02 K, carbon gas 269.2 to 271.0 ppm; golden re-pinned; a body update about 2% faster (34.95
   to 34.10 µs, runs side by side).
+- One clock: the parts of Flow (radiation with the state of ground and air, the exchange, the trace turn, the wind,
+  liquid, creep, the refresh) are processes of the world's clock in `schedule::processes`, each a `clock::Every`;
+  Flow's own timers (`pending`, `pending_liq`, `pending_exc`, `month`, `year`, `trace`, `DUE_SLACK`) go. Each part
+  now moves for the time to its next run, counted from the month's start: the first liquid step stands for 15 days
+  (it stood for 3), creep also runs at the world's start (it waited a year), and the trace gases turn at days 0, 12,
+  24 of each month (at every fourth exchange since the start before). 64 x 64, seed 1, 20 years: land within 0.02 K,
+  rain on land within 0.4%, rivers +2%, plant members within 1.3%. Snapshot version 18, golden re-pinned.
 
 **Owner's decisions after Phase A**
 

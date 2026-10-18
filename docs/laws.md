@@ -54,16 +54,20 @@ the season come from it by the calendar (`clock::Calendar`, from `Config::calend
 one month per call of `step` (`core/src/schedule.rs`). Each process has a period inside the month
 (`clock::Every`), and at one time they run in this order, written once in `schedule::processes`:
 
-1. Every `phys_days` days (3): `survey::survey` (what each cell holds, light and shade),
-   then Flow (`flow::step`), then Change (`change::step`).
+1. Every `phys_days` days (3): `survey::survey` (what each cell holds, light and shade); then the parts
+   of Flow due: the state of ground and air with radiation (every physics step; the state is rebuilt in
+   full at each liquid step), evaporation and rain (every `exchange_days`, 3; the trace gases and the gases
+   that dissolve at every `flow::TRACE_TURN`-th, 4), wind (every `air_days`, 3), liquid, drainage and the
+   work of moving liquid (every `flow_days`, 15), heat conducted sideways through the ground and creep
+   (every `flow::CREEP_YEARS` years, 1), the recheck of what is present and of the slow ground (every
+   `flow::REFRESH_MONTHS` months, 3); then Change (`change::step`).
 2. On the first day of the month: Bond (`bond::step`): parts, loads, breaking.
 3. Every day: `survey::day` updates the bodies whose interval ends that day (each body every 5 to
    360 days, set by its `INTERVAL` gene).
 
-Inside Flow (`flow::step`): radiation every call. Each other part has its own period and runs
-when that period is over, for all the time since: evaporation and rain every `exchange_days`
-(3), wind every `air_days` (3), liquid, drainage and the work of moving liquid every `flow_days`
-(15), heat conducted sideways through the ground and creep once a year.
+Each run stands for the time to the process's next run (the last one in a month to the month's end), so
+a part of Flow moves for its own period, counted from the start of the month (the yearly and the
+three-monthly ones from the start of the world). Flow keeps no timer of its own.
 
 **Sleep and wake** (`clock::Sleep`). A node's own process may sleep while the node is calm: until an
 alarm time, or until one of its amounts has grown by more than `wake_share` (5%) of what it held when it

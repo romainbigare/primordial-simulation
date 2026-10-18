@@ -3,7 +3,7 @@
 
 use super::super::land::{melted, wet};
 use super::super::scratch::may_evaporate;
-use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};
+use super::super::{follow, range, year_weight, Scratch};
 use super::{air_temp, lerp, over_cell};
 use crate::chem::Chemistry;
 use crate::AIR;
@@ -13,7 +13,7 @@ use crate::units::{P_REF, R_GAS};
 use crate::World;
 
 /// A gas making up less than this share of the air is a trace: it evaporates and condenses
-/// only every `TRACE_TURN`-th exchange, for all the time since.
+/// only at the trace turns of the exchange (`flow::TRACE_TURN`), for the time to the next.
 const TRACE_AIR: f64 = 1e-7;
 /// Entries of the table of a saturation pressure (`Sat`) per K, and the step between them, K.
 const SAT_PER_K: f64 = 20.0;
@@ -74,22 +74,17 @@ struct Active {
 /// Evaporation by vapour pressure (the ground's saturation pressure against the partial pressure
 /// near the ground); then condensation where the air a cell sees holds more than it can at its
 /// temperature (colder on higher ground): what it cannot hold rains out within the call; then gases
-/// that cannot condense dissolve in the ground's liquid (`dissolve`, slow: with the trace gases).
-pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
+/// that cannot condense dissolve in the ground's liquid (`dissolve`, slow: with the trace gases). With `trace` (a
+/// trace turn, `flow::TRACE_TURN`) the trace gases move, and gases dissolve, for that many seconds.
+pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64, trace: Option<f64>) {
     let (tmin, tmax) = range(&s.tg);
     let henry: Vec<(usize, usize)> = s.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
-    // A trace gas moves only every `TRACE_TURN`-th call, for all the time since.
-    s.trace = [s.trace[0] + dt, (s.trace[1] + 1.0) % TRACE_TURN as f64];
-    let (turn, since) = (s.trace[1] == 0.0, s.trace[0]);
-    if turn {
-        s.trace[0] = 0.0;
-    }
-    let act = active(w, s, &henry, (dt, turn, since));
+    let act = active(w, s, &henry, dt, trace);
     // Each pass sees the air as it was before it.
     evaporate(w, s, &act);
     let (rained, rain, cloud) = condense(w, s, &act);
-    if turn {
-        dissolve(w, s, since, &henry, (tmin, tmax));
+    if let Some(span) = trace {
+        dissolve(w, s, span, &henry, (tmin, tmax));
     }
     for (a, _) in act.iter().zip(&rained).filter(|(_, &r)| r) {
         s.add_loose(a.k, false);
@@ -99,18 +94,18 @@ pub(crate) fn exchange(w: &mut World, s: &mut Scratch, dt: f64) {
 
 /// The gases that leave the ground or may condense (not those of `henry`, which dissolve), with
 /// their evaporation per unit of deficit, and their saturation pressures up to the warmest ground or air touching it
-/// (`Scratch::sat`): a trace gas only at its `turn`, for the time `since` it last moved, the others for `dt`.
-fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)], (dt, turn, since): (f64, bool, f64)) -> Vec<Active> {
+/// (`Scratch::sat`): a trace gas only at a `trace` turn, for its seconds, the others for `dt`.
+fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)], dt: f64, trace: Option<f64>) -> Vec<Active> {
     let (na, tmax) = (w.mesh.level(AIR).n(), range(&s.tg).1);
     let (hi, all) = (tmax.max(range(&s.tl).1), s.nt.iter().sum::<f64>());
     s.sat.resize(w.chem.ns(), Sat::default());
     let mut act = Vec::new();
     for (gi, &k) in s.gas.iter().enumerate() {
         let up = s.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
-        let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
-        if (up || s.cond[gi]) && (turn || !trace) {
+        let span = if w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all { trace } else { Some(dt) };
+        if let Some(span) = span.filter(|_| up || s.cond[gi]) {
             s.sat[k].fit(&w.chem, k, hi);
-            act.push(Active { gi, k, up, c_evap: w.cfg.evap * if trace { since } else { dt } / R_GAS });
+            act.push(Active { gi, k, up, c_evap: w.cfg.evap * span / R_GAS });
         }
     }
     act

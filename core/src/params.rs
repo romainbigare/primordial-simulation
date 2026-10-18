@@ -34,7 +34,7 @@ pub struct Config {
     pub air_days: u32,
     /// Evaporation and condensation run every this many days (a multiple of `phys_days`)
     pub exchange_days: u32,
-    /// Liquid and creep move every this many days (a multiple of `phys_days`)
+    /// Liquid moves every this many days (a multiple of `phys_days`)
     pub flow_days: u32,
     /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
     pub crowd: usize,
@@ -379,10 +379,10 @@ impl Config {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
-    /// Check a run's settings before it starts: the time steps fit together as the laws take them (`step_marked`,
-    /// `flow::step`): physics runs every `phys_days`, and the wind, evaporation and liquid each at the first physics step
-    /// `air_days`, `exchange_days` and `flow_days` after their last, so each must be a whole multiple of `phys_days` (or it
-    /// runs at another interval than the one asked); and the physics (`Physics::validate`).
+    /// Check a run's settings before it starts: the time steps fit together as the clock runs them (`schedule`): the
+    /// physics runs every `phys_days` from the month's start, and the wind, evaporation and liquid every `air_days`,
+    /// `exchange_days` and `flow_days` after the state of the ground and the air at a physics step, so each must be a
+    /// whole multiple of `phys_days`; and the physics (`Physics::validate`).
     pub fn validate(&self) -> Result<(), String> {
         if self.phys_days == 0 {
             return Err("phys_days must be at least 1".into());

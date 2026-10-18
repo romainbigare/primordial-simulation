@@ -217,7 +217,6 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
     let i = (0..n).max_by(|&a, &b| w.ground[LIQUID * n + a].total_cmp(&w.ground[LIQUID * n + b])).unwrap();
     let books = Books::now(&w);
-    // (Gases dissolve at every fourth exchange, for all the time since.)
     (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
     // Dissolved per mol of liquid, against Henry's share under the gas's share of the reference pressure.
     let held = |w: &World| w.ground[k * n + i] / w.ground[LIQUID * n + i];
@@ -277,18 +276,19 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     assert!(full < 1.05 && full > 0.55, "the ground holds {full} of its pore volume after the excess ran off");
 }
 
-/// Each part of Flow runs on its own period: with the wind every 15 days and liquid every 3, liquid poured on a slope
-/// (four times what the pores hold) runs off at the next 3-day step, between two turns of the wind.
+/// Each part of Flow runs on its own period on the world's clock: with the wind every 15 days and liquid every 3,
+/// liquid poured on a slope (four times what the pores hold) runs off at the next 3-day step, between two turns of the
+/// wind.
 #[test]
 fn liquid_runs_on_its_own_period_between_turns_of_the_wind() {
     let mut w = worldgen::new_world(3, 16, 16);
     (w.cfg.air_days, w.cfg.flow_days) = (15, 3);
-    pcore::flow::step(&mut w, DT);
+    (0..3).for_each(|_| pcore::day(&mut w));
     let (i, _) = pair(&w);
     let pores = w.cfg.phys.porosity * loose(&w, i);
     pour(&mut w, i, 4.0 * pores);
     let v0 = liquid_m3(&w, i);
-    pcore::flow::step(&mut w, DT);
+    pcore::day(&mut w);
     assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed", liquid_m3(&w, i));
 }
 
