@@ -462,6 +462,9 @@ The work of `docs/foundation/plan.md`, one line per task.
   changed). Change at 128 x 128 without life about 9% faster.
 - D10 (speed): `Sleep::due` gives the nodes due by slot (Change's sort of them goes); Change allocates each node's
   transform once. Same results (golden unchanged).
+- D10 (speed): `Chemistry::add_elems` adds only the elements a substance holds, and `store::apply` counts the atoms of
+  each substance once a call to check its transforms; `flow::liquid::book` copies the amounts before a call one
+  substance at a time. Same results (golden unchanged).
 
 **Owner's decisions after Phase A**
 

@@ -205,10 +205,10 @@ impl Chemistry {
         Ok(())
     }
 
-    /// Add element totals of `amount` moles of substance `k` into `out`.
+    /// Add element totals of `amount` moles of substance `k` into `out` (of the elements it holds).
     #[inline]
     pub fn add_elems(&self, k: usize, amount: f64, out: &mut [f64]) {
-        for (j, &c) in self.subs[k].elems.iter().enumerate() {
+        for (j, &c) in self.subs[k].elems.iter().enumerate().filter(|e| *e.1 != 0) {
             out[j] += c as f64 * amount;
         }
     }

@@ -47,7 +47,8 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
     ks.sort_unstable();
     ks.dedup();
-    let before: Vec<f64> = ks.iter().flat_map(|&k| w.ground[k * n..(k + 1) * n].iter().copied()).collect();
+    let mut before = Vec::with_capacity(ks.len() * n);
+    ks.iter().for_each(|&k| before.extend_from_slice(&w.ground[k * n..(k + 1) * n]));
     apply(w, fluxes, &[], &[]);
     for (q, &k) in ks.iter().enumerate() {
         for (i, (&now, &was)) in w.ground[k * n..(k + 1) * n].iter().zip(&before[q * n..(q + 1) * n]).enumerate().filter(|p| p.1 .0 != p.1 .1) {

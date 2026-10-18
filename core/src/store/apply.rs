@@ -34,8 +34,9 @@ pub struct Booking {
     spans: Vec<Span>,
     kept: Vec<f64>,
     woken: Vec<Slot>,
-    /// Room for the element totals of a transform
+    /// Room for the element totals of a transform, and the atoms of each substance (the sum of its element counts)
     sums: Vec<f64>,
+    atoms: Vec<f64>,
 }
 
 /// Adds to `n`, what the changes ask of number `s`, what a change of `x` takes from it, and notes `s` as the
@@ -125,14 +126,15 @@ fn give_links(x: &LinkFlux, cols: &[Column], books: &mut [&mut [f64]; ARRAYS], f
     }
 }
 
-/// Does `dmol` keep every element of the chemistry's table, to rounding? `sums` is room for the element totals.
-fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) -> bool {
+/// Does `dmol` keep every element of the chemistry's table, to rounding? `sums` is room for the element totals, `atoms`
+/// the atoms of each substance.
+fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>, atoms: &[f64]) -> bool {
     sums.clear();
     sums.resize(chem.n_elements, 0.0);
     let mut size = 0.0;
     for &(k, d) in dmol {
         chem.add_elems(k as usize, d, sums);
-        size += d.abs() * chem.subs[k as usize].elems.iter().map(|&c| c as f64).sum::<f64>();
+        size += d.abs() * atoms[k as usize];
     }
     sums.iter().all(|e| e.abs() <= ELEMENT_ROUNDING * size)
 }
@@ -154,7 +156,7 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
     let World { cfg, chem, table, sleep, time, counts, mesh, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
-    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, spans, kept, woken, sums }) = ([mesh.cells().n(), mesh.level(AIR).n(), mesh.cells().n(), BOUNDARIES, 1], booking);
+    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, spans, kept, woken, sums, atoms }) = ([mesh.cells().n(), mesh.level(AIR).n(), mesh.cells().n(), BOUNDARIES, 1], booking);
     let mut books = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..], &mut [], std::slice::from_mut(potential)];
     for ((n, s), b) in need.iter_mut().zip(net.iter_mut()).zip(&books) {
         if n.len() != b.len() {
@@ -167,8 +169,12 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         let shaped = x.class.iter().all(|&c| (c as usize) < BOOKED) && x.b.len() == links && x.mol.len() == x.ks.len() * links && heat;
         assert!(shaped && once, "a link flux of the wrong shape");
     }
+    if !transforms.is_empty() {
+        atoms.clear();
+        atoms.extend(chem.subs.iter().map(|s| s.elems.iter().map(|&c| c as f64).sum::<f64>()));
+    }
     for t in transforms {
-        assert!(keeps_elements(chem, &t.dmol, sums), "a transform that does not keep its elements: {t:?}");
+        assert!(keeps_elements(chem, &t.dmol, sums, atoms), "a transform that does not keep its elements: {t:?}");
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
     let columns: Vec<_> = fluxes.iter().zip(&lifted).map(|(x, q)| x.columns(&len, q)).collect();
