@@ -198,25 +198,50 @@ impl Column<'_> {
 pub(super) struct Giver<'w> {
     pub(super) wake_share: f64,
     pub(super) scaled: &'w mut [f64; 2],
+    /// Per class, a bit for each amount a link flux changed in the call (none between calls); those amounts, as they
+    /// were before their first change, in that order; and the amounts a move or a transform alone brought more than
+    /// `wake_share` of what they held
+    pub(super) marks: &'w mut [Vec<u64>; BOOKED],
+    pub(super) first: &'w mut Vec<(Slot, f64)>,
     pub(super) woken: &'w mut Vec<Slot>,
+    /// Per class, whether a node of it sleeps (none of a class whose nodes all run, or never sleep, can be woken)
+    pub(super) asleep: [bool; BOOKED],
     pub(super) sleep: &'w mut Sleep,
     pub(super) table: &'w Nodes,
     pub(super) time: u64,
     pub(super) len: [usize; BOOKED],
 }
 
+/// Bits in a word of `Giver::marks`.
+pub(super) const MARK_BITS: usize = 64;
+
 impl Giver<'_> {
-    /// Changes number `s`, `v`, by `x` scaled by `f`, and notes the node to wake when that brings it more than
-    /// `wake_share` of what it held of an amount (a node that gives all it is asked never sleeps). Heat wakes no node: a
-    /// node's temperature changes at every step outside `apply` (radiation, the exchange with the air), and its own
-    /// alarm bounds how long it reacts at an old one.
+    /// Changes number `s`, `v`, by the change `x` of a link flux scaled by `f`, noting what an amount held before its
+    /// first change (`flush`).
     #[inline(always)]
     pub(super) fn give(&mut self, v: &mut f64, s: Slot, x: f64, f: f64) {
+        if s.unit() == 0 && self.asleep[s.arr / 2] {
+            let (word, bit) = (&mut self.marks[s.arr / 2][s.at / MARK_BITS], 1 << (s.at % MARK_BITS));
+            if *word & bit == 0 {
+                *word |= bit;
+                self.first.push((s, *v));
+            }
+        }
+        *v += x * f;
+    }
+    /// Changes number `s`, `v`, by the change `x` of a move or a transform scaled by `f`, and notes its node to wake
+    /// when that alone brings it more than `wake_share` of what it held of an amount (`flush`).
+    #[inline(always)]
+    pub(super) fn give_item(&mut self, v: &mut f64, s: Slot, x: f64, f: f64) {
         let (held, given) = (*v, x * f);
         *v += given;
-        if s.unit() == 0 && given > self.wake_share * held.max(0.0) && s.arr < BOUNDARY_ARRAYS {
+        if s.unit() == 0 && given > self.wake_share * held.max(0.0) && self.asleep[s.arr / 2] {
             self.wake(s);
         }
+    }
+    #[cold]
+    fn wake(&mut self, s: Slot) {
+        self.woken.push(s);
     }
     /// Counts what scaling a change of `x` to number `s` by `f` left in place.
     pub(super) fn left(&mut self, s: Slot, x: f64, f: f64) {
@@ -224,12 +249,19 @@ impl Giver<'_> {
             self.scaled[s.unit()] -= x * (1.0 - f);
         }
     }
-    #[cold]
-    fn wake(&mut self, s: Slot) {
-        self.woken.push(s);
-    }
-    /// Wakes the nodes noted (in any order: waking is the same).
-    pub(super) fn flush(&mut self) {
+    /// Wakes each node the call's link fluxes brought, net, more than `wake_share` of what it held of an amount (`books`
+    /// as the call leaves them; what only passes through a node, in by one link and out by another, wakes nothing), and
+    /// each node a move or a transform did (`give_item`). Heat wakes no node: a node's temperature changes at every
+    /// step (radiation, the exchange with the air), and its own alarm bounds how long it reacts at an old one; a node
+    /// that gives all it is asked never sleeps.
+    pub(super) fn flush(&mut self, books: &[&mut [f64]; ARRAYS]) {
+        for &(s, held) in self.first.iter() {
+            self.marks[s.arr / 2][s.at / MARK_BITS] = 0;
+            if books[s.arr][s.at] - held > self.wake_share * held.max(0.0) {
+                self.woken.push(s);
+            }
+        }
+        self.first.clear();
         for s in self.woken.drain(..) {
             let c = s.arr / 2;
             let (class, i) = (Class::ALL[c], s.at % self.len[c]);

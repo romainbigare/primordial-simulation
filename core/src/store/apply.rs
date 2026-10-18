@@ -1,7 +1,7 @@
 //! `apply`: books the moves, transforms and link fluxes of a call, first unscaled where that is safe (`moves::book_first`),
 //! else with care: each number gives only what it holds.
 
-use super::moves::{book_first, with_ends, Column, Ends, Giver, LinkFlux, Move, One, Slot, Sums, Transform, Two, ARRAYS, BOOKED, BOUNDARY_ARRAYS, NET_ROUNDING};
+use super::moves::{book_first, with_ends, Column, Ends, Giver, LinkFlux, Move, One, Slot, Sums, Transform, Two, ARRAYS, BOOKED, BOUNDARY_ARRAYS, MARK_BITS, NET_ROUNDING};
 use super::nodes::{Class, NodeId, Nodes, BOUNDARIES};
 use super::held;
 use crate::chem::Chemistry;
@@ -32,7 +32,9 @@ pub struct Booking {
     lost: Vec<[f64; 2]>,
     /// The fast path (`book_first`): the value of each number before each change, in order
     saved: Vec<f64>,
-    /// The numbers a change brought more than `Config::wake_share` of what they held of an amount, woken at the end of the call
+    /// The amounts changed in a call, and the nodes to wake (`Giver::flush`)
+    marks: [Vec<u64>; BOOKED],
+    first: Vec<(Slot, f64)>,
     woken: Vec<Slot>,
     /// Room for the element totals of a transform
     sums: Vec<f64>,
@@ -143,9 +145,9 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 /// node, or its heat) is more than it holds, each change that takes from it is scaled down by the share it holds (the
 /// least share over all it takes from), so no amount and no heat falls below zero (`docs/handover.md` 6.1); a boundary
 /// node and the potential give all they are asked. What the scaling left in place is counted in `Counters::scaled`, and
-/// the last rounding below zero, set to zero, in `Counters::rounded`. A change that brings a node more than
-/// `Config::wake_share` of what it held of an amount wakes the node (`clock::Sleep::wake`; a node that gives all it is
-/// asked never sleeps). Panics on a transform that does not keep its elements, and on the id of a node that is
+/// the last rounding below zero, set to zero, in `Counters::rounded`. A call whose link fluxes bring a node, net, more
+/// than `Config::wake_share` of what it held of an amount wakes the node, as does a move or a transform that alone
+/// does (`clock::Sleep::wake`, `Giver::flush`). Panics on a transform that does not keep its elements, and on the id of a node that is
 /// gone.
 ///
 /// It works on the numbers the changes touch alone (`Booking`), and books each flux by its columns, one array at a
@@ -154,12 +156,15 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
     let World { cfg, chem, table, sleep, time, counts, grid, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
-    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, saved, woken, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES, 1], booking);
+    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, saved, marks, first, woken, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES, 1], booking);
     let mut books = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..], &mut [], std::slice::from_mut(potential)];
     for ((n, s), b) in need.iter_mut().zip(net.iter_mut()).zip(&books) {
         if n.len() != b.len() {
             (*n, *s) = (vec![0.0; b.len()], vec![[0.0; 2]; b.len()]);
         }
+    }
+    for (m, b) in marks.iter_mut().zip(books.iter().step_by(2)) {
+        m.resize(b.len().div_ceil(MARK_BITS), 0);
     }
     for x in fluxes {
         let (links, once) = (x.a.len(), x.ks.iter().enumerate().all(|(q, k)| !x.ks[..q].contains(k)));
@@ -172,12 +177,12 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
     let columns: Vec<_> = fluxes.iter().zip(&lifted).map(|(x, q)| x.columns(&len, q)).collect();
-    let mut giver = Giver { wake_share: cfg.wake_share, scaled: &mut counts.scaled, woken, sleep, table, time: *time, len };
+    let asleep = std::array::from_fn(|c| !sleep.none(Class::ALL[c]));
+    let mut giver = Giver { wake_share: cfg.wake_share, scaled: &mut counts.scaled, marks, first, woken, asleep, sleep, table, time: *time, len };
     if moves.is_empty() && transforms.is_empty() && book_first(fluxes, &columns, &mut books, &mut giver, (saved, net, passed), &mut counts.rounded) {
-        giver.flush();
+        giver.flush(&books);
         return;
     }
-    giver.woken.clear();
     // What each change asks of each number.
     let changes = fluxes.iter().map(|x| 2 * x.a.len() * (x.ks.len() + 1)).sum::<usize>() + 4 * moves.len();
     let changes = changes + transforms.iter().map(|t| t.dmol.len() + 1).sum::<usize>();
@@ -243,7 +248,7 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
             });
         }
         each_delta(item, table, chem, &len, |s, x| {
-            giver.give(&mut books[s.arr][s.at], s, x, f);
+            giver.give_item(&mut books[s.arr][s.at], s, x, f);
             giver.left(s, x, f);
         });
     });
@@ -263,5 +268,5 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     for (s, v) in below {
         counts.rounded[s.unit()] -= v;
     }
-    giver.flush();
+    giver.flush(&books);
 }

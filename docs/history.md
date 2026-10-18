@@ -431,6 +431,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   looks for numbers below zero in the same pass. Test `cli/tests/contract.rs`: `flow/` writes no array of `World`.
   64 x 64, seed 1, 20 years with life, years 11 to 20: land -0.01 K, air +0.02 K, rain on land +0.5%, carbon gas
   -1.2%, river cells 500.6 -> 499.9; snapshot version 14, golden re-pinned.
+- A link flux wakes a node by its net change over the `store::apply` call (`Giver::flush`: each amount as it was
+  before its first change, marked by a bit), not by each change: liquid or gas that passes through a node wakes
+  nothing, and many small gains that sum to more than `wake_share` wake it. A move or a transform wakes a node by its
+  own change. Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

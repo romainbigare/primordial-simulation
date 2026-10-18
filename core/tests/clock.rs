@@ -3,7 +3,7 @@
 //! large move into it, and then catches up.
 
 use pcore::clock::{self, Every, Sleep};
-use pcore::store::{apply, Boundary, Class, Move, NodeId};
+use pcore::store::{apply, Boundary, Class, LinkFlux, Move, NodeId};
 use pcore::units::DAY_S;
 use pcore::{Config, Stage, World};
 use worldgen::testkit::small_world;
@@ -87,8 +87,8 @@ fn a_calm_node_sleeps_until_its_alarm() {
 }
 
 /// A move into a sleeping node that brings less than `wake_share` of what it holds leaves it asleep; one that brings
-/// more wakes it (it is due at once). The node the move leaves sleeps on; a boundary node, which runs no process, gives
-/// and is never woken.
+/// more wakes it (it is due at once). The node the move leaves sleeps on; so does a node that a link flux brings as
+/// much as it takes (it wakes by its net change); a boundary node, which runs no process, gives and is never woken.
 #[test]
 fn a_large_move_into_a_node_wakes_it() {
     let mut w = small_world();
@@ -110,9 +110,12 @@ fn a_large_move_into_a_node_wakes_it() {
     w.sleep.sleep(Class::Ground, to, now, now + DAY_S);
     let outside = w.table.id(Class::Boundary, Boundary::Outside as usize);
     let back = Move { from: outside, to, k: k as u16, mol: 2.0 * w.cfg.wake_share * w.g(k, i + 1), heat: 0.0 };
-    apply(&mut w, &[], &[Move { from: to, to: outside, ..back }, back], &[]);
+    let (cell, mol) = ([i as u32 + 1; 2], [back.mol, -back.mol]);
+    let through = LinkFlux { class: [Class::Boundary, Class::Ground], a: &[Boundary::Outside as u32; 2], b: &cell, ks: &[k as u16], mol: &mol, heat: &[] };
+    apply(&mut w, &[through], &[], &[]);
+    assert!(w.sleep.due(Class::Ground, now).is_empty() && w.sleep.due(Class::Boundary, now).is_empty());
+    apply(&mut w, &[], &[back], &[]);
     assert_eq!(w.sleep.due(Class::Ground, now), [to]);
-    assert!(w.sleep.due(Class::Boundary, now).is_empty());
     assert_eq!(w.sleep.due(Class::Ground, now + DAY_S), [from]);
 }
 

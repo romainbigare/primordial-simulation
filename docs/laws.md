@@ -66,8 +66,8 @@ when that period is over, for all the time since: evaporation and rain every `ex
 (15), heat conducted sideways through the ground and creep once a year.
 
 **Sleep and wake** (`clock::Sleep`). A node's own process may sleep while the node is calm: until an
-alarm time, or until a change booked by `store::apply` brings the node more than `wake_share` (5%) of
-what it holds of an amount (heat wakes no node). When it is due, its law brings it up to date for all
+alarm time, or until a call of `store::apply` brings the node, net, more than `wake_share` (5%) of
+what it holds of an amount (heat wakes no node; what only passes through a node wakes nothing). When it is due, its law brings it up to date for all
 the time since it last did, in one span. Change's reactions in ground and air nodes sleep so (2.2).
 
 **One ground temperature.** Every law and the tape read the ground temperature of Flow's last
@@ -336,10 +336,9 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
   (`clock::Sleep`), for all the time since it last reacted, with sub-steps when the temperature
   changes fast. Then it sleeps until its reactions, at their rates, would use 5% of their inputs
   or warm it by 0.5 K (`Reactor::rest`), at most `sleep_days` (90): a node where a reaction goes
-  that far within a step reacts every step. A move booked by `store::apply` that brings it more
-  than `wake_share` of an amount wakes it. Radiation, the exchange with the air and the bodies
-  change it outside `apply`, and its temperature does not wake it: `sleep_days` bounds how long it
-  reacts without those changes. This is a speed tool, not physics (`sleep_days` 0: every node
+  that far within a step reacts every step. A call of `store::apply` that brings it, net, more
+  than `wake_share` of an amount wakes it. The bodies change it outside `apply`, and its
+  temperature does not wake it: `sleep_days` bounds how long it reacts without those changes. This is a speed tool, not physics (`sleep_days` 0: every node
   reacts every step). A reaction too slow to matter over the world's year is frozen.
 - **Booked by the store.** The nodes due in a step react from the world as it was before any of
   them did (each ground node from its share of its air node), and `store::apply` books them

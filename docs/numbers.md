@@ -63,7 +63,7 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `wake_share` | share | a move into a sleeping node that brings more than this share of what it holds of that amount wakes it before its alarm (`clock::Sleep`, `store::apply`) | the share of its inputs a calm ground node's own reactions may use while it sleeps (`change`, `CALM`, 0.05): a move larger than that changes the node more than its sleep allowed | speed |
+| `wake_share` | share | a call of `store::apply` that brings a sleeping node, net, more than this share of what it holds of an amount wakes it before its alarm (`clock::Sleep`, `store::apply`) | the share of its inputs a calm ground node's own reactions may use while it sleeps (`change`, `CALM`, 0.05): a move larger than that changes the node more than its sleep allowed | speed |
 | `sleep_days` | days | the longest a ground or air node's reactions sleep before they run again for the time since (`change::step`); 0: every node reacts at every physics step | a season, a quarter of the 360-day year: a node does not react through a whole season at the temperature of another (x2 and /2: `tape/tests/ranges.rs`, the sleep test) | speed |
 
 ## Physics
