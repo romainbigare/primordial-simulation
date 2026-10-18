@@ -43,6 +43,9 @@ const PLANT_KG: f64 = 10.533;
 const EATER_KG: f64 = 4.497;
 /// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the A2 runs.
 const PLANT_LIFE: f64 = 1.895;
+/// The factor either way the light-eaters' life may lie from `PLANT_LIFE`: wider than the others' 2, as the A2
+/// light-eaters paid for a brain that light-eaters no longer have (`docs/foundation/plan.md`, E9), so they live longer.
+const PLANT_LIFE_RANGE: f64 = 3.0;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the A2 reference runs.
 const EATER_LIFE: f64 = 2.914;
 
@@ -81,7 +84,7 @@ const KEYS: [(&str, &str, f64, Range); 10] = [
     ("land worn down", "mm/yr", WORN, Range::Times(2.0)),
     ("light-eaters", "log10 kg", PLANT_KG, Range::Plus(0.3)),
     ("eaters", "log10 kg", EATER_KG, Range::Plus(0.3)),
-    ("life of light-eaters", "yr", PLANT_LIFE, Range::Times(2.0)),
+    ("life of light-eaters", "yr", PLANT_LIFE, Range::Times(PLANT_LIFE_RANGE)),
     ("life of eaters", "yr", EATER_LIFE, Range::Times(2.0)),
 ];
 
