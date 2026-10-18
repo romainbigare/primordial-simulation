@@ -6,7 +6,7 @@ use crate::chem::{Chemistry, Phase};
 impl Body {
     /// How fast the body's chemistry runs at its temperature `t` against `Physics::t_cat`, where the costs are anchored:
     /// the rate law of Change, exp(-Ea (1/t - 1/t_cat)), Ea the barrier of its main burning reaction (the first of
-    /// `Consts::burn`), 1 for a body that burns nothing. Needs `prepare`.
+    /// `Consts::burn`), 1 for a body that burns nothing.
     pub fn pace(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
         match self.k.burn.first() {
             Some(&(r, _)) => (-chem.reactions[r].ea * (1.0 / t.max(1.0) - 1.0 / p.t_cat)).exp(),
@@ -51,7 +51,7 @@ impl Body {
         x
     }
     /// Energy a mole of `k` gives its body's catalysed reactions at temperature `t`, J (0 for a gas or what none of its
-    /// reactions burns): the best over `Consts::burn`. Needs `prepare`.
+    /// reactions burns): the best over `Consts::burn`.
     pub(crate) fn heat_of(&self, chem: &Chemistry, k: usize, t: f64) -> f64 {
         if chem.phase(k, t) == Phase::Gas {
             return 0.0;
@@ -59,13 +59,13 @@ impl Body {
         self.k.burn.iter().filter_map(|&(r, e)| chem.reactions[r].inputs.iter().find(|x| x.0 as usize == k).map(|x| e / x.1 as f64)).fold(0.0, f64::max)
     }
     /// Does it break substance `k`: is its catalyst on for a reaction that takes `k`? A body takes in body matter and the
-    /// solids bodies build only if it does (`Body::wanted`). Read from the genes, so it holds before `prepare`.
+    /// solids bodies build only if it does (`Body::wanted`).
     pub fn breaks(&self, chem: &Chemistry, k: usize) -> bool {
         let cat = Layout::of(chem).cat;
         (0..chem.reactions.len()).any(|r| self.genes[cat + r] > 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
     /// Energy its catalysed reactions that release heat could release from its stores at temperature `t` (each as far as
-    /// its inputs that are not gas go), J. Needs `prepare`.
+    /// its inputs that are not gas go), J.
     pub fn fuel(&self, chem: &Chemistry, t: f64) -> f64 {
         let mut e = 0.0;
         for &(r, q) in &self.k.burn {
@@ -76,7 +76,7 @@ impl Body {
     }
     /// Does it burn substance `k` at its temperature `t`: is `k` an input, not a gas at `t`, of one of `Consts::burn`? A
     /// store it burns is fuel: a body short of fuel dies when it cannot pay its upkeep (`SPENT`), not when the store is
-    /// below its safe minimum, which is then only the floor that growth and giving keep. False before `prepare`.
+    /// below its safe minimum, which is then only the floor that growth and giving keep.
     pub fn burns_at(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
         chem.phase(k, t) != Phase::Gas && self.k.burn.iter().any(|&(r, _)| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }

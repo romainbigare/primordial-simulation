@@ -135,11 +135,12 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
             // A share `fixers` of the light-eaters carry the gene of the fixing reaction; the draw is by the body's own id.
             if let Some(fx) = fix.filter(|_| Rng::new(w.seed, w.day(), id, Purpose::Fixer).f64() < how.fixers) {
                 b.genes[lay.cat + fx] = FIX_GENE;
+                b.prepare(&w.chem, &w.cfg.phys);
                 p.fixers += 1;
             }
             p.add(w, &b, [lay.cat + r_light, lay.cat + burn], take);
             let delay = 1 + r.below(b.interval(w) as usize) as u64;
-            w.life.add(b, w.day(), delay);
+            w.add(b, delay);
         }
     }
     line(w, kind, how, hand, fix, &p)

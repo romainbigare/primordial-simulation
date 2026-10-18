@@ -9,7 +9,7 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 
 | File | What it holds |
 |---|---|
-| `snap_NNNNN.bin.gz` | every 10 years and at the end: the whole world, the run's plan of what is placed when, and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's sums of the cells, `Life::sum`, `env`, `seen`) is not saved |
+| `snap_NNNNN.bin.gz` | every 10 years and at the end: the whole world, the run's plan of what is placed when, and what the tape keeps across years (gzip of bincode, after the tag `EWSN` and the format version); `ew resume --from` goes on from it, and a resumed tape equals the unbroken one. A snapshot is taken at a month's start, so it holds the state and no cache: what the laws build again before they read it at a month's first step (Flow's caches, `flow::Scratch`; the survey's sums of the cells, `Life::sum`, `env`, `seen`; the numbers each body's genes give, `Body::k`, worked out again at load) is not saved |
 | `series.csv` | one row a year, the columns below |
 | `months.csv` | one row a month (below) |
 | `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |

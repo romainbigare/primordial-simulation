@@ -1,6 +1,6 @@
 //! The registry of bodies: slots, cells, lineages, born rows, and the ring of updates due.
 
-use crate::body::{Body, Consts, MAX_INTERVAL};
+use crate::body::{Body, MAX_INTERVAL};
 use crate::brain::{self, Shape};
 use crate::lineage::Lineage;
 use crate::rng::Rng;
@@ -120,7 +120,7 @@ impl Life {
         self.stir(b.cell);
     }
     /// Place a new body on `day`; it first updates `delay` days later (1..=`MAX_INTERVAL`).
-    pub fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
+    pub(crate) fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
         let slot = free_place(&mut self.bodies, &mut self.free);
         (b.gen, b.alive, b.last, b.count) = (self.bodies[slot].gen, true, day, b.n());
         self.at[b.cell as usize].push(slot as u32);
@@ -134,7 +134,7 @@ impl Life {
         let mut b = std::mem::take(&mut self.bodies[slot]);
         let cell = b.cell as usize;
         self.leave(&b);
-        (b.alive, b.store, b.genes, b.trace, b.mem) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        (b.alive, b.store, b.genes, b.spread, b.trace, b.mem, b.rows, b.ms) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         b.gen += 1;
         self.bodies[slot] = b;
         self.at[cell].retain(|&s| s as usize != slot);
@@ -164,20 +164,15 @@ impl Life {
             self.free_genomes.push(g);
         }
     }
-    /// Body `b` (taken out of its slot) now has these genes and born rows (its own rows are the caller's).
-    pub(crate) fn reborn(&mut self, b: &mut Body, genes: Vec<f32>, rows: Vec<f32>) {
+    /// Body `b` (taken out of its slot) is now born with `rows` (its own rows are the caller's).
+    pub(crate) fn reborn(&mut self, b: &mut Body, rows: Vec<f32>) {
         if rows == self.genomes[b.genome as usize].rows {
-            return self.regene(b, genes);
+            return;
         }
         let g = self.new_genome(rows);
         self.genomes[g as usize].refs += 1;
-        (b.genes, b.k) = (genes, Consts::default());
         self.unref(b.genome);
         b.genome = g;
-    }
-    /// Body `b` (taken out of its slot) has these genes and the born rows it had (a member split off a node and back).
-    pub(crate) fn regene(&mut self, b: &mut Body, genes: Vec<f32>) {
-        (b.genes, b.k) = (genes, Consts::default());
     }
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`.
     pub(crate) fn move_to(&mut self, b: &mut Body, lineage: u32, rows: Vec<f32>) {
@@ -221,6 +216,7 @@ impl World {
     /// now: a child or a part split off a node has its own stores and genes, and others see it and its shade
     /// (`survey::shade`) through `Body::vis` before its first update.
     pub(crate) fn place(&mut self, mut c: Body, keep: Option<f32>) -> usize {
+        c.prepare(&self.chem, &self.cfg.phys);
         self.see(&mut c);
         let delay = c.interval(self);
         let s = self.life.add(c, self.day(), delay);
@@ -228,6 +224,12 @@ impl World {
             self.light_keep.set(s, self.life.bodies[s].gen, k);
         }
         s
+    }
+    /// Place body `b` made outside the laws (a founder, an edit), its first update `delay` days on, its numbers worked out
+    /// from its genes (`Body::prepare`).
+    pub fn add(&mut self, mut b: Body, delay: u64) -> usize {
+        b.prepare(&self.chem, &self.cfg.phys);
+        self.life.add(b, self.day(), delay)
     }
     /// What others see of body `b` is worked out again from what it holds now (`Body::visible`), and its cell's light
     /// is shared out again.

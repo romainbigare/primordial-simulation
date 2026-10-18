@@ -598,10 +598,10 @@ fn lane_scene() -> (World, usize, usize, usize) {
         let k = COVER * w.map.area() / p.mass(&w.chem);
         p.store.iter_mut().for_each(|x| *x *= k);
         p.count *= k;
-        w.life.add(p, w.day(), 1);
+        w.add(p, 1);
     }
     let m = line.founder(&mut w, 1, a);
-    let slot = w.life.add(m, w.day(), 1);
+    let slot = w.add(m, 1);
     (w, a, a + 1, slot)
 }
 

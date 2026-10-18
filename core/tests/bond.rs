@@ -154,7 +154,7 @@ fn a_node_acts_on_bonds_through_one_member() {
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 2.0, b.count / 40.0);
         }
         let (n0, genes) = (b.count, b.genes.clone());
-        w.life.add(b, w.day(), 1);
+        w.add(b, 1);
         pcore::survey::survey(&mut w);
         w.time += DAY_S;
         pcore::survey::day(&mut w);

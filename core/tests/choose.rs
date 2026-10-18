@@ -69,7 +69,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     scale(&mut w, &mut b, f);
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
-    let slot = w.life.add(b, w.day(), 1);
+    let slot = w.add(b, 1);
     let mut log = Vec::new();
     // Day by day, to see each decision.
     while log.len() < DECISIONS && w.life.bodies[slot].alive {
@@ -236,8 +236,8 @@ fn a_body_gives_its_stores_but_not_its_body() {
     // room for all the giver's solid and matter, 2 kg per kg of body.)
     taker.genes[lay.keep + RICH] = 2.0;
     let (m0, fuel0) = (giver.store[MATTER], giver.store[RICH]);
-    let g = w.life.add(giver, w.day(), 1);
-    w.life.add(taker, w.day(), 1);
+    let g = w.add(giver, 1);
+    w.add(taker, 1);
     for _ in 0..3 {
         pcore::day(&mut w);
         for b in w.life.alive() {
@@ -263,7 +263,7 @@ fn a_body_with_no_brain_lives_and_copies() {
     // A light-eater node whose members are mature: a body (0.7 kg of the 1 kg) of more than their copy mass (0.25 kg).
     let mut b = line.founder(&mut w, 0, i);
     (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.6);
-    let (n0, s) = (b.count, w.life.add(b, w.day(), 1));
+    let (n0, s) = (b.count, w.add(b, 1));
     // It pays nothing for a brain, however costly brains are.
     let mut x = w.life.bodies[s].clone();
     x.prepare(&w.chem, &w.cfg.phys);

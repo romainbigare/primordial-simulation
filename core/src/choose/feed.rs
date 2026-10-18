@@ -128,11 +128,6 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
 /// own size in the time (`Physics::take` x interval x its `Body::supply`), as far as it has room. A node gives as one
 /// member: a share 1/count of its spare (its members cannot all reach one body). The other remembers this of the giver.
 pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
-    // The receiver's numbers (`supply` goes by its pace, `can_take` by its genes' catalysts) need `prepare`: a body of a
-    // world just loaded has not had its update yet, so without this a gift to it differs from the same gift in the run
-    // that was not saved.
-    let World { chem, cfg, life, .. } = &mut *w;
-    life.bodies[s].prepare(chem, &cfg.phys);
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let (size, mass) = (b.size(chem), b.mass(chem));
     let keep = |k: usize| if b.wet >> k & 1 == 1 { b.level(chem, k, mass) } else { 0.0 };

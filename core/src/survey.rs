@@ -181,7 +181,6 @@ pub fn day(w: &mut World) {
             continue;
         }
         let mut b = std::mem::take(&mut w.life.bodies[s]);
-        b.prepare(&w.chem, &w.cfg.phys);
         w.counts.updates += 1;
         match live(w, s, &mut b, &mut rc, &mut tmp) {
             Err(cause) => die(w, s, b, cause),

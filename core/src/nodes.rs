@@ -2,7 +2,7 @@
 //! a node splitting in two (`split`), and members drawn from a node as individuals (`one`, `open`). Members, stores and
 //! heat are kept exactly in every join and split.
 
-use crate::body::{self, alike, alike_log, class, most, noise, range, size_step, spread_at, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
+use crate::body::{self, alike, alike_log, class, most, noise, range, size_step, spread_at, spread_kept, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{row_step, shake};
 use crate::rng::{Purpose, Rng};
 use crate::life::Life;
@@ -164,19 +164,17 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    o.spread = (0..o.genes.len()).map(|g| pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
-    let genes = mix(&o.genes, genes);
-    match rows {
-        Some((rows, own, row_spread)) => {
-            let born = w.life.born(o);
-            let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
-            o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
-            let rows = mix(born, rows);
-            o.rows = mix(&o.rows, own);
-            w.life.reborn(o, genes, rows);
-        }
-        None => w.life.regene(o, genes),
+    let mean = mix(&o.genes, genes);
+    o.spread = (0..o.genes.len()).map(|g| spread_kept(&lay, g, mean[g], pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0))).collect();
+    if let Some((rows, own, row_spread)) = rows {
+        let born = w.life.born(o);
+        let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
+        o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
+        let rows = mix(born, rows);
+        o.rows = mix(&o.rows, own);
+        w.life.reborn(o, rows);
     }
+    o.set_genes(mean, &w.chem, &w.cfg.phys);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     // A node has no wear: its members are of all ages (`body::live`).
@@ -241,13 +239,13 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     let g = gap[r.below(gap.len())].0;
     let d = half(g).0;
     let mut c = part(&mut w.life, b, 0.5);
-    let (mut genes, rows) = (b.genes.clone(), w.life.born(b).to_vec());
+    let mut genes = b.genes.clone();
     // Which half keeps the slot (and so is first in the order of updates) is drawn.
     let d = if r.below(2) == 0 { d } else { -d };
     (genes[g], c.genes[g]) = (genes[g] + d, genes[g] - d);
     b.spread[g] = (b.spread[g] - d * d).max(0.0);
     c.spread[g] = b.spread[g];
-    w.life.reborn(b, genes, rows);
+    b.set_genes(genes, &w.chem, &w.cfg.phys);
     w.counts.splits[0] += 1.0;
     w.place(c, Some(w.light_keep.get(slot, b.gen)));
 }
@@ -314,10 +312,9 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: b
         shift(&mut c.rows, &mine, born);
         shift(&mut b.rows, &left, born);
         (c.genome, b.row_spread) = (w.life.new_genome(mine), spread);
-        w.life.reborn(b, genes, left);
-    } else {
-        w.life.regene(b, genes);
+        w.life.reborn(b, left);
     }
+    b.set_genes(genes, &w.chem, &w.cfg.phys);
     (c.count, c.spread, c.row_spread, c.wear) = (1.0, Vec::new(), 0.0, r.f64());
     w.place(c, keep)
 }

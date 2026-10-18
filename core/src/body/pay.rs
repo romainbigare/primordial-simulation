@@ -15,7 +15,7 @@ use crate::{bond, World, AIR};
 /// pay Kleiber's mass^0.75, while what one body can supply grows more slowly than the tissue it keeps and it grows until
 /// keeping it takes all it can supply (West, Brown and Enquist 2001; docs/laws.md). Repair multiplies it by
 /// 1 - c + c 2^`REPAIR` (`Physics::c_repair`). All of it goes with its activity and the pace of its temperature
-/// (`Body::pace`): a dry or cold body pays little and ages slowly. Needs `prepare`.
+/// (`Body::pace`): a dry or cold body pays little and ages slowly.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
     upkeep_at(w, b, days, mass, b.temp(&w.chem))
 }
@@ -36,8 +36,7 @@ pub(super) fn breathes(chem: &Chemistry, r: usize, t: f64) -> bool {
     chem.reactions[r].inputs.iter().any(|p| chem.phase(p.0 as usize, t) == Phase::Gas)
 }
 
-/// Energy the body's reactions can release over `days` at its temperature now, J (the most `pay` could pay). Needs
-/// `prepare`.
+/// Energy the body's reactions can release over `days` at its temperature now, J (the most `pay` could pay).
 pub fn release(w: &World, b: &Body, days: f64) -> f64 {
     plan(w, b, f64::MAX, &Payer::of(w, b, days)).1
 }
@@ -54,7 +53,7 @@ pub(crate) struct Payer {
 }
 
 impl Payer {
-    /// Body `b` as it stands, paying over `days`. Needs `prepare`.
+    /// Body `b` as it stands, paying over `days`.
     pub(crate) fn of(w: &World, b: &Body, days: f64) -> Payer {
         let (mass, cap) = b.mass_cap(&w.chem);
         Payer::at(w, b, days, mass, b.thermal(&w.chem, cap))
@@ -78,7 +77,6 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    b.prepare(&w.chem, &w.cfg.phys);
     spend(w, b, cost, b.interval(w) as f64 * DAY, false, &Payer::of(w, b, days)) == 0.0
 }
 

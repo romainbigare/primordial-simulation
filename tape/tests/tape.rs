@@ -160,7 +160,11 @@ fn recording() -> &'static Recording {
         worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
         worldgen::life::seed(&mut w, 0);
         let (lay, fix) = (pcore::body::Layout::of(&w.chem), w.chem.fixing().expect("the fixing reaction"));
-        w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.genes[lay.cat + fix] = -1.0);
+        let World { life, chem, cfg, .. } = &mut w;
+        for b in life.bodies.iter_mut().filter(|b| b.alive) {
+            b.genes[lay.cat + fix] = -1.0;
+            b.prepare(chem, &cfg.phys);
+        }
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let cells = |w: &World| {
             let land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).count() as f64;
@@ -359,7 +363,7 @@ fn null_run_freezes_the_brain_rows() {
         pcore::survey::survey(&mut w);
         for i in worldgen::testkit::dry_lands(&w) {
             let b = worldgen::testkit::founder(&mut w, 0, i, &worldgen::testkit::Brain::neutral());
-            w.life.add(b, w.day(), 1);
+            w.add(b, 1);
         }
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();

@@ -24,7 +24,7 @@ fn feed_minerals(w: &mut World, s: usize) {
     for (mk, _) in w.chem.minerals().to_vec() {
         let b = &mut w.life.bodies[s];
         (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
-        b.k.cat.clear();
+        b.prepare(&w.chem, &w.cfg.phys);
         let a = (100.0 * b.level(&w.chem, mk, b.mass(&w.chem)) - w.ground[mk * n + i]).max(0.0);
         put(w, mk, i, a);
     }
@@ -180,7 +180,7 @@ fn storing_the_solid_costs_no_build() {
     let out_kg = 0.5 * kg(&w, &b, RICH);
     add(&mut w, &mut b, RICH, -out_kg);
     let (rich0, matter0) = (kg(&w, &b, RICH), kg(&w, &b, MATTER));
-    let s = w.life.add(b, w.day(), 1);
+    let s = w.add(b, 1);
     let books = Books::now(&w);
     let mut took = 0.0;
     for _ in 0..30 {
@@ -308,7 +308,7 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     n.count = 5.0;
     let (mm, h) = (w.chem.subs[MATTER].molar_mass, 0.75);
     let child_mol = 3.0 * (1.0 - h) / mm;
-    let s = w.life.add(n, w.day(), 1);
+    let s = w.add(n, 1);
     let books = Books::now(&w);
     w.time += DAY_S;
     pcore::survey::survey(&mut w);
@@ -430,7 +430,7 @@ fn an_immature_body_never_reproduces() {
     let mut b = immature(&mut w, i);
     // (Fuel for a life of building: 60 kg more of it.)
     add(&mut w, &mut b, RICH, 60.0);
-    let s = w.life.add(b, w.day(), 1);
+    let s = w.add(b, 1);
     let (mut grown_up, mut born_before, mut born) = (None, 0.0, 0.0);
     for d in 0..400 {
         feed_minerals(&mut w, s);
@@ -500,7 +500,7 @@ fn reproducing_updates_keep_elements_and_energy() {
     // Children of 0.1 of the copy mass (0.5 kg) from a mature body of 21 kg.
     (b.genes[CHILD], b.genes[ALLOC]) = (-1.0, 0.8);
     let id = {
-        let s = w.life.add(b, w.day(), 1);
+        let s = w.add(b, 1);
         w.life.bodies[s].id(s)
     };
     let books = Books::now(&w);
@@ -697,7 +697,7 @@ fn crowded_individuals_merge_into_a_node() {
     let placed = w.cfg.crowd + 4;
     for _ in 0..placed - w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage).count() {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        w.life.add(b, w.day(), 1);
+        w.add(b, 1);
     }
     // At the month's start (looked at before they act: within the month the node may give its members up one at a time
     // to the actions of Bond, as the draws go).
@@ -722,7 +722,7 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     for x in 0..3 * w.cfg.crowd {
         let mut b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
         b.genes[pcore::body::COPY_MASS] += 0.3 * x as f32;
-        w.life.add(b, w.day(), 1);
+        w.add(b, 1);
     }
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.n()).collect::<Vec<f64>>();
     let before: f64 = here(&w).iter().sum();
@@ -756,7 +756,7 @@ fn pair(w: &mut World, i: usize, gap: f32) -> (usize, Body, usize) {
     }
     let rows = w.life.born(&b).iter().map(|x| x + 1.0).collect();
     w.life.genomes[b.genome as usize].rows = rows;
-    let sb = w.life.add(b, w.day(), 1);
+    let sb = w.add(b, 1);
     let (sa, a) = out(w, a);
     (sa, a, sb)
 }
@@ -909,7 +909,7 @@ fn unlike_bodies_never_mix() {
     for g in lay.cat..lay.min {
         near.genes[g] = BASE + 1.0 * STEP;
     }
-    w.life.add(near, w.day(), 1);
+    w.add(near, 1);
     let kids = copies(&mut w, s, &mut a, 60);
     let (mut a_n, mut far) = (0, 0);
     for c in &kids {
@@ -1147,7 +1147,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     (genes[COPY_MASS], genes[DISPERSE]) = ((0.65 * w.life.bodies[s].member_body(&w.chem) as f32).log10(), 1.0);
     for t in live(&w) {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
-        w.life.bodies[t].k = Default::default();
+        w.life.bodies[t].prepare(&w.chem, &w.cfg.phys);
         // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes
         // of children are: a child joins no mature node (`body::class`).
         if t != s {
@@ -1251,7 +1251,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     pcore::step(&mut w);
     let i = testkit::dry_land(&w);
     let b = founder(&mut w, 0, i, &Brain::neutral());
-    let s = w.life.add(b, w.day(), 1);
+    let s = w.add(b, 1);
     assert!(w.life.bodies[s].count > 1000.0, "a node");
     // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene; and one in the
     // light-capture gene, so each is seen with its own leaf area (near its wall: its noise shrinks, so it is not
@@ -1384,7 +1384,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         node.store[w.chem.matter().expect("matter")] *= 0.5;
         node.e *= 5.0;
         w.life.bodies[s].genes[DISPERSE] = 0.0;
-        let t = w.life.add(node, w.day(), 1);
+        let t = w.add(node, 1);
         // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays
         // mature with the brood out of its body whatever its sprayed `CHILD` gene).
         let (at, before) = (live(&w).len(), held(&w));
@@ -1444,7 +1444,7 @@ fn individuals_mode_merges_no_animal() {
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i && animal(w, b)).count();
     while here(&w) < w.cfg.crowd + 4 {
         let b = worldgen::life::make(&mut w, 1, i, lineage, genome).expect("body");
-        w.life.add(b, w.day(), 1);
+        w.add(b, 1);
     }
     let n = here(&w);
     pcore::survey::survey(&mut w);

@@ -10,22 +10,18 @@ use crate::World;
 
 impl Body {
     /// Heat conductance of its coat, W/K (the `HEAT` gene): through each member's surface, which grows as mass^(2/3), so a
-    /// small body cools faster per kg than a big one. Needs `prepare`.
+    /// small body cools faster per kg than a big one.
     pub fn conductance(&self, m_ref: f64, mass: f64) -> f64 {
         let n = self.n();
         self.k.heat * n * m_ref.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
     }
-    /// Surface the body exchanges gas with the air through, m²: its light-capture area and its skin. Needs `prepare`.
+    /// Surface the body exchanges gas with the air through, m²: its light-capture area and its skin.
     pub fn open_area(&self, chem: &Chemistry, p: &crate::Physics, mass: f64) -> f64 {
         self.leaf_area(chem, p) + self.skin_area(p, mass)
     }
-    /// Its light-capture area, all members', m²: `LEAF` per kg-equivalent of its body (`equiv` of `built`). Needs `prepare`.
+    /// Its light-capture area, all members', m²: `LEAF` per kg-equivalent of its body (`equiv` of `built`).
     pub(crate) fn leaf_area(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
-        self.leaf_area_at(chem, p, self.k.leaf)
-    }
-    /// `leaf_area` at `leaf` m² per kg-equivalent (the `LEAF` gene's value, `dec`).
-    pub(super) fn leaf_area_at(&self, chem: &Chemistry, p: &crate::Physics, leaf: f64) -> f64 {
-        self.equiv(p, self.built(chem)) * leaf
+        self.equiv(p, self.built(chem)) * self.k.leaf
     }
     /// Its skin at a whole mass of `mass` kg, all members', m²: each member a cube of its volume at `rho_body`.
     pub(crate) fn skin_area(&self, p: &crate::Physics, mass: f64) -> f64 {

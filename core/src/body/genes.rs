@@ -198,6 +198,12 @@ pub(crate) fn spread_at(spread: &[f32], g: usize) -> f32 {
     spread.get(g).map_or(0.0, |&v| v.max(0.0))
 }
 
+/// The variance `v` a node keeps along gene `g` whose mean is `x`: none for a gene that is off (a catalyst or a gene of
+/// a substance below 0), where its members' differences do nothing.
+pub(crate) fn spread_kept(lay: &Layout, g: usize, x: f32, v: f32) -> f32 {
+    if g >= lay.cat && x < 0.0 { 0.0 } else { v }
+}
+
 /// A body's spread per gene (`spread_at`).
 pub(crate) fn spreads(b: &Body) -> Vec<f32> {
     (0..b.genes.len()).map(|g| spread_at(&b.spread, g)).collect()
@@ -308,7 +314,8 @@ pub(crate) fn most(step: f32, alike: f32) -> f32 {
 
 /// The genes of `m` members drawn from a node of mean `genes` and variance `spread` per gene (empty: none), each changed
 /// by a generation's mutation: their mean (the node's, plus noise of that variance over `m`), and the variance left
-/// among them ((1 - 1/m) of it, up to `most` for `alike`; none for one). The spread's share of the noise is shrunk
+/// among them ((1 - 1/m) of it, up to `most` for `alike`; none for one, nor for a gene that is off, `spread_kept`). The
+/// spread's share of the noise is shrunk
 /// where it could cross a wall, so the mean drawn is never clamped: a clamp would move the mean of a node's children
 /// away from the wall, a drift no selection made. A generation's own change may still be clamped (one small step).
 pub(crate) fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
@@ -317,12 +324,12 @@ pub(crate) fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f
         .map(|(g, &v)| {
             let (step, lo, hi) = range(lay, g);
             let (u2, s2) = ((step * size).powi(2), spread_at(spread, g));
-            if m > 1.0 {
-                left.push(((u2 + s2) * (1.0 - 1.0 / m)).min(most(step, alike)));
-            }
             let room = wall_room(v, lo, hi) / REACH;
-            let s2 = s2.min((room * room * m - u2).max(0.0));
-            (v + ((u2 + s2) / m).sqrt() * noise(r)).clamp(lo, hi)
+            let x = (v + ((u2 + s2.min((room * room * m - u2).max(0.0))) / m).sqrt() * noise(r)).clamp(lo, hi);
+            if m > 1.0 {
+                left.push(spread_kept(lay, g, x, ((u2 + s2) * (1.0 - 1.0 / m)).min(most(step, alike))));
+            }
+            x
         })
         .collect();
     (genes, left)

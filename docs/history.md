@@ -691,6 +691,14 @@ The work of `docs/foundation/plan.md`, one line per task.
   learns at its own full rate, where a group moved its rows by each member's share. Light-eaters and climate the same
   (plant members -0.7% and -0.3%, land 0 K, carbon gas -0.6 and +0.6 ppm); the same cost per body update (side by
   side). Golden re-pinned.
+- E10 (f): caches out of the snapshot. A body's numbers that follow from its genes (`Body::k`) are worked out at every
+  change of the genes (`Body::set_genes`; a body placed, `World::place` and `World::add`; a world loaded) and not
+  saved, so they are never empty when read; the lazy fills at an update, a payment and a gift go. A gene that is off
+  keeps no spread where members join a node or are born (`body::spread_kept`), and a dead body's slot keeps no rows,
+  spread or genes (dead animals' rows were 2.5 MB of the snapshot). Snapshot version 25. 64 x 64, seed 1, year 30:
+  snapshot 14.7 to 10.0 MB (before E10 (a) it was 10.7 MB). The same world (years 26 to 35, seeds 1 and 2: plant
+  members +1% and -3%, eaters 0.98 and 1.1 times their mass, land the same, carbon gas +2 and -1 ppm); the same cost
+  per update. Golden re-pinned.
 
 **Phase J: the long physics step**
 

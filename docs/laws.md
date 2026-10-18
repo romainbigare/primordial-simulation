@@ -633,7 +633,9 @@ the same patterns as individuals.
 
 - A node keeps its **spread**: the variance of its members' genes around its mean, per gene, and
   one number for its born rows (`Body::spread`, `Body::row_spread`). The spread never grows past
-  the split threshold (`body::most`).
+  the split threshold (`body::most`), and a gene that is off (a catalyst or a gene of a substance
+  below 0) keeps none where members join or are born (`body::spread_kept`): their differences
+  there do nothing.
 - **Joining** (`target` and `emit` in `copy/mod.rs`). Children join the first node in their
   start cell that they belong to: in every gene within `alike` steps plus `WITHIN` (0.5)
   standard deviations of both spreads (`body::within`); in the same **size class** (member

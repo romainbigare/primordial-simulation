@@ -121,12 +121,14 @@ pub struct Body {
     /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
     /// has none: its members are of all ages (`live`).
     pub wear: f64,
-    /// Numbers that follow from the genes (`prepare`; empty until its first update, and others read them: `burns_at`, `pace`)
+    /// Numbers that follow from the genes (`prepare`, at every change of the genes; not saved: a world loaded works them
+    /// out again)
+    #[serde(skip)]
     pub k: Consts,
 }
 
 /// Numbers that follow from a body's genes, kept to save time.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default)]
 pub struct Consts {
     /// 10 to the power of the gas, liquid, heat and light-capture genes
     pub gas: f64,
@@ -264,16 +266,15 @@ impl Body {
     }
     /// Days between the updates its `INTERVAL` gene asks for.
     fn own_interval(&self) -> u64 {
-        if self.k.interval > 0 {
-            return self.k.interval;
-        }
-        self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64
+        self.k.interval
     }
-    /// Fill `k` from the genes (and the physics, which stays the same through a run) if it is missing.
+    /// Its genes are `genes` (`prepare` follows).
+    pub(crate) fn set_genes(&mut self, genes: Vec<f32>, chem: &Chemistry, p: &crate::Physics) {
+        self.genes = genes;
+        self.prepare(chem, p);
+    }
+    /// Work `k` out from the genes (and the physics, which stays the same through a run): at every change of the genes.
     pub fn prepare(&mut self, chem: &Chemistry, p: &crate::Physics) {
-        if !self.k.cat.is_empty() {
-            return;
-        }
         let lay = Layout::of(chem);
         let cat = lay.cat;
         let f: Vec<f64> = (0..chem.reactions.len()).map(|r| if self.genes[cat + r] > 0.0 { self.dec(cat + r) } else { 1.0 }).collect();
@@ -288,7 +289,8 @@ impl Body {
         };
         let cats: f64 = chem.reactions.iter().zip(&f).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.arrhenius(p.t_cat) * open(rx)).sum();
         let cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
-        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval: self.own_interval(), burn, minln, upt, cats };
+        let interval = self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64;
+        self.k = Consts { gas: self.dec(GAS), liq: self.dec(LIQ), heat: self.dec(HEAT), leaf: self.dec(LEAF), cat: f, interval, burn, minln, upt, cats };
     }
     /// The reflectance of a member, the mean of its colour's three bands (`visible`).
     pub(crate) fn reflectance(&self) -> f64 {
@@ -310,14 +312,14 @@ impl Body {
                 }
             }
         }
-        let leaf = self.leaf_area_at(chem, p, self.dec(LEAF)) / self.n();
+        let leaf = self.leaf_area(chem, p) / self.n();
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32, self.height(chem, cfg) as f32]
     }
     /// Well-being at temperature `t`: the energy its catalysed reactions could release from a member's stores (log, in
     /// decisions' worth: `think` is what one decision of the starting brain costs a member of the mass it copies at, J, so
     /// shedding mass does not raise it), less how near it is to its limits: each key store's margin over its safe minimum,
     /// the margin of its reactions over its upkeep (`spare`), both in `MARGIN` form, and its key liquids to freezing or
-    /// boiling (`PHASE_MARGIN`). Needs `prepare`.
+    /// boiling (`PHASE_MARGIN`).
     pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass) = (Layout::of(chem), self.size(chem));
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(MARGIN_MIN, MARGIN) as f32 / MARGIN as f32);
