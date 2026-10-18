@@ -95,6 +95,8 @@ fn a_large_move_into_a_node_wakes_it() {
     let n = w.grid.n();
     let (k, i) = (0..w.chem.ns()).flat_map(|k| (0..n - 1).map(move |i| (k, i))).find(|&(k, i)| w.g(k, i) > 0.0 && w.g(k, i + 1) > 0.0).unwrap();
     let (from, to, now) = (w.table.id(Class::Ground, i), w.table.id(Class::Ground, i + 1), w.time);
+    // Only these two nodes sleep.
+    w.sleep = Default::default();
     for id in [from, to] {
         w.sleep.sleep(Class::Ground, id, now, now + DAY_S);
     }

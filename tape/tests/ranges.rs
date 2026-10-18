@@ -3,8 +3,11 @@
 //! reference, the mean of the same three seeds in the reference runs (A2, `docs/reports/foundation-a/`). The climate
 //! and the land worn down are means over years 21 to 30; life is read at year 30, ten years after the eaters came.
 //! Each run also keeps its books.
+//!
+//! The sleep of Change's nodes is a speed tool (plan 6.4): a small world with life keeps the chemistry's key numbers
+//! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2.
 
-use pcore::World;
+use pcore::{Config, World};
 use std::fmt;
 use tape::Recorder;
 use worldgen::life::Seeding;
@@ -87,34 +90,43 @@ fn rock(w: &World, land: &[usize]) -> f64 {
     land.iter().map(|&i| ground_of(w, i)).map(|g| g.0 + g.1).sum::<f64>() / land.len() as f64
 }
 
-/// `YEARS` years of `ew run --seed <seed> --size 64`, recorded as `ew run` records it: the key numbers in the order of
-/// `KEYS`, once the books are checked.
-fn key_numbers(seed: u64) -> [f64; KEYS.len()] {
-    let mut w = worldgen::new_world(seed, SIDE, SIDE);
+/// `years` years of `ew run --seed <seed> --size <side>` with the settings `set` makes, recorded as `ew run` records it;
+/// `each_year(year, world, recorder)` after each year. Checks the books at the end.
+fn run(seed: u64, side: usize, years: u64, set: impl Fn(&mut Config), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
+    let mut w = worldgen::new_world(seed, side, side);
+    set(&mut w.cfg);
     // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
     worldgen::terrain::scale_absorbers(&mut w, 1.0);
     let plan = Schedule::new(Some(LIFE_YEAR), false, None, Seeding::default());
     let (books, mut rec) = (Books::now(&w), Recorder::new(&w, 0, 0));
-    let gas = format!("air_{ABSORBER}");
-    let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
-    let (mut mean, mut land, mut rock_from) = ([0.0; 6], vec![], 0.0);
-    let span = (YEARS - FROM + 1) as f64;
     rec.record_month(&mut w);
-    for y in 1..=YEARS {
+    for y in 1..=years {
         plan.place(&mut w);
         for _ in 0..w.cfg.months_per_year {
             pcore::step(&mut w);
             rec.record_month(&mut w);
         }
+        each_year(y, &w, &rec);
+    }
+    books.assert_kept(&w, 1e-12);
+    (w, rec)
+}
+
+/// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`.
+fn key_numbers(seed: u64) -> [f64; KEYS.len()] {
+    let gas = format!("air_{ABSORBER}");
+    let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
+    let (mut mean, mut land, mut rock_from) = ([0.0; 6], vec![], 0.0);
+    let span = (YEARS - FROM + 1) as f64;
+    let (w, rec) = run(seed, SIDE, YEARS, |_| {}, |y, w, rec| {
         if y == FROM - 1 {
             land = (0..w.grid.n()).filter(|&i| w.is_land(i)).collect();
-            rock_from = rock(&w, &land);
+            rock_from = rock(w, &land);
         }
         if y >= FROM {
             mean.iter_mut().zip(climate).for_each(|(m, c)| *m += rec.last(c) / span);
         }
-    }
-    books.assert_kept(&w, 1e-12);
+    });
     let worn = (rock_from - rock(&w, &land)) / span * MM;
     let [t, summer, winter, rain, air, rivers] = mean;
     let (plants, eaters) = (rec.last("root_0_kg").log10(), rec.last("root_1_kg").log10());
@@ -140,4 +152,56 @@ fn the_key_numbers_stay_in_their_ranges() {
         }
     }
     assert!(out.is_empty(), "out of their ranges: {out:?}");
+}
+
+/// The sleep test's world: its side, its years, and the years from which its numbers are averaged (their values at the
+/// end of each year, so at one season).
+const SLEEP_SIDE: usize = 32;
+const SLEEP_YEARS: u64 = 8;
+const SLEEP_FROM: u64 = 5;
+
+/// The chemistry's key numbers (series columns): the heat-absorbing gas (the carbon of the air), the two minerals in the
+/// ground of land and of sea (24, the mineral of the fixed gas, and 23, the salt of the rock), and the dead body matter
+/// and lime.
+const CHEMISTRY: [&str; 7] = ["air_3", "min0_land", "min0_sea", "min1_land", "min1_sea", "dead_22", "dead_10"];
+
+/// The `CHEMISTRY` columns at the end of each year from `SLEEP_FROM`, with Change's nodes sleeping at most `sleep_days`.
+fn chemistry(sleep_days: u32) -> Vec<Vec<f64>> {
+    let mut years = vec![];
+    run(1, SLEEP_SIDE, SLEEP_YEARS, |c| c.sleep_days = sleep_days, |y, _, rec| {
+        if y >= SLEEP_FROM {
+            years.push(CHEMISTRY.map(|c| rec.last(c)).to_vec());
+        }
+    });
+    years
+}
+
+/// Sleep against no sleep, and the sleep's setting x2 and /2 (`docs/numbers.md`, speed settings): against every node
+/// awake every step, the mean of each of the chemistry's key numbers over the last years moves by less than its noise,
+/// the spread of its values over those years with every node awake.
+#[test]
+#[ignore = "slow: four 8-year runs of a 32 x 32 world with life"]
+fn the_sleep_of_change_keeps_the_chemistry() {
+    let set = Config::default().sleep_days;
+    let settings = [0, set, 2 * set, set / 2];
+    let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
+        let runs: Vec<_> = settings.iter().map(|&d| s.spawn(move || chemistry(d))).collect();
+        runs.into_iter().map(|r| r.join().expect("a run")).collect()
+    });
+    let mut out = vec![];
+    for (q, name) in CHEMISTRY.iter().enumerate() {
+        let column = |run: &[Vec<f64>]| run.iter().map(|y| y[q]).collect::<Vec<f64>>();
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let awake = column(&runs[0]);
+        let noise = awake.iter().fold(f64::MIN, |m, &x| m.max(x)) - awake.iter().fold(f64::MAX, |m, &x| m.min(x));
+        for (run, days) in runs.iter().zip(settings).skip(1) {
+            let off = mean(&column(run)) - mean(&awake);
+            let ok = off.abs() <= noise;
+            println!("{name}, sleep {days} days: {:.6e}, awake {:.6e}, off by {off:.3e}, noise {noise:.3e}{}", mean(&column(run)), mean(&awake), if ok { "" } else { ": OUT" });
+            if !ok {
+                out.push((*name, days));
+            }
+        }
+    }
+    assert!(out.is_empty(), "the sleep changed: {out:?}");
 }

@@ -38,8 +38,10 @@ pub struct Config {
     pub flow_days: u32,
     /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
     pub crowd: usize,
-    /// Speed setting: a move into a node above this share of what it holds of an amount or of its heat wakes it
+    /// Speed setting: a move into a node above this share of what it holds of an amount wakes it
     pub wake_share: f64,
+    /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
+    pub sleep_days: u32,
 
     // Ground and air physics
     /// Depth of ground that exchanges heat with the surface, m
@@ -419,6 +421,7 @@ impl Default for Config {
             flow_days: 15,
             crowd: 4,
             wake_share: 0.05,
+            sleep_days: 90,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,

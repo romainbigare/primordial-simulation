@@ -108,7 +108,7 @@ pub struct Booking {
     lost: Vec<[f64; 2]>,
     /// The fast path (`book_first`): the value of each number before each change, in order
     saved: Vec<f64>,
-    /// The numbers a change brought more than `Config::wake_share` of what they held, woken at the end of the call
+    /// The numbers a change brought more than `Config::wake_share` of what they held of an amount, woken at the end of the call
     woken: Vec<Slot>,
     /// Room for the element totals of a transform
     sums: Vec<f64>,
@@ -281,12 +281,13 @@ struct Giver<'w> {
 
 impl Giver<'_> {
     /// Changes number `s`, `v`, by `x` scaled by `f`, and notes the node to wake when that brings it more than
-    /// `wake_share` of what it held.
+    /// `wake_share` of what it held of an amount. Heat wakes no node: a node's temperature changes at every step outside
+    /// `apply` (radiation, the exchange with the air), and its own alarm bounds how long it reacts at an old one.
     #[inline(always)]
     fn give(&mut self, v: &mut f64, s: Slot, x: f64, f: f64) {
         let (held, given) = (*v, x * f);
         *v += given;
-        if given > self.wake_share * held.max(0.0) {
+        if s.unit() == 0 && given > self.wake_share * held.max(0.0) {
             self.wake(s);
         }
     }
@@ -304,7 +305,7 @@ impl Giver<'_> {
     fn flush(&mut self) {
         for s in self.woken.drain(..) {
             let c = s.arr / 2;
-            let (class, i) = (Class::ALL[c], if s.unit() == 0 { s.at % self.len[c] } else { s.at });
+            let (class, i) = (Class::ALL[c], s.at % self.len[c]);
             self.sleep.wake(class, self.table.id(class, i), self.time);
         }
     }
@@ -412,7 +413,7 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 /// share it holds (the least share over all it takes from), so no amount and no heat falls below zero
 /// (`docs/handover.md` 6.1); a boundary node gives all it is asked. What the scaling left in place is counted in
 /// `Counters::scaled`, and the last rounding below zero, set to zero, in `Counters::rounded`. A change that brings a
-/// node more than `Config::wake_share` of what it held of that amount or heat wakes the node (`clock::Sleep::wake`; a
+/// node more than `Config::wake_share` of what it held of an amount wakes the node (`clock::Sleep::wake`; a
 /// boundary node never sleeps). Panics on a transform that does not keep its elements, and on the id of a node that is
 /// gone.
 ///

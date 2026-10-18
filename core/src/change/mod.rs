@@ -13,14 +13,19 @@
 //! (`denature`). A ground node with liquid standing over it reacts with the gas dissolved in that
 //! liquid, which the liquid's film renews (`Reactor::film`).
 //!
-//! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `screen`: which nodes react now.
-//! `gas`: the gas a reactor exchanged with the air around it.
-//! Here: the step over the ground and air nodes.
+//! A ground or an air node reacts when it is due (`clock::Sleep`), for all the time since it last did: the kernel
+//! integrates the rate law over a span. Then it sleeps until its own rates would change it by more than a share `CALM`
+//! (`Reactor::rest`), at most `Config::sleep_days`; a node where a reaction goes that far within a step reacts every
+//! step. A move booked by `store::apply` that brings it more than `Config::wake_share` of an amount wakes it. What
+//! reaches it outside `apply` (radiation and the exchange with the air, Flow's; what bodies take and give) and the
+//! change of its temperature do not wake it: `sleep_days` bounds how long it reacts without them.
+//!
+//! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `gas`: the gas a reactor
+//! exchanged with the air around it. Here: the step over the ground and air nodes.
 
 mod balance;
 mod gas;
 mod kernel;
-mod screen;
 
 pub use balance::reversible;
 pub(crate) use gas::{send_gas, GasMove};
@@ -30,56 +35,50 @@ pub(crate) use kernel::{denature, frac, pace, scarce};
 use crate::chem::Phase;
 use crate::flow::{FlowView, Sky};
 use crate::ground::{draw, share};
+use crate::store::Class;
 use crate::World;
-use screen::{bit, Plan};
 
-/// A node that is neither frozen nor hot reacts every `LAZY` ticks with `LAZY` times the time:
-/// reactions at ordinary temperatures are slow, so one long step is as good as many short ones.
-/// A ground node waits `SLOW` ticks if over that time its reactions would go no further than a
-/// share `CALM` of their inputs (but for reactions on a `SPECK` of what it holds) and warm it by
-/// no more than `CALM_K` kelvin.
-const LAZY: u64 = 40;
-const SLOW: u64 = 8 * LAZY;
+/// A node sleeps until its reactions would go further than this share of their inputs (but for reactions on a `SPECK`
+/// of what it holds), or warm it by more than `CALM_K` kelvin: for so little, one long span is as good as many steps.
 const CALM: f64 = 0.05;
 const CALM_K: f64 = 0.5;
 const SPECK: f64 = 1e-12;
-/// Ground nodes take their turns in blocks of this many nodes next to each other in memory.
-const BLOCK: usize = 64;
-/// A reaction goes far within a step when its rate times the step reaches this: a node where one may react every step.
-const FAR: f64 = 0.05;
-/// A substance making up less than this share of a ground node's loose amounts (or of its phase,
-/// for a gas) is a trace: reactions on traces alone never make a node react every step, and
-/// lumping a reaction that runs out of a trace over `LAZY` steps is exact for a first-order decay.
-const TRACE: f64 = 1e-6;
 
-/// Per ground node: the tick it last reacted at its turn, the tick of its next turn, and the steps it reacted on its own
-/// since. Blocks take turns: block `b` first reacts when `(b + tick) % LAZY == 0`.
-fn turns(n: usize, tick: u32) -> Vec<[u32; 3]> {
-    (0..n)
-        .map(|i| tick + ((2 * LAZY - (i / BLOCK) as u64 % LAZY - tick as u64 % LAZY) % LAZY) as u32)
-        .map(|due| [due.saturating_sub(LAZY as u32), due, 0])
-        .collect()
-}
-
-/// Run Law 2 on ground nodes (loose amounts, gas from the air above) and on air nodes, at the
-/// temperatures of the last flow step. A ground node whose reactions may go far within one step
-/// (`screen`) reacts every step; at its turn, every `LAZY` (or `SLOW`) steps by block, it reacts
-/// for all the time since it last did, unless all its reactions are frozen. Air nodes go far by
-/// their exact rates, else react at their turn.
+/// Run Law 2 for the step of `dt` seconds from the world's time, at the temperatures of the last flow step: each ground
+/// node (loose amounts, gas from the air above), then each air node, that is due, in the order of their cells, for all
+/// the time since it last reacted to the end of this step. Then it sleeps until the last step that starts before its
+/// reactions may have to run again (`Reactor::rest`, at most `sleep_days`): the next step, for a rest within one.
 pub fn step(w: &mut World, dt: f64) {
     crate::flow::ensure(w);
-    let mut s = std::mem::take(&mut w.scratch);
-    let n = w.grid.n();
-    let tick = (w.day() / w.cfg.phys_days as u64) as u32;
-    if s.slow.len() != n {
-        s.slow = turns(n, tick);
-    }
-    let mut slow = std::mem::take(&mut s.slow);
+    let s = std::mem::take(&mut w.scratch);
     let nodes = s.view();
-    let plan = screen::screen(w, &nodes, dt);
-    ground(w, &nodes, &plan, &mut slow, tick, dt);
-    air(w, &nodes, &plan, tick, dt);
-    s.slow = slow;
+    let (end, most) = (w.time + dt as u64, w.cfg.sleep_days as u64 * w.cfg.calendar().day);
+    let (mut rc, ns) = (Reactor::new(&w.chem, &w.cfg), w.chem.ns());
+    let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], pool0: vec![0.0; ns] };
+    for (class, len) in [(Class::Ground, w.grid.n()), (Class::Air, w.grid.na())] {
+        // Before the law first runs, every node is due.
+        if w.sleep.none(class) {
+            for i in 0..len {
+                w.sleep.sleep(class, w.table.id(class, i), w.time, w.time);
+            }
+        }
+        let mut due: Vec<_> = w.sleep.due(class, w.time).into_iter().map(|id| (w.table.place(id).1, id)).collect();
+        due.sort_unstable();
+        for (i, id) in due {
+            let (span, amounts) = (end.saturating_sub(w.sleep.since(id)) as f64, if class == Class::Ground { &w.ground } else { &w.air });
+            for (k, a) in h.amt.iter_mut().enumerate() {
+                *a = amounts[k * len + i];
+            }
+            let all = h.amt.iter().sum::<f64>();
+            if class == Class::Ground {
+                react_ground(w, &mut rc, &mut h, &nodes, i, span);
+            } else {
+                react_air(w, &mut rc, &mut h.amt, i, span);
+            }
+            let rest = (rc.rest(CALM, SPECK * all, CALM_K).max(0.0) as u64).min(most);
+            w.sleep.sleep(class, id, end, (end + rest).saturating_sub(dt as u64));
+        }
+    }
     w.scratch = s;
 }
 
@@ -88,36 +87,6 @@ struct Held {
     amt: Vec<f64>,
     pool: Vec<f64>,
     pool0: Vec<f64>,
-}
-
-/// The ground nodes' turn: each that may go far (`Plan::ground`) reacts for this step (at least; a first turn has no
-/// earlier turn to count from); at its turn, for all the time since its last turn it has not reacted for.
-fn ground(w: &mut World, nodes: &FlowView, plan: &Plan, slow: &mut [[u32; 3]], tick: u32, dt: f64) {
-    let (ns, n) = (w.chem.ns(), w.grid.n());
-    let mut rc = Reactor::new(&w.chem, &w.cfg);
-    let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], pool0: vec![0.0; ns] };
-    for (i, turn) in slow.iter_mut().enumerate() {
-        let (due, fast) = (turn[1] <= tick, plan.ground[i]);
-        if !due && !fast {
-            continue;
-        }
-        let (t, j) = (nodes.tg[i], nodes.air_of[i] as usize);
-        for (k, a) in h.amt.iter_mut().enumerate() {
-            *a = w.ground[k * n + i];
-        }
-        let has = || (0..ns).filter(|&k| h.amt[k] > 0.0).fold(plan.in_air[j], |m, k| m | bit(k));
-        let [last, due_at, fasts] = *turn;
-        let ticks = if due && !plan.cold(t, has()) { (tick - last).saturating_sub(fasts).max(fast as u32) } else { fast as u32 };
-        let mut next = LAZY;
-        if ticks > 0 {
-            let all = h.amt.iter().sum::<f64>();
-            react_ground(w, &mut rc, &mut h, nodes, i, ticks as f64 * dt);
-            if rc.calm(SLOW as f64 * dt, CALM, SPECK * all, CALM_K) {
-                next = SLOW;
-            }
-        }
-        *turn = if due { [tick, tick + next as u32, 0] } else { [last, due_at, fasts + 1] };
-    }
 }
 
 /// Time the liquid standing over ground amounts `amt` at `t` (more than the pores of its loose ground hold) takes to
@@ -162,45 +131,15 @@ fn react_ground(w: &mut World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView,
     send_gas(&h.pool, &h.pool0, paid, &mut sky, (j, lift), |k, kept| ground[k * n + i] = amt[k] + kept);
 }
 
-/// The air nodes' turn: each on its own, so from the amounts before (in parallel with the `threads` feature) into a row
-/// [reacted, heat, amounts], then applied in order. A node that may go far (`Plan::air`) and does by its exact rates
-/// reacts for this step; else at its turn, every `LAZY` steps, for `LAZY` steps, unless all its reactions are frozen.
-/// Gas it makes or takes changes its latent heat held in the air.
-fn air(w: &mut World, nodes: &FlowView, plan: &Plan, tick: u32, dt: f64) {
-    let (chem, ns, na) = (&w.chem, w.chem.ns(), w.grid.na());
-    let turn = ((LAZY - tick as u64 % LAZY) % LAZY) as usize;
-    let mut rows = vec![0.0; na * (ns + 2)];
-    let (air_now, e_now, cfg) = (&w.air, &w.e_air, &w.cfg);
-    crate::par::rows(&mut rows, ns + 2, || None, |st: &mut Option<(Reactor, Vec<f64>)>, j, row| {
-        let t = nodes.ta[j];
-        let lazy = j % LAZY as usize == turn && !plan.cold(t, plan.in_air[j]);
-        if !plan.air[j] && !lazy {
-            return;
-        }
-        let (rc, amt) = st.get_or_insert_with(|| (Reactor::new(chem, cfg), vec![0.0; ns]));
-        for k in 0..ns {
-            amt[k] = air_now[k * na + j];
-        }
-        let time = if plan.air[j] && rc.fastest(chem, amt, t) * dt >= FAR {
-            dt
-        } else if lazy {
-            dt * LAZY as f64
-        } else {
-            return;
-        };
-        let mut e = e_now[j];
-        rc.react(chem, amt, None, &mut e, 0.0, None, 0.0, time);
-        for k in 0..ns {
-            e -= (amt[k] - air_now[k * na + j]) * chem.subs[k].latent_gas();
-        }
-        row[0] = 1.0;
-        row[1] = e;
-        row[2..].copy_from_slice(amt);
-    });
-    for (j, row) in rows.chunks(ns + 2).enumerate().filter(|(_, r)| r[0] != 0.0) {
-        w.e_air[j] = row[1];
-        for k in 0..ns {
-            w.air[k * na + j] = row[2 + k];
-        }
+/// React air node `j` (its amounts in `amt`) for `time` s. Gas it makes or takes changes its latent heat held in the
+/// air.
+fn react_air(w: &mut World, rc: &mut Reactor, amt: &mut [f64], j: usize, time: f64) {
+    let (chem, na) = (&w.chem, w.grid.na());
+    let mut e = w.e_air[j];
+    rc.react(chem, amt, None, &mut e, 0.0, None, 0.0, time);
+    for (k, &a) in amt.iter().enumerate() {
+        e -= (a - w.air[k * na + j]) * chem.subs[k].latent_gas();
+        w.air[k * na + j] = a;
     }
+    w.e_air[j] = e;
 }

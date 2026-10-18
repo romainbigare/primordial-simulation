@@ -66,6 +66,11 @@ impl Sleep {
         out
     }
 
+    /// Whether no node of `class` sleeps: its law has not run yet (after a run, it puts every node it ran back to sleep).
+    pub fn none(&self, class: Class) -> bool {
+        self.queue.get(class as usize).is_none_or(|q| q.is_empty())
+    }
+
     /// The time node `id` (put to sleep at least once) was last brought up to date, s: its law catches it up for the
     /// time since.
     pub fn since(&self, id: NodeId) -> u64 {

@@ -22,7 +22,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`); `flow::land::conduct` (sideways) |
 | 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind` with `wind/along` and `wind/mesh`, `sky`); `lanes.rs` (paths) |
-| 2 Change | `change/` (`mod`, `kernel`, `balance`, `screen`, `gas`); the chemistry in `chem/` (`mod`, `thermo`, `roles`) |
+| 2 Change | `change/` (`mod`, `kernel`, `balance`, `gas`); the chemistry in `chem/` (`mod`, `thermo`, `roles`) |
 | 3 Bond | `bond/` (`mod`, `verbs`, `sense`, `month`) |
 | 4 Copy | `copy/` (`mod`, `mix`, `grow`); population nodes in `nodes.rs`; lineages in `lineage.rs` |
 | 5 Choose | `choose/` (`mod`, `perceive`, `learn`, `feed`, `go`); the network in `brain.rs` |
@@ -67,8 +67,8 @@ when that period is over, for all the time since: evaporation and rain every `ex
 
 **Sleep and wake** (`clock::Sleep`). A node's own process may sleep while the node is calm: until an
 alarm time, or until a change booked by `store::apply` brings the node more than `wake_share` (5%) of
-what it holds of an amount or of its heat. When it is due, its law brings it up to date for all the
-time since it last did, in one span. No law puts a node to sleep yet.
+what it holds of an amount (heat wakes no node). When it is due, its law brings it up to date for all
+the time since it last did, in one span. Change's reactions in ground and air nodes sleep so (2.2).
 
 **One ground temperature.** Every law and the tape read the ground temperature of Flow's last
 step (`World::t_ground_last`). Where Flow has not run yet, `flow::ensure` builds that state from
@@ -319,10 +319,15 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
 
 ### 2.2 Where it runs
 
-- **Ground and air nodes** (`change::step`, `Reactor::react`): every Change call, with
-  sub-steps when the temperature changes fast. To save time, a calm node reacts every `LAZY`
-  ticks with that much time, and a very calm one every `SLOW` ticks (`Reactor::calm`); this is a
-  speed tool, not physics. A reaction too slow to matter over the world's year is frozen.
+- **Ground and air nodes** (`change::step`, `Reactor::react`): each when it is due
+  (`clock::Sleep`), for all the time since it last reacted, with sub-steps when the temperature
+  changes fast. Then it sleeps until its reactions, at their rates, would use 5% of their inputs
+  or warm it by 0.5 K (`Reactor::rest`), at most `sleep_days` (90): a node where a reaction goes
+  that far within a step reacts every step. A move booked by `store::apply` that brings it more
+  than `wake_share` of an amount wakes it. Radiation, the exchange with the air and the bodies
+  change it outside `apply`, and its temperature does not wake it: `sleep_days` bounds how long it
+  reacts without those changes. This is a speed tool, not physics (`sleep_days` 0: every node
+  reacts every step). A reaction too slow to matter over the world's year is frozen.
 - **A ground node reacts at Flow's last temperature.** On a melting plateau that is the melting
   point: the fusion heat it holds is set aside while it reacts (`FlowView::fused`).
 - **Gas a node takes or gives** goes through `change::GasMove` and `change::send_gas`

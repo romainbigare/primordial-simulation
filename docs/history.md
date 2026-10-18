@@ -397,6 +397,14 @@ The work of `docs/foundation/plan.md`, one line per task.
   yet received; each call starts from the air nodes' sums of their amounts now (`air::sums`), with Law 2's gas.
   64 x 64, seed 1, 20 years with life, years 11 to 20: land -0.24 K, air +0.13 K, rain on land -1.1%, carbon gas
   +0.4%, river cells -1.7%; ranges hold; golden re-pinned.
+- D6: Change's ground and air nodes sleep by `clock::Sleep` (`change/screen.rs`, the turns by blocks, `LAZY`, `SLOW`,
+  `FAR`, `OWN`, `SCAN`, `SAMPLE`, `FEW`, `BLOCK`, `Scratch::slow`, `Reactor::calm` and `Reactor::fastest` deleted): a
+  node reacts when due for all the time since, then sleeps until its own rates would use 5% of their inputs
+  (`Reactor::rest`; a reaction on a trace of its phase does not count), at most `sleep_days` (90, a new speed
+  setting); `store::apply` wakes a node on amounts only, not on heat. The air nodes react one after the other.
+  Sleep against no sleep, x2 and /2 (`tape/tests/ranges.rs`): the chemistry within its noise. 64 x 64, seeds 1 to 3,
+  years 21 to 30: carbon gas 248.4 ppm (was 252.2), land 289.45 K (289.47), eaters 4.26 log10 kg (4.49), drift
+  near 1e-14. Snapshot version 13, golden re-pinned.
 
 **Owner's decisions after Phase A**
 

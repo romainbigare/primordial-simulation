@@ -1,6 +1,5 @@
 //! The reactor of Law 2: the rate law and its helpers, and `Reactor`, which reacts the amounts of one node, body or part.
 
-use super::TRACE;
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::math::one_minus_exp;
 use crate::units::P_REF;
@@ -18,6 +17,9 @@ const MIN_SUB: f64 = 1e-4;
 const MOST_HEAT: f64 = 0.5;
 /// Below this, 1 - exp(-z) is taken as its series to second order (exact to 2e-7 of its value).
 const SERIES_BELOW: f64 = 1e-3;
+/// A gas or liquid input making up less than this share of its phase is a trace: a reaction whose scarcest input is a
+/// trace does not shorten a node's sleep (`Reactor::rest`), as one long span of a first-order decay is exact.
+const TRACE: f64 = 1e-6;
 
 /// The phases by the number of the points a substance is past (melting, boiling).
 const PHASES: [Phase; 3] = [Phase::Solid, Phase::Liquid, Phase::Gas];
@@ -48,8 +50,10 @@ pub struct Reactor {
     far: Vec<f64>,
     /// The power of what is left of its scarcest input that its rate per unit goes with (`gone`).
     pw: Vec<f64>,
+    /// Per reaction: is its scarcest input a trace of its phase (`TRACE`)?
+    minor: Vec<bool>,
     /// At the start of the last `react`: the heat capacity, J/K, and the rate of each reaction
-    /// not driven by light, 1/s, with its limiting input in reaction units.
+    /// not driven by light nor on a trace (`minor`), 1/s, with its limiting input in reaction units.
     cap0: f64,
     kap0: Vec<f64>,
     lim0: Vec<f64>,
@@ -66,7 +70,7 @@ pub struct Reactor {
 
 /// `f` to a small whole power.
 #[inline]
-pub(super) fn pow(f: f64, nu: u16) -> f64 {
+fn pow(f: f64, nu: u16) -> f64 {
     match nu {
         1 => f,
         2 => f * f,
@@ -74,17 +78,12 @@ pub(super) fn pow(f: f64, nu: u16) -> f64 {
     }
 }
 
-/// The temperature at which a reaction of barrier `ea` K reaches `z` times its rate constant times a time: ea / ln z,
-/// K; never where `z` is at most 1.
-#[inline]
-pub(super) fn warm_at(ea: f64, z: f64) -> f64 {
-    if z > 1.0 { ea / z.ln() } else { f64::INFINITY }
-}
-
 /// Temperature below which reaction `rx` (catalyst 1) is frozen: it would go no further than `NEGLIGIBLE` over a
-/// year of `year` s, K.
-pub(super) fn frozen_below(rx: &Reaction, year: f64) -> f64 {
-    warm_at(rx.ea, rx.k * year / NEGLIGIBLE)
+/// year of `year` s, K: Ea / ln z, z its rate constant times the year over `NEGLIGIBLE` (frozen at every temperature
+/// where z is at most 1).
+fn frozen_below(rx: &Reaction, year: f64) -> f64 {
+    let z = rx.k * year / NEGLIGIBLE;
+    if z > 1.0 { rx.ea / z.ln() } else { f64::INFINITY }
 }
 
 /// The input that runs out first: its amount per `nu` (reaction units) and its place in `inputs`
@@ -171,6 +170,7 @@ impl Reactor {
             lim: vec![0.0; nr],
             far: vec![0.0; nr],
             pw: vec![0.0; nr],
+            minor: vec![false; nr],
             cap0: 0.0,
             kap0: vec![0.0; nr],
             lim0: vec![0.0; nr],
@@ -179,37 +179,17 @@ impl Reactor {
         }
     }
 
-    /// Would the last `react` have gone no further over `span` seconds than a share `far` of
-    /// each reaction's inputs, nor than a `trace` of the amounts, nor heated by more than `dt_k`,
-    /// at its start (the rates and limits of its first sub-step)?
-    pub(super) fn calm(&self, span: f64, far: f64, trace: f64, dt_k: f64) -> bool {
-        let mut heat = 0.0;
-        for (r, &k) in self.kap0.iter().enumerate() {
-            let go = self.lim0[r] * k * span;
-            if k * span > far && go > trace {
-                return false;
-            }
-            heat += self.dh[r].abs() * go;
+    /// The longest the node of the last `react` may wait before it reacts again, s: until a reaction, at its rate at the
+    /// start of that `react`, would go further than a share `far` of its scarcest input (but for one that would use no
+    /// more than `trace` mol), or the heat of them all would change its temperature by more than `dt_k`. Infinite where
+    /// nothing reacts.
+    pub(super) fn rest(&self, far: f64, trace: f64, dt_k: f64) -> f64 {
+        let (mut most, mut heat) = (f64::INFINITY, 0.0);
+        for (r, &k) in self.kap0.iter().enumerate().filter(|e| *e.1 > 0.0) {
+            most = most.min((far / k).max(trace / (self.lim0[r] * k)));
+            heat += self.dh[r].abs() * self.lim0[r] * k;
         }
-        heat <= dt_k * self.cap0
-    }
-
-    /// Fastest rate, 1/s, among the reactions not driven by light that the amounts `n` of one
-    /// node can run at `t`.
-    pub(crate) fn fastest(&mut self, chem: &Chemistry, n: &[f64], t: f64) -> f64 {
-        let tot = self.phases(chem, n, None, t);
-        let mut best = 0.0f64;
-        for (r, rx) in chem.reactions.iter().enumerate() {
-            if rx.light || t < self.thr[r] {
-                continue;
-            }
-            let (lim, who) = scarce(&rx.inputs, |k| self.av[k]);
-            let k = rx.inputs[who].0 as usize;
-            if lim > 0.0 && (self.ph[k] == Phase::Solid || self.av[k] >= TRACE * tot[self.ph[k] as usize]) {
-                best = best.max(rx.arrhenius(t) * self.pace(rx, lim, &tot));
-            }
-        }
-        best
+        most.min(dt_k * self.cap0 / heat)
     }
 
     /// The rates of the last `phases` under a liquid whose film renews its gas in `film` s: each
@@ -323,7 +303,8 @@ impl Reactor {
                 any = true;
                 // (In a liquid or a gas that power is its order less 1, as far as it is not most of its phase.)
                 let k = rx.inputs[q].0 as usize;
-                self.pw[r] = if self.ph[k] != Phase::Solid { (rx.order(q) as f64 - 1.0) * (1.0 - self.av[k] / tot[self.ph[k] as usize]) } else { 0.0 };
+                let share = if self.ph[k] != Phase::Solid { self.av[k] / tot[self.ph[k] as usize] } else { 1.0 };
+                (self.pw[r], self.minor[r]) = ((rx.order(q) as f64 - 1.0) * (1.0 - share), share < TRACE);
             }
         }
         any
@@ -338,7 +319,7 @@ impl Reactor {
             self.far[r] = gone(self.kap[r] * left, self.pw[r]);
             if !self.lit[r] {
                 heat += self.dh[r].abs() * self.lim[r] * self.far[r];
-                if iter == 0 {
+                if iter == 0 && !self.minor[r] {
                     (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
                 }
             }

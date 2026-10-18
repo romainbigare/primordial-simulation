@@ -3,8 +3,9 @@
 
 use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
+use pcore::store::Class;
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{hold_ground, in_all, BURN, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{hold_ground, in_all, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -68,38 +69,38 @@ fn hot_energy_rich_node_keeps_burning() {
     assert!((en1 - en0).abs() <= 1e-9 * en0.abs(), "energy {en0} -> {en1}");
 }
 
-/// A ground node at 600 K holding the energy-rich solid (the one the light reaction makes) with the burning gas
-/// above it reacts in the very next step, whichever turn its block has.
+/// A ground node sleeps by its own rates (`clock::Sleep`): a node at 600 K holding the energy-rich solid with the
+/// burning gas above it burns far within a step, so it reacts again at the next step; a node holding only rock, where
+/// nothing reacts (the air holds none of the gas that burns in it alone), sleeps `sleep_days` after its first step.
 #[test]
-fn hot_node_reacts_in_the_next_step() {
-    let base = worldgen::new_world(1, 16, 16);
-    let chem = &base.chem;
-    // The roles found from the chemistry, as worldgen finds them.
-    let at = |k: u16| chem.phase(k as usize, 290.0);
-    let lit = (0..chem.reactions.len()).find(|&r| chem.reactions[r].light && chem.dh(r) > 0.0).expect("a light reaction");
-    let rich = chem.reactions[lit].outputs.iter().find(|p| at(p.0) == Phase::Solid).expect("a solid made").0 as usize;
-    let burn = (0..chem.reactions.len())
-        .find(|&r| chem.dh(r) < 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == rich) && chem.reactions[r].inputs.iter().any(|p| at(p.0) == Phase::Gas))
-        .expect("a burning reaction");
-    let (n, na, i) = (base.grid.n(), base.grid.na(), 17);
-    let j = base.grid.air_of(i);
-    for tick in 0..40 {
-        let mut w = base.clone();
-        w.scratch = Default::default();
-        w.time = 3 * tick * DAY_S;
+fn a_node_sleeps_by_its_own_rates() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    let (n, na, hot, cold) = (w.grid.n(), w.grid.na(), 17, 40);
+    for i in [hot, cold] {
         for k in 0..w.chem.ns() {
-            w.ground[k * n + i] = 0.0;
-            w.bed[k * n + i] = 0.0;
+            (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
         }
-        w.ground[rich * n + i] = 1000.0;
-        let tot: f64 = (0..w.chem.ns()).map(|k| w.air[k * na + j]).sum();
-        for p in w.chem.reactions[burn].inputs.clone().iter().filter(|p| at(p.0) == Phase::Gas) {
-            w.air[p.0 as usize * na + j] += 0.2 * tot;
-        }
-        w.e_ground[i] = w.energy_ground(i, 600.0);
-        change::step(&mut w, 3.0 * DAY);
-        assert!(w.ground[rich * n + i] < 999.0, "tick {tick}: amount left {}", w.ground[rich * n + i]);
     }
+    (w.ground[RICH * n + hot], w.ground[ROCK * n + cold]) = (1000.0, 1e5);
+    let j = w.grid.air_of(hot);
+    let tot: f64 = (0..w.chem.ns()).map(|k| w.air[k * na + j]).sum();
+    w.air[OX * na + j] += 0.2 * tot;
+    w.air[BURNING_GAS * na..(BURNING_GAS + 1) * na].fill(0.0);
+    w.e_ground[hot] = w.energy_ground(hot, 600.0);
+    let (step, sleep) = (w.cfg.phys_days as u64 * DAY_S, w.cfg.sleep_days as u64 * DAY_S);
+    let (hot, cold, start) = (w.table.id(Class::Ground, hot), w.table.id(Class::Ground, cold), w.time);
+    let mut cold_ran = Vec::new();
+    while w.time < start + sleep + step {
+        change::step(&mut w, step as f64);
+        w.time += step;
+        if w.time <= start + 2 * step {
+            assert_eq!(w.sleep.since(hot), w.time, "the hot node reacted in this step");
+        }
+        if w.sleep.since(cold) == w.time {
+            cold_ran.push(w.time - start);
+        }
+    }
+    assert_eq!(cold_ran, [step, sleep + step], "the steps the cold node reacted at");
 }
 
 /// Gas a ground reaction exchanges with the air crosses the height from the ground to the air's mean height: in a world
@@ -150,8 +151,7 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
         (w.ground[LIQUID * n + i], w.ground[RICH * n + i], w.ground[ROCK * n + i]) = (liquid, 10.0, 1e5);
         let tm = w.chem.subs[LIQUID].melt;
         w.e_ground[i] = if half { w.energy_ground(i, tm) - 0.5 * liquid * w.chem.subs[LIQUID].lf } else { w.energy_ground(i, tm - 1e-6) };
-        // A tick at which every block reacts at its turn for all the time since its first.
-        (w.scratch, w.time) = (Default::default(), 4000 * w.cfg.phys_days as u64 * DAY_S);
+        w.scratch = Default::default();
         assert_eq!(w.thaw(i).1.map(|p| p.0), half.then_some(LIQUID));
         let dt = w.cfg.phys_days as f64 * DAY;
         change::step(&mut w, dt);
@@ -403,29 +403,6 @@ fn the_liquid_gives_back_the_gas_it_holds_when_the_air_thins() {
     // The mineral holds 2 units of the gas each.
     let given = 2.0 * (at400 - at200);
     assert!(given > 2.0 * air_loss, "gave {given} for an air loss of {air_loss}");
-}
-
-/// A cell at balance is calm: in a world whose only reactions are these two (others, such as the burning of a trace
-/// of gas, make warm cells react every step), over 39 steps (just under the 40 a cell waits between turns) each cell
-/// of the liquid reacts about once, not every step.
-#[test]
-fn a_cell_at_balance_does_not_react_every_step() {
-    let (mut chem, init) = worldgen::chemistry0();
-    chem.reactions = chem.reactions[DISSOLVING..].to_vec();
-    let mut w = worldgen::terrain::build(1, 24, 24, chem, &init, pcore::Config::default());
-    let n = w.grid.n();
-    let wet = (0..n).filter(|&i| w.ground[DISSOLVED * n + i] > 0.0).count();
-    let mut changes = 0;
-    for _ in 0..39 {
-        let before: Vec<f64> = w.ground[DISSOLVED * n..(DISSOLVED + 1) * n].to_vec();
-        change::step(&mut w, 3.0 * DAY);
-        w.time += 3 * DAY_S;
-        changes += (0..n).filter(|&i| w.ground[DISSOLVED * n + i] != before[i]).count();
-    }
-    eprintln!("{changes} changes of the mineral in 39 steps over {wet} cells");
-    assert!(wet > 100, "{wet} cells hold the mineral");
-    assert!(changes <= 3 * wet, "{changes} changes of the mineral in 39 steps over {wet} cells");
-    assert!(changes >= wet / 2, "{changes} changes: the cells do react at their turn");
 }
 
 /// The dissolved mineral in the pores of the land: worldgen puts none on land (the ground has no liquid at the start,

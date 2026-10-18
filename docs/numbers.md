@@ -63,7 +63,8 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `wake_share` | share | a move into a sleeping node that brings more than this share of what it holds of that amount, or of its heat, wakes it before its alarm (`clock::Sleep`, `store::apply`) | the share of its inputs a calm ground node's own reactions may use while it waits (`change`, `CALM`, 0.05): a move larger than that changes the node more than its sleep allowed | speed |
+| `wake_share` | share | a move into a sleeping node that brings more than this share of what it holds of that amount wakes it before its alarm (`clock::Sleep`, `store::apply`) | the share of its inputs a calm ground node's own reactions may use while it sleeps (`change`, `CALM`, 0.05): a move larger than that changes the node more than its sleep allowed | speed |
+| `sleep_days` | days | the longest a ground or air node's reactions sleep before they run again for the time since (`change::step`); 0: every node reacts at every physics step | a season, a quarter of the 360-day year: a node does not react through a whole season at the temperature of another (x2 and /2: `tape/tests/ranges.rs`, the sleep test) | speed |
 
 ## Physics
 
@@ -184,7 +185,7 @@ These are not numbers of the world and not rows of `Physics` or `Config`, but th
 
 ## Constants outside the structs that act like free numbers
 
-These are in the code, not in `Physics`. They are not covered by the test. Numerical safeguards (`T_FLOOR`, `MAX_DT_K`, `NEGLIGIBLE`...) and the schedules of the slow work (`REFRESH_MONTHS`, `REACT_MONTHS`, `LAZY`...) are left out: they change how fast or how exactly the laws run, not the laws' sizes.
+These are in the code, not in `Physics`. They are not covered by the test. Numerical safeguards (`T_FLOOR`, `MAX_DT_K`, `NEGLIGIBLE`...) and the schedules of the slow work (`REFRESH_MONTHS`, `REACT_MONTHS`...) are left out: they change how fast or how exactly the laws run, not the laws' sizes.
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
@@ -240,7 +241,7 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 109 rows of `Config` and `Physics` are their 109 fields.
+The 110 rows of `Config` and `Physics` are their 110 fields.
 
 | mark | rows | which |
 |---|---|---|
@@ -249,7 +250,7 @@ The 109 rows of `Config` and `Physics` are their 109 fields.
 | tuned (run or reason named) | 18, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 4 | `share_brains`, `nodes`, `two_parents`, `null` |
-| speed | 1 | `wake_share` |
+| speed | 2 | `wake_share`, `sleep_days` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 61 (54 in the structs, 7 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

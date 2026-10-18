@@ -208,9 +208,6 @@ pub struct Scratch {
     pub(super) rad: Vec<f64>,
     /// Time since trace gases last evaporated and condensed, s, and the calls since.
     pub(super) trace: [f64; 2],
-    /// Law 2 (`change`): per ground node, the tick it last reacted slowly, the tick it next does,
-    /// and the steps it reacted on its own since.
-    pub(crate) slow: Vec<[u32; 3]>,
 }
 
 impl Scratch {
