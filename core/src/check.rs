@@ -103,9 +103,10 @@ pub fn broken(w: &World) -> Option<String> {
     let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
     let above_0 = |x: f64| x.is_finite() && x > 0.0;
     let amounts = [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("deep", &w.deep), ("light_pool", &w.light_pool)];
-    let found = (amounts.into_iter().chain([("e_deep", &w.e_deep), ("light", &w.light)]))
+    // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
+    let energies = [("e_ground", &w.e_ground), ("e_air", &w.e_air), ("e_deep", &w.e_deep), ("light", &w.light)];
+    let found = (amounts.into_iter().chain(energies))
         .find_map(|(name, v)| first_bad(name, v, at_least_0))
-        .or_else(|| [("e_ground", &w.e_ground), ("e_air", &w.e_air)].into_iter().find_map(|(name, v)| first_bad(name, v, above_0)))
         // The heat pool goes below 0 where bodies gave the ground heat ahead.
         .or_else(|| first_bad("heat_pool", &w.heat_pool, f64::is_finite))
         .or_else(|| {

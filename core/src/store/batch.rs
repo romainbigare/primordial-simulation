@@ -62,6 +62,10 @@ impl Batch {
             self.link((0, i), q);
         }
     }
+    /// Whether no link is in it yet.
+    pub fn is_empty(&self) -> bool {
+        self.a.is_empty()
+    }
     /// The batch as a link flux, for `apply`.
     pub fn flux(&mut self) -> LinkFlux<'_> {
         self.flat = self.mol.concat();

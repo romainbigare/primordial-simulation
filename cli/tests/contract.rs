@@ -9,8 +9,8 @@ const ARRAYS: [&str; 9] = ["ground", "e_ground", "air", "e_air", "deep", "e_deep
 const WORLD: [&str; 3] = ["w", "ww", "self"];
 
 /// The folders and files of `core/src` that keep the contract, and the files there that may not yet: `Sky::cross` is
-/// the way bodies, parts, ground reactions and growth change the air until they move through the store (plan D6, E7).
-const KEPT: [&str; 1] = ["flow"];
+/// the way bodies, parts and growth change the air until they move through the store (plan E7).
+const KEPT: [&str; 2] = ["flow", "change"];
 const NOT_YET: [&str; 1] = ["flow/air/sky.rs"];
 
 /// Does `line` (code, without its comment) write one of `ARRAYS`: an index of it on the left of an assignment, the

@@ -8,9 +8,9 @@ use crate::World;
 /// Gas going up is lifted from the head of the ground node it leaves to the mean height of its air node; the air pays
 /// the lift from its heat (its expansion does the work). Gas coming down falls the same height, and the fall heats the
 /// air it falls through. The world holds the difference as potential energy (`World::potential`), so a gas that goes
-/// up and comes down again leaves the energy as it was. Every path by which gas enters or leaves the air goes through
-/// `cross`: evaporation, condensation and dissolving (`air::exchange`), the gas of ground reactions (`change`), of
-/// bodies (`body`), of parts (`bond`) and of growth (`copy`). The caller moves the gas's own heat and latent enthalpy.
+/// up and comes down again leaves the energy as it was. The gas of bodies (`body`), of parts (`bond`) and of growth
+/// (`copy`) crosses so, until they move through the store; Flow's exchange and Change book the same as link fluxes
+/// with the potential's node (`store::Batch::falls`). The caller moves the gas's own heat and latent enthalpy.
 pub(crate) struct Sky<'a> {
     pub(crate) chem: &'a Chemistry,
     pub(crate) air: &'a mut [f64],

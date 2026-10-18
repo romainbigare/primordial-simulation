@@ -440,6 +440,11 @@ The work of `docs/foundation/plan.md`, one line per task.
 - `store::Batch`: a link flux gathered link by link (`add`, `link`, `carry`; `falls` and `fall` for the heat of falls
   and lifts with the potential's node). The exchange's passes, creep and every fall of Flow use it (`flow::Falls`
   and the exchange's own link lists deleted). Same results (golden unchanged).
+- Change books the gas between each ground node and its air node as link fluxes, one per substance (`store::Batch`,
+  was a `Move` for each node and gas), and the lift as a flux with the potential (its writes to `e_air` and
+  `World::potential` deleted; `cli/tests/contract.rs` covers `change/`). `check::broken` lets a heat reach 0 J, where
+  `apply` stops what takes from it. Without life the same (16 x 16, seeds 1 to 3, 2 years: series equal); with life
+  the gas wakes an air node by its net change. Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

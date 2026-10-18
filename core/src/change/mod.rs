@@ -16,9 +16,9 @@
 //! A ground or an air node reacts when it is due (`clock::Sleep`), for all the time since it last did: the kernel
 //! integrates the rate law over a span. Then it sleeps until its own rates would change it by more than a share `CALM`
 //! (`Reactor::rest`), at most `Config::sleep_days`; a node where a reaction goes that far within a step reacts every
-//! step. A move booked by `store::apply` that brings it more than `Config::wake_share` of an amount wakes it. What
-//! reaches it outside `apply` (radiation and the exchange with the air, Flow's; what bodies take and give) and the
-//! change of its temperature do not wake it: `sleep_days` bounds how long it reacts without them.
+//! step. A call of `store::apply` that brings it more than `Config::wake_share` of an amount wakes it. What reaches it
+//! outside `apply` (what bodies take and give) and the change of its temperature do not wake it: `sleep_days` bounds
+//! how long it reacts without them.
 //!
 //! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `gas`: the gas a body or a part
 //! exchanged with the air around it. Here: the step over the ground and air nodes, booked by `store::apply`.
@@ -34,7 +34,7 @@ pub(crate) use kernel::{denature, frac, pace, scarce};
 
 use crate::chem::{Chemistry, Phase};
 use crate::flow::FlowView;
-use crate::store::{apply, Class, Move, NodeId, Transform};
+use crate::store::{apply, Batch, Class, LinkFlux, NodeId, Transform};
 use crate::World;
 
 /// A node sleeps until its reactions would go further than this share of their inputs (but for reactions on a `SPECK`
@@ -62,7 +62,7 @@ pub fn step(w: &mut World, dt: f64) {
         }
         let mut due: Vec<_> = w.sleep.due(class, w.time).into_iter().map(|id| (w.table.place(id).1, id)).collect();
         due.sort_unstable();
-        let (mut b, nodes) = (Booked { lift: vec![0.0; w.grid.na()], ..Booked::default() }, w.scratch.view());
+        let (mut b, nodes) = (Booked::new(w.grid.na(), ns), w.scratch.view());
         let rests: Vec<u64> = (due.iter())
             .map(|&(i, id)| {
                 let (span, amounts) = (end.saturating_sub(w.sleep.since(id)) as f64, if class == Class::Ground { &w.ground } else { &w.air });
@@ -98,18 +98,25 @@ struct Held {
 
 /// What the nodes of one class that react in a step change, booked by `store::apply` after they all reacted: the gas
 /// the ground nodes take from the air, their reactions, then the gas they give it, each in its own call, as each takes
-/// what the one before brought (`apply` scales a change by what a node holds before the call). Each air node pays the
-/// lift of the gas that goes up into it into the world's potential energy, outside `apply` (as `Sky::cross` books it).
-#[derive(Default)]
+/// what the one before brought (`apply` scales a change by what a node holds before the call). The gas crosses the
+/// links from each ground node to its air node, + up into the air: the air receives the heat that leaves the ground
+/// less the latent heat it holds of the gas (`store::held`). Each air node pays the lift of the gas that goes up into
+/// it into the world's potential energy (as `Sky::cross` books it). The gas is a flux for each substance (indexed by
+/// it): a node exchanges a few of them, so no link carries the others.
 struct Booked {
-    taken: Vec<Move>,
+    taken: Vec<Batch>,
     reactions: Vec<Transform>,
-    given: Vec<Move>,
+    given: Vec<Batch>,
     /// Per air node, J
     lift: Vec<f64>,
 }
 
 impl Booked {
+    /// Nothing booked yet, for a world of `na` air nodes and `ns` substances.
+    fn new(na: usize, ns: usize) -> Booked {
+        let gas = || (0..ns as u16).map(|k| Batch::new([Class::Ground, Class::Air], &[k])).collect();
+        Booked { taken: gas(), reactions: Vec::new(), given: gas(), lift: vec![0.0; na] }
+    }
     /// The reactions of node `at` in the last `rc.react`: what they made less what they used of each substance, mol,
     /// into `made` (`Reactor::made`), noted as one transform.
     fn transform(&mut self, chem: &Chemistry, at: NodeId, rc: &mut Reactor, made: &mut [f64]) {
@@ -120,15 +127,18 @@ impl Booked {
         }
     }
     /// Book it all on the world.
-    fn book(self, w: &mut World) {
-        for (moves, transforms) in [(&self.taken[..], &[][..]), (&[], &self.reactions[..]), (&self.given[..], &[])] {
-            if !(moves.is_empty() && transforms.is_empty()) {
-                apply(w, &[], moves, transforms);
-            }
+    fn book(mut self, w: &mut World) {
+        let mut lift = Batch::falls(Class::Air);
+        self.lift.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
+        fn gas(v: &mut [Batch]) -> Vec<LinkFlux<'_>> {
+            v.iter_mut().filter(|b| !b.is_empty()).map(|b| b.flux()).collect()
         }
-        for (e, lift) in w.e_air.iter_mut().zip(self.lift) {
-            (*e, w.potential) = (*e - lift, w.potential + lift);
+        apply(w, &gas(&mut self.taken), &[], &[]);
+        if !self.reactions.is_empty() {
+            apply(w, &[], &[], &self.reactions);
         }
+        let given = [gas(&mut self.given), vec![lift.flux()]].concat();
+        apply(w, &given, &[], &[]);
     }
 }
 
@@ -150,7 +160,7 @@ fn film(w: &World, amt: &[f64], t: f64) -> f64 {
 /// (`FlowView::fused`), so a node on a plateau reacts at its melting point. Gas taken from the air brings its heat at the
 /// air's temperature and gives back its fusion and vaporisation enthalpy (`store::held`); gas given to it takes its
 /// share of the node's heat by heat capacity and that enthalpy, so gas the node cannot pay for stays in it
-/// (`store::apply` scales the move).
+/// (`store::apply` scales the flux).
 fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i, id): (usize, NodeId), time: f64, b: &mut Booked) {
     let (chem, na) = (&w.chem, w.grid.na());
     let (t, j, air_share) = (nodes.tg[i], nodes.air_of[i] as usize, w.grid.air_share(i));
@@ -168,14 +178,14 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i,
     // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.
     let c_out = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].cp).sum::<f64>();
     let per_c = e.max(0.0) / (cap(&h.amt) + c_out).max(1e-9);
-    let (air, lift) = (w.table.id(Class::Air, j), nodes.lift(i, w.cfg.gravity));
+    let lift = nodes.lift(i, w.cfg.gravity);
     for (k, m) in (0..chem.ns()).map(|k| (k, gas(k))).filter(|e| e.1 != 0.0) {
         let s = &chem.subs[k];
         b.lift[j] += m * s.molar_mass * lift;
         if m > 0.0 {
-            b.given.push(Move { from: id, to: air, k: k as u16, mol: m, heat: m * (s.latent_gas() + s.cp * per_c) });
+            b.given[k].add((i, j), k as u16, (m, m * (s.latent_gas() + s.cp * per_c)));
         } else {
-            b.taken.push(Move { from: air, to: id, k: k as u16, mol: -m, heat: -m * s.cp * nodes.ta[j] });
+            b.taken[k].add((i, j), k as u16, (m, m * (s.cp * nodes.ta[j] + s.latent_gas())));
         }
     }
 }

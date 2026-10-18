@@ -236,8 +236,8 @@ layer. Height is what the body's materials hold up (3.6). Rain on bodies is shar
 - **Booked by the store.** Each pass (evaporation, condensation, dissolving) is booked at its end
   in one call: a link from each ground node to its air node carries the gas and the heat that
   leaves the ground; the air receives that heat less the latent heat it holds of the gas
-  (`store::held`). Each pass reads the air as it was before it. Bodies, parts, ground reactions
-  and growth still change the air through `flow::Sky::cross` (`flow/air/sky.rs`).
+  (`store::held`). Each pass reads the air as it was before it. Bodies, parts and growth
+  still change the air through `flow::Sky::cross` (`flow/air/sky.rs`).
 - **Gases dissolve** (`exchange::dissolve`). A gas that cannot condense on the ground dissolves
   in the liquid there toward Henry's share (solubility × partial pressure × the liquid's amount),
   and comes out when the liquid warms, thins or freezes. It crosses the surface through the
@@ -348,12 +348,12 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
   formation enthalpies (`store::held`).
 - **A ground node reacts at Flow's last temperature.** On a melting plateau that is the melting
   point: the fusion heat it holds is set aside while it reacts (`FlowView::fused`).
-- **Gas a ground node takes or gives** moves between it and its air node as `store::Move`s: first
-  the gas it takes, then its reactions, then the gas it gives, each booked in its own call, as
-  each needs what the one before brought. Gas taken brings its heat at the air's temperature and
+- **Gas a ground node takes or gives** crosses the link between it and its air node, one link
+  flux for each substance (`store::Batch`): first the gas the nodes take, then their reactions,
+  then the gas they give, each booked in its own call, as each needs what the one before brought. Gas taken brings its heat at the air's temperature and
   gives the node back its latent heat; gas given takes its share of the node's heat by heat
-  capacity and its latent heat. The air node pays the lift (1.5). `apply` scales the gas the node
-  cannot pay for, so it stays in the node. Parts and bodies settle their gas through
+  capacity and its latent heat. The air node pays the lift (1.5), a link flux to the potential.
+  `apply` scales the gas a node cannot pay for, so it stays in the node. Parts and bodies settle their gas through
   `change::GasMove` and `change::send_gas` (`change/gas.rs`) in the same way.
 - **Parts** (`bond::step`): every 6 months, for that time, at their cell's temperature, with
   the air; their gas is settled with the air as a ground node's is.
