@@ -663,6 +663,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   version 23. The same world by another path (the genes' random draws moved): 64 x 64, years 26 to 35, seeds 1 and
   2: plant members -8% and -6%, eaters 1.25 and 1.3 times their mass, land -0.1 and +0.1 K, carbon gas -7 and +6 ppm.
   Golden re-pinned.
+- E6 (F): a node's children have one parent; individuals keep two (its members already mix inside it). 64 x 64,
+  years 30 to 35, seeds 1 and 2: plant members -4% and +10%, life of plants 3.10 to 2.99 and 2.47 to 2.78 yr,
+  animal members 1106 to 1143 and 752 to 485, land and carbon gas the same; the share of the bodies' time in
+  `copy` 20% to 19%. Golden re-pinned.
 
 **Phase J: the long physics step**
 

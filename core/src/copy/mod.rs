@@ -39,10 +39,11 @@ struct Litter {
 /// A mature body makes offspring from its brood. A child has a body of 10^`CHILD` of its parent's copy mass: matter of
 /// 1 - `WET_TISSUE` of that, taken from the brood, and provisions of every other store (`provisions`), with its share of
 /// the heat. A child is made whenever the brood covers one: an individual has whole children, a node (members who all
-/// do the same) fractional members, as many as the brood makes. Their genes and born rows are one parent's or a
-/// partner's (`mix::partner`; the same partner for all the children of the call). A body that is not mature
-/// (`Body::adult`) makes none. A share of a node's children (the `DISPERSE` gene) starts in a random neighbour cell;
-/// an individual's children stay together, in a neighbour cell with that chance.
+/// do the same) fractional members, as many as the brood makes. An individual's children have one parent or two
+/// (`mix::partner`; the same partner for all the children of the call); a node's have one, as its members already mix
+/// their genes among themselves (it keeps one variance per gene and no covariances: free recombination, Bulmer 1971). A
+/// body that is not mature (`Body::adult`) makes none. A share of a node's children (the `DISPERSE` gene) starts in a
+/// random neighbour cell; an individual's children stay together, in a neighbour cell with that chance.
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.dec(COPY_MASS));
     let Some(mi) = chem.matter() else { return false };
@@ -63,7 +64,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let id = b.id(slot);
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
-    let mate = partner(w, slot, b, &mut r);
+    let mate = if node { None } else { partner(w, slot, b, &mut r) };
     // Children that start in a neighbour cell (off the map: none): of a node, a share (none if less than one member); an
     // individual's go together, by that chance.
     let d = b.gene_in_range(DISPERSE);

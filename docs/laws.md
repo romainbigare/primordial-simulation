@@ -607,9 +607,11 @@ node and who merges.
 
 ### 4.3 Two parents
 
-When a mature body makes children, it looks in its own cell for a **partner** (`partner` in
+When a mature individual makes children, it looks in its own cell for a **partner** (`partner` in
 `copy/mix.rs`): another mature body alike to it, the most alike one (a keyed random pick among
-equals), never itself.
+equals), never itself. A node's children have one parent: its members already mix their genes
+among themselves (a node keeps one variance per gene and no covariances, which is free
+recombination, Bulmer 1971), so a second parent would only do early what the monthly merge does.
 
 - Each gene of the children is one parent's, drawn gene by gene. Each born brain row is one
   parent's, drawn row by row (a row is kept whole). Then the normal mutation.

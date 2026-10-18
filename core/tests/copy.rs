@@ -945,60 +945,6 @@ fn the_partner_loses_nothing() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A node's children by two nodes of as many members have the mean between the two and the spread a merge of the
-/// two would pool: each one's spread by its share plus the squared gap of the means times the share of each, per
-/// gene (a quarter at halves); a node with a partner of a tenth of its members takes a tenth of its genes.
-#[test]
-fn a_nodes_mixed_children_have_the_pooled_spread() {
-    let (mut w, i) = start();
-    let lay = Layout::of(&w.chem);
-    let (sa_, sb_, gap) = (0.01f32, 0.03f32, 2.0f32);
-    let members = 20_000.0;
-    for (n_b, p) in [(members, 0.5f32), (members / 10.0, 1.0 / 11.0)] {
-        let (s, mut a, sb) = pair(&mut w, i, gap);
-        // Both are nodes: the stores of their members, a spread in every catalyst gene.
-        scale(&mut w, &mut a, members);
-        a.count = members;
-        a.spread = vec![0.0; lay.len];
-        let mut b = std::mem::take(&mut w.life.bodies[sb]);
-        scale(&mut w, &mut b, n_b);
-        b.count = n_b;
-        b.spread = vec![0.0; lay.len];
-        for g in lay.cat..lay.min {
-            (a.spread[g], b.spread[g]) = (sa_, sb_);
-        }
-        w.life.bodies[sb] = b;
-        // A brood of 2,000 children (members of the new node).
-        brood(&w, &mut a, 2000.0);
-        w.time += DAY_S;
-        assert!(a.adult(&w.chem) && w.life.bodies[sb].adult(&w.chem));
-        w.events.clear();
-        assert!(copy::copy(&mut w, s, &mut a));
-        // (The brood over the child's matter is a float, within rounding of 2,000.)
-        assert!((mixed(&w).0 - 2000.0).abs() < 1e-9 * 2000.0, "{} children", mixed(&w).0);
-        let c = w.life.bodies.iter().find(|c| c.alive && c.parent == a.id(s)).expect("the children").clone();
-        assert!((c.count - 2000.0).abs() < 1e-6 * 2000.0, "{} members", c.count);
-        for g in lay.cat..lay.min {
-            // The mean: a's plus the share p of the gap (the share drawn is p within a few thousandths).
-            let mean = BASE + p * gap * STEP;
-            let sd = (p * (1.0 - p) / 2000.0).sqrt() * STEP * gap;
-            assert!((c.genes[g] - mean).abs() < 4.5 * sd + 0.002, "gene {g}: mean {} not {mean} (sd {sd})", c.genes[g]);
-            // The spread: pooled, less the share of it a group of 2,000 does not keep among itself.
-            let want = ((1.0 - p) * sa_ + p * sb_ + p * (1.0 - p) * (gap * STEP).powi(2)) * (1.0 - 1.0 / 2000.0);
-            // (The share drawn is p within a few of its standard deviations, which moves the pooled spread by their effect.)
-            let sd = (p * (1.0 - p) / 2000.0).sqrt();
-            let tol = 4.5 * sd * ((1.0 - 2.0 * p).abs() * (gap * STEP).powi(2) + (sb_ - sa_)) + 0.01 * want;
-            assert!((c.spread[g] - want).abs() < tol, "gene {g}: spread {} not {want} (p {p}, tolerance {tol})", c.spread[g]);
-        }
-        // The partner's spread is unchanged, and the other genes are as theirs (the same in both).
-        assert_eq!(w.life.bodies[sb].spread[lay.cat], sb_);
-        w.life.bodies[s] = a;
-        // (The next pair is in a world of its own.)
-        let (w2, _) = start();
-        w = w2;
-    }
-}
-
 /// Slots of the live bodies.
 fn live(w: &pcore::World) -> Vec<usize> {
     (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).collect()
