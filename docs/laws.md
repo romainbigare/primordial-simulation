@@ -691,12 +691,17 @@ the same patterns as individuals.
   update stands for the other side, and since the side is drawn, the error of that one-sided
   difference averages out. This is the breeder's equation, the change of a mean is its genetic
   variance times the gradient of log fitness (Lande 1976; Falconer and Mackay 1996). A gene that
-  does nothing gains nothing and does not move, so where the drawn gene cannot change the gain no
-  sample is run: a gene the update as far as its growth never reads in a node without a brain
-  (`copy::select::UNREAD`: those of its children, `CHILD`, `MUT`, `DISPERSE`, `WET`, `ALLOC`,
-  read when children are made, and those of a brain), or a gene that is off on both sides. These
-  genes move only by selection between nodes. A node with a brain has none: its update is also
-  its decisions, which act on the world.
+  does nothing gains nothing and does not move, so where the step cannot change the gain no
+  sample is run (`copy::select::read`, exact by what the update reads): a scalar gene the update
+  as far as its growth never reads in a node without a brain (`UNREAD`: those of its children,
+  `CHILD`, `MUT`, `DISPERSE`, `WET`, `ALLOC`, read when children are made, and those of a brain);
+  a gene of a reaction or a substance that is off at both ends; an uptake gene, unless it turns
+  the roots on or off for a substance that does not dissolve (the update reads only that); and a
+  keep gene, unless its substance is the body matter, a solid it builds, one of its key liquids,
+  a product of a reaction it catalyses, a liquid that dissolves (soaked up) or what its roots
+  take (the update reads the level it keeps only for those). These genes move only by selection
+  between nodes. A node with a brain has none: its update is also its decisions, which act on
+  the world.
 - **Members as individuals.** A node does an action of Bond through one member split off as an
   individual (`nodes::one`); if it then holds something or is inside, it lives on alone, else it
   goes straight back, and the node's rows and their spread stay as they were. `nodes::open` draws

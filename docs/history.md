@@ -738,6 +738,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   bodies 1740 and 1718 ms/yr; the world the same to four digits (the sample's scratch of the reactor no longer runs
   before the node's update, so the last digits move). Drawing only among the genes read, the number of genes as the
   multiplier, ran as many samples and saved nothing. Golden re-pinned.
+- E12, speed: no sample either for an uptake or keep gene the update cannot read (`copy::select::read`: uptake only
+  as the roots' on or off for what does not dissolve; keep only for the matter, built solids, key liquids, products of
+  catalysed reactions, liquids that dissolve and what the roots take). 64 x 64, seed 1, 30 years, side by side:
+  samples 230,600 to 153,400 in 5 years, their time -35% (22% of the bodies' time, from 31%), the world the same to
+  four digits. Golden re-pinned.
 
 **Phase J: the long physics step**
 
