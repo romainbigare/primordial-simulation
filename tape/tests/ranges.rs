@@ -52,6 +52,10 @@ const PLANT_LIFE: f64 = 1.895;
 /// The factor either way the light-eaters' life may lie from `PLANT_LIFE`: wider than the others' 2, as the A2
 /// light-eaters paid for a brain that light-eaters no longer have (`docs/foundation/plan.md`, E9), so they live longer.
 const PLANT_LIFE_RANGE: f64 = 3.0;
+/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, as the A2 eaters shared
+/// the brain rows of their group and learned slower than a body that learns into its own rows (`docs/foundation/plan.md`,
+/// E10).
+const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the A2 reference runs.
 const EATER_LIFE: f64 = 2.914;
 
@@ -89,7 +93,7 @@ const KEYS: [(&str, &str, f64, Range); 10] = [
     ("river cells", "", RIVERS, Range::Times(1.5)),
     ("land worn down", "mm/yr", WORN, Range::Times(2.0)),
     ("light-eaters", "log10 kg", PLANT_KG, Range::Plus(0.3)),
-    ("eaters", "log10 kg", EATER_KG, Range::Plus(0.3)),
+    ("eaters", "log10 kg", EATER_KG, Range::Plus(EATER_KG_RANGE)),
     ("life of light-eaters", "yr", PLANT_LIFE, Range::Times(PLANT_LIFE_RANGE)),
     ("life of eaters", "yr", EATER_LIFE, Range::Times(2.0)),
 ];

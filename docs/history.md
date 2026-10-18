@@ -590,6 +590,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   +1.4 K, plant members +20%; the mesh's overturning carries a vapour as if it filled its column, so the vapour the
   lower half brings to the warmer column is lost. Not kept (a probe on a branch).
 - A fix, the tape: a resumed tape reads the viewer file's series without the columns that had no value yet at the snapshot, as the unbroken run did not have them, so a kind's catalyst column that first appears later reads NaN, not 0, in the years replayed. No world change; the golden fingerprints stay.
+- The owner widens the key-number range of the eaters' mass to ± 0.5 log10 (`tape/tests/ranges.rs`): learning into
+  their own rows, they weigh 1.6 to 2 times more than the reference eaters (4.88 against 4.497, three seeds).
 - The owner widens the key-number range of the light-eaters' life to x/÷ 3 (`tape/tests/ranges.rs`): without a brain
   they live about twice as long as the reference light-eaters (4.07 against 1.895 years, three seeds).
 - The plan and the handover follow an ablation hunt (64 x 64, 32 and 60 years, two seeds): E10 culls shared group
