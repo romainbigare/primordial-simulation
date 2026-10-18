@@ -510,6 +510,9 @@ The work of `docs/foundation/plan.md`, one line per task.
 - D12 (test): the sleep test (`tape/tests/ranges.rs`) also runs `wake_share` x2 and /2 against every node awake; the
   chemistry's key numbers move by 6 to more than 100 times less than their noise at every setting. The ten key
   numbers stay in their ranges (three seeds, 30 years, 64 x 64).
+- D11 (speed): `store::apply` books a link flux column by column into its one or two arrays, and its element check
+  reuses one room for the sums. Same results (golden unchanged). 32 x 32, seed 1, 4 years, instructions against the
+  start of D11: Flow -1.8% and Change -4.6% without life, Flow -1.6% and Change -2.1% with life.
 
 **Phase E: the life engine**
 

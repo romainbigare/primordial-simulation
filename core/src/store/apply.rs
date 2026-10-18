@@ -31,6 +31,35 @@ struct Slot {
     at: usize,
 }
 
+/// One column of a link flux (a substance, or the heat): from array `arr[0]` (`ARRAYS`) at the links' `a` ends to array
+/// `arr[1]` at their `b` ends, where the number of node `i` is at `at[end] + i`; `out[l]` leaves the `a` end of link `l`
+/// and `into[l]` enters its `b` end.
+struct Column<'x> {
+    arr: [usize; 2],
+    at: [usize; 2],
+    a: &'x [u32],
+    b: &'x [u32],
+    out: &'x [f64],
+    into: &'x [f64],
+}
+
+impl Column<'_> {
+    /// Each change it makes, link by link.
+    #[inline(always)]
+    fn each(&self, mut f: impl FnMut(Slot, f64)) {
+        for (((&a, &b), &out), &into) in self.a.iter().zip(self.b).zip(self.out).zip(self.into) {
+            f(Slot { arr: self.arr[0], at: self.at[0] + a as usize }, -out);
+            f(Slot { arr: self.arr[1], at: self.at[1] + b as usize }, into);
+        }
+    }
+}
+
+/// A change of a call: a whole column of a link flux, or one number's change by a move or a transform.
+enum Change<'x> {
+    Column(Column<'x>),
+    One(Slot, f64),
+}
+
 /// What `apply` reads besides the changes: the chemistry, the node table and the count of the nodes of each class.
 struct Ctx<'w> {
     chem: &'w Chemistry,
@@ -45,50 +74,55 @@ fn booked(table: &Nodes, id: NodeId) -> (usize, usize) {
     (class as usize, i)
 }
 
-/// Each change of the call to a number, in order: each link flux's substances, then its heat, link by link (what
-/// leaves the `a` end enters the `b` end; the `b` end receives the heat less what the mol hold more there, `lifted`);
-/// then each move; then each transform.
-fn each_change(cx: &Ctx, (fluxes, lifted): (&[LinkFlux], &[Vec<f64>]), moves: &[Move], transforms: &[Transform], mut f: impl FnMut(Slot, f64)) {
+/// Each change of the call, in order: each link flux's columns, its substances then its heat (the `b` end receives the
+/// heat less what the mol hold more there, `lifted`); then each move's and each transform's changes, number by number.
+fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]), moves: &[Move], transforms: &[Transform], mut f: impl FnMut(Change<'x>)) {
     let (chem, len) = (cx.chem, &cx.len);
     for (x, lifted) in fluxes.iter().zip(lifted) {
-        let (c, links) = (x.class.map(|c| c as usize), x.a.len());
+        let (c, links, (a, b)) = (x.class.map(|c| c as usize), x.a.len(), (x.a, x.b));
         for (q, &k) in x.ks.iter().enumerate() {
-            let at = c.map(|c| k as usize * len[c]);
-            for ((&a, &b), &m) in x.a.iter().zip(x.b).zip(&x.mol[q * links..(q + 1) * links]) {
-                f(Slot { arr: 2 * c[0], at: at[0] + a as usize }, -m);
-                f(Slot { arr: 2 * c[1], at: at[1] + b as usize }, m);
-            }
+            let m = &x.mol[q * links..(q + 1) * links];
+            f(Change::Column(Column { arr: c.map(|c| 2 * c), at: c.map(|c| k as usize * len[c]), a, b, out: m, into: m }));
         }
         let into = if lifted.is_empty() { x.heat } else { lifted };
-        for (((&a, &b), &out), &into) in x.a.iter().zip(x.b).zip(x.heat).zip(into) {
-            f(Slot { arr: 2 * c[0] + 1, at: a as usize }, -out);
-            f(Slot { arr: 2 * c[1] + 1, at: b as usize }, into);
-        }
+        f(Change::Column(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], a, b, out: x.heat, into }));
     }
+    let mut one = |arr, at, d| f(Change::One(Slot { arr, at }, d));
     for m in moves {
         let (((cf, i), (ct, j)), k) = ((booked(cx.table, m.from), booked(cx.table, m.to)), m.k as usize);
         let into = m.heat - m.mol * (held(chem, Class::ALL[ct], k) - held(chem, Class::ALL[cf], k));
-        f(Slot { arr: 2 * cf, at: k * len[cf] + i }, -m.mol);
-        f(Slot { arr: 2 * cf + 1, at: i }, -m.heat);
-        f(Slot { arr: 2 * ct, at: k * len[ct] + j }, m.mol);
-        f(Slot { arr: 2 * ct + 1, at: j }, into);
+        one(2 * cf, k * len[cf] + i, -m.mol);
+        one(2 * cf + 1, i, -m.heat);
+        one(2 * ct, k * len[ct] + j, m.mol);
+        one(2 * ct + 1, j, into);
     }
     for t in transforms {
         let (c, i) = booked(cx.table, t.at);
         let mut q = 0.0;
         for &(k, d) in &t.dmol {
-            f(Slot { arr: 2 * c, at: k as usize * len[c] + i }, d);
+            one(2 * c, k as usize * len[c] + i, d);
             q -= d * held(chem, Class::ALL[c], k as usize);
         }
-        f(Slot { arr: 2 * c + 1, at: i }, q);
+        one(2 * c + 1, i, q);
     }
 }
 
-/// Does `dmol` keep every element of the chemistry's table, to rounding?
-fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)]) -> bool {
-    let (mut sums, mut size) = (vec![0.0; chem.n_elements], 0.0);
+/// Adds `d` to number `s`, `v`, noting it in `low` when it falls below zero (but of a node that gives all it is asked).
+#[inline(always)]
+fn add(v: &mut f64, s: Slot, d: f64, low: &mut Vec<Slot>) {
+    let was = *v;
+    *v += d;
+    if *v < 0.0 && was >= 0.0 && s.arr < BOUNDARY_ARRAYS {
+        low.push(s);
+    }
+}
+
+/// Does `dmol` keep every element of the chemistry's table, to rounding? `sums` is room for the element totals.
+fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bool {
+    let mut size = 0.0;
+    sums.fill(0.0);
     for &(k, d) in dmol {
-        chem.add_elems(k as usize, d, &mut sums);
+        chem.add_elems(k as usize, d, sums);
         size += d.abs() * chem.subs[k as usize].elems.iter().map(|&c| c as f64).sum::<f64>();
     }
     sums.iter().all(|e| e.abs() <= ELEMENT_ROUNDING * size)
@@ -112,19 +146,24 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         let shaped = x.class.iter().all(|&c| (c as usize) < BOOKED) && x.b.len() == links && x.mol.len() == x.ks.len() * links && heat;
         assert!(shaped, "a link flux of the wrong shape");
     }
+    let mut sums = vec![0.0; chem.n_elements];
     for t in transforms {
-        assert!(keeps_elements(chem, &t.dmol), "a transform that does not keep its elements: {t:?}");
+        assert!(keeps_elements(chem, &t.dmol, &mut sums), "a transform that does not keep its elements: {t:?}");
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
     let mut books: [&mut [f64]; ARRAYS] = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..], &mut [], std::slice::from_mut(potential)];
-    // Each number of a node that falls below zero on the way: those that end there are among them.
+    // Each number of a node that falls below zero on the way: those that end there are among them. A column books into
+    // its one or two arrays.
     let mut low = Vec::new();
-    each_change(&cx, (fluxes, &lifted), moves, transforms, |s, d| {
-        let v = &mut books[s.arr][s.at];
-        let was = *v;
-        *v += d;
-        if *v < 0.0 && was >= 0.0 && s.arr < BOUNDARY_ARRAYS {
-            low.push(s);
+    each_change(&cx, (fluxes, &lifted), moves, transforms, |change| match change {
+        Change::One(s, d) => add(&mut books[s.arr][s.at], s, d, &mut low),
+        Change::Column(c) if c.arr[0] == c.arr[1] => {
+            let v = &mut *books[c.arr[0]];
+            c.each(|s, d| add(&mut v[s.at], s, d, &mut low));
+        }
+        Change::Column(c) => {
+            let [p, q] = books.get_disjoint_mut(c.arr).expect("two arrays");
+            c.each(|s, d| add(if s.arr == c.arr[0] { &mut p[s.at] } else { &mut q[s.at] }, s, d, &mut low));
         }
     });
     low.sort_unstable();
@@ -133,10 +172,14 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     if cfg!(debug_assertions) && !low.is_empty() {
         // Per number below zero: the sum of its changes, and of their sizes.
         let mut sums = vec![[0.0; 2]; low.len()];
-        each_change(&cx, (fluxes, &lifted), moves, transforms, |s, d| {
+        let mut sum = |s: Slot, d: f64| {
             if let Ok(x) = low.binary_search(&s) {
                 sums[x] = [sums[x][0] + d, sums[x][1] + d.abs()];
             }
+        };
+        each_change(&cx, (fluxes, &lifted), moves, transforms, |change| match change {
+            Change::One(s, d) => sum(s, d),
+            Change::Column(c) => c.each(&mut sum),
         });
         for (s, [sum, size]) in low.iter().zip(sums) {
             let (v, len) = (&books[s.arr], cx.len[s.arr / 2]);
