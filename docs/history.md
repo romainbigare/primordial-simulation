@@ -584,6 +584,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   part's slot now counts from 0, so the keyed draw of a drifting raft changes: 64 x 64, seed 1, 20 years, the same
   history byte for byte; small roster worlds differ from year 3 only by that draw (with the old key, byte for byte).
   The year-20 snapshot 42.93 to 42.90 MB. Snapshot version 20, golden re-pinned.
+- The wind's two solvers measured, both kept: on 64 x 64 (256 air nodes, 930 links) a call takes 0.22 ms along lines
+  and 1.09 ms by `spread` on the mesh (best of 39, one thread), five times as long. Forced on the mesh, seed 1, years
+  11 to 20, the world is not the same: rain on land -28%, liquid on land -72%, river cells 503 to 104, land in summer
+  +1.4 K, plant members +20%; the mesh's overturning carries a vapour as if it filled its column, so the vapour the
+  lower half brings to the warmer column is lost. Not kept (a probe on a branch).
 
 **Owner's decisions after Phase A**
 
