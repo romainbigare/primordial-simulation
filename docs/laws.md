@@ -495,8 +495,10 @@ Files: `core/src/bond/` (`verbs` what bodies do to parts, `sense` what parts giv
 ### 3.1 Parts and structures
 
 - A **part** is a made object: solid walls, the liquid held in its hollow, heat, a size (3
-  numbers) and a hollowness. It is a node of the store (`Class::Part`): the node table gives it its
-  id and its cell, and gives its slot to a new part, with a new generation, when it is gone. It lies
+  numbers) and a hollowness. It is a node of the store (`Class::Part`) that comes and goes: its id is
+  its slot and generation (`bond::id`), and its slot goes to a new part, with a new generation, when
+  it is gone. A fixed node (ground, air, deep, the boundary nodes, the potential) is named by its class
+  and its index (`store::Node`). It lies
   in a cell or is held by a body. A body makes one with the action "form" (`bond::form`, cost
   `c_form` per kg), at most `form` of its mass.
 - A **bond** is a link (`bond::Bonds`, each bond once) that joins two parts, or a part and the

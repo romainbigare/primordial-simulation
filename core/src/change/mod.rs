@@ -35,7 +35,7 @@ pub(crate) use kernel::{denature, frac, pace, scarce};
 use crate::chem::{Chemistry, Phase};
 use crate::flow::FlowView;
 use crate::ground::share;
-use crate::store::{apply, Batch, Class, LinkFlux, NodeId, Transform};
+use crate::store::{apply, Batch, Class, LinkFlux, Node, Transform};
 use crate::{World, AIR};
 
 /// A node sleeps until its reactions would go further than this share of their inputs (but for reactions on a `SPECK`
@@ -57,39 +57,39 @@ pub fn step(w: &mut World, dt: f64) {
     let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], made: vec![0.0; ns] };
     for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n())] {
         let ground = class == Class::Ground;
-        w.sleep.watch(class, |i| w.table.id(class, i), len, if ground { &w.ground } else { &w.air }, w.cfg.wake_share, w.time);
+        w.sleep.watch(class, len, if ground { &w.ground } else { &w.air }, w.cfg.wake_share, w.time);
         // Before the law first runs, every node is due.
         if w.sleep.none(class) {
             for i in 0..len {
-                w.sleep.sleep(class, w.table.id(class, i), w.time, w.time);
+                w.sleep.sleep(class, i, w.time, w.time);
             }
         }
-        // By slot, so in the order of their cells.
-        let due: Vec<_> = w.sleep.due(class, w.time).into_iter().map(|id| (w.table.place(id).1, id)).collect();
+        // By index, so in the order of their cells.
+        let due = w.sleep.due(class, w.time);
         let (mut b, nodes) = (std::mem::take(&mut w.batches), w.scratch.view());
         b.clear(w.mesh.level(AIR).n(), ns);
         let rests: Vec<u64> = (due.iter())
-            .map(|&(i, id)| {
-                let (span, amounts) = (end.saturating_sub(w.sleep.since(id)) as f64, if ground { &w.ground } else { &w.air });
+            .map(|&i| {
+                let (span, amounts) = (end.saturating_sub(w.sleep.since(class, i)) as f64, if ground { &w.ground } else { &w.air });
                 for (k, a) in h.amt.iter_mut().enumerate() {
                     *a = amounts[k * len + i];
                 }
                 let all = h.amt.iter().sum::<f64>();
                 if ground {
-                    react_ground(w, &mut rc, &mut h, &nodes, (i, id), span, &mut b);
+                    react_ground(w, &mut rc, &mut h, &nodes, i, span, &mut b);
                 } else {
                     // An air node holds its gas itself: no liquid's film stands between them.
                     rc.film = 0.0;
                     rc.react(&w.chem, &mut h.amt, None, &mut { w.e_air[i] }, 0.0, None, 0.0, span);
-                    b.transform(&w.chem, id, &mut rc, &mut h.made);
+                    b.transform(&w.chem, Node::new(Class::Air, i), &mut rc, &mut h.made);
                 }
                 (rc.rest(CALM, SPECK * all, CALM_K).max(0.0) as u64).min(most)
             })
             .collect();
         b.book(w);
         w.batches = b;
-        for (&(i, id), rest) in due.iter().zip(rests) {
-            w.sleep.sleep(class, id, end, (end + rest).saturating_sub(dt as u64));
+        for (&i, rest) in due.iter().zip(rests) {
+            w.sleep.sleep(class, i, end, (end + rest).saturating_sub(dt as u64));
             w.sleep.keep(class, i, len, if ground { &w.ground } else { &w.air });
         }
     }
@@ -134,7 +134,7 @@ impl Batches {
     }
     /// The reactions of node `at` in the last `rc.react`: what they made less what they used of each substance, mol,
     /// into `made` (`Reactor::made`), noted as one transform.
-    fn transform(&mut self, chem: &Chemistry, at: NodeId, rc: &mut Reactor, made: &mut [f64]) {
+    fn transform(&mut self, chem: &Chemistry, at: Node, rc: &mut Reactor, made: &mut [f64]) {
         rc.made(chem, made);
         let changed = made.iter().filter(|&&d| d != 0.0).count();
         if changed > 0 {
@@ -172,7 +172,7 @@ fn film(w: &World, i: usize, amt: &[f64], t: f64) -> f64 {
 /// air's temperature and gives back its fusion and vaporisation enthalpy (`store::held`); gas given to it takes its
 /// share of the node's heat by heat capacity and that enthalpy, and the node gives no more heat than it holds: each gas
 /// it gives is cut by the same share, and what it cannot pay for stays in it.
-fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i, id): (usize, NodeId), time: f64, b: &mut Batches) {
+fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64, b: &mut Batches) {
     let (chem, na) = (&w.chem, w.mesh.level(AIR).n());
     let (t, j, air_share) = (nodes.tg[i], w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));
     for (k, p) in h.pool.iter_mut().enumerate() {
@@ -183,7 +183,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i,
     let fused = nodes.fused(i, w.e_ground[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.e_ground[i] - fused;
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], None, 0.0, time);
-    b.transform(chem, id, rc, &mut h.made);
+    b.transform(chem, Node::new(Class::Ground, i), rc, &mut h.made);
     // What they gave to the gas around the node, or took from it, mol: the rest of what they made was in the node.
     let gas = |k: usize| if rc.pooled[k] { h.made[k] - rc.own[k] } else { 0.0 };
     // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.

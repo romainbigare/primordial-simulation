@@ -3,7 +3,7 @@
 //! it has gained more than a share of what it held, and then catches up.
 
 use pcore::clock::{self, Every, Sleep};
-use pcore::store::{Class, NodeId};
+use pcore::store::Class;
 use pcore::units::DAY_S;
 use pcore::{Config, Stage};
 use worldgen::testkit::small_world;
@@ -69,24 +69,19 @@ fn a_month_runs_its_processes_in_their_order() {
     assert_eq!((w.day(), w.month(), w.time % cal.day), (d + 1, m, 0));
 }
 
-/// The node of slot `slot` (a test's own ids: `Sleep` asks nothing of the table).
-fn node(slot: u32) -> NodeId {
-    NodeId { slot, gen: 0 }
-}
-
-/// A sleeping node is not due before its alarm; at its alarm it is, with the other nodes due, in slot order. A node
-/// with no alarm is never due by itself.
+/// A sleeping node is not due before its alarm; at its alarm it is, with the other nodes of its class due, in the order
+/// of their indices. A node with no alarm is never due by itself.
 #[test]
 fn a_calm_node_sleeps_until_its_alarm() {
     let mut s = Sleep::default();
-    for (slot, until) in [(3, 50), (1, 100), (2, 50), (4, u64::MAX)] {
-        s.sleep(Class::Ground, node(slot), 0, until);
+    for (i, until) in [(3, 50), (1, 100), (2, 50), (4, u64::MAX)] {
+        s.sleep(Class::Ground, i, 0, until);
     }
-    s.sleep(Class::Air, node(5), 0, 10);
+    s.sleep(Class::Air, 1, 0, 10);
     assert!(s.due(Class::Ground, 49).is_empty());
-    assert_eq!(s.due(Class::Ground, 120), [node(1), node(2), node(3)]);
+    assert_eq!(s.due(Class::Ground, 120), [1, 2, 3]);
     assert!(s.due(Class::Ground, u64::MAX - 1).is_empty());
-    assert_eq!(s.due(Class::Air, 10), [node(5)]);
+    assert_eq!(s.due(Class::Air, 10), [1]);
 }
 
 /// A sleeping node wakes when one of its amounts has grown by more than `wake_share` of what it held when it fell
@@ -97,17 +92,17 @@ fn a_node_that_gained_more_than_its_share_wakes() {
     let (len, share, now) = (3, 0.05, 0);
     let (mut s, mut amounts) = (Sleep::default(), vec![1.0; 2 * len]);
     for i in 0..len {
-        s.sleep(Class::Ground, node(i as u32), now, now + DAY_S);
+        s.sleep(Class::Ground, i, now, now + DAY_S);
         s.keep(Class::Ground, i, len, &amounts);
     }
     let gain = 0.6 * share;
     amounts[len] += gain;
-    s.watch(Class::Ground, |i| node(i as u32), len, &amounts, share, now);
+    s.watch(Class::Ground, len, &amounts, share, now);
     assert!(s.due(Class::Ground, now).is_empty(), "one small gain");
     (amounts[len], amounts[1], amounts[2]) = (amounts[len] + gain, amounts[1] + gain, amounts[2] - 0.5);
-    s.watch(Class::Ground, |i| node(i as u32), len, &amounts, share, now);
-    assert_eq!(s.due(Class::Ground, now), [node(0)], "two small gains of node 0");
-    assert_eq!(s.due(Class::Ground, now + DAY_S), [node(1), node(2)]);
+    s.watch(Class::Ground, len, &amounts, share, now);
+    assert_eq!(s.due(Class::Ground, now), [0], "two small gains of node 0");
+    assert_eq!(s.due(Class::Ground, now + DAY_S), [1, 2]);
 }
 
 /// What a law's own step may differ by between one span and many steps of the same time, relative: rounding, as the
@@ -121,24 +116,24 @@ const CATCH_UP: f64 = 1e-12;
 fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
     let (dt, year, rate) = (3 * DAY_S, 360 * DAY_S, 1e-7);
     let relax = |a: f64, span: u64| 1.0 + (a - 1.0) * (-rate * span as f64).exp();
-    let (awake, asleep) = (node(0), node(1));
+    let (awake, asleep, g) = (0, 1, Class::Ground);
     let mut s = Sleep::default();
     let mut amount = [0.0, 0.0];
-    s.sleep(Class::Ground, awake, 0, dt);
-    s.sleep(Class::Ground, asleep, 0, year);
+    s.sleep(g, awake, 0, dt);
+    s.sleep(g, asleep, 0, year);
     let mut t = 0;
     while t < year {
         t += dt;
         if t == 100 * DAY_S {
-            s.wake(Class::Ground, asleep, t);
+            s.wake(g, asleep, t);
         }
-        for id in s.due(Class::Ground, t) {
-            let a = &mut amount[id.slot as usize];
-            *a = relax(*a, t - s.since(id));
-            s.sleep(Class::Ground, id, t, if id == awake { t + dt } else { year });
+        for i in s.due(g, t) {
+            let a = &mut amount[i];
+            *a = relax(*a, t - s.since(g, i));
+            s.sleep(g, i, t, if i == awake { t + dt } else { year });
         }
     }
-    assert_eq!((s.since(awake), s.since(asleep)), (year, year));
+    assert_eq!((s.since(g, awake), s.since(g, asleep)), (year, year));
     assert!((amount[0] - amount[1]).abs() <= CATCH_UP * amount[0], "{amount:?}");
     assert!(amount[0] > 0.9, "the law ran: {amount:?}");
 }

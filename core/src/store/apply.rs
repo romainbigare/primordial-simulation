@@ -4,7 +4,7 @@
 
 use super::held;
 use super::moves::{LinkFlux, Move, Transform};
-use super::nodes::{Class, NodeId, Nodes, BOUNDARIES};
+use super::nodes::{Class, Node, BOUNDARIES};
 use crate::chem::Chemistry;
 use crate::{World, AIR};
 
@@ -60,18 +60,17 @@ enum Change<'x> {
     One(Slot, f64),
 }
 
-/// What `apply` reads besides the changes: the chemistry, the node table and the count of the nodes of each class.
+/// What `apply` reads besides the changes: the chemistry and the count of the nodes of each class.
 struct Ctx<'w> {
     chem: &'w Chemistry,
-    table: &'w Nodes,
     len: [usize; BOOKED],
 }
 
-/// Where the amounts and heat of node `id` lie (`Nodes::place`), in a class `apply` books.
-fn booked(table: &Nodes, id: NodeId) -> (usize, usize) {
-    let (class, i) = table.place(id);
-    assert!((class as usize) < BOOKED, "apply books no node of {class:?}");
-    (class as usize, i)
+/// The class of node `x` and its index, in a class `apply` books.
+fn booked(cx: &Ctx, x: Node) -> (usize, usize) {
+    let c = x.class as usize;
+    assert!(c < BOOKED && x.index < cx.len[c], "apply books no node {x:?}");
+    (c, x.index)
 }
 
 /// Each change of the call, in order: each link flux's columns, its substances then its heat (the `b` end receives the
@@ -89,7 +88,7 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
     }
     let mut one = |arr, at, d| f(Change::One(Slot { arr, at }, d));
     for m in moves {
-        let (((cf, i), (ct, j)), k) = ((booked(cx.table, m.from), booked(cx.table, m.to)), m.k as usize);
+        let (((cf, i), (ct, j)), k) = ((booked(cx, m.from), booked(cx, m.to)), m.k as usize);
         let into = m.heat - m.mol * (held(chem, Class::ALL[ct], k) - held(chem, Class::ALL[cf], k));
         one(2 * cf, k * len[cf] + i, -m.mol);
         one(2 * cf + 1, i, -m.heat);
@@ -97,7 +96,7 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
         one(2 * ct + 1, j, into);
     }
     for t in transforms {
-        let (c, i) = booked(cx.table, t.at);
+        let (c, i) = booked(cx, t.at);
         let mut q = 0.0;
         for &(k, d) in &t.dmol {
             one(2 * c, k as usize * len[c] + i, d);
@@ -134,12 +133,12 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bo
 /// as only what each number holds at the end counts. Then each amount and heat of a node that ended below zero, which
 /// is the rounding of the sums, is set to zero and counted in `Counters::rounded` (handover 12.1), in the order of the
 /// arrays; a debug build checks that it is only rounding (`ROUNDING`). A boundary node and the potential give all they
-/// are asked. Panics on a link flux of the wrong shape, on a transform that does not keep its elements, and on the id
-/// of a node that is gone.
+/// are asked. Panics on a link flux of the wrong shape, on a transform that does not keep its elements, and on a node
+/// beyond its class.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
-    let World { chem, table, counts, mesh, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
-    let cx = Ctx { chem, table, len: [mesh.cells().n(), mesh.level(AIR).n(), mesh.cells().n(), BOUNDARIES, 1] };
+    let World { chem, counts, mesh, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
+    let cx = Ctx { chem, len: [mesh.cells().n(), mesh.level(AIR).n(), mesh.cells().n(), BOUNDARIES, 1] };
     for x in fluxes {
         let links = x.a.len();
         let heat = if x.alike(chem) { x.heat.is_empty() || x.heat.len() == links } else { x.heat.len() == links };

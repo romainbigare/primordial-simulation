@@ -7,7 +7,7 @@ use pcore::flow::scale_height;
 use pcore::rng::{Purpose, Rng};
 use pcore::space::square::Square;
 use pcore::space::Mesh;
-use pcore::store::{Links, Nodes, BOUNDARIES};
+use pcore::store::{Links, BOUNDARIES};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
 
@@ -177,7 +177,6 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let mut world = World {
         cfg,
         chem,
-        table: Nodes::of_mesh(&mesh),
         map,
         air_scale: AIR_SCALE,
         mesh,

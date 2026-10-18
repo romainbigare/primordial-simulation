@@ -5,105 +5,113 @@
 //! nodes never sleeps. When a node is due, its law brings it up to date for all the time since it last did (`since`) in
 //! one span, as its integration over a long step allows, and sets its next alarm.
 //!
-//! A node sleeps or wakes by its own alarm alone; the nodes due at one time are found by a look over all the alarms (a
-//! few numbers a node, once a step) and come in a fixed order, by slot. The alarms and the amounts a node held when it
-//! fell asleep are saved, so a resumed run sleeps the same.
+//! A node is named by its class and its index in that class's arrays. It sleeps or wakes by its own alarm alone; the
+//! nodes due at one time are found by a look over the alarms of their class (a few numbers a node, once a step) and
+//! come in a fixed order, by index. The alarms and the amounts a node held when it fell asleep are saved, so a resumed
+//! run sleeps the same.
 
-use crate::store::{Class, NodeId};
+use crate::store::Class;
 use serde::{Deserialize, Serialize};
 
 /// The classes whose nodes run a process of their own, and so may sleep: all those before `Class::Boundary` (a boundary
 /// node only gives and takes what crosses).
 const RUN: usize = Class::Boundary as usize;
 
-/// The alarms of the nodes, and when each was last brought up to date.
+/// The alarms of the nodes of one class, by index.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Sleep {
-    /// Per node slot: its alarm time, s (`u64::MAX`: no alarm; at or before the time now: due, or running)
+struct Alarms {
+    /// Its alarm time, s (`u64::MAX`: no alarm; at or before the time now: due, or running)
     alarm: Vec<u64>,
-    /// Per node slot: the time its law last brought it up to date, s
+    /// The time its law last brought it up to date, s
     since: Vec<u64>,
-    /// Per node slot: the node that sleeps there, and its class (none while it runs)
-    asleep: Vec<Option<(NodeId, Class)>>,
-    /// Per class that runs (`RUN`): how many of its nodes sleep
-    count: [usize; RUN],
-    /// Per class that runs: what each of its nodes held when it last fell asleep, `[k * len + index]` (`keep`)
-    held: [Vec<f64>; RUN],
+    /// Whether it sleeps (not while it runs)
+    asleep: Vec<bool>,
+    /// How many of the nodes sleep
+    count: usize,
+    /// What each node held when it last fell asleep, `[k * len + index]` (`keep`)
+    held: Vec<f64>,
 }
 
+/// The alarms of the nodes, and when each was last brought up to date, per class that runs (`RUN`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Sleep([Alarms; RUN]);
+
 impl Sleep {
-    /// Node `id` of `class`, brought up to date at `now`, sleeps until `until` (s; `u64::MAX`: until a move wakes it;
-    /// `now`: it is due at once). Its earlier alarm, if any, is dropped. Panics for a boundary node.
-    pub fn sleep(&mut self, class: Class, id: NodeId, now: u64, until: u64) {
+    /// The alarms of `class`. Panics for a class that runs no process (a boundary node, the potential, a part).
+    fn of(&mut self, class: Class) -> &mut Alarms {
         assert!((class as usize) < RUN, "a node of {class:?} runs no process, so it never sleeps");
-        let s = id.slot as usize;
-        if s >= self.alarm.len() {
-            self.alarm.resize(s + 1, u64::MAX);
-            self.since.resize(s + 1, 0);
-            self.asleep.resize(s + 1, None);
-        }
-        if self.asleep[s].is_none() {
-            self.count[class as usize] += 1;
-        }
-        (self.alarm[s], self.since[s], self.asleep[s]) = (until, now, Some((id, class)));
+        &mut self.0[class as usize]
     }
 
-    /// Node `id` of `class` is due at `now` if it sleeps until later (nothing if it is not asleep, as a boundary node
-    /// never is).
-    pub fn wake(&mut self, class: Class, id: NodeId, now: u64) {
-        let s = id.slot as usize;
-        if self.alarm.get(s).is_some_and(|&a| a > now) && self.asleep[s] == Some((id, class)) {
-            self.alarm[s] = now;
+    /// Node `i` of `class`, brought up to date at `now`, sleeps until `until` (s; `u64::MAX`: until a gain wakes it;
+    /// `now`: it is due at once). Its earlier alarm, if any, is dropped.
+    pub fn sleep(&mut self, class: Class, i: usize, now: u64, until: u64) {
+        let a = self.of(class);
+        if i >= a.alarm.len() {
+            a.alarm.resize(i + 1, u64::MAX);
+            a.since.resize(i + 1, 0);
+            a.asleep.resize(i + 1, false);
+        }
+        if !a.asleep[i] {
+            a.count += 1;
+        }
+        (a.alarm[i], a.since[i], a.asleep[i]) = (until, now, true);
+    }
+
+    /// Node `i` of `class` is due at `now` if it sleeps until later (nothing if it is not asleep).
+    pub fn wake(&mut self, class: Class, i: usize, now: u64) {
+        let a = self.of(class);
+        if a.asleep.get(i) == Some(&true) && a.alarm[i] > now {
+            a.alarm[i] = now;
         }
     }
 
-    /// The nodes of `class` due at `now` (their alarm rang or a move woke them), in the order of their slots (none for
-    /// a boundary node). Each runs; its law puts it back to sleep (`sleep`) with its next alarm.
-    pub fn due(&mut self, class: Class, now: u64) -> Vec<NodeId> {
-        let due: Vec<NodeId> = (self.asleep.iter().zip(&self.alarm)).filter_map(|(n, &t)| n.filter(|&(_, c)| c == class && t <= now).map(|e| e.0)).collect();
-        due.iter().for_each(|id| self.asleep[id.slot as usize] = None);
-        if let Some(n) = self.count.get_mut(class as usize) {
-            *n -= due.len();
-        }
+    /// The nodes of `class` due at `now` (their alarm rang or a gain woke them), in the order of their indices. Each
+    /// runs; its law puts it back to sleep (`sleep`) with its next alarm.
+    pub fn due(&mut self, class: Class, now: u64) -> Vec<usize> {
+        let a = self.of(class);
+        let due: Vec<usize> = (0..a.alarm.len()).filter(|&i| a.asleep[i] && a.alarm[i] <= now).collect();
+        due.iter().for_each(|&i| a.asleep[i] = false);
+        a.count -= due.len();
         due
     }
 
     /// Node `i` of `class` (of `len` nodes, holding `amounts`, `[k * len + i]`) falls asleep holding what it holds:
     /// `watch` looks for a gain against it.
     pub fn keep(&mut self, class: Class, i: usize, len: usize, amounts: &[f64]) {
-        let held = &mut self.held[class as usize];
+        let held = &mut self.of(class).held;
         held.resize(amounts.len(), 0.0);
         for (h, &a) in held[i..].iter_mut().step_by(len).zip(amounts[i..].iter().step_by(len)) {
             *h = a;
         }
     }
 
-    /// Wakes each sleeping node of `class` (the node at index `i` of its class is `id(i)`; `len` nodes, holding
-    /// `amounts`, `[k * len + i]`) one of whose amounts has grown by more than `share` of what it held when it fell
-    /// asleep (`keep`), so a node that many small gains have changed reacts as one large gain would make it.
-    pub fn watch(&mut self, class: Class, id: impl Fn(usize) -> NodeId, len: usize, amounts: &[f64], share: f64, now: u64) {
+    /// Wakes each sleeping node of `class` (`len` nodes, holding `amounts`, `[k * len + i]`) one of whose amounts has
+    /// grown by more than `share` of what it held when it fell asleep (`keep`), so a node that many small gains have
+    /// changed reacts as one large gain would make it.
+    pub fn watch(&mut self, class: Class, len: usize, amounts: &[f64], share: f64, now: u64) {
         if self.none(class) {
             return;
         }
         let mut grew = vec![false; len];
-        for (now_k, then_k) in amounts.chunks(len).zip(self.held[class as usize].chunks(len)) {
+        for (now_k, then_k) in amounts.chunks(len).zip(self.of(class).held.chunks(len)) {
             for (g, (&a, &h)) in grew.iter_mut().zip(now_k.iter().zip(then_k)) {
                 *g |= a - h > share * h.max(0.0);
             }
         }
         for i in (0..len).filter(|&i| grew[i]) {
-            self.wake(class, id(i), now);
+            self.wake(class, i, now);
         }
     }
 
     /// Whether no node of `class` sleeps: its law has not run yet (after a run, it puts every node it ran back to sleep).
     pub fn none(&self, class: Class) -> bool {
-        self.count.get(class as usize).is_none_or(|&n| n == 0)
+        self.0.get(class as usize).is_none_or(|a| a.count == 0)
     }
 
-    /// The time node `id` (put to sleep at least once) was last brought up to date, s: its law catches it up for the
-    /// time since.
-    pub fn since(&self, id: NodeId) -> u64 {
-        self.since[id.slot as usize]
+    /// The time node `i` of `class` (put to sleep at least once) was last brought up to date, s: its law catches it up
+    /// for the time since.
+    pub fn since(&self, class: Class, i: usize) -> u64 {
+        self.0[class as usize].since[i]
     }
 }

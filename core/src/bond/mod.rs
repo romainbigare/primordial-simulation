@@ -1,6 +1,6 @@
 //! Law 3: Bond. Nodes can be joined; joins break when pushed too hard.
 //!
-//! Parts (made objects) are nodes of the store (`store::Class::Part`, with a stable id of slot and generation): solid
+//! Parts (made objects) are nodes of the store (`store::Class::Part`, with a stable id of slot and generation, `id`): solid
 //! walls, the liquid held in their hollow, heat, a size (3 numbers, longest first) and a hollowness. A part lies in a
 //! cell, or is held by a body (a body–part bond). Bonds are links (`Bonds`) that join two parts, or a part and the
 //! bonded ground of its cell; their strength (N) comes from the weaker material at the joint and the contact area. A
@@ -37,7 +37,8 @@ pub(crate) use verbs::{bears, let_go, lever};
 
 use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
-use crate::store::{Class, NodeId};
+use crate::life::free_place;
+use crate::store::NodeId;
 use crate::World;
 use serde::{Deserialize, Serialize};
 
@@ -59,10 +60,14 @@ const ASPECT_DECADES: f64 = 2.0;
 /// Faces of a box: plates close one as wide as the longest part; the bonded ground is the last face of an anchored one.
 const BOX_FACES: f64 = 6.0;
 
-/// A part, at its index among the nodes of `Class::Part`; the node table holds its id and its cell.
+/// A part, at its slot among the nodes of `Class::Part`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Part {
     pub alive: bool,
+    /// The generation of the part in its slot (its id is the slot and this, `id`): a freed slot's moves on
+    pub gen: u32,
+    /// The cell it lies in
+    pub cell: u32,
     /// mol of each substance: the walls, and the liquid held in the hollow
     pub wall: Vec<f64>,
     pub fill: Vec<f64>,
@@ -107,8 +112,10 @@ pub struct Tally {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Parts {
-    /// By index (`Class::Part`); a free index holds a part that is not alive
+    /// By slot (`Class::Part`); a free slot holds a part that is not alive
     pub parts: Vec<Part>,
+    /// The free slots, the last freed first
+    free: Vec<u32>,
     pub bonds: Bonds,
     /// Parts in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
@@ -183,19 +190,19 @@ impl Parts {
     }
 }
 
-/// The node of part `p`.
+/// The id of part `p`.
 pub fn id(w: &World, p: usize) -> NodeId {
-    w.table.id(Class::Part, p)
+    NodeId { slot: p as u32, gen: w.parts.parts[p].gen }
 }
 
 /// The cell part `p` lies in.
 pub fn cell(w: &World, p: usize) -> usize {
-    w.table.cell(id(w, p))
+    w.parts.parts[p].cell as usize
 }
 
 /// The part named `id`, if it still exists.
-fn part(w: &World, id: NodeId) -> Option<usize> {
-    w.table.find(id).and_then(|(c, p)| (c == Class::Part).then_some(p))
+pub fn part(w: &World, id: NodeId) -> Option<usize> {
+    w.parts.parts.get(id.slot as usize).is_some_and(|p| p.alive && p.gen == id.gen).then_some(id.slot as usize)
 }
 
 /// The parts of the structure whose root is `r` (all in one cell).
@@ -203,14 +210,11 @@ fn members(w: &World, r: usize) -> Vec<usize> {
     w.parts.at[cell(w, r)].iter().map(|&x| x as usize).filter(|&x| w.parts.parts[x].root as usize == r).collect()
 }
 
-/// Place part `p` in cell `i`, as a new node.
+/// Place part `p` in cell `i`, as a new node: in the slot freed last (its generation moved on when it was freed, so an
+/// old id names nothing), or in a new slot at the end.
 fn add(w: &mut World, mut p: Part, i: usize) -> usize {
-    let node = w.table.add_part(i);
-    let x = w.table.place(node).1;
-    if w.parts.parts.len() <= x {
-        w.parts.parts.resize_with(x + 1, Part::default);
-    }
-    (p.alive, p.root) = (true, x as u32);
+    let x = free_place(&mut w.parts.parts, &mut w.parts.free);
+    (p.alive, p.root, p.gen, p.cell) = (true, x as u32, w.parts.parts[x].gen, i as u32);
     w.parts.at[i].push(x as u32);
     w.parts.parts[x] = p;
     x
@@ -220,10 +224,9 @@ fn add(w: &mut World, mut p: Part, i: usize) -> usize {
 fn move_structure(w: &mut World, r: usize, to: usize) {
     let from = cell(w, r);
     for x in members(w, r) {
-        let node = id(w, x);
         w.parts.at[from].retain(|&y| y as usize != x);
         w.parts.at[to].push(x as u32);
-        w.table.relocate(node, to);
+        w.parts.parts[x].cell = to as u32;
     }
 }
 
@@ -325,13 +328,15 @@ fn dissolve(w: &mut World, s: usize) {
     if let Some(h) = holder(w, s) {
         w.life.bodies[h].hold = None;
     }
-    let (n, i, node, p) = (w.mesh.cells().n(), cell(w, s), id(w, s), std::mem::take(&mut w.parts.parts[s]));
+    let (n, i, p) = (w.mesh.cells().n(), cell(w, s), std::mem::take(&mut w.parts.parts[s]));
     for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate() {
         w.ground[k * n + i] += a + f;
     }
     w.e_ground[i] += p.e;
     w.parts.at[i].retain(|&x| x as usize != s);
-    w.table.remove_part(node);
+    // Its slot is free for a new part, of the next generation.
+    w.parts.parts[s].gen = p.gen + 1;
+    w.parts.free.push(s as u32);
 }
 
 /// The part body `b` holds.

@@ -71,8 +71,6 @@ pub struct World {
     /// nodes. Built from `map` and `air_scale`, so not saved (a loaded world rebuilds it).
     #[serde(skip)]
     pub mesh: Mesh,
-    /// The id, class, parent and cell of every node (`store::Nodes`): the mesh's, and the parts', which come and go
-    pub table: crate::store::Nodes,
     /// Seed of every keyed random draw (`rng::Rng`)
     pub seed: u64,
     /// World clock, seconds since the start (`clock`)

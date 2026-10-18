@@ -1,9 +1,9 @@
-//! The store: every node has one id, `apply` keeps the books of changes that ask no node for more than it holds (what
+//! The store: `apply` keeps the books of changes that ask no node for more than it holds (what
 //! rounding leaves below zero is set to zero), and what crosses the world's boundary is booked on its boundary nodes.
 
 use pcore::check;
 use pcore::rng::{Purpose, Rng};
-use pcore::store::{apply, held, Boundary, Class, LinkFlux, Move, NodeId, Transform, BOUNDARIES};
+use pcore::store::{apply, held, Boundary, Class, LinkFlux, Move, Node, NodeId, Transform, BOUNDARIES};
 use pcore::{World, AIR};
 use worldgen::testkit::{put, small_world, Books, LIQUID, ROCK};
 
@@ -25,21 +25,6 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
         Class::Potential => (&[], std::slice::from_ref(&w.potential), 1),
         Class::Part => unreachable!("a part's amounts lie in the part"),
     }
-}
-
-#[test]
-fn every_node_has_one_id() {
-    let w = small_world();
-    let mut ids: Vec<NodeId> = w.table.ids().collect();
-    for class in CLASSES.into_iter().chain([Class::Boundary, Class::Potential]) {
-        for i in 0..arrays(&w, class).2 {
-            let id = w.table.id(class, i);
-            assert_eq!((w.table.place(id), w.table.cell(id), w.table.parent(id)), ((class, i), i, None));
-        }
-    }
-    let n = ids.len();
-    ids.dedup();
-    assert_eq!((ids.len(), n), (n, 2 * w.mesh.cells().n() + w.mesh.level(AIR).n() + BOUNDARIES + 1), "one id for each ground, air, deep and boundary node, and the potential");
 }
 
 /// What passes through a node in one call needs nothing held: liquid along a chain of links through nodes that hold
@@ -101,7 +86,7 @@ fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
 #[should_panic(expected = "does not keep its elements")]
 fn a_transform_that_makes_elements_is_refused() {
     let mut w = small_world();
-    let at = w.table.id(Class::Ground, 0);
+    let at = Node::new(Class::Ground, 0);
     apply(&mut w, &[], &[], &[Transform { at, dmol: vec![(0, 1.0)] }]);
 }
 
@@ -176,7 +161,7 @@ fn random_round(w: &mut World, r: &mut Rng) {
             let (m, h) = (left.some(w, r, from, Some(k)), left.some(w, r, from, None));
             let lift = m * (held(&w.chem, to.0, k) - held(&w.chem, from.0, k));
             let mol = if lift > h { m * (h + left.take(w, to, None, lift - h)) / lift } else { m };
-            Move { from: w.table.id(from.0, from.1), to: w.table.id(to.0, to.1), k: k as u16, mol, heat: h }
+            Move { from: Node::new(from.0, from.1), to: Node::new(to.0, to.1), k: k as u16, mol, heat: h }
         })
         .collect();
     // A transform takes from its node's heat the energy its products hold apart from heat more than its inputs.
@@ -191,7 +176,7 @@ fn random_round(w: &mut World, r: &mut Rng) {
                 left.take(w, at, None, need * most);
             }
             rx.inputs.iter().for_each(|&(k, n)| *left.at(w, at, Some(k as usize)) -= n as f64 * most);
-            Transform { at: w.table.id(at.0, at.1), dmol: terms.iter().map(|&(k, n)| (k, n * most)).collect() }
+            Transform { at: Node::new(at.0, at.1), dmol: terms.iter().map(|&(k, n)| (k, n * most)).collect() }
         })
         .collect();
     // In one call, or the flux alone and then the rest.
@@ -250,7 +235,7 @@ fn node_streams_are_apart() {
 fn what_crosses_the_boundary_keeps_the_books() {
     let mut w = small_world();
     let books = Books::now(&w);
-    let (from, to) = (w.table.id(Class::Boundary, Boundary::Outside as usize), w.table.id(Class::Ground, 0));
+    let (from, to) = (Node::new(Class::Boundary, Boundary::Outside as usize), Node::new(Class::Ground, 0));
     apply(&mut w, &[], &[Move { from, to, k: LIQUID as u16, mol: 1e3, heat: 1e6 }], &[]);
     put(&mut w, ROCK, 1, 1e2);
     let q = 1e-3 * w.e_air[0];

@@ -578,6 +578,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   rebuild on load would change. Same history (`series.csv` and `months.csv` byte for byte, 64 x 64, seed 1, 20 years;
   a resume from year 10 ends on the same world); the year-20 snapshot 43.97 to 42.93 MB. Snapshot version 19, golden
   re-pinned (the saved world changed).
+- Fixed nodes by class and index: a ground, air, deep, boundary or potential node is named by its class and index
+  (`store::Node`, in moves and transforms); `clock::Sleep` keeps its alarms per class by index; only a part keeps a
+  slot and a generation, in `bond::Parts` (with its cell). The node table (`store::Nodes`, `World::table`) goes. A
+  part's slot now counts from 0, so the keyed draw of a drifting raft changes: 64 x 64, seed 1, 20 years, the same
+  history byte for byte; small roster worlds differ from year 3 only by that draw (with the old key, byte for byte).
+  The year-20 snapshot 42.93 to 42.90 MB. Snapshot version 20, golden re-pinned.
 
 **Owner's decisions after Phase A**
 

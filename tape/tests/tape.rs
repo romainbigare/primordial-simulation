@@ -56,17 +56,16 @@ fn snapshot_round_trip_mid_cycle() {
     tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     assert_eq!(fingerprint(&a), fingerprint(&b));
-    assert!(b.table.ids().count() > 0 && b.table.ids().eq(a.table.ids()), "a load keeps every node's id");
     run(&mut b, 14);
     run(&mut whole, 31);
     assert_eq!(fingerprint(&b), fingerprint(&whole));
 }
 
-/// A part is a node of the table: its id holds through a snapshot, and when it is gone its slot goes to the next part
+/// A part is a node that comes and goes: its id holds through a snapshot, and when it is gone its slot goes to the next part
 /// with a new generation, so the old id names nothing.
 #[test]
 fn a_part_keeps_its_id_through_a_snapshot_and_its_freed_slot_gets_a_new_generation() {
-    use pcore::{bond, store::Class};
+    use pcore::bond;
     let dir = tmp("snap_part");
     let mut a = worldgen::testkit::small_world();
     let i = worldgen::testkit::dry_land(&a);
@@ -74,11 +73,11 @@ fn a_part_keeps_its_id_through_a_snapshot_and_its_freed_slot_gets_a_new_generati
     let id = bond::id(&a, q);
     tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
-    assert_eq!((b.table.place(id), b.table.cell(id)), ((Class::Part, q), i));
+    assert_eq!((bond::part(&b, id), bond::cell(&b, q)), (Some(q), i));
     // Both fall apart in the month, as lighter than the least a part may weigh; `q`'s slot is the last freed.
     b.cfg.phys.min_kg = 1e3;
     bond::step(&mut b);
-    assert!(b.parts.alive().next().is_none() && b.table.find(id).is_none(), "the old id still names a node");
+    assert!(b.parts.alive().next().is_none() && bond::part(&b, id).is_none(), "the old id still names a part");
     let r = worldgen::testkit::plate(&mut b, i, 10.0, false);
     let new = bond::id(&b, r);
     assert_eq!((r, new.slot, new.gen), (q, id.slot, id.gen + 1));

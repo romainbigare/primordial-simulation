@@ -89,15 +89,15 @@ fn a_node_sleeps_by_its_own_rates() {
     w.air[BURNING_GAS * na..(BURNING_GAS + 1) * na].fill(0.0);
     w.e_ground[hot] = w.energy_ground(hot, 600.0);
     let (step, sleep) = (w.cfg.phys_days as u64 * DAY_S, w.cfg.sleep_days as u64 * DAY_S);
-    let (hot, cold, start) = (w.table.id(Class::Ground, hot), w.table.id(Class::Ground, cold), w.time);
+    let start = w.time;
     let mut cold_ran = Vec::new();
     while w.time < start + sleep + step {
         change::step(&mut w, step as f64);
         w.time += step;
         if w.time <= start + 2 * step {
-            assert_eq!(w.sleep.since(hot), w.time, "the hot node reacted in this step");
+            assert_eq!(w.sleep.since(Class::Ground, hot), w.time, "the hot node reacted in this step");
         }
-        if w.sleep.since(cold) == w.time {
+        if w.sleep.since(Class::Ground, cold) == w.time {
             cold_ran.push(w.time - start);
         }
     }

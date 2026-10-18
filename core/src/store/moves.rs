@@ -1,7 +1,7 @@
 //! The three ways a law changes the world (`docs/foundation/plan.md`, Idea 2): a move between two nodes, a transform
 //! of the amounts inside one node, and a link flux over a whole field.
 
-use super::nodes::{Class, NodeId};
+use super::nodes::{Class, Node};
 use crate::chem::Chemistry;
 
 /// `mol` of substance `k` and `heat` J leave node `from` for node `to`. `to` receives `heat` less the energy the mol
@@ -9,8 +9,8 @@ use crate::chem::Chemistry;
 /// enters the air, `from` by giving it with the heat, or `to` by being given only the heat the gas carries.
 #[derive(Clone, Copy, Debug)]
 pub struct Move {
-    pub from: NodeId,
-    pub to: NodeId,
+    pub from: Node,
+    pub to: Node,
     pub k: u16,
     pub mol: f64,
     pub heat: f64,
@@ -20,7 +20,7 @@ pub struct Move {
 /// heat (`held`) and no longer hold becomes the node's heat (the heat of reaction).
 #[derive(Clone, Debug)]
 pub struct Transform {
-    pub at: NodeId,
+    pub at: Node,
     pub dmol: Vec<(u16, f64)>,
 }
 
