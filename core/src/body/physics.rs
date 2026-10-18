@@ -8,7 +8,7 @@ use super::{Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
 use crate::change::{send_gas, GasMove, Reactor};
 use crate::flow::Sky;
 use crate::chem::Phase;
-use crate::ground::{draw, heat_above_floor, share, take_paid};
+use crate::ground::{draw, heat_above_floor, share, take_paid, Melting};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
 use crate::units::{MAX_SUBSTANCES, P_REF};
@@ -47,10 +47,10 @@ impl Soil {
     }
 }
 
-/// The physics of a body of `mass` kg over its update, with the heat its upkeep released. Returns the light it caught
-/// per kg per day, J.
+/// The physics of a body of `mass` kg at the plateau state `th0` (`Body::thermal`) over its update, with the heat its
+/// upkeep released. Returns the light it caught per kg per day, J.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, mass: f64, upkeep_heat: f64) -> f64 {
+pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, mass: f64, upkeep_heat: f64, th0: Melting) -> f64 {
     let keep = w.light_keep.get(slot, b.gen) as f64;
     // (The ground's capacity is needed by the first liquid it soaks or loses; it is the same when taken first.)
     let gcap = w.heat_cap_ground(s.i);
@@ -62,7 +62,6 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     // Its molten stores hold their fusion enthalpy apart (`Body::thermal`): the stages move sensible heat, and the liquids
     // that come and go bring and take their fusion enthalpy as heat, until its stores hold theirs again at the end.
     let c0 = b.heat_cap(chem);
-    let th0 = b.thermal(chem, c0);
     let (t0, fusion0) = (th0.t, b.e - c0 * th0.t);
     // (Its boundary layer is the same for its heat and its breath until its stores change.)
     let f0 = film(chem, cfg, b, mass, s.cover);

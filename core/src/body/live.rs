@@ -8,6 +8,7 @@ use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REP
 use crate::bond::{self, Enclosure};
 use crate::change::Reactor;
 use crate::chem::Phase;
+use crate::ground::Melting;
 use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};
 use crate::units::DAY;
@@ -84,14 +85,14 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
     if b.empty_at(mass) {
         return Err(LACK);
     }
-    let (upkeep_heat, span, mass, spare) = settle_upkeep(w, b, &s, mass, cap, tmp)?;
-    let lit = physics(w, slot, b, rc, &mut *tmp, &s, mass, upkeep_heat);
+    let (upkeep_heat, span, mass, spare, th) = settle_upkeep(w, b, &s, mass, cap, tmp)?;
+    let lit = physics(w, slot, b, rc, &mut *tmp, &s, mass, upkeep_heat, th);
     keep_warm(w, b, span, s.dt);
-    check_stores(w, slot, b, tmp)?;
+    let th = check_stores(w, slot, b, tmp)?;
     // Growth builds body matter, paid by work (`copy::grow`); past maturity a share `ALLOC` of it goes into the brood.
     // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`). The key
     // liquid the new tissue lacks and the children took soaks in again (`soak_again`).
-    let built = crate::copy::grow(w, b, s.days);
+    let built = crate::copy::grow_at(w, b, s.days, th);
     let born = b.brood > 0.0 && crate::copy::copy(w, slot, b);
     if built || born {
         soak_again(w, b, &s);
@@ -103,8 +104,9 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
 /// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but
 /// at least an interval (a decision takes one). In a node the members whose upkeep could not be paid die (that share of
 /// an interval of its gene, at that rate over a longer update, `Body::over_span`); an individual that cannot pay dies. Living wears the body (`Body::wear`). Returns the heat the paying released (held
-/// in the update's heat), the span it was paid over, the mass left and the margin of its reactions over the upkeep.
-fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64), u8> {
+/// in the update's heat), the span it was paid over, the mass left, the margin of its reactions over the upkeep, and the
+/// plateau state it is left at (`Body::thermal`: the stages that follow see the body at the temperature it came with).
+fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
     // (One temperature for the stages that see the body as it came: the upkeep, the plan and the paying.)
     let (th, node) = (b.thermal(&w.chem, cap), b.n() > 1.0);
     let (cost, span) = (upkeep_at(w, b, s.days, mass, th.t), s.days.max(b.interval(w) as f64));
@@ -126,7 +128,7 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
     b.e = kept;
     for (f, cause) in [(b.over_span(short, w), SPENT), (if node { one_minus_exp(worn) } else { 0.0 }, AGE)] {
         if f > 1e-9 {
-            if !members_die(w, b, f, cause, &mut tmp.dead) {
+            if !members_die(w, b, f, cause, &mut tmp.dead, &p.th) {
                 b.e += upkeep_heat;
                 return Err(cause);
             }
@@ -138,15 +140,15 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
         b.e += upkeep_heat;
         return Err(AGE);
     }
-    Ok((upkeep_heat, span, mass, spare))
+    Ok((upkeep_heat, span, mass, spare, p.th))
 }
 
-/// The share `f` of a node's members dies of `cause`, with that share of every store (`thin`); false if less than one
-/// member is left.
-fn members_die(w: &mut World, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f64>) -> bool {
+/// The share `f` of a node's members, at the plateau state `th`, dies of `cause`, with that share of every store (`thin`);
+/// false if less than one member is left.
+fn members_die(w: &mut World, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f64>, th: &Melting) -> bool {
     dead.clear();
     dead.extend(b.store.iter().map(|a| a * f));
-    thin(w, b, f, dead, cause)
+    thin(w, b, f, dead, cause, th)
 }
 
 /// It keeps its temperature at its `KEEP_T` gene: if the update left it colder, it burns on demand, as for its upkeep,
@@ -171,14 +173,15 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
 /// melting point, the body being at one temperature; on its melting plateau, the share frozen there) times its
 /// activity, as a dry body holds little liquid to freeze. A node loses that share of its members (`thin`; that share of
 /// an interval of its gene, at that rate over a longer update, `Body::over_span`); an individual dies with that chance.
-fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<(), u8> {
+/// Returns the plateau state it is left at.
+fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<Melting, u8> {
     let (mass, c) = b.mass_cap(&w.chem);
     let mut th = b.thermal(&w.chem, c);
     if b.lacking_at(&w.chem, mass, th.t) {
-        if !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, b, th.t, &mut tmp.dead)) {
+        if !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, b, &th, &mut tmp.dead)) {
             return Err(LACK);
         }
-        th = b.thermal(&w.chem, b.heat_cap(&w.chem));
+        th = b.thermal_now(&w.chem);
     }
     let (chem, ns) = (&w.chem, w.chem.ns());
     let key = |k: usize| b.wet >> k & 1 == 1;
@@ -196,20 +199,22 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
             return Err(PHASE);
         }
         if b.n() > 1.0 {
-            if !members_die(w, b, b.over_span(f, w), PHASE, &mut tmp.dead) {
+            if !members_die(w, b, b.over_span(f, w), PHASE, &mut tmp.dead, &th) {
                 return Err(PHASE);
             }
+            return Ok(b.thermal_now(&w.chem));
         } else if Rng::new(w.seed, w.day(), b.id(slot), Purpose::Frost).f64() < f {
             return Err(PHASE);
         }
     }
-    Ok(())
+    Ok(th)
 }
 
-/// A node at `t` short of key stores: the members poorest in them die (members differ around the mean), so the survivors
-/// keep those stores and the dead take their share of the rest. The share that dies is the least that lifts every key
-/// store to its safe minimum; false if that is all of them.
-fn starve(w: &mut World, b: &mut Body, t: f64, dead: &mut Vec<f64>) -> bool {
+/// A node at the plateau state `th` short of key stores: the members poorest in them die (members differ around the
+/// mean), so the survivors keep those stores and the dead take their share of the rest. The share that dies is the least
+/// that lifts every key store to its safe minimum; false if that is all of them.
+fn starve(w: &mut World, b: &mut Body, th: &Melting, dead: &mut Vec<f64>) -> bool {
+    let t = th.t;
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
@@ -219,7 +224,7 @@ fn starve(w: &mut World, b: &mut Body, t: f64, dead: &mut Vec<f64>) -> bool {
     let f = 1.0 - live.max(0.0);
     dead.clear();
     dead.extend((0..chem.ns()).map(|k| if short(&k) { 0.0 } else { b.store[k] * f }));
-    f < 1.0 && thin(w, b, f, dead, LACK) && !b.lacking(&w.chem)
+    f < 1.0 && thin(w, b, f, dead, LACK, th) && !b.lacking(&w.chem)
 }
 
 /// What a body sheds to the ground, with its share of the heat: of what it holds besides its matter, gases and the fuel
@@ -229,7 +234,8 @@ fn starve(w: &mut World, b: &mut Body, t: f64, dead: &mut Vec<f64>) -> bool {
 /// full, stop taking matter. Gases (at its temperature) leave by breath. Returns its mass and heat capacity after.
 fn shed(w: &mut World, b: &mut Body) -> (f64, f64) {
     let (chem, (mass, cap)) = (&w.chem, b.mass_cap(&w.chem));
-    let t = b.temp_at(chem, cap);
+    let th = b.thermal(chem, cap);
+    let t = th.t;
     let minerals = chem.minerals();
     let over: Vec<f64> = (0..chem.ns())
         .map(|k| {
@@ -240,7 +246,7 @@ fn shed(w: &mut World, b: &mut Body) -> (f64, f64) {
         })
         .collect();
     if over.iter().any(|&a| a > 0.0) {
-        to_ground(w, b, &over);
+        to_ground(w, b, &th, &over);
         return b.mass_cap(&w.chem);
     }
     (mass, cap)

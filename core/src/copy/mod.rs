@@ -10,6 +10,7 @@ mod grow;
 mod mix;
 
 pub use grow::grow;
+pub(crate) use grow::grow_at;
 
 use crate::body::{alike_size, most, mutation_size, vary, within, Body, Layout, CHILD, COPY_MASS, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
@@ -106,7 +107,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     // Its heat is that of its parent's temperature on the heat capacity it got, with the fusion enthalpy of what it got
     // molten (`Body::heat_with`), so it starts as warm as its parent (a dry child would else be much hotter, a wet one
     // colder); the parent keeps the rest.
-    c.e = b.heat_with(&w.chem, &c.store);
+    c.e = b.heat_with(&w.chem, &b.thermal_now(&w.chem), &c.store);
     b.e -= c.e;
     for (a, x) in b.store.iter_mut().zip(&c.store) {
         *a -= x;

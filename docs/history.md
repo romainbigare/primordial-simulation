@@ -650,6 +650,14 @@ The work of `docs/foundation/plan.md`, one line per task.
   a body came, went, moved, changed its members, or was seen anew, `World::see`), not every cell at every physics
   step. Same history (golden unchanged; 64 x 64, seed 1, 35 years: same fingerprint); bodies 3 to 8% less time per
   year (side by side).
+- E10 (e), speed: the body's temperature solve (`Body::thermal`) is passed on where the body has not changed: from
+  the upkeep to the members who die of age or of a shortfall and to the physics of the time (paying leaves the body
+  at the plateau state it paid at, `Body::energy_in`), from the checks of the stores to growth (its supply and its
+  first conversion) and to the members who freeze or starve, and from shedding to what it sheds (`Body::heat_with`
+  and `to_ground` take the state). 12.6 solves per body update fall to 7.6. Same to rounding (64 x 64, seed 1, 35
+  years: without the upkeep's part the same fingerprint); the same world (64 x 64, years 26 to 35, seeds 1 and 2:
+  plant members -2% and -1%, eaters 0.6 and 1.0 times their mass, land -0.1 K, carbon gas -3 and -4 ppm); a body
+  update 4 to 13% cheaper (side by side, years 10 to 30). Golden re-pinned.
 
 **Phase J: the long physics step**
 

@@ -125,7 +125,11 @@ impl Body {
     /// not working tissue), times the pace of its temperature (`pace`): the whole tempo of a body goes with exp(-Ea/T)
     /// (metabolic theory of ecology, Gillooly et al. 2001), as what it pays to live does.
     pub fn supply(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
-        self.equiv(p, self.built(chem)) * self.pace(chem, p, self.temp(chem))
+        self.supply_at(chem, p, self.temp(chem))
+    }
+    /// `supply` when its temperature `t` is known.
+    pub(crate) fn supply_at(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
+        self.equiv(p, self.built(chem)) * self.pace(chem, p, t)
     }
     /// Most of substance `k` the body holds, mol, by its keep gene: for a key liquid the largest share of the body it may
     /// make up, `h` (below `MAX_KEEP`), so h / (1 - h) of its matter; for a solid it builds (`Chemistry::materials`), what

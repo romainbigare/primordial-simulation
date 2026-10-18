@@ -63,13 +63,14 @@ pub(super) fn put(w: &mut World, b: &mut Body) {
         return;
     }
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
-    body::to_ground(w, b, &m);
+    let th = b.thermal_now(&w.chem);
+    body::to_ground(w, b, &th, &m);
 }
 
 /// Move amounts `m` (mol) from `from` to `to`, with their heat (`Body::heat_with`) and their share of `from`'s brood
 /// (`Body::lose`).
 fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
-    let q = from.heat_with(&w.chem, m);
+    let q = from.heat_with(&w.chem, &from.thermal_now(&w.chem), m);
     from.lose(&w.chem, m);
     for (k, &a) in m.iter().enumerate() {
         to.store[k] += a;

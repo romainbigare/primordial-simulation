@@ -2,6 +2,7 @@
 
 use super::{light_cat, Body};
 use crate::event::{Event, EventKind};
+use crate::ground::Melting;
 use crate::{bond, World};
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
@@ -18,11 +19,11 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
     w.life.remove(slot);
 }
 
-/// Amounts `m` (mol of each substance, at most what it holds) go from body `b` to its cell's ground as loose amounts, with
-/// their heat and fusion enthalpy (`Body::heat_with`).
-pub(crate) fn to_ground(w: &mut World, b: &mut Body, m: &[f64]) {
+/// Amounts `m` (mol of each substance, at most what it holds) go from body `b`, at the plateau state `th`, to its cell's
+/// ground as loose amounts, with their heat and fusion enthalpy (`Body::heat_with`).
+pub(crate) fn to_ground(w: &mut World, b: &mut Body, th: &Melting, m: &[f64]) {
     let (n, i) = (w.mesh.cells().n(), b.cell as usize);
-    let q = b.heat_with(&w.chem, m);
+    let q = b.heat_with(&w.chem, th, m);
     b.lose(&w.chem, m);
     for (k, &a) in m.iter().enumerate() {
         w.ground[k * n + i] += a;
@@ -32,11 +33,12 @@ pub(crate) fn to_ground(w: &mut World, b: &mut Body, m: &[f64]) {
 }
 
 /// Some of a body's matter goes to its cell's ground as loose amounts: `dead` (mol of each substance), with its share of
-/// the heat and of the brood (`Body::lose`). In a node these are the remains of a share `f` of its members, who died of `cause` (the
-/// count falls). False if less than one member is left (the caller lets the node die).
-pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8) -> bool {
+/// the heat and of the brood (`Body::lose`), the body at the plateau state `th`. In a node these are the remains of a share
+/// `f` of its members, who died of `cause` (the count falls). False if less than one member is left (the caller lets the
+/// node die).
+pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, th: &Melting) -> bool {
     let dead: Vec<f64> = dead.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
-    to_ground(w, b, &dead);
+    to_ground(w, b, th, &dead);
     let chem = &w.chem;
     if b.n() > 1.0 && f > 0.0 {
         let (cat, root) = (light_cat(chem, &b.genes), w.life.root(b));
@@ -53,7 +55,8 @@ pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8)
 /// matter, kg, torn off members who live on (0 when members died).
 fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter0: f64) -> Option<f64> {
     let whole = b.n() > 1.0 && f * b.n() >= 1.0;
-    let alive = thin(w, b, if whole { f } else { 0.0 }, dead, cause);
+    let th = b.thermal_now(&w.chem);
+    let alive = thin(w, b, if whole { f } else { 0.0 }, dead, cause, &th);
     alive.then(|| if whole { 0.0 } else { (matter0 - b.matter_kg(&w.chem)).max(0.0) })
 }
 

@@ -184,6 +184,10 @@ impl Body {
     pub(crate) fn temp_at(&self, chem: &Chemistry, cap: f64) -> f64 {
         self.thermal(chem, cap).t
     }
+    /// `thermal` at its heat capacity now.
+    pub(crate) fn thermal_now(&self, chem: &Chemistry) -> Melting {
+        self.thermal(chem, self.heat_cap(chem))
+    }
     /// Where the body of heat capacity `cap` stands among the melting plateaus of its stores (`ground::melting`), each
     /// store melting at its point lowered by what is dissolved in it (`melt`). (What is dissolved only lowers a melting
     /// point: solved first at the stores' own points, the answer holds when every store that may hold something
@@ -227,11 +231,10 @@ impl Body {
     pub fn energy_at(&self, chem: &Chemistry, t: f64) -> f64 {
         self.heat_cap(chem) * t + (0..chem.ns()).map(|k| self.store[k] * chem.fused_heat(k, t, |j| self.store[j])).sum::<f64>()
     }
-    /// The heat that leaves with amounts `m` (mol of each substance): their heat capacity at its temperature and the fusion
-    /// enthalpy of their molten shares, J.
-    pub(crate) fn heat_with(&self, chem: &Chemistry, m: &[f64]) -> f64 {
-        let th = self.thermal(chem, self.heat_cap(chem));
-        chem.heat_cap_of(m) * th.t + self.fused_of(chem, &th, m)
+    /// The heat that leaves with amounts `m` (mol of each substance) from the body at the plateau state `th` (`thermal`):
+    /// their heat capacity at its temperature and the fusion enthalpy of their molten shares, J.
+    pub(crate) fn heat_with(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
+        chem.heat_cap_of(m) * th.t + self.fused_of(chem, th, m)
     }
     /// Volume of its solids and liquids, m³.
     pub fn volume(&self, chem: &Chemistry) -> f64 {
