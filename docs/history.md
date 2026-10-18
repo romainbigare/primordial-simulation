@@ -435,6 +435,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   before its first change, marked by a bit), not by each change: liquid or gas that passes through a node wakes
   nothing, and many small gains that sum to more than `wake_share` wake it. A move or a transform wakes a node by its
   own change. Golden re-pinned.
+- `flow::drain`: its two helpers for what moving liquid carries (`carried_by` for the vertical links) become one
+  (`carry`, by signed shares); `carried` keeps only the choice of links. Same results (golden unchanged).
 
 **Owner's decisions after Phase A**
 

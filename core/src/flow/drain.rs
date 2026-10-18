@@ -48,7 +48,7 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
         }
     }
     let down: Vec<u32> = sinks.iter().map(|c| c.0).collect();
-    let sunk = carried_by(&sinks, liq, |q, i| mob.mol[q * n + i], |i, mol| {
+    let sunk = carry(&sinks, liq, |q, i| mob.mol[q * n + i], |i, _, mol| {
         let t = t_now(w, s, i);
         liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
     });
@@ -145,7 +145,7 @@ struct Carried {
 
 /// What volumes `flux` (m³, + from `a` to `b`) carry, on the links where something leaves: of each substance of `ks`,
 /// the share of its sender's volume `vol` that leaves times its amount there (`amount(q, i)`), and the heat of what
-/// leaves (`heat(i, share, mol)`).
+/// leaves (`heat(i, share, mol)`; `carry`).
 fn carried(
     (a, b): (&[u32], &[u32]),
     flux: &[f64],
@@ -155,32 +155,25 @@ fn carried(
 ) -> Carried {
     let from = |l: usize| if flux[l] > 0.0 { a[l] as usize } else { b[l] as usize };
     let used: Vec<usize> = (0..flux.len()).filter(|&l| flux[l] != 0.0 && vol[from(l)] > 0.0).collect();
-    let (links, mut m) = (used.len(), vec![0.0; ks.len()]);
+    let senders: Vec<(u32, f64)> = used.iter().map(|&l| (from(l) as u32, flux[l].signum() * (flux[l].abs() / vol[from(l)]).min(1.0))).collect();
+    let (mol, heat) = carry(&senders, ks, amount, heat);
     let ends = |v: &[u32]| used.iter().map(|&l| v[l]).collect();
-    let mut c = Carried { a: ends(a), b: ends(b), mol: vec![0.0; ks.len() * links], heat: vec![0.0; links] };
-    for (u, &l) in used.iter().enumerate() {
-        let (i, sign, share) = (from(l), flux[l].signum(), (flux[l].abs() / vol[from(l)]).min(1.0));
-        for (q, mq) in m.iter_mut().enumerate() {
-            *mq = amount(q, i) * share;
-            c.mol[q * links + u] = sign * *mq;
-        }
-        c.heat[u] = sign * heat(i, share, &m);
-    }
-    c
+    Carried { a: ends(a), b: ends(b), mol, heat }
 }
 
-/// What the vertical links of `cells` (each with the share of its sender that leaves) carry: of each substance of
-/// `ks`, the share times its amount there (`amount(q, i)`), mol per link (`[q * links + l]`), and the heat of what
-/// leaves (`heat(i, mol)`), J per link.
-fn carried_by(cells: &[(u32, f64)], ks: &[usize], amount: impl Fn(usize, usize) -> f64, heat: impl Fn(usize, &[f64]) -> f64) -> (Vec<f64>, Vec<f64>) {
-    let (links, mut m) = (cells.len(), vec![0.0; ks.len()]);
+/// What leaves each sender of `from` (its node, and the share of it that leaves, negative on a link that carries it
+/// from `b` to `a`): of each substance of `ks`, the share times its amount there (`amount(q, i)`), mol per link
+/// (`[q * links + l]`, with the sign of the share), and the heat of what leaves (`heat(i, share, mol)`), J per link.
+fn carry(from: &[(u32, f64)], ks: &[usize], amount: impl Fn(usize, usize) -> f64, heat: impl Fn(usize, f64, &[f64]) -> f64) -> (Vec<f64>, Vec<f64>) {
+    let (links, mut m) = (from.len(), vec![0.0; ks.len()]);
     let (mut mol, mut e) = (vec![0.0; ks.len() * links], vec![0.0; links]);
-    for (l, &(i, share)) in cells.iter().enumerate() {
+    for (l, &(i, f)) in from.iter().enumerate() {
+        let (i, share) = (i as usize, f.abs());
         for (q, mq) in m.iter_mut().enumerate() {
-            *mq = amount(q, i as usize) * share;
-            mol[q * links + l] = *mq;
+            *mq = amount(q, i) * share;
+            mol[q * links + l] = f.signum() * *mq;
         }
-        e[l] = heat(i as usize, &m);
+        e[l] = f.signum() * heat(i, share, &m);
     }
     (mol, e)
 }
@@ -198,7 +191,7 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[
         return got;
     }
     let (up, ks16): (Vec<u32>, Vec<u16>) = (ups.iter().map(|c| c.0).collect(), ks.iter().map(|&k| k as u16).collect());
-    let (mol, heat) = carried_by(&ups, &ks, |q, i| w.deep[ks[q] * n + i], |i, _| w.e_deep[i] * share[i]);
+    let (mol, heat) = carry(&ups, &ks, |q, i| w.deep[ks[q] * n + i], |i, f, _| w.e_deep[i] * f);
     for (l, &i) in up.iter().enumerate() {
         let (i, links) = (i as usize, up.len());
         let (lift, mut r) = (g * (s.head[i] - store_table(w, s, i, held[i])), 0.0);
