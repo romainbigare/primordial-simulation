@@ -691,10 +691,12 @@ the same patterns as individuals.
   update stands for the other side, and since the side is drawn, the error of that one-sided
   difference averages out. This is the breeder's equation, the change of a mean is its genetic
   variance times the gradient of log fitness (Lande 1976; Falconer and Mackay 1996). A gene that
-  does nothing gains nothing and does not move (a gene that is off on both sides is not run). A
-  node with a brain has none: its update is also its decisions, which act on the world. Genes
-  whose worth shows only after an update (the size and number of children, `CHILD`, `ALLOC`,
-  `DISPERSE`) gain nothing in one, so they move only by selection between nodes.
+  does nothing gains nothing and does not move, so where the drawn gene cannot change the gain no
+  sample is run: a gene the update as far as its growth never reads in a node without a brain
+  (`copy::select::UNREAD`: those of its children, `CHILD`, `MUT`, `DISPERSE`, `WET`, `ALLOC`,
+  read when children are made, and those of a brain), or a gene that is off on both sides. These
+  genes move only by selection between nodes. A node with a brain has none: its update is also
+  its decisions, which act on the world.
 - **Members as individuals.** A node does an action of Bond through one member split off as an
   individual (`nodes::one`); if it then holds something or is inside, it lives on alone, else it
   goes straight back, and the node's rows and their spread stay as they were. `nodes::open` draws

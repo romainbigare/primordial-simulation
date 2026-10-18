@@ -6,7 +6,7 @@
 //! Mackay 1996), in the form the covariance of a gene with fitness gives for two halves a step either side of the
 //! mean (Robertson 1966).
 
-use crate::body::{gain_to_growth, range, spread_at, Body, Layout, LiveTmp};
+use crate::body::{gain_to_growth, range, spread_at, Body, Layout, LiveTmp, ALLOC, CHILD, DISPERSE, HIDDEN, LEARN, MEMORY, MUT, SEEN, SIGHT, WET};
 use crate::change::Reactor;
 use crate::rng::{Purpose, Rng};
 use crate::World;
@@ -60,13 +60,20 @@ impl Shadow {
     }
 }
 
+/// The genes an update as far as its growth never reads in a node without a brain: those of its children (read when
+/// children are made, `copy::copy`, after the growth a sample runs to; the mutation size too) and those of a brain. A
+/// sample that differs in one of them gains what the node gains, so none is drawn: they move only by selection between
+/// nodes.
+const UNREAD: [usize; 10] = [CHILD, MUT, DISPERSE, WET, ALLOC, LEARN, HIDDEN, MEMORY, SEEN, SIGHT];
+
 /// The sample member of node `b` (slot `slot`, taken out of it, before its update; a node without a brain whose members
 /// differ): the node's genes but one, drawn among the genes its members differ in, one standard deviation of its spread
 /// up or down (the side drawn too, `Purpose::Select`), within its walls; its update as far as its growth
 /// (`body::gain_to_growth`) on the world as it is, which is then given back as it was: a member that might be, not one
-/// that is, so it changes nothing. None for other bodies, and where the step changes nothing: a gene that is off (a
-/// catalyst or a gene of a substance at or below 0) on both sides does nothing, so its sample would gain what the node
-/// gains.
+/// that is, so it changes nothing. None for other bodies, and where the drawn gene cannot change what the node gains
+/// in the update, so its sample would gain what the node gains and its mean would not move: a gene the update does not
+/// read (`UNREAD`), or one that is off (a catalyst or a gene of a substance at or below 0) on both sides. That draw
+/// costs no update, and each gene is still drawn as often, so the others move at their own rate.
 pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Option<Sample> {
     if b.n() <= 1.0 || !w.life.brainless(b) {
         return None;
@@ -77,7 +84,7 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
     let g = *differ.get(r.below(differ.len().max(1)))?;
     let ((_, lo, hi), x, sd) = (range(&lay, g), b.genes[g], spread_at(&b.spread, g).sqrt());
     let step = (if r.below(2) == 0 { x + sd } else { x - sd }).clamp(lo, hi) - x;
-    if step == 0.0 || g >= lay.cat && x <= 0.0 && x + step <= 0.0 {
+    if step == 0.0 || UNREAD.contains(&g) || g >= lay.cat && x <= 0.0 && x + step <= 0.0 {
         return None;
     }
     let mut s = b.clone();

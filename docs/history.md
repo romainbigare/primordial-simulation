@@ -732,6 +732,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   members 2617 to 1677 and 2837 to 2030, land -0.4 and -0.3 K, carbon gas 273 to 251 and 307 to 293 ppm; repair gene
   -0.97 to -0.87 in 30 years (-0.96 without). The samples are about 35% of the bodies' time (16 and 11 us each, 79%
   of them on genes that change nothing in an update). Golden re-pinned.
+- E12, speed: no sample is run where the drawn gene is one the update never reads in a node without a brain (its
+  children's and its brain's genes, `copy::select::UNREAD`); each gene is still drawn as often. 64 x 64, seed 1, 30
+  years, side by side: samples 278,900 to 230,600 in 5 years, their time -14% (31% of the bodies' time, from 35%),
+  bodies 1740 and 1718 ms/yr; the world the same to four digits (the sample's scratch of the reactor no longer runs
+  before the node's update, so the last digits move). Drawing only among the genes read, the number of genes as the
+  multiplier, ran as many samples and saved nothing. Golden re-pinned.
 
 **Phase J: the long physics step**
 
