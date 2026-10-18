@@ -392,6 +392,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   path gives it, and only the numbers that ended below zero are looked at; when one is short beyond rounding, every
   number is set back from the values kept before each change, and the careful path runs. Nodes are woken at the end
   of the call. Same results (golden unchanged); Flow at 128 x 128 without life about 15% faster.
+- D3 (c), the law: the wind books what crosses the air level's links over its whole solve through `store::apply`
+  (`wind::book`'s own booking deleted), so a node is no longer clipped when a line asks it to pass on gas it has not
+  yet received; each call starts from the air nodes' sums of their amounts now (`air::sums`), with Law 2's gas.
+  64 x 64, seed 1, 20 years with life, years 11 to 20: land -0.24 K, air +0.13 K, rain on land -1.1%, carbon gas
+  +0.4%, river cells -1.7%; ranges hold; golden re-pinned.
 
 **Owner's decisions after Phase A**
 

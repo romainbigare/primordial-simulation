@@ -260,9 +260,11 @@ pressure moves the amount by the pressure, each gas and the heat going with it a
 the node it leaves. There the overturning is an exchange of whole columns, so the vapour it
 brings to the warmer column on lines is not carried.
 
-What crosses the links is booked on each node at once (`wind::book`; `store::apply` would cut a
-node that passes on more gas than it holds, which a long call does). Air in Flow moves as whole
-columns, so there is no wind near the ground; bodies use the anchored `wind_ground` (6.3).
+Each call starts from the air nodes' amounts as they are (`air::sums`), with what Law 2 and bodies
+changed. What crosses the links over the whole solve is booked at once by `store::apply` (gas and
+heat; a node gives only its net loss, so gas that passes through it needs nothing held). Air in
+Flow moves as whole columns, so there is no wind near the ground; bodies use the anchored
+`wind_ground` (6.3).
 
 ### 1.7 Paths
 

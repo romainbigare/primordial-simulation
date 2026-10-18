@@ -100,15 +100,12 @@ impl Ctx<'_> {
                     let (a, b) = (air.a()[l] as usize, air.b()[l] as usize);
                     let mut moved = 0.0;
                     for t in 0..ng {
-                        // (The solve keeps every amount at 0 or more, but booked link by link in the line's order
-                        // a node may be asked to pass on what it has not yet received: no more than it holds goes.
-                        // The lift is of the mass the solve moves.)
-                        let (f, sp) = ((sign * row[t * len + p]).clamp(-st.x[t * na + b], st.x[t * na + a]), s.sp[s.gas[t]]);
+                        let (f, sp) = (sign * row[t * len + p], s.sp[s.gas[t]]);
                         (st.x[t * na + a], st.x[t * na + b]) = (st.x[t * na + a] - f, st.x[t * na + b] + f);
                         (st.nt[a], st.nt[b]) = (st.nt[a] - f, st.nt[b] + f);
                         (st.capa[a], st.capa[b]) = (st.capa[a] - f * sp.cp, st.capa[b] + f * sp.cp);
                         m.mol[t * nl + l] += f;
-                        moved += sign * row[t * len + p] * sp.mm;
+                        moved += f * sp.mm;
                     }
                     let h = sign * row[ng * len + p];
                     (st.e[a], st.e[b]) = (st.e[a] - h, st.e[b] + h);

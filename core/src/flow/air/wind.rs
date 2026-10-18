@@ -9,6 +9,7 @@ use super::super::Scratch;
 use super::air_temp;
 use crate::grid::AIR;
 use crate::space::Level;
+use crate::store::{apply, Class, LinkFlux};
 use crate::units::R_GAS;
 use crate::{Config, World};
 
@@ -71,14 +72,15 @@ pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
 pub fn wind_on(w: &mut World, air: &Level, dt: f64) {
     crate::flow::ensure(w);
     let mut s = std::mem::take(&mut w.scratch);
-    let moved = blow(w, &s, air, dt);
+    let moved = blow(w, &mut s, air, dt);
     book(w, &mut s, air, &moved);
     w.scratch = s;
 }
 
 /// What the wind moves over the links of `air` in a call: along lines where they form lines (`along`), else on the
-/// mesh (`mesh`).
-fn blow(w: &World, s: &Scratch, air: &Level, dt: f64) -> Moved {
+/// mesh (`mesh`); from the sums of the air nodes' amounts now (`air::sums`: Law 2 and bodies change them too).
+fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
+    super::sums(w, s);
     let na = air.n();
     let x = s.gas.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
     let start = State { x, e: w.e_air.clone(), nt: s.nt.clone(), capa: s.capa.clone() };
@@ -89,42 +91,17 @@ fn blow(w: &World, s: &Scratch, air: &Level, dt: f64) -> Moved {
     }
 }
 
-/// Book `m` on the world over the links of `air`. Each air node gets what enters and leaves it over all its
-/// links at once: a solved field may pass more gas through a node in a call than the node holds, which `store::apply`
-/// (which scales down what a node passes on beyond what it holds) would cut. An amount that rounding leaves below
-/// zero is set to zero and counted (`Counters::rounded`, as `apply` does). The lift is paid from the heat of the node
-/// the mass enters into the world's potential energy (as `Sky::cross` books it). The state's sums of each node
-/// (`Scratch::nt`, `capa`, `mass`) follow the gas.
+/// Book `m` on the world over the links of `air`: the gas and heat through `store::apply`; the lift from the heat of the
+/// node the mass enters into the world's potential energy (as `Sky::cross` books it); then the sums the state keeps of
+/// each air node, from its amounts (`air::sums`).
 fn book(w: &mut World, s: &mut Scratch, air: &Level, m: &Moved) {
-    let (na, nl, a, b) = (w.grid.na(), air.a().len(), air.a(), air.b());
-    let mut net = vec![0.0; na];
-    for (t, &k) in s.gas.iter().enumerate() {
-        let sp = s.sp[k];
-        net.fill(0.0);
-        for (l, &f) in m.mol[t * nl..(t + 1) * nl].iter().enumerate() {
-            let (x, y) = (a[l] as usize, b[l] as usize);
-            (net[x], net[y]) = (net[x] - f, net[y] + f);
-            (s.nt[x], s.nt[y]) = (s.nt[x] - f, s.nt[y] + f);
-            (s.capa[x], s.capa[y]) = (s.capa[x] - f * sp.cp, s.capa[y] + f * sp.cp);
-            (s.mass[x], s.mass[y]) = (s.mass[x] - f * sp.mm, s.mass[y] + f * sp.mm);
-        }
-        for (v, &d) in w.air[k * na..(k + 1) * na].iter_mut().zip(&net) {
-            *v += d;
-            if *v < 0.0 {
-                w.counts.rounded[0] -= *v;
-                *v = 0.0;
-            }
-        }
-    }
-    net.fill(0.0);
-    for (l, &h) in m.heat.iter().enumerate() {
-        let (x, y) = (a[l] as usize, b[l] as usize);
-        (net[x], net[y]) = (net[x] - h, net[y] + h);
-    }
-    for ((e, &d), &lift) in w.e_air.iter_mut().zip(&net).zip(&m.paid) {
-        *e += d - lift;
+    let ks: Vec<u16> = s.gas.iter().map(|&k| k as u16).collect();
+    apply(w, &[LinkFlux { class: [Class::Air; 2], a: air.a(), b: air.b(), ks: &ks, mol: &m.mol, heat: &m.heat }], &[], &[]);
+    for (e, &lift) in w.e_air.iter_mut().zip(&m.paid) {
+        *e -= lift;
         w.potential += lift;
     }
+    super::sums(w, s);
     for (j, &e) in w.e_air.iter().enumerate() {
         s.ta[j] = air_temp(e, s.capa[j]);
     }

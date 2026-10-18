@@ -77,24 +77,35 @@ pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
     s.ta0.copy_from_slice(&s.ta);
 }
 
+/// Amount, mol, heat capacity, J/K, and mass, kg, of the gases of each air node, from its amounts now.
+pub(super) fn sums(w: &World, s: &mut Scratch) {
+    let na = w.grid.na();
+    (s.nt, s.capa, s.mass) = (vec![0.0; na], vec![0.0; na], vec![0.0; na]);
+    for &k in &s.gas {
+        let sp = s.sp[k];
+        for (j, &a) in w.air[k * na..(k + 1) * na].iter().enumerate() {
+            s.nt[j] += a;
+            s.capa[j] += a * sp.cp;
+            s.mass[j] += a * sp.mm;
+        }
+    }
+}
+
 /// Amounts, heat capacity, mass, optical depth, volume, temperature and mean height of each air node; the height of
 /// its ground is the mean of its cells' by area.
 fn nodes(w: &World, s: &mut Scratch) {
     let (na, g, top) = (w.grid.na(), w.cfg.gravity, w.cfg.air_top_m);
     let (cells, air) = (w.grid.mesh().cells(), w.grid.mesh().level(AIR));
+    sums(w, s);
     for j in 0..na {
-        (s.za[j], s.nt[j], s.capa[j], s.mass[j], s.fabs[j], s.node_tmp[j]) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        (s.za[j], s.fabs[j], s.node_tmp[j]) = (0.0, 0.0, 0.0);
     }
     for (i, &j) in cells.parent().iter().enumerate() {
         s.za[j as usize] += s.head[i] * cells.area()[i];
     }
-    for &k in &s.gas {
-        let (sp, ir) = (s.sp[k], w.chem.subs[k].ir_abs > 0.0);
+    for &k in s.gas.iter().filter(|&&k| w.chem.subs[k].ir_abs > 0.0) {
         for (j, &a) in w.air[k * na..(k + 1) * na].iter().enumerate() {
-            s.nt[j] += a;
-            s.capa[j] += a * sp.cp;
-            s.mass[j] += a * sp.mm;
-            s.fabs[j] += if ir { w.chem.depth(k, a / air.area()[j]) } else { 0.0 };
+            s.fabs[j] += w.chem.depth(k, a / air.area()[j]);
         }
     }
     for j in 0..na {
