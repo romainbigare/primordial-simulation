@@ -456,6 +456,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   compares against it (the value kept before each change and the bit per amount go). The sum of all that passes
   through a number below zero runs only over the columns that may change one. Same results (golden unchanged);
   Flow at 64 x 64 without life 15% fewer instructions.
+- D10 (speed), `clock::Sleep`: a node sleeps and wakes by its own alarm alone (the queue of alarms by time, a
+  `BTreeSet` per class, goes); the nodes due are found by a look over all the alarms, in the same order. Same
+  history (`series.csv` and `months.csv` byte for byte); snapshot version 15, golden re-pinned (the saved state
+  changed). Change at 128 x 128 without life about 9% faster.
 
 **Owner's decisions after Phase A**
 
