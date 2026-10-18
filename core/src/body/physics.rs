@@ -77,7 +77,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let mass1 = b.mass(&w.chem);
     let (lost, moved) = evaporate(w, b, tmp, s, &mut h, &soil, reach);
     let mass2 = if moved { b.mass(&w.chem) } else { mass1 };
-    soak(w, b, s, &mut h, &soil, &lost, fall, mass2);
+    soak(w, b, s, h.gcap, &mut h.heat, &soil, &lost, fall, mass2);
     roots(w, b, s, &mut h, mass2, wk);
     let fusion1 = b.fusion_in(&w.chem, &th0);
     h.heat += fusion0 - fusion1;
@@ -235,9 +235,10 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
 
 /// Liquids of the ground soak in by solubility up to the level the body keeps, at the rate of `Soil` x solubility,
 /// while it loses what it evaporated (`lost`) at a steady rate, solved exactly over the time; with them the rain its
-/// capture area caught (`fall`). The ground pays their heat and fusion enthalpy, or the body soaks less.
+/// capture area caught (`fall`). The ground (of heat capacity `gcap`) pays their heat and fusion enthalpy, or the body
+/// soaks less; the fusion enthalpy goes into `heat`.
 #[allow(clippy::too_many_arguments)]
-fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
+fn soak(w: &mut World, b: &mut Body, s: &Site, gcap: f64, heat: &mut f64, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
     let World { chem, mesh, ground, e_ground, counts, .. } = w;
     let (n, i, tg, days) = (mesh.cells().n(), s.i, s.tg, s.days);
     for k in (0..chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
@@ -249,12 +250,25 @@ fn soak(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, soil: &Soil, lost: 
         let uptake = if rate * days > 1e-9 { (room - lost[k]) * f + lost[k] * (1.0 - f / (rate * days)) } else { 0.0 };
         let want = ((uptake + fall) * x).min(room).min(MAX_TAKE_SHARE * ground[k * n + i]).max(0.0);
         let (per, fused) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
-        let d = take_paid(&mut e_ground[i], counts, h.gcap, want, chem.subs[k].cp, want * (per + fused)).0;
+        let d = take_paid(&mut e_ground[i], counts, gcap, want, chem.subs[k].cp, want * (per + fused)).0;
         b.store[k] += d;
         ground[k * n + i] -= d;
         b.e += d * per;
-        h.heat += d * fused;
+        *heat += d * fused;
     }
+}
+
+/// After growth and children, the key liquids soak in again at the same update (`soak` over the time, with nothing
+/// lost and no rain): new matter raises their level (`Body::level`) and children take their share of them, and a body
+/// takes up that liquid as it grows and gives it, not one update later, so its activity (`Body::activity`) does not
+/// fall with the length of its updates. The liquid comes with its heat and fusion enthalpy at the ground's temperature.
+pub(super) fn soak_again(w: &mut World, b: &mut Body, s: &Site) {
+    let mass = b.mass(&w.chem);
+    let soil = soil(w, b, s, b.size(&w.chem) / mass);
+    let soil = Soil { wets: soil.wets & b.wet, ..soil };
+    let (gcap, mut heat) = (w.heat_cap_ground(s.i), 0.0);
+    soak(w, b, s, gcap, &mut heat, &soil, &[0.0; MAX_SUBSTANCES], 0.0, mass);
+    b.e += heat;
 }
 
 /// Roots take what is liquid in the ground but does not dissolve itself, for the uptake genes that are on, up to its

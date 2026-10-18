@@ -1017,18 +1017,19 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
     // (Lives are counted from the last update of the first individual: wear counts from there.)
-    let (books, start, n0) = (Books::now(&w), w.life.bodies[sa].last, w.life.bodies[c].count);
+    let (books, start, n0, node_last) = (Books::now(&w), w.life.bodies[sa].last, w.life.bodies[c].count, w.life.bodies[c].last);
     let mut deaths = Vec::new();
     for _ in 0..240 {
         day(&mut w, &mut deaths);
     }
     // The individuals' deaths (one member each) and the node's (a share of its members).
     let (ones, node): (Vec<_>, Vec<_>) = deaths.into_iter().map(|(d, v)| (d - start, v)).partition(|x| x.1 == 1.0);
-    // The node's mean life: the days its members lived over those who died (it loses a share at each update; it may die
-    // of other causes later, so only its age deaths count).
-    let (mut n, mut t, mut lived) = (n0, 0, 0.0);
+    // The node's mean life: the days its members lived over those who died (it loses a share at each update, of
+    // members who die at a steady rate between updates, so over a span they live dead / ln(n / (n - dead)) times its
+    // days; it may die of other causes later, so only its age deaths count).
+    let (mut n, mut t, mut lived) = (n0, node_last as f64 - start as f64, 0.0);
     for &(day, dead) in &node {
-        (lived, n, t) = (lived + n * (day - t) as f64, n - dead, day);
+        (lived, n, t) = (lived + dead * (day as f64 - t) / (n / (n - dead)).ln(), n - dead, day as f64);
     }
     let dc = lived / (n0 - n);
     println!("lives, days: individuals {ones:?} at genes 0 and 0.5 (predicted {life} and {:.0}); node {dc:.1} ({:.0} of {n0} members died of age)", life * x, n0 - n);

@@ -3,11 +3,12 @@
 
 use super::exchange::cover_of;
 use super::pay::{hold, pay_at, plan, spend, upkeep_at, Payer};
-use super::physics::physics;
+use super::physics::{physics, soak_again};
 use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::bond::{self, Enclosure};
 use crate::change::Reactor;
 use crate::chem::Phase;
+use crate::math::one_minus_exp;
 use crate::rng::{Purpose, Rng};
 use crate::units::DAY;
 use crate::{World, AIR};
@@ -88,10 +89,12 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
     keep_warm(w, b, span, s.dt);
     check_stores(w, slot, b, tmp)?;
     // Growth builds body matter, paid by work (`copy::grow`); past maturity a share `ALLOC` of it goes into the brood.
-    // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`).
-    crate::copy::grow(w, b, s.days);
-    if b.brood > 0.0 {
-        crate::copy::copy(w, slot, b);
+    // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`). The key
+    // liquid the new tissue lacks and the children took soaks in again (`soak_again`).
+    let built = crate::copy::grow(w, b, s.days);
+    let born = b.brood > 0.0 && crate::copy::copy(w, slot, b);
+    if built || born {
+        soak_again(w, b, &s);
     }
     let (mass, cap) = shed(w, b);
     Ok(Lived { lit, spare, mass, cap })
@@ -112,15 +115,16 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
         return Err(SPENT);
     }
     // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it
-    // carries), over what it can turn over in its life (`Physics::e_life`). A node's members are of all ages: this share
-    // of them dies now (the death rate of members who each live that long, so the same mean life).
+    // carries), over what it can turn over in its life (`Physics::e_life`). A node's members are of all ages: they die
+    // at the rate of the wear, so over the time the share 1 - e^-wear of them dies now (the same mean life, whatever the
+    // length of its updates).
     let worn = cost / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so
     // the body keeps its temperature as its stores change (as in `pay`).
     let kept = b.energy_in(&w.chem, &p.th);
     let upkeep_heat = b.e - kept;
     b.e = kept;
-    for (f, cause) in [(short, SPENT), (if node { worn.min(1.0) } else { 0.0 }, AGE)] {
+    for (f, cause) in [(short, SPENT), (if node { one_minus_exp(worn) } else { 0.0 }, AGE)] {
         if f > 1e-9 {
             if !members_die(w, b, f, cause, &mut tmp.dead) {
                 b.e += upkeep_heat;

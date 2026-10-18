@@ -617,6 +617,14 @@ The work of `docs/foundation/plan.md`, one line per task.
   squares (D3), so the wind always runs along lines. A row that closes on itself (round the globe, G1) is solved as a
   ring by the cyclic form of the line step (`solve::lines::along_ring`, Sherman–Morrison). Same history (golden
   unchanged).
+- Fixes of the body update over its span (found by the check of E4). (1) After growth and children the key liquid soaks
+  in again at the same update (`physics::soak_again`): new matter raised the level of the key liquid after the
+  soaking and children took their share of it, so a body started each update drier by the growth and the children of
+  the last one, and its upkeep, catalysts and building ran slower over the whole span, the more so the longer the span
+  (activity at the start of an update 0.94 at 20 days, 0.79 at 72). (2) A node's members die of age at the rate of
+  their wear, the share 1 - e^-wear over the span, not the share `wear` (which killed too many over a long span).
+  64 x 64, seed 1, years 11 to 20: plant activity 0.50 to 0.75, plant members -22%, body mass -3%, life of plants
+  2.1 to 1.7 yr, land +0.1 K, carbon gas 247 to 250 ppm; golden re-pinned.
 
 **Owner's decisions after Phase A**
 

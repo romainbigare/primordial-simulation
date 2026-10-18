@@ -654,8 +654,8 @@ the same patterns as individuals.
   drawn from the node's spread.
 - **Brain size in nodes** (`lineage::resize`): a node whose mean brain-size gene is a whole unit
   away from its lineage's size moves itself to a new lineage of that size, its brain carried over.
-- **Age in nodes.** A node has no single age: at each update a share of its members dies of age,
-  equal to the wear an individual would take in that time (6.7).
+- **Age in nodes.** A node has no single age: its members die of age at the rate of the wear an
+  individual would take (6.7).
 - **Individuals mode** (`Config::nodes` off, `ew run --individuals`): bodies with a brain are
   never nodes. Bodies without one (the light-eaters) stay nodes in both modes: the check compares
   brains in nodes and alone. Siblings born together as individuals each get born rows
@@ -855,7 +855,9 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Soaking** (`LIQ` gene): a flow along the body's contact with the ground, at rate `LIQ` × the
   ground's wetness (standing or pore liquid; half wet at `wet_depth`) × its working share ×
   solubility per day, driven by how far it is below its level, while it loses what it
-  evaporates. Solved exactly over the update. A body afloat reaches no ground.
+  evaporates. Solved exactly over the update. A body afloat reaches no ground. After it grows (6.6)
+  and has children (4.2), it soaks in the same way again at the same update (`soak_again`): the
+  liquid its new tissue lacks and its children took, so its activity does not lag by one update.
 - **What flows through** (`through` in `body/exchange.rs`): a soaking body loses where its
   soaking meets what its pores pass; what passes beyond its store comes from the ground as it
   goes. This is transpiration.
@@ -912,8 +914,10 @@ up to the level its share makes of its matter. They pay no upkeep and are not th
   solid or liquid it neither burns nor is made of.
 - **Ageing**: living wears a body. Its wear grows by the energy its upkeep turns over per kg of
   living body, over `e_life` × 10^`REPAIR` (`e_life` = 10⁹ J/kg, the rate-of-living figure of real
-  life). An individual dies of age (`AGE`) when its wear reaches 1. A node loses that share of its
-  members at each update. A member split off a node gets a random wear in [0, 1).
+  life). An individual dies of age (`AGE`) when its wear reaches 1. A node's members die at the rate
+  of that wear: at each update it loses the share 1 − e^−wear of the wear over the time since, so
+  as many in a year whatever the length of its updates. A member split off a node gets a random
+  wear in [0, 1).
 
 ### 6.8 Damage
 
