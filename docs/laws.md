@@ -555,7 +555,7 @@ starting eaters move while their mass is under about 6 times their living body.
 
 ## 4. Copy: a piece of the graph is copied, with small changes
 
-Files: `core/src/copy/` (`copy`, `mix`, `grow`, `young`), `core/src/nodes.rs` (population nodes),
+Files: `core/src/copy/` (`copy`, `mix`, `grow`, `young`, `select`), `core/src/nodes.rs` (population nodes),
 `core/src/body/genes.rs` (genes, likeness, mutation), `core/src/lineage.rs`. The body side of
 growth is in 6.6.
 
@@ -676,6 +676,25 @@ the same patterns as individuals.
   halves.
 - **Gene means move only by selection.** Splits, draws and joins keep the mean of each gene
   exactly; near a wall the noise is shrunk, never clamped.
+- **Selection inside a node** (`copy/select.rs`). Members are born and die in proportion whatever
+  their genes, so a node's genes would move only by selection between nodes. So a node without a
+  brain also runs its update, as far as its growth, for a sample member (`copy::sample`): the
+  node's genes but one, drawn among those its members differ in, which is one standard deviation
+  of its spread up or down (the gene and the side drawn by keyed random numbers), within its
+  walls. The sample runs on the world as it is and the world is given back as it was: it is a
+  member that might be, and changes nothing. Its gain and the node's are the log of the body
+  matter (brood with it) after growth over that before the update: growth less deaths. The mean
+  of the gene then moves by the sample's step times tanh(sample's gain − node's gain), times the
+  number of genes drawn from (each gene is drawn that much less often), at most by the step
+  (`copy::select`): Price's equation for two halves a step either side of the mean (Price 1970)
+  moves the mean by the step times tanh(half the difference of their log gains); the node's own
+  update stands for the other side, and since the side is drawn, the error of that one-sided
+  difference averages out. This is the breeder's equation, the change of a mean is its genetic
+  variance times the gradient of log fitness (Lande 1976; Falconer and Mackay 1996). A gene that
+  does nothing gains nothing and does not move (a gene that is off on both sides is not run). A
+  node with a brain has none: its update is also its decisions, which act on the world. Genes
+  whose worth shows only after an update (the size and number of children, `CHILD`, `ALLOC`,
+  `DISPERSE`) gain nothing in one, so they move only by selection between nodes.
 - **Members as individuals.** A node does an action of Bond through one member split off as an
   individual (`nodes::one`); if it then holds something or is inside, it lives on alone, else it
   goes straight back, and the node's rows and their spread stay as they were. `nodes::open` draws

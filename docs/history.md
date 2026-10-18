@@ -721,6 +721,17 @@ The work of `docs/foundation/plan.md`, one line per task.
   (seed 2), from -0, -4, -10, -14% and -0, -2, -2, -16%; mass within 0.005 log10. The time of joining members alone
   gave -0, -1, -7, -8% and -0, -3, -3, -11%. Years 30 to 35 at 36 days: plant members 4.27e10 to 4.48e10 and 3.54e10
   to 3.69e10, life of plants 3.34 to 3.69 and 3.83 to 4.08 yr. Golden re-pinned; snapshot version 27.
+- E12, selection inside a node: a node without a brain also runs its update, as far as its growth, for a sample
+  member one standard deviation of its spread from its mean on one gene (drawn, with its side, `Purpose::Select`),
+  on the world as it is, then given back (`copy::sample`); the mean of that gene moves by the step times tanh of what
+  the sample gained over the node, times the number of genes drawn from, at most a step (`copy::select`: Price's
+  equation, the breeder's equation). Tried and not kept: all genes at once with drawn signs (one sample for all): the
+  other genes' effects moved genes that do nothing (the brain sizes of light-eaters) by chance, 100 lineages by year
+  30, and a run failed. Years 30 to 35, seeds 1 and 2: plant members 4.43e10 to 5.36e10 and 3.63e10 to 4.31e10,
+  plant mass 4.18e10 to 5.33e10 and 3.41e10 to 4.16e10 kg, life of plants 3.77 to 4.37 and 3.84 to 4.11 yr, animal
+  members 2617 to 1677 and 2837 to 2030, land -0.4 and -0.3 K, carbon gas 273 to 251 and 307 to 293 ppm; repair gene
+  -0.97 to -0.87 in 30 years (-0.96 without). The samples are about 35% of the bodies' time (16 and 11 us each, 79%
+  of them on genes that change nothing in an update). Golden re-pinned.
 
 **Phase J: the long physics step**
 

@@ -1056,8 +1056,10 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     for s in live(&w) {
         (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT], w.life.bodies[s].genes[CHILD]) = (1.45, -0.8, -std::f32::consts::LOG10_2);
         if wide {
-            // (The first children that stay bring every spread down to the split threshold.)
+            // (The first children that stay bring every spread down to the split threshold.) A brain of 12 hidden units
+            // for selection to shrink (light-eaters start with none).
             w.life.bodies[s].spread = vec![1e9; len];
+            w.life.bodies[s].genes[HIDDEN] = 12.0;
         }
     }
     let mean = |w: &pcore::World| {
@@ -1492,5 +1494,55 @@ fn individuals_mode_merges_no_animal() {
     assert!(alive.last().is_some_and(|&a| a > 0), "no animal was alive at the end: {alive:?}");
     assert!(born > 0.0, "no animal was born in the window: {alive:?}");
     assert!(w.life.alive().any(|b| !animal(&w, b) && b.count > 1.0), "no light-eater node");
+    books.assert_kept(&w, 1e-9);
+}
+
+/// The body matter body `s` holds (its brood with it), mol, and its gene `g`, after its next update (`pcore::day` until
+/// it has updated).
+fn after_update(w: &mut World, s: usize, g: usize) -> (f64, f32) {
+    let last = w.life.bodies[s].last;
+    while w.life.bodies[s].last == last {
+        pcore::day(w);
+    }
+    (w.life.bodies[s].store[MATTER], w.life.bodies[s].genes[g])
+}
+
+/// Selection inside a node moves its mean as selection among its members would (`copy::sample`, `copy::select`): a
+/// light-eater node at its first update (making no brood, so all it builds stays in it), whose members differ in one
+/// gene by a standard deviation of 0.3 steps. The same node with that gene at its mean plus and minus the deviation,
+/// and no spread, gains W+ and W- in an update (as two kinds of members would, each on its own); the covariance of the
+/// gene with fitness in two such halves moves the mean by sd (W+ - W-) / (W+ + W-) (Robertson 1966). The node's own
+/// update moves its mean as much, within a quarter, the same way. It costs the node one more update as far as its
+/// growth.
+#[test]
+fn selection_inside_a_node_moves_its_mean_as_its_members_would() {
+    let mut w = small_world();
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
+    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0 && w.life.bodies[s].adult(&w.chem)).expect("an adult node");
+    let books = Books::now(&w);
+    let lay = Layout::of(&w.chem);
+    for (g, name) in [(LEAF, "light capture"), (body::REPAIR, "repair")] {
+        let sd = 0.3 * pcore::body::steps(&lay, &vec![1.0; lay.len])[g].recip();
+        let b = &mut w.life.bodies[s];
+        (b.genes[ALLOC], b.brood) = (0.0, 0.0);
+        b.prepare(&w.chem, &w.cfg.phys);
+        b.spread = vec![0.0; lay.len];
+        b.spread[g] = sd * sd;
+        let (z, m0) = (b.genes[g], b.store[MATTER]);
+        // The two halves, each on its own in a copy of the world.
+        let half = |d: f32| {
+            let mut v = w.clone();
+            let b = &mut v.life.bodies[s];
+            (b.genes[g], b.spread) = (z + d, Vec::new());
+            b.prepare(&v.chem, &v.cfg.phys);
+            (after_update(&mut v, s, g).0 / m0).ln()
+        };
+        let (up, down) = (half(sd), half(-sd));
+        let pair = sd * ((up - down) / 2.0).tanh() as f32;
+        let (m1, z1) = after_update(&mut w, s, g);
+        println!("{name}: ln W+ {up:.3e}, ln W- {down:.3e}, node ln W {:.3e}; mean moved {:.3e}, the two halves {pair:.3e}", (m1 / m0).ln(), z1 - z);
+        assert!((up - down).abs() > 1e-5, "{name}: no selection to measure ({up} and {down})");
+        assert!(((z1 - z) / pair - 1.0).abs() < 0.25, "{name}: the node's mean moved {} where the two halves move it {pair}", z1 - z);
+    }
     books.assert_kept(&w, 1e-9);
 }

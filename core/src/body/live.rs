@@ -43,6 +43,9 @@ pub struct Lived {
     /// Its mass and heat capacity as its update leaves them, after it sheds (valid until its stores change)
     pub mass: f64,
     pub cap: f64,
+    /// The log of the body matter (its brood with it) it holds after its growth over what it held as its update began:
+    /// what its members gained in the time, by growth, less the deaths (`copy::select`)
+    pub gain: f64,
 }
 
 /// Where a body is at its update, and the time since its last.
@@ -78,8 +81,33 @@ fn site(w: &World, b: &Body) -> Site {
 /// Flow and Change on one body since its last update: upkeep, the physics of the time (`physics`), the heat it keeps,
 /// the checks of its stores, growth and copying, and what it sheds. Returns what it left for its decision, or a death cause.
 pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<Lived, u8> {
+    let (g, s) = to_growth(w, slot, b, rc, tmp)?;
+    // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`). The key
+    // liquid the new tissue lacks and the children took soaks in again (`soak_again`).
+    let born = b.brood > 0.0 && crate::copy::copy(w, slot, b);
+    if g.built || born {
+        soak_again(w, b, &s);
+    }
+    let (mass, cap) = shed(w, b);
+    Ok(Lived { lit: g.lit, spare: g.spare, mass, cap, gain: g.gain })
+}
+
+/// What an update did as far as its growth (`to_growth`): the light it caught per kg per day, J, its spare, whether it
+/// built, and what its members gained (`Lived::gain`).
+struct Growth {
+    lit: f64,
+    spare: f64,
+    built: bool,
+    gain: f64,
+}
+
+/// The update of body `b` as far as its growth (`live`): upkeep, the physics of the time, the heat it keeps, the
+/// checks of its stores, and growth, which builds body matter paid by work (`copy::grow`; past maturity a share
+/// `ALLOC` of it goes into the brood). Returns what it did and where it is, or a death cause.
+fn to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<(Growth, Site), u8> {
     let s = site(w, b);
     let (mass, cap) = b.mass_cap(&w.chem);
+    let held = w.chem.matter().map_or(0.0, |k| b.store[k]);
     b.last = w.day() as f64;
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
@@ -89,16 +117,16 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
     let lit = physics(w, slot, b, rc, &mut *tmp, &s, mass, upkeep_heat, th);
     keep_warm(w, b, span, s.dt);
     let th = check_stores(w, slot, b, tmp)?;
-    // Growth builds body matter, paid by work (`copy::grow`); past maturity a share `ALLOC` of it goes into the brood.
-    // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`). The key
-    // liquid the new tissue lacks and the children took soaks in again (`soak_again`).
     let built = crate::copy::grow_at(w, b, s.days, th);
-    let born = b.brood > 0.0 && crate::copy::copy(w, slot, b);
-    if built || born {
-        soak_again(w, b, &s);
-    }
-    let (mass, cap) = shed(w, b);
-    Ok(Lived { lit, spare, mass, cap })
+    let gain = (w.chem.matter().map_or(0.0, |k| b.store[k]) / held.max(f64::MIN_POSITIVE)).ln();
+    Ok((Growth { lit, spare, built, gain }, s))
+}
+
+/// What the members of body `b` (slot `slot`, taken out of it) gain in an update as far as its growth (`Lived::gain`;
+/// minus infinity if it dies), for a sample member that changes nothing (`copy::select`: the caller gives the world
+/// back as it was).
+pub(crate) fn gain_to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> f64 {
+    to_growth(w, slot, b, rc, tmp).map_or(f64::NEG_INFINITY, |g| g.0.gain)
 }
 
 /// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but

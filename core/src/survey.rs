@@ -185,6 +185,8 @@ pub fn day(w: &mut World) {
         w.counts.updates += 1;
         // (Its mean member's body as it comes, for what its members grow in the update: `copy::mature`.)
         let before = b.member_body(&w.chem);
+        // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
+        let sample = crate::copy::sample(w, s, &b, &mut rc, &mut tmp);
         match live(w, s, &mut b, &mut rc, &mut tmp) {
             Err(cause) => die(w, s, b, cause),
             Ok(lived) => {
@@ -197,6 +199,10 @@ pub fn day(w: &mut World) {
                         die(w, s, b, LACK);
                         continue;
                     }
+                }
+                // Its mean moves by what the sample gained over its members (`copy::select`).
+                if let Some(x) = sample {
+                    crate::copy::select(w, &mut b, x, lived.gain);
                 }
                 crate::lineage::resize(w, s, &mut b);
                 // Young members who grew past their copy mass join their adult node (`copy::mature`).

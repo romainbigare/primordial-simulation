@@ -8,10 +8,12 @@
 
 mod grow;
 mod mix;
+mod select;
 mod young;
 
 pub use grow::grow;
 pub(crate) use grow::grow_at;
+pub(crate) use select::{sample, select};
 pub use young::{mature, Grown};
 
 use crate::body::{most, mutation_size, vary, within, Body, Layout, CHILD, COPY_MASS, DISPERSE, WET, WET_TISSUE};

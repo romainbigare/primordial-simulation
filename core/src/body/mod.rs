@@ -20,7 +20,7 @@ use death::thin;
 pub(crate) use death::to_ground;
 pub use exchange::conductance_to_ground;
 pub use genes::*;
-pub(crate) use live::{live, LiveTmp};
+pub(crate) use live::{gain_to_growth, live, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, release, upkeep};
 pub(crate) use pay::{plan, spend, upkeep_at, Payer};
