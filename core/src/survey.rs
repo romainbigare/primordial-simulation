@@ -74,6 +74,7 @@ fn sum_cells(w: &mut World) {
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         let (i, m, k) = (b.cell as usize, b.n(), keep(slot, b.gen));
         sum[i][0] += m;
+        // (The height is not summed: the sums end before it.)
         for (x, &v) in sum[i][1..].iter_mut().zip(&b.vis) {
             *x += v as f64 * m;
         }
@@ -135,19 +136,19 @@ pub(crate) fn intercept(x: f64) -> f64 {
     mean_decay(x)
 }
 
-/// Light passes through the bodies of a cell from the tallest member down (`Body::height`), and
+/// Light passes through the bodies of a cell from the tallest member down (`Body::height`, kept in `Body::vis`), and
 /// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
 /// `1 - exp(-x)` of what reaches it, so a tall member shades a low one and holding up pays. Together
 /// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
 /// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it.
 fn shade(w: &mut World) {
     let g = intercept;
-    let (Life { bodies, at, shade, .. }, area, chem, cfg) = (&mut w.life, w.mesh.cells().area(), &w.chem, &w.cfg);
+    let (Life { bodies, at, shade, .. }, area) = (&mut w.life, w.mesh.cells().area());
     shade.resize(bodies.len(), 1.0);
     let mut l: Vec<(f32, f64, usize)> = Vec::new();
     for (i, s) in at.iter().enumerate() {
         l.clear();
-        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.height(chem, cfg) as f32, b.vis[1] as f64 * b.n() / area[i], s)));
+        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / area[i], s)));
         l.sort_by(|a, b| b.0.total_cmp(&a.0));
         let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
         while k < l.len() {
@@ -195,7 +196,7 @@ pub fn day(w: &mut World) {
                 }
                 crate::lineage::resize(w, s, &mut b);
                 crate::nodes::split(w, s, &mut b);
-                b.vis = b.visible(&w.chem, &w.cfg.phys);
+                b.vis = b.visible(&w.chem, &w.cfg);
                 w.life.schedule(w.day() + b.interval(), slot, gen);
                 w.life.bodies[s] = b;
             }

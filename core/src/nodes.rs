@@ -147,7 +147,7 @@ pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>
     // A node has no wear: its members are of all ages (`body::live`).
     (o.e, o.wear) = (o.e + c.e, 0.0);
     w.life.set_count(o, o.count + c.count);
-    o.vis = o.visible(&w.chem, &w.cfg.phys);
+    o.vis = o.visible(&w.chem, &w.cfg);
 }
 
 /// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the brood and of the heat;

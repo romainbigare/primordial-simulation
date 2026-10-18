@@ -73,7 +73,7 @@ pub fn seed_clever(w: &mut World, n: usize) -> String {
             let group = w.life.new_group(lineage, rows.clone());
             let genome = w.life.new_genome(rows);
             let mut b = Body { cell: cell as u32, count: 1.0, lineage, group, near: u32::MAX, mark: w.light[cell], e, store: store.clone(), genes: g, genome, wear, wet, born: w.day(), ..Default::default() };
-            b.vis = b.visible(&w.chem, &w.cfg.phys);
+            b.vis = b.visible(&w.chem, &w.cfg);
             book_body(w, &b);
             if is_big {
                 (members, kg) = (members + 1.0, kg + b.mass(&w.chem));

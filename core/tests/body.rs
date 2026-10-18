@@ -201,7 +201,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     let mut small = s.eater(0);
     // (In the dark: no light-capture area to absorb the sun, which warms a body too.)
     small.genes[pcore::body::LEAF] = -9.0;
-    small.vis = small.visible(&s.w.chem, &s.w.cfg.phys);
+    small.vis = small.visible(&s.w.chem, &s.w.cfg);
     // (And with no liquid, which would evaporate and cool it; what its burning makes is little.)
     let w = &mut s.w;
     let wet = kg(w, &small, LIQUID);
@@ -702,7 +702,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     add(&mut w, &mut c, RICH, 100.0);
     a.prepare(&w.chem, &w.cfg.phys);
     c.prepare(&w.chem, &w.cfg.phys);
-    let (va, vc) = (a.visible(&w.chem, &w.cfg.phys), c.visible(&w.chem, &w.cfg.phys));
+    let (va, vc) = (a.visible(&w.chem, &w.cfg), c.visible(&w.chem, &w.cfg));
     assert!(va[1] > 0.0 && va[1] == vc[1], "leaf {} and {}", va[1], vc[1]);
     assert!(vc[0] > 4.0 * va[0], "the mass differs: {} and {}", va[0], vc[0]);
     let ma = a.mass(&w.chem);
@@ -722,7 +722,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     for s in [sa, sb] {
         let mut x = std::mem::take(&mut w.life.bodies[s]);
         x.prepare(&w.chem, &w.cfg.phys);
-        x.vis = x.visible(&w.chem, &w.cfg.phys);
+        x.vis = x.visible(&w.chem, &w.cfg);
         w.life.bodies[s] = x;
     }
     // (Not at a month's start: alike nodes of a cell merge then.)
@@ -922,7 +922,7 @@ fn a_tall_member_shades_a_short_one() {
     // one's LEAF gene is raised by 0.5 to make the areas equal.
     (tall.count, tall.genes[pcore::body::COPY_MASS], tall.k) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0, Default::default());
     tall.genes[pcore::body::LEAF] += 0.5;
-    (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg.phys), tall.visible(&w.chem, &w.cfg.phys));
+    (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg), tall.visible(&w.chem, &w.cfg));
     let slots = [w.life.add(tall, w.day(), 1), short];
     let books = Books::now(&w);
     pcore::survey::survey(&mut w);
@@ -1138,7 +1138,7 @@ fn leaf_area_per_kg_falls_with_mass() {
         b.prepare(&chem, &p);
         b
     };
-    let leaf = |b: &Body| b.visible(&chem, &p)[1] as f64;
+    let leaf = |b: &Body| b.visible(&chem, &w.cfg)[1] as f64;
     let (one, tonne) = (member(1.0, 1.0, 6.0), member(1.0, 1000.0, 6.0));
     println!("leaf of a member: 1 kg {:.3} m², 1,000 kg {:.3} m²", leaf(&one), leaf(&tonne));
     assert!((leaf(&one) - 0.5).abs() < 1e-6, "1 kg: {}", leaf(&one));

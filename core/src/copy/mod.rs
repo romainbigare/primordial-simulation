@@ -258,7 +258,7 @@ fn place_child(w: &mut World, slot: usize, b: &Body, l: &Litter, mut c: Body, ro
     // Its key liquids first: `visible` reads the body (`Body::size`) through them. (A parent that survived a freezing is
     // still wet in the sense of its key liquids: its child's are kept though it is born frozen.)
     c.wet = c.key_liquids(&w.chem) | (b.wet & c.key_mask(&w.chem));
-    c.vis = c.visible(&w.chem, &w.cfg.phys);
+    c.vis = c.visible(&w.chem, &w.cfg);
     let s = w.place(c, Some(w.light_keep.get(slot, b.gen)));
     if l.alone && w.life.bodies[s].count > 1.5 {
         let k = w.life.bodies[s].count.round() as usize - 1;
@@ -268,6 +268,8 @@ fn place_child(w: &mut World, slot: usize, b: &Body, l: &Litter, mut c: Body, ro
         let mut c = std::mem::take(&mut w.life.bodies[s]);
         (c.spread, c.row_spread) = (Vec::new(), 0.0);
         w.life.set_count(&mut c, 1.0);
+        // (The members drawn took their stores: its height is that of what is left.)
+        c.vis[6] = c.height(&w.chem, &w.cfg) as f32;
         w.life.bodies[s] = c;
     }
 }

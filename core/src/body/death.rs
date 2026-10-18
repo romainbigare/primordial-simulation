@@ -70,7 +70,7 @@ pub fn wound(w: &mut World, slot: usize, mut b: Body, f: f64, dead: &[f64], caus
         die(w, slot, b, cause);
         return false;
     }
-    b.vis = b.visible(&w.chem, &w.cfg.phys);
+    b.vis = b.visible(&w.chem, &w.cfg);
     w.life.bodies[slot] = b;
     true
 }

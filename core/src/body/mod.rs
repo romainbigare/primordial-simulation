@@ -97,8 +97,8 @@ pub struct Body {
     /// not counted in the body: `size`, `built`). A mature body puts the share `ALLOC` of what it
     /// builds here (`copy::grow`); `copy::copy` turns it into children of the size the `CHILD` gene sets
     pub brood: f64,
-    /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands)
-    pub vis: [f32; 6],
+    /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands), height m (`height`)
+    pub vis: [f32; 7],
     /// Brain group; the other group it has stayed near, and since when (day)
     pub group: u32,
     pub near: u32,
@@ -268,8 +268,8 @@ impl Body {
         (self.vis[3] + self.vis[4] + self.vis[5]) as f64 / 3.0
     }
     /// Visible traits of one member (`Body::vis`); the colour is the reflectance of the stores by volume.
-    pub fn visible(&self, chem: &Chemistry, p: &crate::Physics) -> [f32; 6] {
-        let (m, cap) = self.mass_cap(chem);
+    pub fn visible(&self, chem: &Chemistry, cfg: &crate::Config) -> [f32; 7] {
+        let ((m, cap), p) = (self.mass_cap(chem), &cfg.phys);
         let m1 = m / self.n();
         let t = self.temp_at(chem, cap);
         let (mut v, mut c) = (1e-12, [0.0; 3]);
@@ -284,7 +284,7 @@ impl Body {
             }
         }
         let leaf = self.leaf_area_at(chem, p, self.dec(LEAF)) / self.n();
-        [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32]
+        [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32, self.height(chem, cfg) as f32]
     }
     /// Well-being at temperature `t`: the energy its catalysed reactions could release from a member's stores (log, in
     /// decisions' worth: `think` is what one decision of the starting brain costs a member of the mass it copies at, J, so

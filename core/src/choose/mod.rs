@@ -279,7 +279,7 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
         }
     }
     if let Some(mut o) = one {
-        o.vis = o.visible(&w.chem, &w.cfg.phys);
+        o.vis = o.visible(&w.chem, &w.cfg);
         w.life.bodies[me] = o;
         if w.life.bodies[me].hold.is_none() && w.life.bodies[me].inside.is_none() {
             let o = w.life.bodies[me].clone();

@@ -120,7 +120,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     b.e = b.energy_at(chem, t);
     // Its key liquids first: `visible` reads the body (`Body::size`) through them.
     b.wet = b.key_liquids(chem);
-    b.vis = b.visible(chem, &w.cfg.phys);
+    b.vis = b.visible(chem, &w.cfg);
     book_body(w, &b);
     Some(b)
 }

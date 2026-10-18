@@ -135,7 +135,7 @@ pub(crate) fn regroup(w: &mut World) {
 /// body can only copy what its own body can do.
 pub(super) fn watch(w: &mut World, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
-    let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem, &w.cfg.phys)));
+    let (og, oadj, ol, (u, v)) = (o.group as usize, o.adj, o.lineage, (o.vis, b.visible(&w.chem, &w.cfg)));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / STRENGTH_STEP).powi(2))).exp();
     let alike = if w.cfg.null { 0.0 } else { w.cfg.phys.blend * alike };

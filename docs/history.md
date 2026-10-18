@@ -521,6 +521,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   a pass now reads its rows from memory, not from the cache); a body update about 3% faster (runs side by side, year
   10: 42.8 to 41.3 µs and, on a busier machine, 55.6 to 53.2 µs). Years 11 to 20: land +0.02 K, carbon gas 270.4 to
   271.4 ppm, rain on land -0.4%, plant members -9% (life's choices grow the rounding); golden re-pinned.
+- E1 (b), speed: a body's height is its seventh visible trait (`Body::vis`, set where the others are, and for a body
+  placed or left by a node's draw), so the survey's shade sorts by it and no longer works out every body's height
+  again every physics step. Same history (`series.csv` and `months.csv` byte for byte, 64 x 64, seed 1, 20 years);
+  snapshot version 17, golden re-pinned (the saved bodies changed). A body update 3 to 5% faster (year 10: 42.1 to
+  40.7 µs; year 20: 44.9 to 42.6 µs).
 
 **Owner's decisions after Phase A**
 
