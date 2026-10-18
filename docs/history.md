@@ -544,6 +544,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   surfaces to `breath`, which no longer works out the capture area and the skin twice, and the body's physics shares
   it between its heat and its breath; the air's heat capacity is kept with the chemistry (`Chemistry::air_cp`). Same
   results bit for bit (golden unchanged; 64 x 64, seed 1, 20 years: same fingerprint); a body update about 2% faster.
+- E1 (f), speed, the tape: the yearly clustering of kinds (`tape::measure`) stops its rounds when no body changes its
+  kind (the rounds left changed nothing), and works out each distance to a centre once (the search for the nearest
+  centre and for the furthest point worked each out twice). Same series and months byte for byte (64 x 64, seed 1, 20
+  years); the two clusterings of a year 89 to 44 ms (about 2% of a living year).
 
 **Owner's decisions after Phase A**
 

@@ -59,26 +59,34 @@ fn d2(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum()
 }
 
+/// The centre nearest `p` (the first of equally near ones), each distance worked out once.
 fn nearest(c: &[Vec<f32>], p: &[f32]) -> usize {
-    (0..c.len()).min_by(|&a, &b| d2(&c[a], p).total_cmp(&d2(&c[b], p))).unwrap_or(0)
+    c.iter().map(|x| d2(x, p)).enumerate().fold((0, f32::INFINITY), |best, (j, d)| if d.total_cmp(&best.1).is_lt() { (j, d) } else { best }).0
 }
 
 /// Weighted k-means with `k` centres: the first is the point nearest the mean, each next the
-/// point furthest from the centres so far (ties to the lower index); then `ROUNDS` rounds of
-/// Lloyd with each point counting its weight. Returns the centres and the kind of each point.
+/// point furthest from the centres so far (ties to the lower index); then up to `ROUNDS` rounds of
+/// Lloyd with each point counting its weight, until no point changes its kind (the centres would
+/// then stay as they are). Returns the centres and the kind of each point.
 fn kmeans(p: &[Vec<f32>], wt: &[f64], k: usize) -> (Vec<Vec<f32>>, Vec<usize>) {
     let (dim, tot) = (p[0].len(), wt.iter().sum::<f64>());
     let mean: Vec<f32> = (0..dim).map(|j| (p.iter().zip(wt).map(|(x, &w)| x[j] as f64 * w).sum::<f64>() / tot) as f32).collect();
     let first = (0..p.len()).min_by(|&a, &b| d2(&p[a], &mean).total_cmp(&d2(&p[b], &mean))).unwrap_or(0);
     let mut c = vec![p[first].clone()];
     while c.len() < k {
-        let far = (0..p.len()).max_by(|&a, &b| d2(&p[a], &c[nearest(&c, &p[a])]).total_cmp(&d2(&p[b], &c[nearest(&c, &p[b])])).then(b.cmp(&a)));
+        let gap: Vec<f32> = p.iter().map(|x| d2(x, &c[nearest(&c, x)])).collect();
+        let far = (0..p.len()).max_by(|&a, &b| gap[a].total_cmp(&gap[b]).then(b.cmp(&a)));
         c.push(p[far.unwrap_or(0)].clone());
     }
-    let mut of = vec![0; p.len()];
+    let mut of = vec![usize::MAX; p.len()];
     for _ in 0..ROUNDS {
+        let mut moved = false;
         for (o, x) in of.iter_mut().zip(p) {
-            *o = nearest(&c, x);
+            let j = nearest(&c, x);
+            (moved, *o) = (moved || j != *o, j);
+        }
+        if !moved {
+            break;
         }
         let (mut sum, mut cnt) = (vec![vec![0f64; dim]; k], vec![0f64; k]);
         for ((x, &o), &w) in p.iter().zip(&of).zip(wt) {
