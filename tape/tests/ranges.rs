@@ -165,10 +165,11 @@ const SLEEP_FROM: u64 = 5;
 /// and lime.
 const CHEMISTRY: [&str; 7] = ["air_3", "min0_land", "min0_sea", "min1_land", "min1_sea", "dead_22", "dead_10"];
 
-/// The `CHEMISTRY` columns at the end of each year from `SLEEP_FROM`, with Change's nodes sleeping at most `sleep_days`.
-fn chemistry(sleep_days: u32) -> Vec<Vec<f64>> {
+/// The `CHEMISTRY` columns at the end of each year from `SLEEP_FROM`, with Change's nodes sleeping at most `sleep_days`
+/// and woken by a gain of `wake_share`.
+fn chemistry((sleep_days, wake_share): (u32, f64)) -> Vec<Vec<f64>> {
     let mut years = vec![];
-    run(1, SLEEP_SIDE, SLEEP_YEARS, |c| c.sleep_days = sleep_days, |y, _, rec| {
+    run(1, SLEEP_SIDE, SLEEP_YEARS, |c| (c.sleep_days, c.wake_share) = (sleep_days, wake_share), |y, _, rec| {
         if y >= SLEEP_FROM {
             years.push(CHEMISTRY.map(|c| rec.last(c)).to_vec());
         }
@@ -176,14 +177,15 @@ fn chemistry(sleep_days: u32) -> Vec<Vec<f64>> {
     years
 }
 
-/// Sleep against no sleep, and the sleep's setting x2 and /2 (`docs/numbers.md`, speed settings): against every node
-/// awake every step, the mean of each of the chemistry's key numbers over the last years moves by less than its noise,
-/// the spread of its values over those years with every node awake.
+/// Sleep against no sleep, and each speed setting of the sleep x2 and /2 (`docs/numbers.md`, speed settings): the
+/// longest sleep (`sleep_days`) and the gain that wakes a node (`wake_share`). Against every node awake every step, the
+/// mean of each of the chemistry's key numbers over the last years moves by less than its noise, the spread of its
+/// values over those years with every node awake.
 #[test]
-#[ignore = "slow: four 8-year runs of a 32 x 32 world with life"]
+#[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
 fn the_sleep_of_change_keeps_the_chemistry() {
-    let set = Config::default().sleep_days;
-    let settings = [0, set, 2 * set, set / 2];
+    let (set, share) = (Config::default().sleep_days, Config::default().wake_share);
+    let settings = [(0, share), (set, share), (2 * set, share), (set / 2, share), (set, 2.0 * share), (set, share / 2.0)];
     let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
         let runs: Vec<_> = settings.iter().map(|&d| s.spawn(move || chemistry(d))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
@@ -194,12 +196,12 @@ fn the_sleep_of_change_keeps_the_chemistry() {
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let awake = column(&runs[0]);
         let noise = awake.iter().fold(f64::MIN, |m, &x| m.max(x)) - awake.iter().fold(f64::MAX, |m, &x| m.min(x));
-        for (run, days) in runs.iter().zip(settings).skip(1) {
+        for (run, (days, wake)) in runs.iter().zip(settings).skip(1) {
             let off = mean(&column(run)) - mean(&awake);
             let ok = off.abs() <= noise;
-            println!("{name}, sleep {days} days: {:.6e}, awake {:.6e}, off by {off:.3e}, noise {noise:.3e}{}", mean(&column(run)), mean(&awake), if ok { "" } else { ": OUT" });
+            println!("{name}, sleep {days} days, wake at {wake}: {:.6e}, awake {:.6e}, off by {off:.3e}, noise {noise:.3e}{}", mean(&column(run)), mean(&awake), if ok { "" } else { ": OUT" });
             if !ok {
-                out.push((*name, days));
+                out.push((*name, days, wake));
             }
         }
     }

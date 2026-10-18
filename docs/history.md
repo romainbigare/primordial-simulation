@@ -507,6 +507,9 @@ The work of `docs/foundation/plan.md`, one line per task.
   at every exchange, from the coldest temperature. Its entries now lie on a fixed grid, so a value between them moves
   by up to about 1e-6. 64 x 64, seed 1, 6 years without life: rain on land within 5e-5, every series column within
   4e-4. Golden re-pinned.
+- D12 (test): the sleep test (`tape/tests/ranges.rs`) also runs `wake_share` x2 and /2 against every node awake; the
+  chemistry's key numbers move by 6 to more than 100 times less than their noise at every setting. The ten key
+  numbers stay in their ranges (three seeds, 30 years, 64 x 64).
 
 **Owner's decisions after Phase A**
 
