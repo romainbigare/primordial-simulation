@@ -59,14 +59,13 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: &
     }
 }
 
-/// One liquid step of `dt` seconds; `work` (> 0 every few months) is the time the work of the liquid on its bed stands
-/// for, as a multiple of `dt`.
-pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64, work: f64) {
+/// One liquid step of `dt` seconds.
+pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     let (tmin, tmax) = range(&s.tg);
     let liq = s.liquids(&w.chem, (tmin, tmax), true);
     let slope = slopes(w, s);
     let runs = springs(w, s, tmin, &slope, dt);
-    surface(w, s, (&liq, tmin), (&slope, &runs), dt, work);
+    surface(w, s, (&liq, tmin), (&slope, &runs), dt);
     under(w, s, &liq, tmin, dt);
 }
 
@@ -87,14 +86,14 @@ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
 /// passes it to its lower neighbours, more to the steeper (`split`, `still`), so it can cross the map in one pass while
 /// depressions fill and spill; its head falls no further than to a neighbour still to come (or to its own bed), and
 /// half way to one already passed, so heads never cross. What leaves carries the node's heat at its temperature then
-/// (with what came in), and the head it loses heats the node. Every few months (`work` > 0) the power lost also
-/// carries loose solids, drops what is over capacity and breaks bonded ground (`load`, `wear`).
-fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64, work: f64) {
+/// (with what came in), and the head it loses heats the node. The power lost also carries loose solids, drops what is
+/// over capacity and breaks bonded ground (`load`, `wear`).
+fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
     let (n, area, ph, g) = (w.grid.n(), s.area, w.cfg.phys, w.cfg.gravity);
     let mob = mobile(w, s, liq, tmin);
     // Rows that move together, side by side for each node (`q[i * width + r]`): the liquid that may run off, of each of
     // `liq`; the load, of each of `sol`; their heat, J; and the volume of the liquid, m³ (for the heads).
-    let sol = if work > 0.0 { s.solids(tmin) } else { Vec::new() };
+    let sol = s.solids(tmin);
     let ks: Vec<usize> = liq.iter().chain(&sol).copied().collect();
     let (nl, rows) = (liq.len(), ks.len());
     let (heat, vol, width) = (rows, rows + 1, rows + 2);
@@ -162,12 +161,10 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         let q = &mut q[cell];
         let t = ((ww.e_ground[i] + q[heat] - held) / c.max(1.0)).min(ss.tg[i]).max(T_FLOOR);
         let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * ss.sp[ks[r]].mm).sum::<f64>();
-        if work > 0.0 {
-            // The work, on the bed below the liquid left standing (which hides it).
-            let left = sv * (1.0 - out) / area;
-            let bedwork = g * drop * kg(q, 0..nl) * work * ph.hide[1] / (ph.hide[1] + left);
-            worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
-        }
+        // The work, on the bed below the liquid left standing (which hides it).
+        let left = sv * (1.0 - out) / area;
+        let bedwork = g * drop * kg(q, 0..nl) * ph.hide[1] / (ph.hide[1] + left);
+        worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
         q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
         power[i] = g * drop * kg(q, 0..rows);
         sent[i] = out * q[..nl].iter().sum::<f64>();

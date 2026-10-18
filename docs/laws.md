@@ -62,9 +62,8 @@ one month per call of `step` (`core/src/schedule.rs`). Each process has a period
 
 Inside Flow (`flow::step`): radiation every call. Each other part has its own period and runs
 when that period is over, for all the time since: evaporation and rain every `exchange_days`
-(3), wind every `air_days` (3), liquid and drainage every `flow_days` (15), the work of moving
-liquid every 7 months (`WORK_MONTHS`), heat conducted sideways through the ground and creep once a
-year.
+(3), wind every `air_days` (3), liquid, drainage and the work of moving liquid every `flow_days`
+(15), heat conducted sideways through the ground and creep once a year.
 
 **Sleep and wake** (`clock::Sleep`). A node's own process may sleep while the node is calm: until an
 alarm time, or until a change booked by `store::apply` brings the node more than `wake_share` (5%) of
@@ -170,7 +169,7 @@ air nodes.
 ### 1.3 Erosion and creep
 
 Moving liquid loses energy (its lost head). That energy does work where it is lost
-(`flow::liquid`, every `WORK_MONTHS` months for all the time since), in the same pass as the liquid:
+(`flow::liquid`, at every liquid step, in the same pass as the liquid):
 
 - **Carrying.** It carries loose solids: `carry` m³ per J. The load leaves a cell in the share the liquid leaves it,
   so it settles where the flow slows (in pools and lakes), and what is over the capacity drops.

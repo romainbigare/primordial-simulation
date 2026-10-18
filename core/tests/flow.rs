@@ -603,6 +603,22 @@ fn rain_crosses_the_land_in_one_step() {
     assert!(fell > 0.0 && wet - dry > 0.1 * fell, "{} of {fell} m³ reached the low ground", wet - dry);
 }
 
+/// Moving liquid works on its bed at every liquid step: once rain runs off (the pores of the land are full after
+/// three months), each of the next eight liquid steps breaks bonded ground on the land.
+#[test]
+fn liquid_wears_its_bed_at_every_liquid_step() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    (0..3).for_each(|_| pcore::step(&mut w));
+    let n = w.grid.n();
+    let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) > 0.0).collect();
+    let bed = |w: &World| land.iter().map(|&i| (0..w.chem.ns()).map(|k| w.bed[k * n + i]).sum::<f64>()).sum::<f64>();
+    for step in 0..8 {
+        let before = bed(&w);
+        pcore::flow::step(&mut w, LIQUID_STEP);
+        assert!(bed(&w) < before, "step {step}: the bed on land kept {} of {before} mol", bed(&w));
+    }
+}
+
 /// A small island, ten years: the land loses rock (the rock-making solids of its loose ground and bed, over its
 /// cells) at the real rate of denudation, 0.01 to 1 mm a year.
 #[test]

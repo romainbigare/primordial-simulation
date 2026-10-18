@@ -110,8 +110,6 @@ pub struct Scratch {
     /// The substances present changed: rebuild the state of ground and air at the next step.
     #[serde(skip)]
     pub(super) stale: bool,
-    /// Moving liquid's work on its bed is due at the next liquid step.
-    pub(super) owe_work: bool,
     /// Area of a ground cell, m².
     #[serde(skip)]
     pub(super) area: f64,

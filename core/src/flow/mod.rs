@@ -34,9 +34,6 @@ use liquid::liquid;
 use scratch::{refresh, space, tables};
 
 // The cadences of the law (the order of its parts is in `step`).
-/// Moving liquid does work on its bed (carrying, wear) once in this many months (seven,
-/// so the season sampled turns over the years).
-const WORK_MONTHS: u64 = 7;
 /// The slow-changing ground and the substances present are rechecked this often, months.
 const REFRESH_MONTHS: u64 = 3;
 /// A trace gas (`air::exchange`) evaporates and condenses only at every this many exchanges,
@@ -54,9 +51,9 @@ const DUE_SLACK: f64 = 1.0;
 /// air nodes (`air::state`), then radiation (`air::radiation`). Each other part runs once its own
 /// period has passed, for all the time since: the exchange of the ground with the air
 /// (`air::exchange`, every `cfg.exchange_days`), the wind (`air::wind`, every `cfg.air_days`),
-/// liquid with its drainage (`liquid`, its work on the bed every `WORK_MONTHS`) every
-/// `cfg.flow_days`, and heat conducted sideways through the ground (`land::conduct`) and creep
-/// every `CREEP_YEARS` (`creep`); every `REFRESH_MONTHS` the slow
+/// liquid with its drainage and its work on the bed (`liquid`) every `cfg.flow_days`, and heat
+/// conducted sideways through the ground (`land::conduct`) and creep every `CREEP_YEARS`
+/// (`creep`); every `REFRESH_MONTHS` the slow
 /// ground is rechecked (`refresh`).
 pub fn step(w: &mut World, dt: f64) {
     ensure(w);
@@ -81,11 +78,9 @@ pub fn step(w: &mut World, dt: f64) {
         let dt = std::mem::take(&mut s.pending);
         air::wind(w, &mut s, dt);
     }
-    s.owe_work |= monthly && month % WORK_MONTHS == 0;
     if liq_due {
         let dt = std::mem::take(&mut s.pending_liq);
-        let work = if std::mem::take(&mut s.owe_work) { (WORK_MONTHS * w.cfg.calendar().month) as f64 / dt } else { 0.0 };
-        liquid(w, &mut s, dt, work);
+        liquid(w, &mut s, dt);
         let period = CREEP_YEARS * w.cfg.calendar().year;
         let year = w.time / period;
         if s.year != Some(year) {

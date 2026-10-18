@@ -384,6 +384,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   `ORDER_TOP`, `ORDER_PER_M`, `CELL_BITS`, `CELL_MASK`, `Outlets`, `lower`, `runoff`, `send`, `carry`),
   `pore_flow`, the old `drain` and `stores`, `land::darcy`, `Scratch::{nbr, done, sed, sed_e}` (`Scratch::order` is a `downhill::Order`), and the
   downhill parity test of `core/tests/solve.rs`. Snapshot version 11, golden re-pinned.
+- D5: the work of moving liquid on its bed (carrying, dropping, wear) runs at every liquid step in the downhill
+  pass, with no multiplier; `WORK_MONTHS` and `Scratch::owe_work` are deleted. The young 32 x 32 island of
+  `an_island_loses_ground_at_a_real_rate` loses 0.133 mm a year (main: 0.138); "land worn down" (64 x 64, years 21
+  to 30) 0.048 mm a year. Snapshot version 12, golden re-pinned.
 
 **Owner's decisions after Phase A**
 
