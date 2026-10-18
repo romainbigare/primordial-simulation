@@ -359,10 +359,11 @@ impl Life {
 
 impl World {
     /// Place body `c`, its first update after its interval; `keep` is the share of light the reactions of the body it
-    /// came from stored (`World::light_keep`), which it inherits. Its height is its own from now on (`survey::shade`
-    /// reads it in `Body::vis`); a part split off a node keeps the node's other visible traits until its first update.
+    /// came from stored (`World::light_keep`), which it inherits. Its visible traits are worked out from what it holds
+    /// now: a child or a part split off a node has its own stores and genes, and others see it and its shade
+    /// (`survey::shade`) through `Body::vis` before its first update.
     pub(crate) fn place(&mut self, mut c: Body, keep: Option<f32>) -> usize {
-        c.vis[6] = c.height(&self.chem, &self.cfg) as f32;
+        c.vis = c.visible(&self.chem, &self.cfg);
         let delay = c.interval();
         let s = self.life.add(c, self.day(), delay);
         if let Some(k) = keep {

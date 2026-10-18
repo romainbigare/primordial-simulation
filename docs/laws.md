@@ -222,8 +222,9 @@ the ground at once.
 **Shade** (`survey.rs`). Light passes the bodies of a cell from the tallest member down. Each
 layer of leaf area x per ground area takes 1 − exp(−x) of what reaches it. Equal heights share a
 layer. Height is what the body's materials hold up (3.6), kept with the other visible traits
-(`Body::vis`, set at each body's update and wherever its stores change outside it). Rain on bodies is
-shared the same way (6.4).
+(`Body::vis`, set at each body's update, when a body is placed, as a child or a part split off a
+node, and wherever its stores or members change outside its update). Rain on bodies is shared the
+same way (6.4).
 
 ### 1.5 Evaporation, rain and dissolved gases
 

@@ -1,7 +1,7 @@
 //! Law 4 (Copy): growth builds body matter, a mature body fills a brood and a child is made of it, two parents mix,
 //! population nodes spread, split, merge and open, and a hurt body rebuilds.
 
-use pcore::body::{Body, Layout, ALLOC, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, HIDDEN, KEEP_T, LIQ, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
+use pcore::body::{Body, Layout, ALLOC, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, HIDDEN, KEEP_T, LEAF, LIQ, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
@@ -1005,7 +1005,7 @@ fn live(w: &pcore::World) -> Vec<usize> {
 /// A mature node's children start a node of their own (they are immature, `body::class`) that carries the variance
 /// left among them; when they have grown and join their parents' node (the month's merge, `nodes::merge`) its spread
 /// is widened by it; a node whose members differ so much that its halves would not be alike splits in two along that
-/// gene, keeping its members, stores, heat and pooled spread.
+/// gene, keeping its members, stores, heat and pooled spread; the half placed is seen as what it holds.
 #[test]
 fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -1041,6 +1041,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     w.life.bodies[s] = b;
     let new: Vec<usize> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
     assert_eq!(new.len(), 1, "not split in two");
+    seen_as_it_is(&w, new[0]);
     let (a, c) = (&w.life.bodies[s], &w.life.bodies[new[0]]);
     assert_eq!((a.count + c.count, a.lineage, a.group, a.cell), (count, c.lineage, c.group, c.cell));
     for (k, &x) in store.iter().enumerate() {
@@ -1276,8 +1277,15 @@ fn same(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
     }
 }
 
+/// Body `s` is seen as what it holds now: its visible traits are those its stores, genes and members give.
+fn seen_as_it_is(w: &World, s: usize) {
+    let b = &w.life.bodies[s];
+    assert_eq!(b.vis, b.visible(&w.chem, &w.cfg), "body {s} is seen as it was");
+}
+
 /// `open` draws members of a node as individuals: they are in the node's cell, of count 1, with a wear in [0, 1), and
-/// members, stores and heat are kept exactly; the node keeps its place with the members left; the genes of the drawn
+/// members, stores and heat are kept exactly; the node keeps its place with the members left; each is seen as what it
+/// holds (`Body::vis`); the genes of the drawn
 /// are the node's plus noise of its spread (their mean near the node's, within four standard errors, and as wide as the
 /// spread) and the mean of all members, drawn and left, is the node's; and so are their born rows, each member's its
 /// own.
@@ -1288,11 +1296,14 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1000.0).expect("a node");
-    // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene.
+    // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene; and one in the
+    // light-capture gene, so each is seen with its own leaf area (near its wall: its noise shrinks, so it is not
+    // measured).
     let (lay, genes0) = (Layout::of(&w.chem), w.life.bodies[s].genes.clone());
     let cat = lay.cat + 1;
     let wide = [(COPY_MASS, 0.04f64), (GAS, 0.09), (cat, 0.09)];
     w.life.bodies[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
+    w.life.bodies[s].spread[LEAF] = 0.09;
     // And one of 0.1 in the born rows.
     w.life.bodies[s].row_spread = 0.01;
     let rows0 = w.life.born(&w.life.bodies[s]).to_vec();
@@ -1302,6 +1313,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     assert_eq!(drawn.len(), n);
     same(&before, &held(&w));
     assert!((held(&w).0 - before.0).abs() <= 1e-9 * before.0, "members {} then {}", before.0, held(&w).0);
+    drawn.iter().chain([&s]).for_each(|&m| seen_as_it_is(&w, m));
     let node = &w.life.bodies[s];
     assert!((node.count + n as f64 - count0).abs() < 1e-6 && node.count >= 1.0 && node.alive);
     let mut mean = vec![0.0f64; lay.len];

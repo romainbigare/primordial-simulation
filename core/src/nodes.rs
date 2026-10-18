@@ -234,8 +234,8 @@ pub(crate) const COUNT_SLACK: f64 = 1e-9;
 /// `n` members of the node in `slot` as individuals, each drawn as `one` draws a member and with born rows of its own,
 /// drawn as its genes are from their spread (`Body::row_spread`), placed in the node's cell: the close view of a node,
 /// and what the check of nodes against individuals compares. Each draw leaves the others' genes and rows, so the mean
-/// of all is kept. The node keeps at least one member (draws stop when it has fewer than two). Returns the members'
-/// slots.
+/// of all is kept. The node keeps at least one member (draws stop when it has fewer than two), seen as what is left of
+/// it. Returns the members' slots.
 pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
     let (mut r, keep) = (Rng::new(w.seed, w.day(), b.id(slot), Purpose::Open), w.light_keep.get(slot, b.gen));
@@ -250,6 +250,7 @@ pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
         }
         out.push(draw(w, &mut b, &mut r, Some(keep), true));
     }
+    b.vis = b.visible(&w.chem, &w.cfg);
     w.life.bodies[slot] = b;
     out
 }

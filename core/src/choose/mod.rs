@@ -279,9 +279,13 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
         }
     }
     if let Some(mut o) = one {
-        o.vis = o.visible(&w.chem, &w.cfg);
+        // A member that stays apart is seen as what its action left of it; one that goes back is seen in the node.
+        let apart = o.hold.is_some() || o.inside.is_some();
+        if apart {
+            o.vis = o.visible(&w.chem, &w.cfg);
+        }
         w.life.bodies[me] = o;
-        if w.life.bodies[me].hold.is_none() && w.life.bodies[me].inside.is_none() {
+        if !apart {
             let o = w.life.bodies[me].clone();
             w.life.remove(me);
             nodes::take_in(w, node, o, None);

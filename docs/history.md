@@ -548,6 +548,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   kind (the rounds left changed nothing), and works out each distance to a centre once (the search for the nearest
   centre and for the furthest point worked each out twice). Same series and months byte for byte (64 x 64, seed 1, 20
   years); the two clusterings of a year 89 to 44 ms (about 2% of a living year).
+- E1 (g), a fix: a body placed (a child, a part split off a node) and a node left by `nodes::open` are seen as what
+  they hold (`Body::vis` worked out by `World::place` and `open`), not with the node's old traits until their first
+  update. 64 x 64, seed 1, years 11 to 20: plant members -0.7%, body mass +1.6%, land -0.02 K, carbon gas 272.3 to
+  269.2 ppm; golden re-pinned.
 
 **Owner's decisions after Phase A**
 
