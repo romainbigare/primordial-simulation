@@ -24,7 +24,7 @@ pub struct Net<'a> {
 /// Work space of the solver, kept between calls so that a step allocates nothing once it has grown. Per node: the
 /// change of the potential solved so far, the residual, the preconditioned residual, the search direction, the system
 /// times the direction, the diagonal of the system, and the amount the node gains over the step.
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Spread {
     change: Vec<f64>,
     res: Vec<f64>,

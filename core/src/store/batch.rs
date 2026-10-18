@@ -62,13 +62,22 @@ impl Batch {
             self.link((0, i), q);
         }
     }
+    /// No link in it any more (its substances stay).
+    pub fn clear(&mut self) {
+        for v in [&mut self.heat].into_iter().chain(&mut self.mol) {
+            v.clear();
+        }
+        self.a.clear();
+        self.b.clear();
+    }
     /// Whether no link is in it yet.
     pub fn is_empty(&self) -> bool {
         self.a.is_empty()
     }
     /// The batch as a link flux, for `apply`.
     pub fn flux(&mut self) -> LinkFlux<'_> {
-        self.flat = self.mol.concat();
+        self.flat.clear();
+        self.mol.iter().for_each(|m| self.flat.extend_from_slice(m));
         LinkFlux { class: self.class, a: &self.a, b: &self.b, ks: &self.ks, mol: &self.flat, heat: &self.heat }
     }
 }

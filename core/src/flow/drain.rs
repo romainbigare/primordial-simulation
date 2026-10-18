@@ -52,7 +52,9 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
         let t = t_now(w, s, i);
         liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
     });
-    let (a, b, flux, x) = flows(w, s, &stack, (&mob, &held), dt);
+    let mut spread = std::mem::take(&mut s.spread);
+    let (a, b, flux, x) = flows(w, s, &mut spread, &stack, (&mob, &held), dt);
+    s.spread = spread;
     let links = a.len();
     // What the volumes carry: the share of the sender's mobile liquid, at its temperature, or of its store.
     let deep: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.deep[k * n..(k + 1) * n].iter().any(|&m| m > 0.0)).collect();
@@ -94,11 +96,11 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
 /// is the head of the liquid (the store's table, the pores' liquid table, `land::table`), the capacity the volume per
 /// metre of head (`bed_porosity` x area; `porosity` x area, or the area where the pores are full), and a link passes
 /// the conductivity (`bed_seep`, `seep`) x the saturated thickness of its higher end x the border's width / the
-/// distance. A store's saturated thickness is the depth it fills; the pores' is the depth of the higher table over
+/// distance (solved in the work space `spread`). A store's saturated thickness is the depth it fills; the pores' is the depth of the higher table over
 /// the higher of the two bottoms of the loose ground, none where they hold no more than their field capacity (they
 /// hold that against gravity). No store and no pores give more than they hold (`spread::within`). Returns the links (the cells' links with a border), the volume through each, m³ (all
 /// the stores' links, then all the pores'), and the heads before the step, m, by node of the stack.
-fn flows(w: &World, s: &Scratch, stack: &Stack, (mob, held): (&super::liquid::Mobile, &[f64]), dt: f64) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
+fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held): (&super::liquid::Mobile, &[f64]), dt: f64) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
     let (p, cells) = (w.cfg.phys, w.mesh.cells());
     let area = cells.area();
     let (mut x, mut cap) = (vec![0.0; stack.nodes()], vec![0.0; stack.nodes()]);
@@ -131,7 +133,7 @@ fn flows(w: &World, s: &Scratch, stack: &Stack, (mob, held): (&super::liquid::Mo
     let x0 = x.clone();
     // The network is far from stiff (dt g / capacity is about 1e-3 on the island): the solve converges in a few
     // iterations; the cap of one per node is never reached.
-    Spread::default().step(&Net { a: &na, b: &nb, g: &gl, cap: &cap }, &mut x, dt, cap.len(), &mut flux);
+    spread.step(&Net { a: &na, b: &nb, g: &gl, cap: &cap }, &mut x, dt, cap.len(), &mut flux);
     // No store and no pores give more than they hold.
     let mut have = vec![0.0; stack.nodes()];
     for (i, &vol) in held.iter().enumerate() {

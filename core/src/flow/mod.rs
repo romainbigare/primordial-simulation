@@ -86,7 +86,7 @@ pub fn step(w: &mut World, dt: f64) {
         let year = w.time / period;
         if s.year != Some(year) {
             if s.year.is_some() {
-                land::conduct(w, &s, period as f64);
+                land::conduct(w, &mut s, period as f64);
                 creep(w, &mut s, period as f64);
             }
             s.year = Some(year);
@@ -105,7 +105,7 @@ pub fn conduct(w: &mut World, dt: f64) {
     ensure(w);
     let mut s = std::mem::take(&mut w.scratch);
     ground_state(w, &mut s, false);
-    land::conduct(w, &s, dt);
+    land::conduct(w, &mut s, dt);
     w.scratch = s;
 }
 

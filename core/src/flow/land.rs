@@ -3,7 +3,7 @@
 //! conducted sideways between nodes (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
-use crate::solve::spread::{Net, Spread};
+use crate::solve::spread::Net;
 use crate::store::{apply, Class, LinkFlux};
 use crate::units::{MAX_SUBSTANCES, T_FLOOR};
 use crate::World;
@@ -149,7 +149,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
 /// the next `ground_state` sets each node's temperature from its energy, plateaus included. A link passes the harmonic
 /// mean of its nodes' conductivity times thickness (two half cells in series, Patankar 1980, 4.2) times its width
 /// over its length: a corner-only diagonal (width 0) passes nothing and is left out.
-pub(super) fn conduct(w: &mut World, s: &Scratch, dt: f64) {
+pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, cells) = (w.mesh.cells().n(), w.mesh.cells());
     // Conductivity times thickness of each node's active layer, W/K: the skin of its bed and the solid and liquid
     // of its loose ground, side by side.
@@ -175,7 +175,7 @@ pub(super) fn conduct(w: &mut World, s: &Scratch, dt: f64) {
     }
     let (cap, mut t, mut heat) = (s.cap.iter().map(|&c| c.max(1.0)).collect::<Vec<_>>(), s.tg.clone(), vec![0.0; a.len()]);
     // At most as many iterations as nodes: the solve stops once converged, in a few where links pass little.
-    Spread::default().step(&Net { a: &a, b: &b, g: &g, cap: &cap }, &mut t, dt, n, &mut heat);
+    s.spread.step(&Net { a: &a, b: &b, g: &g, cap: &cap }, &mut t, dt, n, &mut heat);
     apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[], &[]);
 }
 

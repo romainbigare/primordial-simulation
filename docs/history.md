@@ -498,6 +498,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   substance (a whole air node's transform was cut to 8% of it or less for 1e-30 mol). 64 x 64, seed 1, years 7 to 12 with
   life: land 288.58 -> 288.57 K, rain on land +0.1%, carbon gas -0.1%, plant mass +1.2%; air nodes due per year
   119 -> 100 with life, 114 -> 8.5 without; ground nodes as before. Snapshot version 16, golden re-pinned.
+- D13 (a): the work spaces are kept between steps: one `solve::Spread` in Flow's scratch for the heat through the
+  ground, the liquid under the surface and the wind on a mesh (each call made a new one); Change's batches of gas and
+  reactions (`change::Batches`, `World::batches`, not saved); a `store::Batch` reuses its flat column. Same results
+  (golden unchanged; 64 x 64, 12 years with life and 6 without: same fingerprints).
 
 **Owner's decisions after Phase A**
 

@@ -3,7 +3,8 @@
 use super::{Ctx, Moved, State};
 use crate::solve::spread::{within, Net, Spread};
 
-/// The wind of one call on the links of any air level, from `st`, by three implicit steps of `solve::spread`, each
+/// The wind of one call on the links of any air level, from `st`, by three implicit steps of `solve::spread` (in the
+/// work space `solver`), each
 /// from the start of the call: the mixing and the overturning carry each gas by its share of the column (capacity:
 /// the column's amount) and heat per mol; the evening of pressure moves the amount by the pressure (capacity: the
 /// amount per Pa, n/p), and each gas and the heat go with it at the share of the node it leaves.
@@ -13,7 +14,7 @@ use crate::solve::spread::{within, Net, Spread};
 /// a gas crowded in the lower half (a vapour) is carried as if it filled its column evenly: the vapour the overturning
 /// brings to the warmer column on a square map is not carried on another mesh. The evening of pressure closes
 /// `EVEN`/(1 + `EVEN`) of a lone pair's difference, as the implicit step closes it, not `EVEN`.
-pub(super) fn on_mesh(at: &Ctx, st: &State) -> Moved {
+pub(super) fn on_mesh(at: &Ctx, st: &State, solver: &mut Spread) -> Moved {
     let (s, air, ng, na, nl) = (at.s, at.air, at.s.gas.len(), at.air.n(), at.air.a().len());
     let (a, b) = (air.a(), air.b());
     let col = at.columns(st);
@@ -24,7 +25,7 @@ pub(super) fn on_mesh(at: &Ctx, st: &State) -> Moved {
     }
     let mut m = Moved { mol: vec![0.0; ng * nl], heat: vec![0.0; nl], paid: vec![0.0; na] };
     // (A step stops when it has converged; at most one iteration per node.)
-    let (mut solver, mixing) = (Spread::default(), Net { a, b, g: &g_mix, cap: &st.nt });
+    let mixing = Net { a, b, g: &g_mix, cap: &st.nt };
     for t in 0..ng {
         let mut share: Vec<f64> = (0..na).map(|j| st.x[t * na + j] / st.nt[j]).collect();
         solver.step(&mixing, &mut share, at.dt, na, &mut m.mol[t * nl..(t + 1) * nl]);

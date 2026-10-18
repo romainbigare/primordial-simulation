@@ -84,11 +84,14 @@ fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
     let na = air.n();
     let x = s.gas.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
     let start = State { x, e: w.e_air.clone(), nt: s.nt.clone(), capa: s.capa.clone() };
+    let mut spread = std::mem::take(&mut s.spread);
     let at = Ctx { cfg: &w.cfg, s, air, dt };
-    match along::lines(air) {
+    let moved = match along::lines(air) {
         Some(lines) => along::along(&at, &lines, start),
-        None => mesh::on_mesh(&at, &start),
-    }
+        None => mesh::on_mesh(&at, &start, &mut spread),
+    };
+    s.spread = spread;
+    moved
 }
 
 /// Book `m` on the world over the links of `air` through `store::apply`: the gas and heat, then the lift from the heat

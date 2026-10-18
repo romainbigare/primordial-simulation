@@ -117,6 +117,9 @@ pub struct World {
     pub events: Vec<Event>,
     /// Working memory of the laws, rebuilt when missing (saved, so a resumed run goes on the same)
     pub scratch: flow::Scratch,
+    /// What Change books at a step, kept between steps (not saved)
+    #[serde(skip)]
+    pub batches: crate::change::Batches,
     /// Light set aside in each cell for what its bodies' light reactions will store, J: put
     /// aside as it falls (`flow::air::radiation`), not as heat; a body takes its share at its
     /// update (`body::live`), what no body can claim goes to the ground's heat (`survey::survey`).

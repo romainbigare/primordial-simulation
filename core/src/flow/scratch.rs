@@ -6,6 +6,7 @@ use super::land::NONE;
 use super::range;
 use crate::chem::Chemistry;
 use crate::solve::downhill::Order;
+use crate::solve::spread::Spread;
 use crate::{World, AIR};
 use serde::{Deserialize, Serialize};
 
@@ -146,6 +147,9 @@ pub struct Scratch {
     /// Cells by the head of the liquid that may run off, highest first: the order of the liquid's pass (`liquid`).
     #[serde(skip)]
     pub(super) order: Order,
+    /// The work space of `solve::spread` (heat through the ground, the liquid under the surface, the wind on a mesh).
+    #[serde(skip)]
+    pub(super) spread: Spread,
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
     #[serde(skip)]
     pub(super) near: Vec<[u32; 4]>,
