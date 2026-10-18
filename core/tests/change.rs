@@ -519,25 +519,25 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Cover is fuel when hot: on a cell held at 700 K for a month, a light-eater node loses most of its energy-rich solid
-/// (it reacts with the gas, in the body or, once the body dies, in the ground), while the same cell left as it was
-/// keeps it.
+/// Cover is fuel when hot: on a cell held at 700 K until its light-eater node has updated, the node loses most of its
+/// energy-rich solid (it reacts with the gas, in the body or, once the body dies, in the ground), while the same cell
+/// left as it was keeps it.
 #[test]
 fn hot_cover_burns() {
     let run = |hot: bool| {
         let mut w = worldgen::new_world(1, 16, 16);
-        // (No growth: building body matter takes the solid too, and this is about the burning. And no body can pay to
-        // move: a node that walks out of the hot cell does not burn.)
+        // (No growth: building body matter takes the solid too, and this is about the burning.)
         w.cfg.phys.c_build = 0.0;
-        w.cfg.phys.c_move = 1e12;
         pcore::step(&mut w);
         worldgen::life::seed(&mut w, 0);
-        let i = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node").cell as usize;
+        let node = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node");
+        let (i, days) = (node.cell as usize, node.interval() + 1);
         let n = w.mesh.cells().n();
         let held = |w: &pcore::World| w.ground[RICH * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[RICH]).sum::<f64>();
         let before = held(&w);
-        // A month, the cell heated back to 700 K before each day (booked as an edit).
-        for _ in 0..w.cfg.days_per_month {
+        // Its interval and a day (its first update comes within its interval), the cell heated back to 700 K before
+        // each day (booked as an edit).
+        for _ in 0..days {
             if hot {
                 hold_ground(&mut w, i, 700.0);
             }

@@ -22,14 +22,13 @@ pub struct Kind {
     pub(super) chance: f64,
     /// Share of a member's mass placed as the energy-rich solid, its fuel at the start (the rest is its body, `split`)
     pub(super) store: f64,
-    /// Hand-set brain biases (`Seeding::hand`)
-    pub(super) hand: Hand,
+    /// Hand-set brain biases (`Seeding::hand`; none for a kind without a brain)
+    pub(super) hand: Option<Hand>,
 }
 
 /// Hand-set brain biases: rest, put, take from the node, form a part, let go, join to the ground, break the ground; move; take from, put to, watch a body; hold, take from, put to, join to, break,
 /// enter a part.
 pub(super) type Hand = ([f32; brain::FIXED], f32, [f32; brain::VERBS + brain::OVERBS]);
-const H_LIGHT: Hand = ([2.0, -3.0, -2.0, -6.0, -6.0, -6.0, -6.0], -4.0, [-4.0, -4.0, -4.0, -6.0, -6.0, -6.0, -6.0, -6.0, -6.0]);
 const H_EATER: Hand = ([0.0, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
 
 /// `s` with the genes of `d` (gene, value) set.
@@ -50,20 +49,21 @@ const fn with(mut s: [f32; NSCALAR], d: &[(usize, f32)]) -> [f32; NSCALAR] {
 const BASE: [f32; NSCALAR] = [0.0, 0.0, 3.5, 0.0, 0.0, -0.523, 0.0, 0.0, -1.2, 0.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.0, 320.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
 /// Light-eaters: strong light reaction, slow burning, wide gas exchange (`GAS` 4.334, a leaf's open pores, about
-/// 0.25 mol/(m² s): Körner, Scheel and Bauer 1979) and capture area, long intervals, learning off; one node of
-/// 0.1 kg/m² per land cell.
+/// 0.25 mol/(m² s): Körner, Scheel and Bauer 1979) and capture area, long intervals, no brain (no hidden units and no
+/// memory: what a light-eater does is its body's physics, so it takes no decisions and pays for none) and learning off;
+/// one node of 0.1 kg/m² per land cell.
 const LIGHT: Kind = Kind {
     name: "light-eaters",
     year: 0,
     anywhere: true,
-    scalars: with(BASE, &[(GAS, 4.334), (LEAF, 0.416), (STRENGTH, 0.05), (COPY_MASS, 0.145), (INTERVAL, 1.3), (LEARN, -4.0), (DISPERSE, 0.1), (REPAIR, -1.0)]),
+    scalars: with(BASE, &[(GAS, 4.334), (LEAF, 0.416), (STRENGTH, 0.05), (COPY_MASS, 0.145), (INTERVAL, 1.3), (LEARN, -4.0), (DISPERSE, 0.1), (REPAIR, -1.0), (HIDDEN, 0.0), (MEMORY, 0.0)]),
     cat: [9.0, 2.0],
     upt: [0.0, 0.0],
     cover: 0.1,
     per: 1,
     chance: 1.0,
     store: 0.3,
-    hand: H_LIGHT,
+    hand: None,
 };
 
 /// Eaters: fast burning, take the energy-rich solid from bodies and the ground, short intervals, learning on;
@@ -79,7 +79,7 @@ const EATER: Kind = Kind {
     per: 2,
     chance: 0.3,
     store: 0.3,
-    hand: H_EATER,
+    hand: Some(H_EATER),
 };
 
 /// Starting kinds; the row is the root label of the lineages a kind starts (`Lineage::root`, the `root_<k>_*` columns

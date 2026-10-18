@@ -681,7 +681,9 @@ Files: `core/src/choose/` (`mod` the decision, `perceive`, `learn`, `feed` takin
   and an estimate of how well-being will go (a critic).
 - Sizes are genes, each with a cost: hidden units (0 to 64; 0 is no brain), memory numbers (0 to
   12), bodies perceived (1 to 6), sight (1 to 4 cells). A body with no hidden units takes no
-  decisions and pays nothing for a brain; its update is physics only.
+  decisions and pays nothing for a brain; its update is physics only. The light-eaters start so
+  (8): everything they do is their body's physics (6). A lineage may grow a brain back through
+  the same gene (`lineage::resize`) if a brain pays.
 - **Shared group brains** (`choose::learn::regroup`, monthly; `life::Group`). Bodies that stay
   near each other share one set of rows: the mean of their members' born rows plus what the group
   learned. Every group number is **weighed by members** (a node counts its count): the mean rows,
@@ -987,9 +989,9 @@ run places what is still due); the laws never read a kind.
 - **Founders are adults**: a founder's living body is its copy-mass gene. Its mass is 30% sugar
   (60% for the two big slow kinds), the rest liquid and matter.
 - **Brains**: animals start with hand-set brain biases (`Seeding::hand`), because neutral
-  founders die before they learn; light-eaters start with neutral brains but for one bias, taking
-  from a body, which keeps its hand-set -4, so almost no founder plant leans to bite another.
-  `--neutral-eaters` and `--plant-bias` change this. Genes and rows get a spray of mutation (`--spray`).
+  founders die before they learn (`--neutral-eaters` for neutral brains). Light-eaters start with
+  no brain (`HIDDEN` and `MEMORY` 0): they take no decisions and pay for none, and live by the
+  physics of their bodies (6). Genes and rows get a spray of mutation (`--spray`).
 - **Fixers**: a tenth of the starting light-eaters carry the nitrogen-fixing gene
   (`worldgen::life::FIXERS`, `FIX_GENE`; `--fixers`). The share comes from real floras.
 - **Founder genes**: some are measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's

@@ -19,5 +19,5 @@ cargo run --release -p cli --features threads --bin ew -- run ...               
 cd web && npm run build && cp ../out/run/world.ewf.gz dist/                                   # viewer: open dist/index.html via a local server
 ```
 
-By default the animals start with hand-set brain biases and the light-eaters with neutral brains, but for a
-hand-set bias against taking from a body (`--neutral-eaters` and `--plant-bias` change this).
+By default the animals start with hand-set brain biases (`--neutral-eaters` for neutral brains) and the
+light-eaters with no brain.

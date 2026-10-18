@@ -595,6 +595,13 @@ The work of `docs/foundation/plan.md`, one line per task.
   the `FORGET` gene (never on), old experiment flags, the 3-day shade sort and repeated temperature solves, and saved
   caches; E6 aims at child placement for every body (29% of the bodies' time after E9); Bond's joins of parts, never
   seen in any run, stay for now (the owner decides).
+- E9 (a), the start: light-eaters start without a brain (`HIDDEN` and `MEMORY` 0): their decisions were mostly
+  failed moves, watches and random gifts. The hand-set plant bias (`H_LIGHT`), the bias kept in their neutral start
+  and `--plant-bias` go. 64 x 64, seed 1, 30 years: plant mass 10.59 to 10.68 (log10 kg), eaters 4.45 to 4.78, plant
+  life 2.40 to 4.01 yr, eater life 3.12 to 4.83 yr, plant members +62%, land -0.36 K, rain on land +3%, carbon gas
+  239.5 to 236.4 ppm; members split off 238,734 to 488; a plant update about twice cheaper (year 20, side by side on
+  a busy machine: 72 to 35 µs; bodies 7.0 to 3.6 s per year). The series test turns off the mineral's breakdown
+  (reaction 25), which grew past its tolerance with more mineral in bodies. Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

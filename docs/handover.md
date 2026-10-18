@@ -122,7 +122,7 @@ What went wrong:
 | Moving | Moving needs force |
 | Materials | Bodies are built of several materials; physics reads the material (height, breaking, digestion) |
 | Freezing | One freezing law for bodies, ground, lakes and the sea |
-| The start | What is placed at the start is an initial condition and every run prints it. Animals start with hand-set brain biases, plants with neutral brains (but a hand-set bias against taking from a body), founders as adults |
+| The start | What is placed at the start is an initial condition and every run prints it. Animals start with hand-set brain biases, plants with no brain (`HIDDEN` 0: their life is their body's physics), founders as adults |
 | Waits | Natural fire starts wait for M4. Disease (bodies inside bodies) waits until after M4 |
 | World chemistry | One fixed Earth-like "chemistry 0" through M6 (numbers only, no names in core). Random chemistry per world from M7 (Section 6.0) |
 | Earth concepts | Only in the recognition library, viewer and analysis code. Never in the core |
@@ -968,7 +968,7 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **Carbon.** The carbon cycle has no source (a volcano-like input is the same physics as the god action). The sea's store goes with its depth to the power 2/3, the Revelle factor is 3, and the whole depth is one mixed layer (6.1), so the sea answers the air in years, not centuries.
 - **Inside bodies.** The litter constants also run inside living bodies (real living stems and bones do not rot). The rock salt cannot be kept in a body (real bodies bind calcium in solids). A stronger form of product inhibition (a full store stops the enzyme) was measured. Each is the owner's choice.
 - **Water and air.** Transpiration is set by the breath (`GAS`), not by the liquid or the heat. Still air is forced convection at one anchored wind; free convection (calm air) is not modelled.
-- **Tuned numbers that matter.** `bump` (tuned) decides whether a body can move; `c_brain` sets most of what plants pay.
+- **Tuned numbers that matter.** `bump` (tuned) decides whether a body can move; `c_brain` sets most of what an animal pays to think (plants have no brain).
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters still grow about 0.2 a year at year 60, so report log10 kg at year 60 with the growth rate over years 30 to 60, three seeds at least. Under 2 times is noise.

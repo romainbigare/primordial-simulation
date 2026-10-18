@@ -1227,8 +1227,8 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
 }
 
 /// A node whose mean brain-size gene moved a whole unit from its lineage's size moves to a new lineage with that size
-/// at its update: its brain carried over, in a group of its own that keeps what its group learned; matter and energy
-/// as they were.
+/// at its update (here a light-eater node, from no brain to one hidden unit): its brain carried over, in a group of its
+/// own that keeps what its group learned (the bias of a row is its last entry); matter and energy as they were.
 #[test]
 fn a_node_whose_size_genes_moved_changes_lineage() {
     let mut w = small_world();
@@ -1238,8 +1238,8 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     let (lin0, g0) = (b.lineage, b.group);
     let h0 = w.life.brains[lin0 as usize].as_ref().unwrap().shape.h;
-    w.life.groups[g0 as usize].rows[0] += 0.5;
-    let learned = w.life.groups[g0 as usize].rows[0] - w.life.born(&b)[0];
+    w.life.groups[g0 as usize].rows[h0] += 0.5;
+    let learned = w.life.groups[g0 as usize].rows[h0] - w.life.born(&b)[h0];
     b.genes[HIDDEN] += 0.9;
     lineage::resize(&mut w, s, &mut b);
     assert_eq!(b.lineage, lin0, "moved for less than a unit");
@@ -1251,7 +1251,8 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     assert!(b.lineage != lin0 && b.group != g0 && lin.shape.h == h0 + 1, "no new lineage of {} hidden units", h0 + 1);
     assert_eq!((w.life.members[b.lineage as usize], w.life.groups[b.group as usize].members), (1, 1));
     assert_eq!(w.life.born(b).len(), lin.shape.rows() * lin.shape.r());
-    assert!((w.life.groups[b.group as usize].rows[0] - w.life.born(b)[0] - learned).abs() < 1e-5, "what it learned is lost");
+    let h = lin.shape.h;
+    assert!((w.life.groups[b.group as usize].rows[h] - w.life.born(b)[h] - learned).abs() < 1e-5, "what it learned is lost");
     for _ in 0..2 {
         pcore::step(&mut w);
     }

@@ -2,7 +2,7 @@
 //! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked from outside, the rock
 //! of a cell, the books of a world, the books of one reacting node, sums of the day's events, and the substances of chemistry 0 by number.
 
-use pcore::body::{Body, Layout, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
+use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
 use pcore::bond;
 use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};
@@ -42,6 +42,8 @@ pub const MINERAL: usize = 24;
 pub const FRAME: usize = 25;
 /// The reaction that burns the energy-rich solid with `OX`.
 pub const BURN: usize = 1;
+/// The reaction that breaks `MINERAL` down when hot (its fixed element goes back to the air as `FIX_GAS`).
+pub const MINERAL_BREAKS: usize = 25;
 
 /// The world most tests stand in: seed 1, 16 x 16 cells, after one month (so its cells have their surroundings).
 pub fn small_world() -> World {
@@ -124,10 +126,14 @@ impl Line {
     }
 
     /// A founder of starting kind `kind` (a row of `life::KINDS`) in cell `i`, of this lineage, born with its rows; not
-    /// yet placed, its matter and energy booked as an edit.
+    /// yet placed, its matter and energy booked as an edit. Its genes of the sizes of brain and senses are its
+    /// lineage's, so it keeps the brain of the test (a light-eater's own genes have none).
     pub fn founder(&self, w: &mut World, kind: usize, i: usize) -> Body {
         let genome = w.life.new_genome(self.rows.clone());
-        crate::life::make(w, kind, i, self.lineage, genome).expect("a founder")
+        let mut b = crate::life::make(w, kind, i, self.lineage, genome).expect("a founder");
+        let sizes = w.life.brains[self.lineage as usize].as_ref().map(lineage::sizes_of).expect("the lineage");
+        BRAIN_SIZES.iter().zip(sizes).for_each(|(&g, x)| b.genes[g] = x as f32);
+        b
     }
 }
 

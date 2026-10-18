@@ -141,9 +141,10 @@ fn frames_file_round_trip() {
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
 }
 
-/// The recording the series tests read: `world` with the soil, the light-eaters (none of them fixing, so that the fixed
-/// mineral in all stays what the soil gave) and the eaters (neutral brains), recorded month by month for three years;
-/// its folder, and the land and low-ground cells at each yearly row.
+/// The recording the series tests read: `world` with the soil, the light-eaters (none of them fixing) and the eaters
+/// (neutral brains), recorded month by month for three years, with the reaction that breaks the fixed mineral down
+/// (`MINERAL_BREAKS`) off, so that the mineral in all stays what the soil gave; its folder, and the land and low-ground
+/// cells at each yearly row.
 struct Recording {
     w: World,
     dir: std::path::PathBuf,
@@ -155,6 +156,7 @@ fn recording() -> &'static Recording {
     RECORDING.get_or_init(|| {
         let dir = tmp("series");
         let mut w = world();
+        w.chem.reactions[worldgen::testkit::MINERAL_BREAKS].k = 0.0;
         worldgen::life::soil(&mut w, &worldgen::chemistry0().1.soil);
         worldgen::life::seed(&mut w, 0);
         let (lay, fix) = (pcore::body::Layout::of(&w.chem), w.chem.fixing().expect("the fixing reaction"));
@@ -372,7 +374,7 @@ fn null_run_freezes_the_brain_rows() {
 
 /// The minerals: the series has each mineral (`min0_`, the mineral of the fixing reaction's gas, and `min1_`) in the ground per m²
 /// of land and of sea, and where the first is in all (dead matter on land and sea, the bodies, the bed's stores), which with the
-/// ground's stays what the soil gave the world (no body fixes, and nothing burns hot).
+/// ground's stays what the soil gave the world (no body fixes, and the reaction that breaks it down is off).
 #[test]
 fn yearly_series_counts_the_minerals() {
     let Recording { w, dir, cells: at } = recording();

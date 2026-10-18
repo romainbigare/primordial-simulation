@@ -21,7 +21,6 @@ pub const USAGE: &str = "usage:
     --spray-size X        step of one round on the row biases of a neutral start (0.2)
     --spray-genes X       the genes' spray, times the step of one generation (3)
     --fixers X            share of the starting light-eaters that carry the fixing gene (0.1)
-    --plant-bias          light-eaters start with hand-set brain biases, not neutral brains
     --neutral-eaters      animals start with neutral brains, not hand-set biases
     --own-brains          each body learns alone (no shared brain rows in a group)
     --individuals         animals are never nodes (light-eaters stay nodes): the detailed form
@@ -81,10 +80,10 @@ impl Args {
         worldgen::terrain::scale_absorbers(w, self.get("--absorber", 1.0));
     }
 
-    /// How the founders are placed: the animals with hand-set brain biases unless `--neutral-eaters`, the
-    /// light-eaters with neutral brains unless `--plant-bias`.
+    /// How the founders are placed: the animals with hand-set brain biases unless `--neutral-eaters` (the light-eaters
+    /// have no brain).
     pub fn seeding(&self) -> Seeding {
-        let hand = [self.has("--plant-bias"), !self.has("--neutral-eaters")];
+        let hand = !self.has("--neutral-eaters");
         Seeding { hand, rounds: self.get("--spray", 20), size: self.get("--spray-size", 0.2), genes: self.get("--spray-genes", 3.0), fixers: self.get("--fixers", FIXERS) }
     }
 
