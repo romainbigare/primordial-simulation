@@ -469,6 +469,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   substance held, `Reactor::needs`), and the reactor's later loops run over the reactions that can run (`on`), went
   (`ran`) or set the rest (`on0`), not over all of them. Same results (golden unchanged); Change at 64 x 64 without
   life 13% fewer instructions.
+- The wind skips a direction with no air link: on a map one air node across (the slow copy tests' 4 x 4 world) it
+  panicked since D3 (b), so CI was red from D3 (b) to D10 while the normal suite passed; fixed, results unchanged.
 - Phase D check: all ten key numbers in range, the sleep test passes; the speed goal (Flow and Change 2 times
   faster) and the size goal (600 lines fewer) are not met: `docs/reports/foundation-d.md`.
 

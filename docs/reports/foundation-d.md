@@ -165,5 +165,10 @@ Before Phase E, please decide:
 
 ## Checks
 
-On main (`c74a579`): the normal suite passes (30 test groups); clippy gives no warnings; the wasm build works; the
-golden runs keep their pins, also with threads; the key-number test and the sleep test pass; CI runs the slow tests.
+On main (`13d0e27`): the normal suite passes (30 test groups); clippy gives no warnings; the wasm build works; the
+golden runs keep their pins, also with threads; the whole slow suite passes (key numbers and sleep tests included).
+
+**A mistake to report:** CI on GitHub was red from D3 (b) to D10. Two slow tests (on a 4 × 4 world, one air node
+across) made the new wind code divide its work into chunks of size 0. The normal suite, which I ran before each push,
+did not include them. Fixed in `13d0e27` (results unchanged); from now on I run the slow suite before the last push
+of a phase.
