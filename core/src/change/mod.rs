@@ -73,6 +73,8 @@ pub fn step(w: &mut World, dt: f64) {
                 if class == Class::Ground {
                     react_ground(w, &mut rc, &mut h, &nodes, (i, id), span, &mut b);
                 } else {
+                    // An air node holds its gas itself: no liquid's film stands between them.
+                    rc.film = 0.0;
                     rc.react(&w.chem, &mut h.amt, None, &mut { w.e_air[i] }, 0.0, None, 0.0, span);
                     b.transform(&w.chem, id, &mut rc, &mut h.made);
                 }

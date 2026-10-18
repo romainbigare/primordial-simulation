@@ -32,7 +32,7 @@ fn run(w: &mut World, plan: &Schedule, years: u64, mut month: impl FnMut(&World)
 
 /// The golden runs: seed, and the fingerprint (`tape::fingerprint`) of the world after `GOLDEN_YEARS` years. Only a
 /// bug fix may change them: `GOLDEN=print cargo test -p tape --test golden -- --nocapture` prints the new values.
-const GOLDEN: [(u64, u64); 3] = [(1, 0x3d9bdd283c3a0dc5), (2, 0xe2580faf5f56a605), (3, 0xd67c56d2d8c9ed8f)];
+const GOLDEN: [(u64, u64); 3] = [(1, 0xba5a5d965c37e00e), (2, 0xb8d800b516483a57), (3, 0x035d99870fd8dec3)];
 const GOLDEN_SIDE: usize = 16;
 const GOLDEN_YEARS: u64 = 2;
 

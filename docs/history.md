@@ -414,6 +414,9 @@ The work of `docs/foundation/plan.md`, one line per task.
   64 x 64, seed 1, years 11 to 20: land -0.05 K, rain on land +1.0%, carbon gas 272.6 to 268.8 ppm, plant members
   +12%. Change at 128 x 128 without life 1,047 to 1,265 ms a year (the cost of `apply` for its moves and transforms).
   Golden re-pinned.
+- An air node reacts with no liquid's film (`Reactor::film` 0): it reacted through the film of the last ground node
+  that reacted before it, where that one stood under liquid. 64 x 64, seed 1, years 11 to 20: land +0.04 K, rain on
+  land -1.3%, carbon gas 268.8 to 271.7 ppm, methane -3%; golden re-pinned.
 
 **Owner's decisions after Phase A**
 
