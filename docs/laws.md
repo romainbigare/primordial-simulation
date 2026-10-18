@@ -691,12 +691,13 @@ the same patterns as individuals.
   brain, node or individual, keeps its `INTERVAL` gene: its actions and its learning go by decisions,
   and they do not add up over a longer span. The rules of an update that count by the gene's interval
   become rates over the update (`Body::paces`, the update over the gene's interval): the stores it uses
-  refill a level per interval of its gene (`Body::room`; what is not used is shed), and frost and a
-  shortfall of upkeep kill at the rate their share per interval gives (`Body::over_span`, 6.5, 6.2).
-  The update is still an integration by steps, with an error larger than the seeds' noise: on
-  64 × 64, 30 years, seeds 1 and 2, the light-eaters live 7 to 9% longer at 18 days, 14 to 24% at
-  36 and 7 to 18% at 72 than at their gene's pace, with 0.01 to 0.08 more log10 kg (all key numbers
-  in range; the pace test of `tape/tests/ranges.rs` holds).
+  refill a level per interval of its gene (`Body::room`; what is not used is shed), and frost kills
+  at the rate its share per interval gives (`Body::over_span`, 6.5). A shortfall of upkeep kills the
+  share of the members its upkeep over the update left unpaid, whatever the update's length (6.2).
+  Members who join a node between its updates (children, members maturing, merges) count their time
+  from when they came: the node's last day and its mark of light become the means by members of its
+  own and theirs (`nodes::add`), so its next update integrates as many member-days as its members
+  lived in it.
 - **Individuals mode** (`Config::nodes` off, `ew run --individuals`): bodies with a brain are
   never nodes. Bodies without one (the light-eaters) stay nodes in both modes: the check compares
   brains in nodes and alone. Siblings born together as individuals each get born rows
@@ -850,7 +851,7 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Paying** (`body::pay`, `body::plan`): the body runs its burnings one after the other, each as
   far as the rate law allows at its temperature with the air it breathes in the time. A cold body
   releases little. If they cannot pay, the body dies of `SPENT` (a node loses the members it
-  cannot pay for, at that rate over an update longer than its gene's interval, 4.4).
+  cannot pay for: the share of its upkeep over the update left unpaid, 4.4).
 - The products of burning take their heat at the body's temperature, so the body keeps its
   temperature as its stores change.
 

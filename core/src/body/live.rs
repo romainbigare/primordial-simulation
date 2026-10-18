@@ -71,7 +71,7 @@ fn site(w: &World, b: &Body) -> Site {
     let (stands, depth, walls) = (depth > 0.0, bond::depth(w, b, depth), bond::enclosure(w, b));
     let cover = cover_of(w, b);
     let open = 1.0 - walls.map_or(0.0, |x| x.closed as f64);
-    let days = w.day().saturating_sub(b.last).max(1) as f64;
+    let days = (w.day() as f64 - b.last).max(1.0);
     Site { i, j: w.mesh.up(i, 0, AIR), tg, stands, depth, walls, cover, open, days, dt: days * DAY }
 }
 
@@ -80,7 +80,7 @@ fn site(w: &World, b: &Body) -> Site {
 pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<Lived, u8> {
     let s = site(w, b);
     let (mass, cap) = b.mass_cap(&w.chem);
-    b.last = w.day();
+    b.last = w.day() as f64;
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
         return Err(LACK);
@@ -102,8 +102,9 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
 }
 
 /// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but
-/// at least an interval (a decision takes one). In a node the members whose upkeep could not be paid die (that share of
-/// an interval of its gene, at that rate over a longer update, `Body::over_span`); an individual that cannot pay dies. Living wears the body (`Body::wear`). Returns the heat the paying released (held
+/// at least an interval (a decision takes one). In a node the members whose upkeep could not be paid die: the share of
+/// its upkeep over the update left unpaid, whatever the length of the update; an individual that cannot pay dies.
+/// Living wears the body (`Body::wear`). Returns the heat the paying released (held
 /// in the update's heat), the span it was paid over, the mass left, the margin of its reactions over the upkeep, and the
 /// plateau state it is left at (`Body::thermal`: the stages that follow see the body at the temperature it came with).
 fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
@@ -126,7 +127,7 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
     let kept = b.energy_in(&w.chem, &p.th);
     let upkeep_heat = b.e - kept;
     b.e = kept;
-    for (f, cause) in [(b.over_span(short, w), SPENT), (if node { one_minus_exp(worn) } else { 0.0 }, AGE)] {
+    for (f, cause) in [(short, SPENT), (if node { one_minus_exp(worn) } else { 0.0 }, AGE)] {
         if f > 1e-9 {
             if !members_die(w, b, f, cause, &mut tmp.dead, &p.th) {
                 b.e += upkeep_heat;

@@ -105,7 +105,7 @@ fn hold_heat(w: &mut World) {
     let mut owed = vec![0.0; n];
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         let q = w.heat_keep.get(slot, b.gen) as f64;
-        owed[b.cell as usize] += q * w.day().saturating_sub(b.last) as f64 * DAY;
+        owed[b.cell as usize] += q * (w.day() as f64 - b.last).max(0.0) * DAY;
     }
     w.heat_pool.resize(n, 0.0);
     for (i, &o) in owed.iter().enumerate() {

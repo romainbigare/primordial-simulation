@@ -713,6 +713,14 @@ The work of `docs/foundation/plan.md`, one line per task.
   old merge took whole young nodes into the adults once their mean reached the copy mass, small members too. Pace
   (node_days 0/18/36/72, years 21 to 30): plant mass flat (within 0.006 log10), life of plants -0, -4, -10, -14%
   (seed 1) and -0, -2, -2, -16% (seed 2). Golden re-pinned; snapshot version 26.
+- E11, the pace of nodes made flat: a node's last day (`Body::last`, now a real number) and its mark of light become
+  the means by members when members join it between updates (`nodes::add`), so its next update integrates their own
+  member-days, not the whole span for members who came at its end; and a shortfall of upkeep kills the share of the
+  members it leaves unpaid over the update, not that share compounded over the gene's intervals in it. Pace
+  (node_days 0/18/36/72, years 21 to 30): life of plants +0, -0.4, -2.2, +2.5% (seed 1) and +0, -1.5, +3.8, +1.7%
+  (seed 2), from -0, -4, -10, -14% and -0, -2, -2, -16%; mass within 0.005 log10. The time of joining members alone
+  gave -0, -1, -7, -8% and -0, -3, -3, -11%. Years 30 to 35 at 36 days: plant members 4.27e10 to 4.48e10 and 3.54e10
+  to 3.69e10, life of plants 3.34 to 3.69 and 3.83 to 4.08 yr. Golden re-pinned; snapshot version 27.
 
 **Phase J: the long physics step**
 

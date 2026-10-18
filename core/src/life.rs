@@ -122,7 +122,7 @@ impl Life {
     /// Place a new body on `day`; it first updates `delay` days later (1..=`MAX_INTERVAL`).
     pub(crate) fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
         let slot = free_place(&mut self.bodies, &mut self.free);
-        (b.gen, b.alive, b.last, b.count) = (self.bodies[slot].gen, true, day, b.n());
+        (b.gen, b.alive, b.last, b.count) = (self.bodies[slot].gen, true, day as f64, b.n());
         self.at[b.cell as usize].push(slot as u32);
         self.stir(b.cell);
         self.enter(&b);

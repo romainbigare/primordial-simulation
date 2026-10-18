@@ -241,7 +241,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     let mut rises = [0.0; 2];
     for (n, &slot) in slots.iter().enumerate() {
         // The world and the body as its next update finds them, and the body as that update leaves it.
-        let next = w.life.bodies[slot].last + w.life.bodies[slot].interval(w);
+        let next = w.life.bodies[slot].last as u64 + w.life.bodies[slot].interval(w);
         while w.day() < next {
             held_day(w, &held(w), t_cat);
         }
@@ -368,10 +368,10 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     fur.prepare(&w.chem, &w.cfg.phys);
     let g_fur = g(w, &fur);
     assert!(g_fur < 3.0, "with fur {g_fur} W/K for {} kg", fur.mass(&w.chem));
-    let (fuel0, g0, next) = (b.store[RICH], g(w, &b), b.last + b.interval(w));
+    let (fuel0, g0, next) = (b.store[RICH], g(w, &b), b.last as u64 + b.interval(w));
     held_days(w, &[cell], &[tg], (next - w.day()) as usize + 1);
     let (y, twin) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
-    assert!(y.alive && twin.alive && y.last == next);
+    assert!(y.alive && twin.alive && y.last == next as f64);
     let (t, t_twin) = (y.temp(&w.chem), twin.temp(&w.chem));
     let lost = (t - tg) * 0.5 * (g0 + g(w, y)) * y.interval(w) as f64 * DAY;
     let burned = (fuel0 - y.store[RICH]) * y.k.burn[0].1;
@@ -1014,7 +1014,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
     // (Lives are counted from the last update of the first individual: wear counts from there.)
-    let (books, start, n0, node_last) = (Books::now(&w), w.life.bodies[sa].last, w.life.bodies[c].count, w.life.bodies[c].last);
+    let (books, start, n0, node_last) = (Books::now(&w), w.life.bodies[sa].last as u64, w.life.bodies[c].count, w.life.bodies[c].last);
     let mut deaths = Vec::new();
     for _ in 0..240 {
         day(&mut w, &mut deaths);
@@ -1024,7 +1024,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // The node's mean life: the days its members lived over those who died (it loses a share at each update, of
     // members who die at a steady rate between updates, so over a span they live dead / ln(n / (n - dead)) times its
     // days; it may die of other causes later, so only its age deaths count).
-    let (mut n, mut t, mut lived) = (n0, node_last as f64 - start as f64, 0.0);
+    let (mut n, mut t, mut lived) = (n0, node_last - start as f64, 0.0);
     for &(day, dead) in &node {
         (lived, n, t) = (lived + dead * (day as f64 - t) / (n / (n - dead).max(f64::MIN_POSITIVE)).ln(), n - dead, day as f64);
     }
