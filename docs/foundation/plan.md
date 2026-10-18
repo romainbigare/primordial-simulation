@@ -497,7 +497,7 @@ Days are rough guesses for one agent. Each phase ends with its watch report.
 | A3 | The key-number test (6.3) | `tape/tests/ranges.rs` | — | It passes on today's code and runs in CI |
 | A4 | Check two possible bugs: (a) plant members die "taken" in years 3 to 5 of a normal run, before any animal exists (light-eaters may take from each other); (b) the rain picture shows stripes on the 4 × 4 air grid | — | — | Each is explained or fixed (a fix is its own branch) |
 | A5 | The owner's decisions of Section 3 written in the handover | `docs/handover.md` 13.1 and 14.3 | — | Done on 17 October 2026 |
-| A6 | **The code-size test:** counts the code lines of `core/src` (not blank, not starting with `//`), prints them per folder, and fails above the ceiling of the line budget (9,500 until the end of Phase D, 8,000 after Phase E). It replaces the `wc -l` count of handover 14.3. | `cli/tests/core_size.rs` (beside `word_ban.rs`) | — | It passes on today's code (7,236) and runs in CI |
+| A6 | **The code-size test:** counts the code lines of `core/src` (not blank, not starting with `//`), prints them per folder, and fails above the ceiling of the line budget (9,000 while the foundation is built, 8,000 at its end). It replaces the `wc -l` count of handover 14.3. | `cli/tests/core_size.rs` (beside `word_ban.rs`) | — | It passes on today's code (7,236) and runs in CI |
 
 ### Phase B: the base layers (about 45 days)
 
