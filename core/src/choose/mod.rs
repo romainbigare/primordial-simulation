@@ -81,6 +81,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     // A brain perceives sizes per member.
     let pm = lived.mass / b.n();
     let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS)), temp, lived.spare);
+    w.life.settle(b.group);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);

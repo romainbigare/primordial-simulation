@@ -45,6 +45,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
         // The cover broken along the way was the lane's: that much ground is now clear.
         lanes::clear(w, i, j, broken / cover);
     }
+    w.life.settle(b.group);
     let gr = &w.life.groups[b.group as usize];
     let ((cx, cy), (x, y)) = (gr.centre(), w.map.xy(j));
     if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > w.cfg.phys.leave {

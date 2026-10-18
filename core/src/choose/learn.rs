@@ -74,6 +74,7 @@ pub(crate) fn regroup(w: &mut World) {
         list[fill[at(g)] as usize] = k as u32;
         fill[at(g)] += 1;
     }
+    life.settle_all();
     for g in life.groups.iter_mut().filter(|g| g.members > 0) {
         let f = g.forget_rate().max(0.0);
         if f > 0.0 {
@@ -110,6 +111,7 @@ pub(crate) fn regroup(w: &mut World) {
         } else if day - b.since >= w.cfg.phys.stay {
             let old = b.group;
             (b.group, b.near) = (best, NONE);
+            life.settle(old);
             let o = &life.groups[old as usize];
             let lone: Option<Vec<f32>> = (o.members == 1).then(|| o.learned().collect());
             let b = std::mem::take(&mut life.bodies[slot]);
@@ -117,6 +119,7 @@ pub(crate) fn regroup(w: &mut World) {
             life.enrol(old, &b, -1);
             life.bodies[slot] = b;
             if let Some(o) = lone {
+                life.settle(best);
                 let gr = &mut life.groups[best as usize];
                 let share = (life.bodies[slot].n() / gr.count) as f32;
                 let add: Vec<f32> = gr.learned().zip(o).map(|(l, x)| (x - l) * share).collect();
@@ -139,6 +142,8 @@ pub(super) fn watch(w: &mut World, b: &mut Body, s: usize) {
     brain::blend(&mut b.adj, &oadj, alike);
     let g = b.group as usize;
     if og != g && w.life.shape_of(ol) == w.life.shape_of(b.lineage) {
+        w.life.settle(g as u32);
+        w.life.settle(og as u32);
         let (lo, hi) = w.life.groups.split_at_mut(g.max(og));
         let (mine, theirs) = if g < og { (&mut lo[g], &hi[0]) } else { (&mut hi[0], &lo[og]) };
         brain::blend(&mut mine.rows, &theirs.rows, (alike as f64 * b.n() / mine.count.max(b.n())) as f32);

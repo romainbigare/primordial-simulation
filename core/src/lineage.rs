@@ -75,8 +75,10 @@ pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };
+    let from = lin.shape;
+    w.life.settle(b.group);
     // The born and the shared rows get the same new weights (two streams of one key, the body's id turned over).
-    let rerow = |x: &[f32]| brain::rerow(x, lin.shape, l.shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
+    let rerow = |x: &[f32]| brain::rerow(x, from, l.shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
     let (born, shared) = (rerow(w.life.born(b)), rerow(&w.life.groups[b.group as usize].rows));
     let lineage = w.life.new_lineage(l);
     let group = w.life.fork_group(b.group, lineage, shared);
@@ -91,6 +93,7 @@ pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
 /// learned.
 pub(crate) fn own(w: &mut World, b: &Body, c: &mut Body) {
     if !w.cfg.share_brains && c.group == b.group {
+        w.life.settle(b.group);
         let rows = w.life.born(c).iter().zip(w.life.groups[b.group as usize].learned()).map(|(r, l)| r + l).collect();
         c.group = w.life.fork_group(b.group, c.lineage, rows);
     }

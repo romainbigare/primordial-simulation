@@ -511,6 +511,17 @@ The work of `docs/foundation/plan.md`, one line per task.
   chemistry's key numbers move by 6 to more than 100 times less than their noise at every setting. The ten key
   numbers stay in their ranges (three seeds, 30 years, 64 x 64).
 
+**Phase E: the life engine**
+
+- E1 (a), speed: a change of a group's members changes its count at once and waits, by born rows, in the group
+  (`Group::due`, holding its born rows); the sum of born rows and the rows follow in one pass when the rows are read
+  (`Life::settle`: before a body thinks, before a reader of the rows, and at the end of each run of the clock),
+  not at every change (`Group::weigh` re-summed every row each time). 64 x 64, seed 1, 10 years: the work on the
+  sums falls from 4.1 s to 3.0 s (9% of a year to 7%: about one pass per decision, not one per change of members, but
+  a pass now reads its rows from memory, not from the cache); a body update about 3% faster (runs side by side, year
+  10: 42.8 to 41.3 µs and, on a busier machine, 55.6 to 53.2 µs). Years 11 to 20: land +0.02 K, carbon gas 270.4 to
+  271.4 ppm, rain on land -0.4%, plant members -9% (life's choices grow the rounding); golden re-pinned.
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body

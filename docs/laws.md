@@ -678,7 +678,8 @@ Files: `core/src/choose/` (`mod` the decision, `perceive`, `learn`, `feed` takin
   near each other share one set of rows: the mean of their members' born rows plus what the group
   learned. Every group number is **weighed by members** (a node counts its count): the mean rows,
   the forgetting rate, which group is bigger, and how far a body's step moves the shared rows. The
-  group's count is right at all times. A body further than `leave` cells from its group's centre
+  group's count is right at all times; its mean rows follow its members when the rows are read
+  (`life::Life::settle`: each change of members waits, by born rows, until then). A body further than `leave` cells from its group's centre
   leaves with a copy (`choose::go`). One that stays `stay` days within `join` cells of a bigger
   group of its lineage joins it. What a group learned fades at the mean `FORGET` rate of its
   members. `Config::share_brains` off (`ew run --own-brains`) gives one brain per body.

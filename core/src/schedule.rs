@@ -76,6 +76,8 @@ fn run_for(w: &mut World, span: u64, mark: &mut dyn FnMut(Stage)) {
         }
         w.time = clock::next(&list, t).min(end);
     }
+    // The groups' rows follow their members before anything outside the laws reads them.
+    w.life.settle_all();
 }
 
 /// The survey, Flow and Change, for `span` seconds.
