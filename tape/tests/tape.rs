@@ -287,9 +287,10 @@ fn read_tape(dir: &std::path::Path) -> (serde_json::Value, usize, Vec<String>, V
     (meta, raw.len() - 8 - n, series, months.lines().skip(1).map(ym).collect())
 }
 
-/// A run with life written for 4 years and resumed from its year 2 snapshot into the same folder keeps the years 0..2
-/// it had and replays 3 and 4 as the unbroken run wrote them: series rows, months, frames and events, with no gap and no
+/// A run with life written for 4 years and resumed from its year 1 snapshot into the same folder keeps the years 0..1
+/// it had and replays 2 to 4 as the unbroken run wrote them: series rows, months, frames and events, with no gap and no
 /// repeat (the snapshot carries what the recorder keeps across years: where bodies were, what they took, worn edges).
+/// A kind seeded after the snapshot has no columns until then, as in the unbroken run.
 #[test]
 fn resume_into_the_same_folder_continues_the_tape() {
     let dir = tmp("resume");
@@ -299,11 +300,16 @@ fn resume_into_the_same_folder_continues_the_tape() {
     let (mpy, dpy) = (w.cfg.months_per_year as u64, w.days_per_year());
     let mut rec = tape::Recorder::new(&w, 1, 0);
     rec.record_month(&mut w);
+    // The third kind comes at the end of year 2, after the snapshot of year 1, in both runs.
+    let late = |w: &mut World| worldgen::life::seed_with(w, 2, &worldgen::life::Seeding::neutral());
     for m in 1..=4 * mpy {
         run(&mut w, 1);
         rec.record_month(&mut w);
-        if m == 2 * mpy {
+        if m == mpy {
             tape::save_snapshot(&w, &rec.kept(), dir.join("snap.bin.gz")).unwrap();
+        }
+        if m == 2 * mpy {
+            late(&mut w);
         }
     }
     rec.finish(&dir).unwrap();
@@ -314,9 +320,12 @@ fn resume_into_the_same_folder_continues_the_tape() {
     let mut rec = tape::Recorder::new(&w, 1, 0);
     rec.resume(&mut w, kept, &dir).unwrap();
     rec.record_month(&mut w);
-    for _ in 0..2 * mpy {
+    for m in mpy + 1..=4 * mpy {
         run(&mut w, 1);
         rec.record_month(&mut w);
+        if m == 2 * mpy {
+            late(&mut w);
+        }
     }
     rec.finish(&dir).unwrap();
 

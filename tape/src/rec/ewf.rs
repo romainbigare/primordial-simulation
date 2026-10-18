@@ -64,18 +64,22 @@ impl Recorder {
         self.frames = frames.iter().map(day).take_while(|&d| d <= w.day()).collect();
         self.bytes = raw[8 + n..8 + n + frame * self.frames.len()].to_vec();
         self.log = events.iter().take_while(|e| day(e) <= w.day()).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
-        // Series: the rows of years up to this one (a null is a NaN that was written).
+        // Series: the rows of years up to this one (a null is a NaN that was written). A column with no value in them is
+        // left out, as in the run that wrote the file before this year: it comes back, NaN in the years before, with its
+        // first value (`Recorder::append`), and the columns that follow what was recorded (`kinds`) do not see it early.
         let (series, units) = (object("series")?, object("series_units")?);
         let years = series.get("year").and_then(Value::as_array).ok_or_else(|| bad("no years"))?;
         let rows = years.iter().take_while(|y| y.as_f64().is_some_and(|y| y <= w.year())).count();
-        self.series = series
-            .iter()
-            .map(|(k, v)| {
-                let values = v.as_array().filter(|a| a.len() >= rows).ok_or_else(|| bad(&format!("series {k} is short")))?;
+        let mut columns = vec![];
+        for (k, v) in series {
+            let values = v.as_array().filter(|a| a.len() >= rows).ok_or_else(|| bad(&format!("series {k} is short")))?;
+            let values: Vec<f64> = values[..rows].iter().map(|x| x.as_f64().unwrap_or(f64::NAN)).collect();
+            if values.iter().any(|x| !x.is_nan()) {
                 let unit = units.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-                Ok(Column { name: k.clone(), unit, values: values[..rows].iter().map(|x| x.as_f64().unwrap_or(f64::NAN)).collect() })
-            })
-            .collect::<io::Result<_>>()?;
+                columns.push(Column { name: k.clone(), unit, values });
+            }
+        }
+        self.series = columns;
         // Months: the rows up to this month.
         let now = year_month(w);
         let months: Vec<MonthRow> = serde_json::from_value(g["months"].clone())?;
