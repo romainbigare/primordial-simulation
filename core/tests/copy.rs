@@ -991,7 +991,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     assert_eq!(new.len(), 1, "not split in two");
     seen_as_it_is(&w, new[0]);
     let (a, c) = (&w.life.bodies[s], &w.life.bodies[new[0]]);
-    assert_eq!((a.count + c.count, a.lineage, a.group, a.cell), (count, c.lineage, c.group, c.cell));
+    assert_eq!((a.count + c.count, a.lineage, a.cell), (count, c.lineage, c.cell));
     for (k, &x) in store.iter().enumerate() {
         assert!((a.store[k] + c.store[k] - x).abs() <= 1e-12 * x, "store {k}");
     }
@@ -1175,9 +1175,9 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
 }
 
 /// A node whose mean brain-size gene moved a whole unit from its lineage's size moves to a new lineage with that size
-/// at its update. A light-eater node (no brain: no born rows, no group) grows one hidden unit: new born rows and a group
-/// of its own. Grown once more, its brain is carried over, in a group of its own that keeps what its group learned (the
-/// bias of a row is its last entry). Matter and energy as they were.
+/// at its update. A light-eater node (no brain: no rows) grows one hidden unit: new born rows, and its rows those. Grown
+/// once more, its brain is carried over and keeps what it learned (the bias of a row is its last entry). Matter and
+/// energy as they were.
 #[test]
 fn a_node_whose_size_genes_moved_changes_lineage() {
     let mut w = small_world();
@@ -1186,26 +1186,27 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     let lin0 = b.lineage;
-    assert!(w.life.born(&b).is_empty() && b.group == pcore::life::NO_GROUP, "a light-eater has a brain");
+    assert!(w.life.born(&b).is_empty() && b.rows.is_empty(), "a light-eater has a brain");
     b.genes[HIDDEN] += 0.9;
     lineage::resize(&mut w, s, &mut b);
     assert_eq!(b.lineage, lin0, "moved for less than a unit");
     b.genes[HIDDEN] += 0.3;
     lineage::resize(&mut w, s, &mut b);
     let shape = |w: &World, b: &Body| w.life.brains[b.lineage as usize].as_ref().expect("its lineage").shape;
-    let (lin1, g1, s1) = (b.lineage, b.group, shape(&w, &b));
-    assert!(lin1 != lin0 && g1 != pcore::life::NO_GROUP && s1.h == 1, "no new lineage of one hidden unit");
-    assert_eq!((w.life.members[lin1 as usize], w.life.groups[g1 as usize].members), (1, 1));
+    let (lin1, s1) = (b.lineage, shape(&w, &b));
+    assert!(lin1 != lin0 && s1.h == 1, "no new lineage of one hidden unit");
+    assert_eq!(w.life.members[lin1 as usize], 1);
     assert_eq!(w.life.born(&b).len(), s1.rows() * s1.r());
-    w.life.groups[g1 as usize].rows[s1.h] += 0.5;
-    let learned = w.life.groups[g1 as usize].rows[s1.h] - w.life.born(&b)[s1.h];
+    assert_eq!(b.rows.as_slice(), w.life.born(&b));
+    b.rows[s1.h] += 0.5;
+    let learned = b.rows[s1.h] - w.life.born(&b)[s1.h];
     b.genes[HIDDEN] += 1.0;
     lineage::resize(&mut w, s, &mut b);
     w.life.bodies[s] = b;
     let b = &w.life.bodies[s];
     let h = shape(&w, b).h;
-    assert!(b.lineage != lin1 && b.group != g1 && h == 2, "no new lineage of two hidden units");
-    assert!((w.life.groups[b.group as usize].rows[h] - w.life.born(b)[h] - learned).abs() < 1e-5, "what it learned is lost");
+    assert!(b.lineage != lin1 && h == 2, "no new lineage of two hidden units");
+    assert!((b.rows[h] - w.life.born(b)[h] - learned).abs() < 1e-5, "what it learned is lost");
     for _ in 0..2 {
         pcore::step(&mut w);
     }

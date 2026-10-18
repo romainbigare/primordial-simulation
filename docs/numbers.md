@@ -51,7 +51,6 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `regrow` | m/s | speed at which bodies spread back into a cleared lane, from each side, under dense cover (times cover / `rho_pass` below that) | 1 nm/s is 3 cm a year, the slow end of the spread of a ground cover by runners (my arithmetic, unchecked) | anchored |
 | `creep` | m/s per unit slope, times 1/hardness | loose solids creeping down a slope: a flux of D x slope, D = creep x softness x thickness | hillslope diffusivity 1e-3 to 1e-2 m²/yr (Roering et al. 1999; Fernandes and Dietrich 1997; Hanks 2000; checked in part in Whipple's MIT notes, 2004); 3e-3 m²/yr on the starting loose ground (1 m, softness 1.53) is 6.3e-11 m/s | anchored |
 | `crowd` | nodes per cell | speed-tool setting: past this many body nodes in a cell at a month's start the most alike merge (past twice this, however unlike); a node splits only while its cell has fewer than this minus one; it never bounds the members | run: speed; it must give the same patterns as individuals (to be checked at M4) | tuned |
-| `share_brains` | on/off | bodies that stay near each other share one brain's rows (off, `--own-brains`: each keeps its own) | a setting, to check that sharing gives the same patterns | switch |
 | `nodes` | on/off | bodies with a brain may be population nodes (off, `--individuals`: they are individuals; bodies without a brain stay nodes) | a setting, for the check that nodes give the same patterns as individuals (handover 7.1) | switch |
 | `two_parents` | on/off | a mature body's children may have a second, alike parent (off, `--no-mix`: copies of one parent) | a setting: the check that nodes keep the mean of their genes without selection, and the measure of what mixing changes (handover 6.4) | switch |
 | `null` | on/off | a null run: no learning, no imitation, born rows and brain bases never change; genes still mutate | the run to compare a seed with | switch |
@@ -120,9 +119,6 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `signal_noise` | none | spread of the signal, around its mean | none found | tuned, first guess |
 | `discount` | none | weight of well-being one decision ahead against well-being now | the usual 0.9 of learning machines | anchored |
 | `blend` | share | share of the way a watcher's rows move toward the watched one's | none found | tuned, first guess |
-| `leave` | cells | a body further than this from its group's centre leaves it | speed-tool setting for group brains (handover 7.0) | tuned |
-| `join` | cells | a body within this of a bigger group's centre for `stay` days joins it | the same | tuned |
-| `stay` | days | the days a body must stay near a bigger group to join it | the same | tuned |
 | `learn_beta` | share | weight of the newest step in a learned row's mean square of steps | the usual 0.1 of a running average in learning machines | anchored |
 | `learn_most` | learning-rate units | the most a row moves in one step | none found | tuned, first guess |
 
@@ -242,15 +238,15 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 110 rows of `Config` and `Physics` are their 110 fields.
+The 106 rows of `Config` and `Physics` are their 106 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 45, and 7 outside the structs | 45 fields (among them `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
-| tuned (run or reason named) | 18, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`, `leave`, `join`, `stay`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
+| tuned (run or reason named) | 15, and 7 outside the structs | speed settings (`phys_days`, `air_days`, `exchange_days`, `flow_days`, `crowd`, `alike`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `mix`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
-| switch | 4 | `share_brains`, `nodes`, `two_parents`, `null` |
+| switch | 3 | `nodes`, `two_parents`, `null` |
 | speed | 3 | `wake_share`, `sleep_days`, `node_days` |
 | container | 1 | `phys` |
 

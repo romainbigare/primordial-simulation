@@ -4,7 +4,6 @@
 
 use crate::body::{self, alike, alike_log, class, most, noise, range, size_step, spread_at, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{row_step, shake};
-use crate::lineage::own;
 use crate::rng::{Purpose, Rng};
 use crate::life::Life;
 use crate::World;
@@ -17,8 +16,8 @@ const UNLIKE_CROWD: usize = 2;
 /// The monthly merge of nodes, a speed shortcut, not a law: it coarsens only how members are represented (as population
 /// nodes), never how many there are or where. In each cell, among the bodies that hold and are inside nothing, a node
 /// joins the first larger one alike to it (`join_alike`); then, while more than `Config::crowd` remain, the most alike
-/// pairs merge (`merge_closest`). Stores and heat add up, genes and born rows become the means by count, and the spread
-/// of both is kept (`merge`); lineage, brain group and memory are the larger's. A node that grew too varied splits
+/// pairs merge (`merge_closest`). Stores and heat add up, genes, born rows and brain rows become the means by count, and
+/// the spread of genes and born rows is kept (`merge`); lineage and memory are the larger's. A node that grew too varied splits
 /// again at its next update (`split`). With `Config::nodes` off, bodies with a brain never merge and never count
 /// toward `crowd`.
 pub(crate) fn crowd(w: &mut World) {
@@ -104,17 +103,19 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
     w.cfg.nodes || w.life.brainless(b)
 }
 
-/// The body in slot `s` joins the body in slot `t` (`join`), its born rows carried over to the sizes of the other's brain
-/// where they differ.
+/// The body in slot `s` joins the body in slot `t` (`join`), its born rows and its rows carried over to the sizes of the
+/// other's brain where they differ (`Life::carry_rows`).
 pub fn merge(w: &mut World, s: usize, t: usize) {
-    let c = w.life.bodies[s].clone();
+    let mut c = w.life.bodies[s].clone();
     let mut r = Rng::new(w.seed, w.day(), c.id(s), Purpose::Merge);
-    let rows = w.life.carry_rows(w.life.born(&c).to_vec(), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.new_noise());
+    let (born, rows) = w.life.carry_rows(w.life.born(&c).to_vec(), std::mem::take(&mut c.rows), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.new_noise());
     w.life.remove(s);
-    join(w, t, c, &rows);
+    c.rows = rows;
+    join(w, t, c, &born);
 }
 
-/// Members `c` (not placed, born with `rows`, in the shape of `t`'s brain) join body `t` (`take_in`).
+/// Members `c` (not placed, born with `rows`, its born rows and its own in the shape of `t`'s brain) join body `t`
+/// (`take_in`).
 pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
     take_in(w, &mut o, c, Some(rows));
@@ -152,25 +153,26 @@ impl Lot {
     }
 }
 
-/// Members `c` join body `o`, taken out of its slot, with the means `genes` and the spread `spread` of their genes and
-/// their born rows and the rows' spread: members, stores, brood and heat add up; genes and born rows become the means
-/// by members (members of less than one weigh what they are), and the spread what both held around the new mean (each
-/// one's spread plus its gap from the new mean squared, by members; for the rows the mean over rows of the gap squared;
-/// up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows` none: those of `o` (a
-/// member split off `o` coming back, `one`), which leaves its rows, their spread and its group's as they are: it left
-/// with the rows' mean and comes back with it.
-pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], rows: Option<(&[f32], f32)>) {
+/// Members `c` join body `o`, taken out of its slot, with the means `genes` and the spread `spread` of their genes, and
+/// their born rows, their brain rows and the born rows' spread: members, stores, brood and heat add up; genes, born rows
+/// and brain rows become the means by members (members of less than one weigh what they are), and the spread what both
+/// held around the new mean (each one's spread plus its gap from the new mean squared, by members; for the born rows the
+/// mean over rows of the gap squared; up to `most`), so the smaller one's genes stay in the spread, not only in the
+/// mean. `rows` none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows and their spread
+/// as they are: it left with the node's and comes back with them.
+pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], rows: Option<(&[f32], &[f32], f32)>) {
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
     o.spread = (0..o.genes.len()).map(|g| pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
     let genes = mix(&o.genes, genes);
     match rows {
-        Some((rows, row_spread)) => {
+        Some((rows, own, row_spread)) => {
             let born = w.life.born(o);
             let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
             o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
             let rows = mix(born, rows);
+            o.rows = mix(&o.rows, own);
             w.life.reborn(o, genes, rows);
         }
         None => w.life.regene(o, genes),
@@ -186,11 +188,11 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
 /// Members `c` (out of any slot) join body `o`, taken out of its slot (`add`), born with `rows` (none: those of `o`).
 pub(crate) fn take_in(w: &mut World, o: &mut Body, mut c: Body, rows: Option<&[f32]>) {
     let lot = Lot::of(&mut c);
-    add(w, o, lot, &c.genes, &c.spread, rows.map(|r| (r, c.row_spread)));
+    add(w, o, lot, &c.genes, &c.spread, rows.map(|r| (r, c.rows.as_slice(), c.row_spread)));
 }
 
 /// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the brood and of the heat
-/// (`Lot::split`); lineage, group, genome and memory as the node's; holding nothing, inside nothing.
+/// (`Lot::split`); lineage, genome, brain rows and memory as the node's; holding nothing, inside nothing.
 fn part(life: &mut Life, b: &mut Body, f: f64) -> Body {
     let lot = Lot::split(life, b, f, f);
     // (The trace, the constants and the stores are not the part's: set aside, not cloned.)
@@ -246,7 +248,6 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     b.spread[g] = (b.spread[g] - d * d).max(0.0);
     c.spread[g] = b.spread[g];
     w.life.reborn(b, genes, rows);
-    own(w, b, &mut c);
     w.counts.splits[0] += 1.0;
     w.place(c, Some(w.light_keep.get(slot, b.gen)));
 }
@@ -290,7 +291,7 @@ pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
 }
 
 /// One member drawn from node `b` (`one`), placed with the light-keep share `keep`; with `own_rows`, born with rows of
-/// its own (`member_rows`), else with the node's.
+/// its own (`member_rows`), else with the node's. Each keeps what the node learned on top of its born rows.
 fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: bool) -> usize {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
@@ -308,13 +309,16 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: b
     }
     if own_rows && b.row_spread > 0.0 {
         let (mine, left, spread) = member_rows(w.life.born(b), b.row_spread, n, r);
+        let shift = |rows: &mut [f32], to: &[f32], from: &[f32]| rows.iter_mut().zip(to).zip(from).for_each(|((x, t), f)| *x += t - f);
+        let born = &w.life.genomes[b.genome as usize].rows;
+        shift(&mut c.rows, &mine, born);
+        shift(&mut b.rows, &left, born);
         (c.genome, b.row_spread) = (w.life.new_genome(mine), spread);
         w.life.reborn(b, genes, left);
     } else {
         w.life.regene(b, genes);
     }
     (c.count, c.spread, c.row_spread, c.wear) = (1.0, Vec::new(), 0.0, r.f64());
-    own(w, b, &mut c);
     w.place(c, keep)
 }
 

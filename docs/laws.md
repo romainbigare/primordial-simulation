@@ -17,7 +17,7 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 | Law or part | Files |
 |---|---|
 | time and the month's order | `clock/` (the calendar, processes with periods; `sleep`: the sleep and wake of nodes), `schedule.rs` (`step`, `step_marked`, `day`) |
-| the shape of the world | `space/` (`Mesh`: levels of cells and links with their widths, parents and children; `square`: the square map; `stack`: layers above and below a cell). `World::mesh` is built from the saved map (`World::map`, `World::air_scale`; `World::mesh_of`), and the laws read cells, links, areas and air nodes from it. The square map is read only where a law is about its layout: the eight moves and sides a brain sees (`choose`), the side a child lands on (`copy`), the lowest neighbour a drifting part goes to (`bond::month`, first in compass order on a tie), the groups' centres (`life`, `choose::learn`), and the four air nodes a cell reads the air between (`flow::scratch::tables`) |
+| the shape of the world | `space/` (`Mesh`: levels of cells and links with their widths, parents and children; `square`: the square map; `stack`: layers above and below a cell). `World::mesh` is built from the saved map (`World::map`, `World::air_scale`; `World::mesh_of`), and the laws read cells, links, areas and air nodes from it. The square map is read only where a law is about its layout: the eight moves and sides a brain sees (`choose`), the side a child lands on (`copy`), the lowest neighbour a drifting part goes to (`bond::month`, first in compass order on a tie), and the four air nodes a cell reads the air between (`flow::scratch::tables`) |
 | the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `lines`: the implicit step along a line) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`); `flow::land::conduct` (sideways) |
@@ -644,8 +644,9 @@ the same patterns as individuals.
 - **Members are kept exactly** (`nodes::Lot`, `nodes::add`: one helper for every join, merge,
   split and booking). Members, stores, heat and brood split by shares (the node keeps the
   remainder, so the parts add up to it) and join as sums: when members join a node, the count
-  grows by exactly what they are (0.4 of a member adds 0.4). Genes and born rows become the means
-  **by members**, and the spread pools each one's spread and its gap to the new mean.
+  grows by exactly what they are (0.4 of a member adds 0.4). Genes, born rows and brain rows
+  become the means **by members**, and the spread pools each one's spread and its gap to the new
+  mean.
 - **Merging** (`nodes::crowd`, monthly). Alike nodes of one class in a cell merge. A cell with
   more than `crowd` nodes merges its most alike pairs while they are alike. Past twice `crowd` the
   most alike merge however unlike (a safeguard). A merge pools stores, heat, the means by count,
@@ -660,7 +661,7 @@ the same patterns as individuals.
   individual (`nodes::one`); if it then holds something or is inside, it lives on alone, else it
   goes straight back, and the node's rows and their spread stay as they were. `nodes::open` draws
   several members as individuals (for a close view), each with genes and born rows of its own
-  drawn from the node's spread.
+  drawn from the node's spread, and what the node learned on top.
 - **Brain size in nodes** (`lineage::resize`): a node whose mean brain-size gene is a whole unit
   away from its lineage's size moves itself to a new lineage of that size, its brain carried over.
 - **Age in nodes.** A node has no single age: its members die of age at the rate of the wear an
@@ -699,18 +700,14 @@ Files: `core/src/choose/` (`mod` the decision, `perceive`, `learn`, `feed` takin
   and an estimate of how well-being will go (a critic).
 - Sizes are genes, each with a cost: hidden units (0 to 64; 0 is no brain), memory numbers (0 to
   12), bodies perceived (1 to 6), sight (1 to 4 cells). A body with no hidden units takes no
-  decisions and pays nothing for a brain; its update is physics only. It has no born rows and is
-  in no brain group (`life::NO_GROUP`). The light-eaters start so (8): everything they do is their
-  body's physics (6). A lineage may grow a brain back through the same gene (`lineage::resize`) if
+  decisions and pays nothing for a brain; its update is physics only. It has no born rows and no
+  rows. The light-eaters start so (8): everything they do is their body's physics (6). A lineage may grow a brain back through the same gene (`lineage::resize`) if
   a brain pays: its rows then start as new weights (`brain::rerow`).
-- **Shared group brains** (`choose::learn::regroup`, monthly; `life::Group`). Bodies that stay
-  near each other share one set of rows: the mean of their members' born rows plus what the group
-  learned. Every group number is **weighed by members** (a node counts its count): the mean rows,
-  which group is bigger, and how far a body's step moves the shared rows. The
-  group's count is right at all times; its mean rows follow its members when the rows are read
-  (`life::Life::settle`: each change of members waits, by born rows, until then). A body further than `leave` cells from its group's centre
-  leaves with a copy (`choose::go`). One that stays `stay` days within `join` cells of a bigger
-  group of its lineage joins it. `Config::share_brains` off (`ew run --own-brains`) gives one brain per body.
+- **One brain per body or node** (`Body::rows`). Each body keeps its own rows: the rows it was
+  born with plus what it learned. A population node's members share the node's rows. A child
+  starts with its born rows plus what its parent learned (`Life::inherit`). When members join a
+  node, its rows become the mean of both by members, as its genes and born rows do (4.4); where
+  two brains differ in size, the members bring only their born rows (`Life::carry_rows`).
 
 ### 5.2 Perception
 
@@ -758,15 +755,15 @@ could take by its own size in the time. A node gives as one member.
   upkeep, key liquids to freezing or boiling). No reward is hand-shaped.
 - **Within a life** (`choose::learn`, `brain::learn`): at its next decision the brain learns from
   the change of the body's own well-being, by a policy gradient against the critic's estimate
-  (actor-critic). The `LEARN` gene sets the rate. A node's step moves the group by its members'
-  share. An error too big for a number changes nothing.
+  (actor-critic), into its own rows. The `LEARN` gene sets the rate. An error too big for a number
+  changes nothing.
 - **Across lives**: evolution of the born rows and the base (4.1).
 
 ### 5.5 Imitation, signals, memory
 
-- **Watching** (`choose::learn::watch`) costs the turn. The group's rows move part of the way
-  (`blend`) toward the rows of the watched body's group, if the brains have the same sizes, and
-  less the less alike the two bodies are (size, leaf, strength).
+- **Watching** (`choose::learn::watch`) costs the turn. The watcher's rows move part of the way
+  (`blend`) toward the watched body's rows, if the brains have the same sizes, and less the less
+  alike the two bodies are (size, leaf, strength).
 - **Signals**: each decision emits a small signal (2 numbers, with noise `signal_noise`). It has no
   meaning at first; others perceive it. It costs upkeep (`c_signal`).
 - **Memory of individuals**: a body remembers up to 4 others (`Body::note`, `Body::recall`) and how

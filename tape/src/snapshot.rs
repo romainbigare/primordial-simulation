@@ -10,7 +10,7 @@ use std::path::Path;
 /// Start of every snapshot file, before the bincode body: a tag, then the format version (little-endian `u32`).
 const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
 /// Raise it whenever the serialized layout of `World` (or of the shell's state) changes.
-const SNAPSHOT_VERSION: u32 = 23;
+const SNAPSHOT_VERSION: u32 = 24;
 /// Buffer between bincode and the compressor, bytes: bincode reads and writes 8 bytes at a time, and each call into
 /// the compressor is slow.
 const BUFFER: usize = 1 << 20;
@@ -34,8 +34,7 @@ pub fn save_snapshot<P: Serialize>(w: &World, plan: &P, path: impl AsRef<Path>) 
 }
 
 /// Load a snapshot written by `save_snapshot` of this format version. The caches come back empty, and the laws build
-/// them before they read them; the mesh is rebuilt from the map's numbers, and the groups' sums of born rows, as each
-/// month does.
+/// them before they read them; the mesh is rebuilt from the map's numbers.
 pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<(World, P)> {
     let mut z = BufReader::with_capacity(BUFFER, GzDecoder::new(std::fs::File::open(path)?));
     let mut head = [0u8; 8];
@@ -50,7 +49,6 @@ pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<
     let mut w: World = bincode::deserialize_from(&mut z).map_err(bad)?;
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
     w.mesh = World::mesh_of(&w.map, w.air_scale, &w.cfg);
-    w.life.resum();
     Ok((w, plan))
 }
 

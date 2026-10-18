@@ -33,7 +33,7 @@ ask the owner.
 5. **No compatibility code.** No `#[serde(default)]`, no readers of old files, no padding for old snapshots. When the
    saved `World` changes, bump `SNAPSHOT_VERSION` in `tape`. Old snapshots and tapes are not supported.
 6. **No experiment switches on main.** Try an idea on a branch. A switch stays only if it is a control run that a law is
-   checked against (today: `--own-brains`, `--individuals`, `--no-mix`, `--null`).
+   checked against (today: `--individuals`, `--no-mix`, `--null`).
 7. **Counters are not state.** `World::counts` holds numbers for the tape only; no law may read them. Anything a law
    reads is simulation state.
 8. **Clear names.** No two different things with the same name in different modules. No reused variable names for

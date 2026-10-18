@@ -12,8 +12,8 @@ pub enum EventKind {
     /// Members died (value) of `cause`, the highest speed-up (log10) of any light reaction in their genes, and their
     /// starting kind (a label, as for `Born`)
     Died { cause: u8, cat: f32, root: u32 },
-    /// A body of group `by` watched a body of group `of` (value 1 if of the same lineage)
-    Watched { by: u32, of: u32 },
+    /// Body `by` watched body `of` (value 1 if of the same lineage)
+    Watched { by: u64, of: u64 },
     /// Body `from` put stores into body `to` (value: kg)
     Gave { from: u64, to: u64 },
     /// Body `by` took from body `from` (`u64::MAX`: from the ground); value: kg taken. `burn` is

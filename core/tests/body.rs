@@ -907,8 +907,8 @@ fn a_tall_member_shades_a_short_one() {
     let (i, area) = (w.life.bodies[short].cell as usize, w.map.area());
     // The cell's other nodes move next door.
     for s in w.life.at[i].clone().into_iter().map(|s| s as usize).filter(|&s| s != short) {
-        let (g, j) = (w.life.bodies[s].group, i ^ 1);
-        w.life.relocate(s, g, i, j);
+        let j = i ^ 1;
+        w.life.relocate(s, i, j);
         (w.life.bodies[s].cell, w.life.bodies[s].mark) = (j as u32, w.light[j]);
     }
     // Two nodes of capture area 0.5 per ground area each, the same but for member mass (and the copy mass gene, so they

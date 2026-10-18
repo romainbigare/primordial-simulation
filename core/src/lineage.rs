@@ -1,6 +1,5 @@
 //! Lineages: what the bodies of a lineage share (`Lineage`), the brain shape the sizes of brain and senses give
-//! (`shape`), a body moving to a lineage of new sizes (`resize`), and a body's own brain group when brains are not shared
-//! (`own`).
+//! (`shape`), and a body moving to a lineage of new sizes (`resize`).
 
 use crate::body::{Body, BRAIN_SIZES, HIDDEN, MEMORY, SEEN, SIGHT};
 use crate::brain::{self, Shape};
@@ -66,36 +65,24 @@ pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, nois
 }
 
 /// At its update, a body whose brain-size genes (a node's: their mean) are a whole unit away from its lineage's sizes
-/// moves itself to a new lineage with those sizes (`resized`; its born rows by `brain::rerow`), in a new group of its
-/// own whose rows are its group's carried over with the same new weights (so what it learned goes with it; a body that
-/// had no brain starts from its new born rows, one that has none after has no rows and no group). An individual's child does this at birth (`copy::copy`); a node's children start no lineage. Moves no matter and no
-/// energy.
+/// moves itself to a new lineage with those sizes (`resized`; its born rows by `brain::rerow`), its own rows carried
+/// over with the same new weights (so what it learned goes with it; a body that had no brain starts from its new born
+/// rows, one that has none after has no rows). An individual's child does this at birth (`copy::copy`); a node's
+/// children start no lineage. Moves no matter and no energy.
 pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
     let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id(slot));
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };
     let from = lin.shape;
-    w.life.settle(b.group);
-    // The born and the shared rows get the same new weights (two streams of one key, the body's id turned over).
+    // The born rows and its own get the same new weights (two streams of one key, the body's id turned over).
     let rerow = |x: &[f32]| brain::rerow(x, from, l.shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
     let born = rerow(w.life.born(b));
-    let shared = w.life.groups.get(b.group as usize).map_or_else(|| born.clone(), |g| rerow(&g.rows));
+    b.rows = if b.rows.is_empty() { born.clone() } else { rerow(&b.rows) };
     let lineage = w.life.new_lineage(l);
-    let group = w.life.fork_group(b.group, lineage, shared);
-    w.life.move_to(b, lineage, group, born);
+    w.life.move_to(b, lineage, born);
     // With no brain it has no decision to learn from, no memory and no signal.
     if w.life.brainless(b) {
-        (b.trace, b.mem, b.sig, b.wb) = (Vec::new(), Vec::new(), Default::default(), 0.0);
-    }
-}
-
-/// Without shared brains a body born or split from `b` starts a group of its own: its born rows plus what `b`'s group
-/// learned.
-pub(crate) fn own(w: &mut World, b: &Body, c: &mut Body) {
-    if !w.cfg.share_brains && c.group == b.group && b.group != crate::life::NO_GROUP {
-        w.life.settle(b.group);
-        let rows = w.life.born(c).iter().zip(w.life.groups[b.group as usize].learned()).map(|(r, l)| r + l).collect();
-        c.group = w.life.fork_group(b.group, c.lineage, rows);
+        (b.trace, b.mem, b.sig, b.wb, b.var, b.ms) = (Vec::new(), Vec::new(), Default::default(), 0.0, 0.0, Vec::new());
     }
 }

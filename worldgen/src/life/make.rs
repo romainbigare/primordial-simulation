@@ -47,7 +47,7 @@ pub(super) fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
     (store, liquid, body - liquid)
 }
 
-/// A body of starting kind `which` in cell `i`, of `lineage`, born with brain rows `genome`, in a new group of it, at
+/// A body of starting kind `which` in cell `i`, of `lineage`, born with brain rows `genome` (its own rows those), at
 /// the cell's temperature; its matter and energy are booked like an edit. Not yet placed.
 pub fn make(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32) -> Option<Body> {
     make_with(w, which, i, lineage, genome, 0, 1.0, 0)
@@ -80,7 +80,7 @@ fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, gmul: f32, id: u64) -> Option<Body> {
     let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, KINDS.get(which)?, genes(w, which)?);
-    let group = w.life.new_group(lineage, w.life.genomes[genome as usize].rows.clone());
+    let rows = w.life.genomes[genome as usize].rows.clone();
     let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
     let (chem, t) = (&w.chem, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());
@@ -114,7 +114,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
             }
         }
     }
-    let mut b = Body { cell: i as u32, count, lineage, group, near: u32::MAX, mark: w.light[i], store, genes, genome, ..Default::default() };
+    let mut b = Body { cell: i as u32, count, lineage, mark: w.light[i], store, genes, genome, rows, ..Default::default() };
     // It holds what its shares make of its matter (`Body::level`).
     chem.materials().for_each(|k| b.store[k] = b.level(chem, k, 0.0));
     b.e = b.energy_at(chem, t);

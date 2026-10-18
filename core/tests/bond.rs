@@ -45,15 +45,18 @@ fn walls_keep_a_body_warm() {
     // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place.
     let bs = &w.life.bodies;
     let slot = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
-    let (from, g) = (w.life.bodies[slot].cell as usize, w.life.bodies[slot].group);
-    w.life.relocate(slot, g, from, i);
+    let from = w.life.bodies[slot].cell as usize;
+    w.life.relocate(slot, from, i);
     w.life.bodies[slot].cell = i as u32;
     // Enough liquid for a month without rain.
     let b = &mut w.life.bodies[slot];
     let k = (0..b.store.len()).max_by(|&x, &y| b.store[x].total_cmp(&b.store[y])).unwrap();
-    // It rests (its own adjustment of the action scores), so it stays where it is put.
-    b.adj.fill(-3.0);
-    b.adj[pcore::brain::REST] = 3.0;
+    // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
+    let shape = w.life.brains[b.lineage as usize].as_ref().expect("a brain").shape;
+    let rows = (0..pcore::brain::FIXED).chain([shape.dir()]).chain((0..pcore::brain::VERBS + pcore::brain::OVERBS).map(|v| shape.verb(v)));
+    for q in rows {
+        b.rows[q * shape.r() + shape.h] += if q == pcore::brain::REST { 3.0 } else { -3.0 };
+    }
     // (At the body's temperature, with the fusion enthalpy a molten store holds: `Body::energy_at`.)
     let t = b.temp(&w.chem);
     b.store[k] *= 1.3;

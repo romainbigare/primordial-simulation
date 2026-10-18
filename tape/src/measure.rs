@@ -5,13 +5,13 @@ use pcore::body::{self, Body, Layout, COPY_MASS, INTERVAL, LEAF, STRENGTH};
 use pcore::chem::Chemistry;
 use pcore::World;
 
-/// Mean absolute learned offset of each live group's rows (its rows less the mean of its members'
-/// born rows), averaged over groups by their members (`Group::count`, as the core weighs them).
+/// Mean absolute learned offset of the brains of the living bodies (their rows less the rows they were born with),
+/// averaged over bodies by their members.
 pub(crate) fn learned(w: &World) -> f64 {
     let (mut sum, mut members) = (0.0, 0.0);
-    for g in w.life.groups.iter().filter(|g| g.members > 0 && !g.rows.is_empty()) {
-        let d: f64 = g.learned().map(|x| x.abs() as f64).sum();
-        (sum, members) = (sum + d / g.rows.len() as f64 * g.count, members + g.count);
+    for b in w.life.alive().filter(|b| !b.rows.is_empty()) {
+        let d: f64 = b.rows.iter().zip(w.life.born(b)).map(|(r, x)| (r - x).abs() as f64).sum();
+        (sum, members) = (sum + d / b.rows.len() as f64 * b.n(), members + b.n());
     }
     sum / members.max(1.0)
 }

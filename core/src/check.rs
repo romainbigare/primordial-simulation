@@ -122,8 +122,8 @@ pub fn broken(w: &World) -> Option<String> {
             return Some(format!("body {s}: energy {}, members {}, stores {:?}", b.e, b.count, b.store));
         }
     }
-    if let Some(g) = w.life.groups.iter().position(|g| !g.rows.iter().all(|x| x.is_finite())) {
-        return Some(format!("group {g}: a brain weight is not finite"));
+    if let Some(s) = w.life.bodies.iter().position(|b| b.alive && !b.rows.iter().all(|x| x.is_finite())) {
+        return Some(format!("body {s}: a brain weight is not finite"));
     }
     for (s, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
         if !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x)) {

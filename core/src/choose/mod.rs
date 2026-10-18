@@ -1,9 +1,9 @@
 //! Law 5: Choose. A body perceives a little of itself, what it holds, its memory, its cell, the cells around it in 8
 //! directions (as far as its sight), up to a few other bodies in or next to its cell (their looks, signals and
 //! well-being, and how past dealings with them went; walls and cover hide them) and up to 3 parts in its cell. How much
-//! it remembers, sees and thinks is set by genes, and each costs energy per decision (`Lineage::cost`). The brain of its
-//! group, plus a few numbers of its own, scores every action; one is drawn by those scores, and the body emits a signal
-//! and writes its memory. Actions are physical: move (`go`), take from the ground or a body, put to the ground or give
+//! it remembers, sees and thinks is set by genes, and each costs energy per decision (`Lineage::cost`). Its brain (its
+//! lineage's base and its own rows) scores every action; one is drawn by those scores, and the body emits a signal and
+//! writes its memory. Actions are physical: move (`go`), take from the ground or a body, put to the ground or give
 //! to a body (`feed`), watch a body (`learn::watch`), rest, and the actions of Bond. Each costs energy paid by the body's
 //! own reactions; if it cannot pay, it fails. At its next decision the brain learns from the change of the body's own
 //! well-being (`learn`).
@@ -15,7 +15,6 @@ mod perceive;
 
 pub use feed::take_body;
 pub use go::{go, wear};
-pub(crate) use learn::regroup;
 pub use perceive::{cells, Sector};
 
 use perceive::{inputs, perceive, sector, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_SCALE};
@@ -40,7 +39,6 @@ const TO_PART: usize = TO_BODY + VERBS * MAX_SEEN;
 /// Inputs of a brain besides two per substance (its stores, the cell's loose amounts) and its memory: the eight numbers
 /// of its own state, its cell and the season, the signals heard, and what Bond senses (`bond::sense`).
 pub(crate) const INPUTS: usize = 8 + SIG + bond::SENSE;
-const NONE: u32 = u32::MAX;
 
 /// Working memory of `act`, kept from body to body.
 #[derive(Default)]
@@ -81,7 +79,6 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     // A brain perceives sizes per member.
     let pm = lived.mass / b.n();
     let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS)), temp, lived.spare);
-    w.life.settle(b.group);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
@@ -90,7 +87,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     }
     let mut c = perceive(w, slot, b, nseen, &mut rng);
     inputs(w, b, lived, temp, &c, &mut t.input);
-    brain::think(&lin.base, &w.life.groups[b.group as usize].rows, s, &t.input, &mut t.thought);
+    brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
     // (Its stores are as `live` left them: its volume is at `temp`.)
     options(w, b, s, (pm, b.volume_at(&w.chem, temp) / b.n(), sight), &mut c, t);
@@ -107,9 +104,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
 /// volume, m³.
 fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c: &mut Choice, t: &mut ActTmp) {
     let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
-    for ((l, o), j) in c.logit[..FIXED].iter_mut().zip(out).zip(&b.adj) {
-        *l = o + j;
-    }
+    c.logit[..FIXED].copy_from_slice(&out[..FIXED]);
     // What the body can take (by its uptake selectivity) in a cell, as it perceives it.
     let smell = |j: usize| b.k.upt.iter().map(|&(k, u)| u * w.life.seen[j * ns + k]).sum::<f32>();
     let (here, f, sec) = (smell(i), &mut t.feat, &t.sector[sight]);
@@ -134,7 +129,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c
         }
         fd.iter_mut().for_each(|x| *x /= sum);
         fd[8] -= here;
-        c.logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd) + b.adj[FIXED];
+        c.logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd);
         c.to[d] = j;
     }
     for (q, &(o, same)) in c.seen[..c.nseen].iter().enumerate() {
@@ -145,7 +140,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c
         fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], ob.sig[0], ob.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, ob.wb / WB_SCALE]);
         for verb in 0..VERBS {
             if same || verb == WATCH {
-                c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq) + b.adj[FIXED + 1 + verb];
+                c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq);
             }
         }
     }
@@ -154,7 +149,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c
         fq.copy_from_slice(&bond::features(w, b, p, pm));
         for v in (0..OVERBS).filter(|&v| bond::possible(w, b, v, p, vol)) {
             let r = s.verb(VERBS + v);
-            c.logit[TO_PART + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq) + b.adj[FIXED + 1 + VERBS + v];
+            c.logit[TO_PART + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq);
         }
     }
     if b.n() > 1.0 && b.count < 2.0 {
@@ -275,7 +270,7 @@ fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32;
             match verb {
                 TAKE_FROM => take_body(w, slot, b, c.seen[q].0, rng),
                 GIVE => feed::give(w, slot, b, c.seen[q].0),
-                _ => learn::watch(w, b, c.seen[q].0),
+                _ => learn::watch(w, slot, b, c.seen[q].0),
             }
         }
     }

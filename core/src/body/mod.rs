@@ -25,7 +25,7 @@ pub use live::Lived;
 pub use pay::{pay, release, upkeep};
 pub(crate) use pay::{plan, spend, upkeep_at, Payer};
 
-use crate::brain::{ln, FIXED, OVERBS, SIG, VERBS};
+use crate::brain::{ln, SIG};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::{melting, Melting};
 use crate::store::NodeId;
@@ -100,12 +100,12 @@ pub struct Body {
     pub brood: f64,
     /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands), height m (`height`)
     pub vis: [f32; 7],
-    /// Brain group; the other group it has stayed near, and since when (day)
-    pub group: u32,
-    pub near: u32,
-    pub since: u64,
-    /// Its own adjustment of the action scores: fixed actions, moving, the verbs
-    pub adj: [f32; FIXED + 1 + VERBS + OVERBS],
+    /// Its brain rows: the rows it was born with plus what it (a node: its members) learned; empty without a brain
+    pub rows: Vec<f32>,
+    /// Moving average of the square of its critic's error (0 until the first one), and per learned row a moving average
+    /// of the square of its share of the learning steps (`brain::learn`)
+    pub var: f32,
+    pub ms: Vec<f32>,
     /// The part it holds, and a part of the structure it is inside
     pub hold: Option<NodeId>,
     pub inside: Option<NodeId>,

@@ -1,6 +1,6 @@
 //! A small brain. Its base (one hidden layer over what a body perceives and remembers) belongs
-//! to a lineage and changes only by evolution. Its rows are genes of each body, and a group of
-//! bodies shares their mean plus what the group learned: read from the hidden layer, they give
+//! to a lineage and changes only by evolution. Its rows are genes of each body, plus what the body
+//! (a node: its members) learned: read from the hidden layer, they give
 //! fixed action scores, the weights of shared scorers (one used for every neighbour direction,
 //! one per verb for every perceived body or part), the mean of the signal and of the shape of a
 //! part made, the next memory, and an estimate of how well-being will go. Within a life the rows
@@ -108,7 +108,7 @@ pub fn dot(a: &[f32], b: &[f32]) -> f32 {
     acc.iter().sum::<f32>() + tail
 }
 
-/// `base` is the lineage's, `rows` the group's.
+/// `base` is the lineage's, `rows` the body's.
 pub(crate) fn think(base: &[f32], rows: &[f32], s: Shape, x: &[f32], t: &mut Thought) {
     let b1 = s.h * s.ni;
     t.h.clear();

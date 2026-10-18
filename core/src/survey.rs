@@ -34,24 +34,22 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 }
 
 /// Before each physics step: what each cell holds (`sum_cells`), the light and heat it holds aside for its bodies
-/// (`hold_heat`), and once a month the merge of alike nodes, the brain groups, the traffic and each cell's surroundings.
+/// (`hold_heat`), and once a month the merge of alike nodes, the traffic and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
-    w.life.fit_map(n, w.map.w as u32);
+    w.life.fit_map(n);
     if w.canopy.len() != n {
         (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
     }
     bond::ready(w);
     let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
     if monthly {
-        w.life.resum();
         crate::nodes::crowd(w);
     }
     shade(w);
     sum_cells(w);
     hold_heat(w);
     if monthly && w.time > 0 {
-        choose::regroup(w);
         traffic(w);
     }
     if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
@@ -171,9 +169,9 @@ pub fn day(w: &mut World) {
     if due.is_empty() {
         return;
     }
-    // Group by group, cell by cell (a fixed order that keeps memory reads close together).
+    // Cell by cell (a fixed order that keeps memory reads close together).
     let bodies = &w.life.bodies;
-    let mut list: Vec<(u64, u32, u32)> = due.iter().filter(|&&(s, g)| bodies[s as usize].alive && bodies[s as usize].gen == g).map(|&(s, g)| ((bodies[s as usize].group as u64) << 32 | bodies[s as usize].cell as u64, s, g)).collect();
+    let mut list: Vec<(u32, u32, u32)> = due.iter().filter(|&&(s, g)| bodies[s as usize].alive && bodies[s as usize].gen == g).map(|&(s, g)| (bodies[s as usize].cell, s, g)).collect();
     list.sort_unstable();
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());

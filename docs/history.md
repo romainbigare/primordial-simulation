@@ -678,6 +678,19 @@ The work of `docs/foundation/plan.md`, one line per task.
   to 3.24 and 2.78 to 2.71 yr, animal members 1143 to 1039 and 485 to 598, land and carbon gas the same. E6 in all,
   side by side with E4: bodies 2810 against 2888 ms/yr (the same), `copy` 21% to 19% of the bodies' time. Golden
   re-pinned.
+- E10 (a): shared group brains go (`life::Group`, `settle`, `weigh`, `resum`, `regroup`, `lineage::own`,
+  `Body::group`, `near`, `since` and the body's own adjustment `adj`, the tuned `leave`, `join` and `stay`, the
+  switch `--own-brains` and `Config::share_brains`). Each body keeps its own rows (`Body::rows`, with its critic's
+  `var` and `ms`): its born rows plus what it learned; a node's members share the node's. A child starts with its
+  born rows plus what its parent learned; members joining a node bring their rows into its mean by members; watching
+  blends the watcher's rows toward the watched one's. Tape: `groups` goes, `watched_groups` becomes `watched_bodies`,
+  `learned` is over bodies (zero in a null run). Snapshot version 24; tuned numbers 61 to 58; core 8,652 to 8,414
+  code lines. 64 x 64, years 26 to 35, seeds 1 and 2 (after E6): eaters 1.6 and 2.0 times their mass (5.7e4 to 8.9e4
+  kg, 4.7e4 to 9.6e4) and life 3.9 to 4.4 and 4.4 to 4.7 yr, beyond the seeds' noise; before E6 the old switch
+  `--own-brains` gave the same as this change (eaters 1.02e5 and 1.13e5 kg against 1.04e5 and 1.08e5): each body
+  learns at its own full rate, where a group moved its rows by each member's share. Light-eaters and climate the same
+  (plant members -0.7% and -0.3%, land 0 K, carbon gas -0.6 and +0.6 ppm); the same cost per body update (side by
+  side). Golden re-pinned.
 
 **Phase J: the long physics step**
 

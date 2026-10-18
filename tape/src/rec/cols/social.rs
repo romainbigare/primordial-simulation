@@ -52,13 +52,12 @@ impl Recorder {
         row.push("worn_persist", "1", s.worn_persist);
         row.push("mass_top2", "kg/m2", mean(top));
         row.push("mass_land", "kg/m2", mean(&rest));
-        // Imitation: groups, watches (of them within a lineage), groups watched and the most watchers of one.
+        // Imitation: watches (of them within a lineage), bodies watched and the most watchers of one.
         let y = &self.year;
-        row.push("groups", "1", life.groups.iter().filter(|g| g.members > 0).count() as f64);
         row.push("watched", "1/yr", y.watched);
         row.push("watched_kin", "1/yr", y.kin_watched);
-        row.push("watched_groups", "1", y.spread.len() as f64);
-        row.push("spread_max", "groups", y.spread.values().map(|v| v.len()).max().unwrap_or(0) as f64);
+        row.push("watched_bodies", "1", y.spread.len() as f64);
+        row.push("spread_max", "bodies", y.spread.values().map(|v| v.len()).max().unwrap_or(0) as f64);
         // Gifts: puts into other bodies, kg, those by bodies that are not light-eaters, giving pairs and pairs giving
         // both ways.
         row.push("gave", "1/yr", y.gave);

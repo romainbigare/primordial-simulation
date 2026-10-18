@@ -57,10 +57,10 @@ pub(super) struct YearTally {
     /// month of the year, `World::is_land`)
     pub t_land: Vec<f64>,
     pub land: Vec<u32>,
-    /// Watch events, of them within a lineage; watcher groups per watched group
+    /// Watch events, of them within a lineage; watchers per watched body
     pub watched: f64,
     pub kin_watched: f64,
-    pub spread: BTreeMap<u32, BTreeSet<u32>>,
+    pub spread: BTreeMap<u64, BTreeSet<u64>>,
     /// Puts into other bodies, kg put, of them those by bodies that are not light-eaters (still alive at the month's
     /// end), and the (giver, receiver) pairs
     pub gave: f64,
@@ -148,10 +148,7 @@ impl Recorder {
             }
             EventKind::Watched { by, of } => {
                 (y.watched, y.kin_watched) = (y.watched + 1.0, y.kin_watched + e.value);
-                // (A body without a brain is in no group: watching it reaches none.)
-                if of != pcore::life::NO_GROUP {
-                    y.spread.entry(of).or_default().insert(by);
-                }
+                y.spread.entry(of).or_default().insert(by);
             }
             EventKind::Gave { from, to } => {
                 (y.gave, y.gave_kg) = (y.gave + 1.0, y.gave_kg + e.value);

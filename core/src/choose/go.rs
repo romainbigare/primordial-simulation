@@ -1,6 +1,5 @@
 //! Moving: a body steps to a neighbour cell (`go`), wearing the bodies it pushes through (`wear`) and clearing a lane.
 
-use super::NONE;
 use crate::body::{self, Body, BROKEN};
 use crate::chem::Phase;
 use crate::{bond, lanes, World};
@@ -11,8 +10,7 @@ use crate::{bond, lanes, World};
 /// liquid while held up by what it carries. The movers must fit in the free space over the cell (`Physics::layer`).
 /// The part spent pushing through bodies breaks their body matter (`wear`) and clears the lane (`lanes::clear`).
 /// What it moves is the whole mass it carries, fuel too; what it can carry and hold goes by its force, of its body
-/// (`bond::carry`, `Body::built`). A body that strays from its group's centre leaves with a copy of its rows. A node
-/// moves as one: all its members go (they drew the same action), and it stays one node.
+/// (`bond::carry`, `Body::built`). A node moves as one: all its members go (they drew the same action), and it stays one node.
 pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
     if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.mesh.cells().area()[j] {
@@ -34,7 +32,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     }
     bond::moved(w, b, carried, j, mb);
     w.counts.parts.afloat += afloat as u8 as f64;
-    w.life.relocate(slot, b.group, i, j);
+    w.life.relocate(slot, i, j);
     b.cell = j as u32;
     b.mark = w.light[j];
     w.counts.crossings.resize(w.mesh.cells().n(), 0.0);
@@ -44,15 +42,6 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     if broken > 0.0 && cover > 0.0 {
         // The cover broken along the way was the lane's: that much ground is now clear.
         lanes::clear(w, i, j, broken / cover);
-    }
-    w.life.settle(b.group);
-    let gr = &w.life.groups[b.group as usize];
-    let ((cx, cy), (x, y)) = (gr.centre(), w.map.xy(j));
-    if gr.members > 1 && (x as f32 - cx).abs().max((y as f32 - cy).abs()) > w.cfg.phys.leave {
-        let g = w.life.fork_group(b.group, b.lineage, gr.rows.clone());
-        w.life.enrol(g, b, 1);
-        w.life.enrol(b.group, b, -1);
-        (b.group, b.near) = (g, NONE);
     }
 }
 

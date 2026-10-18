@@ -72,8 +72,6 @@ pub struct Config {
     pub creep: f64,
 
     // Run switches (control runs to compare with)
-    /// Bodies that stay near each other share one brain's rows (off: each keeps its own)
-    pub share_brains: bool,
     /// Bodies with a brain may be population nodes (off, `--individuals`: they are always individuals)
     pub nodes: bool,
     /// A mature body's children may have a second, alike parent (off, `--no-mix`: one parent)
@@ -171,14 +169,8 @@ pub struct Physics {
     pub signal_noise: f32,
     /// Weight of well-being one decision ahead against well-being now
     pub discount: f32,
-    /// Share of the way a watcher's rows move toward the watched one's (split over its group)
+    /// Share of the way a watcher's rows move toward the watched one's
     pub blend: f32,
-    /// A body further than this from its group's centre leaves it, cells
-    pub leave: f32,
-    /// A body within this of a bigger group's centre for `stay` days joins it, cells
-    pub join: usize,
-    /// Days a body must stay near a bigger group to join it
-    pub stay: u64,
     /// Weight of the newest step in a learned row's mean square of steps
     pub learn_beta: f32,
     /// Most a row moves in one step, in units of the learning rate
@@ -333,9 +325,6 @@ impl Default for Physics {
             signal_noise: 0.3,
             discount: 0.9,
             blend: 0.3,
-            leave: 2.5,
-            join: 2,
-            stay: 360,
             learn_beta: 0.1,
             learn_most: 0.5,
             tensile: 1e7,
@@ -440,7 +429,6 @@ impl Default for Config {
             wear: 1.4e-11,
             regrow: 1e-9,
             creep: 6.3e-11,
-            share_brains: true,
             nodes: true,
             two_parents: true,
             null: false,

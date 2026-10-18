@@ -1,5 +1,5 @@
-//! Law 5 (Choose): one body learns to move to what it can take; brains shared in groups; giving; moving; a body with
-//! no brain.
+//! Law 5 (Choose): one body learns to move to what it can take; each body learns into its own brain; giving; moving; a
+//! body with no brain.
 //!
 //! The learning scene: flat ground, the energy-rich solid lying loose only in a strip on the east side, one body (of
 //! the starting kind that burns that solid and takes it from the ground) just west of the strip, with a neutral
@@ -170,11 +170,10 @@ fn body_learns_to_move_toward_what_it_can_take() {
 }
 
 /// A world of seed 1, 16 x 16, with the light-eaters and the eaters (neutral brains) placed after a month and run for
-/// 30 months more, its bodies sharing brains in groups or not; and its books at the start.
-fn lived(share_brains: bool) -> (pcore::World, Books) {
+/// 30 months more; and its books at the start.
+fn lived() -> (pcore::World, Books) {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
-    w.cfg.share_brains = share_brains;
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
@@ -182,26 +181,6 @@ fn lived(share_brains: bool) -> (pcore::World, Books) {
         pcore::step(&mut w);
     }
     (w, books)
-}
-
-/// Bodies that stay together share a brain in a group, and each group knows, as members come and go, how many members
-/// its bodies hold (a node counts its count) and the mean of their born rows by members.
-#[test]
-fn a_group_holds_the_mean_of_its_members_born_rows() {
-    let (a, _) = lived(true);
-    let shared = a.life.groups.iter().filter(|g| g.members > 1).count();
-    assert!(shared > 0, "no shared brains among {} bodies", a.life.alive().count());
-    assert!(a.life.alive().any(|b| b.count > 1.0), "no node");
-    for (k, g) in a.life.groups.iter().enumerate().filter(|(_, g)| g.members > 0) {
-        let (mut sum, mut count) = (vec![0f64; g.rows.len()], 0.0);
-        for b in a.life.alive().filter(|b| b.group as usize == k) {
-            sum.iter_mut().zip(a.life.born(b)).for_each(|(s, &x)| *s += x as f64 * b.count);
-            count += b.count;
-        }
-        assert!((g.count - count).abs() < 1e-9 * count, "group {k}: {} members, counted {count}", g.count);
-        let err = sum.iter().zip(g.innate()).map(|(x, y)| (x / count - y as f64).abs()).fold(0.0, f64::max);
-        assert!(err < 1e-4, "group {k}: mean off by {err}");
-    }
 }
 
 /// A brain grown (more hidden units and memory) and shrunk back is the brain it was.
@@ -221,13 +200,18 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
     assert_eq!(pcore::brain::rerow(&[], z, a, &mut r, 0.1).len(), a.rows() * a.r());
 }
 
-/// Without shared brains every body keeps a group of its own, and matter and energy still add up.
+/// Each body with a brain learns into rows of its own: its rows are those it was born with plus what it learned, so
+/// bodies that lived differ from their born rows, and each learned something else. Matter and energy still add up.
 #[test]
-fn own_brains_keep_one_body_per_group() {
-    let (w, books) = lived(false);
-    let born = w.life.alive().filter(|b| b.born > 0).count();
-    assert!(born > 0, "no body was born");
-    assert!(w.life.groups.iter().all(|g| g.members <= 1), "a group with more than one member");
+fn each_body_learns_into_its_own_rows() {
+    let (w, books) = lived();
+    let minds: Vec<&pcore::body::Body> = w.life.alive().filter(|b| !b.rows.is_empty()).collect();
+    assert!(minds.iter().all(|b| b.rows.len() == w.life.born(b).len()), "rows of another shape than the born rows");
+    let learned: Vec<Vec<f32>> = minds.iter().map(|b| b.rows.iter().zip(w.life.born(b)).map(|(r, x)| r - x).collect()).collect();
+    let moved = learned.iter().filter(|l| l.iter().any(|&x| x != 0.0)).count();
+    assert!(moved >= 2, "{moved} of {} bodies learned", minds.len());
+    let same = (0..learned.len()).any(|a| (a + 1..learned.len()).any(|b| learned[a] == learned[b] && learned[a].iter().any(|&x| x != 0.0)));
+    assert!(!same, "two bodies learned the same");
     books.assert_kept(&w, 1e-9);
 }
 
