@@ -38,7 +38,7 @@ pub struct Lived {
     pub lit: f64,
     /// What its reactions could release over the time against its upkeep (well-being counts it up to `MARGIN`)
     pub spare: f64,
-    /// Its mass and heat capacity (valid until its stores change)
+    /// Its mass and heat capacity as its update leaves them, after it sheds (valid until its stores change)
     pub mass: f64,
     pub cap: f64,
 }
@@ -86,18 +86,15 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
     let (upkeep_heat, span, mass, spare) = settle_upkeep(w, b, &s, mass, cap, tmp)?;
     let lit = physics(w, slot, b, rc, &mut *tmp, &s, mass, upkeep_heat);
     keep_warm(w, b, span, s.dt);
-    let (mass, cap) = check_stores(w, slot, b, tmp)?;
-    let mut lived = Lived { lit, spare, mass, cap };
+    check_stores(w, slot, b, tmp)?;
     // Growth builds body matter, paid by work (`copy::grow`); past maturity a share `ALLOC` of it goes into the brood.
     // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`).
-    if crate::copy::grow(w, b, s.days) {
-        (lived.mass, lived.cap) = b.mass_cap(&w.chem);
+    crate::copy::grow(w, b, s.days);
+    if b.brood > 0.0 {
+        crate::copy::copy(w, slot, b);
     }
-    if b.brood > 0.0 && crate::copy::copy(w, slot, b) {
-        (lived.mass, lived.cap) = b.mass_cap(&w.chem);
-    }
-    shed(w, b);
-    Ok(lived)
+    let (mass, cap) = shed(w, b);
+    Ok(Lived { lit, spare, mass, cap })
 }
 
 /// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but
@@ -169,19 +166,17 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
 /// kills it; one that froze kills the share of it that is free liquid to freeze: the share frozen (all of it below its
 /// melting point, the body being at one temperature; on its melting plateau, the share frozen there) times its
 /// activity, as a dry body holds little liquid to freeze. A node loses that share of its members (`thin`); an
-/// individual dies with that chance. Returns the mass and heat capacity left.
-fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
-    let (mut mass, mut c) = b.mass_cap(&w.chem);
+/// individual dies with that chance.
+fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<(), u8> {
+    let (mass, c) = b.mass_cap(&w.chem);
     let mut th = b.thermal(&w.chem, c);
     if b.lacking_at(&w.chem, mass, th.t) {
         if !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, b, th.t, &mut tmp.dead)) {
             return Err(LACK);
         }
-        (mass, c) = b.mass_cap(&w.chem);
-        th = b.thermal(&w.chem, c);
+        th = b.thermal(&w.chem, b.heat_cap(&w.chem));
     }
-    let (chem, mut left) = (&w.chem, (mass, c));
-    let ns = chem.ns();
+    let (chem, ns) = (&w.chem, w.chem.ns());
     let key = |k: usize| b.wet >> k & 1 == 1;
     if (0..ns).any(|k| key(k) && chem.phase(k, th.t) == Phase::Gas) {
         return Err(PHASE);
@@ -200,12 +195,11 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
             if !members_die(w, b, f, PHASE, &mut tmp.dead) {
                 return Err(PHASE);
             }
-            left = b.mass_cap(&w.chem);
         } else if Rng::new(w.seed, w.day(), b.id(slot), Purpose::Frost).f64() < f {
             return Err(PHASE);
         }
     }
-    Ok(left)
+    Ok(())
 }
 
 /// A node at `t` short of key stores: the members poorest in them die (members differ around the mean), so the survivors
@@ -228,9 +222,10 @@ fn starve(w: &mut World, b: &mut Body, t: f64, dead: &mut Vec<f64>) -> bool {
 /// it burns, its key liquids, the minerals (`Chemistry::minerals`) and the solids it builds (`Chemistry::materials`)
 /// past the level it keeps (`Body::level`), and all of anything else. Digestion and its own burning make more of them
 /// than it builds with (its burning makes its key liquid): an eater that kept them would grow without end and, its room
-/// full, stop taking matter. Gases (at its temperature) leave by breath.
-fn shed(w: &mut World, b: &mut Body) {
-    let (chem, mass, t) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem));
+/// full, stop taking matter. Gases (at its temperature) leave by breath. Returns its mass and heat capacity after.
+fn shed(w: &mut World, b: &mut Body) -> (f64, f64) {
+    let (chem, (mass, cap)) = (&w.chem, b.mass_cap(&w.chem));
+    let t = b.temp_at(chem, cap);
     let minerals = chem.minerals();
     let over: Vec<f64> = (0..chem.ns())
         .map(|k| {
@@ -242,5 +237,7 @@ fn shed(w: &mut World, b: &mut Body) {
         .collect();
     if over.iter().any(|&a| a > 0.0) {
         to_ground(w, b, &over);
+        return b.mass_cap(&w.chem);
     }
+    (mass, cap)
 }

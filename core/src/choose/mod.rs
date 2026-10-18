@@ -92,7 +92,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     inputs(w, b, lived, temp, &c, &mut t.input);
     brain::think(&lin.base, &w.life.groups[b.group as usize].rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
-    options(w, b, s, (pm, sight), &mut c, t);
+    // (Its stores are as `live` left them: its volume is at `temp`.)
+    options(w, b, s, (pm, b.volume_at(&w.chem, temp) / b.n(), sight), &mut c, t);
     pick(w, &mut c, &mut rng);
     let form = trace(w, b, s, &c, t, &mut rng);
     b.wb = wb;
@@ -102,8 +103,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
 /// The score of each option: the fixed actions, a move to each neighbour (each direction's features are the weighted
 /// mean over the cells it sees that way), each verb toward each perceived body and part. Letting go needs something
 /// held or walls around; joining to the ground, a held part. A node does the actions of Bond through one member split
-/// off (`dispatch`): with less than two members it has none to spare. `pm` is the mass of a member, kg.
-fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Choice, t: &mut ActTmp) {
+/// off (`dispatch`): with less than two members it has none to spare. `pm` is the mass of a member, kg, and `vol` its
+/// volume, m³.
+fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c: &mut Choice, t: &mut ActTmp) {
     let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
     for ((l, o), j) in c.logit[..FIXED].iter_mut().zip(out).zip(&b.adj) {
         *l = o + j;
@@ -147,7 +149,6 @@ fn options(w: &World, b: &Body, s: Shape, (pm, sight): (f64, usize), c: &mut Cho
             }
         }
     }
-    let vol = b.volume(&w.chem) / b.n();
     for (q, &p) in c.parts[..c.nparts].iter().enumerate() {
         let fq = &mut c.fo[q * bond::NO..(q + 1) * bond::NO];
         fq.copy_from_slice(&bond::features(w, b, p, pm));

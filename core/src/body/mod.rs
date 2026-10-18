@@ -234,7 +234,10 @@ impl Body {
     }
     /// Volume of its solids and liquids, m³.
     pub fn volume(&self, chem: &Chemistry) -> f64 {
-        let t = self.temp(chem);
+        self.volume_at(chem, self.temp(chem))
+    }
+    /// `volume` when its temperature `t` is known.
+    pub(crate) fn volume_at(&self, chem: &Chemistry, t: f64) -> f64 {
         self.store.iter().enumerate().map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
     }
     pub fn interval(&self) -> u64 {

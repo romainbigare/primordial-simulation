@@ -756,7 +756,9 @@ could take by its own size in the time. A node gives as one member.
 
 Files: `core/src/body/` (and `copy::grow` for growth). `body::live` (`body/live.rs`) runs one
 update in stages: upkeep, the physics of the time since the last update (`body/physics.rs`),
-keeping warm, the checks of the stores, growth and copying, shedding.
+keeping warm, the checks of the stores, growth and copying, shedding. Its decision
+(`choose::act`) then sees the body as these stages leave it: its mass, heat capacity and
+temperature after it sheds.
 
 ### 6.1 What a body is
 

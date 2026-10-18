@@ -552,6 +552,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   they hold (`Body::vis` worked out by `World::place` and `open`), not with the node's old traits until their first
   update. 64 x 64, seed 1, years 11 to 20: plant members -0.7%, body mass +1.6%, land -0.02 K, carbon gas 272.3 to
   269.2 ppm; golden re-pinned.
+- E1 (h), a fix: the decision sees the body's mass and heat capacity as its update leaves them, after it sheds
+  (`Lived`, worked out by `shed`), not as they were before it shed; `options` takes the volume at the temperature
+  known. 64 x 64, seed 1, years 11 to 20: plant members +1.6%, body
+  mass -1.0%, land -0.02 K, carbon gas 269.2 to 271.0 ppm; golden re-pinned; a body update about 2% faster (34.95
+  to 34.10 µs, runs side by side).
 
 **Owner's decisions after Phase A**
 
