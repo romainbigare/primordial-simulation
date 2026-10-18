@@ -155,7 +155,9 @@ and over the vertical links between each ground node and its store.
   vertical link (`flow::drain`). Down it, liquid above field capacity sinks into the store (at most `seep` per
   second, never more than the store has room for); up it, the store drains to the channels (a spring) and gives
   back all it holds over its room. The stores flow to their neighbours by Darcy's law (`bed_seep` × the depth they
-  fill), in the same `spread` as the pores.
+  fill), in the same `spread` as the pores. No pores and no store give more than they hold: where all a node's
+  outgoing links would take more, each is cut by the same share (`solve::spread::within`; only that node's own
+  links change).
 - **What goes with the liquid.** A move takes its share of every liquid and of what is
   dissolved in it (salts, dissolved gases), with its heat. A salt is written in the data as a
   liquid that never boils (substances 23 and 24): it goes with the liquid by its share, and
@@ -270,7 +272,8 @@ any other mesh (`wind/mesh`) three steps of `solve::spread` on the links do it: 
 the overturning carry each gas by its share of the column, and the heat per mol; the evening of
 pressure moves the amount by the pressure, each gas and the heat going with it at the share of
 the node it leaves. There the overturning is an exchange of whole columns, so the vapour it
-brings to the warmer column on lines is not carried.
+brings to the warmer column on lines is not carried, and a node gives no more of a gas than it holds
+(`solve::spread::within`).
 
 Each call starts from the air nodes' amounts as they are (`air::sums`), with what Law 2 and bodies
 changed. What crosses the links over the whole solve is booked at once by `store::apply` (gas and
@@ -354,7 +357,8 @@ p      = (order of the scarce input − 1) · (1 − its share)   for a gas or l
   then the gas they give, each booked in its own call, as each needs what the one before brought. Gas taken brings its heat at the air's temperature and
   gives the node back its latent heat; gas given takes its share of the node's heat by heat
   capacity and its latent heat. The air node pays the lift (1.5), a link flux to the potential.
-  `apply` scales the gas a node cannot pay for, so it stays in the node. Parts and bodies settle their gas through
+  A node gives no more heat than it holds: where its gas would take more, each gas it gives is cut by the
+  same share, and the rest stays in the node. Parts and bodies settle their gas through
   `change::GasMove` and `change::send_gas` (`change/gas.rs`) in the same way.
 - **Parts** (`bond::step`): every 6 months, for that time, at their cell's temperature, with
   the air; their gas is settled with the air as a ground node's is.

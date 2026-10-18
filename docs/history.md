@@ -482,6 +482,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   replaced by moves and one body node per cell (D11); the thread design (5.6) before the columns; the chunk layout
   of amounts (Idea 8); no sparse amounts (B4) and no graphics card (old J2); J2 is now the longer physics step; the
   8,000-line ceiling moves to the end of the foundation (9,000 until then).
+- D11 (a): the laws that could ask a node for more than it holds stop doing so in their own code. A ground node's
+  reactions give the air no more gas than its heat pays for (the rest stays in it; `store::apply` scaled the whole
+  flux). The pores, the deep stores and the wind on a mesh cut a node's own outgoing links where they would take more
+  than it holds (`solve::spread::within`). A probe found that no Flow call ever needed the store's scaling (golden
+  runs; 64 x 64 seed 1, 12 years with life); only Change's transforms did, for rounding of trace substances. Same
+  results (golden unchanged; 64 x 64, 12 years: same fingerprint).
 
 **Owner's decisions after Phase A**
 

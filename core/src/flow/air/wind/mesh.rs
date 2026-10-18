@@ -1,7 +1,7 @@
 //! The wind on any mesh: the links of the air level as the networks of `solve::spread`.
 
 use super::{Ctx, Moved, State};
-use crate::solve::spread::{Net, Spread};
+use crate::solve::spread::{within, Net, Spread};
 
 /// The wind of one call on the links of any air level, from `st`, by three implicit steps of `solve::spread`, each
 /// from the start of the call: the mixing and the overturning carry each gas by its share of the column (capacity:
@@ -40,6 +40,12 @@ pub(super) fn on_mesh(at: &Ctx, st: &State) -> Moved {
             m.mol[t * nl + l] += f * st.x[t * na + up] / st.nt[up];
         }
         m.heat[l] += f * st.e[up] / st.nt[up];
+    }
+    // The mixing and the evening of pressure, each from the start of the call, give no more of a gas than a node holds.
+    for t in 0..ng {
+        within(a, b, &mut m.mol[t * nl..(t + 1) * nl], &st.x[t * na..(t + 1) * na]);
+    }
+    for l in 0..nl {
         let moved = (0..ng).map(|t| m.mol[t * nl + l] * s.sp[s.gas[t]].mm).sum();
         let (j, lift) = at.lift(a[l] as usize, b[l] as usize, moved);
         m.paid[j] += lift;

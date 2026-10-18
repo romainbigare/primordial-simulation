@@ -34,6 +34,7 @@ pub(crate) use kernel::{denature, frac, pace, scarce};
 
 use crate::chem::{Chemistry, Phase};
 use crate::flow::FlowView;
+use crate::ground::share;
 use crate::store::{apply, Batch, Class, LinkFlux, NodeId, Transform};
 use crate::{World, AIR};
 
@@ -162,8 +163,8 @@ fn film(w: &World, i: usize, amt: &[f64], t: f64) -> f64 {
 /// The reactor sees sensible heat: the fusion enthalpy the node holds by Flow's solve of its plateaus stays apart
 /// (`FlowView::fused`), so a node on a plateau reacts at its melting point. Gas taken from the air brings its heat at the
 /// air's temperature and gives back its fusion and vaporisation enthalpy (`store::held`); gas given to it takes its
-/// share of the node's heat by heat capacity and that enthalpy, so gas the node cannot pay for stays in it
-/// (`store::apply` scales the flux).
+/// share of the node's heat by heat capacity and that enthalpy, and the node gives no more heat than it holds: each gas
+/// it gives is cut by the same share, and what it cannot pay for stays in it.
 fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i, id): (usize, NodeId), time: f64, b: &mut Booked) {
     let (chem, na) = (&w.chem, w.mesh.level(AIR).n());
     let (t, j, air_share) = (nodes.tg[i], w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));
@@ -181,9 +182,10 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, (i,
     // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.
     let c_out = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].cp).sum::<f64>();
     let per_c = e.max(0.0) / (cap(&h.amt) + c_out).max(1e-9);
-    let lift = nodes.lift(i, j, w.cfg.gravity);
+    let pay = (0..chem.ns()).map(|k| gas(k).max(0.0) * (chem.subs[k].latent_gas() + chem.subs[k].cp * per_c)).sum::<f64>();
+    let (paid, lift) = (share(e.max(0.0), pay), nodes.lift(i, j, w.cfg.gravity));
     for (k, m) in (0..chem.ns()).map(|k| (k, gas(k))).filter(|e| e.1 != 0.0) {
-        let s = &chem.subs[k];
+        let (s, m) = (&chem.subs[k], if m > 0.0 { m * paid } else { m });
         b.lift[j] += m * s.molar_mass * lift;
         if m > 0.0 {
             b.given[k].add((i, j), k as u16, (m, m * (s.latent_gas() + s.cp * per_c)));

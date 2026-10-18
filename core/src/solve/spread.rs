@@ -6,6 +6,8 @@
 //! at most a given number of iterations, always in the same order. The books are exact even when it has not
 //! converged: the link fluxes come from the solved potentials, and each node's new value comes only from its fluxes.
 
+use crate::ground::share;
+
 /// The share of its start value below which the preconditioned residual's square (`rz`) ends the solve: about 1e-12
 /// of the residual's size, near the rounding of a step. The same inputs stop at the same iteration.
 const CONVERGED: f64 = 1e-24;
@@ -97,6 +99,26 @@ impl Spread {
             *xi += gi / c;
         }
         made
+    }
+}
+
+/// Cuts the amounts `flux` that cross the links from `a` to `b` (+ from `a` to `b`) where a node would give more than it
+/// holds (`held`): each flux that leaves such a node is cut by the share it holds of all that leaves it, so no node
+/// gives more than it holds. Only the fluxes out of those nodes change. A step that is long against what a node holds,
+/// or a solve that has not converged, may ask a node for more than it holds; the fluxes of a converged step on a
+/// network that is not stiff never do, and keep their values.
+pub fn within(a: &[u32], b: &[u32], flux: &mut [f64], held: &[f64]) {
+    let mut out = vec![0.0; held.len()];
+    for ((&i, &j), &f) in a.iter().zip(b).zip(flux.iter()) {
+        if f > 0.0 {
+            out[i as usize] += f;
+        } else {
+            out[j as usize] -= f;
+        }
+    }
+    for ((&i, &j), f) in a.iter().zip(b).zip(flux.iter_mut()) {
+        let from = if *f > 0.0 { i } else { j } as usize;
+        *f *= share(held[from].max(0.0), out[from]);
     }
 }
 

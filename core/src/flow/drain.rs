@@ -7,7 +7,7 @@ use super::land::{t_now, table, wet};
 use super::liquid::{book, mobile};
 use super::Scratch;
 use crate::math::one_minus_exp;
-use crate::solve::spread::{Net, Spread};
+use crate::solve::spread::{within, Net, Spread};
 use crate::space::{Layer, Stack};
 use crate::store::{Batch, Class, LinkFlux};
 use crate::World;
@@ -96,7 +96,7 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
 /// the conductivity (`bed_seep`, `seep`) x the saturated thickness of its higher end x the border's width / the
 /// distance. A store's saturated thickness is the depth it fills; the pores' is the depth of the higher table over
 /// the higher of the two bottoms of the loose ground, none where they hold no more than their field capacity (they
-/// hold that against gravity). Returns the links (the cells' links with a border), the volume through each, m³ (all
+/// hold that against gravity). No store and no pores give more than they hold (`spread::within`). Returns the links (the cells' links with a border), the volume through each, m³ (all
 /// the stores' links, then all the pores'), and the heads before the step, m, by node of the stack.
 fn flows(w: &World, s: &Scratch, stack: &Stack, (mob, held): (&super::liquid::Mobile, &[f64]), dt: f64) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
     let (p, cells) = (w.cfg.phys, w.mesh.cells());
@@ -132,6 +132,12 @@ fn flows(w: &World, s: &Scratch, stack: &Stack, (mob, held): (&super::liquid::Mo
     // The network is far from stiff (dt g / capacity is about 1e-3 on the island): the solve converges in a few
     // iterations; the cap of one per node is never reached.
     Spread::default().step(&Net { a: &na, b: &nb, g: &gl, cap: &cap }, &mut x, dt, cap.len(), &mut flux);
+    // No store and no pores give more than they hold.
+    let mut have = vec![0.0; stack.nodes()];
+    for (i, &vol) in held.iter().enumerate() {
+        (have[stack.node(DEEP, i)], have[stack.node(PORES, i)]) = (vol, mob.vol[i]);
+    }
+    within(&na, &nb, &mut flux, &have);
     (a, b, flux, x0)
 }
 
@@ -156,7 +162,7 @@ fn carried(
 ) -> Carried {
     let from = |l: usize| if flux[l] > 0.0 { a[l] as usize } else { b[l] as usize };
     let used: Vec<usize> = (0..flux.len()).filter(|&l| flux[l] != 0.0 && vol[from(l)] > 0.0).collect();
-    let senders: Vec<(u32, f64)> = used.iter().map(|&l| (from(l) as u32, flux[l].signum() * (flux[l].abs() / vol[from(l)]).min(1.0))).collect();
+    let senders: Vec<(u32, f64)> = used.iter().map(|&l| (from(l) as u32, flux[l] / vol[from(l)])).collect();
     let (mol, heat) = carry(&senders, ks, amount, heat);
     let ends = |v: &[u32]| used.iter().map(|&l| v[l]).collect();
     Carried { a: ends(a), b: ends(b), mol, heat }
