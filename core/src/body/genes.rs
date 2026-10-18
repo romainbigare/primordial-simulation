@@ -32,39 +32,36 @@ pub const INTERVAL: usize = 7;
 pub const MUT: usize = 8;
 /// Learning rate of the brain within a life, log10 (off at the lower end)
 pub const LEARN: usize = 9;
-/// Share of what its group learned that fades each month, log10 (off at the lower end): the group forgets at the mean
-/// rate of its members
-pub(crate) const FORGET: usize = 10;
 /// Sizes of the brain and the senses (each rounded): hidden units (0..64; 0 is no brain, `Lineage::none`), memory
 /// numbers (0..12), bodies perceived (1..6), sight in cells (1..4). A body whose size genes are a whole unit away from
 /// its lineage's sizes starts a new lineage with those sizes (`lineage::resize`).
-pub const HIDDEN: usize = 11;
-pub const MEMORY: usize = 12;
-pub const SEEN: usize = 13;
-pub const SIGHT: usize = 14;
+pub const HIDDEN: usize = 10;
+pub const MEMORY: usize = 11;
+pub const SEEN: usize = 12;
+pub const SIGHT: usize = 13;
 /// Share of the children that start in a neighbour cell, 0..1 (for an individual, the chance)
-pub const DISPERSE: usize = 15;
+pub const DISPERSE: usize = 14;
 /// Temperature above which its catalysts lose their shape, K (`change::denature`). A firmer catalyst costs more upkeep
 /// (`Physics::t_firm`)
-pub const DENATURE: usize = 16;
+pub const DENATURE: usize = 15;
 /// Repair, log10: a body wears out when the energy its upkeep turned over reaches `Physics::e_life` x 10^gene per kg;
 /// each unit doubles the repair share `Physics::c_repair` of upkeep (`upkeep`)
-pub const REPAIR: usize = 17;
+pub const REPAIR: usize = 16;
 /// The child's key liquid, log10 of the factor on its provisions (`copy::copy`): below 0 a body makes dry children,
 /// nearly dormant (`Body::activity`) until they soak liquid up
-pub const WET: usize = 18;
+pub const WET: usize = 17;
 /// Share of what a mature body builds that goes to offspring (the brood, `Body::brood`), 0..1; the rest is its own
 /// growth
-pub const ALLOC: usize = 19;
+pub const ALLOC: usize = 18;
 /// The temperature the body keeps, K: when its update would leave it colder, it burns on demand the heat that holds it
 /// there, as far as its reactions can release it (`live::keep_warm`)
-pub const KEEP_T: usize = 20;
+pub const KEEP_T: usize = 19;
 /// The temperature above which the body opens its surface to evaporation, K, as far as that holds it there
 /// (`physics::evaporate`), the mirror of `KEEP_T`. Two levels: between them it neither burns nor evaporates, so a body
 /// can keep no temperature
-pub const COOL_T: usize = 21;
-pub const NSCALAR: usize = 22;
-/// A rate gene (`LEARN`, `FORGET`) at or below this is off: the lower end of its range, -4, less a margin for rounding.
+pub const COOL_T: usize = 20;
+pub const NSCALAR: usize = 21;
+/// A rate gene (`LEARN`) at or below this is off: the lower end of its range, -4, less a margin for rounding.
 const GENE_OFF: f32 = -3.9;
 /// The genes of the sizes of brain and senses.
 pub const BRAIN_SIZES: [usize; 4] = [HIDDEN, MEMORY, SEEN, SIGHT];
@@ -116,7 +113,6 @@ const fn scalar(g: usize) -> (f32, f32, f32) {
         INTERVAL => (0.2, LOG_MIN_INTERVAL, LOG_MAX_INTERVAL),
         MUT => (0.2, -3.0, 0.0),
         LEARN => (0.2, -4.0, 0.0),
-        FORGET => (0.2, -4.0, -1.7),
         // Down to no brain: below 0.5 it rounds to 0 hidden units; the room below 0 lets a node's mean reach it.
         HIDDEN => (0.3, -1.0, 64.0),
         MEMORY => (0.15, 0.0, 12.0),
@@ -154,10 +150,6 @@ impl Body {
     /// Learning rate of its brain within its life (0 when off).
     pub fn learn_rate(&self) -> f32 {
         self.rate_gene(LEARN)
-    }
-    /// Share of what its group learned that it would let fade each month (0 when off).
-    pub(crate) fn forget(&self) -> f32 {
-        self.rate_gene(FORGET)
     }
     /// 10 to the power of gene `g`, 0 when it is off (at the lower end of its range).
     fn rate_gene(&self, g: usize) -> f32 {

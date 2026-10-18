@@ -1,5 +1,5 @@
 //! Learning: a brain learns from the change of its body's well-being (`learn`, a policy gradient against the critic's
-//! estimate), groups share and forget what they learned (`regroup`), and a body copies part of another's brain by
+//! estimate), groups share what they learned (`regroup`), and a body copies part of another's brain by
 //! watching it (`watch`).
 
 use super::NONE;
@@ -52,7 +52,7 @@ pub(super) fn learn(w: &mut World, b: &mut Body, s: Shape, wb: f32, now: &[f32])
     }
 }
 
-/// Monthly: what each group learned fades by its members' mean forgetting rate. A body that has stayed for a year
+/// Monthly: a body that has stayed for a year
 /// within `phys.join` cells of the centre of a group of its lineage with more members joins it; if it was alone, what it
 /// learned is blended in by its share of the members. (No joining unless brains are shared.)
 pub(crate) fn regroup(w: &mut World) {
@@ -73,14 +73,6 @@ pub(crate) fn regroup(w: &mut World) {
     for (k, g) in life.groups.iter().enumerate().filter(|(_, g)| g.members > 0) {
         list[fill[at(g)] as usize] = k as u32;
         fill[at(g)] += 1;
-    }
-    life.settle_all();
-    for g in life.groups.iter_mut().filter(|g| g.members > 0) {
-        let f = g.forget_rate().max(0.0);
-        if f > 0.0 {
-            let fade: Vec<f32> = g.learned().map(|l| f * l).collect();
-            g.rows.iter_mut().zip(fade).for_each(|(r, x)| *r -= x);
-        }
     }
     if !share {
         return;

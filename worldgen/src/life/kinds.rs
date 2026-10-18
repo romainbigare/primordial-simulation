@@ -43,10 +43,10 @@ const fn with(mut s: [f32; NSCALAR], d: &[(usize, f32)]) -> [f32; NSCALAR] {
 
 /// The genes every kind starts with unless its row says otherwise: GAS, LIQ, HEAT 3.5 (no coat: the top of the
 /// gene's range), LEAF, STRENGTH, CHILD -0.523 (a child's body 0.3 of the copy mass), COPY_MASS, INTERVAL, MUT -1.2,
-/// LEARN, FORGET -4, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, DISPERSE, DENATURE 320 K (about where enzymes fail),
+/// LEARN, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, DISPERSE, DENATURE 320 K (about where enzymes fail),
 /// REPAIR, WET 0, ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K (both outside what the island has: they do nothing at
 /// the start).
-const BASE: [f32; NSCALAR] = [0.0, 0.0, 3.5, 0.0, 0.0, -0.523, 0.0, 0.0, -1.2, 0.0, -4.0, 12.0, 6.0, 3.0, 1.0, 0.0, 320.0, 0.0, 0.0, 0.8, 250.0, 320.0];
+const BASE: [f32; NSCALAR] = [0.0, 0.0, 3.5, 0.0, 0.0, -0.523, 0.0, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 320.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
 /// Light-eaters: strong light reaction, slow burning, wide gas exchange (`GAS` 4.334, a leaf's open pores, about
 /// 0.25 mol/(m² s): Körner, Scheel and Bauer 1979) and capture area, long intervals, no brain (no hidden units and no

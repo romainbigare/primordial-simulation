@@ -658,6 +658,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   years: without the upkeep's part the same fingerprint); the same world (64 x 64, years 26 to 35, seeds 1 and 2:
   plant members -2% and -1%, eaters 0.6 and 1.0 times their mass, land -0.1 K, carbon gas -3 and -4 ppm); a body
   update 4 to 13% cheaper (side by side, years 10 to 30). Golden re-pinned.
+- E10 (b): the `FORGET` gene and the monthly fading of what a group learned go: the founders started it at its floor,
+  where it is off, and no animal ever raised it (forgetting only makes a brain worse). 21 scalar genes; snapshot
+  version 23. The same world by another path (the genes' random draws moved): 64 x 64, years 26 to 35, seeds 1 and
+  2: plant members -8% and -6%, eaters 1.25 and 1.3 times their mass, land -0.1 and +0.1 K, carbon gas -7 and +6 ppm.
+  Golden re-pinned.
 
 **Phase J: the long physics step**
 

@@ -790,6 +790,8 @@ fn mixed(w: &World) -> (f64, f64) {
 #[test]
 fn each_gene_and_row_of_a_child_is_one_parents() {
     let (mut w, i) = start();
+    // (No child starts a lineage of its own by chance, `Physics::new_lineage`: the lineage tested is the parents'.)
+    w.cfg.phys.new_lineage = 0.0;
     let lay = Layout::of(&w.chem);
     let (s, mut a, sb) = pair(&mut w, i, 2.0);
     let (rows_a, rows_b) = (w.life.born(&a).to_vec(), w.life.born(&w.life.bodies[sb]).to_vec());

@@ -361,7 +361,7 @@ Add v2 and v3 only when the world is ready for them (Section 9.4).
 - which reactions the body catalyses, and how strongly
 - minimum safe amounts of key substances (below them, the body dies), and how much of each it keeps
 - reproduction settings (size of maturity, share of surplus for children, size of a child)
-- the starting state of the brain, its sizes, and how fast it learns and forgets
+- the starting state of the brain, its sizes, and how fast it learns
 - how much it repairs itself (a longer life for more upkeep)
 - its insulation and the temperatures it keeps (it burns fuel when colder, evaporates when warmer)
 

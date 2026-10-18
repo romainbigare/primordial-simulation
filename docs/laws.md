@@ -562,8 +562,8 @@ growth is in 6.6.
 ### 4.1 Genes
 
 A body's genes (`body::Layout`) are:
-- 22 **scalar genes**: `GAS`, `LIQ`, `HEAT`, `LEAF`, `STRENGTH`, `CHILD`, `COPY_MASS`,
-  `INTERVAL`, `MUT`, `LEARN`, `FORGET`, the four brain sizes `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`,
+- 21 **scalar genes**: `GAS`, `LIQ`, `HEAT`, `LEAF`, `STRENGTH`, `CHILD`, `COPY_MASS`,
+  `INTERVAL`, `MUT`, `LEARN`, the four brain sizes `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`,
   `DISPERSE`, `DENATURE`, `REPAIR`, `WET`, `ALLOC`, `KEEP_T`, `COOL_T` (meanings in
   `core/src/body/genes.rs`);
 - one **catalyst** gene per reaction (log10 speed-up);
@@ -699,12 +699,11 @@ Files: `core/src/choose/` (`mod` the decision, `perceive`, `learn`, `feed` takin
 - **Shared group brains** (`choose::learn::regroup`, monthly; `life::Group`). Bodies that stay
   near each other share one set of rows: the mean of their members' born rows plus what the group
   learned. Every group number is **weighed by members** (a node counts its count): the mean rows,
-  the forgetting rate, which group is bigger, and how far a body's step moves the shared rows. The
+  which group is bigger, and how far a body's step moves the shared rows. The
   group's count is right at all times; its mean rows follow its members when the rows are read
   (`life::Life::settle`: each change of members waits, by born rows, until then). A body further than `leave` cells from its group's centre
   leaves with a copy (`choose::go`). One that stays `stay` days within `join` cells of a bigger
-  group of its lineage joins it. What a group learned fades at the mean `FORGET` rate of its
-  members. `Config::share_brains` off (`ew run --own-brains`) gives one brain per body.
+  group of its lineage joins it. `Config::share_brains` off (`ew run --own-brains`) gives one brain per body.
 
 ### 5.2 Perception
 

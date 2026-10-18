@@ -25,7 +25,8 @@ fn a_tenth_of_the_light_eaters_start_with_the_fixing_gene() {
     // The line says how many, and the speed-up (log10 `FIX_GENE` is in the genes).
     assert!(line.contains(&format!("{on} of them")) && line.contains("the fixing reaction"), "{line}");
     let lay = Layout::of(&w.chem);
-    assert!(w.life.alive().all(|b| b.genes[lay.cat + fix] == FIX_GENE || b.genes[lay.cat + fix] < 0.5), "a gene turned on by mutation is small");
+    // (A gene the spray turned on speeds the reaction up at most ten times, against 10^`FIX_GENE`.)
+    assert!(w.life.alive().all(|b| b.genes[lay.cat + fix] == FIX_GENE || b.genes[lay.cat + fix] < 1.0), "a gene turned on by mutation is small");
     // The animals placed after them have none; and the same seed gives the same bodies.
     life::seed(&mut w, 1);
     let (on_all, _) = fixers_of(&w, fix);
