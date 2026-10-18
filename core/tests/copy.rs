@@ -1328,6 +1328,41 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     }
 }
 
+/// A node that splits and joins again many times keeps its members, stores and heat to rounding, and comes back to
+/// its genes and spread (`nodes::Lot`, `nodes::add`): 10,000 splits along a gene drawn at random, each half joined
+/// back at once (`nodes::merge`), from a spread drawn at random between the split threshold and `body::most`.
+#[test]
+fn splitting_and_joining_give_the_node_back() {
+    let mut w = small_world();
+    worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
+    w.cfg.crowd = 64;
+    let books = Books::now(&w);
+    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
+    let lay = Layout::of(&w.chem);
+    let mut r = Rng::new(1, 0, 0, Purpose::Split);
+    let (n0, before) = (w.life.bodies[s].count, held(&w));
+    for _ in 0..10_000 {
+        let g = lay.cat + r.below(lay.min - lay.cat);
+        let mut b = std::mem::take(&mut w.life.bodies[s]);
+        // (A catalyst gene well clear of its walls, its spread past the split threshold and at most the most a node keeps,
+        // `body::most`, which a join does not pass.)
+        b.genes[g] = 6.0;
+        b.spread = vec![0.0; lay.len];
+        b.spread[g] = (1.0 - 0.1 * r.f64() as f32) * 0.3f32.powi(2) * (w.cfg.phys.alike.powi(2) * std::f32::consts::FRAC_PI_8 + 1.0);
+        let (genes, spread) = (b.genes.clone(), b.spread.clone());
+        let others = live(&w);
+        nodes::split(&mut w, s, &mut b);
+        w.life.bodies[s] = b;
+        let half = live(&w).into_iter().find(|x| *x != s && !others.contains(x)).expect("split in two");
+        nodes::merge(&mut w, half, s);
+        let b = &w.life.bodies[s];
+        assert!((b.genes[g] - genes[g]).abs() < 1e-5 && (b.spread[g] - spread[g]).abs() < 1e-5 * spread[g], "gene {g}: {} and {} back as {} and {}", genes[g], spread[g], b.genes[g], b.spread[g]);
+    }
+    same(&before, &held(&w));
+    assert!((w.life.bodies[s].count - n0).abs() < 1e-9 * n0, "members {n0} then {}", w.life.bodies[s].count);
+    books.assert_kept(&w, 1e-9);
+}
+
 /// With `Config::nodes` off an animal's children are individuals: a child joins no node, even when one of its own kind
 /// is in its cell (with nodes on it joins it), and a member whose brood covers many children has that many
 /// individuals, not a node of them. Members, stores and heat are kept.

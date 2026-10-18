@@ -667,6 +667,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   years 30 to 35, seeds 1 and 2: plant members -4% and +10%, life of plants 3.10 to 2.99 and 2.47 to 2.78 yr,
   animal members 1106 to 1143 and 752 to 485, land and carbon gas the same; the share of the bodies' time in
   `copy` 20% to 19%. Golden re-pinned.
+- E6 (A, with F1): children who join a node are booked on it, with no body built for them; one helper moves members,
+  stores, heat, brood and gene moments between nodes (`nodes::Lot`, `nodes::add`) for joins, merges, splits and
+  births. The same world bit for bit (golden kept). A test splits and joins a node 10,000 times. `copy` per call
+  about the same (10.2 against 10.5 us, side by side): its time is in drawing the genes (31%), finding the node (27%)
+  and pooling the genes (25%), not in building the body.
 
 **Phase J: the long physics step**
 

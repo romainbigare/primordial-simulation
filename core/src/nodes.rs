@@ -60,7 +60,7 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
 type Likeness = (Vec<f32>, Vec<f32>, (f64, bool));
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
-/// are left or no pair is alike: here each within the other's spread, as children join a node (`body::within`), and of
+/// are left or no pair is alike: here each within the other's spread, as children join a node (`copy::target`), and of
 /// one size class. Past `UNLIKE_CROWD` times `max`, unlike pairs merge too, the most alike first. A pair's key: unlike or
 /// not, then the squared distance of their genes in steps.
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
@@ -121,23 +121,55 @@ pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     w.life.bodies[t] = o;
 }
 
-/// Members `c` join body `o`, taken out of its slot: members, stores, brood and heat add up; genes and born rows become
-/// the means by members (children of less than one member weigh what they are), and the spread what both held around
-/// the new mean (each one's spread plus its gap from the new mean squared, by members; for the rows the mean over rows
-/// of the gap squared; up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows` are
-/// the born rows of `c`; none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows, their
-/// spread and its group's as they are: it left with the rows' mean and comes back with it.
-pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>) {
+/// What splits and joins as an amount when members move between nodes (Idea 3 of `docs/foundation/plan.md`): their
+/// count, mol of each store, heat, J, and brood, mol.
+pub(crate) struct Lot {
+    pub count: f64,
+    pub store: Vec<f64>,
+    pub e: f64,
+    pub brood: f64,
+}
+
+impl Lot {
+    /// The share `f` of node `b`'s members and the share `fa` of its stores, heat and brood leave it; it keeps the rest
+    /// (the remainder, so the two add up to what it held to rounding). The same share of both is members alike to the
+    /// others; a larger share of the amounts is members that hold more than the mean.
+    pub(crate) fn split(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Lot {
+        let mut store = Vec::with_capacity(b.store.len());
+        for a in b.store.iter_mut() {
+            let x = fa * *a;
+            store.push(x);
+            *a -= x;
+        }
+        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood };
+        (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
+        life.set_count(b, b.count - c.count);
+        c
+    }
+    /// All that body `c` holds (its stores taken out of it).
+    pub(crate) fn of(c: &mut Body) -> Lot {
+        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood }
+    }
+}
+
+/// Members `c` join body `o`, taken out of its slot, with the means `genes` and the spread `spread` of their genes and
+/// their born rows and the rows' spread: members, stores, brood and heat add up; genes and born rows become the means
+/// by members (members of less than one weigh what they are), and the spread what both held around the new mean (each
+/// one's spread plus its gap from the new mean squared, by members; for the rows the mean over rows of the gap squared;
+/// up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows` none: those of `o` (a
+/// member split off `o` coming back, `one`), which leaves its rows, their spread and its group's as they are: it left
+/// with the rows' mean and comes back with it.
+pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], rows: Option<(&[f32], f32)>) {
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    o.spread = (0..o.genes.len()).map(|g| pool(spread_at(&o.spread, g), spread_at(&c.spread, g), (c.genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
-    let genes = mix(&o.genes, &c.genes);
+    o.spread = (0..o.genes.len()).map(|g| pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0)).collect();
+    let genes = mix(&o.genes, genes);
     match rows {
-        Some(rows) => {
+        Some((rows, row_spread)) => {
             let born = w.life.born(o);
             let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
-            o.row_spread = pool(o.row_spread, c.row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
+            o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
             let rows = mix(born, rows);
             w.life.reborn(o, genes, rows);
         }
@@ -151,19 +183,20 @@ pub(crate) fn take_in(w: &mut World, o: &mut Body, c: Body, rows: Option<&[f32]>
     w.see(o);
 }
 
-/// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the brood and of the heat;
-/// lineage, group, genome and memory as the node's; holding nothing, inside nothing.
+/// Members `c` (out of any slot) join body `o`, taken out of its slot (`add`), born with `rows` (none: those of `o`).
+pub(crate) fn take_in(w: &mut World, o: &mut Body, mut c: Body, rows: Option<&[f32]>) {
+    let lot = Lot::of(&mut c);
+    add(w, o, lot, &c.genes, &c.spread, rows.map(|r| (r, c.row_spread)));
+}
+
+/// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the brood and of the heat
+/// (`Lot::split`); lineage, group, genome and memory as the node's; holding nothing, inside nothing.
 fn part(life: &mut Life, b: &mut Body, f: f64) -> Body {
-    // (The trace and the constants are not the part's: set aside, not cloned.)
-    let (trace, k) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k));
-    let mut c = Body { count: f * b.count, e: f * b.e, brood: f * b.brood, hold: None, inside: None, ..b.clone() };
-    (b.trace, b.k) = (trace, k);
-    for (a, x) in b.store.iter_mut().zip(c.store.iter_mut()) {
-        *x = f * *a;
-        *a -= *x;
-    }
-    (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
-    life.set_count(b, b.count - c.count);
+    let lot = Lot::split(life, b, f, f);
+    // (The trace, the constants and the stores are not the part's: set aside, not cloned.)
+    let (trace, k, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k), std::mem::take(&mut b.store));
+    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, ..b.clone() };
+    (b.trace, b.k, b.store) = (trace, k, store);
     c
 }
 

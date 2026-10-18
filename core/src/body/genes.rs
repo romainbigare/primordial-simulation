@@ -235,13 +235,13 @@ pub(crate) fn within_steps(lay: &Layout, limit: f32, var: f32, g: usize) -> f32 
     limit + WITHIN * var.sqrt() / like(lay, g)
 }
 
-/// Children `c` (one, or a group drawn from a node with the spread left among them) belong to node `o`: in each gene
-/// their mean is within `limit` steps of its mean plus `WITHIN` standard deviations of both spreads together. Each
-/// gene alone, so kinds that differ in a few genes stay apart; the spreads count, as a few children drawn from a node
-/// differ from its mean by its spread over their number.
-pub(crate) fn within(lay: &Layout, limit: f32, o: &Body, c: &Body) -> bool {
-    let reach = |g: usize| within_steps(lay, limit, spread_at(&o.spread, g) + spread_at(&c.spread, g), g);
-    distance(lay, &o.genes, &c.genes, reach).is_some()
+/// Children of genes `genes` and spread `spread` (one, or a group drawn from a node with the spread left among them)
+/// belong to node `o`: in each gene their mean is within `limit` steps of its mean plus `WITHIN` standard deviations of
+/// both spreads together. Each gene alone, so kinds that differ in a few genes stay apart; the spreads count, as a few
+/// children drawn from a node differ from its mean by its spread over their number.
+pub(crate) fn within(lay: &Layout, limit: f32, o: &Body, genes: &[f32], spread: &[f32]) -> bool {
+    let reach = |g: usize| within_steps(lay, limit, spread_at(&o.spread, g) + spread_at(spread, g), g);
+    distance(lay, &o.genes, genes, reach).is_some()
 }
 
 /// Bodies are compared in log10 of their mass from this many kg up.

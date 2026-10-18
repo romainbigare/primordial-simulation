@@ -632,15 +632,18 @@ the same patterns as individuals.
 - A node keeps its **spread**: the variance of its members' genes around its mean, per gene, and
   one number for its born rows (`Body::spread`, `Body::row_spread`). The spread never grows past
   the split threshold (`body::most`).
-- **Joining** (`target` in `copy/mod.rs`, `nodes::join`). Children join the first node in their
-  start cell that they belong to (`body::within`): in every gene within `alike` steps plus
-  `WITHIN` (0.5) standard deviations of both spreads; in the same **size class** (member bodies
-  within `alike` steps of the copy-mass gene, about a factor 6); and immature. A child is always
-  immature, so it never joins its mature parent node. With no node to join it starts a body; less
-  than one member with nowhere to go waits in the brood.
-- **Members are kept exactly** (`nodes::take_in`). When members join a node, the count grows by
-  exactly what they are (0.4 of a member adds 0.4). Genes and born rows become the means **by
-  members**, and the spread pools each one's spread and its gap to the new mean.
+- **Joining** (`target` and `emit` in `copy/mod.rs`). Children join the first node in their
+  start cell that they belong to: in every gene within `alike` steps plus `WITHIN` (0.5)
+  standard deviations of both spreads (`body::within`); in the same **size class** (member
+  bodies within `alike` steps of the copy-mass gene, about a factor 6); and immature. A child is
+  always immature, so it never joins its mature parent node. Children who join are booked on the
+  node: no body is built for them. With no node to join they start a body; less than one member
+  with nowhere to go waits in the brood.
+- **Members are kept exactly** (`nodes::Lot`, `nodes::add`: one helper for every join, merge,
+  split and booking). Members, stores, heat and brood split by shares (the node keeps the
+  remainder, so the parts add up to it) and join as sums: when members join a node, the count
+  grows by exactly what they are (0.4 of a member adds 0.4). Genes and born rows become the means
+  **by members**, and the spread pools each one's spread and its gap to the new mean.
 - **Merging** (`nodes::crowd`, monthly). Alike nodes of one class in a cell merge. A cell with
   more than `crowd` nodes merges its most alike pairs while they are alike. Past twice `crowd` the
   most alike merge however unlike (a safeguard). A merge pools stores, heat, the means by count,
