@@ -388,6 +388,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   pass, with no multiplier; `WORK_MONTHS` and `Scratch::owe_work` are deleted. The young 32 x 32 island of
   `an_island_loses_ground_at_a_real_rate` loses 0.133 mm a year (main: 0.138); "land worn down" (64 x 64, years 21
   to 30) 0.048 mm a year. Snapshot version 12, golden re-pinned.
+- `store::apply` books link fluxes alone first and checks after (`book_first`): each column is added as the careful
+  path gives it, and only the numbers that ended below zero are looked at; when one is short beyond rounding, every
+  number is set back from the values kept before each change, and the careful path runs. Nodes are woken at the end
+  of the call. Same results (golden unchanged); Flow at 128 x 128 without life about 15% faster.
 
 **Owner's decisions after Phase A**
 

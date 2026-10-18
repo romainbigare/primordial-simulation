@@ -98,6 +98,32 @@ fn a_link_joins_a_ground_node_to_its_store() {
     assert_eq!(w.counts.scaled, [0.0; 2]);
 }
 
+/// A link flux alone is booked first and checked after: it gives the same numbers, bit for bit, as booked with care
+/// (beside a move that changes nothing), when nothing is short and when some nodes are asked more than they hold.
+#[test]
+fn a_flux_booked_first_is_booked_as_with_care() {
+    for greed in [0.1, GREED] {
+        let w0 = small_world();
+        let (cells, mut r) = (w0.grid.mesh().cells(), Rng::new(2, 0, 0, Purpose::Chem));
+        let (a, b) = (cells.a().to_vec(), cells.b().to_vec());
+        // Each link carries up to `greed` of the difference of what its ends hold (a node has up to 8 links).
+        let (mut mol, mut heat) = (Vec::new(), Vec::new());
+        for &k in &[LIQUID, ROCK] {
+            mol.extend(a.iter().zip(&b).map(|(&i, &j)| greed * r.f64() * (w0.g(k, i as usize) - w0.g(k, j as usize))));
+        }
+        heat.extend(a.iter().zip(&b).map(|(&i, &j)| greed * r.f64() * (w0.e_ground[i as usize] - w0.e_ground[j as usize])));
+        let flux = LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[LIQUID as u16, ROCK as u16], mol: &mol, heat: &heat };
+        let (mut first, mut careful) = (w0.clone(), w0.clone());
+        let nothing = Move { from: w0.table.id(Class::Ground, 0), to: w0.table.id(Class::Ground, 1), k: LIQUID as u16, mol: 0.0, heat: 0.0 };
+        apply(&mut first, &[flux], &[], &[]);
+        apply(&mut careful, &[flux], &[nothing], &[]);
+        let bits = |w: &World| w.ground.iter().chain(&w.e_ground).map(|x| x.to_bits()).collect::<Vec<_>>();
+        assert!(bits(&first) == bits(&careful), "greed {greed}: not the same numbers");
+        assert_eq!((first.counts.scaled, first.counts.rounded), (careful.counts.scaled, careful.counts.rounded));
+        assert_eq!(first.counts.scaled[0] > 0.0, greed > 1.0, "scaled only when nodes are asked too much");
+    }
+}
+
 #[test]
 #[should_panic(expected = "does not keep its elements")]
 fn a_transform_that_makes_elements_is_refused() {
@@ -125,7 +151,7 @@ fn some_heat(w: &World, r: &mut Rng, (class, i): (Class, usize)) -> f64 {
 
 /// One round of random changes, each asking up to `GREED` times what its node holds: a link flux of two substances and
 /// heat over a third of them (between nodes of one class, or of the ground and the deep store), then moves between
-/// nodes of any classes, then the chemistry's reactions in any node.
+/// nodes of any classes, then the chemistry's reactions in any node; in one call, or the flux alone first.
 fn random_round(w: &mut World, r: &mut Rng) {
     let (ns, per) = (w.chem.ns(), PER_ROUND / 3);
     let first = CLASSES[r.below(3)];
@@ -163,7 +189,13 @@ fn random_round(w: &mut World, r: &mut Rng) {
             Transform { at: w.table.id(at.0, at.1), dmol: [side(&rx.inputs, -1.0), side(&rx.outputs, 1.0)].concat() }
         })
         .collect();
-    apply(w, &[flux], &moves, &transforms);
+    // In one call, or the flux alone (booked first and checked after) and then the rest.
+    if r.below(2) == 0 {
+        apply(w, &[flux], &moves, &transforms);
+    } else {
+        apply(w, &[flux], &[], &[]);
+        apply(w, &[], &moves, &transforms);
+    }
 }
 
 /// A million random moves, transforms and link fluxes keep every element and the energy to rounding, and leave no

@@ -84,6 +84,9 @@ impl Slot {
     }
 }
 
+/// Per array (`ARRAYS`), two sums for each number.
+type Sums = [Vec<[f64; 2]>; ARRAYS];
+
 /// The working space of `apply`, kept between calls so that a call costs only the numbers it changes.
 #[derive(Clone, Debug, Default)]
 pub struct Booking {
@@ -94,7 +97,7 @@ pub struct Booking {
     /// ask of, two per link of a flux's column)
     asked: Vec<Slot>,
     /// Per array: the net change a flux's column makes to each number, and all that passes through it; 0 between columns
-    net: [Vec<[f64; 2]>; ARRAYS],
+    net: Sums,
     /// The numbers a column touches, at their first change (room for two per link)
     touched: Vec<usize>,
     /// The numbers a flux takes from (by flux: up to `ends[x]`), and those whose net change is rounding (`NET_ROUNDING`)
@@ -103,6 +106,10 @@ pub struct Booking {
     passed: Vec<Slot>,
     /// Per flux: what it takes from the nodes, mol and J (`Slot::unit`)
     lost: Vec<[f64; 2]>,
+    /// The fast path (`book_first`): the value of each number before each change, in order
+    saved: Vec<f64>,
+    /// The numbers a change brought more than `Config::wake_share` of what they held, woken at the end of the call
+    woken: Vec<Slot>,
     /// Room for the element totals of a transform
     sums: Vec<f64>,
 }
@@ -265,6 +272,7 @@ fn each_delta(item: Item, table: &Nodes, chem: &Chemistry, len: &[usize; BOOKED]
 struct Giver<'w> {
     wake_share: f64,
     scaled: &'w mut [f64; 2],
+    woken: &'w mut Vec<Slot>,
     sleep: &'w mut Sleep,
     table: &'w Nodes,
     time: u64,
@@ -272,8 +280,8 @@ struct Giver<'w> {
 }
 
 impl Giver<'_> {
-    /// Changes number `s`, `v`, by `x` scaled by `f`, and wakes the node when that brings it more than `wake_share`
-    /// of what it held.
+    /// Changes number `s`, `v`, by `x` scaled by `f`, and notes the node to wake when that brings it more than
+    /// `wake_share` of what it held.
     #[inline(always)]
     fn give(&mut self, v: &mut f64, s: Slot, x: f64, f: f64) {
         let (held, given) = (*v, x * f);
@@ -290,10 +298,85 @@ impl Giver<'_> {
     }
     #[cold]
     fn wake(&mut self, s: Slot) {
-        let c = s.arr / 2;
-        let (class, i) = (Class::ALL[c], if s.unit() == 0 { s.at % self.len[c] } else { s.at });
-        self.sleep.wake(class, self.table.id(class, i), self.time);
+        self.woken.push(s);
     }
+    /// Wakes the nodes noted (in any order: waking is the same).
+    fn flush(&mut self) {
+        for s in self.woken.drain(..) {
+            let c = s.arr / 2;
+            let (class, i) = (Class::ALL[c], if s.unit() == 0 { s.at % self.len[c] } else { s.at });
+            self.sleep.wake(class, self.table.id(class, i), self.time);
+        }
+    }
+}
+
+/// Each number the columns of `fluxes` change, with its change, as `f(number, slot, change)`: column by column and link
+/// by link in their order (the order in which they are given), or from the last back (`BACK`).
+#[inline(always)]
+fn each_end<const BACK: bool>(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &mut [&mut [f64]; ARRAYS], mut f: impl FnMut(&mut f64, Slot, f64)) {
+    let at = |k: usize, n: usize| if BACK { n - 1 - k } else { k };
+    for xi in 0..fluxes.len() {
+        let (x, cols) = (&fluxes[at(xi, fluxes.len())], &columns[at(xi, fluxes.len())]);
+        for ci in 0..cols.len() {
+            let col = cols[at(ci, cols.len())];
+            with_ends!(col.arr, (books, v) => {
+                for k in 0..x.a.len() {
+                    let l = at(k, x.a.len());
+                    let ds = col.deltas(l, x.a[l], x.b[l]);
+                    for e in 0..2 {
+                        let (s, d) = ds[at(e, 2)];
+                        f(v.at(at(e, 2), s.at), s, d);
+                    }
+                }
+            })
+        }
+    }
+}
+
+/// The fast path of `apply` for link fluxes alone: books them unscaled, in the order in which the careful path gives
+/// them when nothing is short, keeping the value of each number before each change (`saved`); then looks at the
+/// numbers that ended below zero (`low`). One below the rounding of all that passed through it (`NET_ROUNDING`) is
+/// short: then every number is set back to what it held and it returns false. Else the rounding below zero is set to
+/// zero and counted in `rounded`, as the careful path does, so the result is the same.
+fn book_first(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &mut [&mut [f64]; ARRAYS], giver: &mut Giver, (saved, net, low): (&mut Vec<f64>, &mut Sums, &mut Vec<Slot>), rounded: &mut [f64; 2]) -> bool {
+    saved.clear();
+    low.clear();
+    each_end::<false>(fluxes, columns, books, |v, s, d| {
+        saved.push(*v);
+        giver.give(v, s, d, 1.0);
+    });
+    // Each number below zero once (marked in `net`), then all that passed through it.
+    each_end::<false>(fluxes, columns, books, |v, s, _| {
+        if *v < 0.0 && net[s.arr][s.at][0] == 0.0 {
+            net[s.arr][s.at][0] = 1.0;
+            low.push(s);
+        }
+    });
+    if low.is_empty() {
+        return true;
+    }
+    each_end::<false>(fluxes, columns, books, |_, s, d| {
+        let m = &mut net[s.arr][s.at];
+        m[1] += if m[0] != 0.0 { d.abs() } else { 0.0 };
+    });
+    let mut short = false;
+    for s in low.iter() {
+        let [_, all] = std::mem::take(&mut net[s.arr][s.at]);
+        short |= books[s.arr][s.at] < -NET_ROUNDING * all;
+    }
+    if short {
+        let mut i = saved.len();
+        each_end::<true>(fluxes, columns, books, |v, _, _| {
+            i -= 1;
+            *v = saved[i];
+        });
+        return false;
+    }
+    low.sort_unstable();
+    for &s in low.iter() {
+        rounded[s.unit()] -= std::mem::take(&mut books[s.arr][s.at]);
+    }
+    true
 }
 
 /// Gives each change of the links of flux `x` (of columns `cols`) to `books`, scaled by `f`, one column at a time.
@@ -334,11 +417,13 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 /// gone.
 ///
 /// It works on the numbers the changes touch alone (`Booking`), and books each flux by its columns, one array at a
-/// time: each number still sees its changes in their order, so the result is the same.
+/// time: each number still sees its changes in their order, so the result is the same. Link fluxes alone (between
+/// nodes that are not boundary nodes) are booked first and checked after (`book_first`), and booked with care only
+/// where that finds a number short.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
     let World { cfg, chem, table, sleep, time, counts, grid, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, .. } = w;
-    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES], booking);
+    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, saved, woken, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES], booking);
     let mut books = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..]];
     for ((n, s), b) in need.iter_mut().zip(net.iter_mut()).zip(&books) {
         if n.len() != b.len() {
@@ -354,13 +439,21 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     for t in transforms {
         assert!(keeps_elements(chem, &t.dmol, sums), "a transform that does not keep its elements: {t:?}");
     }
+    let columns: Vec<_> = fluxes.iter().map(|x| x.columns(&len)).collect();
+    let mut giver = Giver { wake_share: cfg.wake_share, scaled: &mut counts.scaled, woken, sleep, table, time: *time, len };
+    let alone = moves.is_empty() && transforms.is_empty() && fluxes.iter().all(|x| !x.class.contains(&Class::Boundary));
+    if alone && book_first(fluxes, &columns, &mut books, &mut giver, (saved, net, passed), &mut counts.rounded) {
+        giver.flush();
+        return;
+    }
+    giver.woken.clear();
     // What each change asks of each number.
     let changes = fluxes.iter().map(|x| 2 * x.a.len() * (x.ks.len() + 1)).sum::<usize>() + 4 * moves.len();
     let changes = changes + transforms.iter().map(|t| t.dmol.len() + 1).sum::<usize>();
     if asked.len() < changes {
         asked.resize(changes, Slot { arr: 0, at: 0 });
     }
-    let (columns, mut count): (Vec<_>, _) = (fluxes.iter().map(|x| x.columns(&len)).collect(), 0);
+    let mut count = 0;
     ends.clear();
     lost.clear();
     let (mut nt, mut np) = (0, 0);
@@ -399,7 +492,6 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         whole &= *n == 1.0;
     }
     // Each change, scaled by the least share of what it takes from (by none when each number gives all it is asked).
-    let mut giver = Giver { wake_share: cfg.wake_share, scaled: &mut counts.scaled, sleep, table, time: *time, len };
     let mut start = 0;
     for (((x, cols), &end), lost) in fluxes.iter().zip(&columns).zip(&*ends).zip(&*lost) {
         let f = if whole { 1.0 } else { takes[start..end].iter().fold(1.0, |f: f64, s| f.min(need[s.arr][s.at])) };
@@ -440,4 +532,5 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     for (s, v) in below {
         counts.rounded[s.unit()] -= v;
     }
+    giver.flush();
 }
