@@ -474,6 +474,15 @@ The work of `docs/foundation/plan.md`, one line per task.
 - Phase D check: all ten key numbers in range, the sleep test passes; the speed goal (Flow and Change 2 times
   faster) and the size goal (600 lines fewer) are not met: `docs/reports/foundation-d.md`.
 
+**Before Phase E: an outside review of Phase D**
+
+- The plan follows the review: a law never overdraws a node and the store only adds (D9, D11); wake by what a node
+  gained since it slept, not in `apply` (D12); check level 2 is the normal level for speed work (D10); Phase E in the
+  order of the profile, the bookkeeping first, E4 (brains as one block) dropped, E8 (a body as a node in Flow's steps)
+  replaced by moves and one body node per cell (D11); the thread design (5.6) before the columns; the chunk layout
+  of amounts (Idea 8); no sparse amounts (B4) and no graphics card (old J2); J2 is now the longer physics step; the
+  8,000-line ceiling moves to the end of the foundation (9,000 until then).
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body

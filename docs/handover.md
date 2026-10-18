@@ -446,7 +446,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 | Individual bodies in detailed areas | 1 day |
 | Snapshots for the history tape | every 10 years (and before every god action) |
 
-As built: ground and air physics every 3 days (radiation at every step; evaporation, rain and wind every 3 days), liquid every 15, the reactor every physics step, bodies every 5 to 360 days (their `INTERVAL` gene), the loads of parts once a month and their reactions every 6 months. Each part of Flow keeps its own period.
+As built: ground and air physics every 3 days (radiation at every step; evaporation, rain and wind every 3 days), liquid every 15, the reactor every physics step, bodies every 5 to 360 days (their `INTERVAL` gene), the loads of parts once a month and their reactions every 6 months. Each part of Flow keeps its own period. An implicit step of each cell's ground-and-air column would let heat, air and rain step 15 to 30 days (`docs/foundation/plan.md`, J2).
 
 There is **one world clock**. Fast processes in detailed areas sub-step inside a month. Seasons must exist, because they matter for food and migration.
 
@@ -971,7 +971,7 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters still grow about 0.2 a year at year 60, so report log10 kg at year 60 with the growth rate over years 30 to 60, three seeds at least. Under 2 times is noise.
-- **Core size.** `core` has 8,733 code lines against its budget of 8,000 (14.3, counted by `cli/tests/core_size.rs`); the foundation's Phase E must delete about 730 to reach it (`docs/reports/foundation-d.md`).
+- **Core size.** `core` must reach its budget of 8,000 code lines (14.3, counted by `cli/tests/core_size.rs`) by the end of the foundation, mostly by a small store and by deleting the special code the foundation replaces (`docs/foundation/plan.md`, "The line budget").
 
 ---
 
@@ -1007,8 +1007,8 @@ All of these must be true:
 
 **Code size at the end of M3:** `core` is 10,372 lines: 7,508 of code, 2,260 of comments, 604 blank. A comment line
 starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts the code lines of `core/src`, prints them
-per folder (`cargo test --release -p cli --test core_size -- --nocapture`) and fails above its ceiling: 9,500 to the
-end of the foundation's Phase D, 8,000 from the end of Phase E on. Comments are not counted, so do not delete them to
+per folder (`cargo test --release -p cli --test core_size -- --nocapture`) and fails above its ceiling: 9,000 while
+the foundation is built, 8,000 at its end. Comments are not counted, so do not delete them to
 save lines. The foundation work keeps `core` at or under 8,000 code lines by replacing special code with general
 pieces, not by adding to it (`docs/foundation/plan.md`, "The main rule" and "The line budget").
 

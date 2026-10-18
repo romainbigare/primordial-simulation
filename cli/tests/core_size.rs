@@ -5,9 +5,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// The most code lines `core/src` may hold: 9,500 while the foundation's new base is built beside the old code (to the
-/// end of Phase D), 8,000 from the end of Phase E on.
-const CEILING: usize = 9_500;
+/// The most code lines `core/src` may hold: 9,000 while the foundation is built, 8,000 at its end (Phase L).
+const CEILING: usize = 9_000;
 
 /// Is `line` a line of code (not blank, not a comment)?
 fn is_code(line: &str) -> bool {

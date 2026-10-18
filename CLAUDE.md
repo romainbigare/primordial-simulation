@@ -41,8 +41,10 @@ ask the owner.
 9. **No Earth words in `core/` and `worldgen/`** (`cli/tests/word_ban.rs`), including substance names (nitrogen,
    carbon, salt, sugar...). Use numbers and physical words.
 10. `cargo clippy --release --workspace --all-targets` gives no warnings.
-11. **Size.** `core` holds at most 8,000 lines of code, not counting comments and blank lines (`docs/handover.md`
-    14.3; the test `cli/tests/core_size.rs` counts them). Simplify before you add. Never delete useful comments to save lines: they are not counted.
+11. **Size.** `core` holds at most 8,000 lines of code at the end of the foundation, and 9,000 until then, not counting
+    comments and blank lines (`docs/handover.md` 14.3; the test `cli/tests/core_size.rs` counts them). Simplify before
+    you add. Never delete useful comments to save lines: they are not counted. Never pick a slower or less honest
+    design to save lines.
 12. **Replace, do not patch.** When you build a general piece, delete the special code it replaces in the same change
     (the main rule of `docs/foundation/plan.md`).
 
@@ -54,7 +56,10 @@ ask the owner.
    one body). Means over a node or a group are weighted by members.
 3. **One source for each quantity.** One ground temperature (`World::t_ground_last`), one melting rule, one way to pay
    for lifting gas into the air. When two places need the same number, they read the same thing.
-4. **Validate inputs in one place.** `Chemistry::validate` and the config checks refuse bad worlds with a clear error
+4. **A law never overdraws a node.** It never asks a node for more than it holds; where it could, it limits that
+   node's own outgoing links, never a whole field. `store::apply` only adds, sets rounding below zero to zero and
+   counts it. A real overdraw breaks the books.
+5. **Validate inputs in one place.** `Chemistry::validate` and the config checks refuse bad worlds with a clear error
    (limits like `MAX_SUBSTANCES`, periods that must divide each other, numbers that must be positive).
 
 ## 4. Comments and docs
@@ -80,14 +85,17 @@ ask the owner.
    last push of a phase, and the golden test with `--features pcore/threads`. There is no CI on GitHub for now. The
    normal suite stays under about 30 seconds.
 4. **The golden test** (`tape/tests/golden.rs`) pins the fingerprint of the whole world for three small runs. A pure
-   clean-up must keep it. A change of the laws re-pins it in the same commit, and the commit says why.
+   clean-up must keep it. A change of the laws, or speed work that changes the order of sums, re-pins it in the same
+   commit, and the commit says why.
 5. Never loosen a tolerance to make a test pass. Never restore old physics inside a test.
 6. Delete the tests of a mechanism you delete.
 
 ## 6. Working
 
-1. **A refactor keeps the results bit for bit.** Check the golden test, and compare a few short runs (same
+1. **A pure clean-up keeps the results bit for bit.** Check the golden test, and compare a few short runs (same
    fingerprint, same `series.csv`). Keep the order of floating-point sums; `a*b*c` is not `a*(b*c)`.
+   **Speed work may change the order of sums** (check level 2 of `docs/foundation/plan.md` 6.1): it re-pins the golden
+   test and shows the same world (a few series columns, or the key numbers where life's choices amplify rounding).
 2. **A change of the laws is its own commit**, with the physics reason and its effect on a few numbers of a long run
    (populations, temperatures, drift).
 3. Before you push: build, all tests, clippy, the wasm build (`cargo build -p pcore --target wasm32-unknown-unknown`).
