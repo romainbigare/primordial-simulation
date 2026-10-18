@@ -76,8 +76,9 @@ ask the owner.
 
 1. **Few, fast and meaningful** (`docs/handover.md` 12.3). A test states a law or an invariant, not the story of a bug.
 2. Use the shared kit `worldgen::testkit` for setup. Never copy setup code between test files.
-3. **Slow tests are `#[ignore]`** and run in CI (`cargo test --release --workspace -- --ignored`). The normal suite
-   stays under about 30 seconds.
+3. **Slow tests are `#[ignore]`** (`cargo test --release --workspace -- --ignored --no-fail-fast`): run them before the
+   last push of a phase, and the golden test with `--features pcore/threads`. There is no CI on GitHub for now. The
+   normal suite stays under about 30 seconds.
 4. **The golden test** (`tape/tests/golden.rs`) pins the fingerprint of the whole world for three small runs. A pure
    clean-up must keep it. A change of the laws re-pins it in the same commit, and the commit says why.
 5. Never loosen a tolerance to make a test pass. Never restore old physics inside a test.
