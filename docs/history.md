@@ -672,6 +672,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   births. The same world bit for bit (golden kept). A test splits and joins a node 10,000 times. `copy` per call
   about the same (10.2 against 10.5 us, side by side): its time is in drawing the genes (31%), finding the node (27%)
   and pooling the genes (25%), not in building the body.
+- E6 (D): a node's children who leave the cell no longer need to make one whole member (less than one with no node
+  of their kind to join waits in the brood, as those who stay do), so small nodes disperse too and dispersal does
+  not hang on the span of an update. Years 30 to 35, seeds 1 and 2: plant members +4% and -1%, life of plants 2.99
+  to 3.24 and 2.78 to 2.71 yr, animal members 1143 to 1039 and 485 to 598, land and carbon gas the same. E6 in all,
+  side by side with E4: bodies 2810 against 2888 ms/yr (the same), `copy` 21% to 19% of the bodies' time. Golden
+  re-pinned.
 
 **Phase J: the long physics step**
 

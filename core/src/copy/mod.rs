@@ -65,12 +65,13 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if node { None } else { partner(w, slot, b, &mut r) };
-    // Children that start in a neighbour cell (off the map: none): of a node, a share (none if less than one member); an
+    // Children that start in a neighbour cell (off the map: none): of a node, the share `DISPERSE` of its births, however
+    // few (less than one member with no node to join there waits in the brood, as the stayers do, `emit`); an
     // individual's go together, by that chance.
     let d = b.gene_in_range(DISPERSE);
     let prov = provisions(&w.chem, b, mi, matter, births);
     let litter = Litter { body, matter, prov, node, alone: !may_be_node(w, b), mate, parent: id };
-    let m = if node { if d * births >= 1.0 { d * births } else { 0.0 } } else { (r.f64() < d) as u8 as f64 };
+    let m = if node { d * births } else { (r.f64() < d) as u8 as f64 };
     let to = if m > 0.0 { w.map.step(i, DIRS[r.below(8)]) } else { None };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),

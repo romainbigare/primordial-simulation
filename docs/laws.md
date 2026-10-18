@@ -602,8 +602,10 @@ node and who merges.
 - An individual makes whole children (the rest of the brood waits). A node makes fractional
   members. The parent keeps its body and pays nothing more: the matter was paid for when it was
   built.
-- A share `DISPERSE` of a node's children starts in a random neighbour cell (for an individual,
-  the chance that its children do). A birth is recorded in the cell where the children start.
+- A share `DISPERSE` of a node's children starts in a random neighbour cell, however few (for an
+  individual, the chance that its children do): less than one member with no node of its kind to
+  join there waits in the brood, as the children who stay do. A birth is recorded in the cell where
+  the children start.
 
 ### 4.3 Two parents
 
