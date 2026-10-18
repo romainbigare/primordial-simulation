@@ -469,6 +469,8 @@ The work of `docs/foundation/plan.md`, one line per task.
   substance held, `Reactor::needs`), and the reactor's later loops run over the reactions that can run (`on`), went
   (`ran`) or set the rest (`on0`), not over all of them. Same results (golden unchanged); Change at 64 x 64 without
   life 13% fewer instructions.
+- Phase D check: all ten key numbers in range, the sleep test passes; the speed goal (Flow and Change 2 times
+  faster) and the size goal (600 lines fewer) are not met: `docs/reports/foundation-d.md`.
 
 **Owner's decisions after Phase A**
 
@@ -481,5 +483,3 @@ The work of `docs/foundation/plan.md`, one line per task.
   store beyond the dead members' share comes from the members who live. 64 x 64, seeds 1 and 2, with the start
   above: bites fall from 0.2% to 0.004% of plant deaths in years 3 to 21; plant members at year 30 +7% (seed 1)
   and -17% (seed 2); golden re-pinned.
-- Phase D check: all ten key numbers in range, the sleep test passes; the speed goal (Flow and Change 2 times
-  faster) and the size goal (600 lines fewer) are not met: `docs/reports/foundation-d.md`.
