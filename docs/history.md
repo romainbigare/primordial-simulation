@@ -373,6 +373,17 @@ The work of `docs/foundation/plan.md`, one line per task.
   to nothing. A link may join nodes of two classes (`LinkFlux::class`, the vertical links of a stack: ground and
   deep store), so a law books a vertical exchange as one flux, not as one move per substance and cell. Same results
   (golden unchanged).
+- D2: liquid on the new base. Surface liquid moves down the cells in one `solve::downhill` pass (the order renewed
+  every liquid step) with the old sweep's rule as its closure; the load rides in the pass's rows and settles where
+  the share of the liquid that leaves is small. Pore liquid and the deep store are the two layers of each cell's
+  stack (`space::Stack`): one `solve::spread` moves both by Darcy's law across the borders of cells (no longer
+  across corners); the vertical link carries the sinking (a rate, as before) and the springs and the spill of a
+  full store. Every move goes through `store::apply`: link fluxes of the links that carry something, the vertical
+  ones between the two classes. `downhill::pass` keeps a cell's rows side by side and gives the crossings of its
+  links (`downhill::Crossed`), not a flux for every link and row. Deleted: the sorted sweep (`order_key`,
+  `ORDER_TOP`, `ORDER_PER_M`, `CELL_BITS`, `CELL_MASK`, `Outlets`, `lower`, `runoff`, `send`, `carry`),
+  `pore_flow`, the old `drain` and `stores`, `land::darcy`, `Scratch::{nbr, done, sed, sed_e}` (`Scratch::order` is a `downhill::Order`), and the
+  downhill parity test of `core/tests/solve.rs`. Snapshot version 11, golden re-pinned.
 
 **Owner's decisions after Phase A**
 

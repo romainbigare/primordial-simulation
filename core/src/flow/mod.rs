@@ -1,9 +1,10 @@
 //! Law 1: Flow. Stuff moves along edges from high push to low push, with loss.
 //!
 //! Ground nodes: liquid soaks into the pores of the loose ground (porosity times the volume of the
-//! loose solids); what is over that stands and runs down its head in one ordered sweep; the pore
-//! liquid flows by Darcy's law, and drains to the channels inside a cell (`Physics::hill`) and into
-//! the store of the bed below (`drain`); the head lost heats the ground and does work, carrying
+//! loose solids); what is over that stands and runs down the cells in the order of their heads in
+//! one pass (`liquid`, by `solve::downhill`); the pore liquid and the store of the bed below, the
+//! layers of each cell's stack, flow by Darcy's law (`drain`, by `solve::spread`), and drain to the
+//! channels inside a cell (`Physics::hill`); the head lost heats the ground and does work, carrying
 //! loose solids and breaking weak bonds; loose solids creep downhill; heat conducts sideways
 //! through the ground's active layer. Air nodes
 //! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
@@ -28,7 +29,6 @@ pub(crate) use scratch::FlowView;
 use crate::units::DAY;
 use crate::World;
 use creep::creep;
-use drain::drain;
 use land::ground_state;
 use liquid::liquid;
 use scratch::{refresh, space, tables};
@@ -54,7 +54,7 @@ const DUE_SLACK: f64 = 1.0;
 /// air nodes (`air::state`), then radiation (`air::radiation`). Each other part runs once its own
 /// period has passed, for all the time since: the exchange of the ground with the air
 /// (`air::exchange`, every `cfg.exchange_days`), the wind (`air::wind`, every `cfg.air_days`),
-/// liquid (`liquid`, its work on the bed every `WORK_MONTHS`) and drainage (`drain`) every
+/// liquid with its drainage (`liquid`, its work on the bed every `WORK_MONTHS`) every
 /// `cfg.flow_days`, and heat conducted sideways through the ground (`land::conduct`) and creep
 /// every `CREEP_YEARS` (`creep`); every `REFRESH_MONTHS` the slow
 /// ground is rechecked (`refresh`).
@@ -86,7 +86,6 @@ pub fn step(w: &mut World, dt: f64) {
         let dt = std::mem::take(&mut s.pending_liq);
         let work = if std::mem::take(&mut s.owe_work) { (WORK_MONTHS * w.cfg.calendar().month) as f64 / dt } else { 0.0 };
         liquid(w, &mut s, dt, work);
-        drain(w, &mut s, dt);
         let period = CREEP_YEARS * w.cfg.calendar().year;
         let year = w.time / period;
         if s.year != Some(year) {
@@ -127,7 +126,7 @@ pub(crate) fn ensure(w: &mut World) {
     if new {
         refresh(w, &mut s);
     }
-    if s.done.len() != n {
+    if s.rain.len() != n {
         space(w, &mut s);
     }
     if new {

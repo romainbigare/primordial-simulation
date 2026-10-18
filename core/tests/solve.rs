@@ -224,18 +224,12 @@ mod spread {
     }
 }
 
-use pcore::chem::Phase;
 use pcore::space::square::DIRS;
-use pcore::solve::downhill::{self, Adjacency, Order};
-use pcore::units::DAY;
+use pcore::solve::downhill::{self, Adjacency, Crossed, Order};
 use pcore::World;
 use std::collections::BTreeMap;
-use worldgen::testkit::LIQUID;
 
 // ---- downhill: the order of cells by head, and the pass down it ----
-
-/// One liquid step.
-const LIQUID_STEP: f64 = 15.0 * DAY;
 
 /// The links of a square grid to all 8 neighbours, each once, as plain slices.
 #[derive(Default)]
@@ -244,9 +238,8 @@ struct GridLinks {
     start: Vec<u32>,
     link: Vec<u32>,
     other: Vec<u32>,
-    /// The first cell of each link, and its length, m.
+    /// The first cell of each link.
     a: Vec<u32>,
-    dist: Vec<f64>,
 }
 
 /// The links of the grid of `w`.
@@ -257,7 +250,6 @@ fn grid_links(w: &World) -> GridLinks {
             if let Some(j) = w.grid.step(i, d) {
                 let l = *ids.entry((i.min(j), i.max(j))).or_insert_with(|| {
                     g.a.push(i as u32);
-                    g.dist.push(if d.0 != 0 && d.1 != 0 { w.grid.cell_m * std::f64::consts::SQRT_2 } else { w.grid.cell_m });
                     g.a.len() as u32 - 1
                 });
                 g.link.push(l);
@@ -267,91 +259,6 @@ fn grid_links(w: &World) -> GridLinks {
         g.start.push(g.link.len() as u32);
     }
     g
-}
-
-/// Every ground node of `w` brought to 330 K, so all its liquid is liquid through a step of radiation.
-fn warm(w: &mut World) {
-    for i in 0..w.grid.n() {
-        w.e_ground[i] = w.energy_ground(i, 330.0);
-    }
-}
-
-/// On bare ground with rain on it (no pores, nothing sinking into the bed below), one pass down the order moves the
-/// liquid as Flow's sweep does (`flow::liquid`, whose rule for the share that leaves is written here as the pass's
-/// rule): the same amount on every cell to rounding. Every amount is kept, and the link fluxes account for every
-/// change.
-#[test]
-fn downhill_moves_surface_liquid_as_the_sweep_does() {
-    let mut w = worldgen::new_world(1, 32, 32);
-    let (n, area, v, ph) = (w.grid.n(), w.grid.area(), w.chem.molar_volume(LIQUID, Phase::Liquid), w.cfg.phys);
-    // Only the liquid on the bed; the exchange with the air and the wind wait for a later step than the next.
-    (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.carry, w.cfg.wear) = (0.0, 0.0, 0.0, 0.0);
-    (w.cfg.exchange_days, w.cfg.air_days) = (30, 30);
-    let clear = |w: &mut World| (0..w.chem.ns()).filter(|&k| k != LIQUID).for_each(|k| w.ground[k * n..(k + 1) * n].fill(0.0));
-    clear(&mut w);
-    w.deep.fill(0.0);
-    w.scratch = Default::default();
-    warm(&mut w);
-    // The first step runs every part of Flow.
-    pcore::flow::step(&mut w, LIQUID_STEP);
-    // 5 mm of rain on every cell; then only the liquid moves at the next step.
-    clear(&mut w);
-    w.ground[LIQUID * n..(LIQUID + 1) * n].iter_mut().for_each(|m| *m += 0.005 * area / v);
-    warm(&mut w);
-    let z: Vec<f64> = (0..n).map(|i| w.surface_z(i)).collect();
-    let q0 = w.ground[LIQUID * n..(LIQUID + 1) * n].to_vec();
-    pcore::flow::step(&mut w, LIQUID_STEP);
-    let sweep = &w.ground[LIQUID * n..(LIQUID + 1) * n];
-
-    let GridLinks { start, link, other, a, dist } = grid_links(&w);
-    let adj = Adjacency { start: &start, link: &link, other: &other, a: &a };
-    let head = |q: &[f64], i: usize| (z[i] + q[i] * v / area).max(z[i]);
-    // The sweep orders heads in steps of 0.1 m down from 20 km, ties by cell.
-    let mut order = Order::default();
-    order.update(&(0..n).map(|i| -((((2e4 - head(&q0, i)).max(0.0)) * 10.0) as u64 as f64)).collect::<Vec<_>>());
-    let (mut q, mut flux) = (q0.clone(), vec![0.0; a.len()]);
-    downhill::pass(&order, &adj, &mut q, &mut flux, |i, q, share| {
-        // Outlets: lower by more than `still`, weighted by slope; the head may fall to a cell still to come (or to its
-        // own bed), and half way to one passed. Outlets much less steep than the steepest get nothing.
-        let (hd, zi, es) = (head(q, i), z[i], start[i] as usize..start[i + 1] as usize);
-        let (mut out, mut wsum, mut rmax, mut qmax) = ([(0.0, 0.0); 8], 0.0, 0.0_f64, 0.0_f64);
-        for (e, o) in es.clone().zip(out.iter_mut()) {
-            let (j, dh) = (other[e] as usize, hd - head(q, other[e] as usize));
-            if hd > zi && dh > ph.still {
-                *o = (dh / dist[link[e] as usize], if order.before(j, i) { 0.5 * dh } else { hd - head(q, j).max(zi) });
-                (wsum, rmax, qmax) = (wsum + o.0, rmax.max(o.1), qmax.max(o.0));
-            }
-        }
-        for o in out.iter_mut().filter(|o| o.0 > 0.0 && o.0 < ph.split * qmax) {
-            (wsum, o.0) = (wsum - o.0, 0.0);
-        }
-        // The liquid over the pores (all of it), up to how far the head may fall, shared by weight.
-        let lvol = q[i] * v;
-        if wsum <= 0.0 || lvol <= 0.0 {
-            return;
-        }
-        let x = lvol.min(area * rmax) / wsum;
-        let vols = out.map(|o| (x * o.0).min(area * o.1));
-        let qsum: f64 = vols.iter().sum();
-        let part = (qsum / lvol).min(1.0);
-        share.iter_mut().zip(&vols).for_each(|(s, &vol)| *s = part * vol / qsum);
-    });
-
-    // The same amount to 1e-12 of it, or to the rounding of the heads: a share is taken from a difference of heads
-    // (a sheet on high ground leaves by the drop of its head to its bed), known to a few EPSILON x the highest head.
-    let top = (0..n).map(|i| head(&q0, i).abs()).fold(0.0, f64::max);
-    let mut moved = 0;
-    for i in 0..n {
-        let (s, d) = (sweep[i], q[i]);
-        let tol = 1e-12 * s.abs().max(d.abs()) + 4.0 * f64::EPSILON * top * area / v;
-        assert!((s - d).abs() <= tol, "cell {i}: the sweep leaves {s} mol, the pass {d}");
-        moved += ((d - q0[i]).abs() > 0.01 * q0[i]) as usize;
-        let net: f64 = (start[i] as usize..start[i + 1] as usize).map(|e| if a[link[e] as usize] as usize == i { -flux[link[e] as usize] } else { flux[link[e] as usize] }).sum();
-        assert!((q0[i] + net - d).abs() <= 1e-12 * q0[i].max(d), "cell {i}: the fluxes bring {net} mol, it changed by {}", d - q0[i]);
-    }
-    assert!(moved > n / 4, "only {moved} of {n} cells changed");
-    let (before, after) = (q0.iter().sum::<f64>(), q.iter().sum::<f64>());
-    assert!((after - before).abs() <= 1e-14 * before, "the pass holds {after} mol of {before}");
 }
 
 /// Rain is the same whether it falls at once or in 4 parts, each followed by a pass, when the rule is linear in the
@@ -374,13 +281,16 @@ fn downhill_one_rain_in_one_pass_or_in_parts() {
     };
     let rain: Vec<f64> = (0..n).map(|i| 1.0 + (i * 37 % 11) as f64).collect();
     let total: f64 = rain.iter().sum();
-    let (mut whole, mut whole_flux) = (rain.clone(), vec![0.0; a.len()]);
-    downhill::pass(&order, &adj, &mut whole, &mut whole_flux, rule);
-    let (mut parts, mut flux, mut part_flux) = (vec![0.0; n], vec![0.0; a.len()], vec![0.0; a.len()]);
+    // What crossed each link, added up from the crossings of a pass (one row).
+    let add = |flux: &mut [f64], c: &Crossed| c.links.iter().zip(&c.amount).for_each(|(&l, m)| flux[l as usize] += m);
+    let (mut whole, mut whole_flux, mut crossed) = (rain.clone(), vec![0.0; a.len()], Crossed::default());
+    downhill::pass(&order, &adj, &mut whole, &mut crossed, rule);
+    add(&mut whole_flux, &crossed);
+    let (mut parts, mut flux) = (vec![0.0; n], vec![0.0; a.len()]);
     for _ in 0..4 {
         parts.iter_mut().zip(&rain).for_each(|(q, r)| *q += r / 4.0);
-        downhill::pass(&order, &adj, &mut parts, &mut part_flux, rule);
-        flux.iter_mut().zip(&part_flux).for_each(|(f, p)| *f += p);
+        downhill::pass(&order, &adj, &mut parts, &mut crossed, rule);
+        add(&mut flux, &crossed);
     }
     let sinks = (0..n).filter(|&i| (start[i]..start[i + 1]).all(|e| z[other[e as usize] as usize] >= z[i])).count();
     assert!(sinks < n / 2 && whole.iter().filter(|&&q| q > 1e-12 * total).count() == sinks, "only the sinks hold liquid");

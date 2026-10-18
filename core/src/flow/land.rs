@@ -3,7 +3,6 @@
 //! conducted sideways between nodes (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
-use crate::grid::Grid;
 use crate::solve::spread::{Net, Spread};
 use crate::store::{apply, Class, LinkFlux};
 use crate::units::{MAX_SUBSTANCES, T_FLOOR};
@@ -64,16 +63,20 @@ pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
 }
 
 impl Scratch {
-    /// Put `m` mol of `k` into ground node `i` (negative `m`: take), with its heat capacity, the
-    /// fusion enthalpy it holds there (`fusion`), and the rise of the surface. The caller moves the heat.
+    /// Put `m` mol of `k` into ground node `i` (negative `m`: take), and `note` it. The caller moves the heat.
     #[inline]
     pub(super) fn put(&mut self, ground: &mut [f64], k: usize, i: usize, m: f64) {
         if m == 0.0 {
             return;
         }
-        let (n, p) = (self.cap.len(), self.sp[k]);
-        ground[k * n + i] += m;
-        self.cap[i] += m * p.cp;
+        ground[k * self.cap.len() + i] += m;
+        self.note(k, i, m);
+    }
+    /// Ground node `i` gained `m` mol of `k` (negative `m`: lost): its heat capacity, the fusion enthalpy it holds there
+    /// (`fusion`), and the rise of the surface.
+    #[inline]
+    pub(super) fn note(&mut self, k: usize, i: usize, m: f64) {
+        self.cap[i] += m * self.sp[k].cp;
         self.latent[i].held += self.fusion(k, i, m);
         settle(self, k, i, m);
     }
@@ -229,11 +232,4 @@ pub(super) fn stand(s: &Scratch, i: usize) -> f64 {
 pub(super) fn table(s: &Scratch, i: usize, por: f64) -> f64 {
     let full = s.head[i] - s.z[i] >= s.pd[i];
     if full { s.head[i] - s.pd[i] } else { s.z[i] - s.pd[i] / por + (s.head[i] - s.z[i]) / por }
-}
-
-/// Darcy's law between two cells along `d`: the volume through their side in `dt`, m³, for a
-/// conductivity times depth filled `kd` (m²/s) and a fall `dh` of the table between them.
-#[inline]
-pub(super) fn darcy(kd: f64, grid: &Grid, d: (i32, i32), dh: f64, dt: f64) -> f64 {
-    kd * grid.cell_m * dh / grid.dist(d) * dt
 }

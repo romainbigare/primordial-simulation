@@ -578,6 +578,31 @@ fn liquid_carries_and_breaks_at_the_measured_yield_per_joule() {
     assert!((per_j / yield_per_j - 1.0).abs() < 0.2, "{per_j}");
 }
 
+/// Liquid runs down the cells in the order of their heads in one pass: rain on bare land (no pores, nothing sinking)
+/// more than `FAR` cells from the low ground under 0 m reaches it in one liquid step, where a step from cell to cell
+/// would take it no more than one cell and bring it none; the pits of the island keep the rest (they fill and spill over
+/// the following steps). Matter and energy are kept.
+#[test]
+fn rain_crosses_the_land_in_one_step() {
+    const FAR: usize = 3;
+    let low_after = |rain: f64| {
+        let mut w = worldgen::new_world(1, 32, 32);
+        (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap) = (0.0, 0.0, 0.0);
+        let (n, area) = (w.grid.n(), w.grid.area());
+        let low: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) < 0.0).collect();
+        let apart = |i: usize, j: usize| (w.grid.xy(i).0.abs_diff(w.grid.xy(j).0)).max(w.grid.xy(i).1.abs_diff(w.grid.xy(j).1));
+        let far: Vec<usize> = (0..n).filter(|&i| low.iter().all(|&j| apart(i, j) > FAR)).collect();
+        far.iter().for_each(|&i| pour(&mut w, i, rain * area));
+        let books = Books::now(&w);
+        pcore::flow::step(&mut w, LIQUID_STEP);
+        books.assert_within(&w, 1e-12, 1e-9);
+        (low.iter().map(|&i| liquid_m3(&w, i)).sum::<f64>(), rain * area * far.len() as f64)
+    };
+    let ((wet, fell), (dry, _)) = (low_after(0.05), low_after(0.0));
+    println!("{:.1}% of the rain on the land far from the low ground reached it in one step", 100.0 * (wet - dry) / fell);
+    assert!(fell > 0.0 && wet - dry > 0.1 * fell, "{} of {fell} m³ reached the low ground", wet - dry);
+}
+
 /// A small island, ten years: the land loses rock (the rock-making solids of its loose ground and bed, over its
 /// cells) at the real rate of denudation, 0.01 to 1 mm a year.
 #[test]

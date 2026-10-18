@@ -120,35 +120,41 @@ amounts now).
   frozen or all melted. Each substance melts at its own melting point **in that node**, lowered
   by what is dissolved in its liquid (the freezing law, 2.5). The plateaus are passed in the
   order of those points.
-- **Deep store.** Under the loose ground lies a store in the bed (`World::deep`): the weathered
-  zone, `bed_depth` deep, with `bed_porosity` of it as pore space. Bodies and Change do not
+- **Deep store.** Under the loose ground lies a store in the bed (`World::deep`, the store's `Class::Deep`): the
+  weathered zone, `bed_depth` deep, with `bed_porosity` of it as pore space. Bodies and Change do not
   reach it.
 - **Land** (`World::is_land`): a cell whose solid surface is above 0 m. This one rule is used
   everywhere (soil, founders, the tape).
 
 ### 1.2 Liquid
 
-`flow::liquid`, one ordered sweep over the cells, from high to low.
+`flow::liquid`, every `flow_days`: first the stores drain to the channels (`flow::drain::springs`), then what may run
+off moves down the cells in one pass (`solve::downhill`), then the liquid under the surface moves
+(`flow::drain::under`). Every move is booked by the store (`store::apply`): link fluxes over the links of the cells,
+and over the vertical links between each ground node and its store.
 
 - **Pores first.** The loose ground has pore space: `porosity` × the volume of its loose solids.
   A cell's liquid fills the pores first. Only the liquid above them **stands** and has a head
   (`flow::land::stand`).
-- **Running off.** Standing liquid runs to lower neighbours, by the head (height of the ground
-  plus the liquid), to every neighbour at least `split` as steep as the steepest one. A head
-  difference under `still` does not move.
-- **Pore water.** The liquid in the pores flows by **Darcy's law**: flow = `seep` × slope of the
-  liquid table × the thickness of ground it fills × the width of the edge. It goes to the
-  neighbour with the lower table, and never more than half way to a level table
-  (`flow::land::table`). Only what the pores hold over their field capacity (`field`) flows;
-  the rest is held against gravity.
+- **Running off.** The cells are ordered by the head of what may run off, highest first
+  (`downhill::Order`, renewed every liquid step), and one pass down that order moves it: each cell sends to every
+  lower neighbour (all 8) at least `split` as steep as the steepest one, by slope; a head difference under `still`
+  does not move. Its head falls no further than to a neighbour still to come (or to its own bed), and half way to
+  one already passed, so heads never cross. Liquid can cross the map in one step while depressions fill and spill.
+- **Pore water.** The liquid in the pores flows by **Darcy's law** across the borders of cells (not across corners),
+  by one implicit step of `solve::spread`: the potential is the liquid table (`flow::land::table`), the capacity
+  `porosity` × area per metre of head (the area where the pores are full), and a link passes `seep` × the
+  saturated thickness of its higher end × the border's width / the distance. Pores at or under their field
+  capacity (`field`) hold their liquid against gravity and give none.
 - **Channels inside a cell.** Real land drains to small channels a few hundred metres apart.
   So the loose ground above its field capacity and the deep store also drain by Darcy's law down
   the slope of the cell, over a hillslope of `hill` metres, into the liquid that runs off. A node
   under deep liquid has no slope and does not drain this way.
-- **Drainage down** (`flow::drain`). Liquid above field capacity sinks into the deep store (at
-  most `seep` per second, never more than the node holds). The stores flow to their neighbours
-  by Darcy's law (`bed_seep`), all computed from the stores as they are before the step, so no
-  direction goes first. Liquid that reaches a full store comes out in that cell (a spring).
+- **The deep store** is the lower layer of each cell's stack (`space::Stack`), joined to the ground node by a
+  vertical link (`flow::drain`). Down it, liquid above field capacity sinks into the store (at most `seep` per
+  second, never more than the store has room for); up it, the store drains to the channels (a spring) and gives
+  back all it holds over its room. The stores flow to their neighbours by Darcy's law (`bed_seep` × the depth they
+  fill), in the same `spread` as the pores.
 - **What goes with the liquid.** A move takes its share of every liquid and of what is
   dissolved in it (salts, dissolved gases), with its heat. A salt is written in the data as a
   liquid that never boils (substances 23 and 24): it goes with the liquid by its share, and
@@ -164,9 +170,10 @@ air nodes.
 ### 1.3 Erosion and creep
 
 Moving liquid loses energy (its lost head). That energy does work where it is lost
-(`flow::liquid`, every `WORK_MONTHS` months for all the time since):
+(`flow::liquid`, every `WORK_MONTHS` months for all the time since), in the same pass as the liquid:
 
-- **Carrying.** It carries loose solids: `carry` m³ per J. They settle where the flow slows.
+- **Carrying.** It carries loose solids: `carry` m³ per J. The load leaves a cell in the share the liquid leaves it,
+  so it settles where the flow slows (in pools and lakes), and what is over the capacity drops.
 - **Wear.** It breaks bonded bed into loose ground: `wear` m³ per J, divided by the bed's
   strength.
 - Bodies on a cell hold the ground: they cut carrying and creep by 1 / (1 + their mass per

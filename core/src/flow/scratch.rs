@@ -5,7 +5,7 @@ use super::air;
 use super::land::NONE;
 use super::range;
 use crate::chem::Chemistry;
-use crate::space::square::DIRS;
+use crate::solve::downhill::Order;
 use crate::World;
 use serde::{Deserialize, Serialize};
 
@@ -153,19 +153,9 @@ pub struct Scratch {
     /// Condensed on each ground node in this exchange, mol.
     #[serde(skip)]
     pub(super) rain: Vec<f64>,
-    /// Cells by head, highest first: the order of the liquid sweep (`order_key`).
-    pub(super) order: Vec<u64>,
-    /// Neighbours of each ground node along `DIRS` (`u32::MAX` off the map).
+    /// Cells by the head of the liquid that may run off, highest first: the order of the liquid's pass (`liquid`).
     #[serde(skip)]
-    pub(super) nbr: Vec<[u32; 8]>,
-    /// The liquid sweep has passed this node.
-    #[serde(skip)]
-    pub(super) done: Vec<bool>,
-    /// Loose solids carried by liquid, mol, [cell * carried kinds + kind], and their heat, J.
-    #[serde(skip)]
-    pub(super) sed: Vec<f64>,
-    #[serde(skip)]
-    pub(super) sed_e: Vec<f64>,
+    pub(super) order: Order,
     /// Volume of loose solid able to creep, weighted by softness, m³.
     #[serde(skip)]
     pub(super) mob: Vec<f64>,
@@ -294,7 +284,6 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     s.fixed = s.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax + T_MARGIN && !up(k)).collect();
     s.vary = s.loose.iter().copied().filter(|k| !s.fixed.contains(k)).collect();
     s.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
-    s.order.clear();
     s.bedk = (0..ns).filter(|&k| any(&w.bed, n, k)).collect();
     let gas = (0..ns).filter(|&k| any(&w.air, na, k) || (s.loose.contains(&k) && up(k))).collect();
     s.stale |= gas != s.gas;
@@ -368,13 +357,9 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
         .unzip();
 }
 
-/// Space used only within a call, and the neighbour table (not saved).
+/// Space used only within a call (not saved).
 pub(super) fn space(w: &World, s: &mut Scratch) {
     let (n, na) = (w.grid.n(), w.grid.na());
-    s.nbr = (0..n).map(|i| DIRS.map(|d| w.grid.step(i, d).map_or(u32::MAX, |j| j as u32))).collect();
-    for v in [&mut s.rain, &mut s.sed_e, &mut s.mob] {
-        *v = vec![0.0; n];
-    }
-    s.node_tmp = vec![0.0; na];
-    (s.done, s.cloud) = (vec![false; n], vec![[0.0; 2]; na]);
+    (s.rain, s.mob) = (vec![0.0; n], vec![0.0; n]);
+    (s.node_tmp, s.cloud) = (vec![0.0; na], vec![[0.0; 2]; na]);
 }

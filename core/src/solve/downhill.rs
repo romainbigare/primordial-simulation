@@ -63,33 +63,51 @@ impl Order {
     }
 }
 
-/// One pass down `order`. `q` holds rows of amounts that move together, one value per cell in each row
-/// (`q[k * cells + i]`). At each cell `i` in turn, `rule(i, q, share)` says which share of what `i` holds now leaves
+/// What crossed the links in a pass, crossing by crossing: the link of each, `links[c]`, and what it carried of each
+/// row, `amount[c * rows + k]`, + from the link's cell `a` to the other. A link may cross more than once.
+#[derive(Clone, Debug, Default)]
+pub struct Crossed {
+    pub links: Vec<u32>,
+    pub amount: Vec<f64>,
+}
+
+/// One pass down `order`. `q` holds rows of amounts that move together, the rows of each cell side by side
+/// (`q[i * rows + k]`). At each cell `i` in turn, `rule(i, q, share)` says which share of what `i` holds now leaves
 /// along each of its entries in `adj` (`share` has one value per entry, all 0 on entry, summing to at most 1); the
 /// rule may read the amounts of every cell and change those of `i` before they leave. Each row then moves by those
 /// shares (no more than is left, so rounding never takes a cell below zero): what one cell loses another gains, and
-/// `flux[k * links + l]` (zeroed first) gets what crossed link `l`, + from its cell `a` to the other.
-pub fn pass(order: &Order, adj: &Adjacency, q: &mut [f64], flux: &mut [f64], mut rule: impl FnMut(usize, &mut [f64], &mut [f64])) {
-    let (n, nl) = (order.cells.len(), adj.a.len());
+/// `crossed` (emptied first) gets what crossed each link.
+pub fn pass(order: &Order, adj: &Adjacency, q: &mut [f64], crossed: &mut Crossed, mut rule: impl FnMut(usize, &mut [f64], &mut [f64])) {
+    let n = order.cells.len();
     let rows = q.len() / n.max(1);
     let most = adj.start.windows(2).map(|s| (s[1] - s[0]) as usize).max().unwrap_or(0);
-    let mut share = vec![0.0; most];
-    flux.fill(0.0);
+    let (mut share, mut out) = (vec![0.0; most], Vec::with_capacity(most));
+    crossed.links.clear();
+    crossed.amount.clear();
     for &c in &order.cells {
         let i = c as usize;
         let (e0, e1) = (adj.start[i] as usize, adj.start[i + 1] as usize);
         let share = &mut share[..e1 - e0];
         share.fill(0.0);
         rule(i, q, share);
-        for k in 0..rows {
-            let (held, mut gone) = (q[k * n + i], 0.0);
-            for (e, &f) in (e0..e1).zip(share.iter()).filter(|p| *p.1 > 0.0) {
-                let (l, j, m) = (adj.link[e] as usize, adj.other[e] as usize, (held * f).min(held - gone));
-                q[k * n + j] += m;
-                flux[k * nl + l] += if adj.a[l] as usize == i { m } else { -m };
+        // The entries it sends along: the other cell, and the sign of the link's flux.
+        out.clear();
+        out.extend((e0..e1).zip(share.iter()).filter(|p| *p.1 > 0.0).map(|(e, &f)| {
+            let l = adj.link[e];
+            crossed.links.push(l);
+            (adj.other[e] as usize, f, if adj.a[l as usize] as usize == i { 1.0 } else { -1.0 })
+        }));
+        let first = crossed.amount.len();
+        crossed.amount.resize(first + out.len() * rows, 0.0);
+        for k in (0..rows).filter(|_| !out.is_empty()) {
+            let (held, mut gone) = (q[i * rows + k], 0.0);
+            for (o, &(j, f, sign)) in out.iter().enumerate() {
+                let m = (held * f).min(held - gone);
+                q[j * rows + k] += m;
+                crossed.amount[first + o * rows + k] = sign * m;
                 gone += m;
             }
-            q[k * n + i] = held - gone;
+            q[i * rows + k] = held - gone;
         }
     }
 }
