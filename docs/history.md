@@ -451,6 +451,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   `flow::Scratch` keeps no copy of the cell area or the air node of each cell. The square map stays for what is about
   its layout (`docs/laws.md`). `cli/tests/contract.rs` covers all of `core/src`, with each exempt file named. Same
   results bit for bit (golden unchanged).
+- D10 (speed), `store::apply`: before a call books its link fluxes it keeps the numbers each column may change, one
+  copy of each span of nodes (`Giver::keep`); the fast path sets them back from it when one is short, and the wake
+  compares against it (the value kept before each change and the bit per amount go). The sum of all that passes
+  through a number below zero runs only over the columns that may change one. Same results (golden unchanged);
+  Flow at 64 x 64 without life 15% fewer instructions.
 
 **Owner's decisions after Phase A**
 

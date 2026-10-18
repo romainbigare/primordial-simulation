@@ -88,11 +88,13 @@ impl Slot {
 pub(super) type Sums = [Vec<[f64; 2]>; ARRAYS];
 
 /// One column of a link flux: what crosses each link, from array `arr[0]` (`ARRAYS`) at its `a` end to `arr[1]` at its
-/// `b` end, where the number of node `i` is at `at[end] + i`: `by_link[0]` leaves the one, `by_link[1]` enters the other.
+/// `b` end, where the number of node `i` (of `nodes[end]`) is at `at[end] + i`: `by_link[0]` leaves the one, `by_link[1]`
+/// enters the other.
 #[derive(Clone, Copy)]
 pub(super) struct Column<'a> {
     pub(super) arr: [usize; 2],
     at: [usize; 2],
+    nodes: [usize; 2],
     by_link: [&'a [f64]; 2],
 }
 
@@ -122,10 +124,10 @@ impl<'a> LinkFlux<'a> {
         let (c, links, mol) = (self.class.map(|c| c as usize), self.a.len(), self.mol);
         let amount = |q: usize, k: u16| {
             let m = &mol[q * links..(q + 1) * links];
-            Column { arr: c.map(|c| 2 * c), at: c.map(|c| k as usize * len[c]), by_link: [m, m] }
+            Column { arr: c.map(|c| 2 * c), at: c.map(|c| k as usize * len[c]), nodes: c.map(|c| len[c]), by_link: [m, m] }
         };
         let into = if lifted.is_empty() { self.heat } else { lifted };
-        let heat = (!self.heat.is_empty()).then_some(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], by_link: [self.heat, into] });
+        let heat = (!self.heat.is_empty()).then_some(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], nodes: c.map(|c| len[c]), by_link: [self.heat, into] });
         self.ks.iter().enumerate().map(|(q, &k)| amount(q, k)).chain(heat).collect()
     }
 }
@@ -170,6 +172,14 @@ macro_rules! with_ends {
 pub(super) use with_ends;
 
 impl Column<'_> {
+    /// The numbers of end `end` it may change: those of its nodes in its array.
+    fn span(&self, end: usize) -> std::ops::Range<usize> {
+        self.at[end]..self.at[end] + self.nodes[end]
+    }
+    /// Whether it may change number `s`.
+    fn reaches(&self, s: Slot) -> bool {
+        (0..2).any(|end| s.arr == self.arr[end] && self.span(end).contains(&s.at))
+    }
     /// What link `l`, from node `a` to node `b`, changes in it: what leaves `a` enters `b`.
     #[inline(always)]
     pub(super) fn deltas(&self, l: usize, a: u32, b: u32) -> [(Slot, f64); 2] {
@@ -194,15 +204,26 @@ impl Column<'_> {
     }
 }
 
+/// The numbers `at..at + len` of array `arr` (`ARRAYS`): those of the nodes of one class in one of its arrays.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Span {
+    arr: usize,
+    at: usize,
+    len: usize,
+}
+
+/// The numbers `Giver::flush` looks at together for a node to wake.
+const WAKE_CHUNK: usize = 64;
+
 /// What gives each change its scaled amount: the counts of what scaling left, and the sleep of the nodes it wakes.
 pub(super) struct Giver<'w> {
     pub(super) wake_share: f64,
     pub(super) scaled: &'w mut [f64; 2],
-    /// Per class, a bit for each amount a link flux changed in the call (none between calls); those amounts, as they
-    /// were before their first change, in that order; and the amounts a move or a transform alone brought more than
-    /// `wake_share` of what they held
-    pub(super) marks: &'w mut [Vec<u64>; BOOKED],
-    pub(super) first: &'w mut Vec<(Slot, f64)>,
+    /// The spans the call's link fluxes may change, each once, and their numbers as they were before the call, one span
+    /// after another (`keep`); and the amounts a move or a transform alone brought more than `wake_share` of what they
+    /// held
+    pub(super) spans: &'w mut Vec<Span>,
+    pub(super) kept: &'w mut Vec<f64>,
     pub(super) woken: &'w mut Vec<Slot>,
     /// Per class, whether a node of it sleeps (none of a class whose nodes all run, or never sleep, can be woken)
     pub(super) asleep: [bool; BOOKED],
@@ -212,22 +233,26 @@ pub(super) struct Giver<'w> {
     pub(super) len: [usize; BOOKED],
 }
 
-/// Bits in a word of `Giver::marks`.
-pub(super) const MARK_BITS: usize = 64;
-
 impl Giver<'_> {
-    /// Changes number `s`, `v`, by the change `x` of a link flux scaled by `f`, noting what an amount held before its
-    /// first change (`flush`).
-    #[inline(always)]
-    pub(super) fn give(&mut self, v: &mut f64, s: Slot, x: f64, f: f64) {
-        if s.unit() == 0 && self.asleep[s.arr / 2] {
-            let (word, bit) = (&mut self.marks[s.arr / 2][s.at / MARK_BITS], 1 << (s.at % MARK_BITS));
-            if *word & bit == 0 {
-                *word |= bit;
-                self.first.push((s, *v));
+    /// Keeps the numbers each column of `columns` may change as they are now (`spans`, `kept`), before the call changes
+    /// them.
+    pub(super) fn keep(&mut self, books: &[&mut [f64]; ARRAYS], columns: &[Vec<Column>]) {
+        for (col, end) in columns.iter().flatten().flat_map(|c| [(c, 0), (c, 1)]) {
+            let (arr, at) = (col.arr[end], col.at[end]);
+            let span = Span { arr, at, len: col.nodes[end] };
+            if !self.spans.contains(&span) {
+                self.spans.push(span);
+                self.kept.extend_from_slice(&books[arr][at..at + span.len]);
             }
         }
-        *v += x * f;
+    }
+    /// Sets the numbers the call's link fluxes may change back to what they were before it (`keep`).
+    pub(super) fn restore(&self, books: &mut [&mut [f64]; ARRAYS]) {
+        let mut was = &self.kept[..];
+        for s in self.spans.iter() {
+            books[s.arr][s.at..s.at + s.len].copy_from_slice(&was[..s.len]);
+            was = &was[s.len..];
+        }
     }
     /// Changes number `s`, `v`, by the change `x` of a move or a transform scaled by `f`, and notes its node to wake
     /// when that alone brings it more than `wake_share` of what it held of an amount (`flush`).
@@ -249,19 +274,27 @@ impl Giver<'_> {
             self.scaled[s.unit()] -= x * (1.0 - f);
         }
     }
-    /// Wakes each node the call's link fluxes brought, net, more than `wake_share` of what it held of an amount (`books`
-    /// as the call leaves them; what only passes through a node, in by one link and out by another, wakes nothing), and
-    /// each node a move or a transform did (`give_item`). Heat wakes no node: a node's temperature changes at every
-    /// step (radiation, the exchange with the air), and its own alarm bounds how long it reacts at an old one; a node
-    /// that gives all it is asked never sleeps.
+    /// Wakes each node the call brought, net, more than `wake_share` of what it held of an amount its link fluxes may
+    /// change (`books` as the call leaves them against `kept`; what only passes through a node, in by one link and out
+    /// by another, wakes nothing), and each node a move or a transform alone did (`give_item`). Heat wakes no node: a
+    /// node's temperature changes at every step (radiation, the exchange with the air), and its own alarm bounds how long
+    /// it reacts at an old one; a node that gives all it is asked never sleeps.
     pub(super) fn flush(&mut self, books: &[&mut [f64]; ARRAYS]) {
-        for &(s, held) in self.first.iter() {
-            self.marks[s.arr / 2][s.at / MARK_BITS] = 0;
-            if books[s.arr][s.at] - held > self.wake_share * held.max(0.0) {
-                self.woken.push(s);
+        let (mut was, share) = (&self.kept[..], self.wake_share);
+        let woke = |(&now, &held): (&f64, &f64)| now - held > share * held.max(0.0);
+        for s in self.spans.drain(..) {
+            if s.arr % 2 == 0 && self.asleep[s.arr / 2] {
+                // A few nodes wake: each chunk is first looked at as a whole.
+                for (c, (now, held)) in books[s.arr][s.at..s.at + s.len].chunks(WAKE_CHUNK).zip(was[..s.len].chunks(WAKE_CHUNK)).enumerate() {
+                    if now.iter().zip(held).fold(false, |any, e| any | woke(e)) {
+                        let at = s.at + c * WAKE_CHUNK;
+                        self.woken.extend(now.iter().zip(held).enumerate().filter(|e| woke(e.1)).map(|e| Slot { arr: s.arr, at: at + e.0 }));
+                    }
+                }
             }
+            was = &was[s.len..];
         }
-        self.first.clear();
+        self.kept.clear();
         for s in self.woken.drain(..) {
             let c = s.arr / 2;
             let (class, i) = (Class::ALL[c], s.at % self.len[c]);
@@ -270,46 +303,39 @@ impl Giver<'_> {
     }
 }
 
-/// Each number the columns of `fluxes` change, with its change, as `f(number, slot, change)`: column by column and link
-/// by link in their order (the order in which they are given), or from the last back (`BACK`).
+/// Books column `col` of flux `x` unscaled into its numbers `v`, noting each that falls below zero on the way in `low`,
+/// once (by `n`), but of a node that gives all it is asked.
 #[inline(always)]
-fn each_end<const BACK: bool>(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &mut [&mut [f64]; ARRAYS], mut f: impl FnMut(&mut f64, Slot, f64)) {
-    let at = |k: usize, n: usize| if BACK { n - 1 - k } else { k };
-    for xi in 0..fluxes.len() {
-        let (x, cols) = (&fluxes[at(xi, fluxes.len())], &columns[at(xi, fluxes.len())]);
-        for ci in 0..cols.len() {
-            let col = cols[at(ci, cols.len())];
-            with_ends!(col.arr, (books, v) => {
-                for k in 0..x.a.len() {
-                    let l = at(k, x.a.len());
-                    let ds = col.deltas(l, x.a[l], x.b[l]);
-                    for e in 0..2 {
-                        let (s, d) = ds[at(e, 2)];
-                        f(v.at(at(e, 2), s.at), s, d);
-                    }
-                }
-            })
+fn book_column(x: &LinkFlux, col: &Column, (v, n): (&mut impl Ends<f64>, &mut impl Ends<[f64; 2]>), low: &mut Vec<Slot>) {
+    let mine = col.arr.map(|a| a < BOUNDARY_ARRAYS);
+    let mut change = |end: usize, at: usize, d: f64| {
+        let v = v.at(end, at);
+        *v += d;
+        if *v < 0.0 && mine[end] && n.at(end, at)[0] == 0.0 {
+            n.at(end, at)[0] = 1.0;
+            low.push(Slot { arr: col.arr[end], at });
         }
+    };
+    let [out, into] = col.by_link;
+    for (((&a, &b), &o), &i) in x.a.iter().zip(x.b).zip(out).zip(into) {
+        change(0, col.at[0] + a as usize, -o);
+        change(1, col.at[1] + b as usize, i);
     }
 }
 
 /// The fast path of `apply` for link fluxes alone: books them unscaled, in the order in which the careful path gives
-/// them when nothing is short, keeping the value of each number before each change (`saved`); then looks at the
-/// numbers that ended below zero (`low`; a boundary node and the potential may). One below the rounding of all that passed through it (`NET_ROUNDING`) is
-/// short: then every number is set back to what it held and it returns false. Else the rounding below zero is set to
-/// zero and counted in `rounded`, as the careful path does, so the result is the same.
-pub(super) fn book_first(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &mut [&mut [f64]; ARRAYS], giver: &mut Giver, (saved, net, low): (&mut Vec<f64>, &mut Sums, &mut Vec<Slot>), rounded: &mut [f64; 2]) -> bool {
-    saved.clear();
+/// them when nothing is short; then looks at the numbers that ended below zero (`low`; a boundary node and the
+/// potential may). One below the rounding of all that passed through it (`NET_ROUNDING`) is short: then every number is
+/// set back to what it held (`Giver::restore`) and it returns false. Else the rounding below zero is set to zero and
+/// counted in `rounded`, as the careful path does, so the result is the same.
+pub(super) fn book_first(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &mut [&mut [f64]; ARRAYS], giver: &Giver, (net, low): (&mut Sums, &mut Vec<Slot>), rounded: &mut [f64; 2]) -> bool {
     low.clear();
     // Each number that falls below zero on the way, once (marked in `net`): those that end there are among them.
-    each_end::<false>(fluxes, columns, books, |v, s, d| {
-        saved.push(*v);
-        giver.give(v, s, d, 1.0);
-        if *v < 0.0 && s.arr < BOUNDARY_ARRAYS && net[s.arr][s.at][0] == 0.0 {
-            net[s.arr][s.at][0] = 1.0;
-            low.push(s);
+    for (x, cols) in fluxes.iter().zip(columns) {
+        for col in cols {
+            with_ends!(col.arr, (books, v), (net, n) => book_column(x, col, (&mut v, &mut n), low))
         }
-    });
+    }
     low.retain(|s| {
         let below = books[s.arr][s.at] < 0.0;
         if !below {
@@ -320,22 +346,26 @@ pub(super) fn book_first(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &m
     if low.is_empty() {
         return true;
     }
-    // All that passed through each number that ends below zero.
-    each_end::<false>(fluxes, columns, books, |_, s, d| {
-        let m = &mut net[s.arr][s.at];
-        m[1] += if m[0] != 0.0 { d.abs() } else { 0.0 };
-    });
+    // All that passed through each number that ends below zero, from the columns that may change one.
+    for (x, cols) in fluxes.iter().zip(columns) {
+        for col in cols.iter().filter(|c| low.iter().any(|&s| c.reaches(s))) {
+            with_ends!(col.arr, (net, n) => {
+                for (l, (&a, &b)) in x.a.iter().zip(x.b).enumerate() {
+                    for (end, (s, d)) in col.deltas(l, a, b).into_iter().enumerate() {
+                        let m = n.at(end, s.at);
+                        m[1] += if m[0] != 0.0 { d.abs() } else { 0.0 };
+                    }
+                }
+            })
+        }
+    }
     let mut short = false;
     for s in low.iter() {
         let [_, all] = std::mem::take(&mut net[s.arr][s.at]);
         short |= books[s.arr][s.at] < -NET_ROUNDING * all;
     }
     if short {
-        let mut i = saved.len();
-        each_end::<true>(fluxes, columns, books, |v, _, _| {
-            i -= 1;
-            *v = saved[i];
-        });
+        giver.restore(books);
         return false;
     }
     low.sort_unstable();
@@ -344,4 +374,3 @@ pub(super) fn book_first(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &m
     }
     true
 }
-
