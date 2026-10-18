@@ -128,6 +128,8 @@ pub struct Chemistry {
 struct Derived {
     /// `Chemistry::minerals`
     minerals: Vec<(usize, f64)>,
+    /// `Chemistry::air_cp`
+    air_cp: f64,
 }
 
 impl Chemistry {
@@ -144,7 +146,7 @@ impl Chemistry {
 
     /// What follows from the chemistry (`Derived`), made at the first call.
     fn derived(&self) -> &Derived {
-        self.derived.get_or_init(|| Derived { minerals: self.find_minerals() })
+        self.derived.get_or_init(|| Derived { minerals: self.find_minerals(), air_cp: self.find_air_cp() })
     }
 
     /// Element counts of a reaction side.

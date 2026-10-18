@@ -1,7 +1,7 @@
 //! Flow and Change on a body over the time since its last update (`physics`): the light it caught, the gas it exchanged
 //! and its catalysed reactions, the liquids it lost and soaked up, and its heat to the ground.
 
-use super::exchange::{breath, film, surface, through};
+use super::exchange::{breath, film, surface, through, Film};
 use super::live::{LiveTmp, Site};
 use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
@@ -64,10 +64,12 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let c0 = b.heat_cap(chem);
     let th0 = b.thermal(chem, c0);
     let (t0, fusion0) = (th0.t, b.e - c0 * th0.t);
-    let g = surface(chem, cfg, b, mass, s.cover, s.walls, t0, s.tg);
+    // (Its boundary layer is the same for its heat and its breath until its stores change.)
+    let f0 = film(chem, cfg, b, mass, s.cover);
+    let g = surface(cfg, b, mass, &f0, s.walls, t0, s.tg);
     let (caught, lit) = catch_light(w, b, s, leaf);
     let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0 };
-    let reach = gas_pool(w, b, s, mass, tmp);
+    let reach = gas_pool(w, b, s, &f0, tmp);
     let used = react(w, b, rc, tmp, s, &mut h, c0, upkeep_heat);
     settle_gas(w, b, tmp, s, &mut h);
     h.took = store_light(w, slot, b, s, keep, caught, used);
@@ -101,12 +103,12 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
     (caught, caught * reach)
 }
 
-/// The air the body exchanges gas with in this time (`breath`), at the air's shares (none of an empty air node), at most
-/// `MAX_TAKE_SHARE` of each.
-fn gas_pool(w: &World, b: &Body, s: &Site, mass: f64, tmp: &mut LiveTmp) -> f64 {
+/// The air the body of boundary layer `f` exchanges gas with in this time (`breath`), at the air's shares (none of an
+/// empty air node), at most `MAX_TAKE_SHARE` of each.
+fn gas_pool(w: &World, b: &Body, s: &Site, f: &Film, tmp: &mut LiveTmp) -> f64 {
     let (chem, air, na, j) = (&w.chem, &w.air, w.mesh.level(AIR).n(), s.j);
     let tot: f64 = (0..chem.ns()).map(|k| air[k * na + j]).sum();
-    let reach = breath(chem, &w.cfg, b, mass, s.cover, s.days, s.depth);
+    let reach = breath(chem, &w.cfg, b, f, s.days, s.depth);
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..chem.ns() {
@@ -195,7 +197,7 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
     let (g, t0) = (h.g, h.t0);
     let mut moved = false;
     let cpa: f64 = (0..ns).map(|k| tmp.x[k] * chem.subs[k].cp).sum();
-    let wide = film(chem, cfg, b, h.mass, s.cover).0 / cpa.max(1e-9) * dt * s.open * (-s.depth / cfg.phys.gas_depth).exp();
+    let wide = film(chem, cfg, b, h.mass, s.cover).g / cpa.max(1e-9) * dt * s.open * (-s.depth / cfg.phys.gas_depth).exp();
     let (lay, size) = (Layout::of(chem), b.size(chem));
     let mut lost = [0.0f64; MAX_SUBSTANCES];
     for k in 0..ns {
@@ -290,7 +292,7 @@ fn relax_heat(w: &mut World, slot: usize, b: &mut Body, s: &Site, h: &Heat) {
     let (released, ct, e_start) = (heat.max(-g * dt * tg), c + h.c_out, b.e + heat - heat.max(-g * dt * tg));
     let relax = |g: f64| ct * (tg + released / dt / g + (e_start / ct - tg - released / dt / g) * (-g * dt / ct).exp());
     let e1 = relax(g);
-    let e1 = if e1 > ct * h.t0 { relax(surface(chem, cfg, b, h.mass, s.cover, s.walls, e1 / ct, tg)) } else { e1 };
+    let e1 = if e1 > ct * h.t0 { relax(surface(cfg, b, h.mass, &film(chem, cfg, b, h.mass, s.cover), s.walls, e1 / ct, tg)) } else { e1 };
     let give = e1 - b.e - heat + h.lit - h.took;
     let set = heat_keep.get(slot, b.gen) as f64 * dt;
     let pool = heat_pool.get(i).copied().unwrap_or(0.0);

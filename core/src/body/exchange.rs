@@ -5,7 +5,7 @@ use super::Body;
 use crate::bond::{self, Enclosure};
 use crate::chem::Chemistry;
 use crate::math::cube_area;
-use crate::units::{DAY, R_GAS, SIGMA};
+use crate::units::{DAY, SIGMA};
 use crate::World;
 
 impl Body {
@@ -34,8 +34,6 @@ impl Body {
     }
 }
 
-/// Molar heat capacity of an ideal gas of two atoms, J/(mol K): the air's when none is known.
-const DIATOMIC_CP: f64 = 3.5 * R_GAS;
 /// Halvings of the interval in `through`.
 const BISECT_STEPS: usize = 40;
 
@@ -52,41 +50,46 @@ pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
 /// (it is about as warm as the ground). The link through walls around it (`walls`, `bond::enclosure`) is in series with
 /// all of it. A 30 kg member with a coat gene of -1.0 gets 0.8 W/K (Herreid and Kessel 1967 measured 0.94 for fur).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn surface(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64, walls: Option<Enclosure>, t: f64, tg: f64) -> f64 {
-    let ((air, area), coat) = (film(chem, cfg, b, mass, cover), b.conductance(cfg.phys.m_ref, mass));
-    let out = air + radiated(area, t, tg);
-    let out = air + radiated(area, (coat * t + out * tg) / (coat + out), tg);
+pub(super) fn surface(cfg: &crate::Config, b: &Body, mass: f64, f: &Film, walls: Option<Enclosure>, t: f64, tg: f64) -> f64 {
+    let coat = b.conductance(cfg.phys.m_ref, mass);
+    let out = f.g + radiated(f.area, t, tg);
+    let out = f.g + radiated(f.area, (coat * t + out * tg) / (coat + out), tg);
     let g = coat * out / (coat + out);
     walls.map_or(g, |x| 1.0 / (1.0 / g + 1.0 / x.g))
 }
 
-/// The boundary layer of a body's outer surface, W/K, and that surface, m² (`surface`): its skin (through the cover) and
-/// both faces of its light-capture area. Forced convection in the wind near the ground (Campbell and Norman 1998):
+/// The boundary layer of a body's outer surface (`Film`, `surface`): its skin (through the cover) and both faces of its
+/// light-capture area. Forced convection in the wind near the ground (Campbell and Norman 1998):
 /// `forced` x sqrt(`wind_ground` / d) mol/(m² s) x the air's molar heat capacity, d the length of a member, (m1 /
 /// `rho_body`)^(1/3), or of a leaf (`leaf_size`). Free convection is smaller at this wind.
-pub(super) fn film(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64) -> (f64, f64) {
+pub(super) fn film(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64) -> Film {
     let p = &cfg.phys;
     let (leaf, m1, skin) = (b.leaf_area(chem, p), mass / b.n(), b.skin_area(p, mass));
-    let h = |d: f64| p.forced * air_cp(chem) * (p.wind_ground / d).sqrt();
+    let h = |d: f64| p.forced * chem.air_cp() * (p.wind_ground / d).sqrt();
     let still = h((m1 / p.rho_body).cbrt()) * skin;
-    (if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + h(p.leaf_size) * 2.0 * leaf, skin + 2.0 * leaf)
+    let g = if cover > 0.0 { 1.0 / (1.0 / still + cover / (p.shelter * skin)) } else { still } + h(p.leaf_size) * 2.0 * leaf;
+    Film { g, area: skin + 2.0 * leaf, leaf, skin }
 }
 
-/// Molar heat capacity of the starting air, J/(mol K) (`DIATOMIC_CP` if none is known).
-fn air_cp(chem: &Chemistry) -> f64 {
-    let c: f64 = chem.air.iter().zip(&chem.subs).map(|(x, s)| x * s.cp).sum();
-    if c > 0.0 { c } else { DIATOMIC_CP }
+/// The boundary layer of a body's outer surface (`film`).
+#[derive(Clone, Copy)]
+pub(super) struct Film {
+    /// Its heat conductance, W/K, and the surface, m²
+    pub g: f64,
+    pub area: f64,
+    /// Of the body: its light-capture area and its skin, m² (`Body::open_area` is their sum)
+    pub leaf: f64,
+    pub skin: f64,
 }
 
-/// The air a body exchanges gas with in `days`, mol: `Body::open_area` times its pores (the `GAS` gene, mol/(m² day), a
-/// stomatal conductance) in series with the boundary layer of its surface (`film` over the air's molar heat capacity:
-/// the Lewis relation); liquid over it (`depth`) slows it. Its gases and the vapour of its liquids go through it alike;
-/// for the vapour the pores open only as far as it is wet (`closing`).
-#[allow(clippy::too_many_arguments)]
-pub(super) fn breath(chem: &Chemistry, cfg: &crate::Config, b: &Body, mass: f64, cover: f64, days: f64, depth: f64) -> f64 {
-    let ((air, area), gs) = (film(chem, cfg, b, mass, cover), b.k.gas);
-    let gb = air / air_cp(chem) / area.max(1e-12) * DAY;
-    b.open_area(chem, &cfg.phys, mass) * days * (-depth / cfg.phys.gas_depth).exp() * if gs > 0.0 { gs * gb / (gs + gb) } else { 0.0 }
+/// The air a body of boundary layer `f` (`film`) exchanges gas with in `days`, mol: `Body::open_area` times its pores (the
+/// `GAS` gene, mol/(m² day), a stomatal conductance) in series with that boundary layer (over the air's molar heat
+/// capacity: the Lewis relation); liquid over it (`depth`) slows it. Its gases and the vapour of its liquids go through
+/// it alike; for the vapour the pores open only as far as it is wet (`closing`).
+pub(super) fn breath(chem: &Chemistry, cfg: &crate::Config, b: &Body, f: &Film, days: f64, depth: f64) -> f64 {
+    let gs = b.k.gas;
+    let gb = f.g / chem.air_cp() / f.area.max(1e-12) * DAY;
+    (f.leaf + f.skin) * days * (-depth / cfg.phys.gas_depth).exp() * if gs > 0.0 { gs * gb / (gs + gb) } else { 0.0 }
 }
 
 /// What a key liquid of `l` mol loses over an update in which it would lose `e` mol with its pores open, when they open
@@ -124,7 +127,7 @@ pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
 pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
     let i = b.cell as usize;
     let tg = w.t_ground_last(i);
-    surface(&w.chem, &w.cfg, b, mass, cover_of(w, b), bond::enclosure(w, b), t, tg)
+    surface(&w.cfg, b, mass, &film(&w.chem, &w.cfg, b, mass, cover_of(w, b)), bond::enclosure(w, b), t, tg)
 }
 
 /// Heat conductance of radiation between a surface of `area` m² at `t` and the ground at `tg`, W/K: σ (T² + tg²)

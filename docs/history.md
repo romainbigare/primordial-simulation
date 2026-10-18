@@ -538,6 +538,12 @@ The work of `docs/foundation/plan.md`, one line per task.
 - E1 (d), speed: `Chemistry::minerals` is made once, at its first use, and kept beside the chemistry (`Derived`, not
   saved: a chemistry loaded makes it again), not as a new list at every body's shedding and every intake. Same
   results bit for bit (golden unchanged; 64 x 64, seed 1, 20 years: same fingerprint); a body update 1 to 2% faster.
+- E1 (e), speed: what paying needs of the body's air (its depth under liquid, the cover over it, its breath and the
+  air node's sum) is worked out once per state of the body (`pay::Payer`: with its mass and plateau state) and shared by
+  the plan and the paying that follow, not again in each `plan`. The boundary layer (`exchange::Film`) gives its
+  surfaces to `breath`, which no longer works out the capture area and the skin twice, and the body's physics shares
+  it between its heat and its breath; the air's heat capacity is kept with the chemistry (`Chemistry::air_cp`). Same
+  results bit for bit (golden unchanged; 64 x 64, seed 1, 20 years: same fingerprint); a body update about 2% faster.
 
 **Owner's decisions after Phase A**
 

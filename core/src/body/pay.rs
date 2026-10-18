@@ -1,6 +1,6 @@
 //! Upkeep, and paying a cost by running the body's catalysed reactions that breathe, at the rate Change gives them.
 
-use super::exchange::{breath, conductance_to_ground, cover_of};
+use super::exchange::{breath, conductance_to_ground, cover_of, film};
 use super::{Body, COPY_MASS, DENATURE, MAX_TAKE_SHARE, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::Melting;
@@ -39,8 +39,36 @@ pub(super) fn breathes(chem: &Chemistry, r: usize, t: f64) -> bool {
 /// Energy the body's reactions can release over `days` at its temperature now, J (the most `pay` could pay). Needs
 /// `prepare`.
 pub fn release(w: &World, b: &Body, days: f64) -> f64 {
-    let (mass, cap) = b.mass_cap(&w.chem);
-    plan(w, b, f64::MAX, days, mass, b.temp_at(&w.chem, cap)).1
+    plan(w, b, f64::MAX, &Payer::of(w, b, days)).1
+}
+
+/// A body about to pay over some days, as its paying sees it (valid until its stores or its heat change): its mass, kg,
+/// where it stands among its melting plateaus (`Body::thermal`), the days, the share of its air node it exchanges gas
+/// with in them (`breath`, at most `MAX_TAKE_SHARE`) and all that node holds, mol.
+pub(crate) struct Payer {
+    pub mass: f64,
+    pub th: Melting,
+    days: f64,
+    share: f64,
+    tot: f64,
+}
+
+impl Payer {
+    /// Body `b` as it stands, paying over `days`. Needs `prepare`.
+    pub(crate) fn of(w: &World, b: &Body, days: f64) -> Payer {
+        let (mass, cap) = b.mass_cap(&w.chem);
+        Payer::at(w, b, days, mass, b.thermal(&w.chem, cap))
+    }
+    /// `of` when its mass and plateau state are known.
+    pub(crate) fn at(w: &World, b: &Body, days: f64, mass: f64, th: Melting) -> Payer {
+        let (chem, i) = (&w.chem, b.cell as usize);
+        let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
+        let (na, j, air) = (w.mesh.level(AIR).n(), w.mesh.up(i, 0, AIR), &w.air);
+        let tot: f64 = (0..chem.ns()).map(|k| air[k * na + j]).sum();
+        let f = film(chem, &w.cfg, b, mass, cover_of(w, b));
+        let share = (breath(chem, &w.cfg, b, &f, days, depth) / tot).min(MAX_TAKE_SHARE);
+        Payer { mass, th, days, share, tot }
+    }
 }
 
 /// Pay `cost` J by running the body's catalysed reactions that release heat and breathe, one after the other as far as
@@ -50,16 +78,14 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    let (mass, cap) = b.mass_cap(&w.chem);
-    let th = b.thermal(&w.chem, cap);
-    spend(w, b, cost, days, b.interval() as f64 * DAY, false, mass, &th) == 0.0
+    b.prepare(&w.chem, &w.cfg.phys);
+    spend(w, b, cost, b.interval() as f64 * DAY, false, &Payer::of(w, b, days)) == 0.0
 }
 
-/// `pay` with the heat released held over `dt` s, for a body of `mass` kg at the plateau state `th0` (`Body::thermal`);
-/// returns what was not paid (with `part` it pays what it can, else all or nothing).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn spend(w: &mut World, b: &mut Body, cost: f64, days: f64, dt: f64, part: bool, mass: f64, th0: &Melting) -> f64 {
-    let left = pay_at(w, b, cost, days, mass, th0.t, part);
+/// `pay` by the payer `p` (body `b` as it stands) with the heat released held over `dt` s; returns what was not paid
+/// (with `part` it pays what it can, else all or nothing).
+pub(crate) fn spend(w: &mut World, b: &mut Body, cost: f64, dt: f64, part: bool, p: &Payer) -> f64 {
+    let (left, mass, th0) = (pay_at(w, b, cost, p, part), p.mass, &p.th);
     // The heat released leaves through its surface (`conductance_to_ground`) over `dt`: the body keeps the share `hold`
     // and the rest goes to the ground. A cost that leaves it colder than it was is not held back.
     let (keep, i) = (b.energy_in(&w.chem, th0), b.cell as usize);
@@ -77,16 +103,13 @@ pub(super) fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
     mean_decay(conductance_to_ground(w, b, mass, t) * dt / b.heat_cap(&w.chem).max(1e-9))
 }
 
-/// How far each reaction of `pay` runs (one entry for each of `Consts::burn`, in its order) to release up to `cost` J, and the energy
-/// released, for a body of `mass` kg at `t`. Each goes at most as far as Change's rate at the body's temperature takes it over `days` (`change::pace`),
-/// its gases the air it exchanges (at most `MAX_TAKE_SHARE` of its air node), its other inputs its own stores. So a cold
-/// body releases little: the cold cost is the rate, not a rule.
-pub(crate) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, t: f64) -> (Vec<f64>, f64) {
-    let (chem, i) = (&w.chem, b.cell as usize);
-    let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
-    let (ns, na, j, air) = (chem.ns(), w.mesh.level(AIR).n(), w.mesh.up(i, 0, AIR), &w.air);
-    let tot: f64 = (0..ns).map(|k| air[k * na + j]).sum();
-    let share = (breath(chem, &w.cfg, b, mass, cover_of(w, b), days, depth) / tot).min(MAX_TAKE_SHARE);
+/// How far each reaction of `pay` runs (one entry for each of `Consts::burn`, in its order) to release up to `cost` J, and
+/// the energy released, by the payer `p`. Each goes at most as far as Change's rate at the body's temperature takes it
+/// over the payer's days (`change::pace`), its gases the air it exchanges (`Payer`), its other inputs its own stores. So a
+/// cold body releases little: the cold cost is the rate, not a rule.
+pub(crate) fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64) {
+    let (chem, na, j, air) = (&w.chem, w.mesh.level(AIR).n(), w.mesh.up(b.cell as usize, 0, AIR), &w.air);
+    let (t, days, share, tot) = (p.th.t, p.days, p.share, p.tot);
     let dry = b.activity(chem, &w.cfg.phys);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; MAX_SUBSTANCES];
@@ -117,14 +140,13 @@ pub(crate) fn plan(w: &World, b: &Body, cost: f64, days: f64, mass: f64, t: f64)
     (ext, got.min(cost))
 }
 
-/// `pay` when the body's mass and temperature are known; returns what was not paid. If `part`, it pays what it can;
-/// else all or nothing. The heat stays in the body, less the latent heat of the gases taken and put out.
-pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, days: f64, mass: f64, t: f64, part: bool) -> f64 {
+/// `pay` by the payer `p`; returns what was not paid. If `part`, it pays what it can; else all or nothing. The heat stays
+/// in the body, less the latent heat of the gases taken and put out.
+pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bool) -> f64 {
     if cost <= 0.0 {
         return 0.0;
     }
-    b.prepare(&w.chem, &w.cfg.phys);
-    let (ext, paid) = plan(w, b, cost, days, mass, t);
+    let ((ext, paid), t) = (plan(w, b, cost, p), p.th.t);
     let left = cost - paid;
     if left > 1e-9 * cost && !part {
         return cost;

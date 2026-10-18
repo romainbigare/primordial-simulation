@@ -2,7 +2,7 @@
 //! the end checks are here; the physics of the time between is in `physics`.
 
 use super::exchange::cover_of;
-use super::pay::{hold, pay_at, plan, spend, upkeep_at};
+use super::pay::{hold, pay_at, plan, spend, upkeep_at, Payer};
 use super::physics::physics;
 use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::bond::{self, Enclosure};
@@ -108,8 +108,9 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
     // (One temperature for the stages that see the body as it came: the upkeep, the plan and the paying.)
     let (th, node) = (b.thermal(&w.chem, cap), b.n() > 1.0);
     let (cost, span) = (upkeep_at(w, b, s.days, mass, th.t), s.days.max(b.interval() as f64));
-    let spare = plan(w, b, MARGIN * cost, span, mass, th.t).1 / cost.max(1e-300);
-    let short = pay_at(w, b, cost, span, mass, th.t, node) / cost.max(1e-300);
+    let p = Payer::at(w, b, span, mass, th);
+    let spare = plan(w, b, MARGIN * cost, &p).1 / cost.max(1e-300);
+    let short = pay_at(w, b, cost, &p, node) / cost.max(1e-300);
     if short > 1e-9 && !node {
         return Err(SPENT);
     }
@@ -119,7 +120,7 @@ fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64,
     let worn = cost / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so
     // the body keeps its temperature as its stores change (as in `pay`).
-    let kept = b.energy_in(&w.chem, &th);
+    let kept = b.energy_in(&w.chem, &p.th);
     let upkeep_heat = b.e - kept;
     b.e = kept;
     for (f, cause) in [(short, SPENT), (if node { worn.min(1.0) } else { 0.0 }, AGE)] {
@@ -157,8 +158,8 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
         if c <= 0.0 || short <= KEEP_T_SLACK * b.e {
             break;
         }
-        let th = b.thermal(&w.chem, c);
-        if spend(w, b, short / hold(w, b, m, th.t, dt), span, dt, true, m, &th) > 0.0 {
+        let p = Payer::at(w, b, span, m, b.thermal(&w.chem, c));
+        if spend(w, b, short / hold(w, b, m, p.th.t, dt), dt, true, &p) > 0.0 {
             break;
         }
     }

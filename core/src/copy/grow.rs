@@ -59,10 +59,10 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
     let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
-    let ((mass, cap), ivl) = (b.mass_cap(chem), b.interval() as f64);
-    let th = b.thermal(chem, cap);
-    let t = th.t;
-    let r = RELEASE_MARGIN * body::plan(w, b, f64::MAX, ivl, mass, t).1;
+    let ivl = b.interval() as f64;
+    let payer = body::Payer::of(w, b, ivl);
+    let (mass, t) = (payer.mass, payer.th.t);
+    let r = RELEASE_MARGIN * body::plan(w, b, f64::MAX, &payer).1;
     if r <= 0.0 {
         return 0.0;
     }
@@ -87,7 +87,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
         return 0.0;
     }
     let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_of(bl), p.c_copy * kg);
-    if body::spend(w, b, cost, ivl, ivl * DAY, false, mass, &th) > 0.0 {
+    if body::spend(w, b, cost, ivl * DAY, false, &payer) > 0.0 {
         return 0.0;
     }
     // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.
