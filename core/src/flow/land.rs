@@ -177,7 +177,7 @@ pub(super) fn conduct(w: &mut World, s: &Scratch, dt: f64) {
     let (cap, mut t, mut heat) = (s.cap.iter().map(|&c| c.max(1.0)).collect::<Vec<_>>(), s.tg.clone(), vec![0.0; a.len()]);
     // At most as many iterations as nodes: the solve stops once converged, in a few where links pass little.
     Spread::default().step(&Net { a: &a, b: &b, g: &g, cap: &cap }, &mut t, dt, n, &mut heat);
-    apply(w, &[LinkFlux { class: Class::Ground, a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[], &[]);
+    apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[], &[]);
 }
 
 /// Solid surface, head, heat resistance of the soft cover and reflectance of node `i`, from

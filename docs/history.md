@@ -368,6 +368,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   `store::apply` (its scaling cuts gas passing through a node). Without life the same to rounding (2 years of the
   golden seeds, 64 x 64 and 128 x 128 within 5e-11); maps whose side is not a multiple of 4 change at their edges;
   golden re-pinned (with life, any rounding changes the bodies' history).
+- A link flux takes from a node only its net loss over all the flux's links (a net change within 1e-12 of what passes
+  through is rounding) and is scaled as a whole by `store::apply`: liquid that passes through a dry cell was scaled
+  to nothing. A link may join nodes of two classes (`LinkFlux::class`, the vertical links of a stack: ground and
+  deep store), so a law books a vertical exchange as one flux, not as one move per substance and cell. Same results
+  (golden unchanged).
 
 **Owner's decisions after Phase A**
 

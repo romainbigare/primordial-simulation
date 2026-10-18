@@ -9,6 +9,9 @@ use crate::World;
 
 /// What a transform may lose or gain of an element to rounding, relative to all the elements it changes.
 const ELEMENT_ROUNDING: f64 = 1e-9;
+/// A link flux's net change of a number within this share of all that passes through it is the rounding of its sum, not
+/// a change: liquid that passes through a dry cell would else take from it what it never held.
+const NET_ROUNDING: f64 = 1e-12;
 /// The classes `apply` books, the first ones: those whose amounts lie in arrays of `World` (a part's lie in the part,
 /// `Class::Part`, which Bond books).
 const BOOKED: usize = Class::Part as usize;
@@ -33,12 +36,16 @@ pub struct Transform {
     pub dmol: Vec<(u16, f64)>,
 }
 
-/// What crosses each link of a field of nodes of one class at once: link `l` joins the nodes at index `a[l]` and
-/// `b[l]` and carries `mol[q * links + l]` mol of substance `ks[q]` (each substance once) and `heat[l]` J, + from `a`
-/// to `b` (`heat` empty: no heat). What leaves one end enters the other, so a flux keeps the books by its form.
+/// What crosses each link of a field of nodes at once: link `l` joins the node at index `a[l]` of class `class[0]` and
+/// the one at `b[l]` of `class[1]` (one class for the links of a level, two for the vertical links of a stack, which
+/// must hold substances alike: both air or neither, `held`) and carries `mol[q * links + l]` mol of substance `ks[q]`
+/// (each substance once) and `heat[l]` J, + from `a` to `b` (`heat` empty: no heat). What leaves one end enters the
+/// other, so a flux keeps the books by its form. It takes from a node only what the node loses over all its links (so
+/// what passes through a node, in by one link and out by another, as liquid down a slope, needs nothing held), and it
+/// is scaled as a whole.
 #[derive(Clone, Copy, Debug)]
 pub struct LinkFlux<'a> {
-    pub class: Class,
+    pub class: [Class; 2],
     pub a: &'a [u32],
     pub b: &'a [u32],
     pub ks: &'a [u16],
@@ -83,10 +90,19 @@ pub struct Booking {
     /// Per array (`ARRAYS`): what the changes ask of each number, then the share of it the number can give; 0 between
     /// calls
     need: [Vec<f64>; ARRAYS],
-    /// The numbers the call asks of, in the order it first asks (the first ones: room for one per change it may make)
+    /// The numbers the call asks of, in the order it first asks (the first ones: room for one per number a change may
+    /// ask of, two per link of a flux's column)
     asked: Vec<Slot>,
-    /// Per link of a flux: the least share over what it takes from
-    least: Vec<f64>,
+    /// Per array: the net change a flux's column makes to each number, and all that passes through it; 0 between columns
+    net: [Vec<[f64; 2]>; ARRAYS],
+    /// The numbers a column touches, at their first change (room for two per link)
+    touched: Vec<usize>,
+    /// The numbers a flux takes from (by flux: up to `ends[x]`), and those whose net change is rounding (`NET_ROUNDING`)
+    takes: Vec<Slot>,
+    ends: Vec<usize>,
+    passed: Vec<Slot>,
+    /// Per flux: what it takes from the nodes, mol and J (`Slot::unit`)
+    lost: Vec<[f64; 2]>,
     /// Room for the element totals of a transform
     sums: Vec<f64>,
 }
@@ -100,37 +116,104 @@ fn ask(n: &mut f64, s: Slot, x: f64, asked: &mut [Slot], count: &mut usize) {
     *n -= x.min(0.0);
 }
 
-/// One column of a link flux: what crosses each link in one array (`ARRAYS`), where the number of node `i` is at
-/// `at + i`.
+/// One column of a link flux: what crosses each link, from array `arr[0]` (`ARRAYS`) at its `a` end to `arr[1]` at its
+/// `b` end, where the number of node `i` is at `at[end] + i`.
 #[derive(Clone, Copy)]
 struct Column<'a> {
-    arr: usize,
-    at: usize,
+    arr: [usize; 2],
+    at: [usize; 2],
     by_link: &'a [f64],
 }
 
 impl<'a> LinkFlux<'a> {
     /// Its columns: one for each substance, then the heat.
     fn columns(&self, len: &[usize; BOOKED]) -> Vec<Column<'a>> {
-        let (c, links, at, mol) = (self.class as usize, self.a.len(), len[self.class as usize], self.mol);
-        let amounts = self.ks.iter().enumerate().map(|(q, &k)| Column { arr: 2 * c, at: k as usize * at, by_link: &mol[q * links..(q + 1) * links] });
-        amounts.chain((!self.heat.is_empty()).then_some(Column { arr: 2 * c + 1, at: 0, by_link: self.heat })).collect()
+        let (c, links, mol) = (self.class.map(|c| c as usize), self.a.len(), self.mol);
+        let amount = |q: usize, k: u16| Column { arr: c.map(|c| 2 * c), at: c.map(|c| k as usize * len[c]), by_link: &mol[q * links..(q + 1) * links] };
+        let heat = (!self.heat.is_empty()).then_some(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], by_link: self.heat });
+        self.ks.iter().enumerate().map(|(q, &k)| amount(q, k)).chain(heat).collect()
     }
+}
+
+/// The arrays of a column's two ends: one (`One`), or two apart (`Two`), so the loops over a column are compiled for
+/// each and the common one, a field of one class, pays nothing for the other.
+trait Ends<T> {
+    /// The number at index `i` of the array of end `end`.
+    fn at(&mut self, end: usize, i: usize) -> &mut T;
+}
+
+struct One<'v, T>(&'v mut [T]);
+struct Two<'v, T>(&'v mut [T], &'v mut [T]);
+
+impl<T> Ends<T> for One<'_, T> {
+    #[inline(always)]
+    fn at(&mut self, _: usize, i: usize) -> &mut T {
+        &mut self.0[i]
+    }
+}
+
+impl<T> Ends<T> for Two<'_, T> {
+    #[inline(always)]
+    fn at(&mut self, end: usize, i: usize) -> &mut T {
+        if end == 0 { &mut self.0[i] } else { &mut self.1[i] }
+    }
+}
+
+/// Runs `$body` with `$e` the ends (`Ends`) of arrays `$arr` of each of `$v`, one array or two.
+macro_rules! with_ends {
+    ($arr:expr, $(($v:expr, $e:ident)),+ => $body:expr) => {{
+        let arr: [usize; 2] = $arr;
+        if arr[0] == arr[1] {
+            $(let mut $e = One(&mut $v[arr[0]][..]);)+
+            $body
+        } else {
+            $(let [p, q] = $v.get_disjoint_mut(arr).expect("two arrays"); let mut $e = Two(&mut p[..], &mut q[..]);)+
+            $body
+        }
+    }};
 }
 
 impl Column<'_> {
     /// What link `l`, from node `a` to node `b`, changes in it: what leaves `a` enters `b`.
     #[inline(always)]
     fn deltas(&self, l: usize, a: u32, b: u32) -> [(Slot, f64); 2] {
-        let (arr, m) = (self.arr, self.by_link[l]);
-        [(Slot { arr, at: self.at + a as usize }, -m), (Slot { arr, at: self.at + b as usize }, m)]
+        let (arr, at, m) = (self.arr, self.at, self.by_link[l]);
+        [(Slot { arr: arr[0], at: at[0] + a as usize }, -m), (Slot { arr: arr[1], at: at[1] + b as usize }, m)]
     }
-    /// The change of link `l` that takes from its node: the one below zero, or else one that takes nothing.
+    /// Adds to `net` the net change of each number it touches and all that passes through it, and notes each number
+    /// once in `touched` (its index times 2, plus its end); returns their count.
     #[inline(always)]
-    fn take(&self, l: usize, a: u32, b: u32) -> (Slot, f64) {
-        let [from, to] = self.deltas(l, a, b);
-        if from.1 < 0.0 { from } else { to }
+    fn sum(&self, x: &LinkFlux, net: &mut impl Ends<[f64; 2]>, touched: &mut [usize]) -> usize {
+        let mut count = 0;
+        for (l, (&a, &b)) in x.a.iter().zip(x.b).enumerate() {
+            for (end, (s, d)) in self.deltas(l, a, b).into_iter().enumerate() {
+                let [sum, through] = net.at(end, s.at);
+                touched[count] = 2 * s.at + end;
+                count += ((*through == 0.0) & (d != 0.0)) as usize;
+                *through += d.abs();
+                *sum += d;
+            }
+        }
+        count
     }
+}
+
+/// What the numbers of a column, `touched` by it (`Column::sum`), ask: each once, without a branch, a net loss is
+/// asked (but of a boundary node) and noted in `takes` (from `nt` on), a change within rounding is noted in `passed`
+/// (from `np` on). Returns what the column takes from its nodes, and the counts `nt` and `np` after it.
+#[inline(always)]
+fn ask_column(col: &Column, touched: &[usize], (need, net): (&mut impl Ends<f64>, &mut impl Ends<[f64; 2]>), (asked, count): (&mut [Slot], &mut usize), (takes, passed): (&mut [Slot], &mut [Slot]), (mut nt, mut np): (usize, usize)) -> (f64, usize, usize) {
+    let mut loss = 0.0;
+    for &t in touched {
+        let (end, at) = (t % 2, t / 2);
+        let (s, [d, all]) = (Slot { arr: col.arr[end], at }, std::mem::take(net.at(end, at)));
+        let (lose, round) = (d < -NET_ROUNDING * all && s.arr < BOUNDARY_ARRAYS, d.abs() <= NET_ROUNDING * all);
+        let d = if lose { d } else { 0.0 };
+        ask(need.at(end, at), s, d, asked, count);
+        (takes[nt], passed[np]) = (s, s);
+        (nt, np, loss) = (nt + lose as usize, np + round as usize, loss - d);
+    }
+    (loss, nt, np)
 }
 
 /// A move or a transform.
@@ -213,15 +296,17 @@ impl Giver<'_> {
     }
 }
 
-/// Gives each change of the links of flux `x` (of columns `cols`) to `books`, link `l`'s scaled by `f(l)`, one column
-/// at a time.
+/// Gives each change of the links of flux `x` (of columns `cols`) to `books`, scaled by `f`, one column at a time.
 #[inline(always)]
-fn give_links(x: &LinkFlux, cols: &[Column], books: &mut [&mut [f64]; ARRAYS], giver: &mut Giver, f: impl Fn(usize) -> f64) {
+fn give_links(x: &LinkFlux, cols: &[Column], books: &mut [&mut [f64]; ARRAYS], giver: &mut Giver, f: f64) {
     for &col in cols {
-        let v = &mut books[col.arr][..];
-        for (l, (&a, &b)) in x.a.iter().zip(x.b).enumerate() {
-            col.deltas(l, a, b).into_iter().for_each(|(s, d)| giver.give(&mut v[s.at], s, d, f(l)));
-        }
+        with_ends!(col.arr, (books, v) => {
+            for (l, (&a, &b)) in x.a.iter().zip(x.b).enumerate() {
+                for (end, (s, d)) in col.deltas(l, a, b).into_iter().enumerate() {
+                    giver.give(v.at(end, s.at), s, d, f);
+                }
+            }
+        })
     }
 }
 
@@ -237,7 +322,9 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
     sums.iter().all(|e| e.abs() <= ELEMENT_ROUNDING * size)
 }
 
-/// Book the link fluxes, then the moves, then the transforms, each in its order. Where all that would leave a number
+/// Book the link fluxes, then the moves, then the transforms, each in its order. A link flux takes from a node only its
+/// net loss over all the flux's links (a net change within `NET_ROUNDING` of what passes through is none), and is
+/// scaled as a whole: by the least share over what it takes from. Where all that would leave a number
 /// (an amount of a node, or its heat) is more than it holds, each change that takes from it is scaled down by the
 /// share it holds (the least share over all it takes from), so no amount and no heat falls below zero
 /// (`docs/handover.md` 6.1); a boundary node gives all it is asked. What the scaling left in place is counted in
@@ -251,36 +338,51 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
     let World { cfg, chem, table, sleep, time, counts, grid, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, .. } = w;
-    let (len, Booking { need, asked, least, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES], booking);
+    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES], booking);
     let mut books = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..]];
-    for (n, b) in need.iter_mut().zip(&books) {
+    for ((n, s), b) in need.iter_mut().zip(net.iter_mut()).zip(&books) {
         if n.len() != b.len() {
-            *n = vec![0.0; b.len()];
+            (*n, *s) = (vec![0.0; b.len()], vec![[0.0; 2]; b.len()]);
         }
     }
     for x in fluxes {
         let (links, once) = (x.a.len(), x.ks.iter().enumerate().all(|(q, k)| !x.ks[..q].contains(k)));
-        let shaped = (x.class as usize) < BOOKED && x.b.len() == links && x.mol.len() == x.ks.len() * links && (x.heat.is_empty() || x.heat.len() == links);
+        let classes = x.class.iter().all(|&c| (c as usize) < BOOKED) && (x.class[0] == Class::Air) == (x.class[1] == Class::Air);
+        let shaped = classes && x.b.len() == links && x.mol.len() == x.ks.len() * links && (x.heat.is_empty() || x.heat.len() == links);
         assert!(shaped && once, "a link flux of the wrong shape");
     }
     for t in transforms {
         assert!(keeps_elements(chem, &t.dmol, sums), "a transform that does not keep its elements: {t:?}");
     }
     // What each change asks of each number.
-    let changes = fluxes.iter().map(|x| x.a.len() * (x.ks.len() + 1)).sum::<usize>() + 4 * moves.len();
+    let changes = fluxes.iter().map(|x| 2 * x.a.len() * (x.ks.len() + 1)).sum::<usize>() + 4 * moves.len();
     let changes = changes + transforms.iter().map(|t| t.dmol.len() + 1).sum::<usize>();
     if asked.len() < changes {
         asked.resize(changes, Slot { arr: 0, at: 0 });
     }
     let (columns, mut count): (Vec<_>, _) = (fluxes.iter().map(|x| x.columns(&len)).collect(), 0);
-    for (x, cols) in fluxes.iter().zip(&columns).filter(|(x, _)| x.class != Class::Boundary) {
+    ends.clear();
+    lost.clear();
+    let (mut nt, mut np) = (0, 0);
+    for (x, cols) in fluxes.iter().zip(&columns) {
+        lost.push([0.0; 2]);
         for &col in cols {
-            let n = &mut need[col.arr][..];
-            for (l, (&a, &b)) in x.a.iter().zip(x.b).enumerate() {
-                let (s, d) = col.take(l, a, b);
-                ask(&mut n[s.at], s, d, asked, &mut count);
+            if touched.len() <= 2 * x.a.len() {
+                touched.resize(2 * x.a.len() + 1, 0);
             }
+            let loss = with_ends!(col.arr, (need, n), (net, m) => {
+                let count_touched = col.sum(x, &mut m, touched);
+                let room = nt.max(np) + count_touched + 1;
+                for v in [&mut *takes, &mut *passed].into_iter().filter(|v| v.len() < room) {
+                    v.resize(room, Slot { arr: 0, at: 0 });
+                }
+                let loss;
+                (loss, nt, np) = ask_column(&col, &touched[..count_touched], (&mut n, &mut m), (asked, &mut count), (takes, passed), (nt, np));
+                loss
+            });
+            lost.last_mut().unwrap()[col.arr[0] % 2] += loss;
         }
+        ends.push(nt);
     }
     each_item(moves, transforms, |item| {
         each_delta(item, table, chem, &len, |s, x| {
@@ -298,25 +400,14 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     }
     // Each change, scaled by the least share of what it takes from (by none when each number gives all it is asked).
     let mut giver = Giver { wake_share: cfg.wake_share, scaled: &mut counts.scaled, sleep, table, time: *time, len };
-    for (x, cols) in fluxes.iter().zip(&columns) {
-        if whole {
-            give_links(x, cols, &mut books, &mut giver, |_| 1.0);
-            continue;
-        }
-        least.clear();
-        least.resize(x.a.len(), 1.0);
-        for col in cols {
-            for (l, (&a, &b)) in x.a.iter().zip(x.b).enumerate() {
-                let (s, d) = col.take(l, a, b);
-                if s.takes(d) {
-                    least[l] = least[l].min(need[s.arr][s.at]);
-                }
-            }
-        }
-        give_links(x, cols, &mut books, &mut giver, |l| least[l]);
-        // What the scaling left in place, counted link by link.
-        for (l, (&a, &b)) in x.a.iter().zip(x.b).enumerate() {
-            cols.iter().flat_map(|col| col.deltas(l, a, b)).for_each(|(s, d)| giver.left(s, d, least[l]));
+    let mut start = 0;
+    for (((x, cols), &end), lost) in fluxes.iter().zip(&columns).zip(&*ends).zip(&*lost) {
+        let f = if whole { 1.0 } else { takes[start..end].iter().fold(1.0, |f: f64, s| f.min(need[s.arr][s.at])) };
+        start = end;
+        give_links(x, cols, &mut books, &mut giver, f);
+        // What the scaling left in place: the share of the net losses it did not take.
+        if f < 1.0 {
+            (0..2).for_each(|u| giver.scaled[u] += lost[u] * (1.0 - f));
         }
     }
     each_item(moves, transforms, |item| {
@@ -337,6 +428,8 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     let mut below = Vec::new();
     for &s in asked {
         need[s.arr][s.at] = 0.0;
+    }
+    for &s in asked.iter().chain(&passed[..np]) {
         let v = &mut books[s.arr][s.at];
         if *v < 0.0 {
             below.push((s, *v));

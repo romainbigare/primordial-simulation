@@ -60,6 +60,44 @@ fn what_leaves_a_node_that_holds_too_little_is_scaled_down() {
     assert_eq!(w.counts.scaled[0], have);
 }
 
+/// A flux along a chain of links takes from a node only what it loses over all of them: liquid that passes through
+/// nodes that hold little (in by one link, out by the next) is not scaled, and they hold what they held.
+#[test]
+fn what_passes_through_a_node_is_not_scaled() {
+    const CHAIN: usize = 6;
+    let mut w = small_world();
+    let (n, have) = (w.grid.n(), 1e3);
+    let held: Vec<f64> = (0..CHAIN).map(|i| if i == 0 { have } else { 1e-3 * have * (i % 2) as f64 }).collect();
+    w.ground[LIQUID * n..LIQUID * n + CHAIN].copy_from_slice(&held);
+    let (a, b): (Vec<u32>, Vec<u32>) = (0..CHAIN as u32 - 1).map(|i| (i, i + 1)).unzip();
+    let mol = vec![have; CHAIN - 1];
+    let books = Books::now(&w);
+    apply(&mut w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[LIQUID as u16], mol: &mol, heat: &[] }], &[], &[]);
+    books.assert_kept(&w, 1e-12);
+    let after = &w.ground[LIQUID * n..LIQUID * n + CHAIN];
+    assert_eq!((after[0], w.counts.scaled), (0.0, [0.0; 2]), "nothing is scaled");
+    for i in 1..CHAIN - 1 {
+        assert!((after[i] - held[i]).abs() <= 1e-12 * have, "node {i} holds {} of {}", after[i], held[i]);
+    }
+    assert!((after[CHAIN - 1] - held[CHAIN - 1] - have).abs() <= 1e-12 * have);
+}
+
+/// A link may join the nodes of two classes: liquid and its heat cross the vertical link from a ground node into its
+/// deep store, and the books are kept (with a new working space for `apply`, which must make room for all the call asks).
+#[test]
+fn a_link_joins_a_ground_node_to_its_store() {
+    let mut w = small_world();
+    w.booking = Default::default();
+    let (n, i) = (w.grid.n(), 3);
+    let (have, deep, heat) = (w.g(LIQUID, i), w.deep[LIQUID * n + i], 1e-3 * w.e_ground[i]);
+    let books = Books::now(&w);
+    let cell = [i as u32];
+    apply(&mut w, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &cell, b: &cell, ks: &[LIQUID as u16], mol: &[have / 2.0], heat: &[heat] }], &[], &[]);
+    books.assert_kept(&w, 1e-12);
+    assert!((w.g(LIQUID, i) - have / 2.0).abs() <= 1e-12 * have && (w.deep[LIQUID * n + i] - deep - have / 2.0).abs() <= 1e-12 * have);
+    assert_eq!(w.counts.scaled, [0.0; 2]);
+}
+
 #[test]
 #[should_panic(expected = "does not keep its elements")]
 fn a_transform_that_makes_elements_is_refused() {
@@ -86,26 +124,28 @@ fn some_heat(w: &World, r: &mut Rng, (class, i): (Class, usize)) -> f64 {
 }
 
 /// One round of random changes, each asking up to `GREED` times what its node holds: a link flux of two substances and
-/// heat over a third of them, then moves between nodes of any classes, then the chemistry's reactions in any node.
+/// heat over a third of them (between nodes of one class, or of the ground and the deep store), then moves between
+/// nodes of any classes, then the chemistry's reactions in any node.
 fn random_round(w: &mut World, r: &mut Rng) {
     let (ns, per) = (w.chem.ns(), PER_ROUND / 3);
-    let class = CLASSES[r.below(3)];
-    let len = arrays(w, class).2;
-    let (a, b): (Vec<u32>, Vec<u32>) = (0..per).map(|_| (r.below(len) as u32, r.below(len) as u32)).unzip();
+    let first = CLASSES[r.below(3)];
+    let class = [first, if first == Class::Air { first } else { [Class::Ground, Class::Deep][r.below(2)] }];
+    let len = class.map(|c| arrays(w, c).2);
+    let (a, b): (Vec<u32>, Vec<u32>) = (0..per).map(|_| (r.below(len[0]) as u32, r.below(len[1]) as u32)).unzip();
     let k = r.below(ns);
     let ks = [k, (k + 1 + r.below(ns - 1)) % ns].map(|k| k as u16);
     let (mut mol, mut heat) = (Vec::new(), Vec::new());
     // + from a to b, or back: each takes from the end it leaves.
-    let sign = |r: &mut Rng, l: usize| if r.below(2) == 0 { (a[l], 1.0) } else { (b[l], -1.0) };
+    let sign = |r: &mut Rng, l: usize| if r.below(2) == 0 { ((class[0], a[l] as usize), 1.0) } else { ((class[1], b[l] as usize), -1.0) };
     for &k in &ks {
         for l in 0..per {
             let (from, s) = sign(r, l);
-            mol.push(s * some_of(w, r, (class, from as usize), k as usize));
+            mol.push(s * some_of(w, r, from, k as usize));
         }
     }
     for l in 0..per {
         let (from, s) = sign(r, l);
-        heat.push(s * some_heat(w, r, (class, from as usize)));
+        heat.push(s * some_heat(w, r, from));
     }
     let flux = LinkFlux { class, a: &a, b: &b, ks: &ks, mol: &mol, heat: &heat };
     let moves: Vec<Move> = (0..per)
