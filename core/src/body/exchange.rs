@@ -37,9 +37,12 @@ impl Body {
 /// Halvings of the interval in `through`.
 const BISECT_STEPS: usize = 40;
 
-/// The cover of other bodies over a body's cell, kg/m²: the mass of the others per ground area.
+/// The cover of other bodies over a body's cell, kg/m²: the mass of the others there now per ground area. (A body in
+/// its update is out of its slot; one in its slot is left out by its place.)
 pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
-    (w.life.sum[b.cell as usize][1] - b.vis[0] as f64 * b.n()).max(0.0) / w.mesh.cells().area()[b.cell as usize]
+    let i = b.cell as usize;
+    let others = w.life.at[i].iter().map(|&s| &w.life.bodies[s as usize]).filter(|o| o.alive && !std::ptr::eq(*o, b));
+    others.map(|o| o.vis[0] as f64 * o.n()).sum::<f64>() / w.mesh.cells().area()[i]
 }
 
 /// A body's heat conductance to the ground it stands on, at its temperature `t` and the ground's `tg`, W/K: one network

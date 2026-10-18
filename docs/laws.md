@@ -824,8 +824,8 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
   the coat (the `HEAT` gene, which goes with mass^(2/3)) to the outer surface (skin and both faces
   of the leaf). From there it goes in parallel to the still air and by radiation. The still air's
   conductance is forced convection: `forced` × √(`wind_ground` / d) × the air's heat capacity, d
-  the body's length or a leaf's size (`leaf_size`). Cover of other bodies (`shelter`) and walls
-  (3.4) are in series. Radiation from the surface goes to the ground (`radiated`).
+  the body's length or a leaf's size (`leaf_size`). Cover of other bodies (`shelter`; the mass of
+  the others in its cell now, `cover_of`) and walls (3.4) are in series. Radiation from the surface goes to the ground (`radiated`).
 - **Work heat stays** (`body::spend`, `body::hold` in `body/pay.rs`). The heat of upkeep and of
   paid work stays in the body and leaves through that network over the interval; the share
   (1 − e^−x)/x stays, x = conductance × time / heat capacity. The rest goes to the ground.

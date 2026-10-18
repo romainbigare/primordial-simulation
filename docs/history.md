@@ -625,6 +625,10 @@ The work of `docs/foundation/plan.md`, one line per task.
   their wear, the share 1 - e^-wear over the span, not the share `wear` (which killed too many over a long span).
   64 x 64, seed 1, years 11 to 20: plant activity 0.50 to 0.75, plant members -22%, body mass -3%, life of plants
   2.1 to 1.7 yr, land +0.1 K, carbon gas 247 to 250 ppm; golden re-pinned.
+- A fix: the cover of other bodies over a body (`exchange::cover_of`) is the mass of the others in its cell now, summed
+  over them, not the cell's sum of the last survey less the body's mass now (its mass had changed since the sum, so the
+  others' cover was off by that change). 64 x 64, seed 1, years 11 to 20: plant members -8%, body mass -5%, life of
+  plants 1.7 to 1.6 yr, land +0.1 K, carbon gas 250 to 254 ppm; golden re-pinned.
 
 **Owner's decisions after Phase A**
 
