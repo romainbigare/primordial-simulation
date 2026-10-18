@@ -10,7 +10,7 @@
 //! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
 //! overturning and mixing. Every move is booked by the store (`store::apply`): it takes from one
 //! node exactly what it gives to another, with its heat; lifting matter takes heat and a fall gives
-//! it back, the difference held by the store's potential node (`Falls`, `World::potential`), so
+//! it back, the difference held by the store's potential node (`store::Batch::falls`, `World::potential`), so
 //! elements and energy are kept.
 //!
 //! Files: `scratch` (the law's working memory and its tables), `land` (state, phases and surface of
@@ -27,7 +27,6 @@ pub use air::{column, glow, scale_height, wind_on};
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 
-use crate::store::{Class, LinkFlux};
 use crate::units::DAY;
 use crate::World;
 use creep::creep;
@@ -134,33 +133,6 @@ pub(crate) fn ensure(w: &mut World) {
 #[inline]
 fn due(pending: f64, days: f64) -> bool {
     pending >= days * DAY - DUE_SLACK
-}
-
-/// What falls give nodes of one class from the world's potential energy, J (a lift: what it takes from their heat,
-/// negative), booked as a link flux from the one node of `Class::Potential` (`flux`).
-struct Falls {
-    class: Class,
-    nodes: Vec<u32>,
-    heat: Vec<f64>,
-    /// The potential's node, once per entry
-    zero: Vec<u32>,
-}
-
-impl Falls {
-    fn new(class: Class) -> Falls {
-        Falls { class, nodes: Vec::new(), heat: Vec::new(), zero: Vec::new() }
-    }
-    /// Node `i` gains `q` J from the potential (gives it, negative).
-    fn add(&mut self, i: usize, q: f64) {
-        if q != 0.0 {
-            self.nodes.push(i as u32);
-            self.heat.push(q);
-            self.zero.push(0);
-        }
-    }
-    fn flux(&self) -> LinkFlux<'_> {
-        LinkFlux { class: [Class::Potential, self.class], a: &self.zero, b: &self.nodes, ks: &[], mol: &[], heat: &self.heat }
-    }
 }
 
 /// Lowest and highest of `v`.

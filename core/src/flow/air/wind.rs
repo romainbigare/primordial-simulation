@@ -5,11 +5,11 @@
 mod along;
 mod mesh;
 
-use super::super::{Falls, Scratch};
+use super::super::Scratch;
 use super::air_temp;
 use crate::grid::AIR;
 use crate::space::Level;
-use crate::store::{apply, Class, LinkFlux};
+use crate::store::{apply, Batch, Class, LinkFlux};
 use crate::units::R_GAS;
 use crate::{Config, World};
 
@@ -96,8 +96,8 @@ fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
 /// keeps of each air node, from its amounts (`air::sums`).
 fn book(w: &mut World, s: &mut Scratch, air: &Level, m: &Moved) {
     let ks: Vec<u16> = s.gas.iter().map(|&k| k as u16).collect();
-    let mut lift = Falls::new(Class::Air);
-    m.paid.iter().enumerate().for_each(|(j, &q)| lift.add(j, -q));
+    let mut lift = Batch::falls(Class::Air);
+    m.paid.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
     apply(w, &[LinkFlux { class: [Class::Air; 2], a: air.a(), b: air.b(), ks: &ks, mol: &m.mol, heat: &m.heat }, lift.flux()], &[], &[]);
     super::sums(w, s);
     for (j, &e) in w.e_air.iter().enumerate() {

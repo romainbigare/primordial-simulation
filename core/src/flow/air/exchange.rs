@@ -3,11 +3,11 @@
 
 use super::super::land::{melted, wet};
 use super::super::scratch::may_evaporate;
-use super::super::{follow, range, year_weight, Falls, Scratch, TRACE_TURN};
+use super::super::{follow, range, year_weight, Scratch, TRACE_TURN};
 use super::{air_temp, lerp, over_cell};
 use crate::grid::AIR;
 use crate::math::one_minus_exp;
-use crate::store::{apply, Class, LinkFlux};
+use crate::store::{apply, Batch, Class};
 use crate::units::{P_REF, R_GAS};
 use crate::World;
 
@@ -117,10 +117,7 @@ struct Pass {
     /// The gases, and the gravity that lifts them, m/s²
     ks: Vec<usize>,
     g: f64,
-    cells: Vec<u32>,
-    airs: Vec<u32>,
-    mol: Vec<Vec<f64>>,
-    heat: Vec<f64>,
+    links: Batch,
     lift: Vec<f64>,
     /// The air each pass sees, as it was before it: each air node's temperature, K, and what it holds of each gas, mol
     /// (`[x * na + j]`); and what it holds as the pass leaves it
@@ -135,8 +132,8 @@ impl Pass {
         let na = w.grid.na();
         let left: Vec<f64> = ks.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
         let ta = (0..na).map(|j| air_temp(w.e_air[j], s.capa[j])).collect();
-        let (mol, g) = (vec![Vec::new(); ks.len()], w.cfg.gravity);
-        Pass { ks, g, cells: Vec::new(), airs: Vec::new(), mol, heat: Vec::new(), lift: vec![0.0; na], ta, seen: left.clone(), left }
+        let links = Batch::new([Class::Ground, Class::Air], &ks.iter().map(|&k| k as u16).collect::<Vec<_>>());
+        Pass { ks, g: w.cfg.gravity, links, lift: vec![0.0; na], ta, seen: left.clone(), left }
     }
     /// `m` mol of gas `x` of the pass go from ground node `i` up into air node `j` (negative `m`: down) with `heat` J
     /// that leaves the ground; the state of both nodes follows (`Scratch::note`, or for a gas that was `dissolved`,
@@ -144,25 +141,16 @@ impl Pass {
     fn cross(&mut self, s: &mut Scratch, x: usize, (i, j): (usize, usize), (m, heat): (f64, f64), dissolved: bool) {
         let (na, k) = (self.lift.len(), self.ks[x]);
         let p = s.sp[k];
-        if self.cells.last() != Some(&(i as u32)) {
-            self.cells.push(i as u32);
-            self.airs.push(j as u32);
-            self.heat.push(0.0);
-            self.mol.iter_mut().for_each(|v| v.push(0.0));
-        }
-        let l = self.cells.len() - 1;
-        (self.mol[x][l], self.heat[l]) = (self.mol[x][l] + m, self.heat[l] + heat);
+        self.links.add((i, j), k as u16, (m, heat));
         (self.lift[j], self.left[x * na + j]) = (self.lift[j] + m * p.mm * s.view().lift(i, self.g), self.left[x * na + j] + m);
         if dissolved { s.hold(k, i, -m) } else { s.note(k, i, -m) }
         (s.capa[j], s.nt[j], s.mass[j]) = (s.capa[j] + m * p.cp, s.nt[j] + m, s.mass[j] + m * p.mm);
     }
     /// Book the pass through the store.
-    fn book(self, w: &mut World) {
-        let (ks, mol): (Vec<u16>, Vec<f64>) = (self.ks.iter().map(|&k| k as u16).collect(), self.mol.concat());
-        let mut lift = Falls::new(Class::Air);
-        self.lift.iter().enumerate().for_each(|(j, &q)| lift.add(j, -q));
-        let x = LinkFlux { class: [Class::Ground, Class::Air], a: &self.cells, b: &self.airs, ks: &ks, mol: &mol, heat: &self.heat };
-        apply(w, &[x, lift.flux()], &[], &[]);
+    fn book(mut self, w: &mut World) {
+        let mut lift = Batch::falls(Class::Air);
+        self.lift.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
+        apply(w, &[self.links.flux(), lift.flux()], &[], &[]);
     }
 }
 

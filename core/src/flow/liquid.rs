@@ -4,10 +4,10 @@
 
 use super::drain::{springs, under};
 use super::land::{lift, solid, stand, wet, HALF_WAY};
-use super::{bare_share, follow, range, year_weight, Falls, Scratch};
+use super::{bare_share, follow, range, year_weight, Scratch};
 use crate::math::one_minus_exp;
 use crate::solve::downhill::{pass, Adjacency, Crossed};
-use crate::store::{apply, Class, LinkFlux};
+use crate::store::{apply, Batch, Class, LinkFlux};
 use crate::units::T_FLOOR;
 use crate::World;
 
@@ -177,8 +177,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     }
     col_of.push(kinds.len());
     let (a, b, mol) = by_link(&crossed, rows + 2, &col_of, (cells.a(), cells.b()));
-    let (at, mut fall) = (kinds.len() * a.len(), Falls::new(Class::Ground));
-    power.iter().enumerate().for_each(|(i, &q)| fall.add(i, q));
+    let (at, mut fall) = (kinds.len() * a.len(), Batch::falls(Class::Ground));
+    power.iter().enumerate().for_each(|(i, &q)| fall.fall(i, q));
     book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }, fall.flux()]);
     s.order = order;
     let ema = year_weight(w, dt);

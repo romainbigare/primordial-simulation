@@ -5,11 +5,11 @@
 
 use super::land::{t_now, table, wet};
 use super::liquid::{book, mobile};
-use super::{Falls, Scratch};
+use super::Scratch;
 use crate::math::one_minus_exp;
 use crate::solve::spread::{Net, Spread};
 use crate::space::{Layer, Stack};
-use crate::store::{Class, LinkFlux};
+use crate::store::{Batch, Class, LinkFlux};
 use crate::World;
 
 /// The layers of each cell's stack under its surface, bottom up: the store of the bed, and the pores of the loose
@@ -71,10 +71,10 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
         }
     }
     let (liq16, deep16): (Vec<u16>, Vec<u16>) = (liq.iter().map(|&k| k as u16).collect(), deep.iter().map(|&k| k as u16).collect());
-    let (mut into_deep, mut into_pores) = (Falls::new(Class::Deep), Falls::new(Class::Ground));
+    let (mut into_deep, mut into_pores) = (Batch::falls(Class::Deep), Batch::falls(Class::Ground));
     for i in 0..n {
-        into_deep.add(i, fallen[stack.node(DEEP, i)]);
-        into_pores.add(i, fallen[stack.node(PORES, i)]);
+        into_deep.fall(i, fallen[stack.node(DEEP, i)]);
+        into_pores.fall(i, fallen[stack.node(PORES, i)]);
     }
     let fluxes = [
         LinkFlux { class: [Class::Ground; 2], a: &pores.a, b: &pores.b, ks: &liq16, mol: &pores.mol, heat: &pores.heat },
@@ -183,7 +183,7 @@ fn carry(from: &[(u32, f64)], ks: &[usize], amount: impl Fn(usize, usize) -> f64
 /// m³ (what boils below the coldest node, `tmin`, is dissolved gas and adds none).
 fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[f64])) -> Vec<f64> {
     let (n, g, ns) = (w.grid.n(), w.cfg.gravity, w.chem.ns());
-    let (mut got, mut rise) = (vec![0.0; n], Falls::new(Class::Ground));
+    let (mut got, mut rise) = (vec![0.0; n], Batch::falls(Class::Ground));
     let holds = |i: usize| (0..ns).any(|k| w.deep[k * n + i] > 0.0);
     let ups: Vec<(u32, f64)> = share.iter().enumerate().filter(|p| *p.1 > 0.0 && holds(p.0)).map(|(i, &f)| (i as u32, f)).collect();
     let ks: Vec<usize> = (0..ns).filter(|&k| ups.iter().any(|c| w.deep[k * n + c.0 as usize] > 0.0)).collect();
@@ -200,7 +200,7 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[
             r += m * sp.mm * lift;
             got[i] += if sp.boil > tmin { m * sp.v[1] * wet(s, k, i) } else { 0.0 };
         }
-        rise.add(i, -r);
+        rise.fall(i, -r);
     }
     book(w, s, &[LinkFlux { class: [Class::Deep, Class::Ground], a: &up, b: &up, ks: &ks16, mol: &mol, heat: &heat }, rise.flux()]);
     got

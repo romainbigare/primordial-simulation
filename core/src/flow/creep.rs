@@ -1,9 +1,9 @@
 //! The yearly part of Flow: creep of loose solids, and the regrowth of bodies into cleared ground.
 
 use super::land::{lift, melted, molten, rise};
-use super::{bare_share, range, Falls, Scratch};
+use super::{bare_share, range, Scratch};
 use crate::space::square::FORWARD;
-use crate::store::{apply, Class, LinkFlux};
+use crate::store::{apply, Batch, Class};
 use crate::World;
 
 /// Added to a substance's hardness before its softness (1 / hardness) is taken.
@@ -16,15 +16,12 @@ const CREEP_MOST: f64 = 0.25;
 
 /// A call of creep: the amount of each solid in each node, mol (`[q * n + i]`), and the volume able to creep weighted
 /// by softness, m³, as the edges so far leave them; and what it moves: over each edge that moves something, from its
-/// higher node `a` to `b`, of each solid, mol, and their heat, J; and the fall of each mass, which heats `b`.
+/// higher node to the lower, the solids and their heat; and the fall of each mass, which heats the lower node.
 struct Slides {
     amt: Vec<f64>,
     mob: Vec<f64>,
-    a: Vec<u32>,
-    b: Vec<u32>,
-    mol: Vec<Vec<f64>>,
-    heat: Vec<f64>,
-    fall: Falls,
+    moved: Batch,
+    fall: Batch,
 }
 
 /// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more, edge by edge in a fixed
@@ -41,7 +38,8 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             *m += amt[q * n + i] * (1.0 - molten(s, k, i)) * s.sp[k].v[0] * soft[q];
         }
     }
-    let mut sl = Slides { amt, mob, a: Vec::new(), b: Vec::new(), mol: vec![Vec::new(); sol.len()], heat: Vec::new(), fall: Falls::new(Class::Ground) };
+    let ks: Vec<u16> = sol.iter().map(|&k| k as u16).collect();
+    let mut sl = Slides { amt, mob, moved: Batch::new([Class::Ground; 2], &ks), fall: Batch::falls(Class::Ground) };
     for i in 0..n {
         for d in FORWARD {
             let Some(j) = w.grid.step(i, d) else { continue };
@@ -49,8 +47,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             slide(w, s, (a, b), d, (&sol, &soft), dt, &mut sl);
         }
     }
-    let (ks, mol): (Vec<u16>, Vec<f64>) = (sol.iter().map(|&k| k as u16).collect(), sl.mol.concat());
-    apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &sl.a, b: &sl.b, ks: &ks, mol: &mol, heat: &sl.heat }, sl.fall.flux()], &[], &[]);
+    apply(w, &[sl.moved.flux(), sl.fall.flux()], &[], &[]);
     crate::lanes::regrow(w, dt);
 }
 
@@ -82,11 +79,9 @@ fn slide(w: &World, s: &mut Scratch, (a, b): (usize, usize), d: (i32, i32), (sol
     if c > 0.0 {
         (s.cap[a], s.cap[b], mob[a], mob[b]) = (s.cap[a] - c, s.cap[b] + c, mob[a] - moved, mob[b] + moved);
         // The heat of what moves goes with it.
-        sl.a.push(a as u32);
-        sl.b.push(b as u32);
-        sl.heat.push(c * ta);
-        sl.mol.iter_mut().zip(&out).for_each(|(v, &m)| v.push(m));
-        sl.fall.add(b, mass * g * dz / 2.0);
+        let l = sl.moved.link((a, b), c * ta);
+        sol.iter().zip(&out).for_each(|(&k, &m)| sl.moved.carry(l, k as u16, m));
+        sl.fall.fall(b, mass * g * dz / 2.0);
         lift(s, a, ua);
         lift(s, b, ub);
     }

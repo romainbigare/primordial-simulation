@@ -437,6 +437,9 @@ The work of `docs/foundation/plan.md`, one line per task.
   own change. Golden re-pinned.
 - `flow::drain`: its two helpers for what moving liquid carries (`carried_by` for the vertical links) become one
   (`carry`, by signed shares); `carried` keeps only the choice of links. Same results (golden unchanged).
+- `store::Batch`: a link flux gathered link by link (`add`, `link`, `carry`; `falls` and `fall` for the heat of falls
+  and lifts with the potential's node). The exchange's passes, creep and every fall of Flow use it (`flow::Falls`
+  and the exchange's own link lists deleted). Same results (golden unchanged).
 
 **Owner's decisions after Phase A**
 

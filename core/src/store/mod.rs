@@ -3,12 +3,14 @@
 //! world's boundary that book what crosses it. The store decides nothing physical.
 
 mod apply;
+mod batch;
 pub mod links;
 pub mod moves;
 pub mod nodes;
 
 pub use links::Links;
 pub use apply::{apply, Booking};
+pub use batch::Batch;
 pub use moves::{held, LinkFlux, Move, Transform};
 pub use nodes::{Boundary, Class, NodeId, Nodes, BOUNDARIES};
 
