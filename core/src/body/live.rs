@@ -2,7 +2,7 @@
 //! the end checks are here; the physics of the time between is in `physics`.
 
 use super::exchange::cover_of;
-use super::pay::{hold, pay_at, plan, spend, upkeep};
+use super::pay::{hold, pay_at, plan, spend, upkeep_at};
 use super::physics::physics;
 use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::bond::{self, Enclosure};
@@ -105,10 +105,11 @@ pub(crate) fn live(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, t
 /// individual that cannot pay dies. Living wears the body (`Body::wear`). Returns the heat the paying released (held
 /// in the update's heat), the span it was paid over, the mass left and the margin of its reactions over the upkeep.
 fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, cap: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64), u8> {
-    let (cost, span) = (upkeep(w, b, s.days, mass), s.days.max(b.interval() as f64));
-    let spare = plan(w, b, MARGIN * cost, span, mass, cap).1 / cost.max(1e-300);
+    // (One temperature for the stages that see the body as it came: the upkeep, the plan and the paying.)
     let (th, node) = (b.thermal(&w.chem, cap), b.n() > 1.0);
-    let short = pay_at(w, b, cost, span, mass, cap, node) / cost.max(1e-300);
+    let (cost, span) = (upkeep_at(w, b, s.days, mass, th.t), s.days.max(b.interval() as f64));
+    let spare = plan(w, b, MARGIN * cost, span, mass, th.t).1 / cost.max(1e-300);
+    let short = pay_at(w, b, cost, span, mass, th.t, node) / cost.max(1e-300);
     if short > 1e-9 && !node {
         return Err(SPENT);
     }
@@ -153,7 +154,11 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
     for _ in 0..KEEP_T_PASSES {
         let (m, c) = b.mass_cap(&w.chem);
         let short = b.energy_at(&w.chem, b.gene(KEEP_T)) - b.e;
-        if c <= 0.0 || short <= KEEP_T_SLACK * b.e || spend(w, b, short / hold(w, b, m, b.temp_at(&w.chem, c), dt), span, dt, true) > 0.0 {
+        if c <= 0.0 || short <= KEEP_T_SLACK * b.e {
+            break;
+        }
+        let th = b.thermal(&w.chem, c);
+        if spend(w, b, short / hold(w, b, m, th.t, dt), span, dt, true, m, &th) > 0.0 {
             break;
         }
     }
@@ -166,14 +171,16 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
 /// individual dies with that chance. Returns the mass and heat capacity left.
 fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<(f64, f64), u8> {
     let (mut mass, mut c) = b.mass_cap(&w.chem);
-    if b.lacking_at(&w.chem, mass) {
-        if !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, b, &mut tmp.dead)) {
+    let mut th = b.thermal(&w.chem, c);
+    if b.lacking_at(&w.chem, mass, th.t) {
+        if !(b.n() > 1.0 && !b.empty_at(mass) && starve(w, b, th.t, &mut tmp.dead)) {
             return Err(LACK);
         }
         (mass, c) = b.mass_cap(&w.chem);
+        th = b.thermal(&w.chem, c);
     }
     let (chem, mut left) = (&w.chem, (mass, c));
-    let (th, ns) = (b.thermal(chem, c), chem.ns());
+    let ns = chem.ns();
     let key = |k: usize| b.wet >> k & 1 == 1;
     if (0..ns).any(|k| key(k) && chem.phase(k, th.t) == Phase::Gas) {
         return Err(PHASE);
@@ -200,14 +207,14 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
     Ok(left)
 }
 
-/// A node short of key stores: the members poorest in them die (members differ around the mean), so the survivors keep
-/// those stores and the dead take their share of the rest. The share that dies is the least that lifts every key store
-/// to its safe minimum; false if that is all of them.
-fn starve(w: &mut World, b: &mut Body, dead: &mut Vec<f64>) -> bool {
+/// A node at `t` short of key stores: the members poorest in them die (members differ around the mean), so the survivors
+/// keep those stores and the dead take their share of the rest. The share that dies is the least that lifts every key
+/// store to its safe minimum; false if that is all of them.
+fn starve(w: &mut World, b: &mut Body, t: f64, dead: &mut Vec<f64>) -> bool {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
-    let (size, t) = (b.size(chem), b.temp(chem));
+    let size = b.size(chem);
     let short = |&k: &usize| !b.burns_at(chem, k, t) && x(k) < b.gene(lay.min + k) * size;
     let live = (0..chem.ns()).filter(short).map(|k| x(k) / (b.gene(lay.min + k) * size).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);

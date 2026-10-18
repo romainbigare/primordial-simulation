@@ -2,6 +2,7 @@
 
 use crate::body::{self, Body, Layout, ALLOC, COPY_MASS, WET_TISSUE};
 use crate::chem::{Phase, Reaction};
+use crate::units::DAY;
 use crate::{World, AIR};
 
 /// Growth is building body matter, and past the size of maturity a share of it is offspring. A member makes matter
@@ -51,13 +52,18 @@ const LEAST_MADE: f64 = 1e-12;
 /// leaves to the air with its heat and its latent heat. Returns the kg made: none below `LEAST_MADE` of `full` (kg of
 /// matter of the size of maturity; 0 for the other solids).
 fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, most: f64, full: f64) -> f64 {
+    if room <= 0.0 || most <= 0.0 {
+        return 0.0;
+    }
     let (chem, p) = (&w.chem, &w.cfg.phys);
     let m = bl.outputs[0].0 as usize;
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
     let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
-    let (ivl, t, mass) = (b.interval() as f64, b.temp(chem), b.mass(chem));
-    let r = RELEASE_MARGIN * body::release(w, b, ivl);
-    if room <= 0.0 || r <= 0.0 || most <= 0.0 {
+    let ((mass, cap), ivl) = (b.mass_cap(chem), b.interval() as f64);
+    let th = b.thermal(chem, cap);
+    let t = th.t;
+    let r = RELEASE_MARGIN * body::plan(w, b, f64::MAX, ivl, mass, t).1;
+    if r <= 0.0 {
         return 0.0;
     }
     // The fuel it spares: what is paid and the inputs converted leave its fuel, less the product's own
@@ -65,7 +71,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     let (ins, outs) = (&bl.inputs, &bl.outputs);
     let fuel = ins.iter().map(|&(k, nu)| nu as f64 * b.heat_of(chem, k as usize, t)).sum::<f64>() / (mm * nu0);
     let per_kg = p.c_copy + fuel - b.heat_of(chem, m, t) / mm;
-    let spare = b.fuel(chem, t) * (1.0 - body::upkeep(w, b, ivl, mass) / r);
+    let spare = b.fuel(chem, t) * (1.0 - body::upkeep_at(w, b, ivl, mass, t) / r);
     // The stores it converts must also cover the fuel the work burns (each input that burns), and
     // leave the safe minimum of each (a body is not built of its last fuel: below its minimum it dies).
     let lay = Layout::of(chem);
@@ -81,7 +87,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
         return 0.0;
     }
     let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_of(bl), p.c_copy * kg);
-    if !body::pay(w, b, cost, ivl) {
+    if body::spend(w, b, cost, ivl, ivl * DAY, false, mass, &th) > 0.0 {
         return 0.0;
     }
     // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.

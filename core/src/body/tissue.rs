@@ -190,12 +190,12 @@ impl Body {
     }
     /// A store below its safe minimum, or nothing left of a member.
     pub fn lacking(&self, chem: &Chemistry) -> bool {
-        self.lacking_at(chem, self.mass(chem))
+        self.lacking_at(chem, self.mass(chem), self.temp(chem))
     }
-    /// `lacking` when the mass `m` is known.
-    pub fn lacking_at(&self, chem: &Chemistry, m: f64) -> bool {
+    /// `lacking` when the mass `m` and the temperature `t` are known.
+    pub fn lacking_at(&self, chem: &Chemistry, m: f64, t: f64) -> bool {
         // (A safe minimum is a share of the body, not of the whole mass: a body is not killed by holding fuel.)
-        let (lay, size, t) = (Layout::of(chem), self.size(chem), self.temp(chem));
+        let (lay, size) = (Layout::of(chem), self.size(chem));
         self.empty_at(m) || (0..chem.ns()).any(|k| !self.burns_at(chem, k, t) && self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
     }
 }

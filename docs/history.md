@@ -529,6 +529,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   again every physics step. Same history (`series.csv` and `months.csv` byte for byte, 64 x 64, seed 1, 20 years);
   snapshot version 17, golden re-pinned (the saved bodies changed). A body update 3 to 5% faster (year 10: 42.1 to
   40.7 µs; year 20: 44.9 to 42.6 µs).
+- E1 (c), speed: the temperature solve (`Body::thermal`) runs once for the stages of an update that see the body in
+  the same state and is passed along: the upkeep, its plan and its paying (`upkeep_at`, `plan`, `pay_at` take the
+  temperature), the checks of the stores (`lacking_at`, `starve`), each conversion of growth (its release, upkeep and
+  paying: `spend` takes the mass and the plateau state); a conversion with no room or nothing to make stops before
+  any solve. 31 solves per body update fall to 15. Same results bit for bit (golden unchanged; 64 x 64, seed 1, 20
+  years: same fingerprint); a body update about 3% faster (year 20: 40.8 to 38.3 µs, year 10 within the noise).
 
 **Owner's decisions after Phase A**
 

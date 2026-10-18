@@ -799,12 +799,12 @@ fn the_safe_minimum_is_a_share_of_the_body() {
     let (size, mass) = (b.size(&w.chem), b.mass(&w.chem));
     println!("body {size:.2} kg of {mass:.2}: liquid {:.2} kg against a minimum of {:.2} kg", kg(&w, &b, LIQUID), 0.7 * size);
     assert!(kg(&w, &b, LIQUID) > 0.7 * size && kg(&w, &b, LIQUID) < 0.7 * mass, "the setup");
-    assert!(!b.lacking_at(&w.chem, mass), "lacking a minimum that is met");
+    assert!(!b.lacking(&w.chem), "lacking a minimum that is met");
     add(&mut w, &mut b, RICH, 100.0);
-    assert!(!b.lacking_at(&w.chem, b.mass(&w.chem)), "killed by holding fuel");
+    assert!(!b.lacking(&w.chem), "killed by holding fuel");
     // And a minimum above what it holds still counts: 0.8 of the body is 16.8 kg of the liquid.
     b.genes[lay.min + LIQUID] = 0.8;
-    assert!(b.lacking_at(&w.chem, b.mass(&w.chem)));
+    assert!(b.lacking(&w.chem));
 }
 
 /// Digestion: body matter that a body takes in from outside is broken into the energy-rich solid and the minerals as it

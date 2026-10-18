@@ -23,6 +23,7 @@ pub use genes::*;
 pub(crate) use live::{live, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, release, upkeep};
+pub(crate) use pay::{plan, spend, upkeep_at};
 
 use crate::brain::{ln, FIXED, OVERBS, SIG, VERBS};
 use crate::chem::{Chemistry, Phase};
