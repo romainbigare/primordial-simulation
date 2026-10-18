@@ -1,8 +1,9 @@
 //! The yearly part of Flow: creep of loose solids, and the regrowth of bodies into cleared ground.
 
-use super::land::{lift, melted, rise, solid};
-use super::{bare_share, range, Scratch};
+use super::land::{lift, melted, molten, rise};
+use super::{bare_share, range, Falls, Scratch};
 use crate::space::square::FORWARD;
+use crate::store::{apply, Class, LinkFlux};
 use crate::World;
 
 /// Added to a substance's hardness before its softness (1 / hardness) is taken.
@@ -13,63 +14,80 @@ const CREEP_LEVEL: f64 = 0.25;
 /// Most of each loose solid that creeps over an edge per call.
 const CREEP_MOST: f64 = 0.25;
 
-/// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more;
-/// bodies spread back into ground cleared along edges
-/// (`lanes::regrow`, here only, so it closes at the documented speed).
+/// A call of creep: the amount of each solid in each node, mol (`[q * n + i]`), and the volume able to creep weighted
+/// by softness, m³, as the edges so far leave them; and what it moves: over each edge that moves something, from its
+/// higher node `a` to `b`, of each solid, mol, and their heat, J; and the fall of each mass, which heats `b`.
+struct Slides {
+    amt: Vec<f64>,
+    mob: Vec<f64>,
+    a: Vec<u32>,
+    b: Vec<u32>,
+    mol: Vec<Vec<f64>>,
+    heat: Vec<f64>,
+    fall: Falls,
+}
+
+/// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more, edge by edge in a fixed
+/// order, each from the amounts the edges before it left; the store books them in one call (`store::apply`). Bodies
+/// spread back into ground cleared along edges (`lanes::regrow`, here only, so it closes at the documented speed).
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let n = w.grid.n();
     let sol = s.solids(range(&s.tg).0);
-    let soft: Vec<f64> = (0..w.chem.ns()).map(|k| 1.0 / (w.chem.subs[k].hardness + HARD_MIN)).collect();
-    s.mob.fill(0.0);
-    for &k in &sol {
-        for i in 0..n {
-            s.mob[i] += solid(w, s, k, i) * s.sp[k].v[0] * soft[k];
+    let soft: Vec<f64> = sol.iter().map(|&k| 1.0 / (w.chem.subs[k].hardness + HARD_MIN)).collect();
+    let amt: Vec<f64> = sol.iter().flat_map(|&k| w.ground[k * n..(k + 1) * n].iter().copied()).collect();
+    let mut mob = vec![0.0; n];
+    for (q, &k) in sol.iter().enumerate() {
+        for (i, m) in mob.iter_mut().enumerate() {
+            *m += amt[q * n + i] * (1.0 - molten(s, k, i)) * s.sp[k].v[0] * soft[q];
         }
     }
-    let mut heat = 0.0;
+    let mut sl = Slides { amt, mob, a: Vec::new(), b: Vec::new(), mol: vec![Vec::new(); sol.len()], heat: Vec::new(), fall: Falls::new(Class::Ground) };
     for i in 0..n {
         for d in FORWARD {
             let Some(j) = w.grid.step(i, d) else { continue };
             let (a, b) = if s.z[i] > s.z[j] { (i, j) } else { (j, i) };
-            slide(w, s, (a, b), d, (&sol, &soft), dt, &mut heat);
+            slide(w, s, (a, b), d, (&sol, &soft), dt, &mut sl);
         }
     }
-    w.potential -= heat;
+    let (ks, mol): (Vec<u16>, Vec<f64>) = (sol.iter().map(|&k| k as u16).collect(), sl.mol.concat());
+    apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &sl.a, b: &sl.b, ks: &ks, mol: &mol, heat: &sl.heat }, sl.fall.flux()], &[], &[]);
     crate::lanes::regrow(w, dt);
 }
 
-/// Loose solids `sol` (with softness `soft`) creep from the higher node `a` to its neighbour `b`
-/// (along `d`) with their heat; the mass's fall heats `b` and is counted in `heat`.
-fn slide(w: &mut World, s: &mut Scratch, (a, b): (usize, usize), d: (i32, i32), (sol, soft): (&[usize], &[f64]), dt: f64, heat: &mut f64) {
+/// Loose solids `sol` (with softness `soft`) creep from the higher node `a` to its neighbour `b` (along `d`) with their
+/// heat; the mass's fall heats `b`.
+fn slide(w: &World, s: &mut Scratch, (a, b): (usize, usize), d: (i32, i32), (sol, soft): (&[usize], &[f64]), dt: f64, sl: &mut Slides) {
     let (n, area, g, cell, dist) = (w.grid.n(), s.area, w.cfg.gravity, w.grid.cell_m, w.grid.dist(d));
+    let Slides { amt, mob, .. } = sl;
     let dz = s.z[a] - s.z[b];
-    if s.mob[a] <= 0.0 || dz <= 0.0 {
+    if mob[a] <= 0.0 || dz <= 0.0 {
         return;
     }
     let r = w.cfg.creep * dz / dist * cell * dt / area * bare_share(w, a);
-    let f = (area * dz * CREEP_LEVEL / (r * s.mob[a])).min(1.0);
+    let f = (area * dz * CREEP_LEVEL / (r * mob[a])).min(1.0);
     let (ta, tb) = (s.tg[a], s.tg[b]);
     // What moves, summed over substances: heat capacity, mass, mobility, rise of each surface and head.
-    let (mut c, mut mass, mut mob, mut ua, mut ub) = (0.0, 0.0, 0.0, [0.0; 2], [0.0; 2]);
-    for &k in sol {
-        let x = solid(w, s, k, a);
+    let (mut c, mut mass, mut moved, mut ua, mut ub) = (0.0, 0.0, 0.0, [0.0; 2], [0.0; 2]);
+    let mut out = vec![0.0; sol.len()];
+    for (q, &k) in sol.iter().enumerate() {
+        let x = amt[q * n + a] * (1.0 - molten(s, k, a));
         if x > 0.0 {
-            let (p, m) = (&s.sp[k], (x * r * f * soft[k]).min(CREEP_MOST * x));
-            w.ground[k * n + a] -= m;
-            w.ground[k * n + b] += m;
+            let (p, m) = (&s.sp[k], (x * r * f * soft[q]).min(CREEP_MOST * x));
+            (amt[q * n + a], amt[q * n + b], out[q]) = (amt[q * n + a] - m, amt[q * n + b] + m, m);
             let (da, db) = (rise(p, ta, melted(s, k, a), -m, area), rise(p, tb, melted(s, k, b), m, area));
-            (c, mass, mob) = (c + m * p.cp, mass + m * p.mm, mob + m * p.v[0] * soft[k]);
+            (c, mass, moved) = (c + m * p.cp, mass + m * p.mm, moved + m * p.v[0] * soft[q]);
             (ua, ub) = ([ua[0] + da[0], ua[1] + da[1]], [ub[0] + db[0], ub[1] + db[1]]);
         }
     }
     if c > 0.0 {
-        let drop = mass * g * dz / 2.0;
-        (s.cap[a], s.cap[b], s.mob[a], s.mob[b]) = (s.cap[a] - c, s.cap[b] + c, s.mob[a] - mob, s.mob[b] + mob);
-        // The heat of what moved goes with it (no more than the node holds above `T_FLOOR`).
-        let took = w.take_heat(a, c * ta);
-        w.e_ground[b] += took + drop;
+        (s.cap[a], s.cap[b], mob[a], mob[b]) = (s.cap[a] - c, s.cap[b] + c, mob[a] - moved, mob[b] + moved);
+        // The heat of what moves goes with it.
+        sl.a.push(a as u32);
+        sl.b.push(b as u32);
+        sl.heat.push(c * ta);
+        sl.mol.iter_mut().zip(&out).for_each(|(v, &m)| v.push(m));
+        sl.fall.add(b, mass * g * dz / 2.0);
         lift(s, a, ua);
         lift(s, b, ub);
-        *heat += drop;
     }
 }

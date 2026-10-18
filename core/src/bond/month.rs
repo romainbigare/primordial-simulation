@@ -5,7 +5,7 @@ use super::verbs::{bears, torn_from};
 use super::{cell, dissolve, holder, id, members, move_structure, ready, restructure, unlink, GROUND};
 use crate::change::{send_gas, GasMove, Reactor};
 use crate::flow::Sky;
-use crate::ground::share;
+use crate::ground::{draw, share};
 use crate::chem::Phase;
 use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
@@ -69,7 +69,8 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);
     p.e += gas.q_in - q_out;
     (w.e_air[j], w.e_ground[i]) = (w.e_air[j] + q_out - gas.q_in, w.e_ground[i] + gas.back);
-    let paid = share(w.take_heat(i, gas.pay), gas.pay);
+    let cap = w.heat_cap_ground(i);
+    let paid = share(draw(&mut w.e_ground[i], &mut w.counts, cap, gas.pay), gas.pay);
     // The heat of the gas that goes to the ground goes with it.
     (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
     let ground = &mut w.ground;
@@ -94,7 +95,8 @@ fn settle(w: &mut World, s: usize) {
         }
     }
     let (e1, e0) = (p.heat_cap(chem) * tg, p.e);
-    let got = w.take_heat(i, e1 - e0);
+    let cap = w.heat_cap_ground(i);
+    let got = draw(&mut w.e_ground[i], &mut w.counts, cap, e1 - e0);
     let p = &mut w.parts.parts[s];
     p.e = if got == e1 - e0 { e1 } else { e0 + got };
     let chem = &w.chem;

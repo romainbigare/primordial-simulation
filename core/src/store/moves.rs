@@ -9,8 +9,8 @@ use crate::clock::Sleep;
 /// A link flux's net change of a number within this share of all that passes through it is the rounding of its sum, not
 /// a change: liquid that passes through a dry cell would else take from it what it never held.
 pub(super) const NET_ROUNDING: f64 = 1e-12;
-/// The classes `apply` books, the first ones: those whose amounts lie in arrays of `World` (a part's lie in the part,
-/// `Class::Part`, which Bond books).
+/// The classes `apply` books, the first ones: those whose amounts and heat lie in arrays of `World` (a part's lie in
+/// the part, `Class::Part`, which Bond books).
 pub(super) const BOOKED: usize = Class::Part as usize;
 
 /// `mol` of substance `k` and `heat` J leave node `from` for node `to`. `to` receives `heat` less the energy the mol
@@ -34,12 +34,14 @@ pub struct Transform {
 }
 
 /// What crosses each link of a field of nodes at once: link `l` joins the node at index `a[l]` of class `class[0]` and
-/// the one at `b[l]` of `class[1]` (one class for the links of a level, two for the vertical links of a stack, which
-/// must hold substances alike: both air or neither, `held`) and carries `mol[q * links + l]` mol of substance `ks[q]`
-/// (each substance once) and `heat[l]` J, + from `a` to `b` (`heat` empty: no heat). What leaves one end enters the
-/// other, so a flux keeps the books by its form. It takes from a node only what the node loses over all its links (so
-/// what passes through a node, in by one link and out by another, as liquid down a slope, needs nothing held), and it
-/// is scaled as a whole.
+/// the one at `b[l]` of `class[1]` (one class for the links of a level; two for the vertical links of a stack, between
+/// a ground node and its air node, or from a boundary node or the potential to each node of a field) and carries
+/// `mol[q * links + l]` mol of substance `ks[q]` (each substance once) and `heat[l]` J, + from `a` to `b` (`heat`
+/// empty: no heat). What leaves one end enters the other, so a flux keeps the books by its form; where the two classes
+/// hold a substance apart from heat unlike (`held`: the air holds its latent heat), `b` receives the heat less what the
+/// mol hold more there than at `a`, as the `to` of a `Move` does (so such a flux has heat). It takes from a node only
+/// what the node loses over all its links (so what passes through a node, in by one link and out by another, as liquid
+/// down a slope, needs nothing held), and it is scaled as a whole.
 #[derive(Clone, Copy, Debug)]
 pub struct LinkFlux<'a> {
     pub class: [Class; 2],
@@ -60,7 +62,8 @@ pub fn held(chem: &Chemistry, class: Class, k: usize) -> f64 {
 /// The arrays `apply` books: `2 * class` holds the amounts of a class and `2 * class + 1` its heat, the order in which
 /// it counts what it rounds.
 pub(super) const ARRAYS: usize = 2 * BOOKED;
-/// The first array of the boundary nodes, which give all they are asked (`Class::Boundary`).
+/// The first array of the nodes that give all they are asked: the boundary nodes and the potential
+/// (`Class::Boundary`, `Class::Potential`).
 pub(super) const BOUNDARY_ARRAYS: usize = 2 * Class::Boundary as usize;
 
 /// One number of the world: entry `at` of array `arr` (`ARRAYS`); an amount is at `k * len + index`.
@@ -85,20 +88,44 @@ impl Slot {
 pub(super) type Sums = [Vec<[f64; 2]>; ARRAYS];
 
 /// One column of a link flux: what crosses each link, from array `arr[0]` (`ARRAYS`) at its `a` end to `arr[1]` at its
-/// `b` end, where the number of node `i` is at `at[end] + i`.
+/// `b` end, where the number of node `i` is at `at[end] + i`: `by_link[0]` leaves the one, `by_link[1]` enters the other.
 #[derive(Clone, Copy)]
 pub(super) struct Column<'a> {
     pub(super) arr: [usize; 2],
     at: [usize; 2],
-    by_link: &'a [f64],
+    by_link: [&'a [f64]; 2],
 }
 
 impl<'a> LinkFlux<'a> {
-    /// Its columns: one for each substance, then the heat.
-    pub(super) fn columns(&self, len: &[usize; BOOKED]) -> Vec<Column<'a>> {
+    /// Whether its two classes hold each of its substances apart from heat alike (`held`).
+    pub(super) fn alike(&self, chem: &Chemistry) -> bool {
+        self.ks.iter().all(|&k| held(chem, self.class[0], k as usize) == held(chem, self.class[1], k as usize))
+    }
+    /// The heat its `b` ends receive, by link: what leaves `a` less what the mol hold more at `b` (empty where the
+    /// classes hold its substances alike, `alike`).
+    pub(super) fn lifted(&self, chem: &Chemistry) -> Vec<f64> {
+        if self.alike(chem) {
+            return Vec::new();
+        }
+        let (links, mut q) = (self.a.len(), self.heat.to_vec());
+        for (x, &k) in self.ks.iter().enumerate() {
+            let more = held(chem, self.class[1], k as usize) - held(chem, self.class[0], k as usize);
+            q.iter_mut().zip(&self.mol[x * links..(x + 1) * links]).for_each(|(q, m)| *q -= m * more);
+        }
+        q
+    }
+    /// Its columns: one for each substance, then the heat, which its `b` ends receive as `lifted` (`lifted`).
+    pub(super) fn columns<'c>(&self, len: &[usize; BOOKED], lifted: &'c [f64]) -> Vec<Column<'c>>
+    where
+        'a: 'c,
+    {
         let (c, links, mol) = (self.class.map(|c| c as usize), self.a.len(), self.mol);
-        let amount = |q: usize, k: u16| Column { arr: c.map(|c| 2 * c), at: c.map(|c| k as usize * len[c]), by_link: &mol[q * links..(q + 1) * links] };
-        let heat = (!self.heat.is_empty()).then_some(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], by_link: self.heat });
+        let amount = |q: usize, k: u16| {
+            let m = &mol[q * links..(q + 1) * links];
+            Column { arr: c.map(|c| 2 * c), at: c.map(|c| k as usize * len[c]), by_link: [m, m] }
+        };
+        let into = if lifted.is_empty() { self.heat } else { lifted };
+        let heat = (!self.heat.is_empty()).then_some(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], by_link: [self.heat, into] });
         self.ks.iter().enumerate().map(|(q, &k)| amount(q, k)).chain(heat).collect()
     }
 }
@@ -146,8 +173,8 @@ impl Column<'_> {
     /// What link `l`, from node `a` to node `b`, changes in it: what leaves `a` enters `b`.
     #[inline(always)]
     pub(super) fn deltas(&self, l: usize, a: u32, b: u32) -> [(Slot, f64); 2] {
-        let (arr, at, m) = (self.arr, self.at, self.by_link[l]);
-        [(Slot { arr: arr[0], at: at[0] + a as usize }, -m), (Slot { arr: arr[1], at: at[1] + b as usize }, m)]
+        let (arr, at, [out, into]) = (self.arr, self.at, self.by_link);
+        [(Slot { arr: arr[0], at: at[0] + a as usize }, -out[l]), (Slot { arr: arr[1], at: at[1] + b as usize }, into[l])]
     }
     /// Adds to `net` the net change of each number it touches and all that passes through it, and notes each number
     /// once in `touched` (its index times 2, plus its end); returns their count.
@@ -180,13 +207,14 @@ pub(super) struct Giver<'w> {
 
 impl Giver<'_> {
     /// Changes number `s`, `v`, by `x` scaled by `f`, and notes the node to wake when that brings it more than
-    /// `wake_share` of what it held of an amount. Heat wakes no node: a node's temperature changes at every step outside
-    /// `apply` (radiation, the exchange with the air), and its own alarm bounds how long it reacts at an old one.
+    /// `wake_share` of what it held of an amount (a node that gives all it is asked never sleeps). Heat wakes no node: a
+    /// node's temperature changes at every step outside `apply` (radiation, the exchange with the air), and its own
+    /// alarm bounds how long it reacts at an old one.
     #[inline(always)]
     pub(super) fn give(&mut self, v: &mut f64, s: Slot, x: f64, f: f64) {
         let (held, given) = (*v, x * f);
         *v += given;
-        if s.unit() == 0 && given > self.wake_share * held.max(0.0) {
+        if s.unit() == 0 && given > self.wake_share * held.max(0.0) && s.arr < BOUNDARY_ARRAYS {
             self.wake(s);
         }
     }
@@ -235,26 +263,32 @@ fn each_end<const BACK: bool>(fluxes: &[LinkFlux], columns: &[Vec<Column>], book
 
 /// The fast path of `apply` for link fluxes alone: books them unscaled, in the order in which the careful path gives
 /// them when nothing is short, keeping the value of each number before each change (`saved`); then looks at the
-/// numbers that ended below zero (`low`). One below the rounding of all that passed through it (`NET_ROUNDING`) is
+/// numbers that ended below zero (`low`; a boundary node and the potential may). One below the rounding of all that passed through it (`NET_ROUNDING`) is
 /// short: then every number is set back to what it held and it returns false. Else the rounding below zero is set to
 /// zero and counted in `rounded`, as the careful path does, so the result is the same.
 pub(super) fn book_first(fluxes: &[LinkFlux], columns: &[Vec<Column>], books: &mut [&mut [f64]; ARRAYS], giver: &mut Giver, (saved, net, low): (&mut Vec<f64>, &mut Sums, &mut Vec<Slot>), rounded: &mut [f64; 2]) -> bool {
     saved.clear();
     low.clear();
+    // Each number that falls below zero on the way, once (marked in `net`): those that end there are among them.
     each_end::<false>(fluxes, columns, books, |v, s, d| {
         saved.push(*v);
         giver.give(v, s, d, 1.0);
-    });
-    // Each number below zero once (marked in `net`), then all that passed through it.
-    each_end::<false>(fluxes, columns, books, |v, s, _| {
-        if *v < 0.0 && net[s.arr][s.at][0] == 0.0 {
+        if *v < 0.0 && s.arr < BOUNDARY_ARRAYS && net[s.arr][s.at][0] == 0.0 {
             net[s.arr][s.at][0] = 1.0;
             low.push(s);
         }
     });
+    low.retain(|s| {
+        let below = books[s.arr][s.at] < 0.0;
+        if !below {
+            net[s.arr][s.at] = [0.0; 2];
+        }
+        below
+    });
     if low.is_empty() {
         return true;
     }
+    // All that passed through each number that ends below zero.
     each_end::<false>(fluxes, columns, books, |_, s, d| {
         let m = &mut net[s.arr][s.at];
         m[1] += if m[0] != 0.0 { d.abs() } else { 0.0 };

@@ -148,15 +148,9 @@ pub struct Scratch {
     pub(super) alb: Vec<f64>,
     /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
     pub(super) rc: Vec<f64>,
-    /// Condensed on each ground node in this exchange, mol.
-    #[serde(skip)]
-    pub(super) rain: Vec<f64>,
     /// Cells by the head of the liquid that may run off, highest first: the order of the liquid's pass (`liquid`).
     #[serde(skip)]
     pub(super) order: Order,
-    /// Volume of loose solid able to creep, weighted by softness, m³.
-    #[serde(skip)]
-    pub(super) mob: Vec<f64>,
     /// Air node over each ground cell (radiation and Law 2 read it); the four nearest air nodes and their weights
     /// (`air::lerp`).
     #[serde(skip)]
@@ -175,12 +169,6 @@ pub struct Scratch {
     pub(super) lay: Vec<[[f64; air::LAYERS]; 2]>,
     /// Temperature of each air node at the last `air::state`, K.
     pub(super) ta0: Vec<f64>,
-    /// Condensed in each air node in this exchange, mol, and mol × reflectance.
-    #[serde(skip)]
-    pub(super) cloud: Vec<[f64; 2]>,
-    /// The air's amounts of the exchanged gases at the start of a pass, mol.
-    #[serde(skip)]
-    pub(super) snap: Vec<f64>,
     /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
     pub(super) vol: Vec<f64>,
@@ -194,10 +182,6 @@ pub struct Scratch {
     pub(super) gam: Vec<f64>,
     pub(super) zair: Vec<f64>,
     pub(super) ta: Vec<f64>,
-    /// Per air node, reused by each part for its own sums: J/K (state), J (radiation),
-    /// reflectance (exchange).
-    #[serde(skip)]
-    pub(super) node_tmp: Vec<f64>,
     /// Per gas [g * na + j]: may it condense in the column; height its amount fills near the
     /// ground, m; share of it in the upper half of the column.
     pub(super) cond: Vec<bool>,
@@ -350,11 +334,4 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             ([j(x0, y0), j(x1, y0), j(x0, y1), j(x1, y1)], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
         })
         .unzip();
-}
-
-/// Space used only within a call (not saved).
-pub(super) fn space(w: &World, s: &mut Scratch) {
-    let (n, na) = (w.grid.n(), w.grid.na());
-    (s.rain, s.mob) = (vec![0.0; n], vec![0.0; n]);
-    (s.node_tmp, s.cloud) = (vec![0.0; na], vec![[0.0; 2]; na]);
 }

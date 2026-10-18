@@ -6,7 +6,7 @@ use super::super::Scratch;
 use super::air_temp;
 use crate::life::Life;
 use crate::math::one_minus_exp;
-use crate::store::Boundary;
+use crate::store::{apply, Boundary, Class, LinkFlux};
 use crate::units::SIGMA;
 use crate::{Config, World};
 use std::f64::consts::{PI, TAU};
@@ -53,34 +53,33 @@ struct Ground<'a> {
     /// Declination of the sun, radians.
     decl: f64,
     ground: &'a [f64],
-    e_ground: &'a [f64],
     canopy: &'a [f32],
     life: &'a Life,
     dt: f64,
 }
 
 /// The numbers of one cell's radiation, in a row (see `cell`).
-const ROW: usize = 8;
+const ROW: usize = 6;
 
 /// Sunlight by latitude and season, reflected by what covers the ground; the ground emits
 /// σT⁴, of which the air absorbs its share and emits by its layers (`column`); and
 /// contact heat with the air touching the ground (warmer than the air's mean by the drop
-/// from the air's mean height). The ground temperature is solved implicitly. All the air
-/// absorbs and emits is booked to its node; the sunlight absorbed is booked from the sun node,
-/// the heat that leaves to space to the space node.
+/// from the air's mean height). The ground temperature is solved implicitly. The store books it
+/// in one call (`store::apply`), as link fluxes: the sunlight each ground node absorbs, from the sun
+/// node; what it gives its air node (what that absorbs of it, less what it sends down, and what
+/// leaves to space through it); and what leaves each air node to the space node.
 pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
     let season = w.season();
-    let World { cfg, grid, ground, e_ground, e_air, counts, canopy, light, light_pool, life, .. } = w;
+    let World { cfg, grid, ground, canopy, light, light_pool, life, .. } = w;
     light_pool.resize(grid.n(), 0.0);
-    let (n, na, cells) = (grid.n(), grid.na(), grid.mesh().cells());
+    let (n, cells) = (grid.n(), grid.mesh().cells());
     let decl = -cfg.tilt.to_radians() * (TAU * season).cos();
-    let (mut sun, mut out) = (0.0, 0.0);
-    s.node_tmp.fill(0.0);
+    let mut kept_all = 0.0;
     // Each cell's numbers depend on no other cell: computed in rows (in parallel, with `threads`),
     // applied in the order of the cells.
     let mut rows = std::mem::take(&mut s.rad);
     rows.resize(n * ROW, 0.0);
-    let (sc, at) = (&*s, Ground { cfg, area: cells.area(), lat: cells.lat(), decl, ground, e_ground, canopy, life, dt });
+    let (sc, at) = (&*s, Ground { cfg, area: cells.area(), lat: cells.lat(), decl, ground, canopy, life, dt });
     // Each task keeps the last latitude and its sunlight: neighbouring cells often share a latitude (a row of the
     // square map), and the sunlight is the same function of it.
     crate::par::rows(&mut rows, ROW, || (f64::NAN, 0.0), |last, i, row| {
@@ -89,8 +88,12 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
         }
         *<&mut [f64; ROW]>::try_from(row).unwrap() = cell(&at, sc, i, last.1);
     });
+    // The links: from the sun to each ground node, from each ground node to its air node, and from each air node to
+    // space (`ids`: the nodes 0, 1, ... of the cells, and of the fewer air nodes).
+    let (na, mut heat, mut out) = (grid.na(), vec![0.0; 2 * n], vec![0.0; grid.na()]);
+    let (sun, ids) = (vec![Boundary::Sun as u32; n], (0..n as u32).collect::<Vec<_>>());
     for (i, row) in rows.chunks_exact(ROW).enumerate() {
-        let &[tl, dl, kept, sw, gain, to_air, to_space, clamped] = <&[f64; ROW]>::try_from(row).unwrap();
+        let &[tl, dl, kept, sw, to_air, to_space] = <&[f64; ROW]>::try_from(row).unwrap();
         s.tl[i] = tl;
         let adt = cells.area()[i] * dt;
         if canopy[i] as f64 > 0.0 {
@@ -100,30 +103,31 @@ pub(crate) fn radiation(w: &mut World, s: &mut Scratch, dt: f64) {
             }
         }
         light_pool[i] += adt * kept;
-        sun += adt * kept;
-        if clamped != 0.0 {
-            counts.clamped_heat += clamped;
-        }
-        e_ground[i] += gain;
-        s.node_tmp[s.air_of[i] as usize] += to_air;
-        sun += adt * sw;
-        out += to_space;
+        kept_all += adt * kept;
+        (heat[i], heat[n + i]) = (adt * sw, to_air + to_space);
+        out[s.air_of[i] as usize] += to_space;
     }
     s.rad = rows;
-    for (j, e) in e_air.iter_mut().enumerate().take(na) {
-        *e += s.node_tmp[j];
-        s.ta[j] = air_temp(*e, s.capa[j]);
+    // The light set aside for bodies is no heat of a node yet: it crosses from the sun as it falls.
+    w.cross(Boundary::Sun, [], kept_all);
+    let space = vec![Boundary::Space as u32; na];
+    let fluxes = [
+        LinkFlux { class: [Class::Boundary, Class::Ground], a: &sun, b: &ids, ks: &[], mol: &[], heat: &heat[..n] },
+        LinkFlux { class: [Class::Ground, Class::Air], a: &ids, b: &s.air_of, ks: &[], mol: &[], heat: &heat[n..] },
+        LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
+    ];
+    apply(w, &fluxes, &[], &[]);
+    for j in 0..w.grid.na() {
+        s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
     }
-    w.cross(Boundary::Sun, [], sun);
-    w.cross(Boundary::Space, [], -out);
 }
 
 /// The radiation of ground cell `i` under the sunlight `q` of its latitude (W/m²) over the step: [temperature of the
 /// air touching the ground, K; light each unit of capture area of its bodies gets, J/m²; light set
-/// aside for them, W/m²; shortwave absorbed, W/m²; heat the node gains, J; heat given to its air
-/// node, J; heat sent to space, J; heat it could not pay, J].
+/// aside for them, W/m²; shortwave absorbed, W/m²; heat given to its air node, J; heat sent to
+/// space, J].
 fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
-    let (cfg, n, dt) = (at.cfg, at.e_ground.len(), at.dt);
+    let (cfg, n, dt) = (at.cfg, at.area.len(), at.dt);
     let adt = at.area[i] * dt;
     // The air this cell sees, and its temperature where it touches the ground.
     let ([gam, zair, f, c, ta], t, j) = (s.seen[i], s.tg[i], s.air_of[i] as usize);
@@ -157,14 +161,7 @@ fn cell(at: &Ground, s: &Scratch, i: usize, q: f64) -> [f64; ROW] {
             ts = surface(adt / s.cap[i] + s.rc[i]);
         }
     }
-    let (mut up, mut hs) = flux(ts);
-    // A node pays only what it holds above `T_FLOOR`; past that it emits and conducts less (as `take_heat`).
-    let (room, lose, mut clamped) = (crate::ground::heat_above_floor(at.e_ground[i], s.cap[i]), adt * (up + hs), 0.0);
-    if lose > room + adt * (sw + down) {
-        let lam = (room + adt * (sw + down)) / lose;
-        clamped = lose * (1.0 - lam);
-        (up, hs) = (up * lam, hs * lam);
-    }
-    [tl, dl, kept, sw, adt * (sw + down - up - hs), adt * (f * up + hs - down - emit), adt * ((1.0 - f) * up + emit), clamped]
+    let (up, hs) = flux(ts);
+    [tl, dl, kept, sw, adt * (f * up + hs - down - emit), adt * ((1.0 - f) * up + emit)]
 }
 

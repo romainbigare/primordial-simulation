@@ -6,9 +6,10 @@ use crate::params::Config;
 use crate::units::T_FLOOR;
 use crate::world::{Counters, World};
 
-/// `World::take_heat` for callers that hold other parts of the world borrowed: take up to `q` from
-/// a node with energy `e` and heat capacity `cap` (at most what it holds above `T_FLOOR`), count
-/// the shortfall, return what was taken.
+/// Take up to `q` J from a node with energy `e` and heat capacity `cap` (at most what it holds above `T_FLOOR`), count
+/// the shortfall in `Counters::clamped_heat`, return what was taken: whoever wanted `q` passes on only that. A negative
+/// `q` gives heat to the node and is returned whole. For the moves not booked by the store (bodies, parts and ground
+/// reactions), whose guard this is; the store's is `store::apply`.
 #[inline]
 pub(crate) fn draw(e: &mut f64, counts: &mut Counters, cap: f64, q: f64) -> f64 {
     let took = if q > 0.0 { q.min(heat_above_floor(*e, cap)) } else { q };
@@ -120,21 +121,6 @@ impl World {
         ks.sort_by(|a, b| a.0.total_cmp(&b.0));
         let th = melting(c, self.e_ground[i], ks.into_iter().map(|(tm, k)| (tm, k, self.g(k, i) * self.chem.subs[k].lf)));
         (th.t, th.on)
-    }
-    /// Take up to `q` J from ground node `i`, never more than it holds above `T_FLOOR`, and return what was
-    /// really taken. The shortfall is counted in `counts.clamped_heat`. Whoever wanted `q` must
-    /// pass on only the returned amount (evaporate less, carry less), so energy stays exact.
-    /// A negative `q` gives heat to the node and is returned whole.
-    pub fn take_heat(&mut self, i: usize, q: f64) -> f64 {
-        self.take_heat_with(i, q, 0.0)
-    }
-    /// `take_heat` for heat that leaves with matter of heat capacity `c` J/K (still counted in
-    /// the node): only the heat capacity that stays must be left above `T_FLOOR`.
-    pub fn take_heat_with(&mut self, i: usize, q: f64, c: f64) -> f64 {
-        // Only a take needs the capacity (a walk over the node's substances): a body taking from
-        // the ground asks once per substance, mostly for nothing.
-        let cap = if q > 0.0 { self.heat_cap_ground(i) - c } else { 0.0 };
-        draw(&mut self.e_ground[i], &mut self.counts, cap, q)
     }
     /// `take_paid` from ground node `i`.
     pub(crate) fn take_paid(&mut self, i: usize, d: f64, cp: f64, want: f64) -> (f64, f64) {

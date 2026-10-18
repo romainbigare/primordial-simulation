@@ -48,15 +48,16 @@ fn ask(n: &mut f64, s: Slot, x: f64, asked: &mut [Slot], count: &mut usize) {
 }
 
 /// What the numbers of a column, `touched` by it (`Column::sum`), ask: each once, without a branch, a net loss is
-/// asked (but of a boundary node) and noted in `takes` (from `nt` on), a change within rounding is noted in `passed`
-/// (from `np` on). Returns what the column takes from its nodes, and the counts `nt` and `np` after it.
+/// asked and noted in `takes` (from `nt` on), a change within rounding is noted in `passed` (from `np` on), but of a
+/// node that gives all it is asked. Returns what the column takes from its nodes, and the counts `nt` and `np` after it.
 #[inline(always)]
 fn ask_column(col: &Column, touched: &[usize], (need, net): (&mut impl Ends<f64>, &mut impl Ends<[f64; 2]>), (asked, count): (&mut [Slot], &mut usize), (takes, passed): (&mut [Slot], &mut [Slot]), (mut nt, mut np): (usize, usize)) -> (f64, usize, usize) {
     let mut loss = 0.0;
     for &t in touched {
         let (end, at) = (t % 2, t / 2);
         let (s, [d, all]) = (Slot { arr: col.arr[end], at }, std::mem::take(net.at(end, at)));
-        let (lose, round) = (d < -NET_ROUNDING * all && s.arr < BOUNDARY_ARRAYS, d.abs() <= NET_ROUNDING * all);
+        let mine = s.arr < BOUNDARY_ARRAYS;
+        let (lose, round) = (d < -NET_ROUNDING * all && mine, d.abs() <= NET_ROUNDING * all && mine);
         let d = if lose { d } else { 0.0 };
         ask(need.at(end, at), s, d, asked, count);
         (takes[nt], passed[np]) = (s, s);
@@ -138,24 +139,23 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut Vec<f64>) ->
 
 /// Book the link fluxes, then the moves, then the transforms, each in its order. A link flux takes from a node only its
 /// net loss over all the flux's links (a net change within `NET_ROUNDING` of what passes through is none), and is
-/// scaled as a whole: by the least share over what it takes from. Where all that would leave a number
-/// (an amount of a node, or its heat) is more than it holds, each change that takes from it is scaled down by the
-/// share it holds (the least share over all it takes from), so no amount and no heat falls below zero
-/// (`docs/handover.md` 6.1); a boundary node gives all it is asked. What the scaling left in place is counted in
-/// `Counters::scaled`, and the last rounding below zero, set to zero, in `Counters::rounded`. A change that brings a
-/// node more than `Config::wake_share` of what it held of an amount wakes the node (`clock::Sleep::wake`; a
-/// boundary node never sleeps). Panics on a transform that does not keep its elements, and on the id of a node that is
+/// scaled as a whole: by the least share over what it takes from. Where all that would leave a number (an amount of a
+/// node, or its heat) is more than it holds, each change that takes from it is scaled down by the share it holds (the
+/// least share over all it takes from), so no amount and no heat falls below zero (`docs/handover.md` 6.1); a boundary
+/// node and the potential give all they are asked. What the scaling left in place is counted in `Counters::scaled`, and
+/// the last rounding below zero, set to zero, in `Counters::rounded`. A change that brings a node more than
+/// `Config::wake_share` of what it held of an amount wakes the node (`clock::Sleep::wake`; a node that gives all it is
+/// asked never sleeps). Panics on a transform that does not keep its elements, and on the id of a node that is
 /// gone.
 ///
 /// It works on the numbers the changes touch alone (`Booking`), and books each flux by its columns, one array at a
-/// time: each number still sees its changes in their order, so the result is the same. Link fluxes alone (between
-/// nodes that are not boundary nodes) are booked first and checked after (`book_first`), and booked with care only
-/// where that finds a number short.
+/// time: each number still sees its changes in their order, so the result is the same. Link fluxes alone are booked
+/// first and checked after (`book_first`), and booked with care only where that finds a number short.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
-    let World { cfg, chem, table, sleep, time, counts, grid, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, .. } = w;
-    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, saved, woken, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES], booking);
-    let mut books = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..]];
+    let World { cfg, chem, table, sleep, time, counts, grid, booking, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
+    let (len, Booking { need, asked, net, touched, takes, ends, passed, lost, saved, woken, sums }) = ([grid.n(), grid.na(), grid.n(), BOUNDARIES, 1], booking);
+    let mut books = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..], &mut [], std::slice::from_mut(potential)];
     for ((n, s), b) in need.iter_mut().zip(net.iter_mut()).zip(&books) {
         if n.len() != b.len() {
             (*n, *s) = (vec![0.0; b.len()], vec![[0.0; 2]; b.len()]);
@@ -163,17 +163,17 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     }
     for x in fluxes {
         let (links, once) = (x.a.len(), x.ks.iter().enumerate().all(|(q, k)| !x.ks[..q].contains(k)));
-        let classes = x.class.iter().all(|&c| (c as usize) < BOOKED) && (x.class[0] == Class::Air) == (x.class[1] == Class::Air);
-        let shaped = classes && x.b.len() == links && x.mol.len() == x.ks.len() * links && (x.heat.is_empty() || x.heat.len() == links);
+        let heat = if x.alike(chem) { x.heat.is_empty() || x.heat.len() == links } else { x.heat.len() == links };
+        let shaped = x.class.iter().all(|&c| (c as usize) < BOOKED) && x.b.len() == links && x.mol.len() == x.ks.len() * links && heat;
         assert!(shaped && once, "a link flux of the wrong shape");
     }
     for t in transforms {
         assert!(keeps_elements(chem, &t.dmol, sums), "a transform that does not keep its elements: {t:?}");
     }
-    let columns: Vec<_> = fluxes.iter().map(|x| x.columns(&len)).collect();
+    let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
+    let columns: Vec<_> = fluxes.iter().zip(&lifted).map(|(x, q)| x.columns(&len, q)).collect();
     let mut giver = Giver { wake_share: cfg.wake_share, scaled: &mut counts.scaled, woken, sleep, table, time: *time, len };
-    let alone = moves.is_empty() && transforms.is_empty() && fluxes.iter().all(|x| !x.class.contains(&Class::Boundary));
-    if alone && book_first(fluxes, &columns, &mut books, &mut giver, (saved, net, passed), &mut counts.rounded) {
+    if moves.is_empty() && transforms.is_empty() && book_first(fluxes, &columns, &mut books, &mut giver, (saved, net, passed), &mut counts.rounded) {
         giver.flush();
         return;
     }

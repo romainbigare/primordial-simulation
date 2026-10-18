@@ -5,7 +5,7 @@
 mod along;
 mod mesh;
 
-use super::super::Scratch;
+use super::super::{Falls, Scratch};
 use super::air_temp;
 use crate::grid::AIR;
 use crate::space::Level;
@@ -91,16 +91,14 @@ fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
     }
 }
 
-/// Book `m` on the world over the links of `air`: the gas and heat through `store::apply`; the lift from the heat of the
-/// node the mass enters into the world's potential energy (as `Sky::cross` books it); then the sums the state keeps of
-/// each air node, from its amounts (`air::sums`).
+/// Book `m` on the world over the links of `air` through `store::apply`: the gas and heat, then the lift from the heat
+/// of the node the mass enters into the world's potential energy (as `Sky::cross` books it); then the sums the state
+/// keeps of each air node, from its amounts (`air::sums`).
 fn book(w: &mut World, s: &mut Scratch, air: &Level, m: &Moved) {
     let ks: Vec<u16> = s.gas.iter().map(|&k| k as u16).collect();
-    apply(w, &[LinkFlux { class: [Class::Air; 2], a: air.a(), b: air.b(), ks: &ks, mol: &m.mol, heat: &m.heat }], &[], &[]);
-    for (e, &lift) in w.e_air.iter_mut().zip(&m.paid) {
-        *e -= lift;
-        w.potential += lift;
-    }
+    let mut lift = Falls::new(Class::Air);
+    m.paid.iter().enumerate().for_each(|(j, &q)| lift.add(j, -q));
+    apply(w, &[LinkFlux { class: [Class::Air; 2], a: air.a(), b: air.b(), ks: &ks, mol: &m.mol, heat: &m.heat }, lift.flux()], &[], &[]);
     super::sums(w, s);
     for (j, &e) in w.e_air.iter().enumerate() {
         s.ta[j] = air_temp(e, s.capa[j]);

@@ -258,9 +258,8 @@ pub fn dig(w: &mut World, b: &mut Body) {
     if !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval() as f64) {
         return;
     }
-    for (k, a) in m.iter().enumerate() {
-        w.bed[k * n + i] -= a;
-        w.ground[k * n + i] += a;
+    for (k, &a) in m.iter().enumerate() {
+        w.loosen(k, i, a);
     }
 }
 

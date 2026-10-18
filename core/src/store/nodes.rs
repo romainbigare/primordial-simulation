@@ -26,6 +26,10 @@ pub enum Class {
     /// A node beyond the world's boundary (`Boundary`): `World::boundary`, `World::e_boundary`. It may hold less than
     /// nothing: what it holds is what crossed, with the sign of a node (the sun's heat falls by the light it gives).
     Boundary,
+    /// The potential energy the world's matter has gained in the field of gravity since the start: one node, holding no
+    /// amounts, whose heat is `World::potential`. Lifting matter moves heat into it and a fall takes it back; like a
+    /// boundary node it gives all it is asked (it holds less than nothing when matter ends lower than it started).
+    Potential,
     /// A part (`bond::Part`): its walls, fill and heat in `World::parts`, by its index. The only class whose nodes come
     /// and go, so it is the last: a new slot is a part's.
     #[default]
@@ -33,7 +37,7 @@ pub enum Class {
 }
 
 /// The number of classes.
-pub(crate) const CLASSES: usize = 5;
+pub(crate) const CLASSES: usize = 6;
 
 /// The three nodes beyond the world's boundary, by their index among the `Class::Boundary` nodes: what the world
 /// gains from them and gives them is all its energy and matter may change by (`check::drift`).
@@ -52,7 +56,7 @@ pub const BOUNDARIES: usize = 3;
 
 impl Class {
     /// Every class, by its index (`class as usize`).
-    pub(crate) const ALL: [Class; CLASSES] = [Class::Ground, Class::Air, Class::Deep, Class::Boundary, Class::Part];
+    pub(crate) const ALL: [Class; CLASSES] = [Class::Ground, Class::Air, Class::Deep, Class::Boundary, Class::Potential, Class::Part];
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
@@ -77,10 +81,10 @@ pub struct Nodes {
 
 impl Nodes {
     /// The table of a world on `grid`: its ground nodes, then its air nodes, then its deep stores, each in the order of
-    /// its cells, then the boundary nodes; the parts come after them.
+    /// its cells, then the boundary nodes and the potential; the parts come after them.
     pub fn of_grid(grid: &Grid) -> Self {
         let mut t = Nodes::default();
-        for (class, len) in [(Class::Ground, grid.n()), (Class::Air, grid.na()), (Class::Deep, grid.n()), (Class::Boundary, BOUNDARIES)] {
+        for (class, len) in [(Class::Ground, grid.n()), (Class::Air, grid.na()), (Class::Deep, grid.n()), (Class::Boundary, BOUNDARIES), (Class::Potential, 1)] {
             t.first[class as usize] = t.nodes.len() as u32;
             t.nodes.extend((0..len as u32).map(|cell| Node { gen: 0, class, parent: None, cell }));
         }

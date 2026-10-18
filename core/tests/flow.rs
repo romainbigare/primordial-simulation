@@ -3,7 +3,7 @@
 
 use pcore::chem::Phase;
 use pcore::store::Boundary;
-use pcore::units::{DAY, T_FLOOR};
+use pcore::units::DAY;
 use pcore::{body, brain, choose, lanes, World};
 use worldgen::testkit::{ground_of, loose_volume as loose, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
@@ -63,7 +63,7 @@ fn hot_plateau_cools_but_not_to_the_floor() {
     pcore::flow::step(&mut w, DT);
     let t = w.t_ground(i);
     assert!(t > 150.0 && t < melt, "{t} K after a step from {melt} K");
-    assert_eq!(w.counts.clamped_heat, 0.0);
+    assert_eq!(w.counts.scaled, [0.0; 2]);
     books.assert_within(&w, 1e-12, 1e-9);
 }
 
@@ -232,28 +232,6 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
     assert!(held(&w) < 0.9 * h1, "{} dissolved per mol after warming, {h1} before", held(&w));
     books.assert_within(&w, 1e-12, 1e-9);
-}
-
-/// Taking heat from a ground node never takes it below the floor temperature: what is asked past that is counted,
-/// and heat that leaves with matter takes the node down only to the floor of the heat capacity that stays.
-#[test]
-fn take_heat_never_takes_a_node_below_the_floor() {
-    let mut w = worldgen::new_world(1, 16, 16);
-    let (i, e0) = (5, w.e_ground[5]);
-    let floor = w.heat_cap_ground(i).max(1.0) * T_FLOOR;
-    assert_eq!(w.take_heat(i, 0.25 * e0), 0.25 * e0);
-    assert_eq!(w.counts.clamped_heat, 0.0);
-    // Asking for more than there is gives what is above the floor and counts the rest.
-    let took = w.take_heat(i, 10.0 * e0);
-    assert!((w.e_ground[i] - floor).abs() <= 1e-9 * e0, "{} vs {floor}", w.e_ground[i]);
-    assert!((took + w.counts.clamped_heat - 10.0 * e0).abs() <= 1e-9 * e0);
-    assert!(pcore::check::broken(&w).is_none());
-    // A negative request gives heat and is returned whole.
-    assert_eq!(w.take_heat(i, -5.0), -5.0);
-    // Heat that leaves with matter of most of the node's heat capacity.
-    let (c, e1) = (0.9 * w.heat_cap_ground(i), w.e_ground[i]);
-    let took = w.take_heat_with(i, e1, c);
-    assert!((e1 - took - (w.heat_cap_ground(i) - c) * T_FLOOR).abs() <= 1e-9 * e1, "{took} of {e1}");
 }
 
 /// The pore space of a cell is the porosity times the volume of its loose solids; the liquid in it does not stand:

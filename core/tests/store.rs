@@ -23,6 +23,7 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
         Class::Air => (&w.air, &w.e_air, w.grid.na()),
         Class::Deep => (&w.deep, &w.e_deep, w.grid.n()),
         Class::Boundary => (&w.boundary, &w.e_boundary[..], BOUNDARIES),
+        Class::Potential => (&[], std::slice::from_ref(&w.potential), 1),
         Class::Part => unreachable!("a part's amounts lie in the part"),
     }
 }
@@ -31,7 +32,7 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
 fn every_node_has_one_id() {
     let w = small_world();
     let mut ids: Vec<NodeId> = w.table.ids().collect();
-    for class in CLASSES.into_iter().chain([Class::Boundary]) {
+    for class in CLASSES.into_iter().chain([Class::Boundary, Class::Potential]) {
         for i in 0..arrays(&w, class).2 {
             let id = w.table.id(class, i);
             assert_eq!((w.table.place(id), w.table.cell(id), w.table.parent(id)), ((class, i), i, None));
@@ -39,7 +40,7 @@ fn every_node_has_one_id() {
     }
     let n = ids.len();
     ids.dedup();
-    assert_eq!((ids.len(), n), (n, 2 * w.grid.n() + w.grid.na() + BOUNDARIES), "one id for each ground, air, deep and boundary node");
+    assert_eq!((ids.len(), n), (n, 2 * w.grid.n() + w.grid.na() + BOUNDARIES + 1), "one id for each ground, air, deep and boundary node, and the potential");
 }
 
 /// Two moves that each ask for all a node holds each get half of it.
@@ -98,6 +99,25 @@ fn a_link_joins_a_ground_node_to_its_store() {
     assert_eq!(w.counts.scaled, [0.0; 2]);
 }
 
+/// A link may join a ground node to its air node: the gas that rises takes from the heat the air receives what the air
+/// holds of it apart from heat (its latent heat), and its lift goes from the air's heat into the potential.
+#[test]
+fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
+    let mut w = small_world();
+    let i = 3;
+    let (j, latent) = (w.grid.air_of(i) as u32, w.chem.subs[LIQUID].latent_gas());
+    let (e_air, e_ground, pot, books) = (w.e_air[j as usize], w.e_ground[i], w.potential, Books::now(&w));
+    let (heat, lift) = (1e-6 * e_ground, 1e-9 * e_ground);
+    let m = 0.5 * heat / latent;
+    let rise = LinkFlux { class: [Class::Ground, Class::Air], a: &[i as u32], b: &[j], ks: &[LIQUID as u16], mol: &[m], heat: &[heat] };
+    let paid = LinkFlux { class: [Class::Potential, Class::Air], a: &[0], b: &[j], ks: &[], mol: &[], heat: &[-lift] };
+    apply(&mut w, &[rise, paid], &[], &[]);
+    books.assert_kept(&w, 1e-12);
+    let near = |x: f64, y: f64, of: f64| (x - y).abs() <= 1e-12 * of;
+    assert!(near(w.e_air[j as usize] - e_air, heat - m * latent - lift, e_air) && near(e_ground - w.e_ground[i], heat, e_ground));
+    assert!(near(w.potential - pot, lift, pot.abs()) && w.counts.scaled == [0.0; 2]);
+}
+
 /// A link flux alone is booked first and checked after: it gives the same numbers, bit for bit, as booked with care
 /// (beside a move that changes nothing), when nothing is short and when some nodes are asked more than they hold.
 #[test]
@@ -150,12 +170,11 @@ fn some_heat(w: &World, r: &mut Rng, (class, i): (Class, usize)) -> f64 {
 }
 
 /// One round of random changes, each asking up to `GREED` times what its node holds: a link flux of two substances and
-/// heat over a third of them (between nodes of one class, or of the ground and the deep store), then moves between
+/// heat over a third of them (between nodes of any two classes), then moves between
 /// nodes of any classes, then the chemistry's reactions in any node; in one call, or the flux alone first.
 fn random_round(w: &mut World, r: &mut Rng) {
     let (ns, per) = (w.chem.ns(), PER_ROUND / 3);
-    let first = CLASSES[r.below(3)];
-    let class = [first, if first == Class::Air { first } else { [Class::Ground, Class::Deep][r.below(2)] }];
+    let class = [CLASSES[r.below(3)], CLASSES[r.below(3)]];
     let len = class.map(|c| arrays(w, c).2);
     let (a, b): (Vec<u32>, Vec<u32>) = (0..per).map(|_| (r.below(len[0]) as u32, r.below(len[1]) as u32)).unzip();
     let k = r.below(ns);

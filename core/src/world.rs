@@ -128,7 +128,8 @@ pub struct World {
     pub deep: Vec<f64>,
     pub e_deep: Vec<f64>,
     /// Potential energy the world's matter has gained since the start, J: what lifting it took from heat (gas into the
-    /// air, `flow::Sky::cross`, and between air nodes) less what falls gave back (rain, liquid and solids downhill)
+    /// air and between air nodes) less what falls gave back (rain, liquid and solids downhill); the heat of the store's
+    /// potential node (`store::Class::Potential`)
     pub potential: f64,
     /// Heat set aside in each cell for what its bodies draw from the ground between their updates, J (below 0: given to the
     /// ground ahead): each survey holds here what each body drew a second at its last update times the time since

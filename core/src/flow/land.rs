@@ -1,5 +1,5 @@
 //! Ground nodes: their heat capacity and temperature on the melting plateaus (`ground_state`),
-//! the phase of each substance, the surface and heads, putting matter into a node, and heat
+//! the phase of each substance, the surface and heads, what matter brings into a node, and heat
 //! conducted sideways between nodes (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
@@ -63,22 +63,18 @@ pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64) {
 }
 
 impl Scratch {
-    /// Put `m` mol of `k` into ground node `i` (negative `m`: take), and `note` it. The caller moves the heat.
-    #[inline]
-    pub(super) fn put(&mut self, ground: &mut [f64], k: usize, i: usize, m: f64) {
-        if m == 0.0 {
-            return;
-        }
-        ground[k * self.cap.len() + i] += m;
-        self.note(k, i, m);
-    }
     /// Ground node `i` gained `m` mol of `k` (negative `m`: lost): its heat capacity, the fusion enthalpy it holds there
     /// (`fusion`), and the rise of the surface.
     #[inline]
     pub(super) fn note(&mut self, k: usize, i: usize, m: f64) {
+        self.hold(k, i, m);
+        settle(self, k, i, m);
+    }
+    /// `note` but for the surface: for a gas dissolved in the liquid, which takes no room.
+    #[inline]
+    pub(super) fn hold(&mut self, k: usize, i: usize, m: f64) {
         self.cap[i] += m * self.sp[k].cp;
         self.latent[i].held += self.fusion(k, i, m);
-        settle(self, k, i, m);
     }
     /// Fusion enthalpy `m` mol of `k` hold in ground node `i`, J: theirs where `k` is molten there,
     /// none where it is solid or on its plateau (whose molten share `phi` holds its own).

@@ -417,6 +417,20 @@ The work of `docs/foundation/plan.md`, one line per task.
 - An air node reacts with no liquid's film (`Reactor::film` 0): it reacted through the film of the last ground node
   that reacted before it, where that one stood under liquid. 64 x 64, seed 1, years 11 to 20: land +0.04 K, rain on
   land -1.3%, carbon gas 268.8 to 271.7 ppm, methane -3%; golden re-pinned.
+- D9 (first half), the law: Flow and Bond move through the store. Radiation books the sunlight from the sun node,
+  what each ground node gives its air node and what leaves each air node to space as link fluxes (one call); the
+  exchange books each pass (evaporation, condensation, dissolving) as one flux from the ground nodes to their air
+  nodes, the air receiving the heat less the latent heat it holds (`LinkFlux` may join ground and air:
+  `LinkFlux::lifted`); creep books its slides as one flux. The potential energy is a node of the store
+  (`Class::Potential`, its heat `World::potential`): every lift and fall of Flow is a link flux with it
+  (`flow::Falls`). Deleted: `World::take_heat`, `take_heat_with` (and their test), the floor clamp of radiation, the
+  `take_paid` of the exchange (`store::apply` is Flow's one guard, at zero), `exchange::ground_to_air`,
+  `Scratch::{put, mob, rain, cloud, snap, node_tmp}` and `scratch::space`. The bed is no node yet: its wear and
+  digging change it by one helper (`World::loosen`) until patches (F6). Bond's trades with parts stay its own (parts'
+  amounts are not store columns). `apply` books fluxes with boundary nodes and the potential on its fast path, and
+  looks for numbers below zero in the same pass. Test `cli/tests/contract.rs`: `flow/` writes no array of `World`.
+  64 x 64, seed 1, 20 years with life, years 11 to 20: land -0.01 K, air +0.02 K, rain on land +0.5%, carbon gas
+  -1.2%, river cells 500.6 -> 499.9; snapshot version 14, golden re-pinned.
 
 **Owner's decisions after Phase A**
 

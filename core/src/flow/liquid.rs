@@ -4,10 +4,10 @@
 
 use super::drain::{springs, under};
 use super::land::{lift, solid, stand, wet, HALF_WAY};
-use super::{bare_share, follow, range, year_weight, Scratch};
+use super::{bare_share, follow, range, year_weight, Falls, Scratch};
 use crate::math::one_minus_exp;
 use crate::solve::downhill::{pass, Adjacency, Crossed};
-use crate::store::{apply, Class, LinkFlux, Move};
+use crate::store::{apply, Class, LinkFlux};
 use crate::units::T_FLOOR;
 use crate::World;
 
@@ -40,18 +40,15 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64) -> Mobile
     m
 }
 
-/// Book `fluxes` and `moves` through the store (`store::apply`), and bring the state of the ground nodes up to date
-/// for what that changed of their amounts (`Scratch::note`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux], moves: &[Move]) {
+/// Book `fluxes` through the store (`store::apply`), and bring the state of the ground nodes up to date for what that
+/// changed of their amounts (`Scratch::note`).
+pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     let n = w.grid.n();
-    let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).chain(moves.iter().map(|m| &m.k)).map(|&k| k as usize).collect();
+    let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
     ks.sort_unstable();
     ks.dedup();
-    if ks.is_empty() {
-        return;
-    }
     let before: Vec<f64> = ks.iter().flat_map(|&k| w.ground[k * n..(k + 1) * n].iter().copied()).collect();
-    apply(w, fluxes, moves, &[]);
+    apply(w, fluxes, &[], &[]);
     for (q, &k) in ks.iter().enumerate() {
         for (i, (&now, &was)) in w.ground[k * n..(k + 1) * n].iter().zip(&before[q * n..(q + 1) * n]).enumerate().filter(|p| p.1 .0 != p.1 .1) {
             s.note(k, i, now - was);
@@ -86,7 +83,7 @@ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
 /// passes it to its lower neighbours, more to the steeper (`split`, `still`), so it can cross the map in one pass while
 /// depressions fill and spill; its head falls no further than to a neighbour still to come (or to its own bed), and
 /// half way to one already passed, so heads never cross. What leaves carries the node's heat at its temperature then
-/// (with what came in), and the head it loses heats the node. The power lost also carries loose solids, drops what is
+/// (with what came in), and the head it loses heats the node from the world's potential energy. The power lost also carries loose solids, drops what is
 /// over capacity and breaks bonded ground (`load`, `wear`).
 fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
     let (n, area, ph, g) = (w.grid.n(), s.area, w.cfg.phys, w.cfg.gravity);
@@ -180,12 +177,12 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     }
     col_of.push(kinds.len());
     let (a, b, mol) = by_link(&crossed, rows + 2, &col_of, (cells.a(), cells.b()));
-    let at = kinds.len() * a.len();
-    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }], &[]);
+    let (at, mut fall) = (kinds.len() * a.len(), Falls::new(Class::Ground));
+    power.iter().enumerate().for_each(|(i, &q)| fall.add(i, q));
+    book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }, fall.flux()]);
     s.order = order;
     let ema = year_weight(w, dt);
     for i in 0..n {
-        (w.e_ground[i], w.potential) = (w.e_ground[i] + power[i], w.potential - power[i]);
         follow(&mut w.liquid_flux[i], (sent[i] / dt) as f32, ema);
         if worn[i] > 0.0 {
             wear(w, s, i, worn[i]);
@@ -233,9 +230,9 @@ fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops:
 }
 
 /// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each
-/// substance by its share of the bed's volume, no more than half of it. What breaks off was in
-/// the bed's skin, whose heat is the node's: it keeps it, and joins the loose ground with its heat
-/// capacity (`Scratch::put`); the bed's surface falls by its volume.
+/// substance by its share of the bed's volume, no more than half of it (`World::loosen`). What breaks
+/// off was in the bed's skin, whose heat is the node's: it keeps it, and joins the loose ground with
+/// its heat capacity (`Scratch::note`); the bed's surface falls by its volume.
 fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
     let n = w.grid.n();
     for bi in 0..s.bedk.len() {
@@ -245,10 +242,10 @@ fn wear(w: &mut World, s: &mut Scratch, i: usize, bedwork: f64) {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
             let m = (v / s.sp[k].v[0]).min(MOST_TAKEN * b);
             let dz = m * s.sp[k].v[0] / s.area;
-            w.bed[k * n + i] -= m;
+            w.loosen(k, i, m);
             s.bed[i].vol -= m * s.sp[k].v[0];
             s.add_loose(k, false);
-            s.put(&mut w.ground, k, i, m);
+            s.note(k, i, m);
             lift(s, i, [-dz, -dz]);
         }
     }
