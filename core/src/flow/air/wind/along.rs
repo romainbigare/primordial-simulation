@@ -92,6 +92,10 @@ impl Ctx<'_> {
                 push[l as usize] = self.push(&st, &col, l as usize);
             }
             let len = lines[dir].iter().map(|ln| ln.nodes.len()).max().unwrap_or(0);
+            // A direction with no link (one air node across the map) moves nothing.
+            if len == 0 {
+                continue;
+            }
             let mut rows = vec![0.0; lines[dir].len() * (ng + 1) * len];
             crate::par::rows(&mut rows, (ng + 1) * len, Lane::default, |ln, i, row| self.solve(&st, &push, &lines[dir][i], ln, len, row));
             for (line, row) in lines[dir].iter().zip(rows.chunks((ng + 1) * len)) {
