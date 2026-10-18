@@ -630,6 +630,26 @@ The work of `docs/foundation/plan.md`, one line per task.
   others' cover was off by that change). 64 x 64, seed 1, years 11 to 20: plant members -8%, body mass -5%, life of
   plants 1.7 to 1.6 yr, land +0.1 K, carbon gas 250 to 254 ppm; golden re-pinned.
 
+**Phase J: the long physics step**
+
+- J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the
+  physics, wind and exchange from 6 hours to 30 days). Rain on land falls as the step grows: 6 hours 3.9e-3 and
+  4.6e-3 mol/m²/s, 12 hours 3.7e-3, 1 day 2.8e-3, 2 days 1.6e-3, 3 days 1.17e-3, 6 days 0.81e-3, 15 days 0.42e-3;
+  river cells 814, 1069 (1 day), 506 (3 days), 132 (6 days), 8 (15 days); the seasonal swing on land 12.1 K at 6
+  hours, 9.9 K at 3 days, 11.6 K at 15. So the 3-day world is not converged, and an accurate long step would not
+  give it. The causes, term by term: radiation solves the ground implicitly but takes the air's temperature as it
+  was (it relaxes in about a week: at 15 days it swings, at 30 days it grows without bound and the run fails in its
+  first month); the wind evens 25% of a pressure difference per call (`EVEN`) and lets the overturning move at most
+  3 columns per call (`OVER`: at 3 days it binds; 12 times looser, rain on land +33%, river cells 506 to 860), and
+  its mixing evens two columns within a call; the exchange lets the air over a cell take or give no more than it
+  holds in a call (its cap of evaporation at the column's saturation does not bind at 3 days); split from each other,
+  each of these moves at most what a node holds per call, so what crosses per day falls as the call grows. The
+  exchange alone at 3 days (the rest at 6 hours) has 52% less rain on land, the wind alone 63%. Liquid holds 30
+  days.
+- J1, liquid every 30 days (`flow_days` 15 to 30): the rain on land (+0.6%, +0.5%), river cells (+0.4%, -0.7%) and
+  land temperature (+0.1 K) of the runs above stay; Flow about 25% cheaper (side by side, 64 x 64, seed 1: 1,853 to
+  1,386 ms per year without life, 1,878 to 1,426 with life, on a busy machine). Golden re-pinned.
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body

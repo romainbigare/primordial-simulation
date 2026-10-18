@@ -418,7 +418,7 @@ impl Default for Config {
             phys_days: 3,
             air_days: 3,
             exchange_days: 3,
-            flow_days: 15,
+            flow_days: 30,
             crowd: 4,
             wake_share: 0.05,
             sleep_days: 90,

@@ -446,7 +446,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 | Individual bodies in detailed areas | 1 day |
 | Snapshots for the history tape | every 10 years (and before every god action) |
 
-As built: ground and air physics every 3 days (radiation at every step; evaporation, rain and wind every 3 days), liquid every 15, the reactor every physics step, bodies every 5 to 360 days (their `INTERVAL` gene), the loads of parts once a month and their reactions every 6 months. Each part of Flow keeps its own period. An implicit step of each cell's ground-and-air column would let heat, air and rain step 15 to 30 days (`docs/foundation/plan.md`, J2).
+As built: ground and air physics every 3 days (radiation at every step; evaporation, rain and wind every 3 days), liquid every 30, the reactor every physics step, bodies every 5 to 360 days (their `INTERVAL` gene), the loads of parts once a month and their reactions every 6 months. Each part of Flow keeps its own period. Heat, air and rain do not hold a longer step as written: each of radiation (the air's temperature), the exchange and the wind is limited by what a node holds in one call, so rain on land falls as the step grows, and the 3-day world is itself far from the world of short steps (rain on land 3 to 4 times less than at 6 hours; `docs/numbers.md`, `phys_days`). A longer step needs one implicit solve of the air's heat, vapour and wind together (`docs/foundation/plan.md`, J1).
 
 There is **one world clock**. Fast processes in detailed areas sub-step inside a month. Seasons must exist, because they matter for food and migration.
 

@@ -58,7 +58,7 @@ one month per call of `step` (`core/src/schedule.rs`). Each process has a period
    of Flow due: the state of ground and air with radiation (every physics step; the state is rebuilt in
    full at each liquid step), evaporation and rain (every `exchange_days`, 3; the trace gases and the gases
    that dissolve at every `flow::TRACE_TURN`-th, 4), wind (every `air_days`, 3), liquid, drainage and the
-   work of moving liquid (every `flow_days`, 15), heat conducted sideways through the ground and creep
+   work of moving liquid (every `flow_days`, 30), heat conducted sideways through the ground and creep
    (every `flow::CREEP_YEARS` years, 1), the recheck of what is present and of the slow ground (every
    `flow::REFRESH_MONTHS` months, 3); then Change (`change::step`).
 2. On the first day of the month: Bond (`bond::step`): parts, loads, breaking.

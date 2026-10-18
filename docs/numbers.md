@@ -33,10 +33,10 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
 | `months_per_year` | months | the calendar | the same | anchored |
-| `phys_days` | days | speed-tool setting: how often ground and air physics run | run: the channel cells of a world with no life (seed 5, 50 years) against shorter steps: 3 days loses little | tuned |
-| `air_days` | days | speed-tool setting: how often air moves between nodes | the same run: 3 days loses nothing against 15 once moisture moves every 3 | tuned |
-| `exchange_days` | days | speed-tool setting: how often evaporation and rain run | the same run | tuned |
-| `flow_days` | days | speed-tool setting: how often liquid moves | the same run | tuned |
+| `phys_days` | days | speed-tool setting: how often ground and air physics run | run: worlds with no life (64 x 64, seeds 1 and 2, years 7 to 12): rain on land falls as the step grows (6 hours 3.9e-3 and 4.6e-3 mol/m²/s, 1 day 2.8e-3, 3 days 1.17e-3, 15 days 0.42e-3), and 30 days is unstable (the air's temperature in radiation); 3 days is the step of the reference world (plan 6.3), not a converged one | tuned |
+| `air_days` | days | speed-tool setting: how often air moves between nodes | the same runs: the wind alone at 3 days, the rest at 6 hours, has 63% less rain on land than all at 6 hours | tuned |
+| `exchange_days` | days | speed-tool setting: how often evaporation and rain run | the same runs: the exchange alone at 3 days has 52% less rain on land | tuned |
+| `flow_days` | days | speed-tool setting: how often liquid moves | the same runs: 30 days keeps the rain on land (+0.6%, +0.5%) and the river cells (+0.4%, -0.7%) of 15; the long-step test (`tape/tests/ranges.rs`) | tuned |
 | `skin_m` | m | depth of ground that exchanges heat with the surface and conducts it sideways | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |
 | `gravity` | m/s² | pull of the planet | 9.81 | physical |

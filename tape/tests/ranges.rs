@@ -6,6 +6,10 @@
 //!
 //! The sleep of Change's nodes is a speed tool (plan 6.4): a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2.
+//!
+//! The steps of Flow are speed settings too (plan 6.4, the long step against the short one): a small world with life
+//! keeps its climate within its noise at the default steps and at the short ones (every part of Flow every 3 days but
+//! liquid every 15).
 
 use pcore::{Config, World};
 use std::fmt;
@@ -209,4 +213,48 @@ fn the_sleep_of_change_keeps_the_chemistry() {
         }
     }
     assert!(out.is_empty(), "the sleep changed: {out:?}");
+}
+
+/// The climate's key numbers (series columns): the ground temperature on land, the warmest and the coldest month's,
+/// the rain on land, the heat-absorbing gas and the river cells.
+const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
+
+/// The `CLIMATE` columns at the end of each year from `SLEEP_FROM`, on the sleep test's world, with the steps of Flow
+/// that `set` makes.
+fn climate(set: fn(&mut Config)) -> Vec<Vec<f64>> {
+    let mut years = vec![];
+    run(1, SLEEP_SIDE, SLEEP_YEARS, set, |y, _, rec| {
+        if y >= SLEEP_FROM {
+            years.push(CLIMATE.map(|c| rec.last(c)).to_vec());
+        }
+    });
+    years
+}
+
+/// The long step against the short one: at the default steps of Flow (`phys_days`, `air_days`, `exchange_days`,
+/// `flow_days`) the mean of each of the climate's key numbers over the last years moves by less than its noise, the
+/// spread of its values over those years at the short steps.
+#[test]
+#[ignore = "slow: two 8-year runs of a 32 x 32 world with life"]
+fn the_long_step_keeps_the_climate() {
+    let short: fn(&mut Config) = |c| (c.phys_days, c.air_days, c.exchange_days, c.flow_days) = (3, 3, 3, 15);
+    let default: fn(&mut Config) = |_| {};
+    let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
+        let runs: Vec<_> = [short, default].into_iter().map(|set| s.spawn(move || climate(set))).collect();
+        runs.into_iter().map(|r| r.join().expect("a run")).collect()
+    });
+    let mut out = vec![];
+    for (q, name) in CLIMATE.iter().enumerate() {
+        let column = |run: &[Vec<f64>]| run.iter().map(|y| y[q]).collect::<Vec<f64>>();
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let (base, long) = (column(&runs[0]), column(&runs[1]));
+        let noise = base.iter().fold(f64::MIN, |m, &x| m.max(x)) - base.iter().fold(f64::MAX, |m, &x| m.min(x));
+        let off = mean(&long) - mean(&base);
+        let ok = off.abs() <= noise;
+        println!("{name}: {:.6e} at the default steps, {:.6e} at the short ones, off by {off:.3e}, noise {noise:.3e}{}", mean(&long), mean(&base), if ok { "" } else { ": OUT" });
+        if !ok {
+            out.push(*name);
+        }
+    }
+    assert!(out.is_empty(), "the long step changed: {out:?}");
 }

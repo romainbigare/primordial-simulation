@@ -28,7 +28,8 @@ pub const USAGE: &str = "usage:
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --flow-days N         days between moves of liquid and creep (15; a multiple of the physics step's, 3)
+    --phys-days N         days between steps of ground and air physics (3)
+    --flow-days N         days between moves of liquid (30; a multiple of the physics step's, 3)
     --air-days N          days between moves of the air (3; a multiple of the physics step's, 3)
     --exchange-days N     days between evaporation and condensation (3; a multiple of the physics step's, 3)
     --regrow X            Config::regrow
@@ -69,6 +70,7 @@ impl Args {
         let c = &mut w.cfg;
         c.sun *= self.get("--sun", 1.0);
         c.share_brains = !self.has("--own-brains");
+        c.phys_days = self.get("--phys-days", c.phys_days);
         c.flow_days = self.get("--flow-days", c.flow_days);
         c.air_days = self.get("--air-days", c.air_days);
         c.exchange_days = self.get("--exchange-days", c.exchange_days);
