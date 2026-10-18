@@ -2,7 +2,7 @@
 //! a node splitting in two (`split`), and members drawn from a node as individuals (`one`, `open`). Members, stores and
 //! heat are kept exactly in every join and split.
 
-use crate::body::{self, alike, alike_log, class, most, noise, range, size_step, spread_at, spread_kept, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
+use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{row_step, shake};
 use crate::rng::{Purpose, Rng};
 use crate::life::Life;
@@ -34,19 +34,20 @@ pub(crate) fn crowd(w: &mut World) {
 }
 
 /// Each node of cell `i`, largest first, joins the first larger one alike in genes (`body::alike`, on the means only, so
-/// a split's halves stay apart for selection) and of its size class (`body::class`). Returns the bodies left.
+/// a split's halves stay apart for selection) and of its stage (both mature or both young: the young join their adult
+/// node member by member as they mature, `copy::young`). Returns the bodies left.
 fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     let b = &w.life.bodies;
     let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold.is_none() && b[s].inside.is_none() && may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_unstable();
     let mut head: Vec<usize> = (0..list.len()).collect();
-    // Each one's class once, tested before the genes.
-    let class: Vec<(f64, bool)> = list.iter().map(|&(_, s)| class(&w.chem, &b[s])).collect();
+    // Each one's stage once, tested before the genes.
+    let mature: Vec<bool> = list.iter().map(|&(_, s)| b[s].adult(&w.chem)).collect();
     for x in 0..list.len() {
         let a = &b[list[x].1];
         if a.n() > 1.0 {
             let lim = w.cfg.phys.alike;
-            head[x] = (0..x).find(|&y| head[y] == y && class[y].1 == class[x].1 && alike_log(lay, lim, class[y].0, class[x].0) && alike(lay, lim, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
+            head[x] = (0..x).find(|&y| head[y] == y && mature[y] == mature[x] && alike(lay, lim, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
         }
     }
     for x in (0..list.len()).filter(|&x| head[x] != x) {
@@ -55,21 +56,20 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread (`body::spreads`) and its size class (`merge_closest`).
-type Likeness = (Vec<f32>, Vec<f32>, (f64, bool));
+/// A body's genes in steps (`body::steps`), its spread (`body::spreads`) and whether it is mature (`merge_closest`).
+type Likeness = (Vec<f32>, Vec<f32>, bool);
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
-/// are left or no pair is alike: here each within the other's spread, as children join a node (`copy::target`), and of
-/// one size class. Past `UNLIKE_CROWD` times `max`, unlike pairs merge too, the most alike first. A pair's key: unlike or
+/// are left or no pair is alike: here each within the other's spread, as children join a node (`body::within`), and of
+/// one stage. Past `UNLIKE_CROWD` times `max`, unlike pairs merge too, the most alike first. A pair's key: unlike or
 /// not, then the squared distance of their genes in steps.
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
-    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), class(&w.chem, &w.life.bodies[s]));
+    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), w.life.bodies[s].adult(&w.chem));
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
-    let reach = lim as f64 * size_step(lay) as f64;
     let dist = |p: &Likeness, q: &Likeness| {
         let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
-        (p.2 .1 != q.2 .1 || (p.2 .0 - q.2 .0).abs() > reach || (0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
+        (p.2 != q.2 || (0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
     };
     let mut d = vec![(true, f32::INFINITY); m * m];
     for p in 0..m {
@@ -153,15 +153,19 @@ impl Lot {
     }
 }
 
-/// Members `c` join body `o`, taken out of its slot, with the means `genes` and the spread `spread` of their genes, and
-/// their born rows, their brain rows and the born rows' spread: members, stores, brood and heat add up; genes, born rows
-/// and brain rows become the means by members (members of less than one weigh what they are), and the spread what both
-/// held around the new mean (each one's spread plus its gap from the new mean squared, by members; for the born rows the
-/// mean over rows of the gap squared; up to `most`), so the smaller one's genes stay in the spread, not only in the
-/// mean. `rows` none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows and their spread
-/// as they are: it left with the node's and comes back with them.
-pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], rows: Option<(&[f32], &[f32], f32)>) {
+/// Members `c` join body `o`, taken out of its slot, with the means `genes` and the spread `spread` of their genes, the
+/// mean and the variance of log10 of their bodies (`size`, `Body::size_moments`), and their born rows, their brain rows
+/// and the born rows' spread: members, stores, brood and heat add up; genes, sizes, born rows and brain rows become the
+/// means by members (members of less than one weigh what they are), and the spread what both held around the new mean
+/// (each one's spread plus its gap from the new mean squared, by members; for the born rows the mean over rows of the
+/// gap squared; the genes' up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows`
+/// none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows and their spread as they are:
+/// it left with the node's and comes back with them.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], size: (f32, f32), rows: Option<(&[f32], &[f32], f32)>) {
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
+    let (mo, vo) = o.size_moments(&w.chem);
+    o.size_spread = (1.0 - a) * vo + a * size.1 + a * (1.0 - a) * (size.0 - mo).powi(2);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
     let mean = mix(&o.genes, genes);
@@ -185,14 +189,16 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
 
 /// Members `c` (out of any slot) join body `o`, taken out of its slot (`add`), born with `rows` (none: those of `o`).
 pub(crate) fn take_in(w: &mut World, o: &mut Body, mut c: Body, rows: Option<&[f32]>) {
+    let size = c.size_moments(&w.chem);
     let lot = Lot::of(&mut c);
-    add(w, o, lot, &c.genes, &c.spread, rows.map(|r| (r, c.rows.as_slice(), c.row_spread)));
+    add(w, o, lot, &c.genes, &c.spread, size, rows.map(|r| (r, c.rows.as_slice(), c.row_spread)));
 }
 
-/// Share `f` of node `b`'s members as a new body (not placed): that share of each store, of the brood and of the heat
-/// (`Lot::split`); lineage, genome, brain rows and memory as the node's; holding nothing, inside nothing.
-fn part(life: &mut Life, b: &mut Body, f: f64) -> Body {
-    let lot = Lot::split(life, b, f, f);
+/// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body
+/// (not placed, `Lot::split`); lineage, genome, brain rows, link and memory as the node's; holding nothing, inside
+/// nothing.
+pub(crate) fn part(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Body {
+    let lot = Lot::split(life, b, f, fa);
     // (The trace, the constants and the stores are not the part's: set aside, not cloned.)
     let (trace, k, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k), std::mem::take(&mut b.store));
     let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, ..b.clone() };
@@ -238,7 +244,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Split);
     let g = gap[r.below(gap.len())].0;
     let d = half(g).0;
-    let mut c = part(&mut w.life, b, 0.5);
+    let mut c = part(&mut w.life, b, 0.5, 0.5);
     let mut genes = b.genes.clone();
     // Which half keeps the slot (and so is first in the order of updates) is drawn.
     let d = if r.below(2) == 0 { d } else { -d };
@@ -294,7 +300,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: b
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
     let spread = std::mem::take(&mut b.spread);
-    let (mut c, mut genes) = (part(&mut w.life, b, 1.0 / b.count), b.genes.clone());
+    let (mut c, mut genes) = (part(&mut w.life, b, 1.0 / b.count, 1.0 / b.count), b.genes.clone());
     b.spread = spread;
     for (g, x) in c.genes.iter_mut().enumerate() {
         let ((_, lo, hi), v) = (range(&lay, g), spread_at(&b.spread, g));
@@ -315,7 +321,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: b
         w.life.reborn(b, left);
     }
     b.set_genes(genes, &w.chem, &w.cfg.phys);
-    (c.count, c.spread, c.row_spread, c.wear) = (1.0, Vec::new(), 0.0, r.f64());
+    (c.count, c.spread, c.row_spread, c.size_spread, c.wear) = (1.0, Vec::new(), 0.0, 0.0, r.f64());
     w.place(c, keep)
 }
 

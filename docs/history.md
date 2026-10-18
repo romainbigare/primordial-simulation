@@ -701,6 +701,18 @@ The work of `docs/foundation/plan.md`, one line per task.
   snapshot 14.7 to 10.0 MB (before E10 (a) it was 10.7 MB). The same world (years 26 to 35, seeds 1 and 2: plant
   members +1% and -3%, eaters 0.98 and 1.1 times their mass, land the same, carbon gas +2 and -1 ppm); the same cost
   per update. Golden re-pinned.
+- E11, young that grow up: a kind in a cell is an adult node and a young node joined by a link (`Body::link`);
+  a node keeps the spread of its members' log sizes (`Body::size_spread`), and the young members who grew past the
+  copy mass in an update move along the link into the adult node (`copy::mature`: the flux across a size, none
+  without growth). The size classes (`class`, `alike_log`, `alike_size`, `LEAST_KG`, `CLASS_SLACK`) and the merge of
+  young into adult nodes go. Years 30 to 35, seeds 1 and 2: plant members 5.28e10 to 4.27e10 and 5.03e10 to 3.54e10,
+  life of plants 2.83 to 3.34 and 3.12 to 3.83 yr, animal members 1127 to 684 and 912 to 1513, land +0.4 and +0.3 K,
+  carbon gas 223 to 270 and 255 to 305 ppm. Young members are still 92% and 93% of the plant members (86% and 87%
+  before), their median node 0.36 and 0.37 of the copy mass (0.31 and 0.30): a newborn lives about two months and
+  grows about 0.025 decades in an update of 36 days, so most die young, and 0.9% of the young mature per update. The
+  old merge took whole young nodes into the adults once their mean reached the copy mass, small members too. Pace
+  (node_days 0/18/36/72, years 21 to 30): plant mass flat (within 0.006 log10), life of plants -0, -4, -10, -14%
+  (seed 1) and -0, -2, -2, -16% (seed 2). Golden re-pinned; snapshot version 26.
 
 **Phase J: the long physics step**
 

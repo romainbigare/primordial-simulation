@@ -280,7 +280,7 @@ fn a_body_with_no_brain_lives_and_copies() {
     let b = &w.life.bodies[s];
     let born = testkit::born(&w);
     println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.counts.updates - u, b.count);
-    // (Its children are small against its members: another size class, so they are nodes of their own.)
+    // (Its children are small against its members: young, so they are nodes of their own.)
     let all: f64 = w.life.alive().map(|x| x.n()).sum();
     assert!(b.alive && w.counts.updates - u >= 2 && born > 0.0 && all > n0, "no children: {born}");
     assert!(w.counts.decisions == 0.0 && b.trace.is_empty() && b.wb == 0.0, "the brain was called");

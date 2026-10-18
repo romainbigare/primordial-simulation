@@ -555,7 +555,7 @@ starting eaters move while their mass is under about 6 times their living body.
 
 ## 4. Copy: a piece of the graph is copied, with small changes
 
-Files: `core/src/copy/` (`copy`, `mix`, `grow`), `core/src/nodes.rs` (population nodes),
+Files: `core/src/copy/` (`copy`, `mix`, `grow`, `young`), `core/src/nodes.rs` (population nodes),
 `core/src/body/genes.rs` (genes, likeness, mutation), `core/src/lineage.rs`. The body side of
 growth is in 6.6.
 
@@ -585,7 +585,8 @@ node and who merges.
 ### 4.2 Children come from a brood
 
 - A body is **mature** when its living body per member (`Body::built`) is at or past its
-  `COPY_MASS` gene (`Body::adult`).
+  `COPY_MASS` gene (`Body::adult`). The members of a young node pass it one by one and move into
+  the adult node of their kind (4.4).
 - At each update `copy::grow` builds what it can (6.6). An immature body puts it all into its own
   growth. A mature body puts the share `ALLOC` into a **brood** (`Body::brood`: body matter held
   for children, not yet body) and the rest into its own growth. With `ALLOC` below 1 it grows all
@@ -636,20 +637,36 @@ the same patterns as individuals.
   the split threshold (`body::most`), and a gene that is off (a catalyst or a gene of a substance
   below 0) keeps none where members join or are born (`body::spread_kept`): their differences
   there do nothing.
-- **Joining** (`target` and `emit` in `copy/mod.rs`). Children join the first node in their
-  start cell that they belong to: in every gene within `alike` steps plus `WITHIN` (0.5)
-  standard deviations of both spreads (`body::within`); in the same **size class** (member
-  bodies within `alike` steps of the copy-mass gene, about a factor 6); and immature. A child is
-  always immature, so it never joins its mature parent node. Children who join are booked on the
-  node: no body is built for them. With no node to join they start a body; less than one member
-  with nowhere to go waits in the brood.
+- **Joining** (`kin` and `emit` in `copy/mod.rs`). Children join the young (immature) node of
+  their kind in their start cell: in every gene within `alike` steps plus `WITHIN` (0.5)
+  standard deviations of both spreads (`body::within`). A child is always immature, so it never
+  joins its mature parent node. Children who join are booked on the node: no body is built for
+  them. With no node to join they start a body; less than one member with nowhere to go waits in
+  the brood.
+- **Young that grow up** (`copy/young.rs`). A kind in a cell lives as an adult node and a young
+  node joined by a link (`Body::link`). A node's children who stay in its cell are booked on its
+  young node along the link (found by kind and linked when there is none yet; children who start
+  a young node are linked to their parent's node). A node keeps the spread of its members' sizes
+  (`Body::size_spread`: the variance of log10 of their bodies, pooled at every join like a gene;
+  newborns come in at one size), so members who joined earlier, and so have grown more, are the
+  larger ones. At each update of a young node its members grow alike in proportion (their log10
+  bodies all rise by the growth of the mean), and those who passed the copy mass in it move
+  along the link into the adult node (`copy::mature`): with the log10 bodies normal, the share
+  of members between the copy mass and that much below it, with the share of the body a
+  lognormal puts there and the stores with the body. No growth, no maturing: it is the flux
+  across a size of a size-structured population (McKendrick 1926; von Foerster 1959). Those who
+  stay and those who leave keep the variances of their parts of the normal. With no adult node
+  in the cell, at least one member maturing starts one; less than one member left young joins
+  the adult node whole. So members mature one by one, at the rate their growth gives, and the
+  mean of a young node never jumps to maturity.
 - **Members are kept exactly** (`nodes::Lot`, `nodes::add`: one helper for every join, merge,
   split and booking). Members, stores, heat and brood split by shares (the node keeps the
   remainder, so the parts add up to it) and join as sums: when members join a node, the count
   grows by exactly what they are (0.4 of a member adds 0.4). Genes, born rows and brain rows
   become the means **by members**, and the spread pools each one's spread and its gap to the new
   mean.
-- **Merging** (`nodes::crowd`, monthly). Alike nodes of one class in a cell merge. A cell with
+- **Merging** (`nodes::crowd`, monthly). Alike nodes of one stage (both mature or both young) in
+  a cell merge: the young never merge into their adult node, they mature into it. A cell with
   more than `crowd` nodes merges its most alike pairs while they are alike. Past twice `crowd` the
   most alike merge however unlike (a safeguard). A merge pools stores, heat, the means by count,
   and the spread.

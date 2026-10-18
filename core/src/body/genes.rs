@@ -1,5 +1,5 @@
 //! The genes: what each scalar gene means, its mutation step and range, where the genes of each kind start
-//! (`Layout`), how alike two sets of genes are (in steps, `alike`, `within`, size classes), and how a generation
+//! (`Layout`), how alike two sets of genes are (in steps, `alike`, `within`), and how a generation
 //! changes them (`vary`).
 
 use super::Body;
@@ -248,36 +248,6 @@ pub(crate) fn within_steps(lay: &Layout, limit: f32, var: f32, g: usize) -> f32 
 pub(crate) fn within(lay: &Layout, limit: f32, o: &Body, genes: &[f32], spread: &[f32]) -> bool {
     let reach = |g: usize| within_steps(lay, limit, spread_at(&o.spread, g) + spread_at(spread, g), g);
     distance(lay, &o.genes, genes, reach).is_some()
-}
-
-/// Bodies are compared in log10 of their mass from this many kg up.
-const LEAST_KG: f64 = 1e-30;
-/// Slack of a size-class bound for rounding, decades.
-const CLASS_SLACK: f64 = 1e-9;
-
-/// The step of the copy-mass gene that sizes are alike in (`alike_size`).
-pub(crate) fn size_step(lay: &Layout) -> f32 {
-    like(lay, COPY_MASS)
-}
-
-/// A body's size class: log10 of its member's body (`Body::member_body`) and whether it is mature (`Body::mature`).
-/// Two bodies are in one class when they are alike in size (`alike_log`) and both mature or both not: a node's mean
-/// must stay at or past its copy mass for its members to reproduce, so the young join and merge with the young until
-/// they have grown.
-pub fn class(chem: &Chemistry, b: &Body) -> (f64, bool) {
-    let x = b.member_body(chem);
-    (x.max(LEAST_KG).log10(), b.mature(x))
-}
-
-/// Two member bodies (kg) are alike in size: within `alike` steps of the copy-mass gene of each other in log10 (0.2
-/// decades a step: with `alike` 4 about a factor 6.3).
-pub fn alike_size(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
-    alike_log(lay, alike, x.max(LEAST_KG).log10(), y.max(LEAST_KG).log10())
-}
-
-/// `alike_size` of two bodies given as log10 (`class`).
-pub fn alike_log(lay: &Layout, alike: f32, x: f64, y: f64) -> bool {
-    (x - y).abs() <= (alike * size_step(lay)) as f64 + CLASS_SLACK
 }
 
 /// Reach of `noise` (a sum of four uniforms, centred and scaled): 2 sqrt(3).

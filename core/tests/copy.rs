@@ -8,12 +8,6 @@ use pcore::units::DAY_S;
 use pcore::{body, brain, copy, lineage, nodes, World};
 use worldgen::testkit::{self, add, brood, children, eater, founder, kg, only_the_solid, out, put, put_kg_m2, scale, small_world, start, took_to_burn, Books, Brain, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 
-/// Bodies `a` and `b` are in one size class (`body::class`): alike in size and in maturity.
-fn near(lay: &Layout, chem: &pcore::chem::Chemistry, alike: f32, a: &Body, b: &Body) -> bool {
-    let (x, y) = (body::class(chem, a), body::class(chem, b));
-    x.1 == y.1 && body::alike_log(lay, alike, x.0, y.0)
-}
-
 /// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly
 /// all fuel; soaking at least a tenth a day, `body::live`), and the ground of its cell given a hundred times the level
 /// it keeps of each (booked as an edit): what a test that builds for many days needs to be free of the minerals. (The
@@ -294,11 +288,10 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
 }
 
 /// A mature node's children never lower its mean under maturity: they gather in a young node of their own (the second
-/// brood joins the first), and the young node merges into the adult only once it is mature itself (`body::class`: the
-/// same size class and both mature, or both immature). Grown to the size of the adults' class but under the size of
-/// maturity, the young stay apart at the month's merge; mature, they join. Members, matter and energy are kept.
+/// brood joins the first, along the link of the two), which keeps the spread of its members' sizes; the monthly merge
+/// never takes the young into the adult node. Members, matter and energy are kept.
 #[test]
-fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
+fn a_mature_nodes_children_gather_in_its_young_node() {
     let (mut w, i) = start();
     w.cfg.phys.c_copy = 1e18;
     let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
@@ -312,7 +305,6 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
     let books = Books::now(&w);
     w.time += DAY_S;
     pcore::survey::survey(&mut w);
-    let lay = Layout::of(&w.chem);
     for round in 0..3 {
         let mut n = std::mem::take(&mut w.life.bodies[s]);
         n.prepare(&w.chem, &w.cfg.phys);
@@ -327,42 +319,79 @@ fn a_mature_nodes_mean_stays_mature_and_its_young_merge_in_only_once_mature() {
         w.life.bodies[s] = n;
         w.time += DAY_S;
     }
-    // All three broods are in one young node.
+    // All three broods are in one young node, linked to its adult node; its members are all of one size.
     let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
     assert_eq!(kids.len(), 1, "the children are {} nodes", kids.len());
-    let k = kids[0];
-    assert!((w.life.bodies[k].count - 12.0).abs() < 1e-4 && !w.life.bodies[k].adult(&w.chem), "young: {} members", w.life.bodies[k].count);
+    let (k, young) = (kids[0], &w.life.bodies[kids[0]]);
+    assert!((young.count - 12.0).abs() < 1e-4 && !young.adult(&w.chem), "young: {} members", young.count);
+    assert_eq!((young.link, w.life.bodies[s].link), (Some(w.life.bodies[s].id(s)), Some(young.id(k))), "not linked");
+    assert!(young.size_spread.abs() < 1e-9, "children of one size have a size spread {}", young.size_spread);
+    // A month's merge: alike in genes, but the young are immature.
     let month = w.cfg.calendar().month;
-    // A month's merge: alike in genes and in size class (3 kg and the parents' about 20), but the young are immature.
     w.time = (w.time / month + 1) * month;
     pcore::survey::survey(&mut w);
     assert_eq!(w.life.alive().count(), 2, "the young merged into the mature node");
-    // Grown to 8 kg a member (under the copy mass 10 kg, within the size class of the parents' 20): still apart.
-    let grow_to = |w: &mut World, k: usize, body: f64| {
-        let want = (body * (1.0 - h) * w.life.bodies[k].count - w.life.bodies[k].store[MATTER] * mm).max(0.0);
-        let mut c = std::mem::take(&mut w.life.bodies[k]);
-        add(w, &mut c, MATTER, want);
-        add(w, &mut c, LIQUID, 3.0 * want);
-        c.prepare(&w.chem, &w.cfg.phys);
-        w.life.bodies[k] = c;
-    };
-    grow_to(&mut w, k, 8.0);
-    assert!(!w.life.bodies[k].adult(&w.chem) && body::alike_size(&lay, w.cfg.phys.alike, 8.0, w.life.bodies[s].built(&w.chem) / 5.0));
-    assert!(!near(&lay, &w.chem, w.cfg.phys.alike, &w.life.bodies[s], &w.life.bodies[k]));
-    w.time += month;
-    pcore::survey::survey(&mut w);
-    assert_eq!(w.life.alive().count(), 2, "an immature node merged into a mature one");
-    // Mature (11 kg), it joins.
-    grow_to(&mut w, k, 11.0);
-    assert!(w.life.bodies[k].adult(&w.chem));
-    w.time += month;
-    pcore::survey::survey(&mut w);
-    assert_eq!(w.life.alive().count(), 1, "the mature young did not merge in");
-    let all: f64 = w.life.alive().map(|b| b.n()).sum();
-    assert!((all - 17.0).abs() < 1e-4, "members {all}");
     books.assert_kept(&w, 1e-9);
 }
 
+/// The share of a standard normal above `z`, by Simpson's rule on its density (`n` intervals out to 12).
+fn tail(z: f64) -> f64 {
+    let (n, top) = (20_000, 12.0);
+    let hh = (top - z) / n as f64;
+    let f = |x: f64| (-0.5 * x * x).exp() / (2.0 * std::f64::consts::PI).sqrt();
+    (0..=n).map(|j| f(z + j as f64 * hh) * if j == 0 || j == n { 1.0 } else if j % 2 == 1 { 4.0 } else { 2.0 }).sum::<f64>() * hh / 3.0
+}
+
+/// Young members mature at the rate their growth gives (`copy::mature`): a young node of 1,000 members whose log10
+/// bodies spread with a variance of 0.04 about a mean member at 0.6 of the copy mass, beside its adult node. Without
+/// growth none matures. When every member grows by 0.1 decades, those who passed the copy mass join the adult node:
+/// as many as a normal of log10 bodies puts within 0.1 decades below it, holding the share of the body a lognormal
+/// puts there. Members, stores and heat are kept; the adult node stays mature and the young one is still young.
+#[test]
+fn young_members_mature_at_the_rate_their_growth_gives() {
+    let (mut w, i) = start();
+    let mm = w.chem.subs[MATTER].molar_mass;
+    let mut a = eater(&mut w, i, brain::REST, 10f32.log10());
+    scale(&mut w, &mut a, 5.0);
+    a.count = 5.0;
+    let mut y = a.clone();
+    let sa = testkit::place(&mut w, a);
+    // The young: 1,000 members whose mean body is 6 kg (matter over 1 - 0.75), their size spread 0.04 decades².
+    let copy_kg = 10.0;
+    scale(&mut w, &mut y, 200.0);
+    y.count = 1000.0;
+    let want = 0.6 * copy_kg * 0.25 * y.count / mm;
+    let kg_in = (want - y.store[MATTER]) * mm;
+    add(&mut w, &mut y, MATTER, kg_in);
+    y.size_spread = 0.04;
+    let (sy, mut y) = out(&mut w, y);
+    assert!(!y.adult(&w.chem) && w.life.bodies[sa].adult(&w.chem));
+    let x0 = y.member_body(&w.chem);
+    // No growth: nobody matures.
+    assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives) && y.count == 1000.0, "members matured without growth");
+    // Every member grows by 0.1 decades: the young node's matter times 10^0.1 (booked as an edit).
+    let kg_in = (10f64.powf(0.1) - 1.0) * y.store[MATTER] * mm;
+    add(&mut w, &mut y, MATTER, kg_in);
+    w.life.bodies[sy] = y;
+    let (books, before) = (Books::now(&w), held(&w));
+    let mut y = std::mem::take(&mut w.life.bodies[sy]);
+    let (n0, matter0, x1) = (y.count, y.store[MATTER], y.member_body(&w.chem));
+    let (sd, v) = (0.2f64, 0.04f64);
+    let mu = x1.log10() - 0.5 * std::f64::consts::LN_10 * v;
+    let a0 = (copy_kg.log10() - mu) / sd;
+    let (members, body) = (tail(a0) - tail(a0 + 0.1 / sd), tail(a0 - sd * std::f64::consts::LN_10) - tail(a0 + 0.1 / sd - sd * std::f64::consts::LN_10));
+    let adult0 = w.life.bodies[sa].count;
+    assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives));
+    let moved = n0 - y.count;
+    println!("matured {moved:.3} of {n0} members (wanted {:.3}), {:.4} of the body (wanted {body:.4})", members * n0, 1.0 - y.store[MATTER] / matter0);
+    assert!((moved - members * n0).abs() < 1e-5 * n0, "{moved} matured, wanted {}", members * n0);
+    assert!((1.0 - y.store[MATTER] / matter0 - body).abs() < 1e-5, "the body share that left");
+    assert!((w.life.bodies[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life.bodies[sa].count - adult0);
+    assert!(w.life.bodies[sa].adult(&w.chem) && !y.adult(&w.chem), "the stages mixed");
+    w.life.bodies[sy] = y;
+    same(&before, &held(&w));
+    books.assert_kept(&w, 1e-9);
+}
 /// A mature body splits what it builds in an update by `ALLOC`: the share to its brood, the rest its own growth; one
 /// just below the size of maturity puts everything into its own growth up to that size and splits what it builds past
 /// it. Counted in matter: what it made is the matter that rose, the brood is the share of it, the body grew by the
@@ -950,10 +979,10 @@ fn live(w: &pcore::World) -> Vec<usize> {
     (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).collect()
 }
 
-/// A mature node's children start a node of their own (they are immature, `body::class`) that carries the variance
-/// left among them; when they have grown and join their parents' node (the month's merge, `nodes::merge`) its spread
-/// is widened by it; a node whose members differ so much that its halves would not be alike splits in two along that
-/// gene, keeping its members, stores, heat and pooled spread; the half placed is seen as what it holds.
+/// A mature node's children start a node of their own (they are immature, `copy::young`) that carries the variance
+/// left among them; when they join their parents' node (`nodes::merge`) its spread is widened by it; a node whose
+/// members differ so much that its halves would not be alike splits in two along that gene, keeping its members,
+/// stores, heat and pooled spread; the half placed is seen as what it holds.
 #[test]
 fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -1006,7 +1035,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
 
 /// Light-eater nodes with a fast mutation (their spreads reach the split threshold) and members of 100 kg that are
 /// mature from 28 kg, with children of 14 kg (no copy cost; the copy-mass and child genes are set again at each update
-/// so that every node is mature, and its children are of its size class, whatever its other genes: no selection by
+/// so that every node is mature, and its children join a young node, whatever its other genes: no selection by
 /// when a body may reproduce) copy, split, move to the lineage their brain sizes ask for, send children to join or
 /// start nodes in neighbour cells, and merge each month, for `updates` updates of 10 days (`wide`: from spreads held at
 /// the split threshold). Every member has one child per update, and then a share `live_on(b)` of each body's members
@@ -1054,7 +1083,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             let mut b = std::mem::take(&mut w.life.bodies[s]);
             (b.store, b.e) = (per.iter().map(|a| a * b.count).collect(), e1 * b.count);
             b.prepare(&w.chem, &w.cfg.phys);
-            // Mature with a body of twice its copy mass after the brood, children half the copy mass: of its size class.
+            // Mature with a body of twice its copy mass after the brood, children half the copy mass.
             let (body, n) = (b.built(&w.chem) / b.n(), b.count);
             (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -std::f32::consts::LOG10_2, 0.0);
             brood(&w, &mut b, n);
@@ -1063,9 +1092,8 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             lineage::resize(&mut w, s, &mut b);
             nodes::split(&mut w, s, &mut b);
             w.life.bodies[s] = b;
-            // The children are young nodes of their own (immature, `body::class`); here they grow up at once, and the
-            // month's merge would take them back into their parent's node: they do now, so the update's node math is the
-            // same.
+            // The children are young nodes of their own (immature, `copy::young`); here they grow up at once, and
+            // would mature into their parent's node: they join it now, so the update's node math is the same.
             let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life.bodies[*k].parent == id).collect();
             for k in kids {
                 nodes::merge(&mut w, k, s);
@@ -1149,7 +1177,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
         w.life.bodies[t].prepare(&w.chem, &w.cfg.phys);
         // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes
-        // of children are: a child joins no mature node (`body::class`).
+        // of children are: a child joins no mature node (`copy::kin`).
         if t != s {
             let m = w.chem.matter().expect("matter");
             w.life.bodies[t].store[m] *= 0.5;

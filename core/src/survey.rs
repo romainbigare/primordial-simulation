@@ -7,6 +7,7 @@ use crate::change::Reactor;
 use crate::life::Life;
 use crate::math::mean_decay;
 use crate::units::DAY;
+use crate::copy::Grown;
 use crate::{bond, choose, World};
 
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
@@ -182,6 +183,8 @@ pub fn day(w: &mut World) {
         }
         let mut b = std::mem::take(&mut w.life.bodies[s]);
         w.counts.updates += 1;
+        // (Its mean member's body as it comes, for what its members grow in the update: `copy::mature`.)
+        let before = b.member_body(&w.chem);
         match live(w, s, &mut b, &mut rc, &mut tmp) {
             Err(cause) => die(w, s, b, cause),
             Ok(lived) => {
@@ -196,6 +199,12 @@ pub fn day(w: &mut World) {
                     }
                 }
                 crate::lineage::resize(w, s, &mut b);
+                // Young members who grew past their copy mass join their adult node (`copy::mature`).
+                if let Grown::Joins(t) = crate::copy::mature(w, s, &mut b, before) {
+                    w.life.bodies[s] = b;
+                    crate::nodes::merge(w, s, t);
+                    continue;
+                }
                 crate::nodes::split(w, s, &mut b);
                 w.see(&mut b);
                 w.life.schedule(w.day() + b.interval(w), slot, gen);
