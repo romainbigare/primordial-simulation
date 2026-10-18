@@ -233,6 +233,10 @@ pub fn rebase(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32>
 /// Rows of shape `a` carried over to shape `b`, the same way: rows matched by what they do
 /// (the memory rows from their first), weights by hidden unit, the bias kept.
 pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> {
+    // A brain of no hidden units has no born rows (nothing reads them); from none, every weight is new.
+    if b.h == 0 {
+        return Vec::new();
+    }
     let l = b.learned();
     let row = |q: usize| match q {
         q if q < l => Some(q),
@@ -241,7 +245,7 @@ pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> 
     };
     let mut o = Vec::with_capacity(b.rows() * b.r());
     for q in 0..b.rows() {
-        let src = row(q).map(|p| &w[p * a.r()..(p + 1) * a.r()]);
+        let src = row(q).filter(|_| !w.is_empty()).map(|p| &w[p * a.r()..(p + 1) * a.r()]);
         o.extend((0..b.h).map(|m| match src {
             Some(s) if m < a.h => s[m],
             _ => size * r.normal() as f32,

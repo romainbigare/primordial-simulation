@@ -682,9 +682,10 @@ Files: `core/src/choose/` (`mod` the decision, `perceive`, `learn`, `feed` takin
   and an estimate of how well-being will go (a critic).
 - Sizes are genes, each with a cost: hidden units (0 to 64; 0 is no brain), memory numbers (0 to
   12), bodies perceived (1 to 6), sight (1 to 4 cells). A body with no hidden units takes no
-  decisions and pays nothing for a brain; its update is physics only. The light-eaters start so
-  (8): everything they do is their body's physics (6). A lineage may grow a brain back through
-  the same gene (`lineage::resize`) if a brain pays.
+  decisions and pays nothing for a brain; its update is physics only. It has no born rows and is
+  in no brain group (`life::NO_GROUP`). The light-eaters start so (8): everything they do is their
+  body's physics (6). A lineage may grow a brain back through the same gene (`lineage::resize`) if
+  a brain pays: its rows then start as new weights (`brain::rerow`).
 - **Shared group brains** (`choose::learn::regroup`, monthly; `life::Group`). Bodies that stay
   near each other share one set of rows: the mean of their members' born rows plus what the group
   learned. Every group number is **weighed by members** (a node counts its count): the mean rows,

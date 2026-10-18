@@ -87,7 +87,8 @@ pub(crate) fn regroup(w: &mut World) {
     }
     for slot in 0..life.bodies.len() {
         let b = &life.bodies[slot];
-        if !b.alive {
+        // (A body without a brain has no group to join.)
+        if !b.alive || b.group == crate::life::NO_GROUP {
             continue;
         }
         let ((x, y), groups) = (((b.cell as usize) % gw, (b.cell as usize) / gw), &life.groups);

@@ -148,7 +148,10 @@ impl Recorder {
             }
             EventKind::Watched { by, of } => {
                 (y.watched, y.kin_watched) = (y.watched + 1.0, y.kin_watched + e.value);
-                y.spread.entry(of).or_default().insert(by);
+                // (A body without a brain is in no group: watching it reaches none.)
+                if of != pcore::life::NO_GROUP {
+                    y.spread.entry(of).or_default().insert(by);
+                }
             }
             EventKind::Gave { from, to } => {
                 (y.gave, y.gave_kg) = (y.gave + 1.0, y.gave_kg + e.value);

@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 
 /// Updates are kept in a ring of this many days (more than the longest interval).
 const RING: u64 = 384;
+/// The brain group of a body without a brain: none (it has no rows to share).
+pub const NO_GROUP: u32 = u32::MAX;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Life {
@@ -130,17 +132,22 @@ impl Life {
         self.members.push(0);
         (self.brains.len() - 1) as u32
     }
-    /// A new group of `lineage` with these rows (the difference from its first member's born rows counts as learned).
+    /// A new group of `lineage` with these rows (the difference from its first member's born rows counts as learned);
+    /// `NO_GROUP` for a lineage without a brain.
     pub fn new_group(&mut self, lineage: u32, rows: Vec<f32>) -> u32 {
+        if self.brains[lineage as usize].as_ref().is_some_and(|l| l.none()) {
+            return NO_GROUP;
+        }
         let i = free_place(&mut self.groups, &mut self.free_groups);
         self.groups[i] = Group { lineage, rows, ..Default::default() };
         i as u32
     }
     /// A new group of `lineage` with these rows that keeps what group `from` knows of its learning (`Group::var`,
-    /// `Group::ms`).
+    /// `Group::ms`; nothing if `from` is `NO_GROUP`); `NO_GROUP` for a lineage without a brain.
     pub(crate) fn fork_group(&mut self, from: u32, lineage: u32, rows: Vec<f32>) -> u32 {
-        let (var, ms) = (self.groups[from as usize].var, self.groups[from as usize].ms.clone());
         let g = self.new_group(lineage, rows);
+        let Some(f) = self.groups.get(from as usize).filter(|_| g != NO_GROUP) else { return g };
+        let (var, ms) = (f.var, f.ms.clone());
         (self.groups[g as usize].var, self.groups[g as usize].ms) = (var, ms);
         g
     }
@@ -177,6 +184,9 @@ impl Life {
     /// Count body `b` into group `g` (`d` = 1) or out of it (`d` = -1): its cell, and its members' born rows and
     /// forgetting rate (`weigh`).
     pub(crate) fn enrol(&mut self, g: u32, b: &Body, d: i64) {
+        if g == NO_GROUP {
+            return;
+        }
         self.shift(g, b.cell, d);
         let gr = &mut self.groups[g as usize];
         gr.members = (gr.members as i64 + d) as u32;
@@ -200,7 +210,7 @@ impl Life {
     /// `n` members (fewer: `n` below 0) born with the rows of `genome` and of forgetting rate `forget` in group `g`: its
     /// count and forgetting rate change now, its sum of born rows and its rows at the next `settle`.
     fn weigh(&mut self, g: u32, genome: u32, forget: f32, n: f64) {
-        if n == 0.0 {
+        if n == 0.0 || g == NO_GROUP {
             return;
         }
         let gr = &mut self.groups[g as usize];
@@ -218,10 +228,7 @@ impl Life {
     /// learned).
     pub(crate) fn settle(&mut self, g: u32) {
         let Life { groups, genomes, .. } = self;
-        let gr = &mut groups[g as usize];
-        if gr.due.is_empty() {
-            return;
-        }
+        let Some(gr) = groups.get_mut(g as usize).filter(|gr| !gr.due.is_empty()) else { return };
         gr.sum.resize(gr.rows.len(), 0.0);
         let (k1, k0) = if gr.formed > 0.0 { (1.0 / gr.count, 1.0 / gr.formed) } else { (0.0, 0.0) };
         for (q, two) in gr.due.chunks(2).enumerate() {
@@ -254,7 +261,7 @@ impl Life {
             g.sum.resize(g.rows.len(), 0.0);
             (g.count, g.forget) = (0.0, 0.0);
         }
-        for b in self.bodies.iter().filter(|b| b.alive) {
+        for b in self.bodies.iter().filter(|b| b.alive && b.group != NO_GROUP) {
             let (gr, born, n) = (&mut self.groups[b.group as usize], &self.genomes[b.genome as usize].rows, b.n());
             gr.sum.iter_mut().zip(born).for_each(|(s, &x)| *s += n * x as f64);
             (gr.count, gr.forget) = (gr.count + n, gr.forget + n * b.forget() as f64);
@@ -264,8 +271,9 @@ impl Life {
     /// Move the centre of group `g` by a member at `cell` (`d` = 1 arrived, -1 left).
     fn shift(&mut self, g: u32, cell: u32, d: i64) {
         let (x, y) = ((cell % self.gw) as i64, (cell / self.gw) as i64);
-        let gr = &mut self.groups[g as usize];
-        (gr.sx, gr.sy) = (gr.sx + d * x, gr.sy + d * y);
+        if let Some(gr) = self.groups.get_mut(g as usize) {
+            (gr.sx, gr.sy) = (gr.sx + d * x, gr.sy + d * y);
+        }
     }
     /// Place a new body on `day`; it first updates `delay` days later (1..=`MAX_INTERVAL`).
     pub fn add(&mut self, mut b: Body, day: u64, delay: u64) -> usize {
@@ -330,8 +338,9 @@ impl Life {
     pub(crate) fn regene(&mut self, b: &mut Body, genes: Vec<f32>) {
         let old = b.forget();
         (b.genes, b.k) = (genes, Consts::default());
-        let gr = &mut self.groups[b.group as usize];
-        gr.forget += b.n() * (b.forget() - old) as f64;
+        if let Some(gr) = self.groups.get_mut(b.group as usize) {
+            gr.forget += b.n() * (b.forget() - old) as f64;
+        }
     }
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`, in its new group `group`.
     pub(crate) fn move_to(&mut self, b: &mut Body, lineage: u32, group: u32, rows: Vec<f32>) {

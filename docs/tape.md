@@ -68,7 +68,7 @@ worn edges, structures, true colour (r, g, b).
 | `crossings`, `traffic_top2`, `traffic_persist` | 1/yr, , | moves to a neighbour cell; share on the busiest 2% of cells; overlap with ten years before |
 | `worn_edges`, `worn_new`, `worn_persist` | , 1/yr, | edges cleared by movers (path-like), new ones, kept from ten years before |
 | `mass_top2`, `mass_land` | kg/m² | body mass on the busiest cells and on other land |
-| `groups`, `watched`, `watched_kin`, `watched_groups`, `spread_max` | , 1/yr, 1/yr, , groups | groups; watches (imitation), of them within a lineage; groups watched; most watchers of one |
+| `groups`, `watched`, `watched_kin`, `watched_groups`, `spread_max` | , 1/yr, 1/yr, , groups | brain groups (bodies without a brain are in none); watches (imitation), of them within a lineage; groups watched; most watchers of one |
 | `gave`, `gave_kg`, `gave_eaters`, `gave_pairs`, `gave_reciprocal` | 1/yr, kg/yr, 1/yr, , | gifts, kg given, gifts by eaters, giving pairs, pairs giving both ways |
 | `ate_light_eaters`, `ate_others`, `ate_ground` | kg/yr | what eaters could burn of what they took, by source |
 

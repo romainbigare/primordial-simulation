@@ -605,6 +605,12 @@ The work of `docs/foundation/plan.md`, one line per task.
 - E9 (b): a body may be a node in individuals mode (`--individuals`) when it has no brain, not when it is a
   light-eater: the check compares brains in nodes and alone, and no law reads the light-eater threshold any more.
   Same results (golden unchanged).
+- E9 (c): a body without a brain has no born rows and is in no brain group (`life::NO_GROUP`): joins no longer mix
+  rows nothing reads, the groups' columns (`groups`, `learned`) count only bodies with a brain, and a brain that grows
+  back starts from new weights (`brain::rerow`). The bodies without a brain now update in the order of their cells.
+  64 x 64, seed 1, 30 years: the same world (plant mass 10.676 to 10.678 log10 kg, plant life 4.01 to 4.02 yr, eaters
+  4.78 to 4.75, land +0.04 K); born-row sets at year 30 5,455 to 134; snapshot 12.9 to 10.6 MB; a body update a few
+  per cent faster (side by side, busy machine). Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

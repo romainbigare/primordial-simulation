@@ -152,7 +152,11 @@ fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: Option<Hand>,
     let shape = lineage::shape(w.chem.ns(), h, mem);
     let (fixed, dir, verbs) = hand.unwrap_or(([0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]));
     let mut base = brain::random(shape, r, BRAIN_NOISE, fixed, dir, verbs);
-    let rows = base.split_off(shape.base());
+    let mut rows = base.split_off(shape.base());
+    // (A brain of no hidden units has no born rows: nothing reads them, `brain::rerow`.)
+    if shape.h == 0 {
+        rows.clear();
+    }
     (shape, w.life.new_lineage(Lineage { shape, seen, sight, base, root: which as u32 }), rows)
 }
 

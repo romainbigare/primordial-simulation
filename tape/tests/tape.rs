@@ -348,13 +348,19 @@ fn resume_into_the_same_folder_continues_the_tape() {
 
 /// A null run: with life about and copies made, nobody learns (the bodies' own adjustments stay
 /// zero) and every born row is a mean of the starting ones (inside their range, as a node's rows
-/// are the means of its members'); in the real run of the same world they are neither.
+/// are the means of its members'); in the real run of the same world they are neither. The
+/// light-eaters here are of a test lineage with a brain (their own kind has none), so that many
+/// copies carry rows.
 #[test]
 fn null_run_freezes_the_brain_rows() {
     let go = |null: bool| {
         let mut w = world();
         w.cfg.null = null;
-        worldgen::life::seed(&mut w, 0);
+        pcore::survey::survey(&mut w);
+        for i in worldgen::testkit::dry_lands(&w) {
+            let b = worldgen::testkit::founder(&mut w, 0, i, &worldgen::testkit::Brain::neutral());
+            w.life.add(b, w.day(), 1);
+        }
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();
         let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();

@@ -215,11 +215,10 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
     assert_eq!((grown.0.len(), grown.1.len()), (b.base(), b.rows() * b.r()));
     assert_eq!(pcore::brain::rebase(&grown.0, b, a, &mut r, 0.1), base);
     assert_eq!(pcore::brain::rerow(&grown.1, b, a, &mut r, 0.1), rows);
-    // Down to no brain: no base, the rows' biases kept.
+    // Down to no brain: no base and no born rows; back up from none: rows of new weights.
     let z = pcore::lineage::shape(9, 0, 6);
-    let none = pcore::brain::rerow(rows, a, z, &mut r, 0.1);
-    assert!(pcore::brain::rebase(base, a, z, &mut r, 0.1).is_empty() && none.len() == z.rows());
-    assert_eq!(none[0], rows[a.h]);
+    assert!(pcore::brain::rebase(base, a, z, &mut r, 0.1).is_empty() && pcore::brain::rerow(rows, a, z, &mut r, 0.1).is_empty());
+    assert_eq!(pcore::brain::rerow(&[], z, a, &mut r, 0.1).len(), a.rows() * a.r());
 }
 
 /// Without shared brains every body keeps a group of its own, and matter and energy still add up.

@@ -1227,8 +1227,9 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
 }
 
 /// A node whose mean brain-size gene moved a whole unit from its lineage's size moves to a new lineage with that size
-/// at its update (here a light-eater node, from no brain to one hidden unit): its brain carried over, in a group of its
-/// own that keeps what its group learned (the bias of a row is its last entry); matter and energy as they were.
+/// at its update. A light-eater node (no brain: no born rows, no group) grows one hidden unit: new born rows and a group
+/// of its own. Grown once more, its brain is carried over, in a group of its own that keeps what its group learned (the
+/// bias of a row is its last entry). Matter and energy as they were.
 #[test]
 fn a_node_whose_size_genes_moved_changes_lineage() {
     let mut w = small_world();
@@ -1236,22 +1237,26 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
     let mut b = std::mem::take(&mut w.life.bodies[s]);
-    let (lin0, g0) = (b.lineage, b.group);
-    let h0 = w.life.brains[lin0 as usize].as_ref().unwrap().shape.h;
-    w.life.groups[g0 as usize].rows[h0] += 0.5;
-    let learned = w.life.groups[g0 as usize].rows[h0] - w.life.born(&b)[h0];
+    let lin0 = b.lineage;
+    assert!(w.life.born(&b).is_empty() && b.group == pcore::life::NO_GROUP, "a light-eater has a brain");
     b.genes[HIDDEN] += 0.9;
     lineage::resize(&mut w, s, &mut b);
     assert_eq!(b.lineage, lin0, "moved for less than a unit");
     b.genes[HIDDEN] += 0.3;
     lineage::resize(&mut w, s, &mut b);
+    let shape = |w: &World, b: &Body| w.life.brains[b.lineage as usize].as_ref().expect("its lineage").shape;
+    let (lin1, g1, s1) = (b.lineage, b.group, shape(&w, &b));
+    assert!(lin1 != lin0 && g1 != pcore::life::NO_GROUP && s1.h == 1, "no new lineage of one hidden unit");
+    assert_eq!((w.life.members[lin1 as usize], w.life.groups[g1 as usize].members), (1, 1));
+    assert_eq!(w.life.born(&b).len(), s1.rows() * s1.r());
+    w.life.groups[g1 as usize].rows[s1.h] += 0.5;
+    let learned = w.life.groups[g1 as usize].rows[s1.h] - w.life.born(&b)[s1.h];
+    b.genes[HIDDEN] += 1.0;
+    lineage::resize(&mut w, s, &mut b);
     w.life.bodies[s] = b;
     let b = &w.life.bodies[s];
-    let lin = w.life.brains[b.lineage as usize].as_ref().expect("its lineage");
-    assert!(b.lineage != lin0 && b.group != g0 && lin.shape.h == h0 + 1, "no new lineage of {} hidden units", h0 + 1);
-    assert_eq!((w.life.members[b.lineage as usize], w.life.groups[b.group as usize].members), (1, 1));
-    assert_eq!(w.life.born(b).len(), lin.shape.rows() * lin.shape.r());
-    let h = lin.shape.h;
+    let h = shape(&w, b).h;
+    assert!(b.lineage != lin1 && b.group != g1 && h == 2, "no new lineage of two hidden units");
     assert!((w.life.groups[b.group as usize].rows[h] - w.life.born(b)[h] - learned).abs() < 1e-5, "what it learned is lost");
     for _ in 0..2 {
         pcore::step(&mut w);
@@ -1289,14 +1294,16 @@ fn seen_as_it_is(w: &World, s: usize) {
 /// holds (`Body::vis`); the genes of the drawn
 /// are the node's plus noise of its spread (their mean near the node's, within four standard errors, and as wide as the
 /// spread) and the mean of all members, drawn and left, is the node's; and so are their born rows, each member's its
-/// own.
+/// own (a light-eater node of a test lineage with a brain: its own kind has no born rows).
 #[test]
 fn opening_a_node_draws_members_and_keeps_everything() {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
-    worldgen::life::seed(&mut w, 0);
-    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1000.0).expect("a node");
+    let i = testkit::dry_land(&w);
+    let b = founder(&mut w, 0, i, &Brain::neutral());
+    let s = w.life.add(b, w.day(), 1);
+    assert!(w.life.bodies[s].count > 1000.0, "a node");
     // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene; and one in the
     // light-capture gene, so each is seen with its own leaf area (near its wall: its noise shrinks, so it is not
     // measured).
