@@ -149,12 +149,12 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bo
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
         for &(k, nu) in &w.chem.reactions[r].inputs {
             let (k, lat) = (k as usize, w.chem.subs[k as usize].latent_gas());
+            let d = nu as f64 * ext[q];
             if gas(k) {
-                let d = (nu as f64 * ext[q]).min(w.a(k, air.index));
                 w.moves.take(&w.chem, air, k, d, 0.0);
                 latent -= d * lat;
             } else {
-                b.store[k] -= (nu as f64 * ext[q]).min(b.store[k]);
+                super::add_store(&mut b.store[k], -d, &mut w.counts.rounded[0]);
             }
         }
         for &(k, nu) in &w.chem.reactions[r].outputs {

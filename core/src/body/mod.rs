@@ -161,6 +161,18 @@ pub struct Consts {
     pub cats: f64,
 }
 
+/// Store amount `x` of a body changes by `d` mol: what rounding leaves below zero is set to zero and counted
+/// (`Counters::rounded`), as `store::apply` does for the nodes of the store; more is a law that overdrew (checked in
+/// debug builds).
+pub(crate) fn add_store(x: &mut f64, d: f64, rounded: &mut f64) {
+    let was = *x;
+    *x += d;
+    if *x < 0.0 {
+        debug_assert!(-*x <= crate::store::ROUNDING * (was + d.abs()), "a law overdrew a body's store: {was} by {d}");
+        *rounded -= std::mem::take(x);
+    }
+}
+
 impl Body {
     /// Members (at least 1).
     #[inline]

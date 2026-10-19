@@ -103,8 +103,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.
     let ext = ins.iter().zip(&floors).fold(kg / (mm * nu0), |e, (&(k, nu), f)| e.min((b.store[k as usize] - f).max(0.0) / nu as f64));
     for &(k, nu) in &ins {
-        // (A store used up to its last mol is zero, not a rounding below it.)
-        b.store[k as usize] = (b.store[k as usize] - nu as f64 * ext).max(0.0);
+        body::add_store(&mut b.store[k as usize], -(nu as f64) * ext, &mut w.counts.rounded[0]);
     }
     b.e -= dh * ext;
     let (j, lift, t) = (w.mesh.up(b.cell as usize, 0, AIR), w.lift(b.cell as usize), b.temp(&w.chem));

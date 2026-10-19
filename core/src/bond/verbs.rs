@@ -133,7 +133,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
         pt.wall[k] = (pt.wall[k] - (a - f)).max(0.0);
         b.store[k] += a;
     }
-    b.digest(chem, chem.matter().map_or(0.0, |k| m[k]));
+    b.digest(chem, chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
     (pt.e, b.e) = (pt.e - q, b.e + q);
     w.counts.parts.from_parts += got;
     if pt.walls(chem).mass < w.cfg.phys.min_kg {

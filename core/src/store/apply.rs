@@ -13,7 +13,7 @@ const ELEMENT_ROUNDING: f64 = 1e-9;
 /// What a number may end below zero by to rounding, relative to what its node holds of that unit (all its amounts, or
 /// its heat), what the number held and all the changes of the call to it: more is a law that overdrew (checked in debug
 /// builds). A law's sums round at the size of what it moves, which is the size of what the node holds or less.
-const ROUNDING: f64 = 1e-9;
+pub(crate) const ROUNDING: f64 = 1e-9;
 /// The classes `apply` books, the first ones: those whose amounts and heat lie in the arrays of the `Store` (a part's
 /// and a body's lie in it, `Class::Part`, `Class::Body`, which Bond and the bodies book).
 const BOOKED: usize = Class::Part as usize;

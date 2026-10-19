@@ -817,6 +817,10 @@ Phase E review, round 1 (fixes):
   Flow 1811 to 1410 ms/yr at year 30 (947 at year 10, against 1208); the world within the noise a rounding change alone
   gives (plants 10.716 to 10.705 log10 kg, plant life 4.70 to 4.24 yr against 4.27 with the column booking alone,
   land 287.87 to 287.86 K, carbon gas 259.1 to 259.6 ppm). Golden re-pinned.
+- No silent cuts of a body's stores: what upkeep, growth and digestion take from a store changes it whole, and what
+  rounding leaves below zero is set to zero and counted in `Counters::rounded` (`body::add_store`), as `store::apply`
+  does for the store's nodes; a debug build checks it is only rounding. The gas upkeep takes from the air is no longer
+  cut to what the air holds (`apply` counts its rounding). The same world (golden; 64 x 64, seed 1, 8 years).
 
 **Phase J: the long physics step**
 

@@ -853,7 +853,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     add(&mut w, &mut b, MATTER, 34.56);
     let (s, mut b) = out(&mut w, b);
     let (books, before) = (Books::now(&w), b.store.clone());
-    let x = b.digest(&w.chem, 10.0);
+    let x = b.digest(&w.chem, 10.0, &mut 0.0);
     assert!((x - 10.0).abs() < 1e-12);
     // 10 of matter and the liquid growth makes with it become what growth is made of, 10 times its counts.
     let growth = w.chem.build.as_ref().expect("growth");

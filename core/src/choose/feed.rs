@@ -52,7 +52,7 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
             matter = a;
         }
     }
-    b.digest(&w.chem, matter);
+    b.digest(&w.chem, matter, &mut w.counts.rounded[0]);
 }
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
@@ -115,7 +115,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let mut o = std::mem::take(&mut w.life.bodies[s]);
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
     transfer(w, &mut o, b, &m);
-    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
+    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
     if body::wound(w, s, o, f, &rest, TAKEN, built0, matter0) {
@@ -146,7 +146,7 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
     let mut o = std::mem::take(&mut w.life.bodies[s]);
     transfer(w, b, &mut o, &m);
-    o.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]));
+    o.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
     o.note(b.id(slot), (NOTE_SCALE * got / mo) as f32);
     w.see(&mut o);
     w.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id(slot), to: o.id(s) }, node: b.cell, value: got });

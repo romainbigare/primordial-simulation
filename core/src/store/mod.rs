@@ -12,6 +12,7 @@ pub mod moves;
 pub mod nodes;
 
 pub use apply::apply;
+pub(crate) use apply::ROUNDING;
 pub use links::Links;
 pub use batch::Batch;
 pub use gather::Moves;

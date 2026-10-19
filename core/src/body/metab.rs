@@ -29,9 +29,9 @@ impl Body {
     }
     /// Digestion: `taken` mol of body matter that this body took in from outside are broken into its units as they come
     /// in, the reverse of growth (`Chemistry::build`), so it enters as fuel, never as body; the body builds its own matter
-    /// from that, at the cost of work (`copy::grow`). The other inputs come from its own stores, as far as they go. Returns
-    /// the units of growth reversed.
-    pub fn digest(&mut self, chem: &Chemistry, taken: f64) -> f64 {
+    /// from that, at the cost of work (`copy::grow`). The other inputs come from its own stores, as far as they go (what
+    /// rounding leaves of them below zero counted in `rounded`, `add_store`). Returns the units of growth reversed.
+    pub fn digest(&mut self, chem: &Chemistry, taken: f64, rounded: &mut f64) -> f64 {
         let Some(bl) = chem.build.as_ref() else { return 0.0 };
         let m = bl.outputs[0].0 as usize;
         let mut x = (taken / bl.outputs[0].1 as f64).min(self.store[m] / bl.outputs[0].1 as f64);
@@ -42,7 +42,7 @@ impl Body {
             return 0.0;
         }
         for &(k, nu) in &bl.outputs {
-            self.store[k as usize] = (self.store[k as usize] - nu as f64 * x).max(0.0);
+            super::add_store(&mut self.store[k as usize], -(nu as f64) * x, rounded);
         }
         for &(k, nu) in &bl.inputs {
             self.store[k as usize] += nu as f64 * x;
