@@ -12,7 +12,7 @@ const SCALE: usize = 4;
 /// Two maps: one the air blocks fit, one they do not (10 x 7 leaves narrow blocks along the south and east edges).
 fn maps() -> [(Square, Mesh); 2] {
     [(16, 16), (10, 7)].map(|(w, h)| {
-        let sq = Square { w, h, side: SIDE, wrap: false };
+        let sq = Square { w, h, side: SIDE, wrap: false, region: None };
         (sq, sq.mesh(&[SCALE], 31.0, 33.3))
     })
 }
@@ -91,7 +91,7 @@ fn air_of_is_the_parent_at_the_air_level_and_levels_agree() {
 #[test]
 fn the_compass_of_a_square_is_its_eight_neighbours() {
     const GRID: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
-    let globe = Square { w: 16, h: 8, side: SIDE, wrap: true };
+    let globe = Square { w: 16, h: 8, side: SIDE, wrap: true, region: None };
     for (sq, mesh) in maps().into_iter().chain([(globe, globe.mesh(&[SCALE], -90.0, 90.0))]) {
         let lv = mesh.cells();
         for (i, (d, &g)) in (0..sq.n()).flat_map(|i| GRID.iter().enumerate().map(move |dg| (i, dg))) {
@@ -130,7 +130,7 @@ fn a_stack_of_three_layers_links_each_cell_up_its_column() {
 #[test]
 fn a_globe_covers_its_sphere_and_wraps_east_to_west() {
     let (rows, radius) = (8, 1e6);
-    let sq = Square { w: 2 * rows, h: rows, side: std::f64::consts::PI * radius / rows as f64, wrap: true };
+    let sq = Square { w: 2 * rows, h: rows, side: std::f64::consts::PI * radius / rows as f64, wrap: true, region: None };
     let mesh = sq.mesh(&[SCALE], -90.0, 90.0);
     let sphere = 4.0 * std::f64::consts::PI * radius * radius;
     for l in 0..mesh.levels() {
@@ -153,4 +153,43 @@ fn a_globe_covers_its_sphere_and_wraps_east_to_west() {
     let coarse = mesh.level(1);
     let reach = (0..coarse.a().len()).filter(|&l| coarse.width()[l] > 0.0).map(|l| coarse.b()[l] - coarse.a()[l]).max();
     assert_eq!(reach, Some((sq.w / SCALE) as u32), "a border of the air reaches one row");
+}
+
+/// A refined region, on a flat map and on a globe: its squares in quarters that cover them, each cell under its
+/// square's air block; each square keeps its borders with the others (a square beside the region shares its side with
+/// two quarters, half a side each), and a square and a quarter link only across a border, as far apart as their
+/// centres across it.
+#[test]
+fn a_refined_region_splits_its_squares_in_four_and_keeps_the_borders() {
+    let flat = Square { w: 10, h: 7, side: SIDE, wrap: false, region: Some([3, 2, 4, 3]) };
+    let globe = Square { w: 16, h: 8, side: SIDE, wrap: true, region: Some([0, 0, 3, 2]) };
+    for (sq, south, north) in [(flat, 31.0, 33.3), (globe, -90.0, 90.0)] {
+        let (mesh, plain) = (sq.mesh(&[SCALE], south, north), Square { region: None, ..sq }.mesh(&[SCALE], south, north));
+        let (lv, [_, _, rw, rh]) = (mesh.cells(), sq.region.expect("a region"));
+        assert_eq!(lv.n(), sq.n() + 3 * rw * rh);
+        links_once(lv);
+        links_once(mesh.level(AIR));
+        let mut area = vec![0.0; sq.n()];
+        for i in 0..lv.n() {
+            area[sq.square_of(i)] += lv.area()[i];
+            assert_eq!(mesh.up(i, 0, AIR), plain.up(sq.square_of(i), 0, AIR), "cell {i} under its square's air block");
+        }
+        let near = |a: f64, b: f64| (a / b - 1.0).abs() < 1e-12;
+        assert!((0..sq.n()).all(|s| near(area[s], plain.cells().area()[s])), "the quarters cover their square");
+        let quarter = |i: usize| lv.area()[i] < 0.5 * plain.cells().area()[sq.square_of(i)];
+        let mut border = vec![0.0; plain.cells().a().len()];
+        for l in 0..lv.a().len() {
+            let (a, b) = (lv.a()[l] as usize, lv.b()[l] as usize);
+            if let Some(p) = plain.cells().link(sq.square_of(a), sq.square_of(b)) {
+                border[p] += lv.width()[l];
+            }
+            if quarter(a) != quarter(b) {
+                assert!(lv.width()[l] > 0.0, "no corner links a square and a quarter");
+                if !sq.wrap {
+                    assert!(near(lv.dist()[l], 0.75 * SIDE), "a square's centre lies three quarters of its side from a quarter's across their border");
+                }
+            }
+        }
+        assert!(border.iter().zip(plain.cells().width()).all(|(&b, &w)| b == w || near(b, w)), "each square keeps its borders");
+    }
 }

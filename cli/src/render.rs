@@ -75,7 +75,8 @@ pub fn save(w: &World, path: &str) {
     }
     let (pw, ph) = (gw * s * panels + (panels - 1) * GAP, gh * s);
     let mut img = vec![255u8; pw * ph * 3];
-    let n = w.mesh.cells().n();
+    // A pixel block for each square of the map (a refined square shows its north-west quarter, `Square::square_of`).
+    let n = w.map.n();
     for i in 0..n {
         let (x, y) = w.map.xy(i);
         let cols = [

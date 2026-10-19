@@ -12,7 +12,12 @@ of a cell takes one of 8 compass directions, `Level::way`, the free one nearest 
 neighbours take the 8 directions even near a pole; the laws step only on the links). The map is an island of 2 km squares, or a globe (`ew run --globe`): squares of
 latitude and longitude from pole to pole whose rows wrap east to west, each row's area and borders from its latitude
 on a sphere of 6,371 km (cells narrow toward the poles; no link crosses a pole), the air a coarser level that wraps
-too; the shared maths in `solve/`; settings in `params.rs`; the nodes and their books in
+too. A rectangle of squares may be refined at the start (`ew run --region X,Y,W,H`, `Square::refine`, 2 x 2 squares
+or more): each of its squares is four quarters in the mesh, under its square's air node. A square beside the region
+links to the two quarters along its side, each across half the side, as far apart as their centres lie across the
+border (three quarters of a side), and not across a corner (so it keeps at most 8 links). Heat, pore liquid and the
+like then cross the border exactly for a change across it; a change along it gives a quarter and its square a small
+false exchange (two-point fluxes on cells that do not line up); the shared maths in `solve/`; settings in `params.rs`; the nodes and their books in
 `store/`, `world.rs` and `check.rs`; ground heat in `ground.rs`; the registry of bodies in `life.rs`, the cells as
 bodies see them in `survey.rs`.
 
@@ -20,7 +25,7 @@ bodies see them in `survey.rs`.
 
 | Word | Meaning |
 |---|---|
-| cell | one square of the map (2 km × 2 km on the island; on a globe a square of latitude and longitude), with a ground node; it sees its parent air node at the air level (`Mesh::share`: its area over the node's) |
+| cell | one square of the map (2 km × 2 km on the island; on a globe a square of latitude and longitude), or a quarter of one in a refined region, with a ground node; it sees its parent air node at the air level (`Mesh::share`: its area over the node's) |
 | node | anything that holds stuff: the ground of a cell, an air column, a body, a part |
 | body | a living node with genes and maybe a brain |
 | member | one living thing inside a body. A body of 1 member is an **individual**; of many, a **population node** (alike members counted together) |
@@ -838,6 +843,8 @@ read a kind.
   the starting air (2.6), which thins with height by its scale height. Every land cell drains to the sea from the
   start (`drain`): a priority flood from the cells below 0 m raises each closed basin above 0 m to its outlet,
   with a slope of 1 m per km across the filled floor (`DRAIN_SLOPE`; Planchon and Darboux 2001, Barnes et al. 2014).
+  The quarters of a refined region read the same noise at their own centres (finer detail, not a blurred copy) and
+  take the same drainage pass and starting state as any cell.
 - **Life** starts at year 2 (`--life-year`): light-eaters first, eaters 20 years later (`worldgen::life::KINDS`);
   `--roster` places ten kinds (`worldgen::life::ROSTER`) of several sizes and diets, each at its own year. Founders go
   on land under no more than half a metre of standing liquid.

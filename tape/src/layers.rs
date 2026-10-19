@@ -179,9 +179,10 @@ pub fn quantise(l: &Layer, v: f64) -> u8 {
     b.round().clamp(0.0, 255.0) as u8
 }
 
-/// Append one frame: every layer in table order, row-major.
+/// Append one frame: every layer in table order, a byte for each square of the map, row-major (a refined square shows
+/// its north-west quarter, `Square::square_of`).
 pub(crate) fn frame(c: &Ctx, out: &mut Vec<u8>) {
     for l in LAYERS {
-        out.extend((0..c.w.mesh.cells().n()).map(|i| quantise(l, (l.val)(c, i))));
+        out.extend((0..c.w.map.n()).map(|i| quantise(l, (l.val)(c, i))));
     }
 }

@@ -143,7 +143,7 @@ impl Recorder {
                     bump(&mut m.deaths, NC * root as usize + c, e.value);
                 }
                 if cat < LIGHT_EATER && cause == SPENT {
-                    m.spent = [m.spent[0] + e.value, m.spent[1] + e.value * (e.node / w.map.w as u32) as f64];
+                    m.spent = [m.spent[0] + e.value, m.spent[1] + e.value * w.map.xy(w.map.square_of(e.node as usize)).1 as f64];
                 }
             }
             EventKind::Watched { by, of } => {

@@ -6,7 +6,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::flow::scale_height;
 use pcore::rng::{Purpose, Rng};
 use pcore::space::square::Square;
-use pcore::space::{Level, Mesh};
+use pcore::space::Level;
 use pcore::store::{Boundary, Class, Links, Node, Store};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
@@ -73,12 +73,12 @@ fn fbm(seed: u64, p: &[f64], octaves: u32) -> f64 {
     sum / norm
 }
 
-/// Where cell `i` of `map` lies in the noise at `per_cell` units a cell: its column and row on a flat map; on a globe
-/// the point over its centre on a sphere `per_cell` units a cell round its equator (no seam where the rows wrap).
+/// Where cell `i` of `map` lies in the noise at `per_cell` units a square: on a flat map its centre, in squares, less
+/// half a square (a square's column and row); on a globe the point over its centre on a sphere `per_cell` units a
+/// square round its equator (no seam where the rows wrap). A refined region's quarters read the noise at their centres.
 fn spot(map: &Square, cells: &Level, i: usize, per_cell: f64) -> Vec<f64> {
-    let (x, y) = map.xy(i);
     if !map.wrap {
-        return vec![x as f64 * per_cell, y as f64 * per_cell];
+        return cells.centre()[i].iter().map(|&c| (c / map.side - 0.5) * per_cell).collect();
     }
     let (r, lat, lon) = (per_cell * map.w as f64 / TAU, cells.lat()[i].to_radians(), cells.lon()[i].to_radians());
     vec![r * lat.cos() * lon.cos(), r * lat.cos() * lon.sin(), r * lat.sin()]
@@ -103,18 +103,18 @@ fn height(above: f64) -> f64 {
 /// map to a level of 0.3; a globe's level leaves the share `LAND_SHARE` of its area above it.
 pub fn heights(seed: u64, map: &Square, cells: &Level) -> Vec<f64> {
     let per_cell = ACROSS / map.w.max(map.h) as f64;
-    let rise: Vec<f64> = (0..map.n()).map(|i| relief(seed, &spot(map, cells, i, per_cell))).collect();
+    let rise: Vec<f64> = (0..cells.n()).map(|i| relief(seed, &spot(map, cells, i, per_cell))).collect();
     if !map.wrap {
-        let middle = |c: usize, len: usize| (c as f64 + 0.5) / len as f64 - 0.5;
+        // How far the centre `c`, m, lies from the middle of a side of `len` squares, in sides.
+        let middle = |c: f64, len: usize| c / map.side / len as f64 - 0.5;
         return (rise.iter().enumerate())
             .map(|(i, &r)| {
-                let (x, y) = map.xy(i);
-                let (dx, dy) = (middle(x, map.w), middle(y, map.h));
+                let (dx, dy) = (middle(cells.centre()[i][0], map.w), middle(cells.centre()[i][1], map.h));
                 height(r - ((dx * dx + dy * dy).sqrt() * 2.0).powf(1.6) * 1.0 - 0.3)
             })
             .collect();
     }
-    let mut order: Vec<usize> = (0..map.n()).collect();
+    let mut order: Vec<usize> = (0..cells.n()).collect();
     order.sort_by(|&a, &b| rise[b].total_cmp(&rise[a]));
     let (total, mut above) = (cells.area().iter().sum::<f64>(), 0.0);
     let level = order.iter().find(|&&i| {
@@ -171,9 +171,9 @@ pub fn air_column(chem: &Chemistry, init: &Init, gravity: f64) -> f64 {
     P_REF / (gravity * m_air)
 }
 
-/// Starting temperature at row `y` of `map` and height `z`, K: warm low latitudes, cooler poles and heights.
-fn t_start((map, mesh): (&Square, &Mesh), y: usize, z: f64) -> f64 {
-    let lat = mesh.cells().lat()[map.idx(0, y)].to_radians();
+/// Starting temperature at latitude `lat`, degrees, and height `z`, K: warm low latitudes, cooler poles and heights.
+fn t_start(lat: f64, z: f64) -> f64 {
+    let lat = lat.to_radians();
     T_EQUATOR - POLE_DROP * lat.sin().powi(2) - LAPSE * z.max(0.0)
 }
 
@@ -190,24 +190,28 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
 
 /// The map of an island of `w × h` cells.
 pub fn island(w: usize, h: usize) -> Square {
-    Square { w, h, side: CELL_M, wrap: false }
+    Square { w, h, side: CELL_M, wrap: false, region: None }
 }
 
 /// The map of a globe of `rows` rows from pole to pole, with twice as many columns, so a cell is square at the equator.
 pub fn globe(rows: usize) -> Square {
-    Square { w: 2 * rows, h: rows, side: PI * RADIUS_M / rows as f64, wrap: true }
+    Square { w: 2 * rows, h: rows, side: PI * RADIUS_M / rows as f64, wrap: true, region: None }
+}
+
+/// A new world on `map` from a seed: terrain, chemistry 0, ground, liquid and air.
+pub fn new_map(seed: u64, map: Square) -> World {
+    let (chem, init) = chemistry0();
+    build(seed, map, chem, &init, Config::default())
 }
 
 /// A new island from a seed: terrain, chemistry 0, ground, liquid and air.
 pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    let (chem, init) = chemistry0();
-    build(seed, island(w, h), chem, &init, Config::default())
+    new_map(seed, island(w, h))
 }
 
 /// A new globe of `rows` rows from a seed: terrain, chemistry 0, ground, liquid and air.
 pub fn new_globe(seed: u64, rows: usize) -> World {
-    let (chem, init) = chemistry0();
-    build(seed, globe(rows), chem, &init, Config::default())
+    new_map(seed, globe(rows))
 }
 
 /// A new world on `map` (an island or a globe, whose rows run from pole to pole).
@@ -259,8 +263,9 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     let mut t_air = vec![0.0; na];
     for j in 0..na {
         zmean[j] /= air_area[j];
+        // At the latitude of the first cell of a row near the middle of the node's block.
         let y = (j / map.w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
-        t_air[j] = t_start((&map, &mesh), y.min(map.h - 1), zmean[j]);
+        t_air[j] = t_start(mesh.cells().lat()[map.idx(0, y.min(map.h - 1))], zmean[j]);
         let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * air_area[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;
@@ -298,9 +303,8 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
     let mut e_ground = vec![0.0; n];
     for (i, &z) in hz.iter().enumerate().take(n) {
-        let (_, y) = world.map.xy(i);
         // Low ground starts with its liquid molten.
-        let t = t_start((&world.map, &world.mesh), y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
+        let t = t_start(world.mesh.cells().lat()[i], z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
         e_ground[i] = world.energy_ground(i, t);
     }
     let e_air = t_air.iter().enumerate().map(|(j, &t)| world.heat_cap_air(j) * t).collect();

@@ -115,7 +115,7 @@ impl Level {
         self.area.len()
     }
     views! {
-        area: f64, lat: f64, lon: f64, a: u32, b: u32, dist: f64, width: f64,
+        area: f64, centre: [f64; 2], lat: f64, lon: f64, a: u32, b: u32, dist: f64, width: f64,
         /// The compressed adjacency: `start` (len n + 1), and for each entry its link and its other cell.
         start: u32, adj_link: u32, adj_cell: u32, heading: [f64; 2],
         /// Each cell's parent at the next coarser level (empty at the coarsest).
@@ -193,11 +193,22 @@ impl Mesh {
         }
         [p.radius * east_of(p.lon[i], q.lon[j]).to_radians(), p.radius * (p.lat[i] - q.lat[j]).to_radians()]
     }
-    /// Add a coarser level over the coarsest, given each cell's parent (0..m, each with a child; on a sphere, children
-    /// that do not straddle the longitude 0). A coarse cell holds its children's area at their area-weighted centre;
-    /// coarse cells link where children do, across the sum of their widths.
+    /// Add a coarser level over the coarsest, given each cell's parent (`Level::coarser`).
     pub(crate) fn coarsen(&mut self, parent: Vec<u32>) {
         let fine = self.levels.last_mut().expect("a mesh has a level");
+        let (mut coarse, links) = fine.coarser(&parent);
+        fine.parent = parent;
+        coarse.join(links);
+        self.levels.push(coarse);
+    }
+}
+
+impl Level {
+    /// The cells of a coarser level over this one and their links, given each cell's parent (0..m, each with a child; on
+    /// a sphere, children that do not straddle the longitude 0). A coarse cell holds its children's area at their
+    /// area-weighted centre; coarse cells link where children do, across the sum of their widths.
+    pub(crate) fn coarser(&self, parent: &[u32]) -> (Level, Vec<LinkSpec>) {
+        let fine = self;
         assert_eq!(parent.len(), fine.n(), "one parent for each cell");
         let m = parent.iter().max().map_or(0, |&p| p as usize + 1);
         let (kid_start, kids) = compress(m, parent.iter().enumerate().map(|(c, &p)| (p, c as u32)));
@@ -232,9 +243,7 @@ impl Mesh {
                 }
             }
         }
-        fine.parent = parent;
-        coarse.join(links);
         (coarse.kid_start, coarse.kids) = (kid_start, kids);
-        self.levels.push(coarse);
+        (coarse, links)
     }
 }

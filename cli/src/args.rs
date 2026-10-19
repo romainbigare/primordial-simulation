@@ -9,6 +9,7 @@ pub const USAGE: &str = "usage:
     --seed N              world seed (1)
     --size N              cells along a side (128); of a globe, its rows from pole to pole (even)
     --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
+    --region X,Y,W,H      the W x H cells from column X and row Y split in four (each side 2 or more; none)
     --years N             years to run (10)
     --every N             print and draw a picture every N years (10)
     --out DIR             where the tape, pictures and snapshots go (out)
@@ -53,6 +54,12 @@ impl Args {
     /// The value after `name`, or `default`.
     pub fn get<T: std::str::FromStr>(&self, name: &str, default: T) -> T {
         self.value(name).unwrap_or(default)
+    }
+
+    /// The refined region of `--region X,Y,W,H`, if it is there and parses.
+    pub fn region(&self) -> Option<[usize; 4]> {
+        let v: Vec<usize> = self.value::<String>("--region")?.split(',').map(str::parse).collect::<Result<_, _>>().ok()?;
+        v.try_into().ok()
     }
 
     /// The command (the first word after the program's name).

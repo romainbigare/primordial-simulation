@@ -164,6 +164,49 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     books.assert_within(&w, 1e-12, 1e-12);
 }
 
+/// Heat crosses the border of a refined region by the border's width over the distance across it: on even bed
+/// everywhere with no loose ground, ground warmer to the east at a fixed rate (as much heat flows into each cell as
+/// out) stays so in the cells away from the map's edges, inside the region, beside it and across its border, while a
+/// region whose quarters read a square's width or the distance between centres would not. An even temperature stays
+/// even.
+#[test]
+fn heat_crosses_the_border_of_a_refined_region_by_its_width() {
+    const GRAD: f64 = 1e-3;
+    // A region from the north edge of the map to the south: its borders run north to south, across the warming.
+    let map = pcore::space::square::Square { region: Some([5, 0, 6, 16]), ..worldgen::terrain::island(16, 16) };
+    let mut w = worldgen::terrain::new_map(3, map);
+    let (n, ns, area) = (w.mesh.cells().n(), w.chem.ns(), w.mesh.cells().area().to_vec());
+    let land = (0..n).find(|&i| w.surface_z(i) > 0.0 && area[i] == map.side * map.side).expect("land");
+    // Per m² of the bed: heat capacity, volume, and volume times conductivity.
+    let (mut cp, mut vol, mut kv) = (0.0, 0.0, 0.0);
+    for k in 0..ns {
+        let (b, v) = (w.store.amounts(Class::Bed)[k * n + land] / area[land], w.chem.molar_volume(k, Phase::Solid));
+        (cp, vol, kv) = (cp + b * w.chem.subs[k].cp, vol + b * v, kv + b * v * w.chem.subs[k].conductivity);
+        for (i, &a) in area.iter().enumerate() {
+            set_amount(&mut w, Node::new(Class::Bed, i), k, b * a);
+            set_amount(&mut w, Node::ground(i), k, 0.0);
+        }
+    }
+    // A step short against the time heat takes to cross a square, and the heat that crosses a side in it, J.
+    let x = |w: &World, i: usize| w.mesh.cells().centre()[i][0];
+    let dt = 0.01 * map.side * map.side * cp / kv;
+    let side_heat = kv / vol * w.cfg.skin_m * map.side * GRAD * dt;
+    let away = |w: &World, i: usize| (4.0 * map.side..=12.0 * map.side).contains(&x(w, i));
+    for even in [true, false] {
+        for i in 0..n {
+            let t = 300.0 + if even { 0.0 } else { GRAD * x(&w, i) };
+            hold_ground(&mut w, i, t);
+        }
+        w.scratch = Default::default();
+        let (books, before) = (Books::now(&w), w.store.heat(Class::Ground).to_vec());
+        pcore::flow::conduct(&mut w, dt);
+        let off = (0..n).filter(|&i| even || away(&w, i)).map(|i| (w.store.heat(Class::Ground)[i] - before[i]).abs()).fold(0.0, f64::max);
+        println!("even {even}: the most any cell changed, {:.3e} of the heat across a side", off / side_heat);
+        assert!(off <= 1e-6 * side_heat, "a cell changed by {off:.3e} J, against {side_heat:.3e} J across a side");
+        books.assert_within(&w, 1e-12, 1e-12);
+    }
+}
+
 /// More heat-absorbing gas keeps warming the ground: under 240 W/m² of sunlight, with the air following the ground by
 /// the lapse rate, the balance at optical depth 17 is clearly warmer than at 9 (one slab at the air's mean temperature
 /// would give both the same).

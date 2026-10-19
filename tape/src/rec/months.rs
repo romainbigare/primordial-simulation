@@ -59,7 +59,9 @@ impl Recorder {
     /// The month: its row, and what the year counts at month ends (members, signals, bodies inside walls, the land's
     /// temperature).
     pub(super) fn month(&mut self, w: &World) {
-        let (chem, gw, y, s) = (&w.chem, w.map.w as u32, &mut self.year, &mut self.social);
+        let (chem, y, s) = (&w.chem, &mut self.year, &mut self.social);
+        // The row of the map of a cell (of its square, in a refined region).
+        let row = |i: u32| w.map.xy(w.map.square_of(i as usize)).1 as f64;
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
         let mut last = vec![(u32::MAX, 0); w.life.bodies.len()];
         // The surface heights of the last survey (`Life::env`, not saved), or, before the first survey of a resumed world,
@@ -87,11 +89,11 @@ impl Recorder {
             let c = &mut y.inside[(t >= INSIDE_COLD_T) as usize];
             (c[0], c[1], inside, tm) = (c[0] + 1.0, c[1] + ins as u8 as f64, inside + ins as u8 as f64, tm + t);
             let (dy, dz) = match s.last.get(at).filter(|l| l.0 == b.gen) {
-                Some(&(_, c)) => ((b.cell / gw) as f64 - (c / gw) as f64, z - z_of(c as usize)),
+                Some(&(_, c)) => (row(b.cell) - row(c), z - z_of(c as usize)),
                 None => (0.0, 0.0),
             };
             n += 1.0;
-            for (a, v) in sum.iter_mut().zip([(b.cell / gw) as f64, z, dy, dz]) {
+            for (a, v) in sum.iter_mut().zip([row(b.cell), z, dy, dz]) {
                 *a += v;
             }
         }

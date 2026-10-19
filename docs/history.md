@@ -1200,6 +1200,14 @@ Phase E review, round 1 (fixes):
   dispersals (158 across the wrap, 5 at 60° of latitude or more), 36 steps (4 at 60° or more), drift 2.7e-15
   (elements) and 7.4e-15 (energy); `ew run --globe --size 16 --years 15`: 85 light-eaters at year 15, drift 9.8e-16
   and 1.2e-14, 0.16 s a year.
+- G4, a refined region (`ew run --region X,Y,W,H`): the squares of a rectangle split in four at the start
+  (`Square::refine`: the map's quarters joined back into their squares outside it by `Level::coarser`); a square and a
+  quarter link across a border only, at the distance across it (decision 30); the quarters read the terrain's noise at
+  their centres; the tape and the pictures keep one byte a square. The island is the same world bit for bit (checked
+  with the new field left out of the fingerprint); golden re-pinned for the field the saved map now carries; snapshot
+  version 37. 32 x 32 with an 8 x 8 region, seed 1, with life, 10 years: drift 1.3e-15 (elements) and 1.1e-15
+  (energy); against no region: land 288.77 K (288.76), rain on land 1.896e-3 (1.885e-3), light-eater members 1.64e9
+  (1.65e9); 1.02 s a year (0.74).
 
 **Owner's decisions after Phase A**
 

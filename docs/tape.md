@@ -29,9 +29,10 @@ map repeating east and west, and a cell's latitude and longitude in the inspect 
 
 **Means over the map** (`t_ground`, `t_air`, `t_land`, `absorber`, `ice_frac`, `rain`, `rain_land`, `mass_top2`,
 `mass_land`) are weighted by cell area, as the cells of a globe differ in area (`measure::area_mean`). Counts of cells
-(`rivers`, the cover's median) are of cells.
+(`rivers`, the cover's median) are of cells (a refined region's quarters count one each).
 
-**Map layers** in the frames (`tape/src/layers.rs`, one byte a cell): height, liquid depth, ice, liquid flux, loose
+**Map layers** in the frames (`tape/src/layers.rs`, one byte a square of the map, row by row; a square of a refined
+region, `ew run --region`, shows its north-west quarter, as do the PNG pictures): height, liquid depth, ice, liquid flux, loose
 ground, ground and air temperature, rain, vapour, absorber, light-eater and other body mass per m², bodies, traffic,
 worn edges, structures, true colour (r, g, b).
 
