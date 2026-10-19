@@ -1,5 +1,5 @@
 //! The exchange of ground nodes with the air: evaporation, condensation (rain and cloud), and gases dissolving in the
-//! ground's liquid; and how what crosses is booked (`Crossing`).
+//! ground's liquid; and how what dissolves is booked (`Crossing`).
 
 use super::super::land::wet;
 use super::super::Scratch;
@@ -103,49 +103,42 @@ pub(super) fn cloud(cloud: f64, (m, mr): (f64, f64), area: f64, dt: f64) -> f64 
     if m > 0.0 { rate / (rate + cloud) * mr / m } else { 0.0 }
 }
 
-/// What crosses between ground nodes and their air nodes, booked at its end in one call (`Crossing::book`): a link from
-/// each ground node that exchanges to its air node, with the mol of each of its gases (+ up into the air) and the heat
-/// that leaves the ground with them, J (the air receives it less the latent heat it holds of them, `store::held`); and
-/// the lift of the gas, from each air node's heat into the world's potential energy, J (`Sky::cross` books it the same).
-pub(super) struct Crossing {
+/// What crosses between ground nodes and their air nodes as gases dissolve, booked at its end in one call
+/// (`Crossing::book`): a link from each ground node that exchanges to its air node, with the mol of each of its gases (+
+/// up into the air) and the heat that leaves the ground with them, J (the air receives it less the latent heat it holds
+/// of them, `store::held`); and the lift of the gas, from each air node's heat into the world's potential energy, J.
+struct Crossing {
     /// The gases, and the gravity that lifts them, m/s²
     ks: Vec<usize>,
     g: f64,
     links: Batch,
     lift: Vec<f64>,
     /// What each air node holds of each gas as the crossing leaves it, mol (`[x * na + j]`)
-    pub(super) left: Vec<f64>,
+    left: Vec<f64>,
 }
 
 impl Crossing {
     /// A crossing of the gases `ks`, from the air now.
-    pub(super) fn new(w: &World, ks: Vec<usize>) -> Crossing {
+    fn new(w: &World, ks: Vec<usize>) -> Crossing {
         let na = w.mesh.level(AIR).n();
         let left: Vec<f64> = ks.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
         let links = Batch::new([Class::Ground, Class::Air], &ks.iter().map(|&k| k as u16).collect::<Vec<_>>());
         Crossing { ks, g: w.cfg.gravity, links, lift: vec![0.0; na], left }
     }
-    /// `m` mol of gas `x` of the crossing go from ground node `i`, of `area` m², up into its air node `j` (negative `m`:
-    /// down) with `heat` J that leaves the ground; the state of both nodes follows (`Scratch::note`, or for a gas that
-    /// was `dissolved`, `Scratch::hold`; and the air's sums).
-    pub(super) fn cross(&mut self, s: &mut Scratch, x: usize, (i, j, area): (usize, usize, f64), (m, heat): (f64, f64), dissolved: bool) {
+    /// `m` mol of dissolved gas `x` of the crossing go from ground node `i` up into its air node `j` (negative `m`: down)
+    /// with `heat` J that leaves the ground; the state of the ground node follows (`Scratch::hold`; the air's sums are
+    /// worked out again at the end of the air's step, `air::sums`).
+    fn cross(&mut self, s: &mut Scratch, x: usize, (i, j): (usize, usize), (m, heat): (f64, f64)) {
         let (na, k) = (self.lift.len(), self.ks[x]);
-        let p = s.sp[k];
         self.links.add((i, j), k as u16, (m, heat));
-        (self.lift[j], self.left[x * na + j]) = (self.lift[j] + m * p.mm * s.view().lift(i, j, self.g), self.left[x * na + j] + m);
-        if dissolved { s.hold(k, i, -m) } else { s.note(k, i, -m, area) }
-        (s.capa[j], s.nt[j], s.mass[j]) = (s.capa[j] + m * p.cp, s.nt[j] + m, s.mass[j] + m * p.mm);
-    }
-    /// The links of the crossing and the lifts, for the store.
-    pub(super) fn batches(self) -> (Batch, Batch) {
-        let mut lift = Batch::falls(Class::Air);
-        self.lift.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
-        (self.links, lift)
+        (self.lift[j], self.left[x * na + j]) = (self.lift[j] + m * s.sp[k].mm * s.view().lift(i, j, self.g), self.left[x * na + j] + m);
+        s.hold(k, i, -m);
     }
     /// Book the crossing through the store.
-    pub(super) fn book(self, w: &mut World) {
-        let (mut links, mut lift) = self.batches();
-        apply(w, &[links.flux(), lift.flux()], &[], &[]);
+    fn book(mut self, w: &mut World) {
+        let mut lift = Batch::falls(Class::Air);
+        self.lift.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
+        apply(w, &[self.links.flux(), lift.flux()], &[], &[]);
     }
 }
 
@@ -184,7 +177,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             // The gas brings its heat (at the air's temperature, or the ground's when it comes out), and dissolving frees
             // its fusion and vaporisation enthalpy into the node.
             let tq = if m > 0.0 { s.ta[j] } else { t };
-            pass.cross(s, x, (i, j, area), (-m, -m * (sp.cp * tq + sp.lf + sp.lv)), true);
+            pass.cross(s, x, (i, j), (-m, -m * (sp.cp * tq + sp.lf + sp.lv)));
         }
     }
     pass.book(w);

@@ -808,6 +808,15 @@ Phase E review, round 1 (fixes):
   4.04e10, plant life 4.75 to 4.70 yr, eaters 4.50 to 4.49 log10 kg (life 4.2 to 3.2 yr, a few hundred members),
   land 287.98 to 287.87 K, swing 12.65 to 12.49 K, rain the same, carbon gas 254 to 259 ppm, drift 7e-15 and 2.4e-14;
   Change 787 to 374 ms/yr, Flow 2055 to 1816, the whole run 130 to 109 s. Snapshot version 32; golden re-pinned.
+- Why life made the air dearer: with life, three substances that cannot evaporate (saturation pressures near 1e-38
+  Pa) stood in the air at 1e-14 to 1e-30 mol, put there by bodies' breath, and the air's step solved each as a gas
+  (a banded solve per round, 7 numbers per cell, a crossing per cell); and the rounds went from 3.0 to 4.1 per step
+  as the land's water vapour moved more (the canopy). The air's gases are now those it holds more of than the
+  rounding of its sums, or that can evaporate; the ground's gas crosses to its air node as one column per gas (no
+  `Batch` per cell and gas, no `FlowView` per crossing, no sums of the air done twice). 64 x 64, seed 1, 30 years:
+  Flow 1811 to 1410 ms/yr at year 30 (947 at year 10, against 1208); the world within the noise a rounding change alone
+  gives (plants 10.716 to 10.705 log10 kg, plant life 4.70 to 4.24 yr against 4.27 with the column booking alone,
+  land 287.87 to 287.86 K, carbon gas 259.1 to 259.6 ppm). Golden re-pinned.
 
 **Phase J: the long physics step**
 

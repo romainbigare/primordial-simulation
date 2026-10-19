@@ -207,7 +207,9 @@ air and of the physics to that of 6-hour air steps and 3-day physics steps withi
 (`tape/tests/ranges.rs`).
 
 - The unknowns are each air node's temperature and gases at the end of the step. The sun is that of
-  the step's end.
+  the step's end. The gases are those the air holds more of than the rounding of its sums, and those
+  that can evaporate from the ground (a substance's saturation pressure over 1 Pa at the warmest ground):
+  a trace of less stays where it is.
 - Each round reads them and finds what every ground node exchanges with its air node over the step:
   its surface balance solved implicitly (1.4 below), the rain it gets and what evaporates from it
   (1.5), and how these change with the air it sees (each cell sees the four nearest air nodes by

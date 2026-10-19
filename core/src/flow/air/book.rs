@@ -3,7 +3,6 @@
 //! bodies and the rain it leaves until the next air step.
 
 use super::super::{follow, year_weight, Scratch};
-use super::exchange::Crossing;
 use super::newton::Wind;
 use super::step::{Active, Iterate, FIXED, PER_GAS};
 use super::wind::Links;
@@ -63,26 +62,31 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, act: &[Active], (rows, width)
             life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&sh| sh) - 1.0) * got;
         }
     }
-    let mut cross = Crossing::new(w, act.iter().map(|a| a.k).collect());
-    for x in 0..act.len() {
+    // The gas of each ground node goes up into its air node (or rains out of it) along the link between them, one column
+    // per gas, with the heat that leaves the ground with it (scaled as `hold_air` cut it); the air pays its lift from
+    // the head of the ground node to its own mean height, as it pays the lift of the gas the wind brings it.
+    let (g, view) = (w.cfg.gravity, s.view());
+    let mut paid = wind.paid.clone();
+    for (x, ac) in act.iter().enumerate() {
         for i in (0..n).filter(|&i| up[x * n + i] != 0.0) {
-            let q = up_heat[x * n + i] * up[x * n + i] / cut[x * n + i];
-            cross.cross(s, x, (i, parent[i] as usize, area[i]), (up[x * n + i], q), false);
+            let (m, j) = (up[x * n + i], parent[i] as usize);
+            heat[i] += up_heat[x * n + i] * m / cut[x * n + i];
+            paid[j] += m * s.sp[ac.k].mm * view.lift(i, j, g);
         }
+    }
+    for (x, ac) in act.iter().enumerate() {
+        (0..n).filter(|&i| up[x * n + i] != 0.0).for_each(|i| s.note(ac.k, i, -up[x * n + i], area[i]));
     }
     let ids: Vec<u32> = (0..n as u32).collect();
     let (to_sun, space) = (vec![Boundary::Sun as u32; n], vec![Boundary::Space as u32; na]);
     let mut lift = Batch::falls(Class::Air);
-    wind.paid.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
-    let (mut links_x, mut lift_x) = cross.batches();
-    let gas: Vec<u16> = s.state.gas.iter().map(|&k| k as u16).collect();
+    paid.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
+    let (ks, gas): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
     let fluxes = [
         LinkFlux { class: [Class::Boundary, Class::Ground], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &sun },
         LinkFlux { class: [Class::Boundary, Class::Bodies], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &kept },
-        LinkFlux { class: [Class::Ground, Class::Air], a: &ids, b: &parent, ks: &[], mol: &[], heat: &heat },
+        LinkFlux { class: [Class::Ground, Class::Air], a: &ids, b: &parent, ks: &ks, mol: &up, heat: &heat },
         LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
-        links_x.flux(),
-        lift_x.flux(),
         LinkFlux { class: [Class::Air; 2], a: &links.a, b: &links.b, ks: &gas, mol: &wind_mol, heat: &wind.heat },
         lift.flux(),
     ];

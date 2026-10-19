@@ -113,7 +113,7 @@ pub(super) struct State {
     pub(super) vary: Vec<usize>,
     /// Volume of the `fixed` solids of each ground node, and volume × reflectance, m³.
     pub(super) fix: Vec<[f64; 2]>,
-    /// Substances present in bonded ground, and in the air (or able to evaporate into it).
+    /// Substances present in bonded ground, and in the air (more than the rounding of its sums, or able to evaporate into it).
     pub(super) bedk: Vec<usize>,
     pub(super) gas: Vec<usize>,
     /// Bonded ground of each ground node.
@@ -267,7 +267,11 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     s.state.vary = s.state.loose.iter().copied().filter(|k| !s.state.fixed.contains(k)).collect();
     s.state.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
     s.state.bedk = (0..ns).filter(|&k| any(w.store.amounts(Class::Bed), n, k)).collect();
-    let gas = (0..ns).filter(|&k| any(w.store.amounts(Class::Air), na, k) || (s.state.loose.contains(&k) && up(k))).collect();
+    // (A substance whose air holds less than the rounding of the air's sums is no gas of it: what little there is stays
+    // where it is, and the air's step does not solve for it.)
+    let (air, all) = (w.store.amounts(Class::Air), w.store.amounts(Class::Air).iter().sum::<f64>());
+    let in_air = |k: usize| air[k * na..(k + 1) * na].iter().sum::<f64>() > f64::EPSILON * all;
+    let gas = (0..ns).filter(|&k| in_air(k) || (s.state.loose.contains(&k) && up(k))).collect();
     s.stale |= gas != s.state.gas;
     s.state.gas = gas;
     s.state.fix = vec![[0.0; 2]; n];
