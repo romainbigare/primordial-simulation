@@ -857,6 +857,8 @@ Phase E review, round 1 (fixes):
   to `core` (the move buffer and its read cache).
 - The cost model (plan 5.7) after E1: a cell 290 µs and a body node 650 µs per simulated year; after the review's
   10-day steps: a cell about 0.48 ms, a body node about 360 µs (64 x 64, with life).
+- `docs/laws.md` says each law once and shorter (1,117 to 776 lines): no function-by-function walk, numbers only
+  where they help to read a rule (the rest are in `docs/numbers.md`); "Stability" joins the books in section 0.
 
 **Phase J: the long physics step**
 
