@@ -334,18 +334,18 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// The share of a standard normal above `z`, by Simpson's rule on its density (`n` intervals out to 12).
-fn tail(z: f64) -> f64 {
+/// The integral of z^`p` times a standard normal's density above `z`, by Simpson's rule (`n` intervals out to 12).
+fn tail(z: f64, p: i32) -> f64 {
     let (n, top) = (20_000, 12.0);
     let hh = (top - z) / n as f64;
-    let f = |x: f64| (-0.5 * x * x).exp() / (2.0 * std::f64::consts::PI).sqrt();
+    let f = |x: f64| x.powi(p) * (-0.5 * x * x).exp() / (2.0 * std::f64::consts::PI).sqrt();
     (0..=n).map(|j| f(z + j as f64 * hh) * if j == 0 || j == n { 1.0 } else if j % 2 == 1 { 4.0 } else { 2.0 }).sum::<f64>() * hh / 3.0
 }
 
-/// Young members mature at the rate their growth gives (`copy::mature`): a young node of 1,000 members whose log10
-/// bodies spread with a variance of 0.04 about a mean member at 0.6 of the copy mass, beside its adult node. Without
-/// growth none matures. When every member grows by 0.1 decades, those who passed the copy mass join the adult node:
-/// as many as a normal of log10 bodies puts within 0.1 decades below it, holding the share of the body a lognormal
+/// Young members mature at the rate their growth gives (`copy::mature`): a young node of 1,000 members of mean body
+/// 0.6 of the copy mass, whose log10 bodies are a normal of sd 0.2 about log10 of 0.6 of the copy mass cut at the copy
+/// mass, beside its adult node. Without growth none matures. When every member grows by 0.1 decades, those who passed
+/// the copy mass join the adult node: the top 0.1 decades of the cut normal, holding the share of the body a lognormal
 /// puts there. Members, stores and heat are kept; the adult node stays mature and the young one is still young.
 #[test]
 fn young_members_mature_at_the_rate_their_growth_gives() {
@@ -356,14 +356,21 @@ fn young_members_mature_at_the_rate_their_growth_gives() {
     a.count = 5.0;
     let mut y = a.clone();
     let sa = testkit::place(&mut w, a);
-    // The young: 1,000 members whose mean body is 6 kg (matter over 1 - 0.75), their size spread 0.04 decades².
+    // The young: 1,000 members whose mean body is 6 kg (matter over 1 - 0.75).
     let copy_kg = 10.0;
     scale(&mut w, &mut y, 200.0);
     y.count = 1000.0;
     let want = 0.6 * copy_kg * 0.25 * y.count / mm;
     let kg_in = (want - y.store[MATTER]) * mm;
     add(&mut w, &mut y, MATTER, kg_in);
-    y.size_spread = 0.04;
+    // Their log10 bodies: the normal cut at the copy mass, `cut` its standard units, and its mean and variance.
+    let (sd, top) = (0.2f64, copy_kg.log10());
+    let cut = (top - (0.6 * copy_kg).log10()) / sd;
+    let below = tail(-cut, 0);
+    let (z1, z2) = (-tail(-cut, 1) / below, tail(-cut, 2) / below);
+    let mean = top - sd * cut + sd * z1;
+    y.size_spread = (sd * sd * (z2 - z1 * z1)) as f32;
+    y.size_lag = ((y.built(&w.chem) / y.count).log10() - mean) as f32;
     let (sy, mut y) = out(&mut w, y);
     assert!(!y.adult(&w.chem) && w.life.bodies[sa].adult(&w.chem));
     let x0 = y.member_body(&w.chem);
@@ -375,11 +382,11 @@ fn young_members_mature_at_the_rate_their_growth_gives() {
     w.life.bodies[sy] = y;
     let (books, before) = (Books::now(&w), held(&w));
     let mut y = std::mem::take(&mut w.life.bodies[sy]);
-    let (n0, matter0, x1) = (y.count, y.store[MATTER], y.member_body(&w.chem));
-    let (sd, v) = (0.2f64, 0.04f64);
-    let mu = x1.log10() - 0.5 * std::f64::consts::LN_10 * v;
-    let a0 = (copy_kg.log10() - mu) / sd;
-    let (members, body) = (tail(a0) - tail(a0 + 0.1 / sd), tail(a0 - sd * std::f64::consts::LN_10) - tail(a0 + 0.1 / sd - sd * std::f64::consts::LN_10));
+    let (n0, matter0) = (y.count, y.store[MATTER]);
+    // After the growth the copy mass is 0.1 decades below the top of the cut normal.
+    let (lo, k) = (cut - 0.1 / sd, sd * std::f64::consts::LN_10);
+    let members = (tail(lo, 0) - tail(cut, 0)) / below;
+    let body = (tail(lo - k, 0) - tail(cut - k, 0)) / (1.0 - tail(cut - k, 0));
     let adult0 = w.life.bodies[sa].count;
     assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives));
     let moved = n0 - y.count;
@@ -392,6 +399,48 @@ fn young_members_mature_at_the_rate_their_growth_gives() {
     same(&before, &held(&w));
     books.assert_kept(&w, 1e-9);
 }
+
+/// A young node's sizes stay between birth and the copy mass (`copy::copy`, `copy::mature`): members are born at one
+/// size, grow alike and leave at the copy mass. An adult node of copy mass 10 kg has 10 children of 1 kg each round,
+/// and its young members grow by 0.02 decades a round, so each member is young for 50 rounds. At every round the mean
+/// of their log10 bodies lies between 0 and 1 and their variance is at most 1/4, that of half at each end (Popoviciu
+/// 1935); once steady, as many mature as are born, so the young are about 10 x 50 members (Little 1961).
+#[test]
+fn a_young_nodes_sizes_stay_between_birth_and_the_copy_mass() {
+    let (mut w, i) = start();
+    w.cfg.phys.c_copy = 1e18;
+    let mm = w.chem.subs[MATTER].molar_mass;
+    let mut n = eater(&mut w, i, brain::REST, 10f32.log10());
+    (n.genes[CHILD], n.genes[DISPERSE]) = (0.1f32.log10(), 0.0);
+    scale(&mut w, &mut n, 5.0);
+    n.count = 5.0;
+    // A child: 1 kg of body, a quarter of it matter (h 0.75).
+    let child_mol = 0.25 / mm;
+    let s = w.add(n, 1);
+    let mut young = None;
+    for round in 0..300 {
+        let mut n = std::mem::take(&mut w.life.bodies[s]);
+        add(&mut w, &mut n, MATTER, 10.0 * 0.25);
+        n.prepare(&w.chem, &w.cfg.phys);
+        n.brood = 10.0 * child_mol;
+        assert!(copy::copy(&mut w, s, &mut n), "round {round}: no children");
+        w.life.bodies[s] = n;
+        let y = *young.get_or_insert_with(|| children(&w, w.life.bodies[s].id(s)).into_iter().find(|&k| k != s).expect("a young node"));
+        let mut b = std::mem::take(&mut w.life.bodies[y]);
+        let before = b.member_body(&w.chem);
+        let grown = (10f64.powf(0.02) - 1.0) * b.store[MATTER] * mm;
+        add(&mut w, &mut b, MATTER, grown);
+        assert!(matches!(copy::mature(&mut w, y, &mut b, before), copy::Grown::Lives), "round {round}: the young left");
+        let (m, v) = b.size_moments(&w.chem);
+        assert!((-1e-6..=1.0).contains(&m) && v <= 0.25, "round {round}: mean {m} and variance {v} of log10 kg");
+        if round >= 200 {
+            assert!((b.count / 500.0 - 1.0).abs() < 0.1, "round {round}: {} young", b.count);
+        }
+        w.life.bodies[y] = b;
+        w.time += DAY_S;
+    }
+}
+
 /// A mature body splits what it builds in an update by `ALLOC`: the share to its brood, the rest its own growth; one
 /// just below the size of maturity puts everything into its own growth up to that size and splits what it builds past
 /// it. Counted in matter: what it made is the matter that rose, the brood is the share of it, the body grew by the

@@ -94,6 +94,9 @@ pub struct Body {
     /// How a node's members differ in size: the variance of log10 of their bodies (`Body::size_moments`), decades²;
     /// members who joined earlier have grown more, and they mature first (`copy::young`)
     pub size_spread: f32,
+    /// How far the mean of log10 of its members' bodies lies below log10 of its mean member's body, decades
+    /// (`Body::size_moments`): 0 when all are of one size
+    pub size_lag: f32,
     /// The node of its kind in its cell at the other stage: a young node's adult node, an adult node's young node (its
     /// id, `Body::id`; none: not known). Births flow along it one way, maturing members the other (`copy::young`)
     pub link: Option<u64>,

@@ -748,6 +748,15 @@ The work of `docs/foundation/plan.md`, one line per task.
   time 22% to 12% (7% at 4). x2 and /2 against other draws at 1 (years 10 to 30): plant members -3% and -5% at 4,
   +1.5% and +4% at 1 (noise 2%); plant life -2% and -5%, +2% and +4% (noise 2.5%); animals, carbon gas and land
   temperature within noise. The cap not scaled with the weight lowered plant mass 8% and 11% at 4. Golden re-pinned.
+- E11, the sizes of the young kept between birth and the copy mass: a node keeps the mean of its members' log10
+  bodies (`Body::size_lag`), pooled as the moments of the mix, no longer the mean of a lognormal of the mean body (a
+  wider spread lowered that mean, which widened the spread at the next newborns: young nodes' variances ran to 1e16
+  and NaN in the 12-day air of J1, all three seeds); `copy::mature` fits a normal cut at the copy mass, so members
+  leave across it at the rate a hard edge gives (an uncut normal let members pile up past it). Nodes whose size
+  variance passes a quarter of the birth-to-copy range squared with a mean inside it: 336 to 10 (64 x 64, seed 1,
+  year 30). Years 26 to 30: plant members 4.79e10 to 4.94e10, plant life 3.87 to 4.10 yr, plant mass 5.65e10 to
+  5.38e10 kg, carbon gas 243 to 251 ppm; young 91.8% to 91.6% of plant members, their median node 0.30 to 0.28 of
+  the copy mass. With J1's air all three seeds run 30 years. Snapshot version 28; golden re-pinned.
 
 **Phase J: the long physics step**
 

@@ -646,25 +646,30 @@ the same patterns as individuals.
 - **Young that grow up** (`copy/young.rs`). A kind in a cell lives as an adult node and a young
   node joined by a link (`Body::link`). A node's children who stay in its cell are booked on its
   young node along the link (found by kind and linked when there is none yet; children who start
-  a young node are linked to their parent's node). A node keeps the spread of its members' sizes
-  (`Body::size_spread`: the variance of log10 of their bodies, pooled at every join like a gene;
-  newborns come in at one size), so members who joined earlier, and so have grown more, are the
-  larger ones. At each update of a young node its members grow alike in proportion (their log10
-  bodies all rise by the growth of the mean), and those who passed the copy mass in it move
-  along the link into the adult node (`copy::mature`): with the log10 bodies normal, the share
-  of members between the copy mass and that much below it, with the share of the body a
-  lognormal puts there and the stores with the body. No growth, no maturing: it is the flux
-  across a size of a size-structured population (McKendrick 1926; von Foerster 1959). Those who
-  stay and those who leave keep the variances of their parts of the normal. With no adult node
-  in the cell, at least one member maturing starts one; less than one member left young joins
-  the adult node whole. So members mature one by one, at the rate their growth gives, and the
-  mean of a young node never jumps to maturity.
+  a young node are linked to their parent's node). A node keeps the mean and the variance of log10
+  of its members' bodies (`Body::size_moments`: the mean as its lag below log10 of the mean body,
+  `Body::size_lag`, the variance `Body::size_spread`), pooled at every join as the moments of the
+  mix; newborns come in at one size. The mean is kept apart from the mean body: a mix of sizes is
+  no lognormal. So members who joined earlier, and so have grown more, are the larger ones. At
+  each update of a young node its members grow alike in proportion (their log10 bodies all rise
+  by the growth of the mean), and those who passed the copy mass in it move along the link into
+  the adult node (`copy::mature`). Young members lie below the copy mass (born smaller, they
+  leave when they reach it), so their log10 bodies are a normal cut above at the copy mass,
+  fitted to their mean and variance; those who leave are the top slice the growth pushed past it,
+  with the share of the body a lognormal puts there and the stores with the body. No growth, no
+  maturing: it is the flux across a size of a size-structured population (McKendrick 1926; von
+  Foerster 1959). Those who stay are again a normal cut at the copy mass, and those who leave
+  keep the mean and the variance of their slice. With no adult node in the cell, at least one
+  member maturing starts one; less than one member left young joins the adult node whole. So
+  members mature one by one, at the rate their growth gives, the mean of a young node never jumps
+  to maturity, and while its members only grow its sizes stay between the birth size and the
+  copy mass. Members who starve shrink alike, below their birth size too.
 - **Members are kept exactly** (`nodes::Lot`, `nodes::add`: one helper for every join, merge,
   split and booking). Members, stores, heat and brood split by shares (the node keeps the
   remainder, so the parts add up to it) and join as sums: when members join a node, the count
-  grows by exactly what they are (0.4 of a member adds 0.4). Genes, born rows and brain rows
-  become the means **by members**, and the spread pools each one's spread and its gap to the new
-  mean.
+  grows by exactly what they are (0.4 of a member adds 0.4). Genes, sizes (log10 bodies), born
+  rows and brain rows become the means **by members**, and the spread pools each one's spread and
+  its gap to the new mean.
 - **Merging** (`nodes::crowd`, monthly). Alike nodes of one stage (both mature or both young) in
   a cell merge: the young never merge into their adult node, they mature into it. A cell with
   more than `crowd` nodes merges its most alike pairs while they are alike. Past twice `crowd` the

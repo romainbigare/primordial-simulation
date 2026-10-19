@@ -159,7 +159,8 @@ impl Lot {
 /// Members `c` join body `o`, taken out of its slot, with the means `genes` and the spread `spread` of their genes, the
 /// mean and the variance of log10 of their bodies (`size`, `Body::size_moments`), and their born rows, their brain rows
 /// and the born rows' spread: members, stores, brood and heat add up; genes, sizes, born rows and brain rows become the
-/// means by members (members of less than one weigh what they are), and the spread what both held around the new mean
+/// means by members (members of less than one weigh what they are; for sizes the mean of the log10 bodies itself, kept
+/// apart from the mean body, since a mix of sizes is no lognormal), and the spread what both held around the new mean
 /// (each one's spread plus its gap from the new mean squared, by members; for the born rows the mean over rows of the
 /// gap squared; the genes' up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows`
 /// none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows and their spread as they are:
@@ -172,7 +173,8 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
     (o.last, o.mark) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark));
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, share as f32);
     let (mo, vo) = o.size_moments(&w.chem);
-    o.size_spread = (1.0 - a) * vo + a * size.1 + a * (1.0 - a) * (size.0 - mo).powi(2);
+    let gap = size.0 - mo;
+    let (size_mean, size_var) = (mo + a * gap, (1.0 - a) * vo + a * size.1 + a * (1.0 - a) * gap * gap);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
     let mean = mix(&o.genes, genes);
@@ -191,6 +193,7 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
     // A node has no wear: its members are of all ages (`body::live`).
     (o.e, o.wear) = (o.e + c.e, 0.0);
     w.life.set_count(o, o.count + c.count);
+    o.set_size(&w.chem, size_mean as f64, size_var as f64);
     w.see(o);
 }
 
@@ -328,7 +331,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: b
         w.life.reborn(b, left);
     }
     b.set_genes(genes, &w.chem, &w.cfg.phys);
-    (c.count, c.spread, c.row_spread, c.size_spread, c.wear) = (1.0, Vec::new(), 0.0, 0.0, r.f64());
+    (c.count, c.spread, c.row_spread, c.size_spread, c.size_lag, c.wear) = (1.0, Vec::new(), 0.0, 0.0, 0.0, r.f64());
     w.place(c, keep)
 }
 

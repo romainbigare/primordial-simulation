@@ -3,7 +3,6 @@
 
 use super::{Body, Layout, COPY_MASS, WET_TISSUE};
 use crate::chem::{Chemistry, Phase};
-use std::f64::consts::LN_10;
 
 /// The most share of a body its keep gene of a key liquid, or the solids it builds together, may make up.
 pub(crate) const MAX_KEEP: f64 = 0.95;
@@ -74,12 +73,17 @@ impl Body {
     pub fn member_body(&self, chem: &Chemistry) -> f64 {
         self.built(chem) / self.n()
     }
-    /// The mean and the variance of log10 of its members' bodies, kg: their variance `size_spread` about the mean that
-    /// makes their mean body the node's (`member_body`), as for a lognormal (the mean of 10^x for x normal of mean m and
-    /// variance v is 10^(m + v ln 10 / 2)).
+    /// The mean and the variance of log10 of its members' bodies, kg: the mean `size_lag` below log10 of its mean
+    /// member's body (`member_body`), so that it rises by as much when they all grow alike in proportion; the variance
+    /// `size_spread`.
     pub fn size_moments(&self, chem: &Chemistry) -> (f32, f32) {
-        let v = self.size_spread;
-        ((self.member_body(chem).max(f64::MIN_POSITIVE).log10() - 0.5 * LN_10 * v as f64) as f32, v)
+        ((self.member_body(chem).max(f64::MIN_POSITIVE).log10() - self.size_lag as f64) as f32, self.size_spread)
+    }
+    /// Its members' log10 bodies (kg) have the mean `mean` and the variance `v` (`size_moments`), with its members and
+    /// stores as they are now.
+    pub(crate) fn set_size(&mut self, chem: &Chemistry, mean: f64, v: f64) {
+        self.size_lag = (self.member_body(chem).max(f64::MIN_POSITIVE).log10() - mean) as f32;
+        self.size_spread = v.max(0.0) as f32;
     }
     /// A member body (`member_body`) is at or past the copy mass (`adult`).
     pub fn mature(&self, member: f64) -> bool {
