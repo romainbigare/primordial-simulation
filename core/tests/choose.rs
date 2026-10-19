@@ -114,8 +114,14 @@ struct Tally {
 /// The scene over seeds 1 to `seeds`.
 fn measure(learn: f32, seeds: u64) -> Tally {
     let (mut on, mut n, mut moves, mut toward, mut chance, mut lives) = (0, 0, 0usize, 0, 0.0, Vec::new());
-    for seed in 1..=seeds {
-        let log = run(seed, learn);
+    // (The seeds run on the machine's threads, each thread every so many of them; the tally adds them in seed order.)
+    let threads = std::thread::available_parallelism().map_or(1, |t| t.get()) as u64;
+    let mut logs: Vec<(u64, Vec<Decision>)> = std::thread::scope(|s| {
+        let parts: Vec<_> = (0..threads).map(|t| s.spawn(move || (1 + t..=seeds).step_by(threads as usize).map(|seed| (seed, run(seed, learn))).collect::<Vec<_>>())).collect();
+        parts.into_iter().flat_map(|p| p.join().expect("a thread of seeds")).collect()
+    });
+    logs.sort_by_key(|l| l.0);
+    for (_, log) in logs {
         lives.push(log.len() as f64);
         for (strip, moved, next, up, share) in log {
             (on, n) = (on + strip as usize, n + 1);

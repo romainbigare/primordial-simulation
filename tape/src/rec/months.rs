@@ -62,6 +62,9 @@ impl Recorder {
         let (chem, gw, y, s) = (&w.chem, w.map.w as u32, &mut self.year, &mut self.social);
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
         let mut last = vec![(u32::MAX, 0); w.life.bodies.len()];
+        // The surface heights of the last survey (`Life::env`, not saved), or, before the first survey of a resumed world,
+        // as the survey works them out.
+        let z_of = |i: usize| w.life.env.get(i).map_or_else(|| pcore::survey::env_of(w, i)[2], |e| e[2]);
         y.months += 1.0;
         for (at, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let i = b.cell as usize;
@@ -69,7 +72,7 @@ impl Recorder {
                 bump(&mut y.stand, l.root as usize, b.n());
             }
             // The ground's temperature as the bodies feel it (`World::t_ground_last`).
-            let (t, z) = (w.t_ground_last(i), w.life.env[i][2]);
+            let (t, z) = (w.t_ground_last(i), z_of(i));
             let ctx = [t < SIGNAL_COLD_T, b.known.iter().any(|k| k.1 < 0.0), b.wb < 1.0];
             let q = (b.sig[0] > 0.0) as usize * 2 + (b.sig[1] > 0.0) as usize;
             let tab = slot(&mut y.sig, b.lineage as usize);
@@ -84,7 +87,7 @@ impl Recorder {
             let c = &mut y.inside[(t >= INSIDE_COLD_T) as usize];
             (c[0], c[1], inside, tm) = (c[0] + 1.0, c[1] + ins as u8 as f64, inside + ins as u8 as f64, tm + t);
             let (dy, dz) = match s.last.get(at).filter(|l| l.0 == b.gen) {
-                Some(&(_, c)) => ((b.cell / gw) as f64 - (c / gw) as f64, z - w.life.env[c as usize][2]),
+                Some(&(_, c)) => ((b.cell / gw) as f64 - (c / gw) as f64, z - z_of(c as usize)),
                 None => (0.0, 0.0),
             };
             n += 1.0;

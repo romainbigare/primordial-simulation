@@ -825,6 +825,10 @@ Phase E review, round 1 (fixes):
   growth do: one path for every gas a body exchanges with the air. 64 x 64, seed 1, 30 years: within the noise (plants
   10.705 to 10.713 log10 kg, plant life 4.24 to 4.63 yr, land 287.86 to 287.87 K, carbon gas 259.6 to 261.3 ppm,
   energy drift 1.9e-14).
+- `ew resume` into a new `--out` folder: the recorder read the surface heights of the survey's cache (`Life::env`, not
+  saved) before the first survey; it now works them out as the survey does when the cache is empty. The resumed run
+  matches the unbroken one (years 21 and 22, every series column). The learning test runs its seeds on threads (the
+  same tally; 6.3 to 3.4 s).
 
 **Phase J: the long physics step**
 
