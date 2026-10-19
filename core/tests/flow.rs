@@ -96,10 +96,10 @@ fn a_pool_with_a_solute_freezes_lower() {
     worldgen::testkit::flow_step(&mut w, DT);
     // (Liquid ran off the pools in the step, and some evaporated: each is held at its melting point as the step left it.)
     for i in [pure, mixed] {
-        let held = w.scratch.temps().0[i];
+        let held = w.t_ground_last(i);
         assert!((held - w.melt(k, i)).abs() < MELT_HELD && w.thaw_last(i).1.is_some_and(|(q, _)| q == k), "{held} K, melting at {} K", w.melt(k, i));
     }
-    assert!(w.scratch.temps().0[mixed] < w.scratch.temps().0[pure], "the pool with a solute is held lower");
+    assert!(w.t_ground_last(mixed) < w.t_ground_last(pure), "the pool with a solute is held lower");
     books.assert_within(&w, 1e-12, 1e-9);
 }
 
@@ -173,7 +173,7 @@ fn more_gas_warms_with_no_ceiling() {
         let (mut lo, mut hi) = (150.0, 500.0);
         for _ in 0..60 {
             let t: f64 = (lo + hi) / 2.0;
-            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]);
+            let up = (-x).exp() * 5.670e-8 * t.powi(4) + pcore::flow::glow(-(-x).exp_m1(), t, &pcore::flow::column(x, 0.0065, 1e4, 7600.0)[1]).0;
             (lo, hi) = if up > 240.0 { (lo, t) } else { (t, hi) };
         }
         lo

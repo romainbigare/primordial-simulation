@@ -68,12 +68,7 @@ impl Level {
         let ends = links.iter().enumerate().flat_map(|(l, &(a, b, ..))| [(a, (l as u32, b)), (b, (l as u32, a))]);
         (self.start, self.adj_link) = compress(n, ends.clone().map(|(c, (l, _))| (c, l)));
         self.adj_cell = compress(n, ends.map(|(c, (_, o))| (c, o))).1;
-        for (a, b, dist, width) in links {
-            self.a.push(a);
-            self.b.push(b);
-            self.dist.push(dist);
-            self.width.push(width);
-        }
+        ((self.a, self.b), (self.dist, self.width)) = links.into_iter().map(|(a, b, dist, width)| ((a, b), (dist, width))).unzip();
     }
     pub fn n(&self) -> usize {
         self.area.len()

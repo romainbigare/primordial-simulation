@@ -42,11 +42,6 @@ impl Order {
         }
     }
 
-    /// The cells, highest head first.
-    pub fn cells(&self) -> &[u32] {
-        &self.cells
-    }
-
     /// Is cell `a` visited before cell `b` (so it is passed when `b` is visited)?
     #[inline]
     pub fn before(&self, a: usize, b: usize) -> bool {

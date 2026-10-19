@@ -53,19 +53,14 @@ pub(super) fn lift(s: &mut Scratch, i: usize, [dz, dh]: [f64; 2]) {
     s.head[i] += dh;
 }
 
-/// Raise (or with negative `m`, lower) the surface of ground node `i`, of `area` m², for `m` mol of `k`.
-#[inline]
-pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64, area: f64) {
-    let d = rise(&s.sp[k], s.state.tg[i], melted(s, k, i), m, area);
-    lift(s, i, d);
-}
-
 impl Scratch {
-    /// Ground node `i` gained `m` mol of `k` (negative: lost): its heat capacity, fusion enthalpy and surface follow.
+    /// Ground node `i`, of `area` m², gained `m` mol of `k` (negative: lost): its heat capacity, fusion enthalpy and
+    /// surface follow.
     #[inline]
     pub(super) fn note(&mut self, k: usize, i: usize, m: f64, area: f64) {
         self.hold(k, i, m);
-        settle(self, k, i, m, area);
+        let d = rise(&self.sp[k], self.state.tg[i], melted(self, k, i), m, area);
+        lift(self, i, d);
     }
     /// `note` but for the surface: for a gas dissolved in the liquid, which takes no room.
     #[inline]

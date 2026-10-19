@@ -110,9 +110,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let (fixed, far) = (fixed(w, s, &act), far(s));
     for round in 0.. {
         pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, dt, decl }, &mut rows, width);
-        for (i, t) in ts.iter_mut().enumerate() {
-            *t = rows[i * width + 4];
-        }
+        ts.iter_mut().zip(rows.chunks_exact(width)).for_each(|(t, row)| *t = row[4]);
         let g = gather(w, s, &it, &act, (&rows, width), far);
         let next = solve(w, s, (&act, &drive), (&x0, &g), &it, dt, &mut wind);
         let (moved_t, moved_x) = moved(&next, &it);

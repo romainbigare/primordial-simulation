@@ -38,13 +38,9 @@ pub fn column(x: f64, gam: f64, l: f64, h: f64) -> [[f64; LAYERS]; 2] {
     out
 }
 
-/// What layers (`column`) over ground with air at `tl` that absorbs a share `f` send, W/m².
-pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> f64 {
-    lay.iter().map(|&d| (tl + d).max(1.0).powi(4)).sum::<f64>() * SIGMA * f / LAYERS as f64
-}
-
-/// `glow` and its slope with `tl`, W/(m² K).
-fn glow_slope(f: f64, tl: f64, lay: &[f64; LAYERS]) -> (f64, f64) {
+/// What layers (`column`) over ground with air at `tl` that absorbs a share `f` send, W/m², and its slope with `tl`,
+/// W/(m² K).
+pub fn glow(f: f64, tl: f64, lay: &[f64; LAYERS]) -> (f64, f64) {
     let k = SIGMA * f / LAYERS as f64;
     lay.iter().fold((0.0, 0.0), |(g, s), &d| {
         let t = (tl + d).max(1.0);
@@ -83,7 +79,7 @@ impl Surface {
     /// in series with any soft cover. A plateau holds the node only while its fusion enthalpy lasts.
     pub(super) fn balance(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, fusion: f64) -> Balance {
         let (adt, f, t) = (area * dt, s.seen[i][2], s.state.tg[i]);
-        let ((down, d_down), (emit, d_emit)) = (glow_slope(f, self.tl, &s.lay[i][0]), glow_slope(f, self.tl, &s.lay[i][1]));
+        let ((down, d_down), (emit, d_emit)) = (glow(f, self.tl, &s.lay[i][0]), glow(f, self.tl, &s.lay[i][1]));
         let t3 = SIGMA * t * t * t;
         let num = self.sw + down + 3.0 * t3 * t + sensible * self.tl + self.gain - self.slope * self.t0 + self.g_rain * self.t_rain;
         let den = 4.0 * t3 + sensible + self.g_rain - self.slope;

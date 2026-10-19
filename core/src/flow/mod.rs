@@ -97,7 +97,9 @@ pub(crate) fn ensure(w: &mut World) {
     }
     if s.state.tg.len() != n {
         scratch::refresh(w, &mut s);
-        scratch::fresh(w, &mut s);
+        // A new world's ground nodes, before its first step: no plateau, no clouds.
+        let st = &mut s.state;
+        (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![0.0; n]);
     }
     if s.cap.len() != n {
         scratch::room(w, &mut s);

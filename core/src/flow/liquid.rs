@@ -170,8 +170,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     }
     col_of.push(kinds.len());
     let (a, b, mol) = by_link(&crossed, rows + 2, &col_of, (cells.a(), cells.b()));
-    let (at, mut fall) = (kinds.len() * a.len(), Batch::falls(Class::Ground));
-    power.iter().enumerate().for_each(|(i, &q)| fall.fall(i, q));
+    let (at, mut fall) = (kinds.len() * a.len(), Batch::fallen(Class::Ground, power));
     book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }, fall.flux()]);
     s.order = order;
     let (ema, mut broke) = (year_weight(w, dt), Vec::new());

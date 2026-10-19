@@ -13,8 +13,7 @@ pub struct Layer {
 /// The stacks of a mesh, and their vertical links.
 #[derive(Clone, Debug)]
 pub struct Stack {
-    /// The level of each layer, and the first node of each layer (then the number of nodes)
-    level: Vec<usize>,
+    /// The first node of each layer (then the number of nodes)
     first: Vec<u32>,
     /// Each vertical link: the node below and above, the distance between the layers' middles, m, and its area, m²
     lo: Vec<u32>,
@@ -31,7 +30,7 @@ impl Stack {
         for l in layers {
             first.push(first[first.len() - 1] + mesh.level(l.level).n() as u32);
         }
-        let mut s = Stack { level: layers.iter().map(|l| l.level).collect(), first, lo: vec![], hi: vec![], dist: vec![], area: vec![] };
+        let mut s = Stack { first, lo: vec![], hi: vec![], dist: vec![], area: vec![] };
         for (k, pair) in layers.windows(2).enumerate() {
             let at = pair[0].level.min(pair[1].level);
             for c in 0..mesh.level(at).n() {
@@ -50,10 +49,6 @@ impl Stack {
     /// The node of layer `k` over cell `c` of that layer's level.
     pub fn node(&self, k: usize, c: usize) -> usize {
         self.first[k] as usize + c
-    }
-    /// The node of layer `k` over cell `i` of the finest level.
-    pub fn over(&self, mesh: &Mesh, k: usize, i: usize) -> usize {
-        self.node(k, mesh.up(i, 0, self.level[k]))
     }
     pub fn lo(&self) -> &[u32] {
         &self.lo

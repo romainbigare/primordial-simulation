@@ -265,7 +265,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         let w0 = &w0;
         b.prepare(&w0.chem, &w0.cfg.phys);
         let (i, mass, days) = (b.cell as usize, b.mass(&w0.chem), b.interval(w0) as f64);
-        let (tg, chem) = (w0.scratch.temps().0[i], &w0.chem);
+        let (tg, chem) = (w0.t_ground_last(i), &w0.chem);
         let (ns, na, j) = (chem.ns(), w0.mesh.level(AIR).n(), w0.mesh.up(i, 0, AIR));
         // The temperature where heat made = heat lost. The heat made is what its reactions release at that temperature to
         // their products where they go: the gases to the air with their latent heat, the rest held at its temperature (each

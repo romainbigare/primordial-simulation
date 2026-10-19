@@ -36,13 +36,6 @@ pub(super) fn far(s: &Scratch) -> usize {
     s.near.iter().flat_map(|j| j.iter().flat_map(move |&a| j.iter().map(move |&b| a.abs_diff(b) as usize))).max().unwrap_or(0)
 }
 
-/// Per mol of active gas `ac` that rains on ground node `i` out of air node `q`: the vaporisation enthalpy it frees, less
-/// its heat and its fall to the ground, J.
-fn mol_down(w: &World, s: &Scratch, it: &Iterate, ac: Active, (i, q): (usize, usize)) -> f64 {
-    let sp = s.sp[ac.k];
-    sp.lv - sp.cp * it.t[q] + sp.mm * s.view().lift(i, q, w.cfg.gravity)
-}
-
 /// The rows summed over the air nodes, in the order of the cells, with their slopes: each ground node gives its own air
 /// node its heat and what comes up with its heat less its lift, with slopes to the four air nodes it sees by their
 /// weights; what rains comes out of those four in their shares (`shares`), which move with each node's gas, and leaves
@@ -71,7 +64,9 @@ pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], (rows
             let (v, k) = (&it.x[ac.gi * na..(ac.gi + 1) * na], 1 + 3 * x);
             let (sum, r_col) = (lerp(s, v, i), r_col * over);
             for (c, (qc, share)) in shares(s, v, i).into_iter().enumerate().filter(|&(c, _)| wt[c] > 0.0) {
-                let down = mol_down(w, s, it, *ac, (i, qc));
+                // Per mol that rains out of air node `qc`: the vaporisation enthalpy it frees, less its heat and its fall
+                // to the ground, J.
+                let down = sp.lv - sp.cp * it.t[qc] + sp.mm * s.view().lift(i, qc, g);
                 out.heat[qc] += r * share * down;
                 out.up[x * na + qc] -= r * share;
                 out.rained[qc] = [out.rained[qc][0] + r * share, out.rained[qc][1] + r * share * sp.refl[0]];
@@ -123,7 +118,7 @@ impl Drive {
         let links = Links::of(air);
         let push = pushes(&w.cfg, s, air, &links);
         let pressure = push.pressure(s, &links, dt);
-        let even = Band::step(na, &links.carry(&pressure), &vec![0.0; na]);
+        let even = Band::step(na, &links.carry(&pressure));
         let half = |j: usize, q: usize| (x0[q * na + j], s.split[q * na + j]);
         let halves = (0..na).map(|j| (0..s.state.gas.len()).map(|q| half(j, q)).fold([0.0; 2], |h, (v, up)| [h[0] + v * (1.0 - up), h[1] + v * up])).collect();
         Drive { links, push, pressure, even, halves }
@@ -143,7 +138,6 @@ pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (
     drive.even.solve(&mut n);
     let mut flow = vec![0.0; nl];
     fluxes(&links.carry(&drive.pressure), &n, (1, 0), &mut flow);
-    let zero = vec![0.0; na];
     let coef: Vec<_> = (0..ng).map(|q| push.carry(links, &n, (Some(&s.split[q * na..(q + 1) * na]), halves), &flow, dt)).collect();
     let mut x = it.x.clone();
     (wind.mol, wind.heat) = (vec![0.0; ng * nl], vec![0.0; nl]);
@@ -152,7 +146,7 @@ pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (
     for q in (0..ng).filter(|&q| !act.iter().any(|a| a.gi == q)) {
         let alike = done.iter().position(|(p, _)| coef[*p] == coef[q]);
         if alike.is_none() {
-            done.push((q, Band::step(na, &links.carry(&coef[q]), &zero)));
+            done.push((q, Band::step(na, &links.carry(&coef[q]))));
         }
         let xq = &mut x[q * na..(q + 1) * na];
         xq.copy_from_slice(&x0[q * na..(q + 1) * na]);

@@ -98,49 +98,19 @@ pub(super) fn cloud(cloud: f64, (m, mr): (f64, f64), area: f64, dt: f64) -> f64 
     if m > 0.0 { rate / (rate + cloud) * mr / m } else { 0.0 }
 }
 
-/// What crosses between ground nodes and their air nodes as gases dissolve, booked in one call: a link per ground node
-/// with the mol of each gas (+ up) and the heat that leaves the ground, and the lift of the gas into the potential.
-struct Crossing {
-    /// The gases, and the gravity that lifts them, m/s²
-    ks: Vec<usize>,
-    g: f64,
-    links: Batch,
-    lift: Vec<f64>,
-    /// What each air node holds of each gas as the crossing leaves it, mol (`[x * na + j]`)
-    left: Vec<f64>,
-}
-
-impl Crossing {
-    /// A crossing of the gases `ks`, from the air now.
-    fn new(w: &World, ks: Vec<usize>) -> Crossing {
-        let na = w.mesh.level(AIR).n();
-        let left: Vec<f64> = ks.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
-        let links = Batch::new([Class::Ground, Class::Air], &ks.iter().map(|&k| k as u16).collect::<Vec<_>>());
-        Crossing { ks, g: w.cfg.gravity, links, lift: vec![0.0; na], left }
-    }
-    /// `m` mol of gas `x` go from ground node `i` up into its air node `j` (negative: down) with `heat` J that leaves the
-    /// ground; the ground node's state follows.
-    fn cross(&mut self, s: &mut Scratch, x: usize, (i, j): (usize, usize), (m, heat): (f64, f64)) {
-        let (na, k) = (self.lift.len(), self.ks[x]);
-        self.links.add((i, j), k as u16, (m, heat));
-        (self.lift[j], self.left[x * na + j]) = (self.lift[j] + m * s.sp[k].mm * s.view().lift(i, j, self.g), self.left[x * na + j] + m);
-        s.hold(k, i, -m);
-    }
-    /// Book the crossing through the store.
-    fn book(mut self, w: &mut World) {
-        let mut lift = Batch::falls(Class::Air);
-        self.lift.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
-        apply(w, &[self.links.flux(), lift.flux()], &[], &[]);
-    }
-}
-
 /// Gases that cannot condense on the ground (`henry`) dissolve in each ground node's liquid toward Henry's share and
 /// come out as it warms, thins or freezes, through the air's film and the liquid's in series, solved exactly over the
-/// step (laws.md 1.5). Dissolving frees the vaporisation enthalpy into the node; coming out takes it back.
+/// step (laws.md 1.5). Dissolving frees the vaporisation enthalpy into the node; coming out takes it back. What crosses
+/// is booked in one call: a link per ground node with the mol of each gas (+ up) and the heat that leaves the ground,
+/// and the lift of the gas into the potential.
 pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
-    let mut pass = Crossing::new(w, henry.iter().map(|h| h.1).collect());
+    let mut links = Batch::new([Class::Ground, Class::Air], &henry.iter().map(|h| h.1 as u16).collect::<Vec<_>>());
+    // The lift paid by each air node, J; what each air node holds of each gas as the crossing leaves it, mol
+    // (`[x * na + j]`).
+    let mut lift = vec![0.0; na];
+    let mut left: Vec<f64> = henry.iter().flat_map(|h| w.store.amounts(Class::Air)[h.1 * na..(h.1 + 1) * na].iter().copied()).collect();
     for i in 0..n {
         let (t, j, area) = (s.state.tg[i], w.mesh.up(i, 0, AIR), w.mesh.cells().area()[i]);
         let tl = (lerp(s, &s.ta, i) - s.seen[i][0] * (s.head[i] - s.seen[i][1])).max(1.0);
@@ -156,16 +126,19 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
             let m = (b * (a + col) / (1.0 + b) - a) * one_minus_exp(dt * (1.0 + b) / tau);
             // Coming out cools the node, no further than the boiling point.
-            let m = if m >= 0.0 { m.min(pass.left[x * na + j]) } else { -(-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv)) };
+            let m = if m >= 0.0 { m.min(left[x * na + j]) } else { -(-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv)) };
             if m == 0.0 {
                 continue;
             }
-            // The gas brings its heat (the air's, or the ground's when it comes out) and frees its latent heat in the node.
-            let tq = if m > 0.0 { s.ta[j] } else { t };
-            pass.cross(s, x, (i, j), (-m, -m * (sp.cp * tq + sp.lf + sp.lv)));
+            // The gas brings its heat (the air's, or the ground's when it comes out) and frees its latent heat in the node;
+            // `up` mol go up from the ground node into its air node (negative: down), and the ground node's state follows.
+            let (tq, up) = (if m > 0.0 { s.ta[j] } else { t }, -m);
+            links.add((i, j), k as u16, (up, -m * (sp.cp * tq + sp.lf + sp.lv)));
+            (lift[j], left[x * na + j]) = (lift[j] + up * sp.mm * s.view().lift(i, j, w.cfg.gravity), left[x * na + j] + up);
+            s.hold(k, i, -up);
         }
     }
-    pass.book(w);
+    apply(w, &[links.flux(), Batch::fallen(Class::Air, lift.iter().map(|q| -q)).flux()], &[], &[]);
     for &(_, k) in henry {
         if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);

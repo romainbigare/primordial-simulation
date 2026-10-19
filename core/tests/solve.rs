@@ -48,7 +48,7 @@ fn band_step_solves_its_system_and_keeps_the_total() {
     let c = Carry { a: &a, b: &b, fwd: &fwd, back: &back };
     let zero = vec![0.0; before.len()];
     let mut after = before.clone();
-    Band::step(before.len(), &c, &zero).solve(&mut after);
+    Band::step(before.len(), &c).solve(&mut after);
     let again = put_back(&c, &after, &zero);
     let worst = before.iter().zip(&again).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max);
     assert!(worst < 1e-10, "residual {worst}");
@@ -71,7 +71,7 @@ fn band_big_step_is_close_to_small_steps() {
     let (a, b): (Vec<u32>, Vec<u32>) = ((0..n as u32 - 1).collect(), (1..n as u32).collect());
     let step = |share: f64, x: &mut [f64]| {
         let v = vec![share; n - 1];
-        Band::step(n, &Carry { a: &a, b: &b, fwd: &v, back: &v }, &vec![0.0; n]).solve(x)
+        Band::step(n, &Carry { a: &a, b: &b, fwd: &v, back: &v }).solve(x)
     };
     let (mut big, mut small) = (before.clone(), before.clone());
     step(s, &mut big);
@@ -336,13 +336,13 @@ fn the_order_is_the_order_of_the_heads() {
     };
     let mut head: Vec<f64> = (0..n).map(|i| (i * 7919 % 1000) as f64 * 0.1 - 50.0).collect();
     let mut order = Order::default();
+    // Each cell is visited before the next one of the heads' order, and the next one not before it.
+    let in_order = |order: &Order, c: &[u32]| c.windows(2).all(|p| order.before(p[0] as usize, p[1] as usize) && !order.before(p[1] as usize, p[0] as usize));
     order.update(&head);
-    assert_eq!(order.cells(), sorted(&head));
+    assert!(in_order(&order, &sorted(&head)));
     for i in (0..n as usize).step_by(97) {
         head[i] += 0.35;
     }
     order.update(&head);
-    assert_eq!(order.cells(), sorted(&head));
-    let c = order.cells();
-    assert!(order.before(c[0] as usize, c[1] as usize) && !order.before(c[1] as usize, c[0] as usize));
+    assert!(in_order(&order, &sorted(&head)));
 }

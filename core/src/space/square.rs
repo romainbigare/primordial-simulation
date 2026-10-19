@@ -51,10 +51,7 @@ impl Square {
         // The length of the circle of latitude `phi` (radians) across one cell, m: a side on the flat map.
         let across = |phi: f64| if self.wrap { radius * phi.cos() * TAU / self.w as f64 } else { self.side };
         let area = |y: usize| if self.wrap { radius * radius * TAU / self.w as f64 * (edge(y).sin() - edge(y + 1).sin()) } else { self.side * self.side };
-        let centre = |i: usize| {
-            let (x, y) = self.xy(i);
-            [(x as f64 + 0.5) * self.side, (y as f64 + 0.5) * self.side]
-        };
+        let centre = |i: usize| [(self.xy(i).0 as f64 + 0.5) * self.side, (self.xy(i).1 as f64 + 0.5) * self.side];
         let lon = |i: usize| (self.xy(i).0 as f64 + 0.5) * if self.wrap { 360.0 / self.w as f64 } else { row };
         let links: Vec<LinkSpec> = (0..n)
             .flat_map(|i| FORWARD.iter().filter_map(move |&d| self.step(i, d).map(|j| (i, j, d))))

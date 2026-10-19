@@ -74,8 +74,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     }
     let ids: Vec<u32> = (0..n as u32).collect();
     let (to_sun, space) = (vec![Boundary::Sun as u32; n], vec![Boundary::Space as u32; na]);
-    let mut lift = Batch::falls(Class::Air);
-    paid.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
+    let mut lift = Batch::fallen(Class::Air, paid.iter().map(|q| -q));
     let (ks, gas): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
     let fluxes = [
         LinkFlux { class: [Class::Boundary, Class::Ground], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &sun },

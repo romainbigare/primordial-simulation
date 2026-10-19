@@ -96,9 +96,8 @@ fn nodes(w: &World, s: &mut Scratch) {
     let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
     sums(w, s);
-    for j in 0..na {
-        (s.za[j], s.fabs[j]) = (0.0, 0.0);
-    }
+    s.za.fill(0.0);
+    s.fabs.fill(0.0);
     for (i, &j) in cells.parent().iter().enumerate() {
         s.za[j as usize] += s.head[i] * cells.area()[i];
     }

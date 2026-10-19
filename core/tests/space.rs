@@ -97,7 +97,7 @@ fn a_stack_of_three_layers_links_each_cell_up_its_column() {
     assert_eq!(st.lo().len(), 2 * n, "one link per square below the ground, one from each square up to its air");
     let mut into_air = vec![0.0; na];
     for i in 0..n {
-        let (deep, ground, air) = (st.over(&mesh, 0, i), st.over(&mesh, 1, i), st.over(&mesh, 2, i));
+        let (deep, ground, air) = (st.node(0, i), st.node(1, i), st.node(2, mesh.up(i, 0, 1)));
         assert_eq!((deep, ground, air), (i, n + i, 2 * n + mesh.up(i, 0, 1)));
         assert_eq!((st.lo()[i] as usize, st.hi()[i] as usize, st.dist()[i]), (deep, ground, 16.0));
         assert_eq!((st.lo()[n + i] as usize, st.hi()[n + i] as usize, st.dist()[n + i]), (ground, air, 5001.0));

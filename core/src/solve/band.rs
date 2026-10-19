@@ -29,11 +29,11 @@ impl Band {
     pub fn zero(n: usize, w: usize) -> Band {
         Band { w, rows: vec![0.0; n * (3 * w + 1)], swap: Vec::new(), last: (0..n).map(|i| (i + w).min(n.max(1) - 1)).collect() }
     }
-    /// The step of one field: the identity with the transport `c` and each node's `diag` added, factored.
-    pub fn step(n: usize, c: &Carry, diag: &[f64]) -> Band {
+    /// The step of one field of `n` nodes: the identity with the transport `c` added, factored.
+    pub fn step(n: usize, c: &Carry) -> Band {
         let mut band = Band::zero(n, reach(c));
         band.carry(c, 1, 0, 1.0);
-        diag.iter().enumerate().for_each(|(j, &d)| band.add(j, j, 1.0 + d));
+        (0..n).for_each(|j| band.add(j, j, 1.0));
         band.factor();
         band
     }

@@ -185,10 +185,6 @@ impl<'de> Deserialize<'de> for Scratch {
 }
 
 impl Scratch {
-    /// Temperature of each ground node and of each air node at the last flow step, K (empty before it).
-    pub fn temps(&self) -> (&[f64], &[f64]) {
-        (&self.state.tg, &self.ta)
-    }
     /// Temperature of ground node `i` at the last flow step, K, and the substance on its plateau with its molten share.
     pub(crate) fn plateau(&self, i: usize) -> Option<(f64, Option<(usize, f64)>)> {
         let t = *self.state.tg.get(i)?;
@@ -274,13 +270,6 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
             Bed { vol: v, refl: r / v.max(V_MIN), cond: c / v.max(V_MIN) }
         })
         .collect();
-}
-
-/// The state of a new world's ground nodes, before its first step: no plateau, no clouds.
-pub(super) fn fresh(w: &World, s: &mut Scratch) {
-    let n = w.mesh.cells().n();
-    let st = &mut s.state;
-    (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![NONE; n], vec![0.0; n], vec![0.0; n]);
 }
 
 /// Room for the caches of every ground and air node (`ensure` then builds them).
