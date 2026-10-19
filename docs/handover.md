@@ -284,7 +284,7 @@ cost = base(body mass) · slope_factor · (1 + resistance of bonded structures i
 When the structures (for example plants) are worn away, the cost falls.
 
 **Radiation (climate).** Radiation is also Flow, between surface nodes, air nodes and a single "space" node:
-- The sun gives energy to surface nodes by latitude, season and planet settings (sun strength, axial tilt, day length). The island's rows span only what its size spans on the planet (31° to 33.3°); real latitude bands come with the planet at M4.
+- The sun gives energy to surface nodes by latitude, season and planet settings (sun strength, axial tilt, day length). The island's rows span only what its size spans on the planet (40° to 42.3°, where Earth's surface is near its mean); real latitude bands come with the planet at M4.
 - Surface reflects part of it, based on the reflectance of its substances (ice and sand reflect more, dark plants less).
 - Surface emits `ε · σ · T⁴`.
 - The air column absorbs a fraction `1 − exp(−x)` of the outgoing heat, where `x` (the optical depth) is the sum over the gases of amount × absorption.

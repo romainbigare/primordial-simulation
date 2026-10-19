@@ -11,7 +11,7 @@ use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
-use pcore::World;
+use pcore::{Config, World};
 
 /// A body an edit changes (its own end of the moves of an edit, which it books itself; `World::cross`).
 const A_BODY: Node = Node { class: Class::Body, index: 0 };
@@ -47,9 +47,16 @@ pub const BURN: usize = 1;
 /// The reaction that breaks `MINERAL` down when hot (its fixed element goes back to the air as `FIX_GAS`).
 pub const MINERAL_BREAKS: usize = 25;
 
-/// The world most tests stand in: seed 1, 16 x 16 cells, after one month (so its cells have their surroundings).
+/// Latitudes of the south and north edges of the world most tests stand in, degrees: a low latitude whose first winter
+/// is mild (about 290 K), so the tests' bodies live through it; real runs place the island by `Config::lat_south`.
+pub const MILD_LAT: [f64; 2] = [31.0, 33.3];
+
+/// The world most tests stand in: seed 1, 16 x 16 cells at `MILD_LAT`, after one month (so its cells have their
+/// surroundings).
 pub fn small_world() -> World {
-    let mut w = crate::new_world(1, 16, 16);
+    let (chem, init) = crate::chemistry0();
+    let cfg = Config { lat_south: MILD_LAT[0], lat_north: MILD_LAT[1], ..Default::default() };
+    let mut w = crate::terrain::build(1, crate::terrain::island(16, 16), chem, &init, cfg);
     pcore::step(&mut w);
     w
 }

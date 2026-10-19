@@ -28,8 +28,8 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 |---|---|---|---|---|
 | `sun` | W/m² | strength of the star at the top of the air | the solar constant, 1361 | physical |
 | `tilt` | degrees | axial tilt: sets the size of the seasons | the planet's tilt, 23.4 | physical |
-| `lat_south` | degrees | latitude of the map's south edge | run: the island spans 2.3° (256 km), placed at 31° so the starting ground is near 287 K (handover 6.1) | tuned |
-| `lat_north` | degrees | latitude of the map's north edge | the same run as `lat_south` (31 + 2.3) | tuned |
+| `lat_south` | degrees | latitude of the map's south edge | where the surface is 287 K, near the global mean: on Earth at about 38° to 40° in both hemispheres (zonal means, from memory); on the model's globe without life at 37.5° N and 44° S | anchored |
+| `lat_north` | degrees | latitude of the map's north edge | `lat_south` + 2.3: the island spans 256 km | anchored |
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
 | `months_per_year` | months | the calendar | the same | anchored |
@@ -42,7 +42,8 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `wind` | m/s per K | overturning air speed per K of warmth difference between air nodes | none found; a sea breeze of a few m/s for about 10 K is the same order (my arithmetic, unchecked) | tuned, first guess |
 | `mix` | m²/s | mixing of neighbouring air columns by eddies | the eddy diffusivity of the weather systems of middle latitudes, about 1e6 (from memory: the diffusive climate models of North 1975 and Held 1999); the air then crosses the map in about a day | anchored |
 | `rain_time` | s | time in which vapour over saturation rains out | run: a cell sees the mean air of its node, so with the life of real cloud water, an hour or two, its rain falls only on the coldest cells (64 x 64, no life: 27% of the land gets rain, 70% of it on a tenth); at 1 day 85% of the land gets rain and it comes to 0.88 m a year, near the 0.7 to 1 m of real land (Trenberth et al. 2007, from memory); weather systems that make rain live about a day (Houze 2004, from memory) | tuned |
-| `cloud` | mol/(m² s) | condensation at which droplets cover half the sky | none found; 1.2e-2 is a light rain of 0.8 mm an hour (my arithmetic) | tuned, first guess |
+| `cloud` | mol/(m² s) | condensation at which a cloud reflects half of what its droplets can (scattering depth 1) | none found; 1.2e-2 is a light rain of 0.8 mm an hour (my arithmetic) | tuned, first guess |
+| `cloud_ir` | none | optical depth to heat radiation of a cloud at the condensation `cloud` | a layer of drops reflects x / (1 + x) at scattering depth x = √3 (1 − g) τ / 2 = 0.13 τ, g = 0.85 (Lacis and Hansen 1974), so `cloud` is τ = 7.7; drops of 10 µm absorb heat radiation with a depth of 0.87 τ (130 m²/kg, Stephens 1978, against an extinction of 3 / (2 ρ r) = 150 m²/kg): 6.7 | anchored |
 | `carry` | m³/J | loose solid volume moving liquid carries off a cell per J its runoff loses falling to the neighbour | rivers carry 15 to 20 Gt of sediment a year (Milliman and Syvitski 1992; Wittmann et al. 2020: 15.2) with a runoff of 4e13 m³ a year falling a mean 840 m, 3.4e20 J: 2e-11 m³/J (checked). The yield, not Bagnold's capacity (250 times more): nothing holds the model's loose ground | anchored |
 | `wear` | m³/J, times 1/bond strength | bonded volume broken per J dissipated | the same 2e-11 m³/J for the starting bed: over its sum of volume share / bond strength, 1.39, it is 1.4e-11. Bedrock lowers about as the land does, 0.05 mm a year (checked: Wittmann et al. 2020; Portenga and Bierman 2011) | anchored |
 | `regrow` | m/s | speed at which bodies spread back into a cleared lane, from each side, under dense cover (times cover / `rho_pass` below that) | 1 nm/s is 3 cm a year, the slow end of the spread of a ground cover by runners (my arithmetic, unchecked) | anchored |
@@ -243,16 +244,16 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 108 rows of `Config` and `Physics` are their 108 fields.
+The 109 rows of `Config` and `Physics` are their 109 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 46, and 8 outside the structs | 46 fields (among them `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
-| tuned (run or reason named) | 10, and 5 outside the structs | the threshold of who is alike (`alike`), set for an outcome (`lat_south`, `lat_north`, `rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
+| anchored | 49, and 8 outside the structs | 49 fields (among them `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
+| tuned (run or reason named) | 8, and 5 outside the structs | the threshold of who is alike (`alike`), set for an outcome (`rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
 | speed | 8, and 2 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL`, `WITHIN` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 51 (46 in the structs, 5 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 49 (44 in the structs, 5 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

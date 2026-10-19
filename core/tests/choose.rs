@@ -10,7 +10,7 @@ use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use pcore::store::{Class, Node};
-use worldgen::testkit::{self, dry_land, founder, scale, set_amount, set_heat, start, Books, Brain, Line, LIQUID, MATTER, OFF, RICH};
+use worldgen::testkit::{self, dry_land, founder, scale, set_amount, set_heat, start, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -25,10 +25,10 @@ const DECISIONS: usize = 200;
 const LEARN_ON: f32 = -1.0;
 const LEARN_OFF: f32 = -4.0;
 
-/// The scene's world for `seed`: flat and warm, every cell a copy of one dry land cell, the strip added on top.
+/// The scene's world for `seed`: flat and mild (`MILD_LAT`), every cell a copy of one dry land cell, the strip added on top.
 fn scene(seed: u64) -> World {
     let (chem, init) = worldgen::chemistry0();
-    let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
+    let cfg = pcore::Config { lat_south: MILD_LAT[0], lat_north: MILD_LAT[1], ..Default::default() };
     let mut w = worldgen::terrain::build(seed, worldgen::terrain::island(W, H), chem, &init, cfg);
     pcore::step(&mut w);
     let (n, ns) = (w.mesh.cells().n(), w.chem.ns());

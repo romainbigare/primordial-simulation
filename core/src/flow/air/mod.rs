@@ -164,12 +164,13 @@ fn heights(w: &World, s: &mut Scratch) {
     }
 }
 
-/// The air each ground cell sees (from the four nearest nodes, `lerp`) and the layers of its column.
+/// The air each ground cell sees (from the four nearest nodes, `lerp`) and the layers of its column, whose absorber is
+/// its gases and the clouds of the step before (spread like the air's mass).
 fn seen(w: &World, s: &mut Scratch) {
     let (n, g, top) = (w.mesh.cells().n(), w.cfg.gravity, w.cfg.air_top_m);
     s.lay.resize(n, [[0.0; LAYERS]; 2]);
     for (i, &j) in w.mesh.cells().parent().iter().enumerate() {
-        let (gam, zair, fabs) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i));
+        let (gam, zair, fabs) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i) + s.state.cloud_depth[i]);
         s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, j as usize, g));
         s.seen[i] = [gam, zair, one_minus_exp(fabs)];
     }

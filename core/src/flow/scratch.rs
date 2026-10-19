@@ -91,8 +91,9 @@ pub(super) struct State {
     /// Substance held at its melting point in each ground node (or `NONE`), and its molten share.
     pub(super) pk: Vec<usize>,
     pub(super) phi: Vec<f64>,
-    /// Reflectance of the clouds over each ground cell.
+    /// Reflectance of the clouds over each ground cell, and their optical depth to heat radiation.
     pub(super) cloud: Vec<f64>,
+    pub(super) cloud_depth: Vec<f64>,
     /// Substances present in loose ground, in order (`refresh`; exchange and liquid add new ones).
     pub(super) loose: Vec<usize>,
     /// Loose substances that stay solid and cannot evaporate, and the others in order of melting point.
@@ -151,7 +152,7 @@ pub struct Scratch {
     pub(super) nt: Vec<f64>,
     pub(super) capa: Vec<f64>,
     pub(super) mass: Vec<f64>,
-    /// Of each air node: optical depth for heat radiation; temperature drop, K/m; mean height, m; temperature, K.
+    /// Of each air node: optical depth of its gases for heat radiation; temperature drop, K/m; mean height, m; temperature, K.
     pub(super) fabs: Vec<f64>,
     pub(super) gam: Vec<f64>,
     pub(super) zair: Vec<f64>,

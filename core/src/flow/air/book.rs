@@ -41,8 +41,9 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
         }
     }
     // The clouds of what condensed, which the next step's sunlight passes.
-    let refl: Vec<f64> = rained.iter().zip(w.mesh.level(AIR).area()).map(|(&r, &a)| cloud(w.cfg.cloud, (r[0], r[1]), a, dt)).collect();
+    let (refl, depth): (Vec<f64>, Vec<f64>) = rained.iter().zip(w.mesh.level(AIR).area()).map(|(&r, &a)| cloud((w.cfg.cloud, w.cfg.cloud_ir), (r[0], r[1]), a, dt)).map(|[r, d]| (r, d)).unzip();
     s.state.cloud = (0..n).map(|i| lerp(s, &refl, i)).collect();
+    s.state.cloud_depth = (0..n).map(|i| lerp(s, &depth, i)).collect();
     // The wind and the rain of each gas, cut where an air node would give more than it holds.
     let links = Links::of(w.mesh.level(AIR));
     let (nl, mut wind_mol, cut) = (links.a.len(), wind.mol.clone(), up.clone());

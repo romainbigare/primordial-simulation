@@ -1,7 +1,8 @@
 //! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
 //! seeds in the reference runs: the runs of the world after the foundation's law changes of Phases E, F and J, at the
-//! steps of Phase J's end (decision 27). The climate and the land worn down are means over years 21 to 30; life is read
+//! steps of Phase J's end (decision 27); for the climate, the land worn down and the rivers, the runs since clouds absorb
+//! heat radiation and the island lies at 40° (decision 34). The climate and the land worn down are means over years 21 to 30; life is read
 //! at year 30, ten years after the eaters came. Each run also keeps its books.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
@@ -11,6 +12,8 @@
 //!
 //! The eaters live: at 48 x 48 they still have members at year 60 in seeds 1, 2 and 3, after the booms and busts that
 //! year 30 hides. The ground under dense canopies follows its neighbours from one month to the next.
+//!
+//! A globe of Earth's size without life keeps an Earth-like climate: its land near Earth's, steady, with no runaway ice.
 //!
 //! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
 //! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step at
@@ -33,17 +36,17 @@ const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
 /// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 289.50;
+const T_LAND: f64 = 289.03;
 /// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
-const SWING: f64 = 12.73;
+const SWING: f64 = 14.31;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
-const RAIN_LAND: f64 = 1.798e-3;
+const RAIN_LAND: f64 = 1.769e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
-const ABSORBER_PPM: f64 = 250.5;
+const ABSORBER_PPM: f64 = 329.1;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
-const RIVERS: f64 = 831.8;
+const RIVERS: f64 = 271.2;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.0816;
+const WORN: f64 = 0.0578;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
 const PLANT_KG: f64 = 10.610;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
@@ -337,4 +340,43 @@ fn the_ground_under_dense_canopies_stays_near_its_neighbours() {
     let moved = swings.iter().filter(|&&x| x > CANOPY_SWING).count();
     println!("{moved} of {} dense canopies moved more than {CANOPY_SWING} K against their neighbours within 30 days; the most {:.1} K", dense.len(), swings.iter().fold(0.0f64, |a, &b| a.max(b)));
     assert!(!dense.is_empty() && (moved as f64) < CANOPY_SHARE * dense.len() as f64, "{moved} of {} dense canopies moved more than {CANOPY_SWING} K", dense.len());
+}
+
+/// The globe of the climate check: its rows (twice as many columns), its years, and the years its means are over.
+const GLOBE_ROWS: usize = 32;
+const GLOBE_YEARS: u64 = 20;
+const GLOBE_FROM: u64 = 11;
+/// Earth's land, K: its mean surface is about 282 K, its whole surface 288 K (from memory); the bounds leave a few K.
+const EARTH_LAND: [f64; 2] = [280.0, 292.0];
+/// The most the globe's land may drift in a year over those years, K, and the most of its surface ice may cover.
+const GLOBE_DRIFT_K: f64 = 0.2;
+const GLOBE_ICE: f64 = 0.25;
+
+/// A globe of Earth's size under Earth's sun, without life, keeps an Earth-like climate: over years `GLOBE_FROM` to
+/// `GLOBE_YEARS` its land stays within `EARTH_LAND` and drifts by less than `GLOBE_DRIFT_K` a year, and ice covers
+/// less than `GLOBE_ICE` of it (no runaway of the ice's reflectance).
+#[test]
+#[ignore = "slow: a 20-year run of a 64 x 32 globe without life"]
+fn a_globe_without_life_keeps_an_earth_like_climate() {
+    let mut w = worldgen::terrain::new_globe(1, GLOBE_ROWS);
+    worldgen::terrain::scale_absorbers(&mut w, 1.0);
+    let mut rec = tape::Recorder::new(&w, 0, 0);
+    common::record(&mut rec, &mut w);
+    let mut years = vec![];
+    for y in 1..=GLOBE_YEARS {
+        for _ in 0..w.cfg.months_per_year {
+            pcore::step(&mut w);
+            common::record(&mut rec, &mut w);
+        }
+        if y >= GLOBE_FROM {
+            years.push([rec.last("t_land"), rec.last("ice_frac")]);
+        }
+    }
+    let (first, last) = (years[0], years[years.len() - 1]);
+    let land = years.iter().map(|y| y[0]).sum::<f64>() / years.len() as f64;
+    let drift = (last[0] - first[0]) / (GLOBE_YEARS - GLOBE_FROM) as f64;
+    let ice = years.iter().map(|y| y[1]).fold(0.0, f64::max);
+    let report = format!("land {land:.2} K, drift {drift:.3} K a year, ice at most {ice:.3}");
+    println!("{report}");
+    assert!((EARTH_LAND[0]..=EARTH_LAND[1]).contains(&land) && drift.abs() < GLOBE_DRIFT_K && ice < GLOBE_ICE, "{report}");
 }

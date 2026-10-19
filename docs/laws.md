@@ -182,8 +182,15 @@ step stays implicit, and the rounds solve only the exchange with the ground.
   equator to the analytic values, the sphere's mean to S/4 at every season, and the south's seasons half a year from
   the north's.
 - Every surface emits σT⁴. The air absorbs 1 − exp(−x) of what the ground emits, x the optical depth summed over the
-  gases (each past its own column amount grows only as the square root). It emits from 4 grey layers that cool with
-  height (`flow::glow`): more gas lifts the layer that reaches space into colder air, so the ground warms.
+  gases (each past its own column amount grows only as the square root) and the clouds. It emits from 4 grey layers
+  that cool with height (`flow::glow`): more gas lifts the layer that reaches space into colder air, so the ground
+  warms.
+- **Clouds** (`exchange::cloud`) are a layer of droplets whose optical depth grows with what condensed in the air node
+  in the step before. A layer of scattering depth x = rate / `cloud` reflects x / (1 + x) of the sunlight (two-stream,
+  Lacis and Hansen 1974), times the condensate's mean reflectance; its droplets absorb heat radiation with an optical
+  depth `cloud_ir` × x (Stephens 1978), added to the gases'. A globe of Earth's size without life then holds about
+  Earth's climate (a test in `tape/tests/ranges.rs`). **Known limit:** the clouds' depth is spread like the air's
+  mass, not set at the height where they condense.
 - The ground trades heat with the air touching it (`sensible`); its temperature is solved implicitly over the step,
   with the latent heat of what evaporates and the heat of the rain.
 
@@ -225,8 +232,8 @@ shared the same way (6.4). The survey shares out a cell's light again only when 
   proportion to its liquid (the bucket of Manabe 1969), integrated exactly over the step with the rain it gets.
 - **Rain.** Vapour over what the air a cell sees can hold at its temperature (colder on higher ground) rains out in
   `rain_time`, out of the four air nodes the cell sees, each in the share it gives of that vapour (`air::shares`), so
-  no node gives more than it holds; it brings the heat of the air it comes from. Condensing air makes clouds that cover
-  part of the sky (`cloud`) in the next step.
+  no node gives more than it holds; it brings the heat of the air it comes from. Condensing air makes clouds that reflect
+  sunlight and absorb heat radiation in the next step (1.4).
 - **Lift.** Gas that goes up into the air (from the ground, bodies, parts, reactions, growth) is lifted from the
   ground's head to the air's mean height, paid by the air's heat; gas that comes down gives it back.
 - **Booked by the store**: a link from each ground node to its air node carries what evaporates and its heat, and a

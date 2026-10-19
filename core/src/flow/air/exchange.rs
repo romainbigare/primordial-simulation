@@ -86,11 +86,14 @@ pub(super) fn bucket_slope(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f
     (m, (bucket(a, r, e * (1.0 + NUDGE), wet, dt) - m) / (e * NUDGE))
 }
 
-/// The cloud's reflectance where `m` mol condense over `area` m² in `dt` seconds: the share of sky covered (half at the
-/// rate `cloud`) times the condensate's mean reflectance `mr / m`, as it scatters sunlight like its powder.
-pub(super) fn cloud(cloud: f64, (m, mr): (f64, f64), area: f64, dt: f64) -> f64 {
-    let rate = m / (area * dt);
-    if m > 0.0 { rate / (rate + cloud) * mr / m } else { 0.0 }
+/// The cloud where `m` mol condense over `area` m² in `dt` seconds, a layer of droplets whose optical depth grows with
+/// the rate: [its reflectance, its optical depth to heat radiation]. A layer of scattering depth x reflects x / (1 + x)
+/// (two-stream, Lacis and Hansen 1974), half at the rate `cloud`, times the condensate's mean reflectance `mr / m` as
+/// it scatters like its powder; the same droplets absorb heat radiation, with the depth `cloud_ir` at that rate
+/// (Stephens 1978).
+pub(super) fn cloud((cloud, cloud_ir): (f64, f64), (m, mr): (f64, f64), area: f64, dt: f64) -> [f64; 2] {
+    let x = m / (area * dt) / cloud;
+    if m > 0.0 { [x / (1.0 + x) * mr / m, cloud_ir * x] } else { [0.0; 2] }
 }
 
 /// Gases that cannot condense on the ground (`henry`) dissolve in each ground node's liquid toward Henry's share and

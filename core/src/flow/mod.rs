@@ -95,7 +95,7 @@ fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
         scratch::refresh(w, &mut s);
         // A new world's ground nodes, before its first step: no plateau, no clouds.
         let st = &mut s.state;
-        (st.tg, st.pk, st.phi, st.cloud) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![0.0; n]);
+        (st.tg, st.pk, st.phi, st.cloud, st.cloud_depth) = (vec![0.0; n], vec![land::NONE; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     }
     if s.cap.len() != n {
         scratch::room(w, &mut s);

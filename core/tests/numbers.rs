@@ -7,7 +7,7 @@ use std::path::Path;
 
 /// Rows marked tuned in the whole file: it may not grow. A new number must be physical or anchored, or replace a tuned
 /// one. Lower this when a tuned number is anchored or removed; do not raise it without asking.
-const TUNED_BUDGET: usize = 51;
+const TUNED_BUDGET: usize = 49;
 
 /// Rules chosen for a run (what was picked so a run came out a certain way, not a number of `Physics` or `Config`): the
 /// table "Rules chosen for a run" lists them, and it may not grow.

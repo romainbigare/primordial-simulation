@@ -59,8 +59,10 @@ pub struct Config {
     pub wind: f64,
     /// Mixing of neighbouring air columns by eddies, m²/s
     pub mix: f64,
-    /// Condensation in the air at which its droplets cover half the sky, mol/(m² s)
+    /// Condensation in the air at which its cloud reflects half of what its droplets can, mol/(m² s)
     pub cloud: f64,
+    /// Optical depth to heat radiation of a cloud at the condensation `cloud`
+    pub cloud_ir: f64,
     /// Time in which vapour over saturation rains out, s
     pub rain_time: f64,
     /// Loose solid volume moving liquid carries off per J it dissipates, m³/J
@@ -395,8 +397,8 @@ impl Default for Config {
         Config {
             sun: 1361.0,
             tilt: 23.4,
-            lat_south: 31.0,
-            lat_north: 33.3,
+            lat_south: 40.0,
+            lat_north: 42.3,
             rotation: 1.0,
             gravity: 9.81,
             days_per_month: 30,
@@ -417,6 +419,7 @@ impl Default for Config {
             wind: 0.25,
             mix: 1e6,
             cloud: 1.2e-2,
+            cloud_ir: 6.7,
             rain_time: 86400.0,
             carry: 2e-11,
             wear: 1.4e-11,
