@@ -56,7 +56,7 @@ pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8,
 /// matter, kg, torn off members who live on (0 when members died).
 fn tear(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, matter0: f64) -> Option<f64> {
     let whole = b.n() > 1.0 && f * b.n() >= 1.0;
-    let th = b.thermal_now(&w.chem);
+    let th = b.thermal(&w.chem);
     let alive = thin(w, b, if whole { f } else { 0.0 }, dead, cause, &th);
     alive.then(|| if whole { 0.0 } else { (matter0 - b.matter_kg(&w.chem)).max(0.0) })
 }
@@ -70,7 +70,7 @@ const TORN_TO_DEATH: f64 = 0.5;
 #[allow(clippy::too_many_arguments)]
 pub fn wound(w: &mut World, slot: usize, mut b: Body, f: f64, dead: &[f64], cause: u8, built0: f64, matter0: f64) -> bool {
     let torn = tear(w, &mut b, f, dead, cause, matter0);
-    if torn.is_none() || (b.n() <= 1.0 && (b.built(&w.chem) <= TORN_TO_DEATH * built0 * (1.0 + 1e-9) || b.lacking(&w.chem))) {
+    if torn.is_none() || (b.n() <= 1.0 && (b.built(&w.chem) <= TORN_TO_DEATH * built0 * (1.0 + 1e-9) || b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)))) {
         die(w, slot, b, cause);
         return false;
     }

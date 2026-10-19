@@ -12,7 +12,6 @@ mod select;
 mod young;
 
 pub use grow::grow;
-pub(crate) use grow::grow_at;
 pub(crate) use select::{sample, select};
 pub use young::{mature, Grown};
 
@@ -176,7 +175,7 @@ fn give(w: &mut World, b: &mut Body, l: &Litter, cell: usize, m: f64) -> (Vec<f6
     let mi = w.chem.matter().unwrap_or(0);
     let take = (m * l.matter).min(b.store[mi]);
     let store: Vec<f64> = b.store.iter().zip(&l.prov).enumerate().map(|(k, (a, p))| if k == mi { take } else { (p * m).min(*a) }).collect();
-    let e = b.heat_with(&w.chem, &b.thermal_now(&w.chem), &store);
+    let e = b.heat_with(&w.chem, &b.thermal(&w.chem), &store);
     b.e -= e;
     for (a, x) in b.store.iter_mut().zip(&store) {
         *a -= x;

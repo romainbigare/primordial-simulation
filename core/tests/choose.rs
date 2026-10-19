@@ -273,9 +273,9 @@ fn a_body_with_no_brain_lives_and_copies() {
     let mut x = w.life.bodies[s].clone();
     x.prepare(&w.chem, &w.cfg.phys);
     let (d, m, p0) = (x.interval(&w) as f64, x.mass(&w.chem), w.cfg.phys);
-    let u0 = pcore::body::upkeep(&w, &x, d, m);
+    let u0 = pcore::body::upkeep(&w, &x, d, m, x.temp(&w.chem));
     (w.cfg.phys.c_hidden, w.cfg.phys.c_memory, w.cfg.phys.c_seen, w.cfg.phys.c_sight, w.cfg.phys.c_learn) = (1e9, 1e9, 1e9, 1e9, 1e9);
-    assert_eq!(pcore::body::upkeep(&w, &x, d, m), u0);
+    assert_eq!(pcore::body::upkeep(&w, &x, d, m, x.temp(&w.chem)), u0);
     w.cfg.phys = p0;
     let (books, u) = (Books::now(&w), w.counts.updates);
     for _ in 0..2 {

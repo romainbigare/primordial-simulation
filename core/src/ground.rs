@@ -25,7 +25,7 @@ pub(crate) fn skin_cap(chem: &Chemistry, cfg: &Config, area: f64, ks: impl IntoI
 }
 
 /// Where a ground node or a body of heat capacity `c` (J/K) and energy `e` (J) stands among its melting plateaus.
-pub(crate) struct Melting {
+pub struct Melting {
     /// Temperature, K
     pub t: f64,
     /// The substance held at its melting point, with its molten share

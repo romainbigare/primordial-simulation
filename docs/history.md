@@ -791,6 +791,15 @@ The work of `docs/foundation/plan.md`, one line per task.
   body, 16 x 16 with every kind, three seeds, 4 years); the fingerprints change with the saved layout. Snapshot
   version 31; golden re-pinned.
 
+Phase E review, round 1 (fixes):
+
+- Merged pairs and cheaper gene numbers: one form each of `Body::thermal` (it finds its heat capacity), `temp`,
+  `volume`, `supply`, `lacking`, `body::upkeep`, `copy::grow` and `body::Payer` (each takes what its caller knows);
+  `copy::grow` for tests is `testkit::grow`; `Lived::cap` goes. `Body::prepare` fills the vectors of `Consts` again
+  instead of making new ones, and a brain works out what it perceives of its safe minimums itself (`Consts::minln`
+  goes); evaporation tests the cheap conditions before the vapour pressure. The same world to the bit (64 x 64, seed
+  1, 30 years, every series column).
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

@@ -34,7 +34,7 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
     let mass = b.mass(&w.chem);
-    let m = b.wanted(&w.chem, b.paces(w), free, reach(w, b, free) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys), mass);
+    let m = b.wanted(&w.chem, b.paces(w), free, reach(w, b, free) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mass);
     if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
@@ -63,14 +63,14 @@ pub(super) fn put(w: &mut World, b: &mut Body) {
         return;
     }
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
-    let th = b.thermal_now(&w.chem);
+    let th = b.thermal(&w.chem);
     body::to_ground(w, b, &th, &m);
 }
 
 /// Move amounts `m` (mol) from `from` to `to`, with their heat (`Body::heat_with`) and their share of `from`'s brood
 /// (`Body::lose`).
 fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
-    let q = from.heat_with(&w.chem, &from.thermal_now(&w.chem), m);
+    let q = from.heat_with(&w.chem, &from.thermal(&w.chem), m);
     from.lose(&w.chem, m);
     for (k, &a) in m.iter().enumerate() {
         to.store[k] += a;
@@ -99,7 +99,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
-    let m = b.wanted(&w.chem, b.paces(w), |k| o.store[k], rate * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys), mb);
+    let m = b.wanted(&w.chem, b.paces(w), |k| o.store[k], rate * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
     let away = rng.f64() < 1.0 - o.interval(w) as f64 / b.interval(w) as f64;
     // The bite tears this share of the body; the stores it held spill in proportion, less what the taker took of them (a
@@ -135,7 +135,7 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
     let (mo, paces) = (o.mass(chem), o.paces(w));
-    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys) / all.max(1e-9)).min(1.0 / b.n());
+    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys, o.temp(&w.chem)) / all.max(1e-9)).min(1.0 / b.n());
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.can_take(chem, k) { (spare(k) * share).min(o.room(chem, paces, k, mo)) } else { 0.0 }).collect();
     o.digest_room(chem, paces, &mut m, mo);
     let got = w.chem.mass_of(&m);

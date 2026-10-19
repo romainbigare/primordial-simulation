@@ -64,13 +64,13 @@ fn upkeep_and_supply_follow_the_rate_law_of_the_reactions() {
     let b = s.eater(0);
     let (w, p) = (&s.w, s.w.cfg.phys);
     let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
-    let up = |x: &Body| pcore::body::upkeep(w, x, days, mass);
+    let up = |x: &Body| pcore::body::upkeep(w, x, days, mass, x.temp(&w.chem));
     let ea = w.chem.reactions[b.k.burn[0].0].ea;
     let (b0, u0) = (at(w, &b, p.t_cat), up(&at(w, &b, p.t_cat)));
     assert!(u0 > 0.0);
     for t in [250.0, 270.0, 280.0, 285.0, 295.0, 300.0, 310.0] {
         let x = at(w, &b, t);
-        let (want, got, supply) = ((-ea * (1.0 / t - 1.0 / p.t_cat)).exp(), up(&x) / u0, x.supply(&w.chem, &p) / b0.supply(&w.chem, &p));
+        let (want, got, supply) = ((-ea * (1.0 / t - 1.0 / p.t_cat)).exp(), up(&x) / u0, x.supply(&w.chem, &p, x.temp(&w.chem)) / b0.supply(&w.chem, &p, b0.temp(&w.chem)));
         println!("{t} K: upkeep x {got:.4}, supply x {supply:.4} (the law: {want:.4})");
         assert!((got / want - 1.0).abs() < 1e-9 && (supply / want - 1.0).abs() < 1e-9, "{t} K: upkeep {got}, supply {supply}, the law {want}");
     }
@@ -96,7 +96,7 @@ fn a_cold_body_ages_slower() {
     let (days, mass) = (1.0, cold.mass(&w.chem));
     cold.prepare(&w.chem, &w.cfg.phys);
     hot.prepare(&w.chem, &w.cfg.phys);
-    let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass), pcore::body::upkeep(w, &hot, days, mass));
+    let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass, cold.temp(&w.chem)), pcore::body::upkeep(w, &hot, days, mass, hot.temp(&w.chem)));
     let (c, k) = (w.add(cold, 1), w.add(hot, 1));
     let books = Books::now(w);
     pcore::survey::survey(w);
@@ -269,7 +269,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         let made = |t: f64| {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
             let mut y = x.clone();
-            assert!(moved(&mut w2, (i, 0), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass), days)));
+            assert!(moved(&mut w2, (i, 0), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass, x.temp(&w0.chem)), days)));
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, &w0.cfg));
             rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * DAY);
             let air = |k: usize| w0.store.amounts(Class::Air)[k * na + j] - w2.store.amounts(Class::Air)[k * na + j] + gas[k] - g[k];
@@ -322,7 +322,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         let mut b = std::mem::take(&mut w.life.bodies[slot]);
         b.prepare(&w.chem, &w.cfg.phys);
         let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
-        let (up, pace) = (pcore::body::upkeep(w, &b, days, mass), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
+        let (up, pace) = (pcore::body::upkeep(w, &b, days, mass, b.temp(&w.chem)), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
         w.events.clear();
         moved(w, (b.cell as usize, slot), |w| pcore::choose::act(w, slot, &mut b, &Default::default(), &mut Default::default()));
         let id = b.id(slot);
@@ -452,12 +452,12 @@ fn a_dry_body_pays_upkeep_times_activity_and_ages_slower() {
     let dry = s.dried(&wet, 0.5);
     let (d, m) = (wet.interval(&s.w) as f64, wet.mass(&s.w.chem));
     let a = dry.activity(&s.w.chem, &s.w.cfg.phys);
-    let (uw, ud) = (pcore::body::upkeep(&s.w, &wet, d, m), pcore::body::upkeep(&s.w, &dry, d, m));
+    let (uw, ud) = (pcore::body::upkeep(&s.w, &wet, d, m, wet.temp(&s.w.chem)), pcore::body::upkeep(&s.w, &dry, d, m, dry.temp(&s.w.chem)));
     println!("upkeep {uw:.4e} J wet, {ud:.4e} dry, activity {a:.4}");
     assert!((ud / uw / a - 1.0).abs() < 1e-9, "the same body, dry, pays its activity's share: {}", ud / uw);
     // The brain's decision is in it: with the brain costing a thousand times more, the dry body still pays its activity's share.
     s.w.cfg.phys.c_hidden *= 1000.0;
-    let (uw2, ud2) = (pcore::body::upkeep(&s.w, &wet, d, m), pcore::body::upkeep(&s.w, &dry, d, m));
+    let (uw2, ud2) = (pcore::body::upkeep(&s.w, &wet, d, m, wet.temp(&s.w.chem)), pcore::body::upkeep(&s.w, &dry, d, m, dry.temp(&s.w.chem)));
     assert!(uw2 > 2.0 * uw && (ud2 / uw2 / a - 1.0).abs() < 1e-9, "{uw2} {ud2}");
     s.w.cfg.phys.c_hidden /= 1000.0;
     // Over two months of updates the dry body's wear is a small share of the wet one's.
@@ -517,8 +517,8 @@ fn a_dry_body_builds_in_proportion_to_its_activity() {
     let m = s.w.chem.matter().expect("matter");
     let (m0, m1) = (wet.store[m], dry.store[m]);
     // (What it may build goes with its mass^0.75 too, and the dry body has the lighter liquid.)
-    let eq = dry.supply(&s.w.chem, &s.w.cfg.phys) / wet.supply(&s.w.chem, &s.w.cfg.phys);
-    let grow = |w: &mut World, b: &mut Body| moved(w, (b.cell as usize, 0), |w| pcore::copy::grow(w, b, 10.0));
+    let eq = dry.supply(&s.w.chem, &s.w.cfg.phys, dry.temp(&s.w.chem)) / wet.supply(&s.w.chem, &s.w.cfg.phys, wet.temp(&s.w.chem));
+    let grow = |w: &mut World, b: &mut Body| moved(w, (b.cell as usize, 0), |w| worldgen::testkit::grow(w, b, 10.0));
     assert!(grow(&mut s.w, &mut wet) && grow(&mut s.w, &mut dry));
     let (gw, gd) = (wet.store[m] - m0, dry.store[m] - m1);
     println!("matter built: wet {gw:.4e} mol, dry {gd:.4e}, activity {a:.4}");
@@ -795,12 +795,12 @@ fn the_safe_minimum_is_a_share_of_the_body() {
     let (size, mass) = (b.size(&w.chem), b.mass(&w.chem));
     println!("body {size:.2} kg of {mass:.2}: liquid {:.2} kg against a minimum of {:.2} kg", kg(&w, &b, LIQUID), 0.7 * size);
     assert!(kg(&w, &b, LIQUID) > 0.7 * size && kg(&w, &b, LIQUID) < 0.7 * mass, "the setup");
-    assert!(!b.lacking(&w.chem), "lacking a minimum that is met");
+    assert!(!b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)), "lacking a minimum that is met");
     add(&mut w, &mut b, RICH, 100.0);
-    assert!(!b.lacking(&w.chem), "killed by holding fuel");
+    assert!(!b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)), "killed by holding fuel");
     // And a minimum above what it holds still counts: 0.8 of the body is 16.8 kg of the liquid.
     b.genes[lay.min + LIQUID] = 0.8;
-    assert!(b.lacking(&w.chem));
+    assert!(b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)));
 }
 
 /// Digestion: body matter that a body takes in from outside is broken into the energy-rich solid and the minerals as it
@@ -999,7 +999,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         let mut b = std::mem::take(&mut w.life.bodies[s]);
         b.prepare(&w.chem, &w.cfg.phys);
         let (d, m) = (b.interval(w) as f64, b.mass(&w.chem));
-        let u = pcore::body::upkeep(w, &b, d, m) / (d * b.built(&w.chem));
+        let u = pcore::body::upkeep(w, &b, d, m, b.temp(&w.chem)) / (d * b.built(&w.chem));
         let act = b.activity(&w.chem, &w.cfg.phys);
         b.wear = 0.0;
         w.life.bodies[s] = b;
@@ -1061,11 +1061,11 @@ fn equiv_goes_with_mass_to_the_power() {
     let mut b = Body { count: 1.0, genes: vec![0.0; Layout::of(&w.chem).len], store: vec![0.0; w.chem.ns()], ..Default::default() };
     b.genes[COPY_MASS] = 1.0;
     (b.store[MATTER], b.store[RICH]) = (10.0, 20.0);
-    let thin = b.supply(&w.chem, &w.cfg.phys);
+    let thin = b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem));
     b.store[RICH] *= 3.0;
-    assert!(thin > 0.0 && (b.supply(&w.chem, &w.cfg.phys) / thin - 1.0).abs() < 1e-12, "fuel changed the supply");
+    assert!(thin > 0.0 && (b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / thin - 1.0).abs() < 1e-12, "fuel changed the supply");
     b.store[MATTER] *= 8.0;
-    assert!((b.supply(&w.chem, &w.cfg.phys) / thin - 8f64.powf(0.75)).abs() < 1e-9, "supply goes with the body to the power 0.75");
+    assert!((b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / thin - 8f64.powf(0.75)).abs() < 1e-9, "supply goes with the body to the power 0.75");
 }
 
 /// The cost of keeping tissue goes with the kg of the body, mass^1.0, at every mass (the supply of a body goes with
@@ -1086,7 +1086,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     let p = &mut w.cfg.phys;
     (p.c_brain, p.c_hidden, p.c_memory, p.c_seen, p.c_sight, p.c_leaf) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     let days = 10.0;
-    let up = |w: &pcore::World, x: &pcore::body::Body| pcore::body::upkeep(w, x, days, x.mass(&w.chem));
+    let up = |w: &pcore::World, x: &pcore::body::Body| pcore::body::upkeep(w, x, days, x.mass(&w.chem), x.temp(&w.chem));
     let per_kg: Vec<f64> = [1.0, 10.0, 100.0, 1e4]
         .iter()
         .map(|&f| {
@@ -1217,7 +1217,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
             let mut off = b.clone();
             off.genes[lay.cat + fix] = -1.0;
             off.prepare(&w.chem, &w.cfg.phys);
-            up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem)) / body::upkeep(&w, &off, 1.0, b.mass(&w.chem));
+            up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem)) / body::upkeep(&w, &off, 1.0, b.mass(&w.chem), off.temp(&w.chem));
         }
         assert!(w.life.bodies[s].alive);
         books.assert_kept(&w, 1e-9);

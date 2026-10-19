@@ -276,6 +276,12 @@ pub fn moved<R>(w: &mut World, (i, slot): (usize, usize), f: impl FnOnce(&mut Wo
     r
 }
 
+/// Body `b` grows for `days` days at the plateau state it stands at (`copy::grow`). Returns whether it built anything.
+pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
+    let th = b.thermal(&w.chem);
+    pcore::copy::grow(w, b, days, th)
+}
+
 /// Body `b` placed and prepared where it is: its slot.
 pub fn place(w: &mut World, b: Body) -> usize {
     let (s, b) = out(w, b);

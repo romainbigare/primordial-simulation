@@ -136,11 +136,7 @@ impl Body {
     /// What a body can take and build, in kg-equivalents: `equiv` of the body that is built (the fuel it stores is carried,
     /// not working tissue), times the pace of its temperature (`pace`): the whole tempo of a body goes with exp(-Ea/T)
     /// (metabolic theory of ecology, Gillooly et al. 2001), as what it pays to live does.
-    pub fn supply(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
-        self.supply_at(chem, p, self.temp(chem))
-    }
-    /// `supply` when its temperature `t` is known.
-    pub(crate) fn supply_at(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
+    pub fn supply(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
         self.equiv(p, self.built(chem)) * self.pace(chem, p, t)
     }
     /// Most of substance `k` the body holds, mol, by its keep gene: for a key liquid the largest share of the body it may
@@ -204,12 +200,8 @@ impl Body {
     pub(crate) fn empty_at(&self, m: f64) -> bool {
         m < EMPTY_KG * self.n()
     }
-    /// A store below its safe minimum, or nothing left of a member.
-    pub fn lacking(&self, chem: &Chemistry) -> bool {
-        self.lacking_at(chem, self.mass(chem), self.temp(chem))
-    }
-    /// `lacking` when the mass `m` and the temperature `t` are known.
-    pub fn lacking_at(&self, chem: &Chemistry, m: f64, t: f64) -> bool {
+    /// A store below its safe minimum, or nothing left of a member, for its mass `m` and temperature `t`.
+    pub fn lacking(&self, chem: &Chemistry, m: f64, t: f64) -> bool {
         // (A safe minimum is a share of the body, not of the whole mass: a body is not killed by holding fuel.)
         let (lay, size) = (Layout::of(chem), self.size(chem));
         self.empty_at(m) || (0..chem.ns()).any(|k| !self.burns_at(chem, k, t) && self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)

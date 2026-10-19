@@ -17,15 +17,9 @@ use crate::{World, AIR};
 /// own growth; of what it builds past it a share `ALLOC` goes into the brood (`Body::brood`, matter held back for
 /// offspring) and the rest into its own growth, so with `ALLOC` 1 it stops at maturity and with less it grows all its
 /// life. The liquid that goes with new matter comes by soaking (`body::live`). The other solids it can build
-/// (`Chemistry::builds`) it builds the same way, first, each in its share (`Body::share`). Returns whether it built
-/// anything.
-pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
-    let th = b.thermal_now(&w.chem);
-    grow_at(w, b, days, th)
-}
-
-/// `grow` when the body's plateau state `th` (`Body::thermal`) is known.
-pub(crate) fn grow_at(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
+/// (`Chemistry::builds`) it builds the same way, first, each in its share (`Body::share`). `th` is its plateau state
+/// (`Body::thermal`). Returns whether it built anything.
+pub fn grow(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
     let (chem, p) = (&w.chem, &w.cfg.phys);
     let Some(bl) = chem.build.clone() else { return false };
     let (m, n) = (bl.outputs[0].0 as usize, b.n());
@@ -34,7 +28,7 @@ pub(crate) fn grow_at(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bo
     let full = b.dec(COPY_MASS) * n * (1.0 - WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
-    let room0 = p.c_build * b.supply_at(chem, p, th.t) / p.m_ref * days.min(b.interval(w) as f64) * b.activity(chem, p);
+    let room0 = p.c_build * b.supply(chem, p, th.t) / p.m_ref * days.min(b.interval(w) as f64) * b.activity(chem, p);
     // (The plateau state holds until a conversion changes the body.)
     let mut th = Some(th);
     // The other solids it builds first, each with its share (`Body::share`) of the allowance and of what it can spare, and up
@@ -72,8 +66,8 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     // (A unit of growth makes `nu0` mol of what it makes; chemistry 0: 1.)
     let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
     let ivl = b.interval(w) as f64;
-    let (mass, cap) = b.mass_cap(chem);
-    let th = known.take().unwrap_or_else(|| b.thermal(chem, cap));
+    let mass = b.mass(chem);
+    let th = known.take().unwrap_or_else(|| b.thermal(chem));
     let payer = body::Payer::at(w, b, ivl, mass, th);
     let t = payer.th.t;
     let r = RELEASE_MARGIN * body::plan(w, b, f64::MAX, &payer).1;
@@ -86,7 +80,7 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     let (ins, outs) = (&bl.inputs, &bl.outputs);
     let fuel = ins.iter().map(|&(k, nu)| nu as f64 * b.heat_of(chem, k as usize, t)).sum::<f64>() / (mm * nu0);
     let per_kg = p.c_copy + fuel - b.heat_of(chem, m, t) / mm;
-    let spare = b.fuel(chem, t) * (1.0 - body::upkeep_at(w, b, ivl, mass, t) / r);
+    let spare = b.fuel(chem, t) * (1.0 - body::upkeep(w, b, ivl, mass, t) / r);
     // The stores it converts must also cover the fuel the work burns (each input that burns), and
     // leave the safe minimum of each (a body is not built of its last fuel: below its minimum it dies).
     let lay = Layout::of(chem);

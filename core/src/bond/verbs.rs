@@ -106,9 +106,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
         _ => {
             let r = w.parts.parts[p].root as usize;
             let i = b.cell as usize;
-            let used: f64 = w.life.at[i].iter().map(|&o| &w.life.bodies[o as usize]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| o.volume(&w.chem)).sum();
+            let used: f64 = w.life.at[i].iter().map(|&o| &w.life.bodies[o as usize]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| o.volume(&w.chem, o.temp(&w.chem))).sum();
             let s = w.parts.parts[r].s;
-            if s.encl.closed > 0.0 && s.space >= used + b.volume(&w.chem) && body::pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
+            if s.encl.closed > 0.0 && s.space >= used + b.volume(&w.chem, b.temp(&w.chem)) && body::pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
                 b.inside = Some(id(w, p));
             }
         }
@@ -120,7 +120,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
 /// `w.cfg.phys.min_kg` fall apart.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
-    let m = b.wanted(&w.chem, b.paces(w), |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys), mb);
+    let m = b.wanted(&w.chem, b.paces(w), |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
     let got = w.chem.mass_of(&m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;
@@ -174,7 +174,7 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     }
     let chem = &w.chem;
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let q = b.heat_with(chem, &b.thermal_now(chem), &m);
+    let q = b.heat_with(chem, &b.thermal(chem), &m);
     let pt = &mut w.parts.parts[p];
     for (k, &a) in m.iter().enumerate() {
         *if wet[k] { &mut pt.fill[k] } else { &mut pt.wall[k] } += a;
@@ -204,7 +204,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     }
     // Paying may have used some of what was to be put out.
     let wall: Vec<f64> = wall.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let e = b.heat_with(&w.chem, &b.thermal_now(&w.chem), &wall);
+    let e = b.heat_with(&w.chem, &b.thermal(&w.chem), &wall);
     for (s, a) in b.store.iter_mut().zip(&wall) {
         *s -= a;
     }

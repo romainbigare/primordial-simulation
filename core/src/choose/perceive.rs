@@ -2,15 +2,18 @@
 //! each direction (`sector`) and what a cell offers as a place to move to (`cells`); each scaled to about one.
 
 use super::{Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
-use crate::body::{Body, Lived, SHARE_SENSE};
+use crate::body::{Body, Layout, Lived};
 use crate::brain::{ln, REST, SIG};
 use crate::space::square::DIRS;
 use crate::lanes::thickness;
 use crate::rng::Rng;
 use crate::{bond, World};
 
-/// A store's share of the body's mass is perceived as `SHARE_SENSE` ln(share + this) (no store: as this).
+/// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a store with the floor `STORE_FLOOR` (no
+/// store: as that floor), less its safe minimum with the floor `MIN_FLOOR`.
+const SHARE_SENSE: f32 = 0.25;
 const STORE_FLOOR: f32 = 1e-4;
+const MIN_FLOOR: f32 = 1e-2;
 /// The body's temperature over its cell's ground, K.
 const WARM_SCALE: f32 = 10.0;
 // ln of a mass: of a member, kg (less 1), of a perceived body's member over its own, of a cell's mean member.
@@ -106,8 +109,8 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
     let (env, pm) = (w.life.env[i], mass / b.n());
     let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, &(o, _)| [0, 1].map(|k| h[k] + w.life.bodies[o].sig[k] / c.nseen as f32));
     x.clear();
-    let none = SHARE_SENSE * ln(STORE_FLOOR);
-    x.extend((0..ns).map(|k| if b.store[k] > 0.0 { SHARE_SENSE * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - b.k.minln[k]));
+    let (none, min) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min);
+    x.extend((0..ns).map(|k| if b.store[k] > 0.0 { SHARE_SENSE * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(b.genes[min + k].max(0.0) + MIN_FLOOR)));
     x.extend_from_slice(&w.life.seen[i * ns..(i + 1) * ns]);
     let crowd = ln(1.0 + (w.life.sum[i][1] / w.mesh.cells().area()[i]) as f32);
     let (dt, lit, sun) = ((temp - env[0]) as f32, lived.lit as f32, w.season() as f32 * std::f32::consts::TAU);

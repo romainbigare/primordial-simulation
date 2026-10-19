@@ -75,7 +75,7 @@ struct Choice {
 pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
-    let temp = b.temp_at(&w.chem, lived.cap);
+    let temp = b.temp(&w.chem);
     // A brain perceives sizes per member.
     let pm = lived.mass / b.n();
     let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS)), temp, lived.spare);
@@ -90,7 +90,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
     // (Its stores are as `live` left them: its volume is at `temp`.)
-    options(w, b, s, (pm, b.volume_at(&w.chem, temp) / b.n(), sight), &mut c, t);
+    options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n(), sight), &mut c, t);
     pick(w, &mut c, &mut rng);
     let form = trace(w, b, s, &c, t, &mut rng);
     b.wb = wb;

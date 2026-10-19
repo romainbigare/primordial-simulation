@@ -17,12 +17,7 @@ use crate::{bond, World, AIR};
 /// keeping it takes all it can supply (West, Brown and Enquist 2001; docs/laws.md). Repair multiplies it by
 /// 1 - c + c 2^`REPAIR` (`Physics::c_repair`). All of it goes with its activity and the pace of its temperature
 /// (`Body::pace`): a dry or cold body pays little and ages slowly.
-pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64) -> f64 {
-    upkeep_at(w, b, days, mass, b.temp(&w.chem))
-}
-
-/// `upkeep` when the body's temperature `t` is known.
-pub(crate) fn upkeep_at(w: &World, b: &Body, days: f64, mass: f64, t: f64) -> f64 {
+pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) { 0.0 } else { p.c_learn * b.learn_rate() as f64 + p.c_signal * sig };
@@ -39,7 +34,7 @@ pub(super) fn breathes(chem: &Chemistry, r: usize, t: f64) -> bool {
 
 /// Energy the body's reactions can release over `days` at its temperature now, J (the most `pay` could pay).
 pub fn release(w: &World, b: &Body, days: f64) -> f64 {
-    plan(w, b, f64::MAX, &Payer::of(w, b, days)).1
+    plan(w, b, f64::MAX, &Payer::at(w, b, days, b.mass(&w.chem), b.thermal(&w.chem))).1
 }
 
 /// A body about to pay over some days, as its paying sees it (valid until its stores or its heat change): its mass, kg,
@@ -54,12 +49,7 @@ pub(crate) struct Payer {
 }
 
 impl Payer {
-    /// Body `b` as it stands, paying over `days`.
-    pub(crate) fn of(w: &World, b: &Body, days: f64) -> Payer {
-        let (mass, cap) = b.mass_cap(&w.chem);
-        Payer::at(w, b, days, mass, b.thermal(&w.chem, cap))
-    }
-    /// `of` when its mass and plateau state are known.
+    /// Body `b` of `mass` kg at the plateau state `th`, paying over `days`.
     pub(crate) fn at(w: &World, b: &Body, days: f64, mass: f64, th: Melting) -> Payer {
         let (chem, i) = (&w.chem, b.cell as usize);
         let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
@@ -78,7 +68,7 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
     }
-    spend(w, b, cost, b.interval(w) as f64 * DAY, false, &Payer::of(w, b, days)) == 0.0
+    spend(w, b, cost, b.interval(w) as f64 * DAY, false, &Payer::at(w, b, days, b.mass(&w.chem), b.thermal(&w.chem))) == 0.0
 }
 
 /// `pay` by the payer `p` (body `b` as it stands) with the heat released held over `dt` s; returns what was not paid

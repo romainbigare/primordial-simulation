@@ -205,8 +205,11 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
     let mut lost = [0.0f64; MAX_SUBSTANCES];
     for (k, lost) in lost.iter_mut().enumerate().take(ns) {
         let (chem, cfg) = (&w.chem, &w.cfg);
+        if b.store[k] <= 0.0 || chem.phase(k, t0) == Phase::Gas {
+            continue;
+        }
         let push = (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0);
-        if push <= 0.0 || b.store[k] <= 0.0 || chem.phase(k, t0) == Phase::Gas || t0 < b.melt(chem, k) {
+        if push <= 0.0 || t0 < b.melt(chem, k) {
             continue;
         }
         let (own, room) = (h.heat - h.lit + h.took, heat_above_floor(w.heat_now(Node::ground(i)), h.gcap));
