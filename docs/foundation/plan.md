@@ -650,7 +650,7 @@ formulas stay.
 | G3 | **Cheap sea cells**: the sea on a coarser level (as the air), so that a sea cell costs a small share of a land cell | `flow/`, `space/` | 3 | The key numbers hold on the island; the cost of a sea cell measured. **Measured, not built** (decision 20): a sea cell costs a land cell's Flow and a third of its Change; the lever on a planet is the air's rounds (J3). Built: the air of a globe in a folded order (decision 19), 8% cheaper on a 64 x 32 globe. A finer air level on the 64 x 32 globe (`air_scale` 2, 32 x 16 air nodes) costs 3.3 times Flow and moves the climate (2 years: mid latitudes 1.4 K colder, the tropics 0.7 K warmer, rain at the poles 20 times more): the air at 2,500 km is not converged |
 | G4 | **A refined region built into the mesh**: finer cells in one region, at the start or rebuilt at a god action; amounts split by F1 on a rebuild, summed back | `space/`, `store/` | 3 | Books exact through a rebuild; liquid and heat cross the border of the region correctly (tests) |
 | G5 | **The coarse-against-fine test** | `tape/tests/` | 3 | Key numbers agree within their ranges |
-| G6 | Remove old limits: the 20-bit cell key of the liquid sort, the 64-substance bit masks (`u64`), the sea level fixed at 0 in the land and sea counts | `flow/`, `body/`, `tape/` | 1 | Tests with more than 10⁶ cells and more than 64 substances |
+| G6 | ~~Remove old limits~~: **dropped** (decision 28). The time budget allows a few thousand cells, far below 10⁶, and chemistry 0 has 26 substances, far below 64; the globe keeps its level at 0 by shifting heights | — | — | — |
 
 ### Phase K: recording and viewer (about 20 days)
 
