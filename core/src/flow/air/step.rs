@@ -13,7 +13,7 @@ use super::super::land::{melted, NONE};
 use super::super::scratch::may_evaporate;
 use super::super::{range, Scratch};
 use super::book::record;
-use super::exchange::{bucket, cloud, dissolve};
+use super::exchange::{bucket_slope, cloud, dissolve};
 use super::newton::{gather, solve, Wind};
 use super::radiation::{insolation, Surface};
 use super::wind::Links;
@@ -44,8 +44,6 @@ const SURFACE_STILL_K: f64 = 1e-3;
 const SAT_REACH: f64 = 60.0;
 /// A gas making up less than this share of the air is a trace (`Newton::traces`).
 const TRACE_AIR: f64 = 1e-7;
-/// The slope of what evaporates with the open rate is taken over this share of it.
-const NUDGE: f64 = 1e-6;
 
 /// A gas that may leave the ground or condense in the air: its index in `Scratch::gas` and its substance; whether it
 /// may evaporate, and whether it may condense; and, if it is more than a trace, its place among the gases solved with
@@ -287,7 +285,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
 }
 
 /// What evaporates of active gas `x` from ground node `i` over the step when the node ends it at `t`, the vapour's
-/// partial pressure near the ground being `pa` and `rain` mol of it raining on the node, mol (`exchange::bucket`), and
+/// partial pressure near the ground being `pa` and `rain` mol of it raining on the node, mol (`exchange::bucket_slope`), and
 /// its slopes with `t`, mol/K, and with `pa`, mol/Pa: by the difference of the saturation pressure at `t` and `pa`
 /// through the air's film (`evap`), the open rate while the ground is wet; a node over the boiling point gives all of it.
 fn evaporate(cx: &Ctx, i: usize, x: usize, t: f64, pa: f64, rain: f64) -> (f64, f64, f64) {
@@ -305,8 +303,7 @@ fn evaporate(cx: &Ctx, i: usize, x: usize, t: f64, pa: f64, rain: f64) -> (f64, 
     if e <= 0.0 {
         return (0.0, 0.0, 0.0);
     }
-    let m = bucket(a, rain, e, wet, cx.dt);
-    let dm_de = (bucket(a, rain, e * (1.0 + NUDGE), wet, cx.dt) - m) / (e * NUDGE);
+    let (m, dm_de) = bucket_slope(a, rain, e, wet, cx.dt);
     // The open rate's slope with `t` (Clausius-Clapeyron), and with the gas through the partial pressure.
     let de_dt = c * (ps * sp.lv / (R_GAS * t * t) - (ps - pa) / t) / t;
     (m, dm_de * de_dt, -dm_de * c / t)

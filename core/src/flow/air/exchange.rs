@@ -59,7 +59,7 @@ impl Sat {
 /// over the step: `e` mol/s while the ground is wet, holding `wet` mol or more (liquid stands on it, or its loose ground
 /// holds its field capacity or more: stage 1), and in proportion to what it holds below that (stage 2: the bucket of
 /// Manabe 1969), integrated exactly over the step. Never more than it holds and gets.
-pub(super) fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> f64 {
+fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> f64 {
     let rate = r / dt;
     if e <= 0.0 {
         return 0.0;
@@ -80,6 +80,19 @@ pub(super) fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> f64 {
     let t2 = if eq > wet { ((eq - now) / (eq - wet)).ln() / k } else { f64::INFINITY };
     let m = if t2 >= left { m + rate * left + (now - eq) * one_minus_exp(k * left) } else { m + rate * t2 - (wet - now) + e * (left - t2) };
     m.min(a + r).max(0.0)
+}
+
+/// The slope of what evaporates with the open rate is taken over this share of it, where the ground dries in the step.
+const NUDGE: f64 = 1e-6;
+
+/// `bucket` and its slope with the open rate `e`, mol per mol/s: `dt` where the ground stays wet through the step (and
+/// gives no more than it holds and gets), else over a nudge of `e`.
+pub(super) fn bucket_slope(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f64) {
+    if e > 0.0 && a > wet && a - wet >= (e - r / dt) * dt && e * dt <= a + r {
+        return (e * dt, dt);
+    }
+    let m = bucket(a, r, e, wet, dt);
+    (m, (bucket(a, r, e * (1.0 + NUDGE), wet, dt) - m) / (e * NUDGE))
 }
 
 /// The share of the sky the droplets of the air cover where `m` mol condense over `area` m² in `dt` seconds (the faster

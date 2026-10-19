@@ -791,6 +791,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   rain on land 1.58e-3 against 1.15e-3 mol/m²/s without life, 1.79e-3 against 1.49e-3 with life. Air steps of 6 and
   72 hours cost 8,200 and 950 ms per year. The growth test of `copy` holds its body's ground at 289 K (the new climate
   is 4 K warmer there). Golden re-pinned.
+- J1, speed: the slope of evaporation with the open rate is the step where the ground stays wet
+  (`exchange::bucket_slope`): the cell pass -6% of its instructions, Flow -1%; the same world to 4 digits. Tried and
+  not kept: a first guess from the step before (Newton rounds 3.1 to 3.6), the factors of the round before refined to
+  1e-8 (4 corrections cost more than a factoring), the air's layers out of the surface's inner loop (no gain). Golden
+  re-pinned.
 
 **Owner's decisions after Phase A**
 
