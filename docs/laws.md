@@ -196,12 +196,14 @@ shared the same way (6.4). The survey shares out a cell's light again only when 
   Wet ground (standing liquid, or pores at field capacity or more) evaporates at the open rate, drier ground in
   proportion to its liquid (the bucket of Manabe 1969), integrated exactly over the step with the rain it gets.
 - **Rain.** Vapour over what the air a cell sees can hold at its temperature (colder on higher ground) rains out in
-  `rain_time`. Condensing air makes clouds that cover part of the sky (`cloud`) in the next step.
+  `rain_time`, out of the four air nodes the cell sees, each in the share it gives of that vapour (`air::shares`), so
+  no node gives more than it holds; it brings the heat of the air it comes from. Condensing air makes clouds that cover
+  part of the sky (`cloud`) in the next step.
 - **Lift.** Gas that goes up into the air (from the ground, bodies, parts, reactions, growth) is lifted from the
   ground's head to the air's mean height, paid by the air's heat; gas that comes down gives it back.
-- **Booked by the store**: a link from each ground node to its air node carries the gas and its heat; the air gets that
-  heat less the latent heat it holds of the gas (`store::held`). Bodies and parts book their gas as moves
-  (`store::Moves::gas`), with the same lift.
+- **Booked by the store**: a link from each ground node to its air node carries what evaporates and its heat, and a
+  link to each of the four air nodes it sees what rains out of it; the air gets that heat less the latent heat it holds
+  of the gas (`store::held`). Bodies and parts book their gas as moves (`store::Moves::gas`), with the same lift.
 - **Gases dissolve** (`exchange::dissolve`, at the start of the air's step). A gas that cannot condense on the ground
   dissolves in the liquid there toward Henry's share and comes out when the liquid warms, thins or freezes, through the
   air's film (`evap`) and the liquid's film (`dissolve`) in series. Dissolving frees the vaporisation enthalpy into

@@ -42,6 +42,14 @@ pub(super) fn lerp(s: &Scratch, v: &[f64], i: usize) -> f64 {
     w[0] * v[j[0] as usize] + w[1] * v[j[1] as usize] + w[2] * v[j[2] as usize] + w[3] * v[j[3] as usize]
 }
 
+/// The four air nodes ground cell `i` sees, each with the share it gives of the node field `v` the cell sees (`lerp`):
+/// what condenses there comes out of each node in that share, so no node gives more than it holds.
+#[inline]
+pub(super) fn shares(s: &Scratch, v: &[f64], i: usize) -> [(usize, f64); 4] {
+    let (j, w, seen) = (&s.near[i], &s.wt[i], lerp(s, v, i));
+    std::array::from_fn(|c| (j[c] as usize, if seen > 0.0 { w[c] * v[j[c] as usize] / seen } else { 0.0 }))
+}
+
 /// The share of the air ground cell `i` sees that lies over it: its area over the area of the air it sees (`lerp`).
 #[inline]
 pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {

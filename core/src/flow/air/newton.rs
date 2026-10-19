@@ -4,7 +4,7 @@
 use super::super::Scratch;
 use super::step::{Active, Iterate, FIXED, PER_GAS};
 use super::wind::{pushes, Coef, Links, Pushes};
-use super::over_cell;
+use super::{lerp, over_cell, shares};
 use crate::solve::band::{fluxes, reach, Band};
 use crate::{World, AIR};
 use crate::store::Class;
@@ -44,8 +44,9 @@ fn mol_down(w: &World, s: &Scratch, it: &Iterate, ac: Active, (i, q): (usize, us
 }
 
 /// The rows summed over the air nodes, in the order of the cells, with their slopes: each ground node gives its own air
-/// node its heat, what comes up with its heat less its lift and what rains, with slopes to the four air nodes it sees by
-/// their weights.
+/// node its heat and what comes up with its heat less its lift, with slopes to the four air nodes it sees by their
+/// weights; what rains comes out of those four in their shares (`shares`), which move with each node's gas, and leaves
+/// with its node's heat.
 pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], (rows, width): (&[f64], usize), far: usize) -> Gathered {
     let (na, cells, g, nx) = (w.mesh.level(AIR).n(), w.mesh.cells(), w.cfg.gravity, act.len());
     let kinds = 1 + 3 * nx;
@@ -59,15 +60,29 @@ pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], (rows
         for (x, ac) in act.iter().enumerate() {
             let (sp, o) = (s.sp[ac.k], FIXED + PER_GAS * x);
             let [m, m_col, m_tl, r, r_col, r_tl, h_col] = <[f64; PER_GAS]>::try_from(&row[o..o + PER_GAS]).unwrap();
-            // Per mol that comes up: its heat, less its lift; per mol that rains, the vaporisation enthalpy it frees, and it
-            // leaves with its node's heat.
-            let (mol_up, mol_down) = (sp.cp * row[4] - sp.mm * s.view().lift(i, p, g), mol_down(w, s, it, *ac, (i, p)));
-            out.heat[p] += m * mol_up + r * mol_down;
-            out.up[x * na + p] += m - r;
-            own[0] += m_tl * mol_up + r_tl * mol_down;
-            own[1 + 3 * x..4 + 3 * x].copy_from_slice(&[(h_col + m_col * mol_up + r_col * mol_down) * over, (m_col - r_col) * over, m_tl - r_tl]);
-            out.rained[p] = [out.rained[p][0] + r, out.rained[p][1] + r * sp.refl[0]];
-            out.slope((p, p), 0, -r * sp.cp);
+            let mol_up = sp.cp * row[4] - sp.mm * s.view().lift(i, p, g);
+            out.heat[p] += m * mol_up;
+            out.up[x * na + p] += m;
+            own[0] += m_tl * mol_up;
+            own[1 + 3 * x..4 + 3 * x].copy_from_slice(&[(h_col + m_col * mol_up) * over, m_col * over, m_tl]);
+            if r <= 0.0 {
+                continue;
+            }
+            let (v, k) = (&it.x[ac.gi * na..(ac.gi + 1) * na], 1 + 3 * x);
+            let (sum, r_col) = (lerp(s, v, i), r_col * over);
+            for (c, (qc, share)) in shares(s, v, i).into_iter().enumerate().filter(|&(c, _)| wt[c] > 0.0) {
+                let down = mol_down(w, s, it, *ac, (i, qc));
+                out.heat[qc] += r * share * down;
+                out.up[x * na + qc] -= r * share;
+                out.rained[qc] = [out.rained[qc][0] + r * share, out.rained[qc][1] + r * share * sp.refl[0]];
+                // Its share grows with its own gas and shrinks with the gas the cell sees.
+                let mine = r * wt[c] / sum;
+                [(0, -r * share * sp.cp), (k, down * mine), (k + 1, -mine)].into_iter().for_each(|(kind, v)| out.slope((qc, qc), kind, v));
+                for (wk, q) in seen() {
+                    let (by_gas, by_t) = (wk * share * (r_col - r / sum), wk * share * r_tl);
+                    [(0, down * by_t), (k, down * by_gas), (k + 1, -by_gas), (k + 2, -by_t)].into_iter().for_each(|(kind, v)| out.slope((qc, q), kind, v));
+                }
+            }
         }
         for (wk, q) in seen() {
             own.iter().enumerate().for_each(|(kind, &v)| out.slope((p, q), kind, v * wk));

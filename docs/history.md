@@ -964,6 +964,13 @@ Phase E review, round 1 (fixes):
   13.2 (a fifth at the cap of 16) to 6.4 (a fifth at the cap: a cold air node whose ground nodes rain out of it what
   its moist neighbour holds); 64 x 64 island without life 3.1 to 2.2. Flow 682 to 411 ms a year on the globe, 616 to
   494 on the island; rain on land 1.445e-3 to 1.443e-3 (globe), 1.559e-3 to 1.561e-3 (island). Golden re-pinned.
+- J3, rain comes out of the four air nodes a ground node sees, each in the share it gives of the vapour the node sees
+  (`air::shares`), with its heat, and is booked over a link to each; before, it came out of the node's own air node
+  alone, so a cold air node beside a moist one was asked for more than it held, the Newton step wanted it below zero
+  and the rounds stopped at their cap. Side by side with the commit before, 64 x 32 globe without life, 6 years: rounds
+  6.4 to 3.6 (none at the cap), Flow 354 to 277 ms a year, rain on land 1.443e-3 to 1.607e-3 mol/m²/s; 64 x 64 island
+  without life: rounds 2.2 (the same), Flow 475 to 509 ms a year (the slopes of the shares), rain on land the same.
+  Golden re-pinned.
 
 **Phase K: recording and viewer**
 

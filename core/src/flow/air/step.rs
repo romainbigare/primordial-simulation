@@ -10,7 +10,7 @@ use super::book::book;
 use super::exchange::{bucket_slope, dissolve};
 use super::newton::{far, gather, solve, Drive, Wind};
 use super::radiation::{declination, insolation, Surface};
-use super::{lerp, over_cell};
+use super::{lerp, over_cell, shares};
 use crate::units::R_GAS;
 use crate::{World, AIR};
 use crate::store::Class;
@@ -175,7 +175,7 @@ fn pass(cx: &Ctx, rows: &mut [f64], width: usize) {
 fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let (w, s, it, dt) = (cx.w, cx.s, cx.it, cx.dt);
     let (cells, na, n) = (w.mesh.cells(), w.mesh.level(AIR).n(), w.mesh.cells().n());
-    let (p, area) = (cells.parent()[i] as usize, cells.area()[i]);
+    let area = cells.area()[i];
     let adt = area * dt;
     let [gam, zair, _] = s.seen[i];
     let tl = (lerp(s, &it.t, i) - gam * (s.head[i] - zair)).max(1.0);
@@ -186,9 +186,10 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let per_area = if cover > 0.0 { cover / w.canopy[i] as f64 } else { 1.0 };
     let (dl, kept) = (q * (1.0 - c) * per_area * dt, q * (1.0 - c) * caught * keep);
     let sw = q * (1.0 - c) * ((1.0 - cover) * (1.0 - s.alb[i]) + caught) - kept;
-    // Rain brings its heat at the air's temperature and its fusion enthalpy, of which the node keeps what stays molten.
-    // Until the balance is solved, each gas's first number holds its vapour's partial pressure near the ground, Pa.
-    let (mut gain, mut g_rain) = (0.0, 0.0);
+    // Rain brings its heat at the temperature of the air it comes from (`shares`) and its fusion enthalpy, of which the
+    // node keeps what stays molten. Until the balance is solved, each gas's first number holds its vapour's partial
+    // pressure near the ground, Pa.
+    let (mut gain, mut g_rain, mut rain_heat) = (0.0, 0.0, 0.0);
     for (x, ac) in cx.act.iter().enumerate() {
         let (o, sp) = (FIXED + PER_GAS * x, s.sp[ac.k]);
         let (col, hk) = (lerp(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i) * over, fixed[FIXED_CELL + x]);
@@ -198,7 +199,8 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
             let f = dt / w.cfg.rain_time;
             let r = f * (col - full);
             row[o + 3..o + 6].copy_from_slice(&[r, f, -f * full * (sp.lv / (R_GAS * tl * tl) - 1.0 / tl)]);
-            g_rain += r * sp.cp / adt;
+            let t_from: f64 = shares(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i).iter().map(|&(q, share)| share * it.t[q]).sum();
+            (g_rain, rain_heat) = (g_rain + r * sp.cp / adt, rain_heat + r * sp.cp / adt * t_from);
             gain += (r * sp.lf - s.fusion(ac.k, i, r)) / adt;
         }
     }
@@ -221,7 +223,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
             gain -= lat(x, m) / adt;
             slope -= lat(x, dm_dt) / adt;
         }
-        (Surface { sw, tl, t0, gain, slope: slope.min(0.0), t_rain: it.t[p], g_rain }.balance(s, (i, area, dt), w.cfg.sensible, fusion), slope != 0.0)
+        (Surface { sw, tl, t0, gain, slope: slope.min(0.0), t_rain: if g_rain > 0.0 { rain_heat / g_rain } else { 0.0 }, g_rain }.balance(s, (i, area, dt), w.cfg.sensible, fusion), slope != 0.0)
     };
     let ((mut bal, evaporates), mut from) = (balance(cx.ts[i]), cx.ts[i]);
     for _ in 1..SURFACE_ROUNDS {

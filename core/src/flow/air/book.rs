@@ -6,7 +6,7 @@ use super::exchange::cloud;
 use super::newton::Wind;
 use super::step::{Active, Iterate, FIXED, PER_GAS};
 use super::wind::Links;
-use super::{lerp, sums};
+use super::{lerp, shares, sums};
 use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
@@ -17,25 +17,27 @@ use crate::{World, AIR};
 pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[[f64; 2]]), (rows, width): (&[f64], usize), wind: &Wind, it: &Iterate, dt: f64) {
     let (n, na, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells());
     let (parent, area) = (cells.parent().to_vec(), cells.area().to_vec());
+    // The links of each ground node to the air (`[e * n + i]`): to its own air node (`e` 0), and to the four it sees.
+    let ends: Vec<u32> = parent.iter().copied().chain((0..4).flat_map(|c| s.near.iter().map(move |j| j[c]))).collect();
+    let (from, ne): (Vec<u32>, usize) = ((0..ends.len()).map(|e| (e % n) as u32).collect(), ends.len());
     let v = |len: usize| vec![0.0; len];
-    let (mut sun, mut heat, mut light, mut kept, mut rain, mut out) = (v(n), v(n), v(n), v(n), v(n), v(na));
-    // Per gas and ground node (`[x * n + i]`): what goes up into its air node, mol, and the heat leaving with it, J.
-    let (mut up, mut up_heat) = (v(act.len() * n), v(act.len() * n));
+    let (mut sun, mut heat, mut light, mut kept, mut rain, mut out) = (v(n), v(ne), v(n), v(n), v(n), v(na));
+    // Per gas and link (`[x * ne + e]`): what goes up, mol (what evaporates into its own air node, what rains out of each
+    // node it sees by its share), and the heat that leaves the ground with it, J.
+    let (mut up, mut up_heat) = (v(act.len() * ne), v(act.len() * ne));
     for (i, row) in rows.chunks_exact(width).enumerate() {
         let (j, ts) = (parent[i] as usize, row[4]);
         (sun[i], heat[i], light[i], kept[i]) = (row[3], row[0] + row[2], row[5], row[6] * area[i] * dt);
         out[j] += row[2];
         for (x, ac) in act.iter().enumerate() {
-            let (o, sp) = (FIXED + PER_GAS * x, s.sp[ac.k]);
+            let (o, sp, e) = (FIXED + PER_GAS * x, s.sp[ac.k], x * ne);
             let r = row[o + 3];
             let m = row[o].min(w.store.amounts(Class::Ground)[ac.k * n + i] + r);
-            (up[x * n + i], up_heat[x * n + i]) = (m - r, m * (sp.cp * ts + sp.lf + sp.lv) - r * (sp.cp * it.t[j] + sp.lf));
+            (up[e + i], up_heat[e + i]) = (m, m * (sp.cp * ts + sp.lf + sp.lv));
+            for (c, (q, share)) in shares(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i).into_iter().enumerate() {
+                (up[e + (c + 1) * n + i], up_heat[e + (c + 1) * n + i]) = (-r * share, -r * share * (sp.cp * it.t[q] + sp.lf));
+            }
             rain[i] += r;
-        }
-    }
-    for (x, ac) in act.iter().enumerate() {
-        if up[x * n..(x + 1) * n].iter().any(|&u| u < 0.0) {
-            s.add_loose(ac.k, false);
         }
     }
     // The clouds of what condensed, which the next step's sunlight passes.
@@ -45,11 +47,8 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     let links = Links::of(w.mesh.level(AIR));
     let (nl, mut wind_mol, cut) = (links.a.len(), wind.mol.clone(), up.clone());
     for (gi, &k) in s.state.gas.iter().enumerate() {
-        let rain: &mut [f64] = match act.iter().position(|a| a.k == k) {
-            Some(x) => &mut up[x * n..(x + 1) * n],
-            None => &mut [],
-        };
-        hold_air(&w.store.amounts(Class::Air)[k * na..(k + 1) * na], (&links.a, &links.b), &mut wind_mol[gi * nl..(gi + 1) * nl], (&parent, rain));
+        let rain = act.iter().position(|a| a.k == k).map_or(&mut [][..], |x| &mut up[x * ne..(x + 1) * ne]);
+        hold_air(&w.store.amounts(Class::Air)[k * na..(k + 1) * na], (&links.a, &links.b), &mut wind_mol[gi * nl..(gi + 1) * nl], (&ends, rain));
     }
     let World { light: lit, life, .. } = w;
     for (i, (l, &got)) in lit.iter_mut().zip(&light).enumerate() {
@@ -58,18 +57,20 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
             life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&sh| sh) - 1.0) * got;
         }
     }
-    // Each ground node's gas crosses the link to its air node, one column per gas, with its heat; the air pays the lift.
+    // Each ground node's gas crosses its links to the air, one column per gas, with its heat; the air pays the lift.
     let (g, view) = (w.cfg.gravity, s.view());
-    let mut paid = wind.paid.clone();
+    let (mut paid, mut net) = (wind.paid.clone(), v(act.len() * n));
     for (x, ac) in act.iter().enumerate() {
-        for i in (0..n).filter(|&i| up[x * n + i] != 0.0) {
-            let (m, j) = (up[x * n + i], parent[i] as usize);
-            heat[i] += up_heat[x * n + i] * m / cut[x * n + i];
+        for e in (0..ne).filter(|&e| up[x * ne + e] != 0.0) {
+            let (m, i, j) = (up[x * ne + e], e % n, ends[e] as usize);
+            heat[e] += up_heat[x * ne + e] * m / cut[x * ne + e];
             paid[j] += m * s.sp[ac.k].mm * view.lift(i, j, g);
+            net[x * n + i] += m;
         }
     }
     for (x, ac) in act.iter().enumerate() {
-        (0..n).filter(|&i| up[x * n + i] != 0.0).for_each(|i| s.note(ac.k, i, -up[x * n + i], area[i]));
+        net[x * n..(x + 1) * n].iter().any(|&u| u < 0.0).then(|| s.add_loose(ac.k, false));
+        (0..n).filter(|&i| net[x * n + i] != 0.0).for_each(|i| s.note(ac.k, i, -net[x * n + i], area[i]));
     }
     let ids: Vec<u32> = (0..n as u32).collect();
     let (to_sun, space) = (vec![Boundary::Sun as u32; n], vec![Boundary::Space as u32; na]);
@@ -79,7 +80,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     let fluxes = [
         LinkFlux { class: [Class::Boundary, Class::Ground], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &sun },
         LinkFlux { class: [Class::Boundary, Class::Bodies], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &kept },
-        LinkFlux { class: [Class::Ground, Class::Air], a: &ids, b: &parent, ks: &ks, mol: &up, heat: &heat },
+        LinkFlux { class: [Class::Ground, Class::Air], a: &from, b: &ends, ks: &ks, mol: &up, heat: &heat },
         LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
         LinkFlux { class: [Class::Air; 2], a: &links.a, b: &links.b, ks: &gas, mol: &wind_mol, heat: &wind.heat },
         lift.flux(),
@@ -97,15 +98,16 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
 const CUT_PASSES: usize = 4;
 
 /// Cuts the wind and the rain out of each air node of one gas where it would end below zero, by the share that leaves
-/// it nothing; as that takes from its neighbours, again, `CUT_PASSES` times at most (as `solve::spread::within`).
-fn hold_air(held: &[f64], (a, b): (&[u32], &[u32]), wind: &mut [f64], (parent, up): (&[u32], &mut [f64])) {
+/// it nothing; as that takes from its neighbours, again, `CUT_PASSES` times at most (as `solve::spread::within`). `up`
+/// is what comes up into air node `ends[e]` over each link `e` with the ground.
+fn hold_air(held: &[f64], (a, b): (&[u32], &[u32]), wind: &mut [f64], (ends, up): (&[u32], &mut [f64])) {
     for pass in 0..=CUT_PASSES {
         let (mut end, mut out) = (held.to_vec(), vec![0.0; held.len()]);
         for ((&i, &j), &m) in a.iter().zip(b).zip(wind.iter()) {
             let (from, to) = if m > 0.0 { (i as usize, j as usize) } else { (j as usize, i as usize) };
             (end[from], end[to], out[from]) = (end[from] - m.abs(), end[to] + m.abs(), out[from] + m.abs());
         }
-        for (&j, &u) in parent.iter().zip(up.iter()) {
+        for (&j, &u) in ends.iter().zip(up.iter()) {
             (end[j as usize], out[j as usize]) = (end[j as usize] + u, out[j as usize] + (-u).max(0.0));
         }
         if end.iter().all(|&e| e >= 0.0) {
@@ -121,7 +123,7 @@ fn hold_air(held: &[f64], (a, b): (&[u32], &[u32]), wind: &mut [f64], (parent, u
         for ((&i, &j), m) in a.iter().zip(b).zip(wind.iter_mut()) {
             *m *= keep[if *m > 0.0 { i } else { j } as usize];
         }
-        for (&j, u) in parent.iter().zip(up.iter_mut()).filter(|(_, u)| **u < 0.0) {
+        for (&j, u) in ends.iter().zip(up.iter_mut()).filter(|(_, u)| **u < 0.0) {
             *u *= keep[j as usize];
         }
     }
