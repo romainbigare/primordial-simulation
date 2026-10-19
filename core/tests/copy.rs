@@ -349,20 +349,8 @@ fn tail(z: f64, p: i32) -> f64 {
 /// puts there. Members, stores and heat are kept; the adult node stays mature and the young one is still young.
 #[test]
 fn young_members_mature_at_the_rate_their_growth_gives() {
-    let (mut w, i) = start();
-    let mm = w.chem.subs[MATTER].molar_mass;
-    let mut a = eater(&mut w, i, brain::REST, 10f32.log10());
-    scale(&mut w, &mut a, 5.0);
-    a.count = 5.0;
-    let mut y = a.clone();
-    let sa = testkit::place(&mut w, a);
-    // The young: 1,000 members whose mean body is 6 kg (matter over 1 - 0.75).
-    let copy_kg = 10.0;
-    scale(&mut w, &mut y, 200.0);
-    y.count = 1000.0;
-    let want = 0.6 * copy_kg * 0.25 * y.count / mm;
-    let kg_in = (want - y.store[MATTER]) * mm;
-    add(&mut w, &mut y, MATTER, kg_in);
+    let (mut w, sa, mut y) = young_beside_adult();
+    let (mm, copy_kg) = (w.chem.subs[MATTER].molar_mass, 10f64);
     // Their log10 bodies: the normal cut at the copy mass, `cut` its standard units, and its mean and variance.
     let (sd, top) = (0.2f64, copy_kg.log10());
     let cut = (top - (0.6 * copy_kg).log10()) / sd;
@@ -397,6 +385,52 @@ fn young_members_mature_at_the_rate_their_growth_gives() {
     assert!(w.life.bodies[sa].adult(&w.chem) && !y.adult(&w.chem), "the stages mixed");
     w.life.bodies[sy] = y;
     same(&before, &held(&w));
+    books.assert_kept(&w, 1e-9);
+}
+
+/// A world with an adult node of 5 eaters of copy mass 10 kg (its slot), and out of any slot a young node of 1,000
+/// members of its kind whose mean body is 6 kg (matter over 1 - 0.75), their sizes not set.
+fn young_beside_adult() -> (World, usize, Body) {
+    let (mut w, i) = start();
+    let mm = w.chem.subs[MATTER].molar_mass;
+    let mut a = eater(&mut w, i, brain::REST, 10f32.log10());
+    scale(&mut w, &mut a, 5.0);
+    a.count = 5.0;
+    let mut y = a.clone();
+    let sa = testkit::place(&mut w, a);
+    scale(&mut w, &mut y, 200.0);
+    y.count = 1000.0;
+    let kg_in = (0.6 * 10.0 * 0.25 * y.count / mm - y.store[MATTER]) * mm;
+    add(&mut w, &mut y, MATTER, kg_in);
+    (w, sa, y)
+}
+
+/// Any spread of a young node's sizes matures a share of its members and of its body between 0 and 1
+/// (`copy::mature`), also one wider than a normal cut at the copy mass can hold: two cohorts far apart, as members who
+/// starved for years and newborns make (sd 2 decades about a mean 1 decade below the copy mass). Its sizes stay finite,
+/// and members and books are kept.
+#[test]
+fn any_spread_of_sizes_matures_a_share_of_the_young() {
+    let (mut w, sa, y) = young_beside_adult();
+    let mm = w.chem.subs[MATTER].molar_mass;
+    let (sy, mut y) = out(&mut w, y);
+    let x0 = y.member_body(&w.chem);
+    (y.size_spread, y.size_lag) = (4.0, (x0.log10() - (10f64.log10() - 1.0)) as f32);
+    // Every member grows by 0.05 decades (booked as an edit).
+    let kg_in = (10f64.powf(0.05) - 1.0) * y.store[MATTER] * mm;
+    add(&mut w, &mut y, MATTER, kg_in);
+    w.life.bodies[sy] = y;
+    let books = Books::now(&w);
+    let mut y = std::mem::take(&mut w.life.bodies[sy]);
+    let (n0, matter0, adult0) = (y.count, y.store[MATTER], w.life.bodies[sa].count);
+    assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives));
+    let (moved, body) = (n0 - y.count, 1.0 - y.store[MATTER] / matter0);
+    let (m, v) = y.size_moments(&w.chem);
+    println!("matured {moved:.3} of {n0} members, {body:.4} of the body");
+    assert!(moved > 0.0 && moved < n0 && body > 0.0 && body < 1.0, "matured {moved} members, {body} of the body");
+    assert!(m.is_finite() && v.is_finite() && y.e.is_finite(), "the rest: mean {m}, variance {v}, heat {}", y.e);
+    assert!((w.life.bodies[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life.bodies[sa].count - adult0);
+    w.life.bodies[sy] = y;
     books.assert_kept(&w, 1e-9);
 }
 

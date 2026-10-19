@@ -757,6 +757,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   year 30). Years 26 to 30: plant members 4.79e10 to 4.94e10, plant life 3.87 to 4.10 yr, plant mass 5.65e10 to
   5.38e10 kg, carbon gas 243 to 251 ppm; young 91.8% to 91.6% of plant members, their median node 0.30 to 0.28 of
   the copy mass. With J1's air all three seeds run 30 years. Snapshot version 28; golden re-pinned.
+- E11, maturing from the logs of the tails (`math::ln_upper_tail`, `copy::young::above`): a young node of members
+  starved for decades and newborns (sd 1.9 decades about a mean 1.8 below the copy mass) is wider than any normal cut
+  at the copy mass, so `fit` takes its deepest cut and the uncut sd grows to 16 decades; the body's share of the
+  maturing slice was then a ratio of two normal tails that both underflowed, 0/0, and the node went NaN (the century
+  test, 16 x 16 seed 1, year 46). The shares are now ratios of tails taken from their logs, finite at any depth; the
+  same law. A test of a spread that wide. Golden re-pinned (rounding).
 
 **Phase J: the long physics step**
 

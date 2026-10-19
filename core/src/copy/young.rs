@@ -7,7 +7,7 @@
 
 use super::kin;
 use crate::body::{Body, COPY_MASS};
-use crate::math::upper_tail;
+use crate::math::ln_upper_tail;
 use crate::nodes::{join, may_be_node, part};
 use crate::rng::{Purpose, Rng};
 use crate::World;
@@ -46,16 +46,18 @@ fn density(z: f64) -> f64 {
     (-0.5 * z * z).exp() / (2.0 * PI).sqrt()
 }
 
-/// The share of a standard normal between `x` and `y` (x <= y), from the tail on the side away from them, which keeps
-/// its digits far out in either tail (`math::upper_tail`).
-fn between(x: f64, y: f64) -> f64 {
-    if x + y >= 0.0 { upper_tail(x) - upper_tail(y) } else { upper_tail(-y) - upper_tail(-x) }
+/// The share of a standard normal cut above `y` that lies above `x` (x <= y), and the share below `x`: 1 - Φ(x)/Φ(y)
+/// and Φ(x)/Φ(y), from the logs of the tails (`math::ln_upper_tail`), which keep their digits far out in either tail
+/// and stay finite where Φ underflows (a deep cut of a wide spread).
+fn above(x: f64, y: f64) -> (f64, f64) {
+    let ln_rest = ln_upper_tail(-x) - ln_upper_tail(-y);
+    (-ln_rest.exp_m1(), ln_rest.exp())
 }
 
 /// The mean and the variance of a standard normal cut above `a`: -λ and 1 - aλ - λ², λ = φ(a)/Φ(a) the inverse Mills
 /// ratio (Johnson, Kotz and Balakrishnan 1994, 13.10).
 fn cut(a: f64) -> (f64, f64) {
-    let l = density(a) / upper_tail(-a);
+    let l = density(a) / ln_upper_tail(-a).exp();
     (-l, (1.0 - a * l - l * l).max(0.0))
 }
 
@@ -112,8 +114,7 @@ pub fn mature(w: &mut World, slot: usize, b: &mut Body, before: f64) -> Grown {
     let s = sd / cut(a).1.sqrt();
     // The uncut normal's mean after growth, the copy mass in its standard units, and the shares.
     let (mu, lo, k) = (top + d - a * s, a - d / s, s * LN_10);
-    let (slice, whole) = (between(lo, a), upper_tail(-a));
-    let (members, rest, held) = (slice / whole, upper_tail(-lo) / whole, between(lo - k, a - k) / upper_tail(k - a));
+    let ((members, rest), held) = (above(lo, a), above(lo - k, a - k).0);
     let adult = linked(w, slot, b, true);
     match adult {
         Some(t) if rest * b.count < 1.0 => return Grown::Joins(t),
@@ -123,6 +124,7 @@ pub fn mature(w: &mut World, slot: usize, b: &mut Body, before: f64) -> Grown {
     }
     // The mean and the mean square of the slice of a standard normal between lo and a, and the mean and the variance
     // of the normal cut at lo.
+    let slice = members * ln_upper_tail(-a).exp();
     let (m1, m2) = ((density(lo) - density(a)) / slice, 1.0 + (lo * density(lo) - a * density(a)) / slice);
     let (r1, r2) = cut(lo);
     let mut c = part(&mut w.life, b, members, held);

@@ -23,12 +23,13 @@ pub(crate) fn mean_decay(x: f64) -> f64 {
 /// least 0, t = 1 / (1 + x / 2), P with these coefficients from t⁰; fractional error under 1.2e-7 everywhere.
 const ERFC: [f64; 10] = [-1.265_512_23, 1.000_023_68, 0.374_091_96, 0.096_784_18, -0.186_288_06, 0.278_868_07, -1.135_203_98, 1.488_515_87, -0.822_152_23, 0.170_872_77];
 
-/// The share of a standard normal above `z`: erfc(z / sqrt 2) / 2 (`ERFC`).
-pub(crate) fn upper_tail(z: f64) -> f64 {
+/// ln of the share of a standard normal above `z`, erfc(z / sqrt 2) / 2 (`ERFC`): finite far out, where the share
+/// underflows.
+pub(crate) fn ln_upper_tail(z: f64) -> f64 {
     let x = (z / std::f64::consts::SQRT_2).abs();
     let t = 1.0 / (1.0 + 0.5 * x);
-    let erfc = t * (-x * x + ERFC.iter().rev().fold(0.0, |p, &c| p * t + c)).exp();
-    if z >= 0.0 { 0.5 * erfc } else { 1.0 - 0.5 * erfc }
+    let ln_half_erfc = (0.5 * t).ln() - x * x + ERFC.iter().rev().fold(0.0, |p, &c| p * t + c);
+    if z >= 0.0 { ln_half_erfc } else { (-ln_half_erfc.exp()).ln_1p() }
 }
 
 /// Veltkamp's constant, 2^27 + 1: it splits a number into two halves of 26 bits (`add_times`).
