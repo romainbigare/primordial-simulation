@@ -460,7 +460,7 @@ What closes the gap, with rough estimates:
 |---|---|---|
 | The air's Newton rounds solve only the exchange with the ground; rain out of the air a cell sees | J3 | measured: 2.4 times on a globe's Flow (13 rounds a step to 3.6), little on the island (4 to 3); a second-order air step was tried and is unstable with the wind from the step's start (decision 22) |
 | Cheap sea cells (the sea on a coarser level, as the air) | G3 | measured: at most about 1.6 times on a globe, as a sea cell already sleeps in Change and the air's rounds and level are most of a cell's time (decision 20) |
-| Threads for Flow and Change (native) | as today | measured about 5% (only the air's cell pass runs on threads); more needs the reactor and the solves on threads |
+| Threads for Flow and Change (native) | as today | the air's cell pass and Change's reactor run on threads: Change about 20% faster, Flow about 5% (4 cores shared with other runs); the solves and the bodies stay on one thread |
 
 With the physics levers the bodies set the size: at one body node per cell, about 2,500 cells fit the budget. Threads
 over bodies (5.6) would give up to about 3.5 times more on a native run: they are the first lever after the

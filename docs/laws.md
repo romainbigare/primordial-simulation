@@ -302,7 +302,8 @@ p       = (order of the scarce input − 1) · (1 − its share)   for a gas or 
   would use 5% of their inputs or warm it 0.5 K (`Reactor::rest`), at most `sleep_days`. A speed tool, not physics
   (`sleep_days` 0: every node reacts every step). A reaction too slow to matter over a year is frozen.
 - **Booked together.** The nodes due in a step react from the world as it was before any of them did (a ground node
-  with its share of its air node), and `store::apply` books them in one call. A node's reactions are one
+  with its share of its air node), each into its own row (in parallel with `threads`, `par::rows`), and
+  `store::apply` books the rows in the order of the nodes, in one call. A node's reactions are one
   `store::Transform` (`Reactor::made`, summed exactly where terms cancel, so it keeps every element); their heat
   follows from the formation enthalpies (`store::held`).
 - **A ground node reacts at Flow's last temperature.** On a plateau the fusion heat it holds is set aside while it
