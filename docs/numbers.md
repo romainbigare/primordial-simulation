@@ -14,7 +14,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
   - **anchored:** a real order of magnitude, chosen within it.
   - **tuned:** set so a run came out a certain way. The row names the run or the reason. `tuned, first guess` is the same mark for a number with no real size and no recorded run: it was written by hand to get a sensible start. It counts as tuned. The first job of any of them is to find a size and become anchored.
   - **switch:** an on/off setting of an experiment, not a number of the world. **container:** a field that holds other rows.
-  - **speed:** a speed setting (decision D4 of `docs/foundation/plan.md`): it says when the model may save time, not how the world works. Speed settings are in their own table, outside the tuned budget, and each must pass the test that ×2 and ÷2 change no key number beyond its noise.
+  - **speed:** a speed setting: it says when the model may save time, not how the world works. Speed settings are outside the tuned budget, and each must pass the test that ×2 and ÷2 change no key number beyond its noise.
 
 **The M7 world search varies only tuned and anchored numbers, within their anchors, and never the physical ones.** Switches are not searched. For an anchored number "within its anchor" means within the real order named in its row (about a factor of 3 each way unless the row says more). For a tuned number it means around its value, by the factor its row suggests. Every run prints the numbers it used (`physics.json`).
 
@@ -33,8 +33,6 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `rotation` | none (0 = none) | strength of the turning of moving air by the planet's spin | 1 is the real size of the spin's effect; the wind closure is crude (unchecked) | anchored |
 | `days_per_month` | days | the calendar | 12 x 30 = 360 days for a year of 365 | anchored |
 | `months_per_year` | months | the calendar | the same | anchored |
-| `phys_days` | days | speed setting: how often the survey of the cells, the state of ground and air and the reactions run | 10, the air's step: three even steps a month, and the long-step test (`tape/tests/ranges.rs`: 3 seeds, 32 x 32, 8 years with life) holds the climate of 10-day steps to that of 6-hour air steps and 3-day physics steps within the seeds' noise; 64 x 64, seed 1, 30 years at 10 against 3 days: every key number within its noise, the whole run 16% faster | speed |
-| `flow_days` | days | speed-tool setting: how often liquid moves | runs of worlds with no life (64 x 64, seeds 1 and 2): 30 days keeps the rain on land (+0.6%, +0.5%) and the river cells (+0.4%, -0.7%) of 15; the long-step test (`tape/tests/ranges.rs`) | tuned |
 | `skin_m` | m | depth of ground that exchanges heat with the surface and conducts it sideways | the yearly swing of temperature reaches 2 to 4 m in soil (my arithmetic, unchecked) | anchored |
 | `air_top_m` | m | height of the air column | the lower air of Earth, 8 to 16 km | anchored |
 | `gravity` | m/s² | pull of the planet | 9.81 | physical |
@@ -49,7 +47,6 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `wear` | m³/J, times 1/bond strength | bonded volume broken per J dissipated | the same 2e-11 m³/J for the starting bed: over its sum of volume share / bond strength, 1.39, it is 1.4e-11. Bedrock lowers about as the land does, 0.05 mm a year (checked: Wittmann et al. 2020; Portenga and Bierman 2011) | anchored |
 | `regrow` | m/s | speed at which bodies spread back into a cleared lane, from each side, under dense cover (times cover / `rho_pass` below that) | 1 nm/s is 3 cm a year, the slow end of the spread of a ground cover by runners (my arithmetic, unchecked) | anchored |
 | `creep` | m/s per unit slope, times 1/hardness | loose solids creeping down a slope: a flux of D x slope, D = creep x softness x thickness | hillslope diffusivity 1e-3 to 1e-2 m²/yr (Roering et al. 1999; Fernandes and Dietrich 1997; Hanks 2000; checked in part in Whipple's MIT notes, 2004); 3e-3 m²/yr on the starting loose ground (1 m, softness 1.53) is 6.3e-11 m/s | anchored |
-| `crowd` | nodes per cell | speed-tool setting: past this many body nodes in a cell at a month's start the most alike merge (past twice this, however unlike); a node splits only while its cell has fewer than this minus one; it never bounds the members | run: speed; it must give the same patterns as individuals (to be checked at M4) | tuned |
 | `nodes` | on/off | bodies with a brain may be population nodes (off, `--individuals`: they are individuals; bodies without a brain stay nodes) | a setting, for the check that nodes give the same patterns as individuals (handover 7.1) | switch |
 | `two_parents` | on/off | a mature body's children may have a second, alike parent (off, `--no-mix`: copies of one parent) | a setting: the check that nodes keep the mean of their genes without selection, and the measure of what mixing changes (handover 6.4) | switch |
 | `null` | on/off | a null run: no learning, no imitation, born rows and brain bases never change; genes still mutate | the run to compare a seed with | switch |
@@ -57,15 +54,18 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 
 ## Speed settings
 
-Fields of `Config` that say when the model may save time (mark **speed**). The test that ×2 and ÷2 change no key number beyond its noise comes with the first law that uses each one.
+Fields of `Config` that say when the model may save time (mark **speed**). The test that ×2 and ÷2 change no key number beyond its noise comes with the first law that uses each one. `MIN_INTERVAL`, a speed constant outside the structs, is in the last table.
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `wake_share` | share | a sleeping node one of whose amounts has grown by more than this share of what it held when it fell asleep wakes before its alarm (`clock::Sleep::watch`, looked at by Change at its step) | the share of its inputs a calm ground node's own reactions may use while it sleeps (`change`, `CALM`, 0.05): a gain larger than that changes the node more than its sleep allowed (x2 and /2: `tape/tests/ranges.rs`, the sleep test) | speed |
-| `air_hours` | hours | the air's step: radiation, evaporation, rain and the wind, solved together, and booked whole (`flow::air`); it divides the physics step | 240 (10 days, the physics step): the long-step test holds the climate of 10-day steps to that of 6-hour steps within the seeds' noise; at 360 hours the warmest month on land is 0.33 K cooler, past it (backward Euler is first order in the step) | speed |
-| `node_days` | days | a population node (more than one member) without a brain updates at most every this many days; a body with a brain by its `INTERVAL` gene (`Body::interval`) | about 10 updates a year (decision D13; handover 7.3 suggests a month for population nodes): the bodies' time per year falls about 1.6 times (x2 and /2: `tape/tests/ranges.rs`, the pace test) | speed |
-| `sleep_days` | days | the longest a ground or air node's reactions sleep before they run again for the time since (`change::step`); 0: every node reacts at every physics step | a season, a quarter of the 360-day year: a node does not react through a whole season at the temperature of another (x2 and /2: `tape/tests/ranges.rs`, the sleep test) | speed |
-| `sample_every` | updates | a node without a brain runs its sample member on one update in this many, drawn, and its weight and its cap are that many times larger, so each gene moves at the same mean rate (`copy::sample`, `copy::select`) | 2 halves the samples' time, about a fifth of the bodies' time at 1, to about an eighth; the fewer, larger moves add noise to the genes. x2 and /2 (64 x 64, seeds 1 and 2, years 10 to 30, side by side, against other draws at 1): plant members -3% and -5% at 4, +1.5% and +4% at 1 (other draws: 2%); light-eaters' life -2% and -5%, +2% and +4% (other draws: 2.5%); their mass +1% and +3%, -4% and -2% (other draws: 2% to 3%); animals, carbon gas and land temperature within their noise | speed |
+| `phys_days` | days | how often the survey of the cells, the state of ground and air and Change run | 10, the air's step: three even steps a month; the long-step test (`tape/tests/ranges.rs`) holds the climate to that of 3-day steps within the seeds' noise | speed |
+| `air_hours` | hours | the air's step: radiation, evaporation, rain, dissolving gases and the wind in one implicit step, booked whole (`flow::air`); it divides the physics step | 240, the physics step: the long-step test holds the climate to that of 6-hour steps within the seeds' noise; backward Euler is first order in the step, so a much longer step drifts | speed |
+| `flow_days` | days | how often liquid moves, drains and wears the ground (`flow::liquid`) | 30: the rain on land and the river cells of 15 days within 1% (worlds without life) | speed |
+| `wake_share` | share | a sleeping node wakes before its alarm when one of its amounts has grown by more than this share of what it held when it fell asleep (`clock::Sleep::watch`) | the share of its inputs a calm node's own reactions may use while it sleeps (`change`, `CALM`, 0.05) | speed |
+| `sleep_days` | days | the longest a ground or air node's reactions sleep before they run for the time since (`change::step`); 0: every node reacts at every physics step | a season: a node does not react through a whole season at the temperature of another | speed |
+| `node_days` | days | a population node without a brain updates at most every this many days; a body with a brain by its `INTERVAL` gene (`Body::interval`) | about 10 updates a year (handover 7.3 suggests a month for population nodes) | speed |
+| `crowd` | nodes per cell | past this many body nodes in a cell at a month's start the most alike merge (past twice this, however unlike); a node splits only while its cell has fewer than this minus one; it never bounds the members | 4; nodes must give the patterns of individuals (handover 7.1: the check takes `--crowd 4` and `8` as its noise) | speed |
+| `sample_every` | updates | a node without a brain runs its sample member on one update in this many, drawn; its weight and its cap are that many times larger, so each gene moves at the same mean rate (`copy::select`) | 2 halves the samples' time; ×2 and ÷2 keep plants, animals, carbon gas and land temperature within their noise | speed |
 
 ## Physics
 
@@ -152,7 +152,7 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `row_chance` | chance per child | a child's born brain rows change | none found | tuned, first guess |
 | `row_noise` | none | step of that change per generation, times the body's mutation size (a child that changes takes a step bigger by 1 / sqrt(`row_chance`)) | none found | tuned, first guess |
 | `new_noise` | none | spread of the weights a bigger brain adds (none in a null run) | none found | tuned, first guess |
-| `alike` | mutation steps | bodies whose genes differ by at most this in every gene are alike: they mix, merge and join; a node splits when its halves differ by more; sizes are alike within this many steps of the copy-mass gene (a factor 6.3 at 4) | run: a speed-tool threshold, 4 steps; to be checked against individuals at M4 | tuned |
+| `alike` | mutation steps | bodies whose genes differ by at most this in every gene are alike: they mix, merge and join; a node splits when its halves differ by more | run: 4 steps. It says who mixes, so what a kind is: not only a speed setting. To be checked against individuals at M4 | tuned |
 
 ### Flow, as ground cover and moving liquid feel it
 
@@ -188,7 +188,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
 | `WITHIN` (0.5, `core/src/body/genes.rs`) | standard deviations | children may lie this far beyond `alike` (in the spreads of both) and still join a node; nodes of a full cell merge within it | run: small enough that nodes of two kinds never join: a speed tool must not mix genes that individuals would never mix | tuned |
-| `MIN_INTERVAL` (5, `core/src/body/genes.rs`) | days | the shortest time between updates | a speed safeguard | tuned |
+| `MIN_INTERVAL` (5, `core/src/body/genes.rs`) | days | the shortest time between a body's updates | bounds how often the fastest bodies update | speed |
 | `MAX_INTERVAL` (360, `core/src/body/genes.rs`) | days | the longest time between updates | one year | anchored |
 | `body::WET_TISSUE` (0.75) | share | the liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of living body (`Body::built`), whatever liquid the body holds | lean animal tissue is 0.7 to 0.75 liquid, herbs 0.8 to 0.9 (from memory) | anchored |
 | `pcore::units::T_SURF` (290) | K | typical surface temperature: where the starting kinds' reactions, the richness checks and `ew chem` look at phases | the same as `t_cat` | anchored |
@@ -239,16 +239,16 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 106 rows of `Config` and `Physics` are their 106 fields.
+The 108 rows of `Config` and `Physics` are their 108 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 46, and 7 outside the structs | 46 fields (among them `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
-| tuned (run or reason named) | 12, and 7 outside the structs | speed settings (`flow_days`, `crowd`, `alike`; outside: `WITHIN`, `MIN_INTERVAL`), set for an outcome (`lat_south`, `lat_north`, `rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
+| tuned (run or reason named) | 10, and 6 outside the structs | thresholds of who is alike (`alike`; outside: `WITHIN`), set for an outcome (`lat_south`, `lat_north`, `rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 6 | `wake_share`, `sleep_days`, `node_days`, `sample_every`, `air_hours`, `phys_days` |
+| speed | 8, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 57 (50 in the structs, 7 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 52 (46 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

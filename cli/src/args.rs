@@ -26,7 +26,7 @@ pub const USAGE: &str = "usage:
     --phys-days N         days between surveys of the cells and steps of the reactions (10)
     --air-hours N         hours between steps of the air: radiation, evaporation, rain and wind (240; divides the physics step)
     --flow-days N         days between moves of liquid (30; a whole number of air steps)
-    --crowd N             Config::crowd
+    --crowd N             past N body nodes in a cell, the most alike merge each month (4; Config::crowd)
     --node-days N         a population node updates at most every N days (36; Config::node_days)
     --sample-every N      a node without a brain runs its sample member on one update in N (2; Config::sample_every)
   ew resume   go on from a snapshot, into the tape in --out, placing what its run's plan still has due

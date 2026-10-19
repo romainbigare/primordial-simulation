@@ -850,6 +850,8 @@ Phase E review, round 1 (fixes):
   half. The light-eaters' `INTERVAL` gene stays the turnover time of their stores (decision 11).
 - Bodies catch the rain that fell since their last update (`World::rained`, the cell's rain since the start, and a
   mark per body, `Body::rained`, as for light), not the yearly mean rain times the span: the seasons reach the leaves.
+- `flow_days`, `crowd` and `MIN_INTERVAL` are marked speed in `docs/numbers.md`, not tuned (`alike` stays tuned: it
+  says who mixes); the speed rows lose their run results; `TUNED_BUDGET` 57 to 52 (the count was 55).
 
 **Phase J: the long physics step**
 
