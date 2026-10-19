@@ -1,6 +1,6 @@
-//! Population nodes: the monthly merge of alike nodes in each cell (`crowd`), a body joining another (`merge`, `join`),
-//! a node splitting in two (`split`), and members drawn from a node as individuals (`one`, `open`). Members, stores and
-//! heat are kept exactly in every join and split.
+//! Population nodes: the monthly merge of alike nodes in each cell (`crowd`), a body joining another (`merge`,
+//! `take_in`), a node splitting in two (`split`), and members drawn from a node as individuals (`one`, `open`). Members,
+//! stores and heat are kept exactly in every join and split.
 
 use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{row_step, shake};
@@ -103,22 +103,16 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
     w.cfg.nodes || w.life.brainless(b)
 }
 
-/// The body in slot `s` joins the body in slot `t` (`join`), its born rows and its rows carried over to the sizes of the
-/// other's brain where they differ (`Life::carry_rows`).
+/// The body in slot `s` joins the body in slot `t` (`take_in`), its born rows and its rows carried over to the sizes of
+/// the other's brain where they differ (`Life::carry_rows`).
 pub fn merge(w: &mut World, s: usize, t: usize) {
     let mut c = w.life.bodies[s].clone();
     let mut r = Rng::new(w.seed, w.day(), c.id(s), Purpose::Merge);
     let (born, rows) = w.life.carry_rows(w.life.born(&c).to_vec(), std::mem::take(&mut c.rows), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.new_noise());
     w.life.remove(s);
     c.rows = rows;
-    join(w, t, c, &born);
-}
-
-/// Members `c` (not placed, born with `rows`, its born rows and its own in the shape of `t`'s brain) join body `t`
-/// (`take_in`).
-pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
     let mut o = std::mem::take(&mut w.life.bodies[t]);
-    take_in(w, &mut o, c, Some(rows));
+    take_in(w, &mut o, c, Some(&born));
     w.life.bodies[t] = o;
 }
 

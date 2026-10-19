@@ -919,6 +919,16 @@ Phase E review, round 1 (fixes):
   branches of `share` for more than 32 children of a litter, which never ran, go. The same world to the bit at 64 x
   64, seed 1; golden unchanged; F7 differences past the noise 10 to 9 (the default start passes all three rules).
 
+- F7 follow-up, choices as a spread of actions (handover 7.1; `choose/spread.rs`): a node with a brain took one
+  action for all its members, so its members fed, moved and rested all together. Now count × chance of its members do
+  each action, a part acts as so many members would, a part that moves joins a node of its kind where it lands, and the
+  node learns as from one member drawn among those who stayed (with how much more its part's action raised their
+  well-being than the mean): learning from the mean of all parts made node brains near certain (eaters of remains took
+  from the ground at 0.999, individuals 0.958). The old one-action path for nodes goes. 32 x 32 roster, seed 1, years
+  26-30, as nodes: eaters of remains 4.5e3 to 9.3e3 members (individuals 6.9e3), small eaters of light-eaters 3.4e3 to
+  2.8e3 kg (individuals 970), big eaters of light-eaters 1.2e3 to 1.3e3 kg (individuals 5.6e3). Snapshot version 36;
+  golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

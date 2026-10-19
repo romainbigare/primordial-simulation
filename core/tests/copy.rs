@@ -1414,8 +1414,8 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Members who join a node are kept, however few: children of less than one member (a node's, `copy::copy`) add what
-/// they are to its count, and the genes become the means by members.
+/// Members who join a node are kept (`nodes::merge`): a body of 1.4 members adds 1.4 to its count, and the genes become
+/// the means by members.
 #[test]
 fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -1425,13 +1425,13 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     w.life.bodies[t].count = 3.0;
     let (o, before) = (w.life.bodies[t].clone(), held(&w).0);
     let mut c = o.clone();
-    (c.count, c.genes) = (0.4, o.genes.iter().map(|g| g + 0.1).collect());
-    let rows = w.life.born(&o).to_vec();
-    nodes::join(&mut w, t, c, &rows);
+    (c.count, c.genes) = (1.4, o.genes.iter().map(|g| g + 0.1).collect());
+    let s = w.add(c, 1);
+    nodes::merge(&mut w, s, t);
     let (after, node) = (held(&w).0, &w.life.bodies[t]);
-    assert!((after - (before + 0.4)).abs() < 1e-12 * after && (node.count - 3.4).abs() < 1e-12, "members {before} + 0.4 then {after}");
+    assert!((after - (before + 1.4)).abs() < 1e-12 * after && (node.count - 4.4).abs() < 1e-12, "members {before} + 1.4 then {after}");
     for (g, (x, y)) in o.genes.iter().zip(&node.genes).enumerate() {
-        let want = x + 0.1 * 0.4 / 3.4;
+        let want = x + 0.1 * 1.4 / 4.4;
         assert!((y - want).abs() < 1e-5 * (1.0 + x.abs()), "gene {g}: {x} then {y}, wanted {want}");
     }
 }

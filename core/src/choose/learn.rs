@@ -13,17 +13,19 @@ const CRITIC_FLOOR: f32 = 1e-3;
 /// capture area).
 const STRENGTH_STEP: f32 = 0.2;
 
-/// Learn from the last decision (actor-critic): the change of well-being since plus the discounted estimate from now,
-/// less the estimate then. The critic moves toward it; the learned rows move along the decision's trace by it, in units
-/// of its spread, times the learning rate (`brain::learn`).
+/// Learn from the last decision (actor-critic): the change of well-being since (for a node, of the member its trace
+/// stands for, `choose::spread`) plus the discounted estimate from now, less the estimate then. The critic moves toward
+/// it; the learned rows move along the decision's trace by it, in units of its spread, times the learning rate
+/// (`brain::learn`).
 pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     let (l, lr, cr, nh) = (s.learned(), b.learn_rate(), s.critic() * s.r(), s.h);
-    if b.trace.len() != nh + l || lr <= 0.0 {
+    if b.trace.len() != nh + l + 1 || lr <= 0.0 {
         return;
     }
     let (h, c) = b.trace.split_at(nh);
+    let (c, adv) = (&c[..l], c[l]);
     let v = |x: &[f32]| b.rows[cr + nh] + brain::dot(&b.rows[cr..cr + nh], x);
-    let delta = wb - b.wb + w.cfg.phys.discount * v(now) - v(h);
+    let delta = wb - b.wb + adv + w.cfg.phys.discount * v(now) - v(h);
     // An error too big for a number teaches nothing.
     let var = if b.var > 0.0 { b.var + CRITIC_RATE * (delta * delta - b.var) } else { delta * delta };
     let a = lr * delta / (var.sqrt() + CRITIC_FLOOR);

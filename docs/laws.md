@@ -527,8 +527,11 @@ individuals.
   step cannot change the gain in one update (`copy::select::read`: genes read only for children or a brain, genes off
   at both ends, thresholds the step does not reach); a wrong skip only slows that gene. A node with a brain runs no
   sample: its update is also its decisions.
-- **Members as individuals.** A node does an action of Bond through one member split off (`nodes::one`), who lives on
-  alone if it then holds something or is inside. `nodes::open` draws members as individuals for a close view.
+- **Choices as a spread of actions** (`choose/spread.rs`). A node with a brain spreads its members over the actions
+  by the chances its brain gives, those an individual draws from (5.3).
+- **Members as individuals.** Members of a node doing an action of Bond act one at a time, each split off
+  (`nodes::one`), and live on alone if they then hold something or are inside. `nodes::open` draws members as
+  individuals for a close view.
 - **Brain size** (`lineage::resize`): a node whose mean brain-size gene is a whole unit from its lineage's moves to a
   new lineage of that size.
 - **The pace of nodes** (`Body::interval`). A node without a brain updates at most every `node_days`: it takes no
@@ -574,7 +577,11 @@ about one by a fixed table.
 ### 5.3 Actions
 
 One action is drawn by the scores at each decision (once per update, `choose::act`); with none open the body rests.
-Each costs energy its own reactions must pay (`body::pay`), or it fails.
+Each costs energy its own reactions must pay (`body::pay`), or it fails. A node spreads its members over the actions
+by those chances instead (`choose::spread`): count × chance members do each, a part of less than one member being one
+member with that chance. A part acts as so many members would, split off by shares and back in (4.4); a part that
+moves joins the first node of its kind and stage in the cell it reaches, or lives on there; members doing an action of
+Bond act one at a time.
 
 **rest**; **move** to a neighbour (`choose::go`: `Physics::walk` per kg and metre, the real cost of transport, plus
 climbing and the bodies in the way; it needs force, 3.5); **take** from the ground or another body, **put** to the
@@ -597,7 +604,9 @@ member.
   No reward is hand-shaped.
 - **Within a life** (`choose::learn`, `brain::learn`): at its next decision the brain learns from the change of its own
   well-being, by a policy gradient against the critic (actor-critic), into its own rows, at the rate of its `LEARN`
-  gene.
+  gene. A node learns as from one member drawn among those who stayed: from what it did, with the change of the
+  node's well-being plus how much more its part's action raised its members' well-being than the mean of the members
+  (`choose::spread`); so its brain moves, decision by decision, as an individual's does.
 - **Across lives**: evolution of the born rows and the base (4.1).
 
 ### 5.5 Imitation, signals, memory

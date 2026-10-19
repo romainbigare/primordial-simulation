@@ -199,7 +199,7 @@ fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -
 /// The first node of `cell` mature or young as `mature` asks and of the kind of genes `genes` and spread `spread`
 /// (`body::within`, tested last: it reads every gene): the young node children join (they are below their parents'
 /// copy mass, and a mature node must keep its mean there), or the adult node young members mature into.
-fn kin(w: &World, cell: usize, genes: &[f32], spread: &[f32], mature: bool) -> Option<usize> {
+pub(crate) fn kin(w: &World, cell: usize, genes: &[f32], spread: &[f32], mature: bool) -> Option<usize> {
     let (lay, alike) = (Layout::of(&w.chem), w.cfg.phys.alike);
     w.life.at[cell].iter().map(|&s| s as usize).find(|&s| {
         let t = &w.life.bodies[s];

@@ -1,11 +1,12 @@
-//! Law 5: Choose. A body perceives a little (`perceive`), its brain scores the actions and one is drawn, and it acts:
-//! move (`go`), take, put or give (`feed`), watch (`learn::watch`), rest, or Bond's actions; at its next decision it
-//! learns from the change of its well-being (`learn`). Laws.md 5.
+//! Law 5: Choose. A body perceives a little (`perceive`), its brain scores the actions and one is drawn (a node spreads
+//! its members over them, `spread`), and it acts: move (`go`), take, put or give (`feed`), watch (`learn::watch`),
+//! rest, or Bond's actions; at its next decision it learns from the change of its well-being (`learn`). Laws.md 5.
 
 mod feed;
 mod go;
 mod learn;
 mod perceive;
+mod spread;
 
 pub use feed::take_body;
 pub use go::{go, wear};
@@ -17,7 +18,7 @@ use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
 use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
-use crate::{bond, lanes, nodes, World};
+use crate::{bond, lanes, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
@@ -61,15 +62,16 @@ struct Choice {
     a: usize,
 }
 
-/// A body's decision at its update: perceive, think and learn from the last decision, score the options, draw one,
-/// keep the trace and emit the signal, act.
+/// A body's decision at its update: perceive, think and learn from the last decision, score the options, emit the
+/// signal; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
 pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member.
     let pm = lived.mass / b.n();
-    let wb = b.wellbeing_at(&w.chem, w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS)), temp, lived.spare);
+    let think = w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS));
+    let wb = b.wellbeing_at(&w.chem, think, temp, lived.spare);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
@@ -82,14 +84,38 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     learn::learn(w, b, s, wb, &t.thought.h);
     options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n(), sight), &mut c, t);
     pick(w, &mut c, &mut rng);
-    let form = trace(w, b, s, &c, t, &mut rng);
+    let (form, z) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    dispatch(w, slot, b, &c, form, &mut rng);
+    let k = Kit { s, t, z, form, think, spare: lived.spare };
+    if b.n() > 1.0 {
+        spread::spread(w, slot, b, &c, &k, &mut rng);
+    } else {
+        b.trace = trace(w, b, &c, &k, c.a, 0.0);
+        act_as(w, slot, b, &c, &k, c.a, &mut rng);
+    }
+}
+
+/// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn
+/// for the signal and the shape of a part made, that shape (`noise`), a decision's cost, J, and the margin of the body's
+/// reactions over its upkeep (`Lived::spare`).
+struct Kit<'a> {
+    s: Shape,
+    t: &'a ActTmp,
+    z: [f32; SIG + FORM_OUT],
+    form: [f32; FORM_OUT],
+    think: f64,
+    spare: f64,
+}
+
+impl Kit<'_> {
+    /// The well-being of body `b` now (`Body::wellbeing_at`).
+    fn wb(&self, w: &World, b: &Body) -> f32 {
+        b.wellbeing_at(&w.chem, self.think, b.temp(&w.chem), self.spare)
+    }
 }
 
 /// The score of each option: the fixed actions, a move to each neighbour (by the weighted mean of the cells it sees
-/// that way), each verb toward each perceived body and part. A node needs two members to spare one for Bond. `pm`: a
-/// member's mass, kg; `vol`: its volume, m³.
+/// that way), each verb toward each perceived body and part. `pm`: a member's mass, kg; `vol`: its volume, m³.
 fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c: &mut Choice, t: &mut ActTmp) {
     let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
     c.logit[..FIXED].copy_from_slice(&out[..FIXED]);
@@ -140,10 +166,6 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c
             c.logit[TO_PART + q * OVERBS + v] = score(&out[r..r + bond::NO + 1], fq);
         }
     }
-    if b.n() > 1.0 && b.count < 2.0 {
-        c.logit[FORM..FIXED].fill(f32::NEG_INFINITY);
-        c.logit[TO_PART..].fill(f32::NEG_INFINITY);
-    }
     if c.held.is_none() {
         c.logit[ANCHOR] = f32::NEG_INFINITY;
         if c.room.is_none() {
@@ -172,103 +194,101 @@ fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
     (w.counts.decisions, w.counts.greedy) = (w.counts.decisions + 1.0, w.counts.greedy + (c.logit[c.a] >= top) as u8 as f64);
 }
 
-/// The trace of the decision for learning: the hidden layer, and per learned row how its output moves the log-chance of
-/// what was done (for the signal and shape the natural gradient, so their noise does not use up the step). Then the
-/// signal, the shape of a part made and the next memory. Returns the shape.
-fn trace(w: &World, b: &mut Body, s: Shape, c: &Choice, t: &ActTmp, rng: &mut Rng) -> [f32; FORM_OUT] {
-    let (l, nh, learning, out) = (s.learned(), s.h, b.learn_rate() > 0.0 && !w.cfg.null, &t.thought.out);
-    let (a, p) = (c.a, &c.p);
-    b.trace.resize(if learning { nh + l } else { 0 }, 0.0);
-    if learning {
-        let (th, cr) = b.trace.split_at_mut(nh);
-        th.copy_from_slice(&t.thought.h);
-        cr.fill(0.0);
-        let g = |o: usize| (o == a) as u8 as f32 - p[o];
-        for (q, cq) in cr[..FIXED].iter_mut().enumerate() {
-            *cq = g(q);
-        }
-        let mut add = |row: usize, gq: f32, fq: &[f32]| {
-            cr[row] += gq;
-            for (x, f) in cr[row + 1..].iter_mut().zip(fq) {
-                *x += gq * f;
-            }
-        };
-        for d in (0..MOVES).filter(|&d| c.to[d] != usize::MAX) {
-            add(s.dir(), g(FIXED + d), &t.feat[d * NF..(d + 1) * NF]);
-        }
-        for q in 0..c.nseen {
-            for verb in 0..VERBS {
-                add(s.verb(verb), g(TO_BODY + q * VERBS + verb), &c.fb[q * NT..(q + 1) * NT]);
-            }
-        }
-        for q in 0..c.nparts {
-            for v in 0..OVERBS {
-                add(s.verb(VERBS + v), g(TO_PART + q * OVERBS + v), &c.fo[q * bond::NO..(q + 1) * bond::NO]);
-            }
-        }
-    }
+/// The signal it emits, the shape of a part it would make and its next memory, with the noise drawn for the signal and
+/// the shape (`trace` learns from it).
+fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32; FORM_OUT], [f32; SIG + FORM_OUT]) {
+    let (out, p) = (&t.thought.out, &w.cfg.phys);
+    let (mut z, mut form) = ([0f32; SIG + FORM_OUT], [0f32; FORM_OUT]);
     for k in 0..SIG {
-        let (mu, z) = (squash(out[s.sig() + k]), rng.normal() as f32);
-        b.sig[k] = mu + w.cfg.phys.signal_noise * z;
-        if learning {
-            b.trace[nh + s.sig() + k] = z * w.cfg.phys.signal_noise * (1.0 - mu * mu);
-        }
+        z[k] = rng.normal() as f32;
+        b.sig[k] = squash(out[s.sig() + k]) + p.signal_noise * z[k];
     }
-    let mut form = [0f32; FORM_OUT];
     for k in 0..FORM_OUT {
-        let (mu, z) = (squash(out[s.form() + k]), rng.normal() as f32);
-        form[k] = mu + w.cfg.phys.shape_noise * z;
-        if learning {
-            b.trace[nh + s.form() + k] = if a == FORM { z * w.cfg.phys.shape_noise * (1.0 - mu * mu) } else { 0.0 };
-        }
+        z[SIG + k] = rng.normal() as f32;
+        form[k] = squash(out[s.form() + k]) + p.shape_noise * z[SIG + k];
     }
     for (k, m) in b.mem.iter_mut().enumerate() {
-        *m = squash(out[l + k]);
+        *m = squash(out[s.learned() + k]);
     }
-    form
+    (form, z)
 }
 
-/// Do the action drawn. A node does an action of Bond through one member split off (`nodes::one`), who lives on alone if
-/// it then holds or is inside something, else goes back at once with what it got.
-fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32; FORM_OUT], rng: &mut Rng) {
-    let a = c.a;
-    let (me, mut one) = if node.n() > 1.0 && ((FORM..FIXED).contains(&a) || a >= TO_PART) {
-        let s = nodes::one(w, node, rng);
-        (s, Some(std::mem::take(&mut w.life.bodies[s])))
-    } else {
-        (slot, None)
+/// The trace of the decision for learning (none if the body does not learn): the hidden layer; per learned row how its
+/// output moves the log-chance of option `a`, what was done (for the signal and shape the natural gradient, so their
+/// noise does not use up the step); and `adv`, how much more that raised the well-being of the members who did it than
+/// the mean of a node's members (`spread`; 0 for an individual).
+fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f32> {
+    if b.learn_rate() <= 0.0 || w.cfg.null {
+        return Vec::new();
+    }
+    let (s, t, p) = (k.s, k.t, &w.cfg.phys);
+    let (nh, l, out) = (s.h, s.learned(), &t.thought.out);
+    let mut v = vec![0.0; nh + l + 1];
+    v[..nh].copy_from_slice(&t.thought.h);
+    v[nh + l] = adv;
+    let cr = &mut v[nh..nh + l];
+    let g = |o: usize| (o == a) as u8 as f32 - c.p[o];
+    for (q, cq) in cr[..FIXED].iter_mut().enumerate() {
+        *cq = g(q);
+    }
+    let mut add = |row: usize, gq: f32, fq: &[f32]| {
+        cr[row] += gq;
+        for (x, f) in cr[row + 1..].iter_mut().zip(fq) {
+            *x += gq * f;
+        }
     };
-    let (b, slot) = (one.as_mut().unwrap_or(&mut *node), me);
+    for d in (0..MOVES).filter(|&d| c.to[d] != usize::MAX) {
+        add(s.dir(), g(FIXED + d), &t.feat[d * NF..(d + 1) * NF]);
+    }
+    for q in 0..c.nseen {
+        for verb in 0..VERBS {
+            add(s.verb(verb), g(TO_BODY + q * VERBS + verb), &c.fb[q * NT..(q + 1) * NT]);
+        }
+    }
+    for q in 0..c.nparts {
+        for v in 0..OVERBS {
+            add(s.verb(VERBS + v), g(TO_PART + q * OVERBS + v), &c.fo[q * bond::NO..(q + 1) * bond::NO]);
+        }
+    }
+    for j in 0..SIG {
+        let mu = squash(out[s.sig() + j]);
+        cr[s.sig() + j] = k.z[j] * p.signal_noise * (1.0 - mu * mu);
+    }
+    for j in 0..FORM_OUT {
+        let mu = squash(out[s.form() + j]);
+        cr[s.form() + j] = if a == FORM { k.z[SIG + j] * p.shape_noise * (1.0 - mu * mu) } else { 0.0 };
+    }
+    v
+}
+
+/// Body `b` (in slot `slot`) does option `a`.
+fn act_as(w: &mut World, slot: usize, b: &mut Body, c: &Choice, k: &Kit, a: usize, rng: &mut Rng) {
     match a {
         REST => {}
         PUT => feed::put(w, b),
         TAKE => feed::take_node(w, slot, b),
-        FORM => bond::form(w, slot, b, [form[0], 0.5 * (form[1] + 1.0)]),
+        FORM => bond::form(w, slot, b, [k.form[0], 0.5 * (k.form[1] + 1.0)]),
         RELEASE => bond::release(w, b),
         ANCHOR => bond::anchor(w, b),
         DIG => bond::dig(w, b),
         a if a < TO_BODY => go(w, slot, b, c.to[a - FIXED]),
-        a if a >= TO_PART => bond::act(w, slot, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
-        a => {
-            let (q, verb) = ((a - TO_BODY) / VERBS, (a - TO_BODY) % VERBS);
-            match verb {
-                TAKE_FROM => take_body(w, slot, b, c.seen[q].0, rng),
-                GIVE => feed::give(w, slot, b, c.seen[q].0),
-                _ => learn::watch(w, slot, b, c.seen[q].0),
+        // (Members of a node acting before may have used up the part or killed the body.)
+        a if a >= TO_PART => {
+            let p = c.parts[(a - TO_PART) / OVERBS];
+            if w.parts.parts[p].alive {
+                bond::act(w, slot, b, (a - TO_PART) % OVERBS, p);
             }
         }
-    }
-    if let Some(mut o) = one {
-        // A member that stays apart is seen as what its action left of it; one that goes back is seen in the node.
-        let apart = o.hold.is_some() || o.inside.is_some();
-        if apart {
-            w.see(&mut o);
-        }
-        w.life.bodies[me] = o;
-        if !apart {
-            let o = w.life.bodies[me].clone();
-            w.life.remove(me);
-            nodes::take_in(w, node, o, None);
+        a => {
+            let (o, verb) = (c.seen[(a - TO_BODY) / VERBS].0, (a - TO_BODY) % VERBS);
+            if !w.life.bodies[o].alive {
+                return;
+            }
+            match verb {
+                TAKE_FROM => take_body(w, slot, b, o, rng),
+                GIVE => feed::give(w, slot, b, o),
+                _ => learn::watch(w, slot, b, o),
+            }
         }
     }
 }
