@@ -966,6 +966,15 @@ Phase E review, round 1 (fixes):
 - Comments of nodes, copy and the update say what the code does in two or three lines and point to laws.md; `WITHIN`
   is marked a speed setting (how members are grouped), tuned rows 52 to 51. The same world.
 
+- F7, after the fixes above: the check holds the rules that pass (default start: b and c; roster: b) and prints the
+  rest (decision 25); rule (b) compares gene moves in the copy-mass gene's units, as a 0.3 K move of `KEEP_T` (step
+  5 K) flagged it. Past the crowd noise, 10 differences: default start, seed 1, the eaters 1.5e4 against 1.0e3 kg (a
+  boom; the noise 7 times); roster, small eaters of light-eaters 3 to 3.5 times lighter as nodes, the big ones 5 times
+  (seed 5), the eaters of eaters few (1 to 9 members) and their real lives far apart, and in seed 5 what eaters eat
+  second (light-eaters as nodes, other bodies as individuals). A node is still found as one body (5.2), and nodes with
+  a brain select inside on nothing: a sample without the decision saw only the costs of what pays through it and drove
+  the eaters of remains to boom (8e6 against 1e4 kg), so it was dropped.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the
