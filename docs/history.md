@@ -1114,6 +1114,12 @@ Phase E review, round 1 (fixes):
   missed the 1 K error above. On main before the two fixes: land -0.84 K (seeds -1.09, -0.87, -0.57), summer -0.98 K,
   out; after: land -0.10 K, summer -0.11 K, winter -0.06 K, rain on land -0.1%, absorbing gas -0.5%; 2.7 minutes on 4
   shared cores.
+- J3 follow-up, the steps checked again with the fixes (64 x 64, seeds 1 to 3, 30 years, years 21 to 30; land /
+  summer / winter, K, against 3/3 days of physics/air): 10/10 -0.15 / -0.26 / -0.13, -0.06 / -0.17 / -0.10, -0.14 /
+  -0.20 / -0.24; 30/10 -0.28 / -0.43 / -0.23, -0.20 / -0.18 / -0.23, -0.22 / -0.38 / -0.24 (the absorbing gas 2 to 4%
+  lower than at 3/3). Rain on land within 0.4% at every step; plant members within 6%. The default stays 10/10 (decision
+  22: 30/10 is out of 0.2 K on seed 1). Speed (ms a year, one thread, a busy machine): Flow 3,450 / 1,430 / 1,640 and
+  Change 1,020 / 450 / 240 at 3/3, 10/10 and 30/10.
 
 **Phase K: recording and viewer**
 
