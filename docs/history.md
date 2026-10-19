@@ -1217,6 +1217,9 @@ Phase E review, round 1 (fixes):
   (noise 0.88), warmest month +0.01 K, coldest +0.29 K, rain on land +2.4e-5 (noise 1.6e-4), the gas -1.1e-6
   (4.3e-5), light-eater mass +4.6e8 kg (3.5e9) and members +3.5e8 (2.0e9). Out: river length -171 km (noise 16;
   decision 31). About a minute on 4 cores.
+- Review round 2, finding 3: what bodies see of their air node (`World::a_seen`) is kept in the moves of the update
+  running, not summed again at each read: 8.7% fewer instructions in a living year (64 x 64, seed 1, year 21); golden
+  re-pinned (order of sums).
 
 **Owner's decisions after Phase A**
 

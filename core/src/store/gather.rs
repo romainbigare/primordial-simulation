@@ -18,6 +18,8 @@ pub struct Moves {
     list: Vec<Move>,
     /// Its cell's ground, air and bodies' node, with what each holds as the moves leave it: amounts, mol, and heat, J
     near: Vec<(Node, Vec<f64>, f64)>,
+    /// What bodies see of each substance in its air node (`World::a_seen`) as the moves leave it, mol
+    seen: Vec<f64>,
     /// Heat a ground node could not give (`World::take_from_ground`), J
     short: f64,
 }
@@ -37,9 +39,14 @@ impl Moves {
     pub(crate) fn push(&mut self, chem: &Chemistry, m: Move) {
         let (k, into) = (m.k as usize, m.heat - m.mol * held_more(chem, m.from.class, m.to.class, m.k as usize));
         for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, into)] {
-            if let Some(n) = self.at(x).map(|n| &mut self.near[n]) {
+            if let Some(at) = self.at(x) {
+                let n = &mut self.near[at];
                 if mol != 0.0 {
                     n.1[k] += mol;
+                    // (The air node and the bodies' node under it, `at` 1 and 2, are what bodies see of the air.)
+                    if at > 0 {
+                        self.seen[k] += mol;
+                    }
                 }
                 n.2 += heat;
             }
@@ -76,8 +83,10 @@ impl World {
         let amounts = |x: &dyn Fn(usize) -> f64| (0..self.chem.ns()).map(x).collect();
         let (st, (g, a, b)) = (&self.store, (Class::Ground, Class::Air, Class::Bodies));
         let near = vec![(Node::ground(i), amounts(&|k| st.amounts(g)[k * n + i]), st.heat(g)[i]), (Node::air(j), amounts(&|k| st.amounts(a)[k * na + j]), st.heat(a)[j]), (Node::bodies(i), amounts(&|k| st.amounts(b)[k * n + i]), st.heat(b)[i])];
+        let kids = self.mesh.level(AIR).children(j);
+        let seen = (0..self.chem.ns()).map(|k| st.amounts(a)[k * na + j] + kids.iter().map(|&c| st.amounts(b)[k * n + c as usize]).sum::<f64>()).collect();
         let m = &mut self.moves;
-        (m.who, m.near, m.short) = (Some(who), near, 0.0);
+        (m.who, m.near, m.seen, m.short) = (Some(who), near, seen, 0.0);
         m.list.clear();
     }
     /// The moves of the update running are booked, in one call (`apply`), and they close.
@@ -86,6 +95,10 @@ impl World {
         apply(self, &[], &list, &[]);
         self.counts.clamped_heat += self.moves.short;
         (self.moves.list, self.moves.who) = (list, None);
+    }
+    /// What bodies see of substance `k` in the air node of the update running (`a_seen`), if `j` is that node.
+    pub(crate) fn seen_now(&self, k: usize, j: usize) -> Option<f64> {
+        (self.moves.who.is_some() && self.moves.near[1].0.index == j).then(|| self.moves.seen[k])
     }
     /// Heat of node `x` (a ground node, an air node or a bodies' node) as the moves of the update running leave it, J.
     pub(crate) fn heat_now(&self, x: Node) -> f64 {
