@@ -330,7 +330,7 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
         .map(|i| {
             let (x, y) = map.xy(i);
             let ((x0, x1, tx), (y0, y1, ty)) = (axis(x, aw, map.wrap), axis(y, ah, false));
-            let j = |x: usize, y: usize| (y * aw + x) as u32;
+            let j = |x: usize, y: usize| w.mesh.up(map.idx(x * scale, y * scale), 0, AIR) as u32;
             ([j(x0, y0), j(x1, y0), j(x0, y1), j(x1, y1)], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
         })
         .unzip();

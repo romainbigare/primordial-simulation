@@ -128,11 +128,15 @@ fn a_globe_covers_its_sphere_and_wraps_east_to_west() {
     assert_eq!(lv.a().len(), 4 * sq.w * sq.h - 3 * sq.w, "8 neighbours round each row, none across a pole");
     assert!(lv.area()[sq.idx(0, 0)] < lv.area()[sq.idx(0, rows / 2)] / 4.0, "a cell at a pole is narrow");
     // The first and the last cell of a row, on the cells' level and on the air's.
-    let aw = sq.w / SCALE;
-    for (lv, (east, west), width) in [(lv, (sq.idx(0, 3), sq.idx(sq.w - 1, 3)), sq.side), (mesh.level(1), (aw, 2 * aw - 1), SCALE as f64 * sq.side)] {
+    let air = |x: usize| mesh.up(sq.idx(x, SCALE), 0, 1);
+    for (lv, (east, west), width) in [(lv, (sq.idx(0, 3), sq.idx(sq.w - 1, 3)), sq.side), (mesh.level(1), (air(0), air(sq.w - 1)), SCALE as f64 * sq.side)] {
         let l = lv.link(east, west).expect("a link across the wrap");
         assert!((lv.width()[l] / width - 1.0).abs() < 1e-12, "it crosses a whole border");
         let way = lv.offset(west, east);
         assert!(way[0] > 0.0 && way[1].abs() < 1e-6 && (way[0] / lv.dist()[l] - 1.0).abs() < 1e-9, "the next cell east lies a link away: {way:?}");
     }
+    // The air's blocks are numbered so that no border reaches further than a row (the band of `solve::band`).
+    let coarse = mesh.level(1);
+    let reach = (0..coarse.a().len()).filter(|&l| coarse.width()[l] > 0.0).map(|l| coarse.b()[l] - coarse.a()[l]).max();
+    assert_eq!(reach, Some((sq.w / SCALE) as u32), "a border of the air reaches one row");
 }

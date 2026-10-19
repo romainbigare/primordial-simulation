@@ -73,15 +73,22 @@ impl Square {
         let mut cells = super::Level::of_cells((0..n).map(|i| area(self.xy(i).1)).collect(), (0..n).map(centre).collect(), place, if self.wrap { radius } else { 0.0 });
         cells.join(links);
         let mut mesh = Mesh::of(cells);
-        let mut fine = 1;
+        // The block of `scale`² squares that holds square `i`, numbered row by row; on a globe a row's blocks in the
+        // folded order 0, w-1, 1, w-2, ..., so the blocks either side of the wrap are numbered side by side and a banded
+        // solve of the level stays one row wide (`solve::band`).
+        let block = |i: usize, scale: usize| {
+            let ((x, y), to) = ((self.xy(i).0 / scale, self.xy(i).1 / scale), self.w.div_ceil(scale));
+            (y * to + if !self.wrap { x } else if 2 * x < to { 2 * x } else { 2 * (to - 1 - x) + 1 }) as u32
+        };
+        // A square of each cell of the coarsest level so far.
+        let (mut fine, mut square): (usize, Vec<usize>) = (1, (0..n).collect());
         for &scale in scales {
             assert!(scale > fine && scale % fine == 0, "each coarser level's scale is a multiple of the one before");
-            let (from, to) = (Square { w: self.w.div_ceil(fine), ..*self }, self.w.div_ceil(scale));
-            mesh.coarsen((0..from.w * self.h.div_ceil(fine)).map(|c| {
-                let (x, y) = from.xy(c);
-                ((y * fine / scale) * to + x * fine / scale) as u32
-            }).collect());
-            fine = scale;
+            let parent: Vec<u32> = square.iter().map(|&i| block(i, scale)).collect();
+            let mut up = vec![0; parent.iter().max().map_or(0, |&p| p as usize + 1)];
+            parent.iter().zip(&square).for_each(|(&p, &i)| up[p as usize] = i);
+            mesh.coarsen(parent);
+            (fine, square) = (scale, up);
         }
         mesh
     }

@@ -153,7 +153,8 @@ steps and 3-day physics steps within the seeds' noise.
   rounding of its sums, and those that can evaporate from the ground), under the sun of the step's end.
 - Each Newton round (`flow::air::newton`) solves every ground node's exchange with the air it sees (its surface
   balance, rain and evaporation, and their slopes), then the whole air level with the wind in one banded solve
-  (`solve::band`; on a globe the link that closes a row lies inside the band). The rounds stop when the air moves by less than 0.05 K and 1e-5 of a node's gas, or after 16.
+  (`solve::band`; on a globe each row of air nodes is numbered in a folded order, 0, w-1, 1, w-2, ..., so the link
+  that closes a row and the air a ground cell sees round the wrap stay within a band of one row). The rounds stop when the air moves by less than 0.05 K and 1e-5 of a node's gas, or after 16.
 - **Booked whole** (`air::book`): what the last round found crosses the links as it is solved, so the books are exact
   whether or not the rounds converged, and the other laws read what it leaves until the next step. A ground node gives
   no more of a gas than it holds and gets; an air node that would give more rains and blows that much less.

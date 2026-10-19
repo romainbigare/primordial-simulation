@@ -997,6 +997,10 @@ Phase E review, round 1 (fixes):
   to 0 m. 64 x 64, seed 1: liquid on land 3.2 / 4.9 / 4.8 / 4.6 km³ at years 5 / 10 / 20 / 40 (level from year 10),
   river cells at year 40 924. Key numbers (3 seeds) in range: land 287.97 K, swing 11.84 K, rain 1.80e-3, absorbing
   gas 249 ppm, river cells 836, land worn 0.080 mm/yr. Golden re-pinned (seed 1).
+- The air of a globe in a folded order (decision 19): each row of air nodes is numbered 0, w-1, 1, w-2, ..., so the
+  cells at the wrap read air nodes within a row and the coupled solve's band is one row wide, not two. The island is
+  the same bit for bit. 64 x 32 globe without life, 6 years: 8% fewer instructions; ground by latitude band the same
+  within 0.04 K, rain within 0.5%.
 
 **Owner's decisions after Phase A**
 

@@ -2,9 +2,9 @@
 //! x'[b]` over the step, `x'` the amounts after it: (I + L) x' = x, backward Euler, stable for any coefficients
 //! (Patankar 1980, ch. 5). A caller may add slopes (a Newton step) and couple fields. A transport alone is dominant by
 //! columns, where elimination swaps no rows (Wilkinson 1961); with slopes it pivots (Press et al. 2007, 2.4). The band
-//! is the farthest pair of a link; the cost is unknowns times the band squared. On a globe numbered row by row, the link
-//! that closes a row (its last node to its first) lies inside the band of the links between rows, so the wrapped system
-//! is solved as it is, exactly.
+//! is the farthest pair of a link; the cost is unknowns times the band squared. On a globe whose rows are numbered in a
+//! folded order (`space::square`), the link that closes a row joins two nodes numbered side by side, so the wrapped
+//! system is solved as it is, exactly, in a band of one row.
 
 /// A banded system: per row the entries from `w` left of the diagonal to `2 w` right (room for pivoting); once factored,
 /// its factors, the swaps and how far right each row reaches.
