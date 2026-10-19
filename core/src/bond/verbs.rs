@@ -2,17 +2,12 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, Layout, STRENGTH}, chem::{Chemistry, Phase}, store::{Class, Move}, World};
+use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, store::{Class, Move}, World};
 
 /// Taking hold of a part costs this share of the work of handling its mass (`Physics::c_handle`).
 const GRAB_COST: f64 = 0.1;
 /// A held part of this share of the body's built mass gives half its full lever (`Physics::lever`).
 const LEVER_REF: f64 = 0.05;
-/// What a body keeps of each store it puts out: twice its safe minimum (as `give` does).
-const KEEP_MINIMUMS: f64 = 2.0;
-/// A body puts out at most this share of each store at once, and digs at most this share of each substance of the
-/// bonded ground.
-const MOST_SHARE: f64 = 0.5;
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
@@ -139,23 +134,18 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     }
 }
 
-/// What body `b` (of size `size`) holds of `k` above `KEEP_MINIMUMS` times its safe minimum, mol.
-fn spare(chem: &Chemistry, lay: &Layout, b: &Body, k: usize, size: f64) -> f64 {
-    (b.store[k] - KEEP_MINIMUMS * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass).max(0.0)
-}
-
-/// Put to a part what a body holds above twice its safe minimums: liquids into its hollow, solids onto its walls.
+/// Put to a part what a body can spare (`Body::spare`): liquids into its hollow, solids onto its walls.
 fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
-    let (chem, lay, t) = (&w.chem, Layout::of(&w.chem), b.temp(&w.chem));
+    let (chem, t) = (&w.chem, b.temp(&w.chem));
     let size = b.size(chem);
     let phase: Vec<Phase> = (0..chem.ns()).map(|k| chem.phase_in(k, t, |j| b.store[j])).collect();
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if phase[k] == Phase::Gas { 0.0 } else { spare(chem, &lay, b, k, size) }).collect();
+    let spare: Vec<f64> = (0..chem.ns()).map(|k| if phase[k] == Phase::Gas { 0.0 } else { b.spare(chem, &w.cfg.phys, k, (size, mb)) }).collect();
     let all = w.chem.mass_of(&spare);
     if all <= 0.0 {
         return;
     }
     let wet: Vec<bool> = phase.iter().map(|&p| p == Phase::Liquid).collect();
-    let mut m: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * (w.cfg.phys.take * days * mb / all).min(1.0)).min(MOST_SHARE * s)).collect();
+    let mut m: Vec<f64> = spare.iter().map(|a| a * (w.cfg.phys.take * days * mb / all).min(1.0)).collect();
     let lv: f64 = (0..chem.ns()).filter(|&k| wet[k]).map(|k| m[k] * chem.molar_volume(k, Phase::Liquid)).sum();
     let fit = (w.parts.parts[p].room(chem) / lv.max(1e-12)).min(1.0);
     (0..chem.ns()).filter(|&k| wet[k]).for_each(|k| m[k] *= fit);
@@ -182,16 +172,16 @@ fn give_up(chem: &Chemistry, b: &mut Body, m: &[f64]) -> (Vec<f64>, f64) {
     (m, q)
 }
 
-/// Put solid stores above twice their safe minimums out as a new part (up to `form` of the body's mass, at least
+/// Put the solids it holds above what it keeps (`Body::kept`) out as a new part (up to `form` of the body's mass, at least
 /// `min_kg`), shaped by the brain; the body holds it if its hands are free and its force bears it.
 pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
-    let (chem, lay, mb, t) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem), b.temp(&w.chem));
+    let (chem, mb, t) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem));
     let size = b.size(chem);
-    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase_in(k, t, |j| b.store[j]) == Phase::Solid { spare(chem, &lay, b, k, size) } else { 0.0 }).collect();
+    let spare: Vec<f64> = (0..chem.ns()).map(|k| if chem.phase_in(k, t, |j| b.store[j]) == Phase::Solid { (b.store[k] - b.kept(chem, &w.cfg.phys, k, size)).max(0.0) } else { 0.0 }).collect();
     let all = w.chem.mass_of(&spare);
     let f = (w.cfg.phys.form * mb / all.max(1e-9)).min(1.0);
-    let wall: Vec<f64> = spare.iter().zip(&b.store).map(|(a, s)| (a * f).min(MOST_SHARE * s)).collect();
+    let wall: Vec<f64> = spare.iter().map(|a| a * f).collect();
     let got = w.chem.mass_of(&wall);
     if got < w.cfg.phys.min_kg || !body::pay(w, b, w.cfg.phys.c_form * got, b.interval(w) as f64) {
         return;
@@ -239,7 +229,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
     let m: Vec<f64> = (0..chem.ns())
         .map(|k| {
             let (a, s) = (w.store.amounts(Class::Bed)[k * n + i], &chem.subs[k]);
-            if f <= s.strength || a <= 0.0 { 0.0 } else { (most * a * chem.molar_volume(k, Phase::Solid) / vol * (1.0 - s.strength / f) / s.molar_mass).min(MOST_SHARE * a) }
+            if f <= s.strength || a <= 0.0 { 0.0 } else { (most * a * chem.molar_volume(k, Phase::Solid) / vol * (1.0 - s.strength / f) / s.molar_mass).min(a) }
         })
         .collect();
     let got = w.chem.mass_of(&m);

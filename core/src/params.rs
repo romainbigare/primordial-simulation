@@ -139,6 +139,8 @@ pub struct Physics {
     pub c_repair: f64,
     /// Exponent of a body's activity in its key liquid over the level it keeps (`Body::activity`)
     pub dormancy: f64,
+    /// Share of its body whose loss kills a member: a hit that tears it kills; starving to it, even chances
+    pub lethal: f64,
 
     // Choose
     /// Energy to move one kg one metre on the flat for a member of `MOVE_REF` kg, J (`Physics::walk`)
@@ -165,6 +167,8 @@ pub struct Physics {
     pub sweep: f64,
     /// Energy to handle one kg taken or put, J
     pub c_handle: f64,
+    /// A body keeps this many times the safe minimum of each store it gives away or puts out
+    pub keep_min: f64,
     /// Spread of the shape of a part made around its mean
     pub shape_noise: f32,
     /// Spread of the signal around its mean
@@ -296,6 +300,7 @@ impl Default for Physics {
             e_life: 1e9,
             c_repair: 0.25,
             dormancy: 5.7,
+            lethal: 0.5,
             c_move: 3.0,
             rho_pass: 5.0,
             lane: 1.0,
@@ -308,6 +313,7 @@ impl Default for Physics {
             sweep: 1.0,
             intake_exp: 0.75,
             c_handle: 1e3,
+            keep_min: 2.0,
             shape_noise: 0.5,
             signal_noise: 0.3,
             discount: 0.9,

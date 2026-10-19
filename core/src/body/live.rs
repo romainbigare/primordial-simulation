@@ -132,14 +132,16 @@ pub(crate) fn gain_to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut 
     to_growth(w, slot, b, rc, tmp).map_or(f64::NEG_INFINITY, |g| g.0.gain)
 }
 
-/// A body whose growth did not rebuild the body it lost in the update, below its copy mass, starves: it dies with the
-/// chance of the share of its body it lost (of `from` kg a member, or of its copy mass if it was larger), so one that
-/// starved to half its size has lived through it with even chances (`lose_share`). An adult larger than its copy mass
-/// shrinks towards it as it chooses (`ALLOC`): that is no starving. False if it dies (a node: less than one member is left).
+/// A body whose growth did not rebuild the body it lost in the update, below its copy mass, starves: it keeps the share
+/// x of its body (of `from` kg a member, or of its copy mass if it was larger) and dies with the chance 1 - x^a, a such
+/// that one that starved to the lethal loss (`Physics::lethal`) has lived through it with even chances, in one update or
+/// in many (`lose_share`). An adult larger than its copy mass shrinks towards it as it chooses (`ALLOC`): that is no
+/// starving. False if it dies (a node: less than one member is left).
 fn starved(w: &mut World, slot: usize, b: &mut Body, from: f64, dead: &mut Vec<f64>) -> bool {
     let (now, was) = (b.member_body(&w.chem), from.min(b.dec(COPY_MASS)));
+    let a = -std::f64::consts::LN_2 / (1.0 - w.cfg.phys.lethal).ln();
     // (A body with no body left has starved whatever it was.)
-    let f = if now > 0.0 { 1.0 - now / was } else { 1.0 };
+    let f = if now > 0.0 { 1.0 - (now / was).min(1.0).powf(a) } else { 1.0 };
     let th = b.thermal(&w.chem);
     f <= 1e-9 || lose_share(w, slot, b, f, SPENT, dead, &th)
 }

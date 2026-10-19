@@ -5,10 +5,6 @@ use crate::{store::{apply, Batch, Class}, World};
 
 /// Added to a substance's hardness before its softness (1 / hardness) is taken.
 const HARD_MIN: f64 = 0.05;
-/// Most volume that creeps over an edge per call, as a share of the step between the surfaces times the cell's area.
-const CREEP_LEVEL: f64 = 0.25;
-/// Most of each loose solid that creeps over an edge per call.
-const CREEP_MOST: f64 = 0.25;
 
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
 /// call; then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
@@ -36,7 +32,8 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
             continue;
         }
         let r = w.cfg.creep * dz / cells.dist()[l] * area[a].min(area[b]).sqrt() * dt / area[a] * bare_share(w, a);
-        let f = (area[a] * dz * CREEP_LEVEL / (r * mob[a])).min(1.0);
+        // At most what levels the two surfaces: creep goes down the slope, never past flat.
+        let f = (dz * area[a] * area[b] / (area[a] + area[b]) / (r * mob[a])).min(1.0);
         let (ta, tb) = (s.state.tg[a], s.state.tg[b]);
         // What moves, summed over substances: heat capacity, mass, mobility, rise of each surface and head.
         let (mut c, mut mass, mut slid, mut ua, mut ub) = (0.0, 0.0, 0.0, [0.0; 2], [0.0; 2]);
@@ -44,7 +41,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
         for (q, &k) in sol.iter().enumerate() {
             let x = amt[q * n + a] * (1.0 - molten(s, k, a));
             if x > 0.0 {
-                let (p, m) = (&s.sp[k], (x * r * f * soft[q]).min(CREEP_MOST * x));
+                let (p, m) = (&s.sp[k], (x * r * f * soft[q]).min(x));
                 (amt[q * n + a], amt[q * n + b], out[q]) = (amt[q * n + a] - m, amt[q * n + b] + m, m);
                 let (da, db) = (rise(p, ta, melted(s, k, a), -m, area[a]), rise(p, tb, melted(s, k, b), m, area[b]));
                 (c, mass, slid) = (c + m * p.cp, mass + m * p.mm, slid + m * p.v[0] * soft[q]);

@@ -7,8 +7,6 @@ use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, st
 
 /// A node with no load and less carrying capacity than this does no work on its bed, m³.
 const CARRY_MIN: f64 = 1.0;
-/// Most of each loose solid picked up, and of each bonded substance worn, per call.
-const MOST_TAKEN: f64 = 0.5;
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
 
@@ -186,7 +184,7 @@ fn by_link(crossed: &Crossed, rows: usize, col_of: &[usize], (a, b): (&[u32], &[
 }
 
 /// The work `bedwork`, J, of the liquid leaving node `i` (a share `out`) on its load: it drops what is over capacity,
-/// else picks up loose solids up to it (at most half of each). Returns the work left to break bonded ground.
+/// else picks up loose solids up to it (at most all that lies loose). Returns the work left to break bonded ground.
 fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops::Range<usize>, &[usize]), bedwork: f64, out: f64) -> f64 {
     let held: f64 = rows.clone().zip(sol).map(|(r, &k)| q[r] * s.sp[k].v[0]).sum();
     let capv = w.cfg.carry * bedwork * bare_share(w, i);
@@ -198,13 +196,13 @@ fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops:
         return 0.0;
     }
     let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
-    let f = if avail > 0.0 { ((capv - held) / avail).min(MOST_TAKEN) } else { 0.0 };
+    let f = if avail > 0.0 { ((capv - held) / avail).min(1.0) } else { 0.0 };
     rows.zip(sol).for_each(|(r, &k)| q[r] += solid(w, s, k, i) * f);
     bedwork
 }
 
 /// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each substance by its share of
-/// the bed's volume, at most half: moves from `Class::Bed` gathered in `broke`. Its heat was already the node's.
+/// the bed's volume, at most all of it: moves from `Class::Bed` gathered in `broke`. Its heat was already the node's.
 fn wear(w: &World, s: &mut Scratch, i: usize, bedwork: f64, broke: &mut Vec<Move>) {
     let n = w.mesh.cells().n();
     for bi in 0..s.state.bedk.len() {
@@ -212,7 +210,7 @@ fn wear(w: &World, s: &mut Scratch, i: usize, bedwork: f64, broke: &mut Vec<Move
         let b = w.store.amounts(Class::Bed)[k * n + i];
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
-            let (m, area) = ((v / s.sp[k].v[0]).min(MOST_TAKEN * b), w.mesh.cells().area()[i]);
+            let (m, area) = ((v / s.sp[k].v[0]).min(b), w.mesh.cells().area()[i]);
             let dz = m * s.sp[k].v[0] / area;
             broke.push(Move::loosen(i, k, m));
             s.state.bed[i].vol -= m * s.sp[k].v[0];

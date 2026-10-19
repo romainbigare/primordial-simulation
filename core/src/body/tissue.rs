@@ -158,6 +158,20 @@ impl Body {
             _ => (share(f) * (mass - self.store[k] * mm) / mm).max(0.0),
         }
     }
+    /// What it keeps of `k` when it gives or puts out (of size `size`, kg): `Physics::keep_min` times its safe minimum,
+    /// mol.
+    pub(crate) fn kept(&self, chem: &Chemistry, p: &crate::Physics, k: usize, size: f64) -> f64 {
+        p.keep_min * self.gene(Layout::of(chem).min + k).max(0.0) * size / chem.subs[k].molar_mass
+    }
+    /// What it can spare of store `k` to give, to a body or into a part (of size `size` and mass `mass`, kg), mol: never
+    /// its body matter or a built solid; what it holds above `kept` and, of a key liquid, above its level.
+    pub(crate) fn spare(&self, chem: &Chemistry, p: &crate::Physics, k: usize, (size, mass): (f64, f64)) -> f64 {
+        if chem.matter() == Some(k) || chem.is_material(k) {
+            return 0.0;
+        }
+        let level = if self.wet >> k & 1 == 1 { self.level(chem, k, mass) } else { 0.0 };
+        (self.store[k] - level.max(self.kept(chem, p, k, size))).max(0.0)
+    }
     /// What the body is built of, all members: [volume m³, Σ volume × Young's modulus, Σ volume × breaking stress] over
     /// its soft tissue (`built` at `rho_body`) and each solid it builds.
     pub fn solids(&self, chem: &Chemistry, cfg: &crate::Config) -> [f64; 3] {

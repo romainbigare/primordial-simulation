@@ -139,13 +139,14 @@ link flux booked with the move (`flow::Falls`).
 
 The head moving liquid loses does work where it is lost (`flow::liquid`, in the same pass):
 
-- **Carrying:** `carry` m³ of loose solids per J. The load leaves a cell in the share the liquid leaves it, so it
-  settles where the flow slows; what is over the capacity drops.
-- **Wear:** `wear` m³ of bonded bed per J, over the bed's strength, broken into loose ground (`Move::loosen`; the bed
-  is `Class::Bed`, amounts without heat).
+- **Carrying:** `carry` m³ of loose solids per J, at most all that lies loose. The load leaves a cell in the share the
+  liquid leaves it, so it settles where the flow slows; what is over the capacity drops.
+- **Wear:** `wear` m³ of bonded bed per J, over the bed's strength, at most all of it, broken into loose ground
+  (`Move::loosen`; the bed is `Class::Bed`, amounts without heat).
 - Bodies hold the ground: they cut carrying and creep by 1 / (1 + their mass per area / `hold`).
 - **Creep** (`flow::creep`, yearly): loose ground slides downhill like a slow diffusion, `creep` × softness ×
-  thickness × slope, link by link, across the side of the smaller of the two cells (corners too).
+  thickness × slope, link by link, across the side of the smaller of the two cells (corners too); over a link no more
+  than levels the two surfaces.
 
 Most rock that leaves the land is lime that Change dissolves (reaction 22, 2.6) and the liquid takes away.
 
@@ -639,9 +640,10 @@ reaches what they hold (a node is found as one body, 5.2, and taken as its membe
 interval) gets away with the chance its interval gives (of a node's bites, that share). A bite tears the body of each
 member it reaches (6.8).
 
-**Giving** is of stores only: never body matter, brood or built solids, nor a key liquid below its level, and only
-from stores above twice their safe minimum; at most what the members it meets could take in the time (each member
-meets one, as in taking).
+**Giving**, to a body or into a part (`Body::spare`), is of stores only: never body matter, brood or built solids,
+nor a key liquid below its level, and only from stores above `keep_min` times their safe minimum (as a body keeps
+when it forms a part); to a body, at most what the members it meets could take in the time (each member meets one,
+as in taking).
 
 ### 5.4 Learning
 
@@ -736,7 +738,9 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Work heat stays** (`body::spend`, `body::hold`): the heat of upkeep and work leaves through that network over the
   interval; the share (1 − e^−x)/x stays, x = conductance × time / heat capacity, the rest goes to the ground.
 - **Reactions' heat** (`body/physics.rs`): a body reacts at its temperature, held by the ground it stands on (Flow's
-  last ground temperature) as a store of the heat that ground can conduct into it over the update.
+  last ground temperature) as a store of the heat that ground can conduct into it over the update. The gas they put
+  out takes its latent heat as far as heat pays for it (the body's above `T_FLOOR`, what they released, what its surface
+  conducts in of what its bodies' node holds for it); the rest stays in its stores (`physics::settle_gas`).
 - **The ground's heat** a body reaches in an update is what its bodies' node holds for it (`Draw::owed`, 1.4): it pays
   for what it evaporates with its own heat and that, as far as its surface conducts it in; what it would have
   evaporated with more it asks of the ground until its next update (`survey::Draw`).
@@ -748,7 +752,7 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 ### 6.4 Water: breath, rain, soaking, roots
 
 - **Breath** (`breath` in `body/exchange.rs`): the `GAS` gene is the conductance of the body's pores (stomata), per m²
-  of open surface (`Body::open_area`) per day, in series with the still air; liquid over the body slows it
+  of open surface (its light-capture area and skin) per day, in series with the still air; liquid over the body slows it
   (`gas_depth`). It reaches no more of a gas than its air node holds.
 - **Pores close as it dries**: for vapour only they open as far as the activity (6.5), solved exactly over the update
   (`closing`).
@@ -815,13 +819,15 @@ growth**: lost matter is rebuilt the same way.
 - **Pushing through** (`choose::wear`) breaks the share of each body there that the energy spent on it pays for, each
   of its members alike.
 - **Heat** burns body matter by its own reaction (21).
-- A member lives on smaller and weaker and dies when half its body or more is torn at once (an individual also when a
-  store falls below its minimum). A hurt adult is immature until it heals: no children meanwhile.
+- A member lives on smaller and weaker and dies when the share `lethal` of its body or more is torn at once (an
+  individual also when a store falls below its minimum). A hurt adult is immature until it heals: no children
+  meanwhile. Pushing through breaks at most all of a body.
 - **Starving** (`starved` in `body/live.rs`): a body whose growth did not rebuild what it lost in an update (what rots,
-  what it burns), below its copy mass, dies with the chance of the share of its body it lost (of its body at the start,
-  or of its copy mass if less): one that starved to half its size lived through it with even chances. A node loses that
-  share of its members with their share of everything, so it does not shrink alike forever. An adult larger than its
-  copy mass shrinks towards it as it chooses (`ALLOC`): no starving. Cause `SPENT`.
+  what it burns), below its copy mass, keeps the share x of its body (of its body at the start, or of its copy mass if
+  less) and dies with the chance 1 − x^a, a = ln 2 / −ln(1 − `lethal`): one that starved to the lethal loss lived
+  through it with even chances, in one update or in many. A node loses that share of its members with their share of
+  everything, so it does not shrink alike forever. An adult larger than its copy mass shrinks towards it as it chooses
+  (`ALLOC`): no starving. Cause `SPENT`.
 - **In a node** the members a bite reaches lose what it tears, so the node's mean body falls (grazing), or die with all
   they held (`body::wound`).
 - **Death causes**: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN` (by bodies moving through), `AGE`. At death matter,

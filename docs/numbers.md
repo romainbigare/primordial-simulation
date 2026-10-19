@@ -100,6 +100,7 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `e_life` | J per kg | energy a kg of body turns over in its upkeep before it is worn out, at a repair gene of 0 (a body lives 10^gene times this) | Rubner 1908: many kinds that move turn over about 1,000 kJ per gram of body in a life | anchored |
 | `c_repair` | share | share of upkeep that is repair at repair 0: upkeep x (1 - c + c 2^gene), so each unit of the gene doubles it and every value of the gene has a cost | remaking a body's own matter takes 20 to 30% of resting upkeep in life | anchored |
 | `dormancy` | none | how steeply a body's activity falls as it dries: activity = min(1, l / l*)^n, l the key liquid it holds, l* the level it keeps (`Body::activity`); must be above 1 (`Config::validate`) | Harrington's rule (checked: Harrington 1963 and 1972): seed life doubles for each 1% less moisture between about 14% and 5%, so a 3-fold drop is 2^9 = 512 times less activity: n = ln 512 / ln 3 = 5.7 | anchored |
+| `lethal` | share | share of its body whose loss kills a member: a hit that tears that much kills it; a starving member that lost that much lived through it with even chances (`live::starved`) | starving mammals die near the loss of half their body mass (from memory); a wound that takes half the body kills | anchored |
 
 ### Choose
 
@@ -117,6 +118,7 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `intake_exp` | none | what a member takes, sweeps, receives and builds, and its leaf, go with its living body (`Body::supply`) to this power | Kleiber's 0.75 (checked: production of 305 mammals goes with mass^0.755, 95% range 0.73 to 0.78, Ernest et al. 2003, Ecology Letters 6: 990); the supply in West, Brown and Enquist's growth law (2001) | anchored |
 | `sweep` | m² per kg per day | area a body works per day per kg of its mass that works, at `m_ref` | run: set for eaters to live. A 30 kg body works 300 m² in 10 days | tuned |
 | `c_handle` | J per kg | energy to handle one kg taken or put | none found; set for a run | tuned |
+| `keep_min` | times | a body keeps this many times the safe minimum of each store it gives away (`choose::give`) or puts out to parts (`bond::verbs`) | none found: a margin over the minimum below which it dies | tuned, first guess |
 | `shape_noise` | none | spread of the shape of a part made, around its mean | none found | tuned, first guess |
 | `signal_noise` | none | spread of the signal, around its mean | none found | tuned, first guess |
 | `discount` | none | weight of well-being one decision ahead against well-being now | the usual 0.9 of learning machines | anchored |
@@ -244,16 +246,16 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 109 rows of `Config` and `Physics` are their 109 fields.
+The 111 rows of `Config` and `Physics` are their 111 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 49, and 8 outside the structs | 49 fields (among them `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
+| anchored | 50, and 8 outside the structs | 50 fields (among them `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
 | tuned (run or reason named) | 8, and 5 outside the structs | the threshold of who is alike (`alike`), set for an outcome (`rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
-| tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
+| tuned, first guess | 37 | 33 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
 | speed | 8, and 2 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL`, `WITHIN` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 49 (44 in the structs, 5 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 50 (45 in the structs, 5 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

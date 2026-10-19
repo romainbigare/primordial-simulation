@@ -1228,6 +1228,13 @@ Phase E review, round 1 (fixes):
   halvings); a chemistry keeps its burnings (`Chemistry::burners`, whose `keeps` test was most of `Body::prepare`)
   and its catalysed rates per contact at `t_cat` (`contact_rates`). 2.1% fewer instructions in a living year; the
   gene noise of children is kept as it is (a skip would not apply). Golden re-pinned (order of sums).
+- Review round 2, finding 10: the hidden caps of a call go where the law already limits (liquid picks up at most all
+  that lies loose and wears at most all the bed, creep moves no more than levels two surfaces, a body puts out and
+  digs at most what there is, a mover breaks at most all of a body, a body pays for its gas with its heat above
+  `T_FLOOR`); the lethal loss is `Physics::lethal` (anchored, 0.5: a hit that tears it kills, starving to it is even
+  chances, `starved` as 1 - x^a); the keep of a giver and of what a body puts out is one tuned number, `keep_min` (2;
+  the tuned budget 49 to 50); what a body puts into a part is what it can give (`Body::spare`). 64 x 64, seed 1,
+  years 21 to 30: land 289.1 K (289.1), plant members 2.81e10 (2.83e10), eaters at year 30 214 (219); golden re-pinned.
 
 **Owner's decisions after Phase A**
 

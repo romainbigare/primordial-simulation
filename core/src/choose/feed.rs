@@ -1,7 +1,7 @@
 //! Taking and giving: from the cell's ground (`take_node`), to it (`put`), from another body (`take_body`), and to
 //! another body (`give`), each by the intake law of bodies (`Body::wanted`).
 
-use crate::body::{self, light_cat, Body, Layout, STRENGTH, TAKEN};
+use crate::body::{self, light_cat, Body, STRENGTH, TAKEN};
 use crate::chem::Phase;
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
@@ -9,8 +9,6 @@ use crate::{bond, lanes, World};
 
 /// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
 const NOTE_SCALE: f64 = 10.0;
-/// A giver keeps this many times the safe minimum of each store.
-const GIVE_KEEPS: f64 = 2.0;
 
 /// Mass of the amounts `m` that the body's reactions can burn, kg.
 fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
@@ -97,7 +95,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     }
     let mut o = std::mem::take(&mut w.life.bodies[s]);
     let m: Vec<f64> = m.iter().map(|a| a * hit / reached).collect();
-    let torn = if body::torn_to_death(f) { hit } else { f * hit };
+    let torn = if body::torn_to_death(&w.cfg.phys, f) { hit } else { f * hit };
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
     let got = w.chem.mass_of(&m);
     transfer(w, &mut o, b, &m);
@@ -109,14 +107,13 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     }
 }
 
-/// Give to another body in the cell from stores above `GIVE_KEEPS` times their safe minimum (laws.md 5.3), up to what the
+/// Give to another body in the cell what it can spare (`Body::spare`, laws.md 5.3), up to what the
 /// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
 /// both have, as in `take_body`). The other remembers the giver.
 pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
-    let (chem, lay) = (&w.chem, Layout::of(&w.chem));
+    let chem = &w.chem;
     let (size, mass) = (b.size(chem), b.mass(chem));
-    let keep = |k: usize| if b.wet >> k & 1 == 1 { b.level(chem, k, mass) } else { 0.0 };
-    let spare = |k: usize| if chem.matter() == Some(k) || chem.is_material(k) { 0.0 } else { (b.store[k] - keep(k).max(GIVE_KEEPS * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
+    let spare = |k: usize| b.spare(chem, &w.cfg.phys, k, (size, mass));
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
     let (mo, paces, met) = (o.mass(chem), o.paces(w), b.n().min(o.n()));

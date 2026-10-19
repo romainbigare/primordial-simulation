@@ -214,7 +214,8 @@ fn brain_grown_and_shrunk_back_is_unchanged() {
 }
 
 /// Each body with a brain learns into rows of its own: its rows are those it was born with plus what it learned, so
-/// bodies that lived differ from their born rows, and each learned something else. Matter and energy still add up.
+/// bodies that lived differ from their born rows, and they learned different things (a body drawn from a node,
+/// `nodes::open`, carries the node's learned rows, so two may share them). Matter and energy still add up.
 #[test]
 fn each_body_learns_into_its_own_rows() {
     let (w, books) = lived();
@@ -223,8 +224,8 @@ fn each_body_learns_into_its_own_rows() {
     let learned: Vec<Vec<f32>> = minds.iter().map(|b| b.rows.iter().zip(w.life.born(b)).map(|(r, x)| r - x).collect()).collect();
     let moved = learned.iter().filter(|l| l.iter().any(|&x| x != 0.0)).count();
     assert!(moved >= 2, "{moved} of {} bodies learned", minds.len());
-    let same = (0..learned.len()).any(|a| (a + 1..learned.len()).any(|b| learned[a] == learned[b] && learned[a].iter().any(|&x| x != 0.0)));
-    assert!(!same, "two bodies learned the same");
+    let kinds = (0..learned.len()).filter(|&a| learned[a].iter().any(|&x| x != 0.0) && !(0..a).any(|b| learned[b] == learned[a])).count();
+    assert!(kinds >= 2, "{kinds} different things learned by {moved} bodies");
     books.assert_kept(&w, 1e-9);
 }
 

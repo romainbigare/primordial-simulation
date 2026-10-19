@@ -7,15 +7,12 @@ use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE};
 use crate::change::{send_gas, GasMove, Reactor};
 use crate::chem::Phase;
-use crate::ground::{share, Melting};
+use crate::ground::{heat_above_floor, share, Melting};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
 use crate::store::Node;
 use crate::units::{MAX_SUBSTANCES, P_REF};
 use crate::World;
-
-/// The most share of the heat the body has and can get from the surface that pays the enthalpy of the gas it puts out.
-const GAS_HEAT_SHARE: f64 = 0.5;
 
 /// The heat of an update as its stages go.
 struct Heat {
@@ -144,7 +141,8 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 }
 
 /// Gas taken brings its heat at the air's temperature and its latent heat; gas put out takes its latent heat, as far as
-/// `GAS_HEAT_SHARE` of the heat pays for it (what the surface conducts in no more than its bodies' node holds for it).
+/// heat pays for it: the body's above `T_FLOOR`, what it released, and what the surface conducts in, no more than its
+/// bodies' node holds for it.
 fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
     let (j, lift) = (s.j, w.lift(s.i));
     let gas = GasMove::of(&w.chem, &tmp.pool, &tmp.pool0, w.t_air(j));
@@ -152,7 +150,7 @@ fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat
     w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
     let heat = h.heat + gas.back;
     let conduct = (h.g * s.dt * s.tg).min(held_for(w, b, s.i));
-    let paid = share(GAS_HEAT_SHARE * (b.e + heat + conduct).max(0.0), gas.pay);
+    let paid = share((heat_above_floor(b.e, b.heat_cap(&w.chem)) + heat + conduct).max(0.0), gas.pay);
     send_gas(&tmp.pool, &tmp.pool0, paid, |k, sent, kept| {
         b.store[k] += kept;
         if sent != 0.0 {

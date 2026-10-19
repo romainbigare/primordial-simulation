@@ -82,11 +82,13 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
     let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
     b.cell = i as u32;
+    let fed: Vec<f64> = b.store.iter().map(|a| 2.0 * a).collect();
     for _ in 0..8 {
-        // Fed again each time (its matter and heat are not booked here), so that it has solids above its minimums to
-        // spare, and its liquid with them (a dry body's pores close, and it could not breathe to pay).
+        // Fed again each time to twice its starting stores (its matter and heat are not booked here), so that it has
+        // solids above its minimums to spare, and its liquid with them (a dry body's pores close, and it could not
+        // breathe to pay).
         let t = b.temp(&w.chem);
-        (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] *= 2.0);
+        (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] = b.store[k].max(fed[k]));
         b.e = b.energy_at(&w.chem, t);
         moved(&mut w, (b.cell as usize, slot), |w| bond::form(w, slot, &mut b, [0.0, 0.5]));
         b.hold = None;
@@ -113,8 +115,9 @@ fn forming_never_takes_more_than_is_left() {
     b.store[k] = 0.05 * b.mass(chem) / chem.subs[k].molar_mass;
     b.e = b.energy_at(chem, t);
     b.k.cat.iter_mut().for_each(|c| *c *= 1e6);
-    // Half the fuel is to go out, and paying for it burns nearly all of it.
+    // Half the fuel is to go out (`Physics::form` of its mass), and paying for it burns nearly all of it.
     let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;
+    w.cfg.phys.form = got / b.mass(chem);
     let r = worldgen::testkit::release(&w, &w.life.bodies[slot], w.life.bodies[slot].interval(&w) as f64);
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
