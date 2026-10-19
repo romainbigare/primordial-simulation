@@ -9,10 +9,6 @@ use crate::life::Life;
 use crate::World;
 use std::f32::consts::FRAC_2_PI;
 
-/// Past this many times `Config::crowd` bodies in a cell, unlike nodes merge too (the most alike first): a numerical
-/// safeguard.
-const UNLIKE_CROWD: usize = 2;
-
 /// The monthly merge of nodes, a speed shortcut, not a law: it coarsens only how members are represented (as population
 /// nodes), never how many there are or where. In each cell, among the bodies that hold and are inside nothing, a node
 /// joins the first larger one alike to it (`join_alike`); then, while more than `Config::crowd` remain, the most alike
@@ -61,25 +57,25 @@ type Likeness = (Vec<f32>, Vec<f32>, bool);
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
 /// are left or no pair is alike: here each within the other's spread, as children join a node (`body::within`), and of
-/// one stage. Past `UNLIKE_CROWD` times `max`, unlike pairs merge too, the most alike first. A pair's key: unlike or
-/// not, then the squared distance of their genes in steps.
+/// one stage; unlike nodes never merge, however full the cell. A pair's key: the squared distance of their genes in
+/// steps (infinite if unlike).
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
     let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), w.life.bodies[s].adult(&w.chem));
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
         let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
-        (p.2 != q.2 || (0..p.0.len()).any(gap), p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum::<f32>())
+        if p.2 != q.2 || (0..p.0.len()).any(gap) { f32::INFINITY } else { p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum() }
     };
-    let mut d = vec![(true, f32::INFINITY); m * m];
+    let mut d = vec![f32::INFINITY; m * m];
     for p in 0..m {
         for q in p + 1..m {
             d[p * m + q] = dist(&v[p], &v[q]);
         }
     }
-    for n in (max..m).rev() {
+    for _ in max..m {
         let k = (0..m * m).fold(0, |k, x| if d[x] < d[k] { x } else { k });
-        if d[k].1 == f32::INFINITY || d[k].0 && n < UNLIKE_CROWD * max {
+        if d[k] == f32::INFINITY {
             break;
         }
         let (p, q) = (k / m, k % m);
@@ -88,7 +84,7 @@ fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) 
         (left[s], v[t]) = (usize::MAX, steps(w, left[t]));
         for o in 0..m {
             let (lo, hi) = (o.min(s), o.max(s));
-            d[lo * m + hi] = (true, f32::INFINITY);
+            d[lo * m + hi] = f32::INFINITY;
             if o != t && left[o] != usize::MAX {
                 let (lo, hi) = (o.min(t), o.max(t));
                 d[lo * m + hi] = dist(&v[o], &v[t]);

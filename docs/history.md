@@ -939,6 +939,11 @@ Phase E review, round 1 (fixes):
   373 now; small eaters of light-eaters 2.8e3 against 970 kg before, 1.7e3 against 1.3e3 now; strong fast eaters of
   eaters 1.2e3 against 1.3e3 kg before, 510 against 1.2e3 now (few bodies). Golden re-pinned.
 
+- F3 (decision D8): unlike nodes never merge, however full the cell; the safeguard that merged them past twice `crowd`
+  goes. 32 x 32 roster, seed 1, years 26-30, as nodes: eaters 210 to 110 members (individuals 56), eaters of remains
+  1.1e4 to 3.1e3 members (individuals 1.5e4), small eaters of light-eaters 1.7e3 to 6.3e3 kg (individuals 1.3e3).
+  `crowd` stays a speed setting: past it the most alike merge. Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

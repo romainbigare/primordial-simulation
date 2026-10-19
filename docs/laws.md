@@ -513,8 +513,8 @@ individuals.
   move into the adult node with the share of the body their slice holds (`copy::mature`): the flux across a size of a
   size-structured population (McKendrick 1926; von Foerster 1959).
 - **Merging** (`nodes::crowd`, monthly). Alike nodes of one stage in a cell merge (the young mature into their adult
-  node instead). Past `crowd` nodes a cell merges its most alike pairs while they are alike; past twice `crowd`,
-  however unlike (a safeguard).
+  node instead). Past `crowd` nodes a cell merges its most alike pairs while they are alike; unlike nodes never
+  merge, however full the cell.
 - **Splitting** (`nodes::split`). A node whose two halves would no longer be alike splits along its widest gene, if its
   cell has room; selection then acts between the halves. Splits, draws and joins keep each gene's mean exactly.
 - **Selection inside a node** (`copy/select.rs`). Members are born and die in proportion whatever their genes, so a
