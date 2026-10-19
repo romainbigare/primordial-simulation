@@ -1001,6 +1001,12 @@ Phase E review, round 1 (fixes):
   cells at the wrap read air nodes within a row and the coupled solve's band is one row wide, not two. The island is
   the same bit for bit. 64 x 32 globe without life, 6 years: 8% fewer instructions; ground by latitude band the same
   within 0.04 K, rain within 0.5%.
+- G3, measured and not built (decision 20): a cell under deep standing liquid costs a land cell's Flow (its surface
+  row 0.24 to 0.31 µs a round, land 0.32 to 0.38) and a third of its Change (it sleeps); on a globe the air's 13
+  rounds a step and its level's solve are most of a cell's time. Tried and not kept: rows of cells whose air moved
+  less than the rounds' tolerance kept between rounds (3% fewer instructions on the globe); waking a node only by a
+  substance a reaction takes (no effect); `air_scale` 2 on the 64 x 32 globe (Flow 3.3 times dearer, a different
+  climate).
 
 **Owner's decisions after Phase A**
 
