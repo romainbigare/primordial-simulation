@@ -273,17 +273,11 @@ fn act_as(w: &mut World, slot: usize, b: &mut Body, c: &Choice, k: &Kit, a: usiz
         DIG => bond::dig(w, b),
         a if a < TO_BODY => go(w, slot, b, c.to[a - FIXED]),
         // (Members of a node acting before may have used up the part or killed the body.)
-        a if a >= TO_PART => {
-            let p = c.parts[(a - TO_PART) / OVERBS];
-            if w.parts.parts[p].alive {
-                bond::act(w, slot, b, (a - TO_PART) % OVERBS, p);
-            }
-        }
+        a if a >= TO_PART && !w.parts.parts[c.parts[(a - TO_PART) / OVERBS]].alive => {}
+        a if a >= TO_PART => bond::act(w, slot, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
+        a if !w.life.bodies[c.seen[(a - TO_BODY) / VERBS].0].alive => {}
         a => {
             let (o, verb) = (c.seen[(a - TO_BODY) / VERBS].0, (a - TO_BODY) % VERBS);
-            if !w.life.bodies[o].alive {
-                return;
-            }
             match verb {
                 TAKE_FROM => take_body(w, slot, b, o, rng),
                 GIVE => feed::give(w, slot, b, o),

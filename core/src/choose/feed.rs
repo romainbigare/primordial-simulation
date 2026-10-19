@@ -18,21 +18,17 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
     m.iter().enumerate().filter(|&(k, _)| b.burns_at(&w.chem, k, t)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
 }
 
-/// Most a body takes per day per kg of its mass from amounts `from` spread over a cell: `take`, and no more than the
-/// area it works (`sweep`) holds of what it takes, so a thin cover is as hard to find as it is thin.
-fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
-    let dens: f64 = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k)).map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.mesh.cells().area()[b.cell as usize];
-    w.cfg.phys.take.min(w.cfg.phys.sweep * dens)
-}
-
-/// Take loose solids and liquids from the cell's ground, as `reach` allows for its supply (a node's members each work
-/// their own area), no more than its stores have room for.
+/// Take loose solids and liquids from the cell's ground, no more than its stores have room for. Per day per kg of its
+/// mass it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to `take`:
+/// take s / (take + s), so the thinner what it takes lies, the more of its time goes to finding it (Holling 1959). A
+/// node's members each work their own area.
 pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let i = b.cell as usize;
     let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
-    let mass = b.mass(&w.chem);
-    let m = b.wanted(&w.chem, b.paces(w), free, reach(w, b, free) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mass);
+    let (mass, take) = (b.mass(&w.chem), w.cfg.phys.take);
+    let found = w.cfg.phys.sweep * b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k)).map(|&(k, _)| free(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.mesh.cells().area()[i];
+    let m = b.wanted(&w.chem, b.paces(w), free, take * found / (take + found) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mass);
     if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }

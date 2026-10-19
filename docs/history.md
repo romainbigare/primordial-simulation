@@ -951,6 +951,12 @@ Phase E review, round 1 (fixes):
   individuals: eaters 4.4e3 against 2.7e3 kg (copy-mass gene 1.65 against 1.63), big eaters of light-eaters 3.2e3
   against 2.8e3 kg, eaters of remains 1.1e4 against 2.6e4 kg. Golden re-pinned.
 
+- Intake from the ground by Holling's type II response (Holling 1959; `choose::feed::take_node`): take x s / (take + s)
+  for s what the area it works holds, not min(take, s), with no new number. It does not limit the eaters' booms: the
+  dead matter on the ground (1 to 4 kg/m²) holds 50 to 200 times what makes s equal to take. 48 x 48, 60 years, eater
+  members at year 60 in seeds 1 to 3: none (gone by year 55), 929, 447 before; 27, 1171, none (gone by year 50) with
+  it: booms and busts either way. A few lines of `choose` fold, the same world. Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

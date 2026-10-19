@@ -102,8 +102,7 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
 
 /// The body in slot `s` joins the body in slot `t`, of its lineage (`take_in`).
 pub fn merge(w: &mut World, s: usize, t: usize) {
-    let c = w.life.bodies[s].clone();
-    let born = w.life.born(&c).to_vec();
+    let (c, born) = (w.life.bodies[s].clone(), w.life.born(&w.life.bodies[s]).to_vec());
     w.life.remove(s);
     let mut o = std::mem::take(&mut w.life.bodies[t]);
     take_in(w, &mut o, c, Some(&born));

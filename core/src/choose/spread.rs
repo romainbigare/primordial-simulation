@@ -31,10 +31,8 @@ pub(super) fn spread(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k:
         } else if o != REST {
             let left;
             (gain[o], left) = part_acts(w, slot, node, c, k, (o, x[o]), rng);
-            match left {
-                None => break,
-                Some(left) => kept[o] *= !left as u8 as f64,
-            }
+            let Some(left) = left else { break };
+            kept[o] *= !left as u8 as f64;
         }
     }
     // (With no member drawn for any option, all rest.)
@@ -44,8 +42,7 @@ pub(super) fn spread(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k:
     let a = (0..OPTS).find(|&o| {
         u -= kept[o];
         u < 0.0
-    });
-    let a = a.unwrap_or(REST);
+    }).unwrap_or(REST);
     node.trace = trace(w, node, c, k, a, gain[a] - mean as f32);
 }
 

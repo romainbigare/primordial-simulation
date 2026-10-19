@@ -63,8 +63,7 @@ pub(crate) fn torn_to_death(f: f64) -> bool {
 /// safe minimum), and `dead` holds all they held; else they live on, smaller, and the node's mean body falls. True if
 /// the body lives (back in its slot).
 pub fn wound(w: &mut World, slot: usize, mut b: Body, (hit, f): (f64, f64), dead: &[f64], cause: u8) -> bool {
-    let dies = torn_to_death(f);
-    let th = b.thermal(&w.chem);
+    let (dies, th) = (torn_to_death(f), b.thermal(&w.chem));
     let alive = thin(w, &mut b, if dies { hit } else { 0.0 }, dead, cause, &th);
     if !alive || (b.n() <= 1.0 && (dies || b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)))) {
         die(w, slot, b, cause);

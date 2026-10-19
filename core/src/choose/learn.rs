@@ -22,10 +22,10 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     if b.trace.len() != nh + l + 1 || lr <= 0.0 {
         return;
     }
+    // (The trace ends with the advantage of what was done, `choose::trace`.)
     let (h, c) = b.trace.split_at(nh);
-    let (c, adv) = (&c[..l], c[l]);
     let v = |x: &[f32]| b.rows[cr + nh] + brain::dot(&b.rows[cr..cr + nh], x);
-    let delta = wb - b.wb + adv + w.cfg.phys.discount * v(now) - v(h);
+    let delta = wb - b.wb + c[l] + w.cfg.phys.discount * v(now) - v(h);
     // An error too big for a number teaches nothing.
     let var = if b.var > 0.0 { b.var + CRITIC_RATE * (delta * delta - b.var) } else { delta * delta };
     let a = lr * delta / (var.sqrt() + CRITIC_FLOOR);
@@ -34,7 +34,7 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     }
     b.var = var;
     brain::fit(&mut b.rows[cr..cr + s.r()], h, &[1.0], lr * delta);
-    brain::learn(&mut b.rows[..l * s.r()], h, c, a / lr, lr, &mut b.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
+    brain::learn(&mut b.rows[..l * s.r()], h, &c[..l], a / lr, lr, &mut b.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
 }
 
 /// Watch another body (it costs the turn): its rows move part of the way toward the other's if the brains have the same

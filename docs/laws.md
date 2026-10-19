@@ -591,7 +591,8 @@ take from or put to a part, join, break bonds, let go, anchor, dig, enter an ins
 action (children come from the brood), and no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** goes by uptake genes (`Body::wanted`, `body/intake.rs`), up to what the body can take in the time (6.7),
-from a cell only what the area it works holds (`sweep`), at `c_handle` per kg. From another body it is also limited by
+at `c_handle` per kg. From the ground it takes per kg Holling's type II response to what the area it works holds
+(`sweep`): take × s / (take + s) for s found, so thin food takes time to find (Holling 1959). From another body it is also limited by
 its force against the other's. Each member of the taker meets one member of the other, as many as both have, and
 reaches what they hold (a node is found as one body, 5.2, and taken as its members are); a quicker body (shorter
 interval) gets away with the chance its interval gives (of a node's bites, that share). A bite tears the body of each
@@ -743,7 +744,7 @@ growth**: lost matter is rebuilt the same way.
 
 ### 6.7 Taking, digesting, minimums, ageing
 
-- **Intake limits**: per day at most `take` × supply; from a cell only what the area it works holds.
+- **Intake limits**: per day at most `take` × supply; from the ground less as its food thins (5.3).
 - **Digestion** (`Body::digest`): body matter taken from outside is broken back into what it was built of as it comes
   in, the reverse of growth, so food enters as fuel, never as body. A body takes body matter or a built solid only if a
   catalyst of its own breaks it (`Body::can_take`), and only as much as the stores it becomes have room for.
