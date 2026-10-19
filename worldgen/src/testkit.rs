@@ -1,6 +1,5 @@
-//! What the tests of the laws share (the `testkit` feature, turned on only by the crates' dev-dependencies): a small
-//! world and its dry land, founders of a chosen brain, edits of bodies and of the ground booked from outside, the rock
-//! of a cell, the books of a world, the books of one reacting node, sums of the day's events, and the substances of chemistry 0 by number.
+//! What the tests of the laws share (the `testkit` feature, for dev-dependencies only): a small world, founders of a
+//! chosen brain, edits booked from outside, the books, and the substances of chemistry 0 by number.
 
 use pcore::body::{Body, Layout, BRAIN_SIZES, CHILD, COPY_MASS, DISPERSE, LIQ, STRENGTH, WET_TISSUE};
 use pcore::bond;
@@ -128,9 +127,7 @@ impl Line {
         Line { lineage, rows }
     }
 
-    /// A founder of starting kind `kind` (a row of `life::KINDS`) in cell `i`, of this lineage, born with its rows; not
-    /// yet placed, its matter and energy booked as an edit. Its genes of the sizes of brain and senses are its
-    /// lineage's, so it keeps the brain of the test (a light-eater's own genes have none).
+    /// A founder of starting kind `kind` in cell `i`, of this lineage and its brain sizes, booked as an edit; not placed.
     pub fn founder(&self, w: &mut World, kind: usize, i: usize) -> Body {
         let genome = w.life.new_genome(self.rows.clone());
         let mut b = crate::life::make(w, kind, i, self.lineage, genome).expect("a founder");
@@ -146,8 +143,7 @@ pub fn founder(w: &mut World, kind: usize, i: usize, brain: &Brain) -> Body {
     Line::new(w, brain, kind as u32).founder(w, kind, i)
 }
 
-/// The mass the tests' starting eaters are scaled to, kg: 9 kg of fuel, 15.75 kg of liquid, 5.25 kg of body matter, a
-/// body of 21 kg.
+/// The mass the tests' starting eaters are scaled to, kg (9 of fuel, 15.75 of liquid, 5.25 of body matter).
 pub const EATER_KG: f64 = 30.0;
 
 /// A starting eater of `EATER_KG` in cell `i`, of a brain that only does fixed action `act`, weak (strength 0), staying

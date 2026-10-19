@@ -210,11 +210,8 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     }
     let e_air = t_air.iter().enumerate().map(|(j, &t)| world.heat_cap_air(j) * t).collect();
     world.store = Store::new(n, (amounts(&world, Class::Ground), amounts(&world, Class::Bed), e_ground), (amounts(&world, Class::Air), e_air));
-    // The liquid starts at balance with the air: of each pair of reactions that undo each other, the
-    // substance the first makes is set, in each cell, to the amount at which the pair goes at equal
-    // rates at the cell's temperature and the air's start (`Reactor::balance`: from the chemistry's
-    // own rate constants and barriers). A cell with no liquid holds none. The air stays as it is.
-    // (The node takes the heat of its new amounts at its temperature: worked out once they are in the store.)
+    // The liquid starts at balance with the air (`Reactor::balance`, laws.md 2.6); a cell with no liquid holds none. The
+    // node takes the heat of its new amounts at its temperature, once they are in the store.
     let mut rc = Reactor::new(&world.chem, &world.cfg);
     let (mut ground, mut balanced) = (amounts(&world, Class::Ground), Vec::new());
     for i in 0..n {

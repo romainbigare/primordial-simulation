@@ -4,12 +4,8 @@ use super::open_land;
 use pcore::store::{Boundary, Node};
 use pcore::World;
 
-/// Give the loose ground of every land cell the soil `soil` (substance, mol per m²: `Init::soil`, the mineral of the
-/// fixing reaction's gas in chemistry 0) at this moment, which is when life starts: booked as new matter and energy
-/// like an edit, at the cell's own temperature. Only the land founders are placed on gets it (`open_land`: not a basin
-/// of standing liquid). It is not placed at year 0: the first years of a world are the liquid's, before any body, and
-/// rain washes a dissolved mineral from the slopes into the basins in the first year.
-/// Returns what was placed, in one line.
+/// Give the loose ground of the open land the soil `soil` (substance, mol per m²) now, when life starts, as an edit at
+/// each cell's temperature: placed at year 0, rain would wash it into the basins before any body. Returns one line.
 pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
     let (n, area) = (w.mesh.cells().n(), w.map.area());
     let land: Vec<usize> = (0..n).filter(|&i| open_land(w, i)).collect();

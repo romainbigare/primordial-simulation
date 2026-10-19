@@ -26,8 +26,7 @@ pub struct Kind {
     pub(super) hand: Option<Hand>,
 }
 
-/// Hand-set brain biases: rest, put, take from the node, form a part, let go, join to the ground, break the ground; move; take from, put to, watch a body; hold, take from, put to, join to, break,
-/// enter a part.
+/// Hand-set brain biases: the fixed actions (`brain::FIXED`), moving, then the verbs toward a body and a part.
 pub(super) type Hand = ([f32; brain::FIXED], f32, [f32; brain::VERBS + brain::OVERBS]);
 const H_EATER: Hand = ([0.0, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
 
@@ -41,17 +40,13 @@ const fn with(mut s: [f32; NSCALAR], d: &[(usize, f32)]) -> [f32; NSCALAR] {
     s
 }
 
-/// The genes every kind starts with unless its row says otherwise: GAS, LIQ, HEAT 3.5 (no coat: the top of the
-/// gene's range), LEAF, STRENGTH, CHILD -0.523 (a child's body 0.3 of the copy mass), COPY_MASS, INTERVAL, MUT -1.2,
-/// LEARN, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, DISPERSE, DENATURE 320 K (about where enzymes fail),
-/// REPAIR, WET 0, ALLOC 0.8, KEEP_T 250 K and COOL_T 320 K (both outside what the island has: they do nothing at
-/// the start).
+/// The genes every kind starts with unless its row says otherwise: HEAT 3.5 (no coat), CHILD -0.523 (a child 0.3 of
+/// the copy mass), MUT -1.2, HIDDEN 12, MEMORY 6, SEEN 3, SIGHT 1, DENATURE 320 K (about where enzymes fail), ALLOC
+/// 0.8, KEEP_T 250 K and COOL_T 320 K (outside what the island has: they do nothing at the start).
 const BASE: [f32; NSCALAR] = [0.0, 0.0, 3.5, 0.0, 0.0, -0.523, 0.0, 0.0, -1.2, 0.0, 12.0, 6.0, 3.0, 1.0, 0.0, 320.0, 0.0, 0.0, 0.8, 250.0, 320.0];
 
-/// Light-eaters: strong light reaction, slow burning, wide gas exchange (`GAS` 4.334, a leaf's open pores, about
-/// 0.25 mol/(m² s): Körner, Scheel and Bauer 1979) and capture area, long intervals, no brain (no hidden units and no
-/// memory: what a light-eater does is its body's physics, so it takes no decisions and pays for none) and learning off;
-/// one node of 0.1 kg/m² per land cell.
+/// Light-eaters: strong light reaction, slow burning, a leaf's open pores (`GAS` 4.334, about 0.25 mol/(m² s): Körner,
+/// Scheel and Bauer 1979), long intervals, no brain (what they do is their body's physics); one node per land cell.
 const LIGHT: Kind = Kind {
     name: "light-eaters",
     year: 0,
@@ -82,26 +77,12 @@ const EATER: Kind = Kind {
     hand: Some(H_EATER),
 };
 
-/// Starting kinds; the row is the root label of the lineages a kind starts (`Lineage::root`, the `root_<k>_*` columns
-/// of the tape). Rows 0 and 1 are the two kinds of `ew run`, rows 2 to 9 with them the roster (`ROSTER`).
-///
-/// A row sets only what the laws read: the genes (the mass a member copies at, strength, interval, the exchange
-/// genes, mutation, learning, brain sizes, dispersal, the temperature its catalysts hold to, repair), the catalysts
-/// (what it digests and how fast), the uptake (what it takes), and when, where and how many are placed. There is no
-/// height, lifespan, speed or "intelligence" field, because the laws have none: size is the mass, speed is the
-/// interval (a move is a decision), mind is the brain's sizes and learning rate, and a life lasts until its upkeep has
-/// turned over `Physics::e_life` x 10^`REPAIR` per kg. Kinds are initial conditions, not laws; a bigger table is a
-/// bigger start, never a rule.
-///
-/// A founder is an adult: its body is its copy mass, and its mass that body over 1 - `store` (`make_with`). The
-/// roster's rungs scale the two first rows: small ones copy often, big ones seldom; the heat gene goes with
-/// mass^(2/3), so a small body loses heat faster per kg. What one body can take from another is set by its force
-/// (strength times mass), so the eaters of light-eaters are stronger than light-eaters and the eaters of eaters
-/// stronger than the eaters; the eaters of remains have no strength (they lose every fight and work the ground). The
-/// `REPAIR` genes give the kinds a range of lives, short for small fast ones and long for big slow ones. A neutral
-/// brain must find what to take within the few decisions its store lasts, so the kinds that live long between
-/// decisions are placed in hundreds, and the two big slow eater kinds start with 60% of their mass as the energy-rich
-/// solid, not 30%.
+/// Starting kinds; the row is the root label of the lineages a kind starts (the tape's `root_<k>_*` columns). Rows 0
+/// and 1 are the two kinds of `ew run`, rows 2 to 9 with them the roster. A row sets only what the laws read (genes,
+/// catalysts, uptake, and where, when and how many): kinds are initial conditions, never rules. The roster's rungs
+/// scale the first two rows; eaters of bodies are stronger than what they eat, eaters of remains have no strength, and
+/// the two big slow eater kinds start with 60% of their mass as fuel, not 30%, as a neutral brain must find what to take
+/// within the few decisions its store lasts.
 pub const KINDS: [Kind; 10] = [
     LIGHT,
     EATER,
@@ -119,9 +100,7 @@ pub const KINDS: [Kind; 10] = [
     Kind { name: "strong big slow eaters of eaters", year: 24, scalars: with(EATER.scalars, &[(GAS, 2.736), (LEAF, -2.702), (STRENGTH, 0.5), (COPY_MASS, 2.682), (INTERVAL, 1.15), (LEARN, -0.7), (HIDDEN, 16.0), (MEMORY, 8.0), (SEEN, 4.0), (SIGHT, 2.0), (DISPERSE, 0.05), (REPAIR, 0.0)]), per: 1, chance: 0.15, store: 0.6, ..EATER },
 ];
 
-/// The roster of `ew run --roster`: ten kinds with rungs from the first day (rows of `KINDS`, each placed at its
-/// `year`): light-eaters of three sizes, eaters of remains of two, eaters of light-eaters of three and eaters of
-/// eaters of two.
+/// The roster of `ew run --roster`: the ten rows of `KINDS`, each placed at its `year`.
 pub const ROSTER: [usize; 10] = [2, 0, 3, 4, 5, 6, 1, 7, 8, 9];
 
 /// Whether a kind is a light-eater (its light catalyst at or above `body::LIGHT_EATER`).

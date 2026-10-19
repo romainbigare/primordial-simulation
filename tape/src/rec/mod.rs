@@ -83,9 +83,7 @@ pub struct Recorder {
     physics: String,
 }
 
-/// The run's numbers: `{"physics": {..}, "config": {..}}`, every field of `Physics` and of `Config`
-/// (the config without its `phys`), keys sorted, one line each, so two runs' files can be
-/// compared with a diff or `ew numbers`.
+/// The run's numbers, `{"physics": {..}, "config": {..}}`, keys sorted, one line each, so two runs compare with a diff.
 fn physics_json(w: &World) -> String {
     let mut cfg = serde_json::to_value(&w.cfg).unwrap_or_default();
     if let Some(o) = cfg.as_object_mut() {
@@ -123,10 +121,8 @@ impl Recorder {
         Kept { seen: self.seen.clone(), social: self.social.clone() }
     }
 
-    /// Start a run resumed from a snapshot: take back what the recorder kept (`kept`), and load what an earlier run
-    /// wrote to `dir` (series, months, frames, events) up to the snapshot's day, so the files go on from there. What it
-    /// wrote after that day is dropped (a resume from an earlier snapshot replays it). A `dir` without a tape starts the
-    /// tape empty. The events before the snapshot are the earlier run's, already counted.
+    /// Start a run resumed from a snapshot: take back what the recorder kept, and load what an earlier run wrote to `dir`
+    /// up to the snapshot's day, so the files go on from there (a `dir` without a tape starts it empty).
     pub fn resume(&mut self, w: &World, kept: Kept, dir: impl AsRef<Path>) -> io::Result<()> {
         (self.seen, self.social) = (kept.seen, kept.social);
         self.updates = w.counts.updates;
@@ -155,9 +151,8 @@ impl Recorder {
         w.time.is_multiple_of(w.cfg.calendar().year)
     }
 
-    /// Call at the start and after every simulated month with the events the world gave (`World::drain_events`), at a
-    /// year's end (`wants_counters`) the counts it gave (`World::take_counters`), and the time spent so far. A month
-    /// the tape has already (the snapshot's month, in a resumed run) is not recorded again.
+    /// Call at the start and after every month with the world's events, at a year's end its counts, and the time spent
+    /// so far. A month the tape has already (a resumed run's first) is not recorded again.
     pub fn record_month(&mut self, w: &World, events: Vec<Event>, taken: Option<Taken>, spent: &Spent) {
         let cal = w.cfg.calendar();
         let (year, yearly) = (cal.years(w.time), w.time.is_multiple_of(cal.year));

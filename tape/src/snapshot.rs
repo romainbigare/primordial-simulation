@@ -33,9 +33,8 @@ pub fn save_snapshot<P: Serialize>(w: &World, plan: &P, path: impl AsRef<Path>) 
     z.into_inner().map_err(|e| e.into_error())?.finish()?.flush()
 }
 
-/// Load a snapshot written by `save_snapshot` of this format version. The caches come back empty, and the laws build
-/// them before they read them; the mesh is rebuilt from the map's numbers, and each body's numbers from its genes
-/// (`Body::prepare`).
+/// Load a snapshot of this format version; caches come back empty and are rebuilt (the mesh from the map, each body's
+/// numbers from its genes).
 pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<(World, P)> {
     let mut z = BufReader::with_capacity(BUFFER, GzDecoder::new(std::fs::File::open(path)?));
     let mut head = [0u8; 8];

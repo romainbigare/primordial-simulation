@@ -11,14 +11,11 @@ use pcore::rng::{Purpose, Rng};
 use pcore::{lineage, World};
 use serde::{Deserialize, Serialize};
 
-/// The share of the starting light-eaters that carry the gene of the fixing reaction (`Chemistry::fixing`), chosen
-/// before any run: one in ten. Plants that fix with a partner are near a tenth of the flowering species, and a floor
-/// of grass or forest has 5 to 20% of its cover in them. The gene then evolves as any other: it costs the enzyme's
-/// upkeep.
+/// The share of the starting light-eaters that carry the gene of the fixing reaction: one in ten, as fixing plants are
+/// near a tenth of flowering species (docs/numbers.md). The gene then evolves as any other.
 pub const FIXERS: f64 = 0.1;
-/// log10 of the speed-up of the fixing reaction in those founders: the speed a growing body needs. A body turns its
-/// matter over in about half a year (3 x 10^-9 mol of the mineral a kg and second), and the gene is set as the light
-/// reaction's was, the speed a body needs over the speed of the bare reaction.
+/// log10 of the speed-up of the fixing reaction in those founders: what a body that turns its matter over in about
+/// half a year needs (3 x 10^-9 mol of the mineral a kg and second) over the bare reaction.
 pub const FIX_GENE: f32 = 9.8;
 /// Size of the random weights of a founder lineage's brain.
 const BRAIN_NOISE: f32 = 0.1;
@@ -35,18 +32,10 @@ fn founder_id(which: usize, i: usize, k: usize) -> u64 {
     (1 + which as u64) << KIND_BIT | (i as u64) << CELL_BIT | k as u64
 }
 
-/// How the first bodies are placed. What is placed, and when, is initial condition and must be reported with every
-/// result (`seed_with` returns the line to print).
-///
-/// A neutral brain has every action bias at 0 (resting, putting, taking, moving, the verbs on bodies and parts) and
-/// small random weights, so nothing says "eat" or "move when hungry"; selection has to find that. A kind without a
-/// brain (the light-eaters, `HIDDEN` 0) has no biases to set and starts as a neutral start does. Then every body gets
-/// `rounds` rounds of mutation (genes by `body::mutate`, born brain rows by `brain::shake`), each body its own random
-/// walk and genome, so the first generation is already a spray of variants. A neutral start gets more than one
-/// generation's step, which is too small to give selection anything to pick from: the bias of every row gets rounds of
-/// `ROW_SPRAY` (after 20 rounds of 0.2 they span about 0.9), the other row entries keep the step of one generation so
-/// the features do not swamp the brain, and the genes get `GENE_SPRAY` times the step of one generation. Hand-set
-/// starts keep the step of one generation for everything.
+/// How the first bodies are placed: an initial condition, reported with every result (`seed_with` returns the line). A
+/// neutral brain has every action bias at 0, so selection must find what to do. Every body then gets `rounds` rounds of
+/// mutation, so the first generation is a spray of variants; a neutral start gets more than one generation's step (row
+/// biases by `ROW_SPRAY`, genes `GENE_SPRAY` times the step), as one step gives selection too little to pick from.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Seeding {
     /// Hand-set brain biases for the kinds that have them (the animals). The default, what `ew run` uses, sets them:

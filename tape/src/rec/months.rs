@@ -55,9 +55,8 @@ pub(super) fn year_month(w: &World) -> (u64, u64) {
 }
 
 impl Recorder {
-    /// The month: its row (where the mobile bodies are and how they moved since last month), and what the year
-    /// counts at month ends: standing members by kind, signals by context, bodies inside walls, the land's
-    /// temperature.
+    /// The month: its row, and what the year counts at month ends (members, signals, bodies inside walls, the land's
+    /// temperature).
     pub(super) fn month(&mut self, w: &World) {
         let (chem, gw, y, s) = (&w.chem, w.map.w as u32, &mut self.year, &mut self.social);
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);

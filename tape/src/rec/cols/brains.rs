@@ -69,10 +69,8 @@ impl Recorder {
         row.push("hidden_max", "1", top);
     }
 
-    /// Kinds of live bodies by their genes and diet (`measure::kinds`: `kinds` counts each body once,
-    /// `kinds_members` each member), the mass range of their members (kg), and the share of what a kind took from
-    /// other bodies that came from bodies that are not light-eaters: for the kind with most bodies, and the highest
-    /// of any kind.
+    /// Kinds of live bodies by genes and diet (`measure::kinds`), their members' mass range (kg), and the share of what a
+    /// kind took from bodies that came from animals: for the kind with most bodies, and the highest of any.
     fn variety(&self, w: &World, row: &mut Row) {
         let (of, k) = measure::kinds(w);
         let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();

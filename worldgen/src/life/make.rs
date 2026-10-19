@@ -6,25 +6,19 @@ use pcore::body::{self, Body, Layout};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 
-/// log10 of how much faster the open world burns the energy-rich solid, and body matter, than when the founders'
-/// `cat` numbers were set (four times: litter constants of 0.27 and 0.2 a year): a founder's burning genes are that
-/// much lower, so its burning and the cost of its enzymes (both go with k x 10^gene) stay what they were.
+/// log10 of how much faster the open world burns the energy-rich solid and body matter than the founders' `cat`
+/// numbers assume (litter constants of 0.27 and 0.2 a year): their burning genes are that much lower.
 pub const LITTER_X: f32 = 0.602;
-/// log10 of how much more light catalyst a founder light-eater needs under the smooth rate of Law 2: the reaction's
-/// contact is the body's liquid, not the gas it exchanges in its interval, and a founder (2 kg, a 20-day interval)
-/// exchanges 182 times its liquid. Its gene of the light reaction is that much higher, so its own light reaction
-/// goes as before.
+/// log10 of how much more light catalyst a founder light-eater needs: the reaction's contact is the body's liquid, and
+/// a founder (2 kg, a 20-day interval) exchanges 182 times its liquid in gas.
 pub const LIGHT_X: f32 = 2.26;
-/// The share of each solid bodies can build besides their matter (`Chemistry::builds`) in what every founder builds
-/// and holds (its keep gene of the solid, `Body::share`): the same for every kind, small so that selection can find
-/// what each is worth.
+/// Every founder's keep gene of each solid bodies build besides their matter: small, so selection finds its worth.
 const BUILT_SHARE: f32 = 0.02;
 /// A gene that is off starts below zero, so small changes keep it off: catalysts and the rest.
 const CAT_OFF: f32 = -1.0;
 const GENE_OFF: f32 = -0.1;
-/// What a founder keeps, kg per kg of its body (`Body::level`): the liquid (also its share of the body,
-/// `Body::size`), the energy-rich solid (or what it is placed with and `KEEP_MARGIN` more, if more), every other store;
-/// and the minimums, the floor growth and giving keep (`Body::burns_at`): about three updates of upkeep of the solid.
+/// What a founder keeps, kg per kg of its body: the liquid, the energy-rich solid (or what it is placed with and
+/// `KEEP_MARGIN` more), every other store; and the minimums, about three updates of upkeep of the solid.
 pub(super) const KEEP_LIQUID: f32 = 0.75;
 const KEEP_SOLID: f32 = 0.9;
 const KEEP_MARGIN: f64 = 1.1;
@@ -35,9 +29,8 @@ const MINERAL_KEEP: f64 = 2.0;
 /// The largest share of a body that is liquid (as `Body::size` bounds the keep gene).
 const MAX_LIQUID_SHARE: f64 = 0.95;
 
-/// How a placed member's mass is shared: (fuel, liquid, body matter), shares of the mass, for a fuel share `store` and
-/// the keep gene `h` of the liquid. The body (the rest) is liquid in the share `h` and matter in 1 - `h`
-/// (`Body::size`: matter over 1 - `h`). Without body matter in the chemistry the rest is liquid.
+/// How a placed member's mass is shared, (fuel, liquid, body matter), for a fuel share `store` and the liquid's keep
+/// gene `h`: the body is liquid in the share `h` and matter in 1 - `h` (all liquid without body matter).
 pub(super) fn split(store: f64, h: f64, matter: bool) -> (f64, f64, f64) {
     let body = 1.0 - store;
     if !matter {
@@ -90,9 +83,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
         genes = pcore::body::mutate(&lay, &genes, &mut rg);
     }
     genes[body::MUT] -= gmul.log10();
-    // A founder is an adult of its kind: its body (`Body::built`, its matter at the liquid share of living tissue) is
-    // its copy mass, from its own genes after the spray, and fuel the share `store` of its mass on top; the liquid it
-    // keeps with it in the share of its keep gene. Without body matter the whole mass is the body.
+    // A founder is an adult: its living body is its copy mass after the spray, with the share `store` of fuel on top.
     let matter = chem.matter_roles();
     let h = genes[lay.keep + liquid].clamp(0.0, MAX_LIQUID_SHARE as f32) as f64;
     let mass = 10f64.powf(genes[body::COPY_MASS] as f64) * if matter.is_some() { (1.0 - body::WET_TISSUE) / (1.0 - h) / (1.0 - kind.store) } else { 1.0 };
@@ -101,9 +92,8 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let (fuel, liq, mat) = split(kind.store, genes[lay.keep + liquid] as f64, matter.is_some());
     store[rich] = fuel * count * mass / chem.subs[rich].molar_mass;
     store[liquid] = liq * count * mass / chem.subs[liquid].molar_mass;
-    // The minerals growth also needs: a member is placed holding what its matter was made of, so it can build a
-    // matter's worth again; it keeps up to `MINERAL_KEEP` times that per kg of its body (the matter over 1 - h), and a
-    // light-eater takes them from the ground (an animal has them from the matter it digests).
+    // A member holds the minerals its matter was made of, so it can build that again, and keeps up to `MINERAL_KEEP`
+    // times that per kg of body.
     if let Some((m, _)) = matter {
         store[m] = mat * count * mass / chem.subs[m].molar_mass;
         for &(k, per) in chem.minerals() {

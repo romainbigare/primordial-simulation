@@ -1,9 +1,6 @@
-//! First life: bodies placed on land at the start. These are initial conditions only; afterwards everything follows
-//! the laws. The reactions they speed up are found from the chemistry's numbers (`Chemistry::life_roles`): the light
-//! reaction, the energy-rich solid it makes, the liquid it uses, and the reaction that burns that solid with a gas.
-//!
-//! `kinds`: the table of starting kinds; `make`: one founder; `seeding`: placing a kind; `soil`: the mineral of the
-//! land when life starts.
+//! First life: bodies placed on land at the start, initial conditions only (laws.md 8); their reactions are found from
+//! the chemistry's numbers (`Chemistry::life_roles`). `kinds`: the table; `make`: one founder; `seeding`: placing a
+//! kind; `soil`: the mineral of the land when life starts.
 
 mod kinds;
 mod make;
@@ -22,8 +19,7 @@ use pcore::{survey, World};
 /// Land under more standing liquid than this, m, gets no soil and no founder (a basin of standing liquid).
 const MAX_STANDING_M: f64 = 0.5;
 
-/// Whether life starts on cell `i`: land (`World::is_land`) under no more than `MAX_STANDING_M` of standing liquid (what
-/// the pores of the ground do not hold, `survey::env_of`).
+/// Whether life starts on cell `i`: land under no more than `MAX_STANDING_M` of standing liquid.
 fn open_land(w: &World, i: usize) -> bool {
     w.is_land(i) && survey::env_of(w, i)[1] <= MAX_STANDING_M
 }

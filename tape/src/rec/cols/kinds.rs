@@ -23,10 +23,8 @@ const GENES: [(usize, &str, &str); 8] = [
 /// A member below this activity (`Body::activity`) counts as dry.
 const DRY: f64 = 0.5;
 
-/// Sums over the live members of one starting kind: members, bodies, member-years of life (`life_years`), mass and
-/// body matter (kg), body (kg, `Body::size`), member-copy-mass (kg), brood (kg); and by members the `ALLOC` and
-/// `CHILD` genes, the activity, the members below `DRY`, the `WET` gene and the genes of `GENES`; and per catalyst
-/// gene the sum over the members that carry it on, and those members.
+/// Sums over the live members of one starting kind: counts, life, masses and brood; by members the genes and the
+/// activity; per catalyst gene its sum over the members that carry it on, and those members.
 #[derive(Clone)]
 struct Kind {
     members: f64,
@@ -77,8 +75,7 @@ impl Kind {
     }
 }
 
-/// Years a member of `b` lives at its upkeep now, as the age law wears it (`body::live`): `e_life` x 10^`REPAIR` per kg
-/// of the body that is built (`Body::built`, at least 10^-9 of the mass as there) over its upkeep.
+/// Years a member of `b` lives at its upkeep now: `e_life` × 10^`REPAIR` per kg of living body over its upkeep.
 fn life_years(w: &World, b: &Body) -> f64 {
     let mut x = Body::default();
     let b = if b.k.cat.is_empty() {
@@ -133,8 +130,7 @@ impl Recorder {
             row.push(c("activity"), "1", per(v.act));
             row.push(c("dry"), "1", per(v.dry));
             row.push(c("wet_gene"), "log10", per(v.wet));
-            // The genes of reproduction (the share of building that goes to offspring, and a child's body as log10 of
-            // its share of the copy mass) and the brood as a share of the members' mass.
+            // The genes of reproduction and the brood as a share of the members' mass.
             row.push(c("alloc"), "1", per(v.alloc));
             row.push(c("child"), "log10", per(v.child));
             row.push(c("brood"), "1", ratio(v.brood, v.mass));

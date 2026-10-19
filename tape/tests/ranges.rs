@@ -1,17 +1,16 @@
-//! The key numbers of a normal run (`docs/foundation/plan.md` 6.3): `ew run --seed N --size 64` for seeds 1, 2 and 3,
-//! 30 years each, on threads. The mean of each number over the three seeds must lie in its range around its
-//! reference, the mean of the same three seeds in the reference runs: for the climate and the land worn down, the runs
-//! of the converged world (the air's implicit step at its default, J1); for life, the A2 runs
-//! (`docs/reports/foundation-a/`). The climate
-//! and the land worn down are means over years 21 to 30; life is read at year 30, ten years after the eaters came.
-//! Each run also keeps its books.
+//! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
+//! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
+//! seeds in the reference runs: for the climate and the land worn down, the runs of the converged world (the air's
+//! implicit step at its default); for life, the A2 runs (`docs/reports/foundation-a/`). The climate and the land worn
+//! down are means over years 21 to 30; life is read at year 30, ten years after the eaters came. Each run also keeps
+//! its books.
 //!
-//! The sleep of Change's nodes is a speed tool (plan 6.4): a small world with life keeps the chemistry's key numbers
+//! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
 //! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
-//! The steps of Flow are speed settings too (plan 6.4, the long step against the short one): small worlds with life keep
+//! The steps of Flow are speed settings too (the long step against the short one): small worlds with life keep
 //! their climate within the seeds' noise at the default steps and with the air's step at 6 hours and the physics step
 //! at 3 days.
 
@@ -57,11 +56,10 @@ const EATER_KG: f64 = 4.497;
 /// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the A2 runs.
 const PLANT_LIFE: f64 = 1.895;
 /// The factor either way the light-eaters' life may lie from `PLANT_LIFE`: wider than the others' 2, as the A2
-/// light-eaters paid for a brain that light-eaters no longer have (`docs/foundation/plan.md`, E9), so they live longer.
+/// light-eaters paid for a brain that light-eaters no longer have, so they live longer.
 const PLANT_LIFE_RANGE: f64 = 3.0;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, as the A2 eaters shared
-/// the brain rows of their group and learned slower than a body that learns into its own rows (`docs/foundation/plan.md`,
-/// E10).
+/// the brain rows of their group and learned slower than a body that learns into its own rows.
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the A2 reference runs.
 const EATER_LIFE: f64 = 2.914;

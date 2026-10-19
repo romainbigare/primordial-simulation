@@ -16,29 +16,21 @@ pub(crate) fn learned(w: &World) -> f64 {
     sum / members.max(1.0)
 }
 
-/// What makes bodies kinds, one dimension each: log10 copy mass, log10 interval, strength, log10
-/// light-capture area and the light-reaction catalyst (the first `FIXED` places, scales in `SCALE`),
-/// then the diet: the catalyst of every other reaction (off counts as 0; `CAT_SCALE` decades) and
-/// the uptake gene of every substance (off as 0; `UPT_SCALE`). The diet has one place per reaction
-/// and per substance, not "the two largest": a charcoal-eater and a sugar-eater whose largest
-/// catalysts are equal still differ in which reaction they are, and two bodies with the same diet
-/// are equal whatever order their genes lie in. A kind differs by about one scale. The cost is
-/// about 45 dimensions on a sample of `SAMPLE` bodies, a few milliseconds a year.
+/// What makes bodies kinds, one dimension each: log10 copy mass, log10 interval, strength, log10 light-capture area
+/// and the light-reaction catalyst (the first `FIXED`, scales in `SCALE`), then the diet: every other catalyst
+/// (`CAT_SCALE` decades) and every uptake gene (`UPT_SCALE`), off as 0, one place each so diets compare by reaction.
+/// A kind differs by about one scale.
 const FIXED: usize = 5;
 const SCALE: [f32; FIXED] = [1.0, 0.3, 0.25, 1.0, 4.0];
 const CAT_SCALE: f32 = 4.0;
 const UPT_SCALE: f32 = 1.0;
-/// Most kinds looked for; most bodies clustered (an even sample of the live bodies); rounds of
-/// the clustering. So `kinds` is a floor, not a count: it never says more than `MAX_K`, and it says
-/// less when two kinds lie closer than `SEP` radii or one has under `MIN_SHARE` of the bodies (a
-/// roster run with six starting kinds alive can read 1). In roster runs read the number of kinds
-/// from the per-root survival (`root_<k>_members` above 0).
+/// Most kinds looked for; most bodies clustered (an even sample); rounds of the clustering. So `kinds` is a floor, not a
+/// count (a roster run with six kinds alive can read 1): in roster runs read `root_<k>_members` above 0 instead.
 const MAX_K: usize = 6;
 const SAMPLE: usize = 2000;
 const ROUNDS: usize = 20;
-/// Kinds are clearly separated if the nearest two centres are further apart than this many times
-/// the widest kind's rms radius; a kind needs this share of the bodies (or members) and at
-/// least 3 sampled bodies (1 when counting members: one node of 10^8 members is a kind).
+/// Kinds are clearly separated if the nearest two centres are further apart than this many times the widest kind's rms
+/// radius; a kind needs this share of the bodies (or members) and 3 sampled bodies (1 when counting members).
 const SEP: f32 = 3.0;
 const MIN_SHARE: f64 = 0.01;
 
@@ -64,10 +56,8 @@ fn nearest(c: &[Vec<f32>], p: &[f32]) -> usize {
     c.iter().map(|x| d2(x, p)).enumerate().fold((0, f32::INFINITY), |best, (j, d)| if d.total_cmp(&best.1).is_lt() { (j, d) } else { best }).0
 }
 
-/// Weighted k-means with `k` centres: the first is the point nearest the mean, each next the
-/// point furthest from the centres so far (ties to the lower index); then up to `ROUNDS` rounds of
-/// Lloyd with each point counting its weight, until no point changes its kind (the centres would
-/// then stay as they are). Returns the centres and the kind of each point.
+/// Weighted k-means with `k` centres: the first nearest the mean, each next furthest from those so far; then up to
+/// `ROUNDS` rounds of Lloyd until no point changes its kind. Returns the centres and the kind of each point.
 fn kmeans(p: &[Vec<f32>], wt: &[f64], k: usize) -> (Vec<Vec<f32>>, Vec<usize>) {
     let (dim, tot) = (p[0].len(), wt.iter().sum::<f64>());
     let mean: Vec<f32> = (0..dim).map(|j| (p.iter().zip(wt).map(|(x, &w)| x[j] as f64 * w).sum::<f64>() / tot) as f32).collect();
@@ -103,10 +93,8 @@ fn kmeans(p: &[Vec<f32>], wt: &[f64], k: usize) -> (Vec<Vec<f32>>, Vec<usize>) {
     (c, of)
 }
 
-/// The centres of the kinds of the live bodies (none if they are not clearly separated, or too
-/// few to tell): the largest k from 2 to `MAX_K` whose kinds are clearly separated (see `SEP`,
-/// `MIN_SHARE`). Each sampled body counts once, or, `by_members`, as many times as it has
-/// members, so a node of 10^8 and a lone individual do not weigh the same.
+/// The centres of the kinds of the live bodies: the largest k from 2 to `MAX_K` whose kinds are clearly separated (none
+/// if none is). Each sampled body counts once, or `by_members` by its members.
 fn fit(w: &World, by_members: bool) -> Vec<Vec<f32>> {
     let diet = diet(&w.chem);
     let stride = w.life.alive().count().div_ceil(SAMPLE).max(1);

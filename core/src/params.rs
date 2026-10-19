@@ -85,9 +85,8 @@ pub struct Config {
     pub phys: Physics,
 }
 
-/// Free numbers of the laws of bodies and of the ground's cover and hydrology, grouped by the
-/// law that reads them; none is a rule, all are sizes of costs, strengths, spreads and flows.
-/// Numerical safeguards, speed schedules and fixed sizes stay consts in the code.
+/// Free numbers of the laws of bodies and of the ground's cover and hydrology, grouped by the law that reads them:
+/// sizes of costs, strengths, spreads and flows, never rules.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Physics {
     // Change and Flow, as bodies feel them
@@ -257,22 +256,18 @@ const MOVE_REF: f64 = 30.0;
 const MOVE_EXP: f64 = -0.32;
 
 impl Physics {
-    /// Energy of one decision of a brain whose cost is `c` J per kg of a member of `m_ref` kg
-    /// (`Lineage::cost`), for a member of `m` kg, J: weakly more for a bigger body. Paid per
-    /// decision, not per day, so it pushes bodies toward long intervals.
+    /// Energy of one decision of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for a
+    /// bigger body; paid per decision, so it pushes bodies toward long intervals.
     pub(crate) fn think(&self, c: f64, m: f64) -> f64 {
         c * self.m_ref * (m / self.m_ref).powf(0.25)
     }
-    /// Energy to move one kg one metre on the flat for a member of `m1` kg, J: `c_move` at
-    /// `MOVE_REF`, times (m1 / `MOVE_REF`)^`MOVE_EXP` otherwise, the real cost of transport
-    /// (Taylor et al. 1982, 10.7 m1^-0.32 J per kg per m). Climbing is not in it: that is the
-    /// weight lifted (`Config::gravity`).
+    /// Energy to move one kg one metre on the flat for a member of `m1` kg, J: the real cost of transport, 10.7
+    /// m1^-0.32 J per kg per m (Taylor et al. 1982), scaled to `c_move` at `MOVE_REF`. Climbing is the weight lifted.
     pub fn walk(&self, m1: f64) -> f64 {
         self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
     }
-    /// Check the numbers the laws need in their range: `dormancy` above 1 (a drying body's pores close as u^n, solved
-    /// with n - 1 in a divisor: `body::exchange::closing`); `light_yield` above 0 and at most 1 (the light a light
-    /// reaction takes is what it stores over this share).
+    /// Check the numbers the laws need in range: `dormancy` above 1 (`body::exchange::closing` divides by n - 1);
+    /// `light_yield` in (0, 1] (a light reaction takes what it stores over this share).
     pub fn validate(&self) -> Result<(), String> {
         if self.dormancy.is_nan() || self.dormancy <= 1.0 {
             return Err(format!("dormancy ({}) must be above 1", self.dormancy));
@@ -372,14 +367,12 @@ impl Config {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
-    /// Check a run's settings before it starts: the time steps are at least 1 (`schedule`), and the physics
-    /// (`Physics::validate`).
+    /// Check a run's settings before it starts: the time steps, and the physics (`Physics::validate`).
     pub fn validate(&self) -> Result<(), String> {
         if self.phys_days == 0 || self.air_hours == 0 || self.flow_days == 0 {
             return Err(format!("phys_days ({}), air_hours ({}) and flow_days ({}) must be at least 1", self.phys_days, self.air_hours, self.flow_days));
         }
-        // (The air's step is booked whole as it runs: a longer one would book the air's moves ahead of the physics steps
-        // that read them.)
+        // The air's step is booked whole as it runs: a longer one would book its moves ahead of the physics steps.
         if !(self.phys_days as u64 * self.calendar().day).is_multiple_of(self.air_hours as u64 * HOUR_S) {
             return Err(format!("the air's step ({} hours) must divide the physics step ({} days)", self.air_hours, self.phys_days));
         }
@@ -394,8 +387,7 @@ impl Config {
         }
         self.phys.validate()
     }
-    /// Spread of the new weights of a brain carried over to other sizes (`Physics::new_noise`; none in a null run, whose
-    /// brains never change at a copy).
+    /// Spread of the new weights of a brain carried over to other sizes (none in a null run).
     pub(crate) fn new_noise(&self) -> f32 {
         if self.null { 0.0 } else { self.phys.new_noise }
     }

@@ -1,6 +1,5 @@
-//! The code-size test (handover 14.3, `docs/foundation/plan.md` "The line budget"): `core/src` holds at most
-//! `CEILING` lines of code. A code line is one that is not blank and does not start with `//` after its spaces, so
-//! comments are free.
+//! The code-size test (handover 14.3): `core/src` holds at most `CEILING` lines of code. A code line is one that is
+//! not blank and does not start with `//` after its spaces, so comments are free.
 
 use std::collections::BTreeMap;
 use std::path::Path;

@@ -64,9 +64,8 @@ impl Recorder {
         self.frames = frames.iter().map(day).take_while(|&d| d <= w.day()).collect();
         self.bytes = raw[8 + n..8 + n + frame * self.frames.len()].to_vec();
         self.log = events.iter().take_while(|e| day(e) <= w.day()).map(|e| (day(e), e["text"].as_str().unwrap_or("").to_string())).collect();
-        // Series: the rows of years up to this one (a null is a NaN that was written). A column with no value in them is
-        // left out, as in the run that wrote the file before this year: it comes back, NaN in the years before, with its
-        // first value (`Recorder::append`), and the columns that follow what was recorded (`kinds`) do not see it early.
+        // Series: the rows of years up to this one (a null is a written NaN). A column with no value yet is left out, as
+        // the unbroken run had it then; it comes back with its first value (`Recorder::append`).
         let (series, units) = (object("series")?, object("series_units")?);
         let years = series.get("year").and_then(Value::as_array).ok_or_else(|| bad("no years"))?;
         let rows = years.iter().take_while(|y| y.as_f64().is_some_and(|y| y <= w.year())).count();
