@@ -1,11 +1,7 @@
 //! The order of the laws, as processes of the clock: each runs on its own period, and at one time they run in the
 //! order of `processes`, written once here (laws.md 0).
 
-use crate::clock::{self, Every};
-use crate::params::Config;
-use crate::units::HOUR_S;
-use crate::world::World;
-use crate::{bond, change, check, flow, survey};
+use crate::{bond, change, check, clock::{self, Every}, flow, params::Config, survey, units::HOUR_S, world::World};
 
 /// A stage of the month, as `step_marked` reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

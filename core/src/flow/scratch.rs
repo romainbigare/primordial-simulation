@@ -1,14 +1,8 @@
 //! The working memory of Flow (`Scratch`), its tables, and the recheck of what is present (`refresh`).
 
-use super::air;
-use super::land::NONE;
-use super::range;
-use crate::chem::Chemistry;
-use crate::solve::downhill::Order;
-use crate::solve::spread::Spread;
-use crate::{World, AIR};
+use super::{air, land::NONE, range};
+use crate::{chem::Chemistry, solve::{downhill::Order, spread::Spread}, store::Class, AIR, World};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use crate::store::Class;
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
 #[derive(Clone, Copy, Debug, Default)]

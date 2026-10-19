@@ -15,11 +15,7 @@ pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, anchor, carry, dig, force, form, moved, release};
 pub(crate) use verbs::{bears, let_go, lever};
 
-use crate::chem::{Chemistry, Phase};
-use crate::event::{Event, EventKind};
-use crate::life::free_place;
-use crate::store::{Node, NodeId};
-use crate::World;
+use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::free_place, store::{Node, NodeId}, World};
 use serde::{Deserialize, Serialize};
 
 /// Held by no body; the bonded ground (as the other end of a bond).

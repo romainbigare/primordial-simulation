@@ -2,10 +2,7 @@
 //! heads, and heat conducted sideways (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
-use crate::solve::spread::Net;
-use crate::store::{apply, Class, LinkFlux};
-use crate::units::{MAX_SUBSTANCES, T_FLOOR};
-use crate::World;
+use crate::{solve::spread::Net, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
 /// No substance on a melting plateau (`Scratch::pk`).
 pub(super) const NONE: usize = usize::MAX;

@@ -1,8 +1,7 @@
 //! The settings of a world (`Config`) and the free numbers of its laws (`Physics`). What each
 //! number is anchored to is in `docs/numbers.md`, one row per field.
 
-use crate::clock::Calendar;
-use crate::units::{DAY_S, HOUR_S, T_SURF};
+use crate::{clock::Calendar, units::{DAY_S, HOUR_S, T_SURF}};
 use serde::{Deserialize, Serialize};
 
 /// The settings of a world: the planet, the calendar and time steps, the physics of its ground

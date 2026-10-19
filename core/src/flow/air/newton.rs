@@ -2,12 +2,8 @@
 //! (`gather`), and one implicit step of the air nodes' totals, gases and heat with the wind (`solve`, by `solve::band`).
 
 use super::super::Scratch;
-use super::step::{Active, Iterate, FIXED, PER_GAS};
-use super::wind::{pushes, Coef, Links, Pushes};
-use super::{lerp, over_cell, shares};
-use crate::solve::band::{fluxes, reach, Band};
-use crate::{World, AIR};
-use crate::store::Class;
+use super::{lerp, over_cell, shares, step::{Active, Iterate, FIXED, PER_GAS}, wind::{pushes, Coef, Links, Pushes}};
+use crate::{solve::band::{fluxes, reach, Band}, store::Class, AIR, World};
 
 /// What the ground nodes give the air nodes over the step: heat, J; the net amount of each active gas that comes up
 /// (`[gas * nodes + node]`), mol; what condenses, mol and mol × reflectance; and the slopes of what each air node gets

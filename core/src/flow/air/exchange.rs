@@ -1,14 +1,9 @@
 //! The exchange of ground nodes with the air: evaporation, condensation (rain and cloud), and gases dissolving in the
 //! ground's liquid; and how what dissolves is booked (`Crossing`).
 
-use super::super::land::wet;
-use super::super::Scratch;
+use super::super::{land::wet, Scratch};
 use super::{lerp, over_cell};
-use crate::chem::Chemistry;
-use crate::math::one_minus_exp;
-use crate::store::{apply, Batch, Class};
-use crate::units::R_GAS;
-use crate::{World, AIR};
+use crate::{chem::Chemistry, math::one_minus_exp, store::{apply, Batch, Class}, units::R_GAS, AIR, World};
 
 /// Entries of the table of a saturation pressure (`Sat`) per K, and the step between them, K.
 const SAT_PER_K: f64 = 20.0;

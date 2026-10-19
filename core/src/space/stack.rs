@@ -50,16 +50,5 @@ impl Stack {
     pub fn node(&self, k: usize, c: usize) -> usize {
         self.first[k] as usize + c
     }
-    pub fn lo(&self) -> &[u32] {
-        &self.lo
-    }
-    pub fn hi(&self) -> &[u32] {
-        &self.hi
-    }
-    pub fn dist(&self) -> &[f64] {
-        &self.dist
-    }
-    pub fn area(&self) -> &[f64] {
-        &self.area
-    }
+    super::views! { lo: u32, hi: u32, dist: f64, area: f64 }
 }

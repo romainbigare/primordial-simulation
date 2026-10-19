@@ -1,10 +1,7 @@
 //! What bodies perceive of parts, and what parts give a body: the inside of a structure, and being held up afloat.
 
 use super::{cell, held, part, Enclosure, NO, NOBODY};
-use crate::body::Body;
-use crate::brain::LN_MASS;
-use crate::chem::Phase;
-use crate::World;
+use crate::{body::Body, brain::LN_MASS, chem::Phase, World};
 
 /// A body perceives the ln of a part's length (m) over this (its mass as every mass, `brain::LN_MASS`).
 const LN_SIZE_SCALE: f32 = 3.0;

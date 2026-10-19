@@ -1,13 +1,7 @@
 //! The world's state: the store's nodes (ground, air, bed, deep stores, bodies' nodes, the nodes beyond its boundary
 //! that book what crossed it, the potential), the bodies and parts, and the counters the shell reads.
 
-use crate::chem::Chemistry;
-use crate::event::Event;
-use crate::params::Config;
-use crate::space::square::Square;
-use crate::space::Mesh;
-use crate::store::{Class, Node, Store};
-use crate::{bond, flow};
+use crate::{bond, chem::Chemistry, event::Event, flow, params::Config, space::{square::Square, Mesh}, store::{Class, Node, Store}};
 use serde::{Deserialize, Serialize};
 
 /// Counts and slow averages for the shell; the laws never read them. The fields not saved count since the shell last read them.

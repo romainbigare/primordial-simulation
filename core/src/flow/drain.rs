@@ -2,14 +2,8 @@
 //! of each cell's stack joined by a vertical link (laws.md 1.2): the rates along that link, and Darcy's law between
 //! cells in each layer, which `solve::spread` solves.
 
-use super::land::{t_now, table, wet};
-use super::liquid::{book, mobile};
-use super::Scratch;
-use crate::math::one_minus_exp;
-use crate::solve::spread::{within, Net, Spread};
-use crate::space::{Layer, Stack};
-use crate::store::{Batch, Class, LinkFlux};
-use crate::World;
+use super::{land::{t_now, table, wet}, liquid::{book, mobile}, Scratch};
+use crate::{math::one_minus_exp, solve::spread::{within, Net, Spread}, space::{Layer, Stack}, store::{Batch, Class, LinkFlux}, World};
 
 /// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
 const DEEP: usize = 0;

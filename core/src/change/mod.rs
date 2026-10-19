@@ -11,11 +11,7 @@ pub(crate) use gas::{send_gas, GasMove};
 pub use kernel::Reactor;
 pub(crate) use kernel::{denature, frac, pace, scarce};
 
-use crate::chem::{Chemistry, Phase};
-use crate::flow::FlowView;
-use crate::ground::share;
-use crate::store::{apply, Batch, Class, LinkFlux, Node, Transform};
-use crate::{World, AIR};
+use crate::{chem::{Chemistry, Phase}, flow::FlowView, ground::share, store::{apply, Batch, Class, LinkFlux, Node, Transform}, AIR, World};
 
 /// A node sleeps until its reactions would use this share of their inputs (but for those on a `SPECK` of what it
 /// holds) or warm it `CALM_K` kelvin: for so little, one long span is as good as many steps.

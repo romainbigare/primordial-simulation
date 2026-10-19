@@ -13,10 +13,9 @@ pub use air::{column, declination, glow, insolation, scale_height};
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 
-use crate::{World, AIR};
+use crate::{store::Class, AIR, World};
 use land::ground_state;
 use scratch::tables;
-use crate::store::Class;
 
 /// The slow-changing ground and the substances present are rechecked this often, months (`schedule`).
 pub(crate) const REFRESH_MONTHS: u64 = 3;

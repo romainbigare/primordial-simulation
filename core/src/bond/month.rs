@@ -1,15 +1,7 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
-use super::sense::liquid;
-use super::verbs::{bears, torn_from};
-use super::{cell, dissolve, holder, id, members, move_structure, ready, restructure, unlink, GROUND};
-use crate::change::{send_gas, GasMove, Reactor};
-use crate::ground::share;
-use crate::store::{Class, Node};
-use crate::chem::Phase;
-use crate::space::square::DIRS;
-use crate::rng::{Purpose, Rng};
-use crate::{World, AIR};
+use super::{cell, dissolve, holder, id, members, move_structure, ready, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
+use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, rng::{Purpose, Rng}, space::square::DIRS, store::{Class, Node}, AIR, World};
 
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;

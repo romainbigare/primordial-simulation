@@ -2,14 +2,8 @@
 //! (`drain::springs`); what may run off runs down the cells in the order of their heads in one pass
 //! (`solve::downhill`), doing work on its bed; then the liquid under the surface moves (`drain::under`).
 
-use super::drain::{springs, under};
-use super::land::{lift, solid, stand, wet, HALF_WAY};
-use super::{bare_share, follow, range, year_weight, Scratch};
-use crate::math::one_minus_exp;
-use crate::solve::downhill::{pass, Adjacency, Crossed};
-use crate::store::{apply, Batch, Class, LinkFlux, Move};
-use crate::units::T_FLOOR;
-use crate::World;
+use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, HALF_WAY}, range, year_weight, Scratch};
+use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{apply, Batch, Class, LinkFlux, Move}, units::T_FLOOR, World};
 
 /// A node with no load and less carrying capacity than this does no work on its bed, m³.
 const CARRY_MIN: f64 = 1.0;

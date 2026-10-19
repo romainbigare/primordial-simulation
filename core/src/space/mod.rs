@@ -8,6 +8,16 @@ pub mod stack;
 
 pub use stack::{Layer, Stack};
 
+/// Read-only views of array fields of the same names, `name: element type` (the shape is built once and then only read).
+macro_rules! views {
+    ($($(#[$doc:meta])* $field:ident: $t:ty),* $(,)?) => {
+        $($(#[$doc])* pub fn $field(&self) -> &[$t] {
+            &self.$field
+        })*
+    };
+}
+use views;
+
 /// One level of a mesh: its cells, its links, and how it nests in the levels next to it.
 #[derive(Clone, Debug, Default)]
 pub struct Level {
@@ -73,14 +83,12 @@ impl Level {
     pub fn n(&self) -> usize {
         self.area.len()
     }
-    pub fn area(&self) -> &[f64] {
-        &self.area
-    }
-    pub fn lat(&self) -> &[f64] {
-        &self.lat
-    }
-    pub fn lon(&self) -> &[f64] {
-        &self.lon
+    views! {
+        area: f64, lat: f64, lon: f64, a: u32, b: u32, dist: f64, width: f64,
+        /// The compressed adjacency: `start` (len n + 1), and for each entry its link and its other cell.
+        start: u32, adj_link: u32, adj_cell: u32,
+        /// Each cell's parent at the next coarser level (empty at the coarsest).
+        parent: u32,
     }
     /// The way from the centre of cell `i` to that of cell `j`, (east, south), m: on a sphere along its parallel at
     /// their mean latitude and its meridian, the shorter way round.
@@ -92,28 +100,6 @@ impl Level {
         let mean = ((self.lat[i] + self.lat[j]) / 2.0).to_radians();
         [self.radius * east.to_radians() * mean.cos(), self.radius * (self.lat[i] - self.lat[j]).to_radians()]
     }
-    pub fn a(&self) -> &[u32] {
-        &self.a
-    }
-    pub fn b(&self) -> &[u32] {
-        &self.b
-    }
-    pub fn dist(&self) -> &[f64] {
-        &self.dist
-    }
-    pub fn width(&self) -> &[f64] {
-        &self.width
-    }
-    /// The compressed adjacency: `start` (len n + 1), and for each entry its link and its other cell.
-    pub fn start(&self) -> &[u32] {
-        &self.start
-    }
-    pub fn adj_link(&self) -> &[u32] {
-        &self.adj_link
-    }
-    pub fn adj_cell(&self) -> &[u32] {
-        &self.adj_cell
-    }
     /// The links of cell `i` and the cells at their other ends.
     pub fn around(&self, i: usize) -> (&[u32], &[u32]) {
         let r = self.start[i] as usize..self.start[i + 1] as usize;
@@ -123,10 +109,6 @@ impl Level {
     pub fn link(&self, i: usize, j: usize) -> Option<usize> {
         let (links, cells) = self.around(i);
         cells.iter().position(|&c| c as usize == j).map(|e| links[e] as usize)
-    }
-    /// Each cell's parent at the next coarser level (empty at the coarsest).
-    pub fn parent(&self) -> &[u32] {
-        &self.parent
     }
     /// The children of cell `i` at the next finer level (none at the finest).
     pub fn children(&self, i: usize) -> &[u32] {

@@ -1,9 +1,6 @@
 //! The reactor of Law 2: the rate law and its helpers, and `Reactor`, which reacts the amounts of one node, body or part.
 
-use crate::chem::{Chemistry, Phase, Reaction};
-use crate::math::{add_times, one_minus_exp};
-use crate::units::P_REF;
-use crate::Config;
+use crate::{chem::{Chemistry, Phase, Reaction}, math::{add_times, one_minus_exp}, units::P_REF, Config};
 
 /// A reaction whose fraction over the world's year stays below this is frozen and skipped.
 const NEGLIGIBLE: f64 = 1e-12;

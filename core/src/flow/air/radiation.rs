@@ -1,10 +1,8 @@
 //! Radiation: sunlight, the heat radiation of the ground and the layers of the air, and contact heat between the
 //! ground and the air touching it, in the balance of a ground node's surface over a step (`Surface`).
 
-use super::super::land::NONE;
-use super::super::Scratch;
-use crate::math::one_minus_exp;
-use crate::units::SIGMA;
+use super::super::{land::NONE, Scratch};
+use crate::{math::one_minus_exp, units::SIGMA};
 use std::f64::consts::{PI, TAU};
 
 /// The sun's declination at `season` (0..1 from the solstice of the north's winter) on a circular orbit with axial tilt

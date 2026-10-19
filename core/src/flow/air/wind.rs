@@ -2,10 +2,7 @@
 //! of an implicit step (`solve::band`), which the air's step solves with the ground's exchange.
 
 use super::super::Scratch;
-use crate::solve::band::Carry;
-use crate::space::Level;
-use crate::units::R_GAS;
-use crate::Config;
+use crate::{solve::band::Carry, space::Level, units::R_GAS, Config};
 
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
 /// diagonal) is made along each axis alone.

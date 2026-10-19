@@ -1,12 +1,8 @@
 //! What bodies do to parts: hold, take, put, join, break and enter; form new parts, anchor them, dig the bonded ground,
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
-use super::sense::room;
-use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::body::{self, Body, Layout, STRENGTH};
-use crate::chem::{Chemistry, Phase};
-use crate::World;
-use crate::store::{Class, Move};
+use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
+use crate::{body::{self, Body, Layout, STRENGTH}, chem::{Chemistry, Phase}, store::{Class, Move}, World};
 
 /// Taking hold of a part costs this share of the work of handling its mass (`Physics::c_handle`).
 const GRAB_COST: f64 = 0.1;

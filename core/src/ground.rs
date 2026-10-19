@@ -1,10 +1,6 @@
 //! Heat of ground and air nodes: heat capacities, temperatures, melting plateaus, and the heat above `T_FLOOR`.
 
-use crate::chem::{self, Chemistry};
-use crate::params::Config;
-use crate::units::T_FLOOR;
-use crate::world::World;
-use crate::store::Class;
+use crate::{chem::{self, Chemistry}, params::Config, store::Class, units::T_FLOOR, world::World};
 
 /// The share of a wanted amount that was really given (exactly 1 when all of it was).
 #[inline]

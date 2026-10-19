@@ -1,9 +1,7 @@
 //! The yearly part of Flow: creep of loose solids, and the regrowth of bodies into cleared ground.
 
-use super::land::{lift, melted, molten, rise};
-use super::{bare_share, range, Scratch};
-use crate::store::{apply, Batch, Class};
-use crate::World;
+use super::{bare_share, land::{lift, melted, molten, rise}, range, Scratch};
+use crate::{store::{apply, Batch, Class}, World};
 
 /// Added to a substance's hardness before its softness (1 / hardness) is taken.
 const HARD_MIN: f64 = 0.05;
