@@ -1,4 +1,4 @@
-import { World, gunzip, parse, plane, fmt, fmtYear, unitText } from './data';
+import { World, gunzip, parse, plane, fmt, fmtYear, unitText, latOf, lonOf } from './data';
 import { CLASSES, PATH_LAYER, paint, rampFor, rampCss } from './earth';
 import { MapView } from './map';
 import { Charts } from './charts';
@@ -32,8 +32,8 @@ function setup(w: World): void {
   const m = w.meta;
   say('');
   cls = new Uint8Array(m.w * m.h);
-  map.setWorld(m.w, m.h, m.cell_m);
-  $('meta').innerHTML = [['seed', m.seed], ['size', `${m.w}×${m.h}`], ['cell', m.cell_m >= 1000 ? `${m.cell_m / 1000} km` : `${m.cell_m} m`]]
+  map.setWorld(m.w, m.h, m.cell_m, m.globe ? { north: m.lat_north, south: m.lat_south } : null);
+  $('meta').innerHTML = [['seed', m.seed], ...(m.globe ? [['world', 'globe']] : []), ['size', `${m.w}×${m.h}`], ['cell', m.cell_m >= 1000 ? `${fmt(m.cell_m / 1000)} km` : `${fmt(m.cell_m)} m`]]
     .map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('') + '<span>year <b id="hy"></b></span>';
   const names = m.layers.map(l => l.name).filter(n => !/^true_[rgb]$/.test(n));
   const sorted = [...names.filter(n => ORDER.includes(n)).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)), ...names.filter(n => !ORDER.includes(n))];
@@ -121,7 +121,16 @@ function inspect(): void {
   });
   const t = ['true_r', 'true_g', 'true_b'].map(n => plane(world!, frame, n)[i]);
   rows += `<tr><td>True colour</td><td><s style="background:rgb(${t})"></s></td></tr>`;
-  el.innerHTML = `<div class="cell"><s style="background:${color}"></s><b>${name}</b><span>x ${i % meta.w}, y ${(i / meta.w) | 0}</span></div><table>${rows}</table>`;
+  el.innerHTML = `<div class="cell"><s style="background:${color}"></s><b>${name}</b><span>x ${i % meta.w}, y ${(i / meta.w) | 0}</span></div>${where(i)}<table>${rows}</table>`;
+}
+
+/** A globe cell's latitude and longitude, as a line above the table (nothing on an island). */
+function where(i: number): string {
+  const m = world!.meta;
+  if (!m.globe) return '';
+  const lat = latOf(m, (i / m.w) | 0), east = lonOf(m, i % m.w), lon = east > 180 ? east - 360 : east;
+  const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(1)}° ${v < 0 ? neg : pos}`;
+  return `<p class="where">${deg(lat, 'N', 'S')}, ${deg(lon, 'E', 'W')}</p>`;
 }
 
 function tip(at: HTMLElement, text: string): void {

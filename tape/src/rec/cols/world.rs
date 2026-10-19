@@ -3,6 +3,7 @@
 
 use super::{Row, GIGA};
 use crate::layers::{dry_land_flux, Ctx, COVER_MIN, RIVER_WEB};
+use crate::measure::area_mean;
 use crate::rec::{Recorder, CAUSES};
 use pcore::{World, AIR};
 use pcore::store::Class;
@@ -13,8 +14,8 @@ fn mean(v: &[f64]) -> f64 {
 
 impl Recorder {
     pub(super) fn world_cols(&self, c: &Ctx, land: &[usize], row: &mut Row) {
-        let (w, n) = (c.w, c.w.mesh.cells().n() as f64);
-        let (life, area) = (&w.life, w.mesh.cells().area());
+        let w = c.w;
+        let (life, area, air_area) = (&w.life, w.mesh.cells().area(), w.mesh.level(AIR).area());
         let tot = pcore::check::totals(w);
         row.push("year", "yr", w.year());
         row.push("null", "1", w.cfg.null as u8 as f64);
@@ -23,8 +24,8 @@ impl Recorder {
         }
         minerals(c, row);
         row.push("energy", "J", tot.thermal + tot.chemical);
-        row.push("t_ground", "K", mean(&c.f.t));
-        row.push("t_air", "K", mean(&c.t_air));
+        row.push("t_ground", "K", area_mean(c.f.t.iter().copied().zip(area.iter().copied())));
+        row.push("t_air", "K", area_mean(c.t_air.iter().copied().zip(air_area.iter().copied())));
         // The land's ground temperature: the mean of the year's months, the warmest month and the coldest.
         let t_land = &self.year.t_land;
         row.push("t_land", "K", mean(t_land));
@@ -32,15 +33,15 @@ impl Recorder {
         row.push("t_land_winter", "K", t_land.iter().copied().fold(f64::NAN, f64::min));
         // The mole fraction in the air of each heat-absorbing gas (`absorber` is their total absorption, so the
         // one that rises shows in these).
-        row.push("absorber", "1", mean(&c.absorber));
+        row.push("absorber", "1", area_mean(c.absorber.iter().copied().zip(air_area.iter().copied())));
         let (na, all) = (w.mesh.level(AIR).n(), w.store.amounts(Class::Air).iter().sum::<f64>());
         for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
             row.push(format!("air_{k}"), "1", w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>() / all);
         }
-        row.push("ice_frac", "1", c.f.ice.iter().filter(|&&v| v >= COVER_MIN).count() as f64 / n);
+        row.push("ice_frac", "1", area_mean(c.f.ice.iter().zip(area).map(|(&v, &a)| ((v >= COVER_MIN) as u8 as f64, a))));
         row.push("liquid_land", "km3", land.iter().map(|&i| c.f.depth[i] * area[i]).sum::<f64>() / GIGA);
-        row.push("rain", "mol/m2/s", w.rain.iter().map(|&v| v as f64).sum::<f64>() / n);
-        row.push("rain_land", "mol/m2/s", land.iter().map(|&i| w.rain[i] as f64).sum::<f64>() / land.len().max(1) as f64);
+        row.push("rain", "mol/m2/s", area_mean(w.rain.iter().zip(area).map(|(&v, &a)| (v as f64, a))));
+        row.push("rain_land", "mol/m2/s", area_mean(land.iter().map(|&i| (w.rain[i] as f64, area[i]))));
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", dry_land_flux(w, &c.f).iter().filter(|&&q| q > RIVER_WEB).count() as f64);
         // Bodies (nodes and individuals) and light-eaters; members of light-eaters and of the others; nodes of the others.

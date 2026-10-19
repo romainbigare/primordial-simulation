@@ -1092,6 +1092,11 @@ Phase E review, round 1 (fixes):
 
 **Phase K: recording and viewer**
 
+- K2, K3 (the globe): the viewer's file is `EWF2`, with `globe`, `lat_north` and `lat_south` in its header. The yearly
+  means over the map (`t_ground`, `t_air`, `t_land`, `absorber`, `ice_frac`, `rain`, `rain_land`, `mass_top2`,
+  `mass_land`) are weighted by cell area (the cells of a globe differ in area; the same on the island up to rounding).
+  The viewer draws a globe as a 2:1 map with a line of latitude every 30 degrees, wraps east and west in the picture, the
+  shading, the coast and the sea, and shows a cell's latitude and longitude. The island view is as it was.
 - K3, viewer (part without the globe): the charts are in sections by name (climate, air gases, minerals, births and
   deaths, brains, movement, parts, catalysts, one section a starting kind) with a search box; a "Paths" toggle draws
   the `worn` layer over any map view.

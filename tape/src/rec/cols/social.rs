@@ -3,6 +3,7 @@
 
 use super::Row;
 use crate::layers::Ctx;
+use crate::measure::area_mean;
 use crate::rec::Recorder;
 use std::collections::BTreeSet;
 
@@ -43,7 +44,7 @@ impl Recorder {
         s.worn = now;
         let mass = |i: usize| c.plants[i] + c.animals[i];
         let rest: Vec<usize> = land.iter().copied().filter(|i| !top.contains(i)).collect();
-        let mean = |v: &[usize]| v.iter().map(|&i| mass(i)).sum::<f64>() / v.len().max(1) as f64;
+        let mean = |v: &[usize]| area_mean(v.iter().map(|&i| (mass(i), w.mesh.cells().area()[i])));
         row.push("crossings", "1/yr", all);
         row.push("traffic_top2", "1", on_top / all.max(1.0));
         row.push("traffic_persist", "1", s.persist);

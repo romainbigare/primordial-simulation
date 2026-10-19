@@ -13,11 +13,23 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 | `series.csv` | one row a year, the columns below |
 | `months.csv` | one row a month (below) |
 | `physics.json` | the run's `Physics` and `Config`; `ew numbers OLD NEW` compares two runs |
-| `world.ewf.gz` | the viewer's file: `EWF1`, the header's length, the header (JSON: size, layers, frames, series and units, events, the months rows), then the frames |
+| `world.ewf.gz` | the viewer's file: `EWF2`, the header's length, the header (JSON: size, whether the world is a globe and its edge latitudes, layers, frames, series and units, events, the months rows), then the frames |
 | `yearNNNN.png` | map, temperature, rain, life and traffic every `--every` years |
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
+
+**A globe in the viewer's file.** The header has `globe` (the rows wrap east to west), `lat_north` and `lat_south` (the
+latitudes of the north and south edges, degrees; 90 and -90 on a globe). The grid is the map: row `y` of `h` lies at
+latitude `lat_north + (lat_south - lat_north) * (y + 0.5) / h`, column `x` of `w` at longitude `(x + 0.5) * 360 / w`
+degrees east of the map's west edge. A cell's width shrinks with the cosine of its latitude; `cell_m` is its height
+(and its width at the equator). The viewer draws the grid as a map (2:1), with a line every 30 degrees of latitude, the
+map repeating east and west, and a cell's latitude and longitude in the inspect panel. An island has `globe` false and its
+`lat_*` are the latitudes it lies between (not shown).
+
+**Means over the map** (`t_ground`, `t_air`, `t_land`, `absorber`, `ice_frac`, `rain`, `rain_land`, `mass_top2`,
+`mass_land`) are weighted by cell area, as the cells of a globe differ in area (`measure::area_mean`). Counts of cells
+(`rivers`, the cover's median) are of cells.
 
 **Map layers** in the frames (`tape/src/layers.rs`, one byte a cell): height, liquid depth, ice, liquid flux, loose
 ground, ground and air temperature, rain, vapour, absorber, light-eater and other body mass per m², bodies, traffic,
@@ -32,11 +44,11 @@ worn edges, structures, true colour (r, g, b).
 | `energy` | J | heat and chemical energy in the world |
 | `min<q>_land`, `min<q>_sea` | kg/m² | mineral q in the ground of land and of the sea floor |
 | `min<q>_dead_land`, `min<q>_dead_sea`, `min<q>_bodies`, `min<q>_deep` | 10⁹ mol | mineral q in dead matter on land and sea, in bodies, in the bed's stores |
-| `t_ground`, `t_air` | K | mean ground and air temperature |
+| `t_ground`, `t_air` | K | mean ground and air temperature (by area) |
 | `t_land`, `t_land_summer`, `t_land_winter` | K | the land's ground: the mean of the year's months, the warmest month and the coldest |
 | `absorber` | | mean absorption of the heat-absorbing gases |
 | `air_<k>` | | mole fraction of heat-absorbing gas k in the air |
-| `ice_frac` | | share of cells under ice |
+| `ice_frac` | | share of the area under ice |
 | `liquid_land` | km³ | liquid on land |
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) with a liquid flux over the web viewer's threshold (`tape::RIVER_WEB`) |

@@ -1,5 +1,5 @@
 // Turns layers into pixels. The viewer, not the core, decides what counts as sea, river, desert...
-import { World, plane, decode } from './data';
+import { World, plane, decode, latOf } from './data';
 
 export type RGB = [number, number, number];
 const rgb = (h: string): RGB => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) as RGB;
@@ -47,19 +47,29 @@ const WET = 2; // metres of liquid that make a cell water
 const RIVER_LOG = [3.6, 4.3]; // log10 flux (mol/s) over which a river fades in
 const L = [-0.588, -0.588, 0.647]; // light from the north-west
 const EXAGGERATE = 6;
+const SEA_SHARE = 0.01; // a wet region of a globe with this share of the cells is sea, a smaller one a lake
+const POLE_COS = 0.25; // a globe's east-west cell width, as a share of the equator's, is not taken below this when shading
 
-/** Wet cells connected to the map border are sea; the others are lakes. */
-function oceanFill(wet: Uint8Array, W: number, H: number): Uint8Array {
-  const sea = new Uint8Array(W * H), stack: number[] = [];
-  const seed = (i: number) => { if (wet[i] && !sea[i]) { sea[i] = 1; stack.push(i); } };
-  for (let x = 0; x < W; x++) { seed(x); seed((H - 1) * W + x); }
-  for (let y = 0; y < H; y++) { seed(y * W); seed(y * W + W - 1); }
-  while (stack.length) {
-    const i = stack.pop()!, x = i % W, y = (i / W) | 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const nx = x + dx, ny = y + dy;
-      if (nx >= 0 && ny >= 0 && nx < W && ny < H) seed(ny * W + nx);
+/**
+ * The sea: on an island, the wet cells connected to the map border; the others are lakes. A globe has no border, so
+ * its sea is each wet region of at least SEA_SHARE of the cells. A globe's rows wrap east to west.
+ */
+function oceanFill(wet: Uint8Array, W: number, H: number, globe: boolean): Uint8Array {
+  const sea = new Uint8Array(W * H), seen = new Uint8Array(W * H);
+  for (let start = 0; start < W * H; start++) {
+    if (!wet[start] || seen[start]) continue;
+    const region = [start];
+    seen[start] = 1;
+    let border = false;
+    for (let k = 0; k < region.length; k++) {
+      const x = region[k] % W, y = (region[k] / W) | 0;
+      border ||= x === 0 || y === 0 || x === W - 1 || y === H - 1;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = globe ? (x + dx + W) % W : x + dx, ny = y + dy, j = ny * W + nx;
+        if (nx >= 0 && ny >= 0 && nx < W && ny < H && wet[j] && !seen[j]) { seen[j] = 1; region.push(j); }
+      }
     }
+    if (globe ? region.length >= SEA_SHARE * W * H : border) for (const i of region) sea[i] = 1;
   }
   return sea;
 }
@@ -70,7 +80,7 @@ const PATH = rgb('#e8590c');
 
 /** Fill `img` for frame f. mode: 'earth', 'true' or a layer name. `cls` receives the map class of every cell. `paths` draws the worn links over it. */
 export function paint(w: World, f: number, mode: string, img: ImageData, cls: Uint8Array, paths: boolean): void {
-  const { w: W, h: H, cell_m } = w.meta;
+  const { w: W, h: H, cell_m, globe } = w.meta;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
   const flux = decode(w, f, 'flux'), plants = plane(w, f, 'plants');
   const tr = plane(w, f, 'true_r'), tgc = plane(w, f, 'true_g'), tb = plane(w, f, 'true_b');
@@ -80,18 +90,23 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
   const worn = paths && w.index.has(PATH_LAYER) ? plane(w, f, PATH_LAYER) : null;
 
   const wet = Uint8Array.from(depth, d => (d >= WET ? 1 : 0));
-  const sea = oceanFill(wet, W, H);
-  const zAt = (x: number, y: number) => z[clamp(y, 0, H - 1) * W + clamp(x, 0, W - 1)];
+  const sea = oceanFill(wet, W, H, globe);
+  const wrapX = (x: number) => (globe ? (x + W) % W : x);
+  const zAt = (x: number, y: number) => z[clamp(y, 0, H - 1) * W + clamp(wrapX(x), 0, W - 1)];
   const nearSea = (x: number, y: number) => {
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
-      if (x + dx >= 0 && x + dx < W && y + dy >= 0 && y + dy < H && sea[(y + dy) * W + x + dx]) return true;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = wrapX(x + dx), ny = y + dy;
+      if (nx >= 0 && nx < W && ny >= 0 && ny < H && sea[ny * W + nx]) return true;
+    }
     return false;
   };
   const c = [0, 0, 0], out = img.data;
 
   for (let i = 0; i < W * H; i++) {
     const x = i % W, y = (i / W) | 0;
-    const gx = (zAt(x + 1, y - 1) + 2 * zAt(x + 1, y) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x - 1, y) - zAt(x - 1, y + 1)) / (8 * cell_m);
+    // A globe's cells are narrower east to west towards the poles.
+    const width = globe ? cell_m * Math.max(Math.cos((latOf(w.meta, y) * Math.PI) / 180), POLE_COS) : cell_m;
+    const gx = (zAt(x + 1, y - 1) + 2 * zAt(x + 1, y) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x - 1, y) - zAt(x - 1, y + 1)) / (8 * width);
     const gy = (zAt(x - 1, y + 1) + 2 * zAt(x, y + 1) + zAt(x + 1, y + 1) - zAt(x - 1, y - 1) - 2 * zAt(x, y - 1) - zAt(x + 1, y - 1)) / (8 * cell_m);
     const slope = Math.hypot(gx, gy), nx = -EXAGGERATE * gx, ny = -EXAGGERATE * gy;
     const shade = ((nx * L[0] + ny * L[1] + L[2]) / Math.hypot(nx, ny, 1)) / L[2];

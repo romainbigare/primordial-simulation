@@ -39,12 +39,16 @@ struct Column {
     values: Vec<f64>,
 }
 
-/// The world a tape is of: width and height in cells, cell size (m), seed and days per year.
+/// The world a tape is of: width and height in cells, cell size (m), whether it is a globe (its rows wrap east to west)
+/// and the latitudes of its north and south edges (degrees; the rows are evenly spread between them), seed and days per year.
 #[derive(Clone, Copy)]
 struct Shape {
     w: usize,
     h: usize,
     cell_m: f64,
+    globe: bool,
+    lat_north: f64,
+    lat_south: f64,
     seed: u64,
     days_per_year: u64,
 }
@@ -98,7 +102,7 @@ impl Recorder {
     pub fn new(w: &World, every: u64, monthly: u64) -> Self {
         let g = &w.map;
         Recorder {
-            shape: Shape { w: g.w, h: g.h, cell_m: g.side, seed: w.seed, days_per_year: w.days_per_year() },
+            shape: Shape { w: g.w, h: g.h, cell_m: g.side, globe: g.wrap, lat_north: w.cfg.lat_north, lat_south: w.cfg.lat_south, seed: w.seed, days_per_year: w.days_per_year() },
             every,
             monthly,
             seen: vec![false; w.chem.ns()],

@@ -1,8 +1,10 @@
-// Reader for the EWF1 tape: gzip( "EWF1" | u32 json_len | json | frames of u8 layers ), as tape/src/rec/ewf.rs writes it.
+// Reader for the EWF2 tape: gzip( "EWF2" | u32 json_len | json | frames of u8 layers ), as tape/src/rec/ewf.rs writes it.
 
 export interface Layer { name: string; unit: string; scale: 'lin' | 'log' | 'raw'; min: number; max: number }
 export interface Meta {
   w: number; h: number; cell_m: number; seed: number; days_per_year: number;
+  /** A globe: rows run pole to pole, columns wrap east to west; rows are evenly spread from lat_north to lat_south (degrees). */
+  globe: boolean; lat_north: number; lat_south: number;
   layers: Layer[];
   frames: { day: number; year: number }[];
   /** One value a year per column; null where the tape wrote NaN (none that year). */
@@ -13,6 +15,11 @@ export interface Meta {
   months: { year: number; month: number; values: number[]; births: number[]; deaths: number[] }[];
 }
 export interface World { meta: Meta; data: Uint8Array; base: number; frameBytes: number; lut: Float32Array[]; index: Map<string, number> }
+
+/** Latitude of the centre of row y, degrees north. */
+export const latOf = (m: Meta, y: number) => m.lat_north + ((m.lat_south - m.lat_north) * (y + 0.5)) / m.h;
+/** Longitude of the centre of column x of a globe, degrees east of the map's west edge. */
+export const lonOf = (m: Meta, x: number) => ((x + 0.5) * 360) / m.w;
 
 export function decodeByte(l: Layer, b: number): number {
   if (l.scale === 'raw') return b / 255;
@@ -30,7 +37,7 @@ export async function gunzip(buf: ArrayBuffer): Promise<Uint8Array> {
 }
 
 export function parse(data: Uint8Array): World {
-  if (String.fromCharCode(...data.subarray(0, 4)) !== 'EWF1') throw new Error('Not an EWF1 world file.');
+  if (String.fromCharCode(...data.subarray(0, 4)) !== 'EWF2') throw new Error('Not an EWF2 world file.');
   const jsonLen = new DataView(data.buffer, data.byteOffset).getUint32(4, true);
   const meta = JSON.parse(new TextDecoder().decode(data.subarray(8, 8 + jsonLen))) as Meta;
   const frameBytes = meta.w * meta.h * meta.layers.length;

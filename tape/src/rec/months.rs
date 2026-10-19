@@ -3,6 +3,7 @@
 //! year's sums what is counted at month ends (standing members, signals, bodies inside walls, the land's temperature).
 
 use super::tally::{bump, slot, NC};
+use crate::measure::area_mean;
 use super::{Recorder, CAUSES};
 use pcore::World;
 use serde::{Deserialize, Serialize};
@@ -99,7 +100,7 @@ impl Recorder {
         if y.t_land.is_empty() {
             y.land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| i as u32).collect();
         }
-        y.t_land.push(y.land.iter().map(|&i| w.t_ground_last(i as usize)).sum::<f64>() / y.land.len().max(1) as f64);
+        y.t_land.push(area_mean(y.land.iter().map(|&i| (w.t_ground_last(i as usize), w.mesh.cells().area()[i as usize]))));
         let (year, month) = year_month(w);
         let mean = sum.map(|v| v / n.max(1.0));
         let [sp, sy] = std::mem::take(&mut self.month.spent);

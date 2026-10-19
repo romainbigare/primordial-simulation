@@ -1,6 +1,7 @@
-//! `world.ewf.gz`, the viewer's file and what a resumed run goes on from: gzip of `EWF1`, the header's length
-//! (`u32`, little-endian), the header (JSON: the world's size, the layers, the day of each frame, the series and
-//! their units, the events and the rows of `months.csv`) and the frames (one byte a cell and layer, `layers::frame`).
+//! `world.ewf.gz`, the viewer's file and what a resumed run goes on from: gzip of `EWF2`, the header's length
+//! (`u32`, little-endian), the header (JSON: the world's size, whether it is a globe and the latitudes of its edges, the
+//! layers, the day of each frame, the series and their units, the events and the rows of `months.csv`) and the frames
+//! (one byte a cell and layer, `layers::frame`).
 
 use super::months::year_month;
 use super::{Column, MonthRow, Recorder};
@@ -12,7 +13,7 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 
 const FILE: &str = "world.ewf.gz";
-const MAGIC: &[u8; 4] = b"EWF1";
+const MAGIC: &[u8; 4] = b"EWF2";
 
 impl Recorder {
     /// Write the file into `dir`.
@@ -20,7 +21,7 @@ impl Recorder {
         let s = self.shape;
         let year = |d: u64| d as f64 / s.days_per_year as f64;
         let head = json!({
-            "w": s.w, "h": s.h, "cell_m": s.cell_m, "seed": s.seed, "days_per_year": s.days_per_year,
+            "w": s.w, "h": s.h, "cell_m": s.cell_m, "globe": s.globe, "lat_north": s.lat_north, "lat_south": s.lat_south, "seed": s.seed, "days_per_year": s.days_per_year,
             "layers": LAYERS.iter().map(|l| json!({"name": l.name, "unit": l.unit, "scale": l.scale, "min": l.min, "max": l.max})).collect::<Vec<_>>(),
             "frames": self.frames.iter().map(|&d| json!({"day": d, "year": year(d)})).collect::<Vec<_>>(),
             "series": self.series.iter().map(|c| (c.name.clone(), json!(c.values))).collect::<serde_json::Map<_, _>>(),

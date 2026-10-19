@@ -129,11 +129,11 @@ fn frames_file_round_trip() {
 
     let mut raw = vec![];
     GzDecoder::new(std::fs::File::open(dir.join("world.ewf.gz")).unwrap()).read_to_end(&mut raw).unwrap();
-    assert_eq!(&raw[..4], b"EWF1");
+    assert_eq!(&raw[..4], b"EWF2");
     let n = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
     let meta: serde_json::Value = serde_json::from_slice(&raw[8..8 + n]).unwrap();
     let (cells, layers, frames) = (SIDE * SIDE, meta["layers"].as_array().unwrap().len(), meta["frames"].as_array().unwrap().len());
-    assert_eq!((meta["w"].as_u64(), frames), (Some(SIDE as u64), 2));
+    assert_eq!((meta["w"].as_u64(), frames, meta["globe"].as_bool()), (Some(SIDE as u64), 2, Some(false)));
     assert_eq!(raw.len() - 8 - n, cells * layers * frames);
     // Layer "z" of frame 0 is the first layer: check one cell.
     let z = &tape::LAYERS[0];
@@ -141,6 +141,30 @@ fn frames_file_round_trip() {
     let first = tape::quantise(z, world().surface_z(100));
     assert_eq!(raw[8 + n + 100], first);
     assert!(meta["events"].as_array().unwrap().iter().any(|e| e["text"].as_str().unwrap().contains("first appears")));
+}
+
+/// The viewer file says whether the world is a globe and the latitudes of its edges, and the world's means of a globe are
+/// by area (its rows narrow toward the poles): `t_ground` is the area-weighted mean of the cells' ground temperature.
+#[test]
+fn a_globe_file_names_its_shape_and_its_means_are_by_area() {
+    let dir = tmp("globe");
+    let (rows, mut w) = (8, worldgen::terrain::new_globe(1, 8));
+    let mut rec = tape::Recorder::new(&w, 1, 0);
+    common::record(&mut rec, &mut w);
+    for _ in 0..w.cfg.months_per_year {
+        step(&mut w);
+        common::record(&mut rec, &mut w);
+    }
+    rec.finish(&dir).unwrap();
+    let mut raw = vec![];
+    GzDecoder::new(std::fs::File::open(dir.join("world.ewf.gz")).unwrap()).read_to_end(&mut raw).unwrap();
+    let n = u32::from_le_bytes(raw[4..8].try_into().unwrap()) as usize;
+    let meta: serde_json::Value = serde_json::from_slice(&raw[8..8 + n]).unwrap();
+    assert_eq!((meta["globe"].as_bool(), meta["w"].as_u64(), meta["h"].as_u64()), (Some(true), Some(2 * rows), Some(rows)));
+    assert_eq!((meta["lat_north"].as_f64(), meta["lat_south"].as_f64()), (Some(90.0), Some(-90.0)));
+    let (t, area) = (tape::fields(&w).t, w.mesh.cells().area());
+    let by_area = t.iter().zip(area).map(|(t, a)| t * a).sum::<f64>() / area.iter().sum::<f64>();
+    assert!((rec.last("t_ground") - by_area).abs() < 1e-9, "{} against {by_area}", rec.last("t_ground"));
 }
 
 /// The recording the series tests read: `world` with the soil, the light-eaters (none of them fixing) and the eaters

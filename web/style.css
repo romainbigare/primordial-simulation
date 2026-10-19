@@ -97,6 +97,7 @@ aside .group { background: var(--panel); border: 1px solid var(--line); border-r
 .inspect .hint { color: var(--muted); margin: 0; font-size: 13px; }
 .cell { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 6px; }
 .cell span { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.inspect .where { margin: 0 0 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .inspect table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .inspect td { padding: 2px 0; border-top: 1px solid var(--line); }
 .inspect td:last-child { text-align: right; font-variant-numeric: tabular-nums; }

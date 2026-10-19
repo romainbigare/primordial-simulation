@@ -1,4 +1,5 @@
 // The map canvas: one pixel per cell in an offscreen canvas, drawn with zoom and pan.
+const LAT_STEP = 30; // degrees between a globe's lines of latitude
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 export class MapView {
@@ -10,6 +11,8 @@ export class MapView {
   private cam = { s: 1, ox: 0, oy: 0 };
   private fitted = true;
   private w = 0; private h = 0; private cellM = 1;
+  /** Edge latitudes (degrees) of a globe, whose columns wrap east to west; null for an island. */
+  private globe: { north: number; south: number } | null = null;
   private raf = 0;
 
   constructor(private cv: HTMLCanvasElement, private onHover: (i: number) => void, private onPick: (i: number) => void) {
@@ -40,8 +43,8 @@ export class MapView {
     cv.addEventListener('dblclick', () => this.fit());
   }
 
-  setWorld(w: number, h: number, cellM: number): void {
-    this.w = w; this.h = h; this.cellM = cellM;
+  setWorld(w: number, h: number, cellM: number, globe: { north: number; south: number } | null): void {
+    this.w = w; this.h = h; this.cellM = cellM; this.globe = globe;
     this.off.width = w; this.off.height = h;
     this.img = new ImageData(w, h);
     this.pick = this.hover = -1;
@@ -68,7 +71,9 @@ export class MapView {
   }
 
   private cellAt(px: number, py: number): number {
-    const x = Math.floor((px - this.cam.ox) / this.cam.s), y = Math.floor((py - this.cam.oy) / this.cam.s);
+    let x = Math.floor((px - this.cam.ox) / this.cam.s);
+    const y = Math.floor((py - this.cam.oy) / this.cam.s);
+    if (this.globe && !this.fitted) x = ((x % this.w) + this.w) % this.w; // the map repeats east and west
     return x >= 0 && y >= 0 && x < this.w && y < this.h ? y * this.w + x : -1;
   }
 
@@ -82,21 +87,49 @@ export class MapView {
 
   private draw(): void {
     if (!this.w) return;
-    const { ctx, cam: { s, ox, oy }, w, h } = this, d = this.dpr();
+    const { ctx, cam, w, h } = this, d = this.dpr(), span = w * cam.s;
+    // Once moved, a globe is drawn again east and west of itself, so panning round it shows no seam.
+    const wrap = this.globe !== null && !this.fitted;
+    if (wrap) cam.ox = (((cam.ox % span) - span) % span);
+    const { s, ox, oy } = cam, xs: number[] = [ox];
+    if (wrap) for (let x = ox + span; x < this.cv.clientWidth; x += span) xs.push(x);
     ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.fillStyle = css('--map-bg'); ctx.fillRect(0, 0, this.cv.clientWidth, this.cv.clientHeight);
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 5;
-    ctx.fillStyle = '#888'; ctx.fillRect(ox, oy, w * s, h * s);
+    ctx.fillStyle = '#888'; ctx.fillRect(ox, oy, xs.length * span, h * s);
     ctx.restore();
     ctx.imageSmoothingEnabled = s * d < 6; ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(this.off, ox, oy, w * s, h * s);
+    // Copies meet on whole device pixels, so no thin line shows between them.
+    const edge = (k: number) => Math.round((ox + k * span) * d) / d;
+    xs.forEach((_, k) => ctx.drawImage(this.off, edge(k), oy, edge(k + 1) - edge(k), h * s));
+    if (this.globe) this.latitudeLines(ox, oy, xs.length * span);
     for (const [i, col] of [[this.pick, '#fff'], [this.hover, '#000']] as const) {
       if (i < 0) continue;
       ctx.lineWidth = 1.5; ctx.strokeStyle = col;
-      ctx.strokeRect(ox + (i % w) * s - 0.5, oy + Math.floor(i / w) * s - 0.5, s + 1, s + 1);
+      for (const x of xs) ctx.strokeRect(x + (i % w) * s - 0.5, oy + Math.floor(i / w) * s - 0.5, s + 1, s + 1);
     }
     this.scaleBar();
+  }
+
+  /** A globe's lines of latitude every LAT_STEP degrees (the equator heavier), named at the map's west edge. */
+  private latitudeLines(ox: number, oy: number, width: number): void {
+    const { ctx, cam: { s }, h, globe } = this;
+    if (!globe) return;
+    const { north, south } = globe, left = Math.max(ox, 0);
+    ctx.save();
+    ctx.font = '11px system-ui, sans-serif'; ctx.textBaseline = 'bottom'; ctx.lineJoin = 'round';
+    for (let lat = Math.ceil(south / LAT_STEP) * LAT_STEP; lat <= north; lat += LAT_STEP) {
+      const y = oy + ((north - lat) / (north - south)) * h * s;
+      if (y <= oy + 1 || y >= oy + h * s - 1) continue; // the poles are the map's edges
+      ctx.strokeStyle = '#fff'; ctx.globalAlpha = lat === 0 ? 0.7 : 0.45; ctx.lineWidth = lat === 0 ? 1.5 : 1;
+      ctx.setLineDash(lat === 0 ? [] : [5, 4]);
+      ctx.beginPath(); ctx.moveTo(ox, y); ctx.lineTo(ox + width, y); ctx.stroke();
+      const name = lat === 0 ? '0°' : `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'}`;
+      ctx.setLineDash([]); ctx.globalAlpha = 0.9; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.fillStyle = '#fff';
+      ctx.strokeText(name, left + 5, y - 2); ctx.fillText(name, left + 5, y - 2);
+    }
+    ctx.restore();
   }
 
   private scaleBar(): void {
