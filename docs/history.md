@@ -796,6 +796,12 @@ The work of `docs/foundation/plan.md`, one line per task.
   not kept: a first guess from the step before (Newton rounds 3.1 to 3.6), the factors of the round before refined to
   1e-8 (4 corrections cost more than a factoring), the air's layers out of the surface's inner loop (no gain). Golden
   re-pinned.
+- J1, the climate's references from the converged world (64 x 64, seeds 1 to 3, 30 years, years 21 to 30): land
+  289.31 to 288.45 K, seasonal swing 10.19 to 12.68 K, rain on land 1.496e-3 to 1.842e-3 mol/m²/s, absorbing gas 257.7
+  to 271.2 ppm, river cells 380.4 to 784.5, land worn 0.0510 to 0.0717 mm/yr. Life's stay A2's and hold: light-eaters
+  10.68 log10 kg (10.53), eaters 4.41 (4.50), life of light-eaters 4.45 yr (1.90, x/ 3), of eaters 4.40 yr (2.91,
+  x/ 2). The long-step test, run once: land -0.10 K (noise 0.71), warmest month -0.21 K (0.34), coldest +0.04 K
+  (1.19), rain on land +0.2%, absorbing gas -0.1%, river cells +0.3%.
 
 **Owner's decisions after Phase A**
 

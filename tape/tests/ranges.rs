@@ -1,6 +1,8 @@
 //! The key numbers of a normal run (`docs/foundation/plan.md` 6.3): `ew run --seed N --size 64` for seeds 1, 2 and 3,
 //! 30 years each, on threads. The mean of each number over the three seeds must lie in its range around its
-//! reference, the mean of the same three seeds in the reference runs (A2, `docs/reports/foundation-a/`). The climate
+//! reference, the mean of the same three seeds in the reference runs: for the climate and the land worn down, the runs
+//! of the converged world (the air's implicit step at its default, J1); for life, the A2 runs
+//! (`docs/reports/foundation-a/`). The climate
 //! and the land worn down are means over years 21 to 30; life is read at year 30, ten years after the eaters came.
 //! Each run also keeps its books.
 //!
@@ -30,18 +32,21 @@ const LIFE_YEAR: u64 = 2;
 const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
-/// Ground temperature on land, K (series `t_land`), in the A2 reference runs.
-const T_LAND: f64 = 289.31;
-/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the A2 reference runs.
-const SWING: f64 = 10.19;
-/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the A2 reference runs.
-const RAIN_LAND: f64 = 1.496e-3;
-/// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the A2 reference runs.
-const ABSORBER_PPM: f64 = 257.7;
-/// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the A2 reference runs.
-const RIVERS: f64 = 380.4;
-/// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the A2 reference runs.
-const WORN: f64 = 0.0510;
+/// Ground temperature on land, K (series `t_land`), in the reference runs of the converged world.
+const T_LAND: f64 = 288.45;
+/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs of the converged world.
+const SWING: f64 = 12.68;
+/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs of the converged
+/// world.
+const RAIN_LAND: f64 = 1.842e-3;
+/// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs of the converged world.
+const ABSORBER_PPM: f64 = 271.2;
+/// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs of the converged
+/// world.
+const RIVERS: f64 = 784.5;
+/// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs of the
+/// converged world.
+const WORN: f64 = 0.0717;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the A2 reference runs.
 const PLANT_KG: f64 = 10.533;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the A2 reference runs.
