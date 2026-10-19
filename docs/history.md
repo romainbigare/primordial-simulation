@@ -985,6 +985,13 @@ Phase E review, round 1 (fixes):
   piled up, never merged). `nodes::one` and its counter go; `Body::set_genes` works the constants out only when the
   genes change. Golden re-pinned.
 
+- F7 on today's main (the terrain drains, the globe's changes), after all the above: the check holds the default
+  start's rules (a) and (b) and the roster's (b), and prints the rest. Past the crowd noise, 7 differences: in both
+  starts and seeds, what eaters eat second (light-eaters as nodes, other bodies as individuals: a node is found as one
+  body, so eaters see and take fewer of a node's members); roster, small eaters of light-eaters 3.8 and 14 times
+  lighter as nodes, big eaters of light-eaters 2.6 times (seed 1, real life 60 against 13 years), strong big eaters of
+  eaters 4.5 times (seed 5). The default start's eaters agree within the noise.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the
