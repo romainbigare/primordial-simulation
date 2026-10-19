@@ -60,7 +60,7 @@ fn hot_plateau_cools_but_not_to_the_floor() {
     set_heat(&mut w, Node::ground(i), e);
     assert_eq!(w.thaw(i).1.map(|p| p.0), Some(k));
     let books = Books::now(&w);
-    pcore::flow::step(&mut w, DT);
+    worldgen::testkit::flow_step(&mut w, DT);
     let t = w.t_ground(i);
     assert!(t > 150.0 && t < melt, "{t} K after a step from {melt} K");
     books.assert_within(&w, 1e-12, 1e-9);
@@ -93,7 +93,7 @@ fn a_pool_with_a_solute_freezes_lower() {
         assert!(at == t && plateau.is_some_and(|(q, f)| q == k && (f - 0.5).abs() < 1e-9), "{at} K, {plateau:?}");
     }
     let books = Books::now(&w);
-    pcore::flow::step(&mut w, DT);
+    worldgen::testkit::flow_step(&mut w, DT);
     // (Liquid ran off the pools in the step, and some evaporated: each is held at its melting point as the step left it.)
     for i in [pure, mixed] {
         let held = w.scratch.temps().0[i];
@@ -115,8 +115,8 @@ fn warm_air_spreads() {
     set_heat(&mut warm, Node::air(j), 1.2 * cold.store.heat(Class::Air)[j]);
     let books = Books::now(&warm);
     let excess = warm.t_air(j) - cold.t_air(j);
-    pcore::flow::step(&mut cold, DT);
-    pcore::flow::step(&mut warm, DT);
+    worldgen::testkit::flow_step(&mut cold, DT);
+    worldgen::testkit::flow_step(&mut warm, DT);
     assert!(warm.t_air(j) - cold.t_air(j) < 0.5 * excess, "warm node kept its heat");
     assert!(warm.t_air(j + 1) - cold.t_air(j + 1) > 0.5, "neighbour did not warm");
     books.assert_within(&warm, 1e-12, 1e-9);
@@ -194,7 +194,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
     let i = (0..n).max_by(|&a, &b| w.store.amounts(Class::Ground)[LIQUID * n + a].total_cmp(&w.store.amounts(Class::Ground)[LIQUID * n + b])).unwrap();
     let books = Books::now(&w);
-    (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
+    (0..4).for_each(|_| worldgen::testkit::flow_step(&mut w, DT));
     // Dissolved per mol of liquid, against Henry's share under the gas's share of the reference pressure.
     let held = |w: &World| w.store.amounts(Class::Ground)[k * n + i] / w.store.amounts(Class::Ground)[LIQUID * n + i];
     let j = w.mesh.up(i, 0, AIR);
@@ -203,7 +203,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     assert!(h1 > 0.5 * want && h1 < 2.0 * want, "{h1} dissolved per mol, Henry's share {want}");
     let t = w.t_ground(i) + 20.0;
     hold_ground(&mut w, i, t);
-    (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
+    (0..4).for_each(|_| worldgen::testkit::flow_step(&mut w, DT));
     assert!(held(&w) < 0.9 * h1, "{} dissolved per mol after warming, {h1} before", held(&w));
     books.assert_within(&w, 1e-12, 1e-9);
 }
@@ -238,7 +238,7 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
         pour(&mut w, i, share * pores);
         let books = Books::now(&w);
         let v0 = liquid_m3(&w, i);
-        pcore::flow::step(&mut w, LIQUID_STEP);
+        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
         books.assert_within(&w, 1e-12, 1e-9);
         (liquid_m3(&w, i) / v0, liquid_m3(&w, i) / pores)
     };
@@ -287,7 +287,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let pores = w.cfg.phys.porosity * loose(&w, i);
         pour(&mut w, i, share * pores);
         let books = Books::now(&w);
-        pcore::flow::step(&mut w, LIQUID_STEP);
+        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
         books.assert_within(&w, 1e-12, 1e-9);
         let (area, depth) = (w.map.area(), loose(&w, i) / w.map.area());
         // The liquid table of `i` stood at its bottom plus the depth the liquid fills; `j` was dry on its own bottom.
@@ -350,7 +350,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
         set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full / mv);
         set_heat(&mut w, Node::new(Class::Deep, i), e);
         let books = Books::now(&w);
-        pcore::flow::step(&mut w, LIQUID_STEP);
+        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
         books.assert_kept(&w, 1e-9);
         (w.store.amounts(Class::Deep)[LIQUID * n + i] * mv, liquid_m3(&w, i))
     };
@@ -382,7 +382,7 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     w.cfg.evap = 0.0;
     pour(&mut w, hi, 0.9 * pores);
     let books = Books::now(&w);
-    pcore::flow::step(&mut w, LIQUID_STEP);
+    worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
     let deep = |w: &World, i: usize| w.store.amounts(Class::Deep)[LIQUID * n + i] * mv;
     // Down: what is over the field capacity, 0.3 of the pores (0.9 - 0.6), less what Darcy's flow took sideways.
     assert!(deep(&w, hi) > 0.1 * pores && deep(&w, hi) <= (0.3 * pores).min(full) * 1.000001, "{} m³ sank of {pores} m³ of pores", deep(&w, hi));
@@ -394,7 +394,7 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     set_heat(&mut w, Node::new(Class::Deep, hi), e);
     let books = Books::now(&w);
     for _ in 0..20 {
-        pcore::flow::step(&mut w, LIQUID_STEP);
+        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
         assert!(deep(&w, lo) <= full * 1.000001, "the low cell's store overfilled");
     }
     assert!(deep(&w, hi) < 0.9 * full, "the full store on the high cell did not drain: {} of {full} m³", deep(&w, hi));
@@ -407,7 +407,7 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
 fn a_store_reaches_only_its_neighbours_in_a_step() {
     let mut w = worldgen::new_world(3, 16, 16);
     w.cfg.phys.seep = 0.0;
-    pcore::flow::step(&mut w, LIQUID_STEP);
+    worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
     let (n, gw, p) = (w.mesh.cells().n(), w.map.w, w.cfg.phys);
     let (x, y) = (gw / 2, w.map.h / 2);
     let i = y * gw + x;
@@ -419,7 +419,7 @@ fn a_store_reaches_only_its_neighbours_in_a_step() {
     let m = p.bed_porosity * p.bed_depth * w.map.area() / mv;
     set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, m);
     set_heat(&mut w, Node::new(Class::Deep, i), m * (sub.cp * 290.0 + sub.lf));
-    pcore::flow::step(&mut w, LIQUID_STEP);
+    worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
     let near = |j: usize| (j % gw).abs_diff(x) <= 1 && (j / gw).abs_diff(y) <= 1;
     let reached: Vec<usize> = (0..n).filter(|&j| j != i && w.store.amounts(Class::Deep)[LIQUID * n + j] > 0.0).collect();
     assert!(!reached.is_empty() && reached.iter().all(|&j| near(j)), "reached {reached:?} from {i}");
@@ -454,7 +454,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         let books = Books::now(&w);
         let liquid0 = w.store.amounts(Class::Ground)[LIQUID * n + top];
         for _ in 0..steps {
-            pcore::flow::step(&mut w, DT);
+            worldgen::testkit::flow_step(&mut w, DT);
         }
         books.assert_kept(&w, 1e-9);
         let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| w.store.amounts(Class::Ground)[MINERAL * n + i]).sum::<f64>() + w.store.amounts(Class::Deep).get(MINERAL * n..(MINERAL + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>());
@@ -472,7 +472,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
     // No liquid: nothing carries it, but for what Darcy's flow takes of the film a dry cell holds.
     let mut dry = scene(0.0);
     dry.cfg.evap = 0.0;
-    pcore::flow::step(&mut dry, DT);
+    worldgen::testkit::flow_step(&mut dry, DT);
     assert!(dry.g(MINERAL, top) > 0.99e6, "the mineral moved on dry ground: {}", dry.g(MINERAL, top));
 }
 
@@ -492,7 +492,7 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     (0..na).for_each(|j| set_amount(&mut w, Node::air(j), LIQUID, 0.0));
     let (liquid0, mineral0) = (w.store.amounts(Class::Ground)[LIQUID * n + i], w.store.amounts(Class::Ground)[DISSOLVED * n + i]);
     for _ in 0..4 {
-        pcore::flow::step(&mut w, DT);
+        worldgen::testkit::flow_step(&mut w, DT);
     }
     assert!(w.store.amounts(Class::Ground)[LIQUID * n + i] < 0.99 * liquid0, "the liquid did not evaporate: {} of {liquid0}", w.store.amounts(Class::Ground)[LIQUID * n + i]);
     assert_eq!(w.store.amounts(Class::Ground)[DISSOLVED * n + i], mineral0);
@@ -551,7 +551,7 @@ fn rain_crosses_the_land_in_one_step() {
         let far: Vec<usize> = (0..n).filter(|&i| low.iter().all(|&j| apart(i, j) > FAR)).collect();
         far.iter().for_each(|&i| pour(&mut w, i, rain * area));
         let books = Books::now(&w);
-        pcore::flow::step(&mut w, LIQUID_STEP);
+        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
         books.assert_within(&w, 1e-12, 1e-9);
         (low.iter().map(|&i| liquid_m3(&w, i)).sum::<f64>(), rain * area * far.len() as f64)
     };
@@ -571,7 +571,7 @@ fn liquid_wears_its_bed_at_every_liquid_step() {
     let bed = |w: &World| land.iter().map(|&i| (0..w.chem.ns()).map(|k| w.store.amounts(Class::Bed)[k * n + i]).sum::<f64>()).sum::<f64>();
     for step in 0..8 {
         let before = bed(&w);
-        pcore::flow::step(&mut w, LIQUID_STEP);
+        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
         assert!(bed(&w) < before, "step {step}: the bed on land kept {} of {before} mol", bed(&w));
     }
 }

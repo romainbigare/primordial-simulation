@@ -836,6 +836,7 @@ Phase E review, round 1 (fixes):
   64, seed 1, 30 years: plant members 3.90e10 to 3.11e10, plants 10.71 to 10.64 log10 kg, plant life 4.63 to 3.16 yr
   (the cap had spread the ground's liquid and minerals over the bodies of a cell), eaters 4.38 to 4.42, land 287.87
   to 288.03 K, swing 12.45 to 12.11 K, carbon gas 261 to 261 ppm.
+- `flow::step`, which only tests called, is `testkit::flow_step` (Flow's processes are public to it).
 
 **Phase J: the long physics step**
 

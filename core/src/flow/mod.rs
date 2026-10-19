@@ -45,7 +45,7 @@ pub(crate) const CREEP_YEARS: u64 = 1;
 /// each liquid step, so a world resumed at a month's start goes on as an unbroken one, or when a refresh changed what
 /// is present) and the temperature of air nodes, from the world now: what the other laws and the rest of Flow read
 /// until the next physics step (`World::t_ground_last`).
-pub(crate) fn state(w: &mut World, full: bool) {
+pub fn state(w: &mut World, full: bool) {
     with(w, |w, s| {
         ground_now(w, s, full);
         air::sums(w, s);
@@ -65,7 +65,7 @@ fn ground_now(w: &World, s: &mut Scratch, full: bool) {
 /// The state of ground nodes (`ground_now`: at a physics step `state` has just set it, and nothing has changed it
 /// since) and of air nodes (`air::state`); then the air's step for `dt` seconds (`air::step`: radiation, gases
 /// dissolving, evaporation and rain, and the wind, together), booked whole at once.
-pub(crate) fn air(w: &mut World, dt: f64) {
+pub fn air(w: &mut World, dt: f64) {
     with(w, |w, s| {
         ground_now(w, s, false);
         air::state(w, s);
@@ -75,7 +75,7 @@ pub(crate) fn air(w: &mut World, dt: f64) {
 
 /// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`): it moves the rain that fell
 /// since the last liquid step.
-pub(crate) fn liquid(w: &mut World, dt: f64) {
+pub fn liquid(w: &mut World, dt: f64) {
     with(w, |w, s| liquid::liquid(w, s, dt));
 }
 
@@ -88,18 +88,8 @@ pub(crate) fn creep(w: &mut World, dt: f64) {
 }
 
 /// The slow ground and the substances present are rechecked (`scratch::refresh`).
-pub(crate) fn refresh(w: &mut World) {
+pub fn refresh(w: &mut World) {
     with(w, |w, s| scratch::refresh(w, s));
-}
-
-/// Every part of the law but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's
-/// step, liquid, and the refresh; then the state the step leaves. A law of Flow on its own, for tests.
-pub fn step(w: &mut World, dt: f64) {
-    state(w, true);
-    air(w, dt);
-    liquid(w, dt);
-    refresh(w);
-    state(w, false);
 }
 
 /// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`) from the world as it is, and nothing

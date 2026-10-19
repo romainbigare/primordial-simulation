@@ -276,6 +276,16 @@ pub fn moved<R>(w: &mut World, (i, slot): (usize, usize), f: impl FnOnce(&mut Wo
     r
 }
 
+/// Every part of Flow but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's step,
+/// liquid, and the refresh; then the state the step leaves. A law of Flow on its own.
+pub fn flow_step(w: &mut World, dt: f64) {
+    pcore::flow::state(w, true);
+    pcore::flow::air(w, dt);
+    pcore::flow::liquid(w, dt);
+    pcore::flow::refresh(w);
+    pcore::flow::state(w, false);
+}
+
 /// Body `b` grows for `days` days at the plateau state it stands at (`copy::grow`). Returns whether it built anything.
 pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     let th = b.thermal(&w.chem);

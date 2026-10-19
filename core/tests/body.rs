@@ -928,7 +928,7 @@ fn a_tall_member_shades_a_short_one() {
     let books = Books::now(&w);
     pcore::survey::survey(&mut w);
     let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * DAY);
-    pcore::flow::step(&mut w, dt);
+    worldgen::testkit::flow_step(&mut w, dt);
     let bs = &w.life.bodies;
     let per = |s: usize| w.light[i] - bs[s].mark;
     let cap = |s: usize| bs[s].vis[1] as f64 * bs[s].n();
