@@ -36,7 +36,7 @@ const MOVE: f64 = 0.3;
 /// The main genes (`docs/tape.md`, `root_<k>_*`) and their place in the genome.
 const GENES: [(&str, usize); 11] = [("gas", GAS), ("leaf", LEAF), ("copy_log", COPY_MASS), ("interval", INTERVAL), ("hidden", HIDDEN), ("heat", HEAT), ("keep_t", KEEP_T), ("repair", REPAIR), ("wet_gene", WET), ("alloc", ALLOC), ("child", CHILD)];
 /// The rules the check holds, per plan (default, roster) and rule (a, b, c); it prints the others.
-const HELD: [[bool; 3]; 2] = [[true, true, false], [false, true, false]];
+const HELD: [[bool; 3]; 2] = [[false, true, false], [false, true, true]];
 /// What eaters could burn of what they took, by source.
 const ATE: [&str; 3] = ["ate_light_eaters", "ate_others", "ate_ground"];
 

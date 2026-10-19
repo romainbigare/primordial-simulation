@@ -997,6 +997,16 @@ Phase E review, round 1 (fixes):
   light-eaters and lives stay in range. The eaters live to year 60 at 48 x 48 in seeds 1 and 2 (206 and 312 members),
   not in seed 3 (nor as individuals).
 
+- F7 on main after J3 and G3: the check holds the default start's rule (b) and the roster's (b) and (c), and prints
+  the rest. Past the crowd noise, 15 differences. Default start: the eaters (kind 1) boom as nodes in seed 1 (1.8e4
+  against 3.9e3 kg) and nearly die out in seed 5 (36 against 4.4e3 kg), and in seed 5 the heaviest member is another
+  kind. Roster: small eaters of remains 2.4 and 6.9 times heavier as nodes; small eaters of light-eaters 3.5 and 9
+  times lighter, big ones 2.2 times, strong big eaters of eaters 2.2 times (seed 1); in seed 5 the strong fast eaters of
+  eaters live only as individuals. What eaters eat second now agrees in both starts. The key numbers (64 x 64, 3
+  seeds, year 30): eaters 3.66 log10 kg (3.85, 3.57, 3.57), still out of range (decision 26); land 288.06 K, swing
+  11.88 K, rain on land 1.806e-3, absorbing gas 251 ppm, river cells 836, light-eaters 10.64, lives 2.52 and 5.72 yr,
+  in range. The eaters live to year 60 at 48 x 48 in all three seeds (115, 2,852 and 95 members).
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the
