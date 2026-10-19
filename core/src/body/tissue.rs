@@ -145,8 +145,11 @@ impl Body {
     /// kg of its body (`built`). Body matter itself is a share of the whole mass `mass` (also for a chemistry with none).
     /// What it takes stops there.
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
+        self.level_at(chem, k, mass, self.gene(Layout::of(chem).keep + k))
+    }
+    /// `level` with the keep gene of `k` at `f`.
+    pub(crate) fn level_at(&self, chem: &Chemistry, k: usize, mass: f64, f: f64) -> f64 {
         let mm = chem.subs[k].molar_mass;
-        let f = self.gene(Layout::of(chem).keep + k);
         let share = |f: f64| f.clamp(0.0, MAX_KEEP) / (1.0 - f.clamp(0.0, MAX_KEEP));
         match chem.matter() {
             Some(_) if chem.is_material(k) => self.share(chem, k) / (1.0 - self.share(chem, usize::MAX)) * self.matter_kg(chem) / mm,

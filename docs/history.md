@@ -842,6 +842,12 @@ Phase E review, round 1 (fixes):
   conversion) after over before, not of the matter alone; growth held by its allowance hid every gene that brings more
   fuel (a leaf, pores, a coat). 64 x 64, seed 1, 30 years: carbon gas 260.5 to 236.3 ppm (the light-eaters take more
   of it), land 288.03 to 287.54 K, swing 12.11 to 11.93 K, plants 10.64 to 10.70 log10 kg.
+- Selection inside a node skips the samples whose step cannot reach a threshold in the update (a safe minimum whose
+  store holds more than twice the step's upper end, `KEEP_T` and `COOL_T` farther than the step from the body and its
+  ground, uptake and keep genes of what the ground does not hold as liquid or the store already holds, gases, the
+  body matter's keep gene): 7,600 samples a year at 64 x 64 (35% that move nothing) against 14,400 (63%). A sample at
+  every update would cost about 5% more than before the skips, so `sample_every` stays at 2 and the samples cost
+  half. The light-eaters' `INTERVAL` gene stays the turnover time of their stores (decision 11).
 
 **Phase J: the long physics step**
 

@@ -726,15 +726,18 @@ the same patterns as individuals.
   difference averages out. This is the breeder's equation, the change of a mean is its genetic
   variance times the gradient of log fitness (Lande 1976; Falconer and Mackay 1996). A gene that
   does nothing gains nothing and does not move, so where the step cannot change the gain no
-  sample is run (`copy::select::read`, exact by what the update reads): a scalar gene the update
-  as far as its growth never reads in a node without a brain (`UNREAD`: those of its children,
-  `CHILD`, `MUT`, `DISPERSE`, `WET`, `ALLOC`, read when children are made, and those of a brain);
-  a gene of a reaction or a substance that is off at both ends; an uptake gene, unless it turns
-  the roots on or off for a substance that does not dissolve (the update reads only that); and a
-  keep gene, unless its substance is the body matter, a solid it builds, one of its key liquids,
-  a product of a reaction it catalyses, a liquid that dissolves (soaked up) or what its roots
-  take (the update reads the level it keeps only for those). These genes move only by selection
-  between nodes. A node with a brain has none: its update is also its decisions, which act on
+  sample is run (`copy::select::read`): a scalar gene the update as far as its growth never reads
+  in a node without a brain (`UNREAD`: those of its children, `CHILD`, `MUT`, `DISPERSE`, `WET`,
+  `ALLOC`, read when children are made, and those of a brain); a gene of a reaction or a substance
+  that is off at both ends; a gene that acts at a threshold the update does not reach: a safe
+  minimum whose store holds more than twice the step's upper end, `KEEP_T` above the body and its
+  ground by more than the step, `COOL_T` below them by more; an uptake gene, unless it turns the
+  roots on or off for a substance that does not dissolve and the ground holds as liquid; and a keep
+  gene, unless its substance is a solid it builds, one of its key liquids, a product it holds and
+  that is not gas of a reaction it catalyses, or a liquid of the ground that dissolves (soaked up) or
+  its roots take while its store lies under the level at the step's upper end (the update reads the
+  level it keeps only for those). A wrong skip only slows that gene. The genes the update never
+  reads move only by selection between nodes. A node with a brain has none: its update is also its decisions, which act on
   the world.
 - **Members as individuals.** A node does an action of Bond through one member split off as an
   individual (`nodes::one`); if it then holds something or is inside, it lives on alone, else it
@@ -752,7 +755,9 @@ the same patterns as individuals.
   and they do not add up over a longer span. The rules of an update that count by the gene's interval
   become rates over the update (`Body::paces`, the update over the gene's interval): the stores it uses
   refill a level per interval of its gene (`Body::room`; what is not used is shed), and frost kills
-  at the rate its share per interval gives (`Body::over_span`, 6.5). A shortfall of upkeep kills the
+  at the rate its share per interval gives (`Body::over_span`, 6.5). So for a body without a brain the
+  `INTERVAL` gene is the turnover time of its stores and of its frost, not a pace of decisions, and a
+  shorter one costs it nothing (a known limit, `docs/foundation/decisions.md`). A shortfall of upkeep kills the
   share of the members its upkeep over the update left unpaid, whatever the update's length (6.2).
   Members who join a node between its updates (children, members maturing, merges) count their time
   from when they came: the node's last day and its mark of light become the means by members of its
