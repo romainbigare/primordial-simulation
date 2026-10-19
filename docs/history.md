@@ -1208,6 +1208,10 @@ Phase E review, round 1 (fixes):
   version 37. 32 x 32 with an 8 x 8 region, seed 1, with life, 10 years: drift 1.3e-15 (elements) and 1.1e-15
   (energy); against no region: land 288.77 K (288.76), rain on land 1.896e-3 (1.885e-3), light-eater members 1.64e9
   (1.65e9); 1.02 s a year (0.74).
+- Creep crosses a border as wide as the side of the smaller of its two cells, not of the higher one: beside a refined
+  region a square crept into each of two quarters across a whole side. The island is the same bit for bit (golden
+  unchanged). 32 x 16 globe without life, years 11 to 20: land 251.86 K (251.76), rain on land 1.388e-3 (1.372e-3),
+  river cells 53.3 (54.2), the same to noise.
 
 **Owner's decisions after Phase A**
 

@@ -145,7 +145,7 @@ The head moving liquid loses does work where it is lost (`flow::liquid`, in the 
   is `Class::Bed`, amounts without heat).
 - Bodies hold the ground: they cut carrying and creep by 1 / (1 + their mass per area / `hold`).
 - **Creep** (`flow::creep`, yearly): loose ground slides downhill like a slow diffusion, `creep` × softness ×
-  thickness × slope, link by link (corners too, as wide as a side).
+  thickness × slope, link by link, across the side of the smaller of the two cells (corners too).
 
 Most rock that leaves the land is lime that Change dissolves (reaction 22, 2.6) and the liquid takes away.
 

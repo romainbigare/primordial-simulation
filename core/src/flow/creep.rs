@@ -12,8 +12,8 @@ const CREEP_MOST: f64 = 0.25;
 
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
 /// call; then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
-/// `a` to `b` with their heat, and the fall heats `b`; they cross a border as wide as the side of `a`, across a corner
-/// too.
+/// `a` to `b` with their heat, and the fall heats `b`; they cross a border as wide as the side of the smaller of the two
+/// cells (a quarter's beside a refined square), across a corner too.
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, area, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.gravity);
     let sol = s.solids(range(&s.state.tg).0);
@@ -35,7 +35,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
         if mob[a] <= 0.0 || dz <= 0.0 {
             continue;
         }
-        let r = w.cfg.creep * dz / cells.dist()[l] * area[a].sqrt() * dt / area[a] * bare_share(w, a);
+        let r = w.cfg.creep * dz / cells.dist()[l] * area[a].min(area[b]).sqrt() * dt / area[a] * bare_share(w, a);
         let f = (area[a] * dz * CREEP_LEVEL / (r * mob[a])).min(1.0);
         let (ta, tb) = (s.state.tg[a], s.state.tg[b]);
         // What moves, summed over substances: heat capacity, mass, mobility, rise of each surface and head.
