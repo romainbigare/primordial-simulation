@@ -121,11 +121,12 @@ impl Drive {
     }
 }
 
-/// One implicit step of the air nodes from the step's start with the bodies' gas (`Start`) with what the ground gives (`g`, linearised about
-/// the round's air: a Newton step) and the wind of `drive`: the totals with the evening of pressure, then the gases the
-/// ground does not exchange, then the active gases and the heat together, then each trace gas alone. `wind` gets what
-/// crosses the links.
-pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (start, g): (&Start, &Gathered), it: &Iterate, dt: f64, wind: &mut Wind) -> Iterate {
+/// One implicit step of the air nodes from the step's start with the bodies' gas (`Start`) with what the ground gives
+/// (`g`, linearised about the round's air: a Newton step) and the wind of `drive`: the totals with the evening of
+/// pressure, then the gases the ground does not exchange, then the gases that may condense and the heat together (the
+/// others are solved once after the rounds, `alone`). `wind` gets what crosses the links. Returns the air at the end
+/// and how the wind carries each gas.
+pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (start, g): (&Start, &Gathered), it: &Iterate, dt: f64, wind: &mut Wind) -> (Iterate, Vec<Coef>) {
     let (links, push, halves, x0) = (&drive.links, &drive.push, &drive.halves, &start.x[..]);
     let (na, ng, nl) = (w.mesh.level(AIR).n(), s.state.gas.len(), links.a.len());
     // The total amounts, with what comes up; and what the pressure moves over each link.
@@ -153,14 +154,26 @@ pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (
     let (capa, heat) = (total(s, &x, &|k| s.sp[k].cp), push.carry(links, &n, (None, halves), &flow, dt));
     let heat = (heat.0.iter().zip(&links.a).map(|(c, &a)| c * capa[a as usize]).collect(), heat.1.iter().zip(&links.b).map(|(c, &b)| c * capa[b as usize]).collect());
     let t = Newton { w, s, act, g, it, links }.coupled((start, &coef, (&heat, &capa)), &mut x, wind);
-    Newton { w, s, act, g, it, links }.traces((x0, &coef), &mut x, wind);
-    // The mass that crosses each link is lifted between the mean heights of its nodes, by the heat of the node it enters.
-    wind.paid = vec![0.0; na];
+    lift(w, s, links, wind);
+    (Iterate { t, x }, coef)
+}
+
+/// The mass that crosses each link is lifted between the mean heights of its nodes, by the heat of the node it enters
+/// (`Wind::paid`).
+fn lift(w: &World, s: &Scratch, links: &Links, wind: &mut Wind) {
+    let (ng, nl) = (s.state.gas.len(), links.a.len());
+    wind.paid = vec![0.0; s.ta.len()];
     for (l, (&a, &b)) in links.a.iter().zip(&links.b).enumerate() {
         let (moved, a, b) = ((0..ng).map(|q| wind.mol[q * nl + l] * s.sp[s.state.gas[q]].mm).sum::<f64>(), a as usize, b as usize);
         wind.paid[if moved > 0.0 { b } else { a }] += w.cfg.gravity * moved * (s.zair[b] - s.zair[a]);
     }
-    Iterate { t, x }
+}
+
+/// After the last round, each active gas that does not take part in the rounds (a trace, or one that cannot condense)
+/// alone, from that round's slopes (`Newton::alone`), with the wind's `coef`; then what the wind lifts again.
+pub(super) fn alone(w: &World, s: &Scratch, (act, links): (&[Active], &Links), (start, g): (&Start, &Gathered), it: &Iterate, coef: &[Coef], wind: &mut Wind) {
+    Newton { w, s, act, g, it, links }.alone(&start.x, coef, wind);
+    lift(w, s, links, wind);
 }
 
 /// What the Newton step of the active gases reads.
@@ -182,7 +195,7 @@ impl Newton<'_> {
             add(p, p + off - g.far, kind, v);
         }
     }
-    /// The active gases more than a trace and the heat, solved together, each gas's rows scaled by its vaporisation
+    /// The active gases that may condense, more than a trace, and the heat, solved together, each gas's rows scaled by its vaporisation
     /// enthalpy so the system stays near dominant by columns. A node's energy at the end is its gases' heat capacity
     /// then times its temperature, linearised about the round in the active gases. Writes the gases into `x`, the links
     /// into `wind`; returns each node's temperature at the end, K.
@@ -237,18 +250,16 @@ impl Newton<'_> {
         fluxes(&self.links.carry(heat), &rhs, (fields, fields - 1), &mut wind.heat);
         (0..na).map(|j| rhs[he(j)]).collect()
     }
-    /// Each trace gas alone, at the round's temperature: its latent heat moves the air too little to solve with it.
-    fn traces(&self, (x0, coef): (&[f64], &[Coef]), x: &mut [f64], wind: &mut Wind) {
+    /// Each active gas outside the rounds alone, at the last round's temperature with its slopes with its own gas: a
+    /// trace's latent heat moves the air too little to solve with it, and a gas that cannot condense never rains.
+    fn alone(&self, x0: &[f64], coef: &[Coef], wind: &mut Wind) {
         let (it, g, na, nl) = (self.it, self.g, self.w.mesh.level(AIR).n(), self.links.a.len());
         for (a, ac) in self.act.iter().enumerate().filter(|(_, ac)| ac.field.is_none()) {
             let c = self.links.carry(&coef[ac.gi]);
             let mut band = Band::zero(na, self.g.far.max(reach(&c)));
             band.carry(&c, 1, 0, 1.0);
-            let xq = &mut x[ac.gi * na..(ac.gi + 1) * na];
-            for j in 0..na {
-                band.add(j, j, 1.0);
-                xq[j] = x0[ac.gi * na + j] + g.up[a * na + j];
-            }
+            let mut xq: Vec<f64> = (0..na).map(|j| x0[ac.gi * na + j] + g.up[a * na + j]).collect();
+            (0..na).for_each(|j| band.add(j, j, 1.0));
             self.each_slope(|p, q, kind, v| {
                 if kind == 2 + 3 * a {
                     band.add(p, q, -v);
@@ -256,8 +267,8 @@ impl Newton<'_> {
                 }
             });
             band.factor();
-            band.solve(xq);
-            fluxes(&c, xq, (1, 0), &mut wind.mol[ac.gi * nl..(ac.gi + 1) * nl]);
+            band.solve(&mut xq);
+            fluxes(&c, &xq, (1, 0), &mut wind.mol[ac.gi * nl..(ac.gi + 1) * nl]);
         }
     }
 }

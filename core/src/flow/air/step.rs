@@ -8,7 +8,7 @@ use super::super::scratch::may_evaporate;
 use super::super::{range, Scratch};
 use super::book::book;
 use super::exchange::{bucket_slope, dissolve};
-use super::newton::{far, gather, solve, Drive, Wind};
+use super::newton::{alone, far, gather, solve, Drive, Wind};
 use super::radiation::{declination, insolation, Surface};
 use super::{lerp, over_cell, shares};
 use crate::ground::heat_above_floor;
@@ -31,11 +31,12 @@ const SURFACE_ROUNDS: usize = 8;
 const SURFACE_STILL_K: f64 = 1e-3;
 /// The saturation tables reach this far above the warmest node at a step's start, K: no node warms more in a step.
 const SAT_REACH: f64 = 60.0;
-/// A gas making up less than this share of the air is a trace (`Newton::traces`).
+/// A gas making up less than this share of the air is a trace (`newton::alone`).
 const TRACE_AIR: f64 = 1e-7;
 
 /// A gas that may leave the ground or condense: its index in `Scratch::gas`, its substance, whether it may evaporate or
-/// condense, and (more than a trace) its place among the gases solved with the heat.
+/// condense, and (one that may condense, more than a trace) its place among the gases solved with the heat in each
+/// round; the others are solved once after the rounds (`newton::alone`).
 #[derive(Clone, Copy)]
 pub(super) struct Active {
     pub(super) gi: usize,
@@ -130,8 +131,10 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
     let n = w.mesh.cells().n();
     // The sun at the end of the step, as backward Euler takes it (and as the state at the step's end then shows).
     let decl = declination(w.cfg.tilt, w.cfg.calendar().season(w.time + dt as u64));
-    let start = Start::of(w, s);
-    let mut it = Iterate { t: s.ta.clone(), x: start.x.clone() };
+    let (start, na) = (Start::of(w, s), w.mesh.level(AIR).n());
+    // The rounds start from the air without the bodies' gas, as the last step left it near saturation: with the vapour
+    // the bodies gave off since, the first round would rain out far more than there is and the second take it back.
+    let mut it = Iterate { t: s.ta.clone(), x: s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect() };
     let drive = Drive::of(w, s, &start.x, dt);
     let (mut ts, mut rows, mut wind) = (s.state.tg.clone(), std::mem::take(&mut s.rad), Wind::default());
     let width = FIXED + PER_GAS * act.len();
@@ -142,9 +145,10 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
         pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, draws, room: &room, dt, decl }, &mut rows, width);
         ts.iter_mut().zip(rows.chunks_exact(width)).for_each(|(t, row)| *t = row[4]);
         let g = gather(w, s, &it, &act, (&rows, width), far);
-        let next = solve(w, s, (&act, &drive), (&start, &g), &it, dt, &mut wind);
+        let (next, coef) = solve(w, s, (&act, &drive), (&start, &g), &it, dt, &mut wind);
         let (moved_t, moved_x) = moved(&next, &it);
         if (moved_t < STILL_K && moved_x < STILL_SHARE) || round + 1 == ROUNDS {
+            alone(w, s, (&act, &drive.links), (&start, &g), &it, &coef, &mut wind);
             book(w, s, (&act, &g.rained), (&rows, width), &wind, (&it, &start), dt);
             let given: Vec<f64> = rows.chunks_exact(width).map(|row| row[7]).collect();
             draws.owe(w, |i| ts[i], &given, dt);
@@ -177,9 +181,9 @@ fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)]) -> Vec<Active> {
         let up = s.state.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
         if up || s.cond[gi] {
             s.sat[k].fit(&w.chem, k, hi);
-            let trace = w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
-            act.push(Active { gi, k, up, cond: s.cond[gi], field: (!trace).then_some(fields) });
-            fields += !trace as usize;
+            let rounds = s.cond[gi] && w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>() >= TRACE_AIR * all;
+            act.push(Active { gi, k, up, cond: s.cond[gi], field: rounds.then_some(fields) });
+            fields += rounds as usize;
         }
     }
     act

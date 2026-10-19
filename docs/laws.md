@@ -159,13 +159,17 @@ and the clouds from what condensed in the step before; they carry the amounts an
 step stays implicit, and the rounds solve only the exchange with the ground.
 
 - The unknowns are each air node's temperature and gases at the step's end (the gases it holds more of than the
-  rounding of its sums, and those that can evaporate from the ground), under the sun of the step's end.
+  rounding of its sums, and those that can evaporate from the ground), under the sun of the step's end. The rounds
+  solve the temperature with the gases that may condense and are more than a trace of the air; each other gas that
+  leaves the ground (a trace, or one that cannot condense) is solved once after the last round, alone, from that
+  round's slopes (`newton::alone`): it does not feed back into the air's heat.
 - Each Newton round (`flow::air::newton`) solves every ground node's exchange with the air it sees (its surface
   balance, rain and evaporation, and their slopes), then the whole air level with the wind in one banded solve
   (`solve::band`; on a globe each row of air nodes is numbered in a folded order, 0, w-1, 1, w-2, ..., so the link
   that closes a row and the air a ground cell sees round the wrap stay within a band of one row). A node's energy at
-  the end is the heat capacity of its gases then times its temperature. The rounds stop when the air moves by less
-  than 0.05 K and 1e-5 of a node's gas, or after 16.
+  the end is the heat capacity of its gases then times its temperature. The rounds start from the air as the last
+  step left it, without the bodies' gas that comes up in this one (with it, the first round would rain out far more
+  than there is). They stop when the air moves by less than 0.05 K and 1e-5 of a node's gas, or after 16.
 - **Booked whole** (`air::book`): what the last round found crosses the links as it is solved, so the books are exact
   whether or not the rounds converged, and the other laws read what it leaves until the next step. A ground node gives
   no more of a gas than it holds and gets; an air node that would give more rains and blows that much less.

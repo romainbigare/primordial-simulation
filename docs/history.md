@@ -1236,3 +1236,6 @@ Phase E review, round 1 (fixes):
   where what it evaporates stops, its update pays its evaporation from what its node holds for it, and unclaimed heat
   is drawn first by the cell's bodies. 64 x 64, seed 1, year 20: canopies moving over 10 K against their neighbours in
   30 days 32 of 47 to 5 of 70; years 21 to 30 land +0.30 K, rain on land -0.5%; golden re-pinned.
+- The air's rounds solve only the gases that may condense and are more than a trace; the others are solved once after
+  the last round (`newton::alone`); the rounds start from the air without the bodies' gas. 64 x 64 with life, a year
+  from year 20: rounds 3.7 to 2.2 a step, Flow about 1,130 to 850 ms a year; golden re-pinned.
