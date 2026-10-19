@@ -3,6 +3,9 @@
 /// Seconds in a day, the clock's whole number (`clock`).
 pub const DAY_S: u64 = 86_400;
 
+/// Seconds in an hour.
+pub const HOUR_S: u64 = 3_600;
+
 /// Seconds in a day.
 pub const DAY: f64 = DAY_S as f64;
 

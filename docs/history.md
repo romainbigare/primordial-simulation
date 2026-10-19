@@ -777,6 +777,20 @@ The work of `docs/foundation/plan.md`, one line per task.
 - J1, liquid every 30 days (`flow_days` 15 to 30): the rain on land (+0.6%, +0.5%), river cells (+0.4%, -0.7%) and
   land temperature (+0.1 K) of the runs above stay; Flow about 25% cheaper (side by side, 64 x 64, seed 1: 1,853 to
   1,386 ms per year without life, 1,878 to 1,426 with life, on a busy machine). Golden re-pinned.
+- J1, the air in one implicit step (`flow::air::step`, `newton`, `book`; `solve::band` replaces `solve::lines` and
+  `wind/along`): radiation, evaporation, rain, the gases that dissolve and the wind solved together by backward Euler,
+  Newton rounds on a banded LU solve of the whole air level; `EVEN` and `OVER` become rates (pressure evened in the
+  time sound crosses a link; overturning uncapped); `air_days`, `exchange_days` and `TRACE_TURN` go; `air_hours`
+  (288) comes; the step's moves are booked a physics step at a time, by Flow's state, first at each time. Long step
+  against 6 hours (3 seeds, 32 x 32, 8 years with life; off, noise): land -0.09 K (0.71), warmest month -0.19 K
+  (0.29), coldest +0.03 K (1.19), rain on land +0.2% (4%), absorbing gas +0.04% (4%), river cells +0.3% (37%); at 144,
+  216 and 360 hours the warmest month is 0.13, 0.18 and 0.33 K cooler (360 past the noise: first order in the step).
+  Air numbers re-anchored: `mix` 2e4 to 1e6 m²/s (weather eddies; anchored), `rain_time` 1 day (new, tuned: with an
+  hour or two all rain falls on the coldest cells); tuned rows 61 to 58. 64 x 64, seed 1, side by side with main:
+  Flow 438 against 323 ms per year without life (6 years), 860 against 470 with life (20 years), Change the same;
+  rain on land 1.58e-3 against 1.15e-3 mol/m²/s without life, 1.79e-3 against 1.49e-3 with life. Air steps of 6 and
+  72 hours cost 8,200 and 950 ms per year. The growth test of `copy` holds its body's ground at 289 K (the new climate
+  is 4 K warmer there). Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

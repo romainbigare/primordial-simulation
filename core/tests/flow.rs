@@ -91,9 +91,17 @@ fn a_pool_with_a_solute_freezes_lower() {
     }
     let books = Books::now(&w);
     pcore::flow::step(&mut w, DT);
-    assert_eq!([pure, mixed].map(|i| w.scratch.temps().0[i]), tm);
+    // (Liquid ran off the pools in the step, and some evaporated: each is held at its melting point as the step left it.)
+    for i in [pure, mixed] {
+        let held = w.scratch.temps().0[i];
+        assert!((held - w.melt(k, i)).abs() < MELT_HELD && w.thaw_last(i).1.is_some_and(|(q, _)| q == k), "{held} K, melting at {} K", w.melt(k, i));
+    }
+    assert!(w.scratch.temps().0[mixed] < w.scratch.temps().0[pure], "the pool with a solute is held lower");
     books.assert_within(&w, 1e-12, 1e-9);
 }
+
+/// How near its melting point Flow holds a pool after a step, K: the step's evaporation changes what is dissolved.
+const MELT_HELD: f64 = 1e-3;
 
 /// A warmer air node gives its heat to its neighbours.
 #[test]
@@ -176,7 +184,7 @@ fn more_gas_warms_with_no_ceiling() {
 fn gas_dissolves_and_comes_out_when_warmed() {
     let (_, init) = worldgen::chemistry0();
     let mut w = worldgen::new_world(3, 16, 16);
-    (w.cfg.dissolve, w.cfg.exchange_days) = (1.0, 3);
+    w.cfg.dissolve = 1.0;
     let (n, na, c) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), &w.chem);
     let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
     let i = (0..n).max_by(|&a, &b| w.ground[LIQUID * n + a].total_cmp(&w.ground[LIQUID * n + b])).unwrap();
@@ -240,20 +248,22 @@ fn liquid_soaks_into_the_pores_and_only_the_rest_runs_off() {
     assert!(full < 1.05 && full > 0.55, "the ground holds {full} of its pore volume after the excess ran off");
 }
 
-/// Each part of Flow runs on its own period on the world's clock: with the wind every 15 days and liquid every 3,
-/// liquid poured on a slope (four times what the pores hold) runs off at the next 3-day step, between two turns of the
-/// wind.
+/// Each part of Flow runs on its own period on the world's clock: with the air every 3 days and liquid every 15,
+/// liquid poured on a slope (four times what the pores hold) after the first day stays through the steps of the air
+/// and runs off at the 15-day step.
 #[test]
-fn liquid_runs_on_its_own_period_between_turns_of_the_wind() {
+fn liquid_runs_on_its_own_period_between_steps_of_the_air() {
     let mut w = worldgen::new_world(3, 16, 16);
-    (w.cfg.air_days, w.cfg.flow_days) = (15, 3);
-    (0..3).for_each(|_| pcore::day(&mut w));
+    (w.cfg.air_hours, w.cfg.flow_days) = (72, 15);
+    pcore::day(&mut w);
     let (i, _) = pair(&w);
     let pores = w.cfg.phys.porosity * loose(&w, i);
     pour(&mut w, i, 4.0 * pores);
     let v0 = liquid_m3(&w, i);
+    (1..15).for_each(|_| pcore::day(&mut w));
+    assert!(liquid_m3(&w, i) > 0.5 * v0, "{} of {v0} m³ stayed through the steps of the air", liquid_m3(&w, i));
     pcore::day(&mut w);
-    assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed", liquid_m3(&w, i));
+    assert!(liquid_m3(&w, i) < 0.5 * v0, "{} of {v0} m³ stayed after the liquid step", liquid_m3(&w, i));
 }
 
 /// Darcy: the pore liquid of a cell flows to a neighbour whose liquid table is lower, at `seep` x the slope x the

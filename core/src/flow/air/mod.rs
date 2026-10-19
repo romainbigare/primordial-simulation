@@ -1,17 +1,19 @@
 //! Flow in and through the air: radiation, contact heat, evaporation and condensation,
-//! and gas between air nodes. Here: the state of the air nodes (`state`).
+//! and gas between air nodes, solved together over a step (`step`). Here: the state of the air nodes (`state`).
 
+mod book;
 mod exchange;
+mod newton;
 mod radiation;
 mod sky;
+mod step;
 mod wind;
-pub(super) use exchange::exchange;
+pub(super) use book::{dispense, Pending};
 pub(super) use exchange::Sat;
 pub(crate) use radiation::LAYERS;
-pub(super) use radiation::radiation;
 pub use radiation::{column, glow};
 pub(crate) use sky::Sky;
-pub(super) use wind::wind;
+pub(super) use step::step;
 
 use super::Scratch;
 use crate::AIR;
@@ -64,17 +66,10 @@ fn node_scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
 /// Amounts, heat capacity, mass, heights, volume and optical depth of every air node, the air
 /// each ground cell sees, and how high each gas fills its column: a gas that would condense
 /// higher up is held near the ground, by how fast its vapour pressure falls as the air cools upwards.
-pub(super) fn state(w: &World, s: &mut Scratch, full: bool) {
-    if !full {
-        for j in 0..w.mesh.level(AIR).n() {
-            s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
-        }
-        return;
-    }
+pub(super) fn state(w: &World, s: &mut Scratch) {
     nodes(w, s);
     heights(w, s);
     seen(w, s);
-    s.ta0.copy_from_slice(&s.ta);
 }
 
 /// Amount, mol, heat capacity, J/K, and mass, kg, of the gases of each air node, from its amounts now.
@@ -171,8 +166,8 @@ fn seen(w: &World, s: &mut Scratch) {
     let (n, g, top) = (w.mesh.cells().n(), w.cfg.gravity, w.cfg.air_top_m);
     s.lay.resize(n, [[0.0; LAYERS]; 2]);
     for (i, &j) in w.mesh.cells().parent().iter().enumerate() {
-        let (gam, zair, fabs, ta) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i), lerp(s, &s.ta, i));
+        let (gam, zair, fabs) = (lerp(s, &s.gam, i), lerp(s, &s.zair, i), lerp(s, &s.fabs, i));
         s.lay[i] = column(fabs, gam, (top - s.head[i]).max(COLUMN_MIN), node_scale_height(s, j as usize, g));
-        s.seen[i] = [gam, zair, one_minus_exp(fabs), ta];
+        s.seen[i] = [gam, zair, one_minus_exp(fabs)];
     }
 }

@@ -1,69 +1,115 @@
 //! The shared maths of `solve/`: each solver against an exact answer, big steps against small ones, the books.
 
-// ---- lines: the implicit step along one line (the wind) ----
+// ---- band: the implicit step of amounts carried along links, solved directly (the air) ----
 
-use pcore::solve::lines::{along_line, along_ring};
+use pcore::solve::band::{fluxes, Band, Carry};
 
-/// A line of 40 nodes with uneven amounts and shares that span four orders of magnitude; a ring has one link more.
-fn line_system(ring: bool) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-    let len = 40;
-    let links = if ring { len } else { len - 1 };
-    let share = |p: usize, k: f64| 10f64.powf(4.0 * ((p as f64 * 1.7 + k).sin() * 0.5 - 0.5));
-    let to_next = (0..links).map(|p| share(p, 0.3)).collect();
-    let to_prev = (0..links).map(|p| share(p, 2.1)).collect();
-    let x = (0..len).map(|p| 1.0 + 5.0 * ((p as f64 * 0.9).cos() + 1.0)).collect();
-    (to_next, to_prev, x)
-}
+/// The ends of the links (`a`, `b`), `fwd`, `back` and the amounts of a test grid.
+type Grid = (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>, Vec<f64>);
 
-/// The step along an open line and along a ring (the last link back to node 0) solves its system: the answer put
-/// back in gives the amounts before; the total is kept and no amount goes negative.
-#[test]
-fn line_step_solves_its_system_and_keeps_the_total() {
-    for ring in [false, true] {
-        let (to_next, to_prev, before) = line_system(ring);
-        let (len, links) = (before.len(), to_next.len());
-        let mut after = before.clone();
-        if ring {
-            along_ring(&to_next, &to_prev, &mut after, &mut vec![0.0; len], &mut vec![0.0; len]);
-        } else {
-            along_line(&to_next, &to_prev, &mut after, &mut vec![0.0; len]);
+/// A grid of 7 x 5 nodes, each row closed on itself (a ring, as round the globe), with uneven amounts and coefficients
+/// that span four orders of magnitude each way.
+fn grid() -> Grid {
+    let (w, h) = (7, 5);
+    let (mut a, mut b) = (vec![], vec![]);
+    for y in 0..h {
+        for x in 0..w {
+            let j = (y * w + x) as u32;
+            a.push(j);
+            b.push((y * w + (x + 1) % w) as u32);
+            if y + 1 < h {
+                a.push(j);
+                b.push(j + w as u32);
+            }
         }
-        // Put the answer back in: x' + (out - in) must give the amounts before.
-        let flux: Vec<f64> = (0..links).map(|p| to_next[p] * after[p] - to_prev[p] * after[(p + 1) % len]).collect();
-        let mut gain = vec![0.0; len];
-        for (p, &f) in flux.iter().enumerate() {
-            (gain[p], gain[(p + 1) % len]) = (gain[p] - f, gain[(p + 1) % len] + f);
-        }
-        let worst = (0..len).map(|p| (after[p] - gain[p] - before[p]).abs()).fold(0.0, f64::max);
-        assert!(worst < 1e-12, "ring {ring}: residual {worst}");
-        let (sum_before, sum_after): (f64, f64) = (before.iter().sum(), after.iter().sum());
-        assert!((sum_after - sum_before).abs() < 1e-12 * sum_before, "ring {ring}: total {sum_before} became {sum_after}");
-        assert!(after.iter().all(|&v| v > 0.0), "ring {ring}: an amount went negative");
     }
+    let share = |l: usize, k: f64| 10f64.powf(4.0 * ((l as f64 * 1.7 + k).sin() * 0.5 - 0.5) + 1.0);
+    let (fwd, back) = ((0..a.len()).map(|l| share(l, 0.3)).collect(), (0..a.len()).map(|l| share(l, 2.1)).collect());
+    let x = (0..w * h).map(|p| 1.0 + 5.0 * ((p as f64 * 0.9).cos() + 1.0)).collect();
+    (a, b, fwd, back, x)
 }
 
-/// One implicit step along a line with shares s is close to 100 steps with shares s / 100 (the same total time), and
-/// both keep the total. On the slowest mode of a line (equal shares s both ways, so it decays at rate r = 2 s (1 -
-/// cos(pi / n)) per unit share), one step keeps 1 / (1 + r) and 100 steps keep (1 + r / 100)^-100, about exp(-r); the
-/// two differ by less than r^2 / 2, the first error term of backward Euler.
+/// The amounts after a step put back in: `x' + (out - in) + diag x'`, from the link fluxes.
+fn put_back(c: &Carry, after: &[f64], diag: &[f64]) -> Vec<f64> {
+    let mut flux = vec![0.0; c.a.len()];
+    fluxes(c, after, (1, 0), &mut flux);
+    let mut before: Vec<f64> = after.iter().zip(diag).map(|(x, d)| x * (1.0 + d)).collect();
+    for (l, &f) in flux.iter().enumerate() {
+        (before[c.a[l] as usize], before[c.b[l] as usize]) = (before[c.a[l] as usize] + f, before[c.b[l] as usize] - f);
+    }
+    before
+}
+
+/// The step on a grid with rings solves its system: the answer put back in gives the amounts before; with nothing lost
+/// at the nodes the total is kept, and no amount goes negative.
 #[test]
-fn line_big_step_is_close_to_small_steps() {
+fn band_step_solves_its_system_and_keeps_the_total() {
+    let (a, b, fwd, back, before) = grid();
+    let c = Carry { a: &a, b: &b, fwd: &fwd, back: &back };
+    let zero = vec![0.0; before.len()];
+    let mut after = before.clone();
+    Band::step(before.len(), &c, &zero).solve(&mut after);
+    let again = put_back(&c, &after, &zero);
+    let worst = before.iter().zip(&again).map(|(p, q)| (p - q).abs()).fold(0.0, f64::max);
+    assert!(worst < 1e-10, "residual {worst}");
+    let (sum_before, sum_after): (f64, f64) = (before.iter().sum(), after.iter().sum());
+    assert!((sum_after - sum_before).abs() < 1e-12 * sum_before, "total {sum_before} became {sum_after}");
+    assert!(after.iter().all(|&v| v > 0.0), "an amount went negative");
+}
+
+/// One implicit step along a line with shares s is close to 100 steps with shares s / 100 (the same total time). On
+/// the slowest mode of a line (equal shares s both ways, so it decays at rate r = 2 s (1 - cos(pi / n)) per unit share),
+/// one step keeps 1 / (1 + r) and 100 steps keep (1 + r / 100)^-100, about exp(-r); the two differ by less than r^2 / 2,
+/// the first error term of backward Euler.
+#[test]
+fn band_big_step_is_close_to_small_steps() {
     let n = 40;
     let mode: Vec<f64> = (0..n).map(|i| (std::f64::consts::PI * (i as f64 + 0.5) / n as f64).cos()).collect();
     let before: Vec<f64> = mode.iter().map(|m| 10.0 + m).collect();
     let rate = 0.2;
     let s = rate / (2.0 * (1.0 - (std::f64::consts::PI / n as f64).cos()));
-    let step = |share: f64, x: &mut [f64]| along_line(&vec![share; n - 1], &vec![share; n - 1], x, &mut vec![0.0; n]);
+    let (a, b): (Vec<u32>, Vec<u32>) = ((0..n as u32 - 1).collect(), (1..n as u32).collect());
+    let step = |share: f64, x: &mut [f64]| {
+        let v = vec![share; n - 1];
+        Band::step(n, &Carry { a: &a, b: &b, fwd: &v, back: &v }, &vec![0.0; n]).solve(x)
+    };
     let (mut big, mut small) = (before.clone(), before.clone());
     step(s, &mut big);
     (0..100).for_each(|_| step(s / 100.0, &mut small));
-    let total = |x: &[f64]| x.iter().sum::<f64>();
-    assert!((total(&big) - total(&before)).abs() < 1e-12 * total(&before));
-    assert!((total(&small) - total(&before)).abs() < 1e-12 * total(&before));
     let (keep_big, keep_small) = (1.0 / (1.0 + rate), (1.0 + rate / 100.0).powi(-100));
     for i in 0..n {
         assert!((big[i] - 10.0 - keep_big * mode[i]).abs() < 1e-12 && (small[i] - 10.0 - keep_small * mode[i]).abs() < 1e-12);
         assert!((big[i] - small[i]).abs() < rate * rate / 2.0 * mode[i].abs());
+    }
+}
+
+/// Two fields side by side per node, each carried along the grid, the first losing at each node what the second gives
+/// it back (a coupling of the kind of rain and heat), solve their system together: the answer put back in gives the
+/// right-hand side.
+#[test]
+fn band_solves_two_coupled_fields() {
+    let (a, b, fwd, back, x) = grid();
+    let (n, c) = (x.len(), Carry { a: &a, b: &b, fwd: &fwd, back: &back });
+    let reach = a.iter().zip(&b).map(|(&p, &q)| p.abs_diff(q) as usize).max().unwrap();
+    let mut band = Band::zero(2 * n, 2 * reach + 1);
+    band.carry(&c, 2, 0, 1.0);
+    band.carry(&c, 2, 1, 2.0);
+    for j in 0..n {
+        band.add(2 * j, 2 * j, 3.0);
+        band.add(2 * j + 1, 2 * j + 1, 2.0);
+        band.add(2 * j, 2 * j + 1, -0.5);
+        band.add(2 * j + 1, 2 * j, -1.0);
+    }
+    let rhs: Vec<f64> = (0..2 * n).map(|r| x[r / 2] * (1.0 + (r % 2) as f64)).collect();
+    let mut z = rhs.clone();
+    band.factor();
+    band.solve(&mut z);
+    let field = |f: usize| (0..n).map(|j| z[2 * j + f]).collect::<Vec<f64>>();
+    let (u, v) = (field(0), field(1));
+    let (pu, pv) = (put_back(&c, &u, &vec![2.0; n]), put_back(&c, &v, &vec![0.0; n]));
+    for j in 0..n {
+        let (ru, rv) = (pu[j] - 0.5 * v[j], 2.0 * pv[j] - u[j]);
+        assert!((ru - rhs[2 * j]).abs() < 1e-9 * rhs[2 * j] && (rv - rhs[2 * j + 1]).abs() < 1e-9 * rhs[2 * j + 1], "node {j}: {ru} {rv}");
     }
 }
 

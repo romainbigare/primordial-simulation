@@ -18,10 +18,10 @@ example `body::upkeep` (the function `upkeep` in `core/src/body/pay.rs`).
 |---|---|
 | time and the month's order | `clock/` (the calendar, processes with periods; `sleep`: the sleep and wake of nodes), `schedule.rs` (`step`, `step_marked`, `day`) |
 | the shape of the world | `space/` (`Mesh`: levels of cells and links with their widths, parents and children; `square`: the square map; `stack`: layers above and below a cell). `World::mesh` is built from the saved map (`World::map`, `World::air_scale`; `World::mesh_of`), and the laws read cells, links, areas and air nodes from it. The square map is read only where a law is about its layout: the eight moves and sides a brain sees (`choose`), the side a child lands on (`copy`), the lowest neighbour a drifting part goes to (`bond::month`, first in compass order on a tie), and the four air nodes a cell reads the air between (`flow::scratch::tables`) |
-| the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `lines`: the implicit step along a line) |
+| the shared maths | `solve/` (`spread`: the implicit step along links; `downhill`: the high-to-low order and one pass down it; `band`: the implicit step of amounts carried along the links of a whole level, solved directly) |
 | settings, checks | `params.rs` (`Config`, `Physics`), `world.rs` (`World`, `Counters`), `check.rs` (the books); the nodes and their books in `store/` |
 | ground heat | `ground.rs` (heat capacity, melting plateaus, `World::thaw`, `World::t_ground_last`); `flow::land::conduct` (sideways) |
-| 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `radiation`, `exchange`, `wind` with `wind/along`, `sky`); `lanes.rs` (paths) |
+| 1 Flow | `flow/` (`mod`, `scratch`, `land`, `liquid`, `drain`, `creep`), `flow/air/` (`mod`, `step`, `newton`, `book`, `radiation`, `exchange`, `wind`, `sky`); `lanes.rs` (paths) |
 | 2 Change | `change/` (`mod`, `kernel`, `balance`, `gas`); the chemistry in `chem/` (`mod`, `thermo`, `roles`) |
 | 3 Bond | `bond/` (`mod`, `verbs`, `sense`, `month`) |
 | 4 Copy | `copy/` (`mod`, `mix`, `grow`); population nodes in `nodes.rs`; lineages in `lineage.rs` |
@@ -55,11 +55,12 @@ one month per call of `step` (`core/src/schedule.rs`). Each process has a period
 (`clock::Every`), and at one time they run in this order, written once in `schedule::processes`:
 
 1. Every `phys_days` days (3): `survey::survey` (what each cell holds, light and shade); then the parts
-   of Flow due: the state of ground and air with radiation (every physics step; the state is rebuilt in
-   full at each liquid step), evaporation and rain (every `exchange_days`, 3; the trace gases and the gases
-   that dissolve at every `flow::TRACE_TURN`-th, 4), wind (every `air_days`, 3), liquid, drainage and the
-   work of moving liquid (every `flow_days`, 30), heat conducted sideways through the ground and creep
-   (every `flow::CREEP_YEARS` years, 1), the recheck of what is present and of the slow ground (every
+   of Flow due: the state of ground and air, which the other laws read until the next physics step, and
+   the booking of the air's moves for the physics step ahead (every physics step; the state is rebuilt
+   in full at each liquid step), the air's step (every `air_hours`, 288: radiation, evaporation, rain,
+   gases dissolving and the wind, together, 1.4 to 1.6), liquid, drainage and the work of moving liquid
+   (every `flow_days`, 30), heat conducted sideways through the ground and creep (every
+   `flow::CREEP_YEARS` years, 1), the recheck of what is present and of the slow ground (every
    `flow::REFRESH_MONTHS` months, 3); then Change (`change::step`).
 2. On the first day of the month: Bond (`bond::step`): parts, loads, breaking.
 3. Every day: `survey::day` updates the bodies whose interval ends that day (each body every 5 to
@@ -81,8 +82,8 @@ it last did, in one span. Change's reactions in ground and air nodes sleep so (2
 step (`World::t_ground_last`). Where Flow has not run yet, `flow::ensure` builds that state from
 the world as it is.
 
-**Checks before a run.** `Config::validate` checks the settings: each period is a whole multiple
-of `phys_days`, and `Physics::validate` (`dormancy` above 1, `light_yield` above 0 and at most 1).
+**Checks before a run.** `Config::validate` checks the settings: each period at least 1, the air's
+step and `phys_days` dividing one another, and `Physics::validate` (`dormancy` above 1, `light_yield` above 0 and at most 1).
 `Chemistry::validate` checks a chemistry: indices, densities, and that every reaction and
 conversion keeps its elements and its mass.
 
@@ -198,9 +199,33 @@ Moving liquid loses energy (its lost head). That energy does work where it is lo
 `carry`, `wear` and `creep` come from real erosion rates (`docs/numbers.md`). Most rock that
 leaves the land is lime that Change dissolves (reaction 22, 2.6) and the liquid takes away.
 
-### 1.4 Sun, heat and radiation
+### 1.4 The air's step
 
-`flow::air::radiation`, every Flow call.
+`flow::air::step`, every `air_hours` (288). Radiation, the exchange of the ground with the air
+(evaporation, rain) and the wind are one implicit step (backward Euler) over the whole span, so a
+long step gives the world of short ones: the long-step test holds the climate of 12-day steps to that
+of 6-hour steps within the seeds' noise (`tape/tests/ranges.rs`).
+
+- The unknowns are each air node's temperature and gases at the end of the step. The sun is that of
+  the step's end.
+- Each round reads them and finds what every ground node exchanges with its air node over the step:
+  its surface balance solved implicitly (1.4 below), the rain it gets and what evaporates from it
+  (1.5), and how these change with the air it sees (each cell sees the four nearest air nodes by
+  their weights). Then it solves the air nodes with the wind in one implicit step (`solve::band`, an
+  LU solve of the banded system of the whole air level, with partial pivoting): first the total
+  amounts with the evening of pressure, then the gases the ground does not exchange, then the
+  exchanged gases and the heat together, then each trace gas alone (Newton's method). A round moves
+  the air at most 10 K, and keeps each gas of a node at least half of what it held.
+- The rounds stop when the air moves by less than 0.05 K and 1e-5 of a node's gas (4 to 5 rounds),
+  or after 16. What the last round found crosses every link and is booked by the store, so the books
+  are exact whether or not the rounds converged.
+- **Booked through the span** (`air::book`). The step's moves are booked a physics step at a time
+  (`air::dispense`, by Flow's state, for the physics step ahead): the ground, the air, the light on
+  bodies and the rain change through the span as the other laws read them. A ground node gives no
+  more of a gas than it holds then, and an air node that would give more of a gas than it holds rains
+  that much less.
+
+**Sun, heat and radiation** (`flow::air::radiation`).
 
 - The sun warms each cell by latitude, season and day length (`insolation`, the planet settings
   `sun`, `tilt`, `lat_south`, `lat_north`). The surface reflects part of it by the reflectance
@@ -212,9 +237,11 @@ leaves the land is lime that Change dissolves (reaction 22, 2.6) and the liquid 
   (`flow::column`, `flow::glow`). More gas lifts the layer that reaches space into colder air,
   so the ground warms. There is no ceiling.
 - The ground trades heat with the air touching it (`sensible`). The ground temperature is solved
-  implicitly (stable at any step). The store books it all in one call: the sunlight from the sun
-  node to each ground node, what the ground gives its air node (with what leaves to space through
-  it), and what each air node sends to the space node.
+  implicitly over the step, with the latent heat of what evaporates at that temperature and the heat
+  of the rain, again about the temperature it gives until it moves by less than 1e-3 K (at most 3
+  times). The store books the sunlight from the sun node to each ground node, what the ground gives
+  its air node (with what leaves to space through it), and what each air node sends to the space
+  node.
 
 **Light on bodies.** The light that bodies' leaves absorb warms the ground as it falls, except
 the share their light reactions store. That share is set aside in the cell (`World::light_pool`,
@@ -234,25 +261,25 @@ changed since (one came, went, or changed its members or what others see of it: 
 
 ### 1.5 Evaporation, rain and dissolved gases
 
-`flow::air::exchange`, every `exchange_days`.
+`flow::air::exchange` and `flow::air::step`, in the air's step.
 
-- **Evaporation** by vapour pressure: the ground's saturation pressure against the vapour
-  pressure of the air near it. Wet ground evaporates at the open rate when liquid stands on it
-  or its pores hold their field capacity or more; drier ground in proportion to its liquid.
+- **Evaporation** by vapour pressure: the ground's saturation pressure at the end of the step
+  against the vapour pressure of the air near it. Wet ground evaporates at the open rate when liquid
+  stands on it or its pores hold their field capacity or more; drier ground in proportion to its
+  liquid (the bucket of Manabe 1969), integrated exactly over the step with the rain it gets.
 - **Rain.** Where the air a cell sees holds more vapour than it can at its temperature (colder
-  on higher ground), the rest rains out. Condensing air makes clouds that cover part of the sky
-  (`cloud`).
+  on higher ground), the rest rains out in `rain_time` (1 day). Condensing air makes clouds that
+  cover part of the sky (`cloud`).
 - **Lift.** Gas that goes up into the air, from the ground or from bodies, parts, ground
   reactions and growth, is lifted from the ground's head to the air's mean height: the air's heat
   pays for it. Gas that comes down (rain, gas taken by reactions or bodies) gives that back to the
   air's heat. The difference is `World::potential`.
-- **Booked by the store.** Each pass (evaporation, condensation, dissolving) is booked at its end
-  in one call: a link from each ground node to its air node carries the gas and the heat that
-  leaves the ground; the air receives that heat less the latent heat it holds of the gas
-  (`store::held`). Each pass reads the air as it was before it. Bodies, parts and growth
-  still change the air through `flow::Sky::cross` (`flow/air/sky.rs`).
-- **Gases dissolve** (`exchange::dissolve`). A gas that cannot condense on the ground dissolves
-  in the liquid there toward Henry's share (solubility × partial pressure × the liquid's amount),
+- **Booked by the store.** A link from each ground node to its air node carries the gas and the
+  heat that leaves the ground; the air receives that heat less the latent heat it holds of the gas
+  (`store::held`). Bodies, parts and growth still change the air through `flow::Sky::cross`
+  (`flow/air/sky.rs`).
+- **Gases dissolve** (`exchange::dissolve`, at the start of the air's step, from the air as it is).
+  A gas that cannot condense on the ground dissolves in the liquid there toward Henry's share (solubility × partial pressure × the liquid's amount),
   and comes out when the liquid warms, thins or freezes. It crosses the surface through the
   air's film (`evap`) and the liquid's film (`dissolve`) in series. Dissolving frees the
   vaporisation enthalpy into the liquid; coming out takes it back. Dissolved gas moves with the
@@ -262,30 +289,22 @@ changed since (one came, went, or changed its members or what others see of it: 
 
 ### 1.6 Wind
 
-`flow::air::wind`, every `air_days`. The air nodes are the coarser level of the mesh
+`flow::air::wind`, in the air's step. The air nodes are the coarser level of the mesh
 (`AIR`); the wind runs on that level's links (the cells of two nodes that share a border).
-Gas moves over each link by three pushes:
+Gas moves over each link by three pushes, each a rate:
 
-1. the pressure of the whole column (p = nRT/V), from high to low;
+1. the pressure of the whole column (p = nRT/V), from high to low, evened in the time sound takes
+   to cross the link (Lamb waves travel at the speed of sound, Lindzen 1990);
 2. overturning: at equal height, the lower half flows to the warmer column and the upper half
-   back, through half the column across the link's width; both are turned sideways by the
-   planet's rotation (`rotation`, by the warmth's gradient across the link, at the latitude of
-   the link: the mean of its two nodes'); vapour crowds in the lower half;
+   back, at `wind` per K through half the column across the link's width; both are turned
+   sideways by the planet's rotation (`rotation`, by the warmth's gradient across the link, at the
+   latitude of the link: the mean of its two nodes'); vapour crowds in the lower half;
 3. eddies mix the two columns (`mix`, across the link's width over its length).
 
-It is solved implicitly, so any speed is stable. The links form lines (the rows and columns of
-the square map) and it is solved along them (`wind/along`, `solve::lines`); a row that closes on
-itself (round the globe) is a ring, solved by the cyclic form of the same step (`along_ring`). A
-level whose links do not form lines stops the run with a clear message. A call is long
-against the time the air takes to mix from node to node, so one order of the two directions would
-leave stripes along the lines solved last: the lines are solved in both orders (east–west then
-north–south, and the other way) from the same start, and the air keeps the mean of the two.
-
-Each call starts from the air nodes' amounts as they are (`air::sums`), with what Law 2 and bodies
-changed. What crosses the links over the whole solve is booked at once by `store::apply` (gas and
-heat; only what a node holds at the end counts, so gas that passes through it needs nothing held). Air in
-Flow moves as whole columns, so there is no wind near the ground; bodies use the anchored
-`wind_ground` (6.3).
+They are solved implicitly with the rest of the air's step (1.4), so any speed is stable, on any
+mesh. What crosses the links is booked by `store::apply` (gas and heat; only what a node holds at
+the end counts, so gas that passes through it needs nothing held). Air in Flow moves as whole
+columns, so there is no wind near the ground; bodies use the anchored `wind_ground` (6.3).
 
 ### 1.7 Paths
 

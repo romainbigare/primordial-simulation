@@ -1,134 +1,114 @@
-//! Wind: gas and heat between neighbouring air nodes, along the links of the air level (`AIR`): the pushes on
-//! each link and the booking, here. The links form lines (the rows and columns of the square map, a row closed on
-//! itself where it goes round the globe), and the wind is solved along them (`along`, by `solve::lines`).
-
-mod along;
+//! Wind: gas and heat between neighbouring air nodes, along the links of the air level (`AIR`) that share a border.
+//! Here the three pushes on each link and what they carry over a step, as the coefficients of an implicit step
+//! (`solve::band`); the air step (`step`) solves them with the exchange with the ground.
 
 use super::super::Scratch;
-use super::air_temp;
-use crate::AIR;
+use crate::solve::band::Carry;
 use crate::space::Level;
-use crate::store::{apply, Batch, Class, LinkFlux};
 use crate::units::R_GAS;
-use crate::{Config, World};
+use crate::Config;
 
-/// Share of the pressure difference between two air nodes evened out per call.
-const EVEN: f64 = 0.25;
-/// Most of a node's amount the overturning may exchange over one link per call.
-const OVER: f64 = 3.0;
 /// A fit of a gradient whose neighbours nearly line up (the determinant below this share of the product of its
 /// diagonal) is made along each axis alone.
 const SINGULAR: f64 = 1e-9;
 
-/// The air as the wind moves it within a call: per gas and node (`[gas * nodes + node]`) the amount, mol; per node the
-/// heat, J, and the amount, mol, and heat capacity, J/K (as `Scratch` keeps them).
-#[derive(Clone)]
-struct State {
-    x: Vec<f64>,
-    e: Vec<f64>,
-    nt: Vec<f64>,
-    capa: Vec<f64>,
+/// The coefficients `(fwd, back)` of a transport over the links of `Links`, per link (`solve::band::Carry`).
+pub(super) type Coef = (Vec<f64>, Vec<f64>);
+
+/// The links of the air level that share a border (width above 0), with their ends.
+pub(super) struct Links {
+    pub(super) id: Vec<usize>,
+    pub(super) a: Vec<u32>,
+    pub(super) b: Vec<u32>,
 }
 
-/// What a call moves over each link of the air level, + from its `a` to its `b`: each gas, mol (`[gas * links +
-/// link]`), and heat, J; and the energy each node pays to lift the mass that enters it, J.
-struct Moved {
-    mol: Vec<f64>,
-    heat: Vec<f64>,
-    paid: Vec<f64>,
+impl Links {
+    pub(super) fn of(air: &Level) -> Links {
+        let id: Vec<usize> = (0..air.a().len()).filter(|&l| air.width()[l] > 0.0).collect();
+        let (a, b) = id.iter().map(|&l| (air.a()[l], air.b()[l])).unzip();
+        Links { id, a, b }
+    }
+    /// The coefficients `(fwd, back)` of a transport over these links, for `solve::band`.
+    pub(super) fn carry<'a>(&'a self, (fwd, back): &'a Coef) -> Carry<'a> {
+        Carry { a: &self.a, b: &self.b, fwd, back }
+    }
 }
 
-/// Per air node, from a `State`: the pressure of the column (p = nRT/V), Pa; the warmth at equal height, K; and the
-/// gradient of the warmth [east, south], K/m.
-struct Columns {
-    p: Vec<f64>,
-    warmth: Vec<f64>,
-    grad: Vec<[f64; 2]>,
+/// The air of each node as the wind sees it: the amount, mol, the heat capacity, J/K, the mass, kg, and the
+/// temperature, K.
+pub(super) struct Air<'a> {
+    pub(super) n: &'a [f64],
+    pub(super) capa: &'a [f64],
+    pub(super) mass: &'a [f64],
+    pub(super) t: &'a [f64],
 }
 
-/// What the pushes on the links read.
-struct Ctx<'a> {
-    cfg: &'a Config,
-    s: &'a Scratch,
-    air: &'a Level,
-    dt: f64,
+/// The pushes on each link (`Links`), + from its `a` to its `b`, mol/s: mixing by eddies, overturning, and the
+/// conductance of the evening of pressure, mol/(Pa s).
+pub(super) struct Pushes {
+    mix: Vec<f64>,
+    over: Vec<f64>,
+    even: Vec<f64>,
 }
 
-/// Gas between neighbouring air nodes, by three pushes on each link: the pressure of the whole column drives gas from
-/// high to low; the warmth difference at equal height turns the columns over (the lower half flows to the warmer node
-/// and the upper half back, both turned sideways by rotation; condensable gases crowd in the lower half); eddies mix
-/// the two columns. Solved implicitly, so any speed is stable; what crosses each link is booked on its two nodes
-/// (`book`).
-pub(crate) fn wind(w: &mut World, s: &mut Scratch, dt: f64) {
-    // (The level is copied: the booking changes the world that holds it.)
-    let air = w.mesh.level(AIR).clone();
-    let moved = blow(w, s, &air, dt);
-    book(w, s, &air, &moved);
-}
-
-/// What the wind moves over the links of `air` in a call, along its lines (`along`), from the sums of the air nodes'
-/// amounts now (`air::sums`: Law 2 and bodies change them too).
-fn blow(w: &World, s: &mut Scratch, air: &Level, dt: f64) -> Moved {
-    super::sums(w, s);
+/// Three pushes on each link: the pressure of the whole column (p = nRT/V) drives gas from high to low, evened in the
+/// time sound takes to cross the link (the pressure of neighbouring columns evens out in about that time: Lamb waves
+/// travel at the speed of sound, Lindzen 1990, 9.2); the warmth difference at equal height turns the columns over (the
+/// lower half flows to the warmer node and the upper half back, at the `wind` speed per K through half the column
+/// across the link's width, both turned sideways by the planet's rotation by the gradient of the warmth across the
+/// link, at its latitude); eddies mix the two columns (`mix` across the link's width over its length).
+pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links, at: &Air) -> Pushes {
     let na = air.n();
-    let x = s.state.gas.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
-    let start = State { x, e: w.e_air.clone(), nt: s.nt.clone(), capa: s.capa.clone() };
-    let lines = along::lines(air).expect("the links of the air level form lines (a square map), each node with at most one link each way along a direction");
-    along::along(&Ctx { cfg: &w.cfg, s, air, dt }, &lines, start)
-}
-
-/// Book `m` on the world over the links of `air` through `store::apply`: the gas and heat, then the lift from the heat
-/// of the node the mass enters into the world's potential energy (as `Sky::cross` books it); then the sums the state
-/// keeps of each air node, from its amounts (`air::sums`).
-fn book(w: &mut World, s: &mut Scratch, air: &Level, m: &Moved) {
-    let ks: Vec<u16> = s.state.gas.iter().map(|&k| k as u16).collect();
-    let mut lift = Batch::falls(Class::Air);
-    m.paid.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
-    apply(w, &[LinkFlux { class: [Class::Air; 2], a: air.a(), b: air.b(), ks: &ks, mol: &m.mol, heat: &m.heat }, lift.flux()], &[], &[]);
-    super::sums(w, s);
-    for (j, &e) in w.e_air.iter().enumerate() {
-        s.ta[j] = air_temp(e, s.capa[j]);
-    }
-}
-
-impl Ctx<'_> {
-    /// Pressure and warmth of each node of `st` (at its temperature), and the gradient of the warmth.
-    fn columns(&self, st: &State) -> Columns {
-        let (s, na) = (self.s, self.air.n());
-        let ta: Vec<f64> = (0..na).map(|j| air_temp(st.e[j], st.capa[j])).collect();
-        let p = (0..na).map(|j| st.nt[j] * R_GAS * ta[j] / s.vol[j]).collect();
-        let warmth: Vec<f64> = (0..na).map(|j| ta[j] + s.gam[j] * s.zair[j]).collect();
-        let grad = gradient(self.air, &warmth);
-        Columns { p, warmth, grad }
-    }
-    /// The three pushes on link `l`, + from its `a` to its `b`, mol/s: mixing (the eddies' `mix` across the link's
-    /// width over its length), overturning (the `wind` speed through half the column across the link's width, no more
-    /// than `OVER` times the smaller column per call) and the evening of pressure. The planet's rotation turns the
-    /// overturning by the gradient of the warmth across the link, at the latitude of the link (the mean of its
-    /// nodes').
-    fn push(&self, st: &State, col: &Columns, l: usize) -> [f64; 3] {
-        let (cfg, s, air, dt) = (self.cfg, self.s, self.air, self.dt);
+    let warmth: Vec<f64> = (0..na).map(|j| at.t[j] + s.gam[j] * s.zair[j]).collect();
+    let grad = gradient(air, &warmth);
+    let mut p = Pushes { mix: Vec::with_capacity(links.id.len()), over: Vec::with_capacity(links.id.len()), even: Vec::with_capacity(links.id.len()) };
+    for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, air.width()[l], air.dist()[l]);
-        let rho = (st.nt[a] / s.vol[a] + st.nt[b] / s.vol[b]) / 2.0;
+        let rho = (at.n[a] / s.vol[a] + at.n[b] / s.vol[b]) / 2.0;
         let depth = cfg.air_top_m - (s.za[a] + s.za[b]) / 2.0;
         let turn = cfg.rotation * ((air.lat()[a] + air.lat()[b]) / 2.0).to_radians().sin();
         let (ca, cb) = (air.centre()[a], air.centre()[b]);
-        let (ga, gb) = (col.grad[a], col.grad[b]);
+        let (ga, gb) = (grad[a], grad[b]);
         let across = ((ga[0] + gb[0]) * (cb[1] - ca[1]) - (ga[1] + gb[1]) * (cb[0] - ca[0])) / 2.0;
-        let cap = OVER * st.nt[a].min(st.nt[b]) / dt;
-        let over = (cfg.wind * (col.warmth[b] - col.warmth[a] + turn * across) * rho * wd * depth / 2.0).clamp(-cap, cap);
-        [cfg.mix * rho * depth * wd / d, over, self.even(st, col, a, b) * (col.p[a] - col.p[b])]
+        p.mix.push(cfg.mix * rho * depth * wd / d);
+        p.over.push(cfg.wind * (warmth[b] - warmth[a] + turn * across) * rho * wd * depth / 2.0);
+        // p = c n with c = RT/V; sound crosses the link in d / sqrt(gamma R T / M), gamma = cp / (cp - R) per mol.
+        let c = |j: usize| R_GAS * at.t[j] / s.vol[j];
+        let sound = |j: usize| {
+            let cp = at.capa[j] / at.n[j];
+            (cp / (cp - R_GAS) * R_GAS * at.t[j] * at.n[j] / at.mass[j]).sqrt()
+        };
+        p.even.push((sound(a) + sound(b)) / 2.0 / (d * (c(a) + c(b))));
     }
-    /// The conductance that evens the pressure of nodes `a` and `b` by `EVEN` of their difference over a call,
-    /// mol/(Pa s): the amount that crosses changes their difference by the sum of their pressures per mol.
-    fn even(&self, st: &State, col: &Columns, a: usize, b: usize) -> f64 {
-        EVEN / ((col.p[a] / st.nt[a] + col.p[b] / st.nt[b]) * self.dt)
+    p
+}
+
+impl Pushes {
+    /// The coefficients of the evening of pressure over `dt` for the total amounts (`solve::band`).
+    pub(super) fn pressure(&self, s: &Scratch, links: &Links, t: &[f64], dt: f64) -> Coef {
+        let c = |j: u32| R_GAS * t[j as usize] / s.vol[j as usize];
+        let fwd = links.a.iter().zip(&self.even).map(|(&a, &g)| dt * g * c(a)).collect();
+        let back = links.b.iter().zip(&self.even).map(|(&b, &g)| dt * g * c(b)).collect();
+        (fwd, back)
     }
-    /// The mass `moved` from node `a` to node `b`, kg, is lifted between their mean heights: by the heat of the node
-    /// it enters, J. Returns that node and the energy.
-    fn lift(&self, a: usize, b: usize, moved: f64) -> (usize, f64) {
-        let s = self.s;
-        (if moved > 0.0 { b } else { a }, self.cfg.gravity * moved * (s.zair[b] - s.zair[a]))
+    /// The coefficients over `dt` of a gas whose share in the upper half of each node is `split` (`Scratch::split`),
+    /// given the total amounts after the step `n`, the gas of each node's [lower, upper] half `halves` and what the
+    /// pressure moves over each link over the step, `flow`, mol: mixing evens its share of the gas, the overturning carries
+    /// the share of each half that is this gas, and the pressure's flow carries its share of the node it leaves. With
+    /// `split` None, the heat: each half carries its node's heat per mol.
+    pub(super) fn carry(&self, links: &Links, n: &[f64], (split, halves): (Option<&[f64]>, &[[f64; 2]]), flow: &[f64], dt: f64) -> Coef {
+        let (mut fwd, mut back) = (Vec::with_capacity(flow.len()), Vec::with_capacity(flow.len()));
+        for (l, (&a, &b)) in links.a.iter().zip(&links.b).enumerate() {
+            let (a, b, o, f) = (a as usize, b as usize, self.over[l], flow[l]);
+            let (op, om) = (o.max(0.0), (-o).max(0.0));
+            let (to_b, to_a) = match split {
+                Some(up) => (op * (1.0 - up[a]) / halves[a][0] + om * up[a] / halves[a][1], op * up[b] / halves[b][1] + om * (1.0 - up[b]) / halves[b][0]),
+                None => (o.abs() / n[a], o.abs() / n[b]),
+            };
+            fwd.push((dt * self.mix[l] + f.max(0.0)) / n[a] + dt * to_b);
+            back.push((dt * self.mix[l] + (-f).max(0.0)) / n[b] + dt * to_a);
+        }
+        (fwd, back)
     }
 }
 

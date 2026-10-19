@@ -2,7 +2,7 @@
 //! number is anchored to is in `docs/numbers.md`, one row per field.
 
 use crate::clock::Calendar;
-use crate::units::{DAY_S, T_SURF};
+use crate::units::{DAY_S, HOUR_S, T_SURF};
 use serde::{Deserialize, Serialize};
 
 /// The settings of a world: the planet, the calendar and time steps, the physics of its ground
@@ -28,13 +28,11 @@ pub struct Config {
     pub days_per_month: u32,
     /// Months in a year
     pub months_per_year: u32,
-    /// Ground and air physics (and radiation) run every this many days
+    /// The survey of the cells and the reactions of ground and air run every this many days
     pub phys_days: u32,
-    /// Gas moves between air nodes (wind) every this many days
-    pub air_days: u32,
-    /// Evaporation and condensation run every this many days (a multiple of `phys_days`)
-    pub exchange_days: u32,
-    /// Liquid moves every this many days (a multiple of `phys_days`)
+    /// The air's step (radiation, evaporation, rain and wind, together) runs every this many hours
+    pub air_hours: u32,
+    /// Liquid moves every this many days
     pub flow_days: u32,
     /// Speed shortcut: past this many body nodes in a cell at a month's start the most alike merge (`nodes::crowd`)
     pub crowd: usize,
@@ -64,6 +62,8 @@ pub struct Config {
     pub mix: f64,
     /// Condensation in the air at which its droplets cover half the sky, mol/(m² s)
     pub cloud: f64,
+    /// Time in which vapour over saturation rains out, s
+    pub rain_time: f64,
     /// Loose solid volume moving liquid carries off per J it dissipates, m³/J
     pub carry: f64,
     /// Bonded volume broken per J dissipated, times 1 / bond strength, m³/J
@@ -372,18 +372,16 @@ impl Config {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
-    /// Check a run's settings before it starts: the time steps fit together as the clock runs them (`schedule`): the
-    /// physics runs every `phys_days` from the month's start, and the wind, evaporation and liquid every `air_days`,
-    /// `exchange_days` and `flow_days` after the state of the ground and the air at a physics step, so each must be a
-    /// whole multiple of `phys_days`; and the physics (`Physics::validate`).
+    /// Check a run's settings before it starts: the time steps are at least 1 (`schedule`), and the physics
+    /// (`Physics::validate`).
     pub fn validate(&self) -> Result<(), String> {
-        if self.phys_days == 0 {
-            return Err("phys_days must be at least 1".into());
+        if self.phys_days == 0 || self.air_hours == 0 || self.flow_days == 0 {
+            return Err(format!("phys_days ({}), air_hours ({}) and flow_days ({}) must be at least 1", self.phys_days, self.air_hours, self.flow_days));
         }
-        for (name, x) in [("air_days", self.air_days), ("exchange_days", self.exchange_days), ("flow_days", self.flow_days)] {
-            if x == 0 || x % self.phys_days != 0 {
-                return Err(format!("{name} ({x}) must be a whole multiple of phys_days ({})", self.phys_days));
-            }
+        // (Flow's state books the air's step a physics step ahead: the two steps must meet.)
+        let (air, phys) = (self.air_hours as u64 * HOUR_S, self.phys_days as u64 * self.calendar().day);
+        if air % phys != 0 && phys % air != 0 {
+            return Err(format!("the air's step ({} hours) and the physics step ({} days) must divide one another", self.air_hours, self.phys_days));
         }
         if self.node_days as f64 > crate::body::MAX_INTERVAL {
             return Err(format!("node_days ({}) must be at most {} days, the longest interval", self.node_days, crate::body::MAX_INTERVAL));
@@ -415,8 +413,7 @@ impl Default for Config {
             days_per_month: 30,
             months_per_year: 12,
             phys_days: 3,
-            air_days: 3,
-            exchange_days: 3,
+            air_hours: 288,
             flow_days: 30,
             crowd: 4,
             wake_share: 0.05,
@@ -429,8 +426,9 @@ impl Default for Config {
             evap: 0.006,
             dissolve: 5e-5,
             wind: 0.25,
-            mix: 2e4,
+            mix: 1e6,
             cloud: 1.2e-2,
+            rain_time: 86400.0,
             carry: 2e-11,
             wear: 1.4e-11,
             regrow: 1e-9,
@@ -448,11 +446,11 @@ mod tests {
     use super::{Config, Physics};
 
     #[test]
-    fn the_default_settings_pass_and_a_step_off_its_base_or_a_dormancy_of_1_is_refused() {
+    fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
         assert_eq!(Config::default().validate(), Ok(()));
         let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
-        for c in [Config { flow_days: 4, ..Default::default() }, Config { exchange_days: 4, ..Default::default() }, Config { air_days: 2, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
-            assert!(c.validate().is_err(), "{} {} {} {} {}", c.phys_days, c.air_days, c.exchange_days, c.flow_days, c.phys.dormancy);
+        for c in [Config { flow_days: 0, ..Default::default() }, Config { air_hours: 0, ..Default::default() }, Config { air_hours: 50, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
+            assert!(c.validate().is_err(), "{} {} {} {}", c.phys_days, c.air_hours, c.flow_days, c.phys.dormancy);
         }
     }
 }

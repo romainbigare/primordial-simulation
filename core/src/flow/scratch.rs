@@ -117,12 +117,14 @@ pub(super) struct State {
     pub(super) gas: Vec<usize>,
     /// Bonded ground of each ground node.
     pub(super) bed: Vec<Bed>,
+    /// What the last air step moves over its span, as far as it is not booked yet (`air::dispense`).
+    pub(super) pending: air::Pending,
 }
 
 /// Working memory of the law: its state (`State`), the only part saved with the world, and caches. A cache is rebuilt
-/// from the world and the state at each liquid step (`flow::radiate`), and at once when missing (`flow::ensure`): a
-/// snapshot is taken at a month's start, where a liquid step comes first (`docs/tape.md`), so a resumed run matches an
-/// unbroken one. Ground fields are per ground node, air fields per air node.
+/// from the world and the state at each liquid step (`flow::state`, the air's in each step), and at once when missing
+/// (`flow::ensure`): a snapshot is taken at a month's start, where a liquid step comes (`docs/tape.md`), so a resumed
+/// run matches an unbroken one. Ground fields are per ground node, air fields per air node.
 #[derive(Clone, Debug, Default)]
 pub struct Scratch {
     pub(super) state: State,
@@ -154,16 +156,12 @@ pub struct Scratch {
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
     pub(super) near: Vec<[u32; 4]>,
     pub(super) wt: Vec<[f64; 4]>,
-    /// Temperature of the air touching the ground, K (radiation; exchange reads it).
-    pub(super) tl: Vec<f64>,
     /// The air each ground cell sees (`air::state`): temperature drop, K/m; mean height of the air,
-    /// m; share of heat radiation it absorbs; temperature, K.
-    pub(super) seen: Vec<[f64; 4]>,
+    /// m; share of heat radiation it absorbs.
+    pub(super) seen: Vec<[f64; 3]>,
     /// How much colder than the air touching the ground each layer of the air over a cell is,
     /// [down, up], K (`air::column`).
     pub(super) lay: Vec<[[f64; air::LAYERS]; 2]>,
-    /// Temperature of each air node at the last `air::state`, K.
-    pub(super) ta0: Vec<f64>,
     /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
     pub(super) vol: Vec<f64>,
@@ -182,7 +180,7 @@ pub struct Scratch {
     pub(super) cond: Vec<bool>,
     pub(super) hk: Vec<f64>,
     pub(super) split: Vec<f64>,
-    /// Work space of radiation (a row per ground cell).
+    /// Work space of the air's step (a row per ground cell).
     pub(super) rad: Vec<f64>,
 }
 
@@ -306,13 +304,13 @@ pub(super) fn fresh(w: &World, s: &mut Scratch) {
 pub(super) fn room(w: &World, s: &mut Scratch) {
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0 }; n];
-    for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc, &mut s.tl] {
+    for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc] {
         *v = vec![0.0; n];
     }
-    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta, &mut s.ta0] {
+    for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta] {
         *v = vec![0.0; na];
     }
-    s.seen = vec![[0.0; 4]; n];
+    s.seen = vec![[0.0; 3]; n];
 }
 
 /// Tables that depend on the map and the chemistry alone: substance constants, and the four air nodes each ground

@@ -9,9 +9,8 @@
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
 //! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
-//! The steps of Flow are speed settings too (plan 6.4, the long step against the short one): a small world with life
-//! keeps its climate within its noise at the default steps and at the short ones (every part of Flow every 3 days but
-//! liquid every 15).
+//! The steps of Flow are speed settings too (plan 6.4, the long step against the short one): small worlds with life keep
+//! their climate within the seeds' noise at the default steps and with the air's step at 6 hours.
 
 use pcore::{Config, World};
 use std::fmt;
@@ -232,19 +231,53 @@ fn the_sleep_of_change_keeps_the_chemistry() {
 /// the rain on land, the heat-absorbing gas and the river cells.
 const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
 
-/// The long step against the short one: at the default steps of Flow (`phys_days`, `air_days`, `exchange_days`,
-/// `flow_days`) the mean of each of the climate's key numbers over the last years moves by less than its noise, the
-/// spread of its values over those years at the short steps.
-#[test]
-#[ignore = "slow: two 8-year runs of a 32 x 32 world with life"]
-fn the_long_step_keeps_the_climate() {
-    let short: fn(&mut Config) = |c| (c.phys_days, c.air_days, c.exchange_days, c.flow_days) = (3, 3, 3, 15);
-    let default: fn(&mut Config) = |_| {};
-    let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
-        let runs: Vec<_> = [short, default].into_iter().map(|set| s.spawn(move || yearly(&CLIMATE, set))).collect();
-        runs.into_iter().map(|r| r.join().expect("a run")).collect()
+/// The means of the `CLIMATE` columns at the end of each year from `SLEEP_FROM`, on the sleep test's world of `seed`,
+/// with the steps of Flow that `set` makes.
+fn climate(seed: u64, set: fn(&mut Config)) -> [f64; CLIMATE.len()] {
+    let mut mean = [0.0; CLIMATE.len()];
+    let years = (SLEEP_YEARS - SLEEP_FROM + 1) as f64;
+    run(seed, SLEEP_SIDE, SLEEP_YEARS, set, |y, _, rec| {
+        if y >= SLEEP_FROM {
+            mean.iter_mut().zip(CLIMATE).for_each(|(m, c)| *m += rec.last(c) / years);
+        }
     });
-    let out = off_by_noise(&CLIMATE, &runs, &["the short steps", "the default steps"], |name| name.to_string());
+    mean
+}
+
+/// The air's step of 6 hours (`air_hours`), short against the air's changes in a day.
+const SHORT_AIR_HOURS: u32 = 6;
+
+/// The long step against the short one: at the default steps of Flow (`air_hours`, `flow_days`) the mean over the
+/// three seeds of each of the climate's key numbers (each the mean of its last years) moves by less than its noise, the
+/// spread of the three seeds' values with the air's step at 6 hours (`SHORT_AIR_HOURS`).
+#[test]
+#[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
+fn the_long_step_keeps_the_climate() {
+    let short: fn(&mut Config) = |c| c.air_hours = SHORT_AIR_HOURS;
+    let default: fn(&mut Config) = |_| {};
+    // Per seed, [short, default], the short and the default step side by side.
+    let runs: Vec<[[f64; CLIMATE.len()]; 2]> = SEEDS
+        .iter()
+        .map(|&seed| {
+            std::thread::scope(|s| {
+                let pair = [short, default].map(|set| s.spawn(move || climate(seed, set)));
+                pair.map(|r| r.join().expect("a run"))
+            })
+        })
+        .collect();
+    let mut out = vec![];
+    for (q, name) in CLIMATE.iter().enumerate() {
+        let column = |k: usize| runs.iter().map(|r| r[k][q]).collect::<Vec<f64>>();
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let (base, long) = (column(0), column(1));
+        let noise = base.iter().fold(f64::MIN, |m, &x| m.max(x)) - base.iter().fold(f64::MAX, |m, &x| m.min(x));
+        let off = mean(&long) - mean(&base);
+        let ok = off.abs() <= noise;
+        println!("{name}: {:.6e} at the default steps (seeds {long:.4?}), {:.6e} at the short ones (seeds {base:.4?}), off by {off:.3e}, noise {noise:.3e}{}", mean(&long), mean(&base), if ok { "" } else { ": OUT" });
+        if !ok {
+            out.push(*name);
+        }
+    }
     assert!(out.is_empty(), "the long step changed: {out:?}");
 }
 

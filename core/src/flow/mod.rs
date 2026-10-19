@@ -8,13 +8,13 @@
 //! loose solids and breaking weak bonds; loose solids creep downhill; heat conducts sideways
 //! through the ground's active layer. Air nodes
 //! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
-//! overturning and mixing. Every move is booked by the store (`store::apply`): it takes from one
+//! overturning and mixing, solved together over a step. Every move is booked by the store (`store::apply`): it takes from one
 //! node exactly what it gives to another, with its heat; lifting matter takes heat and a fall gives
 //! it back, the difference held by the store's potential node (`store::Batch::falls`, `World::potential`), so
 //! elements and energy are kept.
 //!
 //! Files: `scratch` (the law's working memory and its tables), `land` (state, phases and surface of
-//! ground nodes), `liquid`, `drain`, `creep`, and `air` (`state`, `radiation`, `exchange`, `wind`).
+//! ground nodes), `liquid`, `drain`, `creep`, and `air` (`state`, `step`, `radiation`, `exchange`, `wind`).
 
 pub(crate) mod air;
 mod creep;
@@ -27,47 +27,58 @@ pub use air::{column, glow, scale_height};
 pub use scratch::Scratch;
 pub(crate) use scratch::FlowView;
 
-use crate::World;
+use crate::{World, AIR};
 use land::ground_state;
 use scratch::tables;
 
 /// The slow-changing ground and the substances present are rechecked this often, months (`schedule`).
 pub(crate) const REFRESH_MONTHS: u64 = 3;
-/// A trace gas (`air::exchange`) evaporates and condenses only at every this many exchanges, for the time to the next
-/// such turn (`schedule`).
-pub(crate) const TRACE_TURN: u32 = 4;
 /// Heat conducted sideways through the ground, and creep (with the regrowth of bodies), run once in this many years,
 /// for all that time (`schedule`): on cells of kilometres both are slow, and the implicit spread holds for any step.
 pub(crate) const CREEP_YEARS: u64 = 1;
 
 /// Each part of the law runs on its own period, as the world's clock calls it (`schedule`, which writes their order
-/// once): `radiate`, `exchange`, `wind`, `liquid`, `creep` and `refresh`.
+/// once): `state`, `air`, `liquid`, `creep` and `refresh`.
 ///
-/// The state of ground nodes (`ground_state`) and of air nodes (`air::state`), then radiation (`air::radiation`) for
-/// `dt` seconds. With `full` (at each liquid step) every node's state is rebuilt from its amounts; between, only what
-/// the moves changed.
-pub(crate) fn radiate(w: &mut World, dt: f64, full: bool) {
+/// The state of ground nodes (`ground_state`: only what changed since it was last rebuilt, or every node with `full`, at
+/// each liquid step, so a world resumed at a month's start goes on as an unbroken one, or when a refresh changed what
+/// is present) and the temperature of air nodes, from the world now: what the other laws and the rest of Flow read
+/// until the next physics step (`World::t_ground_last`). Then what the last air step moves over the next `ahead`
+/// seconds booked (`air::dispense`), as a short step of the air would book it.
+pub(crate) fn state(w: &mut World, ahead: u64, full: bool) {
     with(w, |w, s| {
-        // (Also rebuilt when a refresh changed what is present.)
-        let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.cells().n();
-        ground_state(w, s, full);
-        air::state(w, s, full);
-        air::radiation(w, s, dt);
+        ground_now(w, s, full);
+        air::sums(w, s);
+        for j in 0..w.mesh.level(AIR).n() {
+            s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
+        }
+        air::dispense(w, s, w.time + ahead);
     });
 }
 
-/// The exchange of the ground with the air for `dt` seconds (`air::exchange`); with `trace` (seconds) also the
-/// evaporation and condensation of trace gases, and gases dissolving, for that time.
-pub(crate) fn exchange(w: &mut World, dt: f64, trace: Option<f64>) {
-    with(w, |w, s| air::exchange(w, s, dt, trace));
+/// The state of ground nodes (`ground_state`): only what changed since it was last rebuilt, or every node with `full` or
+/// when a refresh changed what is present.
+fn ground_now(w: &World, s: &mut Scratch, full: bool) {
+    let full = full || std::mem::take(&mut s.stale) || s.lay.len() != w.mesh.cells().n();
+    ground_state(w, s, full);
 }
 
-/// The wind for `dt` seconds (`air::wind`).
-pub(crate) fn wind(w: &mut World, dt: f64) {
-    with(w, |w, s| air::wind(w, s, dt));
+/// What the last air step moves up to now booked (`air::dispense`); the state of ground nodes (`ground_now`: at a
+/// physics step `state` has just set it, and nothing has changed it since) and of air nodes (`air::state`); then the
+/// air's step for `dt` seconds (`air::step`: radiation, gases dissolving, evaporation and rain, and the wind, together),
+/// its first `ahead` seconds booked at once and the rest a physics step at a time (`state`).
+pub(crate) fn air(w: &mut World, dt: f64, ahead: u64) {
+    with(w, |w, s| {
+        air::dispense(w, s, w.time);
+        ground_now(w, s, false);
+        air::state(w, s);
+        air::step(w, s, dt);
+        air::dispense(w, s, w.time + ahead);
+    });
 }
 
-/// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`).
+/// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`): it moves the rain that fell
+/// since the last liquid step.
 pub(crate) fn liquid(w: &mut World, dt: f64) {
     with(w, |w, s| liquid::liquid(w, s, dt));
 }
@@ -85,14 +96,14 @@ pub(crate) fn refresh(w: &mut World) {
     with(w, |w, s| scratch::refresh(w, s));
 }
 
-/// Every part of the law but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, radiation,
-/// the exchange with the trace gases, the wind, liquid, and the refresh. A law of Flow on its own, for tests.
+/// Every part of the law but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's
+/// step booked whole, liquid, and the refresh; then the state the step leaves. A law of Flow on its own, for tests.
 pub fn step(w: &mut World, dt: f64) {
-    radiate(w, dt, true);
-    exchange(w, dt, Some(dt));
-    wind(w, dt);
+    state(w, 0, true);
+    air(w, dt, dt as u64);
     liquid(w, dt);
     refresh(w);
+    state(w, 0, false);
 }
 
 /// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`) from the world as it is, and nothing
@@ -128,7 +139,7 @@ pub(crate) fn ensure(w: &mut World) {
     if s.cap.len() != n {
         scratch::room(w, &mut s);
         ground_state(w, &mut s, true);
-        air::state(w, &mut s, true);
+        air::state(w, &mut s);
     }
     w.scratch = s;
 }

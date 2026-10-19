@@ -47,8 +47,8 @@ fn day_month_and_season_come_from_the_seconds() {
     assert_eq!(cal.season(cal.year / 2), 0.5);
 }
 
-/// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least radiation, the
-/// exchange, the wind and liquid) and Change, then Bond, then the bodies; the physics every `phys_days` days and the
+/// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least its state, the air
+/// and liquid) and Change, then Bond, then the bodies; the physics every `phys_days` days and the
 /// bodies every day. The clock ends a whole month on, and `day` moves it by one day.
 #[test]
 fn a_month_runs_its_processes_in_their_order() {
@@ -58,7 +58,7 @@ fn a_month_runs_its_processes_in_their_order() {
     pcore::step_marked(&mut w, &mut |s| marks.push(s));
     assert_eq!(w.time, t0 + cal.month);
     let flow = marks[1..].iter().take_while(|&&m| m == Stage::Flow).count();
-    assert!(marks[0] == Stage::Bodies && flow >= 4, "{marks:?}");
+    assert!(marks[0] == Stage::Bodies && flow >= 3, "{marks:?}");
     assert_eq!(marks[1 + flow..][..3], [Stage::Change, Stage::Parts, Stage::Bodies]);
     let count = |s: Stage| marks.iter().filter(|&&m| m == s).count() as u32;
     let (dpm, phys) = (w.cfg.days_per_month, w.cfg.phys_days);

@@ -23,10 +23,9 @@ pub const USAGE: &str = "usage:
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --phys-days N         days between steps of ground and air physics (3)
-    --flow-days N         days between moves of liquid (30; a multiple of the physics step's, 3)
-    --air-days N          days between moves of the air (3; a multiple of the physics step's, 3)
-    --exchange-days N     days between evaporation and condensation (3; a multiple of the physics step's, 3)
+    --phys-days N         days between surveys of the cells and steps of the reactions (3)
+    --air-hours N         hours between steps of the air: radiation, evaporation, rain and wind (288)
+    --flow-days N         days between moves of liquid (30; a whole number of air steps)
     --crowd N             Config::crowd
     --node-days N         a population node updates at most every N days (36; Config::node_days)
     --sample-every N      a node without a brain runs its sample member on one update in N (2; Config::sample_every)
@@ -67,8 +66,7 @@ impl Args {
         c.sun *= self.get("--sun", 1.0);
         c.phys_days = self.get("--phys-days", c.phys_days);
         c.flow_days = self.get("--flow-days", c.flow_days);
-        c.air_days = self.get("--air-days", c.air_days);
-        c.exchange_days = self.get("--exchange-days", c.exchange_days);
+        c.air_hours = self.get("--air-hours", c.air_hours);
         c.crowd = self.get("--crowd", c.crowd);
         c.node_days = self.get("--node-days", c.node_days);
         c.sample_every = self.get("--sample-every", c.sample_every);

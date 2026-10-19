@@ -595,6 +595,9 @@ fn reproducing_updates_keep_elements_and_energy() {
     books.assert_kept(&w, 1e-9);
 }
 
+/// The temperature the ground of the growing body is held at, K: mild, under the 295 K over which it evaporates.
+const GROWTH_GROUND_K: f64 = 289.0;
+
 /// Body size by an energy ceiling, not a cap: what a body takes goes with its mass^0.75 (`Body::equiv`) and the cost
 /// of keeping its tissue with its body^1.0 (`body::upkeep`), so growth, which builds only from the spare after upkeep
 /// (`copy::grow`), stops where the two meet, a size the body's own costs set. An eater (ALLOC 0: it builds only for
@@ -635,8 +638,10 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
                 put(&mut w, k, i, a);
             }
             // And the minerals growth is built of: this is a test of the energy ceiling, so its roots find them in plenty
-            // (an eater has them only from the matter it digests, and here eats none).
+            // (an eater has them only from the matter it digests, and here eats none). Its ground is held at
+            // `GROWTH_GROUND_K`, so the heat it can shed is the body's, not the test world's climate.
             feed_minerals(&mut w, s);
+            testkit::hold_ground(&mut w, i, GROWTH_GROUND_K);
             w.events.clear();
             pcore::day(&mut w);
             assert!(w.life.bodies[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
