@@ -19,8 +19,13 @@ pub fn record(rec: &mut Recorder, w: &mut World) {
 /// `years` years of `ew run --seed <seed> --size <side>` (with `--roster` if `roster`) with the settings `set` makes,
 /// recorded as `ew run` records it; `each_year(year, world, recorder)` after each year. Checks the books at the end.
 #[allow(dead_code)]
-pub fn run(seed: u64, side: usize, years: u64, roster: bool, set: impl Fn(&mut Config), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
-    let mut w = worldgen::new_world(seed, side, side);
+pub fn run(seed: u64, side: usize, years: u64, roster: bool, set: impl Fn(&mut Config), each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
+    run_on(worldgen::new_world(seed, side, side), years, roster, set, each_year)
+}
+
+/// As `run`, on the new world `w`.
+#[allow(dead_code)]
+pub fn run_on(mut w: World, years: u64, roster: bool, set: impl Fn(&mut Config), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
     set(&mut w.cfg);
     // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
     worldgen::terrain::scale_absorbers(&mut w, 1.0);

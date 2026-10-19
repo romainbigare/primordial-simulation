@@ -1212,6 +1212,11 @@ Phase E review, round 1 (fixes):
   region a square crept into each of two quarters across a whole side. The island is the same bit for bit (golden
   unchanged). 32 x 16 globe without life, years 11 to 20: land 251.86 K (251.76), rain on land 1.388e-3 (1.372e-3),
   river cells 53.3 (54.2), the same to noise.
+- G5, coarse against fine (`tape/tests/scale.rs`, slow): the 32 x 32 island on its squares and in quarters (64 x 64
+  cells of 1 km), 3 seeds, years 6 to 15, each seed against itself. Within the year-to-year noise: land +0.13 K
+  (noise 0.88), warmest month +0.01 K, coldest +0.29 K, rain on land +2.4e-5 (noise 1.6e-4), the gas -1.1e-6
+  (4.3e-5), light-eater mass +4.6e8 kg (3.5e9) and members +3.5e8 (2.0e9). Out: river length -171 km (noise 16;
+  decision 31). About a minute on 4 cores.
 
 **Owner's decisions after Phase A**
 
