@@ -1,9 +1,8 @@
 //! The registry of bodies: slots, cells, lineages, born rows, and the ring of updates due.
 
 use crate::body::{Body, MAX_INTERVAL};
-use crate::brain::{self, Shape};
+use crate::brain::Shape;
 use crate::lineage::Lineage;
-use crate::rng::Rng;
 use crate::World;
 use serde::{Deserialize, Serialize};
 
@@ -73,17 +72,6 @@ impl Life {
     /// The brain shape of `lineage` (none once it died out).
     pub(crate) fn shape_of(&self, lineage: u32) -> Option<Shape> {
         self.brains[lineage as usize].as_ref().map(|l| l.shape)
-    }
-    /// The born rows and rows of a body of lineage `from` carried over to the shape of lineage `to`: as they are where the
-    /// shapes agree; else born rows by `brain::rerow`, and its rows are those (what it learned fits no other brain).
-    pub(crate) fn carry_rows(&self, born: Vec<f32>, rows: Vec<f32>, from: u32, to: u32, r: &mut Rng, noise: f32) -> (Vec<f32>, Vec<f32>) {
-        match (self.shape_of(from), self.shape_of(to)) {
-            (Some(x), Some(y)) if x != y => {
-                let born = brain::rerow(&born, x, y, r, noise);
-                (born.clone(), born)
-            }
-            _ => (born, rows),
-        }
     }
     /// The rows of a body born with `born` from body `b`: its born rows plus what `b` learned, where the brains have one
     /// shape; else its born rows.

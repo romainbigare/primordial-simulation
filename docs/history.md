@@ -944,6 +944,13 @@ Phase E review, round 1 (fixes):
   1.1e4 to 3.1e3 members (individuals 1.5e4), small eaters of light-eaters 1.7e3 to 6.3e3 kg (individuals 1.3e3).
   `crowd` stays a speed setting: past it the most alike merge. Golden re-pinned.
 
+- F7 follow-up, a node is of one lineage (decision 23): alike nodes, children, maturing young and members who moved
+  joined nodes of other lineages, which then acted by a brain base not theirs, and the larger's label took the smaller's
+  members and genes (the eaters' copy-mass gene 1.33 as nodes against 1.63 as individuals). Only bodies of one lineage
+  join or merge now; `Life::carry_rows` and `Purpose::Merge` go. 32 x 32 roster, years 26-30, seed 1, nodes against
+  individuals: eaters 4.4e3 against 2.7e3 kg (copy-mass gene 1.65 against 1.63), big eaters of light-eaters 3.2e3
+  against 2.8e3 kg, eaters of remains 1.1e4 against 2.6e4 kg. Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

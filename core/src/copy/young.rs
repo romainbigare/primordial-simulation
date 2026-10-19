@@ -11,15 +11,15 @@ use crate::math::Pass;
 use crate::nodes::{may_be_node, merge, part};
 use crate::World;
 
-/// The node that node `b` (slot `slot`, taken out of it) is linked to, if that is alive, a node of `b`'s cell and mature
-/// as `mature` asks; else the first node of the cell at that stage and of `b`'s kind (`copy::kin`), linked from then on.
+/// The node that node `b` (slot `slot`, taken out of it) is linked to, if that is alive, a node of `b`'s cell and lineage
+/// and mature as `mature` asks; else the first node of the cell at that stage and of `b`'s kind (`copy::kin`), linked from then on.
 pub(crate) fn linked(w: &mut World, slot: usize, b: &mut Body, mature: bool) -> Option<usize> {
     let at = b.link.map(|id| id as u32 as usize).filter(|&t| {
         let o = &w.life.bodies[t];
-        t != slot && o.alive && Some(o.id(t)) == b.link && o.n() > 1.0 && o.cell == b.cell && o.adult(&w.chem) == mature
+        t != slot && o.alive && Some(o.id(t)) == b.link && o.n() > 1.0 && o.cell == b.cell && o.lineage == b.lineage && o.adult(&w.chem) == mature
     });
     at.or_else(|| {
-        let t = kin(w, b.cell as usize, &b.genes, &b.spread, mature)?;
+        let t = kin(w, b.cell as usize, b.lineage, (&b.genes, &b.spread), mature)?;
         link(w, slot, b, t);
         Some(t)
     })

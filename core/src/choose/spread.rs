@@ -64,7 +64,7 @@ fn part_acts(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k: &Kit, (
     let f = x / node.count;
     let q = nodes::part(&mut w.life, node, f, f);
     let moves = (FIXED..TO_BODY).contains(&o);
-    let kin = moves.then(|| crate::copy::kin(w, c.to[o - FIXED], &q.genes, &q.spread, q.adult(&w.chem))).flatten().map(|t| (t, w.life.bodies[t].gen));
+    let kin = moves.then(|| crate::copy::kin(w, c.to[o - FIXED], q.lineage, (&q.genes, &q.spread), q.adult(&w.chem))).flatten().map(|t| (t, w.life.bodies[t].gen));
     let s = w.place(q);
     let mut m = std::mem::take(&mut w.life.bodies[s]);
     let before = k.wb(w, &m);

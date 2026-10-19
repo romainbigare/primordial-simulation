@@ -103,8 +103,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
 /// `m` children of `b` start in `cell`: their genes (`mix` with a partner, then `body::vary`: the drift of a group of
 /// `m` on the mean, a generation's mutation added to the spread), stores and heat (`give`), born rows (`child_rows`)
 /// and, for an individual's, perhaps a lineage of their own (`child_lineage`). They join the young node of their kind
-/// there, booked on it with no body built for them (`nodes::add`, their rows carried over to its brain's
-/// sizes), or start a body (`place_child`), which is the young node of their parent's from then on when they stay in
+/// there, booked on it with no body built for them (`nodes::add`), or start a body (`place_child`), which is the young node of their parent's from then on when they stay in
 /// its cell. Children that started a new lineage stay apart. Less than one member of a node's children with no node to
 /// join waits in the brood (nothing is made; false).
 fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) -> bool {
@@ -118,7 +117,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     let hit = match () {
         _ if l.alone => None,
         _ if l.node && cell == b.cell as usize => young::linked(w, slot, b, false),
-        _ => kin(w, cell, &genes, &spread, false),
+        _ => kin(w, cell, b.lineage, (&genes, &spread), false),
     };
     if l.node && m < 1.0 && hit.is_none() {
         return false;
@@ -135,7 +134,6 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     if fresh.is_none() {
         if let Some(t) = hit {
             let born = rows.unwrap_or_else(|| w.life.born(b).to_vec());
-            let (born, own) = w.life.carry_rows(born, own, b.lineage, w.life.bodies[t].lineage, r, w.cfg.new_noise());
             let mut o = std::mem::take(&mut w.life.bodies[t]);
             add(w, &mut o, lot, &genes, &spread, (l.body.log10() as f32, 0.0), Some((&born, &own, row_spread)));
             w.life.bodies[t] = o;
@@ -196,14 +194,15 @@ fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -
     b.store.iter().enumerate().map(|(k, a)| if k == mi { 0.0 } else { a * (if b.wet >> k & 1 == 1 { wet } else { share }).min(1.0) / births }).collect()
 }
 
-/// The first node of `cell` mature or young as `mature` asks and of the kind of genes `genes` and spread `spread`
-/// (`body::within`, tested last: it reads every gene): the young node children join (they are below their parents'
-/// copy mass, and a mature node must keep its mean there), or the adult node young members mature into.
-pub(crate) fn kin(w: &World, cell: usize, genes: &[f32], spread: &[f32], mature: bool) -> Option<usize> {
+/// The first node of `cell` of `lineage` (a node has one brain), mature or young as `mature` asks, and of the kind of
+/// genes `genes` and spread `spread` (`body::within`, tested last: it reads every gene): the young node children join
+/// (they are below their parents' copy mass, and a mature node must keep its mean there), the adult node young members
+/// mature into, or the node members who moved join.
+pub(crate) fn kin(w: &World, cell: usize, lineage: u32, (genes, spread): (&[f32], &[f32]), mature: bool) -> Option<usize> {
     let (lay, alike) = (Layout::of(&w.chem), w.cfg.phys.alike);
     w.life.at[cell].iter().map(|&s| s as usize).find(|&s| {
         let t = &w.life.bodies[s];
-        t.alive && t.n() > 1.0 && t.adult(&w.chem) == mature && within(&lay, alike, t, genes, spread)
+        t.alive && t.n() > 1.0 && t.lineage == lineage && t.adult(&w.chem) == mature && within(&lay, alike, t, genes, spread)
     })
 }
 

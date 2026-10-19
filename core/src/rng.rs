@@ -27,10 +27,8 @@ pub enum Purpose {
     Death,
     /// The order among equally alike mates (`copy::partner`)
     Partner,
-    /// The born rows of a body joining a node, carried over to its brain (`nodes::merge`)
-    Merge,
     /// Members drawn from a node as individuals (`nodes::open`)
-    Open,
+    Open = 14,
     /// The new weights of a resized brain (`lineage::resize`)
     Resize,
     /// The random base of a founder lineage's brain and where its founders go (`worldgen`)

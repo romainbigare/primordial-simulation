@@ -500,6 +500,8 @@ individuals.
   Members, stores, heat and brood split by shares, the node keeping the remainder, and join as sums (0.4 of a member
   adds 0.4). Genes, sizes and rows become the means **by members**; the spread pools each one's spread and its gap to
   the new mean.
+- **One lineage.** A node has one brain, so only bodies of one lineage (one brain base) join or merge; bodies of
+  other lineages may be alike in every gene and still stay apart.
 - **Joining.** Children join the young node of their kind in their start cell when alike within `alike` steps plus
   `WITHIN` standard deviations of both spreads (`body::within`), booked on it with no body built; else they start one.
 - **Young that grow up** (`copy/young.rs`). A kind in a cell lives as an adult node and a young node joined by a link
@@ -512,7 +514,7 @@ individuals.
   slice. A spread no width holds is an exponential tail of the same mean. Those the growth pushed past the copy mass
   move into the adult node with the share of the body their slice holds (`copy::mature`): the flux across a size of a
   size-structured population (McKendrick 1926; von Foerster 1959).
-- **Merging** (`nodes::crowd`, monthly). Alike nodes of one stage in a cell merge (the young mature into their adult
+- **Merging** (`nodes::crowd`, monthly). Alike nodes of one lineage and stage in a cell merge (the young mature into their adult
   node instead). Past `crowd` nodes a cell merges its most alike pairs while they are alike; unlike nodes never
   merge, however full the cell.
 - **Splitting** (`nodes::split`). A node whose two halves would no longer be alike splits along its widest gene, if its
@@ -563,8 +565,7 @@ Files: `core/src/choose/` (`mod`: the decision; `perceive`, `learn`, `feed`: tak
   the same gene if it pays, its rows starting as new weights (`brain::rerow`).
 - **One brain per body or node** (`Body::rows`): the rows it was born with plus what it learned; a node's members
   share the node's. A child starts with its born rows plus what its parent learned (`Life::inherit`). When members join
-  a node its rows become the means by members (4.4); where brains differ in size, the members bring only their born
-  rows (`Life::carry_rows`).
+  a node, of their lineage only, its rows become the means by members (4.4).
 
 ### 5.2 Perception
 

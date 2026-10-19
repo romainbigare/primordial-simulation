@@ -30,20 +30,20 @@ pub(crate) fn crowd(w: &mut World) {
 }
 
 /// Each node of cell `i`, largest first, joins the first larger one alike in genes (`body::alike`, on the means only, so
-/// a split's halves stay apart for selection) and of its stage (both mature or both young: the young join their adult
-/// node member by member as they mature, `copy::young`). Returns the bodies left.
+/// a split's halves stay apart for selection), of its lineage (a node has one brain) and of its stage (both mature or
+/// both young: the young join their adult node member by member as they mature, `copy::young`). Returns the bodies left.
 fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     let b = &w.life.bodies;
     let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold.is_none() && b[s].inside.is_none() && may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_unstable();
     let mut head: Vec<usize> = (0..list.len()).collect();
-    // Each one's stage once, tested before the genes.
-    let mature: Vec<bool> = list.iter().map(|&(_, s)| b[s].adult(&w.chem)).collect();
+    // Each one's lineage and stage once, tested before the genes.
+    let kind: Vec<(u32, bool)> = list.iter().map(|&(_, s)| (b[s].lineage, b[s].adult(&w.chem))).collect();
     for x in 0..list.len() {
         let a = &b[list[x].1];
         if a.n() > 1.0 {
             let lim = w.cfg.phys.alike;
-            head[x] = (0..x).find(|&y| head[y] == y && mature[y] == mature[x] && alike(lay, lim, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
+            head[x] = (0..x).find(|&y| head[y] == y && kind[y] == kind[x] && alike(lay, lim, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
         }
     }
     for x in (0..list.len()).filter(|&x| head[x] != x) {
@@ -52,16 +52,17 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread (`body::spreads`) and whether it is mature (`merge_closest`).
-type Likeness = (Vec<f32>, Vec<f32>, bool);
+/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its lineage and whether it is mature
+/// (`merge_closest`).
+type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
 /// are left or no pair is alike: here each within the other's spread, as children join a node (`body::within`), and of
-/// one stage; unlike nodes never merge, however full the cell. A pair's key: the squared distance of their genes in
+/// one lineage and stage; unlike nodes never merge, however full the cell. A pair's key: the squared distance of their genes in
 /// steps (infinite if unlike).
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
-    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), w.life.bodies[s].adult(&w.chem));
+    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), (w.life.bodies[s].lineage, w.life.bodies[s].adult(&w.chem)));
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
         let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
@@ -99,14 +100,11 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
     w.cfg.nodes || w.life.brainless(b)
 }
 
-/// The body in slot `s` joins the body in slot `t` (`take_in`), its born rows and its rows carried over to the sizes of
-/// the other's brain where they differ (`Life::carry_rows`).
+/// The body in slot `s` joins the body in slot `t`, of its lineage (`take_in`).
 pub fn merge(w: &mut World, s: usize, t: usize) {
-    let mut c = w.life.bodies[s].clone();
-    let mut r = Rng::new(w.seed, w.day(), c.id(s), Purpose::Merge);
-    let (born, rows) = w.life.carry_rows(w.life.born(&c).to_vec(), std::mem::take(&mut c.rows), c.lineage, w.life.bodies[t].lineage, &mut r, w.cfg.new_noise());
+    let c = w.life.bodies[s].clone();
+    let born = w.life.born(&c).to_vec();
     w.life.remove(s);
-    c.rows = rows;
     let mut o = std::mem::take(&mut w.life.bodies[t]);
     take_in(w, &mut o, c, Some(&born));
     w.life.bodies[t] = o;
@@ -216,10 +214,7 @@ const TIE: f32 = 1e-4;
 /// `Config::crowd` - 1 bodies): a node held at `most` splits at every update, and without the limit the nodes of a cell
 /// would double each time. The spread stops at `most` and a split keeps the mean, so the limit does not bias the genes.
 pub fn split(w: &mut World, slot: usize, b: &mut Body) {
-    if b.count < 2.0 || b.spread.is_empty() || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd {
-        return;
-    }
-    if !may_be_node(w, b) {
+    if b.count < 2.0 || b.spread.is_empty() || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd || !may_be_node(w, b) {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
