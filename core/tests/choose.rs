@@ -30,7 +30,7 @@ const LEARN_OFF: f32 = -4.0;
 fn scene(seed: u64) -> World {
     let (chem, init) = worldgen::chemistry0();
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
-    let mut w = worldgen::terrain::build(seed, W, H, chem, &init, cfg);
+    let mut w = worldgen::terrain::build(seed, worldgen::terrain::island(W, H), chem, &init, cfg);
     pcore::step(&mut w);
     let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
     let land = dry_land(&w);
@@ -44,7 +44,7 @@ fn scene(seed: u64) -> World {
     let e = w.store.heat(Class::Ground)[land];
     (0..n).for_each(|i| set_heat(&mut w, Node::ground(i), e));
     for i in (0..n).filter(|&i| i % W >= STRIP) {
-        let rich = w.g(RICH, i) + STRIP_MOL * w.map.area();
+        let rich = w.g(RICH, i) + STRIP_MOL * w.mesh.cells().area()[0];
         set_amount(&mut w, Node::ground(i), RICH, rich);
     }
     w.life.env.clear();

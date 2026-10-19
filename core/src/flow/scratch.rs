@@ -312,18 +312,24 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             refl: [mean(b.refl[0]), mean(b.refl[1])],
         })
         .collect();
-    // The air nodes are blocks of `air_scale`² squares: a cell reads the four whose centres are nearest, bilinearly.
+    // The air nodes are blocks of `air_scale`² squares: a cell reads the four whose centres are nearest, bilinearly
+    // (round a globe's rows).
     let (map, scale) = (w.map, w.air_scale);
     let (aw, ah) = (map.w.div_ceil(scale), map.h.div_ceil(scale));
-    let axis = |c: usize, len: usize| {
-        let f = ((c as f64 + 0.5) / scale as f64 - 0.5).clamp(0.0, (len - 1) as f64);
+    let axis = |c: usize, len: usize, wrap: bool| {
+        let f = (c as f64 + 0.5) / scale as f64 - 0.5;
+        if wrap {
+            let a = (f.floor() as i64).rem_euclid(len as i64) as usize;
+            return (a, (a + 1) % len, f - f.floor());
+        }
+        let f = f.clamp(0.0, (len - 1) as f64);
         let a = (f as usize).min(len.saturating_sub(2));
         (a, (a + 1).min(len - 1), f - a as f64)
     };
     (s.near, s.wt) = (0..map.n())
         .map(|i| {
             let (x, y) = map.xy(i);
-            let ((x0, x1, tx), (y0, y1, ty)) = (axis(x, aw), axis(y, ah));
+            let ((x0, x1, tx), (y0, y1, ty)) = (axis(x, aw, map.wrap), axis(y, ah, false));
             let j = |x: usize, y: usize| (y * aw + x) as u32;
             ([j(x0, y0), j(x1, y0), j(x0, y1), j(x1, y1)], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
         })

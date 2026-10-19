@@ -186,7 +186,7 @@ pub fn put(w: &mut World, k: usize, i: usize, mol: f64) {
 
 /// `kg` per m² of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
 pub fn put_kg_m2(w: &mut World, k: usize, i: usize, kg: f64) {
-    let mol = kg * w.map.area() / w.chem.subs[k].molar_mass;
+    let mol = kg * w.mesh.cells().area()[i] / w.chem.subs[k].molar_mass;
     put(w, k, i, mol);
 }
 
@@ -206,7 +206,7 @@ pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
 /// loose ground of cell `i` and the bed below it, m, and the mean softness (1 / (hardness + 0.05)) of the loose ones, by
 /// volume.
 pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
-    let (n, area) = (w.mesh.cells().n(), w.map.area());
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
     let (mut loose, mut bed, mut soft) = (0.0, 0.0, 0.0);
     for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0 && Some(k) != w.chem.matter()) {
         let v = w.chem.molar_volume(k, Phase::Solid);

@@ -62,9 +62,8 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links, at: 
         let rho = (at.n[a] / s.vol[a] + at.n[b] / s.vol[b]) / 2.0;
         let depth = cfg.air_top_m - (s.za[a] + s.za[b]) / 2.0;
         let turn = cfg.rotation * ((air.lat()[a] + air.lat()[b]) / 2.0).to_radians().sin();
-        let (ca, cb) = (air.centre()[a], air.centre()[b]);
-        let (ga, gb) = (grad[a], grad[b]);
-        let across = ((ga[0] + gb[0]) * (cb[1] - ca[1]) - (ga[1] + gb[1]) * (cb[0] - ca[0])) / 2.0;
+        let (ab, ga, gb) = (air.offset(a, b), grad[a], grad[b]);
+        let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;
         p.mix.push(cfg.mix * rho * depth * wd / d);
         p.over.push(cfg.wind * (warmth[b] - warmth[a] + turn * across) * rho * wd * depth / 2.0);
         // p = c n with c = RT/V; sound crosses the link in d / sqrt(gamma R T / M), gamma = cp / (cp - R) per mol.
@@ -108,13 +107,12 @@ impl Pushes {
 /// The gradient of `v` at each node [east, south], per m: the least-squares fit of its differences to its bordering
 /// nodes (0 along an axis with none).
 fn gradient(air: &Level, v: &[f64]) -> Vec<[f64; 2]> {
-    let c = air.centre();
     (0..air.n())
         .map(|j| {
             let (mut m, mut r) = ([0.0; 3], [0.0; 2]);
             for (&l, &k) in air.around(j).0.iter().zip(air.around(j).1) {
                 if air.width()[l as usize] > 0.0 {
-                    let (d, dv) = ([c[k as usize][0] - c[j][0], c[k as usize][1] - c[j][1]], v[k as usize] - v[j]);
+                    let (d, dv) = (air.offset(j, k as usize), v[k as usize] - v[j]);
                     m = [m[0] + d[0] * d[0], m[1] + d[0] * d[1], m[2] + d[1] * d[1]];
                     r = [r[0] + d[0] * dv, r[1] + d[1] * dv];
                 }

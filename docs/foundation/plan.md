@@ -338,7 +338,7 @@ A new field (a channel worn by liquid, an ease for signals) comes only with the 
   Suggested: conjugate gradient (a standard iterative solver) with a fixed number of iterations and a fixed order.
 - `downhill`: the order of cells from high head to low, as a tree, kept up to date when heights change; surface
   liquid and what it carries move down it in one pass.
-- `lines`: the tridiagonal solve of the wind along the rows and columns of squares (`flow/air/wind.rs`), in its cyclic form on a row that wraps (G1). It is the wind's only solver.
+- `band`: the banded direct solve of the whole air level with the wind (`solve/band.rs`, J1). On a globe numbered row by row the link that closes a row lies inside the band, so the wrap needs no cyclic form (G1). It is the wind's only solver.
 - The reaction step stays in `change/kernel.rs`; it already integrates the rate law over the step.
 
 **Idea 8. Columns and chunks.**
@@ -645,7 +645,7 @@ formulas stay.
 
 | ID | What | Files | Level | Done when |
 |---|---|---|---|---|
-| G1 | **The lat-lon grid** (D3): squares that wrap east to west; the area and the border widths of each row from its latitude; latitude and longitude per cell; the wind's lines wrap (the cyclic tridiagonal solve); worldgen samples its noise on the sphere | `space/square.rs`, `flow/air/wind*`, `worldgen/src/terrain.rs` | — | A test globe without life runs 10 years; books exact; the sun is right at every latitude |
+| G1 | **The lat-lon grid** (D3): squares that wrap east to west; the area and the border widths of each row from its latitude; latitude and longitude per cell; the wind's lines wrap (the cyclic tridiagonal solve); worldgen samples its noise on the sphere | `space/square.rs`, `flow/air/wind*`, `worldgen/src/terrain.rs` | — | A test globe without life runs 10 years; books exact; the sun is right at every latitude. **Built** (`ew run --globe`; the band takes the wrap as it is, decision 17; bodies step round the wrap on the square map until G2) |
 | G2 | **Life on the mesh's links**: Choose, Copy, Bond's drift and the brain groups step on the mesh's links (each link a bearing for the brain's 8 direction slots), not on `Square::step` and `DIRS`; the air's four-point mix reads the mesh | `choose/`, `copy/`, `bond/`, `life.rs`, `flow/scratch.rs` | 2 on the island | The same world on the island |
 | G3 | **Cheap sea cells**: the sea on a coarser level (as the air), so that a sea cell costs a small share of a land cell | `flow/`, `space/` | 3 | The key numbers hold on the island; the cost of a sea cell measured |
 | G4 | **A refined region built into the mesh**: finer cells in one region, at the start or rebuilt at a god action; amounts split by F1 on a rebuild, summed back | `space/`, `store/` | 3 | Books exact through a rebuild; liquid and heat cross the border of the region correctly (tests) |

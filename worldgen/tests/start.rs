@@ -45,7 +45,7 @@ fn the_soil_is_given_to_the_land_and_booked() {
     let before = total(&w, mineral);
     println!("{}", worldgen::life::soil(&mut w, &soil));
     let (k, per_m2) = soil[0];
-    let cells = (total(&w, mineral) - before) / (per_m2 * w.map.area());
+    let cells = (total(&w, mineral) - before) / (per_m2 * w.mesh.cells().area()[0]);
     assert!(k == mineral && (cells - cells.round()).abs() < 1e-9 && cells >= 10.0 && cells <= w.mesh.cells().n() as f64, "{cells} cells' worth");
     let grams = per_m2 * w.chem.subs[k].elems[2] as f64 * 14.0;
     assert!((grams - 10.0).abs() < 0.05, "{grams} g of the gas's element to the m²");
@@ -71,7 +71,7 @@ fn the_starting_air_thins_with_height_by_its_own_scale_height() {
     for j in 0..na {
         let (mol, kg) = (0..w.chem.ns()).fold((0.0, 0.0), |(m, kg), k| (m + w.store.amounts(Class::Air)[k * na + j], kg + w.store.amounts(Class::Air)[k * na + j] * w.chem.subs[k].molar_mass));
         let (zj, h) = (z[j] / cells[j], pcore::flow::scale_height(w.t_air(j), mol, kg, g));
-        let ratio = mol / (column * w.map.area() * cells[j]);
+        let ratio = mol / (column * w.mesh.cells().area()[0] * cells[j]);
         assert!((ratio / (-zj / h).exp() - 1.0).abs() < 1e-6, "node {j}: {ratio} of the column at height 0, at {zj} m, scale height {h} m");
         high += (zj > 500.0) as usize;
     }

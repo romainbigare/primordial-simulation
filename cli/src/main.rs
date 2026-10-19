@@ -20,8 +20,8 @@ fn main() {
     let args = Args(std::env::args().collect());
     match args.command() {
         "run" => {
-            let size = args.get("--size", 128usize);
-            let mut w = worldgen::new_world(args.get("--seed", 1u64), size, size);
+            let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));
+            let mut w = if args.has("--globe") { worldgen::terrain::new_globe(seed, size) } else { worldgen::new_world(seed, size, size) };
             args.apply(&mut w);
             if let Err(e) = w.cfg.validate() {
                 eprintln!("ew run: {e}");

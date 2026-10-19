@@ -49,7 +49,7 @@ fn liquid_m3(w: &World, i: usize) -> f64 {
 #[test]
 fn hot_plateau_cools_but_not_to_the_floor() {
     let mut w = worldgen::new_world(3, 16, 16);
-    let (ns, area) = (w.chem.ns(), w.map.area());
+    let (ns, area) = (w.chem.ns(), w.mesh.cells().area()[0]);
     let k = (0..ns).find(|&k| (700.0..1000.0).contains(&w.chem.subs[k].melt)).expect("a substance melting near 850 K");
     let i = top(&w);
     (0..ns).for_each(|x| set_amount(&mut w, Node::ground(i), x, 0.0));
@@ -75,7 +75,7 @@ fn a_pool_with_a_solute_freezes_lower() {
     let (n, ns, k) = (w.mesh.cells().n(), w.chem.ns(), LIQUID);
     let solute = (0..ns).find(|&j| j != k && w.chem.subs[j].melt < w.chem.subs[k].melt && w.chem.subs[j].boil > 1000.0).expect("a solute");
     let (pure, mixed) = (0, n - 1);
-    let pool = 1e4 * w.map.area() / w.chem.molar_volume(k, Phase::Liquid);
+    let pool = 1e4 * w.mesh.cells().area()[0] / w.chem.molar_volume(k, Phase::Liquid);
     for i in [pure, mixed] {
         (0..ns).for_each(|x| set_amount(&mut w, Node::ground(i), x, 0.0));
         set_amount(&mut w, Node::ground(i), k, pool);
@@ -214,7 +214,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
 fn pore_space_is_the_porosity_times_the_loose_solids() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (i, _) = pair(&w);
-    let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.map.area());
+    let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.mesh.cells().area()[0]);
     // The loose layer of the generated land is 1 m of a mix of loose solids, 0.4 of it pores (random packing: 0.36 to 0.44).
     assert!((pores / area / 0.4 - 1.0).abs() < 0.05, "{} m of pore depth under a metre of loose ground", pores / area);
     let depth = |w: &World| pcore::survey::env_of(w, i)[1];
@@ -289,7 +289,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
         let books = Books::now(&w);
         worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
         books.assert_within(&w, 1e-12, 1e-9);
-        let (area, depth) = (w.map.area(), loose(&w, i) / w.map.area());
+        let (area, depth) = (w.mesh.cells().area()[0], loose(&w, i) / w.mesh.cells().area()[0]);
         // The liquid table of `i` stood at its bottom plus the depth the liquid fills; `j` was dry on its own bottom.
         let (bi, bj) = (w.surface_z(i) - depth, w.surface_z(j) - loose(&w, j) / area);
         let ti = bi + share * depth;
@@ -321,7 +321,7 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
 #[test]
 fn liquid_drains_inside_a_cell_to_its_channels() {
     let w0 = worldgen::new_world(3, 16, 16);
-    let (n, gw, area, p) = (w0.mesh.cells().n(), w0.map.w, w0.map.area(), w0.cfg.phys);
+    let (n, gw, area, p) = (w0.mesh.cells().n(), w0.map.w, w0.mesh.cells().area()[0], w0.cfg.phys);
     let year = w0.days_per_year() as f64 * DAY;
     assert!(p.seep * w0.map.side * 1e-3 * year / (p.porosity * area) < 2e-4);
     let mv = w0.chem.molar_volume(LIQUID, Phase::Liquid);
@@ -377,7 +377,7 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
 fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (hi, lo) = pair(&w);
-    let (n, area, p) = (w.mesh.cells().n(), w.map.area(), w.cfg.phys);
+    let (n, area, p) = (w.mesh.cells().n(), w.mesh.cells().area()[0], w.cfg.phys);
     let (pores, full, mv) = (p.porosity * loose(&w, hi), p.bed_porosity * p.bed_depth * area, w.chem.molar_volume(LIQUID, Phase::Liquid));
     w.cfg.evap = 0.0;
     pour(&mut w, hi, 0.9 * pores);
@@ -416,7 +416,7 @@ fn a_store_reaches_only_its_neighbours_in_a_step() {
         set_heat(&mut w, Node::new(Class::Deep, j), 0.0);
     }
     let (mv, sub) = (w.chem.molar_volume(LIQUID, Phase::Liquid), w.chem.subs[LIQUID].clone());
-    let m = p.bed_porosity * p.bed_depth * w.map.area() / mv;
+    let m = p.bed_porosity * p.bed_depth * w.mesh.cells().area()[0] / mv;
     set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, m);
     set_heat(&mut w, Node::new(Class::Deep, i), m * (sub.cp * 290.0 + sub.lf));
     worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
@@ -534,7 +534,7 @@ fn liquid_carries_and_breaks_at_the_measured_yield_per_joule() {
     println!("measured yield {yield_per_j:.2e} m3/J; carry {:.1e}, wear {:.1e}", w.cfg.carry, w.cfg.wear);
     assert!((w.cfg.carry / yield_per_j - 1.0).abs() < 0.2, "carry {}", w.cfg.carry);
     // The bed breaks at wear / strength for each substance, by its share of the bed's volume.
-    let (n, area) = (w.mesh.cells().n(), w.map.area());
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[0]);
     let cell = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
     let (mut vol, mut inv) = (0.0, 0.0);
     for k in (0..w.chem.ns()).filter(|&k| w.store.amounts(Class::Bed)[k * n + cell] > 0.0) {
@@ -557,7 +557,7 @@ fn rain_crosses_the_land_in_one_step() {
     let low_after = |rain: f64| {
         let mut w = worldgen::new_world(1, 32, 32);
         (w.cfg.phys.porosity, w.cfg.phys.seep, w.cfg.evap) = (0.0, 0.0, 0.0);
-        let (n, area) = (w.mesh.cells().n(), w.map.area());
+        let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[0]);
         let low: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) < 0.0).collect();
         let apart = |i: usize, j: usize| (w.map.xy(i).0.abs_diff(w.map.xy(j).0)).max(w.map.xy(i).1.abs_diff(w.map.xy(j).1));
         let far: Vec<usize> = (0..n).filter(|&i| low.iter().all(|&j| apart(i, j) > FAR)).collect();
@@ -614,7 +614,7 @@ const COVER: f64 = 20.0;
 fn lane_scene() -> (World, usize, usize, usize) {
     let (chem, init) = worldgen::chemistry0();
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
-    let mut w = worldgen::terrain::build(3, 12, 8, chem, &init, cfg);
+    let mut w = worldgen::terrain::build(3, worldgen::terrain::island(12, 8), chem, &init, cfg);
     pcore::step(&mut w);
     let n = w.mesh.cells().n();
     let a = (0..n - 1).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i + 1][2] > 0.0 && i % 12 < 11).expect("two land cells");
@@ -623,7 +623,7 @@ fn lane_scene() -> (World, usize, usize, usize) {
     for cell in [a, a + 1] {
         let mut p = line.founder(&mut w, 0, cell);
         // The node scaled to the cover wanted (stores are totals).
-        let k = COVER * w.map.area() / p.mass(&w.chem);
+        let k = COVER * w.mesh.cells().area()[0] / p.mass(&w.chem);
         p.store.iter_mut().for_each(|x| *x *= k);
         p.count *= k;
         w.add(p, 1);
@@ -675,4 +675,17 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     }
     assert!(left[1] > 1.2, "recovers slowly: {left:?}");
     assert!(left.windows(2).all(|p| p[1] <= p[0] + 1e-9) && left[40] < 1.01, "and fully: {left:?}");
+}
+
+/// A small globe without life (8 rows, from pole to pole) runs 10 years whole and keeps its books, with liquid, heat
+/// and wind crossing the wrap of its rows.
+#[test]
+fn a_globe_keeps_its_books_round_the_wrap() {
+    let mut w = worldgen::terrain::new_globe(1, 8);
+    let books = Books::now(&w);
+    for month in 0..10 * w.cfg.months_per_year {
+        pcore::step(&mut w);
+        assert_eq!(pcore::check::broken(&w), None, "month {month}");
+    }
+    books.assert_kept(&w, 1e-12);
 }

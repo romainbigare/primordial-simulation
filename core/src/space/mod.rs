@@ -1,5 +1,6 @@
-//! Space: the shape of the world, and nothing else. A mesh is levels of cells (area, centre, latitude) and links (two
-//! cells, the distance between centres, the width of their border); each cell but at the coarsest level has a parent.
+//! Space: the shape of the world, and nothing else. A mesh is levels of cells (area, centre, latitude, longitude) and
+//! links (two cells, the distance between centres, the width of their border); each cell but at the coarsest level has
+//! a parent. A level lies on a flat map or on a sphere.
 //! Links are plain arrays, each once (`a < b`), with each cell's links in compressed lists, so solvers take slices.
 
 pub mod square;
@@ -10,10 +11,13 @@ pub use stack::{Layer, Stack};
 /// One level of a mesh: its cells, its links, and how it nests in the levels next to it.
 #[derive(Clone, Debug, Default)]
 pub struct Level {
-    /// Area of each cell, m²; its centre on the map (east, south), m; its latitude, degrees
+    /// Area of each cell, m²; its centre on the map (east, south), m; its latitude and longitude, degrees
     area: Vec<f64>,
     centre: Vec<[f64; 2]>,
     lat: Vec<f64>,
+    lon: Vec<f64>,
+    /// The radius of the sphere the level lies on, m (0: a flat map, where the centres place the cells)
+    radius: f64,
     /// The two cells of each link, the distance between their centres, m, and their border's width, m (0 at a corner)
     a: Vec<u32>,
     b: Vec<u32>,
@@ -51,22 +55,25 @@ fn compress(groups: usize, members: impl Iterator<Item = (u32, u32)> + Clone) ->
 }
 
 impl Level {
-    /// A level of cells and links (each link once, `a < b`).
-    pub fn new(area: Vec<f64>, centre: Vec<[f64; 2]>, lat: Vec<f64>, links: Vec<LinkSpec>) -> Level {
+    /// A level of cells on a sphere of `radius`, m (0: a flat map), with no links yet.
+    pub(crate) fn of_cells(area: Vec<f64>, centre: Vec<[f64; 2]>, (lat, lon): (Vec<f64>, Vec<f64>), radius: f64) -> Level {
         let n = area.len();
-        assert!(centre.len() == n && lat.len() == n, "a level needs a centre and a latitude for each cell");
+        assert!(centre.len() == n && lat.len() == n && lon.len() == n, "a level needs a centre, a latitude and a longitude for each cell");
+        Level { area, centre, lat, lon, radius, start: vec![0; n + 1], ..Default::default() }
+    }
+    /// Join the cells by `links`, each once (`a < b`).
+    pub(crate) fn join(&mut self, links: Vec<LinkSpec>) {
+        let n = self.n();
         assert!(links.iter().all(|&(a, b, ..)| a < b && (b as usize) < n), "each link joins two cells a < b of the level");
         let ends = links.iter().enumerate().flat_map(|(l, &(a, b, ..))| [(a, (l as u32, b)), (b, (l as u32, a))]);
-        let (start, adj_link) = compress(n, ends.clone().map(|(c, (l, _))| (c, l)));
-        let adj_cell = compress(n, ends.map(|(c, (_, o))| (c, o))).1;
-        let mut lv = Level { area, centre, lat, start, adj_link, adj_cell, ..Default::default() };
+        (self.start, self.adj_link) = compress(n, ends.clone().map(|(c, (l, _))| (c, l)));
+        self.adj_cell = compress(n, ends.map(|(c, (_, o))| (c, o))).1;
         for (a, b, dist, width) in links {
-            lv.a.push(a);
-            lv.b.push(b);
-            lv.dist.push(dist);
-            lv.width.push(width);
+            self.a.push(a);
+            self.b.push(b);
+            self.dist.push(dist);
+            self.width.push(width);
         }
-        lv
     }
     pub fn n(&self) -> usize {
         self.area.len()
@@ -74,11 +81,21 @@ impl Level {
     pub fn area(&self) -> &[f64] {
         &self.area
     }
-    pub fn centre(&self) -> &[[f64; 2]] {
-        &self.centre
-    }
     pub fn lat(&self) -> &[f64] {
         &self.lat
+    }
+    pub fn lon(&self) -> &[f64] {
+        &self.lon
+    }
+    /// The way from the centre of cell `i` to that of cell `j`, (east, south), m: on a sphere along its parallel at
+    /// their mean latitude and its meridian, the shorter way round.
+    pub fn offset(&self, i: usize, j: usize) -> [f64; 2] {
+        if self.radius == 0.0 {
+            return [self.centre[j][0] - self.centre[i][0], self.centre[j][1] - self.centre[i][1]];
+        }
+        let east = (self.lon[j] - self.lon[i] + 180.0).rem_euclid(360.0) - 180.0;
+        let mean = ((self.lat[i] + self.lat[j]) / 2.0).to_radians();
+        [self.radius * east.to_radians() * mean.cos(), self.radius * (self.lat[i] - self.lat[j]).to_radians()]
     }
     pub fn a(&self) -> &[u32] {
         &self.a
@@ -130,7 +147,7 @@ pub struct Mesh {
 
 impl Mesh {
     /// A mesh of one level.
-    pub(crate) fn new(cells: Level) -> Mesh {
+    pub(crate) fn of(cells: Level) -> Mesh {
         Mesh { levels: vec![cells] }
     }
     pub fn levels(&self) -> usize {
@@ -154,25 +171,29 @@ impl Mesh {
     pub fn share(&self, i: usize, to: usize) -> f64 {
         self.cells().area[i] / self.levels[to].area[self.up(i, 0, to)]
     }
-    /// Add a coarser level over the coarsest, given each cell's parent (0..m, each with a child). A coarse cell holds its
-    /// children's area at their area-weighted centre; coarse cells link where children do, across the sum of their widths.
+    /// Add a coarser level over the coarsest, given each cell's parent (0..m, each with a child; on a sphere, children
+    /// that do not straddle the longitude 0). A coarse cell holds its children's area at their area-weighted centre;
+    /// coarse cells link where children do, across the sum of their widths.
     pub(crate) fn coarsen(&mut self, parent: Vec<u32>) {
         let fine = self.levels.last_mut().expect("a mesh has a level");
         assert_eq!(parent.len(), fine.n(), "one parent for each cell");
         let m = parent.iter().max().map_or(0, |&p| p as usize + 1);
         let (kid_start, kids) = compress(m, parent.iter().enumerate().map(|(c, &p)| (p, c as u32)));
         assert!(kid_start.windows(2).all(|s| s[0] < s[1]), "each coarse cell has a child");
-        let (mut area, mut centre, mut lat) = (vec![0.0; m], vec![[0.0; 2]; m], vec![0.0; m]);
+        let (mut area, mut centre, mut lat, mut lon) = (vec![0.0; m], vec![[0.0; 2]; m], vec![0.0; m], vec![0.0; m]);
         for (c, &p) in parent.iter().enumerate() {
             let (p, ac) = (p as usize, fine.area[c]);
             area[p] += ac;
             centre[p] = [centre[p][0] + ac * fine.centre[c][0], centre[p][1] + ac * fine.centre[c][1]];
             lat[p] += ac * fine.lat[c];
+            lon[p] += ac * fine.lon[c];
         }
         for p in 0..m {
             centre[p] = [centre[p][0] / area[p], centre[p][1] / area[p]];
             lat[p] /= area[p];
+            lon[p] /= area[p];
         }
+        let mut coarse = Level::of_cells(area, centre, (lat, lon), fine.radius);
         let mut pairs: Vec<(u32, u32, f64)> = (0..fine.a.len())
             .map(|l| (parent[fine.a[l] as usize], parent[fine.b[l] as usize], fine.width[l]))
             .filter(|&(pa, pb, _)| pa != pb)
@@ -184,13 +205,13 @@ impl Mesh {
             match links.last_mut() {
                 Some(last) if (last.0, last.1) == (pa, pb) => last.3 += wd,
                 _ => {
-                    let (ca, cb) = (centre[pa as usize], centre[pb as usize]);
-                    links.push((pa, pb, (ca[0] - cb[0]).hypot(ca[1] - cb[1]), wd));
+                    let way = coarse.offset(pa as usize, pb as usize);
+                    links.push((pa, pb, way[0].hypot(way[1]), wd));
                 }
             }
         }
         fine.parent = parent;
-        let mut coarse = Level::new(area, centre, lat, links);
+        coarse.join(links);
         (coarse.kid_start, coarse.kids) = (kid_start, kids);
         self.levels.push(coarse);
     }

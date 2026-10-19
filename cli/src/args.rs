@@ -7,7 +7,8 @@ use worldgen::schedule::Schedule;
 pub const USAGE: &str = "usage:
   ew run      simulate a new world, write pictures and the tape to --out
     --seed N              world seed (1)
-    --size N              cells along a side (128)
+    --size N              cells along a side (128); of a globe, its rows from pole to pole (even)
+    --globe               a globe whose rows wrap east to west, twice as many columns as rows (not an island)
     --years N             years to run (10)
     --every N             print and draw a picture every N years (10)
     --out DIR             where the tape, pictures and snapshots go (out)

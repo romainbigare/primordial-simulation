@@ -35,7 +35,7 @@ pub struct Fields {
 }
 
 pub fn fields(w: &World) -> Fields {
-    let (n, ns, area) = (w.mesh.cells().n(), w.chem.ns(), w.map.area());
+    let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
     let mut f = Fields { z: vec![0.0; n], depth: vec![0.0; n], ice: vec![0.0; n], loose: vec![0.0; n], t: vec![0.0; n], rgb: vec![[0.0; 3]; n] };
     for i in 0..n {
         let (t, pl) = w.thaw_last(i);
@@ -59,6 +59,7 @@ pub fn fields(w: &World) -> Fields {
         }
         f.t[i] = t;
         f.z[i] = w.surface_z(i);
+        let area = w.mesh.cells().area()[i];
         (f.ice[i], f.depth[i], f.loose[i]) = (acc[0][0] / area, acc[1][0] / area, acc[2][0] / area);
         let top = acc[..3].iter().find(|a| a[0] / area >= COVER_MIN).unwrap_or(&acc[3]);
         let glow = 1.0 + 2.0 * ((t - GLOW_T) / GLOW_T).clamp(0.0, 1.0);
@@ -101,25 +102,21 @@ pub(crate) struct Ctx<'a> {
 impl<'a> Ctx<'a> {
     pub(crate) fn new(w: &'a World) -> Self {
         let (na, ns) = (w.mesh.level(AIR).n(), w.chem.ns());
-        let mut cells = vec![0.0; na];
-        for i in 0..w.mesh.cells().n() {
-            cells[w.mesh.up(i, 0, AIR)] += 1.0;
-        }
         let n = w.mesh.cells().n();
         let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
         let light = w.life.bodies.iter().map(|b| b.alive && pcore::body::light_eater(&w.chem, &b.genes)).collect();
         let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light };
         for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
-            c.parts[pcore::bond::cell(w, x)] += p.mass(&w.chem) / w.map.area();
+            let i = pcore::bond::cell(w, x);
+            c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
         }
         for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let i = b.cell as usize;
-            let m = b.mass(&w.chem) / w.map.area();
+            let m = b.mass(&w.chem) / w.mesh.cells().area()[i];
             *if c.light[s] { &mut c.plants[i] } else { &mut c.animals[i] } += m;
             c.bodies[i] += 1.0;
         }
-        for (j, &count) in cells.iter().enumerate() {
-            let area = count * w.map.area();
+        for (j, &area) in w.mesh.level(AIR).area().iter().enumerate() {
             for k in 0..ns {
                 let (s, n) = (&w.chem.subs[k], w.a(k, j));
                 c.absorber[j] += w.chem.depth(k, n / area);

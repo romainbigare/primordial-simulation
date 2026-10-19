@@ -1,4 +1,4 @@
-//! Terrain: an island with mountains, and the starting state of ground, low liquid and air.
+//! Terrain: an island or a globe with mountains, and the starting state of ground, low liquid and air.
 
 use crate::chemistry::{chemistry0, Init};
 use pcore::change::Reactor;
@@ -12,10 +12,19 @@ use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use std::f64::consts::{PI, TAU};
 
-/// Cell size, m, and ground cells per air node along a side.
+/// Cell size of an island, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
 const AIR_SCALE: usize = 4;
+/// A globe's radius, m, and the share of its area above the level 0 m: those of the one planet known (Earth: mean
+/// radius 6,371 km, land 29% of the surface).
+const RADIUS_M: f64 = 6.371e6;
+const LAND_SHARE: f64 = 0.29;
+/// Units of the coarsest noise across a map's longer side (a globe's equator).
+const ACROSS: f64 = 6.0;
+/// The keys mixed into the seed of the noise that warps the terrain along each axis.
+const WARP: [u64; 3] = [11, 13, 17];
 /// Height of the bottom of the bed, m.
 const BASE_Z: f64 = -3000.0;
 /// Depth of the loose ground every cell starts with, m.
@@ -30,31 +39,33 @@ const DRAIN_SLOPE: f64 = 1e-3;
 /// Low ground starts this many K above the melting point of its liquid, so it is molten.
 const MOLTEN_MARGIN: f64 = 2.0;
 
-fn hash01(seed: u64, x: i64, y: i64, octave: u64) -> f64 {
-    Rng::new(seed, octave, ((x as u64) << 32) ^ (y as u64 & 0xffff_ffff), Purpose::Terrain).f64()
+/// A draw in [0, 1) for the corner `at` of the noise's lattice (2 or 3 dimensions).
+fn hash01(seed: u64, at: &[i64], octave: u64) -> f64 {
+    let bits = 64 / at.len() as u32;
+    let key = at.iter().fold(0u64, |k, &c| (k << bits) ^ (c as u64 & (u64::MAX >> (64 - bits))));
+    Rng::new(seed, octave, key, Purpose::Terrain).f64()
 }
 
-/// Smooth value noise in [0, 1).
-fn value_noise(seed: u64, x: f64, y: f64, octave: u64) -> f64 {
-    let (x0, y0) = (x.floor(), y.floor());
-    let (fx, fy) = (x - x0, y - y0);
-    let s = |t: f64| t * t * (3.0 - 2.0 * t);
-    let (sx, sy) = (s(fx), s(fy));
-    let (ix, iy) = (x0 as i64, y0 as i64);
-    let a = hash01(seed, ix, iy, octave);
-    let b = hash01(seed, ix + 1, iy, octave);
-    let c = hash01(seed, ix, iy + 1, octave);
-    let d = hash01(seed, ix + 1, iy + 1, octave);
-    let top = a + (b - a) * sx;
-    let bot = c + (d - c) * sx;
-    top + (bot - top) * sy
+/// Smooth value noise in [0, 1) at point `p`: the draws of the corners of its lattice cell, eased in along each axis.
+fn value_noise(seed: u64, p: &[f64], octave: u64) -> f64 {
+    let lo: Vec<f64> = p.iter().map(|v| v.floor()).collect();
+    let ease = |t: f64| t * t * (3.0 - 2.0 * t);
+    // Corner `c` lies at `lo` plus bit `d` of `c` along axis `d`; each axis in turn folds the corners in pairs.
+    let mut v: Vec<f64> = (0..1usize << p.len())
+        .map(|c| hash01(seed, &lo.iter().enumerate().map(|(d, &l)| l as i64 + (c >> d & 1) as i64).collect::<Vec<i64>>(), octave))
+        .collect();
+    for (&x, &l) in p.iter().zip(&lo) {
+        let t = ease(x - l);
+        v = v.chunks(2).map(|ab| ab[0] + (ab[1] - ab[0]) * t).collect();
+    }
+    v[0]
 }
 
 /// Fractal noise in roughly [0, 1).
-fn fbm(seed: u64, x: f64, y: f64, octaves: u32) -> f64 {
+fn fbm(seed: u64, p: &[f64], octaves: u32) -> f64 {
     let (mut sum, mut amp, mut freq, mut norm) = (0.0, 1.0, 1.0, 0.0);
     for o in 0..octaves {
-        sum += amp * value_noise(seed, x * freq, y * freq, o as u64);
+        sum += amp * value_noise(seed, &p.iter().map(|v| v * freq).collect::<Vec<f64>>(), o as u64);
         norm += amp;
         amp *= 0.5;
         freq *= 2.0;
@@ -62,31 +73,56 @@ fn fbm(seed: u64, x: f64, y: f64, octaves: u32) -> f64 {
     sum / norm
 }
 
-/// Height map in metres (zero is the flat reference level).
-pub fn heights(seed: u64, w: usize, h: usize) -> Vec<f64> {
-    let mut out = vec![0.0; w * h];
-    let scale = 6.0 / w.max(h) as f64;
-    for y in 0..h {
-        for x in 0..w {
-            let (fx, fy) = (x as f64 * scale, y as f64 * scale);
-            // Warp the domain so coasts and ridges bend.
-            let wx = fx + 1.5 * (fbm(seed ^ 11, fx * 0.5, fy * 0.5, 3) - 0.5);
-            let wy = fy + 1.5 * (fbm(seed ^ 13, fx * 0.5, fy * 0.5, 3) - 0.5);
-            let base = fbm(seed, wx, wy, 6);
-            let ridge = 1.0 - (2.0 * fbm(seed ^ 7, wx * 0.7, wy * 0.7, 5) - 1.0).abs();
-            let dx = (x as f64 + 0.5) / w as f64 - 0.5;
-            let dy = (y as f64 + 0.5) / h as f64 - 0.5;
-            let d = (dx * dx + dy * dy).sqrt() * 2.0;
-            let land = base * 0.9 + ridge.powi(3) * 0.6 - d.powf(1.6) * 1.0;
-            out[y * w + x] = if land > 0.3 {
-                (land - 0.3).powf(1.3) * 3600.0
-            } else {
-                (land - 0.3) * 1500.0
-            }
-            .max(-800.0);
-        }
+/// Where cell `i` of `map` lies in the noise at `per_cell` units a cell: its column and row on a flat map; on a globe
+/// the point over its centre on a sphere `per_cell` units a cell round its equator (no seam where the rows wrap).
+fn spot(map: &Square, cells: &Level, i: usize, per_cell: f64) -> Vec<f64> {
+    let (x, y) = map.xy(i);
+    if !map.wrap {
+        return vec![x as f64 * per_cell, y as f64 * per_cell];
     }
-    out
+    let (r, lat, lon) = (per_cell * map.w as f64 / TAU, cells.lat()[i].to_radians(), cells.lon()[i].to_radians());
+    vec![r * lat.cos() * lon.cos(), r * lat.cos() * lon.sin(), r * lat.sin()]
+}
+
+/// The rise of the ground at point `p` of the noise: fractal noise with ridges, its domain warped so coasts and ridges
+/// bend.
+fn relief(seed: u64, p: &[f64]) -> f64 {
+    let half: Vec<f64> = p.iter().map(|v| v * 0.5).collect();
+    let warp: Vec<f64> = p.iter().zip(WARP).map(|(&v, key)| v + 1.5 * (fbm(seed ^ key, &half, 3) - 0.5)).collect();
+    let base = fbm(seed, &warp, 6);
+    let ridge = 1.0 - (2.0 * fbm(seed ^ 7, &warp.iter().map(|v| v * 0.7).collect::<Vec<f64>>(), 5) - 1.0).abs();
+    base * 0.9 + ridge.powi(3) * 0.6
+}
+
+/// Height of ground whose rise lies `above` the level, m: land climbs steeply, low ground falls gently.
+fn height(above: f64) -> f64 {
+    if above > 0.0 { above.powf(1.3) * 3600.0 } else { above * 1500.0 }.max(-800.0)
+}
+
+/// Height of each cell of `map`, m (zero is the reference level). An island's rise falls away from the middle of the
+/// map to a level of 0.3; a globe's level leaves the share `LAND_SHARE` of its area above it.
+pub fn heights(seed: u64, map: &Square, cells: &Level) -> Vec<f64> {
+    let per_cell = ACROSS / map.w.max(map.h) as f64;
+    let rise: Vec<f64> = (0..map.n()).map(|i| relief(seed, &spot(map, cells, i, per_cell))).collect();
+    if !map.wrap {
+        let middle = |c: usize, len: usize| (c as f64 + 0.5) / len as f64 - 0.5;
+        return (rise.iter().enumerate())
+            .map(|(i, &r)| {
+                let (x, y) = map.xy(i);
+                let (dx, dy) = (middle(x, map.w), middle(y, map.h));
+                height(r - ((dx * dx + dy * dy).sqrt() * 2.0).powf(1.6) * 1.0 - 0.3)
+            })
+            .collect();
+    }
+    let mut order: Vec<usize> = (0..map.n()).collect();
+    order.sort_by(|&a, &b| rise[b].total_cmp(&rise[a]));
+    let (total, mut above) = (cells.area().iter().sum::<f64>(), 0.0);
+    let level = order.iter().find(|&&i| {
+        above += cells.area()[i];
+        above >= LAND_SHARE * total
+    });
+    let level = level.map_or(0.0, |&i| rise[i]);
+    rise.iter().map(|&r| height(r - level)).collect()
 }
 
 /// A cell waiting in the flood of `drain`, by its height: the lowest first, then the lowest index.
@@ -178,29 +214,47 @@ pub fn scale_absorbers(w: &mut World, factor: f64) {
     }
 }
 
-/// A new world from a seed: terrain, chemistry 0, ground, liquid and air.
-pub fn new_world(seed: u64, w: usize, h: usize) -> World {
-    let (chem, init) = chemistry0();
-    build(seed, w, h, chem, &init, Config::default())
+/// The map of an island of `w × h` cells.
+pub fn island(w: usize, h: usize) -> Square {
+    Square { w, h, side: CELL_M, wrap: false }
 }
 
-pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: Config) -> World {
-    let map = Square { w, h, side: CELL_M };
+/// The map of a globe of `rows` rows from pole to pole, with twice as many columns, so a cell is square at the equator.
+pub fn globe(rows: usize) -> Square {
+    Square { w: 2 * rows, h: rows, side: PI * RADIUS_M / rows as f64, wrap: true }
+}
+
+/// A new island from a seed: terrain, chemistry 0, ground, liquid and air.
+pub fn new_world(seed: u64, w: usize, h: usize) -> World {
+    let (chem, init) = chemistry0();
+    build(seed, island(w, h), chem, &init, Config::default())
+}
+
+/// A new globe of `rows` rows from a seed: terrain, chemistry 0, ground, liquid and air.
+pub fn new_globe(seed: u64, rows: usize) -> World {
+    let (chem, init) = chemistry0();
+    build(seed, globe(rows), chem, &init, Config::default())
+}
+
+/// A new world on `map` (an island or a globe, whose rows run from pole to pole).
+pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Config) -> World {
+    if map.wrap {
+        (cfg.lat_south, cfg.lat_north) = (-90.0, 90.0);
+    }
     let mesh = World::mesh_of(&map, AIR_SCALE, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
-    let mut hz = heights(seed, w, h);
+    let mut hz = heights(seed, &map, mesh.cells());
     drain(mesh.cells(), &mut hz);
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);
 
     for i in 0..n {
-        let (x, y) = map.xy(i);
         let (z, area) = (hz[i], mesh.cells().area()[i]);
         // Patchy deposits, more common in high ground.
         let mut fr: Vec<(usize, f64)> = init.bed.clone();
         for (j, &(k, f)) in init.deposits.iter().enumerate() {
-            let p = fbm(seed ^ (100 + j as u64), x as f64 * 0.15, y as f64 * 0.15, 3);
+            let p = fbm(seed ^ (100 + j as u64), &spot(&map, mesh.cells(), i, 0.15), 3);
             let lift = (z / 1500.0).clamp(0.0, 1.0);
             let amt = f * ((p - 0.55) * 12.0).clamp(0.0, 3.0) * (0.3 + lift);
             fr.push((k, amt));
@@ -231,8 +285,8 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let mut t_air = vec![0.0; na];
     for j in 0..na {
         zmean[j] /= air_area[j];
-        let y = (j / w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
-        t_air[j] = t_start((&map, &mesh), y.min(h - 1), zmean[j]);
+        let y = (j / map.w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
+        t_air[j] = t_start((&map, &mesh), y.min(map.h - 1), zmean[j]);
         let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * air_area[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;

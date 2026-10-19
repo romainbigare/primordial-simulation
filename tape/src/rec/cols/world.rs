@@ -14,7 +14,7 @@ fn mean(v: &[f64]) -> f64 {
 impl Recorder {
     pub(super) fn world_cols(&self, c: &Ctx, land: &[usize], row: &mut Row) {
         let (w, n) = (c.w, c.w.mesh.cells().n() as f64);
-        let (life, area) = (&w.life, w.map.area());
+        let (life, area) = (&w.life, w.mesh.cells().area());
         let tot = pcore::check::totals(w);
         row.push("year", "yr", w.year());
         row.push("null", "1", w.cfg.null as u8 as f64);
@@ -38,7 +38,7 @@ impl Recorder {
             row.push(format!("air_{k}"), "1", w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>() / all);
         }
         row.push("ice_frac", "1", c.f.ice.iter().filter(|&&v| v >= COVER_MIN).count() as f64 / n);
-        row.push("liquid_land", "km3", land.iter().map(|&i| c.f.depth[i]).sum::<f64>() * area / GIGA);
+        row.push("liquid_land", "km3", land.iter().map(|&i| c.f.depth[i] * area[i]).sum::<f64>() / GIGA);
         row.push("rain", "mol/m2/s", w.rain.iter().map(|&v| v as f64).sum::<f64>() / n);
         row.push("rain_land", "mol/m2/s", land.iter().map(|&i| w.rain[i] as f64).sum::<f64>() / land.len().max(1) as f64);
         // Rivers as the web viewer draws them.
@@ -86,7 +86,7 @@ impl Recorder {
 /// and the stores of the bed (`World::deep`).
 fn minerals(c: &Ctx, row: &mut Row) {
     let w = c.w;
-    let (n, area, matter, minerals) = (w.mesh.cells().n(), w.map.area(), w.chem.matter(), w.chem.minerals());
+    let (n, area, matter, minerals) = (w.mesh.cells().n(), w.mesh.cells().area(), w.chem.matter(), w.chem.minerals());
     let mut bodies = vec![0.0f64; minerals.len()];
     for b in w.life.alive() {
         for (x, &(k, per)) in bodies.iter_mut().zip(minerals) {
@@ -94,17 +94,17 @@ fn minerals(c: &Ctx, row: &mut Row) {
         }
     }
     for (q, &(k, per)) in minerals.iter().enumerate() {
-        // [ground, dead matter] x [land, sea], and the cells of each
-        let (mut t, mut cells) = ([[0.0f64; 2]; 2], [0.0f64; 2]);
-        for i in 0..n {
+        // [ground, dead matter] x [land, sea], and the area of each
+        let (mut t, mut areas) = ([[0.0f64; 2]; 2], [0.0f64; 2]);
+        for (i, &a) in area.iter().enumerate() {
             let sea = (c.f.z[i] <= 0.0) as usize;
-            cells[sea] += 1.0;
+            areas[sea] += a;
             t[0][sea] += w.store.amounts(Class::Ground)[k * n + i];
             t[1][sea] += matter.map_or(0.0, |m| w.store.amounts(Class::Ground)[m * n + i]) * per;
         }
         let mm = w.chem.subs[k].molar_mass;
-        row.push(format!("min{q}_land"), "kg/m2", t[0][0] * mm / (cells[0].max(1.0) * area));
-        row.push(format!("min{q}_sea"), "kg/m2", t[0][1] * mm / (cells[1].max(1.0) * area));
+        row.push(format!("min{q}_land"), "kg/m2", t[0][0] * mm / areas[0].max(f64::MIN_POSITIVE));
+        row.push(format!("min{q}_sea"), "kg/m2", t[0][1] * mm / areas[1].max(f64::MIN_POSITIVE));
         row.push(format!("min{q}_dead_land"), "1e9 mol", t[1][0] / GIGA);
         row.push(format!("min{q}_dead_sea"), "1e9 mol", t[1][1] / GIGA);
         row.push(format!("min{q}_bodies"), "1e9 mol", bodies[q] / GIGA);
@@ -118,6 +118,6 @@ fn dead(w: &World, land: &[usize], row: &mut Row) {
     let fuel = w.chem.build.as_ref().map(|b| b.inputs[0].0 as usize);
     for k in fuel.into_iter().chain(w.chem.matter()).chain(w.chem.materials()) {
         let kg = land.iter().map(|&i| w.store.amounts(Class::Ground)[k * n + i]).sum::<f64>() * w.chem.subs[k].molar_mass;
-        row.push(format!("dead_{k}"), "kg/m2", kg / (land.len().max(1) as f64 * w.map.area()));
+        row.push(format!("dead_{k}"), "kg/m2", kg / land.iter().map(|&i| w.mesh.cells().area()[i]).sum::<f64>().max(f64::MIN_POSITIVE));
     }
 }

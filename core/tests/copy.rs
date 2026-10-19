@@ -649,7 +649,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
         let (s, b0) = out(&mut w, b);
         w.life.bodies[s] = b0;
-        let area = w.map.area();
+        let area = w.mesh.cells().area()[0];
         let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {

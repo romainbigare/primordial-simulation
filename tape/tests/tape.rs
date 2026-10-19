@@ -402,7 +402,7 @@ fn yearly_series_counts_the_minerals() {
     assert_eq!(col("min0_sea", first), 0.0);
     // (The second: where the liquid lies on the rock that holds it, and the sea holds it from the start at balance with the air.)
     assert!(col("min1_sea", first) > 1.0 && col("min1_land", first) >= 0.0);
-    let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.map.area());
+    let (mm, area) = (w.chem.subs[w.chem.minerals()[0].0].molar_mass, w.mesh.cells().area()[0]);
     let all = |r: &Vec<f64>, c: [f64; 2]| {
         let ground = (col("min0_land", r) * c[0].max(1.0) + col("min0_sea", r) * c[1].max(1.0)) * area / mm / 1e9;
         ground + ["min0_dead_land", "min0_dead_sea", "min0_bodies", "min0_deep"].iter().map(|c| col(c, r)).sum::<f64>()

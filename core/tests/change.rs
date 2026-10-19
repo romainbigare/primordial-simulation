@@ -117,7 +117,7 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
         .find(|&r| chem.dh(r) < 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == RICH) && chem.reactions[r].inputs.iter().any(|p| at(p.0) == Phase::Gas))
         .expect("a burning reaction");
     chem.reactions = vec![chem.reactions[burn].clone()];
-    let mut w = worldgen::terrain::build(1, 16, 16, chem, &init, pcore::Config::default());
+    let mut w = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, pcore::Config::default());
     let (n, g) = (w.mesh.cells().n(), w.cfg.gravity);
     let i = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
     empty_cell(&mut w, i);
@@ -141,7 +141,7 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
 fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
     let (mut chem, init) = worldgen::chemistry0();
     chem.reactions = vec![chem.reactions[BURN].clone()];
-    let base = worldgen::terrain::build(1, 16, 16, chem, &init, pcore::Config::default());
+    let base = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, pcore::Config::default());
     let (n, i, liquid) = (base.mesh.cells().n(), 17, 2000.0);
     let burned = |half: bool| {
         let mut w = base.clone();

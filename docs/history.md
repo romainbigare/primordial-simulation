@@ -980,6 +980,16 @@ Phase E review, round 1 (fixes):
   mol/m²/s. Key numbers (3 seeds) all in range: land 287.94 K, swing 12.25 K, rain 1.76e-3, absorbing gas 246 ppm,
   river cells 878, land worn 0.082 mm/yr, light-eaters 10.66, eaters 4.30, lives 2.58 and 4.04 yr. Golden re-pinned.
 
+- G1, the lat-lon grid: a globe (`ew run --globe`, `--size` its rows, twice as many columns) of squares of latitude
+  and longitude that wrap east to west, on a sphere of 6,371 km; each row's area and borders from its latitude, no
+  link across a pole; latitude and longitude per cell, the way between centres on the sphere (`Level::offset`) for the
+  wind's slope of warmth; the air a coarser level that wraps; the four air nodes a cell sees wrap; the banded solve
+  takes the wrap as it is (the closing link lies inside the band). worldgen samples its noise on the sphere and sets
+  the level so 29% of the area is land. Bodies step round the wrap on the square map (`Square::step`) until G2.
+  The island is the same world bit for bit (checked with the new flag left out of the fingerprint); golden re-pinned
+  for the flag the saved map now carries. 64 x 32 globe without life, 10 years: drift 5e-16 (elements) and 2e-15
+  (energy), 1.15 s a year.
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body

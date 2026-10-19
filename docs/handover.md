@@ -462,13 +462,14 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
               one folder per law (core/src/<law>/; the air in flow/air/)
   src/body/   bodies: genes, tissue, metabolism, exchange, the update, its physics, paying, death, intake
   src/chem/   the chemistry: its data, its physics (phases, melting), the roles of reactions
-  src/space/  the shape of the world: the mesh (cells, links, levels), the square map, stacks of layers
+  src/space/  the shape of the world: the mesh (cells, links, levels; flat or on a sphere), the square map (an island,
+              or a globe whose rows wrap east to west), stacks of layers
   src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the bodies' node of
               each cell; a part by slot and generation), what the fixed ones hold (`Store`: private arrays, read
               through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`, their
               only writer: moves, transforms, link fluxes), and the moves of a body's or a part's update (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
-  src/solve/  the shared maths: spread (implicit step on links), downhill, lines
+  src/solve/  the shared maths: spread (implicit step on links), downhill, band (the air level with the wind)
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
               life (the registry of bodies), lineage, nodes (population nodes), lanes (paths), survey (the cells
               bodies see), brain, rng, event, math, units, par

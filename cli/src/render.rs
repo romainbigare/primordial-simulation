@@ -66,7 +66,7 @@ pub fn save(w: &World, path: &str) {
     // Life: mass per area of light-eaters (green) and of the other bodies (orange dots), kg/m².
     let (mut green, mut other) = (vec![0.0; w.mesh.cells().n()], vec![0.0; w.mesh.cells().n()]);
     for b in w.life.alive() {
-        let m = b.mass(&w.chem) / w.map.area();
+        let m = b.mass(&w.chem) / w.mesh.cells().area()[b.cell as usize];
         *if pcore::body::light_eater(&w.chem, &b.genes) { &mut green[b.cell as usize] } else { &mut other[b.cell as usize] } += m;
     }
     let mut made = vec![false; w.mesh.cells().n()];

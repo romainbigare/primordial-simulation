@@ -8,7 +8,10 @@ points there). The code is the truth: each part names its file and function, for
 
 **Where the code is** (under `core/src/`; each law below names its own files): time in `clock/` and `schedule.rs`;
 the shape of the world in `space/` (`World::mesh`: cells, links with their widths, levels; the square map is read only
-where a law is about its layout); the shared maths in `solve/`; settings in `params.rs`; the nodes and their books in
+where a law is about its layout). The map is an island of 2 km squares, or a globe (`ew run --globe`): squares of
+latitude and longitude from pole to pole whose rows wrap east to west, each row's area and borders from its latitude
+on a sphere of 6,371 km (cells narrow toward the poles; no link crosses a pole), the air a coarser level that wraps
+too; the shared maths in `solve/`; settings in `params.rs`; the nodes and their books in
 `store/`, `world.rs` and `check.rs`; ground heat in `ground.rs`; the registry of bodies in `life.rs`, the cells as
 bodies see them in `survey.rs`.
 
@@ -16,7 +19,7 @@ bodies see them in `survey.rs`.
 
 | Word | Meaning |
 |---|---|
-| cell | one square of the map (2 km × 2 km), with a ground node; it sees its parent air node at the air level (`Mesh::share`: its area over the node's) |
+| cell | one square of the map (2 km × 2 km on the island; on a globe a square of latitude and longitude), with a ground node; it sees its parent air node at the air level (`Mesh::share`: its area over the node's) |
 | node | anything that holds stuff: the ground of a cell, an air column, a body, a part |
 | body | a living node with genes and maybe a brain |
 | member | one living thing inside a body. A body of 1 member is an **individual**; of many, a **population node** (alike members counted together) |
@@ -150,7 +153,7 @@ steps and 3-day physics steps within the seeds' noise.
   rounding of its sums, and those that can evaporate from the ground), under the sun of the step's end.
 - Each Newton round (`flow::air::newton`) solves every ground node's exchange with the air it sees (its surface
   balance, rain and evaporation, and their slopes), then the whole air level with the wind in one banded solve
-  (`solve::band`). The rounds stop when the air moves by less than 0.05 K and 1e-5 of a node's gas, or after 16.
+  (`solve::band`; on a globe the link that closes a row lies inside the band). The rounds stop when the air moves by less than 0.05 K and 1e-5 of a node's gas, or after 16.
 - **Booked whole** (`air::book`): what the last round found crosses the links as it is solved, so the books are exact
   whether or not the rounds converged, and the other laws read what it leaves until the next step. A ground node gives
   no more of a gas than it holds and gets; an air node that would give more rains and blows that much less.
@@ -207,6 +210,10 @@ each link of that level by three pushes, each a rate:
 2. overturning: at equal height the lower half flows to the warmer column and the upper half back, at `wind` per K,
    turned sideways by the planet's rotation (`rotation`, at the link's latitude); vapour crowds in the lower half;
 3. eddies mix the two columns (`mix`, across the link's width over its length).
+
+The overturning's turn reads the slope of warmth across the link, from each node's neighbours by the way between
+centres (`Level::offset`: on a globe along the parallel and the meridian, the shorter way round the wrap). A ground cell
+sees the air of the four nearest air nodes, bilinearly, round the wrap of a globe's rows.
 
 Solved implicitly with the rest of the step, any speed is stable. Air moves as whole columns, so there is no wind
 near the ground: bodies use the anchored `wind_ground` (6.3).
@@ -775,7 +782,9 @@ What is placed at the start is an initial condition; every run prints a seeding 
 it (`worldgen::schedule::Schedule`, carried by a snapshot, so a resumed run places what is still due); the laws never
 read a kind.
 
-- **Terrain** (`worldgen::terrain`): an island with mountains, a metre of loose ground, the sea's salt at balance with
+- **Terrain** (`worldgen::terrain`): an island with mountains, or a globe (`new_globe`) whose noise is sampled at each
+  cell's centre on a sphere (no seam where the rows wrap) and whose level leaves 29% of the area above 0 m (the land
+  share of the one planet known; `LAND_SHARE`). Both have a metre of loose ground, the sea's salt at balance with
   the starting air (2.6), which thins with height by its scale height. Every land cell drains to the sea from the
   start (`drain`): a priority flood from the largest body of cells below 0 m raises each closed basin to its outlet,
   with a slope of 1 m per km across the filled floor (`DRAIN_SLOPE`; Planchon and Darboux 2001, Barnes et al. 2014).

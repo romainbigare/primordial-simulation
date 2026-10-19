@@ -87,7 +87,7 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let matter = chem.matter_roles();
     let h = genes[lay.keep + liquid].clamp(0.0, MAX_LIQUID_SHARE as f32) as f64;
     let mass = 10f64.powf(genes[body::COPY_MASS] as f64) * if matter.is_some() { (1.0 - body::WET_TISSUE) / (1.0 - h) / (1.0 - kind.store) } else { 1.0 };
-    let count = if kind.cover > 0.0 { kind.cover * w.map.area() / mass } else { 1.0 };
+    let count = if kind.cover > 0.0 { kind.cover * w.mesh.cells().area()[i] / mass } else { 1.0 };
     let mut store = vec![0.0; ns];
     let (fuel, liq, mat) = split(kind.store, genes[lay.keep + liquid] as f64, matter.is_some());
     store[rich] = fuel * count * mass / chem.subs[rich].molar_mass;

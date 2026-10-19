@@ -735,7 +735,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     pcore::survey::survey(&mut w);
     let (a, b) = (&w.life.bodies[sa], &w.life.bodies[sb]);
     let (ma, mb) = (a.mass(&w.chem) / n, b.mass(&w.chem) / n);
-    println!("shade: A (member mass {ma:.0} kg, body {:.1}) {:.3}, B (member mass {mb:.0} kg, body {:.1}) {:.3}; leaf per ground area {:.2} and {:.2}", a.size(&w.chem) / n, w.life.shade[sa], b.size(&w.chem) / n, w.life.shade[sb], a.vis[1] as f64 * n / w.map.area(), b.vis[1] as f64 * n / w.map.area());
+    println!("shade: A (member mass {ma:.0} kg, body {:.1}) {:.3}, B (member mass {mb:.0} kg, body {:.1}) {:.3}; leaf per ground area {:.2} and {:.2}", a.size(&w.chem) / n, w.life.shade[sa], b.size(&w.chem) / n, w.life.shade[sb], a.vis[1] as f64 * n / w.mesh.cells().area()[0], b.vis[1] as f64 * n / w.mesh.cells().area()[0]);
     assert!(ma > 1.3 * mb && a.size(&w.chem) < b.size(&w.chem), "A is heavier and smaller in body");
     assert!(w.life.shade[sb] > 1.2 * w.life.shade[sa], "the body of more matter is the taller: shade {} against {}", w.life.shade[sb], w.life.shade[sa]);
 }
@@ -910,7 +910,7 @@ fn a_tall_member_shades_a_short_one() {
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     let short = (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).max_by(|&a, &b| w.life.bodies[a].count.total_cmp(&w.life.bodies[b].count)).expect("a node");
-    let (i, area) = (w.life.bodies[short].cell as usize, w.map.area());
+    let (i, area) = (w.life.bodies[short].cell as usize, w.mesh.cells().area()[0]);
     // The cell's other nodes move next door.
     for s in w.life.at[i].clone().into_iter().map(|s| s as usize).filter(|&s| s != short) {
         let j = i ^ 1;
