@@ -144,11 +144,8 @@ fn starved(w: &mut World, slot: usize, b: &mut Body, from: f64, dead: &mut Vec<f
     f <= 1e-9 || lose_share(w, slot, b, f, SPENT, dead, &th)
 }
 
-/// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but
-/// at least an interval (a decision takes one). The share of its upkeep over the update left unpaid dies, whatever the
-/// length of the update, and so does the share its wear gives (`lose_share`). Returns the heat the paying released (held
-/// in the update's heat), the span it was paid over, the mass left, the margin of its reactions over the upkeep, and the
-/// plateau state it is left at (`Body::thermal`: the stages that follow see the body at the temperature it came with).
+/// Upkeep over the time, at least an interval: the share left unpaid dies, and so does the share its wear gives
+/// (`lose_share`). Returns the heat released, the span, the mass left, its spare and the plateau state it came at.
 fn settle_upkeep(w: &mut World, slot: usize, b: &mut Body, s: &Site, mut mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
     // (One temperature for the stages that see the body as it came: the upkeep, the plan and the paying.)
     let th = b.thermal(&w.chem);
@@ -210,12 +207,8 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
     }
 }
 
-/// A store below its safe minimum kills the body (a node loses its poorest members, `starve`). A key liquid that boiled
-/// kills it; one that froze kills the share of it that is free liquid to freeze: the share frozen (all of it below its
-/// melting point, the body being at one temperature; on its melting plateau, the share frozen there) times its
-/// activity, as a dry body holds little liquid to freeze: that share of an interval of its gene dies (`lose_share`), at
-/// that rate over a longer update (`Body::over_span`).
-/// Returns the plateau state it is left at.
+/// A store below its safe minimum kills it (a node: its poorest members, `starve`); a boiled key liquid kills it, a
+/// frozen one kills the share frozen times its activity (`Body::over_span`). Returns the plateau state it is left at.
 fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<Melting, u8> {
     let mass = b.mass(&w.chem);
     let mut th = b.thermal(&w.chem);
@@ -265,11 +258,8 @@ fn starve(w: &mut World, b: &mut Body, th: &Melting, dead: &mut Vec<f64>) -> boo
     f < 1.0 && thin(w, b, f, dead, LACK, th) && !b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem))
 }
 
-/// What a body sheds to the ground, with its share of the heat: of what it holds besides its matter, gases and the fuel
-/// it burns, its key liquids, the minerals (`Chemistry::minerals`) and the solids it builds (`Chemistry::materials`)
-/// past the level it keeps (`Body::level`), and all of anything else. Digestion and its own burning make more of them
-/// than it builds with (its burning makes its key liquid): an eater that kept them would grow without end and, its room
-/// full, stop taking matter. Gases (at its temperature) leave by breath. Returns its mass after.
+/// What it sheds to the ground with its heat: minerals, built solids and key liquids past their level, and anything
+/// else it neither burns nor is made of; gases leave by breath. Returns its mass after.
 fn shed(w: &mut World, b: &mut Body) -> f64 {
     let (chem, mass) = (&w.chem, b.mass(&w.chem));
     let th = b.thermal(chem);

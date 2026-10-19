@@ -187,7 +187,7 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `WITHIN` (0.5, `core/src/body/genes.rs`) | standard deviations | children may lie this far beyond `alike` (in the spreads of both) and still join a node; nodes of a full cell merge within it | run: small enough that nodes of two kinds never join: a speed tool must not mix genes that individuals would never mix | tuned |
+| `WITHIN` (0.5, `core/src/body/genes.rs`) | standard deviations | children may lie this far beyond `alike` (in the spreads of both) and still join a node; nodes of a full cell merge within it | run: small enough that nodes of two kinds never join: a speed tool must not mix genes that individuals would never mix; it says how members are grouped, not what they do | speed |
 | `MIN_INTERVAL` (5, `core/src/body/genes.rs`) | days | the shortest time between a body's updates | bounds how often the fastest bodies update | speed |
 | `MAX_INTERVAL` (360, `core/src/body/genes.rs`) | days | the longest time between updates | one year | anchored |
 | `EATER_KEEP_T` (278, `worldgen/src/life/kinds.rs`) | K | the temperature the eaters' founders keep their bodies at (`KEEP_T`; an initial condition) | the melting point of chemistry 0's key liquid (273 K) plus the margin in which well-being falls for nearness to freezing (`PHASE_MARGIN`, 5 K): an animal must keep its liquid from freezing; at 250 K the gene did nothing and never moved, and the eaters froze in winter on the hills | anchored |
@@ -249,10 +249,10 @@ The 108 rows of `Config` and `Physics` are their 108 fields.
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 46, and 8 outside the structs | 46 fields (among them `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
-| tuned (run or reason named) | 10, and 6 outside the structs | thresholds of who is alike (`alike`; outside: `WITHIN`), set for an outcome (`lat_south`, `lat_north`, `rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
+| tuned (run or reason named) | 10, and 5 outside the structs | the threshold of who is alike (`alike`), set for an outcome (`lat_south`, `lat_north`, `rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 36 | 32 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 8, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL` |
+| speed | 8, and 2 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL`, `WITHIN` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 52 (46 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 51 (46 in the structs, 5 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

@@ -9,13 +9,8 @@ use crate::life::Life;
 use crate::World;
 use std::f32::consts::FRAC_2_PI;
 
-/// The monthly merge of nodes, a speed shortcut, not a law: it coarsens only how members are represented (as population
-/// nodes), never how many there are or where. In each cell, among the bodies that hold and are inside nothing, a node
-/// joins the first larger one alike to it (`join_alike`); then, while more than `Config::crowd` remain, the most alike
-/// pairs merge (`merge_closest`). Stores and heat add up, genes, born rows and brain rows become the means by count, and
-/// the spread of genes and born rows is kept (`merge`); lineage and memory are the larger's. A node that grew too varied splits
-/// again at its next update (`split`). With `Config::nodes` off, bodies with a brain never merge and never count
-/// toward `crowd`.
+/// The monthly merge of nodes, a speed setting, not a law: in each cell a node joins the first larger one alike to it
+/// (`join_alike`), then past `Config::crowd` the most alike pairs merge (`merge_closest`); laws.md 4.4.
 pub(crate) fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.mesh.cells().n() {
@@ -109,9 +104,8 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
     w.life.bodies[t] = o;
 }
 
-/// What splits and joins as an amount when members move between nodes (Idea 3 of `docs/foundation/plan.md`): their
-/// count, mol of each store, heat, J, and brood, mol; and the day their time was last integrated from and the cell's
-/// light and rain then, J/m² and mol/m² (`Body::last`, `Body::mark`, `Body::rained`).
+/// What splits and joins as an amount when members move between nodes, split by shares with the remainder kept so the
+/// parts add up: count, mol of each store, heat (J), brood (mol), and their last day and marks of light and rain.
 pub(crate) struct Lot {
     pub count: f64,
     pub store: Vec<f64>,
@@ -140,17 +134,8 @@ impl Lot {
     }
 }
 
-/// Members `c` join body `o`, taken out of its slot, with the means `genes` and the spread `spread` of their genes, the
-/// mean and the variance of log10 of their bodies (`size`, `Body::size_moments`), and their born rows, their brain rows
-/// and the born rows' spread: members, stores, brood and heat add up; genes, sizes, born rows and brain rows become the
-/// means by members (members of less than one weigh what they are; for sizes the mean of the log10 bodies itself, kept
-/// apart from the mean body, since a mix of sizes is no lognormal), and the spread what both held around the new mean
-/// (each one's spread plus its gap from the new mean squared, by members; for the born rows the mean over rows of the
-/// gap squared; the genes' up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows`
-/// none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows and their spread as they are:
-/// it left with the node's and comes back with them. The node's next update integrates its members' own time: its last
-/// day and its marks of light and rain become the means by members of its own and theirs, so members who joined since its last
-/// update count from when they came (as many member-days of light, upkeep and growth as they lived in it).
+/// Members `c` join body `o` (taken out of its slot): amounts add up, genes, sizes and rows become the means by members
+/// and the spreads pool around them (laws.md 4.4); `rows` none: a member coming back with the node's own rows.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], size: (f32, f32), rows: Option<(&[f32], &[f32], f32)>) {
     let share = c.count / (o.count + c.count);
@@ -202,16 +187,8 @@ pub(crate) fn part(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Body {
 /// Genes as wide as the widest but for this share (rounding) tie for the split.
 const TIE: f32 = 1e-4;
 
-/// At its update, a node whose two halves would not be alike splits in two, so selection acts between them. The halves
-/// of a normal spread have means `d = sqrt(2/π)` standard deviations from the mean: it splits when their gap passes
-/// `Physics::alike` steps along the gene where it is widest in its mutation steps (a gene that is off counts as 0; among
-/// genes as wide, a keyed random pick). `d` is shrunk to the room left to the gene's walls, so the mean is kept, and
-/// the variance along it falls by `d²`, so the spread of both together is kept. Each half has half the members, stores
-/// and heat. Halves of a brain size are alike (likeness counts the sizes by whole units), so the monthly merge takes
-/// them back, each having paid for its own size; a mean a whole unit from its lineage's size moves the node to a
-/// lineage of that size (`lineage::resize`). It splits only while its cell keeps a free place after it (fewer than
-/// `Config::crowd` - 1 bodies): a node held at `most` splits at every update, and without the limit the nodes of a cell
-/// would double each time. The spread stops at `most` and a split keeps the mean, so the limit does not bias the genes.
+/// At its update a node whose two halves would not be alike splits in two along its widest gene, the mean and the
+/// spread of both kept, while its cell has room (fewer than `Config::crowd` - 1 bodies); laws.md 4.4.
 pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     if b.count < 2.0 || b.spread.is_empty() || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd || !may_be_node(w, b) {
         return;

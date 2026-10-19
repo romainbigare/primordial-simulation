@@ -7,18 +7,9 @@ use crate::store::Node;
 use crate::units::DAY;
 use crate::{World, AIR};
 
-/// Growth is building body matter, and past the size of maturity a share of it is offspring. A member makes matter
-/// (`Chemistry::build`) and pays `Physics::c_copy` per kg of matter made, through `body::pay` (the work leaves as heat),
-/// as far as: (1) its allowance, `Physics::c_build` x its `Body::supply` / `Physics::m_ref` x the days of its interval x
-/// its activity (building takes time, and it is chemistry: a dry body hardly grows); (2) its spare: after what is paid
-/// and what is converted leave its fuel, its reactions must still release its upkeep over an interval at today's rate;
-/// (3) what its reactions can release now; (4) the stores it converts, which must also cover the fuel the work burns.
-/// Storing fuel costs no building work. A body below its copy mass (the size of maturity) puts all it builds into its
-/// own growth; of what it builds past it a share `ALLOC` goes into the brood (`Body::brood`, matter held back for
-/// offspring) and the rest into its own growth, so with `ALLOC` 1 it stops at maturity and with less it grows all its
-/// life. The liquid that goes with new matter comes by soaking (`body::live`). The other solids it can build
-/// (`Chemistry::builds`) it builds the same way, first, each in its share (`Body::share`). `th` is its plateau state
-/// (`Body::thermal`). Returns whether it built anything.
+/// Growth: a member builds body matter, paid by work, as far as its allowance, its spare, what its reactions release
+/// and the stores it converts allow; past its copy mass a share `ALLOC` goes into the brood (laws.md 6.6). `th` is its
+/// plateau state. Returns whether it built anything.
 pub fn grow(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
     let (chem, p) = (&w.chem, &w.cfg.phys);
     let Some(bl) = chem.build.clone() else { return false };

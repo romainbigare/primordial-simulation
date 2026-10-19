@@ -31,18 +31,9 @@ const UNREAD: [usize; 10] = [CHILD, MUT, DISPERSE, WET, ALLOC, LEARN, HIDDEN, ME
 /// step: further above, the update cannot bring the store down to it.
 const MIN_REACH: f32 = 2.0;
 
-/// Can a step from `x` to `y` of gene `g` change what node `b` (without a brain) gains in its update as far as its
-/// growth? Not for a scalar gene in `UNREAD`, nor for a gene of a reaction or a substance that is off (at or below 0)
-/// at both ends, which does nothing. Genes that act only at a threshold are read only where the update may reach it:
-/// a safe minimum where its store lies within `MIN_REACH` of it; `KEEP_T` where the body or its ground at the start
-/// lies below the step's upper end and the step, `COOL_T` where one lies above its lower end less the step. Of the
-/// uptake genes the update reads only whether one is on, for the roots, which take what does not dissolve
-/// (`physics::roots`) and only where the ground holds some as liquid. A keep gene sets the level of its substance
-/// (`Body::level`), which the update reads for the solids it builds, its key liquids (their share, activity and
-/// soaking), the products it holds of the reactions it catalyses that are not gas (their inhibition,
-/// `Body::inhibited`), and, where the ground holds some as liquid and the store lies under the level at the step's
-/// upper end, the liquids that dissolve, which it soaks up, and what its roots take (not the body matter's: only
-/// shedding and eating read it). A skipped sample costs no update; a wrong skip only slows that gene.
+/// Can a step from `x` to `y` of gene `g` change what node `b` (without a brain) gains as far as its growth? Not for
+/// genes in `UNREAD`, genes off at both ends, or thresholds the step cannot reach. A skipped sample costs no update; a
+/// wrong skip only slows that gene.
 fn read(w: &World, lay: &Layout, b: &Body, g: usize, (x, y): (f32, f32)) -> bool {
     let (chem, i) = (&w.chem, b.cell as usize);
     let (hi, step) = (x.max(y) as f64, (y - x).abs() as f64);
@@ -75,15 +66,9 @@ fn read(w: &World, lay: &Layout, b: &Body, g: usize, (x, y): (f32, f32)) -> bool
     chem.is_material(k) || b.wet >> k & 1 == 1 || product || taken
 }
 
-/// The sample member of node `b` (slot `slot`, taken out of it, before its update; a node without a brain whose members
-/// differ): the node's genes but one, drawn among the genes its members differ in, one standard deviation of its spread
-/// up or down (the side drawn too, `Purpose::Select`), within its walls; its update as far as its growth
-/// (`body::gain_to_growth`) on the world as it is, whose moves are then dropped and its events forgotten: a member that
-/// might be, not one that is, so it changes nothing (it runs first in its node's update, when its node's moves hold no
-/// move yet). None for other bodies, and where the step cannot change what the node gains in the
-/// update (`read`), so its sample would gain what the node gains and its mean would not move. That draw costs no
-/// update, and each gene is still drawn as often, so the others move at their own rate. A sample is run on one update
-/// in `Config::sample_every`, drawn, and its weight is that many times larger, so each gene moves at the same mean rate.
+/// The sample member of node `b` (without a brain, taken out of slot `slot`, before its update): its genes but one, a
+/// standard deviation of its spread up or down, run as far as its growth on the world as it is, its moves and events
+/// then dropped. None where the step cannot change the gain (`read`); run on one update in `Config::sample_every`.
 pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Option<Sample> {
     if b.n() <= 1.0 || !w.life.brainless(b) {
         return None;
@@ -112,15 +97,9 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
     Some(Sample { gene: g, step, genes: (differ.len() * every) as f32, gain })
 }
 
-/// The mean of node `b` (taken out of its slot) after its update, in which its members gained `gain` (the log of what
-/// they gained, `body::Lived::gain`), and its sample member `s` gained `s.gain`: the sample's gene moves by its step
-/// d times tanh(s.gain - gain), times the sample's weight (each gene is drawn that much less often, so each moves at
-/// its own rate), and at most by d times `Config::sample_every` (the one update in that many with a sample stands for
-/// them all, so the mean moves as much on average). For two halves of a node at the mean plus and minus d, gaining W+
-/// and W-, the covariance of the gene with relative fitness moves the mean by d (W+ - W-) / (W+ + W-) =
-/// d tanh((ln W+ - ln W-) / 2) (Robertson 1966); the half difference of the logs is taken here as the sample's over
-/// the node's own, and the side of the step is drawn, so the error of that one-sided difference (of second order)
-/// averages out. A gene that does nothing gains nothing and does not move. Within the walls.
+/// The mean of node `b` after its update, in which it gained `gain`: the sample's gene moves by its step times
+/// tanh(sample's gain - gain) times the sample's weight, at most `sample_every` steps (Robertson 1966). Within the
+/// walls.
 pub(crate) fn select(w: &mut World, b: &mut Body, s: Sample, gain: f64) {
     let f = (s.gain - gain).tanh() as f32;
     if f == 0.0 || !f.is_finite() {

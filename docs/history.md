@@ -963,6 +963,9 @@ Phase E review, round 1 (fixes):
   48, 60 years, eater members at year 60 in seeds 1 to 3: 27, 1171, none before; 789, 3046, none (gone by year 55,
   short of fuel and frozen) now. Golden re-pinned.
 
+- Comments of nodes, copy and the update say what the code does in two or three lines and point to laws.md; `WITHIN`
+  is marked a speed setting (how members are grouped), tuned rows 52 to 51. The same world.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

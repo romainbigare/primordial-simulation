@@ -45,14 +45,9 @@ struct Litter {
     parent: u64,
 }
 
-/// A mature body makes offspring from its brood. A child has a body of 10^`CHILD` of its parent's copy mass: matter of
-/// 1 - `WET_TISSUE` of that, taken from the brood, and provisions of every other store (`provisions`), with its share of
-/// the heat. A child is made whenever the brood covers one: an individual has whole children, a node (members who all
-/// do the same) fractional members, as many as the brood makes. An individual's children have one parent or two
-/// (`mix::partner`; the same partner for all the children of the call); a node's have one, as its members already mix
-/// their genes among themselves (it keeps one variance per gene and no covariances: free recombination, Bulmer 1971). A
-/// body that is not mature (`Body::adult`) makes none. A share of a node's children (the `DISPERSE` gene) starts in a
-/// random neighbour cell; an individual's children stay together, in a neighbour cell with that chance.
+/// A mature body makes children whenever its brood covers one: an individual whole children of one parent or two, a
+/// node fractional members of one parent beyond `BROOD_HELD`; a share `DISPERSE` starts in a neighbour cell (laws.md
+/// 4.2-4.4). Returns whether any were made.
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.dec(COPY_MASS));
     let Some(mi) = chem.matter() else { return false };
@@ -100,12 +95,9 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     made
 }
 
-/// `m` children of `b` start in `cell`: their genes (`mix` with a partner, then `body::vary`: the drift of a group of
-/// `m` on the mean, a generation's mutation added to the spread), stores and heat (`give`), born rows (`child_rows`)
-/// and, for an individual's, perhaps a lineage of their own (`child_lineage`). They join the young node of their kind
-/// there, booked on it with no body built for them (`nodes::add`), or start a body (`place_child`), which is the young node of their parent's from then on when they stay in
-/// its cell. Children that started a new lineage stay apart. Less than one member of a node's children with no node to
-/// join waits in the brood (nothing is made; false).
+/// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
+/// lineage there (`kin`), or a body of their own (`place_child`). Less than one member of a node's children with no
+/// node to join waits in the brood (false).
 fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) -> bool {
     let mixed = l.mate.map(|t| mix(b, &w.life.bodies[t], m, r));
     let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));

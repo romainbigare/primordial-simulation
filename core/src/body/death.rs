@@ -33,10 +33,8 @@ pub(crate) fn to_ground(w: &mut World, b: &mut Body, th: &Melting, m: &[f64]) {
     w.moves.give(&w.chem, Node::ground(i), 0, 0.0, q);
 }
 
-/// Some of a body's matter goes to its cell's ground as loose amounts: `dead` (mol of each substance), with its share of
-/// the heat and of the brood (`Body::lose`), the body at the plateau state `th`. In a node these are the remains of a share
-/// `f` of its members, who died of `cause` (the count falls). False if less than one member is left (the caller lets the
-/// node die).
+/// `dead` (mol of each, at most what it holds) goes from body `b` at the plateau state `th` to the ground; in a node
+/// the remains of the share `f` of its members, dead of `cause`. False if less than one member is left.
 pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8, th: &Melting) -> bool {
     let dead: Vec<f64> = dead.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
     to_ground(w, b, th, &dead);

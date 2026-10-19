@@ -39,14 +39,8 @@ pub enum Grown {
     Joins(usize),
 }
 
-/// A young node `b` (more than one member and immature; slot `slot`, taken out of it) after an update in which its mean
-/// member grew from `before` kg of body: the members who grew past the copy mass in it join its adult node (`linked`)
-/// with their share of the stores, heat and brood (`nodes::part`), or start one if there is none and they are at least
-/// one member. Young members lie below the copy mass (they are born smaller and leave when they reach it), and they grow
-/// alike in proportion (their log10 bodies all rise by the growth of the mean), so those who passed the copy mass are
-/// the top of them (`math::Pass`: the steady state of a stage with births at one size), none without growth. They hold
-/// their share of the body; the stores go with the body. Those who stay and those who leave each keep the mean and the
-/// variance of their part. Less than one member left young: all of it joins the adult node.
+/// Young node `b` (taken out of slot `slot`) after an update in which its mean member grew from `before` kg: those who
+/// passed the copy mass join its adult node with their share (`math::Pass`; McKendrick 1926, von Foerster 1959).
 pub fn mature(w: &mut World, slot: usize, b: &mut Body, before: f64) -> Grown {
     if b.n() <= 1.0 || b.adult(&w.chem) || !may_be_node(w, b) {
         return Grown::Lives;
