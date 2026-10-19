@@ -51,9 +51,7 @@ pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8,
 const TORN_TO_DEATH: f64 = 0.5;
 
 /// A hit that tears the share `f` of a member's body kills it: it leaves it `TORN_TO_DEATH` of its body or less.
-pub(crate) fn torn_to_death(f: f64) -> bool {
-    f >= (1.0 - TORN_TO_DEATH) * (1.0 - 1e-9)
-}
+pub(crate) fn torn_to_death(f: f64) -> bool { f >= (1.0 - TORN_TO_DEATH) * (1.0 - 1e-9) }
 
 /// A hit tears the share `f` of the body (`Body::built`) of the share `hit` of the members of body `b`, taken out of
 /// `slot`: it breaks body matter, which holds a body together, and spills the stores it held (`dead`, mol of each, as
@@ -62,8 +60,7 @@ pub(crate) fn torn_to_death(f: f64) -> bool {
 /// the body lives (back in its slot).
 pub fn wound(w: &mut World, slot: usize, mut b: Body, (hit, f): (f64, f64), dead: &[f64], cause: u8) -> bool {
     let (dies, th) = (torn_to_death(f), b.thermal(&w.chem));
-    let alive = thin(w, &mut b, if dies { hit } else { 0.0 }, dead, cause, &th);
-    if !alive || (b.n() <= 1.0 && (dies || b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)))) {
+    if !thin(w, &mut b, if dies { hit } else { 0.0 }, dead, cause, &th) || (b.n() <= 1.0 && (dies || b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)))) {
         die(w, slot, b, cause);
         return false;
     }

@@ -71,7 +71,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     // A brain perceives sizes per member.
     let pm = lived.mass / b.n();
     let think = w.cfg.phys.think(w.cfg.phys.c_brain, b.dec(crate::body::COPY_MASS));
-    let wb = b.wellbeing_at(&w.chem, think, temp, lived.spare);
+    let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, b.temp(&w.chem), lived.spare);
+    let wb = now(w, b);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
@@ -86,7 +87,6 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     pick(w, &mut c, &mut rng);
     let (form, z) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, b.temp(&w.chem), lived.spare);
     let k = Kit { s, t, z, form, wb: &now };
     if b.n() > 1.0 {
         spread::spread(w, slot, b, &c, &k, &mut rng);
@@ -194,9 +194,7 @@ fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32;
     let z: [f32; SIG + FORM_OUT] = std::array::from_fn(|_| rng.normal() as f32);
     b.sig = std::array::from_fn(|k| squash(out[s.sig() + k]) + p.signal_noise * z[k]);
     let form = std::array::from_fn(|k| squash(out[s.form() + k]) + p.shape_noise * z[SIG + k]);
-    for (k, m) in b.mem.iter_mut().enumerate() {
-        *m = squash(out[s.learned() + k]);
-    }
+    b.mem.iter_mut().enumerate().for_each(|(k, m)| *m = squash(out[s.learned() + k]));
     (form, z)
 }
 
@@ -208,8 +206,8 @@ fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f3
     if b.learn_rate() <= 0.0 || w.cfg.null {
         return Vec::new();
     }
-    let (s, t, p) = (k.s, k.t, &w.cfg.phys);
-    let (nh, l, out) = (s.h, s.learned(), &t.thought.out);
+    let (s, t, p, out) = (k.s, k.t, &w.cfg.phys, &k.t.thought.out);
+    let (nh, l) = (s.h, s.learned());
     let mut v = vec![0.0; nh + l + 1];
     v[..nh].copy_from_slice(&t.thought.h);
     v[nh + l] = adv;
@@ -237,14 +235,9 @@ fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f3
             add(s.verb(VERBS + v), g(TO_PART + q * OVERBS + v), &c.fo[q * bond::NO..(q + 1) * bond::NO]);
         }
     }
-    for j in 0..SIG {
-        let mu = squash(out[s.sig() + j]);
-        cr[s.sig() + j] = k.z[j] * p.signal_noise * (1.0 - mu * mu);
-    }
-    for j in 0..FORM_OUT {
-        let mu = squash(out[s.form() + j]);
-        cr[s.form() + j] = if a == FORM { k.z[SIG + j] * p.shape_noise * (1.0 - mu * mu) } else { 0.0 };
-    }
+    let natural = |r: usize, z: f32, noise: f32| (z * noise) * (1.0 - squash(out[r]) * squash(out[r]));
+    (0..SIG).for_each(|j| cr[s.sig() + j] = natural(s.sig() + j, k.z[j], p.signal_noise));
+    (0..FORM_OUT).for_each(|j| cr[s.form() + j] = if a == FORM { natural(s.form() + j, k.z[SIG + j], p.shape_noise) } else { 0.0 });
     v
 }
 

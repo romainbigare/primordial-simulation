@@ -254,10 +254,8 @@ impl Body {
     }
     /// Its genes are `genes` (`prepare` follows).
     pub(crate) fn set_genes(&mut self, genes: Vec<f32>, chem: &Chemistry, p: &crate::Physics) {
-        if genes != self.genes {
-            self.genes = genes;
-            self.prepare(chem, p);
-        }
+        self.genes = genes;
+        self.prepare(chem, p);
     }
     /// Work `k` out from the genes and the physics, at every change of the genes.
     pub fn prepare(&mut self, chem: &Chemistry, p: &crate::Physics) {

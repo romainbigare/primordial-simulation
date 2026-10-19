@@ -39,8 +39,7 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     for x in 0..list.len() {
         let a = &b[list[x].1];
         if a.n() > 1.0 {
-            let lim = w.cfg.phys.alike;
-            head[x] = (0..x).find(|&y| head[y] == y && kind[y] == kind[x] && alike(lay, lim, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
+            head[x] = (0..x).find(|&y| head[y] == y && kind[y] == kind[x] && alike(lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
         }
     }
     for x in (0..list.len()).filter(|&x| head[x] != x) {
