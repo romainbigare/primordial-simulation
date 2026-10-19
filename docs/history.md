@@ -1224,6 +1224,10 @@ Phase E review, round 1 (fixes):
   leave core (the tests run the yearly creep, `testkit::release`, `testkit::open_area`); `core/tests/copy.rs` and
   `core/tests/body.rs` split into `populations.rs` and `damage.rs` (shared helpers to the test kit); `ew run` prints
   "no updates" where it divided by none. Golden unchanged.
+- Review round 2, finding 11: the fit of `math::Pass` takes Newton steps in a bracket (about 5 evaluations, not 40
+  halvings); a chemistry keeps its burnings (`Chemistry::burners`, whose `keeps` test was most of `Body::prepare`)
+  and its catalysed rates per contact at `t_cat` (`contact_rates`). 2.1% fewer instructions in a living year; the
+  gene noise of children is kept as it is (a skip would not apply). Golden re-pinned (order of sums).
 
 **Owner's decisions after Phase A**
 

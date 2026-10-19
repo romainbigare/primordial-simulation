@@ -265,15 +265,12 @@ impl Body {
         k.cat.clear();
         k.cat.extend((0..nr).map(|r| if on(r) { self.dec(cat + r) } else { 1.0 }));
         k.burn.clear();
-        k.burn.extend((0..nr).filter(|&r| on(r) && chem.dh(r) < 0.0 && !chem.keeps(r)).map(|r| (r, -chem.dh(r))));
+        k.burn.extend(chem.burners().iter().filter(|x| on(x.0)));
         k.upt.clear();
         k.upt.extend((0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])));
         // Catalysts' capacity: the catalysed rate per unit of contact at `t_cat`, summed over the genes that are on, its
         // gases at their share of the open air to their order; dearer when firm past `t_firm` (laws.md 6.2).
-        let open = |rx: &crate::chem::Reaction| -> f64 {
-            rx.inputs.iter().enumerate().filter(|(_, x)| chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
-        };
-        let cats: f64 = chem.reactions.iter().zip(&k.cat).filter(|x| *x.1 > 1.0).map(|(rx, f)| f * rx.arrhenius(p.t_cat) * open(rx)).sum();
+        let cats: f64 = chem.contact_rates(p.t_cat).iter().zip(&k.cat).filter(|x| *x.1 > 1.0).map(|(c, f)| f * c).sum();
         k.cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         k.interval = self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64;
         (k.gas, k.liq, k.heat, k.leaf) = (self.dec(GAS), self.dec(LIQ), self.dec(HEAT), self.dec(LEAF));

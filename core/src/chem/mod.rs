@@ -108,6 +108,9 @@ pub struct Chemistry {
     /// What follows from the fields above, made at its first use (not saved)
     #[serde(skip)]
     derived: OnceLock<Derived>,
+    /// `Chemistry::contact_rates` at the first temperature asked (not saved)
+    #[serde(skip)]
+    contact: OnceLock<(f64, Vec<f64>)>,
 }
 
 /// Numbers that follow from a chemistry, made once (`Chemistry::derived`).
@@ -117,6 +120,8 @@ struct Derived {
     minerals: Vec<(usize, f64)>,
     /// `Chemistry::air_cp`
     air_cp: f64,
+    /// `Chemistry::burners`
+    burners: Vec<(usize, f64)>,
 }
 
 impl Chemistry {
@@ -124,7 +129,7 @@ impl Chemistry {
     pub fn new(n_elements: usize, subs: Vec<Substance>, reactions: Vec<Reaction>, build: Option<Reaction>, builds: Vec<Reaction>, air: &[(usize, f64)]) -> Self {
         let mut shares = vec![0.0; subs.len()];
         air.iter().for_each(|&(k, x)| shares[k] = x);
-        Chemistry { n_elements, subs, reactions, build, builds, air: shares, derived: OnceLock::new() }
+        Chemistry { n_elements, subs, reactions, build, builds, air: shares, derived: OnceLock::new(), contact: OnceLock::new() }
     }
 
     pub fn ns(&self) -> usize {
@@ -137,8 +142,20 @@ impl Chemistry {
             // The inputs of growth no reaction burns, per mol of matter; the starting air's heat capacity per mol.
             let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
             let air_cp: f64 = self.air.iter().zip(&self.subs).map(|(x, s)| x * s.cp).sum();
-            Derived { minerals, air_cp: if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP } }
+            let burners = (0..self.reactions.len()).filter(|&r| self.dh(r) < 0.0 && !self.keeps(r)).map(|r| (r, -self.dh(r))).collect();
+            Derived { minerals, air_cp: if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP }, burners }
         })
+    }
+
+    /// The catalysed rate of each reaction per unit of contact at `t`, its gases at their share of the starting air to
+    /// their order, per second (the cost of catalysts, `Body::prepare`); kept for the first `t` asked.
+    pub(crate) fn contact_rates(&self, t: f64) -> std::borrow::Cow<'_, [f64]> {
+        let open = |rx: &Reaction| -> f64 {
+            rx.inputs.iter().enumerate().filter(|(_, x)| self.phase(x.0 as usize, t) == Phase::Gas).map(|(q, &(k, _))| self.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
+        };
+        let rates = || self.reactions.iter().map(|rx| rx.arrhenius(t) * open(rx)).collect::<Vec<f64>>();
+        let kept = self.contact.get_or_init(|| (t, rates()));
+        if kept.0 == t { std::borrow::Cow::Borrowed(&kept.1) } else { std::borrow::Cow::Owned(rates()) }
     }
 
     /// Element counts of a reaction side.

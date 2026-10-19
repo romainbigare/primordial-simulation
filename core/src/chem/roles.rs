@@ -67,6 +67,12 @@ impl Chemistry {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
+    /// The reactions that release heat but for those that keep a part of a fuel's heat (`keeps`), each with the heat per
+    /// unit, J: a body's burnings when its catalyst is on (`Body::prepare`).
+    pub fn burners(&self) -> &[(usize, f64)] {
+        &self.derived().burners
+    }
+
     /// What growth makes body matter of besides the fuel, with the mol per mol of matter: the inputs no reaction burns,
     /// which a body takes from the ground or what it eats. Empty where bodies do not grow or grow from one fuel.
     pub fn minerals(&self) -> &[(usize, f64)] {

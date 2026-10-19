@@ -23,8 +23,10 @@ pub(crate) fn mean_decay(x: f64) -> f64 {
 const SERIES: f64 = 0.1;
 /// The steepest shape `Pass` fits, its steepness times its width: past it all but e^-700 of the members lie at one end.
 const STEEPEST: f64 = 700.0;
-/// Halvings of the steepness in `Pass::new`: to 1e-9 of its range, far finer than its effect on the shares.
-const FIT_STEPS: usize = 40;
+/// `Pass::new` fits the steepness to this, far finer than its effect on the shares.
+const FIT_TOL: f64 = 1e-10;
+/// Most Newton steps or halvings of `Pass::new`: halvings alone reach `FIT_TOL` across the range in 44.
+const FIT_MOST: usize = 64;
 
 /// The mean and the variance, in units of the width and of its square, of a density proportional to e^(-u y) on
 /// [0, 1]: 1/u - 1/(e^u - 1) and 1/u² - 1/(4 sinh²(u/2)) (1/2 and 1/12 at u = 0, the uniform).
@@ -35,6 +37,16 @@ fn shape(u: f64) -> (f64, f64) {
     }
     let h = (0.5 * u).sinh();
     (1.0 / u - 1.0 / u.exp_m1(), 1.0 / u2 - 0.25 / (h * h))
+}
+
+/// The slope of the variance of `shape` with u (minus its third central moment): -2/u³ + cosh(u/2) / (4 sinh³(u/2)).
+fn shape_slope(u: f64) -> f64 {
+    if u.abs() < SERIES {
+        let u2 = u * u;
+        return u * (-1.0 / 120.0 + u2 / 1512.0 - u2 * u2 / 28_800.0);
+    }
+    let h = (0.5 * u).sinh();
+    -2.0 / (u * u * u) + 0.25 * (0.5 * u).cosh() / (h * h * h)
 }
 
 /// Members whose values (log10 of their bodies, their wear) lie below a level `top` and all rise alike, by `d`: those who
@@ -65,12 +77,24 @@ impl Pass {
         if y <= 0.0 || r <= depth(STEEPEST) {
             return Some(Pass { top, d, k: 1.0 / y.max(f64::MIN_POSITIVE), width: if y > 0.0 { f64::INFINITY } else { 0.0 } });
         }
-        let (mut lo, mut hi) = (-STEEPEST, STEEPEST);
-        for _ in 0..FIT_STEPS {
-            let mid = 0.5 * (lo + hi);
-            if depth(mid) > r { lo = mid } else { hi = mid }
+        // Newton's steps on the depth (the mean's slope is minus the variance), halving the bracket where one leaves it.
+        let (mut lo, mut hi, mut u) = (-STEEPEST, STEEPEST, 0.0);
+        for _ in 0..FIT_MOST {
+            let (m, v) = shape(u);
+            let f = m / v.sqrt() - r;
+            if f == 0.0 {
+                break;
+            }
+            if f > 0.0 { lo = u } else { hi = u }
+            let slope = -v.sqrt() - 0.5 * m * shape_slope(u) / (v * v.sqrt());
+            let next = u - f / slope;
+            let next = if next >= lo && next <= hi { next } else { 0.5 * (lo + hi) };
+            let step = (next - u).abs();
+            u = next;
+            if step < FIT_TOL {
+                break;
+            }
         }
-        let u = 0.5 * (lo + hi);
         let width = y / shape(u).0;
         Some(Pass { top, d, k: u / width, width })
     }
