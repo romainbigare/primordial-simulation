@@ -14,16 +14,12 @@ impl Body {
         let n = self.n();
         self.k.heat * n * m_ref.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
     }
-    /// Surface the body exchanges gas with the air through, m²: its light-capture area and its skin.
-    pub fn open_area(&self, chem: &Chemistry, p: &crate::Physics, mass: f64) -> f64 {
-        self.leaf_area(chem, p) + self.skin_area(p, mass)
-    }
     /// Its light-capture area, all members', m²: `LEAF` per kg-equivalent of its body (`equiv` of `built`).
-    pub(crate) fn leaf_area(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
+    pub fn leaf_area(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
         self.equiv(p, self.built(chem)) * self.k.leaf
     }
     /// Its skin at a whole mass of `mass` kg, all members', m²: each member a cube of its volume at `rho_body`.
-    pub(crate) fn skin_area(&self, p: &crate::Physics, mass: f64) -> f64 {
+    pub fn skin_area(&self, p: &crate::Physics, mass: f64) -> f64 {
         let m1 = mass / self.n();
         cube_area(self.n(), m1 / p.rho_body)
     }
@@ -70,12 +66,12 @@ pub(super) struct Film {
     /// Its heat conductance, W/K, and the surface, m²
     pub g: f64,
     pub area: f64,
-    /// Of the body: its light-capture area and its skin, m² (`Body::open_area` is their sum)
+    /// Of the body: its light-capture area and its skin, m² (their sum is its open surface)
     pub leaf: f64,
     pub skin: f64,
 }
 
-/// The air a body exchanges gas with in `days`, mol: `Body::open_area` times its pores (`GAS`, a stomatal conductance) in
+/// The air a body exchanges gas with in `days`, mol: its open surface (light-capture area and skin) times its pores (`GAS`, a stomatal conductance) in
 /// series with its boundary layer (the Lewis relation), slowed by liquid over it (`depth`).
 pub(super) fn breath(chem: &Chemistry, cfg: &crate::Config, b: &Body, f: &Film, days: f64, depth: f64) -> f64 {
     let gs = b.k.gas;

@@ -18,8 +18,8 @@ pub use exchange::conductance_to_ground;
 pub use genes::*;
 pub(crate) use live::{gain_to_growth, live, LiveTmp};
 pub use live::Lived;
-pub use pay::{pay, release, upkeep};
-pub(crate) use pay::{plan, spend, Payer};
+pub use pay::{pay, plan, upkeep, Payer};
+pub(crate) use pay::spend;
 
 use crate::brain::{ln, SIG};
 use crate::chem::{Chemistry, Phase};

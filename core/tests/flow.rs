@@ -149,7 +149,7 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     // Spread to a standard deviation of one cell, in ten steps (the edges, 7 cells off, then reflect almost nothing).
     let d = kv / cp;
     let t = g.side * g.side / (2.0 * d);
-    (0..10).for_each(|_| pcore::flow::conduct(&mut w, t / 10.0));
+    (0..10).for_each(|_| worldgen::testkit::creep(&mut w, t / 10.0));
     let (mx, my) = g.xy(mid);
     let (mut sum, mut var) = (0.0, [0.0; 2]);
     for i in 0..n {
@@ -200,7 +200,7 @@ fn heat_crosses_the_border_of_a_refined_region_by_its_width() {
         }
         w.scratch = Default::default();
         let (books, before) = (Books::now(&w), w.store.heat(Class::Ground).to_vec());
-        pcore::flow::conduct(&mut w, dt);
+        worldgen::testkit::creep(&mut w, dt);
         let off = (0..n).filter(|&i| even || away(&w, i)).map(|i| (w.store.heat(Class::Ground)[i] - before[i]).abs()).fold(0.0, f64::max);
         println!("even {even}: the most any cell changed, {:.3e} of the heat across a side", off / side_heat);
         assert!(off <= 1e-6 * side_heat, "a cell changed by {off:.3e} J, against {side_heat:.3e} J across a side");

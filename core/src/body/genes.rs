@@ -8,7 +8,7 @@ use std::f32::consts::{FRAC_PI_8, LOG10_2};
 
 // Scalar genes, then one per reaction (catalyst, log10 speed-up) and three per substance (safe minimum as a share of
 // mass; take selectivity; most share of mass kept): `Layout`. Below zero a gene is off.
-/// Gas exchange, log10 mol of air per m² of open surface (`Body::open_area`) per day: its pores' conductance
+/// Gas exchange, log10 mol of air per m² of open surface (light-capture area and skin) per day: its pores' conductance
 pub const GAS: usize = 0;
 /// Liquid exchange with the ground, log10 per day
 pub const LIQ: usize = 1;

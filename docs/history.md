@@ -1220,6 +1220,10 @@ Phase E review, round 1 (fixes):
 - Review round 2, finding 3: what bodies see of their air node (`World::a_seen`) is kept in the moves of the update
   running, not summed again at each read: 8.7% fewer instructions in a living year (64 x 64, seed 1, year 21); golden
   re-pinned (order of sums).
+- Review round 2, finding 14 (tests): `flow::conduct`, `body::release` and `Body::open_area`, called only by tests,
+  leave core (the tests run the yearly creep, `testkit::release`, `testkit::open_area`); `core/tests/copy.rs` and
+  `core/tests/body.rs` split into `populations.rs` and `damage.rs` (shared helpers to the test kit); `ew run` prints
+  "no updates" where it divided by none. Golden unchanged.
 
 **Owner's decisions after Phase A**
 

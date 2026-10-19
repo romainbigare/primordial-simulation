@@ -58,7 +58,7 @@ pub fn liquid(w: &mut World, dt: f64) {
 }
 
 /// Heat conducted sideways through the ground (`land::conduct`), then creep (`creep::creep`), for `dt` seconds.
-pub(crate) fn creep(w: &mut World, dt: f64) {
+pub fn creep(w: &mut World, dt: f64) {
     with(w, |w, s| {
         land::conduct(w, s, dt);
         creep::creep(w, s, dt);
@@ -68,14 +68,6 @@ pub(crate) fn creep(w: &mut World, dt: f64) {
 /// The slow ground and the substances present are rechecked (`scratch::refresh`).
 pub fn refresh(w: &mut World) {
     with(w, |w, s| scratch::refresh(w, s));
-}
-
-/// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`), and nothing else of Flow moves.
-pub fn conduct(w: &mut World, dt: f64) {
-    with(w, |w, s| {
-        ground_state(w, s, false);
-        land::conduct(w, s, dt);
-    });
 }
 
 /// Build the working memory of the law where it is missing (`with`).

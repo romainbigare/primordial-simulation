@@ -28,14 +28,9 @@ pub(super) fn breathes(chem: &Chemistry, r: usize, t: f64) -> bool {
     chem.reactions[r].inputs.iter().any(|p| chem.phase(p.0 as usize, t) == Phase::Gas)
 }
 
-/// Energy the body's reactions can release over `days` at its temperature now, J (the most `pay` could pay).
-pub fn release(w: &World, b: &Body, days: f64) -> f64 {
-    plan(w, b, f64::MAX, &Payer::at(w, b, days, b.mass(&w.chem), b.thermal(&w.chem))).1
-}
-
 /// A body about to pay over some days, valid until its stores or heat change: its mass, kg, its plateau state, the days,
 /// the share of its air node it exchanges gas with in them, and all that node holds, mol.
-pub(crate) struct Payer {
+pub struct Payer {
     pub mass: f64,
     pub th: Melting,
     days: f64,
@@ -45,7 +40,7 @@ pub(crate) struct Payer {
 
 impl Payer {
     /// Body `b` of `mass` kg at the plateau state `th`, paying over `days`.
-    pub(crate) fn at(w: &World, b: &Body, days: f64, mass: f64, th: Melting) -> Payer {
+    pub fn at(w: &World, b: &Body, days: f64, mass: f64, th: Melting) -> Payer {
         let (chem, i) = (&w.chem, b.cell as usize);
         let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
         let j = w.mesh.up(i, 0, AIR);
@@ -87,7 +82,7 @@ pub(super) fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
 
 /// How far each burning (`Consts::burn`) runs to release up to `cost` J, and the energy released: each at most as far
 /// as Change's rate at the body's temperature takes it over the days, so a cold body releases little by the rate alone.
-pub(crate) fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64) {
+pub fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64) {
     let (chem, j) = (&w.chem, w.mesh.up(b.cell as usize, 0, AIR));
     let air = |k: usize| w.a(k, j);
     let (t, days, share, tot) = (p.th.t, p.days, p.share, p.tot);

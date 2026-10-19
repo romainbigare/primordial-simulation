@@ -295,6 +295,49 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64) -> bool {
     pcore::copy::grow(w, b, days, th)
 }
 
+/// Energy body `b`'s reactions can release over `days` at its temperature now, J (the most `body::pay` could pay).
+pub fn release(w: &World, b: &Body, days: f64) -> f64 {
+    pcore::body::plan(w, b, f64::MAX, &pcore::body::Payer::at(w, b, days, b.mass(&w.chem), b.thermal(&w.chem))).1
+}
+
+/// The surface body `b` of `mass` kg exchanges gas with the air through, m²: its light-capture area and its skin.
+pub fn open_area(b: &Body, chem: &Chemistry, p: &pcore::Physics, mass: f64) -> f64 {
+    b.leaf_area(chem, p) + b.skin_area(p, mass)
+}
+
+/// Heat conducted sideways through the ground and creep for `dt` seconds, from the state of the world now: the yearly
+/// part of Flow.
+pub fn creep(w: &mut World, dt: f64) {
+    pcore::flow::state(w, false);
+    pcore::flow::creep(w, dt);
+}
+
+/// A node of `n` members of the body `b` (stores and heat of all of them; booked as an edit).
+pub fn node_of(w: &mut World, mut b: Body, n: f64) -> Body {
+    scale(w, &mut b, n);
+    b.count = n;
+    b
+}
+
+/// Totals over all live bodies: members, each store, heat.
+pub fn life_totals(w: &World) -> (f64, Vec<f64>, f64) {
+    let (mut n, mut store, mut e) = (0.0, vec![0.0; w.chem.ns()], 0.0);
+    for b in w.life.alive() {
+        n += b.n();
+        e += b.e;
+        store.iter_mut().zip(&b.store).for_each(|(s, x)| *s += x);
+    }
+    (n, store, e)
+}
+
+/// The stores and heat of two `life_totals` are the same (a copy makes members, so they are not compared).
+pub fn same_totals(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
+    assert!((a.2 - b.2).abs() <= 1e-9 * a.2.abs().max(1.0), "heat {} then {}", a.2, b.2);
+    for (k, (x, y)) in a.1.iter().zip(&b.1).enumerate() {
+        assert!((x - y).abs() <= 1e-9 * x.abs().max(1.0), "store {k}: {x} then {y}");
+    }
+}
+
 /// Body `b` placed and prepared where it is: its slot.
 pub fn place(w: &mut World, b: Body) -> usize {
     let (s, b) = out(w, b);

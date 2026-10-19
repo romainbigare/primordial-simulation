@@ -115,7 +115,7 @@ fn forming_never_takes_more_than_is_left() {
     b.k.cat.iter_mut().for_each(|c| *c *= 1e6);
     // Half the fuel is to go out, and paying for it burns nearly all of it.
     let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;
-    let r = pcore::body::release(&w, &w.life.bodies[slot], w.life.bodies[slot].interval(&w) as f64);
+    let r = worldgen::testkit::release(&w, &w.life.bodies[slot], w.life.bodies[slot].interval(&w) as f64);
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
     let mut b = std::mem::take(&mut w.life.bodies[slot]);

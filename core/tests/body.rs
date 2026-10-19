@@ -1,13 +1,12 @@
 //! A body's own physics: its upkeep and how its tempo follows temperature, its heat, its liquid and dormancy, its size
-//! and what it keeps, digestion, light and shade, its age, intake, upkeep and leaf by mass, its roots and enzymes, and
-//! damage.
+//! and what it keeps, digestion, light and shade, its age, intake, upkeep and leaf by mass, its roots and enzymes.
+//! Damage: `damage.rs`.
 
 use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
-use pcore::rng::{Purpose, Rng};
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::{DAY, DAY_S, T_FLOOR};
-use pcore::{bond, brain, change, choose, World, AIR};
-use worldgen::testkit::{add, brood, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
+use pcore::{brain, change, World, AIR};
+use worldgen::testkit::{add, brood, node_of, open_area, release, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, open_air, out, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -107,7 +106,7 @@ fn a_cold_body_ages_slower() {
     warm(&mut s.w, &mut cold, t_cold);
     warm(&mut s.w, &mut hot, t_warm);
     let w = &mut s.w;
-    let (cold, hot) = (node(w, cold, 1000.0), node(w, hot, 1000.0));
+    let (cold, hot) = (node_of(w, cold, 1000.0), node_of(w, hot, 1000.0));
     let (mut cold, mut hot, days) = (cold, hot, 1.0);
     cold.prepare(&w.chem, &w.cfg.phys);
     hot.prepare(&w.chem, &w.cfg.phys);
@@ -278,7 +277,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             s.hf + if gas { s.lf + s.lv } else { s.cp * t + chem.fused_heat(k, t, |j| b.store[j]) }
         };
         // (The bare burning gets the burning gas its breath brings, not the open air's.)
-        let reach = b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days;
+        let reach = b.k.gas * open_area(&b, chem, &w0.cfg.phys, mass) * days;
         let gas: Vec<f64> = chem.air.iter().enumerate().map(|(k, x)| if k == FIX_GAS || k == OX { x * reach } else { 0.0 }).collect();
         let made = |t: f64| {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
@@ -292,7 +291,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let air = |k: usize| held(w0, k) - held(&w2, k) + gas[k] - g[k];
             let wet = y.store[LIQUID] - x.store[LIQUID];
             let x_air = w0.a_seen(LIQUID, j) / (0..ns).map(|k| w0.a_seen(k, j)).sum::<f64>();
-            let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
+            let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * open_area(&b, chem, &w0.cfg.phys, mass) * days);
             (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * chem.subs[LIQUID].lv
         };
         let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, &b, mass, t) * days * DAY;
@@ -511,7 +510,7 @@ fn a_dry_body_pays_upkeep_times_activity_and_ages_slower() {
     assert!(uw2 > 2.0 * uw && (ud2 / uw2 / a - 1.0).abs() < 1e-9, "{uw2} {ud2}");
     s.w.cfg.phys.c_hidden /= 1000.0;
     // In a day the dry body's wear is a small share of the wet one's (nodes of a thousand members).
-    let (wet, dry) = (node(&mut s.w, wet, 1000.0), node(&mut s.w, dry, 1000.0));
+    let (wet, dry) = (node_of(&mut s.w, wet, 1000.0), node_of(&mut s.w, dry, 1000.0));
     let (ww, wd) = (wear_of_a_day(&s.w, wet), wear_of_a_day(&s.w, dry));
     println!("wear in a day: wet {ww:.3e}, dry {wd:.3e}");
     assert!(ww > 0.0 && wd < 0.1 * ww, "wear {wd} against {ww}");
@@ -539,7 +538,7 @@ fn a_dry_bodys_catalysed_rate_falls_toward_the_bare_rate() {
     let rel = |x: f64| {
         let b = s.dried(&wet, x);
         // (A time short enough for the reaction to stay first order.)
-        pcore::body::release(&s.w, &b, 0.01) / pcore::body::release(&s.w, &bare(&b), 0.01)
+        release(&s.w, &b, 0.01) / release(&s.w, &bare(&b), 0.01)
     };
     let (full, half, none) = (rel(1.0), rel(0.5), rel(0.0));
     let a = s.dried(&wet, 0.5).activity(&s.w.chem, &s.w.cfg.phys);
@@ -747,7 +746,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     assert!(va[1] > 0.0 && va[1] == vc[1], "leaf {} and {}", va[1], vc[1]);
     assert!(vc[0] > 4.0 * va[0], "the mass differs: {} and {}", va[0], vc[0]);
     let ma = a.mass(&w.chem);
-    assert!((a.open_area(&w.chem, &w.cfg.phys, ma) - c.open_area(&w.chem, &w.cfg.phys, ma)).abs() < 1e-9 * ma, "the open surface, with a mass of {ma} kg");
+    assert!((open_area(&a, &w.chem, &w.cfg.phys, ma) - open_area(&c, &w.chem, &w.cfg.phys, ma)).abs() < 1e-9 * ma, "the open surface, with a mass of {ma} kg");
 
     // Height: two nodes in one cell, B of 3 times the matter of A but lighter (A holds 100 kg of fuel a member more): by
     // mass A is the taller, by body B. Leaf area is set so that each catches a good part of the cell's light and the
@@ -1198,7 +1197,7 @@ fn leaf_area_per_kg_falls_with_mass() {
     let node = member(10.0, 1000.0, 6.0);
     let m = node.mass(&chem);
     let skin = 10.0 * 6.0 * (m / 10.0 / p.rho_body).powf(2.0 / 3.0);
-    assert!((node.open_area(&chem, &p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * (10.0 * leaf(&tonne) + skin), "open area {}", node.open_area(&chem, &p, m));
+    assert!((open_area(&node, &chem, &p, m) - (10.0 * leaf(&tonne) + skin)).abs() < 1e-6 * (10.0 * leaf(&tonne) + skin), "open area {}", open_area(&node, &chem, &p, m));
     // Nothing caps the mass that works (a body is mature from its copy mass but keeps growing): a member of 10 kg (its
     // copy mass) and one of 1,000 kg have leaf in the ratio of their bodies to the power 0.75.
     let (at, past) = (member(1.0, 10.0, 1.0), member(1.0, 1000.0, 1.0));
@@ -1388,232 +1387,4 @@ fn a_catalyst_is_slowed_by_the_product_the_body_holds() {
         assert!(none == 1.0 && (full - 0.5).abs() < 1e-9, "reaction {r}: {none} with none held, {full} at its level");
     }
     assert_eq!(b.inhibited(&w.chem, burn, mass, t), 1.0, "a burning makes gas and the liquid");
-}
-
-/// A world with a dry land cell where a bite costs no handling, and the area a taker works does not bind (a node's
-/// members are reached as an individual is).
-fn bite_start() -> (World, usize) {
-    let (mut w, i) = start();
-    w.cfg.phys.sweep = 1e12;
-    w.cfg.phys.c_handle = 0.0;
-    (w, i)
-}
-
-/// A resting starting eater (`testkit::eater`) of strength `strength`, mature at 10^`copy` kg.
-fn resting(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
-    let mut b = eater(w, i, brain::REST, copy);
-    b.genes[STRENGTH] = strength;
-    b
-}
-
-/// A node of `n` members of the body `b` (stores and heat of all of them; booked as an edit).
-fn node(w: &mut World, mut b: Body, n: f64) -> Body {
-    scale(w, &mut b, n);
-    b.count = n;
-    b
-}
-
-/// Body `a` bites body `v` once.
-fn bite(w: &mut World, a: usize, v: usize) {
-    let mut b = std::mem::take(&mut w.life.bodies[a]);
-    let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
-    moved(w, (b.cell as usize, a), |w| choose::take_body(w, a, &mut b, v, r));
-    w.life.bodies[a] = b;
-}
-
-/// What a body looked like: its body, its matter, solid and liquid (kg), and its force.
-struct Seen {
-    built: f64,
-    matter: f64,
-    solid: f64,
-    liquid: f64,
-    force: f64,
-}
-
-/// What the body in slot `s` looks like.
-fn seen(w: &World, s: usize) -> Seen {
-    let b = &w.life.bodies[s];
-    Seen { built: b.built(&w.chem), matter: kg(w, b, MATTER), solid: kg(w, b, RICH), liquid: kg(w, b, LIQUID), force: bond::force(w, b) }
-}
-
-/// Damage: the energy of a bite (`choose::take_body`), of being pushed through (`choose::wear`) and of heat breaks body
-/// matter first, which is what holds a body together, and spills the stores it held in proportion (`body::wound`). A
-/// bite: the individual lives on smaller and weaker (its force goes by its body). Elements and energy are kept.
-#[test]
-fn an_attacked_individual_loses_body_and_lives_on_weaker() {
-    let (mut w, i) = bite_start();
-    let a = resting(&mut w, i, 6.0, 1.0);
-    let v = resting(&mut w, i, 6.0, 0.3);
-    let (a, v) = (place(&mut w, a), place(&mut w, v));
-    let books = Books::now(&w);
-    let before = seen(&w, v);
-    let (n, ground0, gained0) = (w.mesh.cells().n(), w.store.amounts(Class::Ground)[RICH * w.mesh.cells().n() + i], kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER));
-    bite(&mut w, a, v);
-    assert!(w.life.bodies[v].alive, "the victim died of a bite of {} kg", before.built);
-    let after = seen(&w, v);
-    let gained = kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER) - gained0;
-    let share = 1.0 - after.built / before.built;
-    println!("bite: attacker took {gained:.3} kg, victim's body {:.2} -> {:.2} kg ({:.1}% torn), matter {:.3} -> {:.3}, solid {:.2} -> {:.2}, liquid {:.2} -> {:.2}, force {:.1} -> {:.1} N", before.built, after.built, 100.0 * share, before.matter, after.matter, before.solid, after.solid, before.liquid, after.liquid, before.force, after.force);
-    // It lost body, and the stores that matter held in proportion (the same share of each, but where the taker took more
-    // of one than that share).
-    assert!(share > 0.02, "a bite tore only {share} of the body");
-    assert!((1.0 - after.matter / before.matter - share).abs() < 1e-9, "matter and body tore different shares");
-    for (x, y) in [(before.solid, after.solid), (before.liquid, after.liquid)] {
-        assert!(1.0 - y / x >= share - 1e-9, "a store lost {} of the {share} torn", 1.0 - y / x);
-    }
-    // Weaker: force goes by the body, so it fell by the share of the body torn.
-    assert!((after.force / before.force - after.built / before.built).abs() < 1e-9, "force {} -> {} N", before.force, after.force);
-    // What the taker did not take went to the ground as dead matter.
-    assert!(w.store.amounts(Class::Ground)[RICH * n + i] > ground0, "no dead matter on the ground");
-    books.assert_kept(&w, 1e-9);
-}
-
-/// A bite of more than half of a body kills it: below half of what it was, an individual dies (cause TAKEN).
-#[test]
-fn a_bite_of_more_than_half_the_body_kills() {
-    let (mut w, i) = bite_start();
-    let mut a = resting(&mut w, i, 6.0, 1.0);
-    scale(&mut w, &mut a, 8.0);
-    let v = resting(&mut w, i, 6.0, 0.0);
-    let (a, v) = (place(&mut w, a), place(&mut w, v));
-    let books = Books::now(&w);
-    w.events.clear();
-    bite(&mut w, a, v);
-    assert!(!w.life.bodies[v].alive && died(&w, body::TAKEN) > 0.0, "a victim bitten by a body 8 times its size lived");
-    books.assert_kept(&w, 1e-9);
-}
-
-/// Grazing: bites smaller than one member's body take part of every member's matter, so the node keeps its members with
-/// smaller bodies; a hurt adult node below its copy mass is immature until healed, and stays a node.
-#[test]
-fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
-    let (mut w, i) = bite_start();
-    // Members of 30 kg (body 21 kg, mature at a copy mass of 15 kg); a small taker (a bite far under a member's body).
-    let mut a = resting(&mut w, i, 6.0, 1.0);
-    scale(&mut w, &mut a, 0.05);
-    let m = resting(&mut w, i, 15f32.log10(), 0.0);
-    let v = node(&mut w, m, 100.0);
-    let (a, v) = (place(&mut w, a), place(&mut w, v));
-    let books = Books::now(&w);
-    let b = &w.life.bodies[v];
-    let (n0, mean0, adult0) = (b.n(), b.built(&w.chem) / b.n(), b.adult(&w.chem));
-    assert!(adult0, "members of {mean0} kg are not mature");
-    let before = seen(&w, v);
-    for _ in 0..3 {
-        bite(&mut w, a, v);
-        w.time += DAY_S;
-    }
-    let (b, after) = (&w.life.bodies[v], seen(&w, v));
-    let (mean1, took) = (b.built(&w.chem) / b.n(), before.built - after.built);
-    println!("{} members of {mean0:.3} kg after three small bites: {} members of {mean1:.3} kg ({took:.4} kg of body torn)", n0, b.n());
-    assert!(w.life.bodies[v].alive && b.n() == n0, "members died: {} of {n0}", b.n());
-    assert!(took > 0.0 && mean1 < mean0, "no body torn");
-    // A hurt adult node: below its copy mass, so immature until it has healed; still one node.
-    let copy_mass = b.dec(COPY_MASS);
-    assert!(adult0 && (b.adult(&w.chem) == (mean1 >= copy_mass * (1.0 - 1e-9))));
-    books.assert_kept(&w, 1e-9);
-}
-
-/// A taker meets one member of a node as it would meet an individual: a big bite kills the member it reaches, so the
-/// count falls by one (the body and the brood by the same share), and the survivors keep their bodies.
-#[test]
-fn a_big_bite_kills_the_member_it_reaches() {
-    let (mut w, i) = bite_start();
-    // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg that eats no body matter; most of the members'
-    // matter is brood.
-    let mut a = resting(&mut w, i, 6.0, 1.0);
-    scale(&mut w, &mut a, 8.0);
-    only_the_solid(&w, &mut a);
-    let mut m = resting(&mut w, i, 6.0, 0.0);
-    scale(&mut w, &mut m, 0.01);
-    let mut v = node(&mut w, m, 1000.0);
-    v.brood = 0.5 * v.store[MATTER];
-    let (a, v) = (place(&mut w, a), place(&mut w, v));
-    let books = Books::now(&w);
-    let b = &w.life.bodies[v];
-    let (n0, mean0, brood0) = (b.n(), b.built(&w.chem) / b.n(), b.brood);
-    let before = seen(&w, v);
-    w.events.clear();
-    bite(&mut w, a, v);
-    let got: f64 = w.events.iter().map(|e| if let pcore::event::EventKind::Took { .. } = e.kind { e.value } else { 0.0 }).sum();
-    let (b, after) = (&w.life.bodies[v], seen(&w, v));
-    let (mean1, share) = (b.built(&w.chem) / b.n(), 1.0 - after.built / before.built);
-    println!("{n0} members of {mean0:.4} kg: {:.1} members left of {mean1:.4} kg ({:.2}% of the body torn by a bite of {got:.4} kg)", b.n(), 100.0 * share);
-    assert!((n0 - b.n() - 1.0).abs() < 1e-9 && (share - 1.0 / n0).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
-    assert!(got > 0.0 && got <= mean0, "a bite of {got} kg from members of {mean0} kg");
-    assert!((mean1 / mean0 - 1.0).abs() < 1e-9, "survivors changed: {mean0} -> {mean1} kg");
-    assert!((b.brood / brood0 - b.n() / n0).abs() < 1e-9, "brood {} of {brood0}, count {} of {n0}", b.brood, b.n());
-    books.assert_kept(&w, 1e-9);
-}
-
-/// Being pushed through breaks body matter: the share broken is of the body, with the stores it held; an individual
-/// lives on smaller, and a node is hurt in every member alike, whether its members are big or small.
-#[test]
-fn trampling_breaks_body_matter() {
-    let (mut w, i) = bite_start();
-    let mover = resting(&mut w, i, 6.0, 1.0);
-    let v = resting(&mut w, i, 15f32.log10(), 0.0);
-    let m = resting(&mut w, i, 6.0, 0.0);
-    let big = node(&mut w, m, 10.0);
-    let mut small = resting(&mut w, i, 6.0, 0.0);
-    scale(&mut w, &mut small, 0.001);
-    let small = node(&mut w, small, 10000.0);
-    let (mv, v, big, small) = (place(&mut w, mover), place(&mut w, v), place(&mut w, big), place(&mut w, small));
-    let books = Books::now(&w);
-    let (b0, nb0, ns0) = (seen(&w, v), w.life.bodies[big].n(), w.life.bodies[small].n());
-    let (bb0, bs0) = (seen(&w, big), seen(&w, small));
-    let (g0, e0) = (w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i], w.store.heat(Class::Ground)[i]);
-    let broken = moved(&mut w, (i, mv), |w| choose::wear(w, i, mv, 2_000.0));
-    let (b1, bb1, bs1) = (seen(&w, v), seen(&w, big), seen(&w, small));
-    let (sv, sb, ss) = (1.0 - b1.built / b0.built, 1.0 - bb1.built / bb0.built, 1.0 - bs1.built / bs0.built);
-    println!("trampled: individual body -{:.2}%, node of 10 big members -{:.2}%, node of 10,000 small ones -{:.2}% (members {} of {ns0}); {broken:.3} kg broken", 100.0 * sv, 100.0 * sb, 100.0 * ss, w.life.bodies[small].n());
-    assert!(broken > 0.0 && sv > 0.0 && w.life.bodies[v].alive, "an individual was not hurt");
-    // The share of the matter broken is the share of the body and of every store (not gas).
-    assert!((1.0 - b1.matter / b0.matter - sv).abs() < 1e-9 && (1.0 - b1.solid / b0.solid - sv).abs() < 1e-9 && (1.0 - b1.liquid / b0.liquid - sv).abs() < 1e-9);
-    // Weaker.
-    assert!((b1.force / b0.force).is_nan() || b0.force == 0.0 || (b1.force / b0.force - b1.built / b0.built).abs() < 1e-9);
-    // Every member of a node is hurt alike: none dies short of half its body.
-    assert!(w.life.bodies[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life.bodies[big].n());
-    assert!(w.life.bodies[small].n() == ns0 && ss > 0.0, "a node of light members lost members: {} of {ns0}", w.life.bodies[small].n());
-    assert!(w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i] > g0 && w.store.heat(Class::Ground)[i] > e0, "nothing went to the ground");
-    books.assert_kept(&w, 1e-9);
-}
-
-/// Heat burns body matter: a warm body that lives on (its liquid does not boil) burns matter by the reaction that burns
-/// it, so it is smaller in body, not only in fuel, with no new rule (the reactions of `body::live` act on the matter in
-/// its stores, and the body is its matter over 1 - h). Elements and energy are kept. (30 days of 350 K: the solid burns
-/// first and takes the burning gas the body has at hand, and the matter, which needs its sixth power, follows; what is
-/// tested is that heat makes a body smaller in body as well as in fuel, not how soon.)
-#[test]
-fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
-    let (mut w, i) = bite_start();
-    w.cfg.phys.c_build = 0.0;
-    // Upkeep goes with the body's temperature, about 100 times as much at 350 K as at 290 K: a body that paid it would
-    // die of `SPENT` on the first days. This test is about what the heat does to the matter, so the costs of keeping
-    // tissue are put to nothing.
-    for c in [&mut w.cfg.phys.c_basal, &mut w.cfg.phys.c_cat, &mut w.cfg.phys.c_strength, &mut w.cfg.phys.c_learn, &mut w.cfg.phys.c_signal, &mut w.cfg.phys.c_leaf, &mut w.cfg.phys.c_brain] {
-        *c = 0.0;
-    }
-    let mut b = resting(&mut w, i, 6.0, 0.0);
-    // (Nor does it evaporate to cool: above its `COOL_T` of 320 K it would dry and die of it. Its copy mass a tenth of its
-    // body: what burns is not starving.)
-    (b.genes[pcore::body::COOL_T], b.genes[pcore::body::COPY_MASS]) = (400.0, (0.1 * b.built(&w.chem)).log10() as f32);
-    let s = place(&mut w, b);
-    let books = Books::now(&w);
-    let before = seen(&w, s);
-    for d in 0..30 {
-        // The cell held at 350 K, booked as an edit.
-        hold_ground(&mut w, i, 350.0);
-        pcore::day(&mut w);
-        if !w.life.bodies[s].alive {
-            let cause = w.events.iter().find_map(|e| if let pcore::event::EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None });
-            panic!("it died on day {d}, cause {cause:?} (0 lack, 1 phase, 2 spent)");
-        }
-    }
-    let alive = w.life.bodies[s].alive;
-    let after = seen(&w, s);
-    println!("alive {alive}: body {:.2} -> {:.2} kg, matter {:.3} -> {:.3}, solid {:.2} -> {:.2}", before.built, after.built, before.matter, after.matter, before.solid, after.solid);
-    assert!(alive, "it died");
-    assert!(after.matter < 0.9 * before.matter && after.built < 0.9 * before.built, "its body did not shrink with its fuel");
-    books.assert_kept(&w, 1e-9);
 }
