@@ -992,6 +992,11 @@ Phase E review, round 1 (fixes):
 - G1, the sun: the declination is that of a circular orbit, sin δ = sin ε sin λ, not δ = ε sin λ, which made the
   yearly sun at the poles 0.9% too strong. Key numbers (3 seeds): land 287.94 K (+0.01), swing 12.26 K, rain on land
   1.764e-3, the same to noise. Golden re-pinned.
+- The start drains to every cell below 0 m, not only to the largest low body: on a globe that raised the other low
+  bodies to land (43% land against the 29% set). The island keeps its 1 to 3 low inland cells a seed as basins full
+  to 0 m. 64 x 64, seed 1: liquid on land 3.2 / 4.9 / 4.8 / 4.6 km³ at years 5 / 10 / 20 / 40 (level from year 10),
+  river cells at year 40 924. Key numbers (3 seeds) in range: land 287.97 K, swing 11.84 K, rain 1.80e-3, absorbing
+  gas 249 ppm, river cells 836, land worn 0.080 mm/yr. Golden re-pinned (seed 1).
 
 **Owner's decisions after Phase A**
 

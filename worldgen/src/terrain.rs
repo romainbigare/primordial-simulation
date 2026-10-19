@@ -145,37 +145,11 @@ impl PartialEq for Low {
 }
 impl Eq for Low {}
 
-/// The outlet of all the land: the largest body of cells below 0 m that touch (the first found on a tie).
-fn outlet(cells: &Level, z: &[f64]) -> Vec<bool> {
-    let mut body = vec![usize::MAX; z.len()];
-    let (mut best, mut most) = (usize::MAX, 0);
-    for start in 0..z.len() {
-        if z[start] >= 0.0 || body[start] != usize::MAX {
-            continue;
-        }
-        let (mut todo, mut size) = (vec![start], 0);
-        body[start] = start;
-        while let Some(i) = todo.pop() {
-            size += 1;
-            for &j in cells.around(i).1 {
-                if z[j as usize] < 0.0 && body[j as usize] == usize::MAX {
-                    body[j as usize] = start;
-                    todo.push(j as usize);
-                }
-            }
-        }
-        if size > most {
-            (best, most) = (start, size);
-        }
-    }
-    body.iter().map(|&b| b == best).collect()
-}
-
-/// Give every cell of `cells` a way down to the outlet (`outlet`): a priority flood from it, the lowest cell reached
+/// Give every cell of `cells` a way down to a cell below 0 m: a priority flood from those cells, the lowest cell reached
 /// first, raises each new neighbour to at least its height plus `DRAIN_SLOPE` times their distance (Barnes, Lehman and
 /// Mulla 2014). Noise has closed basins that no liquid ever cut; real wet land drains.
 fn drain(cells: &Level, z: &mut [f64]) {
-    let mut reached = outlet(cells, z);
+    let mut reached: Vec<bool> = z.iter().map(|&h| h < 0.0).collect();
     let mut flood: BinaryHeap<Low> = (0..z.len()).filter(|&i| reached[i]).map(|i| Low(z[i], i)).collect();
     while let Some(Low(h, i)) = flood.pop() {
         let (links, near) = cells.around(i);
