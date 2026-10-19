@@ -11,10 +11,10 @@ use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
 /// Book what the step of `dt` seconds moves, from its last round's rows, wind and air, in one call: sunlight, light set
-/// aside for bodies, heat to the air and to space, the ground's gas with its heat, the wind and the lifts; then the
-/// light on bodies, the rain and the clouds of what condensed in each air node (`rained`). No node gives more of a gas
+/// aside for bodies, the heat each ground node gives its bodies' node (`settle`), heat to the air and to space, the
+/// ground's gas with its heat, the wind and the lifts; then the light on bodies, the rain and the clouds of what condensed in each air node (`rained`). No node gives more of a gas
 /// than it holds and gets (`hold_air`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[[f64; 2]]), (rows, width): (&[f64], usize), wind: &Wind, it: &Iterate, dt: f64) {
+pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Active], &[[f64; 2]], &[f64]), (rows, width): (&[f64], usize), wind: &Wind, it: &Iterate, dt: f64) {
     let (n, na, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells());
     let (parent, area) = (cells.parent().to_vec(), cells.area().to_vec());
     // The links of each ground node to the air (`[e * n + i]`): to its own air node (`e` 0), and to the four it sees.
@@ -79,6 +79,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     let fluxes = [
         LinkFlux { class: [Class::Boundary, Class::Ground], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &sun },
         LinkFlux { class: [Class::Boundary, Class::Bodies], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &kept },
+        LinkFlux { class: [Class::Ground, Class::Bodies], a: &ids, b: &ids, ks: &[], mol: &[], heat: settle },
         LinkFlux { class: [Class::Ground, Class::Air], a: &from, b: &ends, ks: &ks, mol: &up, heat: &heat },
         LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
         LinkFlux { class: [Class::Air; 2], a: &links.a, b: &links.b, ks: &gas, mol: &wind_mol, heat: &wind.heat },

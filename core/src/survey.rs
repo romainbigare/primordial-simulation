@@ -1,15 +1,14 @@
 //! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
 //! (`survey`), and every day the updates due (`day`).
 
-use crate::body::{die, live, LiveTmp, LACK};
+use crate::body::{die, live, Body, LiveTmp, LACK};
 use crate::chem::Phase;
 use crate::change::Reactor;
 use crate::life::Life;
 use crate::math::mean_decay;
 use crate::units::DAY;
 use crate::copy::Grown;
-use crate::ground::heat_above_floor;
-use crate::store::{apply, Batch, Class, Node};
+use crate::store::{Class, Node};
 use crate::{bond, choose, World};
 
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
@@ -34,8 +33,8 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [t, (d - w.cfg.phys.porosity * loose).max(0.0) / area, w.base_z + z / area]
 }
 
-/// Before each physics step: what each cell holds and its bodies' node (`sum_cells`); once a month the merge of alike
-/// nodes, the traffic and each cell's surroundings.
+/// Before each physics step: what each cell holds (`sum_cells`); once a month the merge of alike nodes, the traffic
+/// and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     w.life.fit_map(n);
@@ -61,12 +60,10 @@ pub fn survey(w: &mut World) {
 }
 
 /// Per cell: its members and visible traits summed, their capture area per ground area, the light they absorb and the
-/// share set aside for their light reactions. Then its bodies' node settles with its ground to hold what its bodies
-/// will claim: the light set aside since, and the heat each draws at the rate of its last update (laws.md 1.4). What no
-/// body can claim goes back to the ground.
+/// share set aside for their light reactions.
 fn sum_cells(w: &mut World) {
-    let (n, day) = (w.mesh.cells().n(), w.day() as f64);
-    let (mut abs, mut kept, mut claim) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    let n = w.mesh.cells().n();
+    let (mut abs, mut kept) = (vec![0.0; n], vec![0.0; n]);
     let mut sum = vec![[0.0; 7]; n];
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         let (i, m, k) = (b.cell as usize, b.n(), b.keep as f64);
@@ -74,10 +71,8 @@ fn sum_cells(w: &mut World) {
         for (x, &v) in sum[i][1..].iter_mut().zip(&b.vis) {
             *x += v as f64 * m;
         }
-        let a = b.vis[1] as f64 * m * (1.0 - b.reflectance());
-        let s = a * w.life.shade[slot];
+        let s = light_area(b) * w.life.shade[slot];
         (abs[i], kept[i]) = (abs[i] + s, kept[i] + s * k);
-        claim[i] += a * k * (w.light[i] - b.mark) + b.drew as f64 * (day - b.last).max(0.0) * DAY;
     }
     let World { life, mesh, canopy, .. } = w;
     life.sum = sum;
@@ -90,15 +85,23 @@ fn sum_cells(w: &mut World) {
         life.absorb[i] = if s > 0.0 { (abs[i] / s) as f32 } else { 0.0 };
         life.keep[i] = if abs[i] > 0.0 { (kept[i] / abs[i]) as f32 } else { 0.0 };
     }
-    let mut settle = Batch::new([Class::Ground, Class::Bodies], &[]);
-    for (i, &c) in claim.iter().enumerate() {
-        let d = c - w.store.heat(Class::Bodies)[i];
-        let d = if d > 0.0 { d.min(heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i))) } else { d };
-        if d != 0.0 {
-            settle.link((i, i), d);
-        }
+}
+
+/// The capture area of body `b`'s members times the share of light they absorb, m².
+fn light_area(b: &Body) -> f64 {
+    b.vis[1] as f64 * b.n() * (1.0 - b.reflectance())
+}
+
+/// Per cell, what its bodies claim of its bodies' node at time `t`, s, J: the light set aside for each since its mark,
+/// and the heat each draws from the ground at the rate of its last update (`Body::drew`) since then (laws.md 1.4). So
+/// a body that updates every 20 days does not pull 20 days of heat out of the ground at once.
+pub(crate) fn claims(w: &World, t: f64) -> Vec<f64> {
+    let mut claim = vec![0.0; w.mesh.cells().n()];
+    for b in w.life.bodies.iter().filter(|b| b.alive) {
+        let i = b.cell as usize;
+        claim[i] += light_area(b) * b.keep as f64 * (w.light[i] - b.mark) + b.drew as f64 * (t - b.last * DAY).max(0.0);
     }
-    apply(w, &[settle.flux()], &[], &[]);
+    claim
 }
 
 /// The yearly moving average of the crossings of each cell (`Counters::traffic`), once a month.

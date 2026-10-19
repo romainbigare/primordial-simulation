@@ -11,6 +11,8 @@ use super::exchange::{bucket_slope, dissolve};
 use super::newton::{far, gather, solve, Drive, Wind};
 use super::radiation::{declination, insolation, Surface};
 use super::{lerp, over_cell, shares};
+use crate::ground::heat_above_floor;
+use crate::store::{apply, Batch};
 use crate::units::R_GAS;
 use crate::{World, AIR};
 use crate::store::Class;
@@ -68,6 +70,8 @@ struct Ctx<'a> {
     ts: &'a [f64],
     /// What does not change in a step, per ground node (`Fixed`).
     fixed: &'a [f64],
+    /// Heat each ground node gives its bodies' node over the step, J (`settle`).
+    settle: &'a [f64],
     dt: f64,
     decl: f64,
 }
@@ -91,9 +95,27 @@ fn fixed(w: &World, s: &Scratch, act: &[Active]) -> Vec<f64> {
     out
 }
 
-/// The air's step of `dt` seconds: gases dissolve (from the air as it is), then radiation, evaporation, rain and the
-/// wind together, in rounds.
-pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
+/// Each bodies' node settles with its ground toward what its bodies claim at the end of a step to `t_end`
+/// (`survey::claims`; the light set aside for them in the step comes from the sun, laws.md 1.4). What no body claims
+/// goes back to the ground now, so the step starts from it (a large return, as when many bodies die, would take the
+/// ground's balance far from the temperature it is linearised about); returns the heat each ground node gives its node
+/// over the step, J, no more than it holds above `T_FLOOR`.
+pub(crate) fn settle(w: &mut World, t_end: f64) -> Vec<f64> {
+    let claims = crate::survey::claims(w, t_end);
+    let (mut back, mut draw) = (Batch::new([Class::Bodies, Class::Ground], &[]), vec![0.0; claims.len()]);
+    for (i, &c) in claims.iter().enumerate() {
+        match c - w.store.heat(Class::Bodies)[i] {
+            d if d < 0.0 => _ = back.link((i, i), -d),
+            d => draw[i] = d.min(heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i))),
+        }
+    }
+    apply(w, &[back.flux()], &[], &[]);
+    draw
+}
+
+/// The air's step of `dt` seconds, with the heat each ground node gives its bodies' node (`settle`): gases dissolve
+/// (from the air as it is), then radiation, evaporation, rain and the wind together, in rounds.
+pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, settle: &[f64]) {
     let (tmin, tmax) = range(&s.state.tg);
     let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
     dissolve(w, s, dt, &henry, (tmin, tmax));
@@ -109,13 +131,13 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     rows.resize(n * width, 0.0);
     let (fixed, far) = (fixed(w, s, &act), far(s));
     for round in 0.. {
-        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, dt, decl }, &mut rows, width);
+        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, settle, dt, decl }, &mut rows, width);
         ts.iter_mut().zip(rows.chunks_exact(width)).for_each(|(t, row)| *t = row[4]);
         let g = gather(w, s, &it, &act, (&rows, width), far);
         let next = solve(w, s, (&act, &drive), (&x0, &g), &it, dt, &mut wind);
         let (moved_t, moved_x) = moved(&next, &it);
         if (moved_t < STILL_K && moved_x < STILL_SHARE) || round + 1 == ROUNDS {
-            book(w, s, (&act, &g.rained), (&rows, width), &wind, &it, dt);
+            book(w, s, (&act, &g.rained, settle), (&rows, width), &wind, &it, dt);
             break;
         }
         let x = next.x.iter().zip(&it.x).map(|(&u, &v)| u.max(KEEP * v)).collect();
@@ -169,7 +191,7 @@ fn pass(cx: &Ctx, rows: &mut [f64], width: usize) {
 /// The row of ground node `i` under the sunlight `q` of its latitude, W/m²: sunlight past the clouds, what bodies
 /// intercept less the share their light reactions store (set aside for them, laws.md 1.4); rain, where the air the cell
 /// sees (colder on higher ground) holds more of a gas than it can, in `rain_time`; then the surface balance with what
-/// evaporates and the rain's heat, linearised about the round before.
+/// evaporates, the rain's heat and the heat its bodies' node takes (`settle`), linearised about the round before.
 fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let (w, s, it, dt) = (cx.w, cx.s, cx.it, cx.dt);
     let (cells, na, n) = (w.mesh.cells(), w.mesh.level(AIR).n(), w.mesh.cells().n());
@@ -187,7 +209,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     // Rain brings its heat at the temperature of the air it comes from (`shares`) and its fusion enthalpy, of which the
     // node keeps what stays molten. Until the balance is solved, each gas's first number holds its vapour's partial
     // pressure near the ground, Pa.
-    let (mut gain, mut g_rain, mut rain_heat) = (0.0, 0.0, 0.0);
+    let (mut gain, mut g_rain, mut rain_heat) = (-cx.settle[i] / adt, 0.0, 0.0);
     for (x, ac) in cx.act.iter().enumerate() {
         let (o, sp) = (FIXED + PER_GAS * x, s.sp[ac.k]);
         let (col, hk) = (lerp(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i) * over, fixed[FIXED_CELL + x]);

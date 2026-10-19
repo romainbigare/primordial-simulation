@@ -1089,6 +1089,15 @@ Phase E review, round 1 (fixes):
   (3 seeds): land 288.06 K, swing 11.83 K, rain on land 1.806e-3, absorbing gas 251 ppm, river cells 837, land worn
   0.081 mm/yr, light-eaters 10.64, eaters 4.33, lives 2.59 and 4.10 yr. The long-step test: land -0.15 K (noise 0.76),
   warmest month -0.19 K (0.38), coldest -0.27 K (1.22), rain on land +0.1%, absorbing gas -0.2%, river cells +0.5%.
+- J3 follow-up, the bodies' node settles with its ground in the air's step (`survey::claims`, `air::settle`): a known
+  flux in each ground node's implicit balance brings the node to its bodies' claims at the step's end; what no body
+  claims goes back to the ground at the step's start (inside the balance a large return, when many bodies died, took
+  the ground's linearised balance past zero heat). It replaces the survey's settle before each physics step. Before,
+  bodies drew heat (mostly the latent heat of what they evaporate) from the ground between air steps and the air step
+  warmed it back: the ground sawed, and every law read it at the bottom (land 1.5 K colder at an air step's start than
+  at the one before's end, 10-day steps, year 17). 64 x 64, seed 1, years 21 to 30: land at 3/3 days (physics/air)
+  288.47 to 289.21 K, at 10/10 287.41 to 289.53 K; summer 294.46 to 295.33 and 292.95 to 295.45 K; plant members
+  2.83e10 to 2.69e10 (3/3); drift 4e-14. Golden re-pinned.
 
 **Phase K: recording and viewer**
 

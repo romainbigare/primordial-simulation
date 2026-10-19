@@ -38,8 +38,8 @@ Time is a whole number of seconds (`World::time`); the day, month, year and seas
 (`Config::calendar`). `step` (`schedule.rs`) moves the world one month. Each process has a period (`clock::Every`)
 and, at one time, they run in the order written once in `schedule::processes`:
 
-1. Every `phys_days` (10 days): the survey of the cells (`survey::survey`: what each cell holds, light and shade, its
-   bodies' node); then the parts of Flow that are due: the state of ground and air that the other laws read until the
+1. Every `phys_days` (10 days): the survey of the cells (`survey::survey`: what each cell holds, light and shade);
+   then the parts of Flow that are due: the state of ground and air that the other laws read until the
    next physics step, the air's step (every `air_hours`, the same 10 days), liquid, drainage and erosion (every
    `flow_days`, 30), heat conducted sideways and creep (yearly), the recheck of what is present (every 3 months); then
    Change (`change::step`).
@@ -180,10 +180,14 @@ step stays implicit, and the rounds solve only the exchange with the ground.
 
 **Light and heat for bodies.** Each cell has one bodies' node (`store::Class::Bodies`) that holds, as heat, what its
 bodies will take at their updates. The light bodies' leaves absorb warms the ground, except the share their light
-reactions store (`Body::keep`): Flow books that share from the sun into the bodies' node. Before each physics step
-the node settles with its ground (`survey::survey`) to hold also the heat each body draws from the ground at the rate
-of its last update (`Body::drew`) since then. So a body that updates every 20 days does not pull 20 days of heat out
-of the ground at once; at its update it takes its share from the node, and only the rest is settled with the ground.
+reactions store (`Body::keep`): Flow books that share from the sun into the bodies' node. In each air step the node
+also settles with its ground: the ground gives it, as a known flux in the ground's implicit balance, what brings it to
+what its bodies claim at the step's end (`survey::claims`: the light set aside for each since its mark, and the heat
+each draws from the ground at the rate of its last update, `Body::drew`, up to the step's end), no more than the ground
+holds above `T_FLOOR`; what no body claims goes back to the ground at the step's start (`air::settle`). So the ground
+that the other laws read between air steps has already paid its bodies' draw, and a body that updates every 20 days
+does not pull 20 days of heat out of the ground at once: at its update it takes its share from the node, and only the
+rest from the ground.
 
 **Shade** (`survey.rs`). Light passes the bodies of a cell from the tallest member down; a layer of leaf area x per
 ground area takes 1 − exp(−x) of what reaches it, and equal heights share a layer. Height (3.6) is kept with the
