@@ -13,7 +13,7 @@ mod tissue;
 
 pub use death::{die, wound};
 use death::thin;
-pub(crate) use death::to_ground;
+pub(crate) use death::{to_ground, torn_to_death};
 pub use exchange::conductance_to_ground;
 pub use genes::*;
 pub(crate) use live::{gain_to_growth, live, LiveTmp};

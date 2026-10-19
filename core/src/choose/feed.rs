@@ -77,38 +77,45 @@ fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
 }
 
 /// Take from another body in the cell by uptake selectivity, as far as its supply, its stores' room and its force
-/// against the other's allow. A quicker body gets away with chance 1 - its interval / the taker's (the taker has paid);
-/// from a node the taker reaches only the area it works. The bite tears body matter (`body::wound`; laws.md 6.8).
+/// against the other's allow. Each of its members meets one member of the other, as many as both have: it reaches what
+/// they hold, and a quicker body gets away with chance 1 - its interval / the taker's (the taker has paid; of a node's
+/// bites, that share). The bite tears each member it reaches (`body::wound`; laws.md 6.8).
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
-    let rate = if o.n() > 1.0 { reach(w, b, |k| o.store[k]).min(w.cfg.phys.take * fb / (fb + fo + 1e-30)) } else { w.cfg.phys.take * fb / (fb + fo + 1e-30) };
-    let m = b.wanted(&w.chem, b.paces(w), |k| o.store[k], rate * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
+    let reached = b.n().min(o.n()) / o.n();
+    let m = b.wanted(&w.chem, b.paces(w), |k| reached * o.store[k], w.cfg.phys.take * fb / (fb + fo + 1e-30) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
-    let away = rng.f64() < 1.0 - o.interval(w) as f64 / b.interval(w) as f64;
-    // The bite tears this share of the body; the stores it held spill in proportion, less what the taker took.
-    let (built0, matter0, got) = (o.built(&w.chem), o.matter_kg(&w.chem), w.chem.mass_of(&m));
-    let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / o.store[k] } else { 0.0 });
-    let f = (got / built0.max(1e-30)).max(eaten).min(1.0);
+    let away = (1.0 - o.interval(w) as f64 / b.interval(w) as f64).max(0.0);
+    let hit = reached * if b.n() > 1.0 { 1.0 - away } else { (rng.f64() >= away) as u8 as f64 };
+    // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
+    // what the taker took (all they held, if they die).
+    let (built, got) = (reached * o.built(&w.chem), w.chem.mass_of(&m));
+    let eaten = w.chem.matter().map_or(0.0, |k| if o.store[k] > 0.0 { m[k] / (reached * o.store[k]) } else { 0.0 });
+    let f = (got / built.max(1e-30)).max(eaten).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
-    let cost = w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f);
-    if !body::pay(w, b, cost, b.interval(w) as f64) || away {
+    let cost = w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f * reached);
+    if !body::pay(w, b, cost, b.interval(w) as f64) || hit <= 0.0 {
         return;
     }
     let mut o = std::mem::take(&mut w.life.bodies[s]);
-    let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (f * s - a).max(0.0)).collect();
+    let m: Vec<f64> = m.iter().map(|a| a * hit / reached).collect();
+    let torn = if body::torn_to_death(f) { hit } else { f * hit };
+    let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
+    let got = w.chem.mass_of(&m);
     transfer(w, &mut o, b, &m);
     b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
-    if body::wound(w, s, o, f, &rest, TAKEN, built0, matter0) {
+    if body::wound(w, s, o, (hit, f), &rest, TAKEN) {
         w.life.bodies[s].note(b.id(slot), -(NOTE_SCALE * got / mo) as f32);
     }
 }
 
 /// Give to another body in the cell from stores above `GIVE_KEEPS` times their safe minimum (laws.md 5.3), up to what the
-/// other could take in the time and has room for. A node gives as one member. The other remembers the giver.
+/// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
+/// both have, as in `take_body`). The other remembers the giver.
 pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let (chem, lay) = (&w.chem, Layout::of(&w.chem));
     let (size, mass) = (b.size(chem), b.mass(chem));
@@ -116,9 +123,9 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let spare = |k: usize| if chem.matter() == Some(k) || chem.is_material(k) { 0.0 } else { (b.store[k] - keep(k).max(GIVE_KEEPS * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass)).max(0.0) };
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
-    let (mo, paces) = (o.mass(chem), o.paces(w));
-    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys, o.temp(&w.chem)) / all.max(1e-9)).min(1.0 / b.n());
-    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.can_take(chem, k) { (spare(k) * share).min(o.room(chem, paces, k, mo)) } else { 0.0 }).collect();
+    let (mo, paces, met) = (o.mass(chem), o.paces(w), b.n().min(o.n()));
+    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys, o.temp(&w.chem)) * met / o.n() / all.max(1e-9)).min(met / b.n());
+    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.can_take(chem, k) { (spare(k) * share).min(o.room(chem, paces, k, mo) * met / o.n()) } else { 0.0 }).collect();
     o.digest_room(chem, paces, &mut m, mo);
     let got = w.chem.mass_of(&m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {

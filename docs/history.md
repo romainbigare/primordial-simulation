@@ -929,6 +929,16 @@ Phase E review, round 1 (fixes):
   2.8e3 kg (individuals 970), big eaters of light-eaters 1.2e3 to 1.3e3 kg (individuals 5.6e3). Snapshot version 36;
   golden re-pinned.
 
+- F7 follow-up, predators reach node prey as they reach individuals (`choose::take_body`, `body::wound`): from a node a
+  taker reached only what the area it works holds, and a bite killed members only past a whole member's body, while an
+  individual's bite reached all its prey held and killed it past half its body. Now each member of the taker meets one
+  member of the other, as many as both have: it reaches what they hold, tears each of them, and kills those it leaves
+  half their body or less (an individual as before); of a node's bites the share its interval gives gets away. Giving
+  goes the same way (a node gave as one member). Pushing through wears each member alike; `tear` goes. 32 x 32 roster,
+  seed 1, years 26-30, nodes against individuals: eaters ate other bodies 1.6 against 306 kg a year before, 68 against
+  373 now; small eaters of light-eaters 2.8e3 against 970 kg before, 1.7e3 against 1.3e3 now; strong fast eaters of
+  eaters 1.2e3 against 1.3e3 kg before, 510 against 1.2e3 now (few bodies). Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

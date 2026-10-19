@@ -1476,10 +1476,10 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A bite of one member's body or more takes whole members by its weight: the count falls by the mass taken over the
-/// node's body (the body and the brood fall by the same share), the survivors keep their bodies.
+/// A taker meets one member of a node as it would meet an individual: a big bite kills the member it reaches, so the
+/// count falls by one (the body and the brood by the same share), and the survivors keep their bodies.
 #[test]
-fn a_big_bite_takes_whole_members() {
+fn a_big_bite_kills_the_member_it_reaches() {
     let (mut w, i) = bite_start();
     // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg that eats no body matter; most of the members'
     // matter is brood.
@@ -1501,16 +1501,15 @@ fn a_big_bite_takes_whole_members() {
     let (b, after) = (&w.life.bodies[v], seen(&w, v));
     let (mean1, share) = (b.built(&w.chem) / b.n(), 1.0 - after.built / before.built);
     println!("{n0} members of {mean0:.4} kg: {:.1} members left of {mean1:.4} kg ({:.2}% of the body torn by a bite of {got:.4} kg)", b.n(), 100.0 * share);
-    assert!(b.n() < n0 && (b.n() / n0 - (1.0 - share)).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
-    assert!((share - got / before.built).abs() < 1e-9, "{share} of the members died of a bite of {} of the body", got / before.built);
+    assert!((n0 - b.n() - 1.0).abs() < 1e-9 && (share - 1.0 / n0).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
+    assert!(got > 0.0 && got <= mean0, "a bite of {got} kg from members of {mean0} kg");
     assert!((mean1 / mean0 - 1.0).abs() < 1e-9, "survivors changed: {mean0} -> {mean1} kg");
     assert!((b.brood / brood0 - b.n() / n0).abs() < 1e-9, "brood {} of {brood0}, count {} of {n0}", b.brood, b.n());
     books.assert_kept(&w, 1e-9);
 }
 
 /// Being pushed through breaks body matter: the share broken is of the body, with the stores it held; an individual
-/// lives on smaller, a node of members that weigh less than the hit loses members, and one of bigger members is hurt in
-/// every member.
+/// lives on smaller, and a node is hurt in every member alike, whether its members are big or small.
 #[test]
 fn trampling_breaks_body_matter() {
     let (mut w, i) = bite_start();
@@ -1535,9 +1534,9 @@ fn trampling_breaks_body_matter() {
     assert!((1.0 - b1.matter / b0.matter - sv).abs() < 1e-9 && (1.0 - b1.solid / b0.solid - sv).abs() < 1e-9 && (1.0 - b1.liquid / b0.liquid - sv).abs() < 1e-9);
     // Weaker.
     assert!((b1.force / b0.force).is_nan() || b0.force == 0.0 || (b1.force / b0.force - b1.built / b0.built).abs() < 1e-9);
-    // The same energy over a node of members each lighter than the hit: members lost; of heavier: all hurt.
+    // Every member of a node is hurt alike: none dies short of half its body.
     assert!(w.life.bodies[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life.bodies[big].n());
-    assert!(w.life.bodies[small].n() < ns0, "a node of light members kept all {ns0}");
+    assert!(w.life.bodies[small].n() == ns0 && ss > 0.0, "a node of light members lost members: {} of {ns0}", w.life.bodies[small].n());
     assert!(w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i] > g0 && w.store.heat(Class::Ground)[i] > e0, "nothing went to the ground");
     books.assert_kept(&w, 1e-9);
 }

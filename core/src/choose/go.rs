@@ -44,7 +44,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
 const MOST_WORN: f64 = 0.5;
 
 /// Energy dissipated pushing through the bodies of cell `j` breaks their body matter: each takes its share by mass and
-/// loses what that pays to break (`Body::breaking`, `body::wound`; laws.md 6.8). Returns the mass broken, kg.
+/// loses what that pays to break, each of its members alike (`Body::breaking`, `body::wound`; laws.md 6.8). Returns the mass broken, kg.
 pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     let chem = &w.chem;
     let others: Vec<u32> = w.life.at[j].iter().copied().filter(|&s| s as usize != mover).collect();
@@ -56,11 +56,11 @@ pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     for s in others {
         let s = s as usize;
         let o = std::mem::take(&mut w.life.bodies[s]);
-        let (m, t, built0, matter0) = (o.mass(&w.chem), o.temp(&w.chem), o.built(&w.chem), o.matter_kg(&w.chem));
+        let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
         let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(MOST_WORN);
         broken += m * f;
         let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
-        body::wound(w, s, o, f, &dead, BROKEN, built0, matter0);
+        body::wound(w, s, o, (1.0, f), &dead, BROKEN);
     }
     broken
 }

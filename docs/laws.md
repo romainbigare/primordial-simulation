@@ -591,11 +591,14 @@ action (children come from the brood), and no "farm", "trade" or "attack": those
 
 **Taking** goes by uptake genes (`Body::wanted`, `body/intake.rs`), up to what the body can take in the time (6.7),
 from a cell only what the area it works holds (`sweep`), at `c_handle` per kg. From another body it is also limited by
-its force against the other's; a quicker body (shorter interval) may get away. A bite tears body matter (6.8).
+its force against the other's. Each member of the taker meets one member of the other, as many as both have, and
+reaches what they hold (a node is found as one body, 5.2, and taken as its members are); a quicker body (shorter
+interval) gets away with the chance its interval gives (of a node's bites, that share). A bite tears the body of each
+member it reaches (6.8).
 
 **Giving** is of stores only: never body matter, brood or built solids, nor a key liquid below its level, and only
-from stores above twice their safe minimum; at most what the receiver could take in the time. A node gives as one
-member.
+from stores above twice their safe minimum; at most what the members it meets could take in the time (each member
+meets one, as in taking).
 
 ### 5.4 Learning
 
@@ -755,21 +758,23 @@ growth**: lost matter is rebuilt the same way.
 
 ### 6.8 Damage
 
-`body/death.rs` (`thin`, `tear`, `wound`, `die`).
+`body/death.rs` (`thin`, `wound`, `die`).
 
-- **A bite** (`take_body`) tears the share of the other's living body the taker takes (or of its matter eaten, if
-  more) and pays the energy to break it (3.6); body matter breaks first and spills the stores it held to the ground.
-- **Pushing through** (`choose::wear`) breaks the share of each body there that the energy spent on it pays for.
+- **A bite** (`take_body`) tears, of each member it reaches, the share of its living body the taker takes (or of its
+  matter eaten, if more) and pays the energy to break it (3.6); body matter breaks first and spills the stores it held
+  to the ground.
+- **Pushing through** (`choose::wear`) breaks the share of each body there that the energy spent on it pays for, each
+  of its members alike.
 - **Heat** burns body matter by its own reaction (21).
-- An individual lives on smaller and weaker and dies when half its body or more is torn at once, or when a store falls
-  below its minimum. A hurt adult is immature until it heals: no children meanwhile.
+- A member lives on smaller and weaker and dies when half its body or more is torn at once (an individual also when a
+  store falls below its minimum). A hurt adult is immature until it heals: no children meanwhile.
 - **Starving** (`starved` in `body/live.rs`): a body whose growth did not rebuild what it lost in an update (what rots,
   what it burns), below its copy mass, dies with the chance of the share of its body it lost (of its body at the start,
   or of its copy mass if less): one that starved to half its size lived through it with even chances. A node loses that
   share of its members with their share of everything, so it does not shrink alike forever. An adult larger than its
   copy mass shrinks towards it as it chooses (`ALLOC`): no starving. Cause `SPENT`.
-- **In a node** a bite smaller than one member's body takes part of every member's matter (grazing); a larger one
-  kills members in the same share, and what it takes of a store beyond their share comes from the members who live.
+- **In a node** the members a bite reaches lose what it tears, so the node's mean body falls (grazing), or die with all
+  they held (`body::wound`).
 - **Death causes**: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN` (by bodies moving through), `AGE`. At death matter,
   stores and heat go to the ground (`body::die`).
 
