@@ -99,8 +99,8 @@ fn processes(w: &World) -> [(Every, Run); 9] {
     let p = Periods::of(&w.cfg);
     [
         (p.physics, (Stage::Bodies, "survey", |w, _| survey::survey(w))),
-        (p.physics, (Stage::Flow, "state", |w, s| flow::state(w, s, Periods::of(&w.cfg).liquid.span(w.time).is_some()))),
-        (p.air, (Stage::Flow, "air", |w, s| flow::air(w, s as f64, Periods::of(&w.cfg).physics.span(w.time).unwrap_or(0)))),
+        (p.physics, (Stage::Flow, "state", |w, _| flow::state(w, Periods::of(&w.cfg).liquid.span(w.time).is_some()))),
+        (p.air, (Stage::Flow, "air", |w, s| flow::air(w, s as f64))),
         (p.liquid, (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),
         (p.creep, (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
         (p.refresh, (Stage::Flow, "refresh", |w, _| flow::refresh(w))),

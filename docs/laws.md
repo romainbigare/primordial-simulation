@@ -54,11 +54,10 @@ the season come from it by the calendar (`clock::Calendar`, from `Config::calend
 one month per call of `step` (`core/src/schedule.rs`). Each process has a period inside the month
 (`clock::Every`), and at one time they run in this order, written once in `schedule::processes`:
 
-1. Every `phys_days` days (3): `survey::survey` (what each cell holds, light and shade, its bodies' node); then the parts
-   of Flow due: the state of ground and air, which the other laws read until the next physics step, and
-   the booking of the air's moves for the physics step ahead (every physics step; the state is rebuilt
-   in full at each liquid step), the air's step (every `air_hours`, 288: radiation, evaporation, rain,
-   gases dissolving and the wind, together, 1.4 to 1.6), liquid, drainage and the work of moving liquid
+1. Every `phys_days` days (10): `survey::survey` (what each cell holds, light and shade, its bodies' node); then the
+   parts of Flow due: the state of ground and air, which the other laws read until the next physics step
+   (every physics step; rebuilt in full at each liquid step), the air's step (every `air_hours`, 240:
+   radiation, evaporation, rain, gases dissolving and the wind, together, 1.4 to 1.6), liquid, drainage and the work of moving liquid
    (every `flow_days`, 30), heat conducted sideways through the ground and creep (every
    `flow::CREEP_YEARS` years, 1), the recheck of what is present and of the slow ground (every
    `flow::REFRESH_MONTHS` months, 3); then Change (`change::step`).
@@ -82,8 +81,8 @@ it last did, in one span. Change's reactions in ground and air nodes sleep so (2
 step (`World::t_ground_last`). Where Flow has not run yet, `flow::ensure` builds that state from
 the world as it is.
 
-**Checks before a run.** `Config::validate` checks the settings: each period at least 1, the air's
-step and `phys_days` dividing one another, and `Physics::validate` (`dormancy` above 1, `light_yield` above 0 and at most 1).
+**Checks before a run.** `Config::validate` checks the settings: each period at least 1, the air's step dividing the
+physics step, and `Physics::validate` (`dormancy` above 1, `light_yield` above 0 and at most 1).
 `Chemistry::validate` checks a chemistry: indices, densities, and that every reaction and
 conversion keeps its elements and its mass.
 
@@ -201,10 +200,11 @@ leaves the land is lime that Change dissolves (reaction 22, 2.6) and the liquid 
 
 ### 1.4 The air's step
 
-`flow::air::step`, every `air_hours` (288). Radiation, the exchange of the ground with the air
+`flow::air::step`, every `air_hours` (240). Radiation, the exchange of the ground with the air
 (evaporation, rain) and the wind are one implicit step (backward Euler) over the whole span, so a
-long step gives the world of short ones: the long-step test holds the climate of 12-day steps to that
-of 6-hour steps within the seeds' noise (`tape/tests/ranges.rs`).
+long step gives the world of short ones: the long-step test holds the climate of 10-day steps of the
+air and of the physics to that of 6-hour air steps and 3-day physics steps within the seeds' noise
+(`tape/tests/ranges.rs`).
 
 - The unknowns are each air node's temperature and gases at the end of the step. The sun is that of
   the step's end.
@@ -219,11 +219,10 @@ of 6-hour steps within the seeds' noise (`tape/tests/ranges.rs`).
 - The rounds stop when the air moves by less than 0.05 K and 1e-5 of a node's gas (4 to 5 rounds),
   or after 16. What the last round found crosses every link and is booked by the store, so the books
   are exact whether or not the rounds converged.
-- **Booked through the span** (`air::book`). The step's moves are booked a physics step at a time
-  (`air::dispense`, by Flow's state, for the physics step ahead): the ground, the air, the light on
-  bodies and the rain change through the span as the other laws read them. A ground node gives no
-  more of a gas than it holds then, and an air node that would give more of a gas than it holds rains
-  that much less.
+- **Booked whole** (`air::book`). The step's moves are booked at once as it is solved: the other laws
+  read the ground, the air, the light on bodies and the rain it leaves until the next air step. A
+  ground node gives no more of a gas than it holds and gets, and an air node that would give more of a
+  gas than it holds rains and blows that much less.
 
 **Sun, heat and radiation** (`flow::air::radiation`).
 

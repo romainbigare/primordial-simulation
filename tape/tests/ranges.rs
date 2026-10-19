@@ -12,7 +12,8 @@
 //! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
 //! The steps of Flow are speed settings too (plan 6.4, the long step against the short one): small worlds with life keep
-//! their climate within the seeds' noise at the default steps and with the air's step at 6 hours.
+//! their climate within the seeds' noise at the default steps and with the air's step at 6 hours and the physics step
+//! at 3 days.
 
 use pcore::{Config, World};
 use std::fmt;
@@ -249,16 +250,18 @@ fn climate(seed: u64, set: fn(&mut Config)) -> [f64; CLIMATE.len()] {
     mean
 }
 
-/// The air's step of 6 hours (`air_hours`), short against the air's changes in a day.
+/// The air's step of 6 hours (`air_hours`), short against the air's changes in a day, and a physics step of 3 days
+/// (`phys_days`).
 const SHORT_AIR_HOURS: u32 = 6;
+const SHORT_PHYS_DAYS: u32 = 3;
 
-/// The long step against the short one: at the default steps of Flow (`air_hours`, `flow_days`) the mean over the
-/// three seeds of each of the climate's key numbers (each the mean of its last years) moves by less than its noise, the
-/// spread of the three seeds' values with the air's step at 6 hours (`SHORT_AIR_HOURS`).
+/// The long step against the short one: at the default steps of Flow (`air_hours`, `phys_days`, `flow_days`) the mean
+/// over the three seeds of each of the climate's key numbers (each the mean of its last years) moves by less than its
+/// noise, the spread of the three seeds' values at the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`).
 #[test]
 #[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
-    let short: fn(&mut Config) = |c| c.air_hours = SHORT_AIR_HOURS;
+    let short: fn(&mut Config) = |c| (c.air_hours, c.phys_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS);
     let default: fn(&mut Config) = |_| {};
     // Per seed, [short, default], the short and the default step side by side.
     let runs: Vec<[[f64; CLIMATE.len()]; 2]> = SEEDS

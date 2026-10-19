@@ -196,6 +196,9 @@ fn held_day(w: &mut World, cells: &[usize], t: f64) {
 fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     let mut s = set();
     s.w.cfg.phys.c_build = 0.0;
+    // (Flow and the survey every 3 days: the balance below is the body's own, and at the 10-day steps its surroundings
+    // move its rise by about 1% more.)
+    (s.w.cfg.phys_days, s.w.cfg.air_hours) = (3, 72);
     let mut small = s.eater(0);
     // (In the dark: no light-capture area to absorb the sun, which warms a body too.)
     small.genes[pcore::body::LEAF] = -9.0;

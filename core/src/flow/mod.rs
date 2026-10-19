@@ -44,16 +44,14 @@ pub(crate) const CREEP_YEARS: u64 = 1;
 /// The state of ground nodes (`ground_state`: only what changed since it was last rebuilt, or every node with `full`, at
 /// each liquid step, so a world resumed at a month's start goes on as an unbroken one, or when a refresh changed what
 /// is present) and the temperature of air nodes, from the world now: what the other laws and the rest of Flow read
-/// until the next physics step (`World::t_ground_last`). Then what the last air step moves over the next `ahead`
-/// seconds booked (`air::dispense`), as a short step of the air would book it.
-pub(crate) fn state(w: &mut World, ahead: u64, full: bool) {
+/// until the next physics step (`World::t_ground_last`).
+pub(crate) fn state(w: &mut World, full: bool) {
     with(w, |w, s| {
         ground_now(w, s, full);
         air::sums(w, s);
         for j in 0..w.mesh.level(AIR).n() {
             s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]);
         }
-        air::dispense(w, s, w.time + ahead);
     });
 }
 
@@ -64,17 +62,14 @@ fn ground_now(w: &World, s: &mut Scratch, full: bool) {
     ground_state(w, s, full);
 }
 
-/// What the last air step moves up to now booked (`air::dispense`); the state of ground nodes (`ground_now`: at a
-/// physics step `state` has just set it, and nothing has changed it since) and of air nodes (`air::state`); then the
-/// air's step for `dt` seconds (`air::step`: radiation, gases dissolving, evaporation and rain, and the wind, together),
-/// its first `ahead` seconds booked at once and the rest a physics step at a time (`state`).
-pub(crate) fn air(w: &mut World, dt: f64, ahead: u64) {
+/// The state of ground nodes (`ground_now`: at a physics step `state` has just set it, and nothing has changed it
+/// since) and of air nodes (`air::state`); then the air's step for `dt` seconds (`air::step`: radiation, gases
+/// dissolving, evaporation and rain, and the wind, together), booked whole at once.
+pub(crate) fn air(w: &mut World, dt: f64) {
     with(w, |w, s| {
-        air::dispense(w, s, w.time);
         ground_now(w, s, false);
         air::state(w, s);
         air::step(w, s, dt);
-        air::dispense(w, s, w.time + ahead);
     });
 }
 
@@ -98,13 +93,13 @@ pub(crate) fn refresh(w: &mut World) {
 }
 
 /// Every part of the law but creep once, for `dt` seconds, in the clock's order: the state rebuilt in full, the air's
-/// step booked whole, liquid, and the refresh; then the state the step leaves. A law of Flow on its own, for tests.
+/// step, liquid, and the refresh; then the state the step leaves. A law of Flow on its own, for tests.
 pub fn step(w: &mut World, dt: f64) {
-    state(w, 0, true);
-    air(w, dt, dt as u64);
+    state(w, true);
+    air(w, dt);
     liquid(w, dt);
     refresh(w);
-    state(w, 0, false);
+    state(w, false);
 }
 
 /// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`) from the world as it is, and nothing

@@ -23,8 +23,8 @@ pub const USAGE: &str = "usage:
     --null                learning and imitation off, brain rows frozen: the run to compare a seed with
     --sun X               the sun's strength, times the default (1)
     --absorber X          the heat-absorbing gases of the air at the start, times chemistry 0's (1)
-    --phys-days N         days between surveys of the cells and steps of the reactions (3)
-    --air-hours N         hours between steps of the air: radiation, evaporation, rain and wind (288)
+    --phys-days N         days between surveys of the cells and steps of the reactions (10)
+    --air-hours N         hours between steps of the air: radiation, evaporation, rain and wind (240; divides the physics step)
     --flow-days N         days between moves of liquid (30; a whole number of air steps)
     --crowd N             Config::crowd
     --node-days N         a population node updates at most every N days (36; Config::node_days)

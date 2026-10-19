@@ -799,6 +799,15 @@ Phase E review, round 1 (fixes):
   instead of making new ones, and a brain works out what it perceives of its safe minimums itself (`Consts::minln`
   goes); evaporation tests the cheap conditions before the vapour pressure. The same world to the bit (64 x 64, seed
   1, 30 years, every series column).
+- One even 10-day step for the physics and the air (`phys_days` 10, a speed setting; `air_hours` 240): the survey,
+  Flow's state and Change run 36 times a year, not 120, and the air's step is booked whole as it is solved
+  (`air::book`; `Pending`, `dispense` and the booking a physics step at a time go). The air's step must divide the
+  physics step: booked whole, a 12-day air step over 3-day physics steps warmed the land 0.8 K. The long-step test
+  compares with 6-hour air steps and 3-day physics steps: every climate number within the seeds' noise (the warmest
+  month 0.26 K cooler, noise 0.33). 64 x 64, seed 1, 30 years: plants 10.73 to 10.72 log10 kg, members 4.10e10 to
+  4.04e10, plant life 4.75 to 4.70 yr, eaters 4.50 to 4.49 log10 kg (life 4.2 to 3.2 yr, a few hundred members),
+  land 287.98 to 287.87 K, swing 12.65 to 12.49 K, rain the same, carbon gas 254 to 259 ppm, drift 7e-15 and 2.4e-14;
+  Change 787 to 374 ms/yr, Flow 2055 to 1816, the whole run 130 to 109 s. Snapshot version 32; golden re-pinned.
 
 **Phase J: the long physics step**
 

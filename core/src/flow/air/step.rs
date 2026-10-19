@@ -12,7 +12,7 @@
 use super::super::land::{melted, NONE};
 use super::super::scratch::may_evaporate;
 use super::super::{range, Scratch};
-use super::book::record;
+use super::book::book;
 use super::exchange::{bucket_slope, cloud, dissolve};
 use super::newton::{gather, solve, Wind};
 use super::radiation::{insolation, Surface};
@@ -140,7 +140,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
         let next = solve(w, s, (&act, &links), (&x0, &g), &it, dt, &mut wind);
         let (moved_t, moved_x) = moved(&next, &it);
         if (moved_t < STILL_K && moved_x < STILL_SHARE) || round + 1 == ROUNDS {
-            record(w, s, &act, (&rows, width), &wind, &it, dt);
+            book(w, s, &act, (&rows, width), &wind, &it, dt);
             break;
         }
         let moved = moved_t / STILL_K + moved_x / STILL_SHARE;

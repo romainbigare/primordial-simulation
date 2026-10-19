@@ -118,8 +118,6 @@ pub(super) struct State {
     pub(super) gas: Vec<usize>,
     /// Bonded ground of each ground node.
     pub(super) bed: Vec<Bed>,
-    /// What the last air step moves over its span, as far as it is not booked yet (`air::dispense`).
-    pub(super) pending: air::Pending,
 }
 
 /// Working memory of the law: its state (`State`), the only part saved with the world, and caches. A cache is rebuilt

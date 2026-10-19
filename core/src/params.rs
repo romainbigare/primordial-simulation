@@ -378,10 +378,10 @@ impl Config {
         if self.phys_days == 0 || self.air_hours == 0 || self.flow_days == 0 {
             return Err(format!("phys_days ({}), air_hours ({}) and flow_days ({}) must be at least 1", self.phys_days, self.air_hours, self.flow_days));
         }
-        // (Flow's state books the air's step a physics step ahead: the two steps must meet.)
-        let (air, phys) = (self.air_hours as u64 * HOUR_S, self.phys_days as u64 * self.calendar().day);
-        if air % phys != 0 && phys % air != 0 {
-            return Err(format!("the air's step ({} hours) and the physics step ({} days) must divide one another", self.air_hours, self.phys_days));
+        // (The air's step is booked whole as it runs: a longer one would book the air's moves ahead of the physics steps
+        // that read them.)
+        if !(self.phys_days as u64 * self.calendar().day).is_multiple_of(self.air_hours as u64 * HOUR_S) {
+            return Err(format!("the air's step ({} hours) must divide the physics step ({} days)", self.air_hours, self.phys_days));
         }
         if self.node_days as f64 > crate::body::MAX_INTERVAL {
             return Err(format!("node_days ({}) must be at most {} days, the longest interval", self.node_days, crate::body::MAX_INTERVAL));
@@ -412,8 +412,8 @@ impl Default for Config {
             gravity: 9.81,
             days_per_month: 30,
             months_per_year: 12,
-            phys_days: 3,
-            air_hours: 288,
+            phys_days: 10,
+            air_hours: 240,
             flow_days: 30,
             crowd: 4,
             wake_share: 0.05,
@@ -449,7 +449,7 @@ mod tests {
     fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
         assert_eq!(Config::default().validate(), Ok(()));
         let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
-        for c in [Config { flow_days: 0, ..Default::default() }, Config { air_hours: 0, ..Default::default() }, Config { air_hours: 50, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
+        for c in [Config { flow_days: 0, ..Default::default() }, Config { air_hours: 0, ..Default::default() }, Config { air_hours: 480, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
             assert!(c.validate().is_err(), "{} {} {} {}", c.phys_days, c.air_hours, c.flow_days, c.phys.dormancy);
         }
     }
