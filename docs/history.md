@@ -1229,3 +1229,10 @@ Phase E review, round 1 (fixes):
   store beyond the dead members' share comes from the members who live. 64 x 64, seeds 1 and 2, with the start
   above: bites fall from 0.2% to 0.004% of plant deaths in years 3 to 21; plant members at year 30 +7% (seed 1)
   and -17% (seed 2); golden re-pinned.
+
+**After the round-2 review**
+
+- The bodies' heat from the ground is implicit in the air's step (`survey::Draw`): each body's draw falls to nothing
+  where what it evaporates stops, its update pays its evaporation from what its node holds for it, and unclaimed heat
+  is drawn first by the cell's bodies. 64 x 64, seed 1, year 20: canopies moving over 10 K against their neighbours in
+  30 days 32 of 47 to 5 of 70; years 21 to 30 land +0.30 K, rain on land -0.5%; golden re-pinned.

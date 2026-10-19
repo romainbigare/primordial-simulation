@@ -71,8 +71,8 @@ pub struct Body {
     /// The share of the light it caught that its light reactions stored at its last update: its cell sets that share
     /// aside in its bodies' node (`store::Class::Bodies`)
     pub keep: f32,
-    /// The heat it drew from the ground at its last update, W (0 if it gave heat), set aside in its cell's bodies' node
-    pub drew: f32,
+    /// The heat it draws from the ground between updates, set aside in its cell's bodies' node (`survey::Draw`)
+    pub draw: crate::survey::Draw,
     /// Thermal energy, J
     pub e: f64,
     /// mol of each substance

@@ -106,12 +106,14 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
 }
 
 /// What splits and joins as an amount when members move between nodes, split by shares with the remainder kept so the
-/// parts add up: count, mol of each store, heat (J), brood (mol), and their last day and marks of light and rain.
+/// parts add up: count, mol of each store, heat (J), brood (mol), the heat its bodies' node holds for them (J,
+/// `survey::Draw::owed`), and their last day and marks of light and rain.
 pub(crate) struct Lot {
     pub count: f64,
     pub store: Vec<f64>,
     pub e: f64,
     pub brood: f64,
+    pub owed: f64,
     pub last: f64,
     pub mark: f64,
     pub rained: f64,
@@ -124,14 +126,14 @@ impl Lot {
     pub(crate) fn split(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Lot {
         let store: Vec<f64> = b.store.iter().map(|a| fa * a).collect();
         b.store.iter_mut().zip(&store).for_each(|(a, x)| *a -= x);
-        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last, mark: b.mark, rained: b.rained };
-        (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
+        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, owed: fa * b.draw.owed, last: b.last, mark: b.mark, rained: b.rained };
+        (b.e, b.brood, b.draw.owed) = (b.e - c.e, b.brood - c.brood, b.draw.owed - c.owed);
         life.set_count(b, b.count - c.count);
         c
     }
     /// All that body `c` holds (its stores taken out of it).
     pub(crate) fn of(c: &mut Body) -> Lot {
-        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, last: c.last, mark: c.mark, rained: c.rained }
+        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, owed: c.draw.owed, last: c.last, mark: c.mark, rained: c.rained }
     }
 }
 
@@ -160,7 +162,7 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
     o.set_genes(mean, &w.chem, &w.cfg.phys);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
-    o.e += c.e;
+    (o.e, o.draw.owed) = (o.e + c.e, o.draw.owed + c.owed);
     w.life.set_count(o, o.count + c.count);
     o.set_size(&w.chem, size_mean as f64, size_var as f64);
     w.see(o);
@@ -180,7 +182,8 @@ pub(crate) fn part(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Body {
     let lot = Lot::split(life, b, f, fa);
     // (The trace, the constants and the stores are not the part's: set aside, not cloned.)
     let (trace, k, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k), std::mem::take(&mut b.store));
-    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, hold: None, inside: None, ..b.clone() };
+    let draw = crate::survey::Draw { owed: lot.owed, ..Default::default() };
+    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, draw, hold: None, inside: None, ..b.clone() };
     (b.trace, b.k, b.store) = (trace, k, store);
     c
 }

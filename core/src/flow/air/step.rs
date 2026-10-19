@@ -12,10 +12,10 @@ use super::newton::{far, gather, solve, Drive, Wind};
 use super::radiation::{declination, insolation, Surface};
 use super::{lerp, over_cell, shares};
 use crate::ground::heat_above_floor;
-use crate::store::{apply, Batch};
 use crate::units::R_GAS;
 use crate::{World, AIR};
 use crate::store::Class;
+use crate::survey::Draws;
 
 /// The rounds stop when no air node's temperature moves by more than this from one round to the next, K,
 const STILL_K: f64 = 5e-2;
@@ -27,7 +27,7 @@ const ROUNDS: usize = 16;
 const KEEP: f64 = 0.5;
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
 /// moves by less than `SURFACE_STILL_K`, K.
-const SURFACE_ROUNDS: usize = 3;
+const SURFACE_ROUNDS: usize = 8;
 const SURFACE_STILL_K: f64 = 1e-3;
 /// The saturation tables reach this far above the warmest node at a step's start, K: no node warms more in a step.
 const SAT_REACH: f64 = 60.0;
@@ -47,8 +47,9 @@ pub(super) struct Active {
 
 /// A ground node's row (`cell`): the heat it gives its air node, J, and its slope with the air's temperature, J/K; the
 /// heat to space through the air, J; the sunlight it absorbs, J; its end temperature, K; the light per unit of its
-/// bodies' capture area, J/m²; the light set aside for them, W/m²; then `PER_GAS` numbers per active gas.
-pub(super) const FIXED: usize = 7;
+/// bodies' capture area, J/m²; the light set aside for them, W/m²; the heat it gives its bodies' node, J; then
+/// `PER_GAS` numbers per active gas.
+pub(super) const FIXED: usize = 8;
 /// Per active gas: what evaporates, mol, and its slopes with the column's gas and the air's temperature; what rains and
 /// its two slopes; the slope of the heat the node gives its air with the column's gas, J/mol.
 pub(super) const PER_GAS: usize = 7;
@@ -93,8 +94,9 @@ struct Ctx<'a> {
     ts: &'a [f64],
     /// What does not change in a step, per ground node (`Fixed`).
     fixed: &'a [f64],
-    /// Heat each ground node gives its bodies' node over the step, J (`settle`).
-    settle: &'a [f64],
+    /// The heat the bodies of each cell draw from its ground, and how much heat each ground node holds above `T_FLOOR`, J.
+    draws: &'a Draws,
+    room: &'a [f64],
     dt: f64,
     decl: f64,
 }
@@ -118,27 +120,9 @@ fn fixed(w: &World, s: &Scratch, act: &[Active]) -> Vec<f64> {
     out
 }
 
-/// Each bodies' node settles with its ground toward what its bodies claim at the end of a step to `t_end`
-/// (`survey::claims`; the light set aside for them in the step comes from the sun, laws.md 1.4). What no body claims
-/// goes back to the ground now, so the step starts from it (a large return, as when many bodies die, would take the
-/// ground's balance far from the temperature it is linearised about); returns the heat each ground node gives its node
-/// over the step, J, no more than it holds above `T_FLOOR`.
-pub(crate) fn settle(w: &mut World, t_end: f64) -> Vec<f64> {
-    let claims = crate::survey::claims(w, t_end);
-    let (mut back, mut draw) = (Batch::new([Class::Bodies, Class::Ground], &[]), vec![0.0; claims.len()]);
-    for (i, &c) in claims.iter().enumerate() {
-        match c - w.store.heat(Class::Bodies)[i] {
-            d if d < 0.0 => _ = back.link((i, i), -d),
-            d => draw[i] = d.min(heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i))),
-        }
-    }
-    apply(w, &[back.flux()], &[], &[]);
-    draw
-}
-
-/// The air's step of `dt` seconds, with the heat each ground node gives its bodies' node (`settle`): gases dissolve
-/// (from the air as it is), then radiation, evaporation, rain and the wind together, in rounds.
-pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, settle: &[f64]) {
+/// The air's step of `dt` seconds: gases dissolve (from the air as it is), then radiation, evaporation, rain, the wind
+/// and the heat the bodies draw from the ground (`draws`) together, in rounds.
+pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
     let (tmin, tmax) = range(&s.state.tg);
     let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
     dissolve(w, s, dt, &henry, (tmin, tmax));
@@ -153,14 +137,17 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, settle: &[f64]) {
     let width = FIXED + PER_GAS * act.len();
     rows.resize(n * width, 0.0);
     let (fixed, far) = (fixed(w, s, &act), far(s));
+    let room: Vec<f64> = (0..n).map(|i| if draws.any(i) { heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i)) } else { 0.0 }).collect();
     for round in 0.. {
-        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, settle, dt, decl }, &mut rows, width);
+        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, draws, room: &room, dt, decl }, &mut rows, width);
         ts.iter_mut().zip(rows.chunks_exact(width)).for_each(|(t, row)| *t = row[4]);
         let g = gather(w, s, &it, &act, (&rows, width), far);
         let next = solve(w, s, (&act, &drive), (&start, &g), &it, dt, &mut wind);
         let (moved_t, moved_x) = moved(&next, &it);
         if (moved_t < STILL_K && moved_x < STILL_SHARE) || round + 1 == ROUNDS {
-            book(w, s, (&act, &g.rained, settle), (&rows, width), &wind, (&it, &start), dt);
+            book(w, s, (&act, &g.rained), (&rows, width), &wind, (&it, &start), dt);
+            let given: Vec<f64> = rows.chunks_exact(width).map(|row| row[7]).collect();
+            draws.owe(w, |i| ts[i], &given, dt);
             break;
         }
         let x = next.x.iter().zip(&it.x).map(|(&u, &v)| u.max(KEEP * v)).collect();
@@ -214,7 +201,7 @@ fn pass(cx: &Ctx, rows: &mut [f64], width: usize) {
 /// The row of ground node `i` under the sunlight `q` of its latitude, W/m²: sunlight past the clouds, what bodies
 /// intercept less the share their light reactions store (set aside for them, laws.md 1.4); rain, where the air the cell
 /// sees (colder on higher ground) holds more of a gas than it can, in `rain_time`; then the surface balance with what
-/// evaporates, the rain's heat and the heat its bodies' node takes (`settle`), linearised about the round before.
+/// evaporates, the rain's heat and the heat its bodies draw (`survey::Draws`), linearised about the round before.
 fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let (w, s, it, dt) = (cx.w, cx.s, cx.it, cx.dt);
     let (cells, na, n) = (w.mesh.cells(), w.mesh.level(AIR).n(), w.mesh.cells().n());
@@ -232,7 +219,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     // Rain brings its heat at the temperature of the air it comes from (`shares`) and its fusion enthalpy, of which the
     // node keeps what stays molten. Until the balance is solved, each gas's first number holds its vapour's partial
     // pressure near the ground, Pa.
-    let (mut gain, mut g_rain, mut rain_heat) = (-cx.settle[i] / adt, 0.0, 0.0);
+    let (mut gain, mut g_rain, mut rain_heat) = (0.0, 0.0, 0.0);
     for (x, ac) in cx.act.iter().enumerate() {
         let (o, sp) = (FIXED + PER_GAS * x, s.sp[ac.k]);
         let (col, hk) = (lerp(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i) * over, fixed[FIXED_CELL + x]);
@@ -258,22 +245,27 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     };
     let pk = s.state.pk[i];
     let fusion = if pk != NONE { w.store.amounts(Class::Ground)[pk * n + i] * s.sp[pk].lf } else { 0.0 };
-    // The balance with what evaporates linearised about `t0`; and whether anything evaporates there.
+    // The balance with what evaporates and what the bodies draw linearised about `t0`; and whether either moves with it.
+    let draws = cx.draws.any(i);
     let balance = |t0: f64| {
-        let (mut gain, mut slope) = (gain, 0.0);
+        let (draw, d_draw) = cx.draws.ground(i, t0);
+        let (mut gain, mut slope) = (gain - draw / area, -d_draw / area);
         for x in (0..cx.act.len()).filter(|&x| cx.act[x].up) {
             let (m, dm_dt, _) = evap(t0, x, row);
             gain -= lat(x, m) / adt;
             slope -= lat(x, dm_dt) / adt;
         }
-        (Surface { sw, tl, t0, gain, slope: slope.min(0.0), t_rain: if g_rain > 0.0 { rain_heat / g_rain } else { 0.0 }, g_rain }.balance(s, (i, area, dt), w.cfg.sensible, fusion), slope != 0.0)
+        (Surface { sw, tl, t0, gain, slope: slope.min(0.0), t_rain: if g_rain > 0.0 { rain_heat / g_rain } else { 0.0 }, g_rain }.balance(s, (i, area, dt), w.cfg.sensible, fusion), draws || slope != 0.0)
     };
-    let ((mut bal, evaporates), mut from) = (balance(cx.ts[i]), cx.ts[i]);
+    // Newton's steps, kept between the temperatures the end has been shown to lie between: the net heat a node gets
+    // falls as its end temperature rises, so a step down from `from` says the end lies below it.
+    let ((mut bal, moves), mut from, (mut lo, mut hi)) = (balance(cx.ts[i]), cx.ts[i], (f64::MIN, f64::MAX));
     for _ in 1..SURFACE_ROUNDS {
-        if !evaporates || (bal.ts - from).abs() < SURFACE_STILL_K {
+        if !moves || (bal.ts - from).abs() < SURFACE_STILL_K {
             break;
         }
-        from = bal.ts;
+        (lo, hi) = if bal.ts < from { (lo, from) } else { (from, hi) };
+        from = if bal.ts > lo && bal.ts < hi { bal.ts } else { 0.5 * (lo + hi) };
         bal = balance(from).0;
     }
     // What evaporates, and its slopes: the partial pressure goes with the column and with the temperature of the air
@@ -292,7 +284,9 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
         row[o + 6] = bal.warm * follow_col;
         row_slope += bal.warm * follow_tl;
     }
-    row[..FIXED].copy_from_slice(&[bal.to_air, row_slope, bal.to_space, adt * sw, bal.ts, dl, kept]);
+    // The bodies draw at the end temperature, no more than the node holds above `T_FLOOR`.
+    let given = (cx.draws.ground(i, bal.ts).0 * dt).min(cx.room[i]);
+    row[..FIXED].copy_from_slice(&[bal.to_air, row_slope, bal.to_space, adt * sw, bal.ts, dl, kept, given]);
 }
 
 /// What evaporates of active gas `x` from ground node `i` over the step, ending at `t` under a vapour pressure `pa` with

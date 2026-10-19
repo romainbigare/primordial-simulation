@@ -42,13 +42,13 @@ fn ground_now(w: &World, s: &mut Scratch, full: bool) {
 }
 
 /// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes, after the
-/// bodies' nodes settle with their ground (`air::settle`).
+/// bodies' nodes settle what no body claims (`survey::Draws::settle`).
 pub fn air(w: &mut World, dt: f64) {
     with(w, |w, s| {
-        let draw = air::settle(w, w.time as f64 + dt);
+        let draws = crate::survey::Draws::settle(w, dt);
         ground_now(w, s, false);
         air::state(w, s);
-        air::step(w, s, dt, &draw);
+        air::step(w, s, dt, &draws);
     });
 }
 

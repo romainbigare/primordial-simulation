@@ -185,14 +185,19 @@ step stays implicit, and the rounds solve only the exchange with the ground.
 
 **Light and heat for bodies.** Each cell has one bodies' node (`store::Class::Bodies`) that holds, as heat, what its
 bodies will take at their updates. The light bodies' leaves absorb warms the ground, except the share their light
-reactions store (`Body::keep`): Flow books that share from the sun into the bodies' node. In each air step the node
-also settles with its ground: the ground gives it, as a known flux in the ground's implicit balance, what brings it to
-what its bodies claim at the step's end (`survey::claims`: the light set aside for each since its mark, and the heat
-each draws from the ground at the rate of its last update, `Body::drew`, up to the step's end), no more than the ground
-holds above `T_FLOOR`; what no body claims goes back to the ground at the step's start (`air::settle`). So the ground
-that the other laws read between air steps has already paid its bodies' draw, and a body that updates every 20 days
-does not pull 20 days of heat out of the ground at once: at its update it takes its share from the node, and only the
-rest from the ground.
+reactions store (`Body::keep`): Flow books that share from the sun into the bodies' node. The heat each body draws from
+the ground between its updates is part of the ground's implicit balance in the air's step (`survey::Draw`): what it
+drew at its last update (with what it would have evaporated beyond what its node held for it, 6.3), less in proportion
+as the ground's end temperature nears where its draw stops: where what it evaporates stops (the dew point of the air it
+breathes, the vapour's deficit going nearly with the temperature above it; or `COOL_T` where it evaporated to cool),
+no nearer than its conductance to the surface allows. So a ground that cools gives its bodies less, and they cannot pull
+it below that. The ground gives the bodies' node what they draw at its end temperature (no more than it holds above
+`T_FLOOR`), and each body is owed its share (`Draw::owed`, which moves with members that join or leave). At its update
+a body takes its heat from the node, no more than it is owed. What the node holds that no body claims (a body took
+less than it was owed, or died) its bodies draw first until their next updates, so the ground is spared later rather
+than warmed at once; the rest goes back to the ground at the step's start (`survey::Draws::settle`). The test
+`the_ground_under_dense_canopies_stays_near_its_neighbours` (`tape/tests/ranges.rs`) holds the ground under dense
+canopies to its neighbours from one month to the next.
 
 **Gas from bodies.** The gas a body or a part gives off (breath, what it evaporates, the gas of paying and of growth)
 goes into its cell's bodies' node, with the latent heat it holds there as in the air (`store::held`); the air's step
@@ -720,6 +725,9 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
   interval; the share (1 − e^−x)/x stays, x = conductance × time / heat capacity, the rest goes to the ground.
 - **Reactions' heat** (`body/physics.rs`): a body reacts at its temperature, held by the ground it stands on (Flow's
   last ground temperature) as a store of the heat that ground can conduct into it over the update.
+- **The ground's heat** a body reaches in an update is what its bodies' node holds for it (`Draw::owed`, 1.4): it pays
+  for what it evaporates with its own heat and that, as far as its surface conducts it in; what it would have
+  evaporated with more it asks of the ground until its next update (`survey::Draw`).
 - **KEEP_T**: if the update would leave the body colder than this gene, it burns on demand the heat that brings it
   there, as far as its reactions can.
 - **COOL_T**: if warmer than this gene, it evaporates the latent heat that brings it there, no faster than its still

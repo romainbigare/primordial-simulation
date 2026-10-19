@@ -196,11 +196,10 @@ impl Life {
 }
 
 impl World {
-    /// Place body `c`, its first update after its interval, having drawn no heat yet; its visible traits are worked out
-    /// from what it holds now, so others see it before its first update.
+    /// Place body `c`, its first update after its interval; its visible traits are worked out from what it holds now,
+    /// so others see it before its first update.
     pub(crate) fn place(&mut self, mut c: Body) -> usize {
         c.prepare(&self.chem, &self.cfg.phys);
-        c.drew = 0.0;
         self.see(&mut c);
         let delay = c.interval(self);
         self.life.add(c, self.day(), delay)

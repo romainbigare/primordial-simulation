@@ -7,11 +7,11 @@ use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE};
 use crate::change::{send_gas, GasMove, Reactor};
 use crate::chem::Phase;
-use crate::ground::{heat_above_floor, share, Melting};
+use crate::ground::{share, Melting};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
 use crate::store::Node;
-use crate::units::{MAX_SUBSTANCES, P_REF, T_FLOOR};
+use crate::units::{MAX_SUBSTANCES, P_REF};
 use crate::World;
 
 /// The most share of the heat the body has and can get from the surface that pays the enthalpy of the gas it puts out.
@@ -30,6 +30,11 @@ struct Heat {
     /// Light it absorbed, J; light set aside for it that it took from its bodies' node (`Class::Bodies`), J
     lit: f64,
     took: f64,
+    /// The ground temperature below which what it evaporated would stop, K: the highest dew point of the air it breathes
+    /// among the liquids it evaporated, or `COOL_T` where it evaporated to cool; the heat of what it would have
+    /// evaporated with the heat its surface conducts in that its bodies' node did not hold for it, J
+    stop: Option<f64>,
+    asked: f64,
 }
 
 /// What the ground of a cell offers to soak up: its liquids that dissolve (bits), their sum, mol, and the rate, per day.
@@ -63,7 +68,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let f0 = film(chem, cfg, b, mass, s.cover);
     let g = surface(cfg, b, mass, &f0, s.walls, t0, s.tg);
     let (caught, lit) = catch_light(w, b, s, leaf);
-    let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0 };
+    let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0, stop: None, asked: 0.0 };
     let reach = gas_pool(w, b, s, &f0, tmp);
     let used = react(w, b, rc, tmp, s, &mut h, c0, upkeep_heat);
     settle_gas(w, b, tmp, s, &mut h);
@@ -139,14 +144,14 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 }
 
 /// Gas taken brings its heat at the air's temperature and its latent heat; gas put out takes its latent heat, as far as
-/// `GAS_HEAT_SHARE` of the heat pays for it (what the surface conducts in no more than the ground holds above `T_FLOOR`).
+/// `GAS_HEAT_SHARE` of the heat pays for it (what the surface conducts in no more than its bodies' node holds for it).
 fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
     let (j, lift) = (s.j, w.lift(s.i));
     let gas = GasMove::of(&w.chem, &tmp.pool, &tmp.pool0, w.t_air(j));
     b.e += gas.q_in;
     w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
     let heat = h.heat + gas.back;
-    let conduct = (h.g * s.dt * s.tg).min(heat_above_floor(w.heat_now(Node::ground(s.i)), h.gcap));
+    let conduct = (h.g * s.dt * s.tg).min(held_for(w, b, s.i));
     let paid = share(GAS_HEAT_SHARE * (b.e + heat + conduct).max(0.0), gas.pay);
     send_gas(&tmp.pool, &tmp.pool0, paid, |k, sent, kept| {
         b.store[k] += kept;
@@ -185,9 +190,10 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
 }
 
 /// Its liquids evaporate toward their vapour pressure through its pores (`breath`; for a key liquid as far as it is wet),
-/// paid by its heat and what the surface can conduct into it from the ground (`heat_bound`). Above `COOL_T` it evaporates
-/// more, as far as that cools it to the gene, its still air carries the vapour (the Lewis relation) and its liquid stays
-/// above its safe minimum. Returns what each lost past what flowed in.
+/// paid by its heat and what the surface can conduct into it from the ground, no more than its bodies' node holds for it
+/// (`heat_bound`; the ground gave it over the air's steps, laws.md 1.4). Above `COOL_T` it evaporates more, as far as
+/// that cools it to the gene, its still air carries the vapour (the Lewis relation) and its liquid stays above its safe
+/// minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
     let lift = w.lift(s.i);
     let (ns, i, tg, dt, days) = (w.chem.ns(), s.i, s.tg, s.dt, s.days);
@@ -196,7 +202,7 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
     let (mut moved, mut warmed) = (false, 0.0);
     let cpa: f64 = (0..ns).map(|k| tmp.x[k] * w.chem.subs[k].cp).sum();
     let wide = film(&w.chem, &w.cfg, b, h.mass, s.cover).g / cpa.max(1e-9) * dt * s.open * (-s.depth / w.cfg.phys.gas_depth).exp();
-    let (lay, size) = (Layout::of(&w.chem), b.size(&w.chem));
+    let (lay, size, held) = (Layout::of(&w.chem), b.size(&w.chem), held_for(w, b, i));
     let mut lost = [0.0f64; MAX_SUBSTANCES];
     for (k, lost) in lost.iter_mut().enumerate().take(ns) {
         let (chem, cfg) = (&w.chem, &w.cfg);
@@ -217,9 +223,12 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach, soak_rate * days, cfg.phys.dormancy) } else { push * reach };
         let (cp, latent, flows) = (chem.subs[k].cp, chem.subs[k].latent_gas(), soak_rate > 0.0 && b.wet >> k & 1 == 1);
         let fused = chem.fused_heat(k, tg, |j| w.g(j, i));
-        let pay = Pay { own: h.heat - h.lit + h.took - warmed, conduct: g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0), room: heat_above_floor(w.heat_now(Node::ground(i)), h.gcap) };
-        let per = PerMol { latent, brings: fused - cp * (t0 - tg), leaves: cp * (tg - T_FLOOR) + fused };
-        let m = open_m.max((push * wide).min(need).min(spare)).min(heat_bound(&pay, &per, b.store[k], flows));
+        let (own, conduct) = (h.heat - h.lit + h.took - warmed, g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0));
+        let (per, cool) = (PerMol { latent, brings: fused - cp * (t0 - tg) }, (push * wide).min(need).min(spare));
+        let want = open_m.max(cool);
+        let m = want.min(heat_bound(own + conduct.min(held), &per, b.store[k], flows));
+        // What the surface could conduct in beyond that, it asks of the ground until its next update (`survey::Draw`).
+        h.asked += (want.min(heat_bound(own + conduct, &per, b.store[k], flows)) - m).max(0.0) * latent;
         // What flows through it comes from the ground, which pays its heat and fusion enthalpy.
         let inflow = if flows { (m - b.store[k]).max(0.0).min(gk) } else { 0.0 };
         let pre = w.take_from_ground(i, (k, inflow, cp), inflow * (cp * tg + fused), h.gcap).0;
@@ -232,42 +241,34 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
             (b.store[k], b.e) = (b.store[k] - m, b.e - q);
             w.moves.give(&w.chem, Node::air(s.j), 0, 0.0, q);
             w.moves.gas(&w.chem, k, m, lift);
-            h.heat -= m * latent;
+            let stop = if cool > open_m { b.gene(COOL_T) } else { w.chem.t_sat(k, tmp.x[k]) };
+            (h.heat, h.stop) = (h.heat - m * latent, Some(h.stop.map_or(stop, |d| d.max(stop))));
             *lost = (m - pre).max(0.0);
         }
     }
     (lost, moved)
 }
 
-/// The heat that can pay for evaporating, J: the body's own heat released (`own`), and what its surface conducts in
-/// (`conduct`) as far as the ground holds it above `T_FLOOR` (`room`).
-struct Pay {
-    own: f64,
-    conduct: f64,
-    room: f64,
+/// The heat its cell's bodies' node holds for body `b` (`Draw::owed`), J: the ground's heat it can reach in an update.
+fn held_for(w: &World, b: &Body, i: usize) -> f64 {
+    b.draw.owed.min(w.heat_now(Node::bodies(i))).max(0.0)
 }
 
 /// Per mol of a liquid that evaporates, J: its latent heat; and of what flows in from the ground, the heat it brings the
-/// body (its fusion enthalpy less its warming to the body) and the heat above `T_FLOOR` it takes out of the ground.
+/// body (its fusion enthalpy less its warming to the body).
 struct PerMol {
     latent: f64,
     brings: f64,
-    leaves: f64,
 }
 
-/// The most of a liquid a body holding `held` mol can evaporate with the heat that pays for it (`Pay`), mol. Past its
-/// store the liquid flows in from the ground (if `flows`), which then holds less heat to conduct in: the ground's heat is
-/// counted once, after what flows through has left it.
-fn heat_bound(pay: &Pay, per: &PerMol, held: f64, flows: bool) -> f64 {
-    let at_store = pay.own + pay.conduct.min(pay.room);
-    if !flows || at_store <= held * per.latent {
-        return at_store.max(0.0) / per.latent;
+/// The most of a liquid a body holding `held` mol can evaporate with `pay` J, mol. Past its store the liquid flows in
+/// from the ground (if `flows`): (held + u) latent <= pay + u brings.
+fn heat_bound(pay: f64, per: &PerMol, held: f64, flows: bool) -> f64 {
+    if !flows || pay <= held * per.latent {
+        return pay.max(0.0) / per.latent;
     }
-    // Past the store, u mol flow through: (held + u) latent <= own + u brings + min(conduct, room - u leaves).
-    let most = |spare: f64, cost: f64| if cost > 0.0 { spare / cost } else { f64::INFINITY };
-    let by_conduct = most(pay.own + pay.conduct - held * per.latent, per.latent - per.brings);
-    let by_room = most(pay.own + pay.room - held * per.latent, per.latent - per.brings + per.leaves);
-    held + by_conduct.min(by_room)
+    let cost = per.latent - per.brings;
+    held + if cost > 0.0 { (pay - held * per.latent) / cost } else { f64::INFINITY }
 }
 
 /// Liquids of the ground soak in up to the body's room (`Body::room`) at the rate of `Soil` × solubility, while it loses
@@ -328,24 +329,26 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f6
 }
 
 /// Heat to the surface: its temperature relaxes toward the ground's plus the warming of the heat released. The ground
-/// pays the difference, first from what its bodies' node holds for it; if it cannot, the body ends colder. The gas put
-/// out leaves at the end with its share of the heat.
+/// pays the difference, first from what its bodies' node holds for it (`Draw::owed`); if it cannot, the body ends
+/// colder; what it draws until its next update follows from this (`survey::Draw`). The gas put out leaves at the end
+/// with its share of the heat.
 fn relax_heat(w: &mut World, b: &mut Body, s: &Site, h: &Heat) {
-    let (i, j, tg, dt, g, heat) = (s.i, s.j, s.tg, s.dt, h.g, h.heat);
+    let (i, j, tg, dt, heat) = (s.i, s.j, s.tg, s.dt, h.heat);
     let (_, c) = b.mass_cap(&w.chem);
     if c <= 0.0 {
         return;
     }
-    let (released, ct, e_start) = (heat.max(-g * dt * tg), c + h.c_out, b.e + heat - heat.max(-g * dt * tg));
+    let (released, ct, e_start) = (heat.max(-h.g * dt * tg), c + h.c_out, b.e + heat - heat.max(-h.g * dt * tg));
     let relax = |g: f64| ct * (tg + released / dt / g + (e_start / ct - tg - released / dt / g) * (-g * dt / ct).exp());
-    let e1 = relax(g);
     let (chem, cfg) = (&w.chem, &w.cfg);
-    let e1 = if e1 > ct * h.t0 { relax(surface(cfg, b, h.mass, &film(chem, cfg, b, h.mass, s.cover), s.walls, e1 / ct, tg)) } else { e1 };
+    let e0 = relax(h.g);
+    let g = if e0 > ct * h.t0 { surface(cfg, b, h.mass, &film(chem, cfg, b, h.mass, s.cover), s.walls, e0 / ct, tg) } else { h.g };
+    let e1 = relax(g);
     let give = e1 - b.e - heat + h.lit - h.took;
-    let from = give.min(b.drew as f64 * dt).min(w.heat_now(Node::bodies(i))).max(0.0);
+    let from = give.min(held_for(w, b, i)).max(0.0);
     w.moves.take(&w.chem, Node::bodies(i), 0, 0.0, from);
     let drawn = from + w.take_from_ground(i, (0, 0.0, 0.0), give - from, h.gcap).1;
-    b.drew = (drawn.max(0.0) / dt) as f32;
+    b.draw = crate::survey::Draw::after((drawn + h.asked) / dt, g, tg, h.stop);
     let e1 = if drawn == give { e1 } else { e1 - (give - drawn) };
     let out = e1 * h.c_out / ct;
     b.e = e1 - out;

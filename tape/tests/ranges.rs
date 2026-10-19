@@ -10,7 +10,7 @@
 //! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
 //! The eaters live: at 48 x 48 they still have members at year 60 in seeds 1, 2 and 3, after the booms and busts that
-//! year 30 hides.
+//! year 30 hides. The ground under dense canopies follows its neighbours from one month to the next.
 //!
 //! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
 //! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step at
@@ -301,4 +301,40 @@ fn the_eaters_live_to_year_60() {
     });
     println!("eater members at year {EATER_YEARS}, seeds {SEEDS:?}: {members:?}");
     assert!(members.iter().all(|&m| m > 0.0), "the eaters died out by year {EATER_YEARS}: {members:?}");
+}
+
+/// The canopy check: the years before it, the body mass per area over which a cell is a dense canopy, kg/m², how far
+/// its ground may move against the mean of its neighbours within 30 days, K, and the share of canopies that may move
+/// more.
+const CANOPY_YEARS: u64 = 20;
+const CANOPY_KG: f64 = 20.0;
+const CANOPY_SWING: f64 = 10.0;
+const CANOPY_SHARE: f64 = 0.15;
+
+/// Bodies draw their heat from the ground inside the air's implicit step (laws.md 1.4), so the ground under a dense
+/// canopy follows its neighbours: through a year, day by day, after `CANOPY_YEARS` of seed 1, fewer than
+/// `CANOPY_SHARE` of the dense canopies move more than `CANOPY_SWING` against their neighbours within 30 days.
+#[test]
+#[ignore = "slow: a 20-year run of a 64 x 64 world, then a year day by day"]
+fn the_ground_under_dense_canopies_stays_near_its_neighbours() {
+    let (mut w, _) = run(1, SIDE, CANOPY_YEARS, false, |_| {}, |_, _, _| {});
+    let area = w.mesh.cells().area().to_vec();
+    let dense: Vec<usize> = (0..area.len()).filter(|&i| w.is_land(i) && w.life.sum.get(i).map_or(0.0, |s| s[1]) / area[i] > CANOPY_KG).collect();
+    // The gap of each canopy's ground to the mean of its neighbours, every 10 days.
+    let gap = |w: &World, i: usize| {
+        let around = w.mesh.cells().around(i).1;
+        w.t_ground_last(i) - around.iter().map(|&j| w.t_ground_last(j as usize)).sum::<f64>() / around.len() as f64
+    };
+    let mut gaps: Vec<Vec<f64>> = vec![];
+    for day in 0..w.days_per_year() {
+        pcore::day(&mut w);
+        if day % 10 == 9 {
+            gaps.push(dense.iter().map(|&i| gap(&w, i)).collect());
+        }
+    }
+    let swing = |c: usize| gaps.windows(4).map(|g| g.iter().map(|x| x[c]).fold(f64::MIN, f64::max) - g.iter().map(|x| x[c]).fold(f64::MAX, f64::min)).fold(0.0, f64::max);
+    let swings: Vec<f64> = (0..dense.len()).map(swing).collect();
+    let moved = swings.iter().filter(|&&x| x > CANOPY_SWING).count();
+    println!("{moved} of {} dense canopies moved more than {CANOPY_SWING} K against their neighbours within 30 days; the most {:.1} K", dense.len(), swings.iter().fold(0.0f64, |a, &b| a.max(b)));
+    assert!(!dense.is_empty() && (moved as f64) < CANOPY_SHARE * dense.len() as f64, "{moved} of {} dense canopies moved more than {CANOPY_SWING} K", dense.len());
 }

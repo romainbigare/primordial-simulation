@@ -11,23 +11,23 @@ use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
 /// Book what the step of `dt` seconds moves, from its last round's rows, wind and air, in one call: sunlight, light set
-/// aside for bodies, the heat each ground node gives its bodies' node (`settle`), heat to the air and to space, the
+/// aside for bodies, the heat each ground node gives its bodies' node, heat to the air and to space, the
 /// ground's gas with its heat, the wind and the lifts; then the light on bodies, the rain and the clouds of what condensed in each air node (`rained`). No node gives more of a gas
 /// than it holds and gets (`hold_air`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Active], &[[f64; 2]], &[f64]), (rows, width): (&[f64], usize), wind: &Wind, (it, start): (&Iterate, &Start), dt: f64) {
+pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[[f64; 2]]), (rows, width): (&[f64], usize), wind: &Wind, (it, start): (&Iterate, &Start), dt: f64) {
     let (n, na, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells());
     let (parent, area) = (cells.parent().to_vec(), cells.area().to_vec());
     // The links of each ground node to the air (`[e * n + i]`): to its own air node (`e` 0), and to the four it sees.
     let ends: Vec<u32> = parent.iter().copied().chain((0..4).flat_map(|c| s.near.iter().map(move |j| j[c]))).collect();
     let (from, ne): (Vec<u32>, usize) = ((0..ends.len()).map(|e| (e % n) as u32).collect(), ends.len());
     let v = |len: usize| vec![0.0; len];
-    let (mut sun, mut heat, mut light, mut kept, mut rain, mut out) = (v(n), v(ne), v(n), v(n), v(n), v(na));
+    let (mut sun, mut heat, mut light, mut kept, mut drawn, mut rain, mut out) = (v(n), v(ne), v(n), v(n), v(n), v(n), v(na));
     // Per gas and link (`[x * ne + e]`): what goes up, mol (what evaporates into its own air node, what rains out of each
     // node it sees by its share), and the heat that leaves the ground with it, J.
     let (mut up, mut up_heat) = (v(act.len() * ne), v(act.len() * ne));
     for (i, row) in rows.chunks_exact(width).enumerate() {
         let (j, ts) = (parent[i] as usize, row[4]);
-        (sun[i], heat[i], light[i], kept[i]) = (row[3], row[0] + row[2], row[5], row[6] * area[i] * dt);
+        (sun[i], heat[i], light[i], kept[i], drawn[i]) = (row[3], row[0] + row[2], row[5], row[6] * area[i] * dt, row[7]);
         out[j] += row[2];
         for (x, ac) in act.iter().enumerate() {
             let (o, sp, e) = (FIXED + PER_GAS * x, s.sp[ac.k], x * ne);
@@ -81,7 +81,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Act
     let fluxes = [
         LinkFlux { class: [Class::Boundary, Class::Ground], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &sun },
         LinkFlux { class: [Class::Boundary, Class::Bodies], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &kept },
-        LinkFlux { class: [Class::Ground, Class::Bodies], a: &ids, b: &ids, ks: &[], mol: &[], heat: settle },
+        LinkFlux { class: [Class::Ground, Class::Bodies], a: &ids, b: &ids, ks: &[], mol: &[], heat: &drawn },
         LinkFlux { class: [Class::Ground, Class::Air], a: &from, b: &ends, ks: &ks, mol: &up, heat: &heat },
         LinkFlux { class: [Class::Bodies, Class::Air], a: &ids, b: &parent, ks: &all, mol: &bodies_gas, heat: &[] },
         LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },

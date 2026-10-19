@@ -5,7 +5,8 @@ use pcore::chem::Phase;
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY;
 use pcore::{body, brain, choose, lanes, World, AIR};
-use worldgen::testkit::{ground_of, hold_ground, loose_volume as loose, moved, put, set_amount, set_heat, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
+use pcore::survey::Draw;
+use worldgen::testkit::{flow_step, ground_of, hold_ground, loose_volume as loose, moved, put, set_amount, set_heat, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
 /// One step of radiation and the air.
 const DT: f64 = 3.0 * DAY;
@@ -647,6 +648,32 @@ fn an_island_loses_ground_at_a_real_rate() {
     let rate = (before - rock(&w)) / years as f64 * 1000.0;
     println!("{} land cells lost {rate:.4} mm a year of rock", land.len());
     assert!(rate > 0.003 && rate < 1.0, "{rate} mm a year");
+}
+
+/// A body draws its heat from the ground inside the air's implicit step (`survey::Draw`, laws.md 1.4): one that asks
+/// 1 kW/m² for a whole step, many times what the ground can give, pulls it no colder than where its draw stops; the
+/// bodies' node holds what it is owed, and matter and energy are kept.
+#[test]
+fn a_body_draws_its_ground_no_colder_than_where_its_draw_stops() {
+    let mut w = worldgen::new_world(1, 16, 16);
+    pcore::step(&mut w);
+    worldgen::life::seed(&mut w, 0);
+    pcore::step(&mut w);
+    let s = (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).max_by(|&a, &b| w.life.bodies[a].count.total_cmp(&w.life.bodies[b].count)).expect("a node");
+    let i = w.life.bodies[s].cell as usize;
+    for o in w.life.at[i].clone() {
+        w.life.bodies[o as usize].draw = Draw::default();
+    }
+    let (area, t0, dt) = (w.mesh.cells().area()[i], w.t_ground_last(i), 10.0 * DAY);
+    let (most, stop) = (1e3 * area, t0 - 2.0);
+    assert!(most * dt > 20.0 * (t0 - stop) * w.heat_cap_ground(i), "it asks too little");
+    w.life.bodies[s].draw = Draw { most, g: most / (t0 - stop), t: stop, owed: 0.0 };
+    let books = Books::now(&w);
+    flow_step(&mut w, dt);
+    let (t1, owed) = (w.t_ground_last(i), w.life.bodies[s].draw.owed);
+    assert!(t1 > stop - 0.5 && t1 < t0, "the ground went from {t0:.2} to {t1:.2} K, its draw stops at {stop:.2} K");
+    assert!(owed > 0.0 && owed <= w.store.heat(Class::Bodies)[i], "owed {owed:e} J, its node holds {:e} J", w.store.heat(Class::Bodies)[i]);
+    books.assert_kept(&w, 1e-12);
 }
 
 /// Cover per area in the two cells of the lane scene, kg/m².
