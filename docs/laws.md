@@ -866,8 +866,9 @@ node (its liquids, minerals and food, its breath and the gas of its growth, its 
 remains) are moves (`store::Move`), gathered over its update and booked by one `store::apply` at
 its end (`store::Moves`, `World::open_moves`, `book_moves`). The body changes its own stores and
 heat; the store books the other side. While it updates, it reads its cell's nodes as its moves
-leave them (`World::g`, `a`, `heat_now`). It never asks a node for more than it holds: it takes
-at most half of what a node holds of a substance (`MAX_TAKE_SHARE`), and no heat below
+leave them (`World::g`, `a`, `heat_now`). It never asks a node for more than it holds: what it
+breathes, soaks up, takes by its roots or eats is set by the law's own rate over the update's span
+(6.4), so nodes and individuals take alike, and is never more than is there; and no heat below
 `T_FLOOR`. A sample member's update (4.4) drops its moves. A part's monthly turn books its moves
 the same way.
 
@@ -952,7 +953,7 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Breath** (`breath` in `body/exchange.rs`): the `GAS` gene is the conductance of the body's
   pores (like a leaf's stomata), mol of air per m² of open surface (`Body::open_area`: leaf area
   plus skin) per day, in series with the still air. Gases and vapour go through it. Liquid over
-  the body slows it (`gas_depth`).
+  the body slows it (`gas_depth`). It reaches no more of each gas than its air node holds.
 - **Pores close as it dries**: for vapour only, they open as far as the activity (6.5), solved
   exactly over the update (`closing`).
 - **Rain** (`body/physics.rs`): the bodies of a cell catch 1 − e^−x of the cell's rain (x their
@@ -960,14 +961,15 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Soaking** (`LIQ` gene): a flow along the body's contact with the ground, at rate `LIQ` × the
   ground's wetness (standing or pore liquid; half wet at `wet_depth`) × its working share ×
   solubility per day, driven by how far it is below its level, while it loses what it
-  evaporates. Solved exactly over the update. A body afloat reaches no ground. After it grows (6.6)
+  evaporates. Solved exactly over the update; the ground's wetness makes it first order in what the
+  ground holds when it is dry. A body afloat reaches no ground. After it grows (6.6)
   and has children (4.2), it soaks in the same way again at the same update (`soak_again`): the
   liquid its new tissue lacks and its children took, so its activity does not lag by one update.
 - **What flows through** (`through` in `body/exchange.rs`): a soaking body loses where its
   soaking meets what its pores pass; what passes beyond its store comes from the ground as it
   goes. This is transpiration.
 - **Roots for minerals**: the uptake genes of the minerals take them from the loose ground of the
-  cell, at the rate it soaks liquids, up to its level, no more than half of what the cell holds.
+  cell, at the rate it soaks liquids, up to its level and no more than the cell holds.
 
 ### 6.5 Activity and dormancy
 

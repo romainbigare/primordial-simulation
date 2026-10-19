@@ -1,7 +1,7 @@
 //! Intake: what a body takes in, by its uptake selectivity, within the room of its stores (`Body::wanted`); Choose
 //! takes from the ground and from bodies by it, Bond from parts.
 
-use super::{Body, Layout, MAX_TAKE_SHARE};
+use super::{Body, Layout};
 use crate::chem::Chemistry;
 
 impl Body {
@@ -22,7 +22,7 @@ impl Body {
     }
 
     /// Amounts (mol) to take from `from` by the body's uptake selectivity, up to `kg` in all, for a body of `mass` kg
-    /// whose update spans `paces` intervals of its gene, at most `MAX_TAKE_SHARE` of what is there, within the room of
+    /// whose update spans `paces` intervals of its gene, no more than is there, within the room of
     /// its stores (`Body::room`, `digest_room`).
     pub(crate) fn wanted(&self, chem: &Chemistry, paces: f64, from: impl Fn(usize) -> f64, kg: f64, mass: f64) -> Vec<f64> {
         let lay = Layout::of(chem);
@@ -32,7 +32,7 @@ impl Body {
         // (A solid bodies build it takes past its own level: it holds it until its reactions break it down, and what is
         // left passes back to the ground at its update, `live::shed`.)
         let room = |k: usize| if chem.is_material(k) { f64::MAX } else { self.room(chem, paces, k, mass) };
-        let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(MAX_TAKE_SHARE * from(k)).min(room(k)) } else { 0.0 }).collect();
+        let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(from(k)).min(room(k)) } else { 0.0 }).collect();
         self.digest_room(chem, paces, &mut m, mass);
         m
     }

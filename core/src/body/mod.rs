@@ -42,9 +42,6 @@ pub const TAKEN: u8 = 3;
 pub(crate) const BROKEN: u8 = 4;
 /// Worn out by living (`Body::wear`).
 pub const AGE: u8 = 5;
-/// The most share of what its air node or ground node holds that a body takes in one update (the bodies of a cell
-/// share it).
-pub(crate) const MAX_TAKE_SHARE: f64 = 0.5;
 /// Margins of well-being (`Body::wellbeing_at`) count up to this, and down to `MARGIN_MIN`: the margin of a key store
 /// (the log of its share over its minimum) and that of its reactions over its upkeep (`live` plans for this many upkeeps).
 pub(crate) const MARGIN: f64 = 2.0;

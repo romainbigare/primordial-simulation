@@ -829,6 +829,13 @@ Phase E review, round 1 (fixes):
   saved) before the first survey; it now works them out as the survey does when the cache is empty. The resumed run
   matches the unbroken one (years 21 and 22, every series column). The learning test runs its seeds on threads (the
   same tally; 6.3 to 3.4 s).
+- No take cap per update: a body took at most half of what its node held in one update (`MAX_TAKE_SHARE`), so the cap
+  per day differed up to 7 times between a node (36 days) and an individual (5 to 20). What it breathes, soaks up,
+  takes by its roots or eats is now set by the law's own rate over the span and never more than the node holds. Rate
+  forms bounded by the soaking rate, and the breath of a well-mixed node, gave the same world as the plain bound. 64 x
+  64, seed 1, 30 years: plant members 3.90e10 to 3.11e10, plants 10.71 to 10.64 log10 kg, plant life 4.63 to 3.16 yr
+  (the cap had spread the ground's liquid and minerals over the bodies of a cell), eaters 4.38 to 4.42, land 287.87
+  to 288.03 K, swing 12.45 to 12.11 K, carbon gas 261 to 261 ppm.
 
 **Phase J: the long physics step**
 

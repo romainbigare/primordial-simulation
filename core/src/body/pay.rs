@@ -1,7 +1,7 @@
 //! Upkeep, and paying a cost by running the body's catalysed reactions that breathe, at the rate Change gives them.
 
 use super::exchange::{breath, conductance_to_ground, cover_of, film};
-use super::{Body, COPY_MASS, DENATURE, MAX_TAKE_SHARE, REPAIR, STRENGTH};
+use super::{Body, COPY_MASS, DENATURE, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::Melting;
 use crate::math::mean_decay;
@@ -39,7 +39,7 @@ pub fn release(w: &World, b: &Body, days: f64) -> f64 {
 
 /// A body about to pay over some days, as its paying sees it (valid until its stores or its heat change): its mass, kg,
 /// where it stands among its melting plateaus (`Body::thermal`), the days, the share of its air node it exchanges gas
-/// with in them (`breath`, at most `MAX_TAKE_SHARE`) and all that node holds, mol.
+/// with in them (`breath`, at most all of it) and all that node holds, mol.
 pub(crate) struct Payer {
     pub mass: f64,
     pub th: Melting,
@@ -56,7 +56,7 @@ impl Payer {
         let j = w.mesh.up(i, 0, AIR);
         let tot: f64 = (0..chem.ns()).map(|k| w.a(k, j)).sum();
         let f = film(chem, &w.cfg, b, mass, cover_of(w, b));
-        let share = (breath(chem, &w.cfg, b, &f, days, depth) / tot).min(MAX_TAKE_SHARE);
+        let share = (breath(chem, &w.cfg, b, &f, days, depth) / tot).min(1.0);
         Payer { mass, th, days, share, tot }
     }
 }
