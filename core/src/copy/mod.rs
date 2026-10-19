@@ -12,6 +12,7 @@ mod select;
 mod young;
 
 pub use grow::grow;
+pub use grow::buildable;
 pub(crate) use select::{sample, select};
 pub use young::{mature, Grown};
 

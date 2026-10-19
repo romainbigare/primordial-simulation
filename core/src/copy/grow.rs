@@ -1,7 +1,7 @@
 //! Growth: a body builds body matter (and the other solids it builds) from its stores, paid by work (`grow`).
 
 use crate::body::{self, Body, Layout, ALLOC, COPY_MASS, WET_TISSUE};
-use crate::chem::{Phase, Reaction};
+use crate::chem::{Chemistry, Phase, Reaction};
 use crate::ground::Melting;
 use crate::store::Node;
 use crate::units::DAY;
@@ -46,6 +46,29 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
     built || made > 0.0
 }
 
+/// The kg of the first output of conversion `bl` body `b` at `t` K could make of its stores: each input must cover what
+/// the conversion takes of it and, if it burns, the fuel the work burns, and leave its safe minimum (a body is not built
+/// of its last fuel: below its minimum it dies); with each input's minimum, mol.
+fn reach(chem: &Chemistry, p: &crate::Physics, b: &Body, bl: &Reaction, t: f64) -> (Vec<f64>, f64) {
+    let (lay, size, m) = (Layout::of(chem), b.size(chem), bl.outputs[0].0 as usize);
+    let (nu0, mm) = (bl.outputs[0].1 as f64, chem.subs[m].molar_mass);
+    let floors: Vec<f64> = bl.inputs.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
+    let reach = bl.inputs.iter().zip(&floors).map(|(&(k, nu), f)| {
+        let heat = b.heat_of(chem, k as usize, t);
+        (b.store[k as usize] - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
+    });
+    let most = reach.fold(f64::MAX, f64::min);
+    (floors, most)
+}
+
+/// What body `b` at `t` K holds that can become body, mol of body matter: its matter (its brood with it) and the matter
+/// its stores could make (`reach`). Selection inside a node counts its members' gain in it (`copy::select`), so a gene
+/// that brings more of what growth converts gains though the update builds no more.
+pub fn buildable(w: &World, b: &Body, t: f64) -> f64 {
+    let (Some(bl), Some(m)) = (w.chem.build.as_ref(), w.chem.matter()) else { return 0.0 };
+    b.store[m] + reach(&w.chem, &w.cfg.phys, b, bl, t).1 / w.chem.subs[m].molar_mass
+}
+
 /// It plans on this share of what its reactions can release, so rounding never leaves it short.
 const RELEASE_MARGIN: f64 = 0.999;
 /// Less than this share of `full` (or of its mass) made is nothing made.
@@ -81,17 +104,9 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     let fuel = ins.iter().map(|&(k, nu)| nu as f64 * b.heat_of(chem, k as usize, t)).sum::<f64>() / (mm * nu0);
     let per_kg = p.c_copy + fuel - b.heat_of(chem, m, t) / mm;
     let spare = b.fuel(chem, t) * (1.0 - body::upkeep(w, b, ivl, mass, t) / r);
-    // The stores it converts must also cover the fuel the work burns (each input that burns), and
-    // leave the safe minimum of each (a body is not built of its last fuel: below its minimum it dies).
-    let lay = Layout::of(chem);
-    let size = b.size(chem);
-    let floors: Vec<f64> = ins.iter().map(|&(k, _)| b.gene(lay.min + k as usize).max(0.0) * size / chem.subs[k as usize].molar_mass).collect();
-    let reach: Vec<f64> = ins.iter().zip(&floors).map(|(&(k, nu), f)| {
-        let heat = b.heat_of(chem, k as usize, t);
-        (b.store[k as usize] - f).max(0.0) / (nu as f64 / (mm * nu0) + if heat > 0.0 { p.c_copy / heat } else { 0.0 })
-    }).collect();
+    let (floors, reach) = reach(chem, p, b, bl, t);
     let free = part * (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
-    let kg = free.min(reach.iter().copied().fold(f64::MAX, f64::min)).min(most);
+    let kg = free.min(reach).min(most);
     if kg <= LEAST_MADE * full.max(LEAST_MADE * mass) {
         *known = Some(payer.th);
         return 0.0;

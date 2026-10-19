@@ -712,8 +712,10 @@ the same patterns as individuals.
   node's genes but one, drawn among those its members differ in, which is one standard deviation
   of its spread up or down (the gene and the side drawn by keyed random numbers), within its
   walls. The sample runs on the world as it is and its moves are dropped (6): it is a member that
-  might be, and changes nothing. Its gain and the node's are the log of the body
-  matter (brood with it) after growth over that before the update: growth less deaths. The mean
+  might be, and changes nothing. Its gain and the node's are the log of what can become body after
+  growth over that before the update (`copy::buildable`: the body matter, brood with it, and the
+  matter its stores could make as growth makes it, `copy::grow`): growth and reserves less deaths, so a
+  gene that brings more fuel gains though the update builds no more. The mean
   of the gene then moves by the sample's step times tanh(sample's gain − node's gain), times the
   number of genes drawn from times `sample_every` (each gene is drawn that much less often: a
   node runs its sample on one update in `sample_every`, drawn, a speed setting), at most by the step

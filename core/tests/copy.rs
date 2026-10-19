@@ -1586,20 +1586,26 @@ fn individuals_mode_merges_no_animal() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// The body matter body `s` holds (its brood with it), mol, and its gene `g`, after its next update (`pcore::day` until
+/// What body `s` holds that can become body (`worth`), mol, and its gene `g`, after its next update (`pcore::day` until
 /// it has updated).
 fn after_update(w: &mut World, s: usize, g: usize) -> (f64, f32) {
     let last = w.life.bodies[s].last;
     while w.life.bodies[s].last == last {
         pcore::day(w);
     }
-    (w.life.bodies[s].store[MATTER], w.life.bodies[s].genes[g])
+    (worth(w, s), w.life.bodies[s].genes[g])
+}
+
+/// What the body in slot `s` holds that can become body (`copy::buildable`), at its ground's temperature.
+fn worth(w: &World, s: usize) -> f64 {
+    let b = &w.life.bodies[s];
+    copy::buildable(w, b, w.t_ground_last(b.cell as usize))
 }
 
 /// Selection inside a node moves its mean as selection among its members would (`copy::sample`, `copy::select`): a
 /// light-eater node at its first update (making no brood, so all it builds stays in it), whose members differ in one
 /// gene by a standard deviation of 0.3 steps. The same node with that gene at its mean plus and minus the deviation,
-/// and no spread, gains W+ and W- in an update (as two kinds of members would, each on its own); the covariance of the
+/// and no spread, gains W+ and W- in an update (in what can become body, `copy::buildable`) (as two kinds of members would, each on its own); the covariance of the
 /// gene with fitness in two such halves moves the mean by sd (W+ - W-) / (W+ + W-) (Robertson 1966). The node's own
 /// update moves its mean as much, within a quarter, the same way, with a sample at each update (`sample_every` 1). It
 /// costs the node one more update as far as its growth.
@@ -1611,14 +1617,14 @@ fn selection_inside_a_node_moves_its_mean_as_its_members_would() {
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0 && w.life.bodies[s].adult(&w.chem)).expect("an adult node");
     let books = Books::now(&w);
     let lay = Layout::of(&w.chem);
-    for (g, name) in [(LEAF, "light capture"), (body::REPAIR, "repair")] {
+    for (g, name) in [(body::STRENGTH, "strength"), (body::REPAIR, "repair")] {
         let sd = 0.3 * pcore::body::steps(&lay, &vec![1.0; lay.len])[g].recip();
         let b = &mut w.life.bodies[s];
         (b.genes[ALLOC], b.brood) = (0.0, 0.0);
         b.prepare(&w.chem, &w.cfg.phys);
         b.spread = vec![0.0; lay.len];
         b.spread[g] = sd * sd;
-        let (z, m0) = (b.genes[g], b.store[MATTER]);
+        let (z, m0) = (b.genes[g], worth(&w, s));
         // The two halves, each on its own in a copy of the world.
         let half = |d: f32| {
             let mut v = w.clone();

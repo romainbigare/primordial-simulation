@@ -42,8 +42,9 @@ pub struct Lived {
     pub spare: f64,
     /// Its mass as its update leaves it, after it sheds (valid until its stores change)
     pub mass: f64,
-    /// The log of the body matter (its brood with it) it holds after its growth over what it held as its update began:
-    /// what its members gained in the time, by growth, less the deaths (`copy::select`)
+    /// The log of what it holds that can become body (`copy::buildable`: its matter, brood with it, and what its fuel
+    /// could build) after its growth over that as its update began: what its members gained in the time, by growth and
+    /// reserves, less the deaths (`copy::select`)
     pub gain: f64,
 }
 
@@ -106,7 +107,7 @@ struct Growth {
 fn to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<(Growth, Site), u8> {
     let s = site(w, b);
     let mass = b.mass(&w.chem);
-    let held = w.chem.matter().map_or(0.0, |k| b.store[k]);
+    let held = crate::copy::buildable(w, b, s.tg);
     b.last = w.day() as f64;
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
@@ -117,7 +118,7 @@ fn to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &m
     keep_warm(w, b, span, s.dt);
     let th = check_stores(w, slot, b, tmp)?;
     let built = crate::copy::grow(w, b, s.days, th);
-    let gain = (w.chem.matter().map_or(0.0, |k| b.store[k]) / held.max(f64::MIN_POSITIVE)).ln();
+    let gain = (crate::copy::buildable(w, b, s.tg) / held.max(f64::MIN_POSITIVE)).ln();
     Ok((Growth { lit, spare, built, gain }, s))
 }
 

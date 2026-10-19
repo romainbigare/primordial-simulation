@@ -837,6 +837,11 @@ Phase E review, round 1 (fixes):
   (the cap had spread the ground's liquid and minerals over the bodies of a cell), eaters 4.38 to 4.42, land 287.87
   to 288.03 K, swing 12.45 to 12.11 K, carbon gas 261 to 261 ppm.
 - `flow::step`, which only tests called, is `testkit::flow_step` (Flow's processes are public to it).
+- Selection inside a node sees reserves: a sample's gain and its node's are the log of what can become body
+  (`copy::buildable`: the matter, brood with it, and the matter its stores could make by the reach of growth's
+  conversion) after over before, not of the matter alone; growth held by its allowance hid every gene that brings more
+  fuel (a leaf, pores, a coat). 64 x 64, seed 1, 30 years: carbon gas 260.5 to 236.3 ppm (the light-eaters take more
+  of it), land 288.03 to 287.54 K, swing 12.11 to 11.93 K, plants 10.64 to 10.70 log10 kg.
 
 **Phase J: the long physics step**
 
