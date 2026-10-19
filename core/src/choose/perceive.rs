@@ -1,10 +1,9 @@
 //! What a body perceives: the bodies and parts it sees (`perceive`), its brain's inputs (`inputs`), the cells seen in
 //! each direction (`sector`) and what a cell offers as a place to move to (`cells`); each scaled to about one.
 
-use super::{Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
+use super::{ActTmp, Choice, MAX_SEEN, MOVES, NT, OPTS, PARTS};
 use crate::body::{Body, Layout, Lived};
 use crate::brain::{ln, REST, SIG};
-use crate::space::square::DIRS;
 use crate::lanes::thickness;
 use crate::rng::Rng;
 use crate::{bond, World};
@@ -33,36 +32,48 @@ const LN_MEMBERS: f32 = 10.0;
 /// A perceived body's well-being.
 pub(super) const WB_SCALE: f32 = 4.0;
 
-/// Per direction, the offsets of the cells seen that way and their weights.
-pub type Sector = [Vec<(i32, i32, f32)>; 8];
-
-/// The cells within `sight` of a cell, by the nearest of the 8 directions they lie in: offsets and weights (nearer
-/// cells more, 1 / distance², distance counted in rings).
-pub(super) fn sector(sight: usize) -> Sector {
-    let (mut s, r): (Sector, i32) = (Default::default(), sight as i32);
-    for dy in -r..=r {
-        for dx in -r..=r {
-            let k = dx.abs().max(dy.abs());
-            if k > 0 {
-                let d = ((dy as f64).atan2(dx as f64) / std::f64::consts::FRAC_PI_4).round() as i32;
-                s[d.rem_euclid(8) as usize].push((dx, dy, 1.0 / (k * k) as f32));
+/// The cells within `sight` links of cell `i` (not `i`), each with its weight (nearer cells more, 1 / rings²), in the
+/// order of the cells: a walk over the mesh's links, ring by ring, that marks what it reached with `t.stamp`.
+pub(super) fn walk(w: &World, i: usize, sight: usize, t: &mut ActTmp) {
+    let cells = w.mesh.cells();
+    t.mark.resize(cells.n(), 0);
+    t.stamp = t.stamp.wrapping_add(1);
+    if t.stamp == 0 {
+        t.mark.fill(0);
+        t.stamp = 1;
+    }
+    let (seen, mark, stamp) = (&mut t.seen, &mut t.mark, t.stamp);
+    seen.clear();
+    seen.push((i as u32, 0.0));
+    mark[i] = stamp;
+    let mut from = 0;
+    for ring in 1..=sight {
+        let to = seen.len();
+        for q in from..to {
+            for &j in cells.around(seen[q].0 as usize).1 {
+                if mark[j as usize] != stamp {
+                    mark[j as usize] = stamp;
+                    seen.push((j, 1.0 / (ring * ring) as f32));
+                }
             }
         }
+        from = to;
     }
-    s
+    seen.swap_remove(0);
+    seen.sort_unstable_by_key(|s| s.0);
 }
 
 /// Bodies perceived, its own cell first, then a neighbour's from a random side, up to `nseen`: walls hide by how closed
 /// they are, cover with chance 1 - exp(-a), a the others' capture area per m². Then the parts in its cell.
 pub(super) fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
     let i = b.cell as usize;
-    let (mut seen, mut cnt, side) = ([(0usize, false); MAX_SEEN], 0, rng.below(8));
+    let (mut seen, mut cnt, side, cells) = ([(0usize, false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
     let room = bond::room(w, b);
     for q in 0..9 {
         if cnt == nseen {
             break;
         }
-        let Some(j) = (if q == 0 { Some(i) } else { w.map.step(i, DIRS[(side + q) % 8]) }) else { continue };
+        let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
         for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
             let ob = &w.life.bodies[o as usize];
             let their = bond::room(w, ob);

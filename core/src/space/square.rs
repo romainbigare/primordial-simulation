@@ -9,8 +9,6 @@ use std::f64::consts::{SQRT_2, TAU};
 
 /// Forward link offsets (dx, dy). Every link is met once as (i, i + offset).
 const FORWARD: [(i32, i32); 4] = [(1, 0), (0, 1), (1, 1), (-1, 1)];
-/// All 8 neighbour offsets, clockwise from east.
-pub const DIRS: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
 
 /// A map of `w × h` squares of side `side`, m; with `wrap`, a band of a sphere whose rows are whole circles of latitude
 /// and whose squares are `side` from north to south.

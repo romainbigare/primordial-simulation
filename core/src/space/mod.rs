@@ -1,12 +1,14 @@
 //! Space: the shape of the world, and nothing else. A mesh is levels of cells (area, centre, latitude, longitude) and
 //! links (two cells, the distance between centres, the width of their border); each cell but at the coarsest level has
-//! a parent. A level lies on a flat map or on a sphere.
+//! a parent. A level lies on a flat map or on a sphere. Each link of a cell takes one of its compass directions (`way`).
 //! Links are plain arrays, each once (`a < b`), with each cell's links in compressed lists, so solvers take slices.
 
 pub mod square;
 pub mod stack;
 
 pub use stack::{Layer, Stack};
+
+use std::f64::consts::TAU;
 
 /// Read-only views of array fields of the same names, `name: element type` (the shape is built once and then only read).
 macro_rules! views {
@@ -37,12 +39,25 @@ pub struct Level {
     start: Vec<u32>,
     adj_link: Vec<u32>,
     adj_cell: Vec<u32>,
+    /// The heading of each entry's link from its cell, a unit vector (east, south) along `offset`, and each cell's entry
+    /// in each compass direction (`NONE` where it has none)
+    heading: Vec<[f64; 2]>,
+    compass: Vec<[u32; COMPASS]>,
     /// Each cell's parent at the next coarser level (empty at the coarsest)
     parent: Vec<u32>,
     /// The children of cell `i` at the next finer level are `kids[kid_start[i]..kid_start[i + 1]]` (empty at the finest)
     kid_start: Vec<u32>,
     kids: Vec<u32>,
 }
+
+/// The degrees of longitude east from `from` to `to`, the shorter way round.
+fn east_of(from: f64, to: f64) -> f64 {
+    (to - from + 180.0).rem_euclid(360.0) - 180.0
+}
+
+/// The compass directions of a cell's links, clockwise from east in eighths of a turn; and no link in a direction.
+pub const COMPASS: usize = 8;
+const NONE: u32 = u32::MAX;
 
 /// A link while a level is built: the two cells (`a < b`), the distance and the width, m.
 pub type LinkSpec = (u32, u32, f64, f64);
@@ -75,6 +90,26 @@ impl Level {
         (self.start, self.adj_link) = compress(n, ends.clone().map(|(c, (l, _))| (c, l)));
         self.adj_cell = compress(n, ends.map(|(c, (_, o))| (c, o))).1;
         ((self.a, self.b), (self.dist, self.width)) = links.into_iter().map(|(a, b, dist, width)| ((a, b), (dist, width))).unzip();
+        let ends = (0..n).flat_map(|i| self.around(i).1.iter().map(move |&j| (i, j as usize)));
+        self.heading = ends.map(|(i, j)| self.offset(i, j)).map(|o| [o[0] / o[0].hypot(o[1]), o[1] / o[0].hypot(o[1])]).collect();
+        self.compass = (0..n).map(|i| self.points(i)).collect();
+    }
+    /// The entries of cell `i` in the compass directions: each link takes the free direction nearest its heading, the
+    /// links nearest a direction first, so a square's 8 neighbours take the 8 directions even where a globe's rows
+    /// narrow toward a pole.
+    fn points(&self, i: usize) -> [u32; COMPASS] {
+        let (r, eighths) = (self.start[i] as usize..self.start[i + 1] as usize, |e: usize| self.heading[e][1].atan2(self.heading[e][0]) / (TAU / COMPASS as f64));
+        assert!(r.len() <= COMPASS, "a cell has at most one link in each compass direction");
+        // How far bearing `x` lies from direction `d`, in eighths of a turn either way.
+        let off = |x: f64, d: usize| (x - d as f64).rem_euclid(COMPASS as f64).min((d as f64 - x).rem_euclid(COMPASS as f64));
+        let mut order: Vec<usize> = r.collect();
+        order.sort_by(|&p, &q| (eighths(p) - eighths(p).round()).abs().total_cmp(&(eighths(q) - eighths(q).round()).abs()));
+        let mut points = [NONE; COMPASS];
+        for e in order {
+            let d = (0..COMPASS).filter(|&d| points[d] == NONE).min_by(|&p, &q| off(eighths(e), p).total_cmp(&off(eighths(e), q)));
+            points[d.expect("a free direction")] = e as u32;
+        }
+        points
     }
     pub fn n(&self) -> usize {
         self.area.len()
@@ -82,7 +117,7 @@ impl Level {
     views! {
         area: f64, lat: f64, lon: f64, a: u32, b: u32, dist: f64, width: f64,
         /// The compressed adjacency: `start` (len n + 1), and for each entry its link and its other cell.
-        start: u32, adj_link: u32, adj_cell: u32,
+        start: u32, adj_link: u32, adj_cell: u32, heading: [f64; 2],
         /// Each cell's parent at the next coarser level (empty at the coarsest).
         parent: u32,
     }
@@ -92,9 +127,13 @@ impl Level {
         if self.radius == 0.0 {
             return [self.centre[j][0] - self.centre[i][0], self.centre[j][1] - self.centre[i][1]];
         }
-        let east = (self.lon[j] - self.lon[i] + 180.0).rem_euclid(360.0) - 180.0;
+        let east = east_of(self.lon[i], self.lon[j]);
         let mean = ((self.lat[i] + self.lat[j]) / 2.0).to_radians();
         [self.radius * east.to_radians() * mean.cos(), self.radius * (self.lat[i] - self.lat[j]).to_radians()]
+    }
+    /// The entry of cell `i`'s link in compass direction `d` (0 east, clockwise in eighths of a turn), if it has one.
+    pub fn way(&self, i: usize, d: usize) -> Option<usize> {
+        Some(self.compass[i][d]).filter(|&e| e != NONE).map(|e| e as usize)
     }
     /// The links of cell `i` and the cells at their other ends.
     pub fn around(&self, i: usize) -> (&[u32], &[u32]) {
@@ -143,6 +182,16 @@ impl Mesh {
     /// The share of its cell at level `to` that cell `i` of the finest level covers: their areas' ratio.
     pub fn share(&self, i: usize, to: usize) -> f64 {
         self.cells().area[i] / self.levels[to].area[self.up(i, 0, to)]
+    }
+    /// The way on the map from cell `i` of level `from` to cell `j` of level `to`, (east, south), m: between their
+    /// centres on a flat map; on a sphere, on its map of latitude and longitude at the scale of the equator (the shorter
+    /// way round), where reading a coarser level bilinearly is linear in both.
+    pub fn on_map(&self, (from, i): (usize, usize), (to, j): (usize, usize)) -> [f64; 2] {
+        let (p, q) = (&self.levels[from], &self.levels[to]);
+        if p.radius == 0.0 {
+            return [q.centre[j][0] - p.centre[i][0], q.centre[j][1] - p.centre[i][1]];
+        }
+        [p.radius * east_of(p.lon[i], q.lon[j]).to_radians(), p.radius * (p.lat[i] - q.lat[j]).to_radians()]
     }
     /// Add a coarser level over the coarsest, given each cell's parent (0..m, each with a child; on a sphere, children
     /// that do not straddle the longitude 0). A coarse cell holds its children's area at their area-weighted centre;

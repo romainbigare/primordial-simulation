@@ -485,7 +485,7 @@ const PIT_M: f64 = 10.0;
 fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
-    let near = |w: &World, i: usize| pcore::space::square::DIRS.iter().map(|&d| w.map.step(i, d).map(|j| w.surface_z(j))).collect::<Option<Vec<f64>>>();
+    let near = |w: &World, i: usize| Some(w.mesh.cells().around(i).1).filter(|c| c.len() == 8).map(|c| c.iter().map(|&j| w.surface_z(j as usize)).collect::<Vec<f64>>());
     let dry = |w: &World, i: usize| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0;
     let i = (0..n).find(|&i| dry(&w, i) && near(&w, i).is_some_and(|z| z.iter().all(|&z| z > 20.0))).expect("dry land among dry land");
     let (area, lowest) = (w.mesh.cells().area()[i], near(&w, i).unwrap().into_iter().fold(f64::INFINITY, f64::min));

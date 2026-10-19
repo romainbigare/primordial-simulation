@@ -86,6 +86,20 @@ fn air_of_is_the_parent_at_the_air_level_and_levels_agree() {
     }
 }
 
+/// On a map of squares, flat or a globe (whose cells near a pole are far narrower than tall), each cell's link in each
+/// compass direction goes to its neighbour that way on the grid.
+#[test]
+fn the_compass_of_a_square_is_its_eight_neighbours() {
+    const GRID: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
+    let globe = Square { w: 16, h: 8, side: SIDE, wrap: true };
+    for (sq, mesh) in maps().into_iter().chain([(globe, globe.mesh(&[SCALE], -90.0, 90.0))]) {
+        let lv = mesh.cells();
+        for (i, (d, &g)) in (0..sq.n()).flat_map(|i| GRID.iter().enumerate().map(move |dg| (i, dg))) {
+            assert_eq!(lv.way(i, d).map(|e| lv.adj_cell()[e] as usize), sq.step(i, g), "cell {i}, direction {d}");
+        }
+    }
+}
+
 #[test]
 fn a_stack_of_three_layers_links_each_cell_up_its_column() {
     let [_, (sq, mesh)] = maps();

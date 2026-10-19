@@ -7,7 +7,6 @@
 //! once.
 
 use pcore::body::{self, Layout, INTERVAL, LEARN};
-use pcore::space::square::DIRS;
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use pcore::store::{Class, Node};
@@ -82,7 +81,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // Day by day, to see each decision.
     while log.len() < DECISIONS && w.life.bodies[slot].alive {
         let (u, from) = (w.counts.updates, w.life.bodies[slot].cell as usize);
-        let near: Vec<usize> = DIRS.iter().filter_map(|&d| w.map.step(from, d)).collect();
+        let near: Vec<usize> = w.mesh.cells().around(from).1.iter().map(|&j| j as usize).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
         pcore::day(&mut w);
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene

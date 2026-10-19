@@ -293,26 +293,31 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             refl: [mean(b.refl[0]), mean(b.refl[1])],
         })
         .collect();
-    // The air nodes are blocks of `air_scale`² squares: a cell reads the four whose centres are nearest, bilinearly
-    // (round a globe's rows).
-    let (map, scale) = (w.map, w.air_scale);
-    let (aw, ah) = (map.w.div_ceil(scale), map.h.div_ceil(scale));
-    let axis = |c: usize, len: usize, wrap: bool| {
-        let f = (c as f64 + 0.5) / scale as f64 - 0.5;
-        if wrap {
-            let a = (f.floor() as i64).rem_euclid(len as i64) as usize;
-            return (a, (a + 1) % len, f - f.floor());
-        }
-        let f = f.clamp(0.0, (len - 1) as f64);
-        let a = (f as usize).min(len.saturating_sub(2));
-        (a, (a + 1).min(len - 1), f - a as f64)
-    };
-    (s.near, s.wt) = (0..map.n())
+    // A cell reads its air node and the three next to it on its side of the node's centre, bilinearly on the map (round
+    // a globe's wrap); along an axis with no node on its side, its own alone, paired with the node on the other side.
+    let (mesh, air) = (&w.mesh, w.mesh.level(AIR));
+    (s.near, s.wt) = (0..mesh.cells().n())
         .map(|i| {
-            let (x, y) = map.xy(i);
-            let ((x0, x1, tx), (y0, y1, ty)) = (axis(x, aw, map.wrap), axis(y, ah, false));
-            let j = |x: usize, y: usize| w.mesh.up(map.idx(x * scale, y * scale), 0, AIR) as u32;
-            ([j(x0, y0), j(x1, y0), j(x0, y1), j(x1, y1)], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
+            let p = mesh.up(i, 0, AIR);
+            let o = mesh.on_map((AIR, p), (0, i));
+            // The node next to `p` in compass direction `d` (none: `p`).
+            let node = |d: Option<usize>| d.and_then(|d| air.way(p, d)).map_or(p, |e| air.adj_cell()[e] as usize);
+            // Along axis `x` (0 east, 1 south): the directions from `p` of the nodes before and after the cell (none:
+            // `p`), and the share of the way from the first to the second that the cell lies at.
+            let axis = |x: usize| {
+                let (ahead, back) = (2 * x, 2 * x + 4);
+                let part = |d: usize| o[x].abs() / mesh.on_map((AIR, p), (AIR, node(Some(d))))[x].abs();
+                match (o[x] >= 0.0, air.way(p, ahead).is_some(), air.way(p, back).is_some()) {
+                    (true, true, _) => ([None, Some(ahead)], part(ahead)),
+                    (true, false, true) => ([Some(back), None], 1.0),
+                    (false, _, true) => ([Some(back), None], 1.0 - part(back)),
+                    (false, true, false) => ([None, Some(ahead)], 0.0),
+                    _ => ([None, None], 0.0),
+                }
+            };
+            let ((xs, tx), (ys, ty)) = (axis(0), axis(1));
+            let at = |ew: Option<usize>, ns: Option<usize>| node(match (ew, ns) { (Some(0), Some(6)) => Some(7), (Some(a), Some(b)) => Some((a + b) / 2), (a, b) => a.or(b) }) as u32;
+            ([at(xs[0], ys[0]), at(xs[1], ys[0]), at(xs[0], ys[1]), at(xs[1], ys[1])], [(1.0 - tx) * (1.0 - ty), tx * (1.0 - ty), (1.0 - tx) * ty, tx * ty])
         })
         .unzip();
 }

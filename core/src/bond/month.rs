@@ -1,7 +1,7 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
 use super::{cell, dissolve, holder, id, members, move_structure, ready, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
-use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, rng::{Purpose, Rng}, space::square::DIRS, store::{Class, Node}, AIR, World};
+use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, AIR, World};
 
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
@@ -104,7 +104,11 @@ fn load(w: &mut World, r: usize) {
     let (list, i, g) = (members(w, r), cell(w, r), w.cfg.gravity);
     let (depth, rho, molv) = liquid(w, i);
     let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
-    let v = if depth > STILL_DEPTH { flux / (molv * w.map.side * depth) } else { 0.0 };
+    // The liquid's speed through the cell, m/s: its flux over the mean width of the borders it crosses times its depth.
+    let cells = w.mesh.cells();
+    let (sum, borders) = cells.around(i).0.iter().map(|&l| cells.width()[l as usize]).filter(|&wd| wd > 0.0).fold((0.0, 0.0), |(s, k), wd| (s + wd, k + 1.0));
+    let width = sum / borders;
+    let v = if depth > STILL_DEPTH { flux / (molv * width * depth) } else { 0.0 };
     let bump = std::mem::take(&mut w.parts.parts[r].push) as f64 / list.len() as f64;
     let (mut wt, mut push, mut lift) = (vec![0.0; list.len()], vec![0.0; list.len()], 0.0);
     for (x, &p) in list.iter().enumerate() {
@@ -167,8 +171,11 @@ fn load(w: &mut World, r: usize) {
     }
     let mut rng = Rng::of_node(w.seed, w.time, id(w, r), Purpose::Bond);
     let head = |j: usize| w.life.env[j][2] + w.life.env[j][1];
-    let to = DIRS.iter().filter_map(|&d| w.map.step(i, d)).filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
-    if let Some(j) = to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / w.map.side) {
+    let cells = w.mesh.cells();
+    let near = (0..COMPASS).filter_map(|d| cells.way(i, d).map(|e| cells.adj_cell()[e] as usize));
+    let to = near.filter(|&j| head(j) < head(i)).min_by(|&a, &b| head(a).total_cmp(&head(b)));
+    // It crosses the cell's width at the liquid's speed.
+    if let Some(j) = to.filter(|_| rng.f64() < v * w.cfg.calendar().month as f64 / width) {
         move_structure(w, r, j);
     }
 }

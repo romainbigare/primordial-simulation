@@ -1141,6 +1141,14 @@ Phase E review, round 1 (fixes):
   less than the rounds' tolerance kept between rounds (3% fewer instructions on the globe); waking a node only by a
   substance a reaction takes (no effect); `air_scale` 2 on the 64 x 32 globe (Flow 3.3 times dearer, a different
   climate).
+- G2, life on the mesh's links: Choose (perception and moving), Copy's dispersal and Bond's drift step on the mesh's
+  links, each in a compass direction from its heading (`Level::way`), not on `Square::step` and its 8 offsets (gone);
+  sight is a walk over the links; the drift reads the mean width of the cell's borders, not the map's side; the air's
+  four-point read comes from the mesh (`Mesh::on_map`). The island is the same world bit for bit (golden unchanged);
+  the 32 x 32 speed run about 2% slower (the walk). 32 x 16 globe, seed 1, the roster from year 1, 15 years: 14,360
+  dispersals (158 across the wrap, 5 at 60° of latitude or more), 36 steps (4 at 60° or more), drift 2.7e-15
+  (elements) and 7.4e-15 (energy); `ew run --globe --size 16 --years 15`: 85 light-eaters at year 15, drift 9.8e-16
+  and 1.2e-14, 0.16 s a year.
 
 **Owner's decisions after Phase A**
 

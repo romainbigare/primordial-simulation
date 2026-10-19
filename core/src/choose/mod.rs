@@ -10,23 +10,24 @@ mod spread;
 
 pub use feed::take_body;
 pub use go::{go, wear};
-pub use perceive::{cells, Sector};
+pub use perceive::cells;
 
-use perceive::{inputs, perceive, sector, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_SCALE};
+use perceive::{inputs, perceive, walk, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_SCALE};
 
 use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
-use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
+use crate::space::COMPASS;
 use crate::{bond, lanes, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
 pub(crate) const NT: usize = 11;
-/// Most bodies perceived (the `SEEN` gene sets how many); parts perceived; moves (one per neighbour); options.
+/// Most bodies perceived (the `SEEN` gene sets how many); parts perceived; moves (one per compass direction of the
+/// mesh's links, `Level::way`); options.
 const MAX_SEEN: usize = 6;
 const PARTS: usize = 3;
-const MOVES: usize = DIRS.len();
+const MOVES: usize = COMPASS;
 const OPTS: usize = FIXED + MOVES + VERBS * MAX_SEEN + OVERBS * PARTS;
 /// The first option toward a perceived body, and toward a perceived part.
 const TO_BODY: usize = FIXED + MOVES;
@@ -42,8 +43,10 @@ pub struct ActTmp {
     pub thought: Thought,
     /// Features of each direction (flat), for learning
     pub feat: Vec<f32>,
-    /// By sight, the cells seen in each direction
-    pub sector: Vec<Sector>,
+    /// The cells seen with their weights (`walk`), and the marks of the walk over the cells
+    seen: Vec<(u32, f32)>,
+    mark: Vec<u32>,
+    stamp: u32,
 }
 
 /// One decision: what the body perceives, its options with their scores and features, their chances and the action drawn.
@@ -76,14 +79,12 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
-    while t.sector.len() <= sight {
-        t.sector.push(sector(t.sector.len()));
-    }
     let mut c = perceive(w, slot, b, nseen, &mut rng);
     inputs(w, b, lived, temp, &c, &mut t.input);
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
-    options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n(), sight), &mut c, t);
+    walk(w, b.cell as usize, sight, t);
+    options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
     pick(w, &mut c, &mut rng);
     let (form, z) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
@@ -109,32 +110,40 @@ struct Kit<'a> {
 
 /// The score of each option: the fixed actions, a move to each neighbour (by the weighted mean of the cells it sees
 /// that way), each verb toward each perceived body and part. `pm`: a member's mass, kg; `vol`: its volume, m³.
-fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c: &mut Choice, t: &mut ActTmp) {
+fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice, t: &mut ActTmp) {
     let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
     c.logit[..FIXED].copy_from_slice(&out[..FIXED]);
     // What the body can take (by its uptake selectivity) in a cell, as it perceives it.
     let smell = |j: usize| b.k.upt.iter().map(|&(k, u)| u * w.life.seen[j * ns + k]).sum::<f32>();
-    let (here, f, sec) = (smell(i), &mut t.feat, &t.sector[sight]);
+    let (here, f, cells) = (smell(i), &mut t.feat, w.mesh.cells());
     f.clear();
     f.resize(MOVES * NF, 0.0);
-    for (d, &off) in DIRS.iter().enumerate() {
-        let Some(j) = w.map.step(i, off) else { continue };
-        let (fd, mut sum) = (&mut f[d * NF..(d + 1) * NF], 0.0);
-        for &(dx, dy, wt) in &sec[d] {
-            let Some(k) = w.map.step(i, (dx, dy)) else { continue };
-            let (ck, e) = (&w.life.cellf[k], w.life.env[k]);
-            fd[..8].iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
-            fd[0] += wt * ((e[2] - env[2]) / DZ_SCALE) as f32;
-            fd[6] += wt * ((e[0] - env[0]) / DT_NEAR) as f32;
-            fd[8] += wt * smell(k);
-            fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
-            // The step into the next cell is felt along its edge, worn or not.
-            if (dx, dy) == off {
-                fd[7] += wt * (ln(lanes::resist(w, i, j) as f32) - ck[7]);
-            }
-            sum += wt;
+    // Each direction with a link: its neighbour and the link's heading.
+    let (mut ways, mut nw) = ([(0, 0, [0.0; 2]); MOVES], 0);
+    for (d, e) in (0..MOVES).filter_map(|d| cells.way(i, d).map(|e| (d, e))) {
+        (ways[nw], nw) = ((d, cells.adj_cell()[e] as usize, cells.heading()[e]), nw + 1);
+    }
+    let mut sum = [0f32; MOVES];
+    for &(k, wt) in &t.seen {
+        // A cell seen counts toward the link whose heading lies nearest the way to it (the largest projection on it).
+        let (k, o) = (k as usize, cells.offset(i, k as usize));
+        let along = |h: [f64; 2]| o[0] * h[0] + o[1] * h[1];
+        let &(d, j, _) = ways[..nw].iter().max_by(|p, q| along(p.2).total_cmp(&along(q.2))).expect("a cell seen lies past a link");
+        let (fd, ck, e) = (&mut f[d * NF..(d + 1) * NF], &w.life.cellf[k], w.life.env[k]);
+        fd[..8].iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
+        fd[0] += wt * ((e[2] - env[2]) / DZ_SCALE) as f32;
+        fd[6] += wt * ((e[0] - env[0]) / DT_NEAR) as f32;
+        fd[8] += wt * smell(k);
+        fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
+        // The step into the next cell is felt along its link, worn or not.
+        if k == j {
+            fd[7] += wt * (ln(lanes::resist(w, i, j) as f32) - ck[7]);
         }
-        fd.iter_mut().for_each(|x| *x /= sum);
+        sum[d] += wt;
+    }
+    for &(d, j, _) in &ways[..nw] {
+        let fd = &mut f[d * NF..(d + 1) * NF];
+        fd.iter_mut().for_each(|x| *x /= sum[d]);
         fd[8] -= here;
         c.logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd);
         c.to[d] = j;

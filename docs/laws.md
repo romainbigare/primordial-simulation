@@ -7,8 +7,9 @@ points there). The code is the truth: each part names its file and function, for
 `core/src/body/pay.rs`).
 
 **Where the code is** (under `core/src/`; each law below names its own files): time in `clock/` and `schedule.rs`;
-the shape of the world in `space/` (`World::mesh`: cells, links with their widths, levels; the square map is read only
-where a law is about its layout). The map is an island of 2 km squares, or a globe (`ew run --globe`): squares of
+the shape of the world in `space/` (`World::mesh`: cells, links with their widths and headings, levels; each link
+of a cell takes one of 8 compass directions, `Level::way`, the free one nearest its heading, so a square's 8
+neighbours take the 8 directions even near a pole; the laws step only on the links). The map is an island of 2 km squares, or a globe (`ew run --globe`): squares of
 latitude and longitude from pole to pole whose rows wrap east to west, each row's area and borders from its latitude
 on a sphere of 6,371 km (cells narrow toward the poles; no link crosses a pole), the air a coarser level that wraps
 too; the shared maths in `solve/`; settings in `params.rs`; the nodes and their books in
@@ -225,7 +226,9 @@ each link of that level by three pushes, each a rate:
 
 The overturning's turn reads the slope of warmth across the link, from each node's neighbours by the way between
 centres (`Level::offset`: on a globe along the parallel and the meridian, the shorter way round the wrap). A ground cell
-sees the air of the four nearest air nodes, bilinearly, round the wrap of a globe's rows.
+sees the air of its air node and the three next to it on its side of the node's centre (`flow/scratch.rs`), bilinearly
+on the map (`Mesh::on_map`: on a globe in latitude and longitude, round the wrap); at an edge with no node on its
+side, its own node alone.
 
 The pushes come from the air at the step's start and carry the amounts and heat at its end, solved implicitly with
 the rest of the step: any speed is stable. Air moves as whole columns, so there is no wind
@@ -396,7 +399,9 @@ step). Also `choose::go`, `Body::height`, `Body::breaking`.
 Once a month (`load` in `bond/month.rs`) each bond carries the weight hanging on it from the anchored part, less
 buoyancy, plus the push of moving liquid and of bodies moving through the cell (`bump` of their weight). A bond loaded
 past its strength breaks. What has no support lies on the ground. A structure the liquid holds up floats and drifts
-down the liquid's slope (`bond::afloat`).
+down the liquid's slope (`bond::afloat`): to the neighbour whose liquid stands lowest, with the chance that the
+liquid, at its speed (the cell's outflow over the mean width of its borders and the depth), crosses that width in
+the month.
 
 ### 3.3 Holding, carrying, digging
 
@@ -473,7 +478,8 @@ sense sizes in whole units). It decides who mixes, who joins a node and who merg
 - An individual makes whole children; a node makes fractional members of what its brood holds beyond half a child per
   member (`copy::BROOD_HELD`): each member fills its own brood and makes a child when it covers one, so their broods lie
   evenly between none and one child, and a member who dies loses what it held. A share `DISPERSE` of a node's children
-  starts in a random neighbour cell (for an individual, the chance that they do); less than one member with no node of
+  starts in the neighbour cell of a random compass direction (none when the cell has no link that way; for an
+individual, the chance that they do); less than one member with no node of
   its kind to join waits in the brood.
 
 ### 4.3 Two parents
@@ -569,10 +575,11 @@ Files: `core/src/choose/` (`mod`: the decision; `perceive`, `learn`, `feed`: tak
 ### 5.2 Perception
 
 Limited and local (`choose/perceive.rs`): its own stores against their safe minimums, warmth, size and light; its
-cell's loose substances, liquid, temperature and crowding; the season; signals heard; its memory; the cells in 8
-directions as far as its sight (nearer cells count more); up to `SEEN` bodies in or next to its cell (looks, signals,
-well-being, how past dealings went); up to 3 parts in its cell. Walls and cover hide bodies. Each input is scaled to
-about one by a fixed table.
+cell's loose substances, liquid, temperature and crowding; the season; signals heard; its memory; the cells as far
+as its sight, a walk over the mesh's links ring by ring (`perceive::walk`; nearer rings count more, 1 / ring²), each
+seen toward the link of its cell whose heading lies nearest the way to it; up to `SEEN` bodies in or next to its
+cell, the neighbours by compass direction from a random one (looks, signals, well-being, how past dealings went); up
+to 3 parts in its cell. Walls and cover hide bodies. Each input is scaled to about one by a fixed table.
 
 ### 5.3 Actions
 

@@ -20,10 +20,10 @@ use crate::body::{most, mutation_size, vary, within, Body, Layout, CHILD, COPY_M
 use crate::brain::{self, row_step, shake};
 use crate::chem::Chemistry;
 use crate::event::{Event, EventKind};
-use crate::space::square::DIRS;
 use crate::lineage::resized;
 use crate::nodes::{add, may_be_node, open, Lot, COUNT_SLACK};
 use crate::rng::{Purpose, Rng};
+use crate::space::COMPASS;
 use crate::World;
 use mix::{mix, mix_rows, partner};
 
@@ -70,14 +70,15 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
     let mate = if node { None } else { partner(w, slot, b, &mut r) };
-    // Children that start in a neighbour cell (off the map: none): of a node, the share `DISPERSE` of its births, however
-    // few (less than one member with no node to join there waits in the brood, as the stayers do, `emit`); an
-    // individual's go together, by that chance.
+    // Children that start in the neighbour cell of a compass direction drawn (no link that way: none): of a node, the
+    // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
+    // as the stayers do, `emit`); an individual's go together, by that chance.
     let d = b.gene_in_range(DISPERSE);
     let prov = provisions(&w.chem, b, mi, matter, births);
     let litter = Litter { body, matter, prov, node, alone: !may_be_node(w, b), mate, parent: id };
     let m = if node { d * births } else { (r.f64() < d) as u8 as f64 };
-    let to = if m > 0.0 { w.map.step(i, DIRS[r.below(8)]) } else { None };
+    let cells = w.mesh.cells();
+    let to = if m > 0.0 { cells.way(i, r.below(COMPASS)).map(|e| cells.adj_cell()[e] as usize) } else { None };
     let (cell, m) = match to {
         _ if !node => (to.unwrap_or(i), births),
         Some(j) => (j, m),
