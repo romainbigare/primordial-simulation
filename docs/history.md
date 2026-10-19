@@ -992,6 +992,11 @@ Phase E review, round 1 (fixes):
   lighter as nodes, big eaters of light-eaters 2.6 times (seed 1, real life 60 against 13 years), strong big eaters of
   eaters 4.5 times (seed 5). The default start's eaters agree within the noise.
 
+- The key numbers after this work (64 x 64, 3 seeds, year 30): eaters 3.79 log10 kg, out of their range (4.0 to 5.0;
+  decision 26); as individuals 3.94 (3.90 on main before it), as main's nodes 4.33. The climate, rain, rivers,
+  light-eaters and lives stay in range. The eaters live to year 60 at 48 x 48 in seeds 1 and 2 (206 and 312 members),
+  not in seed 3 (nor as individuals).
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the
