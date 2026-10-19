@@ -140,12 +140,8 @@ impl Lot {
     /// (the remainder, so the two add up to what it held to rounding). The same share of both is members alike to the
     /// others; a larger share of the amounts is members that hold more than the mean.
     pub(crate) fn split(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Lot {
-        let mut store = Vec::with_capacity(b.store.len());
-        for a in b.store.iter_mut() {
-            let x = fa * *a;
-            store.push(x);
-            *a -= x;
-        }
+        let store: Vec<f64> = b.store.iter().map(|a| fa * a).collect();
+        b.store.iter_mut().zip(&store).for_each(|(a, x)| *a -= x);
         let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last, mark: b.mark, rained: b.rained };
         (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
         life.set_count(b, b.count - c.count);

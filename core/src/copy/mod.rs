@@ -97,7 +97,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
 /// `m` children of `b` start in `cell`: their genes (`mix` with a partner, then `body::vary`: the drift of a group of
 /// `m` on the mean, a generation's mutation added to the spread), stores and heat (`give`), born rows (`child_rows`)
 /// and, for an individual's, perhaps a lineage of their own (`child_lineage`). They join the young node of their kind
-/// there (`young_node`), booked on it with no body built for them (`nodes::add`, their rows carried over to its brain's
+/// there, booked on it with no body built for them (`nodes::add`, their rows carried over to its brain's
 /// sizes), or start a body (`place_child`), which is the young node of their parent's from then on when they stay in
 /// its cell. Children that started a new lineage stay apart. Less than one member of a node's children with no node to
 /// join waits in the brood (nothing is made; false).
@@ -106,14 +106,16 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));
     let (genes, spread) = vary(&Layout::of(&w.chem), from, pooled, m, w.cfg.phys.alike, r);
     let size = mutation_size(from);
-    // Nothing between here and the join changes the nodes of the cell or the children's genes, so a search made now
-    // holds for the join.
-    let mut hit = None;
-    if l.node && m < 1.0 {
-        hit = if l.alone { None } else { young_node(w, slot, b, l, cell, &genes, &spread) };
-        if hit.is_none() {
-            return false;
-        }
+    // The young node of their kind they join there: for a node's children who stay, its young node (`young::linked`);
+    // else the first young node there of their genes and spread (`kin`). Nothing between here and the join changes the
+    // nodes of the cell or the children's genes, so the search made now holds for the join.
+    let hit = match () {
+        _ if l.alone => None,
+        _ if l.node && cell == b.cell as usize => young::linked(w, slot, b, false),
+        _ => kin(w, cell, &genes, &spread, false),
+    };
+    if l.node && m < 1.0 && hit.is_none() {
+        return false;
     }
     let (store, e) = give(w, b, l, cell, m);
     let (mut rows, row_spread) = child_rows(w, b, l, m, size, r);
@@ -124,8 +126,8 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     // Their brain: their born rows plus what their parent learned.
     let own = w.life.inherit(rows.as_deref().unwrap_or(w.life.born(b)), lineage, b);
     let lot = Lot { count: m, store, e, brood: 0.0, last: w.day() as f64, mark: w.light[cell], rained: w.rained[cell] };
-    if fresh.is_none() && !l.alone {
-        if let Some(t) = hit.or_else(|| young_node(w, slot, b, l, cell, &genes, &spread)) {
+    if fresh.is_none() {
+        if let Some(t) = hit {
             let born = rows.unwrap_or_else(|| w.life.born(b).to_vec());
             let (born, own) = w.life.carry_rows(born, own, b.lineage, w.life.bodies[t].lineage, r, w.cfg.new_noise());
             let mut o = std::mem::take(&mut w.life.bodies[t]);
@@ -158,14 +160,6 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
         young::link(w, slot, b, s);
     }
     true
-}
-
-/// The young node of their kind `m` children of `b` (slot `slot`, taken out of it) join in `cell`: for a node's
-/// children who stay, its young node (`young::linked`); else the first young node there of their genes `genes` and
-/// spread `spread` (`kin`).
-#[allow(clippy::too_many_arguments)]
-fn young_node(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, genes: &[f32], spread: &[f32]) -> Option<usize> {
-    if l.node && cell == b.cell as usize { young::linked(w, slot, b, false) } else { kin(w, cell, genes, spread, false) }
 }
 
 /// The stores and heat of `m` children of `b` starting in `cell`, taken from it, and their birth recorded: the matter
