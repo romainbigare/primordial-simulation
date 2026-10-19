@@ -1,9 +1,8 @@
 //! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
-//! seeds in the reference runs: for the climate and the land worn down, the runs of the converged world (the air's
-//! implicit step at its default); for life, the A2 runs (`docs/reports/foundation-a/`). The climate and the land worn
-//! down are means over years 21 to 30; life is read at year 30, ten years after the eaters came. Each run also keeps
-//! its books.
+//! seeds in the reference runs: the runs of the world after the foundation's law changes of Phases E, F and J, at the
+//! steps of Phase J's end (decision 27). The climate and the land worn down are means over years 21 to 30; life is read
+//! at year 30, ten years after the eaters came. Each run also keeps its books.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
@@ -33,35 +32,32 @@ const FROM: u64 = 21;
 const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
-/// Ground temperature on land, K (series `t_land`), in the reference runs of the converged world.
-const T_LAND: f64 = 288.45;
-/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs of the converged world.
-const SWING: f64 = 12.68;
-/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs of the converged
-/// world.
-const RAIN_LAND: f64 = 1.842e-3;
-/// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs of the converged world.
-const ABSORBER_PPM: f64 = 271.2;
-/// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs of the converged
-/// world.
-const RIVERS: f64 = 784.5;
-/// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs of the
-/// converged world.
-const WORN: f64 = 0.0717;
-/// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the A2 reference runs.
-const PLANT_KG: f64 = 10.533;
-/// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the A2 reference runs.
-const EATER_KG: f64 = 4.497;
-/// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the A2 runs.
-const PLANT_LIFE: f64 = 1.895;
-/// The factor either way the light-eaters' life may lie from `PLANT_LIFE`: wider than the others' 2, as the A2
-/// light-eaters paid for a brain that light-eaters no longer have, so they live longer.
+/// Ground temperature on land, K (series `t_land`), in the reference runs.
+const T_LAND: f64 = 289.50;
+/// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
+const SWING: f64 = 12.73;
+/// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
+const RAIN_LAND: f64 = 1.798e-3;
+/// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
+const ABSORBER_PPM: f64 = 250.5;
+/// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
+const RIVERS: f64 = 831.8;
+/// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
+const WORN: f64 = 0.0816;
+/// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
+const PLANT_KG: f64 = 10.610;
+/// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
+const EATER_KG: f64 = 3.943;
+/// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the reference runs.
+const PLANT_LIFE: f64 = 2.324;
+/// The factor either way the light-eaters' life may lie from `PLANT_LIFE`: wider than the others' 2, kept as it was
+/// set against the A2 runs (decision 27).
 const PLANT_LIFE_RANGE: f64 = 3.0;
-/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, as the A2 eaters shared
-/// the brain rows of their group and learned slower than a body that learns into its own rows.
+/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, kept as it was set
+/// against the A2 runs (decision 27).
 const EATER_KG_RANGE: f64 = 0.5;
-/// The life eaters live at year 30, yr (`root_1_life_real`), in the A2 reference runs.
-const EATER_LIFE: f64 = 2.914;
+/// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
+const EATER_LIFE: f64 = 3.787;
 
 /// How far a number may lie from its reference: by at most so much, or by at most a factor either way.
 #[derive(Clone, Copy)]

@@ -1120,6 +1120,11 @@ Phase E review, round 1 (fixes):
   lower than at 3/3). Rain on land within 0.4% at every step; plant members within 6%. The default stays 10/10 (decision
   22: 30/10 is out of 0.2 K on seed 1). Speed (ms a year, one thread, a busy machine): Flow 3,450 / 1,430 / 1,640 and
   Change 1,020 / 450 / 240 at 3/3, 10/10 and 30/10.
+- The key-number references set again (decision 27) from 3 seeds x 30 years at the default steps, after the law
+  changes of Phases E, F and J; the ranges stay. Old to new: land 288.45 to 289.50 K, swing 12.68 to 12.73 K, rain on
+  land 1.842e-3 to 1.798e-3 mol/m²/s, absorbing gas 271.2 to 250.5 ppm, river cells 784.5 to 831.8, land worn 0.0717
+  to 0.0816 mm/yr, light-eaters 10.533 to 10.610 log10 kg, eaters 4.497 to 3.943, life of light-eaters 1.895 to 2.324
+  yr, of eaters 2.914 to 3.787 yr.
 
 **Phase K: recording and viewer**
 
