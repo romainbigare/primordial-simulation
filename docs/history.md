@@ -905,6 +905,12 @@ Phase E review, round 1 (fixes):
   x/ 2). The long-step test, run once: land -0.10 K (noise 0.71), warmest month -0.21 K (0.34), coldest +0.04 K
   (1.19), rain on land +0.2%, absorbing gas -0.1%, river cells +0.3%.
 
+**Phase K: recording and viewer**
+
+- K3, viewer (part without the globe): the charts are in sections by name (climate, air gases, minerals, births and
+  deaths, brains, movement, parts, catalysts, one section a starting kind) with a search box; a "Paths" toggle draws
+  the `worn` layer over any map view.
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body

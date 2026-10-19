@@ -1,5 +1,5 @@
 import { World, gunzip, parse, plane, fmt, fmtYear, unitText } from './data';
-import { CLASSES, paint, rampFor, rampCss } from './earth';
+import { CLASSES, PATH_LAYER, paint, rampFor, rampCss } from './earth';
 import { MapView } from './map';
 import { Charts } from './charts';
 
@@ -13,7 +13,7 @@ const label = (n: string) => LABELS[n] ?? (n[0].toUpperCase() + n.slice(1).repla
 const SPEEDS = [1, 2, 4, 8, 16, 32];
 
 let world: World | null = null;
-let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null;
+let frame = 0, speed = 4, playing = false, view = 'earth', layer: string | null = null, paths = false;
 let cls = new Uint8Array(0);
 
 const map = new MapView($<HTMLCanvasElement>('cv'), () => inspect(), () => inspect());
@@ -51,7 +51,8 @@ function setup(w: World): void {
     el.onclick = () => { setFrame(i); tip(el, text); };
     return el;
   }));
-  playing = false; layer = null;
+  $('paths').hidden = !w.index.has(PATH_LAYER);
+  playing = false; layer = null; paths = false;
   setFrame(0); setLayer(null); syncUi();
 }
 
@@ -74,7 +75,7 @@ function setFrame(f: number): void {
 
 function repaint(): void {
   if (!world) return;
-  paint(world, frame, layer ?? view, map.img!, cls);
+  paint(world, frame, layer ?? view, map.img!, cls, paths);
   map.commit();
   inspect();
 }
@@ -95,6 +96,7 @@ function syncUi(): void {
   document.querySelectorAll<HTMLElement>('#views button').forEach(b => b.classList.toggle('on', !layer && b.dataset.view === view));
   document.querySelectorAll<HTMLElement>('#layers button').forEach(b => b.classList.toggle('on', b.dataset.layer === layer));
   document.querySelectorAll<HTMLElement>('#speeds button').forEach(b => b.classList.toggle('on', b.dataset.speed === String(speed)));
+  $('paths').classList.toggle('on', paths);
   $('play').classList.toggle('playing', playing);
 }
 
@@ -152,18 +154,22 @@ function togglePlay(): void {
 // ---- wiring
 $('play').onclick = togglePlay;
 $('fit').onclick = () => map.fit();
+$('paths').onclick = () => { paths = !paths; syncUi(); repaint(); };
+$<HTMLInputElement>('chartfind').oninput = e => charts.filter((e.target as HTMLInputElement).value);
 $('speeds').replaceChildren(...SPEEDS.map(s => { const b = button(`×${s}`, () => { speed = s; syncUi(); }); b.dataset.speed = String(s); return b; }));
 document.querySelectorAll<HTMLElement>('#views button').forEach(b => (b.onclick = () => setView(b.dataset.view!)));
 $<HTMLInputElement>('tl').oninput = e => setFrame(+(e.target as HTMLInputElement).value);
 $<HTMLInputElement>('file').onchange = e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) f.arrayBuffer().then(load); };
 addEventListener('keydown', e => {
   const tag = (e.target as HTMLElement).tagName;
+  if ((e.target as HTMLInputElement).type === 'search') return; // typing in the chart search
   if (e.key === 't' || e.key === 'T') setView(view === 'earth' ? 'true' : 'earth');
   else if (e.key === ' ' && tag !== 'BUTTON' && tag !== 'INPUT') { e.preventDefault(); togglePlay(); }
   else if (e.key === 'ArrowLeft' && tag !== 'INPUT') setFrame(frame - (e.shiftKey ? 10 : 1));
   else if (e.key === 'ArrowRight' && tag !== 'INPUT') setFrame(frame + (e.shiftKey ? 10 : 1));
   else if (e.key === 'Escape') { setLayer(null); map.pick = -1; inspect(); map.invalidate(); }
   else if (e.key === 'f') map.fit();
+  else if (e.key === 'p' && tag !== 'INPUT') $('paths').click();
 });
 let depth = 0;
 addEventListener('dragenter', e => { e.preventDefault(); depth++; $('drop').hidden = false; });

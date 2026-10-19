@@ -64,8 +64,12 @@ function oceanFill(wet: Uint8Array, W: number, H: number): Uint8Array {
   return sea;
 }
 
-/** Fill `img` for frame f. mode: 'earth', 'true' or a layer name. `cls` receives the map class of every cell. */
-export function paint(w: World, f: number, mode: string, img: ImageData, cls: Uint8Array): void {
+/** Where movers wore paths (the `worn` layer: the most cleared link of the cell), drawn over the map. */
+export const PATH_LAYER = 'worn';
+const PATH = rgb('#e8590c');
+
+/** Fill `img` for frame f. mode: 'earth', 'true' or a layer name. `cls` receives the map class of every cell. `paths` draws the worn links over it. */
+export function paint(w: World, f: number, mode: string, img: ImageData, cls: Uint8Array, paths: boolean): void {
   const { w: W, h: H, cell_m } = w.meta;
   const z = decode(w, f, 'z'), depth = decode(w, f, 'depth'), ice = decode(w, f, 'ice'), tg = decode(w, f, 't_ground');
   const flux = decode(w, f, 'flux'), plants = plane(w, f, 'plants');
@@ -73,6 +77,7 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
   const over = ['earth', 'true'].includes(mode) ? null : plane(w, f, mode);
   const overLut = over ? w.lut[w.index.get(mode)!] : null;
   const overRamp = rampFor(mode);
+  const worn = paths && w.index.has(PATH_LAYER) ? plane(w, f, PATH_LAYER) : null;
 
   const wet = Uint8Array.from(depth, d => (d >= WET ? 1 : 0));
   const sea = oceanFill(wet, W, H);
@@ -131,6 +136,10 @@ export function paint(w: World, f: number, mode: string, img: ImageData, cls: Ui
         const mo = 0.72 * (0.75 + 0.25 * m);
         r = c[0] * mo + r * 0.28; g = c[1] * mo + g * 0.28; b = c[2] * mo + b * 0.28;
       }
+    }
+    if (worn && worn[i] > 1) { // a path (byte 1 is the uncleared ground, 1x): stronger the more cleared
+      const t = 0.4 + 0.5 * ((worn[i] - 1) / 254);
+      r += (PATH[0] - r) * t; g += (PATH[1] - g) * t; b += (PATH[2] - b) * t;
     }
     out[i * 4] = r; out[i * 4 + 1] = g; out[i * 4 + 2] = b; out[i * 4 + 3] = 255;
   }
