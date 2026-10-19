@@ -865,6 +865,15 @@ Phase E review, round 1 (fixes):
 
 **Phase F: population nodes**
 
+- F7, the check of nodes against individuals (handover 7.1) as one slow test, `tape/tests/nodes.rs` (the run as `ew
+  run` makes it moves to `tape/tests/common`, shared with `ranges.rs`). Its windows are years 41-50, and 26-30 with the
+  roster (after its last kind is placed, decision 14; handover 7.1 says so): at 32 x 32 the eaters as individuals pass
+  10^4 bodies by year 70 and the roster's eaters of remains 10^5 by year 28, doubling each year. It fails, past the noise of the crowd setting (2.7 times on the eaters' mass): in years
+  41-50 seed 1's eaters are 24 times the mass as nodes as individuals, seed 5's 7 times lighter with a real life 3.6
+  times shorter; in the roster the real life of the eaters of remains, small and big, is 2 to 2.7 times shorter as
+  nodes (members die of age at a constant rate from birth, individuals at the end of their life), and gene means of
+  the eaters move apart. The big slow eaters of light-eaters are too few to compare (their real life is 25 and 0.9
+  years at the two crowd settings).
 - F7 follow-up, the brood rots with the matter it is part of (`Body::brood_share`): a body's own reactions (the
   rotting of reaction 21) and burnings used its body matter, the brood held in it with the rest, but took it all from
   the body, so a body holding a brood shrank faster. Individuals, who hold up to a whole child, shrank about 13% more
@@ -902,7 +911,6 @@ Phase E review, round 1 (fixes):
   336 members, eater life 5.8 to 6.4 yr, carbon gas 251 to 253 ppm; F7 differences past the noise 17 to 10. Snapshot
   version 34; golden re-pinned.
 
-  version 32; golden re-pinned.
 - F7 follow-up, speed: the maturing fit halves 40 times, on one shape a step (60, on two). 64 x 64, seed 1, years 31 to
   35, the same world within its noise: plant members 3.43e10 to 3.29e10, plant mass 4.80e10 to 4.79e10 kg, eaters 336
   to 315 members. Golden re-pinned.

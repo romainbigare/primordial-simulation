@@ -14,22 +14,18 @@
 //! their climate within the seeds' noise at the default steps and with the air's step at 6 hours and the physics step
 //! at 3 days.
 
+mod common;
+
+use common::run;
 use pcore::{Config, World};
 use std::fmt;
-use tape::Recorder;
-use worldgen::life::Seeding;
-use worldgen::schedule::Schedule;
-use worldgen::testkit::{ground_of, Books, ABSORBER};
-
-mod common;
+use worldgen::testkit::{ground_of, ABSORBER};
 
 const SEEDS: [u64; 3] = [1, 2, 3];
 const SIDE: usize = 64;
 const YEARS: u64 = 30;
 /// The climate is the mean of the years from this one to `YEARS`; the land worn down is over the same years.
 const FROM: u64 = 21;
-/// The year life starts in `ew run` (`--life-year`).
-const LIFE_YEAR: u64 = 2;
 /// Parts per million in one; millimetres in a metre.
 const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
@@ -108,35 +104,13 @@ fn rock(w: &World, land: &[usize]) -> f64 {
     land.iter().map(|&i| ground_of(w, i)).map(|g| g.0 + g.1).sum::<f64>() / land.len() as f64
 }
 
-/// `years` years of `ew run --seed <seed> --size <side>` with the settings `set` makes, recorded as `ew run` records it;
-/// `each_year(year, world, recorder)` after each year. Checks the books at the end.
-fn run(seed: u64, side: usize, years: u64, set: impl Fn(&mut Config), mut each_year: impl FnMut(u64, &World, &Recorder)) -> (World, Recorder) {
-    let mut w = worldgen::new_world(seed, side, side);
-    set(&mut w.cfg);
-    // `ew run` scales the air's heat-absorbing gases by `--absorber` (1), which sets each air node's heat again.
-    worldgen::terrain::scale_absorbers(&mut w, 1.0);
-    let plan = Schedule::new(Some(LIFE_YEAR), false, Seeding::default());
-    let (books, mut rec) = (Books::now(&w), Recorder::new(&w, 0, 0));
-    common::record(&mut rec, &mut w);
-    for y in 1..=years {
-        plan.place(&mut w);
-        for _ in 0..w.cfg.months_per_year {
-            pcore::step(&mut w);
-            common::record(&mut rec, &mut w);
-        }
-        each_year(y, &w, &rec);
-    }
-    books.assert_kept(&w, 1e-12);
-    (w, rec)
-}
-
 /// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`.
 fn key_numbers(seed: u64) -> [f64; KEYS.len()] {
     let gas = format!("air_{ABSORBER}");
     let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
     let (mut mean, mut land, mut rock_from) = ([0.0; 6], vec![], 0.0);
     let span = (YEARS - FROM + 1) as f64;
-    let (w, rec) = run(seed, SIDE, YEARS, |_| {}, |y, w, rec| {
+    let (w, rec) = run(seed, SIDE, YEARS, false, |_| {}, |y, w, rec| {
         if y == FROM - 1 {
             land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).collect();
             rock_from = rock(w, &land);
@@ -186,7 +160,7 @@ const CHEMISTRY: [&str; 7] = ["air_3", "min0_land", "min0_sea", "min1_land", "mi
 /// The `columns` at the end of each year from `SLEEP_FROM` of the sleep test's world with the settings `set` makes.
 fn yearly(columns: &[&str], set: impl Fn(&mut Config)) -> Vec<Vec<f64>> {
     let mut years = vec![];
-    run(1, SLEEP_SIDE, SLEEP_YEARS, set, |y, _, rec| {
+    run(1, SLEEP_SIDE, SLEEP_YEARS, false, set, |y, _, rec| {
         if y >= SLEEP_FROM {
             years.push(columns.iter().map(|c| rec.last(c)).collect());
         }
@@ -242,7 +216,7 @@ const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_la
 fn climate(seed: u64, set: fn(&mut Config)) -> [f64; CLIMATE.len()] {
     let mut mean = [0.0; CLIMATE.len()];
     let years = (SLEEP_YEARS - SLEEP_FROM + 1) as f64;
-    run(seed, SLEEP_SIDE, SLEEP_YEARS, set, |y, _, rec| {
+    run(seed, SLEEP_SIDE, SLEEP_YEARS, false, set, |y, _, rec| {
         if y >= SLEEP_FROM {
             mean.iter_mut().zip(CLIMATE).for_each(|(m, c)| *m += rec.last(c) / years);
         }
