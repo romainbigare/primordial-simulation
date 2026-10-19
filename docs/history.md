@@ -862,6 +862,11 @@ Phase E review, round 1 (fixes):
   10-day steps: a cell about 0.48 ms, a body node about 360 µs (64 x 64, with life).
 - `docs/laws.md` says each law once and shorter (1,117 to 776 lines): no function-by-function walk, numbers only
   where they help to read a rule (the rest are in `docs/numbers.md`); "Stability" joins the books in section 0.
+- Diet of `core` (no law changed, golden fingerprints and `series.csv` unchanged): one-use structs and helpers
+  inlined, shapes written twice merged, test-only code moved to the tests, imports one per crate, the mesh's array views
+  from one macro, short loops as iterators. Code lines 8,998 to 8,587: top-level files 1,828 to 1,758, flow 1,947 to
+  1,813, bond 744 to 712, change 571 to 510, chem 336 to 289, space 309 to 262, solve 277 to 260, clock 114 to 108,
+  store 452 to 455 (`Batch::fallen`).
 
 **Phase F: population nodes**
 

@@ -79,12 +79,8 @@ pub fn totals(w: &World) -> Totals {
 /// Returns the worst relative drift of elements and of energy.
 pub fn drift(w: &World, start: &Totals) -> (f64, f64) {
     let now = totals(w);
-    let mut worst_e: f64 = 0.0;
-    for j in 0..start.elems.len() {
-        let given = start.boundary_elems[j] - now.boundary_elems[j];
-        let d = (now.elems[j] - start.elems[j] - given).abs() / start.elems[j].abs().max(1.0);
-        worst_e = worst_e.max(d);
-    }
+    let elem_drift = |j: usize| (now.elems[j] - start.elems[j] - (start.boundary_elems[j] - now.boundary_elems[j])).abs() / start.elems[j].abs().max(1.0);
+    let worst_e = (0..start.elems.len()).map(elem_drift).fold(0.0, f64::max);
     let given: [f64; BOUNDARIES] = std::array::from_fn(|b| start.boundary_energy[b] - now.boundary_energy[b]);
     let change = (now.thermal + now.chemical + now.potential) - (start.thermal + start.chemical + start.potential);
     let scale = given[Boundary::Sun as usize].abs().max(start.thermal.abs()).max(1.0);
@@ -98,8 +94,7 @@ fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool)
 
 /// The first state value that is NaN or infinite, or below 0 where it cannot be: None for a sound world.
 pub fn broken(w: &World) -> Option<String> {
-    let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
-    let above_0 = |x: f64| x.is_finite() && x > 0.0;
+    let (at_least_0, above_0) = (|x: f64| x.is_finite() && x >= 0.0, |x: f64| x.is_finite() && x > 0.0);
     let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep))];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
     let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light), ("rained", &w.rained)];

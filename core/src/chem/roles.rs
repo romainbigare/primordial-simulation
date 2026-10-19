@@ -23,14 +23,8 @@ impl Chemistry {
     /// Enthalpy change of one unit of reaction `r` with each substance in its phase at `t`, J: at `T_SURF` the reaction
     /// heat as measured.
     pub fn dh_at(&self, r: usize, t: f64) -> f64 {
-        let h = |k: usize| {
-            let s = &self.subs[k];
-            s.hf + match self.phase(k, t) {
-                Phase::Solid => 0.0,
-                Phase::Liquid => s.lf,
-                Phase::Gas => s.latent_gas(),
-            }
-        };
+        // A liquid holds its fusion enthalpy more, a gas also its vaporisation enthalpy.
+        let h = |k: usize| self.subs[k].hf + [0.0, self.subs[k].lf, self.subs[k].latent_gas()][self.phase(k, t) as usize];
         let sum = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * h(k as usize)).sum::<f64>();
         let rx = &self.reactions[r];
         sum(&rx.outputs) - sum(&rx.inputs)
@@ -99,8 +93,7 @@ impl Chemistry {
     /// The fixing reaction: the one that makes a mineral of growth (`minerals`) from an element only a gas it takes brings.
     pub fn fixing(&self) -> Option<usize> {
         let minerals = self.minerals();
-        let gas = |k: u16| self.gas_at_surface(k as usize);
-        let has = |k: u16, e: usize| self.subs[k as usize].elems[e] > 0;
+        let (gas, has) = (|k: u16| self.gas_at_surface(k as usize), |k: u16, e: usize| self.subs[k as usize].elems[e] > 0);
         (0..self.reactions.len()).find(|&r| {
             let i = &self.reactions[r].inputs;
             let from_air = |m: u16| (0..self.n_elements).any(|e| has(m, e) && i.iter().all(|p| !has(p.0, e) || gas(p.0)) && i.iter().any(|p| has(p.0, e)));

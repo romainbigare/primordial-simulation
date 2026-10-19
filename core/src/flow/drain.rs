@@ -111,9 +111,7 @@ fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held)
     spread.step(&Net { a: &na, b: &nb, g: &gl, cap: &cap }, &mut x, dt, cap.len(), &mut flux);
     // No store and no pores give more than they hold.
     let mut have = vec![0.0; stack.nodes()];
-    for (i, &vol) in held.iter().enumerate() {
-        (have[stack.node(DEEP, i)], have[stack.node(PORES, i)]) = (vol, mob.vol[i]);
-    }
+    held.iter().enumerate().for_each(|(i, &vol)| (have[stack.node(DEEP, i)], have[stack.node(PORES, i)]) = (vol, mob.vol[i]));
     within(&na, &nb, &mut flux, &have);
     (a, b, flux, x0)
 }

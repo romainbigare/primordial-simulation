@@ -97,8 +97,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
             }
         }
         _ => {
-            let r = w.parts.parts[p].root as usize;
-            let i = b.cell as usize;
+            let (r, i) = (w.parts.parts[p].root as usize, b.cell as usize);
             let used: f64 = w.life.at[i].iter().map(|&o| &w.life.bodies[o as usize]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| o.volume(&w.chem, o.temp(&w.chem))).sum();
             let s = w.parts.parts[r].s;
             if s.encl.closed > 0.0 && s.space >= used + b.volume(&w.chem, b.temp(&w.chem)) && body::pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
@@ -247,9 +246,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
     if !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
         return;
     }
-    for (k, &a) in m.iter().enumerate() {
-        w.moves.push(&w.chem, Move::loosen(i, k, a));
-    }
+    m.iter().enumerate().for_each(|(k, &a)| w.moves.push(&w.chem, Move::loosen(i, k, a)));
 }
 
 /// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets go.

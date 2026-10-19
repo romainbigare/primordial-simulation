@@ -21,17 +21,6 @@ pub fn step(w: &mut World) {
     step_marked(w, &mut |_| {});
 }
 
-/// After a stage: `mark(stage)`; in debug builds, stop at the first stage that leaves the world broken.
-#[inline]
-fn after(w: &World, stage: Stage, what: &str, mark: &mut dyn FnMut(Stage)) {
-    mark(stage);
-    if cfg!(debug_assertions) {
-        if let Some(e) = check::broken(w) {
-            panic!("broken after {what} (day {}): {e}", w.day());
-        }
-    }
-}
-
 /// `step`, calling `mark(stage)` after each stage, e.g. to time them.
 pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(Stage)) {
     run_for(w, w.cfg.calendar().month, mark);
@@ -72,14 +61,18 @@ fn processes(w: &World) -> [(Every, Run); 9] {
     ]
 }
 
-/// Run the processes due from the world's time on, for `span` seconds.
+/// Run the processes due from the world's time on, for `span` seconds; after each, `mark(stage)`, and in debug builds a
+/// stop at the first stage that leaves the world broken.
 fn run_for(w: &mut World, span: u64, mark: &mut dyn FnMut(Stage)) {
     let (list, end) = (processes(w), w.time + span);
     while w.time < end {
         let t = w.time;
         for ((stage, what, run), span) in clock::due(&list, t) {
             run(w, span);
-            after(w, stage, what, mark);
+            mark(stage);
+            if let Some(e) = cfg!(debug_assertions).then(|| check::broken(w)).flatten() {
+                panic!("broken after {what} (day {}): {e}", w.day());
+            }
         }
         w.time = clock::next(&list, t).min(end);
     }

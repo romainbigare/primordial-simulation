@@ -44,15 +44,12 @@ pub fn step(w: &mut World) {
 /// Part `s` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
 /// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
 fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
-    let na = w.mesh.level(AIR).n();
-    let i = cell(w, s);
+    let (na, i) = (w.mesh.level(AIR).n(), cell(w, s));
     let j = w.mesh.up(i, 0, AIR);
     let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), w.t_air(j));
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
-    for (k, p0) in pool0.iter_mut().enumerate() {
-        *p0 = w.store.amounts(Class::Air)[k * na + j] * air_share;
-    }
+    pool0.iter_mut().enumerate().for_each(|(k, p0)| *p0 = w.store.amounts(Class::Air)[k * na + j] * air_share);
     pool.copy_from_slice(pool0);
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
     rc.react(chem, &mut p.wall, Some(pool), &mut p.e, fixed, None, 0.0, dt);
@@ -78,10 +75,8 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
 
 /// Walls of part `s` no longer solid run off; the part takes the ground's temperature; walls under `min_kg` fall apart.
 fn settle(w: &mut World, s: usize) {
-    let ns = w.chem.ns();
-    let i = cell(w, s);
-    let tg = w.t_ground_last(i);
-    let chem = &w.chem;
+    let (ns, i) = (w.chem.ns(), cell(w, s));
+    let (tg, chem) = (w.t_ground_last(i), &w.chem);
     let p = &mut w.parts.parts[s];
     let t = p.e / p.heat_cap(chem).max(1e-9);
     for k in 0..ns {

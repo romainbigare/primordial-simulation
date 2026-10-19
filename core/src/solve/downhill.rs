@@ -37,9 +37,7 @@ impl Order {
         keys.sort_unstable();
         self.cells = keys.iter().map(|k| k.1).collect();
         self.rank.resize(head.len(), 0);
-        for (r, &c) in self.cells.iter().enumerate() {
-            self.rank[c as usize] = r as u32;
-        }
+        self.cells.iter().enumerate().for_each(|(r, &c)| self.rank[c as usize] = r as u32);
     }
 
     /// Is cell `a` visited before cell `b` (so it is passed when `b` is visited)?

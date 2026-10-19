@@ -127,11 +127,8 @@ impl World {
     /// substance on its plateau.
     pub fn surface_z(&self, i: usize) -> f64 {
         let (t, pl) = self.thaw(i);
-        let mut v = 0.0;
-        for k in 0..self.chem.ns() {
-            let mv = self.chem.molar_volume(k, chem::Phase::Solid);
-            v += (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, i, t, pl))) * mv;
-        }
+        let solid = |k: usize| (self.b(k, i) + self.g(k, i) * (1.0 - self.molten(k, i, t, pl))) * self.chem.molar_volume(k, chem::Phase::Solid);
+        let v: f64 = (0..self.chem.ns()).map(solid).sum();
         self.base_z + v / self.mesh.cells().area()[i]
     }
 }

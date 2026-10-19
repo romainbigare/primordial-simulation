@@ -90,15 +90,11 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // Heat capacity from the amounts now: other laws move matter between liquid steps, and a stale capacity would read a
     // node far too hot or cold.
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
-    for (i, skin) in s.skin.iter_mut().enumerate() {
-        *skin = crate::ground::skin_cap(&w.chem, &w.cfg, area[i], s.state.bedk.iter().copied(), |k| w.store.amounts(Class::Bed)[k * n + i]);
-    }
+    s.skin = (0..n).map(|i| crate::ground::skin_cap(&w.chem, &w.cfg, area[i], s.state.bedk.iter().copied(), |k| w.store.amounts(Class::Bed)[k * n + i])).collect();
     let mut cap = s.skin.clone();
     for &k in &s.state.loose {
         let cp = s.sp[k].cp;
-        for (c, &a) in cap.iter_mut().zip(&w.store.amounts(Class::Ground)[k * n..(k + 1) * n]) {
-            *c += a * cp;
-        }
+        cap.iter_mut().zip(&w.store.amounts(Class::Ground)[k * n..(k + 1) * n]).for_each(|(c, &a)| *c += a * cp);
     }
     // Temperature on the melting plateaus (`ground::melting`), each at its point lowered by what is dissolved (laws.md 2.5).
     let mut ord = [(0.0, 0); MAX_SUBSTANCES];

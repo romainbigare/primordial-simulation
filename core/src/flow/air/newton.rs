@@ -150,8 +150,7 @@ pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (
         fluxes(&links.carry(&coef[q]), xq, (1, 0), &mut wind.mol[q * nl..(q + 1) * nl]);
     }
     // Each half carries its node's heat per mol at the step's end.
-    let capa = total(s, &x, &|k| s.sp[k].cp);
-    let heat = push.carry(links, &n, (None, halves), &flow, dt);
+    let (capa, heat) = (total(s, &x, &|k| s.sp[k].cp), push.carry(links, &n, (None, halves), &flow, dt));
     let heat = (heat.0.iter().zip(&links.a).map(|(c, &a)| c * capa[a as usize]).collect(), heat.1.iter().zip(&links.b).map(|(c, &b)| c * capa[b as usize]).collect());
     let t = Newton { w, s, act, g, it, links }.coupled((x0, &coef, (&heat, &capa)), &mut x, wind);
     Newton { w, s, act, g, it, links }.traces((x0, &coef), &mut x, wind);

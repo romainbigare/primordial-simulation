@@ -50,12 +50,8 @@ pub type LinkSpec = (u32, u32, f64, f64);
 /// Compressed lists of the members of each group: `start` (len `groups + 1`) and the members in the order given.
 fn compress(groups: usize, members: impl Iterator<Item = (u32, u32)> + Clone) -> (Vec<u32>, Vec<u32>) {
     let mut start = vec![0u32; groups + 1];
-    for (g, _) in members.clone() {
-        start[g as usize + 1] += 1;
-    }
-    for g in 0..groups {
-        start[g + 1] += start[g];
-    }
+    members.clone().for_each(|(g, _)| start[g as usize + 1] += 1);
+    (0..groups).for_each(|g| start[g + 1] += start[g]);
     let (mut next, mut list) = (start.clone(), vec![0u32; start[groups] as usize]);
     for (g, m) in members {
         list[next[g as usize] as usize] = m;

@@ -257,9 +257,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
             let (mut v, mut r, mut c) = (0.0, 0.0, 0.0);
             for &k in &s.state.bedk {
                 let (b, p) = (w.store.amounts(Class::Bed)[k * n + i], &s.sp[k]);
-                v += b * p.v[0];
-                r += b * p.v[0] * p.refl[0];
-                c += b * p.v[0] * p.cond;
+                (v, r, c) = (v + b * p.v[0], r + b * p.v[0] * p.refl[0], c + b * p.v[0] * p.cond);
             }
             Bed { vol: v, refl: r / v.max(V_MIN), cond: c / v.max(V_MIN) }
         })

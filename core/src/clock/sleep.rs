@@ -70,9 +70,7 @@ impl Sleep {
     pub fn keep(&mut self, class: Class, i: usize, len: usize, amounts: &[f64]) {
         let held = &mut self.of(class).held;
         held.resize(amounts.len(), 0.0);
-        for (h, &a) in held[i..].iter_mut().step_by(len).zip(amounts[i..].iter().step_by(len)) {
-            *h = a;
-        }
+        held[i..].iter_mut().step_by(len).zip(amounts[i..].iter().step_by(len)).for_each(|(h, &a)| *h = a);
     }
 
     /// Wakes each sleeping node of `class` one of whose amounts has grown by more than `share` of what it held when it
@@ -83,13 +81,9 @@ impl Sleep {
         }
         let mut grew = vec![false; len];
         for (now_k, then_k) in amounts.chunks(len).zip(self.of(class).held.chunks(len)) {
-            for (g, (&a, &h)) in grew.iter_mut().zip(now_k.iter().zip(then_k)) {
-                *g |= a - h > share * h.max(0.0);
-            }
+            grew.iter_mut().zip(now_k.iter().zip(then_k)).for_each(|(g, (&a, &h))| *g |= a - h > share * h.max(0.0));
         }
-        for i in (0..len).filter(|&i| grew[i]) {
-            self.wake(class, i, now);
-        }
+        (0..len).filter(|&i| grew[i]).for_each(|i| self.wake(class, i, now));
     }
 
     /// Whether no node of `class` sleeps: its law has not run yet (after a run, it puts every node it ran back to sleep).

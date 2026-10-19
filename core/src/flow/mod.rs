@@ -30,9 +30,7 @@ pub fn state(w: &mut World, full: bool) {
     with(w, |w, s| {
         ground_now(w, s, full);
         air::sums(w, s);
-        for j in 0..w.mesh.level(AIR).n() {
-            s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]);
-        }
+        (0..w.mesh.level(AIR).n()).for_each(|j| s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]));
     });
 }
 
@@ -78,17 +76,14 @@ pub fn conduct(w: &mut World, dt: f64) {
     });
 }
 
-/// Run `f` on the world and the law's working memory (`ensure`d).
-fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
-    ensure(w);
-    let mut s = std::mem::take(&mut w.scratch);
-    f(w, &mut s);
-    w.scratch = s;
+/// Build the working memory of the law where it is missing (`with`).
+pub(crate) fn ensure(w: &mut World) {
+    with(w, |_, _| {});
 }
 
-/// Build the working memory of the law where it is missing (a new or loaded world): its tables, a new world's state,
-/// and its caches from the world now, as at a liquid step.
-pub(crate) fn ensure(w: &mut World) {
+/// Run `f` on the world and the law's working memory, built first where it is missing (a new or loaded world): its
+/// tables, a new world's state, and its caches from the world now, as at a liquid step.
+fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
     let n = w.mesh.cells().n();
     let mut s = std::mem::take(&mut w.scratch);
     if s.near.len() != n {
@@ -105,6 +100,7 @@ pub(crate) fn ensure(w: &mut World) {
         ground_state(w, &mut s, true);
         air::state(w, &mut s);
     }
+    f(w, &mut s);
     w.scratch = s;
 }
 

@@ -78,8 +78,7 @@ impl Rng {
     }
     /// Standard normal (Box-Muller).
     pub fn normal(&mut self) -> f64 {
-        let u = self.f64().max(1e-300);
-        let v = self.f64();
+        let (u, v) = (self.f64().max(1e-300), self.f64());
         (-2.0 * u.ln()).sqrt() * (std::f64::consts::TAU * v).cos()
     }
 }

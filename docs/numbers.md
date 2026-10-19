@@ -98,7 +98,7 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `c_signal` | J per kg of body per day at signal size 1 | cost of signalling | none found; set at the eater founder | tuned, first guess |
 | `e_life` | J per kg | energy a kg of body turns over in its upkeep before it is worn out, at a repair gene of 0 (a body lives 10^gene times this) | Rubner 1908: many kinds that move turn over about 1,000 kJ per gram of body in a life | anchored |
 | `c_repair` | share | share of upkeep that is repair at repair 0: upkeep x (1 - c + c 2^gene), so each unit of the gene doubles it and every value of the gene has a cost | remaking a body's own matter takes 20 to 30% of resting upkeep in life | anchored |
-| `dormancy` | none | how steeply a body's activity falls as it dries: activity = min(1, l / l*)^n, l the key liquid it holds, l* the level it keeps (`Body::activity`); must be above 1 (`Physics::validate`) | Harrington's rule (checked: Harrington 1963 and 1972): seed life doubles for each 1% less moisture between about 14% and 5%, so a 3-fold drop is 2^9 = 512 times less activity: n = ln 512 / ln 3 = 5.7 | anchored |
+| `dormancy` | none | how steeply a body's activity falls as it dries: activity = min(1, l / l*)^n, l the key liquid it holds, l* the level it keeps (`Body::activity`); must be above 1 (`Config::validate`) | Harrington's rule (checked: Harrington 1963 and 1972): seed life doubles for each 1% less moisture between about 14% and 5%, so a 3-fold drop is 2^9 = 512 times less activity: n = ln 512 / ln 3 = 5.7 | anchored |
 
 ### Choose
 

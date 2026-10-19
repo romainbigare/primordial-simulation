@@ -57,7 +57,8 @@ the time since, in one span. Change's ground and air nodes sleep so (2.2).
 (`World::t_ground_last`); before Flow first runs, `flow::ensure` builds it from the world as it is.
 
 **Checks before a run.** `Config::validate` (each period at least 1, the air's step divides the physics step,
-`Physics::validate`) and `Chemistry::validate` (every reaction and conversion keeps its elements and its mass).
+`dormancy` above 1, `light_yield` in (0, 1]) and `Chemistry::validate` (every reaction and conversion keeps its
+elements and its mass).
 
 **The books.** Every move takes from one node exactly what it gives to another, with its heat. Three boundary nodes
 stand for what lies beyond the world (`store::Boundary`): the sun gives the light the world absorbs, space takes the

@@ -49,8 +49,7 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> P
     let mut p = Pushes { mix: Vec::with_capacity(links.id.len()), over: Vec::with_capacity(links.id.len()), even: Vec::with_capacity(links.id.len()) };
     for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, air.width()[l], air.dist()[l]);
-        let rho = (s.nt[a] / s.vol[a] + s.nt[b] / s.vol[b]) / 2.0;
-        let depth = cfg.air_top_m - (s.za[a] + s.za[b]) / 2.0;
+        let (rho, depth) = ((s.nt[a] / s.vol[a] + s.nt[b] / s.vol[b]) / 2.0, cfg.air_top_m - (s.za[a] + s.za[b]) / 2.0);
         let turn = cfg.rotation * ((air.lat()[a] + air.lat()[b]) / 2.0).to_radians().sin();
         let (ab, ga, gb) = (air.offset(a, b), grad[a], grad[b]);
         let across = ((ga[0] + gb[0]) * ab[1] - (ga[1] + gb[1]) * ab[0]) / 2.0;

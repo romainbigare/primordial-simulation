@@ -145,9 +145,7 @@ impl Chemistry {
     fn side_elems(&self, v: &[(u16, u16)]) -> Vec<u32> {
         let mut e = vec![0u32; self.n_elements];
         for &(k, n) in v {
-            for (j, &c) in self.subs[k as usize].elems.iter().enumerate() {
-                e[j] += c as u32 * n as u32;
-            }
+            self.subs[k as usize].elems.iter().enumerate().for_each(|(j, &c)| e[j] += c as u32 * n as u32);
         }
         e
     }
@@ -198,8 +196,6 @@ impl Chemistry {
     /// Add element totals of `amount` moles of substance `k` into `out` (of the elements it holds).
     #[inline]
     pub fn add_elems(&self, k: usize, amount: f64, out: &mut [f64]) {
-        for (j, &c) in self.subs[k].elems.iter().enumerate().filter(|e| *e.1 != 0) {
-            out[j] += c as f64 * amount;
-        }
+        self.subs[k].elems.iter().enumerate().filter(|e| *e.1 != 0).for_each(|(j, &c)| out[j] += c as f64 * amount);
     }
 }

@@ -105,8 +105,7 @@ impl World {
         Taken { decisions: std::mem::take(&mut c.decisions), greedy: std::mem::take(&mut c.greedy), parts: std::mem::take(&mut c.parts) }
     }
     pub fn days_per_year(&self) -> u64 {
-        let cal = self.cfg.calendar();
-        cal.days(cal.year)
+        self.cfg.calendar().days(self.cfg.calendar().year)
     }
     /// Whole days since the start: the day it is
     pub fn day(&self) -> u64 {

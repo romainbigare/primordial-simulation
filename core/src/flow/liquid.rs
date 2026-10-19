@@ -40,8 +40,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
     ks.sort_unstable();
     ks.dedup();
-    let mut before = Vec::with_capacity(ks.len() * n);
-    ks.iter().for_each(|&k| before.extend_from_slice(&w.store.amounts(Class::Ground)[k * n..(k + 1) * n]));
+    let before: Vec<f64> = ks.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();
     apply(w, fluxes, &[], &[]);
     for (q, &k) in ks.iter().enumerate() {
         for (i, (&now, &was)) in w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().zip(&before[q * n..(q + 1) * n]).enumerate().filter(|p| p.1 .0 != p.1 .1) {
@@ -89,9 +88,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         let free = if s.head[i] > s.z[i] { lp - ph.field * pores } else { 0.0 };
         let hill = if free > 0.0 && slope[i] > 0.0 { free.min(lp * one_minus_exp(ph.seep * slope[i] * dt / (ph.porosity * ph.hill))) } else { 0.0 };
         let off = if mob.vol[i] > 0.0 { (((own - pores).max(0.0) + runs[i] + hill) / mob.vol[i]).min(1.0) } else { 0.0 };
-        for r in 0..nl {
-            q[i * width + r] = mob.mol[r * n + i] * off;
-        }
+        (0..nl).for_each(|r| q[i * width + r] = mob.mol[r * n + i] * off);
         q[i * width + vol] = mob.vol[i] * off;
     }
     let head = |q: &[f64], j: usize| s.z[j] + q[j * width + vol] / area[j];
@@ -155,14 +152,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         sent[i] = out * q[..nl].iter().sum::<f64>();
     });
     // The crossings as a link flux: each substance once (liquid and load rows of one substance share it), then the heat.
-    let (mut kinds, mut col_of) = (Vec::new(), Vec::new());
-    for &k in &ks {
-        if !kinds.contains(&(k as u16)) {
-            kinds.push(k as u16);
-        }
-        col_of.push(kinds.iter().position(|&x| x as usize == k).unwrap_or(0));
-    }
-    col_of.push(kinds.len());
+    let kinds: Vec<u16> = liq.iter().chain(sol.iter().filter(|k| !liq.contains(k))).map(|&k| k as u16).collect();
+    let col_of: Vec<usize> = ks.iter().map(|&k| kinds.iter().position(|&x| x as usize == k).unwrap_or(0)).chain([kinds.len()]).collect();
     let (a, b, mol) = by_link(&crossed, rows + 2, &col_of, (cells.a(), cells.b()));
     let (at, mut fall) = (kinds.len() * a.len(), Batch::fallen(Class::Ground, power));
     book(w, s, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &kinds, mol: &mol[..at], heat: &mol[at..] }, fall.flux()]);
@@ -208,9 +199,7 @@ fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops:
     }
     let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
     let f = if avail > 0.0 { ((capv - held) / avail).min(MOST_TAKEN) } else { 0.0 };
-    for (r, &k) in rows.zip(sol) {
-        q[r] += solid(w, s, k, i) * f;
-    }
+    rows.zip(sol).for_each(|(r, &k)| q[r] += solid(w, s, k, i) * f);
     bedwork
 }
 
@@ -223,8 +212,7 @@ fn wear(w: &World, s: &mut Scratch, i: usize, bedwork: f64, broke: &mut Vec<Move
         let b = w.store.amounts(Class::Bed)[k * n + i];
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
-            let m = (v / s.sp[k].v[0]).min(MOST_TAKEN * b);
-            let area = w.mesh.cells().area()[i];
+            let (m, area) = ((v / s.sp[k].v[0]).min(MOST_TAKEN * b), w.mesh.cells().area()[i]);
             let dz = m * s.sp[k].v[0] / area;
             broke.push(Move::loosen(i, k, m));
             s.state.bed[i].vol -= m * s.sp[k].v[0];

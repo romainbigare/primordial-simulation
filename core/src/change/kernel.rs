@@ -234,9 +234,7 @@ impl Reactor {
         }
         for &r in &self.on {
             let rx = &chem.reactions[r];
-            for (q, p) in rx.inputs.iter().enumerate() {
-                self.kap[r] *= self.flux[p.0 as usize][0].powi(rx.order(q) as i32);
-            }
+            rx.inputs.iter().enumerate().for_each(|(q, p)| self.kap[r] *= self.flux[p.0 as usize][0].powi(rx.order(q) as i32));
         }
     }
 
@@ -363,14 +361,10 @@ impl Reactor {
             if self.kap[r] <= 0.0 {
                 continue;
             }
-            let dh = self.dh[r];
-            let lim = scarce(&rx.inputs, |k| self.av[k]).0;
-            let mut ext = lim * self.far[r];
-            if self.lit[r] {
-                ext = ext.min(*light * self.light_yield / dh);
-            } else if dh > 0.0 {
-                ext = ext.min(MOST_HEAT * *energy / dh);
-            }
+            let (dh, lim) = (self.dh[r], scarce(&rx.inputs, |k| self.av[k]).0);
+            // No more than the light it stores, or than `MOST_HEAT` of the heat it takes.
+            let most = if self.lit[r] { *light * self.light_yield / dh } else if dh > 0.0 { MOST_HEAT * *energy / dh } else { f64::INFINITY };
+            let ext = (lim * self.far[r]).min(most);
             if ext <= 0.0 {
                 continue;
             }
@@ -378,8 +372,7 @@ impl Reactor {
                 let (k, d) = (k as usize, nu as f64 * ext);
                 let from_pool = if self.ph[k] == Phase::Gas && has_pool { pool[k].min(d) } else { 0.0 };
                 if from_pool > 0.0 {
-                    pool[k] -= from_pool;
-                    self.pooled[k] = true;
+                    (pool[k], self.pooled[k]) = (pool[k] - from_pool, true);
                 }
                 n[k] = (n[k] - (d - from_pool)).max(0.0);
                 self.own[k] -= d - from_pool;

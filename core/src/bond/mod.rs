@@ -256,9 +256,7 @@ fn restructure(w: &mut World, p: usize) {
     let g = e * cond + crate::math::cube_area(w.cfg.phys.leak * (1.0 - e), space);
     (s.space, s.encl) = (space, Enclosure { closed: e as f32, g });
     let root = *list.iter().min().expect("one part");
-    for &x in &list {
-        w.parts.parts[x].root = root as u32;
-    }
+    list.iter().for_each(|&x| w.parts.parts[x].root = root as u32);
     w.parts.parts[root].s = s;
 }
 

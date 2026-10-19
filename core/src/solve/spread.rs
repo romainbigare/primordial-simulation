@@ -73,9 +73,7 @@ impl Spread {
             precondition(res, diag, pre);
             let rz_next = dot(res, pre);
             let beta = rz_next / rz;
-            for (p, &z) in dir.iter_mut().zip(pre.iter()) {
-                *p = z + beta * *p;
-            }
+            dir.iter_mut().zip(pre.iter()).for_each(|(p, &z)| *p = z + beta * *p);
             rz = rz_next;
         }
         // The fluxes from the solved potentials; each node's change only from its fluxes, so the books are exact.
@@ -85,9 +83,7 @@ impl Spread {
             gain[i] -= *fl;
             gain[j] += *fl;
         }
-        for ((xi, &gi), &c) in x.iter_mut().zip(gain.iter()).zip(net.cap) {
-            *xi += gi / c;
-        }
+        x.iter_mut().zip(gain.iter()).zip(net.cap).for_each(|((xi, &gi), &c)| *xi += gi / c);
         made
     }
 }
@@ -111,9 +107,7 @@ pub fn within(a: &[u32], b: &[u32], flux: &mut [f64], held: &[f64]) {
 
 /// `out = (C + dt L) v`: each node's capacity times `v`, plus what the links would pass out of it over `dt` at `v`.
 fn times(net: &Net, dt: f64, v: &[f64], out: &mut [f64]) {
-    for ((o, &c), &vi) in out.iter_mut().zip(net.cap).zip(v) {
-        *o = c * vi;
-    }
+    out.iter_mut().zip(net.cap).zip(v).for_each(|((o, &c), &vi)| *o = c * vi);
     for (k, &g) in net.g.iter().enumerate() {
         let (i, j) = (net.a[k] as usize, net.b[k] as usize);
         let f = dt * g * (v[i] - v[j]);
@@ -124,9 +118,7 @@ fn times(net: &Net, dt: f64, v: &[f64], out: &mut [f64]) {
 
 /// The Jacobi preconditioner: each residual over the diagonal of the system.
 fn precondition(res: &[f64], diag: &[f64], out: &mut [f64]) {
-    for ((o, &r), &d) in out.iter_mut().zip(res).zip(diag) {
-        *o = r / d;
-    }
+    out.iter_mut().zip(res).zip(diag).for_each(|((o, &r), &d)| *o = r / d);
 }
 
 /// The dot product, summed in index order.

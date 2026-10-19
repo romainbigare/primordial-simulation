@@ -31,23 +31,12 @@ impl Chemistry {
     /// Phase of `k` at `t` by its own melting and boiling points.
     pub fn phase(&self, k: usize, t: f64) -> Phase {
         let s = &self.subs[k];
-        if t < s.melt {
-            Phase::Solid
-        } else if t < s.boil {
-            Phase::Liquid
-        } else {
-            Phase::Gas
-        }
+        if t < s.melt { Phase::Solid } else if t < s.boil { Phase::Liquid } else { Phase::Gas }
     }
 
     /// m³/mol of a condensed phase (gas has no fixed volume here).
     pub fn molar_volume(&self, k: usize, p: Phase) -> f64 {
-        let s = &self.subs[k];
-        match p {
-            Phase::Solid => s.molar_mass / s.density[0],
-            Phase::Liquid => s.molar_mass / s.density[1],
-            Phase::Gas => 0.0,
-        }
+        if p == Phase::Gas { 0.0 } else { self.subs[k].molar_mass / self.subs[k].density[p as usize] }
     }
 
     /// Equilibrium vapour pressure (Pa) from the boiling point (Clausius-Clapeyron).

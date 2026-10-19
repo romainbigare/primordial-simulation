@@ -96,9 +96,7 @@ impl Band {
         let (n, w) = (x.len(), self.w);
         for k in 0..n {
             x.swap(k, self.swap[k]);
-            for i in k + 1..n.min(k + w + 1) {
-                x[i] -= self.rows[self.at(i, k)] * x[k];
-            }
+            (k + 1..n.min(k + w + 1)).for_each(|i| x[i] -= self.rows[self.at(i, k)] * x[k]);
         }
         for i in (0..n).rev() {
             let s: f64 = (i + 1..=self.last[i]).map(|j| self.rows[self.at(i, j)] * x[j]).sum();
@@ -114,7 +112,5 @@ pub fn reach(c: &Carry) -> usize {
 
 /// What each link of `c` carries of field `f` over the step from the amounts after it, `x`, into `flux`.
 pub fn fluxes(c: &Carry, x: &[f64], (fields, f): (usize, usize), flux: &mut [f64]) {
-    for (l, v) in flux.iter_mut().enumerate() {
-        *v = c.fwd[l] * x[c.a[l] as usize * fields + f] - c.back[l] * x[c.b[l] as usize * fields + f];
-    }
+    flux.iter_mut().enumerate().for_each(|(l, v)| *v = c.fwd[l] * x[c.a[l] as usize * fields + f] - c.back[l] * x[c.b[l] as usize * fields + f]);
 }

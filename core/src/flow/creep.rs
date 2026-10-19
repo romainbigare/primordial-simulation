@@ -23,9 +23,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let mut amt: Vec<f64> = sol.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();
     let mut mob = vec![0.0; n];
     for (q, &k) in sol.iter().enumerate() {
-        for (i, m) in mob.iter_mut().enumerate() {
-            *m += amt[q * n + i] * (1.0 - molten(s, k, i)) * s.sp[k].v[0] * soft[q];
-        }
+        mob.iter_mut().enumerate().for_each(|(i, m)| *m += amt[q * n + i] * (1.0 - molten(s, k, i)) * s.sp[k].v[0] * soft[q]);
     }
     let ks: Vec<u16> = sol.iter().map(|&k| k as u16).collect();
     let (mut moved, mut fall) = (Batch::new([Class::Ground; 2], &ks), Batch::falls(Class::Ground));

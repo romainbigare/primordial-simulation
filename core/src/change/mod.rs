@@ -32,9 +32,7 @@ pub fn step(w: &mut World, dt: f64) {
         w.sleep.watch(class, len, w.store.amounts(class), w.cfg.wake_share, w.time);
         // Before the law first runs, every node is due.
         if w.sleep.none(class) {
-            for i in 0..len {
-                w.sleep.sleep(class, i, w.time, w.time);
-            }
+            (0..len).for_each(|i| w.sleep.sleep(class, i, w.time, w.time));
         }
         // By index, so in the order of their cells.
         let due = w.sleep.due(class, w.time);
@@ -43,9 +41,7 @@ pub fn step(w: &mut World, dt: f64) {
         let rests: Vec<u64> = (due.iter())
             .map(|&i| {
                 let (span, amounts) = (end.saturating_sub(w.sleep.since(class, i)) as f64, w.store.amounts(class));
-                for (k, a) in h.amt.iter_mut().enumerate() {
-                    *a = amounts[k * len + i];
-                }
+                h.amt.iter_mut().enumerate().for_each(|(k, a)| *a = amounts[k * len + i]);
                 let all = h.amt.iter().sum::<f64>();
                 if ground {
                     react_ground(w, &mut rc, &mut h, &nodes, i, span, &mut b);
@@ -132,9 +128,7 @@ fn film(w: &World, i: usize, amt: &[f64], t: f64) -> f64 {
 fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64, b: &mut Batches) {
     let (chem, na) = (&w.chem, w.mesh.level(AIR).n());
     let (t, j, air_share) = (nodes.tg[i], w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));
-    for (k, p) in h.pool.iter_mut().enumerate() {
-        *p = w.store.amounts(Class::Air)[k * na + j] * air_share;
-    }
+    h.pool.iter_mut().enumerate().for_each(|(k, p)| *p = w.store.amounts(Class::Air)[k * na + j] * air_share);
     rc.film = film(w, i, &h.amt, t);
     let cap = |amt: &[f64]| nodes.skin[i] + (0..chem.ns()).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);

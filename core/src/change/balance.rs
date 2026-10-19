@@ -45,9 +45,7 @@ impl Reactor {
             // The rate of change of `u`, mol/s, with `x` of it in the node: positive below the balance.
             let net = |rc: &mut Self, n: &mut [f64], x: f64| {
                 n[u] = x;
-                for &(k, a, c) in &used {
-                    n[k] = (a - c * x).max(0.0);
-                }
+                used.iter().for_each(|&(k, a, c)| n[k] = (a - c * x).max(0.0));
                 let tot = rc.phases(chem, n, Some(gas), t);
                 let eps = |rc: &Self, r: usize| {
                     let rx = &chem.reactions[r];

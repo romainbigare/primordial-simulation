@@ -265,17 +265,6 @@ impl Physics {
     pub fn walk(&self, m1: f64) -> f64 {
         self.c_move * (m1 / MOVE_REF).powf(MOVE_EXP)
     }
-    /// Check the numbers the laws need in range: `dormancy` above 1 (`body::exchange::closing` divides by n - 1);
-    /// `light_yield` in (0, 1] (a light reaction takes what it stores over this share).
-    pub fn validate(&self) -> Result<(), String> {
-        if self.dormancy.is_nan() || self.dormancy <= 1.0 {
-            return Err(format!("dormancy ({}) must be above 1", self.dormancy));
-        }
-        if !(self.light_yield > 0.0 && self.light_yield <= 1.0) {
-            return Err(format!("light_yield ({}) must be above 0 and at most 1", self.light_yield));
-        }
-        Ok(())
-    }
 }
 
 impl Default for Physics {
@@ -366,7 +355,7 @@ impl Config {
         let month = self.days_per_month as u64 * DAY_S;
         Calendar { day: DAY_S, month, year: month * self.months_per_year as u64 }
     }
-    /// Check a run's settings before it starts: the time steps, and the physics (`Physics::validate`).
+    /// Check a run's settings before it starts: the time steps, and the numbers of the physics the laws need in range.
     pub fn validate(&self) -> Result<(), String> {
         if self.phys_days == 0 || self.air_hours == 0 || self.flow_days == 0 {
             return Err(format!("phys_days ({}), air_hours ({}) and flow_days ({}) must be at least 1", self.phys_days, self.air_hours, self.flow_days));
@@ -384,7 +373,16 @@ impl Config {
         if !(self.wake_share > 0.0 && self.wake_share.is_finite()) {
             return Err(format!("wake_share ({}) must be above 0", self.wake_share));
         }
-        self.phys.validate()
+        // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
+        // what it stores over this share).
+        let p = &self.phys;
+        if p.dormancy.is_nan() || p.dormancy <= 1.0 {
+            return Err(format!("dormancy ({}) must be above 1", p.dormancy));
+        }
+        if !(p.light_yield > 0.0 && p.light_yield <= 1.0) {
+            return Err(format!("light_yield ({}) must be above 0 and at most 1", p.light_yield));
+        }
+        Ok(())
     }
     /// Spread of the new weights of a brain carried over to other sizes (none in a null run).
     pub(crate) fn new_noise(&self) -> f32 {
