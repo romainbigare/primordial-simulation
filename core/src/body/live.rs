@@ -4,7 +4,7 @@
 use super::exchange::cover_of;
 use super::pay::{hold, pay_at, plan, spend, upkeep, Payer};
 use super::physics::{physics, soak_again};
-use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
+use super::{thin, to_ground, Body, Layout, AGE, COPY_MASS, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::bond::{self, Enclosure};
 use crate::change::Reactor;
 use crate::chem::Phase;
@@ -107,7 +107,7 @@ struct Growth {
 fn to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<(Growth, Site), u8> {
     let s = site(w, b);
     let mass = b.mass(&w.chem);
-    let held = crate::copy::buildable(w, b, s.tg);
+    let (held, from) = (crate::copy::buildable(w, b, s.tg), b.member_body(&w.chem));
     b.last = w.day() as f64;
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
@@ -118,6 +118,9 @@ fn to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &m
     keep_warm(w, b, span, s.dt);
     let th = check_stores(w, slot, b, tmp)?;
     let built = crate::copy::grow(w, b, s.days, th);
+    if !starved(w, slot, b, from, &mut tmp.dead) {
+        return Err(SPENT);
+    }
     let gain = (crate::copy::buildable(w, b, s.tg) / held.max(f64::MIN_POSITIVE)).ln();
     Ok((Growth { lit, spare, built, gain }, s))
 }
@@ -127,6 +130,22 @@ fn to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &m
 /// back as it was).
 pub(crate) fn gain_to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> f64 {
     to_growth(w, slot, b, rc, tmp).map_or(f64::NEG_INFINITY, |g| g.0.gain)
+}
+
+/// A body whose growth did not rebuild the body it lost in the update, below its copy mass, starves: it dies with the
+/// chance of the share of its body it lost (of `from` kg a member, or of its copy mass if it was larger), so one that
+/// starved to half its size has lived through it with even chances; a node loses that share of its members, with their
+/// share of everything, as in a frost (`check_stores`). An adult larger than its copy mass shrinks towards it as it
+/// chooses (`ALLOC`): that is no starving. False if it dies (a node: less than one member is left).
+fn starved(w: &mut World, slot: usize, b: &mut Body, from: f64, dead: &mut Vec<f64>) -> bool {
+    let (now, was) = (b.member_body(&w.chem), from.min(b.dec(COPY_MASS)));
+    // (A body with no body left has starved whatever it was.)
+    let f = if now > 0.0 { 1.0 - now / was } else { 1.0 };
+    if f <= 1e-9 || b.n() <= 1.0 {
+        return f <= 1e-9 || Rng::new(w.seed, w.day(), b.id(slot), Purpose::Starve).f64() >= f;
+    }
+    let th = b.thermal(&w.chem);
+    members_die(w, b, f, SPENT, dead, &th)
 }
 
 /// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but

@@ -72,6 +72,9 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let mut b = founder(&mut w, 1, start, &brain);
     let f = BODY_KG / b.mass(&w.chem);
     scale(&mut w, &mut b, f);
+    // Twice the fuel of a starting eater besides, so that what it learns has the decisions to show before it starves.
+    let fuel = 2.0 * testkit::kg(&w, &b, RICH);
+    testkit::add(&mut w, &mut b, RICH, fuel);
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     let slot = w.add(b, 1);
@@ -181,14 +184,14 @@ fn body_learns_to_move_toward_what_it_can_take() {
 }
 
 /// A world of seed 1, 16 x 16, with the light-eaters and the eaters (neutral brains) placed after a month and run for
-/// 30 months more; and its books at the start.
+/// 12 months more (neutral brains starve soon); and its books at the start.
 fn lived() -> (pcore::World, Books) {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-    for _ in 0..30 {
+    for _ in 0..12 {
         pcore::step(&mut w);
     }
     (w, books)

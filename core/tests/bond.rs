@@ -149,9 +149,11 @@ fn a_node_acts_on_bonds_through_one_member() {
         (b.spread, b.row_spread) = (vec![0.01; b.genes.len()], 0.01);
         // (No liquid soaked up from the ground, which would add a third to their mass.)
         b.genes[LIQ] = -4.0;
+        // (Mature past their copy mass, so the matter that rots is not starving, and putting nothing into a brood, so they
+        // do not copy.)
+        (b.genes[COPY_MASS], b.genes[pcore::body::ALLOC]) = (b.genes[COPY_MASS] - 1.0, 0.0);
         if case == 0 {
-            // (Mature at 100 kg, so they do not copy instead.)
-            (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 2.0, b.count / 40.0);
+            (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 1.0, b.count / 40.0);
         }
         let (n0, genes) = (b.count, b.genes.clone());
         w.add(b, 1);
@@ -167,7 +169,7 @@ fn a_node_acts_on_bonds_through_one_member() {
             let kg = node.mass(&w.chem) / node.count;
             assert!((node.count + 1.0 - n0).abs() < 1e-9 * n0 && (one[0].mass(&w.chem) / kg - 1.0).abs() < 0.1, "{} of {n0} members, {} kg against {kg}", node.count, one[0].mass(&w.chem));
         } else {
-            assert!(one.is_empty() && (node.count - n0).abs() < 1e-9 * n0, "{} members", node.count);
+            assert!(one.is_empty() && (node.count - n0).abs() < 1e-9 * n0, "{} members of {n0}", node.count);
             assert!(node.genes.iter().zip(&genes).all(|(a, b)| (a - b).abs() < 1e-4), "genes changed");
             assert_eq!(node.row_spread, 0.01, "the spread of the born rows changed");
             assert!(w.parts.parts[p].held == pcore::bond::NOBODY, "the part is held");

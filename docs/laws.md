@@ -731,6 +731,11 @@ growth**: lost matter is rebuilt the same way.
 - **Heat** burns body matter by its own reaction (21).
 - An individual lives on smaller and weaker and dies when half its body or more is torn at once, or when a store falls
   below its minimum. A hurt adult is immature until it heals: no children meanwhile.
+- **Starving** (`starved` in `body/live.rs`): a body whose growth did not rebuild what it lost in an update (what rots,
+  what it burns), below its copy mass, dies with the chance of the share of its body it lost (of its body at the start,
+  or of its copy mass if less): one that starved to half its size lived through it with even chances. A node loses that
+  share of its members with their share of everything, so it does not shrink alike forever. An adult larger than its
+  copy mass shrinks towards it as it chooses (`ALLOC`): no starving. Cause `SPENT`.
 - **In a node** a bite smaller than one member's body takes part of every member's matter (grazing); a larger one
   kills members in the same share, and what it takes of a store beyond their share comes from the members who live.
 - **Death causes**: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN` (by bodies moving through), `AGE`. At death matter,

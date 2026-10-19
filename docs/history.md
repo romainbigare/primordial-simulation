@@ -884,6 +884,13 @@ Phase E review, round 1 (fixes):
   `fit`, `math::ln_upper_tail`). 64 x 64, seed 1, years 31 to 35: plant members 4.08e10 to 4.22e10, plant mass
   5.31e10 to 5.16e10 kg, plant life 4.77 to 4.73 yr, eaters 271 to 320 members, eater life 4.0 to 4.4 yr, carbon gas
   250 to 253 ppm. Golden re-pinned.
+- F7 follow-up, a starving body dies with the chance of the share of its body it lost (`body::live::starved`; a node
+  loses that share of its members, as in a frost): a body whose growth did not rebuild what rotted or burnt shrank
+  for ever, a node all its members alike (young light-eater members from 5.7 kg to 3 g in 30 years, their count kept),
+  an individual too (eaters of a few grams living on their fuel). Below its copy mass only: an adult shrinks towards
+  it as it chooses. 64 x 64, seed 1, years 31 to 35: plant members 4.22e10 to 3.32e10, plant mass 5.16e10 to 4.88e10
+  kg, plant life 4.73 to 3.37 yr, eaters 320 to 276 members, eater life 4.4 to 3.9 yr, carbon gas 253 to 247 ppm.
+  Golden re-pinned.
 
 **Phase J: the long physics step**
 

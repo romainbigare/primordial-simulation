@@ -950,11 +950,11 @@ fn a_tall_member_shades_a_short_one() {
 /// doubles per unit). Matter and energy are kept.
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
-    use pcore::body::{AGE, DISPERSE, LEARN, REPAIR, STRENGTH};
+    use pcore::body::{AGE, COPY_MASS, DISPERSE, LEARN, REPAIR, STRENGTH};
     use pcore::brain;
     let mut w = small_world();
     // Bodies that neither grow nor soak liquid up (their mass, which the wear goes by, stays): no building work, and no
-    // liquid exchange with the ground.
+    // liquid exchange with the ground. Their copy mass is half their body: the matter that rots is not starving.
     w.cfg.phys.c_build = 0.0;
     // Upkeep goes with the temperature: the bodies stand on ground held at the temperature the costs are anchored to
     // (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of high ground (rain
@@ -969,6 +969,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         let mut b = line.founder(w, 1, i);
         // (And they do not learn: a body that learns from its well-being may learn to walk away in the months of the test.)
         (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ], b.genes[LEARN]) = (0.0, 0.0, repair, -4.0, -6.0);
+        b.genes[COPY_MASS] -= std::f32::consts::LOG10_2;
         // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel (the
         // two months they settle and the long life of one of them cost more than a starting eater holds).
         let fuel = 2.0 * kg(w, &b, RICH);
@@ -1204,8 +1205,10 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         let mut b = eater_of(&mut w, 0, i, brain::REST);
         // Its own mineral just short of nothing: what it holds past its level goes to the ground and is counted there.
         b.genes[lay.cat + fix] = cat;
-        // (None of the dissolved mineral, so neither builds: the two differ by the fixing alone.)
+        // (None of the dissolved mineral, so neither builds: the two differ by the fixing alone. Their copy mass a tenth
+        // below their body, so the matter that rots unrebuilt in the 60 days is not starving.)
         b.store[w.chem.minerals()[1].0] = 0.0;
+        b.genes[pcore::body::COPY_MASS] += 0.9f32.log10();
         let s = w.add(b, 1);
         let books = Books::now(&w);
         let na = w.mesh.level(AIR).n();
@@ -1544,8 +1547,9 @@ fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
         *c = 0.0;
     }
     let mut b = resting(&mut w, i, 6.0, 0.0);
-    // (Nor does it evaporate to cool: above its `COOL_T` of 320 K it would dry and die of it.)
-    b.genes[pcore::body::COOL_T] = 400.0;
+    // (Nor does it evaporate to cool: above its `COOL_T` of 320 K it would dry and die of it. Its copy mass a tenth of its
+    // body: what burns is not starving.)
+    (b.genes[pcore::body::COOL_T], b.genes[pcore::body::COPY_MASS]) = (400.0, (0.1 * b.built(&w.chem)).log10() as f32);
     let s = place(&mut w, b);
     let books = Books::now(&w);
     let before = seen(&w, s);

@@ -42,6 +42,8 @@ pub enum Purpose {
     Fixer,
     /// The side of each gene of the sample member of a node (`copy::select`)
     Select,
+    /// Whether a starving individual dies (`body::live`)
+    Starve,
 }
 
 pub struct Rng(u64);
