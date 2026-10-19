@@ -911,6 +911,14 @@ Phase E review, round 1 (fixes):
   deaths, brains, movement, parts, catalysts, one section a starting kind) with a search box; a "Paths" toggle draws
   the `worn` layer over any map view.
 
+**Phase K: recording and viewer**
+
+- K1, the tape and every reader take `&World`: the CLI drains the events and the yearly counts
+  (`World::drain_events`, `World::take_counters`) and hands them to the recorder. The same world, `series.csv` and
+  `months.csv` byte for byte on a short run; golden unchanged.
+- K4, time per process: `series.csv` gets `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts` and `ms_tape` (ms a year),
+  measured in the CLI and handed to the recorder; the viewer groups them in "Time per process". The world is unchanged.
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body

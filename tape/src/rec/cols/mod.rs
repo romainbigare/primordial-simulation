@@ -5,9 +5,10 @@ mod brains;
 mod kinds;
 mod parts;
 mod social;
+mod time;
 mod world;
 
-use super::{Column, Recorder};
+use super::{Column, Recorder, Spent};
 use crate::layers::Ctx;
 
 /// The unit of the mineral columns counted in mol: 10^9 mol.
@@ -34,7 +35,7 @@ fn ratio(a: f64, b: f64) -> f64 {
 
 impl Recorder {
     /// Write the yearly row, then start the sums of the year again.
-    pub(super) fn push_series(&mut self, c: &Ctx) {
+    pub(super) fn push_series(&mut self, c: &Ctx, spent: &Spent) {
         let land: Vec<usize> = (0..c.w.mesh.cells().n()).filter(|&i| c.w.is_land(i)).collect();
         let mut row = Row::default();
         self.world_cols(c, &land, &mut row);
@@ -42,6 +43,7 @@ impl Recorder {
         self.brain_cols(c.w, &mut row);
         self.social_cols(c, &land, &mut row);
         self.parts_cols(c.w, &mut row);
+        self.time_cols(spent, &mut row);
         self.year = Default::default();
         self.updates = c.w.counts.updates;
         self.append(row);

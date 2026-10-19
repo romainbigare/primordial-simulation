@@ -3,9 +3,11 @@
 
 use flate2::read::GzDecoder;
 use pcore::{step, World};
-use tape::fingerprint;
 use std::io::Read;
 use std::sync::OnceLock;
+use tape::fingerprint;
+
+mod common;
 
 /// The side of the tests' worlds, cells.
 const SIDE: usize = 16;
@@ -120,9 +122,9 @@ fn frames_file_round_trip() {
     let dir = tmp("frames");
     let mut w = world();
     let mut rec = tape::Recorder::new(&w, 1, 1);
-    rec.record_month(&mut w);
+    common::record(&mut rec, &mut w);
     run(&mut w, 1);
-    rec.record_month(&mut w);
+    common::record(&mut rec, &mut w);
     rec.finish(&dir).unwrap();
 
     let mut raw = vec![];
@@ -172,11 +174,11 @@ fn recording() -> &'static Recording {
         };
         let mpy = w.cfg.months_per_year;
         let mut rec = tape::Recorder::new(&w, 0, 0);
-        rec.record_month(&mut w);
+        common::record(&mut rec, &mut w);
         let mut at = vec![cells(&w)];
         for m in 1..=3 * mpy {
             run(&mut w, 1);
-            rec.record_month(&mut w);
+            common::record(&mut rec, &mut w);
             if m % mpy == 0 {
                 at.push(cells(&w));
             }
@@ -305,12 +307,12 @@ fn resume_into_the_same_folder_continues_the_tape() {
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
     let (mpy, dpy) = (w.cfg.months_per_year as u64, w.days_per_year());
     let mut rec = tape::Recorder::new(&w, 1, 0);
-    rec.record_month(&mut w);
+    common::record(&mut rec, &mut w);
     // The third kind comes at the end of year 2, after the snapshot of year 1, in both runs.
     let late = |w: &mut World| worldgen::life::seed_with(w, 2, &worldgen::life::Seeding::neutral());
     for m in 1..=4 * mpy {
         run(&mut w, 1);
-        rec.record_month(&mut w);
+        common::record(&mut rec, &mut w);
         if m == mpy {
             tape::save_snapshot(&w, &rec.kept(), dir.join("snap.bin.gz")).unwrap();
         }
@@ -324,11 +326,11 @@ fn resume_into_the_same_folder_continues_the_tape() {
 
     let (mut w, kept) = tape::load_snapshot(dir.join("snap.bin.gz")).unwrap();
     let mut rec = tape::Recorder::new(&w, 1, 0);
-    rec.resume(&mut w, kept, &dir).unwrap();
-    rec.record_month(&mut w);
+    rec.resume(&w, kept, &dir).unwrap();
+    common::record(&mut rec, &mut w);
     for m in mpy + 1..=4 * mpy {
         run(&mut w, 1);
-        rec.record_month(&mut w);
+        common::record(&mut rec, &mut w);
         if m == 2 * mpy {
             late(&mut w);
         }

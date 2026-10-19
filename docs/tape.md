@@ -83,6 +83,13 @@ worn edges, structures, true colour (r, g, b).
 | `inside_now`, `inside_cold`, `inside_warm`, `cold_months` | , , , 1/yr | bodies inside walls now; share of the eaters' body-months inside in the cold and the warm; their cold months |
 | `holding_liquid`, `liquid_held`, `afloat`, `afloat_moves` | , kg, , 1/yr | parts holding liquid and how much; structures afloat; moves afloat |
 
+**Time per process** (measured by the shell, never by the core; NaN in the first row and in a run with no clock)
+
+| Column | Unit | Meaning |
+|---|---|---|
+| `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts` | ms/yr | wall time in Flow, in Change, in the bodies (survey and body days) and in the parts since the last row |
+| `ms_tape` | ms/yr | wall time in the tape itself (the months recorded and the files written since the last row, so not the row's own month) |
+
 ## `series.csv`: by starting kind
 
 `root_<K>_*`, for every kind up to the largest seen; a kind that died out reads 0 (its means `NaN`). Means are by

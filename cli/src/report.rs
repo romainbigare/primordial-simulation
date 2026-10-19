@@ -3,8 +3,7 @@
 use crate::render::RIVER_PNG;
 use pcore::body::light_eater;
 use pcore::{World, AIR};
-use std::time::Duration;
-use tape::{Recorder, RIVER_WEB};
+use tape::{Recorder, Spent, RIVER_WEB, TAPE};
 use worldgen::life::Seeding;
 use pcore::store::Class;
 
@@ -34,13 +33,24 @@ pub fn balances(w: &World) -> Vec<String> {
     out
 }
 
-/// Time spent since the last yearly line, by stage (flow, change, bodies, parts) and in the tape, and the body
-/// updates counted at it.
+/// The time spent so far, by stage (flow, change, bodies, parts) and in the tape (the recorder each month, the files
+/// each decade); and the year and body updates counted at the last yearly line, with the time spent then.
 pub struct Clock {
-    pub stages: [Duration; 4],
-    pub tape: Duration,
-    pub since: u64,
-    pub updates: u64,
+    pub spent: Spent,
+    printed: Spent,
+    since: u64,
+    updates: u64,
+}
+
+impl Clock {
+    pub fn new(since: u64, updates: u64) -> Self {
+        Clock { spent: Spent::default(), printed: Spent::default(), since, updates }
+    }
+
+    /// Start the next line's span at year `y`.
+    pub fn print_at(&mut self, y: u64, updates: u64) {
+        (self.printed, self.since, self.updates) = (self.spent, y, updates);
+    }
 }
 
 /// The yearly line: drift, bodies and members, speed, and the counts of the year.
@@ -54,14 +64,13 @@ pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder)
         (m[k], m[3]) = (m[k] + if k == 0 { b.n() } else { 1.0 }, m[3] + if k > 0 { b.n() } else { 0.0 });
     }
     let years = (y - clock.since) as f64;
-    let ms = clock.stages.map(|d| d.as_secs_f64() * 1000.0 / years);
+    let ms: Vec<f64> = clock.spent.iter().zip(&clock.printed).map(|(now, before)| (*now - *before).as_secs_f64() * 1000.0 / years).collect();
     // Microseconds per body update: the cost of one decision, whatever their number.
-    let us = clock.stages[2].as_secs_f64() * 1e6 / (w.counts.updates - clock.updates).max(1) as f64;
-    let ms_tape = clock.tape.as_secs_f64() * 1000.0 / years;
+    let us = ms[2] * 1e3 * years / (w.counts.updates - clock.updates).max(1) as f64;
     let most = w.life.at.iter().map(|v| v.len()).max().unwrap_or(0);
     let born = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count();
     format!(
-        "year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {ms_tape:.0}; {us:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), gifts {}/yr, watches {}/yr",
+        "year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us:.2} us/update ({} parts); node splits {:.0} in two, {:.0} one off; kinds {} ({} by members), gifts {}/yr, watches {}/yr",
         w.counts.clamped_heat,
         m[0],
         m[1],
@@ -72,6 +81,7 @@ pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder)
         ms[1],
         ms[2],
         ms[3],
+        ms[TAPE],
         w.parts.alive().count(),
         w.counts.splits[0],
         w.counts.splits[1],

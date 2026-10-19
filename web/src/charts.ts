@@ -19,6 +19,7 @@ const SECTIONS: [string, RegExp][] = [
   ['Imitation and giving', /^(watched|spread_max|gave|ate_)/],
   ['Parts and structures', /^(parts|put_to_parts|taken_from_parts|bonds_|structures|enclosed|made_|inside_|cold_months|holding_liquid|liquid_held|afloat)/],
   ['Catalysts', /^cat_/],
+  ['Time per process', /^ms_/],
 ];
 const KIND = /^root_(\d+)_/;
 const OPEN_FIRST = 2; // sections open when no search is active

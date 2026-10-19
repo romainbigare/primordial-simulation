@@ -37,6 +37,14 @@ pub struct Counters {
     pub rounded: [f64; 2],
 }
 
+/// The counts the shell takes once a year (`World::take_counters`).
+#[derive(Debug, Default)]
+pub struct Taken {
+    pub decisions: f64,
+    pub greedy: f64,
+    pub parts: bond::Tally,
+}
+
 /// The whole state of a world: what `step` advances, and what a snapshot saves.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct World {
@@ -99,6 +107,15 @@ impl World {
     /// `cfg`.
     pub fn mesh_of(map: &Square, air_scale: usize, cfg: &Config) -> Mesh {
         map.mesh(&[air_scale], cfg.lat_south, cfg.lat_north)
+    }
+    /// Hand the shell the raw events since it last asked, and start the list again.
+    pub fn drain_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.events)
+    }
+    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `parts`), and start them again.
+    pub fn take_counters(&mut self) -> Taken {
+        let c = &mut self.counts;
+        Taken { decisions: std::mem::take(&mut c.decisions), greedy: std::mem::take(&mut c.greedy), parts: std::mem::take(&mut c.parts) }
     }
     pub fn days_per_year(&self) -> u64 {
         let cal = self.cfg.calendar();

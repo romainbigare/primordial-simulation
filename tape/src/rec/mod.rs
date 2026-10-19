@@ -10,16 +10,27 @@ mod tally;
 use crate::layers::{frame, Ctx};
 use months::MonthRow;
 use pcore::event::{Event, EventKind};
-use pcore::{World, AIR};
+use pcore::{Taken, World, AIR};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::io;
 use std::path::Path;
+use std::time::Duration;
 use tally::{MonthTally, Social, YearTally};
 use pcore::store::Class;
 
 /// Death causes in the order of the core's constants (`body::LACK` .. `body::AGE`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
+
+/// The time the shell has spent in the run so far, by process: Flow, Change, bodies, parts, and the tape itself
+/// (`TIMED`). The recorder reads no clock; the shell measures and hands the totals in.
+pub type Spent = [Duration; TIMED.len()];
+
+/// The processes timed, in the order of `Spent`; the yearly columns are `ms_<process>`.
+const TIMED: [&str; 5] = ["flow", "change", "bodies", "parts", "tape"];
+
+/// The place of the tape's own time in `Spent`.
+pub const TAPE: usize = TIMED.len() - 1;
 
 /// One column of the yearly series: its name, unit and a value a year (NaN: none that year).
 struct Column {
@@ -66,6 +77,8 @@ pub struct Recorder {
     social: Social,
     /// Body updates counted at the last yearly row
     updates: u64,
+    /// The time spent by process at the last yearly row (`Spent`)
+    spent: Spent,
     /// The run's `Physics` and `Config` as JSON text, written next to the series (`physics.json`)
     physics: String,
 }
@@ -100,6 +113,7 @@ impl Recorder {
             month: MonthTally::default(),
             social: Social::default(),
             updates: 0,
+            spent: Spent::default(),
             physics: physics_json(w),
         }
     }
@@ -113,15 +127,14 @@ impl Recorder {
     /// wrote to `dir` (series, months, frames, events) up to the snapshot's day, so the files go on from there. What it
     /// wrote after that day is dropped (a resume from an earlier snapshot replays it). A `dir` without a tape starts the
     /// tape empty. The events before the snapshot are the earlier run's, already counted.
-    pub fn resume(&mut self, w: &mut World, kept: Kept, dir: impl AsRef<Path>) -> io::Result<()> {
+    pub fn resume(&mut self, w: &World, kept: Kept, dir: impl AsRef<Path>) -> io::Result<()> {
         (self.seen, self.social) = (kept.seen, kept.social);
-        w.events.clear();
         self.updates = w.counts.updates;
         self.read_ewf(dir.as_ref(), w)
     }
 
     /// A substance with a non-zero amount anywhere that was zero everywhere before.
-    fn detect(&mut self, w: &mut World) {
+    fn detect(&mut self, w: &World) {
         let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
         for k in 0..self.seen.len() {
             if self.seen[k] {
@@ -132,35 +145,40 @@ impl Recorder {
                 .find_map(|&(v, len, off)| v[k * len..(k + 1) * len].iter().position(|&x| x > 0.0).map(|p| (off + p, v[k * len + p])));
             if let Some((node, value)) = hit {
                 self.seen[k] = true;
-                w.events.push(Event { day: w.day(), kind: EventKind::FirstSubstance(k as u16), node: node as u32, value });
+                self.count(&Event { day: w.day(), kind: EventKind::FirstSubstance(k as u16), node: node as u32, value }, w);
             }
         }
     }
 
-    /// Call at the start and after every simulated month. A month the tape has already (the snapshot's month, in a
-    /// resumed run) is not recorded again.
-    pub fn record_month(&mut self, w: &mut World) {
+    /// Whether the world is at a year's end, when `record_month` wants the yearly counts (`World::take_counters`).
+    pub fn wants_counters(w: &World) -> bool {
+        w.time.is_multiple_of(w.cfg.calendar().year)
+    }
+
+    /// Call at the start and after every simulated month with the events the world gave (`World::drain_events`), at a
+    /// year's end (`wants_counters`) the counts it gave (`World::take_counters`), and the time spent so far. A month
+    /// the tape has already (the snapshot's month, in a resumed run) is not recorded again.
+    pub fn record_month(&mut self, w: &World, events: Vec<Event>, taken: Option<Taken>, spent: &Spent) {
         let cal = w.cfg.calendar();
         let (year, yearly) = (cal.years(w.time), w.time.is_multiple_of(cal.year));
         if self.months.last().is_some_and(|r| (r.year, r.month) == months::year_month(w)) {
             return;
         }
-        self.detect(w);
-        for e in std::mem::take(&mut w.events) {
-            self.count(&e, w);
+        for e in &events {
+            self.count(e, w);
         }
+        self.detect(w);
         let framed = year < self.monthly || (yearly && self.every > 0 && year % self.every == 0);
         self.month(w);
         if !yearly && !framed {
             return;
         }
-        if yearly {
-            self.year.decisions = [std::mem::take(&mut w.counts.decisions), std::mem::take(&mut w.counts.greedy)];
-            self.year.parts = std::mem::take(&mut w.counts.parts);
+        if let Some(t) = taken.filter(|_| yearly) {
+            (self.year.decisions, self.year.parts) = ([t.decisions, t.greedy], t.parts);
         }
         let c = Ctx::new(w);
         if yearly {
-            self.push_series(&c);
+            self.push_series(&c, spent);
         }
         if framed {
             self.frames.push(w.day());

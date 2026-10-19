@@ -22,6 +22,8 @@ use worldgen::life::Seeding;
 use worldgen::schedule::Schedule;
 use worldgen::testkit::{ground_of, Books, ABSORBER};
 
+mod common;
+
 const SEEDS: [u64; 3] = [1, 2, 3];
 const SIDE: usize = 64;
 const YEARS: u64 = 30;
@@ -117,12 +119,12 @@ fn run(seed: u64, side: usize, years: u64, set: impl Fn(&mut Config), mut each_y
     worldgen::terrain::scale_absorbers(&mut w, 1.0);
     let plan = Schedule::new(Some(LIFE_YEAR), false, Seeding::default());
     let (books, mut rec) = (Books::now(&w), Recorder::new(&w, 0, 0));
-    rec.record_month(&mut w);
+    common::record(&mut rec, &mut w);
     for y in 1..=years {
         plan.place(&mut w);
         for _ in 0..w.cfg.months_per_year {
             pcore::step(&mut w);
-            rec.record_month(&mut w);
+            common::record(&mut rec, &mut w);
         }
         each_year(y, &w, &rec);
     }

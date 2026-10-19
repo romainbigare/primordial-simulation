@@ -50,8 +50,7 @@ pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<
     let mut w: World = bincode::deserialize_from(&mut z).map_err(bad)?;
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
     w.mesh = World::mesh_of(&w.map, w.air_scale, &w.cfg);
-    let World { life, chem, cfg, .. } = &mut w;
-    life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.prepare(chem, &cfg.phys));
+    w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.prepare(&w.chem, &w.cfg.phys));
     Ok((w, plan))
 }
 
