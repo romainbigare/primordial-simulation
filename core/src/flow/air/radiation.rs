@@ -5,10 +5,16 @@ use super::super::land::NONE;
 use super::super::Scratch;
 use crate::math::one_minus_exp;
 use crate::units::SIGMA;
-use std::f64::consts::PI;
+use std::f64::consts::{PI, TAU};
 
-/// Daily-mean sunlight at the top of the air, W/m².
-pub(super) fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
+/// The sun's declination at `season` (0..1 from the solstice of the north's winter) on a circular orbit with axial tilt
+/// `tilt`, degrees: sin δ = sin ε sin λ, λ the sun's longitude, radians.
+pub fn declination(tilt: f64, season: f64) -> f64 {
+    (tilt.to_radians().sin() * -(TAU * season).cos()).asin()
+}
+
+/// Daily-mean sunlight at the top of the air at latitude `lat` and declination `decl`, radians, W/m² (Berger 1978).
+pub fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
     let h0 = (-lat.tan() * decl.tan()).clamp(-1.0, 1.0).acos();
     (s0 / PI * (h0 * lat.sin() * decl.sin() + lat.cos() * decl.cos() * h0.sin())).max(0.0)
 }

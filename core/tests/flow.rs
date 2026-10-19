@@ -689,3 +689,38 @@ fn a_globe_keeps_its_books_round_the_wrap() {
     }
     books.assert_kept(&w, 1e-12);
 }
+
+/// The sun is right at every latitude, on a circular orbit: the yearly mean at a pole is S sin ε / π and at the equator
+/// 2 S E(sin ε) / π² (E the complete elliptic integral of the second kind; Berger 1978); at every season the whole
+/// sphere's mean is S / 4 (the disc it shows the sun over its area); the south has the north's seasons half a year on.
+#[test]
+fn the_sun_is_right_at_every_latitude() {
+    use pcore::flow::{declination, insolation};
+    use std::f64::consts::{FRAC_PI_2, PI};
+    const SEASONS: usize = 720;
+    const BANDS: usize = 4000;
+    let (s0, tilt) = (1361.0, 23.4);
+    let yearly = |lat: f64| (0..SEASONS).map(|k| insolation(s0, lat, declination(tilt, (k as f64 + 0.5) / SEASONS as f64))).sum::<f64>() / SEASONS as f64;
+    let k = tilt.to_radians().sin();
+    // E(k) = π/2 (1 - Σ ((2n-1)!! / (2n)!!)² k^2n / (2n - 1)).
+    let (mut e, mut term) = (1.0, 1.0);
+    for n in 1..60 {
+        term *= ((2 * n - 1) as f64 / (2 * n) as f64).powi(2) * k * k;
+        e -= term / (2 * n - 1) as f64;
+    }
+    let (pole, equator) = (s0 * k / PI, 2.0 * s0 * e * FRAC_PI_2 / (PI * PI));
+    for (lat, want) in [(FRAC_PI_2, pole), (-FRAC_PI_2, pole), (0.0, equator)] {
+        let got = yearly(lat);
+        assert!((got / want - 1.0).abs() < 1e-5, "latitude {lat}: {got} W/m2, {want} analytic");
+    }
+    for season in [0.0, 0.1, 0.25, 0.4] {
+        let decl = declination(tilt, season);
+        let band = |b: usize| -FRAC_PI_2 + PI * (b as f64 + 0.5) / BANDS as f64;
+        let mean = (0..BANDS).map(|b| insolation(s0, band(b), decl) * band(b).cos()).sum::<f64>() * PI / BANDS as f64 / 2.0;
+        assert!((mean / (s0 / 4.0) - 1.0).abs() < 1e-5, "season {season}: the sphere's mean {mean} W/m2");
+        for lat in [0.3, 0.9, 1.4] {
+            let (north, south) = (insolation(s0, lat, decl), insolation(s0, -lat, declination(tilt, season + 0.5)));
+            assert!((north - south).abs() < 1e-9 * s0, "season {season}, latitude {lat}: north {north}, south {south}");
+        }
+    }
+}

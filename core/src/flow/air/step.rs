@@ -9,12 +9,11 @@ use super::super::{range, Scratch};
 use super::book::book;
 use super::exchange::{bucket_slope, cloud, dissolve};
 use super::newton::{gather, solve, Wind};
-use super::radiation::{insolation, Surface};
+use super::radiation::{declination, insolation, Surface};
 use super::wind::Links;
 use super::{lerp, over_cell};
 use crate::units::R_GAS;
 use crate::{World, AIR};
-use std::f64::consts::TAU;
 use crate::store::Class;
 
 /// The rounds stop when no air node's temperature moves by more than this from one round to the next, K,
@@ -107,8 +106,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let act = active(w, s, &henry);
     let (na, n) = (w.mesh.level(AIR).n(), w.mesh.cells().n());
     // The sun at the end of the step, as backward Euler takes it (and as the state at the step's end then shows).
-    let season = w.cfg.calendar().season(w.time + dt as u64);
-    let decl = -w.cfg.tilt.to_radians() * (TAU * season).cos();
+    let decl = declination(w.cfg.tilt, w.cfg.calendar().season(w.time + dt as u64));
     let x0: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut it = Iterate { t: s.ta.clone(), x: x0.clone(), refl: Vec::new() };
     let links = Links::of(w.mesh.level(AIR));

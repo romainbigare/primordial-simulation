@@ -160,7 +160,11 @@ steps and 3-day physics steps within the seeds' noise.
 
 **Sun, heat and radiation** (`flow::air::radiation`).
 
-- The sun warms each cell by latitude, season and day length (`insolation`); the surface reflects part of it.
+- The sun warms each cell by latitude, season and day length (`insolation`, the daily mean; Berger 1978), with the
+  declination of a circular orbit, sin δ = sin ε sin λ (`declination`, ε the tilt, λ the sun's longitude); the surface
+  reflects part of it. The test `the_sun_is_right_at_every_latitude` holds the yearly mean at the poles and the
+  equator to the analytic values, the sphere's mean to S/4 at every season, and the south's seasons half a year from
+  the north's.
 - Every surface emits σT⁴. The air absorbs 1 − exp(−x) of what the ground emits, x the optical depth summed over the
   gases (each past its own column amount grows only as the square root). It emits from 4 grey layers that cool with
   height (`flow::glow`): more gas lifts the layer that reaches space into colder air, so the ground warms.

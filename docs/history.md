@@ -989,6 +989,9 @@ Phase E review, round 1 (fixes):
   The island is the same world bit for bit (checked with the new flag left out of the fingerprint); golden re-pinned
   for the flag the saved map now carries. 64 x 32 globe without life, 10 years: drift 5e-16 (elements) and 2e-15
   (energy), 1.15 s a year.
+- G1, the sun: the declination is that of a circular orbit, sin δ = sin ε sin λ, not δ = ε sin λ, which made the
+  yearly sun at the poles 0.9% too strong. Key numbers (3 seeds): land 287.94 K (+0.01), swing 12.26 K, rain on land
+  1.764e-3, the same to noise. Golden re-pinned.
 
 **Owner's decisions after Phase A**
 
