@@ -211,19 +211,16 @@ impl Life {
 }
 
 impl World {
-    /// Place body `c`, its first update after its interval; `keep` is the share of light the reactions of the body it
-    /// came from stored (`World::light_keep`), which it inherits. Its visible traits are worked out from what it holds
-    /// now: a child or a part split off a node has its own stores and genes, and others see it and its shade
-    /// (`survey::shade`) through `Body::vis` before its first update.
-    pub(crate) fn place(&mut self, mut c: Body, keep: Option<f32>) -> usize {
+    /// Place body `c`, its first update after its interval; it keeps the light-keep share it was given (`Body::keep`)
+    /// and has drawn no heat yet (`Body::drew`). Its visible traits are worked out from what it holds now: a child or a
+    /// part split off a node has its own stores and genes, and others see it and its shade (`survey::shade`) through
+    /// `Body::vis` before its first update.
+    pub(crate) fn place(&mut self, mut c: Body) -> usize {
         c.prepare(&self.chem, &self.cfg.phys);
+        c.drew = 0.0;
         self.see(&mut c);
         let delay = c.interval(self);
-        let s = self.life.add(c, self.day(), delay);
-        if let Some(k) = keep {
-            self.light_keep.set(s, self.life.bodies[s].gen, k);
-        }
-        s
+        self.life.add(c, self.day(), delay)
     }
     /// Place body `b` made outside the laws (a founder, an edit), its first update `delay` days on, its numbers worked out
     /// from its genes (`Body::prepare`).

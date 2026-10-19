@@ -22,6 +22,10 @@ pub enum Class {
     Air,
     /// The store of the bed under a cell: `World::deep`, `World::e_deep`
     Deep,
+    /// The bodies' node of a cell: the light and the heat set aside for its bodies between their updates, J
+    /// (`World::e_bodies`; it holds no amounts). Flow brings the light their light reactions will store, the ground the
+    /// heat they draw from it as time passes (`survey::survey`); each body takes its share at its update.
+    Bodies,
     /// A node beyond the world's boundary (`Boundary`): `World::boundary`, `World::e_boundary`. It may hold less than
     /// nothing: what it holds is what crossed, with the sign of a node (the sun's heat falls by the light it gives).
     Boundary,
@@ -64,5 +68,5 @@ pub const BOUNDARIES: usize = 3;
 
 impl Class {
     /// Every class, by its index (`class as usize`).
-    pub(crate) const ALL: [Class; 6] = [Class::Ground, Class::Air, Class::Deep, Class::Boundary, Class::Potential, Class::Part];
+    pub(crate) const ALL: [Class; 7] = [Class::Ground, Class::Air, Class::Deep, Class::Bodies, Class::Boundary, Class::Potential, Class::Part];
 }

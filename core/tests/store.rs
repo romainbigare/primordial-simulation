@@ -22,6 +22,7 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
         Class::Air => (&w.air, &w.e_air, w.mesh.level(AIR).n()),
         Class::Deep => (&w.deep, &w.e_deep, w.mesh.cells().n()),
         Class::Boundary => (&w.boundary, &w.e_boundary[..], BOUNDARIES),
+        Class::Bodies => (&[], &w.e_bodies, w.mesh.cells().n()),
         Class::Potential => (&[], std::slice::from_ref(&w.potential), 1),
         Class::Part => unreachable!("a part's amounts lie in the part"),
     }

@@ -51,8 +51,8 @@ pub fn totals(w: &World) -> Totals {
             }
         }
     }
-    // Light set aside for bodies counts as heat until they store it.
-    w.e_ground.iter().chain(&w.e_air).chain(&w.light_pool).chain(&w.e_deep).chain(&w.heat_pool).for_each(|&e| thermal.add(e));
+    // The light set aside in the bodies' nodes counts as heat until they store it.
+    w.e_ground.iter().chain(&w.e_air).chain(&w.e_bodies).chain(&w.e_deep).for_each(|&e| thermal.add(e));
     for b in w.life.alive() {
         b.store.iter().zip(subs.iter_mut()).for_each(|(&a, s)| s.add(a));
         thermal.add(b.e);
@@ -102,13 +102,11 @@ fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool)
 pub fn broken(w: &World) -> Option<String> {
     let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
     let above_0 = |x: f64| x.is_finite() && x > 0.0;
-    let amounts = [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("deep", &w.deep), ("light_pool", &w.light_pool)];
+    let amounts = [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("deep", &w.deep)];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
-    let energies = [("e_ground", &w.e_ground), ("e_air", &w.e_air), ("e_deep", &w.e_deep), ("light", &w.light)];
+    let energies = [("e_ground", &w.e_ground), ("e_air", &w.e_air), ("e_deep", &w.e_deep), ("e_bodies", &w.e_bodies), ("light", &w.light)];
     let found = (amounts.into_iter().chain(energies))
         .find_map(|(name, v)| first_bad(name, v, at_least_0))
-        // The heat pool goes below 0 where bodies gave the ground heat ahead.
-        .or_else(|| first_bad("heat_pool", &w.heat_pool, f64::is_finite))
         .or_else(|| {
             [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)]
                 .into_iter()

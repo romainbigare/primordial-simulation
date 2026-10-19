@@ -77,9 +77,9 @@ pub(super) fn record(w: &World, s: &mut Scratch, act: &[Active], (rows, width): 
 }
 
 /// Book what the last air step moves from the time it is booked up to `to` (no further than its span), as that share
-/// of its span, in one call through the store (only what each node holds at the end counts): the sunlight, the heat
-/// to the air and to space, the gas of the ground and its heat, the wind, the lifts; the light for bodies, and the
-/// yearly average of the rain. A ground node gives no more of a gas than it holds now, and an air node no more than it
+/// of its span, in one call through the store (only what each node holds at the end counts): the sunlight, the light
+/// set aside in the bodies' node of each cell, the heat to the air and to space, the gas of the ground and its heat, the
+/// wind, the lifts; the light on bodies, and the yearly average of the rain. A ground node gives no more of a gas than it holds now, and an air node no more than it
 /// holds and gets (`hold_air`): the other laws change both between shares.
 pub(in crate::flow) fn dispense(w: &mut World, s: &mut Scratch, to: u64) {
     let p = std::mem::take(&mut s.state.pending);
@@ -106,16 +106,13 @@ pub(in crate::flow) fn dispense(w: &mut World, s: &mut Scratch, to: u64) {
         };
         hold_air(&w.air[k * na..(k + 1) * na], (&links.a, &links.b), &mut wind[gi * nl..(gi + 1) * nl], (&parent, rain));
     }
-    let World { light, light_pool, life, .. } = w;
-    light_pool.resize(n, 0.0);
-    for i in 0..n {
-        light[i] += f * p.light[i];
+    let World { light, life, .. } = w;
+    for (i, (l, &got)) in light.iter_mut().zip(&p.light).enumerate() {
+        *l += f * got;
         for &b in life.at.get(i).into_iter().flatten() {
-            life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&sh| sh) - 1.0) * f * p.light[i];
+            life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&sh| sh) - 1.0) * f * got;
         }
-        light_pool[i] += f * p.kept[i];
     }
-    w.cross(Boundary::Sun, [], f * p.kept.iter().sum::<f64>());
     let mut cross = Crossing::new(w, p.ks.clone());
     for (x, _) in p.ks.iter().enumerate() {
         for i in (0..n).filter(|&i| up[x * n + i] != 0.0) {
@@ -123,7 +120,7 @@ pub(in crate::flow) fn dispense(w: &mut World, s: &mut Scratch, to: u64) {
             cross.cross(s, x, (i, parent[i] as usize, area[i]), (up[x * n + i], heat), false);
         }
     }
-    let (sun, heat, out, wind_heat) = (scaled(&p.sun), scaled(&p.heat), scaled(&p.out), scaled(&p.wind_heat));
+    let (sun, heat, out, wind_heat, kept) = (scaled(&p.sun), scaled(&p.heat), scaled(&p.out), scaled(&p.wind_heat), scaled(&p.kept));
     let ids: Vec<u32> = (0..n as u32).collect();
     let (to_sun, space) = (vec![Boundary::Sun as u32; n], vec![Boundary::Space as u32; na]);
     let mut lift = Batch::falls(Class::Air);
@@ -131,6 +128,7 @@ pub(in crate::flow) fn dispense(w: &mut World, s: &mut Scratch, to: u64) {
     let (mut links_x, mut lift_x) = cross.batches();
     let fluxes = [
         LinkFlux { class: [Class::Boundary, Class::Ground], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &sun },
+        LinkFlux { class: [Class::Boundary, Class::Bodies], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &kept },
         LinkFlux { class: [Class::Ground, Class::Air], a: &ids, b: &parent, ks: &[], mol: &[], heat: &heat },
         LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
         links_x.flux(),

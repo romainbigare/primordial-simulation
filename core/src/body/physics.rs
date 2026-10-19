@@ -29,7 +29,7 @@ struct Heat {
     /// out, J/K (it leaves at the end)
     heat: f64,
     c_out: f64,
-    /// Light it absorbed, J; light set aside for it that it took (`World::light_pool`), J; it lives on light
+    /// Light it absorbed, J; light set aside for it that it took from its bodies' node (`World::e_bodies`), J
     lit: f64,
     took: f64,
 }
@@ -51,7 +51,6 @@ impl Soil {
 /// upkeep released. Returns the light it caught per kg per day, J.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, mass: f64, upkeep_heat: f64, th0: Melting) -> f64 {
-    let keep = w.light_keep.get(slot, b.gen) as f64;
     // (The ground's capacity is needed by the first liquid it soaks or loses; it is the same when taken first.)
     let gcap = w.heat_cap_ground(s.i);
     let (chem, cfg) = (&w.chem, &w.cfg);
@@ -71,7 +70,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let reach = gas_pool(w, b, s, &f0, tmp);
     let used = react(w, b, rc, tmp, s, &mut h, c0, upkeep_heat);
     settle_gas(w, b, tmp, s, &mut h);
-    h.took = store_light(w, slot, b, s, keep, caught, used);
+    h.took = store_light(w, b, s, caught, used);
     let soil = soil(w, b, s, wk);
     let mass1 = b.mass(&w.chem);
     let (lost, moved) = evaporate(w, b, tmp, s, &mut h, &soil, reach);
@@ -80,7 +79,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     roots(w, b, s, &mut h, mass2, wk);
     let fusion1 = b.fusion_in(&w.chem, &th0);
     h.heat += fusion0 - fusion1;
-    relax_heat(w, slot, b, s, &h);
+    relax_heat(w, b, s, &h);
     b.e += fusion1;
     lit / mass / s.days
 }
@@ -156,14 +155,15 @@ fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat
     (h.heat, h.c_out) = (heat - paid * gas.pay, paid * gas.c_out);
 }
 
-/// What its light reactions stored (`Physics::light_yield` of the light they used) is paid by the light set aside for it, by the
-/// share it stored last time (`keep`); it keeps the share it stored now. Returns the light set aside it took, J.
-fn store_light(w: &mut World, slot: usize, b: &Body, s: &Site, keep: f64, caught: f64, used: f64) -> f64 {
+/// What its light reactions stored (`Physics::light_yield` of the light they used) is paid by the light set aside for it
+/// in its bodies' node, by the share it stored last time (`Body::keep`), as far as the node holds it; it keeps the share
+/// it stored now. Returns the light set aside it took, J.
+fn store_light(w: &mut World, b: &mut Body, s: &Site, caught: f64, used: f64) -> f64 {
     let stored = w.cfg.phys.light_yield * used;
-    let took = (keep * caught).min(w.light_pool[s.i]).max(0.0);
-    w.light_pool[s.i] -= took;
+    let took = (b.keep as f64 * caught).min(w.e_bodies[s.i]).max(0.0);
+    w.e_bodies[s.i] -= took;
     if caught > 0.0 {
-        w.light_keep.set(slot, b.gen, (stored / caught) as f32);
+        b.keep = (stored / caught) as f32;
     }
     took
 }
@@ -295,10 +295,10 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f6
 
 /// Heat to the surface: its temperature relaxes toward the ground's plus the warming of the heat released, over the time
 /// (heat taken beyond what the surface can give it comes from its own heat at once). The ground pays the difference,
-/// first from what the cell held aside for it (`survey`); if it cannot, the body ends colder. The gas its reactions put
-/// out leaves at the end with its share of the heat.
-fn relax_heat(w: &mut World, slot: usize, b: &mut Body, s: &Site, h: &Heat) {
-    let World { cfg, chem, e_ground, e_air, counts, heat_pool, heat_keep, .. } = w;
+/// first from what its bodies' node holds for it (the rate of its last update over the time, `survey`); if it cannot,
+/// the body ends colder. The gas its reactions put out leaves at the end with its share of the heat.
+fn relax_heat(w: &mut World, b: &mut Body, s: &Site, h: &Heat) {
+    let World { cfg, chem, e_ground, e_air, counts, e_bodies, .. } = w;
     let (i, j, tg, dt, g, heat) = (s.i, s.j, s.tg, s.dt, h.g, h.heat);
     let (_, c) = b.mass_cap(chem);
     if c <= 0.0 {
@@ -309,14 +309,10 @@ fn relax_heat(w: &mut World, slot: usize, b: &mut Body, s: &Site, h: &Heat) {
     let e1 = relax(g);
     let e1 = if e1 > ct * h.t0 { relax(surface(cfg, b, h.mass, &film(chem, cfg, b, h.mass, s.cover), s.walls, e1 / ct, tg)) } else { e1 };
     let give = e1 - b.e - heat + h.lit - h.took;
-    let set = heat_keep.get(slot, b.gen) as f64 * dt;
-    let pool = heat_pool.get(i).copied().unwrap_or(0.0);
-    let from = if give * set > 0.0 && give * pool > 0.0 { give.signum() * give.abs().min(set.abs()).min(pool.abs()) } else { 0.0 };
-    if from != 0.0 {
-        heat_pool[i] -= from;
-    }
+    let from = give.min(b.drew as f64 * dt).min(e_bodies[i]).max(0.0);
+    e_bodies[i] -= from;
     let drawn = from + draw(&mut e_ground[i], counts, h.gcap, give - from);
-    heat_keep.set(slot, b.gen, (drawn / dt) as f32);
+    b.drew = (drawn.max(0.0) / dt) as f32;
     let e1 = if drawn == give { e1 } else { e1 - (give - drawn) };
     let out = e1 * h.c_out / ct;
     (b.e, e_air[j]) = (e1 - out, e_air[j] + out);

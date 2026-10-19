@@ -21,42 +21,32 @@ pub(crate) struct Sample {
     gain: f64,
 }
 
-/// What an update of a body in ground cell `i` and air node `j`, in slot `slot` of generation `gen`, may change in the
-/// world (the stores and heat of its ground and air nodes, the potential energy, the light and heat set aside for its
-/// bodies and for its slot, the heat a ground node could not give, the events), kept to give back after a sample's.
+/// What an update of a body in ground cell `i` and air node `j` may change in the world (the stores and heat of its
+/// ground and air nodes, the potential energy, the heat of its bodies' node, the heat a ground node could not give, the
+/// events), kept to give back after a sample's.
 struct Shadow {
     i: usize,
     j: usize,
-    slot: usize,
-    gen: u32,
     ground: Vec<f64>,
     air: Vec<f64>,
-    heat: [f64; 6],
-    keep: [f32; 2],
+    heat: [f64; 5],
     events: usize,
 }
 
 impl Shadow {
-    fn of(w: &World, slot: usize, b: &Body) -> Shadow {
+    fn of(w: &World, b: &Body) -> Shadow {
         let (i, ns, n, na) = (b.cell as usize, w.chem.ns(), w.mesh.cells().n(), w.mesh.level(crate::AIR).n());
         let j = w.mesh.up(i, 0, crate::AIR);
-        let heat = [w.e_ground[i], w.e_air[j], w.potential, w.light_pool[i], w.heat_pool.get(i).copied().unwrap_or(0.0), w.counts.clamped_heat];
-        let keep = [w.light_keep.get(slot, b.gen), w.heat_keep.get(slot, b.gen)];
+        let heat = [w.e_ground[i], w.e_air[j], w.potential, w.e_bodies[i], w.counts.clamped_heat];
         let (ground, air) = ((0..ns).map(|k| w.ground[k * n + i]).collect(), (0..ns).map(|k| w.air[k * na + j]).collect());
-        Shadow { i, j, slot, gen: b.gen, ground, air, heat, keep, events: w.events.len() }
+        Shadow { i, j, ground, air, heat, events: w.events.len() }
     }
     fn restore(self, w: &mut World) {
         let (i, j, n, na) = (self.i, self.j, w.mesh.cells().n(), w.mesh.level(crate::AIR).n());
         for (k, (&g, &a)) in self.ground.iter().zip(&self.air).enumerate() {
             (w.ground[k * n + i], w.air[k * na + j]) = (g, a);
         }
-        let pool = self.heat[4];
-        [w.e_ground[i], w.e_air[j], w.potential, w.light_pool[i], _, w.counts.clamped_heat] = self.heat;
-        if let Some(h) = w.heat_pool.get_mut(i) {
-            *h = pool;
-        }
-        w.light_keep.set(self.slot, self.gen, self.keep[0]);
-        w.heat_keep.set(self.slot, self.gen, self.keep[1]);
+        [w.e_ground[i], w.e_air[j], w.potential, w.e_bodies[i], w.counts.clamped_heat] = self.heat;
         w.events.truncate(self.events);
     }
 }
@@ -121,7 +111,7 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
     let mut genes = b.genes.clone();
     genes[g] += step;
     s.set_genes(genes, &w.chem, &w.cfg.phys);
-    let shadow = Shadow::of(w, slot, b);
+    let shadow = Shadow::of(w, b);
     let gain = gain_to_growth(w, slot, &mut s, rc, tmp);
     shadow.restore(w);
     Some(Sample { gene: g, step, genes: (differ.len() * every) as f32, gain })

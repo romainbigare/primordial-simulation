@@ -30,4 +30,4 @@ mod world;
 
 pub use params::{Config, Physics};
 pub use schedule::{day, step, step_marked, Stage};
-pub use world::{Counters, PerSlot, World, AIR};
+pub use world::{Counters, World, AIR};

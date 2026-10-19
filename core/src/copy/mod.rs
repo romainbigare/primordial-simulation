@@ -141,6 +141,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
         parent: l.parent,
         born: w.day(),
         mark: w.light[cell],
+        keep: b.keep,
         store: lot.store,
         e,
         genes,
@@ -151,7 +152,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
         wet: b.wet,
         ..Default::default()
     };
-    let s = place_child(w, slot, b, l, c, rows);
+    let s = place_child(w, b, l, c, rows);
     if l.node && cell == b.cell as usize {
         young::link(w, slot, b, s);
     }
@@ -268,7 +269,7 @@ fn child_lineage(w: &mut World, b: &Body, genes: &[f32], rows: &mut Option<Vec<f
 /// children together that join no node at all (`alone`) are drawn from it as individuals (`nodes::open`: each with
 /// genes and born rows of its own, drawn from their spread), newborn (wear 0), the last one the body itself, with the
 /// genes and rows the draws left. Returns the body's slot.
-fn place_child(w: &mut World, slot: usize, b: &Body, l: &Litter, mut c: Body, rows: Option<Vec<f32>>) -> usize {
+fn place_child(w: &mut World, b: &Body, l: &Litter, mut c: Body, rows: Option<Vec<f32>>) -> usize {
     if let Some(v) = rows {
         c.genome = w.life.new_genome(v);
     }
@@ -276,7 +277,7 @@ fn place_child(w: &mut World, slot: usize, b: &Body, l: &Litter, mut c: Body, ro
     // parent that survived a freezing is still wet in the sense of its key liquids: its child's are kept though it is
     // born frozen.)
     c.wet = c.key_liquids(&w.chem) | (b.wet & c.key_mask(&w.chem));
-    let s = w.place(c, Some(w.light_keep.get(slot, b.gen)));
+    let s = w.place(c);
     if l.alone && w.life.bodies[s].count > 1.5 {
         let k = w.life.bodies[s].count.round() as usize - 1;
         for m in open(w, s, k) {

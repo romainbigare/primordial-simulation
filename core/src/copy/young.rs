@@ -138,7 +138,7 @@ pub fn mature(w: &mut World, slot: usize, b: &mut Body, before: f64) -> Grown {
             join(w, t, c, &born);
         }
         None => {
-            let t = w.place(c, Some(w.light_keep.get(slot, b.gen)));
+            let t = w.place(c);
             link(w, slot, b, t);
         }
     }

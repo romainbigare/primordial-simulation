@@ -5,13 +5,13 @@
 use std::path::Path;
 
 /// The arrays of `World` that hold the amounts and heat of the store's nodes (`store::Class`), and the bed.
-const ARRAYS: [&str; 9] = ["ground", "e_ground", "air", "e_air", "deep", "e_deep", "bed", "boundary", "e_boundary"];
+const ARRAYS: [&str; 10] = ["ground", "e_ground", "air", "e_air", "deep", "e_deep", "e_bodies", "bed", "boundary", "e_boundary"];
 /// The names a `World` goes by before a `.` (a field of anything else, as `Scratch::bed`, is not the world's).
 const WORLD: [&str; 3] = ["w", "ww", "self"];
 
 /// The folder and the files of `core/src` that may write the arrays, each with its reason. Each must still write them
 /// (an exemption no longer needed goes).
-const EXEMPT: [(&str, &str); 12] = [
+const EXEMPT: [(&str, &str); 11] = [
     ("store", "the store itself: `apply`, the boundary's books (`World::cross`), and the bed's one change, `World::loosen` (until plan F6)"),
     ("flow/air/sky.rs", "`Sky::cross`, the way bodies, parts and growth change the air until they move through the store (plan E7)"),
     ("ground.rs", "`World::take_paid`, the guard bodies take the ground's heat through (plan E7)"),
@@ -21,8 +21,7 @@ const EXEMPT: [(&str, &str); 12] = [
     ("choose/feed.rs", "a body takes from the ground (plan E7)"),
     ("copy/grow.rs", "growth's gas brings its heat to the air (plan E7)"),
     ("copy/select.rs", "the world given back as it was after a sample member's update (until bodies book through moves, plan E5: then its moves are dropped)"),
-    ("survey.rs", "the light and the heat a cell holds aside for its bodies (plan E7)"),
-    ("bond/mod.rs", "a part's own trade: a dissolved part's matter and heat go to its ground node (their amounts live in parts)"),
+        ("bond/mod.rs", "a part's own trade: a dissolved part's matter and heat go to its ground node (their amounts live in parts)"),
     ("bond/month.rs", "a part's own trades with its ground and air node each month (their amounts live in parts)"),
 ];
 

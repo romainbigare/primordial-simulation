@@ -887,7 +887,7 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
-    assert!(w.light_pool.iter().sum::<f64>() > 0.0 && w.counts.clamped_heat == h0, "heat not given {:e} J", w.counts.clamped_heat - h0);
+    assert!(w.e_bodies.iter().sum::<f64>() > 0.0 && w.counts.clamped_heat == h0, "heat not given {:e} J", w.counts.clamped_heat - h0);
     books.assert_kept(&w, 1e-9);
 }
 

@@ -263,7 +263,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     c.spread[g] = b.spread[g];
     b.set_genes(genes, &w.chem, &w.cfg.phys);
     w.counts.splits[0] += 1.0;
-    w.place(c, Some(w.light_keep.get(slot, b.gen)));
+    w.place(c);
 }
 
 /// One member of node `b` (at least two) split off as an individual, to do what only a single body can (the actions of
@@ -274,7 +274,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 /// Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     w.counts.splits[1] += 1.0;
-    draw(w, b, r, None, false)
+    draw(w, b, r, false)
 }
 
 /// A count this close to a whole number is that number.
@@ -287,7 +287,7 @@ pub(crate) const COUNT_SLACK: f64 = 1e-9;
 /// it. Returns the members' slots.
 pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
     let mut b = std::mem::take(&mut w.life.bodies[slot]);
-    let (mut r, keep) = (Rng::new(w.seed, w.day(), b.id(slot), Purpose::Open), w.light_keep.get(slot, b.gen));
+    let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Open);
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let whole = b.count.round();
@@ -297,16 +297,16 @@ pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
         if b.count < 2.0 {
             break;
         }
-        out.push(draw(w, &mut b, &mut r, Some(keep), true));
+        out.push(draw(w, &mut b, &mut r, true));
     }
     w.see(&mut b);
     w.life.bodies[slot] = b;
     out
 }
 
-/// One member drawn from node `b` (`one`), placed with the light-keep share `keep`; with `own_rows`, born with rows of
+/// One member drawn from node `b` (`one`), placed with the node's light-keep share; with `own_rows`, born with rows of
 /// its own (`member_rows`), else with the node's. Each keeps what the node learned on top of its born rows.
-fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: bool) -> usize {
+fn draw(w: &mut World, b: &mut Body, r: &mut Rng, own_rows: bool) -> usize {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
     let spread = std::mem::take(&mut b.spread);
@@ -332,7 +332,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, keep: Option<f32>, own_rows: b
     }
     b.set_genes(genes, &w.chem, &w.cfg.phys);
     (c.count, c.spread, c.row_spread, c.size_spread, c.size_lag, c.wear) = (1.0, Vec::new(), 0.0, 0.0, 0.0, r.f64());
-    w.place(c, keep)
+    w.place(c)
 }
 
 /// The born rows of one member drawn from `n` members whose rows have mean `rows` and variance `v` (`brain::shake`),

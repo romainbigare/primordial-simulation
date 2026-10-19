@@ -54,7 +54,7 @@ the season come from it by the calendar (`clock::Calendar`, from `Config::calend
 one month per call of `step` (`core/src/schedule.rs`). Each process has a period inside the month
 (`clock::Every`), and at one time they run in this order, written once in `schedule::processes`:
 
-1. Every `phys_days` days (3): `survey::survey` (what each cell holds, light and shade); then the parts
+1. Every `phys_days` days (3): `survey::survey` (what each cell holds, light and shade, its bodies' node); then the parts
    of Flow due: the state of ground and air, which the other laws read until the next physics step, and
    the booking of the air's moves for the physics step ahead (every physics step; the state is rebuilt
    in full at each liquid step), the air's step (every `air_hours`, 288: radiation, evaporation, rain,
@@ -243,13 +243,17 @@ of 6-hour steps within the seeds' noise (`tape/tests/ranges.rs`).
   its air node (with what leaves to space through it), and what each air node sends to the space
   node.
 
-**Light on bodies.** The light that bodies' leaves absorb warms the ground as it falls, except
-the share their light reactions store. That share is set aside in the cell (`World::light_pool`,
-`survey::survey`). A body takes its share at its update. Only the difference to what it really
-stored is settled with the ground. **Heat drawn from the ground** works the same way
-(`World::heat_pool`): the heat each body draws from its ground per second at its update is set
-aside as time passes, so a body that updates every 20 days does not pull 20 days of heat out of
-the ground at once.
+**Light on bodies.** Each cell has one bodies' node for all its bodies (`store::Class::Bodies`,
+`World::e_bodies`): it holds, as heat, what its bodies will take at their updates. The light that
+bodies' leaves absorb warms the ground as it falls, except the share their light reactions store
+(`Body::keep`, the share each stored at its last update): Flow books that share from the sun node
+into the bodies' node. **Heat drawn from the ground** goes there too: before each physics step the
+node settles with its ground so that it holds what its bodies will claim, the light set aside that
+each caught since, and the heat each draws from its ground at the rate of its last update
+(`Body::drew`) over the time since (`survey::survey`). The ground gives what is missing (as far as
+it holds heat above `T_FLOOR`) and gets back what no body can claim. So a body that updates every
+20 days does not pull 20 days of heat out of the ground at once. At its update a body takes its
+share from the node, and only the rest is settled with the ground.
 
 **Shade** (`survey.rs`). Light passes the bodies of a cell from the tallest member down. Each
 layer of leaf area x per ground area takes 1 − exp(−x) of what reaches it. Equal heights share a

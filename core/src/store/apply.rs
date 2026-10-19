@@ -137,8 +137,9 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bo
 /// beyond its class.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     w.fit_deep();
-    let World { chem, counts, mesh, ground, e_ground, air, e_air, deep, e_deep, boundary, e_boundary, potential, .. } = w;
-    let cx = Ctx { chem, len: [mesh.cells().n(), mesh.level(AIR).n(), mesh.cells().n(), BOUNDARIES, 1] };
+    let World { chem, counts, mesh, ground, e_ground, air, e_air, deep, e_deep, e_bodies, boundary, e_boundary, potential, .. } = w;
+    let n = mesh.cells().n();
+    let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, BOUNDARIES, 1] };
     for x in fluxes {
         let links = x.a.len();
         let heat = if x.alike(chem) { x.heat.is_empty() || x.heat.len() == links } else { x.heat.len() == links };
@@ -150,7 +151,12 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         assert!(keeps_elements(chem, &t.dmol, &mut sums), "a transform that does not keep its elements: {t:?}");
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
-    let mut books: [&mut [f64]; ARRAYS] = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut boundary[..], &mut e_boundary[..], &mut [], std::slice::from_mut(potential)];
+    // The nodes that give all they are asked hold what a whole history gave (the sun's heat is all the light the world
+    // got): their changes are summed apart and added once at the end, so the many small changes of a call keep their
+    // size instead of rounding away against that sum.
+    let mut far = [boundary.len(), e_boundary.len(), 0, 1].map(|len| vec![0.0; len]);
+    let [far_mol, far_heat, _, far_lift] = &mut far;
+    let mut books: [&mut [f64]; ARRAYS] = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut [], &mut e_bodies[..], far_mol, far_heat, &mut [], far_lift];
     // Each number of a node that falls below zero on the way: those that end there are among them. A column books into
     // its one or two arrays.
     let mut low = Vec::new();
@@ -189,5 +195,8 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     }
     for s in low {
         counts.rounded[s.arr % 2] -= std::mem::take(&mut books[s.arr][s.at]);
+    }
+    for (v, d) in [&mut boundary[..], &mut e_boundary[..], std::slice::from_mut(potential)].into_iter().zip([&far[0], &far[1], &far[3]]) {
+        v.iter_mut().zip(d).for_each(|(v, d)| *v += d);
     }
 }

@@ -763,6 +763,16 @@ The work of `docs/foundation/plan.md`, one line per task.
   maturing slice was then a ratio of two normal tails that both underflowed, 0/0, and the node went NaN (the century
   test, 16 x 16 seed 1, year 46). The shares are now ratios of tails taken from their logs, finite at any depth; the
   same law. A test of a spread that wide. Golden re-pinned (rounding).
+- E5 (2), one bodies' node per cell (`store::Class::Bodies`, `World::e_bodies`): Flow books the light bodies' light
+  reactions will store from the sun node into it, and before each physics step it settles with its ground to hold
+  what its bodies will claim (the light each caught since by its share, the heat each draws at the rate of its last
+  update); `World::light_pool`, `heat_pool`, `light_keep`, `heat_keep`, `PerSlot` and `survey::hold_heat` go (the two
+  shares are `Body::keep` and `Body::drew`). The ground no longer gets the heat a body gives back ahead of its update.
+  `store::apply` sums the changes of the boundary nodes and the potential apart and adds them once: the light set
+  aside, cell by cell against the sun's sum, rounded away and the energy drift grew to 4.8e-13 in 30 years. 64 x 64,
+  seed 1, years 25 to 30: plant members 3.88e10 to 4.03e10, plant mass 4.97e10 to 4.99e10 kg, plant life 4.51 to
+  4.54 yr, land 287.91 to 287.89 K, carbon gas 252 to 254 ppm, eaters 480 to 410 members (noisy); energy drift at
+  year 30 1.7e-14 to 1.6e-14; a body update 30.7 to 31.8 us. Snapshot version 30; golden re-pinned.
 
 **Phase J: the long physics step**
 

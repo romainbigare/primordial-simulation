@@ -202,13 +202,10 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         events: Vec::new(),
         scratch: Default::default(),
         batches: Default::default(),
-        light_pool: vec![0.0; n],
-        light_keep: Default::default(),
+        e_bodies: vec![0.0; n],
         deep: Vec::new(),
         e_deep: Vec::new(),
         potential: 0.0,
-        heat_pool: vec![0.0; n],
-        heat_keep: Default::default(),
     };
 
     for (i, &z) in hz.iter().enumerate().take(n) {

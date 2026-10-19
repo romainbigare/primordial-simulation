@@ -37,28 +37,6 @@ pub struct Counters {
     pub rounded: [f64; 2],
 }
 
-/// One number per body slot, kept with the generation of the body that set it: a body reads only its own (0 for a new
-/// body in a reused slot, and before its first set).
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct PerSlot(Vec<(u32, f32)>);
-
-impl PerSlot {
-    /// The number set by the body in `slot` of generation `gen` (0 if it set none).
-    pub fn get(&self, slot: usize, gen: u32) -> f32 {
-        self.0.get(slot).filter(|k| k.0 == gen).map_or(0.0, |k| k.1)
-    }
-    pub fn set(&mut self, slot: usize, gen: u32, v: f32) {
-        if self.0.len() <= slot {
-            self.0.resize(slot + 1, (u32::MAX, 0.0));
-        }
-        self.0[slot] = (gen, v);
-    }
-    /// Every slot's (generation, number); `u32::MAX` for a slot never set.
-    pub fn entries(&self) -> &[(u32, f32)] {
-        &self.0
-    }
-}
-
 /// The whole state of a world: what `step` advances, and what a snapshot saves.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct World {
@@ -118,13 +96,9 @@ pub struct World {
     /// What Change books at a step, kept between steps (not saved)
     #[serde(skip)]
     pub batches: crate::change::Batches,
-    /// Light set aside in each cell for what its bodies' light reactions will store, J: put
-    /// aside as it falls (`flow::air::radiation`), not as heat; a body takes its share at its
-    /// update (`body::live`), what no body can claim goes to the ground's heat (`survey::survey`).
-    pub light_pool: Vec<f64>,
-    /// Per body slot: the share of the light it caught that its light reactions stored at its
-    /// last update (J per J). Its cell sets that share of the light it absorbs aside.
-    pub light_keep: PerSlot,
+    /// Heat of the bodies' node of each cell (`store::Class::Bodies`): the light and the heat set aside for its bodies
+    /// between their updates, J
+    pub e_bodies: Vec<f64>,
     /// Liquid (with what is dissolved in it) in the store of the bed under each ground node, [k * n + i], mol, and its
     /// thermal energy with the fusion enthalpy of what is molten, J (`flow::drain`; empty until first used)
     pub deep: Vec<f64>,
@@ -133,12 +107,6 @@ pub struct World {
     /// air and between air nodes) less what falls gave back (rain, liquid and solids downhill); the heat of the store's
     /// potential node (`store::Class::Potential`)
     pub potential: f64,
-    /// Heat set aside in each cell for what its bodies draw from the ground between their updates, J (below 0: given to the
-    /// ground ahead): each survey holds here what each body drew a second at its last update times the time since
-    /// (`survey::survey`), so the ground pays it as it goes and a body's update settles only the difference (`body::live`).
-    pub heat_pool: Vec<f64>,
-    /// Per body slot: the heat it drew from the ground at its last update, W.
-    pub heat_keep: PerSlot,
 }
 
 /// The level of the world's mesh its air nodes live on.

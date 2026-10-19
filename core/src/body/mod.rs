@@ -81,6 +81,12 @@ pub struct Body {
     /// The cell's cumulative light at the last update, J/m², moved since by what its shade gave
     /// it more or less than the cell's mean (`survey::shade`): it caught `light - mark` per m²
     pub mark: f64,
+    /// The share of the light it caught that its light reactions stored at its last update (J per J): its cell sets that
+    /// share of the light it absorbs aside in its bodies' node (`store::Class::Bodies`); a child inherits it
+    pub keep: f32,
+    /// The heat it drew from the ground at its last update, W (0 if it gave heat): its cell sets it aside in its bodies'
+    /// node as time passes (`survey::survey`)
+    pub drew: f32,
     /// Thermal energy, J
     pub e: f64,
     /// mol of each substance

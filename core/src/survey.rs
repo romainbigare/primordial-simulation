@@ -8,6 +8,8 @@ use crate::life::Life;
 use crate::math::mean_decay;
 use crate::units::DAY;
 use crate::copy::Grown;
+use crate::ground::heat_above_floor;
+use crate::store::{apply, Batch, Class};
 use crate::{bond, choose, World};
 
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
@@ -34,8 +36,8 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [t, (d - w.cfg.phys.porosity * loose).max(0.0) / area, w.base_z + z / area]
 }
 
-/// Before each physics step: what each cell holds (`sum_cells`), the light and heat it holds aside for its bodies
-/// (`hold_heat`), and once a month the merge of alike nodes, the traffic and each cell's surroundings.
+/// Before each physics step: what each cell holds, and the light and heat its bodies' node holds for them
+/// (`sum_cells`), and once a month the merge of alike nodes, the traffic and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     w.life.fit_map(n);
@@ -49,7 +51,6 @@ pub fn survey(w: &mut World) {
     }
     shade(w);
     sum_cells(w);
-    hold_heat(w);
     if monthly && w.time > 0 {
         traffic(w);
     }
@@ -63,15 +64,18 @@ pub fn survey(w: &mut World) {
 
 /// Per cell: its members and their visible traits summed (`Life::sum`), their light-capture area per ground area
 /// (`World::canopy`), the share of the light reaching it that they absorb and the share of that set aside for their
-/// light reactions (`Life::absorb`, `Life::keep`). Set-aside light its bodies can no longer claim at their updates (one
+/// light reactions (`Life::absorb`, `Life::keep`). Then its bodies' node (`store::Class::Bodies`) settles with its
+/// ground to hold what its bodies will claim at their updates: the light set aside that each caught since (by its share
+/// `Body::keep`), and the heat each draws from the ground at the rate of its last update (`Body::drew`) over the time
+/// since. The ground gives what is missing as far as it holds heat above `T_FLOOR`, so it pays that heat as time goes
+/// and a body that updates every 20 days does not pull 20 days of heat out of it at once; what no body can claim (one
 /// died, moved or merged before its update, or caught less than its share; walls aside) becomes the ground's heat.
 fn sum_cells(w: &mut World) {
-    let n = w.mesh.cells().n();
-    let keep = |s: usize, g: u32| w.light_keep.get(s, g) as f64;
+    let (n, day) = (w.mesh.cells().n(), w.day() as f64);
     let (mut abs, mut kept, mut claim) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     let mut sum = vec![[0.0; 7]; n];
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-        let (i, m, k) = (b.cell as usize, b.n(), keep(slot, b.gen));
+        let (i, m, k) = (b.cell as usize, b.n(), b.keep as f64);
         sum[i][0] += m;
         // (The height is not summed: the sums end before it.)
         for (x, &v) in sum[i][1..].iter_mut().zip(&b.vis) {
@@ -79,42 +83,29 @@ fn sum_cells(w: &mut World) {
         }
         let a = b.vis[1] as f64 * m * (1.0 - b.reflectance());
         let s = a * w.life.shade[slot];
-        (abs[i], kept[i], claim[i]) = (abs[i] + s, kept[i] + s * k, claim[i] + a * k * (w.light[i] - b.mark));
+        (abs[i], kept[i]) = (abs[i] + s, kept[i] + s * k);
+        claim[i] += a * k * (w.light[i] - b.mark) + b.drew as f64 * (day - b.last).max(0.0) * DAY;
     }
-    let World { life, mesh, canopy, light_pool, e_ground, .. } = w;
+    let World { life, mesh, canopy, .. } = w;
     life.sum = sum;
     life.absorb.resize(n, 0.0);
     life.keep.resize(n, 0.0);
-    light_pool.resize(n, 0.0);
     let area = mesh.cells().area();
     for i in 0..n {
         let s = life.sum[i][2];
         canopy[i] = (s / area[i]) as f32;
         life.absorb[i] = if s > 0.0 { (abs[i] / s) as f32 } else { 0.0 };
         life.keep[i] = if abs[i] > 0.0 { (kept[i] / abs[i]) as f32 } else { 0.0 };
-        let over = (light_pool[i] - claim[i]).max(0.0);
-        (light_pool[i], e_ground[i]) = (light_pool[i] - over, e_ground[i] + over);
     }
-}
-
-/// The heat its bodies drew from the ground at their last update goes on being drawn as time passes: the cell holds
-/// aside what each would settle now at that rate (`World::heat_pool`; it gives back what none can claim), as far as
-/// the ground has it.
-fn hold_heat(w: &mut World) {
-    let n = w.mesh.cells().n();
-    let mut owed = vec![0.0; n];
-    for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-        let q = w.heat_keep.get(slot, b.gen) as f64;
-        owed[b.cell as usize] += q * (w.day() as f64 - b.last).max(0.0) * DAY;
-    }
-    w.heat_pool.resize(n, 0.0);
-    for (i, &o) in owed.iter().enumerate() {
-        let mut d = o - w.heat_pool[i];
-        if d > 0.0 {
-            d = d.min(crate::ground::heat_above_floor(w.e_ground[i], w.heat_cap_ground(i)));
+    let mut settle = Batch::new([Class::Ground, Class::Bodies], &[]);
+    for (i, &c) in claim.iter().enumerate() {
+        let d = c - w.e_bodies[i];
+        let d = if d > 0.0 { d.min(heat_above_floor(w.e_ground[i], w.heat_cap_ground(i))) } else { d };
+        if d != 0.0 {
+            settle.link((i, i), d);
         }
-        (w.heat_pool[i], w.e_ground[i]) = (w.heat_pool[i] + d, w.e_ground[i] - d);
     }
+    apply(w, &[settle.flux()], &[], &[]);
 }
 
 /// The yearly moving average of the crossings of each cell (`Counters::traffic`), once a month.
