@@ -129,7 +129,9 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
         tmp.cat[r] = 1.0;
     }
     let den = (&tmp.cat[..], b.gene(DENATURE), cfg.phys.unfold);
+    let held = b.matter_mol(chem);
     let used = rc.react(chem, &mut b.store, Some(&mut tmp.pool), &mut e, fixed, Some(den), h.lit, dt);
+    b.brood_share(chem, held);
     let c1 = b.heat_cap(chem);
     h.heat = e - t0 * (fixed + c1) + h.lit - used + upkeep_heat;
     b.e = t0 * c1;

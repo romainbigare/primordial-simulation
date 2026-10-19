@@ -860,6 +860,15 @@ Phase E review, round 1 (fixes):
 - `docs/laws.md` says each law once and shorter (1,117 to 776 lines): no function-by-function walk, numbers only
   where they help to read a rule (the rest are in `docs/numbers.md`); "Stability" joins the books in section 0.
 
+**Phase F: population nodes**
+
+- F7 follow-up, the brood rots with the matter it is part of (`Body::brood_share`): a body's own reactions (the
+  rotting of reaction 21) and burnings used its body matter, the brood held in it with the rest, but took it all from
+  the body, so a body holding a brood shrank faster. Individuals, who hold up to a whole child, shrank about 13% more
+  each update than nodes. 64 x 64, seed 1, years 31 to 35: plant members 4.22e10 to 4.12e10, plant mass 5.45e10 to
+  5.21e10 kg, plant life 4.73 to 4.60 yr, eaters 730 to 477 members (noisy), eater life 5.3 to 4.3 yr, carbon gas
+  247 to 252 ppm. Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

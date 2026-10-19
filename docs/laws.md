@@ -442,8 +442,8 @@ sense sizes in whole units). It decides who mixes, who joins a node and who merg
 - At each update `copy::grow` builds what it can (6.6). An immature body puts it all into its own growth; a mature
   body puts the share `ALLOC` into a **brood** (`Body::brood`: matter held for children, not yet body), the rest into
   its own growth. With `ALLOC` below 1 it grows all its life.
-- Matter that leaves a body (a bite, members that die, what it sheds) takes the brood down in the same share
-  (`Body::lose`).
+- Matter that leaves a body (a bite, members that die, what it sheds) or that its own reactions use (it rots, reaction
+  21, or burns) takes the brood down in the same share (`Body::lose`, `Body::brood_share`): it is matter like the rest.
 - Whenever the brood covers one child's matter, children are made (`copy::copy`) at the body's update, whatever its
   brain does: bodies copy by physics only.
 - **A child** has a body of 10^`CHILD` × its parent's copy mass. It gets that matter from the brood, provisions of

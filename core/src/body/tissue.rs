@@ -30,12 +30,21 @@ impl Body {
     }
     /// Amounts `m` (mol, at most what it holds) leave the stores; the brood falls in the share of the matter that left.
     pub(crate) fn lose(&mut self, chem: &Chemistry, m: &[f64]) {
-        let matter = chem.matter().map(|k| (k, self.store[k], self.brooded(chem)));
+        let before = self.matter_mol(chem);
         for (s, a) in self.store.iter_mut().zip(m) {
             *s -= a;
         }
-        if let Some((k, before, brood)) = matter.filter(|x| x.1 > 0.0) {
-            self.brood = brood * (self.store[k] / before);
+        self.brood_share(chem, before);
+    }
+    /// The body matter it holds, mol (all members, its brood with it).
+    pub(crate) fn matter_mol(&self, chem: &Chemistry) -> f64 {
+        chem.matter().map_or(0.0, |k| self.store[k])
+    }
+    /// Its body matter changed from `before` mol by what acts on all of it alike (matter leaving, its reactions, its
+    /// burnings): the brood keeps its share of it.
+    pub(crate) fn brood_share(&mut self, chem: &Chemistry, before: f64) {
+        if before > 0.0 {
+            self.brood = self.brood.max(0.0).min(before) * (self.matter_mol(chem) / before);
         }
     }
     /// The matter of the body itself, kg (all members): the matter in the store less the brood.

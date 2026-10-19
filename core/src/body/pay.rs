@@ -133,6 +133,7 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bo
     }
     // Gas crosses as all a body's gas does (`store::Moves::gas`): given with its latent heat, the air paying the lift.
     let (gas, lift, mut latent) = (|k: usize| w.chem.phase(k, t) == Phase::Gas, w.lift(b.cell as usize), 0.0);
+    let held = b.matter_mol(&w.chem);
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
         for (&(k, nu), sign) in w.chem.reactions[r].inputs.iter().map(|x| (x, -1.0)).chain(w.chem.reactions[r].outputs.iter().map(|x| (x, 1.0))) {
             let (k, d) = (k as usize, sign * nu as f64 * ext[q]);
@@ -144,6 +145,7 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bo
             }
         }
     }
+    b.brood_share(&w.chem, held);
     b.e += paid - latent;
     if left > 1e-9 * cost { left } else { 0.0 }
 }
