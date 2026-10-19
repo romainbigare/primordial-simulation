@@ -72,8 +72,8 @@ every year. It must stay near rounding.
 step, `downhill` by its pass, the reactor by going no further than its scarcest input, and where a law could still ask
 too much it cuts that node's own outgoing links (`solve::spread::within`), never a whole field. `store::apply` only
 adds: what rounding leaves just below zero it sets to zero and counts (`Counters::rounded`; a debug build checks it is
-rounding). A body or part takes heat from a ground node no further than `T_FLOOR` (`World::take_from_ground`,
-counted in `Counters::clamped_heat`).
+rounding). A body or part takes heat from a ground node no further than `T_FLOOR`, with as much less of the matter
+that goes with it (`World::take_from_ground`; what it could not give is counted in `Counters::clamped_heat`).
 
 ---
 
@@ -734,7 +734,9 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
   evaporates; solved exactly over the update. A body afloat reaches no ground. After growth and children it soaks again
   in the same update (`soak_again`), so its activity does not lag one update.
 - **What flows through** (`through`): a soaking body loses where its soaking meets what its pores pass; what passes
-  beyond its store comes from the ground as it goes. This is transpiration.
+  beyond its store comes from the ground as it goes. This is transpiration. Its latent heat is paid by the body's heat
+  and what the ground can conduct in, counted after that liquid has left the ground with its own heat
+  (`physics::heat_bound`), and the body pays for warming it to its temperature.
 - **Roots for minerals**: the uptake genes of the minerals take them from the loose ground at the rate it soaks
   liquids, up to its level.
 

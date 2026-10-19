@@ -5,9 +5,9 @@
 use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{Boundary, Class, Node};
-use pcore::units::{DAY, DAY_S};
+use pcore::units::{DAY, DAY_S, T_FLOOR};
 use pcore::{bond, brain, change, choose, World, AIR};
-use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{add, brood, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -425,6 +425,39 @@ fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     assert!((t - 300.0).abs() < 0.5 && t_dry > t + 1.0, "{t} K, the twin {t_dry} K");
     assert!(kg > 0.0, "{kg} kg");
     books.assert_kept(w, 1e-9);
+}
+
+/// What a wet body evaporates past its store flows through it from the ground (`through`), and the ground's heat pays the
+/// latent heat only after that liquid has left with its own: a node of 10^8 light-eaters on a cell whose ground is only
+/// 10^10 mol of liquid at 300 K evaporates in one update no more than the ground can pay. The ground stays above
+/// `T_FLOOR`, the body above zero energy, and matter and energy are kept.
+#[test]
+fn a_body_evaporates_no_more_than_the_ground_can_pay() {
+    const MEMBERS: f64 = 1e8;
+    const LIQUID_MOL: f64 = 1e10;
+    let mut w = small_world();
+    let (i, days) = (dry_land(&w), 36);
+    empty_cell(&mut w, i);
+    put(&mut w, LIQUID, i, LIQUID_MOL);
+    hold_ground(&mut w, i, 300.0);
+    pcore::flow::state(&mut w, true);
+    let mut b = founder(&mut w, 0, i, &Brain::only(brain::REST));
+    let f = MEMBERS / b.n();
+    b.store.iter_mut().for_each(|a| *a *= f);
+    (b.e, b.count, b.last) = (b.e * f, b.n() * f, w.day() as f64);
+    let slot = w.add(b, days);
+    let (books, rounded) = (Books::now(&w), w.counts.rounded);
+    w.time += days * DAY_S;
+    pcore::survey::survey(&mut w);
+    pcore::survey::day(&mut w);
+    let b = &w.life.bodies[slot];
+    let floor = w.heat_cap_ground(i) * T_FLOOR;
+    let e = w.store.heat(Class::Ground)[i] - floor;
+    println!("the body at {:.1} K; the ground {e:.3e} J above the floor, {:.3e} of {LIQUID_MOL:e} mol of liquid left", b.temp(&w.chem), w.g(LIQUID, i));
+    assert!(!b.alive || b.e >= 0.0, "the body ends at {} J", b.e);
+    assert!(e >= 0.0, "the ground ends {e:e} J below the floor");
+    assert_eq!(w.counts.rounded, rounded);
+    books.assert_kept(&w, 1e-12);
 }
 
 /// Activity needs liquid: a body's chemistry runs in its liquid, so a dry body is nearly dormant. Activity is

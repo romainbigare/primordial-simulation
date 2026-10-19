@@ -1012,6 +1012,16 @@ Phase E review, round 1 (fixes):
   11.88 K, rain on land 1.806e-3, absorbing gas 251 ppm, river cells 836, light-eaters 10.64, lives 2.52 and 5.72 yr,
   in range. The eaters live to year 60 at 48 x 48 in all three seeds (115, 2,852 and 95 members).
 
+- Evaporation pays its latent heat only with heat that is there (`physics::heat_bound`). The ground's heat above
+  `T_FLOOR` was measured before the liquid that flows through a body (transpiration) left the ground with its own heat,
+  so it was counted twice, and warming that liquid to the body was not counted: in 2 of about 8 runs at 3-day steps
+  (64 x 64, around year 30) a node pulled most of its cell's liquid, wanted more heat than the ground held and ended
+  with negative energy (drift 1.8e-7, heat not given 1.75e15 J). `take_from_ground` cut the heat but counted the heat
+  capacity of all the matter asked for as gone, so a cut take left the ground below `T_FLOOR`; the gas a body puts out
+  counted on conduction past what the ground holds. A test of the law: a node of 10^8 light-eaters on 10^10 mol of
+  liquid. 64 x 64, years 21 to 30, against the commit before (seeds 1, 2): land 288.81 to 288.82 K, 289.94 to 289.92 K;
+  plant members -0.9%, +3.1%; eater members at year 30 153 to 95, 169 to 148 (small populations). Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

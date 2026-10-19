@@ -4,6 +4,7 @@
 use super::{apply, held_more, Class, Move, Node};
 use crate::chem::Chemistry;
 use crate::ground::{heat_above_floor, share};
+use crate::units::T_FLOOR;
 use crate::{World, AIR};
 
 /// What a move made when no update runs says (moves are made inside an update).
@@ -94,7 +95,8 @@ impl World {
     /// node holds above `T_FLOOR`, and as much less of the mol; what it could not give is counted. A negative `want` is
     /// heat given to the node, whole. Returns the mol and the heat that moved.
     pub(crate) fn take_from_ground(&mut self, i: usize, (k, d, cp): (usize, f64, f64), want: f64, cap: f64) -> (f64, f64) {
-        let took = if want > 0.0 { want.min(heat_above_floor(self.heat_now(Node::ground(i)), cap - d * cp)) } else { want };
+        // A share x of both leaves it e - x want - (cap - x d cp) T_FLOOR above the floor.
+        let took = if want > 0.0 { want * share(heat_above_floor(self.heat_now(Node::ground(i)), cap), want - d * cp * T_FLOOR) } else { want };
         self.moves.short += want - took;
         let mol = d * share(took, want);
         if mol != 0.0 || took != 0.0 {

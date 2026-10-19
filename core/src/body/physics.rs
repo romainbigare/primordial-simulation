@@ -11,7 +11,7 @@ use crate::ground::{heat_above_floor, share, Melting};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
 use crate::store::Node;
-use crate::units::{MAX_SUBSTANCES, P_REF};
+use crate::units::{MAX_SUBSTANCES, P_REF, T_FLOOR};
 use crate::World;
 
 /// The most share of the heat the body has and can get from the surface that pays the enthalpy of the gas it puts out.
@@ -139,14 +139,15 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 }
 
 /// Gas taken brings its heat at the air's temperature and its latent heat; gas put out takes its latent heat, as far as
-/// `GAS_HEAT_SHARE` of the heat pays for it.
+/// `GAS_HEAT_SHARE` of the heat pays for it (what the surface conducts in no more than the ground holds above `T_FLOOR`).
 fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
     let (j, lift) = (s.j, w.lift(s.i));
     let gas = GasMove::of(&w.chem, &tmp.pool, &tmp.pool0, w.t_air(j));
     b.e += gas.q_in;
     w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
     let heat = h.heat + gas.back;
-    let paid = share(GAS_HEAT_SHARE * (b.e + heat + h.g * s.dt * s.tg).max(0.0), gas.pay);
+    let conduct = (h.g * s.dt * s.tg).min(heat_above_floor(w.heat_now(Node::ground(s.i)), h.gcap));
+    let paid = share(GAS_HEAT_SHARE * (b.e + heat + conduct).max(0.0), gas.pay);
     send_gas(&tmp.pool, &tmp.pool0, paid, |k, sent, kept| {
         b.store[k] += kept;
         if sent != 0.0 {
@@ -184,14 +185,15 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
 }
 
 /// Its liquids evaporate toward their vapour pressure through its pores (`breath`; for a key liquid as far as it is wet),
-/// paid by its heat and what the surface can conduct into it. Above `COOL_T` it evaporates more, as far as that cools it
-/// to the gene, its still air carries the vapour (the Lewis relation) and its liquid stays above its safe minimum.
-/// Returns what each lost past what flowed in.
+/// paid by its heat and what the surface can conduct into it from the ground (`heat_bound`). Above `COOL_T` it evaporates
+/// more, as far as that cools it to the gene, its still air carries the vapour (the Lewis relation) and its liquid stays
+/// above its safe minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
     let lift = w.lift(s.i);
     let (ns, i, tg, dt, days) = (w.chem.ns(), s.i, s.tg, s.dt, s.days);
     let (g, t0) = (h.g, h.t0);
-    let mut moved = false;
+    // Heat that warming what flowed in to the body's temperature takes from its energy, J (the vapour leaves at it).
+    let (mut moved, mut warmed) = (false, 0.0);
     let cpa: f64 = (0..ns).map(|k| tmp.x[k] * w.chem.subs[k].cp).sum();
     let wide = film(&w.chem, &w.cfg, b, h.mass, s.cover).g / cpa.max(1e-9) * dt * s.open * (-s.depth / w.cfg.phys.gas_depth).exp();
     let (lay, size) = (Layout::of(&w.chem), b.size(&w.chem));
@@ -205,8 +207,6 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         if push <= 0.0 || t0 < b.melt(chem, k) {
             continue;
         }
-        let (own, room) = (h.heat - h.lit + h.took, heat_above_floor(w.heat_now(Node::ground(i)), h.gcap));
-        let heat_paid = (own + (g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room)).max(0.0);
         let (ct, x) = (b.heat_cap(chem) + h.c_out, g * dt / (b.heat_cap(chem) + h.c_out));
         let bx = mean_decay(x);
         let e1 = one_minus_exp(x) * ct * tg + (-x).exp() * b.e + bx * h.heat;
@@ -215,13 +215,16 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         let gk = w.g(k, i);
         let soak_rate = if soil.in_ground > 0.0 && soil.liquid(k) { soil.rate * chem.subs[k].solubility * gk / soil.in_ground } else { 0.0 };
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach, soak_rate * days, cfg.phys.dormancy) } else { push * reach };
-        let m = open_m.max((push * wide).min(need).min(spare)).min(heat_paid / chem.subs[k].latent_gas());
+        let (cp, latent, flows) = (chem.subs[k].cp, chem.subs[k].latent_gas(), soak_rate > 0.0 && b.wet >> k & 1 == 1);
+        let fused = chem.fused_heat(k, tg, |j| w.g(j, i));
+        let pay = Pay { own: h.heat - h.lit + h.took - warmed, conduct: g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0), room: heat_above_floor(w.heat_now(Node::ground(i)), h.gcap) };
+        let per = PerMol { latent, brings: fused - cp * (t0 - tg), leaves: cp * (tg - T_FLOOR) + fused };
+        let m = open_m.max((push * wide).min(need).min(spare)).min(heat_bound(&pay, &per, b.store[k], flows));
         // What flows through it comes from the ground, which pays its heat and fusion enthalpy.
-        let inflow = if soak_rate > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(gk) } else { 0.0 };
-        let (cp, latent) = (chem.subs[k].cp, chem.subs[k].latent_gas());
-        let fused = w.chem.fused_heat(k, tg, |j| w.g(j, i));
+        let inflow = if flows { (m - b.store[k]).max(0.0).min(gk) } else { 0.0 };
         let pre = w.take_from_ground(i, (k, inflow, cp), inflow * (cp * tg + fused), h.gcap).0;
-        (b.store[k], b.e, h.heat) = (b.store[k] + pre, b.e + pre * cp * tg, h.heat + pre * fused);
+        (b.store[k], b.e, h.heat, h.gcap) = (b.store[k] + pre, b.e + pre * cp * tg, h.heat + pre * fused, h.gcap - pre * cp);
+        warmed += pre * cp * (t0 - tg);
         let m = m.min(b.store[k]);
         if m > 0.0 {
             moved = true;
@@ -234,6 +237,37 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
         }
     }
     (lost, moved)
+}
+
+/// The heat that can pay for evaporating, J: the body's own heat released (`own`), and what its surface conducts in
+/// (`conduct`) as far as the ground holds it above `T_FLOOR` (`room`).
+struct Pay {
+    own: f64,
+    conduct: f64,
+    room: f64,
+}
+
+/// Per mol of a liquid that evaporates, J: its latent heat; and of what flows in from the ground, the heat it brings the
+/// body (its fusion enthalpy less its warming to the body) and the heat above `T_FLOOR` it takes out of the ground.
+struct PerMol {
+    latent: f64,
+    brings: f64,
+    leaves: f64,
+}
+
+/// The most of a liquid a body holding `held` mol can evaporate with the heat that pays for it (`Pay`), mol. Past its
+/// store the liquid flows in from the ground (if `flows`), which then holds less heat to conduct in: the ground's heat is
+/// counted once, after what flows through has left it.
+fn heat_bound(pay: &Pay, per: &PerMol, held: f64, flows: bool) -> f64 {
+    let at_store = pay.own + pay.conduct.min(pay.room);
+    if !flows || at_store <= held * per.latent {
+        return at_store.max(0.0) / per.latent;
+    }
+    // Past the store, u mol flow through: (held + u) latent <= own + u brings + min(conduct, room - u leaves).
+    let most = |spare: f64, cost: f64| if cost > 0.0 { spare / cost } else { f64::INFINITY };
+    let by_conduct = most(pay.own + pay.conduct - held * per.latent, per.latent - per.brings);
+    let by_room = most(pay.own + pay.room - held * per.latent, per.latent - per.brings + per.leaves);
+    held + by_conduct.min(by_room)
 }
 
 /// Liquids of the ground soak in up to the body's room (`Body::room`) at the rate of `Soil` × solubility, while it loses
