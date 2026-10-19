@@ -4,7 +4,7 @@ use super::{Chemistry, Phase, Substance};
 use crate::units::{P_REF, R_GAS, T_SOL, T_SURF};
 
 /// Molar heat capacity of an ideal gas of two atoms, J/(mol K): the air's when none is known.
-const DIATOMIC_CP: f64 = 3.5 * R_GAS;
+pub(super) const DIATOMIC_CP: f64 = 3.5 * R_GAS;
 
 /// The vapour pressure and solubility curves are read no colder than this, K (they divide by the temperature).
 const T_MIN: f64 = 1.0;
@@ -128,12 +128,6 @@ impl Chemistry {
         self.derived().air_cp
     }
 
-    /// `air_cp`, made from the chemistry (once, `Derived`).
-    pub(super) fn find_air_cp(&self) -> f64 {
-        let c: f64 = self.air.iter().zip(&self.subs).map(|(x, s)| x * s.cp).sum();
-        if c > 0.0 { c } else { DIATOMIC_CP }
-    }
-
     /// Heat capacity of the amounts `m` (mol of each substance), J/K.
     #[inline]
     pub fn heat_cap_of(&self, m: &[f64]) -> f64 {
@@ -143,12 +137,6 @@ impl Chemistry {
     /// Mass of amounts `m` (mol of each substance), kg.
     pub fn mass_of(&self, m: &[f64]) -> f64 {
         m.iter().zip(&self.subs).map(|(a, s)| a * s.molar_mass).sum()
-    }
-
-    /// The heat that leaves with amounts `m` from a holder of heat `e` and heat capacity `cap`: their share by heat capacity, J.
-    #[inline]
-    pub fn heat_share(&self, e: f64, cap: f64, m: &[f64]) -> f64 {
-        e * self.heat_cap_of(m) / cap
     }
 
     /// Optical depth to outgoing heat radiation of a column of `c` mol/m² of substance `k`.

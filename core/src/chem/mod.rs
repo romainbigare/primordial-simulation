@@ -133,7 +133,12 @@ impl Chemistry {
 
     /// What follows from the chemistry (`Derived`), made at the first call.
     fn derived(&self) -> &Derived {
-        self.derived.get_or_init(|| Derived { minerals: self.find_minerals(), air_cp: self.find_air_cp() })
+        self.derived.get_or_init(|| {
+            // The inputs of growth no reaction burns, per mol of matter; the starting air's heat capacity per mol.
+            let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
+            let air_cp: f64 = self.air.iter().zip(&self.subs).map(|(x, s)| x * s.cp).sum();
+            Derived { minerals, air_cp: if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP } }
+        })
     }
 
     /// Element counts of a reaction side.
@@ -145,17 +150,6 @@ impl Chemistry {
             }
         }
         e
-    }
-
-    /// Mass of a reaction side, kg.
-    fn side_mass(&self, v: &[(u16, u16)]) -> f64 {
-        v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].molar_mass).sum()
-    }
-
-    /// Does a reaction or conversion keep mass (its molar masses agree with its elements), to rounding?
-    fn keeps_mass(&self, rx: &Reaction) -> bool {
-        let (a, b) = (self.side_mass(&rx.inputs), self.side_mass(&rx.outputs));
-        (a - b).abs() <= MASS_ROUNDING * a.max(b)
     }
 
     /// Is the chemistry one the laws can run? At most `MAX_SUBSTANCES` substances with element counts, a vapour pressure
@@ -176,33 +170,25 @@ impl Chemistry {
                 return Err(format!("substance {k}: densities must be above 0"));
             }
         }
-        let known = |rx: &Reaction| rx.inputs.iter().chain(&rx.outputs).all(|p| (p.0 as usize) < ns);
-        for (r, rx) in self.reactions.iter().enumerate() {
-            if !known(rx) {
-                return Err(format!("reaction {r}: a substance beyond the {ns}"));
-            }
-            if rx.ord.len() > rx.inputs.len() {
-                return Err(format!("reaction {r}: more orders than inputs"));
-            }
-            if self.side_elems(&rx.inputs) != self.side_elems(&rx.outputs) {
-                return Err(format!("reaction {r} does not balance"));
-            }
-            if !self.keeps_mass(rx) {
-                return Err(format!("reaction {r} does not keep mass"));
-            }
-        }
-        let named = self.build.iter().map(|b| (String::from("build"), b));
-        for (name, b) in named.chain(self.builds.iter().enumerate().map(|(q, b)| (format!("builds {q}"), b))) {
-            if b.outputs.is_empty() || b.inputs.is_empty() {
+        // Each reaction, then each conversion: a conversion needs inputs and a product, a reaction no more orders than
+        // inputs. Its molar masses must agree with its elements to rounding: it keeps mass.
+        let mass = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * self.subs[k as usize].molar_mass).sum::<f64>();
+        let reactions = self.reactions.iter().enumerate().map(|(r, rx)| (format!("reaction {r}"), rx, false));
+        let builds = self.build.iter().map(|b| (String::from("build"), b, true));
+        for (name, rx, conversion) in reactions.chain(builds).chain(self.builds.iter().enumerate().map(|(q, b)| (format!("builds {q}"), b, true))) {
+            if conversion && (rx.outputs.is_empty() || rx.inputs.is_empty()) {
                 return Err(format!("{name} needs inputs and a product"));
             }
-            if !known(b) {
+            if !rx.inputs.iter().chain(&rx.outputs).all(|p| (p.0 as usize) < ns) {
                 return Err(format!("{name}: a substance beyond the {ns}"));
             }
-            if self.side_elems(&b.inputs) != self.side_elems(&b.outputs) {
+            if rx.ord.len() > rx.inputs.len() {
+                return Err(format!("{name}: more orders than inputs"));
+            }
+            if self.side_elems(&rx.inputs) != self.side_elems(&rx.outputs) {
                 return Err(format!("{name} does not balance"));
             }
-            if !self.keeps_mass(b) {
+            if (mass(&rx.inputs) - mass(&rx.outputs)).abs() > MASS_ROUNDING * mass(&rx.inputs).max(mass(&rx.outputs)) {
                 return Err(format!("{name} does not keep mass"));
             }
         }

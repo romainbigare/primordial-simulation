@@ -43,7 +43,12 @@ impl Chemistry {
 
     /// Is `k` an input of a reaction that burns (`burning`)?
     pub fn burnt(&self, k: usize) -> bool {
-        (0..self.reactions.len()).any(|r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
+        self.burner(k).is_some()
+    }
+
+    /// The first reaction that burns `k` (`burning`).
+    fn burner(&self, k: usize) -> Option<usize> {
+        (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 
     /// Does reaction `r` get less heat out of a solid or liquid it takes than burning it does? Then it keeps the rest in
@@ -74,12 +79,6 @@ impl Chemistry {
         &self.derived().minerals
     }
 
-    /// `minerals`, made from the chemistry (once, `Derived`).
-    pub(super) fn find_minerals(&self) -> Vec<(usize, f64)> {
-        let Some(bl) = self.build.as_ref() else { return Vec::new() };
-        bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect()
-    }
-
     /// The roles a first body's chemistry is built on, found from the numbers: the light reaction (one that takes
     /// energy), the energy-rich solid it makes, the liquid it uses, and the reaction that burns that solid with a gas.
     pub fn life_roles(&self) -> Option<(usize, usize, usize, usize)> {
@@ -88,15 +87,13 @@ impl Chemistry {
         let rx = &self.reactions[r_light];
         let rich = rx.outputs.iter().find(|p| at(p.0) == Phase::Solid)?.0 as usize;
         let liquid = rx.inputs.iter().find(|p| at(p.0) == Phase::Liquid)?.0 as usize;
-        let burn = (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == rich))?;
-        Some((r_light, rich, liquid, burn))
+        Some((r_light, rich, liquid, self.burner(rich)?))
     }
 
     /// Body matter and the reaction that burns it with a gas (none where bodies do not grow).
     pub fn matter_roles(&self) -> Option<(usize, usize)> {
         let m = self.matter()?;
-        let burn = (0..self.reactions.len()).find(|&r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == m))?;
-        Some((m, burn))
+        Some((m, self.burner(m)?))
     }
 
     /// The fixing reaction: the one that makes a mineral of growth (`minerals`) from an element only a gas it takes brings.

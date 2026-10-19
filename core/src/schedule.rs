@@ -49,49 +49,30 @@ pub fn day(w: &mut World) {
 /// A process: its stage, its name (for the debug check) and what it does for the seconds its run stands for.
 type Run = (Stage, &'static str, fn(&mut World, u64));
 
-/// The periods of the world's processes, each counted from the start of the longer period that holds it (`Every`).
-struct Periods {
-    physics: Every,
-    air: Every,
-    liquid: Every,
-    creep: Every,
-    refresh: Every,
-    month: Every,
-    day: Every,
+/// A process that runs every `d` days from the start of each month.
+fn days(cfg: &Config, d: u32) -> Every {
+    let cal = cfg.calendar();
+    Every { period: d as u64 * cal.day, within: cal.month }
 }
 
-impl Periods {
-    fn of(cfg: &Config) -> Periods {
-        let cal = cfg.calendar();
-        let days = |d: u32| Every { period: d as u64 * cal.day, within: cal.month };
-        // The slow parts count from the start of the world.
-        let from_start = |period: u64| Every { period, within: period };
-        Periods {
-            physics: days(cfg.phys_days),
-            air: Every { period: cfg.air_hours as u64 * HOUR_S, within: cal.month },
-            liquid: days(cfg.flow_days),
-            creep: from_start(flow::CREEP_YEARS * cal.year),
-            refresh: from_start(flow::REFRESH_MONTHS * cal.month),
-            month: from_start(cal.month),
-            day: days(1),
-        }
-    }
-}
-
-/// The processes of the world in their fixed order at one time; Flow's state comes first, as the others read it.
+/// The processes of the world in their fixed order at one time, each on its period counted from the start of the longer
+/// period that holds it (`Every`); Flow's state comes first, as the others read it.
 fn processes(w: &World) -> [(Every, Run); 9] {
-    let p = Periods::of(&w.cfg);
+    let (cfg, cal) = (&w.cfg, w.cfg.calendar());
+    // The slow parts count from the start of the world.
+    let from_start = |period: u64| Every { period, within: period };
+    let physics = days(cfg, cfg.phys_days);
     [
-        (p.physics, (Stage::Bodies, "survey", |w, _| survey::survey(w))),
-        (p.physics, (Stage::Flow, "state", |w, _| flow::state(w, Periods::of(&w.cfg).liquid.span(w.time).is_some()))),
-        (p.air, (Stage::Flow, "air", |w, s| flow::air(w, s as f64))),
-        (p.liquid, (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),
-        (p.creep, (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
-        (p.refresh, (Stage::Flow, "refresh", |w, _| flow::refresh(w))),
-        (p.physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
+        (physics, (Stage::Bodies, "survey", |w, _| survey::survey(w))),
+        (physics, (Stage::Flow, "state", |w, _| flow::state(w, days(&w.cfg, w.cfg.flow_days).span(w.time).is_some()))),
+        (Every { period: cfg.air_hours as u64 * HOUR_S, within: cal.month }, (Stage::Flow, "air", |w, s| flow::air(w, s as f64))),
+        (days(cfg, cfg.flow_days), (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),
+        (from_start(flow::CREEP_YEARS * cal.year), (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
+        (from_start(flow::REFRESH_MONTHS * cal.month), (Stage::Flow, "refresh", |w, _| flow::refresh(w))),
+        (physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
         // (Bond's own spans are months, `bond::step`; the bodies' intervals whole days, `survey::day`.)
-        (p.month, (Stage::Parts, "bond", |w, _| bond::step(w))),
-        (p.day, (Stage::Bodies, "body day", |w, _| survey::day(w))),
+        (from_start(cal.month), (Stage::Parts, "bond", |w, _| bond::step(w))),
+        (days(cfg, 1), (Stage::Bodies, "body day", |w, _| survey::day(w))),
     ]
 }
 

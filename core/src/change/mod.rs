@@ -86,9 +86,8 @@ struct Held {
 pub struct Batches {
     gas: Vec<Batch>,
     reactions: Vec<Transform>,
-    /// Per air node, J; and as the link flux from the potential
+    /// Per air node, J
     lift: Vec<f64>,
-    falls: Vec<Batch>,
 }
 
 impl Batches {
@@ -96,9 +95,8 @@ impl Batches {
     fn clear(&mut self, na: usize, ns: usize) {
         if self.gas.len() != ns {
             self.gas = (0..ns as u16).map(|k| Batch::new([Class::Ground, Class::Air], &[k])).collect();
-            self.falls = vec![Batch::falls(Class::Air)];
         }
-        self.gas.iter_mut().chain(&mut self.falls).for_each(Batch::clear);
+        self.gas.iter_mut().for_each(Batch::clear);
         self.reactions.clear();
         self.lift.clear();
         self.lift.resize(na, 0.0);
@@ -107,18 +105,15 @@ impl Batches {
     /// into `made` (`Reactor::made`), noted as one transform.
     fn transform(&mut self, chem: &Chemistry, at: Node, rc: &mut Reactor, made: &mut [f64]) {
         rc.made(chem, made);
-        let changed = made.iter().filter(|&&d| d != 0.0).count();
-        if changed > 0 {
-            let mut dmol = Vec::with_capacity(changed);
-            dmol.extend(made.iter().enumerate().filter(|e| *e.1 != 0.0).map(|(k, &d)| (k as u16, d)));
+        let dmol: Vec<_> = made.iter().enumerate().filter(|e| *e.1 != 0.0).map(|(k, &d)| (k as u16, d)).collect();
+        if !dmol.is_empty() {
             self.reactions.push(Transform { at, dmol });
         }
     }
     /// Book it all on the world.
     fn book(&mut self, w: &mut World) {
-        let lift = &mut self.falls[0];
-        self.lift.iter().enumerate().for_each(|(j, &q)| lift.fall(j, -q));
-        let fluxes: Vec<LinkFlux> = self.gas.iter_mut().filter(|b| !b.is_empty()).chain(&mut self.falls).map(|b| b.flux()).collect();
+        let mut lift = Batch::fallen(Class::Air, self.lift.iter().map(|q| -q));
+        let fluxes: Vec<LinkFlux> = self.gas.iter_mut().filter(|b| !b.is_empty()).chain([&mut lift]).map(|b| b.flux()).collect();
         apply(w, &fluxes, &[], &self.reactions);
     }
 }

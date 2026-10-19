@@ -104,15 +104,10 @@ pub fn broken(w: &World) -> Option<String> {
     let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep))];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
     let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light), ("rained", &w.rained)];
-    let found = (amounts.into_iter().chain(energies))
-        .find_map(|(name, v)| first_bad(name, v, at_least_0))
-        .or_else(|| {
-            [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)]
-                .into_iter()
-                .find_map(|(name, v)| first_bad(name, v, at_least_0))
-        });
-    if found.is_some() {
-        return found;
+    let f32s = [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)];
+    let found = amounts.into_iter().chain(energies).find_map(|(name, v)| first_bad(name, v, at_least_0));
+    if let Some(e) = found.or_else(|| f32s.into_iter().find_map(|(name, v)| first_bad(name, v, at_least_0))) {
+        return Some(e);
     }
     for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         if !above_0(b.e) || !above_0(b.count) || !b.store.iter().all(|&x| at_least_0(x)) {

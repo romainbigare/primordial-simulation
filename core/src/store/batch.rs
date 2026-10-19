@@ -55,6 +55,12 @@ impl Batch {
         };
         self.carry(l, k, m);
     }
+    /// Falls give each node `i` of `class` its `q[i]` J from the potential (a lift, negative, takes it).
+    pub fn fallen(class: Class, q: impl IntoIterator<Item = f64>) -> Batch {
+        let mut b = Batch::falls(class);
+        q.into_iter().enumerate().for_each(|(i, q)| b.fall(i, q));
+        b
+    }
     /// A fall gives node `i` `q` J from the potential (a lift, negative, takes it).
     pub fn fall(&mut self, i: usize, q: f64) {
         if q != 0.0 {
@@ -63,9 +69,7 @@ impl Batch {
     }
     /// No link in it any more (its substances stay).
     pub fn clear(&mut self) {
-        for v in [&mut self.heat].into_iter().chain(&mut self.mol) {
-            v.clear();
-        }
+        [&mut self.heat].into_iter().chain(&mut self.mol).for_each(Vec::clear);
         self.a.clear();
         self.b.clear();
     }

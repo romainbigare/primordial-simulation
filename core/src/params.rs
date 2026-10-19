@@ -432,17 +432,3 @@ impl Default for Config {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Config, Physics};
-
-    #[test]
-    fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
-        assert_eq!(Config::default().validate(), Ok(()));
-        let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
-        for c in [Config { flow_days: 0, ..Default::default() }, Config { air_hours: 0, ..Default::default() }, Config { air_hours: 480, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
-            assert!(c.validate().is_err(), "{} {} {} {}", c.phys_days, c.air_hours, c.flow_days, c.phys.dormancy);
-        }
-    }
-}

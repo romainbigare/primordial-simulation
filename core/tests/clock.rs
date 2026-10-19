@@ -5,7 +5,7 @@
 use pcore::clock::{self, Every, Sleep};
 use pcore::store::Class;
 use pcore::units::DAY_S;
-use pcore::{Config, Stage};
+use pcore::{Config, Physics, Stage};
 use worldgen::testkit::small_world;
 
 /// A fast process runs a whole number of times inside a slow one, each run standing for the time to the next; a span
@@ -136,4 +136,15 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
     assert_eq!((s.since(g, awake), s.since(g, asleep)), (year, year));
     assert!((amount[0] - amount[1]).abs() <= CATCH_UP * amount[0], "{amount:?}");
     assert!(amount[0] > 0.9, "the law ran: {amount:?}");
+}
+
+/// The default settings pass; a time step of 0, an air step that does not divide the physics step, or a dormancy of 1
+/// is refused.
+#[test]
+fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
+    assert_eq!(Config::default().validate(), Ok(()));
+    let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
+    for c in [Config { flow_days: 0, ..Default::default() }, Config { air_hours: 0, ..Default::default() }, Config { air_hours: 480, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
+        assert!(c.validate().is_err(), "{} {} {} {}", c.phys_days, c.air_hours, c.flow_days, c.phys.dormancy);
+    }
 }

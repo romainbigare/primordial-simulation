@@ -28,6 +28,7 @@ const CANCEL: f64 = 1e3;
 const PHASES: [Phase; 3] = [Phase::Solid, Phase::Liquid, Phase::Gas];
 
 /// Reusable reaction solver for one chemistry: per-reaction constants and scratch buffers.
+#[derive(Default)]
 pub struct Reactor {
     /// Temperature below which a reaction is frozen (catalyst 1), K (`frozen_below`).
     thr: Vec<f64>,
@@ -165,7 +166,7 @@ impl Reactor {
     pub fn new(chem: &Chemistry, cfg: &Config) -> Self {
         let (nr, ns, year) = (chem.reactions.len(), chem.ns(), cfg.calendar().year as f64);
         let dh: Vec<f64> = (0..nr).map(|r| chem.dh(r)).collect();
-        Reactor {
+        let mut rc = Reactor {
             thr: chem.reactions.iter().map(|rx| frozen_below(rx, year)).collect(),
             lit: chem.reactions.iter().zip(&dh).map(|(rx, &d)| rx.light && d > 0.0).collect(),
             needs: chem.reactions.iter().map(|rx| rx.inputs.iter().fold(0, |m, &(k, _)| m | 1 << k)).collect(),
@@ -175,27 +176,15 @@ impl Reactor {
             melt: chem.subs.iter().map(|s| s.melt).collect(),
             boil: chem.subs.iter().map(|s| s.boil).collect(),
             ph: vec![Phase::Solid; ns],
-            av: vec![0.0; ns],
-            held: 0,
-            kap: vec![0.0; nr],
-            on: Vec::with_capacity(nr),
-            lim: vec![0.0; nr],
-            far: vec![0.0; nr],
-            pw: vec![0.0; nr],
             minor: vec![false; nr],
-            cap0: 0.0,
-            kap0: vec![0.0; nr],
-            lim0: vec![0.0; nr],
-            on0: Vec::with_capacity(nr),
-            film: 0.0,
-            flux: vec![[0.0; 2]; ns],
-            done: vec![0.0; nr],
-            ran: Vec::with_capacity(nr),
-            own: vec![0.0; ns],
             pooled: vec![false; ns],
-            sums: vec![[0.0; 2]; ns],
-            parts: Vec::new(),
-        }
+            ..Default::default()
+        };
+        // The scratch of each reaction and of each substance, empty; the lists of reactions fill as they run.
+        [&mut rc.kap, &mut rc.lim, &mut rc.far, &mut rc.pw, &mut rc.kap0, &mut rc.lim0, &mut rc.done].into_iter().for_each(|v| *v = vec![0.0; nr]);
+        [&mut rc.av, &mut rc.own].into_iter().for_each(|v| *v = vec![0.0; ns]);
+        (rc.flux, rc.sums) = (vec![[0.0; 2]; ns], vec![[0.0; 2]; ns]);
+        rc
     }
 
     /// The longest the node of the last `react` may wait before it reacts again, s: until a reaction at its starting rate
@@ -264,12 +253,8 @@ impl Reactor {
         let (mut tot, mut held) = ([0.0; 3], 0);
         for k in 0..n.len() {
             let p = (t >= self.melt[k] || n[k] > 0.0 && t >= chem.melt_in(k, |j| n[j])) as usize + (t >= self.boil[k]) as usize;
-            let a = match gas {
-                Some(g) if p == 2 => n[k] + g[k],
-                _ => n[k],
-            };
-            self.ph[k] = PHASES[p];
-            self.av[k] = a;
+            let a = if let (Some(g), 2) = (gas, p) { n[k] + g[k] } else { n[k] };
+            (self.ph[k], self.av[k]) = (PHASES[p], a);
             held |= ((a > 0.0) as u64) << k;
             tot[p] += a;
         }
@@ -294,12 +279,9 @@ impl Reactor {
         dt: f64,
     ) -> f64 {
         let pool: &mut [f64] = gas.unwrap_or(&mut []);
-        let mut light = light_j;
-        let mut left = dt;
+        let (mut light, mut left) = (light_j, dt);
         self.on0.clear();
-        for &r in &self.ran {
-            self.done[r] = 0.0;
-        }
+        self.ran.iter().for_each(|&r| self.done[r] = 0.0);
         self.ran.clear();
         self.own.fill(0.0);
         self.pooled.fill(false);
@@ -359,30 +341,17 @@ impl Reactor {
     /// The length of sub-step `iter` of the `left` seconds still to go, at heat capacity `c`: halved while the reactions'
     /// heat would move the temperature more than `MAX_DT_K` (not the last). Sets `far`, and on the first `kap0`, `lim0`.
     fn sub_step(&mut self, left: f64, c: f64, iter: usize) -> f64 {
-        let mut heat = 0.0;
-        for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
-            self.far[r] = gone(self.kap[r] * left, self.pw[r]);
-            if !self.lit[r] {
-                heat += self.dh[r].abs() * self.lim[r] * self.far[r];
-                if iter == 0 && !self.minor[r] {
-                    (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
-                    self.on0.push(r);
-                }
-            }
-        }
+        // The heat of the reactions not driven by light over `sub` seconds, J.
+        let heat = |sub: f64| (self.on.iter()).filter(|&&r| self.kap[r] > 0.0 && !self.lit[r]).map(|&r| self.dh[r].abs() * self.lim[r] * gone(self.kap[r] * sub, self.pw[r])).sum::<f64>();
         let mut sub = left;
-        if iter < MAX_SUBSTEPS {
-            while heat > MAX_DT_K * c && sub > left * MIN_SUB {
-                sub *= 0.5;
-                heat = (self.on.iter().copied())
-                    .filter(|&r| self.kap[r] > 0.0 && !self.lit[r])
-                    .map(|r| self.dh[r].abs() * self.lim[r] * gone(self.kap[r] * sub, self.pw[r]))
-                    .sum();
-            }
+        while iter < MAX_SUBSTEPS && heat(sub) > MAX_DT_K * c && sub > left * MIN_SUB {
+            sub *= 0.5;
         }
-        if sub != left {
-            for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
-                self.far[r] = gone(self.kap[r] * sub, self.pw[r]);
+        for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
+            self.far[r] = gone(self.kap[r] * sub, self.pw[r]);
+            if iter == 0 && !self.lit[r] && !self.minor[r] {
+                (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
+                self.on0.push(r);
             }
         }
         sub
