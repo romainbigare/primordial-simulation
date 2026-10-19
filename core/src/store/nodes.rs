@@ -21,7 +21,8 @@ pub enum Class {
     Deep,
     /// The bonded ground under a cell: amounts only (its skin's heat is its ground node's); it breaks by `Move::loosen`
     Bed,
-    /// The bodies' node of a cell: the light and heat set aside for its bodies between their updates, J (no amounts)
+    /// The bodies' node of a cell: the light and heat set aside for its bodies between their updates, J, and the gas its
+    /// bodies and parts give off until the air's step takes it up (holding its latent heat as the air does)
     Bodies,
     /// A node beyond the world's boundary (`Boundary`): it holds what crossed, with a node's sign, so it may go below zero
     Boundary,

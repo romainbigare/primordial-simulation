@@ -1098,6 +1098,16 @@ Phase E review, round 1 (fixes):
   at the one before's end, 10-day steps, year 17). 64 x 64, seed 1, years 21 to 30: land at 3/3 days (physics/air)
   288.47 to 289.21 K, at 10/10 287.41 to 289.53 K; summer 294.46 to 295.33 and 292.95 to 295.45 K; plant members
   2.83e10 to 2.69e10 (3/3); drift 4e-14. Golden re-pinned.
+- J3 follow-up, gas from bodies goes through the bodies' node (`Moves::gas`, `step::Start`): what a body or part gives
+  off waits in its cell's bodies' node (which now holds amounts, with the latent heat the air would hold) and the air's
+  step takes it up whole as a source of its backward-Euler step, with its lift; gas taken from the air stays direct.
+  Before, it sat in the air at the next step's start, where the step reads its optical depth: at 10-day steps the air
+  held about 7% more vapour and the land was 0.3 to 0.5 K warmer. The air's temperature counts the heat capacity of
+  the gas under it (`air::sums`; bodies give the air its warmth at once: left out, the 10-day step ran 0.3 K cold),
+  and bodies breathe and warm against the air with that gas (`World::a_seen`). 64 x 64, years 21 to 30, against the
+  commit before (seed 1): land 3/3 289.21 to 288.97 K, 10/10 289.53 to 288.82 K; summer 295.33 to 295.08 and 295.45
+  to 294.82 K; air vapour at 10/10 0.00621 to 0.00564 (3/3 0.00559); seed 2: land 3/3 290.01, 10/10 289.95 K.
+  Snapshot version 36; golden re-pinned.
 
 **Phase K: recording and viewer**
 

@@ -142,4 +142,10 @@ impl World {
     pub fn a(&self, k: usize, j: usize) -> f64 {
         self.moves.amount(Node::air(j), k).unwrap_or_else(|| self.store.amounts(Class::Air)[k * self.mesh.level(AIR).n() + j])
     }
+    /// Amount of substance `k` that bodies and parts see in air node `j`, mol: what it holds (`a`) and what the bodies'
+    /// nodes under it hold until the air's step takes it up, as the moves of the update running leave them.
+    pub fn a_seen(&self, k: usize, j: usize) -> f64 {
+        let (n, kids) = (self.mesh.cells().n(), self.mesh.level(AIR).children(j));
+        self.a(k, j) + kids.iter().map(|&i| self.moves.amount(Node::bodies(i as usize), k).unwrap_or_else(|| self.store.amounts(Class::Bodies)[k * n + i as usize])).sum::<f64>()
+    }
 }

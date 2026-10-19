@@ -2,8 +2,8 @@
 //! (`gather`), and one implicit step of the air nodes' totals, gases and heat with the wind (`solve`, by `solve::band`).
 
 use super::super::Scratch;
-use super::{lerp, over_cell, shares, step::{Active, Iterate, FIXED, PER_GAS}, wind::{pushes, Coef, Links, Pushes}};
-use crate::{solve::band::{fluxes, reach, Band}, store::Class, AIR, World};
+use super::{lerp, over_cell, shares, step::{Active, Iterate, Start, FIXED, PER_GAS}, wind::{pushes, Coef, Links, Pushes}};
+use crate::{solve::band::{fluxes, reach, Band}, AIR, World};
 
 /// What the ground nodes give the air nodes over the step: heat, J; the net amount of each active gas that comes up
 /// (`[gas * nodes + node]`), mol; what condenses, mol and mol × reflectance; and the slopes of what each air node gets
@@ -121,12 +121,12 @@ impl Drive {
     }
 }
 
-/// One implicit step of the air nodes from the step's start (`x0`) with what the ground gives (`g`, linearised about
+/// One implicit step of the air nodes from the step's start with the bodies' gas (`Start`) with what the ground gives (`g`, linearised about
 /// the round's air: a Newton step) and the wind of `drive`: the totals with the evening of pressure, then the gases the
 /// ground does not exchange, then the active gases and the heat together, then each trace gas alone. `wind` gets what
 /// crosses the links.
-pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (x0, g): (&[f64], &Gathered), it: &Iterate, dt: f64, wind: &mut Wind) -> Iterate {
-    let (links, push, halves) = (&drive.links, &drive.push, &drive.halves);
+pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (start, g): (&Start, &Gathered), it: &Iterate, dt: f64, wind: &mut Wind) -> Iterate {
+    let (links, push, halves, x0) = (&drive.links, &drive.push, &drive.halves, &start.x[..]);
     let (na, ng, nl) = (w.mesh.level(AIR).n(), s.state.gas.len(), links.a.len());
     // The total amounts, with what comes up; and what the pressure moves over each link.
     let mut n = total(s, x0, &|_| 1.0);
@@ -152,7 +152,7 @@ pub(super) fn solve(w: &World, s: &Scratch, (act, drive): (&[Active], &Drive), (
     // Each half carries its node's heat per mol at the step's end.
     let (capa, heat) = (total(s, &x, &|k| s.sp[k].cp), push.carry(links, &n, (None, halves), &flow, dt));
     let heat = (heat.0.iter().zip(&links.a).map(|(c, &a)| c * capa[a as usize]).collect(), heat.1.iter().zip(&links.b).map(|(c, &b)| c * capa[b as usize]).collect());
-    let t = Newton { w, s, act, g, it, links }.coupled((x0, &coef, (&heat, &capa)), &mut x, wind);
+    let t = Newton { w, s, act, g, it, links }.coupled((start, &coef, (&heat, &capa)), &mut x, wind);
     Newton { w, s, act, g, it, links }.traces((x0, &coef), &mut x, wind);
     // The mass that crosses each link is lifted between the mean heights of its nodes, by the heat of the node it enters.
     wind.paid = vec![0.0; na];
@@ -186,7 +186,8 @@ impl Newton<'_> {
     /// enthalpy so the system stays near dominant by columns. A node's energy at the end is its gases' heat capacity
     /// then times its temperature, linearised about the round in the active gases. Writes the gases into `x`, the links
     /// into `wind`; returns each node's temperature at the end, K.
-    fn coupled(&self, (x0, coef, (heat, capa)): (&[f64], &[Coef], (&Coef, &[f64])), x: &mut [f64], wind: &mut Wind) -> Vec<f64> {
+    fn coupled(&self, (start, coef, (heat, capa)): (&Start, &[Coef], (&Coef, &[f64])), x: &mut [f64], wind: &mut Wind) -> Vec<f64> {
+        let (x0, e0) = (&start.x, &start.e);
         let (s, it, g, na, nl) = (self.s, self.it, self.g, self.w.mesh.level(AIR).n(), self.links.a.len());
         let fields = self.act.iter().filter(|a| a.field.is_some()).count() + 1;
         let (gas, he) = (|j: usize, f: usize| j * fields + f, |j: usize| j * fields + fields - 1);
@@ -209,7 +210,7 @@ impl Newton<'_> {
         }
         for j in 0..na {
             band.add(he(j), he(j), capa[j]);
-            rhs[he(j)] = self.w.store.heat(Class::Air)[j] + g.heat[j] - wind.paid.get(j).copied().unwrap_or(0.0);
+            rhs[he(j)] = e0[j] + g.heat[j] - wind.paid.get(j).copied().unwrap_or(0.0);
             for &(_, f, ac) in &coupled {
                 let c = s.sp[ac.k].cp * it.t[j];
                 band.add(he(j), gas(j, f), c);

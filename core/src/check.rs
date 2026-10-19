@@ -8,7 +8,7 @@ pub struct Totals {
     pub elems: Vec<f64>,
     /// J
     pub thermal: f64,
-    /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air)
+    /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air and the bodies' nodes)
     pub chemical: f64,
     /// J, potential energy gained since the start (the heat of `store::Class::Potential`)
     pub potential: f64,
@@ -36,16 +36,17 @@ impl Sum {
 
 pub fn totals(w: &World) -> Totals {
     let (chem, ns) = (&w.chem, w.chem.ns());
-    // mol of each substance, and the energy held as latent heat in the air
+    // mol of each substance, and the energy held as latent heat in the air and the bodies' nodes
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
-    for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n())] {
-        let (store, air) = (w.store.amounts(class), class == Class::Air);
+    for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n()), (Class::Bodies, w.mesh.cells().n())] {
+        let (store, latent) = (w.store.amounts(class), matches!(class, Class::Air | Class::Bodies));
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
             store.get(k * len..(k + 1) * len).unwrap_or(&[]).iter().for_each(|&a| s.add(a));
             sum.add(s.get());
-            // Air holds its gases' fusion and vaporisation enthalpy; the ground holds fusion in `e_ground`.
-            if air {
+            // Air and the bodies' nodes hold their gases' fusion and vaporisation enthalpy; the ground holds fusion in
+            // `e_ground`.
+            if latent {
                 held.add(s.get() * chem.subs[k].latent_gas());
             }
         }
@@ -95,7 +96,7 @@ fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool)
 /// The first state value that is NaN or infinite, or below 0 where it cannot be: None for a sound world.
 pub fn broken(w: &World) -> Option<String> {
     let (at_least_0, above_0) = (|x: f64| x.is_finite() && x >= 0.0, |x: f64| x.is_finite() && x > 0.0);
-    let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep))];
+    let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep)), ("bodies", w.store.amounts(Class::Bodies))];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
     let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light), ("rained", &w.rained)];
     let f32s = [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)];

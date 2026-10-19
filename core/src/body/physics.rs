@@ -98,18 +98,18 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
     (caught, caught * reach)
 }
 
-/// The air the body exchanges gas with in this time (`breath`), at the air's shares, no more than the node holds.
+/// The air the body exchanges gas with in this time (`breath`), at the shares of the air it sees (`World::a_seen`), no
+/// more than the node holds.
 fn gas_pool(w: &World, b: &Body, s: &Site, f: &Film, tmp: &mut LiveTmp) -> f64 {
     let (chem, j) = (&w.chem, s.j);
-    let tot: f64 = (0..chem.ns()).map(|k| w.a(k, j)).sum();
+    let tot: f64 = (0..chem.ns()).map(|k| w.a_seen(k, j)).sum();
     let reach = breath(chem, &w.cfg, b, f, s.days, s.depth);
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..chem.ns() {
-        let a = w.a(k, j);
-        let x = if tot > 0.0 { a / tot } else { 0.0 };
+        let x = if tot > 0.0 { w.a_seen(k, j) / tot } else { 0.0 };
         tmp.x.push(x);
-        tmp.pool.push((x * reach).min(a));
+        tmp.pool.push((x * reach).min(w.a(k, j)));
     }
     tmp.pool0.clone_from(&tmp.pool);
     reach

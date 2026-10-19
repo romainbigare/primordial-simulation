@@ -22,7 +22,7 @@ use crate::World;
 use serde::{Deserialize, Serialize};
 
 /// What the fixed nodes hold, by class (`Class::Ground` to `Class::Potential`): amounts `[k * len + index]`, mol, and
-/// heat, J (the bed holds no heat, the bodies' node and the potential no amounts). Only `apply` writes them.
+/// heat, J (the bed holds no heat, the potential no amounts). Only `apply` writes them.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Store {
     amounts: Vec<Vec<f64>>,
@@ -33,7 +33,7 @@ impl Store {
     /// A store of `n` ground nodes (`ground`, `bed`, `e_ground`) and of air nodes (`air`, `e_air`); the other classes empty.
     pub fn new(n: usize, (ground, bed, e_ground): (Vec<f64>, Vec<f64>, Vec<f64>), (air, e_air): (Vec<f64>, Vec<f64>)) -> Store {
         let ns = ground.len() / n;
-        let amounts = vec![ground, air, vec![0.0; ns * n], bed, Vec::new(), vec![0.0; ns * BOUNDARIES], Vec::new()];
+        let amounts = vec![ground, air, vec![0.0; ns * n], bed, vec![0.0; ns * n], vec![0.0; ns * BOUNDARIES], Vec::new()];
         let heat = vec![e_ground, e_air, vec![0.0; n], Vec::new(), vec![0.0; n], vec![0.0; BOUNDARIES], vec![0.0]];
         Store { amounts, heat }
     }

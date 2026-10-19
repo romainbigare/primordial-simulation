@@ -49,7 +49,7 @@ impl Payer {
         let (chem, i) = (&w.chem, b.cell as usize);
         let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
         let j = w.mesh.up(i, 0, AIR);
-        let tot: f64 = (0..chem.ns()).map(|k| w.a(k, j)).sum();
+        let tot: f64 = (0..chem.ns()).map(|k| w.a_seen(k, j)).sum();
         let f = film(chem, &w.cfg, b, mass, cover_of(w, b));
         let share = (breath(chem, &w.cfg, b, &f, days, depth) / tot).min(1.0);
         Payer { mass, th, days, share, tot }

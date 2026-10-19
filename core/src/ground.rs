@@ -117,7 +117,7 @@ impl World {
     }
     /// Heat capacity of air node `j`, J/K.
     pub fn heat_cap_air(&self, j: usize) -> f64 {
-        (0..self.chem.ns()).map(|k| self.a(k, j) * self.chem.subs[k].cp).sum()
+        (0..self.chem.ns()).map(|k| self.a_seen(k, j) * self.chem.subs[k].cp).sum()
     }
     /// Temperature of air node `j`, K (as the moves of the update running leave it).
     pub fn t_air(&self, j: usize) -> f64 {

@@ -4,7 +4,7 @@
 use super::super::{follow, year_weight, Scratch};
 use super::exchange::cloud;
 use super::newton::Wind;
-use super::step::{Active, Iterate, FIXED, PER_GAS};
+use super::step::{Active, Iterate, Start, FIXED, PER_GAS};
 use super::wind::Links;
 use super::{lerp, shares, sums};
 use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
@@ -14,7 +14,7 @@ use crate::{World, AIR};
 /// aside for bodies, the heat each ground node gives its bodies' node (`settle`), heat to the air and to space, the
 /// ground's gas with its heat, the wind and the lifts; then the light on bodies, the rain and the clouds of what condensed in each air node (`rained`). No node gives more of a gas
 /// than it holds and gets (`hold_air`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Active], &[[f64; 2]], &[f64]), (rows, width): (&[f64], usize), wind: &Wind, it: &Iterate, dt: f64) {
+pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Active], &[[f64; 2]], &[f64]), (rows, width): (&[f64], usize), wind: &Wind, (it, start): (&Iterate, &Start), dt: f64) {
     let (n, na, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells());
     let (parent, area) = (cells.parent().to_vec(), cells.area().to_vec());
     // The links of each ground node to the air (`[e * n + i]`): to its own air node (`e` 0), and to the four it sees.
@@ -48,7 +48,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Act
     let (nl, mut wind_mol, cut) = (links.a.len(), wind.mol.clone(), up.clone());
     for (gi, &k) in s.state.gas.iter().enumerate() {
         let rain = act.iter().position(|a| a.k == k).map_or(&mut [][..], |x| &mut up[x * ne..(x + 1) * ne]);
-        hold_air(&w.store.amounts(Class::Air)[k * na..(k + 1) * na], (&links.a, &links.b), &mut wind_mol[gi * nl..(gi + 1) * nl], (&ends, rain));
+        hold_air(&start.x[gi * na..(gi + 1) * na], (&links.a, &links.b), &mut wind_mol[gi * nl..(gi + 1) * nl], (&ends, rain));
     }
     let World { light: lit, life, .. } = w;
     for (i, (l, &got)) in lit.iter_mut().zip(&light).enumerate() {
@@ -59,7 +59,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Act
     }
     // Each ground node's gas crosses its links to the air, one column per gas, with its heat; the air pays the lift.
     let (g, view) = (w.cfg.gravity, s.view());
-    let (mut paid, mut net) = (wind.paid.clone(), v(act.len() * n));
+    let (mut paid, mut net) = (wind.paid.iter().zip(&start.lift).map(|(a, b)| a + b).collect::<Vec<f64>>(), v(act.len() * n));
     for (x, ac) in act.iter().enumerate() {
         for e in (0..ne).filter(|&e| up[x * ne + e] != 0.0) {
             let (m, i, j) = (up[x * ne + e], e % n, ends[e] as usize);
@@ -73,6 +73,8 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Act
         (0..n).filter(|&i| net[x * n + i] != 0.0).for_each(|i| s.note(ac.k, i, -net[x * n + i], area[i]));
     }
     let ids: Vec<u32> = (0..n as u32).collect();
+    // The gas of the bodies' nodes comes up whole, with the latent heat it holds; the air paid its lift (`Start`).
+    let (all, bodies_gas): (Vec<u16>, Vec<f64>) = ((0..w.chem.ns() as u16).collect(), w.store.amounts(Class::Bodies).to_vec());
     let (to_sun, space) = (vec![Boundary::Sun as u32; n], vec![Boundary::Space as u32; na]);
     let mut lift = Batch::fallen(Class::Air, paid.iter().map(|q| -q));
     let (ks, gas): (Vec<u16>, Vec<u16>) = (act.iter().map(|a| a.k as u16).collect(), s.state.gas.iter().map(|&k| k as u16).collect());
@@ -81,6 +83,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained, settle): (&[Act
         LinkFlux { class: [Class::Boundary, Class::Bodies], a: &to_sun, b: &ids, ks: &[], mol: &[], heat: &kept },
         LinkFlux { class: [Class::Ground, Class::Bodies], a: &ids, b: &ids, ks: &[], mol: &[], heat: settle },
         LinkFlux { class: [Class::Ground, Class::Air], a: &from, b: &ends, ks: &ks, mol: &up, heat: &heat },
+        LinkFlux { class: [Class::Bodies, Class::Air], a: &ids, b: &parent, ks: &all, mol: &bodies_gas, heat: &[] },
         LinkFlux { class: [Class::Air, Class::Boundary], a: &ids[..na], b: &space, ks: &[], mol: &[], heat: &out },
         LinkFlux { class: [Class::Air; 2], a: &links.a, b: &links.b, ks: &gas, mol: &wind_mol, heat: &wind.heat },
         lift.flux(),

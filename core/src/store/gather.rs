@@ -53,17 +53,18 @@ impl Moves {
     pub(crate) fn give(&mut self, chem: &Chemistry, x: Node, k: usize, mol: f64, heat: f64) {
         self.push(chem, Move { from: self.who.expect(RUNNING), to: x, k: k as u16, mol, heat });
     }
-    /// `m` mol of gas `k` go up from the one whose update it is into its cell's air node (negative: down), from `lift`
-    /// J/kg below its mean height: the giver pays its latent heat, the air pays the lift into the potential (laws.md 1.5).
+    /// `m` mol of gas `k` go from the one whose update it is into its cell's bodies' node, which the air's step empties
+    /// into the air with the lift (laws.md 1.5); the giver pays its latent heat. Negative, `-m` mol come down from its
+    /// cell's air node, from `lift` J/kg below its mean height, giving the lift back to the air.
     pub(crate) fn gas(&mut self, chem: &Chemistry, k: usize, m: f64, lift: f64) {
-        let air = self.near[1].0;
+        let (air, bodies) = (self.near[1].0, self.near[2].0);
         if m > 0.0 {
-            self.give(chem, air, k, m, m * held_more(chem, self.who.expect(RUNNING).class, Class::Air, k));
+            self.give(chem, bodies, k, m, m * held_more(chem, self.who.expect(RUNNING).class, Class::Bodies, k));
         } else {
             self.take(chem, air, k, -m, 0.0);
+            let e = m * chem.subs[k].molar_mass * lift;
+            self.push(chem, Move { from: air, to: Node::new(Class::Potential, 0), k: 0, mol: 0.0, heat: e });
         }
-        let e = m * chem.subs[k].molar_mass * lift;
-        self.push(chem, Move { from: air, to: Node::new(Class::Potential, 0), k: 0, mol: 0.0, heat: e });
     }
 }
 
@@ -72,8 +73,8 @@ impl World {
     pub fn open_moves(&mut self, i: usize, who: Node) {
         let (j, n, na) = (self.mesh.up(i, 0, AIR), self.mesh.cells().n(), self.mesh.level(AIR).n());
         let amounts = |x: &dyn Fn(usize) -> f64| (0..self.chem.ns()).map(x).collect();
-        let (st, (g, a)) = (&self.store, (Class::Ground, Class::Air));
-        let near = vec![(Node::ground(i), amounts(&|k| st.amounts(g)[k * n + i]), st.heat(g)[i]), (Node::air(j), amounts(&|k| st.amounts(a)[k * na + j]), st.heat(a)[j]), (Node::bodies(i), Vec::new(), st.heat(Class::Bodies)[i])];
+        let (st, (g, a, b)) = (&self.store, (Class::Ground, Class::Air, Class::Bodies));
+        let near = vec![(Node::ground(i), amounts(&|k| st.amounts(g)[k * n + i]), st.heat(g)[i]), (Node::air(j), amounts(&|k| st.amounts(a)[k * na + j]), st.heat(a)[j]), (Node::bodies(i), amounts(&|k| st.amounts(b)[k * n + i]), st.heat(b)[i])];
         let m = &mut self.moves;
         (m.who, m.near, m.short) = (Some(who), near, 0.0);
         m.list.clear();

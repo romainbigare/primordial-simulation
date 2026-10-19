@@ -286,9 +286,12 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             assert!(moved(&mut w2, (i, 0), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass, x.temp(&w0.chem)), days)));
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, &w0.cfg));
             rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * DAY);
-            let air = |k: usize| w0.store.amounts(Class::Air)[k * na + j] - w2.store.amounts(Class::Air)[k * na + j] + gas[k] - g[k];
+            // (The gas it gives off waits in its cell's bodies' node for the air's step.)
+            let n = w0.mesh.cells().n();
+            let held = |w: &World, k: usize| w.store.amounts(Class::Air)[k * na + j] + w.store.amounts(Class::Bodies)[k * n + i];
+            let air = |k: usize| held(w0, k) - held(&w2, k) + gas[k] - g[k];
             let wet = y.store[LIQUID] - x.store[LIQUID];
-            let x_air = w0.store.amounts(Class::Air)[LIQUID * na + j] / (0..ns).map(|k| w0.store.amounts(Class::Air)[k * na + j]).sum::<f64>();
+            let x_air = w0.a_seen(LIQUID, j) / (0..ns).map(|k| w0.a_seen(k, j)).sum::<f64>();
             let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
             (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * chem.subs[LIQUID].lv
         };
@@ -1223,7 +1226,9 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         let s = w.add(b, 1);
         let books = Books::now(&w);
         let na = w.mesh.level(AIR).n();
-        let air = |w: &World, k: usize| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>();
+        let n = w.mesh.cells().n();
+        // (What it gives off waits in the bodies' nodes for the air's step.)
+        let air = |w: &World, k: usize| [(Class::Air, na), (Class::Bodies, n)].iter().map(|&(c, len)| w.store.amounts(c)[k * len..(k + 1) * len].iter().sum::<f64>()).sum::<f64>();
         let before = (in_all(&w, mineral), air(&w, FIX_OUT));
         let mut up = 0.0;
         for _ in 0..60 {

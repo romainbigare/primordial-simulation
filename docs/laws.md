@@ -189,6 +189,14 @@ that the other laws read between air steps has already paid its bodies' draw, an
 does not pull 20 days of heat out of the ground at once: at its update it takes its share from the node, and only the
 rest from the ground.
 
+**Gas from bodies.** The gas a body or a part gives off (breath, what it evaporates, the gas of paying and of growth)
+goes into its cell's bodies' node, with the latent heat it holds there as in the air (`store::held`); the air's step
+takes all of it up into the cell's air node, as a source in its backward-Euler step (`step::Start`), with its lift.
+So the air never holds a pulse of the bodies' gas at a step's start, where the step reads its optical depth. Bodies
+already give the air the warmth of their gas, so the air's temperature counts the heat capacity of the gas under it
+(`air::sums`), and bodies breathe and warm against the air with that gas (`World::a_seen`); gas a body takes from the
+air comes from the air node, no more than it holds.
+
 **Shade** (`survey.rs`). Light passes the bodies of a cell from the tallest member down; a layer of leaf area x per
 ground area takes 1 − exp(−x) of what reaches it, and equal heights share a layer. Height (3.6) is kept with the
 other visible traits (`Body::vis`, set wherever a body's stores or members change: `World::see`). Rain on bodies is
@@ -209,7 +217,8 @@ shared the same way (6.4). The survey shares out a cell's light again only when 
   ground's head to the air's mean height, paid by the air's heat; gas that comes down gives it back.
 - **Booked by the store**: a link from each ground node to its air node carries what evaporates and its heat, and a
   link to each of the four air nodes it sees what rains out of it; the air gets that heat less the latent heat it holds
-  of the gas (`store::held`). Bodies and parts book their gas as moves (`store::Moves::gas`), with the same lift.
+  of the gas (`store::held`). A link from each bodies' node to its air node carries the gas the bodies gave off
+  (1.4), with the same lift.
 - **Gases dissolve** (`exchange::dissolve`, at the start of the air's step). A gas that cannot condense on the ground
   dissolves in the liquid there toward Henry's share and comes out when the liquid warms, thins or freezes, through the
   air's film (`evap`) and the liquid's film (`dissolve`) in series. Dissolving frees the vaporisation enthalpy into
@@ -646,11 +655,12 @@ the last update (`body/physics.rs`), keeping warm, the checks of the stores, gro
 decision (`choose::act`) then sees the body as these stages leave it.
 
 **Books.** What a body takes from and gives to its cell's ground, air and bodies' node (liquids, minerals, food,
-breath, the gas of growth, heat, remains) are moves gathered over its update and booked by one `store::apply` at its
-end (`store::Moves`). The body changes its own stores and heat; the store books the other side. While it updates it
-reads its cell's nodes as its moves leave them (`World::g`, `a`, `heat_now`). What it breathes, soaks up, takes by its
-roots or eats is set by the law's own rate over the update's span (6.4), so nodes and individuals take alike, and is
-never more than is there. A sample member's update (4.4) drops its moves. A part's monthly turn books the same way.
+breath, the gas of growth, heat, remains; the gas it gives off goes to the bodies' node, 1.4) are moves gathered over
+its update and booked by one `store::apply` at its end (`store::Moves`). The body changes its own stores and heat; the
+store books the other side. While it updates it reads its cell's nodes as its moves leave them (`World::g`, `a`,
+`heat_now`). What it breathes, soaks up, takes by its roots or eats is set by the law's own rate over the update's
+span (6.4), so nodes and individuals take alike, and is never more than is there. A sample member's update (4.4) drops
+its moves. A part's monthly turn books the same way.
 
 ### 6.1 What a body is
 

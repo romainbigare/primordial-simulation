@@ -60,6 +60,29 @@ pub(super) struct Iterate {
     pub(super) x: Vec<f64>,
 }
 
+/// The air at the step's start with the gas of the bodies' nodes, which comes up into each cell's air node over the
+/// step (laws.md 1.5): per gas and node (`[gas * nodes + node]`) the amount, mol; per node its heat less the lift of
+/// that gas, J, and the lift, J.
+pub(super) struct Start {
+    pub(super) x: Vec<f64>,
+    pub(super) e: Vec<f64>,
+    pub(super) lift: Vec<f64>,
+}
+
+impl Start {
+    fn of(w: &World, s: &Scratch) -> Start {
+        let (n, na, g, parent) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.cfg.gravity, w.mesh.cells().parent());
+        let (mut all, mut lift) = (w.store.amounts(Class::Air).to_vec(), vec![0.0; na]);
+        for (at, &m) in w.store.amounts(Class::Bodies).iter().enumerate().filter(|e| *e.1 != 0.0) {
+            let (k, i, j) = (at / n, at % n, parent[at % n] as usize);
+            all[k * na + j] += m;
+            lift[j] += m * s.sp[k].mm * s.view().lift(i, j, g);
+        }
+        let x = s.state.gas.iter().flat_map(|&k| all[k * na..(k + 1) * na].iter().copied()).collect();
+        Start { x, e: w.store.heat(Class::Air).iter().zip(&lift).map(|(e, l)| e - l).collect(), lift }
+    }
+}
+
 /// What a round's cells read.
 struct Ctx<'a> {
     w: &'a World,
@@ -120,12 +143,12 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, settle: &[f64]) {
     let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
     dissolve(w, s, dt, &henry, (tmin, tmax));
     let act = active(w, s, &henry);
-    let (na, n) = (w.mesh.level(AIR).n(), w.mesh.cells().n());
+    let n = w.mesh.cells().n();
     // The sun at the end of the step, as backward Euler takes it (and as the state at the step's end then shows).
     let decl = declination(w.cfg.tilt, w.cfg.calendar().season(w.time + dt as u64));
-    let x0: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
-    let mut it = Iterate { t: s.ta.clone(), x: x0.clone() };
-    let drive = Drive::of(w, s, &x0, dt);
+    let start = Start::of(w, s);
+    let mut it = Iterate { t: s.ta.clone(), x: start.x.clone() };
+    let drive = Drive::of(w, s, &start.x, dt);
     let (mut ts, mut rows, mut wind) = (s.state.tg.clone(), std::mem::take(&mut s.rad), Wind::default());
     let width = FIXED + PER_GAS * act.len();
     rows.resize(n * width, 0.0);
@@ -134,10 +157,10 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, settle: &[f64]) {
         pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, settle, dt, decl }, &mut rows, width);
         ts.iter_mut().zip(rows.chunks_exact(width)).for_each(|(t, row)| *t = row[4]);
         let g = gather(w, s, &it, &act, (&rows, width), far);
-        let next = solve(w, s, (&act, &drive), (&x0, &g), &it, dt, &mut wind);
+        let next = solve(w, s, (&act, &drive), (&start, &g), &it, dt, &mut wind);
         let (moved_t, moved_x) = moved(&next, &it);
         if (moved_t < STILL_K && moved_x < STILL_SHARE) || round + 1 == ROUNDS {
-            book(w, s, (&act, &g.rained, settle), (&rows, width), &wind, &it, dt);
+            book(w, s, (&act, &g.rained, settle), (&rows, width), &wind, (&it, &start), dt);
             break;
         }
         let x = next.x.iter().zip(&it.x).map(|(&u, &v)| u.max(KEEP * v)).collect();
