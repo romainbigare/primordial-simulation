@@ -2,6 +2,7 @@
 //! other laws read what it leaves until the next step.
 
 use super::super::{follow, year_weight, Scratch};
+use super::exchange::cloud;
 use super::newton::Wind;
 use super::step::{Active, Iterate, FIXED, PER_GAS};
 use super::wind::Links;
@@ -11,8 +12,9 @@ use crate::{World, AIR};
 
 /// Book what the step of `dt` seconds moves, from its last round's rows, wind and air, in one call: sunlight, light set
 /// aside for bodies, heat to the air and to space, the ground's gas with its heat, the wind and the lifts; then the
-/// light on bodies, the rain and the clouds. No node gives more of a gas than it holds and gets (`hold_air`).
-pub(super) fn book(w: &mut World, s: &mut Scratch, act: &[Active], (rows, width): (&[f64], usize), wind: &Wind, it: &Iterate, dt: f64) {
+/// light on bodies, the rain and the clouds of what condensed in each air node (`rained`). No node gives more of a gas
+/// than it holds and gets (`hold_air`).
+pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[[f64; 2]]), (rows, width): (&[f64], usize), wind: &Wind, it: &Iterate, dt: f64) {
     let (n, na, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells());
     let (parent, area) = (cells.parent().to_vec(), cells.area().to_vec());
     let v = |len: usize| vec![0.0; len];
@@ -36,9 +38,9 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, act: &[Active], (rows, width)
             s.add_loose(ac.k, false);
         }
     }
-    for i in 0..n {
-        s.state.cloud[i] = lerp(s, &it.refl, i);
-    }
+    // The clouds of what condensed, which the next step's sunlight passes.
+    let refl: Vec<f64> = rained.iter().zip(w.mesh.level(AIR).area()).map(|(&r, &a)| cloud(w.cfg.cloud, (r[0], r[1]), a, dt)).collect();
+    s.state.cloud = (0..n).map(|i| lerp(s, &refl, i)).collect();
     // The wind and the rain of each gas, cut where an air node would give more than it holds.
     let links = Links::of(w.mesh.level(AIR));
     let (nl, mut wind_mol, cut) = (links.a.len(), wind.mol.clone(), up.clone());

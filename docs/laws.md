@@ -147,14 +147,18 @@ Most rock that leaves the land is lime that Change dissolves (reaction 22, 2.6) 
 `flow::air::step`, every `air_hours`. Radiation, the exchange of the ground with the air (evaporation, rain, gases
 dissolving) and the wind are one implicit step (backward Euler) over the whole span, so a long step gives the world
 of short ones: the long-step test (`tape/tests/ranges.rs`) holds the climate of the 10-day steps to that of 6-hour air
-steps and 3-day physics steps within the seeds' noise.
+steps and 3-day physics steps within the seeds' noise. The wind's pushes come from the air at the step's start and
+the clouds from what condensed in the step before; they carry the amounts and heat at the step's end, so the step
+stays implicit, and the rounds solve only the exchange with the ground.
 
 - The unknowns are each air node's temperature and gases at the step's end (the gases it holds more of than the
   rounding of its sums, and those that can evaporate from the ground), under the sun of the step's end.
 - Each Newton round (`flow::air::newton`) solves every ground node's exchange with the air it sees (its surface
   balance, rain and evaporation, and their slopes), then the whole air level with the wind in one banded solve
   (`solve::band`; on a globe each row of air nodes is numbered in a folded order, 0, w-1, 1, w-2, ..., so the link
-  that closes a row and the air a ground cell sees round the wrap stay within a band of one row). The rounds stop when the air moves by less than 0.05 K and 1e-5 of a node's gas, or after 16.
+  that closes a row and the air a ground cell sees round the wrap stay within a band of one row). A node's energy at
+  the end is the heat capacity of its gases then times its temperature. The rounds stop when the air moves by less
+  than 0.05 K and 1e-5 of a node's gas, or after 16.
 - **Booked whole** (`air::book`): what the last round found crosses the links as it is solved, so the books are exact
   whether or not the rounds converged, and the other laws read what it leaves until the next step. A ground node gives
   no more of a gas than it holds and gets; an air node that would give more rains and blows that much less.
@@ -192,7 +196,7 @@ shared the same way (6.4). The survey shares out a cell's light again only when 
   Wet ground (standing liquid, or pores at field capacity or more) evaporates at the open rate, drier ground in
   proportion to its liquid (the bucket of Manabe 1969), integrated exactly over the step with the rain it gets.
 - **Rain.** Vapour over what the air a cell sees can hold at its temperature (colder on higher ground) rains out in
-  `rain_time`. Condensing air makes clouds that cover part of the sky (`cloud`).
+  `rain_time`. Condensing air makes clouds that cover part of the sky (`cloud`) in the next step.
 - **Lift.** Gas that goes up into the air (from the ground, bodies, parts, reactions, growth) is lifted from the
   ground's head to the air's mean height, paid by the air's heat; gas that comes down gives it back.
 - **Booked by the store**: a link from each ground node to its air node carries the gas and its heat; the air gets that
@@ -220,7 +224,8 @@ The overturning's turn reads the slope of warmth across the link, from each node
 centres (`Level::offset`: on a globe along the parallel and the meridian, the shorter way round the wrap). A ground cell
 sees the air of the four nearest air nodes, bilinearly, round the wrap of a globe's rows.
 
-Solved implicitly with the rest of the step, any speed is stable. Air moves as whole columns, so there is no wind
+The pushes come from the air at the step's start and carry the amounts and heat at its end, solved implicitly with
+the rest of the step: any speed is stable. Air moves as whole columns, so there is no wind
 near the ground: bodies use the anchored `wind_ground` (6.3).
 
 ### 1.7 Paths

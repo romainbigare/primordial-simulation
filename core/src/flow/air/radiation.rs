@@ -65,13 +65,15 @@ pub(super) struct Surface {
 }
 
 /// What the balance gives: the node's end temperature, K; the heat it gives its air node, J, with its slopes with the
-/// air's and the node's temperature, J/K; the node's response per W/m², K m²/W; the heat to space through the air, J.
+/// air's and the node's temperature, J/K; the node's response per W/m², K m²/W, and per K of the air touching it; the
+/// heat to space through the air, J.
 pub(super) struct Balance {
     pub(super) ts: f64,
     pub(super) to_air: f64,
     pub(super) slope: f64,
     pub(super) warm: f64,
     pub(super) give: f64,
+    pub(super) follow: f64,
     pub(super) to_space: f64,
 }
 
@@ -105,6 +107,7 @@ impl Surface {
             slope: adt * (f * 4.0 * t3 * follow + sensible * (follow - 1.0) - d_down - d_emit),
             warm: adt * (f * 4.0 * t3 + sensible),
             give,
+            follow,
             to_space: adt * ((1.0 - f) * up + emit),
         }
     }

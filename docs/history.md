@@ -955,6 +955,15 @@ Phase E review, round 1 (fixes):
   10.68 log10 kg (10.53), eaters 4.41 (4.50), life of light-eaters 4.45 yr (1.90, x/ 3), of eaters 4.40 yr (2.91,
   x/ 2). The long-step test, run once: land -0.10 K (noise 0.71), warmest month -0.21 K (0.34), coldest +0.04 K
   (1.19), rain on land +0.2%, absorbing gas -0.1%, river cells +0.3%.
+- J3, the air's rounds (decision 21): the slopes of the Newton step are exact where they were not (what evaporates
+  follows the node's temperature as it follows the air, `Balance::follow`, 12% of that slope; the energy of a node at
+  the end is its heat capacity then times its temperature, so the vapour's heat capacity is in the Jacobian; the rain
+  leaves with its node's heat); the wind's pushes and the clouds come from the step's start (a fixed-point iteration
+  before, which only shrank by about 0.65 a round on a globe); the damped step goes (no longer needed); the slopes are
+  summed per pair of air nodes once a round. Rounds a step, side by side with main: 64 x 32 globe without life, 6 years,
+  13.2 (a fifth at the cap of 16) to 6.4 (a fifth at the cap: a cold air node whose ground nodes rain out of it what
+  its moist neighbour holds); 64 x 64 island without life 3.1 to 2.2. Flow 682 to 411 ms a year on the globe, 616 to
+  494 on the island; rain on land 1.445e-3 to 1.443e-3 (globe), 1.559e-3 to 1.561e-3 (island). Golden re-pinned.
 
 **Phase K: recording and viewer**
 

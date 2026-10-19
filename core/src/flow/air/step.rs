@@ -7,10 +7,9 @@ use super::super::land::{melted, NONE};
 use super::super::scratch::may_evaporate;
 use super::super::{range, Scratch};
 use super::book::book;
-use super::exchange::{bucket_slope, cloud, dissolve};
-use super::newton::{gather, solve, Wind};
+use super::exchange::{bucket_slope, dissolve};
+use super::newton::{far, gather, solve, Drive, Wind};
 use super::radiation::{declination, insolation, Surface};
-use super::wind::Links;
 use super::{lerp, over_cell};
 use crate::units::R_GAS;
 use crate::{World, AIR};
@@ -22,11 +21,8 @@ const STILL_K: f64 = 5e-2;
 const STILL_SHARE: f64 = 1e-5;
 /// or after this many rounds.
 const ROUNDS: usize = 16;
-/// A damped Newton step (Deuflhard 2004): a round moves no node's temperature more than `REACH_K`, K, and half as far
-/// as the round before when the solve moved no less (a kink of rain crossed back and forth), twice as far again after
-/// two calmer rounds. Each gas of a node keeps at least `KEEP` of what it held, a bound on that one unknown alone.
+/// A round leaves each gas of a node at least this share of what it held, a bound on that one unknown alone.
 const KEEP: f64 = 0.5;
-const REACH_K: f64 = 10.0;
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
 /// moves by less than `SURFACE_STILL_K`, K.
 const SURFACE_ROUNDS: usize = 3;
@@ -55,13 +51,11 @@ pub(super) const FIXED: usize = 7;
 /// its two slopes; the slope of the heat the node gives its air with the column's gas, J/mol.
 pub(super) const PER_GAS: usize = 7;
 
-/// The air during the rounds: per node the temperature, K, and the reflectance of its clouds; per gas and node
-/// (`[gas * nodes + node]`) the amount, mol.
+/// The air during the rounds: per node the temperature, K; per gas and node (`[gas * nodes + node]`) the amount, mol.
 #[derive(Clone)]
 pub(super) struct Iterate {
     pub(super) t: Vec<f64>,
     pub(super) x: Vec<f64>,
-    pub(super) refl: Vec<f64>,
 }
 
 /// What a round's cells read.
@@ -108,33 +102,26 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     // The sun at the end of the step, as backward Euler takes it (and as the state at the step's end then shows).
     let decl = declination(w.cfg.tilt, w.cfg.calendar().season(w.time + dt as u64));
     let x0: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
-    let mut it = Iterate { t: s.ta.clone(), x: x0.clone(), refl: Vec::new() };
-    let links = Links::of(w.mesh.level(AIR));
+    let mut it = Iterate { t: s.ta.clone(), x: x0.clone() };
+    let drive = Drive::of(w, s, &x0, dt);
     let (mut ts, mut rows, mut wind) = (s.state.tg.clone(), std::mem::take(&mut s.rad), Wind::default());
     let width = FIXED + PER_GAS * act.len();
     rows.resize(n * width, 0.0);
-    let (mut damp, mut last, mut shrunk) = (1.0_f64, f64::INFINITY, 0);
-    let fixed = fixed(w, s, &act);
+    let (fixed, far) = (fixed(w, s, &act), far(s));
     for round in 0.. {
         pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, fixed: &fixed, dt, decl }, &mut rows, width);
         for (i, t) in ts.iter_mut().enumerate() {
             *t = rows[i * width + 4];
         }
-        let g = gather(w, s, &it, &act, &rows, width);
-        it.refl = g.rained.iter().zip(w.mesh.level(AIR).area()).map(|(&r, &a)| cloud(w.cfg.cloud, (r[0], r[1]), a, dt)).collect();
-        let next = solve(w, s, (&act, &links), (&x0, &g), &it, dt, &mut wind);
+        let g = gather(w, s, &it, &act, (&rows, width), far);
+        let next = solve(w, s, (&act, &drive), (&x0, &g), &it, dt, &mut wind);
         let (moved_t, moved_x) = moved(&next, &it);
         if (moved_t < STILL_K && moved_x < STILL_SHARE) || round + 1 == ROUNDS {
-            book(w, s, &act, (&rows, width), &wind, &it, dt);
+            book(w, s, (&act, &g.rained), (&rows, width), &wind, &it, dt);
             break;
         }
-        let moved = moved_t / STILL_K + moved_x / STILL_SHARE;
-        shrunk = if moved >= last { 0 } else { shrunk + 1 };
-        damp = if shrunk == 0 { damp / 2.0 } else if shrunk % 2 == 0 { (2.0 * damp).min(1.0) } else { damp };
-        last = moved;
-        let step = damp.min(REACH_K / moved_t.max(f64::MIN_POSITIVE)).min(1.0);
-        let to = |a: &[f64], b: &[f64], keep: f64| a.iter().zip(b).map(|(&u, &v)| if step < 1.0 { v + step * (u - v) } else { u }.max(keep * v)).collect();
-        it = Iterate { t: to(&next.t, &it.t, 0.0), x: to(&next.x, &it.x, KEEP), refl: std::mem::take(&mut it.refl) };
+        let x = next.x.iter().zip(&it.x).map(|(&u, &v)| u.max(KEEP * v)).collect();
+        it = Iterate { t: next.t, x };
     }
     s.rad = rows;
 }
@@ -142,8 +129,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
 /// How far the solve moved the air from `it` to `next`: the most of any node's temperature, K, and the most of any
 /// gas of a node, as a share of the node's gas.
 fn moved(next: &Iterate, it: &Iterate) -> (f64, f64) {
-    let na = it.t.len();
-    let ng = it.x.len() / na.max(1);
+    let (na, ng) = (it.t.len(), it.x.len() / it.t.len().max(1));
     let t = next.t.iter().zip(&it.t).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
     let x = (0..na).map(|j| (0..ng).map(|q| (next.x[q * na + j] - it.x[q * na + j]).abs()).fold(0.0, f64::max) / (0..ng).map(|q| next.x[q * na + j]).sum::<f64>()).fold(0.0, f64::max);
     (t, x)
@@ -193,7 +179,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let adt = area * dt;
     let [gam, zair, _] = s.seen[i];
     let tl = (lerp(s, &it.t, i) - gam * (s.head[i] - zair)).max(1.0);
-    let c = if it.refl.is_empty() { s.state.cloud[i] } else { lerp(s, &it.refl, i) };
+    let c = s.state.cloud[i];
     let fixed = &cx.fixed[i * (FIXED_CELL + cx.act.len())..(i + 1) * (FIXED_CELL + cx.act.len())];
     let [over, cover, caught, keep] = <[f64; FIXED_CELL]>::try_from(&fixed[..FIXED_CELL]).unwrap();
     // Per unit of capture area the bodies intercept cover / a of the light, all of it where they are few.
@@ -246,7 +232,8 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
         bal = balance(from).0;
     }
     // What evaporates, and its slopes: the partial pressure goes with the column and with the temperature of the air
-    // touching the ground, and what evaporates more cools the node, which then evaporates less and warms its air less.
+    // touching the ground, the node's temperature follows that air (`Balance::follow`), and what evaporates more cools
+    // the node, which then evaporates less and warms its air less.
     let mut row_slope = bal.slope;
     for x in 0..cx.act.len() {
         let o = FIXED + PER_GAS * x;
@@ -256,7 +243,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
         let cools = bal.give * lat(x, dm_dpa) / adt;
         let (by_col, by_tl) = (pa / col.max(f64::MIN_POSITIVE), pa / tl);
         let (follow_col, follow_tl) = (-cools * by_col, -cools * by_tl);
-        row[o..o + 3].copy_from_slice(&[m, dm_dpa * by_col + dm_dt * follow_col, dm_dpa * by_tl + dm_dt * follow_tl]);
+        row[o..o + 3].copy_from_slice(&[m, dm_dpa * by_col + dm_dt * follow_col, dm_dpa * by_tl + dm_dt * (bal.follow + follow_tl)]);
         row[o + 6] = bal.warm * follow_col;
         row_slope += bal.warm * follow_tl;
     }

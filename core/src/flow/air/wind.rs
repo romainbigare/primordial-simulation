@@ -33,14 +33,6 @@ impl Links {
     }
 }
 
-/// The air of each node as the wind sees it: amount, mol; heat capacity, J/K; mass, kg; temperature, K.
-pub(super) struct Air<'a> {
-    pub(super) n: &'a [f64],
-    pub(super) capa: &'a [f64],
-    pub(super) mass: &'a [f64],
-    pub(super) t: &'a [f64],
-}
-
 /// The pushes on each link (`Links`), + from its `a` to its `b`, mol/s: mixing by eddies, overturning, and the
 /// conductance of the evening of pressure, mol/(Pa s).
 pub(super) struct Pushes {
@@ -51,15 +43,16 @@ pub(super) struct Pushes {
 
 /// Three pushes on each link: the column's pressure, evened in the time sound takes to cross it (Lamb waves, Lindzen
 /// 1990, 9.2); overturning by the warmth difference, the lower half toward the warmer node at `wind` per K, turned by
-/// the rotation at the link's latitude; and eddy mixing (`mix` × width / length).
-pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links, at: &Air) -> Pushes {
+/// the rotation at the link's latitude; and eddy mixing (`mix` × width / length). From the air of each node as the
+/// last state left it (`Scratch::nt`, `capa`, `mass`, `ta`).
+pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links) -> Pushes {
     let na = air.n();
-    let warmth: Vec<f64> = (0..na).map(|j| at.t[j] + s.gam[j] * s.zair[j]).collect();
+    let warmth: Vec<f64> = (0..na).map(|j| s.ta[j] + s.gam[j] * s.zair[j]).collect();
     let grad = gradient(air, &warmth);
     let mut p = Pushes { mix: Vec::with_capacity(links.id.len()), over: Vec::with_capacity(links.id.len()), even: Vec::with_capacity(links.id.len()) };
     for &l in &links.id {
         let (a, b, wd, d) = (air.a()[l] as usize, air.b()[l] as usize, air.width()[l], air.dist()[l]);
-        let rho = (at.n[a] / s.vol[a] + at.n[b] / s.vol[b]) / 2.0;
+        let rho = (s.nt[a] / s.vol[a] + s.nt[b] / s.vol[b]) / 2.0;
         let depth = cfg.air_top_m - (s.za[a] + s.za[b]) / 2.0;
         let turn = cfg.rotation * ((air.lat()[a] + air.lat()[b]) / 2.0).to_radians().sin();
         let (ab, ga, gb) = (air.offset(a, b), grad[a], grad[b]);
@@ -67,10 +60,10 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links, at: 
         p.mix.push(cfg.mix * rho * depth * wd / d);
         p.over.push(cfg.wind * (warmth[b] - warmth[a] + turn * across) * rho * wd * depth / 2.0);
         // p = c n with c = RT/V; sound crosses the link in d / sqrt(gamma R T / M), gamma = cp / (cp - R) per mol.
-        let c = |j: usize| R_GAS * at.t[j] / s.vol[j];
+        let c = |j: usize| R_GAS * s.ta[j] / s.vol[j];
         let sound = |j: usize| {
-            let cp = at.capa[j] / at.n[j];
-            (cp / (cp - R_GAS) * R_GAS * at.t[j] * at.n[j] / at.mass[j]).sqrt()
+            let cp = s.capa[j] / s.nt[j];
+            (cp / (cp - R_GAS) * R_GAS * s.ta[j] * s.nt[j] / s.mass[j]).sqrt()
         };
         p.even.push((sound(a) + sound(b)) / 2.0 / (d * (c(a) + c(b))));
     }
@@ -79,8 +72,8 @@ pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links, at: 
 
 impl Pushes {
     /// The coefficients of the evening of pressure over `dt` for the total amounts (`solve::band`).
-    pub(super) fn pressure(&self, s: &Scratch, links: &Links, t: &[f64], dt: f64) -> Coef {
-        let c = |j: u32| R_GAS * t[j as usize] / s.vol[j as usize];
+    pub(super) fn pressure(&self, s: &Scratch, links: &Links, dt: f64) -> Coef {
+        let c = |j: u32| R_GAS * s.ta[j as usize] / s.vol[j as usize];
         let fwd = links.a.iter().zip(&self.even).map(|(&a, &g)| dt * g * c(a)).collect();
         let back = links.b.iter().zip(&self.even).map(|(&b, &g)| dt * g * c(b)).collect();
         (fwd, back)
