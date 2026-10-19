@@ -359,12 +359,16 @@ fn resume_into_the_same_folder_continues_the_tape() {
 /// copies carry rows.
 #[test]
 fn null_run_freezes_the_brain_rows() {
+    // (Each of their decisions spreads their many members over every action.)
+    const FEW: usize = 4;
     let go = |null: bool| {
         let mut w = world();
         w.cfg.null = null;
         pcore::survey::survey(&mut w);
-        for i in worldgen::testkit::dry_lands(&w) {
-            let b = worldgen::testkit::founder(&mut w, 0, i, &worldgen::testkit::Brain::neutral());
+        // (Light-eaters of one lineage with neutral brains, in a few cells.)
+        let line = worldgen::testkit::Line::new(&mut w, &worldgen::testkit::Brain::neutral(), 0);
+        for i in worldgen::testkit::dry_lands(&w).into_iter().take(FEW) {
+            let b = line.founder(&mut w, 0, i);
             w.add(b, 1);
         }
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());

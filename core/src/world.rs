@@ -15,8 +15,8 @@ pub struct Counters {
     pub decisions: f64,
     #[serde(skip)]
     pub greedy: f64,
-    /// Population nodes split since the start: in two (`nodes::split`), and one member off to act alone (`nodes::one`)
-    pub splits: [f64; 2],
+    /// Population nodes split in two since the start (`nodes::split`)
+    pub splits: f64,
     /// Body updates since the start
     pub updates: u64,
     /// Heat a ground node could not give (below `T_FLOOR`), J: whoever asked got that much less, so no energy is lost

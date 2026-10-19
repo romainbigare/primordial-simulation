@@ -514,9 +514,9 @@ individuals.
   slice. A spread no width holds is an exponential tail of the same mean. Those the growth pushed past the copy mass
   move into the adult node with the share of the body their slice holds (`copy::mature`): the flux across a size of a
   size-structured population (McKendrick 1926; von Foerster 1959).
-- **Merging** (`nodes::crowd`, monthly). Alike nodes of one lineage and stage in a cell merge (the young mature into their adult
-  node instead). Past `crowd` nodes a cell merges its most alike pairs while they are alike; unlike nodes never
-  merge, however full the cell.
+- **Merging** (`nodes::crowd`, monthly). Alike nodes of one lineage and stage in a cell merge (the young mature into
+  their adult node instead), if they hold nothing and are inside the same structure or none. Past `crowd` nodes a cell
+  merges its most alike pairs while they are alike; unlike nodes never merge, however full the cell.
 - **Splitting** (`nodes::split`). A node whose two halves would no longer be alike splits along its widest gene, if its
   cell has room; selection then acts between the halves. Splits, draws and joins keep each gene's mean exactly.
 - **Selection inside a node** (`copy/select.rs`). Members are born and die in proportion whatever their genes, so a
@@ -531,9 +531,7 @@ individuals.
   sample: its update is also its decisions.
 - **Choices as a spread of actions** (`choose/spread.rs`). A node with a brain spreads its members over the actions
   by the chances its brain gives, those an individual draws from (5.3).
-- **Members as individuals.** Members of a node doing an action of Bond act one at a time, each split off
-  (`nodes::one`), and live on alone if they then hold something or are inside. `nodes::open` draws members as
-  individuals for a close view.
+- **Members as individuals.** `nodes::open` draws members as individuals for a close view.
 - **Brain size** (`lineage::resize`): a node whose mean brain-size gene is a whole unit from its lineage's moves to a
   new lineage of that size.
 - **The pace of nodes** (`Body::interval`). A node without a brain updates at most every `node_days`: it takes no
@@ -580,9 +578,9 @@ about one by a fixed table.
 One action is drawn by the scores at each decision (once per update, `choose::act`); with none open the body rests.
 Each costs energy its own reactions must pay (`body::pay`), or it fails. A node spreads its members over the actions
 by those chances instead (`choose::spread`): count × chance members do each, a part of less than one member being one
-member with that chance. A part acts as so many members would, split off by shares and back in (4.4); a part that
-moves joins the first node of its kind and stage in the cell it reaches, or lives on there; members doing an action of
-Bond act one at a time.
+member with that chance. A part acts as so many members would, together, split off by shares and back in (4.4); a part
+that moves joins the first node of its kind and stage in the cell it reaches, or lives on there, and one that holds or
+is inside something after an action of Bond lives on as a body of its own.
 
 **rest**; **move** to a neighbour (`choose::go`: `Physics::walk` per kg and metre, the real cost of transport, plus
 climbing and the bodies in the way; it needs force, 3.5); **take** from the ground or another body, **put** to the

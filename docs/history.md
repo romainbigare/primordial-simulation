@@ -979,6 +979,12 @@ Phase E review, round 1 (fixes):
   its change of well-being counted like any part's; `Kit` holds the well-being as a function. Core code back under its
   ceiling of 9,000 lines (9,027 to 8,996). Golden re-pinned.
 
+- A part of a node does the actions of Bond as its members together, not one member at a time (a node of 10^5
+  members drawing an action of Bond split 10^3 members off in turn, each cloned and joined back); a part that then holds
+  or is inside something lives on as a body, and the monthly merge joins alike bodies inside the same structure (they
+  piled up, never merged). `nodes::one` and its counter go; `Body::set_genes` works the constants out only when the
+  genes change. Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

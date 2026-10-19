@@ -6,7 +6,7 @@ use pcore::body::{Body, COPY_MASS, LIQ, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
 use pcore::units::DAY_S;
-use worldgen::testkit::{dry_land, moved, plate, small_world, start as world, Books, Brain, Line};
+use worldgen::testkit::{dry_land, moved, plate, scale, small_world, start as world, Books, Brain, Line};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -126,12 +126,12 @@ fn forming_never_takes_more_than_is_left() {
     books.assert_within(&w, 1e-12, 1e-9);
 }
 
-/// A node whose brain draws an action of Bond splits one member off as an individual of its lineage, with its share of
-/// the stores, to act. One that holds a part after (its brain only holds parts, and its force bears the part's weight)
-/// lives on; one that holds nothing (too weak to bear the part, or its brain only breaks the ground) goes back into the
-/// node at once, which is then as it was: its members, genes and the spread of its born rows.
+/// The members of a node who do an action of Bond (all of them, when its brain gives it every chance) act together, as
+/// one body of so many members (`choose::spread`). Strong enough together (its brain only holds parts, and their force
+/// bears the part's weight), they hold the part and live on holding it; else (too weak to bear it, or their brain only
+/// breaks the ground) the node holds nothing and is as it was: its members, genes and the spread of its born rows.
 #[test]
-fn a_node_acts_on_bonds_through_one_member() {
+fn a_node_acts_on_bonds_as_its_members_together() {
     // 0: holds a part of 5 kg, members of 40 kg at strength about 1 (they bear about 200 N, the part weighs 49 N); 1: the
     // same with the light-eater's own members (1 kg at strength about 0.05: they bear about 0.25 N); 2: breaks the ground.
     let scene = |case: u8| {
@@ -155,21 +155,23 @@ fn a_node_acts_on_bonds_through_one_member() {
         if case == 0 {
             (b.genes[STRENGTH], b.genes[COPY_MASS], b.count) = (1.0, 1.0, b.count / 40.0);
         }
+        // (Twenty members of the same size: in case 1 too weak together to bear the part.)
+        let few = 20f64.min(b.count) / b.count;
+        scale(&mut w, &mut b, few);
+        b.count *= few;
         let (n0, genes) = (b.count, b.genes.clone());
         w.add(b, 1);
         pcore::survey::survey(&mut w);
         w.time += DAY_S;
         pcore::survey::day(&mut w);
-        assert_eq!(w.counts.splits[1], 1.0, "no member split off");
-        let one: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l && b.count == 1.0).collect();
-        let node = w.life.alive().find(|b| b.lineage == l && b.count > 1.0).expect("the node");
+        let all: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l).collect();
+        let members: f64 = all.iter().map(|b| b.count).sum();
+        assert!((members - n0).abs() < 1e-9 * n0, "case {case}: {members} members of {n0}");
         if case == 0 {
-            assert!(one.len() == 1 && Some(bond::id(&w, p)) == one[0].hold, "the member holds nothing");
-            // (Its share of the stores: both lost what their leaves give off in the update.)
-            let kg = node.mass(&w.chem) / node.count;
-            assert!((node.count + 1.0 - n0).abs() < 1e-9 * n0 && (one[0].mass(&w.chem) / kg - 1.0).abs() < 0.1, "{} of {n0} members, {} kg against {kg}", node.count, one[0].mass(&w.chem));
+            assert!(all.iter().any(|b| Some(bond::id(&w, p)) == b.hold), "nothing holds the part");
         } else {
-            assert!(one.is_empty() && (node.count - n0).abs() < 1e-9 * n0, "{} members of {n0}", node.count);
+            let node = all.iter().find(|b| b.count > 1.0).expect("the node");
+            assert!(all.iter().all(|b| b.hold.is_none()), "case {case}: a body holds a part");
             assert!(node.genes.iter().zip(&genes).all(|(a, b)| (a - b).abs() < 1e-4), "genes changed");
             assert_eq!(node.row_spread, 0.01, "the spread of the born rows changed");
             assert!(w.parts.parts[p].held == pcore::bond::NOBODY, "the part is held");

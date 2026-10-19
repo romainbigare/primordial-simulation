@@ -8,9 +8,8 @@ use crate::rng::Rng;
 use crate::{nodes, World};
 
 /// Node `node` (in slot `slot`) spreads its members over the options: count × chance of them do each, a part of less
-/// than one member being one member with that chance. A part acts as so many members (`part_acts`; the moves last, so
-/// the others act where the node is); an action of Bond is done by one member at a time, while the node has two to
-/// spare one. Its brain learns as from one member drawn among those who stayed (`trace`): from what that member did,
+/// than one member being one member with that chance. A part acts as so many members together (`part_acts`; the moves
+/// last, so the others act where the node is). Its brain learns as from one member drawn among those who stayed (`trace`): from what that member did,
 /// and how much more its part's action raised their well-being than the mean of the members.
 pub(super) fn spread(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
     let count = node.count;
@@ -19,14 +18,7 @@ pub(super) fn spread(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k:
     let (mut kept, mut gain) = ([0.0; OPTS], [0f32; OPTS]);
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
         kept[o] = x[o];
-        if (FORM..FIXED).contains(&o) || o >= TO_PART {
-            for _ in 0..x[o] as usize + (rng.f64() < x[o].fract()) as usize {
-                if node.count < 2.0 {
-                    break;
-                }
-                gain[o] = part_acts(w, slot, node, c, k, (o, 1.0), rng).0;
-            }
-        } else if o != REST {
+        if o != REST {
             let left;
             (gain[o], left) = part_acts(w, slot, node, c, k, (o, x[o]), rng);
             let Some(left) = left else { break };
@@ -41,24 +33,19 @@ pub(super) fn spread(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k:
     node.trace = trace(w, node, c, k, a, gain[a] - mean as f32);
 }
 
-/// `x` members of node `node` (in slot `slot`) do option `o`: split off by shares (`nodes::part`; for an action of Bond
-/// one member drawn, `nodes::one`). Those still in its cell, holding and inside nothing, then go back in (watchers with
-/// the rows they copied); the others live on as a body with the trace of what they did, and those who moved join the
-/// first node of their kind and stage where they are (`copy::kin`). The node acts itself if less than one member would
-/// be left. Returns the change of their well-being, and whether they left the node (none: it moved whole).
+/// `x` members of node `node` (in slot `slot`) do option `o`, split off by shares (`nodes::part`). Those still in its
+/// cell, holding and inside nothing, then go back in (watchers with the rows they copied); the others live on as a body
+/// with the trace of what they did, and those who moved join the first node of their kind and stage where they are
+/// (`copy::kin`). The node acts itself if less than one member would be left. Returns the change of their well-being, and whether they left the node (none: it moved whole).
 fn part_acts(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
     let (cell, moves, bond) = (node.cell, (FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
-    if node.count - x < 1.0 && !bond {
+    if node.count - x < 1.0 {
         let before = (k.wb)(w, node);
         act_as(w, slot, node, c, k, o, rng);
         return ((k.wb)(w, node) - before, (node.cell == cell).then_some(false));
     }
-    let s = if bond {
-        nodes::one(w, node, rng)
-    } else {
-        let q = nodes::part(&mut w.life, node, x / node.count, x / node.count);
-        w.place(q)
-    };
+    let q = nodes::part(&mut w.life, node, x / node.count, x / node.count);
+    let s = w.place(q);
     let mut m = std::mem::take(&mut w.life.bodies[s]);
     let kin = moves.then(|| crate::copy::kin(w, c.to[o - FIXED], m.lineage, (&m.genes, &m.spread), m.adult(&w.chem))).flatten().map(|t| (t, w.life.bodies[t].gen));
     let before = (k.wb)(w, &m);
