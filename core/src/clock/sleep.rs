@@ -1,20 +1,12 @@
-//! One sleep and wake for every node (`docs/foundation/plan.md`, Idea 6). A node's own process (the law that runs
-//! inside it, as reactions run inside a ground or an air node) need not run while the node is calm: it sleeps until an
-//! alarm time, or until one of its amounts has grown by more than a share of what it held when it fell asleep
-//! (`Config::wake_share`), whatever brought it (`watch`, a look its law makes at its own step). What moves between
-//! nodes never sleeps. When a node is due, its law brings it up to date for all the time since it last did (`since`) in
-//! one span, as its integration over a long step allows, and sets its next alarm.
-//!
-//! A node is named by its class and its index in that class's arrays. It sleeps or wakes by its own alarm alone; the
-//! nodes due at one time are found by a look over the alarms of their class (a few numbers a node, once a step) and
-//! come in a fixed order, by index. The alarms and the amounts a node held when it fell asleep are saved, so a resumed
-//! run sleeps the same.
+//! One sleep and wake for every node (laws.md 0): a calm node's own process sleeps until an alarm, or until one of its
+//! amounts has grown by more than `Config::wake_share` of what it held when it fell asleep (`watch`); when due, its law
+//! brings it up to date for all the time since (`since`) in one span. A long integration is exact for a calm node, and
+//! what moves between nodes never sleeps. Saved, so a resumed run sleeps the same.
 
 use crate::store::Class;
 use serde::{Deserialize, Serialize};
 
-/// The classes whose nodes run a process of their own, and so may sleep: all those before `Class::Boundary` (a boundary
-/// node only gives and takes what crosses).
+/// The classes whose nodes run a process of their own, and so may sleep: those before `Class::Boundary`.
 const RUN: usize = Class::Boundary as usize;
 
 /// The alarms of the nodes of one class, by index.
@@ -43,8 +35,7 @@ impl Sleep {
         &mut self.0[class as usize]
     }
 
-    /// Node `i` of `class`, brought up to date at `now`, sleeps until `until` (s; `u64::MAX`: until a gain wakes it;
-    /// `now`: it is due at once). Its earlier alarm, if any, is dropped.
+    /// Node `i` of `class`, brought up to date at `now`, sleeps until `until` (s; `u64::MAX`: until a gain wakes it).
     pub fn sleep(&mut self, class: Class, i: usize, now: u64, until: u64) {
         let a = self.of(class);
         if i >= a.alarm.len() {
@@ -66,8 +57,7 @@ impl Sleep {
         }
     }
 
-    /// The nodes of `class` due at `now` (their alarm rang or a gain woke them), in the order of their indices. Each
-    /// runs; its law puts it back to sleep (`sleep`) with its next alarm.
+    /// The nodes of `class` due at `now`, in the order of their indices; their law puts each back to sleep.
     pub fn due(&mut self, class: Class, now: u64) -> Vec<usize> {
         let a = self.of(class);
         let due: Vec<usize> = (0..a.alarm.len()).filter(|&i| a.asleep[i] && a.alarm[i] <= now).collect();
@@ -76,8 +66,7 @@ impl Sleep {
         due
     }
 
-    /// Node `i` of `class` (of `len` nodes, holding `amounts`, `[k * len + i]`) falls asleep holding what it holds:
-    /// `watch` looks for a gain against it.
+    /// Node `i` of `class` falls asleep holding what it holds (`amounts`, `[k * len + i]`), which `watch` reads against.
     pub fn keep(&mut self, class: Class, i: usize, len: usize, amounts: &[f64]) {
         let held = &mut self.of(class).held;
         held.resize(amounts.len(), 0.0);
@@ -86,9 +75,8 @@ impl Sleep {
         }
     }
 
-    /// Wakes each sleeping node of `class` (`len` nodes, holding `amounts`, `[k * len + i]`) one of whose amounts has
-    /// grown by more than `share` of what it held when it fell asleep (`keep`), so a node that many small gains have
-    /// changed reacts as one large gain would make it.
+    /// Wakes each sleeping node of `class` one of whose amounts has grown by more than `share` of what it held when it
+    /// fell asleep, so many small gains wake it as one large gain would.
     pub fn watch(&mut self, class: Class, len: usize, amounts: &[f64], share: f64, now: u64) {
         if self.none(class) {
             return;
@@ -109,8 +97,7 @@ impl Sleep {
         self.0.get(class as usize).is_none_or(|a| a.count == 0)
     }
 
-    /// The time node `i` of `class` (put to sleep at least once) was last brought up to date, s: its law catches it up
-    /// for the time since.
+    /// The time node `i` of `class` was last brought up to date, s.
     pub fn since(&self, class: Class, i: usize) -> u64 {
         self.0[class as usize].since[i]
     }

@@ -1,5 +1,4 @@
-//! Flow in and through the air: radiation, contact heat, evaporation and condensation,
-//! and gas between air nodes, solved together over a step (`step`). Here: the state of the air nodes (`state`).
+//! Flow in and through the air, solved together over a step (`step`; laws.md 1.4). Here: the state of the air nodes.
 
 mod book;
 mod exchange;
@@ -50,8 +49,7 @@ pub(super) fn over_cell(w: &World, s: &Scratch, i: usize) -> f64 {
     mesh.cells().area()[i] / lerp(s, mesh.level(AIR).area(), i)
 }
 
-/// Scale height of air at `t` K whose `mol` mol weigh `kg` kg under gravity `g` (RT/(Mg), with the mean molar mass
-/// of its gases), m.
+/// Scale height of air at `t` K whose `mol` mol weigh `kg` kg under gravity `g`, RT/(Mg), m.
 #[inline]
 pub fn scale_height(t: f64, mol: f64, kg: f64, g: f64) -> f64 {
     R_GAS * t * mol / (g * kg)
@@ -63,9 +61,8 @@ fn node_scale_height(s: &Scratch, j: usize, g: f64) -> f64 {
     scale_height(s.ta[j], s.nt[j], s.mass[j], g)
 }
 
-/// Amounts, heat capacity, mass, heights, volume and optical depth of every air node, the air
-/// each ground cell sees, and how high each gas fills its column: a gas that would condense
-/// higher up is held near the ground, by how fast its vapour pressure falls as the air cools upwards.
+/// The state of every air node, the air each ground cell sees, and how high each gas fills its column (a gas that would
+/// condense higher up is held near the ground).
 pub(super) fn state(w: &World, s: &mut Scratch) {
     nodes(w, s);
     heights(w, s);
@@ -86,8 +83,7 @@ pub(super) fn sums(w: &World, s: &mut Scratch) {
     }
 }
 
-/// Amounts, heat capacity, mass, optical depth, volume, temperature and mean height of each air node; the height of
-/// its ground is the mean of its cells' by area.
+/// Amounts, heat capacity, mass, optical depth, volume, temperature and mean height of each air node.
 fn nodes(w: &World, s: &mut Scratch) {
     let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
     let (cells, air) = (w.mesh.cells(), w.mesh.level(AIR));
@@ -114,9 +110,8 @@ fn nodes(w: &World, s: &mut Scratch) {
     }
 }
 
-/// Which gases may condense in the column, the temperature drop of the air with height (slower
-/// where a gas condenses), and per gas and node the height its amount fills and its share in the
-/// upper half of the column.
+/// Which gases may condense, the air's temperature drop with height (slower where one condenses), and per gas and node
+/// the height it fills and its share in the upper half of the column.
 fn heights(w: &World, s: &mut Scratch) {
     let (na, g, top) = (w.mesh.level(AIR).n(), w.cfg.gravity, w.cfg.air_top_m);
     let ng = s.state.gas.len();
@@ -129,8 +124,7 @@ fn heights(w: &World, s: &mut Scratch) {
             w.chem.p_sat(k, t) < w.store.amounts(Class::Air)[k * na + j] * R_GAS * s.ta[j] / s.vol[j]
         });
     }
-    // Rising air in which a gas condenses cools slower: its vaporisation enthalpy is freed as
-    // the share it can hold falls with the temperature (Clausius-Clapeyron).
+    // Rising air in which a gas condenses cools slower: its vaporisation enthalpy is freed (Clausius-Clapeyron).
     for (gi, &k) in s.state.gas.iter().enumerate() {
         if s.cond[gi] {
             for (j, h) in held.iter_mut().enumerate() {
@@ -143,8 +137,7 @@ fn heights(w: &World, s: &mut Scratch) {
     for (j, h) in held.iter().enumerate() {
         s.gam[j] = g * s.mass[j] / (s.capa[j] + h).max(CAPA_MIN);
     }
-    // (The vapour pressure falls by a factor exp(lv/R (1/(t-½) - 1/(t+½))) per K.)
-    // A gas that does not condense is spread like the air: the `split` below with `hk` = `h`, one half.
+    // The vapour pressure falls by exp(lv/R (1/(t-½) - 1/(t+½))) per K; a gas that does not condense spreads like the air.
     for (gi, &k) in s.state.gas.iter().enumerate() {
         for j in 0..na {
             let h = node_scale_height(s, j, g).min((top - s.za[j]).max(COLUMN_MIN));

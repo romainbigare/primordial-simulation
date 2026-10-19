@@ -14,8 +14,7 @@ const LEAST_SHARE: f64 = 1e-30;
 const LEAST_MOL: f64 = 1e-300;
 
 impl Substance {
-    /// Energy a mole holds apart from its heat while it is a gas in the air: its fusion and vaporisation
-    /// enthalpy, J/mol (`check::totals` counts it in the air).
+    /// Energy a mole holds apart from its heat while a gas in the air: its fusion and vaporisation enthalpy, J/mol.
     #[inline]
     pub fn latent_gas(&self) -> f64 {
         self.lf + self.lv
@@ -63,9 +62,8 @@ impl Chemistry {
         1.0 / (1.0 / tb - R_GAS * x.max(LEAST_SHARE).ln() / l)
     }
 
-    /// Melting point of `k` where it is the share `x` of the moles of its liquid, the rest dissolved in it, K: an ideal
-    /// solution freezes lower (Schroeder-van Laar, the mirror of `t_sat`): 1 / T = 1 / Tm - R ln x / Lf. For the common
-    /// liquid of chemistry 0 that is 1.86 K per mol dissolved in a kg (the measured cryoscopic constant), no new number.
+    /// Melting point of `k` as the share `x` of its liquid's moles, K: an ideal solution freezes lower (Schroeder-van
+    /// Laar): 1 / T = 1 / Tm - R ln x / Lf; for the common liquid that is the measured 1.86 K per mol in a kg.
     pub(crate) fn t_melt(&self, k: usize, x: f64) -> f64 {
         let (tm, l) = (self.subs[k].melt, self.subs[k].lf);
         if l <= 0.0 || x >= 1.0 {
@@ -74,14 +72,9 @@ impl Chemistry {
         1.0 / (1.0 / tm - R_GAS * x.max(LEAST_SHARE).ln() / l)
     }
 
-    /// Melting point of `k` among the amounts `a(j)` (mol) of one node or body, K: `t_melt` at the share of `k` among
-    /// itself and what is dissolved in it, where `k` is the solvent there: a liquid of the world (liquid at `T_SURF`) and
-    /// the most of them. Dissolved in it is what melts below its melting point and is liquid there (the minerals that live
-    /// in the liquid); a solid there (the energy-rich solid) is not, nor `k` itself, nor a gas: a gas dissolves only to
-    /// Henry's share (a few parts in 100,000 of the air's, a thousandth of a kelvin lower), and what a node or body holds
-    /// of it beyond that is not dissolved. A solute keeps its own melting point: the data give a dissolved mineral that of
-    /// its solution. Bodies and ground nodes (their pores, the liquid that stands on them, its ice) freeze by it;
-    /// `phase_in` reads phases through it. Where `k` is absent it melts at its own melting point.
+    /// Melting point of `k` among the amounts `a(j)` of one node or body, K: `t_melt` at its share among itself and what
+    /// is dissolved in it, where `k` is the solvent (laws.md 2.5). A gas counts not: it dissolves only to Henry's share,
+    /// a thousandth of a kelvin. Where `k` is absent it melts at its own point.
     pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
         match self.mixes(k) {
             Some(js) => self.melt_with(k, a, js),
@@ -89,8 +82,8 @@ impl Chemistry {
         }
     }
 
-    /// What may share the liquid `k` (`melt_in`): each with whether it is dissolved in `k` and whether it is a liquid of
-    /// the world; none: `k` is not a liquid of the world.
+    /// What may share the liquid `k` (`melt_in`), each with whether it dissolves in `k` and whether it is a liquid of the
+    /// world; none: `k` is no liquid of the world.
     pub fn mixes(&self, k: usize) -> Option<impl Iterator<Item = (usize, bool, bool)> + '_> {
         let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < T_SURF && d.boil > T_SURF);
         let mix = move |j: usize, d: &Substance| (j, d.melt < s.melt && d.boil > s.melt, liquid(d));
@@ -108,8 +101,7 @@ impl Chemistry {
         if most > x || x <= 0.0 { self.subs[k].melt } else { self.t_melt(k, x / (x + other).max(LEAST_MOL)) }
     }
 
-    /// Phase of `k` at `t` among the amounts `a(j)` (mol) of one node or body: as `phase`, at its melting point there
-    /// (`melt_in`).
+    /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`).
     pub(crate) fn phase_in(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> Phase {
         match self.phase(k, t) {
             Phase::Solid if t >= self.melt_in(k, a) => Phase::Liquid,
@@ -117,18 +109,15 @@ impl Chemistry {
         }
     }
 
-    /// Fusion enthalpy a mole of `k` holds in the heat of a node or body at `t` among its amounts `a(j)`, J/mol: none
-    /// while it is solid there (`phase_in`).
+    /// Fusion enthalpy a mole of `k` holds in the heat of a node or body at `t`, J/mol: none while solid there.
     #[inline]
     pub fn fused_heat(&self, k: usize, t: f64, a: impl Fn(usize) -> f64) -> f64 {
         if self.phase_in(k, t, a) != Phase::Solid { self.subs[k].lf } else { 0.0 }
     }
 
-    /// Mole fraction of gas `k` that a liquid at `t` holds under its partial pressure `p`, Pa
-    /// (Henry's law). It falls with warmth by van 't Hoff's law, with the heat of solution taken
-    /// as the vaporisation enthalpy: dissolving is like condensing (for the gas the light-driven
-    /// reaction takes in chemistry 0 that gives 2,100 K for the 2,400 K measured; for the others
-    /// 800 to 1,200 K for 1,300 to 1,700 K).
+    /// Mole fraction of gas `k` a liquid at `t` holds under its partial pressure `p`, Pa (Henry's law), falling with
+    /// warmth by van 't Hoff's law with the vaporisation enthalpy as heat of solution (2,100 K for the light reaction's
+    /// gas, measured 2,400 K).
     pub fn henry(&self, k: usize, t: f64, p: f64) -> f64 {
         let s = &self.subs[k];
         s.solubility * p / P_REF * (s.lv / R_GAS * (1.0 / t.max(T_MIN) - 1.0 / T_SOL)).exp()
@@ -156,8 +145,7 @@ impl Chemistry {
         m.iter().zip(&self.subs).map(|(a, s)| a * s.molar_mass).sum()
     }
 
-    /// The heat that goes with amounts `m` (mol of each substance) when they leave a holder of heat `e` (J) and heat capacity
-    /// `cap` (J/K): their share of it by heat capacity, J.
+    /// The heat that leaves with amounts `m` from a holder of heat `e` and heat capacity `cap`: their share by heat capacity, J.
     #[inline]
     pub fn heat_share(&self, e: f64, cap: f64, m: &[f64]) -> f64 {
         e * self.heat_cap_of(m) / cap

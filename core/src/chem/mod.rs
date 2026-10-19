@@ -1,7 +1,5 @@
-//! The world's chemistry: data the laws read. Substances are numbers only.
-//!
-//! `thermo`: phases, melting and vapour pressure, solubility, heat capacity. `roles`: what the reactions do for bodies
-//! (which burn, which keep their energy, what bodies build of).
+//! The world's chemistry: data the laws read; substances are numbers only. `thermo`: phases, melting, vapour pressure,
+//! solubility, heat capacity; `roles`: what the reactions do for bodies.
 
 mod roles;
 mod thermo;
@@ -42,11 +40,9 @@ pub struct Substance {
     pub refl: [[f32; 3]; 2],
     /// Absorption of outgoing heat radiation per column amount (m²/mol), gas only
     pub ir_abs: f64,
-    /// Column amount past which the absorption grows only as the square root of the amount
-    /// (the gas's bands fill up, a stand-in for the logarithm of real gases), mol/m²; 0: never
+    /// Column amount past which absorption grows as the square root (bands fill up), mol/m²; 0: never
     pub ir_sat: f64,
-    /// Solubility in liquids: the mole fraction that dissolves (for a gas, under the reference
-    /// pressure of it alone at `T_SOL`; `Chemistry::henry`)
+    /// Solubility in liquids: the mole fraction that dissolves (a gas: alone at the reference pressure, `T_SOL`)
     pub solubility: f64,
     /// Heat conductivity of the solid, W/(m K)
     pub conductivity: f64,
@@ -54,14 +50,11 @@ pub struct Substance {
     pub lv: f64,
     /// Fusion enthalpy, J/mol
     pub lf: f64,
-    /// Formation enthalpy of the solid, J/mol: the chemical energy one mole holds (a liquid holds `lf` more, in its holder's
-    /// heat; a gas also `lv`, in the air: `check::totals`).
+    /// Formation enthalpy of the solid, J/mol (a liquid holds `lf` more in its holder's heat, a gas also `lv`)
     pub hf: f64,
-    /// Young's modulus of the solid as a material, Pa (0: none given): how stiff what bodies build of it is
-    /// (`Body::height`). For body matter, that of living soft tissue with its liquid.
+    /// Young's modulus of the solid as a material, Pa (0: none given; body matter: soft tissue with its liquid)
     pub modulus: f64,
-    /// The stress at which the solid as a material breaks, Pa (0: none given): J per m³ to break what bodies
-    /// build of it (`Body::solids`). For body matter, that of living soft tissue with its liquid.
+    /// The stress at which the solid as a material breaks, Pa (0: none given; body matter: soft tissue with its liquid)
     pub rupture: f64,
 }
 
@@ -76,9 +69,8 @@ pub struct Reaction {
     pub ea: f64,
     /// Takes absorbed light instead of heat
     pub light: bool,
-    /// The power each input's share enters the rate law at, in the order of `inputs`; empty: the counts of
-    /// `inputs`, as mass action says. A reaction of a big molecule is not one meeting of 40 molecules: the
-    /// rate law keeps the power it was measured at (`order`), whatever the reaction takes in all.
+    /// The power of each input's share in the rate law; empty: the counts (mass action). A big molecule is not a
+    /// meeting of 40 molecules: the rate law keeps the power it was measured at.
     pub ord: Vec<u16>,
 }
 
@@ -106,19 +98,14 @@ pub struct Chemistry {
     pub n_elements: usize,
     pub subs: Vec<Substance>,
     pub reactions: Vec<Reaction>,
-    /// How bodies grow: a conversion of stores into body matter, balanced in elements like a
-    /// reaction, with no rate (Copy runs it, paid by work, `copy::grow`). Its first output is the
-    /// body matter; the others are what is left over. None: bodies have no matter apart from
-    /// their stores (`Body::size` is their mass, and they do not grow).
+    /// How bodies grow: a conversion of stores into body matter (its first output), with no rate, paid by work
+    /// (`copy::grow`). None: bodies have no matter apart from their stores and do not grow.
     pub build: Option<Reaction>,
-    /// The other solids bodies can build: each a conversion like `build`, run by Copy with the same work
-    /// (`copy::grow`); its first output is the solid. A body's keep gene of that solid is its share in what the body
-    /// builds (`Body::share`); the rest is matter. Empty: bodies build matter only.
+    /// The other solids bodies can build, each a conversion like `build` whose first output is the solid (`Body::share`).
     pub builds: Vec<Reaction>,
-    /// Mole fractions of the starting air, per substance (empty: none known). The cost of a
-    /// catalyst counts the gases of a reaction beyond first order at these shares (`Body::prepare`).
+    /// Mole fractions of the starting air, per substance (empty: none known), for the cost of catalysts (`Body::prepare`).
     pub air: Vec<f64>,
-    /// What follows from the fields above, made at its first use (a chemistry does not change once made; not saved)
+    /// What follows from the fields above, made at its first use (not saved)
     #[serde(skip)]
     derived: OnceLock<Derived>,
 }
@@ -171,9 +158,8 @@ impl Chemistry {
         (a - b).abs() <= MASS_ROUNDING * a.max(b)
     }
 
-    /// Is the chemistry one the laws can run? At most `MAX_SUBSTANCES` substances, each with its element counts, a
-    /// vapour pressure curve and densities; every reaction and conversion names substances that exist and balances its
-    /// elements and its mass; every conversion has inputs and a product.
+    /// Is the chemistry one the laws can run? At most `MAX_SUBSTANCES` substances with element counts, a vapour pressure
+    /// curve and densities; every reaction and conversion names substances that exist and keeps its elements and mass.
     pub fn validate(&self) -> Result<(), String> {
         let ns = self.ns();
         if ns > MAX_SUBSTANCES {

@@ -7,8 +7,8 @@ use crate::chem::{Chemistry, Phase};
 const BISECT: usize = 200;
 const MOST_MOL: f64 = 1e30;
 
-/// Pairs of reactions that undo each other, as (first, back, m, substance): the first makes one
-/// substance, the back takes `m` times as much of it and gives `m` times what the first took.
+/// Pairs of reactions that undo each other, as (first, back, m, substance): the back takes `m` times what the first
+/// makes and gives `m` times what it took.
 pub fn reversible(chem: &Chemistry) -> Vec<(usize, usize, u16, usize)> {
     let mut out = Vec::new();
     for (f, rf) in chem.reactions.iter().enumerate().filter(|(_, r)| !r.light && r.outputs.len() == 1) {
@@ -31,13 +31,9 @@ pub fn reversible(chem: &Chemistry) -> Vec<(usize, usize, u16, usize)> {
 }
 
 impl Reactor {
-    /// The amounts at which pairs of reactions that undo each other (`reversible`) balance in one
-    /// node at `t`, from the chemistry's own rate constants and barriers, with the gas around the
-    /// node (`gas`) held as it is. Of each pair the substance the first makes, if the node holds
-    /// none of it, is set to the amount at which the two take it and give it at the same rate,
-    /// with the other inputs of the first (those that are not gas) lessened by what it holds.
-    /// Returns the substances set and their amounts. A node without an input of the first (no
-    /// liquid, say) holds none: its rate is nothing at every amount.
+    /// The amounts at which pairs of reactions that undo each other balance in one node at `t`, from the chemistry's own
+    /// rates, with the gas around (`gas`) held: of each pair the substance the first makes, if the node holds none, is set
+    /// where the two go at equal rates (laws.md 2.6). Returns the substances set and their amounts.
     pub fn balance(&mut self, chem: &Chemistry, n: &mut [f64], gas: &[f64], t: f64) -> Vec<(usize, f64)> {
         let mut out = Vec::new();
         for (f, b, m, u) in reversible(chem) {

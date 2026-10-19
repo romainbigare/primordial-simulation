@@ -1,10 +1,6 @@
-//! Space: the shape of the world, and nothing else. A mesh is a set of levels; each level is a set of cells (area,
-//! centre, latitude) and the links between them (the two cells, the distance between their centres, the width of the
-//! border they share); each cell of a level but the coarsest has one parent at the next coarser level. The height of
-//! the ground is not here: it changes with what the ground holds, so it belongs to the ground.
-//!
-//! Links are stored as plain arrays, each link once (`a < b`), and each cell's links in compressed form (`start`,
-//! then for each entry the link and the other cell), so a solver takes them as slices. Built once per mesh change.
+//! Space: the shape of the world, and nothing else. A mesh is levels of cells (area, centre, latitude) and links (two
+//! cells, the distance between centres, the width of their border); each cell but at the coarsest level has a parent.
+//! Links are plain arrays, each once (`a < b`), with each cell's links in compressed lists, so solvers take slices.
 
 pub mod square;
 pub mod stack;
@@ -18,8 +14,7 @@ pub struct Level {
     area: Vec<f64>,
     centre: Vec<[f64; 2]>,
     lat: Vec<f64>,
-    /// The two cells of each link, the distance between their centres, m, and the width of their shared border, m
-    /// (0 for cells that touch only at a corner)
+    /// The two cells of each link, the distance between their centres, m, and their border's width, m (0 at a corner)
     a: Vec<u32>,
     b: Vec<u32>,
     dist: Vec<f64>,
@@ -30,8 +25,7 @@ pub struct Level {
     adj_cell: Vec<u32>,
     /// Each cell's parent at the next coarser level (empty at the coarsest)
     parent: Vec<u32>,
-    /// The children of cell `i` at the next finer level are `kids[kid_start[i]..kid_start[i + 1]]`, in their order
-    /// (empty at the finest)
+    /// The children of cell `i` at the next finer level are `kids[kid_start[i]..kid_start[i + 1]]` (empty at the finest)
     kid_start: Vec<u32>,
     kids: Vec<u32>,
 }
@@ -156,14 +150,12 @@ impl Mesh {
         }
         i
     }
-    /// The share of the cell at level `to` that holds cell `i` of the finest level which cell `i` covers: their areas'
-    /// ratio.
+    /// The share of its cell at level `to` that cell `i` of the finest level covers: their areas' ratio.
     pub fn share(&self, i: usize, to: usize) -> f64 {
         self.cells().area[i] / self.levels[to].area[self.up(i, 0, to)]
     }
-    /// Add a coarser level over the coarsest, given the parent of each of its cells (parents numbered 0..m, each with
-    /// at least one child). A coarse cell holds the area of its children, at their area-weighted centre and latitude;
-    /// two coarse cells are linked where any of their children are, across the sum of those children's widths.
+    /// Add a coarser level over the coarsest, given each cell's parent (0..m, each with a child). A coarse cell holds its
+    /// children's area at their area-weighted centre; coarse cells link where children do, across the sum of their widths.
     pub(crate) fn coarsen(&mut self, parent: Vec<u32>) {
         let fine = self.levels.last_mut().expect("a mesh has a level");
         assert_eq!(parent.len(), fine.n(), "one parent for each cell");

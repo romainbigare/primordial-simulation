@@ -19,9 +19,8 @@ pub struct Totals {
     pub boundary_elems: Vec<f64>,
 }
 
-/// A sum that carries the rounding error of each addition (Neumaier): the chemical energy of
-/// the world is about 100 times its heat, so a plain sum over many bodies loses more to rounding
-/// than the laws ever move by mistake.
+/// A sum that carries the rounding error of each addition (Neumaier): the world's chemical energy is about 100 times
+/// its heat, so a plain sum would lose more to rounding than the laws move by mistake.
 #[derive(Clone, Copy, Default)]
 struct Sum(f64, f64);
 
@@ -98,8 +97,7 @@ fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool)
     v.iter().position(|&x| !ok(x.into())).map(|i| format!("{name}[{i}] = {}", v[i].into()))
 }
 
-/// The first state value that is NaN or infinite, or below 0 where it cannot be (an amount, an energy, an area): None
-/// for a sound world.
+/// The first state value that is NaN or infinite, or below 0 where it cannot be: None for a sound world.
 pub fn broken(w: &World) -> Option<String> {
     let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
     let above_0 = |x: f64| x.is_finite() && x > 0.0;

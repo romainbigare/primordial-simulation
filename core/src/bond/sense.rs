@@ -52,11 +52,8 @@ pub fn depth(w: &World, b: &Body, d: f64) -> f64 {
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).
 pub(crate) const SENSE: usize = 5;
 
-/// What a body perceives of what it holds (whether, ln mass ratio, hardness, hollowness) and
-/// of the walls around it. Its mass ratio is read one unit up, so that holding nothing (0) reads as holding a part
-/// about 1,100 times lighter than the body (e^`LN_MASS`), and one as heavy as the body as 1: the input fades to nothing
-/// with what is held. A part looked at (`features`) is always there, so its mass ratio is read as it is, 0 for one as
-/// heavy as the body.
+/// What a body perceives of what it holds (whether, ln mass ratio, hardness, hollowness) and of the walls around it.
+/// The mass ratio reads one unit up, so holding nothing (0) fades into holding a part 1,100 times lighter.
 pub(crate) fn sense(w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
     let mut x = [0f32; SENSE];
     if let Some(p) = held(w, b) {
@@ -68,8 +65,8 @@ pub(crate) fn sense(w: &World, b: &Body, mb: f64) -> [f32; SENSE] {
     x
 }
 
-/// What a body perceives of part `p`: ln mass ratio, hardness, hollowness, ln length, how closed
-/// its structure is, anchored, held, share of it the body would take.
+/// What a body perceives of part `p`: ln mass ratio, hardness, hollowness, ln length, how closed its structure is,
+/// anchored, held, the share the body would take.
 pub fn features(w: &World, b: &Body, p: usize, mb: f64) -> [f32; NO] {
     let (pt, chem) = (&w.parts.parts[p], &w.chem);
     let s = &w.parts.parts[pt.root as usize].s;

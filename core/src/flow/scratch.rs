@@ -1,5 +1,4 @@
-//! The working memory of Flow (`Scratch`), its tables, and the every-few-months recheck of what
-//! is present (`refresh`).
+//! The working memory of Flow (`Scratch`), its tables, and the recheck of what is present (`refresh`).
 
 use super::air;
 use super::land::NONE;
@@ -34,14 +33,12 @@ pub(super) struct Sp {
     pub(super) refl: [f64; 2],
 }
 
-/// The fusion enthalpy a ground node holds off a plateau, and the energies between which it
-/// holds it (until the amounts change).
+/// The fusion enthalpy a ground node holds off a plateau, and the energies between which it holds it.
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Latent {
     /// Fusion enthalpy held by what is molten, J
     pub(super) held: f64,
-    /// The node keeps this `held` while its energy is at least `lo` and below `hi`, J (`hi` is
-    /// `f64::MIN` on a plateau, or when `lift` marks the node for a new state)
+    /// The node keeps `held` while its energy is in [`lo`, `hi`), J (`hi` is `f64::MIN` on a plateau or when stale)
     pub(super) lo: f64,
     pub(super) hi: f64,
     /// What is at or over its melting point, one bit per substance (`melted`)
@@ -74,15 +71,13 @@ pub(crate) struct FlowView<'a> {
 }
 
 impl FlowView<'_> {
-    /// Energy to lift a kg from the head of ground node `i` to the mean height of air node `j` (its own), J/kg, under a
-    /// gravity of `g` m/s² (`Sky::cross`).
+    /// Energy to lift a kg from the head of ground node `i` to the mean height of its air node `j`, J/kg.
     #[inline]
     pub(crate) fn lift(&self, i: usize, j: usize, g: f64) -> f64 {
         g * (self.zair[j] - self.head[i])
     }
-    /// Fusion enthalpy ground node `i` holds when its energy is `e`, J, as Flow's last solve of its plateaus has it
-    /// (`ground::melting`): that of what is molten off a plateau and, on one, as much of the fusion enthalpy of the
-    /// substance there (`lat(k)` J for all of it) as the energy above the plateau's temperature at heat capacity `c` melts.
+    /// Fusion enthalpy ground node `i` holds at energy `e`, J, by Flow's last solve of its plateaus: off a plateau what is
+    /// molten; on one, also what the energy above the plateau at heat capacity `c` melts of `lat(k)`.
     #[inline]
     pub(crate) fn fused(&self, i: usize, e: f64, c: f64, lat: impl Fn(usize) -> f64) -> f64 {
         let held = self.latent[i].held;
@@ -93,10 +88,8 @@ impl FlowView<'_> {
     }
 }
 
-/// What Flow keeps from one step to a later one, and so saves with the world: the plateaus of its ground nodes as its
-/// last step solved them (every law and the tape read that temperature, `World::t_ground_last`, the survey before
-/// Flow's next step), the clouds its last exchange left (the next radiation reads them), and what its last refresh
-/// found present (read until the next refresh). Fields per ground node.
+/// What Flow keeps from one step to a later one, saved with the world: the plateaus of its ground nodes (the one ground
+/// temperature, `World::t_ground_last`), the clouds, and what its last refresh found present.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub(super) struct State {
     /// Temperature of each ground node, K.
@@ -120,10 +113,8 @@ pub(super) struct State {
     pub(super) bed: Vec<Bed>,
 }
 
-/// Working memory of the law: its state (`State`), the only part saved with the world, and caches. A cache is rebuilt
-/// from the world and the state at each liquid step (`flow::state`, the air's in each step), and at once when missing
-/// (`flow::ensure`): a snapshot is taken at a month's start, where a liquid step comes (`docs/tape.md`), so a resumed
-/// run matches an unbroken one. Ground fields are per ground node, air fields per air node.
+/// Working memory of the law: its saved state (`State`) and caches, rebuilt at each liquid step and when missing
+/// (`flow::ensure`). Snapshots are taken at a month's start, where a liquid step comes, so a resumed run matches.
 #[derive(Clone, Debug, Default)]
 pub struct Scratch {
     pub(super) state: State,
@@ -155,11 +146,9 @@ pub struct Scratch {
     /// The four nearest air nodes of each ground cell on the square map, and their weights (`air::lerp`).
     pub(super) near: Vec<[u32; 4]>,
     pub(super) wt: Vec<[f64; 4]>,
-    /// The air each ground cell sees (`air::state`): temperature drop, K/m; mean height of the air,
-    /// m; share of heat radiation it absorbs.
+    /// The air each ground cell sees: temperature drop, K/m; mean height, m; share of heat radiation it absorbs.
     pub(super) seen: Vec<[f64; 3]>,
-    /// How much colder than the air touching the ground each layer of the air over a cell is,
-    /// [down, up], K (`air::column`).
+    /// How much colder than the air at the ground each layer over a cell is, [down, up], K (`air::column`).
     pub(super) lay: Vec<[[f64; air::LAYERS]; 2]>,
     /// Mean height of the ground under each air node, m; the air's volume, m³.
     pub(super) za: Vec<f64>,
@@ -168,14 +157,12 @@ pub struct Scratch {
     pub(super) nt: Vec<f64>,
     pub(super) capa: Vec<f64>,
     pub(super) mass: Vec<f64>,
-    /// Optical depth for heat radiation; temperature drop with height, K/m; mean height of the
-    /// air, m; temperature, K; of each air node.
+    /// Of each air node: optical depth for heat radiation; temperature drop, K/m; mean height, m; temperature, K.
     pub(super) fabs: Vec<f64>,
     pub(super) gam: Vec<f64>,
     pub(super) zair: Vec<f64>,
     pub(super) ta: Vec<f64>,
-    /// Per gas [g * na + j]: may it condense in the column; height its amount fills near the
-    /// ground, m; share of it in the upper half of the column.
+    /// Per gas [g * na + j]: may it condense; the height its amount fills near the ground, m; its share in the upper half.
     pub(super) cond: Vec<bool>,
     pub(super) hk: Vec<f64>,
     pub(super) split: Vec<f64>,
@@ -202,8 +189,7 @@ impl Scratch {
     pub fn temps(&self) -> (&[f64], &[f64]) {
         (&self.state.tg, &self.ta)
     }
-    /// Temperature of ground node `i` at the last flow step, K, and the substance on its melting
-    /// plateau with its molten share (none before the first step).
+    /// Temperature of ground node `i` at the last flow step, K, and the substance on its plateau with its molten share.
     pub(crate) fn plateau(&self, i: usize) -> Option<(f64, Option<(usize, f64)>)> {
         let t = *self.state.tg.get(i)?;
         Some((t, (self.state.pk[i] != NONE).then(|| (self.state.pk[i], self.state.phi[i]))))
@@ -212,9 +198,7 @@ impl Scratch {
     pub(crate) fn view(&self) -> FlowView<'_> {
         FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.state.pk }
     }
-    /// Loose substances that may be liquid somewhere between `tmin` and `tmax`, K: melting
-    /// below the warmest node and boiling above the coldest, or (with `dissolved`) gases that
-    /// dissolve in the liquid (`air::dissolve`), which move with it.
+    /// Loose substances that may be liquid between `tmin` and `tmax`, K, or (with `dissolved`) gases dissolved in it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {
         self.state.loose.iter().copied().filter(|&k| self.sp[k].melt <= tmax && (self.sp[k].boil > tmin || dissolved && chem.subs[k].solubility > 0.0)).collect()
     }
@@ -222,8 +206,8 @@ impl Scratch {
     pub(super) fn solids(&self, tmin: f64) -> Vec<usize> {
         self.state.loose.iter().copied().filter(|&k| self.sp[k].melt > tmin).collect()
     }
-    /// `k` has come into the loose ground: add it to `loose` and `vary` (at the end of `vary`,
-    /// whose order sets the order of sums over it, or `in_order` of melting point).
+    /// `k` has come into the loose ground: add it to `loose` and to `vary` (at its end, which keeps the order of sums,
+    /// or `in_order` of melting point).
     pub(super) fn add_loose(&mut self, k: usize, in_order: bool) {
         if self.state.loose.contains(&k) {
             return;
@@ -239,14 +223,12 @@ impl Scratch {
     }
 }
 
-/// What may melt or evaporate until the next refresh is judged at the warmest ground node now plus
-/// this, K.
+/// What may melt or evaporate until the next refresh is judged at the warmest ground node plus this, K.
 const T_MARGIN: f64 = 20.0;
 /// A loose substance whose saturation pressure there is over this can evaporate, Pa.
 const P_UP: f64 = 1.0;
 
-/// May loose substance `k` evaporate before the next refresh, the warmest ground node being at
-/// `tmax` K now (`refresh` and `air::exchange` judge it alike)?
+/// May loose substance `k` evaporate before the next refresh, the warmest ground node at `tmax` K?
 pub(super) fn may_evaporate(w: &World, k: usize, tmax: f64) -> bool {
     w.chem.p_sat(k, tmax + T_MARGIN) > P_UP
 }
@@ -255,8 +237,7 @@ const V_MIN: f64 = 1e-9;
 /// Least heat conductivity of a substance, W/(m K) (the soft cover's resistance divides by it).
 const COND_MIN: f64 = 1e-3;
 
-/// Every few months: which substances are present, the slow-changing bonded ground and fixed
-/// solids.
+/// Every few months: which substances are present, the slow bonded ground and the fixed solids.
 pub(super) fn refresh(w: &World, s: &mut Scratch) {
     let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
@@ -267,8 +248,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     s.state.vary = s.state.loose.iter().copied().filter(|k| !s.state.fixed.contains(k)).collect();
     s.state.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
     s.state.bedk = (0..ns).filter(|&k| any(w.store.amounts(Class::Bed), n, k)).collect();
-    // (A substance whose air holds less than the rounding of the air's sums is no gas of it: what little there is stays
-    // where it is, and the air's step does not solve for it.)
+    // A substance the air holds less of than the rounding of its sums is no gas of it: the air's step leaves it be.
     let (air, all) = (w.store.amounts(Class::Air), w.store.amounts(Class::Air).iter().sum::<f64>());
     let in_air = |k: usize| air[k * na..(k + 1) * na].iter().sum::<f64>() > f64::EPSILON * all;
     let gas = (0..ns).filter(|&k| in_air(k) || (s.state.loose.contains(&k) && up(k))).collect();
@@ -316,8 +296,7 @@ pub(super) fn room(w: &World, s: &mut Scratch) {
     s.seen = vec![[0.0; 3]; n];
 }
 
-/// Tables that depend on the map and the chemistry alone: substance constants, and the four air nodes each ground
-/// cell reads between. Rebuilt when missing (they are not saved).
+/// Tables of the map and the chemistry alone (not saved): substance constants, and the four air nodes each cell reads.
 pub(super) fn tables(w: &World, s: &mut Scratch) {
     let mean = |v: [f32; 3]| v.iter().map(|&x| x as f64).sum::<f64>() / 3.0;
     s.sp = (w.chem.subs.iter())
@@ -333,8 +312,7 @@ pub(super) fn tables(w: &World, s: &mut Scratch) {
             refl: [mean(b.refl[0]), mean(b.refl[1])],
         })
         .collect();
-    // The air nodes lie on the square map in blocks of `air_scale`² squares, `aw × ah` of them: a cell reads between
-    // the four whose centres are nearest (bilinear weights).
+    // The air nodes are blocks of `air_scale`² squares: a cell reads the four whose centres are nearest, bilinearly.
     let (map, scale) = (w.map, w.air_scale);
     let (aw, ah) = (map.w.div_ceil(scale), map.h.div_ceil(scale));
     let axis = |c: usize, len: usize| {

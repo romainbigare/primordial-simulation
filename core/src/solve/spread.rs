@@ -1,19 +1,15 @@
-//! Spread: one implicit step of anything that moves from high to low along links and fills nodes (heat, liquid in the
-//! pores and what it carries, gases, the evening of pressure). A link passes `g (x_a - x_b)` per second and a node
-//! holds `cap x`, where `x` is the potential (a temperature, a head, a concentration). The step is backward Euler: it
-//! solves (C + dt L) x' = C x, with C the capacities and L the links' Laplacian, so it is stable for any step length
-//! (Patankar 1980, ch. 4). The solver is conjugate gradient with a Jacobi preconditioner (Hestenes & Stiefel 1952),
-//! at most a given number of iterations, always in the same order. The books are exact even when it has not
-//! converged: the link fluxes come from the solved potentials, and each node's new value comes only from its fluxes.
+//! Spread: one implicit step of anything that moves from high to low along links and fills nodes. A link passes
+//! `g (x_a - x_b)` per second, a node holds `cap x`. Backward Euler, (C + dt L) x' = C x, is stable for any step
+//! (Patankar 1980, ch. 4), solved by conjugate gradient with a Jacobi preconditioner (Hestenes and Stiefel 1952). The
+//! books are exact even unconverged: each node moves only by the link fluxes.
 
 use crate::ground::share;
 
-/// The share of its start value below which the preconditioned residual's square (`rz`) ends the solve: about 1e-12
-/// of the residual's size, near the rounding of a step. The same inputs stop at the same iteration.
+/// The share of its start value below which the preconditioned residual's square ends the solve: about 1e-12 of the
+/// residual's size, near the rounding of a step.
 const CONVERGED: f64 = 1e-24;
 
-/// The network of one spread, as plain slices: the two nodes of each link, its conductance g (amount per second per
-/// unit of potential, at least 0) and the capacity of each node (amount per unit of potential, more than 0).
+/// The network of one spread: each link's two nodes and conductance g (at least 0), and each node's capacity (above 0).
 pub struct Net<'a> {
     pub a: &'a [u32],
     pub b: &'a [u32],
@@ -21,9 +17,8 @@ pub struct Net<'a> {
     pub cap: &'a [f64],
 }
 
-/// Work space of the solver, kept between calls so that a step allocates nothing once it has grown. Per node: the
-/// change of the potential solved so far, the residual, the preconditioned residual, the search direction, the system
-/// times the direction, the diagonal of the system, and the amount the node gains over the step.
+/// Work space of the solver, kept between calls: per node the change solved so far, the residual, the preconditioned
+/// residual, the search direction, the system times it, the diagonal, and the node's gain over the step.
 #[derive(Clone, Debug, Default)]
 pub struct Spread {
     change: Vec<f64>,
@@ -36,15 +31,10 @@ pub struct Spread {
 }
 
 impl Spread {
-    /// One step of `dt` seconds on `net`: writes into `flux` the amount each link carries over the step (+ from `a` to
-    /// `b`) and moves the potentials `x` by those fluxes. It iterates until converged (`CONVERGED`) or `iters`, and
-    /// returns the iterations made. A caller sets `iters` at least about the number of nodes on a stiff network: a
-    /// stop before convergence keeps the books exact, but each node then moves by its fluxes from a partial solve,
-    /// which is an explicit step on the solve's error and grows it on links with dt g / cap much above 1. Converged,
-    /// the rounding of the result grows like the machine epsilon times dt g / cap.
-    ///
-    /// Every capacity must be positive: a node that holds nothing could gain nothing, so its fluxes would have to
-    /// balance exactly, which only a converged solve gives. Leave such a node out of the network.
+    /// One step of `dt` seconds on `net`: writes into `flux` what each link carries (+ from `a` to `b`), moves `x` by it,
+    /// and returns the iterations made (at most `iters`). On a stiff network `iters` should be about the number of nodes:
+    /// an unconverged stop keeps the books but steps the solve's error explicitly. Every capacity must be positive (a node
+    /// of none could only balance under a converged solve).
     pub fn step(&mut self, net: &Net, x: &mut [f64], dt: f64, iters: usize, flux: &mut [f64]) -> usize {
         let n = x.len();
         debug_assert!(net.cap.len() == n, "one capacity per node");
@@ -102,11 +92,8 @@ impl Spread {
     }
 }
 
-/// Cuts the amounts `flux` that cross the links from `a` to `b` (+ from `a` to `b`) where a node would give more than it
-/// holds (`held`): each flux that leaves such a node is cut by the share it holds of all that leaves it, so no node
-/// gives more than it holds. Only the fluxes out of those nodes change. A step that is long against what a node holds,
-/// or a solve that has not converged, may ask a node for more than it holds; the fluxes of a converged step on a
-/// network that is not stiff never do, and keep their values.
+/// Where a node would give more than it holds (`held`), cuts each flux that leaves it by the share it holds of all that
+/// leaves it; only those nodes' outgoing fluxes change (laws.md 0, "No overdraw").
 pub fn within(a: &[u32], b: &[u32], flux: &mut [f64], held: &[f64]) {
     let mut out = vec![0.0; held.len()];
     for ((&i, &j), &f) in a.iter().zip(b).zip(flux.iter()) {

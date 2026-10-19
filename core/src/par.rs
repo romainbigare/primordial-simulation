@@ -1,14 +1,10 @@
-//! Optional threads (feature `threads`, off by default; no threads in a wasm build). The same
-//! results either way: work that is independent per cell, line or node is made in parallel into
-//! a vector of rows and then applied in the fixed order of the cells, so no sum depends on
-//! which thread was first.
+//! Optional threads (feature `threads`; none in a wasm build), with the same results: independent work is made in
+//! parallel into rows, then applied in the fixed order of the cells, so no sum depends on which thread was first.
 
-/// Output size (numbers) below which a task is not split: a smaller job costs more to hand out
-/// than to do.
+/// Output size (numbers) below which a task is not split: a smaller job costs more to hand out than to do.
 const CHUNK: usize = 4096;
 
-/// Fill `out` in rows of `width` numbers: row `i` is made by `f(state, i, row)`, with a `state`
-/// from `init` for each task (scratch space). Rows do not depend on each other.
+/// Fill `out` in rows of `width` numbers, row `i` by `f(state, i, row)` with a scratch `state` from `init` per task.
 pub fn rows<S>(out: &mut [f64], width: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, usize, &mut [f64]) + Sync + Send) {
     if width == 0 || out.is_empty() {
         return;

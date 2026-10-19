@@ -1,6 +1,6 @@
 //! `apply`: books the link fluxes, moves and transforms of a call as they are given, then sets what rounding left below
-//! zero to zero and counts it. A law never asks a node for more than it holds (`docs/foundation/plan.md`, Idea 2), so
-//! the store only adds, checks and counts.
+//! zero to zero and counts it. A law never asks a node for more than it holds (laws.md 0, "No overdraw"), so the store
+//! only adds, checks and counts.
 
 use super::{held, held_more};
 use super::moves::{LinkFlux, Move, Transform};
@@ -10,28 +10,26 @@ use crate::{World, AIR};
 
 /// What a transform may lose or gain of an element to rounding, relative to all the elements it changes.
 const ELEMENT_ROUNDING: f64 = 1e-9;
-/// What a number may end below zero by to rounding, relative to what its node holds of that unit (all its amounts, or
-/// its heat), what the number held and all the changes of the call to it: more is a law that overdrew (checked in debug
-/// builds). A law's sums round at the size of what it moves, which is the size of what the node holds or less.
+/// What a number may end below zero by to rounding, relative to what its node holds of that unit, what it held and the
+/// call's changes to it: more is a law that overdrew (checked in debug builds).
 pub(crate) const ROUNDING: f64 = 1e-9;
-/// The classes `apply` books, the first ones: those whose amounts and heat lie in the arrays of the `Store` (a part's
-/// and a body's lie in it, `Class::Part`, `Class::Body`, which Bond and the bodies book).
+/// The classes `apply` books, the first ones: those whose amounts and heat lie in the `Store` (a part or a body books
+/// its own).
 const BOOKED: usize = Class::Part as usize;
 /// The first array of the nodes that give all they are asked and may hold less than nothing: the boundary nodes and
 /// the potential (`Class::Boundary`, `Class::Potential`).
 const BOUNDARY_ARRAYS: usize = 2 * Class::Boundary as usize;
 
-/// One number of the world: entry `at` of array `arr`, where array `2 * class` holds the amounts of a class and
-/// `2 * class + 1` its heat (the order in which `apply` counts what it rounds); an amount is at `k * len + index`.
+/// One number of the world: entry `at` of array `arr` (`2 * class` the amounts of a class, `2 * class + 1` its heat);
+/// an amount is at `k * len + index`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Slot {
     arr: usize,
     at: usize,
 }
 
-/// One column of a link flux (a substance, or the heat): from array `arr[0]` (`Slot`) at the links' `a` ends to array
-/// `arr[1]` at their `b` ends, where the number of node `i` is at `at[end] + i`; `out[l]` leaves the `a` end of link `l`
-/// and `into[l]` enters its `b` end.
+/// One column of a link flux (a substance, or the heat): `out[l]` leaves array `arr[0]` at link `l`'s `a` end and
+/// `into[l]` enters `arr[1]` at its `b` end, node `i`'s number at `at[end] + i`.
 struct Column<'x> {
     arr: [usize; 2],
     at: [usize; 2],
@@ -64,8 +62,7 @@ struct Ctx<'w> {
     len: [usize; BOOKED],
 }
 
-/// The class of node `x` and its index, in a class `apply` books; none for a node that holds its own amounts (a part, a
-/// body), whose side of a move the law that changes it books.
+/// The class of node `x` and its index, in a class `apply` books; none for a part or a body, whose law books its side.
 fn booked(cx: &Ctx, x: Node) -> Option<(usize, usize)> {
     let c = x.class as usize;
     if c >= BOOKED {
@@ -75,8 +72,8 @@ fn booked(cx: &Ctx, x: Node) -> Option<(usize, usize)> {
     Some((c, x.index))
 }
 
-/// Each change of the call, in order: each link flux's columns, its substances then its heat (the `b` end receives the
-/// heat less what the mol hold more there, `lifted`); then each move's and each transform's changes, number by number.
+/// Each change of the call in order: each link flux's columns (substances, then heat less what the mol hold more at
+/// the `b` end), then each move's and each transform's changes.
 fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]), moves: &[Move], transforms: &[Transform], mut f: impl FnMut(Change<'x>)) {
     let (chem, len) = (cx.chem, &cx.len);
     for (x, lifted) in fluxes.iter().zip(lifted) {
@@ -89,8 +86,7 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
         f(Change::Column(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], a, b, out: x.heat, into }));
     }
     let mut one = |arr, at, d| f(Change::One(Slot { arr, at }, d));
-    // (A move of heat alone changes no amount, and one of amounts alone no heat: a class that holds no amounts or no heat
-    // has none to change.)
+    // A move of heat alone changes no amount, and one of amounts alone no heat.
     for m in moves {
         let k = m.k as usize;
         for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, m.heat - m.mol * held_more(chem, m.from.class, m.to.class, k))] {
@@ -136,14 +132,11 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bo
     sums.iter().all(|e| e.abs() <= ELEMENT_ROUNDING * size)
 }
 
-/// Book the link fluxes, then the moves, then the transforms, each in its order, as they are given: what leaves one
-/// node enters another, so the books are kept by the form of the changes. A law asks no node for more than it holds
-/// (`docs/handover.md` 6.1): what passes through a node in one call (in by one link, out by another) needs nothing held,
-/// as only what each number holds at the end counts. Then each amount and heat of a node that ended below zero, which
-/// is the rounding of the sums, is set to zero and counted in `Counters::rounded` (handover 12.1), in the order of the
-/// arrays; a debug build checks that it is only rounding (`ROUNDING`). A boundary node and the potential give all they
-/// are asked. Panics on a link flux of the wrong shape, on a transform that does not keep its elements, and on a node
-/// beyond its class.
+/// Book the link fluxes, then the moves, then the transforms, as given: what leaves one node enters another, so the
+/// books are kept by their form. Only what each number holds at the end counts, so what passes through a node in one
+/// call needs nothing held. Then each number below zero, the rounding of the sums, is set to zero and counted in
+/// `Counters::rounded` (handover 12.1; checked in debug builds). Boundary nodes and the potential give all they are
+/// asked. Panics on a flux of the wrong shape, a transform that breaks its elements, or a node beyond its class.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
     let World { chem, counts, mesh, store, .. } = w;
     let n = mesh.cells().n();
@@ -159,14 +152,12 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         assert!(keeps_elements(chem, &t.dmol, &mut sums), "a transform that does not keep its elements: {t:?}");
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
-    // The heat of the nodes that give all they are asked is what a whole history gave (the sun's is all the light the
-    // world got): their changes are summed apart and added once at the end, so the many small changes of a call keep
-    // their size instead of rounding away against that sum.
+    // The heat of the boundary nodes and the potential is a whole history's sum: their changes are summed apart and added
+    // once, so small changes do not round away against it.
     let (mut far_heat, mut far_lift) = ([0.0; BOUNDARIES], [0.0]);
     let mut books: Vec<&mut [f64]> = store.amounts.iter_mut().zip(&mut store.heat).flat_map(|(a, h)| [&mut a[..], &mut h[..]]).collect();
     (books[2 * Class::Boundary as usize + 1], books[2 * Class::Potential as usize + 1]) = (&mut far_heat, &mut far_lift);
-    // Each number of a node that falls below zero on the way: those that end there are among them. A column books into
-    // its one or two arrays.
+    // Each number that falls below zero on the way (those that end there are among them).
     let mut low = Vec::new();
     each_change(&cx, (fluxes, &lifted), moves, transforms, |change| match change {
         Change::One(s, d) => add(&mut books[s.arr][s.at], s, d, &mut low),

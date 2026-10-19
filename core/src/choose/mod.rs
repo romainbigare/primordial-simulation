@@ -1,12 +1,6 @@
-//! Law 5: Choose. A body perceives a little of itself, what it holds, its memory, its cell, the cells around it in 8
-//! directions (as far as its sight), up to a few other bodies in or next to its cell (their looks, signals and
-//! well-being, and how past dealings with them went; walls and cover hide them) and up to 3 parts in its cell. How much
-//! it remembers, sees and thinks is set by genes, and each costs energy per decision (`Lineage::cost`). Its brain (its
-//! lineage's base and its own rows) scores every action; one is drawn by those scores, and the body emits a signal and
-//! writes its memory. Actions are physical: move (`go`), take from the ground or a body, put to the ground or give
-//! to a body (`feed`), watch a body (`learn::watch`), rest, and the actions of Bond. Each costs energy paid by the body's
-//! own reactions; if it cannot pay, it fails. At its next decision the brain learns from the change of the body's own
-//! well-being (`learn`).
+//! Law 5: Choose. A body perceives a little (`perceive`), its brain scores the actions and one is drawn, and it acts:
+//! move (`go`), take, put or give (`feed`), watch (`learn::watch`), rest, or Bond's actions; at its next decision it
+//! learns from the change of its well-being (`learn`). Laws.md 5.
 
 mod feed;
 mod go;
@@ -36,8 +30,8 @@ const OPTS: usize = FIXED + MOVES + VERBS * MAX_SEEN + OVERBS * PARTS;
 /// The first option toward a perceived body, and toward a perceived part.
 const TO_BODY: usize = FIXED + MOVES;
 const TO_PART: usize = TO_BODY + VERBS * MAX_SEEN;
-/// Inputs of a brain besides two per substance (its stores, the cell's loose amounts) and its memory: the eight numbers
-/// of its own state, its cell and the season, the signals heard, and what Bond senses (`bond::sense`).
+/// Inputs of a brain besides two per substance and its memory: its own state, its cell and the season, the signals
+/// heard, and what Bond senses.
 pub(crate) const INPUTS: usize = 8 + SIG + bond::SENSE;
 
 /// Working memory of `act`, kept from body to body.
@@ -51,9 +45,7 @@ pub struct ActTmp {
     pub sector: Vec<Sector>,
 }
 
-/// One decision: what the body perceives (bodies, with whether each is in its cell; parts; the room it is in and the
-/// part it holds), its options (the score of each, the cell each move goes to, the features of each body and part), the
-/// chance of each and the action drawn.
+/// One decision: what the body perceives, its options with their scores and features, their chances and the action drawn.
 struct Choice {
     seen: [(usize, bool); MAX_SEEN],
     nseen: usize,
@@ -69,9 +61,8 @@ struct Choice {
     a: usize,
 }
 
-/// A body's decision at its update: it perceives (`perceive`, `inputs`), its brain thinks and learns from the last
-/// decision (`learn`), scores its options (`options`), draws one (`pick`), keeps the trace for learning and emits its
-/// signal (`trace`), and acts (`dispatch`).
+/// A body's decision at its update: perceive, think and learn from the last decision, score the options, draw one,
+/// keep the trace and emit the signal, act.
 pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
@@ -89,7 +80,6 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     inputs(w, b, lived, temp, &c, &mut t.input);
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
-    // (Its stores are as `live` left them: its volume is at `temp`.)
     options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n(), sight), &mut c, t);
     pick(w, &mut c, &mut rng);
     let form = trace(w, b, s, &c, t, &mut rng);
@@ -97,11 +87,9 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     dispatch(w, slot, b, &c, form, &mut rng);
 }
 
-/// The score of each option: the fixed actions, a move to each neighbour (each direction's features are the weighted
-/// mean over the cells it sees that way), each verb toward each perceived body and part. Letting go needs something
-/// held or walls around; joining to the ground, a held part. A node does the actions of Bond through one member split
-/// off (`dispatch`): with less than two members it has none to spare. `pm` is the mass of a member, kg, and `vol` its
-/// volume, m³.
+/// The score of each option: the fixed actions, a move to each neighbour (by the weighted mean of the cells it sees
+/// that way), each verb toward each perceived body and part. A node needs two members to spare one for Bond. `pm`: a
+/// member's mass, kg; `vol`: its volume, m³.
 fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c: &mut Choice, t: &mut ActTmp) {
     let (i, ns, out, env) = (b.cell as usize, w.chem.ns(), &t.thought.out, w.life.env[b.cell as usize]);
     c.logit[..FIXED].copy_from_slice(&out[..FIXED]);
@@ -164,8 +152,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol, sight): (f64, f64, usize), c
     }
 }
 
-/// Draw one action by its score (a softmax); with no option open at all, rest. Copying is not among them: a body makes
-/// children only from its brood (`copy::copy`), so no brain bias sets how often anything is born.
+/// Draw one action by its score (a softmax); with no option open, rest.
 fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
     let top = c.logit.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     if top == f32::NEG_INFINITY {
@@ -186,10 +173,8 @@ fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
 }
 
 /// The trace of the decision for learning: the hidden layer, and per learned row how its output moves the log-chance of
-/// what was done and of the signal. For the values drawn around a mean (signal, shape) that is the natural gradient
-/// (times the spread squared), so their noise does not use up the step allowed to the actions. Then the signal and the
-/// shape of a part made (elongation, hollowness), drawn around the brain's means, and the next memory. Returns the
-/// shape.
+/// what was done (for the signal and shape the natural gradient, so their noise does not use up the step). Then the
+/// signal, the shape of a part made and the next memory. Returns the shape.
 fn trace(w: &World, b: &mut Body, s: Shape, c: &Choice, t: &ActTmp, rng: &mut Rng) -> [f32; FORM_OUT] {
     let (l, nh, learning, out) = (s.learned(), s.h, b.learn_rate() > 0.0 && !w.cfg.null, &t.thought.out);
     let (a, p) = (c.a, &c.p);
@@ -243,9 +228,8 @@ fn trace(w: &World, b: &mut Body, s: Shape, c: &Choice, t: &ActTmp, rng: &mut Rn
     form
 }
 
-/// Do the action drawn. A node does an action of Bond through one member, split off as an individual that acts
-/// (`nodes::one`). If it then holds or is inside something it lives on as one (`nodes::crowd` never merges it); else it
-/// has no reason to stay apart and goes back into the node at once, with what it got.
+/// Do the action drawn. A node does an action of Bond through one member split off (`nodes::one`), who lives on alone if
+/// it then holds or is inside something, else goes back at once with what it got.
 fn dispatch(w: &mut World, slot: usize, node: &mut Body, c: &Choice, form: [f32; FORM_OUT], rng: &mut Rng) {
     let a = c.a;
     let (me, mut one) = if node.n() > 1.0 && ((FORM..FIXED).contains(&a) || a >= TO_PART) {

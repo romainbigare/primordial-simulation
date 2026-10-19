@@ -1,4 +1,4 @@
-//! The shared maths of the laws: solvers that read only their inputs (plan 5.2).
+//! The shared maths of the laws: solvers that read only their inputs and never touch `World`.
 
 pub mod band;
 pub mod downhill;

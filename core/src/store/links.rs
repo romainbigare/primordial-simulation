@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Links {
-    /// Ground cleared of bodies along each link, m²: movers pushing through bodies raise it (`lanes::clear`), cover
-    /// growing back lowers it (`lanes::regrow`).
+    /// Ground cleared of bodies along each link, m² (`lanes::clear`, `lanes::regrow`).
     pub cleared: Vec<f32>,
 }
 

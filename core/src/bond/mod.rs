@@ -1,27 +1,7 @@
-//! Law 3: Bond. Nodes can be joined; joins break when pushed too hard.
-//!
-//! Parts (made objects) are nodes of the store (`store::Class::Part`, with a stable id of slot and generation, `id`): solid
-//! walls, the liquid held in their hollow, heat, a size (3 numbers, longest first) and a hollowness. A part lies in a
-//! cell, or is held by a body (a body–part bond). Bonds are links (`Bonds`) that join two parts, or a part and the
-//! bonded ground of its cell; their strength (N) comes from the weaker material at the joint and the contact area. A
-//! structure is the parts joined by bonds; it moves as one.
-//!
-//! Once a month each part takes its cell's temperature and reacts with the air (Change), and each
-//! structure is loaded: a bond carries the weight hanging on it from the anchored part (or the
-//! held one), less what the liquid around holds up, plus the push of moving liquid and of bodies
-//! moving through the cell. A bond loaded beyond its strength breaks; what is left without
-//! support lies on the ground. A body–part bond is as strong as the weight the holder bears by
-//! its own force (`bears`): a body takes hold of a part only if that bears the weight of the
-//! part's structure, and lets go when it no longer does. A structure the liquid holds up floats
-//! and drifts down the liquid's slope. A structure whose walls close around a space has an
-//! inside, joined to its cell by one link (`Enclosure`): heat passes it through the walls, by their material and
-//! thickness, and through the openings; light and rain pass only through the openings. A body in it exchanges with the
-//! outside only through its share of that link, in series with its own surface. The inside holds almost no heat, so it
-//! is no node of its own: the series is solved in closed form.
-//!
-//! Here: parts, structures and the graph of bonds. `bonds`: the bonds and the enclosure. `verbs`: what bodies do to
-//! parts. `sense`: what bodies perceive of them and what they give a body. `month`: the monthly heat, reactions, loads
-//! and drift.
+//! Law 3: Bond. Parts are nodes of the store (`Class::Part`) that bonds join into structures; a bond breaks when its
+//! load passes its strength (laws.md 3). Here: parts, structures and their graph; `bonds`: the bonds and the enclosure;
+//! `verbs`: what bodies do to parts; `sense`: what parts give a body; `month`: the monthly heat, reactions, loads and
+//! drift.
 
 mod bonds;
 mod month;
@@ -45,8 +25,7 @@ use serde::{Deserialize, Serialize};
 /// Held by no body; the bonded ground (as the other end of a bond).
 pub const NOBODY: u64 = u64::MAX;
 pub const GROUND: u32 = u32::MAX;
-/// Bond kinds (the value of bond events): body–part, part–part, part–ground; a break by load
-/// adds `LOAD`.
+/// Bond kinds (the value of bond events): body–part, part–part, part–ground; a break by load adds `LOAD`.
 pub(crate) const HELD: f64 = 0.0;
 pub(crate) const JOINED: f64 = 1.0;
 pub(crate) const ANCHORED: f64 = 2.0;
@@ -64,7 +43,7 @@ const BOX_FACES: f64 = 6.0;
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Part {
     pub alive: bool,
-    /// The generation of the part in its slot (its id is the slot and this, `id`): a freed slot's moves on
+    /// The generation of the part in its slot (its id is the slot and this): a freed slot's moves on
     pub gen: u32,
     /// The cell it lies in
     pub cell: u32,
@@ -171,8 +150,7 @@ impl Part {
     }
 }
 
-/// Size of a part with wall volume `v`, longest first: elongation `x` (-1 flat .. 1 long, an
-/// aspect of up to 100), hollowness `h`.
+/// Size of a part with wall volume `v`, longest first: elongation `x` (-1 flat .. 1 long), hollowness `h`.
 fn dims(v: f64, x: f32, h: f32) -> [f32; 3] {
     let (r, vo) = (10f64.powf(ASPECT_DECADES * x.abs() as f64), v / (1.0 - h as f64));
     if x >= 0.0 {
@@ -210,8 +188,7 @@ fn members(w: &World, r: usize) -> Vec<usize> {
     w.parts.at[cell(w, r)].iter().map(|&x| x as usize).filter(|&x| w.parts.parts[x].root as usize == r).collect()
 }
 
-/// Place part `p` in cell `i`, as a new node: in the slot freed last (its generation moved on when it was freed, so an
-/// old id names nothing), or in a new slot at the end.
+/// Place part `p` in cell `i`, in the slot freed last (whose generation moved on, so an old id names nothing) or a new one.
 fn add(w: &mut World, mut p: Part, i: usize) -> usize {
     let x = free_place(&mut w.parts.parts, &mut w.parts.free);
     (p.alive, p.root, p.gen, p.cell) = (true, x as u32, w.parts.parts[x].gen, i as u32);
@@ -242,15 +219,13 @@ fn event(w: &mut World, made: bool, i: usize, kind: f64) {
     w.events.push(Event { day, kind: what, node: i as u32, value: kind });
 }
 
-/// Strength of a bond, N, between materials of bond strength `a` and `b` (0..1) over a contact of `area` m²: the
-/// weaker one's.
+/// Strength of a bond, N, between materials of bond strength `a` and `b` over `area` m²: the weaker one's.
 fn strength(w: &World, a: f64, b: f64, area: f64) -> f64 {
     a.min(b) * w.cfg.phys.tensile * w.cfg.phys.joint * area
 }
 
-/// Find the structure of part `p` again, and its numbers. Plates close a box as wide as the
-/// longest part (five faces when the ground is the sixth); a hollow part closes its own hollow.
-/// The structure takes the larger of the two spaces, and its enclosure.
+/// Find the structure of part `p` again, and its numbers. Plates close a box as wide as the longest part (the ground
+/// may be its sixth face); a hollow part closes its own hollow; the structure takes the larger space and its enclosure.
 fn restructure(w: &mut World, p: usize) {
     let mut list = vec![p];
     let mut q = 0;
@@ -281,8 +256,7 @@ fn restructure(w: &mut World, p: usize) {
     let need = if s.anchored { BOX_FACES - 1.0 } else { BOX_FACES } * l * l;
     let plates = if list.len() > 1 { (foot / need).min(1.0) } else { 0.0 };
     let (e, space) = if plates * l.powi(3) > best.1 { (plates, plates * l.powi(3)) } else { best };
-    // The walls pass the share they close; the openings pass `leak` W/(m² K) over their share of the faces of a cube of
-    // that space.
+    // The walls pass the share they close; the openings `leak` over the rest of the faces of a cube of that space.
     let g = e * cond + crate::math::cube_area(w.cfg.phys.leak * (1.0 - e), space);
     (s.space, s.encl) = (space, Enclosure { closed: e as f32, g });
     let root = *list.iter().min().expect("one part");

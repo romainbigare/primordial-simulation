@@ -1,16 +1,11 @@
 //! Band: one implicit step of amounts carried along links, solved directly. Link `l` carries `fwd[l] x'[a] - back[l]
-//! x'[b]` from its node `a` to its node `b` over the step, where `x'` are the amounts after it; the step solves
-//! (I + L) x' = x for the amounts before, `x`: backward Euler, stable for any coefficients (Patankar 1980, ch. 5). A
-//! caller adds what else each row holds: the slope of what a node exchanges with others, for a Newton step, and the
-//! coupling of fields solved together (several unknowns per node, side by side). What leaves a node enters another, so
-//! each column of the transport sums to 1 and a transport alone is diagonally dominant by columns, where Gaussian
-//! elimination swaps no rows (Wilkinson 1961); the slopes a caller adds may take that away, so the elimination swaps up
-//! the largest entry of each column (partial pivoting, Press et al. 2007, 2.4). The unknowns are taken in their order:
-//! the band reaches as far from the diagonal as the farthest pair of a link (on the square map one row of nodes, times
-//! the fields), and the elimination costs unknowns times the band squared.
+//! x'[b]` over the step, `x'` the amounts after it: (I + L) x' = x, backward Euler, stable for any coefficients
+//! (Patankar 1980, ch. 5). A caller may add slopes (a Newton step) and couple fields. A transport alone is dominant by
+//! columns, where elimination swaps no rows (Wilkinson 1961); with slopes it pivots (Press et al. 2007, 2.4). The band
+//! is the farthest pair of a link; the cost is unknowns times the band squared.
 
-/// A banded system: per row, the entries from `w` left of the diagonal to `2 w` right of it (room for the rows swapped
-/// up by pivoting); once factored, its factors, the row each step swapped with, and how far right each row reaches.
+/// A banded system: per row the entries from `w` left of the diagonal to `2 w` right (room for pivoting); once factored,
+/// its factors, the swaps and how far right each row reaches.
 #[derive(Clone, Debug, Default)]
 pub struct Band {
     w: usize,
@@ -19,8 +14,7 @@ pub struct Band {
     last: Vec<usize>,
 }
 
-/// Coefficients of a transport over a step (dimensionless, at least 0), per link from `a` to `b`: it carries `fwd x'[a]
-/// - back x'[b]`.
+/// Coefficients of a transport over a step (at least 0), per link: it carries `fwd x'[a] - back x'[b]` from `a` to `b`.
 pub struct Carry<'a> {
     pub a: &'a [u32],
     pub b: &'a [u32],
@@ -63,8 +57,7 @@ impl Band {
             self.add(p, q, -back);
         }
     }
-    /// Factor the system in place: LU with partial pivoting, each step swapping up the row of the largest entry in its
-    /// column (a system dominant by its diagonal swaps none).
+    /// Factor the system in place: LU with partial pivoting.
     pub fn factor(&mut self) {
         let (w, n) = (self.w, self.last.len());
         self.swap = (0..n).collect();
@@ -117,8 +110,7 @@ pub fn reach(c: &Carry) -> usize {
     c.a.iter().zip(c.b).map(|(&p, &q)| p.abs_diff(q) as usize).max().unwrap_or(0)
 }
 
-/// What each link of `c` carries over the step from the amounts after it, `x` (+ from `a` to `b`), into `flux`; `x`
-/// holds `fields` unknowns per node, and the flux is of field `f`.
+/// What each link of `c` carries of field `f` over the step from the amounts after it, `x`, into `flux`.
 pub fn fluxes(c: &Carry, x: &[f64], (fields, f): (usize, usize), flux: &mut [f64]) {
     for (l, v) in flux.iter_mut().enumerate() {
         *v = c.fwd[l] * x[c.a[l] as usize * fields + f] - c.back[l] * x[c.b[l] as usize * fields + f];

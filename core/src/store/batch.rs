@@ -3,9 +3,8 @@
 use super::moves::LinkFlux;
 use super::nodes::Class;
 
-/// What crosses links between nodes of two classes, gathered link by link: per link its two ends, the mol of each
-/// substance of `ks` (+ from `a` to `b`) and the heat that leaves `a`, J. A batch from the potential's one node is the
-/// heat that falls give nodes from the world's potential energy, and that lifts take (`falls`).
+/// What crosses links between nodes of two classes, gathered link by link: ends, mol of each of `ks` (+ from `a` to
+/// `b`) and the heat leaving `a`, J. A batch from the potential is the heat falls give and lifts take (`falls`).
 #[derive(Clone, Debug)]
 pub struct Batch {
     class: [Class; 2],

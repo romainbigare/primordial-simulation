@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum EventKind {
     /// Substance `k` has a non-zero amount somewhere for the first time
     FirstSubstance(u16),
-    /// Members born (value), the starting kind the parent descends from (`Lineage::root`; only a label for tallies;
-    /// `u32::MAX` if none), and whether they had two parents (a partner, `copy::copy`)
+    /// Members born (value), the parent's starting kind (a label; `u32::MAX` if none), and whether they had two parents
     Born { root: u32, mixed: bool },
     /// Members died (value) of `cause`, the highest speed-up (log10) of any light reaction in their genes, and their
     /// starting kind (a label, as for `Born`)
@@ -16,9 +15,8 @@ pub enum EventKind {
     Watched { by: u64, of: u64 },
     /// Body `from` put stores into body `to` (value: kg)
     Gave { from: u64, to: u64 },
-    /// Body `by` took from body `from` (`u64::MAX`: from the ground); value: kg taken. `burn` is
-    /// the part of it that `by`'s own reactions can burn; `cat` the highest speed-up (log10) of
-    /// any light reaction in the genes of the taker and of the one taken from (0 for ground)
+    /// Body `by` took kg from body `from` (`u64::MAX`: the ground); `burn` the part `by` can burn; `cat` the highest
+    /// light-reaction speed-up (log10) of taker and taken (0 for ground)
     Took { by: u64, from: u64, burn: f32, cat: [f32; 2] },
     BondMade,
     BondBroken,

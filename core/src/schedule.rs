@@ -1,16 +1,5 @@
-//! The order of the laws, as processes of the clock (`clock`): each runs on its own period, and at one time they run
-//! in the order of `processes`, written once here.
-//!
-//! 1. `survey::survey`, every `Config::phys_days` days: what each cell holds, its cover, light and heat set aside for
-//!    its bodies; once a month the merge of alike nodes and each cell's surroundings.
-//! 2. Flow (`flow`): the state of ground and air every `phys_days` (what the other laws read of it), liquid and
-//!    drainage every `flow_days`, the air's step (radiation, evaporation, rain and wind) every `air_hours`, heat through
-//!    the ground and creep every `flow::CREEP_YEARS` years, and the slow ground rechecked every `flow::REFRESH_MONTHS`
-//!    months.
-//! 3. `change::step`, every `phys_days` days: the reactions of ground and air nodes.
-//!
-//! On the first day of the month `bond::step` (parts and structures), and every day `survey::day`
-//! (the bodies whose update is due: their physics, decisions and copying).
+//! The order of the laws, as processes of the clock: each runs on its own period, and at one time they run in the
+//! order of `processes`, written once here (laws.md 0).
 
 use crate::clock::{self, Every};
 use crate::params::Config;
@@ -36,8 +25,7 @@ pub fn step(w: &mut World) {
     step_marked(w, &mut |_| {});
 }
 
-/// After a stage: `mark(stage)`; and, in debug builds only, stop at the first stage that leaves the world broken
-/// (the yearly check of the shell comes too late to say which stage did it, `what`). Release builds skip the check.
+/// After a stage: `mark(stage)`; in debug builds, stop at the first stage that leaves the world broken.
 #[inline]
 fn after(w: &World, stage: Stage, what: &str, mark: &mut dyn FnMut(Stage)) {
     mark(stage);
@@ -58,13 +46,10 @@ pub fn day(w: &mut World) {
     run_for(w, w.cfg.calendar().day, &mut |_| {});
 }
 
-/// What a process is at one time: the stage it belongs to, its name (for the debug check, `after`), and what it does,
-/// given the seconds its run stands for.
+/// A process: its stage, its name (for the debug check) and what it does for the seconds its run stands for.
 type Run = (Stage, &'static str, fn(&mut World, u64));
 
-/// The periods of the world's processes, each counted from the start of the longer period that holds it (`Every`):
-/// the survey and the reactions every `phys_days` days of the month (the last span cut to the month's end), and each
-/// part of Flow on its own period in the month; Bond every month, the bodies every day.
+/// The periods of the world's processes, each counted from the start of the longer period that holds it (`Every`).
 struct Periods {
     physics: Every,
     air: Every,
@@ -93,8 +78,7 @@ impl Periods {
     }
 }
 
-/// The processes of the world in their fixed order at one time. Flow's state comes first: the other parts of Flow and
-/// the other laws read it until the next physics step.
+/// The processes of the world in their fixed order at one time; Flow's state comes first, as the others read it.
 fn processes(w: &World) -> [(Every, Run); 9] {
     let p = Periods::of(&w.cfg);
     [

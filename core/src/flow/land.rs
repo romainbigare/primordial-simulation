@@ -1,6 +1,5 @@
-//! Ground nodes: their heat capacity and temperature on the melting plateaus (`ground_state`),
-//! the phase of each substance, the surface and heads, what matter brings into a node, and heat
-//! conducted sideways between nodes (`conduct`).
+//! Ground nodes: heat capacity and temperature on the melting plateaus (`ground_state`), phases, the surface and
+//! heads, and heat conducted sideways (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
 use crate::solve::spread::Net;
@@ -33,8 +32,7 @@ pub(super) fn wet(s: &Scratch, k: usize, i: usize) -> f64 {
     if s.state.tg[i] < s.sp[k].boil { molten(s, k, i) } else { 0.0 }
 }
 
-/// Rise of the solid surface and of the head of a ground node at `t` for `m` mol of a
-/// substance, molten there or not (negative `m`: fall).
+/// Rise of the solid surface and of the head of a ground node for `m` mol of a substance (negative: fall).
 #[inline]
 pub(super) fn rise(p: &Sp, t: f64, liq: bool, m: f64, area: f64) -> [f64; 2] {
     if t >= p.boil {
@@ -63,8 +61,7 @@ pub(super) fn settle(s: &mut Scratch, k: usize, i: usize, m: f64, area: f64) {
 }
 
 impl Scratch {
-    /// Ground node `i`, of `area` m², gained `m` mol of `k` (negative `m`: lost): its heat capacity, the fusion enthalpy
-    /// it holds there (`fusion`), and the rise of the surface.
+    /// Ground node `i` gained `m` mol of `k` (negative: lost): its heat capacity, fusion enthalpy and surface follow.
     #[inline]
     pub(super) fn note(&mut self, k: usize, i: usize, m: f64, area: f64) {
         self.hold(k, i, m);
@@ -76,8 +73,7 @@ impl Scratch {
         self.cap[i] += m * self.sp[k].cp;
         self.latent[i].held += self.fusion(k, i, m);
     }
-    /// Fusion enthalpy `m` mol of `k` hold in ground node `i`, J: theirs where `k` is molten there,
-    /// none where it is solid or on its plateau (whose molten share `phi` holds its own).
+    /// Fusion enthalpy `m` mol of `k` hold in ground node `i`, J: none where `k` is solid or on its plateau.
     #[inline]
     pub(super) fn fusion(&self, k: usize, i: usize, m: f64) -> f64 {
         if self.state.pk[i] != k && melted(self, k, i) { m * self.sp[k].lf } else { 0.0 }
@@ -90,19 +86,16 @@ pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
     w.store.amounts(Class::Ground)[k * w.mesh.cells().n() + i] * (1.0 - molten(s, k, i))
 }
 
-/// Temperature of ground node `i` now, K, no warmer than at the last `ground_state` (`tg`):
-/// earlier radiation and evaporation in this call may have cooled it, and liquid from above
-/// mixes in at its own temperature.
+/// Temperature of ground node `i` now, K, no warmer than at the last `ground_state`.
 #[inline]
 pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
     s.state.tg[i].min((w.store.heat(Class::Ground)[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR)
 }
 
-/// Heat capacity, temperature, surface, head and reflectance of every ground node. Between full
-/// steps only nodes whose phases change (on or off a melting plateau, past a melting point) get a new surface.
+/// Heat capacity, temperature, surface, head and reflectance of every ground node; between full steps only nodes whose
+/// phases change get a new surface.
 pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
-    // Heat capacity from the amounts now, at every step, as `World::heat_cap_ground` sums it: bodies and Law 2 move loose
-    // matter (with its heat) between liquid steps, liquid wears the bed and bodies dig it, and a stale capacity would read a
+    // Heat capacity from the amounts now: other laws move matter between liquid steps, and a stale capacity would read a
     // node far too hot or cold.
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
     for (i, skin) in s.skin.iter_mut().enumerate() {
@@ -115,8 +108,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             *c += a * cp;
         }
     }
-    // Temperature on the melting plateaus (`ground::melting`): each substance melts at its melting point in the node,
-    // lowered by what is dissolved in its liquid (`World::melt`), in the order of those.
+    // Temperature on the melting plateaus (`ground::melting`), each at its point lowered by what is dissolved (laws.md 2.5).
     let mut ord = [(0.0, 0); MAX_SUBSTANCES];
     let mix: Vec<Option<Vec<_>>> = s.state.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect();
     for (i, &ci) in cap.iter().enumerate().take(n) {
@@ -142,17 +134,13 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     }
 }
 
-/// Heat conducts sideways through the active layer of the ground over `dt` seconds: one backward-Euler step on the cell
-/// level's links (`solve::spread`), booked as heat-only link fluxes (`store::apply`). The potential is each node's
-/// temperature of the last `ground_state` and its capacity the heat capacity `cap`. A node on a melting plateau holds
-/// its temperature in truth, so within the step it is given its share as if it warmed; the books are the fluxes, and
-/// the next `ground_state` sets each node's temperature from its energy, plateaus included. A link passes the harmonic
-/// mean of its nodes' conductivity times thickness (two half cells in series, Patankar 1980, 4.2) times its width
-/// over its length: a corner-only diagonal (width 0) passes nothing and is left out.
+/// Heat conducts sideways through the ground's active layer over `dt` seconds: one backward-Euler step of
+/// `solve::spread` on the cells' links, booked as heat-only link fluxes. A link passes the harmonic mean of its nodes'
+/// conductivity × thickness (two half cells in series, Patankar 1980, 4.2) times width over length. A node on a plateau
+/// takes its share as if it warmed; the next `ground_state` sets its temperature from its energy.
 pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, cells) = (w.mesh.cells().n(), w.mesh.cells());
-    // Conductivity times thickness of each node's active layer, W/K: the skin of its bed and the solid and liquid
-    // of its loose ground, side by side.
+    // Conductivity × thickness of each node's active layer, W/K: its bed's skin and its loose ground side by side.
     let mut kt: Vec<f64> = s.state.bed.iter().map(|b| b.cond * w.cfg.skin_m).collect();
     for &k in &s.state.loose {
         let p = s.sp[k];
@@ -179,10 +167,8 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
     apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[], &[]);
 }
 
-/// Solid surface, head, heat resistance of the soft cover and reflectance of node `i`, from
-/// the volume and volume × reflectance of its layers [soft solid, liquid, loose solid], top
-/// down: each covers a share depth / (depth + `hide`) of what lies below. A solid is soft over
-/// `soft` times its melting point. The pores of the solids hold the first liquid (`pd`).
+/// Solid surface, head, soft cover's heat resistance and reflectance of node `i` from its layers [soft solid, liquid,
+/// loose solid], top down: each covers depth / (depth + `hide`) of what lies below; the pores hold the first liquid.
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     let (n, area, t) = (w.mesh.cells().n(), w.mesh.cells().area()[i], s.state.tg[i]);
     let mut l = [0.0, 0.0, 0.0, 0.0, s.state.fix[i][0], s.state.fix[i][1]];
@@ -215,15 +201,14 @@ pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     s.pd[i] = w.cfg.phys.porosity * (l[0] + l[4]) / area;
 }
 
-/// Head of the liquid that stands on node `i` (the solid surface when none does), m: the liquid
-/// over what the pores hold.
+/// Head of the liquid that stands on node `i` over what its pores hold (the solid surface when none does), m.
 #[inline]
 pub(super) fn stand(s: &Scratch, i: usize) -> f64 {
     (s.head[i] - s.pd[i]).max(s.z[i])
 }
 
-/// Head of the liquid table of node `i`, m (Darcy's law reads it): in a node whose pores are not
-/// full, the bottom of its loose ground plus the depth they fill; else the head that stands.
+/// Head of the liquid table of node `i`, m: with pores not full, the bottom of its loose ground plus the depth they
+/// fill; else the head that stands.
 #[inline]
 pub(super) fn table(s: &Scratch, i: usize, por: f64) -> f64 {
     let full = s.head[i] - s.z[i] >= s.pd[i];

@@ -19,15 +19,14 @@ const SAT_EXACT: usize = 64;
 const SAT_MARGIN: f64 = 1.0;
 const SAT_LOWEST: f64 = 1.0;
 
-/// Saturation pressure of one substance, tabulated every `SAT_STEP` from `SAT_LOWEST`, Pa. Each entry depends only on
-/// its place, so a table built again further up holds the same numbers, and it is kept between calls (`Scratch::sat`).
+/// Saturation pressure of one substance, tabulated every `SAT_STEP` from `SAT_LOWEST`, Pa; each entry depends only on
+/// its place, so a table rebuilt further up holds the same numbers.
 #[derive(Clone, Debug, Default)]
 pub(in crate::flow) struct Sat(Vec<f64>);
 
 impl Sat {
-    /// Reaches `hi` + `SAT_MARGIN` K at least, for substance `k` (built again further up when it does not): exact every
-    /// `SAT_EXACT` entries; between, each from the last by their ratio, exp(b (1/t' - 1/t)), summed to its fifth term
-    /// (ln p is linear in 1/t).
+    /// Reaches `hi` + `SAT_MARGIN` K at least for substance `k`: exact every `SAT_EXACT` entries, between each from the
+    /// last by their ratio exp(b (1/t' - 1/t)), to its fifth term (ln p is linear in 1/t).
     pub(super) fn fit(&mut self, chem: &Chemistry, k: usize, hi: f64) {
         let len = ((hi + SAT_MARGIN - SAT_LOWEST) * SAT_PER_K) as usize + 2;
         if self.0.len() >= len {
@@ -55,10 +54,8 @@ impl Sat {
     }
 }
 
-/// What evaporates over `dt` seconds from ground that holds `a` mol of a substance and gets `r` mol more as rain, evenly
-/// over the step: `e` mol/s while the ground is wet, holding `wet` mol or more (liquid stands on it, or its loose ground
-/// holds its field capacity or more: stage 1), and in proportion to what it holds below that (stage 2: the bucket of
-/// Manabe 1969), integrated exactly over the step. Never more than it holds and gets.
+/// What evaporates over `dt` seconds from ground holding `a` mol that gets `r` mol of rain evenly: `e` mol/s while it
+/// holds `wet` mol or more, in proportion below that (the bucket of Manabe 1969), integrated exactly over the step.
 fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> f64 {
     let rate = r / dt;
     if e <= 0.0 {
@@ -85,8 +82,7 @@ fn bucket(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> f64 {
 /// The slope of what evaporates with the open rate is taken over this share of it, where the ground dries in the step.
 const NUDGE: f64 = 1e-6;
 
-/// `bucket` and its slope with the open rate `e`, mol per mol/s: `dt` where the ground stays wet through the step (and
-/// gives no more than it holds and gets), else over a nudge of `e`.
+/// `bucket` and its slope with the open rate `e`: `dt` where the ground stays wet through the step, else over a nudge.
 pub(super) fn bucket_slope(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f64) {
     if e > 0.0 && a > wet && a - wet >= (e - r / dt) * dt && e * dt <= a + r {
         return (e * dt, dt);
@@ -95,18 +91,15 @@ pub(super) fn bucket_slope(a: f64, r: f64, e: f64, wet: f64, dt: f64) -> (f64, f
     (m, (bucket(a, r, e * (1.0 + NUDGE), wet, dt) - m) / (e * NUDGE))
 }
 
-/// The share of the sky the droplets of the air cover where `m` mol condense over `area` m² in `dt` seconds (the faster
-/// a node condenses, the more of its sky it covers: half at the rate `cloud`), times their mean reflectance, `mr / m`
-/// (`mr`: mol × reflectance): condensate in the air scatters sunlight like the powder of its solid.
+/// The cloud's reflectance where `m` mol condense over `area` m² in `dt` seconds: the share of sky covered (half at the
+/// rate `cloud`) times the condensate's mean reflectance `mr / m`, as it scatters sunlight like its powder.
 pub(super) fn cloud(cloud: f64, (m, mr): (f64, f64), area: f64, dt: f64) -> f64 {
     let rate = m / (area * dt);
     if m > 0.0 { rate / (rate + cloud) * mr / m } else { 0.0 }
 }
 
-/// What crosses between ground nodes and their air nodes as gases dissolve, booked at its end in one call
-/// (`Crossing::book`): a link from each ground node that exchanges to its air node, with the mol of each of its gases (+
-/// up into the air) and the heat that leaves the ground with them, J (the air receives it less the latent heat it holds
-/// of them, `store::held`); and the lift of the gas, from each air node's heat into the world's potential energy, J.
+/// What crosses between ground nodes and their air nodes as gases dissolve, booked in one call: a link per ground node
+/// with the mol of each gas (+ up) and the heat that leaves the ground, and the lift of the gas into the potential.
 struct Crossing {
     /// The gases, and the gravity that lifts them, m/s²
     ks: Vec<usize>,
@@ -125,9 +118,8 @@ impl Crossing {
         let links = Batch::new([Class::Ground, Class::Air], &ks.iter().map(|&k| k as u16).collect::<Vec<_>>());
         Crossing { ks, g: w.cfg.gravity, links, lift: vec![0.0; na], left }
     }
-    /// `m` mol of dissolved gas `x` of the crossing go from ground node `i` up into its air node `j` (negative `m`: down)
-    /// with `heat` J that leaves the ground; the state of the ground node follows (`Scratch::hold`; the air's sums are
-    /// worked out again at the end of the air's step, `air::sums`).
+    /// `m` mol of gas `x` go from ground node `i` up into its air node `j` (negative: down) with `heat` J that leaves the
+    /// ground; the ground node's state follows.
     fn cross(&mut self, s: &mut Scratch, x: usize, (i, j): (usize, usize), (m, heat): (f64, f64)) {
         let (na, k) = (self.lift.len(), self.ks[x]);
         self.links.add((i, j), k as u16, (m, heat));
@@ -142,14 +134,9 @@ impl Crossing {
     }
 }
 
-/// Gases that cannot condense on the ground (`henry`: index in `gas`, substance) dissolve in the
-/// liquid standing on each ground node toward the share Henry's law gives (`Chemistry::henry`), and
-/// come out as the liquid warms, thins or freezes or the gas thins. They cross the surface through
-/// the air's film (`evap`, as evaporation) and the liquid's (`dissolve`, over its whole depth: one
-/// mixed layer, a known limit) in series, solved exactly over the step toward the balance of node
-/// and column. Dissolving frees the vaporisation enthalpy into the node (the heat of solution) and
-/// the gas brings its heat; coming out takes them back. Dissolved gas moves with the liquid
-/// (`liquid`), may feed ground reactions (Law 2), and goes back to the air only here.
+/// Gases that cannot condense on the ground (`henry`) dissolve in each ground node's liquid toward Henry's share and
+/// come out as it warms, thins or freezes, through the air's film and the liquid's in series, solved exactly over the
+/// step (laws.md 1.5). Dissolving frees the vaporisation enthalpy into the node; coming out takes it back.
 pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize, usize)], (tmin, tmax): (f64, f64)) {
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let solv = s.liquids(&w.chem, (tmin, tmax), false);
@@ -163,8 +150,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             if l <= 0.0 && a <= 0.0 {
                 continue;
             }
-            // The column over the cell, the height it fills, mol dissolved per mol at balance, and the
-            // time to balance through the two films.
+            // The column over the cell, its height, mol dissolved per mol at balance, and the time to balance.
             let (col, hk) = (lerp(s, &w.store.amounts(Class::Air)[k * na..(k + 1) * na], i) * over_cell(w, s, i), lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
             let b = l * w.chem.henry(k, t, R_GAS * tl / (area * hk));
             let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
@@ -174,8 +160,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             if m == 0.0 {
                 continue;
             }
-            // The gas brings its heat (at the air's temperature, or the ground's when it comes out), and dissolving frees
-            // its fusion and vaporisation enthalpy into the node.
+            // The gas brings its heat (the air's, or the ground's when it comes out) and frees its latent heat in the node.
             let tq = if m > 0.0 { s.ta[j] } else { t };
             pass.cross(s, x, (i, j), (-m, -m * (sp.cp * tq + sp.lf + sp.lv)));
         }

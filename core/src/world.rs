@@ -10,8 +10,7 @@ use crate::store::{Class, Node, Store};
 use crate::{bond, flow};
 use serde::{Deserialize, Serialize};
 
-/// Counts and slow averages for the shell: the laws never read them. The fields not saved (`serde(skip)`) count since
-/// the shell last read them.
+/// Counts and slow averages for the shell; the laws never read them. The fields not saved count since the shell last read them.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Counters {
     /// Members moving into each ground cell, per year (moving average over about a year), and since the last month
@@ -26,8 +25,7 @@ pub struct Counters {
     pub splits: [f64; 2],
     /// Body updates since the start
     pub updates: u64,
-    /// Heat a ground node could not give (it would have fallen below `T_FLOOR`), J: whoever asked received that much
-    /// less, so this is not a loss of energy
+    /// Heat a ground node could not give (below `T_FLOOR`), J: whoever asked got that much less, so no energy is lost
     pub clamped_heat: f64,
     /// What bodies did with parts
     #[serde(skip)]
@@ -53,8 +51,7 @@ pub struct World {
     /// The map of squares the world is laid out on, and the ground cells along a side of the block under each air node
     pub map: Square,
     pub air_scale: usize,
-    /// The shape of the world (`World::mesh_of`): its cells are the ground nodes, the cells of its level `AIR` the air
-    /// nodes. Built from `map` and `air_scale`, so not saved (a loaded world rebuilds it).
+    /// The shape of the world: its cells are the ground nodes, those of level `AIR` the air nodes (built from `map`, not saved)
     #[serde(skip)]
     pub mesh: Mesh,
     /// Seed of every keyed random draw (`rng::Rng`)
@@ -67,11 +64,9 @@ pub struct World {
     pub store: Store,
     /// Elevation of the bottom of the ground column, m
     pub base_z: f64,
-    /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year (`flow::air::book`), for the
-    /// tape
+    /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year, for the tape
     pub rain: Vec<f32>,
-    /// Liquid moved out of each ground cell, mol/s, a moving average over about a year (`flow::liquid`); it pushes parts
-    /// (`bond::load`)
+    /// Liquid moved out of each ground cell, mol/s, a moving average over about a year; it pushes parts (`bond::load`)
     pub liquid_flux: Vec<f32>,
     pub counts: Counters,
     /// Bodies, and the parts they made: the sparse graph
@@ -79,8 +74,7 @@ pub struct World {
     pub parts: bond::Parts,
     /// Light-capture area of the bodies of each cell per ground area (they intercept 1 - exp(-a))
     pub canopy: Vec<f32>,
-    /// Light intercepted in each cell per m² of light-capture area since the start (the mean of
-    /// its bodies: taller members catch more, `survey::shade`), J/m²
+    /// Light intercepted in each cell per m² of light-capture area since the start (its bodies' mean), J/m²
     pub light: Vec<f64>,
     /// Rain fallen on each cell since the start, mol/m² (its bodies catch what fell since their last update)
     pub rained: Vec<f64>,
@@ -103,8 +97,7 @@ pub struct World {
 pub const AIR: usize = 1;
 
 impl World {
-    /// The mesh of `map`, with air nodes over blocks of `air_scale`² squares, its rows spread between the latitudes of
-    /// `cfg`.
+    /// The mesh of `map`, air nodes over blocks of `air_scale`² squares, its rows between the latitudes of `cfg`.
     pub fn mesh_of(map: &Square, air_scale: usize, cfg: &Config) -> Mesh {
         map.mesh(&[air_scale], cfg.lat_south, cfg.lat_north)
     }
@@ -141,8 +134,7 @@ impl World {
     pub fn is_land(&self, i: usize) -> bool {
         self.surface_z(i) > 0.0
     }
-    /// Loose amount of substance `k` in ground node `i`, mol, as the moves of the update running leave it
-    /// (`store::Moves`).
+    /// Loose amount of substance `k` in ground node `i`, mol, as the moves of the update running leave it.
     #[inline]
     pub fn g(&self, k: usize, i: usize) -> f64 {
         self.moves.amount(Node::ground(i), k).unwrap_or_else(|| self.store.amounts(Class::Ground)[k * self.mesh.cells().n() + i])

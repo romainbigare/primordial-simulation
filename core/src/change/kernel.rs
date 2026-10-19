@@ -17,12 +17,11 @@ const MIN_SUB: f64 = 1e-4;
 const MOST_HEAT: f64 = 0.5;
 /// Below this, 1 - exp(-z) is taken as its series to second order (exact to 2e-7 of its value).
 const SERIES_BELOW: f64 = 1e-3;
-/// A gas or liquid input making up less than this share of its phase is a trace: a reaction whose scarcest input is a
-/// trace does not shorten a node's sleep (`Reactor::rest`), as one long span of a first-order decay is exact.
+/// A gas or liquid input under this share of its phase is a trace: a reaction on a trace does not shorten a node's
+/// sleep (`Reactor::rest`), as one long span of a first-order decay is exact.
 const TRACE: f64 = 1e-6;
 
-/// A substance's change whose terms add up to more than this many times it is summed exactly (`Reactor::made`): below,
-/// the rounding of a plain sum of one term for each reaction is within 1e-12 of it.
+/// A substance's change whose terms add up to more than this many times it is summed exactly (`Reactor::made`).
 const CANCEL: f64 = 1e3;
 
 /// The phases by the number of the points a substance is past (melting, boiling).
@@ -45,41 +44,32 @@ pub struct Reactor {
     boil: Vec<f64>,
     /// Phase of each substance at the current temperature (`Phase as usize` indexes the totals of the phases).
     ph: Vec<Phase>,
-    /// Amount of each substance that can react now (the node's plus, for gas, the surrounding gas), and a bit for each
-    /// above 0 (as of the last `phases`).
+    /// Amount of each substance that can react now (for a gas, with the gas around), and a bit for each above 0.
     pub(super) av: Vec<f64>,
     held: u64,
-    /// Effective rate of each reaction in this sub-step, 1/s (0 = idle), and the reactions with all their inputs, in
-    /// order: the others are idle.
+    /// Effective rate of each reaction in this sub-step, 1/s (0 = idle), and the reactions with all their inputs.
     kap: Vec<f64>,
     on: Vec<usize>,
-    /// Limiting input amount of each reaction at the start of the sub-step, in reaction units,
-    /// and the share of it that reacts over the sub-step.
+    /// Limiting input of each reaction at the sub-step's start, in reaction units, and the share of it that reacts.
     lim: Vec<f64>,
     far: Vec<f64>,
     /// The power of what is left of its scarcest input that its rate per unit goes with (`gone`).
     pw: Vec<f64>,
     /// Per reaction: is its scarcest input a trace of its phase (`TRACE`)?
     minor: Vec<bool>,
-    /// At the start of the last `react`: the heat capacity, J/K, and the rate of each reaction
-    /// not driven by light nor on a trace (`minor`), 1/s, with its limiting input in reaction units;
-    /// those reactions, in order.
+    /// At the start of the last `react`: the heat capacity, J/K, and the rate and limit of each reaction not driven by
+    /// light nor on a trace, and those reactions.
     cap0: f64,
     kap0: Vec<f64>,
     lim0: Vec<f64>,
     on0: Vec<usize>,
-    /// Time, s, the liquid standing over the node takes to renew its gas through its film (Flow's
-    /// law, `air::dissolve`); 0: the node touches the gas around it. Its gas is then the gas
-    /// dissolved in the liquid, held where the film and its reactions balance: Henry's share `eq`
-    /// of the gas around it (`Chemistry::henry`) times (1 + made film / eq) / (1 + used film / eq),
-    /// with what its reactions use and make, mol/s, at that share. What they take and give still
-    /// comes from and goes to the gas around it: through the film.
+    /// Time, s, the liquid standing over the node takes to renew its gas through its film; 0: the node touches the gas
+    /// around it. Its gas is then held where film and reactions balance (laws.md 2.3).
     pub film: f64,
     /// Per substance, used and made, mol/s (scratch for `film`).
     flux: Vec<[f64; 2]>,
-    /// Over the last `react`: per reaction, how far it went, in reaction units, and those that went, in order; per
-    /// substance, what they made less what they used of the node's own amounts, mol, and whether they took or gave any
-    /// of it in the gas around it.
+    /// Over the last `react`: how far each reaction went and those that went; per substance, what they made less what
+    /// they used of the node's own amounts, mol, and whether they touched the gas around it.
     done: Vec<f64>,
     ran: Vec<usize>,
     pub(super) own: Vec<f64>,
@@ -99,9 +89,7 @@ fn pow(f: f64, nu: u16) -> f64 {
     }
 }
 
-/// Temperature below which reaction `rx` (catalyst 1) is frozen: it would go no further than `NEGLIGIBLE` over a
-/// year of `year` s, K: Ea / ln z, z its rate constant times the year over `NEGLIGIBLE` (frozen at every temperature
-/// where z is at most 1).
+/// Temperature below which reaction `rx` (catalyst 1) goes no further than `NEGLIGIBLE` over a year of `year` s, K.
 fn frozen_below(rx: &Reaction, year: f64) -> f64 {
     let z = rx.k * year / NEGLIGIBLE;
     if z > 1.0 { rx.ea / z.ln() } else { f64::INFINITY }
@@ -112,8 +100,7 @@ fn terms(rx: &Reaction) -> impl Iterator<Item = (usize, f64)> + '_ {
     rx.inputs.iter().map(|&(k, nu)| (k as usize, -(nu as f64))).chain(rx.outputs.iter().map(|&(k, nu)| (k as usize, nu as f64)))
 }
 
-/// The input that runs out first: its amount per `nu` (reaction units) and its place in `inputs`
-/// (the first of the least). `a` gives the amount of a substance.
+/// The input that runs out first: its amount per `nu` (reaction units) and its place in `inputs`.
 #[inline]
 pub(crate) fn scarce(inputs: &[(u16, u16)], a: impl Fn(usize) -> f64) -> (f64, usize) {
     let (mut lim, mut who) = (f64::MAX, 0);
@@ -136,9 +123,8 @@ fn per(a: f64, nu: u16) -> f64 {
     }
 }
 
-/// The rate of a reaction per unit of `lim` (its scarcest input per `nu`, above 0) before
-/// catalyst · k · exp(−Ea/T): the product of its inputs' shares to their order, times `e / lim`.
-/// `a(k)` is the amount of an input and `whole(k)` that of its phase (its own for a solid).
+/// The rate of a reaction per unit of `lim` before catalyst · k · exp(−Ea/T): its inputs' shares of their phases
+/// (`whole`) to their order, times contact over `lim` (laws.md 2.1).
 #[inline]
 pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: impl Fn(usize) -> f64) -> f64 {
     let (mut x, mut e) = (1.0, f64::MAX);
@@ -149,12 +135,9 @@ pub(crate) fn pace(rx: &Reaction, lim: f64, a: impl Fn(usize) -> f64, whole: imp
     x * e / lim
 }
 
-/// Catalyst factor `f` at `t` of a catalyst that loses its shape above `td` K, over a width of
-/// `wk` K. A catalyst lowers the reaction's barrier (a speed-up `f` is a lowering of ln f × T);
-/// losing its shape loses the lowering, so the share it keeps, 1 / (1 + exp((t − td) / wk)), is
-/// the share of its decades kept: f to that power. Whole below `td`, near 1 a few `wk` above it
-/// whatever its size, and smooth, so a body warming past `td` slows without a jump (with no
-/// width: whole up to `td`, gone above it).
+/// Catalyst factor `f` at `t` of a catalyst that loses its shape above `td` K over a width `wk` K. A speed-up is a
+/// lowered barrier; an unfolded share loses it, so f is kept to the power 1 / (1 + exp((t − td) / wk)): smooth, and
+/// near 1 a few `wk` above `td` whatever its size.
 #[inline]
 pub(crate) fn denature(f: f64, t: f64, td: f64, wk: f64) -> f64 {
     if f <= 1.0 {
@@ -215,10 +198,8 @@ impl Reactor {
         }
     }
 
-    /// The longest the node of the last `react` may wait before it reacts again, s: until a reaction, at its rate at the
-    /// start of that `react`, would go further than a share `far` of its scarcest input (but for one that would use no
-    /// more than `trace` mol), or the heat of them all would change its temperature by more than `dt_k`. Infinite where
-    /// nothing reacts.
+    /// The longest the node of the last `react` may wait before it reacts again, s: until a reaction at its starting rate
+    /// would use a share `far` of its scarcest input (more than `trace` mol), or their heat would move it `dt_k`.
     pub(super) fn rest(&self, far: f64, trace: f64, dt_k: f64) -> f64 {
         let (mut most, mut heat) = (f64::INFINITY, 0.0);
         for &r in &self.on0 {
@@ -229,9 +210,8 @@ impl Reactor {
         most.min(dt_k * self.cap0 / heat)
     }
 
-    /// What the reactions of the last `react` made less what they used of each substance, mol, into `made`, from how far
-    /// each went. Where the terms of one cancel (a pair of reactions that undo each other, fast, beside a slow one) they
-    /// are summed exactly and rounded once (`math::add_times`), so the changes keep every element to rounding.
+    /// What the reactions of the last `react` made less what they used of each substance, mol, into `made`. Terms that
+    /// cancel (a fast pair that undo each other) are summed exactly (`math::add_times`), so every element is kept.
     pub(super) fn made(&mut self, chem: &Chemistry, made: &mut [f64]) {
         self.sums.fill([0.0; 2]);
         for &r in &self.ran {
@@ -252,8 +232,7 @@ impl Reactor {
         }
     }
 
-    /// The rates of the last `phases` under a liquid whose film renews its gas in `film` s: each
-    /// reaction goes with the liquid's share of Henry's of each gas it takes, to its order.
+    /// The rates of the last `phases` under a liquid whose film renews its gas in `film` s.
     fn through_film(&mut self, chem: &Chemistry, tot: &[f64; 3], t: f64) {
         self.flux.fill([0.0; 2]);
         for &r in &self.on {
@@ -280,9 +259,7 @@ impl Reactor {
         pace(rx, lim, |k| self.av[k], |k| if self.ph[k] != Phase::Solid { tot[self.ph[k] as usize] } else { self.av[k] })
     }
 
-    /// Phase and available amount of each substance at `t` (the node's, plus for a gas the gas
-    /// around it), and the total of each phase: in a gas or a liquid the mole fraction is a
-    /// substance's activity; a solid is a phase of its own (activity 1).
+    /// Phase and available amount of each substance at `t`, and the total of each phase (a solid is a phase of its own).
     pub(super) fn phases(&mut self, chem: &Chemistry, n: &[f64], gas: Option<&[f64]>, t: f64) -> [f64; 3] {
         let (mut tot, mut held) = ([0.0; 3], 0);
         for k in 0..n.len() {
@@ -300,17 +277,10 @@ impl Reactor {
         tot
     }
 
-    /// React the amounts `n` of one node for `dt` seconds. Returns the light energy used, J.
-    /// - `gas`: extra amounts of the gas around the node (e.g. its share of the air). Substances that are
-    ///   gas at the node's temperature are drawn from it first, and gas products are put into it.
-    /// - `energy`: thermal energy of the node, J. Its temperature is `energy / (heat_cap + Σ n·cp)`,
-    ///   where `heat_cap` is the fixed part (e.g. bonded ground).
-    /// - `cat`: catalyst factor per reaction, the temperature above which they lose their shape and
-    ///   the width of that, K (`denature`; `None` = 1 for all).
-    /// - `light_j`: absorbed light energy available to light reactions, J.
-    ///
-    /// Elements are exact; thermal energy plus Σ n·hf gains exactly the light used (a share
-    /// `Physics::light_yield` of it stored, the rest as heat).
+    /// React the amounts `n` of one node for `dt` seconds; returns the light used, J. `gas`: the gas around the node
+    /// (gases are drawn from it first, gas products go to it); `energy`: its heat, J, at heat capacity `heat_cap` plus
+    /// its amounts'; `cat`: catalyst factors with their `denature` limits; `light_j`: light available, J. Elements are
+    /// exact; heat plus Σ n·hf gains exactly the light used.
     #[allow(clippy::too_many_arguments)]
     pub fn react(
         &mut self,
@@ -377,7 +347,7 @@ impl Reactor {
                 self.kap[r] = cr * rx.arrhenius(t) * self.pace(rx, lim, tot);
                 self.lim[r] = lim;
                 self.on.push(r);
-                // (In a liquid or a gas that power is its order less 1, as far as it is not most of its phase.)
+                // In a liquid or a gas the power is its order less 1, as far as it is not most of its phase.
                 let k = rx.inputs[q].0 as usize;
                 let share = if self.ph[k] != Phase::Solid { self.av[k] / tot[self.ph[k] as usize] } else { 1.0 };
                 (self.pw[r], self.minor[r]) = ((rx.order(q) as f64 - 1.0) * (1.0 - share), share < TRACE);
@@ -386,9 +356,8 @@ impl Reactor {
         !self.on.is_empty()
     }
 
-    /// The length of sub-step `iter` of the `left` seconds still to go, at heat capacity `c`: all of them, halved while the
-    /// heat of the reactions not driven by light would change the temperature by more than `MAX_DT_K` (but for the last
-    /// sub-step). Sets the share `far` each reaction goes in it, and on the first the rates `kap0` and limits `lim0`.
+    /// The length of sub-step `iter` of the `left` seconds still to go, at heat capacity `c`: halved while the reactions'
+    /// heat would move the temperature more than `MAX_DT_K` (not the last). Sets `far`, and on the first `kap0`, `lim0`.
     fn sub_step(&mut self, left: f64, c: f64, iter: usize) -> f64 {
         let mut heat = 0.0;
         for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
@@ -419,10 +388,8 @@ impl Reactor {
         sub
     }
 
-    /// Run each reaction its share `far` of its scarcest input, one after the other, each limited by what is left, so
-    /// nothing goes negative: inputs from the node (a gas from the `pool` around it first), outputs to it (a gas to the
-    /// pool), noted in `done`, `own` and `pooled`; its heat to or from `energy`, and the light a light-driven one stores
-    /// from `light`.
+    /// Run each reaction its share `far` of its scarcest input, one after the other, each limited by what is left (a gas
+    /// from the `pool` around first, gas products to it), its heat to or from `energy`, stored light from `light`.
     fn apply(&mut self, chem: &Chemistry, n: &mut [f64], pool: &mut [f64], energy: &mut f64, light: &mut f64) {
         let has_pool = !pool.is_empty();
         for x in 0..self.on.len() {

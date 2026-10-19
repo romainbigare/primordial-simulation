@@ -15,9 +15,7 @@ use crate::{bond, choose, World};
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
 const LOOSE_SENSE: f32 = 0.2;
 
-/// Temperature (as of the last flow step), depth of the liquid that stands (what the pores of the loose ground
-/// do not hold, `flow::liquid`) and surface height of a ground cell (with whole phases: no plateau share, unlike
-/// `World::surface_z`).
+/// Temperature (of the last flow step), depth of the standing liquid and surface height of a ground cell (whole phases).
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     let t = w.t_ground_last(i);
     let (mut z, mut d, mut loose) = (0.0, 0.0, 0.0);
@@ -36,8 +34,8 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [t, (d - w.cfg.phys.porosity * loose).max(0.0) / area, w.base_z + z / area]
 }
 
-/// Before each physics step: what each cell holds, and the light and heat its bodies' node holds for them
-/// (`sum_cells`), and once a month the merge of alike nodes, the traffic and each cell's surroundings.
+/// Before each physics step: what each cell holds and its bodies' node (`sum_cells`); once a month the merge of alike
+/// nodes, the traffic and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     w.life.fit_map(n);
@@ -62,14 +60,10 @@ pub fn survey(w: &mut World) {
     choose::cells(w);
 }
 
-/// Per cell: its members and their visible traits summed (`Life::sum`), their light-capture area per ground area
-/// (`World::canopy`), the share of the light reaching it that they absorb and the share of that set aside for their
-/// light reactions (`Life::absorb`, `Life::keep`). Then its bodies' node (`store::Class::Bodies`) settles with its
-/// ground to hold what its bodies will claim at their updates: the light set aside that each caught since (by its share
-/// `Body::keep`), and the heat each draws from the ground at the rate of its last update (`Body::drew`) over the time
-/// since. The ground gives what is missing as far as it holds heat above `T_FLOOR`, so it pays that heat as time goes
-/// and a body that updates every 20 days does not pull 20 days of heat out of it at once; what no body can claim (one
-/// died, moved or merged before its update, or caught less than its share; walls aside) becomes the ground's heat.
+/// Per cell: its members and visible traits summed, their capture area per ground area, the light they absorb and the
+/// share set aside for their light reactions. Then its bodies' node settles with its ground to hold what its bodies
+/// will claim: the light set aside since, and the heat each draws at the rate of its last update (laws.md 1.4). What no
+/// body can claim goes back to the ground.
 fn sum_cells(w: &mut World) {
     let (n, day) = (w.mesh.cells().n(), w.day() as f64);
     let (mut abs, mut kept, mut claim) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
@@ -77,7 +71,6 @@ fn sum_cells(w: &mut World) {
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
         let (i, m, k) = (b.cell as usize, b.n(), b.keep as f64);
         sum[i][0] += m;
-        // (The height is not summed: the sums end before it.)
         for (x, &v) in sum[i][1..].iter_mut().zip(&b.vis) {
             *x += v as f64 * m;
         }
@@ -120,18 +113,14 @@ fn traffic(w: &mut World) {
     }
 }
 
-/// The share of what falls on a cell that a layer of capture area `x` per ground area intercepts, per unit of `x`:
-/// (1 - exp(-x)) / x (`mean_decay`).
+/// The share of what falls that a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
 pub(crate) fn intercept(x: f64) -> f64 {
     mean_decay(x)
 }
 
-/// Light passes through the bodies of a cell from the tallest member down (`Body::height`, kept in `Body::vis`), and
-/// bodies of equal height share a layer. A layer of capture area `x` per ground area absorbs
-/// `1 - exp(-x)` of what reaches it, so a tall member shades a low one and holding up pays. Together
-/// they still intercept `1 - exp(-canopy)`: the cell's light is only shared out (the shades,
-/// weighted by capture area, have mean 1). `flow::air::radiation` moves each body's mark by it. Only the cells whose
-/// bodies changed since are worked out again (`Life::stir`): the others' shades are what they were.
+/// Light passes the bodies of a cell from the tallest member down, equal heights sharing a layer; a layer of capture
+/// area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the shades,
+/// weighted by capture area, have mean 1). Only cells whose bodies changed are worked out again (`Life::stir`).
 fn shade(w: &mut World) {
     let g = intercept;
     let (Life { bodies, at, shade, stale, .. }, area) = (&mut w.life, w.mesh.cells().area());
@@ -179,12 +168,11 @@ pub fn day(w: &mut World) {
     }
 }
 
-/// The update of the body in `slot`, due today: its physics (`live`), its decision, its sample member's selection, its
-/// lineage, its young members who mature, its split; or its death.
+/// The update of the body in `slot`: its physics, decision, selection, lineage, maturing and split; or its death.
 fn update(w: &mut World, s: usize, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, &mut choose::ActTmp)) {
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     w.counts.updates += 1;
-    // (Its mean member's body as it comes, for what its members grow in the update: `copy::mature`.)
+    // Its mean member's body before the update, for what its members grow (`copy::mature`).
     let before = b.member_body(&w.chem);
     // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
     let sample = crate::copy::sample(w, s, &b, rc, tmp);
@@ -195,8 +183,7 @@ fn update(w: &mut World, s: usize, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, 
     // A body with no brain takes no decision: its update is its physics only.
     if !w.life.brainless(&b) {
         choose::act(w, s, &mut b, &lived, act);
-        // An action can leave nothing of a member (all its stores put or given away): it dies at once, before another
-        // body deals with it.
+        // An action can leave nothing of a member: it dies at once, before another body deals with it.
         if b.empty_at(b.mass(&w.chem)) {
             return die(w, s, b, LACK);
         }

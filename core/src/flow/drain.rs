@@ -1,7 +1,6 @@
 //! Liquid under the surface: the pores of the loose ground and the store of the bed below (`Class::Deep`), two layers
-//! of each cell's stack (`space::Stack`) joined by a vertical link. This file gives their physics: the rates down and
-//! up the vertical link, and the conductances and capacities of Darcy's law between cells in each layer, which
-//! `solve::spread` solves; the store books every move (`store::apply`).
+//! of each cell's stack joined by a vertical link (laws.md 1.2): the rates along that link, and Darcy's law between
+//! cells in each layer, which `solve::spread` solves.
 
 use super::land::{t_now, table, wet};
 use super::liquid::{book, mobile};
@@ -12,8 +11,7 @@ use crate::space::{Layer, Stack};
 use crate::store::{Batch, Class, LinkFlux};
 use crate::World;
 
-/// The layers of each cell's stack under its surface, bottom up: the store of the bed, and the pores of the loose
-/// ground (the ground node).
+/// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
 const DEEP: usize = 0;
 const PORES: usize = 1;
 
@@ -23,19 +21,15 @@ fn stack(w: &World) -> Stack {
     Stack::new(&w.mesh, &[layer(w.cfg.phys.bed_depth), layer(w.cfg.skin_m)])
 }
 
-/// Down the vertical link, liquid the loose ground holds over its field capacity (a share `field` of its pores) sinks
-/// into the store, `seep` a second at most (Darcy's law under its own weight), no more than the store has room for
-/// (`bed_porosity` x `bed_depth`). In each layer the liquid flows between cells across their shared borders by Darcy's
-/// law (`flows`). What a store then holds over its room comes up into its ground node (`come_up`). Each move takes its
-/// share of every liquid and what is dissolved in it, with its heat; the head it loses heats where it goes, from the
-/// world's potential energy.
+/// Liquid over field capacity sinks into the store, at most `seep` a second (Darcy's law under its own weight) and no
+/// more than its room; in each layer liquid flows between cells (`flows`); what a store holds over its room comes up
+/// (`come_up`). A move takes its share of every liquid with what is dissolved and its heat; lost head heats where it goes.
 pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt: f64) {
     let (n, p, g) = (w.mesh.cells().n(), w.cfg.phys, w.cfg.gravity);
     let (mob, stack, held) = (mobile(w, s, liq, tmin), stack(w), stores(w, s, tmin));
     // The heat each node of the stack gains from the head lost on the way into it, J.
     let mut fallen = vec![0.0; stack.nodes()];
-    // Each vertical link joins the store of a cell (below) to its ground node, across the cell's area: the cells where
-    // liquid sinks, and the share of their mobile liquid that does.
+    // The cells where liquid sinks down the vertical link, and the share of their mobile liquid that does.
     let mut sinks = Vec::new();
     for (v, &area) in stack.area().iter().enumerate() {
         let (lo, i) = (stack.lo()[v] as usize, stack.hi()[v] as usize - stack.node(PORES, 0));
@@ -92,14 +86,11 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     come_up(w, s, tmin, (&over, &held));
 }
 
-/// Darcy's law between cells in each layer, across their shared borders, by one `spread` over the stack: the potential
-/// is the head of the liquid (the store's table, the pores' liquid table, `land::table`), the capacity the volume per
-/// metre of head (`bed_porosity` x area; `porosity` x area, or the area where the pores are full), and a link passes
-/// the conductivity (`bed_seep`, `seep`) x the saturated thickness of its higher end x the border's width / the
-/// distance (solved in the work space `spread`). A store's saturated thickness is the depth it fills; the pores' is the depth of the higher table over
-/// the higher of the two bottoms of the loose ground, none where they hold no more than their field capacity (they
-/// hold that against gravity). No store and no pores give more than they hold (`spread::within`). Returns the links (the cells' links with a border), the volume through each, m³ (all
-/// the stores' links, then all the pores'), and the heads before the step, m, by node of the stack.
+/// Darcy's law between cells in each layer by one `spread` over the stack: the potential is the liquid's table, the
+/// capacity its volume per metre of head, and a link passes the conductivity (`bed_seep`, `seep`) × the saturated
+/// thickness of its higher end × width / distance (none for pores at field capacity, held against gravity). No node
+/// gives more than it holds (`spread::within`). Returns the links, the volume through each (stores', then pores'), m³,
+/// and the heads before the step, m.
 fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held): (&super::liquid::Mobile, &[f64]), dt: f64) -> (Vec<u32>, Vec<u32>, Vec<f64>, Vec<f64>) {
     let (p, cells) = (w.cfg.phys, w.mesh.cells());
     let area = cells.area();
@@ -131,8 +122,7 @@ fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held)
     }
     let mut flux = vec![0.0; gl.len()];
     let x0 = x.clone();
-    // The network is far from stiff (dt g / capacity is about 1e-3 on the island): the solve converges in a few
-    // iterations; the cap of one per node is never reached.
+    // The network is far from stiff (dt g / capacity about 1e-3): the solve converges in a few iterations.
     spread.step(&Net { a: &na, b: &nb, g: &gl, cap: &cap }, &mut x, dt, cap.len(), &mut flux);
     // No store and no pores give more than they hold.
     let mut have = vec![0.0; stack.nodes()];
@@ -143,8 +133,7 @@ fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held)
     (a, b, flux, x0)
 }
 
-/// What crosses the links that carry something: their ends, and of each substance mol per link (`[q * links + l]`), and
-/// J per link.
+/// What crosses the links that carry something: their ends, mol of each substance (`[q * links + l]`) and J per link.
 struct Carried {
     a: Vec<u32>,
     b: Vec<u32>,
@@ -152,9 +141,8 @@ struct Carried {
     heat: Vec<f64>,
 }
 
-/// What volumes `flux` (m³, + from `a` to `b`) carry, on the links where something leaves: of each substance of `ks`,
-/// the share of its sender's volume `vol` that leaves times its amount there (`amount(q, i)`), and the heat of what
-/// leaves (`heat(i, share, mol)`; `carry`).
+/// What volumes `flux` (m³, + from `a` to `b`) carry: of each substance of `ks` the sender's share that leaves times its
+/// amount there, and its heat (`carry`).
 fn carried(
     (a, b): (&[u32], &[u32]),
     flux: &[f64],
@@ -170,9 +158,8 @@ fn carried(
     Carried { a: ends(a), b: ends(b), mol, heat }
 }
 
-/// What leaves each sender of `from` (its node, and the share of it that leaves, negative on a link that carries it
-/// from `b` to `a`): of each substance of `ks`, the share times its amount there (`amount(q, i)`), mol per link
-/// (`[q * links + l]`, with the sign of the share), and the heat of what leaves (`heat(i, share, mol)`), J per link.
+/// What leaves each sender of `from` (its node and the share that leaves, negative from `b` to `a`): of each substance
+/// of `ks` the share times its amount, mol per link with the share's sign, and its heat, J per link.
 fn carry(from: &[(u32, f64)], ks: &[usize], amount: impl Fn(usize, usize) -> f64, heat: impl Fn(usize, f64, &[f64]) -> f64) -> (Vec<f64>, Vec<f64>) {
     let (links, mut m) = (from.len(), vec![0.0; ks.len()]);
     let (mut mol, mut e) = (vec![0.0; ks.len() * links], vec![0.0; links]);
@@ -187,9 +174,8 @@ fn carry(from: &[(u32, f64)], ks: &[usize], amount: impl Fn(usize, usize) -> f64
     (mol, e)
 }
 
-/// A share `share[i]` of the store under each ground node `i` (holding `held[i]` m³, `stores`) comes up into it with
-/// its heat, and pays its rise from the store's table to the node's head into the world's potential energy. Returns the volume of liquid each node got,
-/// m³ (what boils below the coldest node, `tmin`, is dissolved gas and adds none).
+/// A share `share[i]` of the store under each ground node comes up into it with its heat, paying its rise into the
+/// potential energy. Returns the volume each node got, m³ (dissolved gas adds none).
 fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[f64])) -> Vec<f64> {
     let (n, g, ns) = (w.mesh.cells().n(), w.cfg.gravity, w.chem.ns());
     let (mut got, mut rise) = (vec![0.0; n], Batch::falls(Class::Ground));
@@ -215,18 +201,15 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[
     got
 }
 
-/// The stores drain up the vertical link to the channels inside each cell, `hill` from the divides, by Darcy's law
-/// down the slope of its surface (`slope`, to the steepest lower neighbour): a share 1 - exp(-`bed_seep` x slope x
-/// time / (`bed_porosity` x `hill`)) of what they hold comes up (`come_up`). Returns the volume each node got, m³,
-/// which runs off.
+/// The stores drain to the channels inside each cell, `hill` from the divides, by Darcy's law down its slope: a share
+/// 1 - exp(-`bed_seep` × slope × time / (`bed_porosity` × `hill`)) comes up. Returns the volume each node got, m³.
 pub(super) fn springs(w: &mut World, s: &mut Scratch, tmin: f64, slope: &[f64], dt: f64) -> Vec<f64> {
     let p = w.cfg.phys;
     let share: Vec<f64> = slope.iter().map(|&q| one_minus_exp(p.bed_seep * q * dt / (p.bed_porosity * p.hill))).collect();
     come_up(w, s, tmin, (&share, &stores(w, s, tmin)))
 }
 
-/// Volume of the liquid in the store under each ground node, m³ (what boils below the coldest node, `tmin`, is
-/// dissolved gas and adds none).
+/// Volume of the liquid in the store under each ground node, m³ (dissolved gas adds none).
 fn stores(w: &World, s: &Scratch, tmin: f64) -> Vec<f64> {
     let n = w.mesh.cells().n();
     let mut vol = vec![0.0; n];
@@ -237,7 +220,7 @@ fn stores(w: &World, s: &Scratch, tmin: f64) -> Vec<f64> {
 }
 
 /// Height of the table of the store under ground node `i` holding `vol` m³, m: the bottom of its zone, `bed_depth`
-/// under the loose ground (whose depth its pores tell, none without pores), plus the depth its liquid fills.
+/// under the loose ground, plus the depth its liquid fills.
 fn store_table(w: &World, s: &Scratch, i: usize, vol: f64) -> f64 {
     let p = w.cfg.phys;
     let loose = if p.porosity > 0.0 { s.pd[i] / p.porosity } else { 0.0 };

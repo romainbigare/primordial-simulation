@@ -1,13 +1,11 @@
-//! The three ways a law changes the world (`docs/foundation/plan.md`, Idea 2): a move between two nodes, a transform
-//! of the amounts inside one node, and a link flux over a whole field.
+//! The three ways a law changes the world: a move between two nodes, a transform of the amounts inside one node, and a
+//! link flux over a whole field. Each books both sides, so the books are kept by their form (laws.md 0).
 
 use super::nodes::{Class, Node};
 use crate::chem::Chemistry;
 
-/// `mol` of substance `k` and `heat` J leave node `from` for node `to`. `to` receives `heat` less the energy the mol
-/// hold apart from heat more there than in `from` (`held_more`): so the law chooses who pays the latent heat of a gas
-/// that enters the air, `from` by giving it with the heat, or `to` by being given only the heat the gas carries. An end
-/// that holds its own amounts (a body, a part) is booked by the law that changes it.
+/// `mol` of substance `k` and `heat` J leave node `from` for node `to`, which receives `heat` less what the mol hold
+/// more there (`held_more`): so the law chooses who pays a gas's latent heat. A body's or part's end is its law's.
 #[derive(Clone, Copy, Debug)]
 pub struct Move {
     pub from: Node,
@@ -18,8 +16,7 @@ pub struct Move {
 }
 
 impl Move {
-    /// `mol` of substance `k` of the bed under ground node `i` break into its loose ground (the heat of the bed's skin is
-    /// the node's already): wear by running liquid, digging.
+    /// `mol` of substance `k` of the bed under ground node `i` break into its loose ground (wear, digging).
     pub fn loosen(i: usize, k: usize, mol: f64) -> Move {
         Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol, heat: 0.0 }
     }
@@ -33,15 +30,10 @@ pub struct Transform {
     pub dmol: Vec<(u16, f64)>,
 }
 
-/// What crosses each link of a field of nodes at once: link `l` joins the node at index `a[l]` of class `class[0]` and
-/// the one at `b[l]` of `class[1]` (one class for the links of a level; two for the vertical links of a stack, between
-/// a ground node and its air node, or from a boundary node or the potential to each node of a field) and carries
-/// `mol[q * links + l]` mol of substance `ks[q]` (each substance once) and `heat[l]` J, + from `a` to `b` (`heat`
-/// empty: no heat). What leaves one end enters the other, so a flux keeps the books by its form; where the two classes
-/// hold a substance apart from heat unlike (`held`: the air holds its latent heat), `b` receives the heat less what the
-/// mol hold more there than at `a`, as the `to` of a `Move` does (so such a flux has heat). What passes through a node,
-/// in by one link and out by another, as liquid down a slope, needs nothing held: a law keeps only what each node holds
-/// at the end of the flux at zero or above.
+/// What crosses each link of a field at once: link `l` joins node `a[l]` of `class[0]` to node `b[l]` of `class[1]` and
+/// carries `mol[q * links + l]` of substance `ks[q]` and `heat[l]` J, + from `a` to `b`. Where the classes hold a
+/// substance unlike (`held`), `b` receives the heat less what the mol hold more there, as a `Move`'s `to` does. Only
+/// what each node holds at the end must be at zero or above.
 #[derive(Clone, Copy, Debug)]
 pub struct LinkFlux<'a> {
     pub class: [Class; 2],
@@ -52,8 +44,8 @@ pub struct LinkFlux<'a> {
     pub heat: &'a [f64],
 }
 
-/// Energy a mol of substance `k` holds in a node of `class` apart from the node's heat, J/mol: its formation enthalpy,
-/// and in the air its fusion and vaporisation enthalpy (`Substance::latent_gas`), as `check::totals` books them.
+/// Energy a mol of substance `k` holds in a node of `class` apart from its heat, J/mol: its formation enthalpy, and in
+/// the air also its fusion and vaporisation enthalpy.
 pub fn held(chem: &Chemistry, class: Class, k: usize) -> f64 {
     let s = &chem.subs[k];
     s.hf + if class == Class::Air { s.latent_gas() } else { 0.0 }
@@ -70,8 +62,7 @@ impl<'a> LinkFlux<'a> {
     pub(super) fn alike(&self, chem: &Chemistry) -> bool {
         self.ks.iter().all(|&k| held_more(chem, self.class[0], self.class[1], k as usize) == 0.0)
     }
-    /// The heat its `b` ends receive, by link: what leaves `a` less what the mol hold more at `b` (empty where the
-    /// classes hold its substances alike, `alike`).
+    /// The heat its `b` ends receive, by link: what leaves `a` less what the mol hold more at `b` (empty when `alike`).
     pub(super) fn lifted(&self, chem: &Chemistry) -> Vec<f64> {
         if self.alike(chem) {
             return Vec::new();

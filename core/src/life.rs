@@ -16,9 +16,8 @@ pub struct Life {
     free: Vec<u32>,
     /// Bodies in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
-    /// Per cell, from the last survey: members, then their visible traits summed (mass and capture area are totals).
-    /// The survey's caches here are not saved: a snapshot is taken at a month's start, where the survey builds them
-    /// all before any law reads them.
+    /// Per cell, from the last survey: members, then their visible traits summed. The survey's caches are not saved:
+    /// a snapshot is taken at a month's start, where the survey builds them before any law reads them.
     #[serde(skip)]
     pub sum: Vec<[f64; 7]>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
@@ -75,9 +74,8 @@ impl Life {
     pub(crate) fn shape_of(&self, lineage: u32) -> Option<Shape> {
         self.brains[lineage as usize].as_ref().map(|l| l.shape)
     }
-    /// The born rows `born` and the rows `rows` of a body of lineage `from` carried over to the shape of lineage `to`: as
-    /// they are where the shapes are the same; else its born rows by `brain::rerow` (new weights of spread `noise`), and
-    /// its rows are those born rows (what it learned does not fit another brain).
+    /// The born rows and rows of a body of lineage `from` carried over to the shape of lineage `to`: as they are where the
+    /// shapes agree; else born rows by `brain::rerow`, and its rows are those (what it learned fits no other brain).
     pub(crate) fn carry_rows(&self, born: Vec<f32>, rows: Vec<f32>, from: u32, to: u32, r: &mut Rng, noise: f32) -> (Vec<f32>, Vec<f32>) {
         match (self.shape_of(from), self.shape_of(to)) {
             (Some(x), Some(y)) if x != y => {
@@ -87,8 +85,8 @@ impl Life {
             _ => (born, rows),
         }
     }
-    /// The brain rows of a body of lineage `lineage` born with `born` from body `b`: its born rows plus what `b` learned
-    /// (`b`'s rows less its born rows), where the two brains have one shape; else its born rows.
+    /// The rows of a body born with `born` from body `b`: its born rows plus what `b` learned, where the brains have one
+    /// shape; else its born rows.
     pub(crate) fn inherit(&self, born: &[f32], lineage: u32, b: &Body) -> Vec<f32> {
         let (from, rows) = (self.born(b), &b.rows);
         if self.shape_of(lineage) != self.shape_of(b.lineage) || born.len() != rows.len() || from.len() != rows.len() {
@@ -180,8 +178,7 @@ impl Life {
         (b.lineage, b.genome) = (lineage, self.new_genome(rows));
         self.enter(b);
     }
-    /// The bodies of `cell` changed (one came, went, or changed its members or what others see of it): the survey
-    /// shares out its light again (`survey::shade`).
+    /// The bodies of `cell` changed: the survey shares out its light again (`survey::shade`).
     pub(crate) fn stir(&mut self, cell: u32) {
         if let Some(x) = self.stale.get_mut(cell as usize) {
             *x = true;
@@ -211,10 +208,8 @@ impl Life {
 }
 
 impl World {
-    /// Place body `c`, its first update after its interval; it keeps the light-keep share it was given (`Body::keep`)
-    /// and has drawn no heat yet (`Body::drew`). Its visible traits are worked out from what it holds now: a child or a
-    /// part split off a node has its own stores and genes, and others see it and its shade (`survey::shade`) through
-    /// `Body::vis` before its first update.
+    /// Place body `c`, its first update after its interval, having drawn no heat yet; its visible traits are worked out
+    /// from what it holds now, so others see it before its first update.
     pub(crate) fn place(&mut self, mut c: Body) -> usize {
         c.prepare(&self.chem, &self.cfg.phys);
         c.drew = 0.0;
@@ -222,14 +217,12 @@ impl World {
         let delay = c.interval(self);
         self.life.add(c, self.day(), delay)
     }
-    /// Place body `b` made outside the laws (a founder, an edit), its first update `delay` days on, its numbers worked out
-    /// from its genes (`Body::prepare`).
+    /// Place body `b` made outside the laws (a founder, an edit), its first update `delay` days on.
     pub fn add(&mut self, mut b: Body, delay: u64) -> usize {
         b.prepare(&self.chem, &self.cfg.phys);
         self.life.add(b, self.day(), delay)
     }
-    /// What others see of body `b` is worked out again from what it holds now (`Body::visible`), and its cell's light
-    /// is shared out again.
+    /// What others see of body `b` is worked out again (`Body::visible`), and its cell's light shared out again.
     pub(crate) fn see(&mut self, b: &mut Body) {
         b.vis = b.visible(&self.chem, &self.cfg);
         self.life.stir(b.cell);

@@ -7,15 +7,13 @@ use crate::World;
 
 /// Added to a substance's hardness before its softness (1 / hardness) is taken.
 const HARD_MIN: f64 = 0.05;
-/// Most volume that creeps over an edge per call, as a share of the step between the surfaces
-/// times the cell's area (the higher node goes no further than half way to level).
+/// Most volume that creeps over an edge per call, as a share of the step between the surfaces times the cell's area.
 const CREEP_LEVEL: f64 = 0.25;
 /// Most of each loose solid that creeps over an edge per call.
 const CREEP_MOST: f64 = 0.25;
 
-/// A call of creep: the amount of each solid in each node, mol (`[q * n + i]`), and the volume able to creep weighted
-/// by softness, m³, as the edges so far leave them; and what it moves: over each edge that moves something, from its
-/// higher node to the lower, the solids and their heat; and the fall of each mass, which heats the lower node.
+/// A call of creep: each solid in each node, mol (`[q * n + i]`), and the volume able to creep by softness, m³, as the
+/// edges so far leave them; and what moves over each edge, with its heat and the fall that heats the lower node.
 struct Slides {
     amt: Vec<f64>,
     mob: Vec<f64>,
@@ -23,10 +21,8 @@ struct Slides {
     fall: Batch,
 }
 
-/// Yearly: loose solids creep to lower neighbours, softer ones faster and thicker layers more, link by link of the cell
-/// level in their order, each from the amounts the links before it left; the store books them in one call
-/// (`store::apply`). Bodies spread back into ground cleared along links (`lanes::regrow`, here only, so it closes at the
-/// documented speed).
+/// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
+/// call; then bodies spread back into cleared links (`lanes::regrow`).
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let n = w.mesh.cells().n();
     let sol = s.solids(range(&s.state.tg).0);
@@ -50,9 +46,8 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     crate::lanes::regrow(w, dt);
 }
 
-/// Loose solids `sol` (with softness `soft`) creep from the higher node `a` to its neighbour `b`, `dist` m between their
-/// centres, with their heat; the mass's fall heats `b`. They cross a border as wide as the side of `a` (the square root
-/// of its area), across a corner too.
+/// Loose solids `sol` creep from the higher node `a` to `b`, `dist` m apart, with their heat; the fall heats `b`. They
+/// cross a border as wide as the side of `a`, across a corner too.
 fn slide(w: &World, s: &mut Scratch, (a, b): (usize, usize), dist: f64, (sol, soft): (&[usize], &[f64]), dt: f64, sl: &mut Slides) {
     let (n, area, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.gravity);
     let Slides { amt, mob, .. } = sl;

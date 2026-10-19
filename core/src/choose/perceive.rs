@@ -52,10 +52,8 @@ pub(super) fn sector(sight: usize) -> Sector {
     s
 }
 
-/// Bodies perceived: in its own cell first, then next to it from a random side, up to `nseen`. Walls between two bodies
-/// hide them from each other by how closed they are; cover hides a body as it shades the ground: it is seen through the
-/// others' capture area per m² of its cell, a, with chance exp(-a). Parts perceived in its cell (not the one it holds),
-/// from a random one on; a node perceives them as one of its members would.
+/// Bodies perceived, its own cell first, then a neighbour's from a random side, up to `nseen`: walls hide by how closed
+/// they are, cover with chance 1 - exp(-a), a the others' capture area per m². Then the parts in its cell.
 pub(super) fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
     let i = b.cell as usize;
     let (mut seen, mut cnt, side) = ([(0usize, false); MAX_SEEN], 0, rng.below(8));
@@ -102,8 +100,7 @@ pub(super) fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut
     }
 }
 
-/// The brain's inputs: own stores against their safe minimums, the cell's loose substances, warmth, size and light,
-/// the cell's liquid, temperature and crowding, the season, signals heard, what Bond senses, memory.
+/// The brain's inputs (laws.md 5.2).
 pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, x: &mut Vec<f32>) {
     let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
     let (env, pm) = (w.life.env[i], mass / b.n());
@@ -120,8 +117,7 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
     x.extend_from_slice(&b.mem);
 }
 
-/// After each survey: what a brain perceives of each cell as a place to move to (liquid depth, members, their mean mass,
-/// light-capture area and strength, the resistance they give to moving through; the height and temperature differences
+/// After each survey: what a brain perceives of each cell as a place to move to (the height and temperature differences
 /// are added per move, in places 0 and 6).
 pub fn cells(w: &mut World) {
     let life = &w.life;

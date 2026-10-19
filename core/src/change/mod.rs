@@ -1,27 +1,6 @@
-//! Law 2: Change. Substances react inside nodes, faster when hot.
-//!
-//! Mass action: a reaction runs at catalyst · k · exp(−Ea/T) · `e` · the product, over its inputs,
-//! of their share of their phase to their order (`Reaction::order`; a solid is a phase of its own,
-//! share 1), in reaction units a second. `e` is the contact of its phases: what `lim` would be
-//! were each input all of its phase (the least, over the inputs, of its phase's amount per `nu`).
-//! So a reaction within one phase goes with that phase, and one between a solid and the air with
-//! the solid, as a surface would. In a step it goes as far as `lim × (1 − exp(−rate / lim ×
-//! time))`, `lim` the amount of its scarcest input per `nu`: never past it, exact for a first-order
-//! decay. The rate has no jump when another input becomes the scarcest, and is first order in a
-//! trace input (a trace gas in plenty of the other goes at the same rate per unit whatever its
-//! amount). A body's catalysts work only below the temperature where they lose their shape
-//! (`denature`). A ground node with liquid standing over it reacts with the gas dissolved in that
-//! liquid, which the liquid's film renews (`Reactor::film`).
-//!
-//! A ground or an air node reacts when it is due (`clock::Sleep`), for all the time since it last did: the kernel
-//! integrates the rate law over a span. Then it sleeps until its own rates would change it by more than a share `CALM`
-//! (`Reactor::rest`), at most `Config::sleep_days`; a node where a reaction goes that far within a step reacts every
-//! step. It wakes when one of its amounts has grown by more than `Config::wake_share` of what it held when it fell
-//! asleep, whatever brought it (Flow, bodies, parts), looked at once a step (`clock::Sleep::watch`). The change of its
-//! temperature does not wake it: `sleep_days` bounds how long it reacts at an old one.
-//!
-//! `kernel`: the rate law and the reactor. `balance`: reactions that undo each other. `gas`: the gas a body or a part
-//! exchanged with the air around it. Here: the step over the ground and air nodes, booked by `store::apply`.
+//! Law 2: Change. Substances react inside nodes by mass action, faster when hot (laws.md 2). `kernel`: the rate law
+//! and the reactor; `balance`: reactions that undo each other; `gas`: the gas a body or a part exchanges with the air.
+//! Here: the step over the ground and air nodes, which react when due and sleep while calm (`clock::Sleep`).
 
 mod balance;
 mod gas;
@@ -38,18 +17,15 @@ use crate::ground::share;
 use crate::store::{apply, Batch, Class, LinkFlux, Node, Transform};
 use crate::{World, AIR};
 
-/// A node sleeps until its reactions would go further than this share of their inputs (but for reactions on a `SPECK`
-/// of what it holds), or warm it by more than `CALM_K` kelvin: for so little, one long span is as good as many steps.
+/// A node sleeps until its reactions would use this share of their inputs (but for those on a `SPECK` of what it
+/// holds) or warm it `CALM_K` kelvin: for so little, one long span is as good as many steps.
 const CALM: f64 = 0.05;
 const CALM_K: f64 = 0.5;
 const SPECK: f64 = 1e-12;
 
-/// Run Law 2 for the step of `dt` seconds from the world's time, at the temperatures of the last flow step: each ground
-/// node (loose amounts, gas from the air above), then each air node, that is due (its alarm rang, or it gained more than
-/// `wake_share` of an amount since it fell asleep, `clock::Sleep::watch`), in the order of their cells, for all
-/// the time since it last reacted to the end of this step, each from the world as it was before the nodes of its class
-/// reacted; booked by `store::apply` (`Batches`). Then it sleeps until the last step that starts before its reactions may have to run again
-/// (`Reactor::rest`, at most `sleep_days`): the next step, for a rest within one.
+/// Run Law 2 for the step of `dt` seconds at the temperatures of the last flow step: each ground node, then each air
+/// node, that is due, for all the time since it last reacted, from the world as it was before its class reacted, booked
+/// in one call (`Batches`). Then it sleeps (`Reactor::rest`, at most `sleep_days`).
 pub fn step(w: &mut World, dt: f64) {
     crate::flow::ensure(w);
     let (end, most) = (w.time + dt as u64, w.cfg.sleep_days as u64 * w.cfg.calendar().day);
@@ -103,14 +79,9 @@ struct Held {
     made: Vec<f64>,
 }
 
-/// What the nodes of one class that react in a step change, booked by `store::apply` in one call after they all
-/// reacted: the gas the ground nodes take from the air and give it, and their reactions (a node gives the gas its
-/// reactions made, and they use the gas it took, so only what it holds at the end of the call counts). The gas crosses
-/// the links from each ground node to its air node, + up into the air: the air receives the heat that leaves the ground
-/// less the latent heat it holds of the gas (`store::held`). Each air node pays the lift of the gas that goes up into
-/// it into the world's potential energy (as `Sky::cross` books it). The gas is a flux for each substance (indexed by
-/// it): a node exchanges a few of them, so no link carries the others. Kept between steps (`World::batches`), so a step
-/// allocates nothing once they have grown.
+/// What the nodes of one class change in a step, booked in one call after they all reacted: their reactions, and the
+/// gas the ground nodes exchange with the air, one link flux per substance (+ up), with the air paying the lift. Only
+/// what a node holds at the end of the call counts. Kept between steps (`World::batches`).
 #[derive(Clone, Debug, Default)]
 pub struct Batches {
     gas: Vec<Batch>,
@@ -152,10 +123,8 @@ impl Batches {
     }
 }
 
-/// Time the liquid standing over the amounts `amt` of ground node `i` at `t` (more than the pores of its loose ground
-/// hold) takes to renew its gas through its film over its whole depth, s (`Reactor::film`; Flow's law, `air::dissolve`:
-/// depth / `dissolve`; the air's side of the film is faster by 100 times or more for every gas and left out). 0: no
-/// liquid stands.
+/// Time the liquid standing over ground node `i` takes to renew its gas through its film, s: depth / `dissolve` (the
+/// air's side is 100 times faster or more, left out). 0: no liquid stands.
 fn film(w: &World, i: usize, amt: &[f64], t: f64) -> f64 {
     let (chem, mut vol) = (&w.chem, [0.0; 3]);
     for k in (0..chem.ns()).filter(|&k| amt[k] != 0.0) {
@@ -166,12 +135,9 @@ fn film(w: &World, i: usize, amt: &[f64], t: f64) -> f64 {
     if wet > w.cfg.phys.porosity * vol[Phase::Solid as usize] { wet / (w.mesh.cells().area()[i] * w.cfg.dissolve) } else { 0.0 }
 }
 
-/// React ground node `i` (its amounts in `h.amt`) for `time` s with the gas over it, and note in `b` what it changes.
-/// The reactor sees sensible heat: the fusion enthalpy the node holds by Flow's solve of its plateaus stays apart
-/// (`FlowView::fused`), so a node on a plateau reacts at its melting point. Gas taken from the air brings its heat at the
-/// air's temperature and gives back its fusion and vaporisation enthalpy (`store::held`); gas given to it takes its
-/// share of the node's heat by heat capacity and that enthalpy, and the node gives no more heat than it holds: each gas
-/// it gives is cut by the same share, and what it cannot pay for stays in it.
+/// React ground node `i` for `time` s with the gas over it, noting in `b` what it changes (laws.md 2.2). The reactor
+/// sees sensible heat: the fusion enthalpy stays apart (`FlowView::fused`). A node gives no more heat than it holds:
+/// each gas it gives is cut by the same share.
 fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64, b: &mut Batches) {
     let (chem, na) = (&w.chem, w.mesh.level(AIR).n());
     let (t, j, air_share) = (nodes.tg[i], w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));

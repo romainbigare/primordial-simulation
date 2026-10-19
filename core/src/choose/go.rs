@@ -4,13 +4,9 @@ use crate::body::{self, Body, BROKEN};
 use crate::chem::Phase;
 use crate::{bond, lanes, World};
 
-/// Move to a neighbour, if its force gives the push a mover makes (`Physics::bump` of what it moves): cost by mass (with
-/// the structure it carries) at the real cost of transport per kg and m, `Physics::walk` (more per kg for a small
-/// member), distance, climb, and the body mass per area already there (`lanes::resist`); less, and no climb, into deep
-/// liquid while held up by what it carries. The movers must fit in the free space over the cell (`Physics::layer`).
-/// The part spent pushing through bodies breaks their body matter (`wear`) and clears the lane (`lanes::clear`).
-/// What it moves is the whole mass it carries, fuel too; what it can carry and hold goes by its force, of its body
-/// (`bond::carry`, `Body::built`). A node moves as one: all its members go (they drew the same action), and it stays one node.
+/// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
+/// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`); less
+/// afloat. The part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one.
 pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
     if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.mesh.cells().area()[j] {
@@ -21,8 +17,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = lanes::resist(w, i, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
-    // Moving needs force: a mover pushes on what it passes with `bump` of its weight (`bond::moved`), so it must push
-    // that much itself, by its own force (`bond::bears`, of its built body).
+    // A mover pushes what it passes with `bump` of its weight, so it must push that much itself.
     if bond::bears(w, b) < w.cfg.phys.bump * mass * w.cfg.gravity {
         return;
     }
@@ -48,12 +43,8 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
 /// Most share of its body a body loses to one mover.
 const MOST_WORN: f64 = 0.5;
 
-/// Energy dissipated pushing through the bodies of cell `j` (all but the `mover`) breaks their body matter: each takes
-/// its share of the energy by its mass and loses the share of its body that this pays to break (`Body::breaking`, by
-/// what it is built of), and the stores that matter held spill in the same share (`body::wound`). A node loses members
-/// when the share is one member's body or more, and else every member loses part of its matter; an individual lives on
-/// smaller (it dies when half of its body is broken, or a store falls under its safe minimum). What breaks off goes to
-/// the ground as loose amounts, with its heat. Returns the mass broken, kg.
+/// Energy dissipated pushing through the bodies of cell `j` breaks their body matter: each takes its share by mass and
+/// loses what that pays to break (`Body::breaking`, `body::wound`; laws.md 6.8). Returns the mass broken, kg.
 pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
     let chem = &w.chem;
     let others: Vec<u32> = w.life.at[j].iter().copied().filter(|&s| s as usize != mover).collect();

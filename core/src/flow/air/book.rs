@@ -1,6 +1,5 @@
-//! What an air step moves over its span, booked at once as the step is solved (`book`): the step is backward Euler,
-//! so what it moves over its span is known at its start, and the other laws read the ground, the air, the light on
-//! bodies and the rain it leaves until the next air step.
+//! What an air step moves over its span, booked at once as it is solved: backward Euler knows it at the start, and the
+//! other laws read what it leaves until the next step.
 
 use super::super::{follow, year_weight, Scratch};
 use super::newton::Wind;
@@ -10,20 +9,15 @@ use super::{lerp, sums};
 use crate::store::{apply, Batch, Boundary, Class, LinkFlux};
 use crate::{World, AIR};
 
-/// Book what the step that starts now and lasts `dt` seconds moves, from the rows of its last round (`step::cell`), the
-/// wind of its last solve and its air `it`, in one call through the store: the sunlight, the light set aside in the
-/// bodies' node of each cell, the heat to the air and to space, the gas of the ground and its heat, the wind, the lifts;
-/// then the light on bodies, the yearly average of the rain and the clouds the step leaves, which the next step starts
-/// from. The ground pays the heat of the gas that leaves it and its fusion and vaporisation enthalpy, rain brings its
-/// heat at the air's temperature and its fusion enthalpy; a ground node gives no more of a gas than it holds and gets,
-/// and an air node no more than it holds and gets (`hold_air`).
+/// Book what the step of `dt` seconds moves, from its last round's rows, wind and air, in one call: sunlight, light set
+/// aside for bodies, heat to the air and to space, the ground's gas with its heat, the wind and the lifts; then the
+/// light on bodies, the rain and the clouds. No node gives more of a gas than it holds and gets (`hold_air`).
 pub(super) fn book(w: &mut World, s: &mut Scratch, act: &[Active], (rows, width): (&[f64], usize), wind: &Wind, it: &Iterate, dt: f64) {
     let (n, na, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.mesh.cells());
     let (parent, area) = (cells.parent().to_vec(), cells.area().to_vec());
     let v = |len: usize| vec![0.0; len];
     let (mut sun, mut heat, mut light, mut kept, mut rain, mut out) = (v(n), v(n), v(n), v(n), v(n), v(na));
-    // Per gas of `act` and ground node (`[x * n + i]`): the net amount that goes up into its air node, mol, and the heat
-    // that leaves the ground with it, J.
+    // Per gas and ground node (`[x * n + i]`): what goes up into its air node, mol, and the heat leaving with it, J.
     let (mut up, mut up_heat) = (v(act.len() * n), v(act.len() * n));
     for (i, row) in rows.chunks_exact(width).enumerate() {
         let (j, ts) = (parent[i] as usize, row[4]);
@@ -62,9 +56,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, act: &[Active], (rows, width)
             life.bodies[b as usize].mark -= (life.shade.get(b as usize).map_or(1.0, |&sh| sh) - 1.0) * got;
         }
     }
-    // The gas of each ground node goes up into its air node (or rains out of it) along the link between them, one column
-    // per gas, with the heat that leaves the ground with it (scaled as `hold_air` cut it); the air pays its lift from
-    // the head of the ground node to its own mean height, as it pays the lift of the gas the wind brings it.
+    // Each ground node's gas crosses the link to its air node, one column per gas, with its heat; the air pays the lift.
     let (g, view) = (w.cfg.gravity, s.view());
     let mut paid = wind.paid.clone();
     for (x, ac) in act.iter().enumerate() {
@@ -102,11 +94,8 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, act: &[Active], (rows, width)
 /// Passes of `hold_air` before every air node gives at most what it holds.
 const CUT_PASSES: usize = 4;
 
-/// Cuts what leaves each air node of one gas where the node, which holds `held`, would end with less than nothing (the
-/// other laws took from it since the step): the wind out of it (`wind`, + from `a` to `b`, per link) and the rain of
-/// its ground nodes (the negative `up`, per ground node, whose air node is `parent`), each by the share that leaves it
-/// nothing. That takes from its neighbours what they would have got, so it is done again, `CUT_PASSES` times at most;
-/// then every node gives at most what it holds (as `solve::spread::within`).
+/// Cuts the wind and the rain out of each air node of one gas where it would end below zero, by the share that leaves
+/// it nothing; as that takes from its neighbours, again, `CUT_PASSES` times at most (as `solve::spread::within`).
 fn hold_air(held: &[f64], (a, b): (&[u32], &[u32]), wind: &mut [f64], (parent, up): (&[u32], &mut [f64])) {
     for pass in 0..=CUT_PASSES {
         let (mut end, mut out) = (held.to_vec(), vec![0.0; held.len()]);

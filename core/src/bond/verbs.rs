@@ -18,8 +18,7 @@ const KEEP_MINIMUMS: f64 = 2.0;
 /// bonded ground.
 const MOST_SHARE: f64 = 0.5;
 
-/// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the
-/// ground rests on it).
+/// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
     let s = w.parts.parts[w.parts.parts[p].root as usize].s;
     if !s.anchored && s.mass * w.cfg.gravity > bears(w, b) {
@@ -54,10 +53,8 @@ pub(crate) fn lever(w: &World, b: &Body) -> f64 {
     })
 }
 
-/// Weight a body bears by its own force, N: what it holds adds nothing (a lever does not lift
-/// itself). Force goes with the body that is built (`Body::built`: its matter and the liquid it
-/// keeps, not the fuel it stores nor the matter held for offspring), not the whole mass: a hurt
-/// body is weaker, and carrying fuel adds no strength.
+/// Weight a body bears by its own force, N (a held lever does not lift itself). Force goes with its living body
+/// (`Body::built`), so a hurt body is weaker and fuel adds no strength.
 pub(crate) fn bears(w: &World, b: &Body) -> f64 {
     b.gene(STRENGTH) * b.built(&w.chem) * w.cfg.gravity * w.cfg.phys.grip
 }
@@ -115,9 +112,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
     }
 }
 
-/// Take from a part by the body's uptake selectivity, the held liquid first, as much as it takes by its
-/// mass (`Body::equiv`) in the time, as far as its stores have room (`Body::level`). Walls taken below
-/// `w.cfg.phys.min_kg` fall apart.
+/// Take from a part by the body's uptake selectivity, the held liquid first, as much as it takes by its mass in the
+/// time and its stores have room for. Walls taken below `min_kg` fall apart.
 fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let pt = &w.parts.parts[p];
     let m = b.wanted(&w.chem, b.paces(w), |k| pt.wall[k] + pt.fill[k], w.cfg.phys.take * days * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
@@ -152,8 +148,7 @@ fn spare(chem: &Chemistry, lay: &Layout, b: &Body, k: usize, size: f64) -> f64 {
     (b.store[k] - KEEP_MINIMUMS * b.gene(lay.min + k).max(0.0) * size / chem.subs[k].molar_mass).max(0.0)
 }
 
-/// Put to a part what a body holds above twice its safe minimums (`spare`): liquids into its hollow as far as there is
-/// room, solids onto its walls; at most half of each store.
+/// Put to a part what a body holds above twice its safe minimums: liquids into its hollow, solids onto its walls.
 fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     let (chem, lay, t) = (&w.chem, Layout::of(&w.chem), b.temp(&w.chem));
     let size = b.size(chem);
@@ -186,10 +181,8 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     restructure(w, p);
 }
 
-/// Put solid stores above twice their safe minimums (`spare`) out as a new part (up to `phys.form` of the
-/// body's mass, and at least `phys.min_kg`: lighter walls fall apart), shaped by the brain:
-/// elongation and hollowness. The body holds it if its hands are free and its force bears it
-/// (`grab`). The number of parts in a cell is not limited: each one costs matter and energy.
+/// Put solid stores above twice their safe minimums out as a new part (up to `form` of the body's mass, at least
+/// `min_kg`), shaped by the brain; the body holds it if its hands are free and its force bears it.
 pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
     let (chem, lay, mb, t) = (&w.chem, Layout::of(&w.chem), b.mass(&w.chem), b.temp(&w.chem));
@@ -237,9 +230,8 @@ pub fn anchor(w: &mut World, b: &mut Body) {
     }
 }
 
-/// Break bonded ground with force: each substance whose bond strength is below the body's
-/// strength (times what a held part adds) comes loose, the more the weaker it is, as far as the body
-/// can work in the time (`Physics::dig` x its body, `Body::built`, as force goes by the body).
+/// Break bonded ground with force: each substance weaker than the body's strength (times a held part's lever) comes
+/// loose, the more the weaker, as far as `dig` × its living body allows in the time.
 pub fn dig(w: &mut World, b: &mut Body) {
     let (i, n, mb) = (b.cell as usize, w.mesh.cells().n(), b.built(&w.chem));
     let (lev, chem) = (lever(w, b), &w.chem);
@@ -264,8 +256,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
     }
 }
 
-/// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets
-/// go (an anchored structure, or one heavier than the body bears, `bears`).
+/// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets go.
 pub fn carry(w: &mut World, b: &mut Body) -> Option<(usize, f64)> {
     let r = w.parts.parts[held(w, b)?].root as usize;
     let s = w.parts.parts[r].s;
@@ -276,8 +267,7 @@ pub fn carry(w: &mut World, b: &mut Body) -> Option<(usize, f64)> {
     Some((r, s.mass))
 }
 
-/// After a body moved from `i` into `j`: the structure it carried comes along; it pushes the
-/// structures there.
+/// After a body moved from `i` into `j`: the structure it carried comes along; it pushes the structures there.
 pub fn moved(w: &mut World, b: &mut Body, carried: Option<(usize, f64)>, j: usize, mb: f64) {
     b.inside = None;
     if let Some((r, _)) = carried {

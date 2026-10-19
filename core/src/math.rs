@@ -1,7 +1,6 @@
 //! Small functions of decay the laws share, the tail of a normal, and an exact sum.
 
-/// 1 - exp(-x), exact for small `x`: the share a first-order decay at rate times time `x` takes, or a layer of depth `x`
-/// absorbs.
+/// 1 - exp(-x), exact for small `x`: the share a first-order decay over `x` time constants takes.
 #[inline]
 pub(crate) fn one_minus_exp(x: f64) -> f64 {
     -(-x).exp_m1()
@@ -19,8 +18,8 @@ pub(crate) fn mean_decay(x: f64) -> f64 {
     if x < 1e-9 { 1.0 } else { one_minus_exp(x) / x }
 }
 
-/// The Chebyshev fit of erfc of Press et al. (1992, Numerical Recipes, `erfcc`): erfc(x) = t exp(-x² + P(t)) for x at
-/// least 0, t = 1 / (1 + x / 2), P with these coefficients from t⁰; fractional error under 1.2e-7 everywhere.
+/// The Chebyshev fit of erfc (Press et al. 1992, `erfcc`): erfc(x) = t exp(-x² + P(t)), t = 1 / (1 + x / 2), x ≥ 0;
+/// fractional error under 1.2e-7.
 const ERFC: [f64; 10] = [-1.265_512_23, 1.000_023_68, 0.374_091_96, 0.096_784_18, -0.186_288_06, 0.278_868_07, -1.135_203_98, 1.488_515_87, -0.822_152_23, 0.170_872_77];
 
 /// ln of the share of a standard normal above `z`, erfc(z / sqrt 2) / 2 (`ERFC`): finite far out, where the share
@@ -57,8 +56,8 @@ fn grow(parts: &mut Vec<f64>, x: f64) {
     }
 }
 
-/// Adds `n x` to `parts` (`grow`) exactly, for a whole `n` of at most 26 bits: `x` split into two halves of 26 bits
-/// (Veltkamp), each of whose products with `n` is exact. The parts added from the smallest give the sum, rounded.
+/// Adds `n x` to `parts` exactly, for a whole `n` of at most 26 bits: `x` split into two halves of 26 bits (Veltkamp),
+/// each of whose products with `n` is exact.
 #[inline]
 pub(crate) fn add_times(parts: &mut Vec<f64>, n: f64, x: f64) {
     let t = SPLIT * x;

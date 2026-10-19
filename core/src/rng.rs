@@ -58,10 +58,8 @@ impl Rng {
     pub fn new(seed: u64, tick: u64, node: u64, purpose: Purpose) -> Self {
         Rng(mix(Self::key(seed, tick, node, purpose)))
     }
-    /// The stream of a purpose for a node (slot and generation) at a time in seconds. The id packs into one `u64`
-    /// without loss, so two ids or two times never give the same key. The tag is XORed into the key before the last
-    /// mix, which is a bijection: the same inputs in `new` and here give different streams, and any other pair of
-    /// keys meets only by chance of 2^-64 (as two `new` keys do).
+    /// The stream of a purpose for a node (slot and generation) at a time in seconds. The id packs into one `u64` without
+    /// loss, and the tag is XORed in before the last mix (a bijection), so keys meet only by chance of 2^-64.
     pub fn of_node(seed: u64, time: u64, id: NodeId, purpose: Purpose) -> Self {
         let node = (id.gen as u64) << 32 | id.slot as u64;
         Rng(mix(Self::key(seed, time, node, purpose) ^ NODE_STREAM))

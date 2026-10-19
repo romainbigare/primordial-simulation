@@ -1,9 +1,5 @@
-//! Bodies: nodes of the sparse graph that hold substances, heat and genes, with stable IDs (slot and generation).
-//! A body updates every `interval` days, and everything in between is integrated at its update (`live`): Flow and
-//! Change on it (`physics`), its upkeep (`pay`), its death (`death`). Choose (`choose`) and Copy (`copy`) act on it.
-//! Its genes, how alike they are and how they change are in `genes`, what it is made of in `tissue`, its chemistry in
-//! `metab`, what it takes in in `intake`, its exchange with its surroundings in `exchange`. The registry of bodies is
-//! `life`, its lineages `lineage`, the survey of cells before each step `survey`.
+//! Bodies: nodes that hold substances, heat and genes, with stable ids (slot and generation). A body updates every
+//! `interval` days and integrates the time since at its update (`live`; laws.md 6).
 
 mod death;
 mod exchange;
@@ -32,8 +28,7 @@ use crate::store::NodeId;
 use crate::units::MAX_SUBSTANCES;
 use serde::{Deserialize, Serialize};
 
-/// Death causes: a store below its safe minimum; a key liquid store froze or boiled; the
-/// body could not pay its upkeep; taken apart by another body.
+/// Death causes: a store below its safe minimum; a key liquid froze or boiled; upkeep not paid; taken by a body.
 pub const LACK: u8 = 0;
 pub const PHASE: u8 = 1;
 pub const SPENT: u8 = 2;
@@ -42,14 +37,13 @@ pub const TAKEN: u8 = 3;
 pub(crate) const BROKEN: u8 = 4;
 /// Worn out by living (`Body::wear`).
 pub const AGE: u8 = 5;
-/// Margins of well-being (`Body::wellbeing_at`) count up to this, and down to `MARGIN_MIN`: the margin of a key store
-/// (the log of its share over its minimum) and that of its reactions over its upkeep (`live` plans for this many upkeeps).
+/// Margins of well-being (`Body::wellbeing_at`) count from `MARGIN_MIN` up to this: a key store's log share over its
+/// minimum, and its reactions over its upkeep (`live` plans for this many upkeeps).
 pub(crate) const MARGIN: f64 = 2.0;
 const MARGIN_MIN: f64 = 1e-3;
 /// Well-being falls as a key liquid comes within this of freezing or boiling, K.
 const PHASE_MARGIN: f32 = 5.0;
 /// The liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of working body (`Body::built`).
-/// About 0.7 to 0.9 in real living tissue (docs/numbers.md).
 pub const WET_TISSUE: f64 = 0.75;
 /// Others a body remembers.
 pub(crate) const KNOWN: usize = 4;
@@ -59,14 +53,11 @@ pub struct Body {
     pub gen: u32,
     pub alive: bool,
     pub cell: u32,
-    /// Members this node stands for (1: an individual; more: a population node). Its
-    /// stores and heat are the members' totals, its genes and brain one (their mean), so every
-    /// law runs on the totals: rates are per kg or per member, times the count. Per member: the
-    /// size a brain perceives, the mass compared with the copy mass. Use `n()`.
+    /// Members this node stands for (1: an individual). Stores and heat are the members' totals, genes and brain their
+    /// mean, so every law runs on the totals. Use `n()`.
     pub count: f64,
     pub lineage: u32,
-    /// The body it was copied from (id; 0 for a placed founder) and its day of birth: a record of
-    /// descent, read by the checks that follow a parent's children
+    /// The body it was copied from (id; 0 for a founder) and its day of birth
     pub parent: u64,
     pub born: u64,
     /// Day of the last update; for a node, the mean by members of the days its members' time was last integrated from
@@ -77,38 +68,33 @@ pub struct Body {
     pub mark: f64,
     /// The cell's cumulative rain at the last update, mol/m²: it caught a share of `rained - this` (`physics::rain_caught`)
     pub rained: f64,
-    /// The share of the light it caught that its light reactions stored at its last update (J per J): its cell sets that
-    /// share of the light it absorbs aside in its bodies' node (`store::Class::Bodies`); a child inherits it
+    /// The share of the light it caught that its light reactions stored at its last update: its cell sets that share
+    /// aside in its bodies' node (`store::Class::Bodies`)
     pub keep: f32,
-    /// The heat it drew from the ground at its last update, W (0 if it gave heat): its cell sets it aside in its bodies'
-    /// node as time passes (`survey::survey`)
+    /// The heat it drew from the ground at its last update, W (0 if it gave heat), set aside in its cell's bodies' node
     pub drew: f32,
     /// Thermal energy, J
     pub e: f64,
     /// mol of each substance
     pub store: Vec<f64>,
     pub genes: Vec<f32>,
-    /// How a node's members differ: the variance of their genes around `genes`, per
-    /// gene, in gene units squared (empty: none), and of their born brain rows around the node's,
-    /// the same for every row (`copy`)
+    /// How a node's members differ: the variance of each gene around `genes` (empty: none), and of their born rows, one
+    /// number for every row
     pub spread: Vec<f32>,
     pub row_spread: f32,
-    /// How a node's members differ in size: the variance of log10 of their bodies (`Body::size_moments`), decades²;
-    /// members who joined earlier have grown more, and they mature first (`copy::young`)
+    /// The variance of log10 of its members' bodies, decades² (`Body::size_moments`, `copy::young`)
     pub size_spread: f32,
     /// How far the mean of log10 of its members' bodies lies below log10 of its mean member's body, decades
     /// (`Body::size_moments`): 0 when all are of one size
     pub size_lag: f32,
-    /// The node of its kind in its cell at the other stage: a young node's adult node, an adult node's young node (its
-    /// id, `Body::id`; none: not known). Births flow along it one way, maturing members the other (`copy::young`)
+    /// The node of its kind in its cell at the other stage (young or adult; its id), along which births and maturing
+    /// members flow (`copy::young`)
     pub link: Option<u64>,
     /// The brain rows it was born with (genes too), in `Life::genomes`
     pub genome: u32,
     /// Key stores (safe minimum > 0) that were liquid at birth, one bit per substance
     pub wet: u64,
-    /// Body matter built for offspring and held back, mol (all members; part of the matter in `store`,
-    /// not counted in the body: `size`, `built`). A mature body puts the share `ALLOC` of what it
-    /// builds here (`copy::grow`); `copy::copy` turns it into children of the size the `CHILD` gene sets
+    /// Body matter built for children and held back, mol (part of `store`, not of the body: `size`, `built`; laws.md 4.2)
     pub brood: f64,
     /// Visible traits: mass kg, light-capture area m², strength, colour (3 bands), height m (`height`)
     pub vis: [f32; 7],
@@ -129,12 +115,10 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
-    /// An individual's wear, 0 at birth: the energy its upkeep turned over per kg, over what it
-    /// can turn over in its life (`Physics::e_life` x 10^`REPAIR`); it dies of age at 1. A node
-    /// has none: its members are of all ages (`live`).
+    /// An individual's wear: the energy its upkeep turned over per kg over `Physics::e_life` x 10^`REPAIR`; it dies of
+    /// age at 1. A node's members are of all ages (laws.md 6.7)
     pub wear: f64,
-    /// Numbers that follow from the genes (`prepare`, at every change of the genes; not saved: a world loaded works them
-    /// out again)
+    /// Numbers that follow from the genes (`prepare`); not saved
     #[serde(skip)]
     pub k: Consts,
 }
@@ -160,9 +144,8 @@ pub struct Consts {
     pub cats: f64,
 }
 
-/// Store amount `x` of a body changes by `d` mol: what rounding leaves below zero is set to zero and counted
-/// (`Counters::rounded`), as `store::apply` does for the nodes of the store; more is a law that overdrew (checked in
-/// debug builds).
+/// Store amount `x` of a body changes by `d` mol; what rounding leaves below zero is set to zero and counted, as
+/// `store::apply` does (a larger overdraw is a law's fault, checked in debug builds).
 pub(crate) fn add_store(x: &mut f64, d: f64, rounded: &mut f64) {
     let was = *x;
     *x += d;
@@ -200,15 +183,13 @@ impl Body {
     pub(crate) fn mass_cap(&self, chem: &Chemistry) -> (f64, f64) {
         self.store.iter().zip(&chem.subs).fold((0.0, 0.0), |(m, c), (a, s)| (m + a * s.molar_mass, c + a * s.cp))
     }
-    /// Its temperature, K: its molten stores hold their fusion enthalpy in `e`, as the ground's do, so a body freezes and
-    /// melts at a plateau (`thermal`).
+    /// Its temperature, K (`thermal`).
     pub fn temp(&self, chem: &Chemistry) -> f64 {
         self.thermal(chem).t
     }
-    /// Where the body stands among the melting plateaus of its stores (`ground::melting`), each
-    /// store melting at its point lowered by what is dissolved in it (`melt`). (What is dissolved only lowers a melting
-    /// point: solved first at the stores' own points, the answer holds when every store that may hold something
-    /// dissolved is molten above its own point, as a warm body's liquid is.)
+    /// Where the body stands among the melting plateaus of its stores (`ground::melting`): its molten stores hold their
+    /// fusion enthalpy in `e`, each melting at its point lowered by what is dissolved in it (`melt`). What is dissolved
+    /// only lowers a point, so the solve at the stores' own points holds when every such store is molten above it.
     pub fn thermal(&self, chem: &Chemistry) -> Melting {
         let (held, cap) = (|k: usize| self.store[k] > 0.0 && chem.subs[k].lf > 0.0, self.heat_cap(chem));
         let own = self.melting_at(chem, cap, |k| chem.subs[k].melt);
@@ -227,8 +208,7 @@ impl Body {
         ks[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
         melting(cap.max(1e-9), self.e, ks[..m].iter().map(|&(tm, k)| (tm, k, self.store[k] * chem.subs[k].lf)))
     }
-    /// Its energy with its stores as they are at the plateau state `th` (`thermal`): their heat capacity at `th.t` and
-    /// the fusion enthalpy of their molten shares there, J.
+    /// Its energy at the plateau state `th`: heat capacity times `th.t` plus the fusion enthalpy molten there, J.
     pub(crate) fn energy_in(&self, chem: &Chemistry, th: &Melting) -> f64 {
         self.heat_cap(chem) * th.t + self.fusion_in(chem, th)
     }
@@ -236,20 +216,18 @@ impl Body {
     pub(crate) fn fusion_in(&self, chem: &Chemistry, th: &Melting) -> f64 {
         self.fused_of(chem, th, &self.store)
     }
-    /// The fusion enthalpy amounts `m` hold in the body at the plateau state `th`: of each its molten share there (what
-    /// `th` does not hold molten, as a store it did not have then, by its melting point now), J.
+    /// The fusion enthalpy amounts `m` hold at the plateau state `th` (a store `th` does not know, by its melting point
+    /// now), J.
     fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
         let molten_at = |k: usize| th.t >= chem.subs[k].melt || th.t >= self.melt(chem, k);
         let molten = |k: usize| if th.bits >> k & 1 == 1 { th.molten(k) } else { molten_at(k) as u8 as f64 };
         m.iter().enumerate().filter(|&(k, &a)| a > 0.0 && chem.subs[k].lf > 0.0).map(|(k, a)| a * chem.subs[k].lf * molten(k)).sum()
     }
-    /// Its energy at `t` with what is at or over its melting point molten (`Chemistry::fused_heat`), J: the inverse of
-    /// `temp` off a plateau.
+    /// Its energy at `t`, what is at or over its melting point molten, J: the inverse of `temp` off a plateau.
     pub fn energy_at(&self, chem: &Chemistry, t: f64) -> f64 {
         self.heat_cap(chem) * t + (0..chem.ns()).map(|k| self.store[k] * chem.fused_heat(k, t, |j| self.store[j])).sum::<f64>()
     }
-    /// The heat that leaves with amounts `m` (mol of each substance) from the body at the plateau state `th` (`thermal`):
-    /// their heat capacity at its temperature and the fusion enthalpy of their molten shares, J.
+    /// The heat that leaves with amounts `m` (mol) at the plateau state `th`, with their molten shares' fusion enthalpy, J.
     pub(crate) fn heat_with(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
         chem.heat_cap_of(m) * th.t + self.fused_of(chem, th, m)
     }
@@ -257,9 +235,8 @@ impl Body {
     pub fn volume(&self, chem: &Chemistry, t: f64) -> f64 {
         self.store.iter().enumerate().map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
     }
-    /// Days between its updates: its `INTERVAL` gene; a population node without a brain's at least `Config::node_days`,
-    /// as a node of many members that takes no decisions needs no update more often (its update integrates the time
-    /// since). A body with a brain keeps its gene's pace: its actions and its learning go by decisions.
+    /// Days between its updates: its `INTERVAL` gene, and at least `Config::node_days` for a population node without a
+    /// brain, which takes no decisions (laws.md 4.4, the pace of nodes).
     pub fn interval(&self, w: &crate::World) -> u64 {
         let own = self.own_interval();
         if self.n() > 1.0 && w.life.brainless(self) { own.max(w.cfg.node_days as u64) } else { own }
@@ -268,9 +245,8 @@ impl Body {
     pub(crate) fn paces(&self, w: &crate::World) -> f64 {
         self.interval(w) as f64 / self.own_interval() as f64
     }
-    /// The share of a node's members that dies in an update when the share `f` would die in one interval of its gene:
-    /// they die at the rate -ln(1 - f) per such interval, so over the update 1 - (1 - f)^`paces`, as many in a time
-    /// whatever the length of its updates.
+    /// The share that dies in an update when `f` would die in one interval of its gene: the rate -ln(1 - f) per
+    /// interval over `paces` intervals, so as many die in a time whatever the length of the updates.
     pub(crate) fn over_span(&self, f: f64, w: &crate::World) -> f64 {
         let d = self.paces(w);
         if d == 1.0 { f } else { 1.0 - (1.0 - f).powf(d) }
@@ -284,11 +260,10 @@ impl Body {
         self.genes = genes;
         self.prepare(chem, p);
     }
-    /// Work `k` out from the genes (and the physics, which stays the same through a run): at every change of the genes.
+    /// Work `k` out from the genes and the physics, at every change of the genes.
     pub fn prepare(&mut self, chem: &Chemistry, p: &crate::Physics) {
         let (lay, nr) = (Layout::of(chem), chem.reactions.len());
         let (cat, on) = (lay.cat, |r: usize| self.genes[lay.cat + r] > 0.0);
-        // (The vectors of the last `k` are filled again: no new ones at each change of the genes.)
         let mut k = std::mem::take(&mut self.k);
         k.cat.clear();
         k.cat.extend((0..nr).map(|r| if on(r) { self.dec(cat + r) } else { 1.0 }));
@@ -296,9 +271,8 @@ impl Body {
         k.burn.extend((0..nr).filter(|&r| on(r) && chem.dh(r) < 0.0 && !chem.keeps(r)).map(|r| (r, -chem.dh(r))));
         k.upt.clear();
         k.upt.extend((0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])));
-        // Its catalysts' capacity: the catalysed rate per unit of the contact of its phases (`change`) at `t_cat`, summed
-        // over the genes that are on, its gases at their share of the open air (`Chemistry::air`) to their order;
-        // dearer if they keep their shape when warmer (`Physics::t_firm`).
+        // Catalysts' capacity: the catalysed rate per unit of contact at `t_cat`, summed over the genes that are on, its
+        // gases at their share of the open air to their order; dearer when firm past `t_firm` (laws.md 6.2).
         let open = |rx: &crate::chem::Reaction| -> f64 {
             rx.inputs.iter().enumerate().filter(|(_, x)| chem.phase(x.0 as usize, p.t_cat) == Phase::Gas).map(|(q, &(k, _))| chem.air.get(k as usize).copied().filter(|&x| x > 0.0).unwrap_or(1.0).powi(rx.order(q) as i32)).product()
         };
@@ -329,11 +303,9 @@ impl Body {
         let leaf = self.leaf_area(chem, p) / self.n();
         [m1 as f32, leaf as f32, self.genes[STRENGTH], (c[0] / v) as f32, (c[1] / v) as f32, (c[2] / v) as f32, self.height(chem, cfg) as f32]
     }
-    /// Well-being at temperature `t`: the energy its catalysed reactions could release from a member's stores (log, in
-    /// decisions' worth: `think` is what one decision of the starting brain costs a member of the mass it copies at, J, so
-    /// shedding mass does not raise it), less how near it is to its limits: each key store's margin over its safe minimum,
-    /// the margin of its reactions over its upkeep (`spare`), both in `MARGIN` form, and its key liquids to freezing or
-    /// boiling (`PHASE_MARGIN`).
+    /// Well-being at `t` (laws.md 5.4): the log of the energy its reactions could release from a member's stores in
+    /// decisions' worth (`think`, J), less its nearness to its limits: key stores to their minimums and reactions to upkeep
+    /// (`spare`), in `MARGIN` form, and key liquids to freezing or boiling.
     pub(crate) fn wellbeing_at(&self, chem: &Chemistry, think: f64, t: f64, spare: f64) -> f32 {
         let (lay, mass) = (Layout::of(chem), self.size(chem));
         let mut w = ln(1.0 + (self.fuel(chem, t) / self.n() / think) as f32) + ln(spare.clamp(MARGIN_MIN, MARGIN) as f32 / MARGIN as f32);

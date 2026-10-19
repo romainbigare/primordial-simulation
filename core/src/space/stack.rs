@@ -1,7 +1,5 @@
-//! Stacks: the nodes above and below each cell (soil layers, a deep store, air layers), and the vertical links between
-//! them. Every cell has the same layers, bottom to top; a layer's nodes live on one level of the mesh, so a coarse air
-//! layer has one node over many cells. The stack numbers its nodes layer by layer (`node`), so its vertical links are
-//! plain arrays like the mesh's links. Only geometry: which node is above which, through what area, how far apart.
+//! Stacks: the nodes above and below each cell and the vertical links between them. Every cell has the same layers;
+//! a layer's nodes live on one level of the mesh. Only geometry: which node is above which, through what area, how far.
 
 use super::Mesh;
 
@@ -18,8 +16,7 @@ pub struct Stack {
     /// The level of each layer, and the first node of each layer (then the number of nodes)
     level: Vec<usize>,
     first: Vec<u32>,
-    /// Each vertical link: the node below, the node above, the distance between the layers' middles, m, and the area
-    /// it crosses, m²
+    /// Each vertical link: the node below and above, the distance between the layers' middles, m, and its area, m²
     lo: Vec<u32>,
     hi: Vec<u32>,
     dist: Vec<f64>,
@@ -27,8 +24,7 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// The stacks of `layers`, bottom to top. Two layers next to each other are linked once per cell of the finer of
-    /// their two levels, across that cell's area: a cell under a coarse layer has its own link up to the node over it.
+    /// The stacks of `layers`, bottom to top: neighbouring layers link once per cell of the finer level, across its area.
     pub fn new(mesh: &Mesh, layers: &[Layer]) -> Stack {
         assert!(layers.iter().all(|l| l.level < mesh.levels() && l.depth > 0.0), "a layer lies on a level of the mesh and has a thickness");
         let mut first = vec![0u32];

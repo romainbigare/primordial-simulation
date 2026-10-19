@@ -1,5 +1,5 @@
-//! The body as tissue: its matter and brood, the liquid it keeps, its size and supply, the levels of its stores, what
-//! it is built of, its height, and when it lacks a store.
+//! The body as tissue: matter and brood, size and supply, the levels of its stores, its materials and height (laws.md
+//! 6.1, 3.6).
 
 use super::{Body, Layout, COPY_MASS, WET_TISSUE};
 use crate::chem::{Chemistry, Phase};
@@ -28,8 +28,7 @@ impl Body {
     pub fn brooded(&self, chem: &Chemistry) -> f64 {
         chem.matter().map_or(0.0, |m| self.brood.max(0.0).min(self.store[m].max(0.0)))
     }
-    /// Amounts `m` (mol of each substance, at most what it holds) leave the stores; the brood falls in the share of the
-    /// body matter that left (it is part of it).
+    /// Amounts `m` (mol, at most what it holds) leave the stores; the brood falls in the share of the matter that left.
     pub(crate) fn lose(&mut self, chem: &Chemistry, m: &[f64]) {
         let matter = chem.matter().map(|k| (k, self.store[k], self.brooded(chem)));
         for (s, a) in self.store.iter_mut().zip(m) {
@@ -43,10 +42,8 @@ impl Body {
     pub fn matter_kg(&self, chem: &Chemistry) -> f64 {
         chem.matter().map_or(0.0, |m| (self.store[m] - self.brooded(chem)) * chem.subs[m].molar_mass)
     }
-    /// The body, kg (all members): its body matter (less the brood) and the key liquid it keeps with it, `h` the most share
-    /// of its mass it keeps of any (`wet_h`): its matter over 1 - `h`, and no more than its matter and all its liquid (a
-    /// body short of liquid is as big as it is wet). The fuel it stores and liquid held past `h` are not body. The safe
-    /// minimums go by it. A chemistry with no body matter: the whole mass.
+    /// The body, kg (all members): its matter (less the brood) over 1 - `h`, `h` the most share it keeps of a key liquid
+    /// (`wet_h`), and no more than its matter and all its liquid. Fuel is not body. The safe minimums go by it.
     pub fn size(&self, chem: &Chemistry) -> f64 {
         if chem.matter().is_none() {
             return self.mass(chem);
@@ -56,16 +53,14 @@ impl Body {
         (matter / (1.0 - h)).min(matter + liquid)
     }
     /// The living body its matter makes, kg (all members): its matter (less the brood) over 1 - `WET_TISSUE`, whatever
-    /// liquid it holds. Growth, maturity, intake, building, upkeep, wear, force and the leaf go by it. Without body
-    /// matter: `size`.
+    /// liquid it holds. Growth, intake, upkeep, wear, force and the leaf go by it.
     pub fn built(&self, chem: &Chemistry) -> f64 {
         if chem.matter().is_none() {
             return self.size(chem);
         }
         self.matter_kg(chem) / (1.0 - WET_TISSUE)
     }
-    /// Whether the mean member's body (`built`) is at or past its copy mass (`COPY_MASS`): grown, and it puts a share of
-    /// what it builds into offspring (`copy::grow`). A node mixes ages, so its mean member says only what most of it is.
+    /// Whether the mean member's body (`built`) is at or past its copy mass (`COPY_MASS`).
     pub fn adult(&self, chem: &Chemistry) -> bool {
         self.mature(self.member_body(chem))
     }
@@ -73,14 +68,12 @@ impl Body {
     pub fn member_body(&self, chem: &Chemistry) -> f64 {
         self.built(chem) / self.n()
     }
-    /// The mean and the variance of log10 of its members' bodies, kg: the mean `size_lag` below log10 of its mean
-    /// member's body (`member_body`), so that it rises by as much when they all grow alike in proportion; the variance
-    /// `size_spread`.
+    /// The mean and the variance of log10 of its members' bodies, kg: the mean is kept as `size_lag` below log10 of the
+    /// mean member's body, so it rises as much when all grow alike in proportion.
     pub fn size_moments(&self, chem: &Chemistry) -> (f32, f32) {
         ((self.member_body(chem).max(f64::MIN_POSITIVE).log10() - self.size_lag as f64) as f32, self.size_spread)
     }
-    /// Its members' log10 bodies (kg) have the mean `mean` and the variance `v` (`size_moments`), with its members and
-    /// stores as they are now.
+    /// Its members' log10 bodies (kg) have the mean `mean` and the variance `v` (`size_moments`).
     pub(crate) fn set_size(&mut self, chem: &Chemistry, mean: f64, v: f64) {
         self.size_lag = (self.member_body(chem).max(f64::MIN_POSITIVE).log10() - mean) as f32;
         self.size_spread = v.max(0.0) as f32;
@@ -89,10 +82,8 @@ impl Body {
     pub fn mature(&self, member: f64) -> bool {
         member >= (1.0 - 1e-9) * self.dec(COPY_MASS)
     }
-    /// Activity, 0..1: a body's chemistry runs in its liquid, so it runs as min(1, l / l*)^n, l the key liquids it holds,
-    /// l* what `level` keeps of them, n `Physics::dormancy`: a dry body is nearly dormant. A body with no key liquid, or
-    /// none that it keeps a level of, has 1. Upkeep (`upkeep`), its catalysts (`catalyst`), its building (`copy::grow`)
-    /// and the share of a freezing that kills (`live`) go with it.
+    /// Activity, 0..1: min(1, l / l*)^n, l the key liquids it holds, l* their `level`, n `Physics::dormancy`, as a body's
+    /// chemistry runs in its liquid (laws.md 6.5). 1 without a key liquid it keeps a level of.
     pub fn activity(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {
         if self.wet == 0 || chem.matter().is_none() {
             return 1.0;
@@ -112,8 +103,7 @@ impl Body {
     pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {
         chem.melt_in(k, |j| self.store[j])
     }
-    /// The key liquids it holds, kg (all members), and the most share of its mass it keeps of any of them (its keep gene,
-    /// 0..`MAX_KEEP`).
+    /// The key liquids it holds, kg, and the most share of its mass it keeps of any (its keep gene, 0..`MAX_KEEP`).
     pub fn wet_h(&self, chem: &Chemistry) -> (f64, f64) {
         let (keep, ns) = (Layout::of(chem).keep, chem.ns());
         // The key liquids are a few of the substances: visit the bits set, lowest first.
@@ -126,24 +116,20 @@ impl Body {
         }
         (liquid, h)
     }
-    /// Mass-equivalent a body's size is counted by, kg, for what goes with mass^0.75 in life: per member `m_ref` times its
-    /// `mass` over `m_ref` to the power `intake_exp`, times the count. Intake, building (`c_build`) and the leaf go by it;
-    /// upkeep does not (mass^1.0, `upkeep`).
+    /// Mass-equivalent for what goes with mass^0.75 in life, kg: per member `m_ref` (`mass` / `m_ref`)^`intake_exp`, times
+    /// the count. Intake, building and the leaf go by it; upkeep goes with mass^1.0.
     pub fn equiv(&self, p: &crate::Physics, mass: f64) -> f64 {
         let n = self.n();
         n * p.m_ref * (mass / n / p.m_ref).powf(p.intake_exp)
     }
-    /// What a body can take and build, in kg-equivalents: `equiv` of the body that is built (the fuel it stores is carried,
-    /// not working tissue), times the pace of its temperature (`pace`): the whole tempo of a body goes with exp(-Ea/T)
-    /// (metabolic theory of ecology, Gillooly et al. 2001), as what it pays to live does.
+    /// What a body can take and build, in kg-equivalents: `equiv` of its living body times the pace of its temperature,
+    /// as the whole tempo of a body goes with exp(-Ea/T) (Gillooly et al. 2001).
     pub fn supply(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
         self.equiv(p, self.built(chem)) * self.pace(chem, p, t)
     }
-    /// Most of substance `k` the body holds, mol, by its keep gene: for a key liquid the largest share of the body it may
-    /// make up, `h` (below `MAX_KEEP`), so h / (1 - h) of its matter; for a solid it builds (`Chemistry::materials`), what
-    /// its share in what it builds (`share`) makes of its matter; for every other substance but body matter, kg of it per
-    /// kg of its body (`built`). Body matter itself is a share of the whole mass `mass` (also for a chemistry with none).
-    /// What it takes stops there.
+    /// Most of substance `k` the body holds, mol, by its keep gene (laws.md 6.1): a key liquid h / (1 - h) of its matter;
+    /// a solid it builds what its `share` makes of its matter; any other, kg per kg of living body; body matter a share
+    /// of the whole mass `mass`.
     pub fn level(&self, chem: &Chemistry, k: usize, mass: f64) -> f64 {
         self.level_at(chem, k, mass, self.gene(Layout::of(chem).keep + k))
     }
@@ -163,20 +149,17 @@ impl Body {
             _ => (share(f) * (mass - self.store[k] * mm) / mm).max(0.0),
         }
     }
-    /// What the body is built of as a material, all members: [volume m³, the sum of volume x Young's modulus, the sum of
-    /// volume x the stress it breaks at] over its soft tissue (`built` at `Physics::rho_body`, with the numbers of body
-    /// matter) and each solid it builds (`Chemistry::materials`). Its fuel and free liquid are in none of them.
+    /// What the body is built of, all members: [volume m³, Σ volume × Young's modulus, Σ volume × breaking stress] over
+    /// its soft tissue (`built` at `rho_body`) and each solid it builds.
     pub fn solids(&self, chem: &Chemistry, cfg: &crate::Config) -> [f64; 3] {
         let Some(m) = chem.matter() else { return [0.0; 3] };
         let soft = self.built(chem).max(0.0) / cfg.phys.rho_body;
         let of = |v: f64, s: &crate::chem::Substance| [v, v * s.modulus, v * s.rupture];
         chem.materials().map(|k| of(self.store[k].max(0.0) * chem.subs[k].molar_mass / chem.subs[k].density[0], &chem.subs[k])).fold(of(soft, &chem.subs[m]), |a, x| [a[0] + x[0], a[1] + x[1], a[2] + x[2]])
     }
-    /// A member's height, m: what what it is built of holds up against its own weight, the order of light in
-    /// `survey::shade`. A column under its own weight buckles past h³ = `GREENHILL` E I / w (Greenhill 1881; McMahon 1973
-    /// found real stems near a quarter of it), w its weight per length; with its solids in one round section (I = A² / 4π,
-    /// A = V / h), h⁴ = `GREENHILL` / 4π x (sum of E V) x V / (m g) (`solids`), m the member's whole mass. Without body
-    /// matter: (mass / `rho_body`)^(1/3).
+    /// A member's height, m: what it is built of holds up against its own weight. A column buckles past h³ = `GREENHILL`
+    /// E I / w (Greenhill 1881; real stems near a quarter of it, McMahon 1973); one round section (I = A² / 4π, A = V / h)
+    /// gives h⁴ = `GREENHILL` / 4π × Σ E V × V / (m g).
     pub fn height(&self, chem: &Chemistry, cfg: &crate::Config) -> f64 {
         let (n, mass) = (self.n(), self.mass(chem));
         if chem.matter().is_none() {
@@ -185,14 +168,12 @@ impl Body {
         let [v, ev, _] = self.solids(chem, cfg);
         (GREENHILL / (4.0 * std::f64::consts::PI) * ev * v / (n * mass * cfg.gravity).max(1e-30)).max(0.0).powf(0.25)
     }
-    /// The energy to break the share `f` of the body, J: what it is built of times the stress each breaks at (`solids`, J
-    /// per m³), so hard parts protect. A bite pays it (`choose::take_body`); a mover pushing through breaks as much as
-    /// the energy it spends there pays for (`choose::wear`).
+    /// The energy to break the share `f` of the body, J: its materials' volumes times their breaking stresses, so hard
+    /// parts protect.
     pub fn breaking(&self, chem: &Chemistry, cfg: &crate::Config, f: f64) -> f64 {
         f * self.solids(chem, cfg)[2]
     }
-    /// The share of solid `k` in what the body builds: its keep gene of `k`, 0..1, the shares cut together to `MAX_KEEP` at
-    /// most; the rest is matter. `usize::MAX`: their sum.
+    /// The share of solid `k` in what the body builds (its keep gene, all together at most `MAX_KEEP`; `usize::MAX`: the sum).
     pub fn share(&self, chem: &Chemistry, k: usize) -> f64 {
         let keep = Layout::of(chem).keep;
         let all: f64 = chem.materials().map(|x| self.gene(keep + x).clamp(0.0, 1.0)).sum();
@@ -205,7 +186,7 @@ impl Body {
     }
     /// A store below its safe minimum, or nothing left of a member, for its mass `m` and temperature `t`.
     pub fn lacking(&self, chem: &Chemistry, m: f64, t: f64) -> bool {
-        // (A safe minimum is a share of the body, not of the whole mass: a body is not killed by holding fuel.)
+        // A safe minimum is a share of the body, not of the whole mass: holding fuel kills no body.
         let (lay, size) = (Layout::of(chem), self.size(chem));
         self.empty_at(m) || (0..chem.ns()).any(|k| !self.burns_at(chem, k, t) && self.store[k] * chem.subs[k].molar_mass < self.gene(lay.min + k) * size)
     }

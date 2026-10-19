@@ -1,6 +1,5 @@
-//! Wind: gas and heat between neighbouring air nodes, along the links of the air level (`AIR`) that share a border.
-//! Here the three pushes on each link and what they carry over a step, as the coefficients of an implicit step
-//! (`solve::band`); the air step (`step`) solves them with the exchange with the ground.
+//! Wind: gas and heat between neighbouring air nodes (laws.md 1.6): the three pushes on each link as the coefficients
+//! of an implicit step (`solve::band`), which the air's step solves with the ground's exchange.
 
 use super::super::Scratch;
 use crate::solve::band::Carry;
@@ -34,8 +33,7 @@ impl Links {
     }
 }
 
-/// The air of each node as the wind sees it: the amount, mol, the heat capacity, J/K, the mass, kg, and the
-/// temperature, K.
+/// The air of each node as the wind sees it: amount, mol; heat capacity, J/K; mass, kg; temperature, K.
 pub(super) struct Air<'a> {
     pub(super) n: &'a [f64],
     pub(super) capa: &'a [f64],
@@ -51,12 +49,9 @@ pub(super) struct Pushes {
     even: Vec<f64>,
 }
 
-/// Three pushes on each link: the pressure of the whole column (p = nRT/V) drives gas from high to low, evened in the
-/// time sound takes to cross the link (the pressure of neighbouring columns evens out in about that time: Lamb waves
-/// travel at the speed of sound, Lindzen 1990, 9.2); the warmth difference at equal height turns the columns over (the
-/// lower half flows to the warmer node and the upper half back, at the `wind` speed per K through half the column
-/// across the link's width, both turned sideways by the planet's rotation by the gradient of the warmth across the
-/// link, at its latitude); eddies mix the two columns (`mix` across the link's width over its length).
+/// Three pushes on each link: the column's pressure, evened in the time sound takes to cross it (Lamb waves, Lindzen
+/// 1990, 9.2); overturning by the warmth difference, the lower half toward the warmer node at `wind` per K, turned by
+/// the rotation at the link's latitude; and eddy mixing (`mix` × width / length).
 pub(super) fn pushes(cfg: &Config, s: &Scratch, air: &Level, links: &Links, at: &Air) -> Pushes {
     let na = air.n();
     let warmth: Vec<f64> = (0..na).map(|j| at.t[j] + s.gam[j] * s.zair[j]).collect();
@@ -91,11 +86,9 @@ impl Pushes {
         let back = links.b.iter().zip(&self.even).map(|(&b, &g)| dt * g * c(b)).collect();
         (fwd, back)
     }
-    /// The coefficients over `dt` of a gas whose share in the upper half of each node is `split` (`Scratch::split`),
-    /// given the total amounts after the step `n`, the gas of each node's [lower, upper] half `halves` and what the
-    /// pressure moves over each link over the step, `flow`, mol: mixing evens its share of the gas, the overturning carries
-    /// the share of each half that is this gas, and the pressure's flow carries its share of the node it leaves. With
-    /// `split` None, the heat: each half carries its node's heat per mol.
+    /// The coefficients over `dt` of a gas whose share in each node's upper half is `split`, given the totals after the
+    /// step `n`, each half's gas `halves` and the pressure's flow `flow`: mixing evens its share, the overturning and the
+    /// pressure carry each half's share. With `split` None, the heat, each half carrying its node's heat per mol.
     pub(super) fn carry(&self, links: &Links, n: &[f64], (split, halves): (Option<&[f64]>, &[[f64; 2]]), flow: &[f64], dt: f64) -> Coef {
         let (mut fwd, mut back) = (Vec::with_capacity(flow.len()), Vec::with_capacity(flow.len()));
         for (l, (&a, &b)) in links.a.iter().zip(&links.b).enumerate() {
@@ -112,8 +105,8 @@ impl Pushes {
     }
 }
 
-/// The gradient of `v` at each node of `air` [east, south], per m: the least-squares fit of its differences to the
-/// nodes it shares a border with (links of width > 0). Along an axis with no such neighbour it is 0.
+/// The gradient of `v` at each node [east, south], per m: the least-squares fit of its differences to its bordering
+/// nodes (0 along an axis with none).
 fn gradient(air: &Level, v: &[f64]) -> Vec<[f64; 2]> {
     let c = air.centre();
     (0..air.n())

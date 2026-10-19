@@ -20,9 +20,8 @@ impl Chemistry {
         sum(&rx.outputs) - sum(&rx.inputs)
     }
 
-    /// Enthalpy change of one unit of reaction `r` with each substance in its phase at `t` by its own melting and boiling
-    /// points (`phase`), J: `dh` with the fusion enthalpy of what is liquid or gas there and the vaporisation enthalpy of
-    /// what is gas. At `T_SURF` it is the reaction heat as measured, from and to the states the substances are found in.
+    /// Enthalpy change of one unit of reaction `r` with each substance in its phase at `t`, J: at `T_SURF` the reaction
+    /// heat as measured.
     pub fn dh_at(&self, r: usize, t: f64) -> f64 {
         let h = |k: usize| {
             let s = &self.subs[k];
@@ -47,9 +46,8 @@ impl Chemistry {
         (0..self.reactions.len()).any(|r| self.burning(r) && self.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
     }
 
-    /// Does reaction `r` get less heat out of a solid or liquid it takes than a burning of it does (a reaction that releases heat
-    /// from it with a gas)? Then it keeps the rest in what it makes (a fuel gas, a mineral): it is no burning, and a body runs it at
-    /// its catalyst's pace and never pays its upkeep with its heat (`Body::prepare`).
+    /// Does reaction `r` get less heat out of a solid or liquid it takes than burning it does? Then it keeps the rest in
+    /// what it makes: no burning, run at its catalyst's pace (laws.md 2.4).
     pub fn keeps(&self, r: usize) -> bool {
         let per = |q: usize, k: u16| self.reactions[q].inputs.iter().find(|p| p.0 == k).map_or(f64::NEG_INFINITY, |p| -self.dh(q) / p.1 as f64);
         (self.reactions[r].inputs.iter().filter(|p| !self.gas_at_surface(p.0 as usize))).any(|p| (0..self.reactions.len()).any(|q| self.burning(q) && per(q, p.0) > (1.0 + KEEPS_MARGIN) * per(r, p.0)))
@@ -70,10 +68,8 @@ impl Chemistry {
         self.build.as_ref().and_then(|b| b.outputs.first()).map(|p| p.0 as usize)
     }
 
-    /// What growth (`build`) makes body matter of besides the fuel (the mineral of the fixing reaction's gas and the one of
-    /// the rock element, both of the ground): each one's substance and the mol of it a mol of matter is made of. They are
-    /// the inputs that no reaction of the chemistry burns (releases heat from with a gas, as a fuel burns), so a body takes
-    /// them from the ground or what it eats and does not burn them. Empty where bodies do not grow or grow from one fuel.
+    /// What growth makes body matter of besides the fuel, with the mol per mol of matter: the inputs no reaction burns,
+    /// which a body takes from the ground or what it eats. Empty where bodies do not grow or grow from one fuel.
     pub fn minerals(&self) -> &[(usize, f64)] {
         &self.derived().minerals
     }
@@ -103,9 +99,7 @@ impl Chemistry {
         Some((m, burn))
     }
 
-    /// The fixing reaction: the one that makes a mineral growth is built of (`minerals`) from the air's gas, an element
-    /// of the mineral that only a gas it takes brings (none where bodies do not grow, or the mineral comes from nowhere
-    /// else).
+    /// The fixing reaction: the one that makes a mineral of growth (`minerals`) from an element only a gas it takes brings.
     pub fn fixing(&self) -> Option<usize> {
         let minerals = self.minerals();
         let gas = |k: u16| self.gas_at_surface(k as usize);

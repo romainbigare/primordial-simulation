@@ -1,11 +1,6 @@
-//! The clock: time is a whole number of seconds since the start of the world (`World::time`), so it adds up exactly
-//! at any step. The calendar (`Calendar`) derives the day, the month, the year and the season from it.
-//!
-//! A process runs every `period` seconds, counted from the start of each longer period that holds it (`Every`), so a
-//! fast process runs several times inside a slow one. A list of processes is their fixed order at one time: `due`
-//! gives the ones that run at a time in that order, and `next` the next time any of them runs.
-//!
-//! `sleep`: a calm node's own process sleeps until an alarm, or until a large gain since it fell asleep wakes it.
+//! The clock: time is whole seconds since the start (`World::time`), so it adds up exactly; the calendar gives the day,
+//! month, year and season. A process runs every `period` from the start of each longer period that holds it (`Every`);
+//! a list of processes is their fixed order at one time. `sleep`: the sleep and wake of nodes.
 
 pub mod sleep;
 
@@ -38,9 +33,8 @@ impl Calendar {
     }
 }
 
-/// A process that runs every `period` seconds from the start of each `within` seconds (the period of the slower
-/// process that holds it). When `within` is not a whole number of periods, its last run there stands for the time to
-/// the end of `within`. Both are above 0 (`Config::validate`).
+/// A process that runs every `period` seconds from the start of each `within` seconds; its last run there stands for
+/// the time to the end of `within`. Both are above 0.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Every {
     pub period: u64,

@@ -13,10 +13,9 @@ const CRITIC_FLOOR: f32 = 1e-3;
 /// capture area).
 const STRENGTH_STEP: f32 = 0.2;
 
-/// Learn from the last decision: the change of well-being since, plus the discounted estimate of how it will go from
-/// the state now, less the estimate made then. The critic row moves toward that; the body's learned rows move along the
-/// decision's trace by it, in units of its spread, times the body's learning rate (each row by a step of its own size,
-/// `brain::learn`). A node's rows are its members' one brain: its decision is that of all of them.
+/// Learn from the last decision (actor-critic): the change of well-being since plus the discounted estimate from now,
+/// less the estimate then. The critic moves toward it; the learned rows move along the decision's trace by it, in units
+/// of its spread, times the learning rate (`brain::learn`).
 pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     let (l, lr, cr, nh) = (s.learned(), b.learn_rate(), s.critic() * s.r(), s.h);
     if b.trace.len() != nh + l || lr <= 0.0 {
@@ -25,7 +24,7 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     let (h, c) = b.trace.split_at(nh);
     let v = |x: &[f32]| b.rows[cr + nh] + brain::dot(&b.rows[cr..cr + nh], x);
     let delta = wb - b.wb + w.cfg.phys.discount * v(now) - v(h);
-    // (An error too big for a number teaches nothing and leaves the critic's average as it was.)
+    // An error too big for a number teaches nothing.
     let var = if b.var > 0.0 { b.var + CRITIC_RATE * (delta * delta - b.var) } else { delta * delta };
     let a = lr * delta / (var.sqrt() + CRITIC_FLOOR);
     if !(a.is_finite() && var.is_finite()) {
@@ -36,9 +35,8 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     brain::learn(&mut b.rows[..l * s.r()], h, c, a / lr, lr, &mut b.ms, (w.cfg.phys.learn_beta, w.cfg.phys.learn_most));
 }
 
-/// Watch another body (it costs the turn): its rows move part of the way toward the other's if their brains have the
-/// same sizes; less the less alike the two bodies are (size, light-capture area, strength), as a body can only copy what
-/// its own body can do.
+/// Watch another body (it costs the turn): its rows move part of the way toward the other's if the brains have the same
+/// sizes, less the less alike the bodies are, as a body can only copy what its own body can do.
 pub(super) fn watch(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let o = &w.life.bodies[s];
     let (u, v) = (o.vis, b.visible(&w.chem, &w.cfg));

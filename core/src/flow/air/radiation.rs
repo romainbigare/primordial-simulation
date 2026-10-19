@@ -16,13 +16,10 @@ pub(super) fn insolation(s0: f64, lat: f64, decl: f64) -> f64 {
 /// Layers of the air over a cell in `column`.
 pub(crate) const LAYERS: usize = 4;
 
-/// The layers of the air over a cell that send heat radiation [down to the ground, up to space],
-/// as how much colder than the air touching the ground each is, K: the grey absorber of optical
-/// depth `x` lies like the air's mass (scale height `h`, in a column `l` deep), and the air's
-/// temperature falls by `gam` per metre. Each layer sends that side the same share of what the
-/// column sends it, from its height (Schwarzschild's integral, summed at `LAYERS` points: see
-/// `glow`). More gas lifts the layers that reach space into colder air, so less leaves and the
-/// ground warms, with no ceiling (one slab at the mean temperature has one: 2^(1/4) times the bare ground's).
+/// The layers of the air over a cell that send heat radiation [down, up], as how much colder than the air at the
+/// ground each is, K: a grey absorber of optical depth `x` spread like the air's mass (scale height `h`, column `l`),
+/// cooling by `gam` per metre, summed at `LAYERS` points of Schwarzschild's integral. More gas lifts the layers that
+/// reach space into colder air, so the ground warms with no ceiling (a single slab would have one).
 pub fn column(x: f64, gam: f64, l: f64, h: f64) -> [[f64; LAYERS]; 2] {
     let (f, e, mut out) = (one_minus_exp(x), (-l / h).exp(), [[0.0; LAYERS]; 2]);
     // Drop to the height with a share `above` of the absorber above it.
@@ -49,10 +46,8 @@ fn glow_slope(f: f64, tl: f64, lay: &[f64; LAYERS]) -> (f64, f64) {
     })
 }
 
-/// What a ground node's surface balance reads over a step, per m² of its cell: the shortwave it absorbs, W/m²; the
-/// temperature of the air touching it, K; the heat it gains from the gas it exchanges with the air, linearised about
-/// its temperature `t0` (`gain` W/m² there and `slope` W/(m² K) more per K warmer), and from rain at the air's
-/// temperature `t_rain` through `g_rain`, W/(m² K).
+/// What a ground node's surface balance reads, per m²: shortwave absorbed, W/m²; the air's temperature at the ground,
+/// K; the heat of the gas it exchanges, linearised about `t0` (`gain`, `slope`); and rain at `t_rain` through `g_rain`.
 pub(super) struct Surface {
     pub(super) sw: f64,
     pub(super) tl: f64,
@@ -63,9 +58,8 @@ pub(super) struct Surface {
     pub(super) g_rain: f64,
 }
 
-/// What the balance gives: the temperature of the node at the end of the step, K; the heat it gives its air node, J,
-/// and the slope of that with the air's temperature, J/K, and with the node's temperature, J/K; how far the node's
-/// temperature moves per W/m² more that reaches it, K m²/W; and the heat that leaves to space through the air, J.
+/// What the balance gives: the node's end temperature, K; the heat it gives its air node, J, with its slopes with the
+/// air's and the node's temperature, J/K; the node's response per W/m², K m²/W; the heat to space through the air, J.
 pub(super) struct Balance {
     pub(super) ts: f64,
     pub(super) to_air: f64,
@@ -76,13 +70,9 @@ pub(super) struct Balance {
 }
 
 impl Surface {
-    /// The balance of ground node `i`, of `area` m², over `dt` seconds: the ground emits σT⁴, of which the air absorbs
-    /// its share and emits by its layers (`column`); contact heat with the air touching the ground (`sensible`); the
-    /// heat of the gas it exchanges. The node's temperature is solved implicitly, the emission linearised about the
-    /// node's temperature before the step (backward Euler): heat reaches the surface from the node through its heat
-    /// capacity over the step (none on a melting plateau) in series with any soft solid cover. A plateau holds the node
-    /// only while its fusion enthalpy lasts: a step that would freeze (or melt) more than the node holds takes it off,
-    /// and its heat capacity holds it back.
+    /// The balance of ground node `i` over `dt` seconds: σT⁴ out, the air's layers back (`column`), contact heat
+    /// (`sensible`) and the gas's heat; solved implicitly about the temperature before the step, the node's heat capacity
+    /// in series with any soft cover. A plateau holds the node only while its fusion enthalpy lasts.
     pub(super) fn balance(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, fusion: f64) -> Balance {
         let (adt, f, t) = (area * dt, s.seen[i][2], s.state.tg[i]);
         let ((down, d_down), (emit, d_emit)) = (glow_slope(f, self.tl, &s.lay[i][0]), glow_slope(f, self.tl, &s.lay[i][1]));

@@ -9,11 +9,9 @@ use crate::solve::band::{fluxes, reach, Band};
 use crate::{World, AIR};
 use crate::store::Class;
 
-/// What the ground nodes under each air node give it over the step (`gather`): heat, J; per active gas and node
-/// (`[gas * nodes + node]`) the net amount that comes up, mol; per node what condenses, mol and mol × reflectance; and per
-/// ground node (`slopes` numbers each) the slopes of what it gives its air node with the air it sees (`air::lerp`): of
-/// the heat with the temperature, J/K, then per active gas of the heat with the gas in the air, J/mol, of the gas that
-/// comes up with the gas in the air, mol/mol, and with the temperature, mol/K.
+/// What the ground nodes under each air node give it over the step: heat, J; the net amount of each active gas that
+/// comes up (`[gas * nodes + node]`), mol; what condenses, mol and mol × reflectance; and per ground node the slopes of
+/// its heat and gas with the temperature and gases of the air it sees.
 pub(super) struct Gathered {
     pub(super) heat: Vec<f64>,
     pub(super) up: Vec<f64>,
@@ -21,11 +19,9 @@ pub(super) struct Gathered {
     slopes: Vec<f64>,
 }
 
-/// The rows summed over each air node (`Gathered`), in the order of the cells: the heat the ground gives it, the heat
-/// of the gas that comes up (and the vaporisation enthalpy rain frees in it), less the lift of that gas; and the gas.
-/// Each ground node sees the air of the four nearest air nodes (`air::lerp`), so its slopes go to those by their weights:
-/// the temperature of the air it sees by the weight, its column of a gas by the weight times its share of that air
-/// (`air::over_cell`).
+/// The rows summed over each air node, in the order of the cells: the heat the ground gives, the heat of the gas that
+/// comes up (and what rain frees) less its lift, and the gas. A ground node's slopes go to the four air nodes it sees by
+/// their weights.
 pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], rows: &[f64], width: usize) -> Gathered {
     let (na, cells, g) = (w.mesh.level(AIR).n(), w.mesh.cells(), w.cfg.gravity);
     let per = 1 + 3 * act.len();
@@ -50,8 +46,8 @@ pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], rows:
     out
 }
 
-/// What the wind of the last solve carries over each link of `Links` over the step: each gas, mol (`[gas * links +
-/// link]`), and heat, J; and the energy each node pays to lift the mass that enters it, J.
+/// What the wind of the last solve carries over each link over the step: each gas, mol (`[gas * links + link]`), and
+/// heat, J; and the energy each node pays to lift the mass that enters it, J.
 #[derive(Default)]
 pub(super) struct Wind {
     pub(super) mol: Vec<f64>,
@@ -59,12 +55,9 @@ pub(super) struct Wind {
     pub(super) paid: Vec<f64>,
 }
 
-/// One implicit step of the air nodes from the start of the step (`x0`, and the world's heat), with what the ground
-/// gives them (`g`, linearised about the round's air `it`: a Newton step): first the total amounts with the evening of
-/// pressure, then the gases the ground does not exchange, carried in their share of those totals, then the active gases
-/// that are more than a trace and the heat together (a node where a gas rains warms by the vaporisation enthalpy the
-/// rain frees, and holds more of the gas as it warms), then each trace gas alone. Returns the new air; `wind` gets what
-/// crosses the links.
+/// One implicit step of the air nodes from the step's start (`x0`) with what the ground gives (`g`, linearised about
+/// the round's air: a Newton step): the totals with the evening of pressure, then the gases the ground does not
+/// exchange, then the active gases and the heat together, then each trace gas alone. `wind` gets what crosses the links.
 pub(super) fn solve(w: &World, s: &Scratch, (act, links): (&[Active], &Links), (x0, g): (&[f64], &Gathered), it: &Iterate, dt: f64, wind: &mut Wind) -> Iterate {
     let (air, na, ng, nl) = (w.mesh.level(AIR), w.mesh.level(AIR).n(), s.state.gas.len(), links.a.len());
     let total = |v: &[f64], f: &dyn Fn(usize) -> f64| (0..na).map(|j| (0..ng).map(|q| v[q * na + j] * f(s.state.gas[q])).sum::<f64>()).collect::<Vec<f64>>();
@@ -90,7 +83,7 @@ pub(super) fn solve(w: &World, s: &Scratch, (act, links): (&[Active], &Links), (
     let coef: Vec<_> = (0..ng).map(|q| push.carry(links, &n, (Some(&s.split[q * na..(q + 1) * na]), &halves), &flow, dt)).collect();
     let mut x = it.x.clone();
     (wind.mol, wind.heat) = (vec![0.0; ng * nl], vec![0.0; nl]);
-    // (Gases spread alike through their column are carried alike: one system for all of them.)
+    // Gases spread alike through their column are carried alike: one system for all of them.
     let mut done: Vec<(usize, Band)> = Vec::new();
     for q in (0..ng).filter(|&q| !act.iter().any(|a| a.gi == q)) {
         let alike = done.iter().position(|(p, _)| coef[*p] == coef[q]);
@@ -102,8 +95,7 @@ pub(super) fn solve(w: &World, s: &Scratch, (act, links): (&[Active], &Links), (
         done[alike.unwrap_or(done.len() - 1)].1.solve(xq);
         fluxes(&links.carry(&coef[q]), xq, (1, 0), &mut wind.mol[q * nl..(q + 1) * nl]);
     }
-    // The heat carried as each half carries its node's heat per mol, its unknown the energy over the heat capacity the
-    // gases now give (the temperature but for what the active gases add).
+    // Each half carries its node's heat per mol; the unknown is the energy over the gases' heat capacity now.
     let capa = total(&x, &|k| s.sp[k].cp);
     let heat = push.carry(links, &n, (None, &halves), &flow, dt);
     let heat = (heat.0.iter().zip(&links.a).map(|(c, &a)| c * capa[a as usize]).collect(), heat.1.iter().zip(&links.b).map(|(c, &b)| c * capa[b as usize]).collect());
@@ -137,8 +129,8 @@ impl Newton<'_> {
         let cells = self.w.mesh.cells();
         (0..cells.n()).flat_map(|i| self.s.near[i].iter().map(move |&q| (q as usize).abs_diff(cells.parent()[i] as usize))).max().unwrap_or(0)
     }
-    /// Each ground node's slopes (`Gathered`) to the air nodes it sees, by their weights: `add(i, p, q, slopes, wq)` for
-    /// ground node `i` of air node `p` and each air node `q` it sees by the weight `wq`.
+    /// Each ground node's slopes to the air nodes it sees: `add(i, p, q, slopes, wq)` for ground node `i` of air node `p`
+    /// and each air node `q` it sees by the weight `wq`.
     fn each_slope(&self, mut add: impl FnMut(usize, usize, &[f64], f64)) {
         let (cells, per) = (self.w.mesh.cells(), 1 + 3 * self.act.len());
         for (i, sl) in self.g.slopes.chunks_exact(per).enumerate() {
@@ -147,10 +139,9 @@ impl Newton<'_> {
             }
         }
     }
-    /// The active gases that are more than a trace (`Active::field`) and the heat (carried by `heat`, through the heat
-    /// capacity `capa`) solved together: each gas's rows scaled by its vaporisation enthalpy, so that the system stays near
-    /// dominant by columns. Writes the gases into `x` and what crosses the links into `wind`; returns each node's heat
-    /// unknown (`solve`).
+    /// The active gases more than a trace and the heat, solved together, each gas's rows scaled by its vaporisation
+    /// enthalpy so the system stays near dominant by columns. Writes the gases into `x`, the links into `wind`; returns
+    /// each node's heat unknown.
     fn coupled(&self, (x0, coef, (heat, capa)): (&[f64], &[Coef], (&Coef, &[f64])), x: &mut [f64], wind: &mut Wind) -> Vec<f64> {
         let (s, it, g, na, nl) = (self.s, self.it, self.g, self.w.mesh.level(AIR).n(), self.links.a.len());
         let fields = self.act.iter().filter(|a| a.field.is_some()).count() + 1;
@@ -198,8 +189,7 @@ impl Newton<'_> {
         fluxes(&self.links.carry(heat), &rhs, (fields, fields - 1), &mut wind.heat);
         (0..na).map(|j| rhs[he(j)]).collect()
     }
-    /// Each trace gas alone, at the round's temperature: its latent heat moves the air's temperature too little to be
-    /// solved with it.
+    /// Each trace gas alone, at the round's temperature: its latent heat moves the air too little to solve with it.
     fn traces(&self, (x0, coef): (&[f64], &[Coef]), x: &mut [f64], wind: &mut Wind) {
         let (it, g, na, nl) = (self.it, self.g, self.w.mesh.level(AIR).n(), self.links.a.len());
         for (a, ac) in self.act.iter().enumerate().filter(|(_, ac)| ac.field.is_none()) {

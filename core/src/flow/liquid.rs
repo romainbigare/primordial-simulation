@@ -40,8 +40,7 @@ pub(super) fn mobile(w: &World, s: &Scratch, liq: &[usize], tmin: f64) -> Mobile
     m
 }
 
-/// Book `fluxes` through the store (`store::apply`), and bring the state of the ground nodes up to date for what that
-/// changed of their amounts (`Scratch::note`).
+/// Book `fluxes` through the store, and bring the ground nodes' state up to date for what changed (`Scratch::note`).
 pub(super) fn book(w: &mut World, s: &mut Scratch, fluxes: &[LinkFlux]) {
     let n = w.mesh.cells().n();
     let mut ks: Vec<usize> = fluxes.iter().flat_map(|x| x.ks.iter()).map(|&k| k as usize).collect();
@@ -77,20 +76,14 @@ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
     (0..w.mesh.cells().n()).map(|i| (cells.around(i).0.iter().zip(cells.around(i).1)).map(|(&l, &j)| lower(i, l, j)).fold(0.0, f64::max)).collect()
 }
 
-/// The liquid that may run off, down the cells in order of their heads, highest first, in one pass (`solve::downhill`):
-/// what stands over the pores, what came up from the store (`runs`, m³), and what the pores hold over their field
-/// capacity drains to the channels inside the cell, `hill` from the divides, by Darcy's law down the slope of its
-/// surface (`slope`): a share 1 - exp(-`seep` x slope x time / (`porosity` x `hill`)) of the pore liquid. Each node
-/// passes it to its lower neighbours, more to the steeper (`split`, `still`), so it can cross the map in one pass while
-/// depressions fill and spill; its head falls no further than to a neighbour still to come (or to its own bed), and
-/// half way to one already passed, so heads never cross. What leaves carries the node's heat at its temperature then
-/// (with what came in), and the head it loses heats the node from the world's potential energy. The power lost also carries loose solids, drops what is
-/// over capacity and breaks bonded ground (`load`, `wear`).
+/// The liquid that may run off (what stands, what came up from the store, and the pores' drainage to the channels, a
+/// share 1 - exp(-`seep` × slope × time / (`porosity` × `hill`))) moves down the cells in one pass (`solve::downhill`;
+/// laws.md 1.2), with its heat; lost head heats the node and does work on the bed (`load`, `wear`).
 fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
     let (n, area, ph, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.phys, w.cfg.gravity);
     let mob = mobile(w, s, liq, tmin);
-    // Rows that move together, side by side for each node (`q[i * width + r]`): the liquid that may run off, of each of
-    // `liq`; the load, of each of `sol`; their heat, J; and the volume of the liquid, m³ (for the heads).
+    // Rows that move together per node (`q[i * width + r]`): each liquid of `liq`, each load of `sol`, their heat, J, and
+    // the liquid's volume, m³.
     let sol = s.solids(tmin);
     let ks: Vec<usize> = liq.iter().chain(&sol).copied().collect();
     let (nl, rows) = (liq.len(), ks.len());
@@ -167,8 +160,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         power[i] = g * drop * kg(q, 0..rows);
         sent[i] = out * q[..nl].iter().sum::<f64>();
     });
-    // The crossings as a link flux: each substance's column, then the heat (the volume is not booked).
-    // Its columns: each substance once (one both liquid and loose solid moves in two rows), then the heat.
+    // The crossings as a link flux: each substance once (liquid and load rows of one substance share it), then the heat.
     let (mut kinds, mut col_of) = (Vec::new(), Vec::new());
     for &k in &ks {
         if !kinds.contains(&(k as u16)) {
@@ -192,9 +184,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     apply(w, &[], &broke, &[]);
 }
 
-/// The crossings of a pass (of `rows` rows) as the columns of a link flux, row `r` in column `col_of[r]` (for the rows
-/// it names): the links that carried something in their order (so the store reads the cells in order), their ends (of
-/// the links' ends `a` and `b`), and what crossed each (`[c * links + u]`; a link that crossed twice carries both).
+/// The crossings of a pass as the columns of a link flux, row `r` in column `col_of[r]`: the links that carried
+/// something, in order, their ends, and what crossed each (`[c * links + u]`).
 fn by_link(crossed: &Crossed, rows: usize, col_of: &[usize], (a, b): (&[u32], &[u32])) -> (Vec<u32>, Vec<u32>, Vec<f64>) {
     let cols = col_of.iter().max().map_or(0, |c| c + 1);
     let mut slot = vec![u32::MAX; a.len()];
@@ -210,9 +201,8 @@ fn by_link(crossed: &Crossed, rows: usize, col_of: &[usize], (a, b): (&[u32], &[
     (ends(a), ends(b), mol)
 }
 
-/// The work of the liquid leaving node `i` on its bed (`bedwork`, J) for its load, the rows `rows` of its rows `q` (of
-/// the solids `sol`), a share `out` of which leaves: it drops what is over its capacity, else picks up loose solids up
-/// to it (no more than half of each). Returns the work left to break bonded ground (`wear`).
+/// The work `bedwork`, J, of the liquid leaving node `i` (a share `out`) on its load: it drops what is over capacity,
+/// else picks up loose solids up to it (at most half of each). Returns the work left to break bonded ground.
 fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops::Range<usize>, &[usize]), bedwork: f64, out: f64) -> f64 {
     let held: f64 = rows.clone().zip(sol).map(|(r, &k)| q[r] * s.sp[k].v[0]).sum();
     let capv = w.cfg.carry * bedwork * bare_share(w, i);
@@ -231,10 +221,8 @@ fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops:
     bedwork
 }
 
-/// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each
-/// substance by its share of the bed's volume, no more than half of it: moves from its bed (`Class::Bed`) gathered in
-/// `broke`. What breaks off was in the bed's skin, whose heat is the node's: it keeps it, and joins the loose ground
-/// with its heat capacity (`Scratch::note`); the bed's surface falls by its volume.
+/// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each substance by its share of
+/// the bed's volume, at most half: moves from `Class::Bed` gathered in `broke`. Its heat was already the node's.
 fn wear(w: &World, s: &mut Scratch, i: usize, bedwork: f64, broke: &mut Vec<Move>) {
     let n = w.mesh.cells().n();
     for bi in 0..s.state.bedk.len() {

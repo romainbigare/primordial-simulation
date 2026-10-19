@@ -1,18 +1,9 @@
-//! Downhill: the cells in order from the highest head to the lowest, and one pass down that order that moves what
-//! stands on each cell to its lower neighbours.
-//!
-//! Liquid on a surface runs from a higher head to a lower one, so the links on which it runs make a graph without
-//! cycles, and an order of the cells by falling head is a topological order of it (Kahn 1962): a cell is visited
-//! after every cell that can send to it. One pass in that order lets what leaves the highest cell cross the whole map
-//! in one step, while depressions fill and spill (the "priority flood" of Barnes and others 2014 orders cells the same
-//! way). The order is brought up to date by sorting the cells anew by their heads (`Order::update`): the heads of a
-//! pool of standing liquid change rank among themselves at every step, so mending the last order costs more than a
-//! new sort of the keys.
-//!
-//! The law says how much leaves a cell (`pass`'s rule); this module does the order, the moves and the books.
+//! Downhill: the cells from the highest head to the lowest, and one pass down that order. Liquid runs from higher to
+//! lower heads, so the order by falling head is a topological order of its links (Kahn 1962; the "priority flood" of
+//! Barnes and others 2014) and one pass carries it across the map while depressions fill and spill. A new sort each
+//! step costs less than mending the last order. The law says how much leaves a cell; this module moves it.
 
-/// A mesh's adjacency as plain slices. The entries of cell `i` are `start[i]..start[i + 1]`; each entry names a link
-/// and the other cell of it. A link's flux is + from its cell `a` to its other cell.
+/// A mesh's adjacency as slices: cell `i`'s entries are `start[i]..start[i + 1]`, each a link and its other cell.
 #[derive(Clone, Copy, Debug)]
 pub struct Adjacency<'a> {
     /// First entry of each cell, and one past the last (length: cells + 1).
@@ -63,20 +54,17 @@ impl Order {
     }
 }
 
-/// What crossed the links in a pass, crossing by crossing: the link of each, `links[c]`, and what it carried of each
-/// row, `amount[c * rows + k]`, + from the link's cell `a` to the other. A link may cross more than once.
+/// What crossed the links in a pass: the link of each crossing and what it carried of each row, `amount[c * rows + k]`,
+/// + from the link's cell `a`.
 #[derive(Clone, Debug, Default)]
 pub struct Crossed {
     pub links: Vec<u32>,
     pub amount: Vec<f64>,
 }
 
-/// One pass down `order`. `q` holds rows of amounts that move together, the rows of each cell side by side
-/// (`q[i * rows + k]`). At each cell `i` in turn, `rule(i, q, share)` says which share of what `i` holds now leaves
-/// along each of its entries in `adj` (`share` has one value per entry, all 0 on entry, summing to at most 1); the
-/// rule may read the amounts of every cell and change those of `i` before they leave. Each row then moves by those
-/// shares (no more than is left, so rounding never takes a cell below zero): what one cell loses another gains, and
-/// `crossed` (emptied first) gets what crossed each link.
+/// One pass down `order` over rows of amounts that move together (`q[i * rows + k]`): at each cell `rule(i, q, share)`
+/// sets the share of what it holds that leaves along each entry (summing to at most 1); each row then moves by those
+/// shares, no more than is left, and `crossed` gets what crossed each link.
 pub fn pass(order: &Order, adj: &Adjacency, q: &mut [f64], crossed: &mut Crossed, mut rule: impl FnMut(usize, &mut [f64], &mut [f64])) {
     let n = order.cells.len();
     let rows = q.len() / n.max(1);

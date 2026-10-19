@@ -25,9 +25,8 @@ impl GasMove {
     }
 }
 
-/// Settle the gas of `pool` against `pool0`: of what was put out, the share `paid` goes up into the air (`sent`, mol)
-/// and the rest stays with what reacted (`kept`, mol); what was taken (`sent` below 0) comes down out of the air:
-/// `settle(k, sent, kept)` for each substance.
+/// Settle the gas of `pool` against `pool0`: of what was put out the share `paid` goes up (`sent`) and the rest stays
+/// (`kept`); what was taken (`sent` below 0) comes down: `settle(k, sent, kept)` for each substance.
 pub(crate) fn send_gas(pool: &[f64], pool0: &[f64], paid: f64, mut settle: impl FnMut(usize, f64, f64)) {
     for (k, (&p, &p0)) in pool.iter().zip(pool0).enumerate() {
         let d = p - p0;

@@ -1,5 +1,5 @@
-//! The moves of one update of a body or a part, gathered while it runs and booked by one `apply` at its end, with the
-//! nodes of its cell as those moves leave them, for what the update reads of them (`World::g`, `a`, `heat_now`). An update that is not to change the world (a sample member's, `copy::sample`) drops its moves.
+//! The moves of one update of a body or a part, gathered while it runs and booked by one `apply` at its end, with its
+//! cell's nodes as those moves leave them. A sample member's update drops its moves.
 
 use super::{apply, held_more, Class, Move, Node};
 use crate::chem::Chemistry;
@@ -12,12 +12,10 @@ const RUNNING: &str = "an update running";
 /// The moves of the update running, and the nodes of its cell as they leave them.
 #[derive(Clone, Debug, Default)]
 pub struct Moves {
-    /// Whose update it is: a body or a part (`Class::Body`, `Class::Part`) by its slot, the one end of every move but
-    /// those of the lift (what dies or is torn in its update moves in its name); none when no update runs
+    /// Whose update it is (a body or a part by its slot), one end of every move but the lift's; none when none runs
     who: Option<Node>,
     list: Vec<Move>,
-    /// Its cell's ground node, air node and bodies' node, in this order, with what each holds as the moves leave it: its
-    /// amounts, mol of each (none for the bodies' node), and its heat, J
+    /// Its cell's ground, air and bodies' node, with what each holds as the moves leave it: amounts, mol, and heat, J
     near: Vec<(Node, Vec<f64>, f64)>,
     /// Heat a ground node could not give (`World::take_from_ground`), J
     short: f64,
@@ -34,8 +32,7 @@ impl Moves {
     pub(crate) fn amount(&self, x: Node, k: usize) -> Option<f64> {
         self.at(x).map(|n| self.near[n].1[k])
     }
-    /// Gather move `m` (between any two nodes; `take` and `give` are those of the one whose update it is); the nodes kept
-    /// near change as `apply` will change them.
+    /// Gather move `m`; the nodes kept near change as `apply` will change them.
     pub(crate) fn push(&mut self, chem: &Chemistry, m: Move) {
         let (k, into) = (m.k as usize, m.heat - m.mol * held_more(chem, m.from.class, m.to.class, m.k as usize));
         for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, into)] {
@@ -52,15 +49,12 @@ impl Moves {
     pub(crate) fn take(&mut self, chem: &Chemistry, x: Node, k: usize, mol: f64, heat: f64) {
         self.push(chem, Move { from: x, to: self.who.expect(RUNNING), k: k as u16, mol, heat });
     }
-    /// `mol` of substance `k` and `heat` J go from the one whose update it is to node `x` of the store (which receives
-    /// `heat` less the energy the mol hold apart from heat more there, `held_more`).
+    /// `mol` of substance `k` and `heat` J go from the one whose update it is to node `x` of the store (`held_more` aside).
     pub(crate) fn give(&mut self, chem: &Chemistry, x: Node, k: usize, mol: f64, heat: f64) {
         self.push(chem, Move { from: self.who.expect(RUNNING), to: x, k: k as u16, mol, heat });
     }
-    /// `m` mol of gas `k` go up from the one whose update it is into the air node of its cell (negative `m`: come down
-    /// out of it), from a place `lift` J/kg below its mean height. The gas brings no heat of its own, and the one that
-    /// gives it pays its latent heat (the air holds it, `held_more`); the air pays the lift from its heat into the
-    /// world's potential energy, and a fall gives it back (`World::lift`).
+    /// `m` mol of gas `k` go up from the one whose update it is into its cell's air node (negative: down), from `lift`
+    /// J/kg below its mean height: the giver pays its latent heat, the air pays the lift into the potential (laws.md 1.5).
     pub(crate) fn gas(&mut self, chem: &Chemistry, k: usize, m: f64, lift: f64) {
         let air = self.near[1].0;
         if m > 0.0 {
@@ -74,8 +68,7 @@ impl Moves {
 }
 
 impl World {
-    /// The moves of the update of `who` (a body or a part) in ground cell `i` open: none yet, and its cell's nodes as
-    /// they are.
+    /// The moves of the update of `who` in ground cell `i` open, with its cell's nodes as they are.
     pub fn open_moves(&mut self, i: usize, who: Node) {
         let (j, n, na) = (self.mesh.up(i, 0, AIR), self.mesh.cells().n(), self.mesh.level(AIR).n());
         let amounts = |x: &dyn Fn(usize) -> f64| (0..self.chem.ns()).map(x).collect();
@@ -96,11 +89,9 @@ impl World {
     pub(crate) fn heat_now(&self, x: Node) -> f64 {
         self.moves.at(x).map_or(self.store.heat(x.class)[x.index], |n| self.moves.near[n].2)
     }
-    /// `d` mol of substance `k` (of `cp` J/(mol K)) and `want` J from ground node `i` (of heat capacity `cap`) to the
-    /// one whose update it is (the heat and fusion enthalpy the mol take, or heat alone): no more heat than the node
-    /// holds above `T_FLOOR` without their heat capacity, so it is never asked for more than it holds, and as much less
-    /// of the mol; the heat it could not give is counted (`Counters::clamped_heat`). A negative `want` is heat given to
-    /// the node, whole. Returns the mol and the heat that moved.
+    /// `d` mol of substance `k` and `want` J from ground node `i` to the one whose update it is: no more heat than the
+    /// node holds above `T_FLOOR`, and as much less of the mol; what it could not give is counted. A negative `want` is
+    /// heat given to the node, whole. Returns the mol and the heat that moved.
     pub(crate) fn take_from_ground(&mut self, i: usize, (k, d, cp): (usize, f64, f64), want: f64, cap: f64) -> (f64, f64) {
         let took = if want > 0.0 { want.min(heat_above_floor(self.heat_now(Node::ground(i)), cap - d * cp)) } else { want };
         self.moves.short += want - took;

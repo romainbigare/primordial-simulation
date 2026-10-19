@@ -1,18 +1,12 @@
-//! A small brain. Its base (one hidden layer over what a body perceives and remembers) belongs
-//! to a lineage and changes only by evolution. Its rows are genes of each body, plus what the body
-//! (a node: its members) learned: read from the hidden layer, they give
-//! fixed action scores, the weights of shared scorers (one used for every neighbour direction,
-//! one per verb for every perceived body or part), the mean of the signal and of the shape of a
-//! part made, the next memory, and an estimate of how well-being will go. Within a life the rows
-//! that pick actions and signals follow a policy gradient against that estimate (actor-critic);
-//! all rows also change by imitation. Kept apart from the laws so it can be swapped.
+//! A small brain (laws.md 5.1): a base of one hidden layer, the lineage's, and rows read from it, each body's, that
+//! give action scores, shared scorers, the signal, a part's shape, the next memory and a critic. Kept apart from the
+//! laws so it can be swapped.
 
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
 
-/// The fixed actions, by their rows: rest; put to the node; take from the node; form a part; let go (or leave the
-/// inside); join the held part to the ground; break the bonded ground. There is no copy: children are made from the
-/// brood (`copy::copy`).
+/// The fixed actions, by their rows: rest; put to the node; take from it; form a part; let go (or leave the inside);
+/// join the held part to the ground; break the bonded ground. No copy: children come from the brood.
 pub const REST: usize = 0;
 pub const PUT: usize = 1;
 pub const TAKE: usize = 2;
@@ -26,16 +20,15 @@ pub const TAKE_FROM: usize = 0;
 pub const GIVE: usize = 1;
 pub const WATCH: usize = 2;
 pub const VERBS: usize = 3;
-/// Verbs toward a perceived part: hold it, take from it, put to it, join the held part to it,
-/// break its bonds, enter the inside of its structure.
+/// Verbs toward a perceived part: hold, take from, put to, join the held part to, break its bonds, enter its inside.
 pub const OVERBS: usize = 6;
 /// Signal outputs.
 pub(crate) const SIG: usize = 2;
 /// Outputs for the shape of a part made: elongation, hollowness.
 pub(crate) const FORM_OUT: usize = 2;
 
-/// Sizes of a brain: hidden units, memory numbers, inputs (the memory last), direction
-/// features, body features and part features. A row is `h` weights, then a bias.
+/// Sizes of a brain: hidden units, memory numbers, inputs (the memory last), direction, body and part features. A row
+/// is `h` weights, then a bias.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Shape {
     pub h: usize,
@@ -55,8 +48,7 @@ impl Shape {
     pub fn base(&self) -> usize {
         self.h * self.ni + self.h
     }
-    /// First row of the direction scorer, of a verb's scorer (body verbs, then part verbs), of
-    /// the signal, of the shape of a part made (elongation, hollowness), of the memory.
+    /// First row of the direction scorer, of a verb's scorer, of the signal, of a part's shape, of the memory.
     pub fn dir(&self) -> usize {
         FIXED
     }
@@ -137,8 +129,7 @@ pub(crate) fn squash(x: f32) -> f32 {
     x * (27.0 + x * x) / (27.0 + 9.0 * x * x)
 }
 
-/// A brain perceives the ln of a mass over this: of a member, kg; of another body, a part or what it holds over its own
-/// mass; of a cell's mean member (e^7, a factor of about 1,100, is one unit of input).
+/// A brain perceives the ln of a mass (of a member, kg, or over its own) over this: a factor of about 1,100 is one unit.
 pub(crate) const LN_MASS: f32 = 7.0;
 
 /// A cheap natural log (error below 0.005), enough for what a brain perceives.
@@ -168,10 +159,8 @@ pub fn fit(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32) {
     }
 }
 
-/// Move each learned row `r` by `lr · g / rms · [h, 1]`, where `g = a · coef[r]` is its share of
-/// the step and `rms` the root of a moving average of its squares (kept in `ms`), capped at
-/// `most · lr` (`(beta, most)` are `Physics::learn_beta` and `learn_most`). Each row gets a step
-/// of its own size: a row that rarely matters learns as fast when it does as one that always does.
+/// Move each learned row `r` by `lr · g / rms · [h, 1]`, `g = a · coef[r]` its share of the step and `rms` the root of
+/// a moving average of its squares (`ms`), capped at `most · lr`: a row that rarely matters learns as fast when it does.
 pub fn learn(rows: &mut [f32], h: &[f32], coef: &[f32], a: f32, lr: f32, ms: &mut Vec<f32>, (beta, most): (f32, f32)) {
     ms.resize(coef.len(), 0.0);
     for ((r, &c), v) in rows.chunks_exact_mut(h.len() + 1).zip(coef).zip(ms.iter_mut()) {
@@ -199,8 +188,7 @@ pub(crate) fn blend(w: &mut [f32], o: &[f32], a: f32) {
     }
 }
 
-/// Small random weights, then the biases given for the fixed actions, moving and the verbs
-/// (toward bodies, then toward parts).
+/// Small random weights, then the biases given for the fixed actions, moving and the verbs.
 pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, verbs: [f32; VERBS + OVERBS]) -> Vec<f32> {
     let mut w: Vec<f32> = (0..s.weights()).map(|_| size * r.normal() as f32).collect();
     let row = |q: usize| s.base() + q * s.r() + s.h;
@@ -214,8 +202,7 @@ pub fn random(s: Shape, r: &mut Rng, size: f32, fixed: [f32; FIXED], dir: f32, v
     w
 }
 
-/// The base of shape `a` carried over to shape `b`: weights both shapes have keep their values
-/// (the memory inputs matched from their first), new ones are noise of spread `size`.
+/// The base of shape `a` carried over to shape `b`: shared weights keep their values, new ones are noise of spread `size`.
 pub fn rebase(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> {
     let fixed = b.ni - b.mem;
     let input = |i: usize| if i < fixed { Some(i) } else { (i - fixed < a.mem).then(|| a.ni - a.mem + i - fixed) };
@@ -230,8 +217,7 @@ pub fn rebase(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32>
     o
 }
 
-/// Rows of shape `a` carried over to shape `b`, the same way: rows matched by what they do
-/// (the memory rows from their first), weights by hidden unit, the bias kept.
+/// Rows of shape `a` carried over to shape `b`: matched by what they do, weights by hidden unit, the bias kept.
 pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> {
     // A brain of no hidden units has no born rows (nothing reads them); from none, every weight is new.
     if b.h == 0 {
@@ -255,8 +241,8 @@ pub fn rerow(w: &[f32], a: Shape, b: Shape, r: &mut Rng, size: f32) -> Vec<f32> 
     o
 }
 
-/// The step of a node's born rows: that of a child whose rows changed, for mutation size `size` (`Physics::row_noise`
-/// made bigger by 1 / sqrt(`Physics::row_chance`), as only that share of children change theirs).
+/// The step of a node's born rows for mutation size `size`: `row_noise` over sqrt(`row_chance`), as only that share
+/// of children change theirs.
 pub fn row_step(p: &crate::Physics, size: f32) -> f32 {
     p.row_noise * size / (p.row_chance as f32).sqrt()
 }
@@ -264,14 +250,12 @@ pub fn row_step(p: &crate::Physics, size: f32) -> f32 {
 /// The number of values of an 8-bit uniform.
 const U8_SPAN: f32 = 256.0;
 
-/// Add noise near a normal of spread `size` to each weight: a sum of four 8-bit uniforms (mean 2 (`U8_SPAN` - 1),
-/// variance about `U8_SPAN`²/3), centred and scaled, two weights from one draw. Cheap, as a brain has many weights and a
-/// node's dispersing children shake them all.
+/// Add noise near a normal of spread `size` to each weight: a sum of four 8-bit uniforms, centred and scaled, two
+/// weights from one draw.
 pub fn shake(w: &mut [f32], r: &mut Rng, size: f32) {
     const B: u64 = 0x00ff_00ff_00ff_00ff;
     let (k, mean) = (size * 3f32.sqrt() / U8_SPAN, 2.0 * (U8_SPAN - 1.0));
-    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits (the first and the third lane of
-    // `a + (a >> 16)`).
+    // Bytes summed in pairs (16-bit lanes), then lanes in pairs: one sum per 32 bits.
     let sums = |u: u64| {
         let a = (u & B) + (u >> 8 & B);
         let t = a + (a >> 16);

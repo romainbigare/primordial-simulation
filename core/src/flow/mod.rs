@@ -1,20 +1,6 @@
-//! Law 1: Flow. Stuff moves along edges from high push to low push, with loss.
-//!
-//! Ground nodes: liquid soaks into the pores of the loose ground (porosity times the volume of the
-//! loose solids); what is over that stands and runs down the cells in the order of their heads in
-//! one pass (`liquid`, by `solve::downhill`); the pore liquid and the store of the bed below, the
-//! layers of each cell's stack, flow by Darcy's law (`drain`, by `solve::spread`), and drain to the
-//! channels inside a cell (`Physics::hill`); the head lost heats the ground and does work, carrying
-//! loose solids and breaking weak bonds; loose solids creep downhill; heat conducts sideways
-//! through the ground's active layer. Air nodes
-//! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
-//! overturning and mixing, solved together over a step. Every move is booked by the store (`store::apply`): it takes from one
-//! node exactly what it gives to another, with its heat; lifting matter takes heat and a fall gives
-//! it back, the difference held by the store's potential node (`store::Batch::falls`, `Class::Potential`), so
-//! elements and energy are kept.
-//!
-//! Files: `scratch` (the law's working memory and its tables), `land` (state, phases and surface of
-//! ground nodes), `liquid`, `drain`, `creep`, and `air` (`state`, `step`, `radiation`, `exchange`, `wind`).
+//! Law 1: Flow. Stuff moves along links from high push to low push, with loss (laws.md 1). `scratch`: the law's
+//! working memory; `land`: the state and surface of ground nodes; `liquid`, `drain`, `creep`; `air`: radiation,
+//! exchange and wind in one step.
 
 pub(crate) mod air;
 mod creep;
@@ -34,17 +20,13 @@ use crate::store::Class;
 
 /// The slow-changing ground and the substances present are rechecked this often, months (`schedule`).
 pub(crate) const REFRESH_MONTHS: u64 = 3;
-/// Heat conducted sideways through the ground, and creep (with the regrowth of bodies), run once in this many years,
-/// for all that time (`schedule`): on cells of kilometres both are slow, and the implicit spread holds for any step.
+/// Heat conducted sideways and creep (with `lanes::regrow`) run once in this many years, for all that time: on
+/// cells of kilometres both are slow, and the implicit spread holds for any step.
 pub(crate) const CREEP_YEARS: u64 = 1;
 
-/// Each part of the law runs on its own period, as the world's clock calls it (`schedule`, which writes their order
-/// once): `state`, `air`, `liquid`, `creep` and `refresh`.
-///
-/// The state of ground nodes (`ground_state`: only what changed since it was last rebuilt, or every node with `full`, at
-/// each liquid step, so a world resumed at a month's start goes on as an unbroken one, or when a refresh changed what
-/// is present) and the temperature of air nodes, from the world now: what the other laws and the rest of Flow read
-/// until the next physics step (`World::t_ground_last`).
+/// Each part of the law (`state`, `air`, `liquid`, `creep`, `refresh`) is a process of the clock (`schedule`). This one:
+/// the state of ground and air nodes from the world now, which the other laws read until the next physics step (in full
+/// at each liquid step, so a world resumed at a month's start goes on as an unbroken one).
 pub fn state(w: &mut World, full: bool) {
     with(w, |w, s| {
         ground_now(w, s, full);
@@ -62,9 +44,7 @@ fn ground_now(w: &World, s: &mut Scratch, full: bool) {
     ground_state(w, s, full);
 }
 
-/// The state of ground nodes (`ground_now`: at a physics step `state` has just set it, and nothing has changed it
-/// since) and of air nodes (`air::state`); then the air's step for `dt` seconds (`air::step`: radiation, gases
-/// dissolving, evaporation and rain, and the wind, together), booked whole at once.
+/// The air's step for `dt` seconds (`air::step`), booked whole, from the state of ground and air nodes.
 pub fn air(w: &mut World, dt: f64) {
     with(w, |w, s| {
         ground_now(w, s, false);
@@ -73,8 +53,7 @@ pub fn air(w: &mut World, dt: f64) {
     });
 }
 
-/// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`): it moves the rain that fell
-/// since the last liquid step.
+/// Liquid with its drainage and its work on the bed for `dt` seconds (`liquid::liquid`).
 pub fn liquid(w: &mut World, dt: f64) {
     with(w, |w, s| liquid::liquid(w, s, dt));
 }
@@ -92,8 +71,7 @@ pub fn refresh(w: &mut World) {
     with(w, |w, s| scratch::refresh(w, s));
 }
 
-/// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`) from the world as it is, and nothing
-/// else of Flow moves.
+/// Heat conducts sideways through the ground for `dt` seconds (`land::conduct`), and nothing else of Flow moves.
 pub fn conduct(w: &mut World, dt: f64) {
     with(w, |w, s| {
         ground_state(w, s, false);
@@ -109,9 +87,8 @@ fn with(w: &mut World, f: impl FnOnce(&mut World, &mut Scratch)) {
     w.scratch = s;
 }
 
-/// Build the working memory of the law where it is missing (a new world, a loaded one, a test that calls another law
-/// alone): its tables; for a new world its state (`scratch::State`); and its caches, from the world now as at a liquid
-/// step. Every law then reads the same state of the last flow step.
+/// Build the working memory of the law where it is missing (a new or loaded world): its tables, a new world's state,
+/// and its caches from the world now, as at a liquid step.
 pub(crate) fn ensure(w: &mut World) {
     let n = w.mesh.cells().n();
     let mut s = std::mem::take(&mut w.scratch);

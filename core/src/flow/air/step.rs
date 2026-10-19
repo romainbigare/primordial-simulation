@@ -1,13 +1,7 @@
 //! One step of the air: radiation, the exchange with the ground (evaporation and rain) and the wind, solved together
-//! by backward Euler over the step, so a long step gives the world of short ones.
-//!
-//! The unknowns are each air node's temperature and gases at the end of the step. Each round reads them, finds what
-//! every ground node exchanges with its air node over the step (`cell`: its surface balance, solved implicitly, the
-//! rain it gets and what evaporates from it) and how that changes with its air node's temperature and gas, then solves
-//! the air nodes' gas and heat with the wind in one implicit step each (`solve::band`), the ground's exchange put in by
-//! its slopes (Newton's method on each node's own terms; the wind's pushes and the coupling of gas and heat from the
-//! round before). The rounds stop once the air no longer moves. What the last round found crosses every link of the
-//! step and is booked in one call (`book`), so the books are exact whether or not the rounds have converged.
+//! by backward Euler, so a long step gives the world of short ones (laws.md 1.4). Each round finds every ground node's
+//! exchange and its slopes (`cell`), then solves the air level (`newton`); what the last round found is booked whole
+//! (`book`), so the books are exact whether or not the rounds converged.
 
 use super::super::land::{melted, NONE};
 use super::super::scratch::may_evaporate;
@@ -29,26 +23,22 @@ const STILL_K: f64 = 5e-2;
 const STILL_SHARE: f64 = 1e-5;
 /// or after this many rounds.
 const ROUNDS: usize = 16;
-/// A round moves the air at most so far toward its solve (a damped Newton step, Deuflhard 2004): no node's temperature
-/// by more than `REACH_K`, K; and only half as far as the round before when the solve moved the air no less than then
-/// (the rounds cross a kink of rain back and forth), twice as far again after two rounds that moved it less. Each gas
-/// of a node then keeps at least this share of what it held (a bound on that one unknown, so a gas the step empties
-/// from a node does not hold back the others).
+/// A damped Newton step (Deuflhard 2004): a round moves no node's temperature more than `REACH_K`, K, and half as far
+/// as the round before when the solve moved no less (a kink of rain crossed back and forth), twice as far again after
+/// two calmer rounds. Each gas of a node keeps at least `KEEP` of what it held, a bound on that one unknown alone.
 const KEEP: f64 = 0.5;
 const REACH_K: f64 = 10.0;
 /// A ground node's surface balance is solved again about the temperature it gives, up to this many times, until that
-/// moves by less than `SURFACE_STILL_K`, K: so what evaporates is the evaporation the balance holds.
+/// moves by less than `SURFACE_STILL_K`, K.
 const SURFACE_ROUNDS: usize = 3;
 const SURFACE_STILL_K: f64 = 1e-3;
-/// The saturation tables reach this far above the warmest ground or air node at the start of a step, K: no node warms
-/// more in a step.
+/// The saturation tables reach this far above the warmest node at a step's start, K: no node warms more in a step.
 const SAT_REACH: f64 = 60.0;
 /// A gas making up less than this share of the air is a trace (`Newton::traces`).
 const TRACE_AIR: f64 = 1e-7;
 
-/// A gas that may leave the ground or condense in the air: its index in `Scratch::gas` and its substance; whether it
-/// may evaporate, and whether it may condense; and, if it is more than a trace, its place among the gases solved with
-/// the heat (`Newton::coupled`).
+/// A gas that may leave the ground or condense: its index in `Scratch::gas`, its substance, whether it may evaporate or
+/// condense, and (more than a trace) its place among the gases solved with the heat.
 #[derive(Clone, Copy)]
 pub(super) struct Active {
     pub(super) gi: usize,
@@ -58,14 +48,12 @@ pub(super) struct Active {
     pub(super) field: Option<usize>,
 }
 
-/// The numbers of a ground node's row (`cell`): the heat it gives its air node, J, and its slope with the air's
-/// temperature, J/K; the heat that leaves to space through the air, J; the sunlight the ground absorbs, J; its
-/// temperature at the end of the step, K; the light each unit of capture area of its bodies gets, J/m²; the light set
-/// aside for them, W/m²; then per active gas `PER_GAS` numbers.
+/// A ground node's row (`cell`): the heat it gives its air node, J, and its slope with the air's temperature, J/K; the
+/// heat to space through the air, J; the sunlight it absorbs, J; its end temperature, K; the light per unit of its
+/// bodies' capture area, J/m²; the light set aside for them, W/m²; then `PER_GAS` numbers per active gas.
 pub(super) const FIXED: usize = 7;
-/// Per active gas: what evaporates, mol, and its slopes with the gas in the column the node sees, mol/mol, and with the
-/// temperature of the air touching it, mol/K; what rains, mol, and its two slopes; and the slope of the heat the node
-/// gives its air node with the gas in the column, J/mol (what evaporates changes the node's temperature).
+/// Per active gas: what evaporates, mol, and its slopes with the column's gas and the air's temperature; what rains and
+/// its two slopes; the slope of the heat the node gives its air with the column's gas, J/mol.
 pub(super) const PER_GAS: usize = 7;
 
 /// The air during the rounds: per node the temperature, K, and the reflectance of its clouds; per gas and node
@@ -91,9 +79,8 @@ struct Ctx<'a> {
     decl: f64,
 }
 
-/// Per ground node, what its rows read that does not change in a step: the share of the air it sees that lies over it
-/// (`air::over_cell`); the share of sunlight its bodies intercept (`cover`), and absorb, and the share of that their
-/// light reactions store; then per active gas the height it fills near the ground, m.
+/// Per ground node, what does not change in a step: the share of the air it sees over it; the share of sunlight its
+/// bodies intercept and absorb, and the share their light reactions store; per active gas its height near the ground, m.
 const FIXED_CELL: usize = 4;
 
 /// The numbers of `FIXED_CELL` for every ground node.
@@ -111,8 +98,8 @@ fn fixed(w: &World, s: &Scratch, act: &[Active]) -> Vec<f64> {
     out
 }
 
-/// The air's step of `dt` seconds: gases dissolve (`exchange::dissolve`, slow, from the air as it is), then radiation,
-/// evaporation, rain and the wind together, in rounds (see the top of this file).
+/// The air's step of `dt` seconds: gases dissolve (from the air as it is), then radiation, evaporation, rain and the
+/// wind together, in rounds.
 pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     let (tmin, tmax) = range(&s.state.tg);
     let henry: Vec<(usize, usize)> = s.state.gas.iter().copied().enumerate().filter(|&(_, k)| s.sp[k].boil < tmin && w.chem.subs[k].solubility > 0.0).collect();
@@ -197,15 +184,10 @@ fn pass(cx: &Ctx, rows: &mut [f64], width: usize) {
     });
 }
 
-/// The row of ground node `i` under the sunlight `q` of its latitude, W/m² (`FIXED`, `PER_GAS`). Sunlight is reflected by
-/// what covers the ground and by clouds; bodies with light-capture area `a` per ground area intercept a share 1 -
-/// exp(-a) of what passes the clouds, and what they absorb warms the surface now but for the share their light reactions
-/// store (as at their last update, `Life::keep`): that is set aside, and each takes its share when it updates
-/// (`body::live`); taller members shade smaller ones (`survey::shade`). Then rain: where the air the cell sees (colder
-/// on higher ground, by the drop of the air's temperature with height) holds more of a gas than it can at the
-/// temperature of the air touching the ground, the rest rains out in `rain_time`. Then the surface balance
-/// (`radiation::Surface`), with what evaporates (`evaporate`) and the heat the rain brings, linearised about the
-/// temperature of the round before.
+/// The row of ground node `i` under the sunlight `q` of its latitude, W/m²: sunlight past the clouds, what bodies
+/// intercept less the share their light reactions store (set aside for them, laws.md 1.4); rain, where the air the cell
+/// sees (colder on higher ground) holds more of a gas than it can, in `rain_time`; then the surface balance with what
+/// evaporates and the rain's heat, linearised about the round before.
 fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let (w, s, it, dt) = (cx.w, cx.s, cx.it, cx.dt);
     let (cells, na, n) = (w.mesh.cells(), w.mesh.level(AIR).n(), w.mesh.cells().n());
@@ -216,14 +198,12 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     let c = if it.refl.is_empty() { s.state.cloud[i] } else { lerp(s, &it.refl, i) };
     let fixed = &cx.fixed[i * (FIXED_CELL + cx.act.len())..(i + 1) * (FIXED_CELL + cx.act.len())];
     let [over, cover, caught, keep] = <[f64; FIXED_CELL]>::try_from(&fixed[..FIXED_CELL]).unwrap();
-    // (Per unit of capture area the bodies intercept cover / a of the light, all of it where they are few.)
+    // Per unit of capture area the bodies intercept cover / a of the light, all of it where they are few.
     let per_area = if cover > 0.0 { cover / w.canopy[i] as f64 } else { 1.0 };
     let (dl, kept) = (q * (1.0 - c) * per_area * dt, q * (1.0 - c) * caught * keep);
     let sw = q * (1.0 - c) * ((1.0 - cover) * (1.0 - s.alb[i]) + caught) - kept;
-    // Rain, and its heat into the node's temperature: it brings its heat at the air's temperature and its fusion
-    // enthalpy, of which the node holds what stays molten (`Scratch::fusion`). Until the balance is solved, the first
-    // number of each gas holds the partial pressure of its vapour near the ground, Pa (it goes with the column and the
-    // temperature).
+    // Rain brings its heat at the air's temperature and its fusion enthalpy, of which the node keeps what stays molten.
+    // Until the balance is solved, each gas's first number holds its vapour's partial pressure near the ground, Pa.
     let (mut gain, mut g_rain) = (0.0, 0.0);
     for (x, ac) in cx.act.iter().enumerate() {
         let (o, sp) = (FIXED + PER_GAS * x, s.sp[ac.k]);
@@ -285,10 +265,9 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
     row[..FIXED].copy_from_slice(&[bal.to_air, row_slope, bal.to_space, adt * sw, bal.ts, dl, kept]);
 }
 
-/// What evaporates of active gas `x` from ground node `i` over the step when the node ends it at `t`, the vapour's
-/// partial pressure near the ground being `pa` and `rain` mol of it raining on the node, mol (`exchange::bucket_slope`), and
-/// its slopes with `t`, mol/K, and with `pa`, mol/Pa: by the difference of the saturation pressure at `t` and `pa`
-/// through the air's film (`evap`), the open rate while the ground is wet; a node over the boiling point gives all of it.
+/// What evaporates of active gas `x` from ground node `i` over the step, ending at `t` under a vapour pressure `pa` with
+/// `rain` mol falling on it, mol, and its slopes with `t` and `pa`: the saturation deficit through the air's film
+/// (`evap`), at the open rate while wet (`exchange::bucket_slope`); over the boiling point, all of it.
 fn evaporate(cx: &Ctx, i: usize, x: usize, t: f64, pa: f64, rain: f64) -> (f64, f64, f64) {
     let (w, s, ac) = (cx.w, cx.s, cx.act[x]);
     let (n, sp, area) = (w.mesh.cells().n(), s.sp[ac.k], w.mesh.cells().area()[i]);

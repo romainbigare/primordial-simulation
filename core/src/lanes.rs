@@ -1,6 +1,5 @@
-//! Lanes: ground cleared of bodies along each link between two cells (`Links::cleared`). Movers pushing through bodies
-//! clear it (`clear`, from `choose::go`), which makes the step cheaper (`resist`, `eased`), and bodies spread back into
-//! it (`regrow`, yearly from Flow).
+//! Lanes: ground cleared of bodies along each link (`Links::cleared`; laws.md 1.7): movers clear it, it eases the step,
+//! and bodies spread back into it yearly.
 
 use crate::World;
 
@@ -19,8 +18,7 @@ fn open(w: &World, l: usize) -> f64 {
     (w.links.cleared[l] as f64 / (w.cfg.phys.lane * w.mesh.cells().dist()[l])).min(1.0)
 }
 
-/// A mover from `i` to its neighbour `j` cleared `m2` of ground: the link is cleared up to its whole lane
-/// (`Physics::lane` x the distance).
+/// A mover from `i` to `j` cleared `m2` of ground, up to the whole lane (`Physics::lane` × the distance).
 pub(crate) fn clear(w: &mut World, i: usize, j: usize, m2: f64) {
     let l = link(w, i, j);
     let lane = (w.cfg.phys.lane * w.mesh.cells().dist()[l]) as f32;
@@ -28,14 +26,13 @@ pub(crate) fn clear(w: &mut World, i: usize, j: usize, m2: f64) {
     *e = (*e + m2 as f32).min(lane);
 }
 
-/// What it costs, against bare ground, to step from `i` into its neighbour `j`: one, plus the body mass per area in
-/// `j` over `Physics::rho_pass` for the share of the passage not yet cleared.
+/// What it costs, against bare ground, to step from `i` into `j`: one, plus `j`'s body mass per area over `rho_pass`
+/// for the share of the passage not yet cleared.
 pub(crate) fn resist(w: &World, i: usize, j: usize) -> f64 {
     1.0 + (1.0 - open(w, link(w, i, j))) * thickness(w, w.life.sum[j][1], w.mesh.cells().area()[j])
 }
 
-/// How much cheaper link `l` is than uncleared ground, for the mean cover of its two cells (1 when bare or not
-/// cleared).
+/// How much cheaper link `l` is than uncleared ground, for the mean cover of its two cells (1 when bare or uncleared).
 pub fn eased(w: &World, l: usize) -> f64 {
     if w.links.cleared[l] <= 0.0 {
         return 1.0;
@@ -46,8 +43,8 @@ pub fn eased(w: &World, l: usize) -> f64 {
     (1.0 + c) / (1.0 + (1.0 - open(w, l)) * c)
 }
 
-/// Yearly (from Flow): bodies spread back into the cleared ground of every link from both sides, at `Config::regrow`
-/// times the cover there over `Physics::rho_pass` (all of it when dense), over the time `dt`.
+/// Yearly: bodies spread back into every cleared link from both sides, at `regrow` times the cover over `rho_pass`
+/// (all of it when dense), over `dt`.
 pub fn regrow(w: &mut World, dt: f64) {
     for l in 0..w.links.cleared.len() {
         if w.links.cleared[l] <= 0.0 {

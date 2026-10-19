@@ -49,11 +49,8 @@ pub fn step(w: &mut World) {
     }
 }
 
-/// Part `s` reacts with its share of the air of its cell for `dt` s (`pool0` that share before, `pool` after), and settles
-/// the gas with the air as a ground node does (`change::GasMove`, `change::send_gas`): gas taken brings its heat at the
-/// air's temperature, gas sent leaves with its share of the part's heat by heat capacity. The ground under it pays the
-/// fusion and vaporisation enthalpy of the gas sent (gas taken gives it back); gas the ground cannot pay for goes to the
-/// ground, with its heat.
+/// Part `s` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
+/// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
 fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
     let na = w.mesh.level(AIR).n();
     let i = cell(w, s);
@@ -87,8 +84,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     });
 }
 
-/// Walls of part `s` that are no longer solid run off to the ground; the part takes the ground's temperature (if the
-/// ground cannot pay the heat, it ends colder); walls lighter than `Physics::min_kg` fall apart.
+/// Walls of part `s` no longer solid run off; the part takes the ground's temperature; walls under `min_kg` fall apart.
 fn settle(w: &mut World, s: usize) {
     let ns = w.chem.ns();
     let i = cell(w, s);
@@ -116,8 +112,7 @@ fn settle(w: &mut World, s: usize) {
     }
 }
 
-/// Load one structure: weights less buoyancy, pushes of moving liquid and bodies; break what is
-/// overloaded; float and drift.
+/// Load one structure: weights less buoyancy, pushes of liquid and bodies; break what is overloaded; float and drift.
 fn load(w: &mut World, r: usize) {
     let (list, i, g) = (members(w, r), cell(w, r), w.cfg.gravity);
     let (depth, rho, molv) = liquid(w, i);
@@ -137,8 +132,7 @@ fn load(w: &mut World, r: usize) {
     let afloat = !s.anchored && depth > 0.0 && lift >= s.mass * g;
     w.parts.parts[r].s.afloat = afloat;
     let held = list.iter().copied().find(|&p| holder(w, p).is_some());
-    // From the supports (anchored parts, else the held one) out along the bonds; each bond
-    // carries what hangs beyond it; a ground bond carries the pushes on what it holds.
+    // From the supports out along the bonds, each carrying what hangs beyond it; a ground bond carries the pushes too.
     let mut order: Vec<usize> = (0..list.len()).filter(|&x| w.parts.bonds.of(list[x]).any(|l| l.0 == GROUND)).collect();
     if order.is_empty() {
         order.extend(held.and_then(|h| list.iter().position(|&p| p == h)));
@@ -173,16 +167,14 @@ fn load(w: &mut World, r: usize) {
             unlink(w, a, o, true);
         }
     }
-    // The holder of a structure that does not rest on the ground bears what hangs on the part it
-    // holds (as of the start of the month) by its own force; past that, it lets go.
+    // The holder of a structure not resting on the ground bears what hangs on its part by its own force, or lets go.
     let x = held.filter(|_| !s.anchored).and_then(|h| list.iter().position(|&p| p == h));
     if let Some((x, o)) = x.and_then(|x| holder(w, list[x]).map(|o| (x, o))) {
         if wt[x] + push[x] > bears(w, &w.life.bodies[o]) {
             torn_from(w, o);
         }
     }
-    // Afloat and free: drift to the neighbour whose liquid stands lowest, as far as the
-    // liquid moves in a month.
+    // Afloat and free: drift to the neighbour whose liquid stands lowest.
     if !afloat || held.is_some() || v <= 0.0 || w.parts.parts[r].root as usize != r {
         return;
     }

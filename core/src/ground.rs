@@ -1,5 +1,4 @@
-//! Heat of ground and air nodes: heat capacities, temperatures, the melting plateaus of the
-//! ground, and the heat a node holds above `T_FLOOR`.
+//! Heat of ground and air nodes: heat capacities, temperatures, melting plateaus, and the heat above `T_FLOOR`.
 
 use crate::chem::{self, Chemistry};
 use crate::params::Config;
@@ -13,8 +12,8 @@ pub(crate) fn share(took: f64, want: f64) -> f64 {
     if took >= want { 1.0 } else { took / want }
 }
 
-/// Heat capacity of the skin of a ground node's bed, J/K: `skin_m` of its bonded amounts `b(k)` (mol) of the substances
-/// `ks` (any that may be there, in order), at their mean heat capacity per volume.
+/// Heat capacity of the skin of a ground node's bed, J/K: `skin_m` of its bonded amounts at their mean heat capacity
+/// per volume.
 pub(crate) fn skin_cap(chem: &Chemistry, cfg: &Config, area: f64, ks: impl IntoIterator<Item = usize>, b: impl Fn(usize) -> f64) -> f64 {
     let (mut c, mut v) = (0.0, 0.0);
     for k in ks {
@@ -49,10 +48,9 @@ impl Melting {
     }
 }
 
-/// Temperature of a node (or body) of heat capacity `c` and energy `e`, where molten amounts hold their fusion enthalpy: `melts` gives,
-/// in the order they melt, each substance's melting point there, the substance and the fusion enthalpy of its amount (J). A
-/// node stays at a melting point (a plateau) until all of that substance has frozen or melted. `World::energy_ground` is the
-/// inverse.
+/// Temperature of a node or body of heat capacity `c` and energy `e` whose molten amounts hold their fusion enthalpy:
+/// `melts` gives, in melting order, each substance's point there and its fusion enthalpy, J. It stays at a melting point
+/// until that substance has all frozen or melted (laws.md 1.1).
 pub(crate) fn melting(c: f64, e: f64, melts: impl IntoIterator<Item = (f64, usize, f64)>) -> Melting {
     let (mut held, mut lo, mut hi, mut bits) = (0.0, f64::MIN, f64::MAX, 0u64);
     for (tm, k, lat) in melts {
@@ -78,8 +76,7 @@ pub(crate) fn heat_above_floor(e: f64, cap: f64) -> f64 {
 }
 
 impl World {
-    /// Heat capacity of a ground node's active layer, J/K: the skin of its bed (`skin_cap`), then its loose amounts in the
-    /// order of the substances (the sum `flow::land::ground_state` keeps for every node).
+    /// Heat capacity of a ground node's active layer, J/K: its bed's skin, then its loose amounts in order.
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
         let (n, ns) = (self.mesh.cells().n(), self.chem.ns());
         let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, |k| self.store.amounts(Class::Bed)[k * n + i]);
@@ -89,9 +86,7 @@ impl World {
     pub fn melt(&self, k: usize, i: usize) -> f64 {
         self.chem.melt_in(k, |j| self.g(j, i))
     }
-    /// Temperature of a ground node, and the substance held at its melting point with its
-    /// liquid share, if any. Molten amounts hold their fusion enthalpy in `e_ground`, so a node
-    /// freezes or melts at a plateau.
+    /// Temperature of a ground node from its amounts now, and the substance on its plateau with its liquid share.
     pub fn thaw(&self, i: usize) -> (f64, Option<(usize, f64)>) {
         let c = self.heat_cap_ground(i).max(1.0);
         let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| self.g(k, i) > 0.0).map(|k| (self.melt(k, i), k)).collect();
@@ -99,9 +94,8 @@ impl World {
         let th = melting(c, self.store.heat(Class::Ground)[i], ks.into_iter().map(|(tm, k)| (tm, k, self.g(k, i) * self.chem.subs[k].lf)));
         (th.t, th.on)
     }
-    /// Temperature of ground node `i` as every law and the shell read it, K, and the substance on its melting plateau with
-    /// its molten share: Flow's solve of the plateaus at its last step (`flow::land::ground_state`), which keeps it for its
-    /// own moves; before Flow has run, the same solve from the amounts now (`thaw`).
+    /// Temperature of ground node `i` as every law and the shell read it, K, with its plateau: Flow's solve at its last
+    /// step; before Flow has run, `thaw`.
     pub fn thaw_last(&self, i: usize) -> (f64, Option<(usize, f64)>) {
         self.scratch.plateau(i).unwrap_or_else(|| self.thaw(i))
     }
@@ -109,13 +103,11 @@ impl World {
     pub fn t_ground_last(&self, i: usize) -> f64 {
         self.thaw_last(i).0
     }
-    /// Temperature of ground node `i` from its amounts and energy now, K (`thaw`): for building a world and for tests
-    /// that set a node's state by hand.
+    /// Temperature of ground node `i` from its amounts and energy now, K (`thaw`), for building a world and for tests.
     pub fn t_ground(&self, i: usize) -> f64 {
         self.thaw(i).0
     }
-    /// Thermal energy of a ground node at temperature `t` with the fusion enthalpy of what is molten there
-    /// (`Chemistry::fused_heat`: all of it at its melting point): the inverse of `thaw` (`melting`).
+    /// Thermal energy of a ground node at temperature `t` with the fusion enthalpy molten there: the inverse of `thaw`.
     pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
         let held: f64 = (0..self.chem.ns()).map(|k| self.g(k, i) * self.chem.fused_heat(k, t, |j| self.g(j, i))).sum();
         self.heat_cap_ground(i) * t + held
@@ -135,9 +127,8 @@ impl World {
     pub fn t_air(&self, j: usize) -> f64 {
         crate::flow::air_temp(self.heat_now(crate::store::Node::air(j)), self.heat_cap_air(j))
     }
-    /// Height of the solid surface (bonded + loose solids), m, at the node's temperature now and with the solid share of a
-    /// substance on its plateau (`survey::env_of` reads the last flow step's temperature and whole phases; `flow::land::surface`
-    /// adds the soft cover and the reflectance).
+    /// Height of the solid surface (bonded and loose solids), m, at the node's temperature now, with the solid share of a
+    /// substance on its plateau.
     pub fn surface_z(&self, i: usize) -> f64 {
         let (t, pl) = self.thaw(i);
         let mut v = 0.0;

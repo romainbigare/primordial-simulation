@@ -40,9 +40,8 @@ impl Square {
         let (nx, ny) = (x as i32 + d.0, y as i32 + d.1);
         (nx >= 0 && ny >= 0 && (nx as usize) < self.w && (ny as usize) < self.h).then(|| self.idx(nx as usize, ny as usize))
     }
-    /// The mesh of the map: the squares, their rows spread evenly from latitude `north` (row 0) to `south` (degrees),
-    /// and a coarser level for each of `scales` (each a multiple of the one before), whose cell holds the `scale`²
-    /// squares of a block (fewer along the south and east edges when `scale` does not divide the map).
+    /// The mesh of the map: the squares, rows spread from latitude `north` (row 0) to `south`, and a coarser level for
+    /// each of `scales` whose cell holds a block of `scale`² squares (fewer at the south and east edges).
     pub fn mesh(&self, scales: &[usize], south: f64, north: f64) -> Mesh {
         let n = self.n();
         let lat = |y: usize| north + (south - north) * (y as f64 + 0.5) / self.h as f64;

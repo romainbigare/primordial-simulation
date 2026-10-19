@@ -1,4 +1,4 @@
-//! Upkeep, and paying a cost by running the body's catalysed reactions that breathe, at the rate Change gives them.
+//! Upkeep, and paying a cost by running the body's burnings at the rate Change gives them (laws.md 6.2).
 
 use super::exchange::{breath, conductance_to_ground, cover_of, film};
 use super::{Body, COPY_MASS, DENATURE, REPAIR, STRENGTH};
@@ -9,14 +9,10 @@ use crate::store::Node;
 use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::{bond, World, AIR};
 
-/// Upkeep over `days` of a body of `mass` kg, J: per kg of the body that is built (`Body::built`, mass^1.0, not the
-/// fuel it stores), basal upkeep, its catalysts' capacity (`Consts::cats`), strength, learning and signalling; its
-/// capture area by the day; one decision per member (`Physics::think`); a body with no brain pays no learning, signal
-/// or decision. Per kg it goes with the size its kind matures at to the power `intake_exp` - 1, so across kinds adults
-/// pay Kleiber's mass^0.75, while what one body can supply grows more slowly than the tissue it keeps and it grows until
-/// keeping it takes all it can supply (West, Brown and Enquist 2001; docs/laws.md). Repair multiplies it by
-/// 1 - c + c 2^`REPAIR` (`Physics::c_repair`). All of it goes with its activity and the pace of its temperature
-/// (`Body::pace`): a dry or cold body pays little and ages slowly.
+/// Upkeep over `days` of a body of `mass` kg, J (laws.md 6.2): per kg of living body its basal, catalyst, strength,
+/// learning and signal costs, times (copy mass)^(`intake_exp` - 1) so adults pay Kleiber's mass^0.75 while one body grows
+/// until keeping its tissue takes all it can supply (West, Brown and Enquist 2001); its leaf by the day; one decision
+/// per member; times repair, activity and the pace of its temperature.
 pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64) -> f64 {
     let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
     let p = &w.cfg.phys;
@@ -37,9 +33,8 @@ pub fn release(w: &World, b: &Body, days: f64) -> f64 {
     plan(w, b, f64::MAX, &Payer::at(w, b, days, b.mass(&w.chem), b.thermal(&w.chem))).1
 }
 
-/// A body about to pay over some days, as its paying sees it (valid until its stores or its heat change): its mass, kg,
-/// where it stands among its melting plateaus (`Body::thermal`), the days, the share of its air node it exchanges gas
-/// with in them (`breath`, at most all of it) and all that node holds, mol.
+/// A body about to pay over some days, valid until its stores or heat change: its mass, kg, its plateau state, the days,
+/// the share of its air node it exchanges gas with in them, and all that node holds, mol.
 pub(crate) struct Payer {
     pub mass: f64,
     pub th: Melting,
@@ -61,9 +56,8 @@ impl Payer {
     }
 }
 
-/// Pay `cost` J by running the body's catalysed reactions that release heat and breathe, one after the other as far as
-/// their inputs allow; gases come from the air the body exchanges with in `days` and go to its cell's air, and the heat
-/// is held as `spend` holds it. False, and nothing paid, if they cannot release that much in that time.
+/// Pay `cost` J by running the body's burnings one after the other as far as their inputs allow, the heat held as
+/// `spend` holds it. False, and nothing paid, if they cannot release that much in `days`.
 pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     if cost <= 0.0 {
         return true;
@@ -75,8 +69,7 @@ pub fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
 /// (with `part` it pays what it can, else all or nothing).
 pub(crate) fn spend(w: &mut World, b: &mut Body, cost: f64, dt: f64, part: bool, p: &Payer) -> f64 {
     let (left, mass, th0) = (pay_at(w, b, cost, p, part), p.mass, &p.th);
-    // The heat released leaves through its surface (`conductance_to_ground`) over `dt`: the body keeps the share `hold`
-    // and the rest goes to the ground. A cost that leaves it colder than it was is not held back.
+    // The heat released leaves through its surface over `dt`: the body keeps the share `hold`, the ground gets the rest.
     let (keep, i) = (b.energy_in(&w.chem, th0), b.cell as usize);
     if b.e > keep {
         let held = hold(w, b, mass, th0.t, dt);
@@ -92,10 +85,8 @@ pub(super) fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
     mean_decay(conductance_to_ground(w, b, mass, t) * dt / b.heat_cap(&w.chem).max(1e-9))
 }
 
-/// How far each reaction of `pay` runs (one entry for each of `Consts::burn`, in its order) to release up to `cost` J, and
-/// the energy released, by the payer `p`. Each goes at most as far as Change's rate at the body's temperature takes it
-/// over the payer's days (`change::pace`), its gases the air it exchanges (`Payer`), its other inputs its own stores. So a
-/// cold body releases little: the cold cost is the rate, not a rule.
+/// How far each burning (`Consts::burn`) runs to release up to `cost` J, and the energy released: each at most as far
+/// as Change's rate at the body's temperature takes it over the days, so a cold body releases little by the rate alone.
 pub(crate) fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64) {
     let (chem, j) = (&w.chem, w.mesh.up(b.cell as usize, 0, AIR));
     let air = |k: usize| w.a(k, j);
@@ -130,8 +121,7 @@ pub(crate) fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64)
     (ext, got.min(cost))
 }
 
-/// `pay` by the payer `p`; returns what was not paid. If `part`, it pays what it can; else all or nothing. The heat stays
-/// in the body, less the latent heat of the gases taken and put out.
+/// `pay` by the payer `p`; returns what was not paid (with `part` it pays what it can, else all or nothing).
 pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bool) -> f64 {
     if cost <= 0.0 {
         return 0.0;
@@ -141,8 +131,7 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bo
     if left > 1e-9 * cost && !part {
         return cost;
     }
-    // (Gas crosses with the air of its cell as all a body's gas does, `store::Moves::gas`: taken with no heat of its own
-    // and given with its latent heat, which the body pays, the air paying the lift.)
+    // Gas crosses as all a body's gas does (`store::Moves::gas`): given with its latent heat, the air paying the lift.
     let (gas, lift, mut latent) = (|k: usize| w.chem.phase(k, t) == Phase::Gas, w.lift(b.cell as usize), 0.0);
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
         for (&(k, nu), sign) in w.chem.reactions[r].inputs.iter().map(|x| (x, -1.0)).chain(w.chem.reactions[r].outputs.iter().map(|x| (x, 1.0))) {
