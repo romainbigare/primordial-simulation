@@ -148,8 +148,8 @@ Most rock that leaves the land is lime that Change dissolves (reaction 22, 2.6) 
 
 `flow::air::step`, every `air_hours`. Radiation, the exchange of the ground with the air (evaporation, rain, gases
 dissolving) and the wind are one implicit step (backward Euler) over the whole span, so a long step gives the world
-of short ones: the long-step test (`tape/tests/ranges.rs`) holds the climate of the 10-day steps to that of 6-hour air
-steps and 3-day physics steps within the seeds' noise. The wind's pushes come from the air at the step's start
+of short ones: the long-step test (`tape/tests/ranges.rs`) holds each seed's climate at the 10-day steps to its own
+at 6-hour air steps and 3-day physics steps, within 0.3 K for a temperature and the year-to-year spread for the rest. The wind's pushes come from the air at the step's start
 and the clouds from what condensed in the step before; they carry the amounts and heat at the step's end, so the
 step stays implicit, and the rounds solve only the exchange with the ground.
 

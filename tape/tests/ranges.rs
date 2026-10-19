@@ -13,9 +13,9 @@
 //! The eaters live: at 48 x 48 they still have members at year 60 in seeds 1, 2 and 3, after the booms and busts that
 //! year 30 hides.
 //!
-//! The steps of Flow are speed settings too (the long step against the short one): small worlds with life keep
-//! their climate within the seeds' noise at the default steps and with the air's step at 6 hours and the physics step
-//! at 3 days.
+//! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
+//! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step at
+//! 3 days, within 0.3 K for a temperature and the year-to-year spread for the others.
 
 mod common;
 
@@ -214,17 +214,24 @@ fn the_sleep_of_change_keeps_the_chemistry() {
 /// the rain on land, the heat-absorbing gas and the river cells.
 const CLIMATE: [&str; 6] = ["t_land", "t_land_summer", "t_land_winter", "rain_land", "air_3", "rivers"];
 
-/// The means of the `CLIMATE` columns at the end of each year from `SLEEP_FROM`, on the sleep test's world of `seed`,
-/// with the steps of Flow that `set` makes.
-fn climate(seed: u64, set: fn(&mut Config)) -> [f64; CLIMATE.len()] {
-    let mut mean = [0.0; CLIMATE.len()];
-    let years = (SLEEP_YEARS - SLEEP_FROM + 1) as f64;
-    run(seed, SLEEP_SIDE, SLEEP_YEARS, false, set, |y, _, rec| {
-        if y >= SLEEP_FROM {
-            mean.iter_mut().zip(CLIMATE).for_each(|(m, c)| *m += rec.last(c) / years);
+/// The long-step test's world: its side, its years (long enough for the plants to grow, as an error that comes with
+/// them grows too), and the years from which its numbers are averaged.
+const STEP_SIDE: usize = 32;
+const STEP_YEARS: u64 = 20;
+const STEP_FROM: u64 = 11;
+/// How far the long step may move each temperature of the climate from the short step's, each seed against itself, K.
+const STEP_K: f64 = 0.3;
+
+/// The `CLIMATE` columns at the end of each year from `STEP_FROM`, on the long-step test's world of `seed`, with the
+/// steps of Flow that `set` makes.
+fn climate(seed: u64, set: fn(&mut Config)) -> Vec<[f64; CLIMATE.len()]> {
+    let mut years = vec![];
+    run(seed, STEP_SIDE, STEP_YEARS, false, set, |y, _, rec| {
+        if y >= STEP_FROM {
+            years.push(CLIMATE.map(|c| rec.last(c)));
         }
     });
-    mean
+    years
 }
 
 /// The air's step of 6 hours (`air_hours`), short against the air's changes in a day, and a physics step of 3 days
@@ -232,33 +239,33 @@ fn climate(seed: u64, set: fn(&mut Config)) -> [f64; CLIMATE.len()] {
 const SHORT_AIR_HOURS: u32 = 6;
 const SHORT_PHYS_DAYS: u32 = 3;
 
-/// The long step against the short one: at the default steps of Flow (`air_hours`, `phys_days`, `flow_days`) the mean
-/// over the three seeds of each of the climate's key numbers (each the mean of its last years) moves by less than its
-/// noise, the spread of the three seeds' values at the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`).
+/// The long step against the short one, each seed against itself: at the default steps of Flow (`air_hours`,
+/// `phys_days`, `flow_days`) the mean over the seeds of what the long step moves each of the climate's key numbers
+/// (the mean of its last years) from the short steps (`SHORT_AIR_HOURS`, `SHORT_PHYS_DAYS`) is less than `STEP_K` for
+/// a temperature, and less than its year-to-year spread at the short steps (the mean over the seeds of its highest
+/// less its lowest yearly value) for the others.
 #[test]
-#[ignore = "slow: six 8-year runs of a 32 x 32 world with life"]
+#[ignore = "slow: six 20-year runs of a 32 x 32 world with life"]
 fn the_long_step_keeps_the_climate() {
     let short: fn(&mut Config) = |c| (c.air_hours, c.phys_days) = (SHORT_AIR_HOURS, SHORT_PHYS_DAYS);
     let default: fn(&mut Config) = |_| {};
-    // Per seed, [short, default], the short and the default step side by side.
-    let runs: Vec<[[f64; CLIMATE.len()]; 2]> = SEEDS
-        .iter()
-        .map(|&seed| {
-            std::thread::scope(|s| {
-                let pair = [short, default].map(|set| s.spawn(move || climate(seed, set)));
-                pair.map(|r| r.join().expect("a run"))
-            })
-        })
-        .collect();
+    // Per seed, [short, default], all side by side.
+    let runs: Vec<[Vec<[f64; CLIMATE.len()]>; 2]> = std::thread::scope(|s| {
+        let runs: Vec<_> = SEEDS.iter().map(|&seed| [short, default].map(|set| s.spawn(move || climate(seed, set)))).collect();
+        runs.into_iter().map(|pair| pair.map(|r| r.join().expect("a run"))).collect()
+    });
+    let seeds = runs.len() as f64;
     let mut out = vec![];
     for (q, name) in CLIMATE.iter().enumerate() {
-        let column = |k: usize| runs.iter().map(|r| r[k][q]).collect::<Vec<f64>>();
-        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
-        let (base, long) = (column(0), column(1));
-        let noise = base.iter().fold(f64::MIN, |m, &x| m.max(x)) - base.iter().fold(f64::MAX, |m, &x| m.min(x));
-        let off = mean(&long) - mean(&base);
-        let ok = off.abs() <= noise;
-        println!("{name}: {:.6e} at the default steps (seeds {long:.4?}), {:.6e} at the short ones (seeds {base:.4?}), off by {off:.3e}, noise {noise:.3e}{}", mean(&long), mean(&base), if ok { "" } else { ": OUT" });
+        let mean = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).sum::<f64>() / run.len() as f64;
+        let spread = |run: &[[f64; CLIMATE.len()]]| run.iter().map(|y| y[q]).fold(f64::MIN, f64::max) - run.iter().map(|y| y[q]).fold(f64::MAX, f64::min);
+        let offs: Vec<f64> = runs.iter().map(|[base, long]| mean(long) - mean(base)).collect();
+        let off = offs.iter().sum::<f64>() / seeds;
+        let limit = if name.starts_with("t_") { STEP_K } else { runs.iter().map(|[base, _]| spread(base)).sum::<f64>() / seeds };
+        let ok = off.abs() <= limit;
+        let short: Vec<String> = runs.iter().map(|[base, _]| format!("{:.4e}", mean(base))).collect();
+        let seeds: Vec<String> = offs.iter().map(|x| format!("{x:.3e}")).collect();
+        println!("{name}: off by {off:.3e} (seeds {seeds:?}) at the default steps from the short ones (seeds {short:?}), limit {limit:.3e}{}", if ok { "" } else { ": OUT" });
         if !ok {
             out.push(*name);
         }

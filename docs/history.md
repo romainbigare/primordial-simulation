@@ -1108,6 +1108,12 @@ Phase E review, round 1 (fixes):
   commit before (seed 1): land 3/3 289.21 to 288.97 K, 10/10 289.53 to 288.82 K; summer 295.33 to 295.08 and 295.45
   to 294.82 K; air vapour at 10/10 0.00621 to 0.00564 (3/3 0.00559); seed 2: land 3/3 290.01, 10/10 289.95 K.
   Snapshot version 36; golden re-pinned.
+- J3 follow-up, the long-step test compares each seed with itself at the two steps (32 x 32, 20 years, years 11 to 20,
+  the six runs side by side): a temperature within 0.3 K, the others within their year-to-year spread at the short
+  steps. Before, it took the spread between seeds (about 1 K) as noise over 8 years, when plants are still small, and
+  missed the 1 K error above. On main before the two fixes: land -0.84 K (seeds -1.09, -0.87, -0.57), summer -0.98 K,
+  out; after: land -0.10 K, summer -0.11 K, winter -0.06 K, rain on land -0.1%, absorbing gas -0.5%; 2.7 minutes on 4
+  shared cores.
 
 **Phase K: recording and viewer**
 
