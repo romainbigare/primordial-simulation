@@ -50,11 +50,10 @@ const PLANT_KG: f64 = 10.610;
 const EATER_KG: f64 = 3.943;
 /// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the reference runs.
 const PLANT_LIFE: f64 = 2.324;
-/// The factor either way the light-eaters' life may lie from `PLANT_LIFE`: wider than the others' 2, kept as it was
-/// set against the A2 runs (decision 27).
-const PLANT_LIFE_RANGE: f64 = 3.0;
-/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, kept as it was set
-/// against the A2 runs (decision 27).
+/// The factor either way the light-eaters' life may lie from `PLANT_LIFE`.
+const PLANT_LIFE_RANGE: f64 = 2.0;
+/// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, as a few hundred eaters
+/// make a noisy mean (decision 33).
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
 const EATER_LIFE: f64 = 3.787;
