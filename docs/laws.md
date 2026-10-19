@@ -685,7 +685,9 @@ the same patterns as individuals.
   member that might be, and changes nothing. Its gain and the node's are the log of the body
   matter (brood with it) after growth over that before the update: growth less deaths. The mean
   of the gene then moves by the sample's step times tanh(sample's gain − node's gain), times the
-  number of genes drawn from (each gene is drawn that much less often), at most by the step
+  number of genes drawn from times `sample_every` (each gene is drawn that much less often: a
+  node runs its sample on one update in `sample_every`, drawn, a speed setting), at most by the step
+  times `sample_every`
   (`copy::select`): Price's equation for two halves a step either side of the mean (Price 1970)
   moves the mean by the step times tanh(half the difference of their log gains); the node's own
   update stands for the other side, and since the side is drawn, the error of that one-sided

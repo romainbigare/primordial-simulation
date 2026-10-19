@@ -743,6 +743,11 @@ The work of `docs/foundation/plan.md`, one line per task.
   catalysed reactions, liquids that dissolve and what the roots take). 64 x 64, seed 1, 30 years, side by side:
   samples 230,600 to 153,400 in 5 years, their time -35% (22% of the bodies' time, from 31%), the world the same to
   four digits. Golden re-pinned.
+- E12, speed: a node without a brain runs its sample on one update in `sample_every` (2, a speed setting), drawn, with
+  its weight and cap that many times larger. 64 x 64, seeds 1 and 2, 30 years: the samples' share of the bodies'
+  time 22% to 12% (7% at 4). x2 and /2 against other draws at 1 (years 10 to 30): plant members -3% and -5% at 4,
+  +1.5% and +4% at 1 (noise 2%); plant life -2% and -5%, +2% and +4% (noise 2.5%); animals, carbon gas and land
+  temperature within noise. The cap not scaled with the weight lowered plant mass 8% and 11% at 4. Golden re-pinned.
 
 **Phase J: the long physics step**
 

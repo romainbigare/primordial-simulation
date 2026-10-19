@@ -44,6 +44,8 @@ pub struct Config {
     pub sleep_days: u32,
     /// Speed setting: a population node (more than one member) updates at most every this many days (`Body::interval`)
     pub node_days: u32,
+    /// Speed setting: a node without a brain runs its sample member on one update in this many, drawn (`copy::select`)
+    pub sample_every: u32,
 
     // Ground and air physics
     /// Depth of ground that exchanges heat with the surface, m
@@ -386,6 +388,9 @@ impl Config {
         if self.node_days as f64 > crate::body::MAX_INTERVAL {
             return Err(format!("node_days ({}) must be at most {} days, the longest interval", self.node_days, crate::body::MAX_INTERVAL));
         }
+        if self.sample_every == 0 {
+            return Err("sample_every must be at least 1 (a sample on one update in that many)".to_string());
+        }
         if !(self.wake_share > 0.0 && self.wake_share.is_finite()) {
             return Err(format!("wake_share ({}) must be above 0", self.wake_share));
         }
@@ -417,6 +422,7 @@ impl Default for Config {
             wake_share: 0.05,
             sleep_days: 90,
             node_days: 36,
+            sample_every: 2,
             skin_m: 2.0,
             air_top_m: 10_000.0,
             sensible: 10.0,

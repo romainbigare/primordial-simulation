@@ -12,8 +12,8 @@ use crate::chem::Chemistry;
 use crate::rng::{Purpose, Rng};
 use crate::World;
 
-/// A sample member of a node: the gene it differs in, its step from the node's mean, the number of genes it was drawn
-/// from, and the log of what it gained in the update.
+/// A sample member of a node: the gene it differs in, its step from the node's mean, its weight (the number of genes it
+/// was drawn from, times `Config::sample_every`), and the log of what it gained in the update.
 pub(crate) struct Sample {
     gene: usize,
     step: f32,
@@ -98,14 +98,19 @@ fn read(chem: &Chemistry, lay: &Layout, b: &Body, g: usize, x: f32, y: f32) -> b
 /// (`body::gain_to_growth`) on the world as it is, which is then given back as it was: a member that might be, not one
 /// that is, so it changes nothing. None for other bodies, and where the step cannot change what the node gains in the
 /// update (`read`), so its sample would gain what the node gains and its mean would not move. That draw costs no
-/// update, and each gene is still drawn as often, so the others move at their own rate.
+/// update, and each gene is still drawn as often, so the others move at their own rate. A sample is run on one update
+/// in `Config::sample_every`, drawn, and its weight is that many times larger, so each gene moves at the same mean rate.
 pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Option<Sample> {
     if b.n() <= 1.0 || !w.life.brainless(b) {
         return None;
     }
+    let every = w.cfg.sample_every as usize;
+    let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Select);
+    if every > 1 && r.below(every) != 0 {
+        return None;
+    }
     let lay = Layout::of(&w.chem);
     let differ: Vec<usize> = (0..b.genes.len()).filter(|&g| spread_at(&b.spread, g) > 0.0).collect();
-    let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Select);
     let g = *differ.get(r.below(differ.len().max(1)))?;
     let ((_, lo, hi), x, sd) = (range(&lay, g), b.genes[g], spread_at(&b.spread, g).sqrt());
     let step = (if r.below(2) == 0 { x + sd } else { x - sd }).clamp(lo, hi) - x;
@@ -119,14 +124,15 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
     let shadow = Shadow::of(w, slot, b);
     let gain = gain_to_growth(w, slot, &mut s, rc, tmp);
     shadow.restore(w);
-    Some(Sample { gene: g, step, genes: differ.len() as f32, gain })
+    Some(Sample { gene: g, step, genes: (differ.len() * every) as f32, gain })
 }
 
 /// The mean of node `b` (taken out of its slot) after its update, in which its members gained `gain` (the log of what
 /// they gained, `body::Lived::gain`), and its sample member `s` gained `s.gain`: the sample's gene moves by its step
-/// d times tanh(s.gain - gain), times the number of genes the sample was drawn from (each is drawn that much less
-/// often, so each moves at its own rate), and at most by d. For two halves of a node at the mean plus and minus d,
-/// gaining W+ and W-, the covariance of the gene with relative fitness moves the mean by d (W+ - W-) / (W+ + W-) =
+/// d times tanh(s.gain - gain), times the sample's weight (each gene is drawn that much less often, so each moves at
+/// its own rate), and at most by d times `Config::sample_every` (the one update in that many with a sample stands for
+/// them all, so the mean moves as much on average). For two halves of a node at the mean plus and minus d, gaining W+
+/// and W-, the covariance of the gene with relative fitness moves the mean by d (W+ - W-) / (W+ + W-) =
 /// d tanh((ln W+ - ln W-) / 2) (Robertson 1966); the half difference of the logs is taken here as the sample's over
 /// the node's own, and the side of the step is drawn, so the error of that one-sided difference (of second order)
 /// averages out. A gene that does nothing gains nothing and does not move. Within the walls.
@@ -137,6 +143,7 @@ pub(crate) fn select(w: &mut World, b: &mut Body, s: Sample, gain: f64) {
     }
     let (_, lo, hi) = range(&Layout::of(&w.chem), s.gene);
     let mut genes = b.genes.clone();
-    genes[s.gene] = (genes[s.gene] + (s.genes * s.step * f).clamp(-s.step.abs(), s.step.abs())).clamp(lo, hi);
+    let cap = w.cfg.sample_every as f32 * s.step.abs();
+    genes[s.gene] = (genes[s.gene] + (s.genes * s.step * f).clamp(-cap, cap)).clamp(lo, hi);
     b.set_genes(genes, &w.chem, &w.cfg.phys);
 }

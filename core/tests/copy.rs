@@ -1512,11 +1512,12 @@ fn after_update(w: &mut World, s: usize, g: usize) -> (f64, f32) {
 /// gene by a standard deviation of 0.3 steps. The same node with that gene at its mean plus and minus the deviation,
 /// and no spread, gains W+ and W- in an update (as two kinds of members would, each on its own); the covariance of the
 /// gene with fitness in two such halves moves the mean by sd (W+ - W-) / (W+ + W-) (Robertson 1966). The node's own
-/// update moves its mean as much, within a quarter, the same way. It costs the node one more update as far as its
-/// growth.
+/// update moves its mean as much, within a quarter, the same way, with a sample at each update (`sample_every` 1). It
+/// costs the node one more update as far as its growth.
 #[test]
 fn selection_inside_a_node_moves_its_mean_as_its_members_would() {
     let mut w = small_world();
+    w.cfg.sample_every = 1;
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
     let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0 && w.life.bodies[s].adult(&w.chem)).expect("an adult node");
     let books = Books::now(&w);
