@@ -975,6 +975,10 @@ Phase E review, round 1 (fixes):
   a brain select inside on nothing: a sample without the decision saw only the costs of what pays through it and drove
   the eaters of remains to boom (8e6 against 1e4 kg), so it was dropped.
 
+- The spread of actions in fewer lines: a member doing an action of Bond is a part of one (`choose::spread::part_acts`),
+  its change of well-being counted like any part's; `Kit` holds the well-being as a function. Core code back under its
+  ceiling of 9,000 lines (9,027 to 8,996). Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

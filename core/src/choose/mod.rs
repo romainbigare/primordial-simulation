@@ -86,7 +86,8 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     pick(w, &mut c, &mut rng);
     let (form, z) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
-    let k = Kit { s, t, z, form, think, spare: lived.spare };
+    let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, b.temp(&w.chem), lived.spare);
+    let k = Kit { s, t, z, form, wb: &now };
     if b.n() > 1.0 {
         spread::spread(w, slot, b, &c, &k, &mut rng);
     } else {
@@ -96,22 +97,14 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
 }
 
 /// What the actions of one decision share besides its options: the brain's shape and what it thought, the noise drawn
-/// for the signal and the shape of a part made, that shape (`noise`), a decision's cost, J, and the margin of the body's
-/// reactions over its upkeep (`Lived::spare`).
+/// for the signal and the shape of a part made, that shape (`noise`), and the well-being of a body now
+/// (`Body::wellbeing_at`, at a decision's cost and the margin of the body's reactions over its upkeep).
 struct Kit<'a> {
     s: Shape,
     t: &'a ActTmp,
     z: [f32; SIG + FORM_OUT],
     form: [f32; FORM_OUT],
-    think: f64,
-    spare: f64,
-}
-
-impl Kit<'_> {
-    /// The well-being of body `b` now (`Body::wellbeing_at`).
-    fn wb(&self, w: &World, b: &Body) -> f32 {
-        b.wellbeing_at(&w.chem, self.think, b.temp(&w.chem), self.spare)
-    }
+    wb: &'a dyn Fn(&World, &Body) -> f32,
 }
 
 /// The score of each option: the fixed actions, a move to each neighbour (by the weighted mean of the cells it sees
@@ -198,15 +191,9 @@ fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
 /// the shape (`trace` learns from it).
 fn noise(w: &World, b: &mut Body, s: Shape, t: &ActTmp, rng: &mut Rng) -> ([f32; FORM_OUT], [f32; SIG + FORM_OUT]) {
     let (out, p) = (&t.thought.out, &w.cfg.phys);
-    let (mut z, mut form) = ([0f32; SIG + FORM_OUT], [0f32; FORM_OUT]);
-    for k in 0..SIG {
-        z[k] = rng.normal() as f32;
-        b.sig[k] = squash(out[s.sig() + k]) + p.signal_noise * z[k];
-    }
-    for k in 0..FORM_OUT {
-        z[SIG + k] = rng.normal() as f32;
-        form[k] = squash(out[s.form() + k]) + p.shape_noise * z[SIG + k];
-    }
+    let z: [f32; SIG + FORM_OUT] = std::array::from_fn(|_| rng.normal() as f32);
+    b.sig = std::array::from_fn(|k| squash(out[s.sig() + k]) + p.signal_noise * z[k]);
+    let form = std::array::from_fn(|k| squash(out[s.form() + k]) + p.shape_noise * z[SIG + k]);
     for (k, m) in b.mem.iter_mut().enumerate() {
         *m = squash(out[s.learned() + k]);
     }
