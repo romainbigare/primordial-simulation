@@ -122,7 +122,8 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
         return;
     }
     let (me, chem, pt) = (Some(id(w, p)), &w.chem, &mut w.parts.parts[p]);
-    let q = chem.heat_share(pt.e, pt.heat_cap(chem), &m);
+    // The heat that leaves with what it takes: its share by heat capacity.
+    let q = pt.e * chem.heat_cap_of(&m) / pt.heat_cap(chem);
     for (k, &a) in m.iter().enumerate() {
         let f = a.min(pt.fill[k]);
         pt.fill[k] -= f;
@@ -167,18 +168,23 @@ fn put(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, days) {
         return;
     }
-    let chem = &w.chem;
+    let (m, q) = give_up(&w.chem, b, &m);
+    let pt = &mut w.parts.parts[p];
+    m.iter().enumerate().for_each(|(k, &a)| *if wet[k] { &mut pt.fill[k] } else { &mut pt.wall[k] } += a);
+    pt.e += q;
+    w.counts.parts.to_parts += got;
+    pt.resize(&w.chem);
+    restructure(w, p);
+}
+
+/// Body `b` gives up `m` mol of its stores, no more than it holds (paying may have used some of them), with their share
+/// of its heat. Returns what it gave and that heat, J.
+fn give_up(chem: &Chemistry, b: &mut Body, m: &[f64]) -> (Vec<f64>, f64) {
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
     let q = b.heat_with(chem, &b.thermal(chem), &m);
-    let pt = &mut w.parts.parts[p];
-    for (k, &a) in m.iter().enumerate() {
-        *if wet[k] { &mut pt.fill[k] } else { &mut pt.wall[k] } += a;
-        b.store[k] -= a;
-    }
-    (pt.e, b.e) = (pt.e + q, b.e - q);
-    w.counts.parts.to_parts += got;
-    pt.resize(chem);
-    restructure(w, p);
+    b.store.iter_mut().zip(&m).for_each(|(s, a)| *s -= a);
+    b.e -= q;
+    (m, q)
 }
 
 /// Put solid stores above twice their safe minimums out as a new part (up to `form` of the body's mass, at least
@@ -195,13 +201,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     if got < w.cfg.phys.min_kg || !body::pay(w, b, w.cfg.phys.c_form * got, b.interval(w) as f64) {
         return;
     }
-    // Paying may have used some of what was to be put out.
-    let wall: Vec<f64> = wall.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let e = b.heat_with(&w.chem, &b.thermal(&w.chem), &wall);
-    for (s, a) in b.store.iter_mut().zip(&wall) {
-        *s -= a;
-    }
-    b.e -= e;
+    let (wall, e) = give_up(&w.chem, b, &wall);
     let p = make(w, i, wall, e, shape[0], shape[1]);
     w.counts.parts.formed += 1.0;
     if held(w, b).is_none() {
