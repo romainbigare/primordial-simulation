@@ -121,7 +121,7 @@ impl Crossing {
     /// A crossing of the gases `ks`, from the air now.
     pub(super) fn new(w: &World, ks: Vec<usize>) -> Crossing {
         let na = w.mesh.level(AIR).n();
-        let left: Vec<f64> = ks.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
+        let left: Vec<f64> = ks.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
         let links = Batch::new([Class::Ground, Class::Air], &ks.iter().map(|&k| k as u16).collect::<Vec<_>>());
         Crossing { ks, g: w.cfg.gravity, links, lift: vec![0.0; na], left }
     }
@@ -164,15 +164,15 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
     for i in 0..n {
         let (t, j, area) = (s.state.tg[i], w.mesh.up(i, 0, AIR), w.mesh.cells().area()[i]);
         let tl = (lerp(s, &s.ta, i) - s.seen[i][0] * (s.head[i] - s.seen[i][1])).max(1.0);
-        let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.ground[k * n + i] * wet(s, k, i), v + w.ground[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
+        let (l, v) = solv.iter().fold((0.0, 0.0), |(l, v), &k| (l + w.store.amounts(Class::Ground)[k * n + i] * wet(s, k, i), v + w.store.amounts(Class::Ground)[k * n + i] * wet(s, k, i) * s.sp[k].v[1]));
         for (x, &(gi, k)) in henry.iter().enumerate() {
-            let (a, sp) = (w.ground[k * n + i], s.sp[k]);
+            let (a, sp) = (w.store.amounts(Class::Ground)[k * n + i], s.sp[k]);
             if l <= 0.0 && a <= 0.0 {
                 continue;
             }
             // The column over the cell, the height it fills, mol dissolved per mol at balance, and the
             // time to balance through the two films.
-            let (col, hk) = (lerp(s, &w.air[k * na..(k + 1) * na], i) * over_cell(w, s, i), lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
+            let (col, hk) = (lerp(s, &w.store.amounts(Class::Air)[k * na..(k + 1) * na], i) * over_cell(w, s, i), lerp(s, &s.hk[gi * na..(gi + 1) * na], i));
             let b = l * w.chem.henry(k, t, R_GAS * tl / (area * hk));
             let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
             let m = (b * (a + col) / (1.0 + b) - a) * one_minus_exp(dt * (1.0 + b) / tau);
@@ -189,7 +189,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
     }
     pass.book(w);
     for &(_, k) in henry {
-        if (0..n).any(|i| w.ground[k * n + i] > 0.0) {
+        if (0..n).any(|i| w.store.amounts(Class::Ground)[k * n + i] > 0.0) {
             s.add_loose(k, true);
         }
     }

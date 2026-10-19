@@ -7,6 +7,7 @@ use super::wind::{pushes, Air, Coef, Links};
 use super::{air_temp, over_cell};
 use crate::solve::band::{fluxes, reach, Band};
 use crate::{World, AIR};
+use crate::store::Class;
 
 /// What the ground nodes under each air node give it over the step (`gather`): heat, J; per active gas and node
 /// (`[gas * nodes + node]`) the net amount that comes up, mol; per node what condenses, mol and mol × reflectance; and per
@@ -173,7 +174,7 @@ impl Newton<'_> {
         }
         for j in 0..na {
             band.add(he(j), he(j), capa[j]);
-            rhs[he(j)] = self.w.e_air[j] + g.heat[j] - wind.paid.get(j).copied().unwrap_or(0.0);
+            rhs[he(j)] = self.w.store.heat(Class::Air)[j] + g.heat[j] - wind.paid.get(j).copied().unwrap_or(0.0);
         }
         let mut slope = |(r, c): (usize, usize), v: f64| {
             band.add(r, c, -v);

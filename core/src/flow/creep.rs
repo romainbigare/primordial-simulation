@@ -31,7 +31,7 @@ pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let n = w.mesh.cells().n();
     let sol = s.solids(range(&s.state.tg).0);
     let soft: Vec<f64> = sol.iter().map(|&k| 1.0 / (w.chem.subs[k].hardness + HARD_MIN)).collect();
-    let amt: Vec<f64> = sol.iter().flat_map(|&k| w.ground[k * n..(k + 1) * n].iter().copied()).collect();
+    let amt: Vec<f64> = sol.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();
     let mut mob = vec![0.0; n];
     for (q, &k) in sol.iter().enumerate() {
         for (i, m) in mob.iter_mut().enumerate() {

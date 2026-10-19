@@ -16,22 +16,26 @@ pub struct NodeId {
 /// How a node is stored: which arrays hold its amounts (`[k * len + index]`, mol) and its heat (`[index]`, J).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Class {
-    /// The loose ground of a cell and the heat of its active layer: `World::ground`, `World::e_ground`
+    /// The loose ground of a cell and the heat of its active layer
     Ground,
-    /// An air node: `World::air`, `World::e_air`
+    /// An air node
     Air,
-    /// The store of the bed under a cell: `World::deep`, `World::e_deep`
+    /// The store of the bed under a cell: the liquid in it (with what is dissolved in it), and its heat with the fusion
+    /// enthalpy of what is molten (`flow::drain`)
     Deep,
-    /// The bodies' node of a cell: the light and the heat set aside for its bodies between their updates, J
-    /// (`World::e_bodies`; it holds no amounts). Flow brings the light their light reactions will store, the ground the
-    /// heat they draw from it as time passes (`survey::survey`); each body takes its share at its update.
+    /// The bonded ground under a cell: amounts only, as its skin's heat is its ground node's. It breaks into loose ground
+    /// by a move from it (`Move::loosen`: wear by running liquid, digging).
+    Bed,
+    /// The bodies' node of a cell: the light and the heat set aside for its bodies between their updates, J (it holds no
+    /// amounts). Flow brings the light their light reactions will store, the ground the heat they draw from it as time
+    /// passes (`survey::survey`); each body takes its share at its update.
     Bodies,
-    /// A node beyond the world's boundary (`Boundary`): `World::boundary`, `World::e_boundary`. It may hold less than
-    /// nothing: what it holds is what crossed, with the sign of a node (the sun's heat falls by the light it gives).
+    /// A node beyond the world's boundary (`Boundary`). It may hold less than nothing: what it holds is what crossed, with
+    /// the sign of a node (the sun's heat falls by the light it gives).
     Boundary,
     /// The potential energy the world's matter has gained in the field of gravity since the start: one node, holding no
-    /// amounts, whose heat is `World::potential`. Lifting matter moves heat into it and a fall takes it back; like a
-    /// boundary node it gives all it is asked (it holds less than nothing when matter ends lower than it started).
+    /// amounts, whose heat is that energy. Lifting matter moves heat into it and a fall takes it back; like a boundary
+    /// node it gives all it is asked (it holds less than nothing when matter ends lower than it started).
     Potential,
     /// A part (`bond::Part`): its walls, fill and heat in `World::parts`, at its slot. Its nodes come and go, named by a
     /// `NodeId`.
@@ -83,5 +87,5 @@ pub const BOUNDARIES: usize = 3;
 
 impl Class {
     /// Every class, by its index (`class as usize`).
-    pub(crate) const ALL: [Class; 8] = [Class::Ground, Class::Air, Class::Deep, Class::Bodies, Class::Boundary, Class::Potential, Class::Part, Class::Body];
+    pub(crate) const ALL: [Class; 9] = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies, Class::Boundary, Class::Potential, Class::Part, Class::Body];
 }

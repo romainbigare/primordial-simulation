@@ -1,12 +1,12 @@
-//! The world's state: the fields of ground and air, the bodies and parts, the nodes beyond its
-//! boundary that book what crossed it, and the counters the shell reads.
+//! The world's state: the store's nodes (ground, air, bed, deep stores, bodies' nodes, the nodes beyond its boundary
+//! that book what crossed it, the potential), the bodies and parts, and the counters the shell reads.
 
 use crate::chem::Chemistry;
 use crate::event::Event;
 use crate::params::Config;
 use crate::space::square::Square;
 use crate::space::Mesh;
-use crate::store::{Node, BOUNDARIES};
+use crate::store::{Class, Node, Store};
 use crate::{bond, flow};
 use serde::{Deserialize, Serialize};
 
@@ -55,16 +55,8 @@ pub struct World {
     pub time: u64,
     /// The alarms of the nodes' own processes, and when each was last brought up to date (`clock::Sleep`)
     pub sleep: crate::clock::Sleep,
-    /// Loose (unbonded) amounts in ground nodes, [k * n + i], mol
-    pub ground: Vec<f64>,
-    /// Bonded ground amounts, [k * n + i], mol
-    pub bed: Vec<f64>,
-    /// Thermal energy of each ground node's active layer, J
-    pub e_ground: Vec<f64>,
-    /// Amounts in air nodes, [k * na + a], mol
-    pub air: Vec<f64>,
-    /// Thermal energy of each air node, J
-    pub e_air: Vec<f64>,
+    /// The amounts and heat of the store's fixed nodes, which only `store::apply` writes
+    pub store: Store,
     /// Elevation of the bottom of the ground column, m
     pub base_z: f64,
     /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year (`flow::air::exchange`); bodies
@@ -74,10 +66,6 @@ pub struct World {
     /// (`bond::load`)
     pub liquid_flux: Vec<f32>,
     pub counts: Counters,
-    /// Amounts in the boundary nodes (`store::Boundary`: sun, space, outside), [k * BOUNDARIES + b], mol, and their heat,
-    /// J: what crossed the world's boundary, as a node holds it (below 0 for what it gave; `World::cross`)
-    pub boundary: Vec<f64>,
-    pub e_boundary: [f64; BOUNDARIES],
     /// Bodies, and the parts they made: the sparse graph
     pub life: crate::life::Life,
     pub parts: bond::Parts,
@@ -99,17 +87,6 @@ pub struct World {
     /// The moves of the update of a body or a part running, and its cell's nodes as they leave them (not saved)
     #[serde(skip)]
     pub moves: crate::store::Moves,
-    /// Heat of the bodies' node of each cell (`store::Class::Bodies`): the light and the heat set aside for its bodies
-    /// between their updates, J
-    pub e_bodies: Vec<f64>,
-    /// Liquid (with what is dissolved in it) in the store of the bed under each ground node, [k * n + i], mol, and its
-    /// thermal energy with the fusion enthalpy of what is molten, J (`flow::drain`; empty until first used)
-    pub deep: Vec<f64>,
-    pub e_deep: Vec<f64>,
-    /// Potential energy the world's matter has gained since the start, J: what lifting it took from heat (gas into the
-    /// air and between air nodes) less what falls gave back (rain, liquid and solids downhill); the heat of the store's
-    /// potential node (`store::Class::Potential`)
-    pub potential: f64,
 }
 
 /// The level of the world's mesh its air nodes live on.
@@ -149,16 +126,16 @@ impl World {
     /// (`store::Moves`).
     #[inline]
     pub fn g(&self, k: usize, i: usize) -> f64 {
-        self.moves.amount(Node::ground(i), k).unwrap_or_else(|| self.ground[k * self.mesh.cells().n() + i])
+        self.moves.amount(Node::ground(i), k).unwrap_or_else(|| self.store.amounts(Class::Ground)[k * self.mesh.cells().n() + i])
     }
     /// Bonded amount of substance `k` in ground node `i`, mol.
     #[inline]
     pub fn b(&self, k: usize, i: usize) -> f64 {
-        self.bed[k * self.mesh.cells().n() + i]
+        self.store.amounts(Class::Bed)[k * self.mesh.cells().n() + i]
     }
     /// Amount of substance `k` in air node `j`, mol, as the moves of the update running leave it.
     #[inline]
     pub fn a(&self, k: usize, j: usize) -> f64 {
-        self.moves.amount(Node::air(j), k).unwrap_or_else(|| self.air[k * self.mesh.level(AIR).n() + j])
+        self.moves.amount(Node::air(j), k).unwrap_or_else(|| self.store.amounts(Class::Air)[k * self.mesh.level(AIR).n() + j])
     }
 }

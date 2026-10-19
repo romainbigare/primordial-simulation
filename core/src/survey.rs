@@ -57,7 +57,7 @@ pub fn survey(w: &mut World) {
     if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
         let (ns, area) = (w.chem.ns(), w.mesh.cells().area());
-        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.ground[(x % ns) * n + x / ns] / area[x / ns]) as f32)).collect();
+        w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.store.amounts(Class::Ground)[(x % ns) * n + x / ns] / area[x / ns]) as f32)).collect();
     }
     choose::cells(w);
 }
@@ -99,8 +99,8 @@ fn sum_cells(w: &mut World) {
     }
     let mut settle = Batch::new([Class::Ground, Class::Bodies], &[]);
     for (i, &c) in claim.iter().enumerate() {
-        let d = c - w.e_bodies[i];
-        let d = if d > 0.0 { d.min(heat_above_floor(w.e_ground[i], w.heat_cap_ground(i))) } else { d };
+        let d = c - w.store.heat(Class::Bodies)[i];
+        let d = if d > 0.0 { d.min(heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i))) } else { d };
         if d != 0.0 {
             settle.link((i, i), d);
         }

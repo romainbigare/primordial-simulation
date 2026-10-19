@@ -6,6 +6,7 @@ use super::{dissolve, event, held, holder, id, link, make, move_structure, restr
 use crate::body::{self, Body, Layout, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::World;
+use crate::store::{Class, Move};
 
 /// Taking hold of a part costs this share of the work of handling its mass (`Physics::c_handle`).
 const GRAB_COST: f64 = 0.1;
@@ -225,7 +226,7 @@ pub fn anchor(w: &mut World, b: &mut Body) {
     let (Some(p), i, n) = (held(w, b), b.cell as usize, w.mesh.cells().n()) else { return };
     let (mut v, mut sv) = (0.0, 0.0);
     for k in 0..w.chem.ns() {
-        let vol = w.bed[k * n + i] * w.chem.molar_volume(k, Phase::Solid);
+        let vol = w.store.amounts(Class::Bed)[k * n + i] * w.chem.molar_volume(k, Phase::Solid);
         (v, sv) = (v + vol, sv + vol * w.chem.subs[k].strength);
     }
     let ac = w.parts.parts[p].contact();
@@ -243,14 +244,14 @@ pub fn dig(w: &mut World, b: &mut Body) {
     let (i, n, mb) = (b.cell as usize, w.mesh.cells().n(), b.built(&w.chem));
     let (lev, chem) = (lever(w, b), &w.chem);
     let f = b.gene(STRENGTH) * lev;
-    let vol: f64 = (0..chem.ns()).map(|k| w.bed[k * n + i] * chem.molar_volume(k, Phase::Solid)).sum();
+    let vol: f64 = (0..chem.ns()).map(|k| w.store.amounts(Class::Bed)[k * n + i] * chem.molar_volume(k, Phase::Solid)).sum();
     if vol <= 0.0 {
         return;
     }
     let most = w.cfg.phys.dig * b.interval(w) as f64 * mb;
     let m: Vec<f64> = (0..chem.ns())
         .map(|k| {
-            let (a, s) = (w.bed[k * n + i], &chem.subs[k]);
+            let (a, s) = (w.store.amounts(Class::Bed)[k * n + i], &chem.subs[k]);
             if f <= s.strength || a <= 0.0 { 0.0 } else { (most * a * chem.molar_volume(k, Phase::Solid) / vol * (1.0 - s.strength / f) / s.molar_mass).min(MOST_SHARE * a) }
         })
         .collect();
@@ -259,7 +260,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
         return;
     }
     for (k, &a) in m.iter().enumerate() {
-        w.loosen(k, i, a);
+        w.moves.push(&w.chem, Move::loosen(i, k, a));
     }
 }
 

@@ -5,6 +5,7 @@ use super::{Row, GIGA};
 use crate::layers::{dry_land_flux, Ctx, COVER_MIN, RIVER_WEB};
 use crate::rec::{Recorder, CAUSES};
 use pcore::{World, AIR};
+use pcore::store::Class;
 
 fn mean(v: &[f64]) -> f64 {
     v.iter().sum::<f64>() / v.len() as f64
@@ -32,9 +33,9 @@ impl Recorder {
         // The mole fraction in the air of each heat-absorbing gas (`absorber` is their total absorption, so the
         // one that rises shows in these).
         row.push("absorber", "1", mean(&c.absorber));
-        let (na, all) = (w.mesh.level(AIR).n(), w.air.iter().sum::<f64>());
+        let (na, all) = (w.mesh.level(AIR).n(), w.store.amounts(Class::Air).iter().sum::<f64>());
         for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
-            row.push(format!("air_{k}"), "1", w.air[k * na..(k + 1) * na].iter().sum::<f64>() / all);
+            row.push(format!("air_{k}"), "1", w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>() / all);
         }
         row.push("ice_frac", "1", c.f.ice.iter().filter(|&&v| v >= COVER_MIN).count() as f64 / n);
         row.push("liquid_land", "km3", land.iter().map(|&i| c.f.depth[i]).sum::<f64>() * area / GIGA);
@@ -98,8 +99,8 @@ fn minerals(c: &Ctx, row: &mut Row) {
         for i in 0..n {
             let sea = (c.f.z[i] <= 0.0) as usize;
             cells[sea] += 1.0;
-            t[0][sea] += w.ground[k * n + i];
-            t[1][sea] += matter.map_or(0.0, |m| w.ground[m * n + i]) * per;
+            t[0][sea] += w.store.amounts(Class::Ground)[k * n + i];
+            t[1][sea] += matter.map_or(0.0, |m| w.store.amounts(Class::Ground)[m * n + i]) * per;
         }
         let mm = w.chem.subs[k].molar_mass;
         row.push(format!("min{q}_land"), "kg/m2", t[0][0] * mm / (cells[0].max(1.0) * area));
@@ -107,7 +108,7 @@ fn minerals(c: &Ctx, row: &mut Row) {
         row.push(format!("min{q}_dead_land"), "1e9 mol", t[1][0] / GIGA);
         row.push(format!("min{q}_dead_sea"), "1e9 mol", t[1][1] / GIGA);
         row.push(format!("min{q}_bodies"), "1e9 mol", bodies[q] / GIGA);
-        row.push(format!("min{q}_deep"), "1e9 mol", w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) / GIGA);
+        row.push(format!("min{q}_deep"), "1e9 mol", w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) / GIGA);
     }
 }
 
@@ -116,7 +117,7 @@ fn dead(w: &World, land: &[usize], row: &mut Row) {
     let n = w.mesh.cells().n();
     let fuel = w.chem.build.as_ref().map(|b| b.inputs[0].0 as usize);
     for k in fuel.into_iter().chain(w.chem.matter()).chain(w.chem.materials()) {
-        let kg = land.iter().map(|&i| w.ground[k * n + i]).sum::<f64>() * w.chem.subs[k].molar_mass;
+        let kg = land.iter().map(|&i| w.store.amounts(Class::Ground)[k * n + i]).sum::<f64>() * w.chem.subs[k].molar_mass;
         row.push(format!("dead_{k}"), "kg/m2", kg / (land.len().max(1) as f64 * w.map.area()));
     }
 }

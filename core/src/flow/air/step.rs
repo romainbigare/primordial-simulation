@@ -21,6 +21,7 @@ use super::{lerp, over_cell};
 use crate::units::R_GAS;
 use crate::{World, AIR};
 use std::f64::consts::TAU;
+use crate::store::Class;
 
 /// The rounds stop when no air node's temperature moves by more than this from one round to the next, K,
 const STILL_K: f64 = 5e-2;
@@ -121,7 +122,7 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64) {
     // The sun at the end of the step, as backward Euler takes it (and as the state at the step's end then shows).
     let season = w.cfg.calendar().season(w.time + dt as u64);
     let decl = -w.cfg.tilt.to_radians() * (TAU * season).cos();
-    let x0: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.air[k * na..(k + 1) * na].iter().copied()).collect();
+    let x0: Vec<f64> = s.state.gas.iter().flat_map(|&k| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().copied()).collect();
     let mut it = Iterate { t: s.ta.clone(), x: x0.clone(), refl: Vec::new() };
     let links = Links::of(w.mesh.level(AIR));
     let (mut ts, mut rows, mut wind) = (s.state.tg.clone(), std::mem::take(&mut s.rad), Wind::default());
@@ -169,13 +170,13 @@ fn active(w: &World, s: &mut Scratch, henry: &[(usize, usize)]) -> Vec<Active> {
     let tmax = range(&s.state.tg).1;
     let hi = tmax.max(range(&s.ta).1) + SAT_REACH;
     s.sat.resize(w.chem.ns(), Default::default());
-    let (na, all) = (w.mesh.level(AIR).n(), w.air.iter().sum::<f64>());
+    let (na, all) = (w.mesh.level(AIR).n(), w.store.amounts(Class::Air).iter().sum::<f64>());
     let (mut act, mut fields) = (Vec::new(), 0);
     for (gi, &k) in s.state.gas.iter().enumerate() {
         let up = s.state.loose.contains(&k) && may_evaporate(w, k, tmax) && !henry.iter().any(|h| h.1 == k);
         if up || s.cond[gi] {
             s.sat[k].fit(&w.chem, k, hi);
-            let trace = w.air[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
+            let trace = w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>() < TRACE_AIR * all;
             act.push(Active { gi, k, up, cond: s.cond[gi], field: (!trace).then_some(fields) });
             fields += !trace as usize;
         }
@@ -247,7 +248,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
         m * (sp.lf + sp.lv) - s.fusion(cx.act[x].k, i, m)
     };
     let pk = s.state.pk[i];
-    let fusion = if pk != NONE { w.ground[pk * n + i] * s.sp[pk].lf } else { 0.0 };
+    let fusion = if pk != NONE { w.store.amounts(Class::Ground)[pk * n + i] * s.sp[pk].lf } else { 0.0 };
     // The balance with what evaporates linearised about `t0`; and whether anything evaporates there.
     let balance = |t0: f64| {
         let (mut gain, mut slope) = (gain, 0.0);
@@ -291,7 +292,7 @@ fn cell(cx: &Ctx, i: usize, q: f64, row: &mut [f64]) {
 fn evaporate(cx: &Ctx, i: usize, x: usize, t: f64, pa: f64, rain: f64) -> (f64, f64, f64) {
     let (w, s, ac) = (cx.w, cx.s, cx.act[x]);
     let (n, sp, area) = (w.mesh.cells().n(), s.sp[ac.k], w.mesh.cells().area()[i]);
-    let a = w.ground[ac.k * n + i];
+    let a = w.store.amounts(Class::Ground)[ac.k * n + i];
     if a + rain <= 0.0 {
         return (0.0, 0.0, 0.0);
     }

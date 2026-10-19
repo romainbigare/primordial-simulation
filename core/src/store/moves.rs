@@ -17,6 +17,14 @@ pub struct Move {
     pub heat: f64,
 }
 
+impl Move {
+    /// `mol` of substance `k` of the bed under ground node `i` break into its loose ground (the heat of the bed's skin is
+    /// the node's already): wear by running liquid, digging.
+    pub fn loosen(i: usize, k: usize, mol: f64) -> Move {
+        Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol, heat: 0.0 }
+    }
+}
+
 /// The amounts of node `at` change by `dmol` (substance, mol), keeping every element; the energy they held apart from
 /// heat (`held`) and no longer hold becomes the node's heat (the heat of reaction).
 #[derive(Clone, Debug)]

@@ -10,9 +10,12 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
-use pcore::store::{Boundary, Class, Node};
+use pcore::store::{Boundary, Class, Move, Node};
 use pcore::units::DAY_S;
 use pcore::World;
+
+/// A body an edit changes (its own end of the moves of an edit, which it books itself; `World::cross`).
+const A_BODY: Node = Node { class: Class::Body, index: 0 };
 
 /// Substances of chemistry 0: the common liquid.
 pub const LIQUID: usize = 0;
@@ -160,7 +163,7 @@ pub fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
 
 /// Body `b` made `f` times as big: its stores and heat (booked as an edit).
 pub fn scale(w: &mut World, b: &mut Body, f: f64) {
-    w.cross(Boundary::Outside, b.store.iter().map(|&a| (f - 1.0) * a).enumerate(), (f - 1.0) * b.e);
+    w.cross((Boundary::Outside, A_BODY), b.store.iter().map(|&a| (f - 1.0) * a).enumerate(), (f - 1.0) * b.e);
     b.store.iter_mut().for_each(|a| *a *= f);
     b.e *= f;
 }
@@ -170,7 +173,7 @@ pub fn add(w: &mut World, b: &mut Body, k: usize, kg: f64) {
     let (a, t, e0) = (kg / w.chem.subs[k].molar_mass, b.temp(&w.chem), b.e);
     b.store[k] += a;
     b.e = b.energy_at(&w.chem, t);
-    w.cross(Boundary::Outside, [(k, a)], b.e - e0);
+    w.cross((Boundary::Outside, A_BODY), [(k, a)], b.e - e0);
 }
 
 /// What body `b` holds of substance `k`, kg.
@@ -180,11 +183,9 @@ pub fn kg(w: &World, b: &Body, k: usize) -> f64 {
 
 /// `mol` of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
 pub fn put(w: &mut World, k: usize, i: usize, mol: f64) {
-    let (t, n) = (w.t_ground(i), w.mesh.cells().n());
-    w.ground[k * n + i] += mol;
-    let e = w.energy_ground(i, t);
-    w.cross(Boundary::Outside, [(k, mol)], e - w.e_ground[i]);
-    w.e_ground[i] = e;
+    let t = w.t_ground(i);
+    w.cross((Boundary::Outside, Node::ground(i)), [(k, mol)], 0.0);
+    hold_ground(w, i, t);
 }
 
 /// `kg` per m² of substance `k` put on the ground of cell `i` at its temperature (booked as an edit).
@@ -196,13 +197,13 @@ pub fn put_kg_m2(w: &mut World, k: usize, i: usize, kg: f64) {
 /// All of substance `k` in the world's ground, the store of its bed and its bodies, mol.
 pub fn in_all(w: &World, k: usize) -> f64 {
     let n = w.mesh.cells().n();
-    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
+    w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().sum::<f64>() + w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
 }
 
 /// The rock element (element 5) outside body matter on the ground of cell `i`, mol.
 pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
     let n = w.mesh.cells().n();
-    (0..w.chem.ns()).filter(|&k| k != MATTER).map(|k| w.chem.subs[k].elems[5] as f64 * w.ground[k * n + i]).sum()
+    (0..w.chem.ns()).filter(|&k| k != MATTER).map(|k| w.chem.subs[k].elems[5] as f64 * w.store.amounts(Class::Ground)[k * n + i]).sum()
 }
 
 /// Thickness of rock-making solids (those that melt above 1000 K, but body matter, which chars before it melts) in the
@@ -213,9 +214,9 @@ pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
     let (mut loose, mut bed, mut soft) = (0.0, 0.0, 0.0);
     for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].melt > 1000.0 && Some(k) != w.chem.matter()) {
         let v = w.chem.molar_volume(k, Phase::Solid);
-        loose += w.ground[k * n + i] * v / area;
-        bed += w.bed[k * n + i] * v / area;
-        soft += w.ground[k * n + i] * v / area / (w.chem.subs[k].hardness + 0.05);
+        loose += w.store.amounts(Class::Ground)[k * n + i] * v / area;
+        bed += w.store.amounts(Class::Bed)[k * n + i] * v / area;
+        soft += w.store.amounts(Class::Ground)[k * n + i] * v / area / (w.chem.subs[k].hardness + 0.05);
     }
     (loose, bed, soft / loose.max(1e-300))
 }
@@ -223,14 +224,36 @@ pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
 /// The ground of cell `i` brought to `t` K (booked as an edit).
 pub fn hold_ground(w: &mut World, i: usize, t: f64) {
     let e = w.energy_ground(i, t);
-    w.cross(Boundary::Outside, [], e - w.e_ground[i]);
-    w.e_ground[i] = e;
+    set_heat(w, Node::ground(i), e);
+}
+
+/// The heat of node `x` of the store set to `e` J (booked as an edit: all it held out, then `e` in, so it holds `e`
+/// exactly).
+pub fn set_heat(w: &mut World, x: Node, e: f64) {
+    w.cross((Boundary::Outside, x), [], -w.store.heat(x.class)[x.index]);
+    w.cross((Boundary::Outside, x), [], e);
+}
+
+/// Ground node `i` and the bed under it emptied of every substance (booked as an edit; its heat stays).
+pub fn empty_cell(w: &mut World, i: usize) {
+    for k in 0..w.chem.ns() {
+        set_amount(w, Node::ground(i), k, 0.0);
+        set_amount(w, Node::new(Class::Bed, i), k, 0.0);
+    }
+}
+
+/// The amount of substance `k` in node `x` of the store set to `mol` (booked as an edit, as `set_heat`, with no heat: set
+/// it after).
+pub fn set_amount(w: &mut World, x: Node, k: usize, mol: f64) {
+    let len = w.store.amounts(x.class).len() / w.chem.ns();
+    w.cross((Boundary::Outside, x), [(k, -w.store.amounts(x.class)[k * len + x.index])], 0.0);
+    w.cross((Boundary::Outside, x), [(k, mol)], 0.0);
 }
 
 /// Body `b` brought to `t` K (booked as an edit).
 pub fn warm(w: &mut World, b: &mut Body, t: f64) {
     let e = b.energy_at(&w.chem, t);
-    w.cross(Boundary::Outside, [], e - b.e);
+    w.cross((Boundary::Outside, A_BODY), [], e - b.e);
     b.e = e;
 }
 
@@ -288,14 +311,14 @@ pub fn loose_volume(w: &World, i: usize) -> f64 {
 /// block if `thick`.
 pub fn plate(w: &mut World, i: usize, kg: f64, thick: bool) -> usize {
     let n = w.mesh.cells().n();
-    let k = (0..w.chem.ns()).max_by(|&a, &b| w.ground[a * n + i].total_cmp(&w.ground[b * n + i])).unwrap();
+    let k = (0..w.chem.ns()).max_by(|&a, &b| w.store.amounts(Class::Ground)[a * n + i].total_cmp(&w.store.amounts(Class::Ground)[b * n + i])).unwrap();
     let mut wall = vec![0.0; w.chem.ns()];
     wall[k] = kg / w.chem.subs[k].molar_mass;
-    assert!(w.ground[k * n + i] > wall[k], "the cell holds less than the part");
-    let e = wall[k] * w.chem.subs[k].cp * w.t_ground_last(i);
-    w.ground[k * n + i] -= wall[k];
-    w.e_ground[i] -= e;
-    bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0)
+    assert!(w.store.amounts(Class::Ground)[k * n + i] > wall[k], "the cell holds less than the part");
+    let (e, mol) = (wall[k] * w.chem.subs[k].cp * w.t_ground_last(i), wall[k]);
+    let s = bond::make(w, i, wall, e, if thick { 0.0 } else { -1.0 }, 0.0);
+    pcore::store::apply(w, &[], &[Move { from: Node::ground(i), to: Node::new(Class::Part, s), k: k as u16, mol, heat: e }], &[]);
+    s
 }
 
 /// The books of a world at a moment: its totals and its boundary nodes' (`check::totals`).

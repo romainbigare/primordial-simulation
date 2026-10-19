@@ -5,6 +5,7 @@ use crate::chem::{self, Chemistry};
 use crate::params::Config;
 use crate::units::T_FLOOR;
 use crate::world::World;
+use crate::store::Class;
 
 /// The share of a wanted amount that was really given (exactly 1 when all of it was).
 #[inline]
@@ -81,7 +82,7 @@ impl World {
     /// order of the substances (the sum `flow::land::ground_state` keeps for every node).
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
         let (n, ns) = (self.mesh.cells().n(), self.chem.ns());
-        let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, |k| self.bed[k * n + i]);
+        let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, |k| self.store.amounts(Class::Bed)[k * n + i]);
         (0..ns).fold(skin, |c, k| c + self.g(k, i) * self.chem.subs[k].cp)
     }
     /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
@@ -95,7 +96,7 @@ impl World {
         let c = self.heat_cap_ground(i).max(1.0);
         let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| self.g(k, i) > 0.0).map(|k| (self.melt(k, i), k)).collect();
         ks.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let th = melting(c, self.e_ground[i], ks.into_iter().map(|(tm, k)| (tm, k, self.g(k, i) * self.chem.subs[k].lf)));
+        let th = melting(c, self.store.heat(Class::Ground)[i], ks.into_iter().map(|(tm, k)| (tm, k, self.g(k, i) * self.chem.subs[k].lf)));
         (th.t, th.on)
     }
     /// Temperature of ground node `i` as every law and the shell read it, K, and the substance on its melting plateau with

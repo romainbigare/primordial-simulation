@@ -62,7 +62,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
     for (k, p0) in pool0.iter_mut().enumerate() {
-        *p0 = w.air[k * na + j] * air_share;
+        *p0 = w.store.amounts(Class::Air)[k * na + j] * air_share;
     }
     pool.copy_from_slice(pool0);
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();

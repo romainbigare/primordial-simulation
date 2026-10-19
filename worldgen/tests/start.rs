@@ -1,6 +1,7 @@
 //! The starting state worldgen makes: the dissolved mineral in the low ground's liquid, and the soil given when life starts.
 
 use pcore::{World, AIR};
+use pcore::store::Class;
 
 /// Substances of chemistry 0: the common liquid, and the mineral that exists only dissolved in it.
 const LIQUID: usize = 0;
@@ -10,7 +11,7 @@ const DISSOLVED: usize = 23;
 fn total(w: &World, k: usize) -> f64 {
     let n = w.mesh.cells().n();
     // (With the store of the bed under the ground, where drained liquid takes what is dissolved in it.)
-    w.ground[k * n..(k + 1) * n].iter().sum::<f64>() + w.deep.get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
+    w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().sum::<f64>() + w.store.amounts(Class::Deep).get(k * n..(k + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>()) + w.life.alive().map(|b| b.store[k]).sum::<f64>()
 }
 
 /// The world starts with the dissolved mineral in the liquid of its low ground and none on dry land.
@@ -20,11 +21,11 @@ fn a_world_starts_with_the_dissolved_mineral_in_its_liquid() {
     let n = w.mesh.cells().n();
     let (mut wet, mut dry) = (0.0, 0.0);
     for i in 0..n {
-        if w.ground[LIQUID * n + i] > 0.0 {
-            assert!(w.ground[DISSOLVED * n + i] > 0.0, "cell {i} has liquid and none of the mineral");
-            wet += w.ground[DISSOLVED * n + i];
+        if w.store.amounts(Class::Ground)[LIQUID * n + i] > 0.0 {
+            assert!(w.store.amounts(Class::Ground)[DISSOLVED * n + i] > 0.0, "cell {i} has liquid and none of the mineral");
+            wet += w.store.amounts(Class::Ground)[DISSOLVED * n + i];
         } else {
-            dry += w.ground[DISSOLVED * n + i];
+            dry += w.store.amounts(Class::Ground)[DISSOLVED * n + i];
         }
     }
     assert!(wet > 0.0 && dry == 0.0, "the mineral in the liquid {wet}, on dry land {dry}");
@@ -68,7 +69,7 @@ fn the_starting_air_thins_with_height_by_its_own_scale_height() {
     }
     let mut high = 0;
     for j in 0..na {
-        let (mol, kg) = (0..w.chem.ns()).fold((0.0, 0.0), |(m, kg), k| (m + w.air[k * na + j], kg + w.air[k * na + j] * w.chem.subs[k].molar_mass));
+        let (mol, kg) = (0..w.chem.ns()).fold((0.0, 0.0), |(m, kg), k| (m + w.store.amounts(Class::Air)[k * na + j], kg + w.store.amounts(Class::Air)[k * na + j] * w.chem.subs[k].molar_mass));
         let (zj, h) = (z[j] / cells[j], pcore::flow::scale_height(w.t_air(j), mol, kg, g));
         let ratio = mol / (column * w.map.area() * cells[j]);
         assert!((ratio / (-zj / h).exp() - 1.0).abs() < 1e-6, "node {j}: {ratio} of the column at height 0, at {zj} m, scale height {h} m");

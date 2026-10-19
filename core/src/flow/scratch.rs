@@ -9,6 +9,7 @@ use crate::solve::downhill::Order;
 use crate::solve::spread::Spread;
 use crate::{World, AIR};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use crate::store::Class;
 
 /// Numbers of one substance Flow reads often (from `chem::Substance`).
 #[derive(Clone, Copy, Debug, Default)]
@@ -263,18 +264,18 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
     let any = |v: &[f64], len: usize, k: usize| v[k * len..(k + 1) * len].iter().any(|&x| x > 0.0);
     let tmax = if s.state.tg.len() == n { range(&s.state.tg).1 } else { (0..n).map(|i| w.t_ground(i)).fold(0.0, f64::max) };
     let up = |k: usize| may_evaporate(w, k, tmax);
-    s.state.loose = (0..ns).filter(|&k| any(&w.ground, n, k)).collect();
+    s.state.loose = (0..ns).filter(|&k| any(w.store.amounts(Class::Ground), n, k)).collect();
     s.state.fixed = s.state.loose.iter().copied().filter(|&k| w.cfg.phys.soft * s.sp[k].melt > tmax + T_MARGIN && !up(k)).collect();
     s.state.vary = s.state.loose.iter().copied().filter(|k| !s.state.fixed.contains(k)).collect();
     s.state.vary.sort_by(|&a, &b| s.sp[a].melt.total_cmp(&s.sp[b].melt));
-    s.state.bedk = (0..ns).filter(|&k| any(&w.bed, n, k)).collect();
-    let gas = (0..ns).filter(|&k| any(&w.air, na, k) || (s.state.loose.contains(&k) && up(k))).collect();
+    s.state.bedk = (0..ns).filter(|&k| any(w.store.amounts(Class::Bed), n, k)).collect();
+    let gas = (0..ns).filter(|&k| any(w.store.amounts(Class::Air), na, k) || (s.state.loose.contains(&k) && up(k))).collect();
     s.stale |= gas != s.state.gas;
     s.state.gas = gas;
     s.state.fix = vec![[0.0; 2]; n];
     for &k in &s.state.fixed {
         let (v, r) = (s.sp[k].v[0], s.sp[k].refl[0]);
-        for (f, &a) in s.state.fix.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
+        for (f, &a) in s.state.fix.iter_mut().zip(&w.store.amounts(Class::Ground)[k * n..(k + 1) * n]) {
             f[0] += a * v;
             f[1] += a * v * r;
         }
@@ -283,7 +284,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
         .map(|i| {
             let (mut v, mut r, mut c) = (0.0, 0.0, 0.0);
             for &k in &s.state.bedk {
-                let (b, p) = (w.bed[k * n + i], &s.sp[k]);
+                let (b, p) = (w.store.amounts(Class::Bed)[k * n + i], &s.sp[k]);
                 v += b * p.v[0];
                 r += b * p.v[0] * p.refl[0];
                 c += b * p.v[0] * p.cond;

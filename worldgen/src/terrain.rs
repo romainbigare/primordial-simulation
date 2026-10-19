@@ -7,7 +7,7 @@ use pcore::flow::scale_height;
 use pcore::rng::{Purpose, Rng};
 use pcore::space::square::Square;
 use pcore::space::Mesh;
-use pcore::store::{Links, BOUNDARIES};
+use pcore::store::{Boundary, Class, Links, Node, Store};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
 
@@ -97,15 +97,14 @@ fn t_start((map, mesh): (&Square, &Mesh), y: usize, z: f64) -> f64 {
     T_EQUATOR - POLE_DROP * lat.sin().powi(2) - LAPSE * z.max(0.0)
 }
 
-/// Scale the heat-absorbing gases of the air by `factor` (`ew run --absorber`), each air node keeping its temperature.
+/// Scale the heat-absorbing gases of the air by `factor` (`ew run --absorber`), each air node keeping its temperature:
+/// the gas added comes from outside the world (an edit) with its heat at that temperature and its latent heat.
 pub fn scale_absorbers(w: &mut World, factor: f64) {
-    let na = w.mesh.level(AIR).n();
-    for j in 0..na {
+    for j in 0..w.mesh.level(AIR).n() {
         let t = w.t_air(j);
-        for k in (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0) {
-            w.air[k * na + j] *= factor;
-        }
-        w.e_air[j] = w.heat_cap_air(j) * t;
+        let more: Vec<(usize, f64)> = (0..w.chem.ns()).filter(|&k| w.chem.subs[k].ir_abs > 0.0).map(|k| (k, w.a(k, j) * (factor - 1.0))).collect();
+        let heat = more.iter().map(|&(k, m)| m * (w.chem.subs[k].cp * t + w.chem.subs[k].latent_gas())).sum();
+        w.cross((Boundary::Outside, Node::air(j)), more, heat);
     }
 }
 
@@ -183,17 +182,11 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         seed,
         time: 0,
         sleep: Default::default(),
-        ground,
-        bed,
-        e_ground: vec![0.0; n],
-        air,
-        e_air: vec![0.0; na],
+        store: Store::new(n, (ground, bed, vec![0.0; n]), (air, vec![0.0; na])),
         base_z: BASE_Z,
         counts: Counters::default(),
         rain: vec![0.0; n],
         liquid_flux: vec![0.0; n],
-        boundary: vec![0.0; ns * BOUNDARIES],
-        e_boundary: [0.0; BOUNDARIES],
         life: Default::default(),
         parts: Default::default(),
         canopy: vec![0.0; n],
@@ -203,36 +196,41 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         scratch: Default::default(),
         batches: Default::default(),
         moves: Default::default(),
-        e_bodies: vec![0.0; n],
-        deep: Vec::new(),
-        e_deep: Vec::new(),
-        potential: 0.0,
     };
-
+    // The ground and the air at their starting temperatures. (The world is made: its store is built whole at each stage,
+    // never written outside `store::apply` once it runs.)
+    let (amounts, heat) = (|w: &World, c: Class| w.store.amounts(c).to_vec(), |w: &World, c: Class| w.store.heat(c).to_vec());
+    let mut e_ground = vec![0.0; n];
     for (i, &z) in hz.iter().enumerate().take(n) {
         let (_, y) = world.map.xy(i);
         // Low ground starts with its liquid molten.
         let t = t_start((&world.map, &world.mesh), y, z).max(if z < 0.0 { world.chem.subs[init.low].melt + MOLTEN_MARGIN } else { 0.0 });
-        world.e_ground[i] = world.energy_ground(i, t);
+        e_ground[i] = world.energy_ground(i, t);
     }
-    for (j, &t) in t_air.iter().enumerate() {
-        world.e_air[j] = world.heat_cap_air(j) * t;
-    }
+    let e_air = t_air.iter().enumerate().map(|(j, &t)| world.heat_cap_air(j) * t).collect();
+    world.store = Store::new(n, (amounts(&world, Class::Ground), amounts(&world, Class::Bed), e_ground), (amounts(&world, Class::Air), e_air));
     // The liquid starts at balance with the air: of each pair of reactions that undo each other, the
     // substance the first makes is set, in each cell, to the amount at which the pair goes at equal
     // rates at the cell's temperature and the air's start (`Reactor::balance`: from the chemistry's
     // own rate constants and barriers). A cell with no liquid holds none. The air stays as it is.
+    // (The node takes the heat of its new amounts at its temperature: worked out once they are in the store.)
     let mut rc = Reactor::new(&world.chem, &world.cfg);
+    let (mut ground, mut balanced) = (amounts(&world, Class::Ground), Vec::new());
     for i in 0..n {
         let (t, j, share) = (world.t_ground(i), world.mesh.up(i, 0, AIR), world.mesh.share(i, AIR));
-        let mut amt: Vec<f64> = (0..ns).map(|k| world.ground[k * n + i]).collect();
-        let gas: Vec<f64> = (0..ns).map(|k| world.air[k * na + j] * share).collect();
+        let mut amt: Vec<f64> = (0..ns).map(|k| world.g(k, i)).collect();
+        let gas: Vec<f64> = (0..ns).map(|k| world.a(k, j) * share).collect();
         if !rc.balance(&world.chem, &mut amt, &gas, t).is_empty() {
             for (k, &a) in amt.iter().enumerate() {
-                world.ground[k * n + i] = a;
+                ground[k * n + i] = a;
             }
-            world.e_ground[i] = world.energy_ground(i, t);
+            balanced.push((i, t));
         }
     }
+    let rebuild = |w: &World, ground: Vec<f64>, e_ground: Vec<f64>| Store::new(n, (ground, amounts(w, Class::Bed), e_ground), (amounts(w, Class::Air), heat(w, Class::Air)));
+    world.store = rebuild(&world, ground, heat(&world, Class::Ground));
+    let mut e_ground = heat(&world, Class::Ground);
+    balanced.iter().for_each(|&(i, t)| e_ground[i] = world.energy_ground(i, t));
+    world.store = rebuild(&world, amounts(&world, Class::Ground), e_ground);
     world
 }

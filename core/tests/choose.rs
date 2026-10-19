@@ -10,7 +10,8 @@ use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::space::square::DIRS;
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
-use worldgen::testkit::{self, dry_land, founder, scale, start, Books, Brain, Line, LIQUID, MATTER, OFF, RICH};
+use pcore::store::{Class, Node};
+use worldgen::testkit::{self, dry_land, founder, scale, set_amount, set_heat, start, Books, Brain, Line, LIQUID, MATTER, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -34,13 +35,17 @@ fn scene(seed: u64) -> World {
     let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
     let land = dry_land(&w);
     for k in 0..ns {
-        let (g, b) = (w.ground[k * n + land], w.bed[k * n + land]);
-        (0..n).for_each(|i| (w.ground[k * n + i], w.bed[k * n + i]) = (g, b));
+        let (g, b) = (w.g(k, land), w.b(k, land));
+        for i in 0..n {
+            set_amount(&mut w, Node::ground(i), k, g);
+            set_amount(&mut w, Node::new(Class::Bed, i), k, b);
+        }
     }
-    let e = w.e_ground[land];
-    w.e_ground.iter_mut().for_each(|x| *x = e);
+    let e = w.store.heat(Class::Ground)[land];
+    (0..n).for_each(|i| set_heat(&mut w, Node::ground(i), e));
     for i in (0..n).filter(|&i| i % W >= STRIP) {
-        w.ground[RICH * n + i] += STRIP_MOL * w.map.area();
+        let rich = w.g(RICH, i) + STRIP_MOL * w.map.area();
+        set_amount(&mut w, Node::ground(i), RICH, rich);
     }
     w.life.env.clear();
     pcore::survey::survey(&mut w);

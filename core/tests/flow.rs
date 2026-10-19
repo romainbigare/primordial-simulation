@@ -2,10 +2,10 @@
 //! liquid carries, erosion, and the edges that moving bodies clear.
 
 use pcore::chem::Phase;
-use pcore::store::Boundary;
+use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY;
 use pcore::{body, brain, choose, lanes, World, AIR};
-use worldgen::testkit::{ground_of, loose_volume as loose, moved, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
+use worldgen::testkit::{ground_of, hold_ground, loose_volume as loose, moved, put, set_amount, set_heat, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
 /// One step of radiation and the air.
 const DT: f64 = 3.0 * DAY;
@@ -33,15 +33,14 @@ fn pair(w: &World) -> (usize, usize) {
 
 /// `vol` m³ of the liquid poured on cell `i`, warm enough to be liquid.
 fn pour(w: &mut World, i: usize, vol: f64) {
-    let n = w.mesh.cells().n();
     let t = w.t_ground(i).max(w.chem.subs[LIQUID].melt + 5.0);
-    w.ground[LIQUID * n + i] += vol / w.chem.molar_volume(LIQUID, Phase::Liquid);
-    w.e_ground[i] = w.energy_ground(i, t);
+    put(w, LIQUID, i, vol / w.chem.molar_volume(LIQUID, Phase::Liquid));
+    hold_ground(w, i, t);
 }
 
 /// The liquid on the ground of cell `i`, m³.
 fn liquid_m3(w: &World, i: usize) -> f64 {
-    w.ground[LIQUID * w.mesh.cells().n() + i] * w.chem.molar_volume(LIQUID, Phase::Liquid)
+    w.store.amounts(Class::Ground)[LIQUID * w.mesh.cells().n() + i] * w.chem.molar_volume(LIQUID, Phase::Liquid)
 }
 
 /// A hot node held at a melting point with little fusion enthalpy left: radiating for a whole step at that
@@ -50,14 +49,15 @@ fn liquid_m3(w: &World, i: usize) -> f64 {
 #[test]
 fn hot_plateau_cools_but_not_to_the_floor() {
     let mut w = worldgen::new_world(3, 16, 16);
-    let (n, ns) = (w.mesh.cells().n(), w.chem.ns());
+    let (ns, area) = (w.chem.ns(), w.map.area());
     let k = (0..ns).find(|&k| (700.0..1000.0).contains(&w.chem.subs[k].melt)).expect("a substance melting near 850 K");
     let i = top(&w);
-    (0..ns).for_each(|x| w.ground[x * n + i] = 0.0);
-    w.ground[k * n + i] = w.map.area();
+    (0..ns).for_each(|x| set_amount(&mut w, Node::ground(i), x, 0.0));
+    set_amount(&mut w, Node::ground(i), k, area);
     let melt = w.chem.subs[k].melt;
     // (At its melting point all of it holds its fusion enthalpy, `World::energy_ground`: half of it frozen.)
-    w.e_ground[i] = w.energy_ground(i, melt) - 0.5 * w.ground[k * n + i] * w.chem.subs[k].lf;
+    let e = w.energy_ground(i, melt) - 0.5 * w.g(k, i) * w.chem.subs[k].lf;
+    set_heat(&mut w, Node::ground(i), e);
     assert_eq!(w.thaw(i).1.map(|p| p.0), Some(k));
     let books = Books::now(&w);
     pcore::flow::step(&mut w, DT);
@@ -75,17 +75,20 @@ fn a_pool_with_a_solute_freezes_lower() {
     let (n, ns, k) = (w.mesh.cells().n(), w.chem.ns(), LIQUID);
     let solute = (0..ns).find(|&j| j != k && w.chem.subs[j].melt < w.chem.subs[k].melt && w.chem.subs[j].boil > 1000.0).expect("a solute");
     let (pure, mixed) = (0, n - 1);
+    let pool = 1e4 * w.map.area() / w.chem.molar_volume(k, Phase::Liquid);
     for i in [pure, mixed] {
-        (0..ns).for_each(|x| w.ground[x * n + i] = 0.0);
-        w.ground[k * n + i] = 1e4 * w.map.area() / w.chem.molar_volume(k, Phase::Liquid);
+        (0..ns).for_each(|x| set_amount(&mut w, Node::ground(i), x, 0.0));
+        set_amount(&mut w, Node::ground(i), k, pool);
     }
-    w.ground[solute * n + mixed] = w.ground[k * n + mixed] * w.chem.subs[k].molar_mass;
+    let dissolved = w.g(k, mixed) * w.chem.subs[k].molar_mass;
+    set_amount(&mut w, Node::ground(mixed), solute, dissolved);
     let tm = [pure, mixed].map(|i| w.melt(k, i));
     assert_eq!(tm[0], w.chem.subs[k].melt);
     let dt = (w.chem.subs[k].melt - tm[1]) / 1.86;
     assert!((dt - 1.0).abs() < 0.03, "{dt} of the textbook lowering");
     for (i, t) in [pure, mixed].into_iter().zip(tm) {
-        w.e_ground[i] = w.energy_ground(i, t) - 0.5 * w.ground[k * n + i] * w.chem.subs[k].lf;
+        let e = w.energy_ground(i, t) - 0.5 * w.g(k, i) * w.chem.subs[k].lf;
+        set_heat(&mut w, Node::ground(i), e);
         let (at, plateau) = w.thaw(i);
         assert!(at == t && plateau.is_some_and(|(q, f)| q == k && (f - 0.5).abs() < 1e-9), "{at} K, {plateau:?}");
     }
@@ -109,7 +112,7 @@ fn warm_air_spreads() {
     let mut cold = worldgen::new_world(3, 16, 16);
     let mut warm = cold.clone();
     let j = cold.map.w.div_ceil(cold.air_scale) + 1;
-    warm.e_air[j] *= 1.2;
+    set_heat(&mut warm, Node::air(j), 1.2 * cold.store.heat(Class::Air)[j]);
     let books = Books::now(&warm);
     let excess = warm.t_air(j) - cold.t_air(j);
     pcore::flow::step(&mut cold, DT);
@@ -129,17 +132,19 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     let land = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
     let (mut cp, mut vol, mut kv) = (0.0, 0.0, 0.0);
     for k in 0..ns {
-        let (b, v) = (w.bed[k * n + land], w.chem.molar_volume(k, Phase::Solid));
+        let (b, v) = (w.store.amounts(Class::Bed)[k * n + land], w.chem.molar_volume(k, Phase::Solid));
         (cp, vol, kv) = (cp + b * w.chem.subs[k].cp, vol + b * v, kv + b * v * w.chem.subs[k].conductivity);
-        w.bed[k * n..(k + 1) * n].fill(b);
-        w.ground[k * n..(k + 1) * n].fill(0.0);
+        for i in 0..n {
+            set_amount(&mut w, Node::new(Class::Bed, i), k, b);
+            set_amount(&mut w, Node::ground(i), k, 0.0);
+        }
     }
     let mid = g.idx(g.w / 2, g.h / 2);
     for i in 0..n {
-        w.e_ground[i] = w.energy_ground(i, if i == mid { 310.0 } else { 300.0 });
+        hold_ground(&mut w, i, if i == mid { 310.0 } else { 300.0 });
     }
     w.scratch = Default::default();
-    let (books, base, hot) = (Books::now(&w), w.energy_ground(0, 300.0), w.e_ground[mid] - w.energy_ground(0, 300.0));
+    let (books, base, hot) = (Books::now(&w), w.energy_ground(0, 300.0), w.store.heat(Class::Ground)[mid] - w.energy_ground(0, 300.0));
     // Spread to a standard deviation of one cell, in ten steps (the edges, 7 cells off, then reflect almost nothing).
     let d = kv / cp;
     let t = g.side * g.side / (2.0 * d);
@@ -147,7 +152,7 @@ fn a_hot_spot_spreads_through_the_ground_at_its_diffusivity() {
     let (mx, my) = g.xy(mid);
     let (mut sum, mut var) = (0.0, [0.0; 2]);
     for i in 0..n {
-        let ((x, y), q) = (g.xy(i), w.e_ground[i] - base);
+        let ((x, y), q) = (g.xy(i), w.store.heat(Class::Ground)[i] - base);
         sum += q;
         for (v, c) in var.iter_mut().zip([x as f64 - mx as f64, y as f64 - my as f64]) {
             *v += q * (c * g.side).powi(2);
@@ -187,18 +192,17 @@ fn gas_dissolves_and_comes_out_when_warmed() {
     w.cfg.dissolve = 1.0;
     let (n, na, c) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), &w.chem);
     let k = init.air.iter().map(|p| p.0).filter(|&k| c.subs[k].boil < 250.0).max_by(|&a, &b| c.subs[a].solubility.total_cmp(&c.subs[b].solubility)).unwrap();
-    let i = (0..n).max_by(|&a, &b| w.ground[LIQUID * n + a].total_cmp(&w.ground[LIQUID * n + b])).unwrap();
+    let i = (0..n).max_by(|&a, &b| w.store.amounts(Class::Ground)[LIQUID * n + a].total_cmp(&w.store.amounts(Class::Ground)[LIQUID * n + b])).unwrap();
     let books = Books::now(&w);
     (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
     // Dissolved per mol of liquid, against Henry's share under the gas's share of the reference pressure.
-    let held = |w: &World| w.ground[k * n + i] / w.ground[LIQUID * n + i];
+    let held = |w: &World| w.store.amounts(Class::Ground)[k * n + i] / w.store.amounts(Class::Ground)[LIQUID * n + i];
     let j = w.mesh.up(i, 0, AIR);
-    let x = w.air[k * na + j] / (0..w.chem.ns()).map(|q| w.air[q * na + j]).sum::<f64>();
+    let x = w.store.amounts(Class::Air)[k * na + j] / (0..w.chem.ns()).map(|q| w.store.amounts(Class::Air)[q * na + j]).sum::<f64>();
     let (h1, want) = (held(&w), w.chem.henry(k, w.t_ground(i), x * pcore::units::P_REF));
     assert!(h1 > 0.5 * want && h1 < 2.0 * want, "{h1} dissolved per mol, Henry's share {want}");
-    let e = w.energy_ground(i, w.t_ground(i) + 20.0) - w.e_ground[i];
-    w.e_ground[i] += e;
-    w.cross(Boundary::Outside, [], e);
+    let t = w.t_ground(i) + 20.0;
+    hold_ground(&mut w, i, t);
     (0..4).for_each(|_| pcore::flow::step(&mut w, DT));
     assert!(held(&w) < 0.9 * h1, "{} dissolved per mol after warming, {h1} before", held(&w));
     books.assert_within(&w, 1e-12, 1e-9);
@@ -342,15 +346,13 @@ fn liquid_drains_inside_a_cell_to_its_channels() {
     let run = |i: usize, hill: f64| {
         let mut w = worldgen::new_world(3, 16, 16);
         (w.cfg.evap, w.cfg.phys.hill) = (0.0, hill);
-        if w.deep.len() != w.chem.ns() * n {
-            (w.deep, w.e_deep) = (vec![0.0; w.chem.ns() * n], vec![0.0; n]);
-        }
-        w.deep[LIQUID * n + i] = full / mv;
-        w.e_deep[i] = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
+        let e = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
+        set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, full / mv);
+        set_heat(&mut w, Node::new(Class::Deep, i), e);
         let books = Books::now(&w);
         pcore::flow::step(&mut w, LIQUID_STEP);
         books.assert_kept(&w, 1e-9);
-        (w.deep[LIQUID * n + i] * mv, liquid_m3(&w, i))
+        (w.store.amounts(Class::Deep)[LIQUID * n + i] * mv, liquid_m3(&w, i))
     };
     let (hi, _) = pair(&w0);
     let s = slope(&w0, hi);
@@ -381,14 +383,15 @@ fn liquid_over_field_capacity_drains_into_the_bed_and_flows_down() {
     pour(&mut w, hi, 0.9 * pores);
     let books = Books::now(&w);
     pcore::flow::step(&mut w, LIQUID_STEP);
-    let deep = |w: &World, i: usize| w.deep[LIQUID * n + i] * mv;
+    let deep = |w: &World, i: usize| w.store.amounts(Class::Deep)[LIQUID * n + i] * mv;
     // Down: what is over the field capacity, 0.3 of the pores (0.9 - 0.6), less what Darcy's flow took sideways.
     assert!(deep(&w, hi) > 0.1 * pores && deep(&w, hi) <= (0.3 * pores).min(full) * 1.000001, "{} m³ sank of {pores} m³ of pores", deep(&w, hi));
     assert!(liquid_m3(&w, hi) >= 0.95 * 0.6 * pores, "the loose ground kept {} of {pores} m³", liquid_m3(&w, hi));
     books.assert_kept(&w, 1e-9);
     // Across: the high cell's store, full and warm, drains to its neighbours; the low one's never holds more than it can.
-    w.deep[LIQUID * n + hi] = full / mv;
-    w.e_deep[hi] = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
+    let e = full / mv * (w.chem.subs[LIQUID].cp * 290.0 + w.chem.subs[LIQUID].lf);
+    set_amount(&mut w, Node::new(Class::Deep, hi), LIQUID, full / mv);
+    set_heat(&mut w, Node::new(Class::Deep, hi), e);
     let books = Books::now(&w);
     for _ in 0..20 {
         pcore::flow::step(&mut w, LIQUID_STEP);
@@ -408,14 +411,17 @@ fn a_store_reaches_only_its_neighbours_in_a_step() {
     let (n, gw, p) = (w.mesh.cells().n(), w.map.w, w.cfg.phys);
     let (x, y) = (gw / 2, w.map.h / 2);
     let i = y * gw + x;
-    w.deep.fill(0.0);
-    w.e_deep.fill(0.0);
-    let (mv, sub) = (w.chem.molar_volume(LIQUID, Phase::Liquid), &w.chem.subs[LIQUID]);
-    w.deep[LIQUID * n + i] = p.bed_porosity * p.bed_depth * w.map.area() / mv;
-    w.e_deep[i] = w.deep[LIQUID * n + i] * (sub.cp * 290.0 + sub.lf);
+    for j in 0..n {
+        (0..w.chem.ns()).for_each(|k| set_amount(&mut w, Node::new(Class::Deep, j), k, 0.0));
+        set_heat(&mut w, Node::new(Class::Deep, j), 0.0);
+    }
+    let (mv, sub) = (w.chem.molar_volume(LIQUID, Phase::Liquid), w.chem.subs[LIQUID].clone());
+    let m = p.bed_porosity * p.bed_depth * w.map.area() / mv;
+    set_amount(&mut w, Node::new(Class::Deep, i), LIQUID, m);
+    set_heat(&mut w, Node::new(Class::Deep, i), m * (sub.cp * 290.0 + sub.lf));
     pcore::flow::step(&mut w, LIQUID_STEP);
     let near = |j: usize| (j % gw).abs_diff(x) <= 1 && (j / gw).abs_diff(y) <= 1;
-    let reached: Vec<usize> = (0..n).filter(|&j| j != i && w.deep[LIQUID * n + j] > 0.0).collect();
+    let reached: Vec<usize> = (0..n).filter(|&j| j != i && w.store.amounts(Class::Deep)[LIQUID * n + j] > 0.0).collect();
     assert!(!reached.is_empty() && reached.iter().all(|&j| near(j)), "reached {reached:?} from {i}");
 }
 
@@ -432,12 +438,10 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
     let scene = |x: f64| {
         let mut w = base.clone();
         let t = w.t_ground(top).max(w.chem.subs[LIQUID].melt + 5.0);
-        w.ground[LIQUID * n + top] += x * pores;
-        w.e_ground[top] = w.energy_ground(top, t);
+        put(&mut w, LIQUID, top, x * pores);
+        hold_ground(&mut w, top, t);
         let e = 1e6 * w.chem.subs[MINERAL].cp * w.t_ground(top);
-        w.ground[MINERAL * n + top] += 1e6;
-        w.e_ground[top] += e;
-        w.cross(Boundary::Outside, [(MINERAL, 1e6)], e);
+        w.cross((Boundary::Outside, Node::ground(top)), [(MINERAL, 1e6)], e);
         w
     };
     // (No evaporation and no vapour in the air to rain, which would add or take liquid and not the mineral: the liquid
@@ -446,16 +450,16 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         let mut w = scene(x);
         w.cfg.evap = 0.0;
         let na = w.mesh.level(AIR).n();
-        w.air[LIQUID * na..(LIQUID + 1) * na].fill(0.0);
+        (0..na).for_each(|j| set_amount(&mut w, Node::air(j), LIQUID, 0.0));
         let books = Books::now(&w);
-        let liquid0 = w.ground[LIQUID * n + top];
+        let liquid0 = w.store.amounts(Class::Ground)[LIQUID * n + top];
         for _ in 0..steps {
             pcore::flow::step(&mut w, DT);
         }
         books.assert_kept(&w, 1e-9);
-        let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| w.ground[MINERAL * n + i]).sum::<f64>() + w.deep.get(MINERAL * n..(MINERAL + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>());
-        assert!((downstream + w.ground[MINERAL * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + w.ground[MINERAL * n + top]);
-        (1.0 - w.ground[MINERAL * n + top] / 1e6, 1.0 - w.ground[LIQUID * n + top] / liquid0)
+        let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| w.store.amounts(Class::Ground)[MINERAL * n + i]).sum::<f64>() + w.store.amounts(Class::Deep).get(MINERAL * n..(MINERAL + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>());
+        assert!((downstream + w.store.amounts(Class::Ground)[MINERAL * n + top] - 1e6).abs() < 1e-6 * 1e6, "the mineral was lost: {} mol", downstream + w.store.amounts(Class::Ground)[MINERAL * n + top]);
+        (1.0 - w.store.amounts(Class::Ground)[MINERAL * n + top] / 1e6, 1.0 - w.store.amounts(Class::Ground)[LIQUID * n + top] / liquid0)
     };
     // Half the pores' worth, under their field capacity: the ground holds all of it against gravity, and the mineral.
     let (m_in, l_in) = run(0.5, 8);
@@ -469,7 +473,7 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
     let mut dry = scene(0.0);
     dry.cfg.evap = 0.0;
     pcore::flow::step(&mut dry, DT);
-    assert!(dry.ground[MINERAL * n + top] > 0.99e6, "the mineral moved on dry ground: {}", dry.ground[MINERAL * n + top]);
+    assert!(dry.g(MINERAL, top) > 0.99e6, "the mineral moved on dry ground: {}", dry.g(MINERAL, top));
 }
 
 /// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): a thin film on warm ground in
@@ -479,18 +483,20 @@ fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     let mut w = worldgen::new_world(3, 16, 16);
     let (n, na, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.map.area());
     let pit = |w: &World, i: usize| pcore::space::square::DIRS.iter().all(|&d| w.map.step(i, d).is_some_and(|j| w.surface_z(j) > w.surface_z(i)));
-    let i = (0..n).find(|&i| w.ground[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && pit(&w, i)).expect("a pit of dry land");
+    let i = (0..n).find(|&i| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && pit(&w, i)).expect("a pit of dry land");
     // 5 cm of the liquid.
-    (w.ground[LIQUID * n + i], w.ground[DISSOLVED * n + i]) = (0.05 * area / w.chem.molar_volume(LIQUID, Phase::Liquid), 1e3);
-    w.e_ground[i] = w.energy_ground(i, 330.0);
-    w.air[LIQUID * na..(LIQUID + 1) * na].fill(0.0);
-    let (liquid0, mineral0) = (w.ground[LIQUID * n + i], w.ground[DISSOLVED * n + i]);
+    let film = 0.05 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
+    set_amount(&mut w, Node::ground(i), LIQUID, film);
+    set_amount(&mut w, Node::ground(i), DISSOLVED, 1e3);
+    hold_ground(&mut w, i, 330.0);
+    (0..na).for_each(|j| set_amount(&mut w, Node::air(j), LIQUID, 0.0));
+    let (liquid0, mineral0) = (w.store.amounts(Class::Ground)[LIQUID * n + i], w.store.amounts(Class::Ground)[DISSOLVED * n + i]);
     for _ in 0..4 {
         pcore::flow::step(&mut w, DT);
     }
-    assert!(w.ground[LIQUID * n + i] < 0.99 * liquid0, "the liquid did not evaporate: {} of {liquid0}", w.ground[LIQUID * n + i]);
-    assert_eq!(w.ground[DISSOLVED * n + i], mineral0);
-    assert_eq!(w.air[DISSOLVED * na..(DISSOLVED + 1) * na].iter().sum::<f64>(), 0.0);
+    assert!(w.store.amounts(Class::Ground)[LIQUID * n + i] < 0.99 * liquid0, "the liquid did not evaporate: {} of {liquid0}", w.store.amounts(Class::Ground)[LIQUID * n + i]);
+    assert_eq!(w.store.amounts(Class::Ground)[DISSOLVED * n + i], mineral0);
+    assert_eq!(w.store.amounts(Class::Air)[DISSOLVED * na..(DISSOLVED + 1) * na].iter().sum::<f64>(), 0.0);
 }
 
 /// The diffusivity of the starting loose ground is the measured one: creep x softness x thickness = 3e-3 m²/yr
@@ -519,8 +525,8 @@ fn liquid_carries_and_breaks_at_the_measured_yield_per_joule() {
     let (n, area) = (w.mesh.cells().n(), w.map.area());
     let cell = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
     let (mut vol, mut inv) = (0.0, 0.0);
-    for k in (0..w.chem.ns()).filter(|&k| w.bed[k * n + cell] > 0.0) {
-        let v = w.bed[k * n + cell] * w.chem.molar_volume(k, Phase::Solid) / area;
+    for k in (0..w.chem.ns()).filter(|&k| w.store.amounts(Class::Bed)[k * n + cell] > 0.0) {
+        let v = w.store.amounts(Class::Bed)[k * n + cell] * w.chem.molar_volume(k, Phase::Solid) / area;
         vol += v;
         inv += v / w.chem.subs[k].strength.max(0.05);
     }
@@ -562,7 +568,7 @@ fn liquid_wears_its_bed_at_every_liquid_step() {
     (0..3).for_each(|_| pcore::step(&mut w));
     let n = w.mesh.cells().n();
     let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) > 0.0).collect();
-    let bed = |w: &World| land.iter().map(|&i| (0..w.chem.ns()).map(|k| w.bed[k * n + i]).sum::<f64>()).sum::<f64>();
+    let bed = |w: &World| land.iter().map(|&i| (0..w.chem.ns()).map(|k| w.store.amounts(Class::Bed)[k * n + i]).sum::<f64>()).sum::<f64>();
     for step in 0..8 {
         let before = bed(&w);
         pcore::flow::step(&mut w, LIQUID_STEP);

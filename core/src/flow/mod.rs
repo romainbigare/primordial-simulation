@@ -10,7 +10,7 @@
 //! (`air`): radiation, contact heat, evaporation and condensation, and gas moved by pressure,
 //! overturning and mixing, solved together over a step. Every move is booked by the store (`store::apply`): it takes from one
 //! node exactly what it gives to another, with its heat; lifting matter takes heat and a fall gives
-//! it back, the difference held by the store's potential node (`store::Batch::falls`, `World::potential`), so
+//! it back, the difference held by the store's potential node (`store::Batch::falls`, `Class::Potential`), so
 //! elements and energy are kept.
 //!
 //! Files: `scratch` (the law's working memory and its tables), `land` (state, phases and surface of
@@ -30,6 +30,7 @@ pub(crate) use scratch::FlowView;
 use crate::{World, AIR};
 use land::ground_state;
 use scratch::tables;
+use crate::store::Class;
 
 /// The slow-changing ground and the substances present are rechecked this often, months (`schedule`).
 pub(crate) const REFRESH_MONTHS: u64 = 3;
@@ -50,7 +51,7 @@ pub(crate) fn state(w: &mut World, ahead: u64, full: bool) {
         ground_now(w, s, full);
         air::sums(w, s);
         for j in 0..w.mesh.level(AIR).n() {
-            s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
+            s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]);
         }
         air::dispense(w, s, w.time + ahead);
     });

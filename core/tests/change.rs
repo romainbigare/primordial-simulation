@@ -3,9 +3,9 @@
 
 use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
-use pcore::store::Class;
+use pcore::store::{Class, Node};
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{hold_ground, in_all, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{empty_cell, hold_ground, in_all, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -76,18 +76,18 @@ fn hot_energy_rich_node_keeps_burning() {
 #[test]
 fn a_node_sleeps_by_its_own_rates() {
     let mut w = worldgen::new_world(1, 16, 16);
-    let (n, na, hot, cold) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), 17, 40);
+    let (na, hot, cold) = (w.mesh.level(AIR).n(), 17, 40);
     for i in [hot, cold] {
-        for k in 0..w.chem.ns() {
-            (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
-        }
+        empty_cell(&mut w, i);
     }
-    (w.ground[RICH * n + hot], w.ground[ROCK * n + cold]) = (1000.0, 1e5);
+    set_amount(&mut w, Node::ground(hot), RICH, 1000.0);
+    set_amount(&mut w, Node::ground(cold), ROCK, 1e5);
     let j = w.mesh.up(hot, 0, AIR);
-    let tot: f64 = (0..w.chem.ns()).map(|k| w.air[k * na + j]).sum();
-    w.air[OX * na + j] += 0.2 * tot;
-    w.air[BURNING_GAS * na..(BURNING_GAS + 1) * na].fill(0.0);
-    w.e_ground[hot] = w.energy_ground(hot, 600.0);
+    let tot: f64 = (0..w.chem.ns()).map(|k| w.a(k, j)).sum();
+    let (ox, e) = (w.a(OX, j) + 0.2 * tot, w.energy_ground(hot, 600.0));
+    set_amount(&mut w, Node::air(j), OX, ox);
+    (0..na).for_each(|j| set_amount(&mut w, Node::air(j), BURNING_GAS, 0.0));
+    set_heat(&mut w, Node::ground(hot), e);
     let (step, sleep) = (w.cfg.phys_days as u64 * DAY_S, w.cfg.sleep_days as u64 * DAY_S);
     let start = w.time;
     let mut cold_ran = Vec::new();
@@ -120,16 +120,15 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
     let mut w = worldgen::terrain::build(1, 16, 16, chem, &init, pcore::Config::default());
     let (n, g) = (w.mesh.cells().n(), w.cfg.gravity);
     let i = (0..n).find(|&i| w.surface_z(i) > 0.0).expect("land");
-    for k in 0..w.chem.ns() {
-        (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
-    }
-    w.ground[RICH * n + i] = 1000.0;
-    w.e_ground[i] = w.energy_ground(i, 600.0);
-    let (books, air0, pot0) = (Books::now(&w), w.air.clone(), w.potential);
+    empty_cell(&mut w, i);
+    set_amount(&mut w, Node::ground(i), RICH, 1000.0);
+    let e = w.energy_ground(i, 600.0);
+    set_heat(&mut w, Node::ground(i), e);
+    let (books, air0, pot0) = (Books::now(&w), w.store.amounts(Class::Air).to_vec(), w.store.heat(Class::Potential)[0]);
     change::step(&mut w, 3.0 * DAY);
     let na = w.mesh.level(AIR).n();
-    let kg: f64 = (0..w.chem.ns()).map(|k| (0..na).map(|j| w.air[k * na + j] - air0[k * na + j]).sum::<f64>() * w.chem.subs[k].molar_mass).sum();
-    let height = (w.potential - pot0) / (g * kg);
+    let kg: f64 = (0..w.chem.ns()).map(|k| (0..na).map(|j| w.store.amounts(Class::Air)[k * na + j] - air0[k * na + j]).sum::<f64>() * w.chem.subs[k].molar_mass).sum();
+    let height = (w.store.heat(Class::Potential)[0] - pot0) / (g * kg);
     println!("the air gained {kg:.2} kg across {height:.0} m");
     assert!(kg.abs() > 1.0 && height > 1e3 && height < w.cfg.air_top_m, "{kg} kg across {height} m");
     books.assert_kept(&w, 1e-12);
@@ -146,17 +145,18 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
     let (n, i, liquid) = (base.mesh.cells().n(), 17, 2000.0);
     let burned = |half: bool| {
         let mut w = base.clone();
-        for k in 0..w.chem.ns() {
-            (w.ground[k * n + i], w.bed[k * n + i]) = (0.0, 0.0);
+        empty_cell(&mut w, i);
+        for (k, m) in [(LIQUID, liquid), (RICH, 10.0), (ROCK, 1e5)] {
+            set_amount(&mut w, Node::ground(i), k, m);
         }
-        (w.ground[LIQUID * n + i], w.ground[RICH * n + i], w.ground[ROCK * n + i]) = (liquid, 10.0, 1e5);
         let tm = w.chem.subs[LIQUID].melt;
-        w.e_ground[i] = if half { w.energy_ground(i, tm) - 0.5 * liquid * w.chem.subs[LIQUID].lf } else { w.energy_ground(i, tm - 1e-6) };
+        let e = if half { w.energy_ground(i, tm) - 0.5 * liquid * w.chem.subs[LIQUID].lf } else { w.energy_ground(i, tm - 1e-6) };
+        set_heat(&mut w, Node::ground(i), e);
         w.scratch = Default::default();
         assert_eq!(w.thaw(i).1.map(|p| p.0), half.then_some(LIQUID));
         let dt = w.cfg.phys_days as f64 * DAY;
         change::step(&mut w, dt);
-        10.0 - w.ground[RICH * n + i]
+        10.0 - w.store.amounts(Class::Ground)[RICH * n + i]
     };
     let (half, frozen) = (burned(true), burned(false));
     assert!(frozen > 0.0 && (half - frozen).abs() <= 1e-5 * frozen, "half frozen {half}, all frozen {frozen}");
@@ -416,28 +416,28 @@ fn the_pores_of_the_land_hold_the_dissolved_mineral_where_rock_and_liquid_meet()
     let mut w = worldgen::new_world(1, 16, 16);
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) >= 0.0).collect();
-    assert!(land.iter().all(|&i| w.ground[DISSOLVED * n + i] == 0.0), "land started with the mineral");
+    assert!(land.iter().all(|&i| w.store.amounts(Class::Ground)[DISSOLVED * n + i] == 0.0), "land started with the mineral");
     for _ in 0..12 {
         pcore::step(&mut w);
     }
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut wet, mut dry, mut ratio) = (0, 0, Vec::new());
     for &i in &land {
-        if w.ground[LIQUID * n + i] > 1e6 {
+        if w.store.amounts(Class::Ground)[LIQUID * n + i] > 1e6 {
             // The balance at the cell's own liquid, warmth and gas.
             let (t, j) = (w.t_ground(i), w.mesh.up(i, 0, AIR));
-            let mut amt: Vec<f64> = (0..w.chem.ns()).map(|k| w.ground[k * n + i]).collect();
+            let mut amt: Vec<f64> = (0..w.chem.ns()).map(|k| w.store.amounts(Class::Ground)[k * n + i]).collect();
             amt[DISSOLVED] = 0.0;
             let share = w.mesh.share(i, AIR);
-            let gas: Vec<f64> = (0..w.chem.ns()).map(|k| w.air[k * na + j] * share).collect();
+            let gas: Vec<f64> = (0..w.chem.ns()).map(|k| w.store.amounts(Class::Air)[k * na + j] * share).collect();
             rc.balance(&w.chem, &mut amt, &gas, t);
             if amt[DISSOLVED] > 0.0 {
                 wet += 1;
-                ratio.push(w.ground[DISSOLVED * n + i] / amt[DISSOLVED]);
+                ratio.push(w.store.amounts(Class::Ground)[DISSOLVED * n + i] / amt[DISSOLVED]);
             }
-        } else if w.ground[LIQUID * n + i] == 0.0 {
+        } else if w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 {
             dry += 1;
-            assert_eq!(w.ground[DISSOLVED * n + i], 0.0, "a dry cell holds the mineral");
+            assert_eq!(w.store.amounts(Class::Ground)[DISSOLVED * n + i], 0.0, "a dry cell holds the mineral");
         }
     }
     ratio.sort_by(|a, b| a.total_cmp(b));
@@ -533,7 +533,7 @@ fn hot_cover_burns() {
         let node = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node");
         let (i, days) = (node.cell as usize, node.interval(&w) + 1);
         let n = w.mesh.cells().n();
-        let held = |w: &pcore::World| w.ground[RICH * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[RICH]).sum::<f64>();
+        let held = |w: &pcore::World| w.store.amounts(Class::Ground)[RICH * n + i] + w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.store[RICH]).sum::<f64>();
         let before = held(&w);
         // Its interval and a day (its first update comes within its interval), the cell heated back to 700 K before
         // each day (booked as an edit).

@@ -782,6 +782,14 @@ The work of `docs/foundation/plan.md`, one line per task.
   same world to the bit (every series column, 32 x 32, two seeds, 5 and 8 years; the whole world but the boundary
   nodes and the potential, 16 x 16 with every kind, three seeds, 4 years); only the potential's sum rounds otherwise
   (`apply` adds a call's lifts at once). Golden re-pinned.
+- E5 (3), a private store: the amounts and heat of the fixed nodes are private arrays of `store::Store` (by class,
+  read through `Store::amounts` and `Store::heat`), which only `store::apply` writes; the bed is a class like the
+  others (`Class::Bed`, amounts and no heat), broken into loose ground by a move (`Move::loosen`), so `World::loosen`
+  goes; the deep stores are sized when the world is made (`World::fit_deep` goes); an edit is moves from a boundary
+  node (`World::cross`), and the tests set the store by edits (`testkit::set_amount`, `set_heat`). The compiler keeps
+  the contract between the layers: `cli/tests/contract.rs` goes. The same world to the bit (the whole store and every
+  body, 16 x 16 with every kind, three seeds, 4 years); the fingerprints change with the saved layout. Snapshot
+  version 31; golden re-pinned.
 
 **Phase J: the long physics step**
 

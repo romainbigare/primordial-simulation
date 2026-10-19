@@ -87,7 +87,7 @@ impl Scratch {
 /// Solid amount of `k` in ground node `i`, mol.
 #[inline]
 pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
-    w.ground[k * w.mesh.cells().n() + i] * (1.0 - molten(s, k, i))
+    w.store.amounts(Class::Ground)[k * w.mesh.cells().n() + i] * (1.0 - molten(s, k, i))
 }
 
 /// Temperature of ground node `i` now, K, no warmer than at the last `ground_state` (`tg`):
@@ -95,7 +95,7 @@ pub(super) fn solid(w: &World, s: &Scratch, k: usize, i: usize) -> f64 {
 /// mixes in at its own temperature.
 #[inline]
 pub(super) fn t_now(w: &World, s: &Scratch, i: usize) -> f64 {
-    s.state.tg[i].min((w.e_ground[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR)
+    s.state.tg[i].min((w.store.heat(Class::Ground)[i] - s.latent[i].held) / s.cap[i].max(1.0)).max(T_FLOOR)
 }
 
 /// Heat capacity, temperature, surface, head and reflectance of every ground node. Between full
@@ -106,12 +106,12 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     // node far too hot or cold.
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
     for (i, skin) in s.skin.iter_mut().enumerate() {
-        *skin = crate::ground::skin_cap(&w.chem, &w.cfg, area[i], s.state.bedk.iter().copied(), |k| w.bed[k * n + i]);
+        *skin = crate::ground::skin_cap(&w.chem, &w.cfg, area[i], s.state.bedk.iter().copied(), |k| w.store.amounts(Class::Bed)[k * n + i]);
     }
     let mut cap = s.skin.clone();
     for &k in &s.state.loose {
         let cp = s.sp[k].cp;
-        for (c, &a) in cap.iter_mut().zip(&w.ground[k * n..(k + 1) * n]) {
+        for (c, &a) in cap.iter_mut().zip(&w.store.amounts(Class::Ground)[k * n..(k + 1) * n]) {
             *c += a * cp;
         }
     }
@@ -122,17 +122,17 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     for (i, &ci) in cap.iter().enumerate().take(n) {
         let same = (ci - s.cap[i]).abs() <= CAP_SAME * ci;
         s.cap[i] = ci;
-        let (c, e, Latent { held, lo, hi, molten: was }) = (s.cap[i].max(1.0), w.e_ground[i], s.latent[i]);
+        let (c, e, Latent { held, lo, hi, molten: was }) = (s.cap[i].max(1.0), w.store.heat(Class::Ground)[i], s.latent[i]);
         if !full && same && e >= lo && e < hi {
             s.state.tg[i] = (e - held) / c;
             continue;
         }
         let (pk, m) = (s.state.pk[i], s.state.vary.len());
         for ((o, &k), js) in ord.iter_mut().zip(&s.state.vary).zip(&mix) {
-            *o = (js.as_ref().map_or(s.sp[k].melt, |js| w.chem.melt_with(k, |j| w.ground[j * n + i], js.iter().copied())), k);
+            *o = (js.as_ref().map_or(s.sp[k].melt, |js| w.chem.melt_with(k, |j| w.store.amounts(Class::Ground)[j * n + i], js.iter().copied())), k);
         }
         ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
-        let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.ground[k * n + i] * s.sp[k].lf)));
+        let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.store.amounts(Class::Ground)[k * n + i] * s.sp[k].lf)));
         (s.state.pk[i], s.state.phi[i]) = th.on.unwrap_or((NONE, s.state.phi[i]));
         s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, molten: th.bits };
         s.state.tg[i] = th.t;
@@ -157,7 +157,7 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
     for &k in &s.state.loose {
         let p = s.sp[k];
         for (i, x) in kt.iter_mut().enumerate() {
-            let a = w.ground[k * n + i];
+            let a = w.store.amounts(Class::Ground)[k * n + i];
             if a > 0.0 {
                 *x += a * ((1.0 - molten(s, k, i)) * p.v[0] + wet(s, k, i) * p.v[1]) * p.cond / cells.area()[i];
             }
@@ -188,7 +188,7 @@ pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     let mut l = [0.0, 0.0, 0.0, 0.0, s.state.fix[i][0], s.state.fix[i][1]];
     let (mut z, mut rc) = (w.base_z + (s.state.bed[i].vol + s.state.fix[i][0]) / area, 0.0);
     for &k in &s.state.vary {
-        let (p, a) = (&s.sp[k], w.ground[k * n + i]);
+        let (p, a) = (&s.sp[k], w.store.amounts(Class::Ground)[k * n + i]);
         if a <= 0.0 || t >= p.boil {
             continue;
         }

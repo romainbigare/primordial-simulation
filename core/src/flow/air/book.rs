@@ -60,7 +60,7 @@ pub(super) fn record(w: &World, s: &mut Scratch, act: &[Active], (rows, width): 
         for (x, ac) in act.iter().enumerate() {
             let (o, sp) = (FIXED + PER_GAS * x, s.sp[ac.k]);
             let r = row[o + 3];
-            let m = row[o].min(w.ground[ac.k * n + i] + r);
+            let m = row[o].min(w.store.amounts(Class::Ground)[ac.k * n + i] + r);
             (p.up[x * n + i], p.up_heat[x * n + i]) = (m - r, m * (sp.cp * ts + sp.lf + sp.lv) - r * (sp.cp * it.t[j] + sp.lf));
             p.rain[i] += r;
         }
@@ -96,7 +96,7 @@ pub(in crate::flow) fn dispense(w: &mut World, s: &mut Scratch, to: u64) {
     let scaled = |v: &[f64]| v.iter().map(|&q| f * q).collect::<Vec<f64>>();
     // The share of each ground node's gas, cut where it gives more than it holds; then the wind and the rain of each gas,
     // cut where an air node would.
-    let mut up: Vec<f64> = p.up.iter().enumerate().map(|(q, &u)| if u > 0.0 { (f * u).min(w.ground[p.ks[q / n] * n + q % n]) } else { f * u }).collect();
+    let mut up: Vec<f64> = p.up.iter().enumerate().map(|(q, &u)| if u > 0.0 { (f * u).min(w.store.amounts(Class::Ground)[p.ks[q / n] * n + q % n]) } else { f * u }).collect();
     let mut wind = scaled(&p.wind);
     for (gi, &k) in p.gas.iter().enumerate() {
         let k = k as usize;
@@ -104,7 +104,7 @@ pub(in crate::flow) fn dispense(w: &mut World, s: &mut Scratch, to: u64) {
             Some(x) => &mut up[x * n..(x + 1) * n],
             None => &mut [],
         };
-        hold_air(&w.air[k * na..(k + 1) * na], (&links.a, &links.b), &mut wind[gi * nl..(gi + 1) * nl], (&parent, rain));
+        hold_air(&w.store.amounts(Class::Air)[k * na..(k + 1) * na], (&links.a, &links.b), &mut wind[gi * nl..(gi + 1) * nl], (&parent, rain));
     }
     let World { light, life, .. } = w;
     for (i, (l, &got)) in light.iter_mut().zip(&p.light).enumerate() {

@@ -16,6 +16,7 @@ use serde_json::json;
 use std::io;
 use std::path::Path;
 use tally::{MonthTally, Social, YearTally};
+use pcore::store::Class;
 
 /// Death causes in the order of the core's constants (`body::LACK` .. `body::AGE`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
@@ -126,7 +127,7 @@ impl Recorder {
             if self.seen[k] {
                 continue;
             }
-            let hit = [(&w.ground, n, 0), (&w.bed, n, 0), (&w.air, na, n)]
+            let hit = [(&w.store.amounts(Class::Ground), n, 0), (&w.store.amounts(Class::Bed), n, 0), (&w.store.amounts(Class::Air), na, n)]
                 .iter()
                 .find_map(|&(v, len, off)| v[k * len..(k + 1) * len].iter().position(|&x| x > 0.0).map(|p| (off + p, v[k * len + p])));
             if let Some((node, value)) = hit {

@@ -6,6 +6,7 @@ use pcore::{World, AIR};
 use std::time::Duration;
 use tape::{Recorder, RIVER_WEB};
 use worldgen::life::Seeding;
+use pcore::store::Class;
 
 /// Which run this is: whether it is the real run or its null run (a resumed run keeps the snapshot's), its switches,
 /// and which start the animals and the light-eaters had.
@@ -23,10 +24,10 @@ pub fn balances(w: &World) -> Vec<String> {
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     let mut out = vec![];
     for (f, _, _, u) in pcore::change::reversible(&w.chem) {
-        let held: f64 = w.ground[u * n..(u + 1) * n].iter().sum();
-        let cells = w.ground[u * n..(u + 1) * n].iter().filter(|&&x| x > 0.0).count();
+        let held: f64 = w.store.amounts(Class::Ground)[u * n..(u + 1) * n].iter().sum();
+        let cells = w.store.amounts(Class::Ground)[u * n..(u + 1) * n].iter().filter(|&&x| x > 0.0).count();
         if let Some(&(g, c)) = w.chem.reactions[f].inputs.iter().find(|p| w.chem.gas_at_surface(p.0 as usize)) {
-            let air: f64 = w.air[g as usize * na..(g as usize + 1) * na].iter().sum();
+            let air: f64 = w.store.amounts(Class::Air)[g as usize * na..(g as usize + 1) * na].iter().sum();
             out.push(format!("start: substance {u} held at balance with the air in {cells} of {n} cells, {held:.3e} mol, {:.2} times the air's substance {g} ({air:.3e} mol)", held * c as f64 / air));
         }
     }

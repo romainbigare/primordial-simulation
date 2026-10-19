@@ -1,6 +1,6 @@
 //! Conservation and sanity checks.
 
-use crate::store::{Boundary, BOUNDARIES};
+use crate::store::{BOUNDARIES, Boundary, Class};
 use crate::{World, AIR};
 
 #[derive(Clone, Debug)]
@@ -11,7 +11,7 @@ pub struct Totals {
     pub thermal: f64,
     /// J, chemical energy held in substances (formation enthalpies, and the latent heat held in the air)
     pub chemical: f64,
-    /// J, potential energy gained since the start (`World::potential`)
+    /// J, potential energy gained since the start (the heat of `store::Class::Potential`)
     pub potential: f64,
     /// J, the energy each boundary node holds (`store::Boundary`): its heat and its amounts' formation enthalpy
     pub boundary_energy: [f64; BOUNDARIES],
@@ -40,7 +40,8 @@ pub fn totals(w: &World) -> Totals {
     let (chem, ns) = (&w.chem, w.chem.ns());
     // mol of each substance, and the energy held as latent heat in the air
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
-    for (store, len, air) in [(&w.ground, w.mesh.cells().n(), false), (&w.bed, w.mesh.cells().n(), false), (&w.air, w.mesh.level(AIR).n(), true), (&w.deep, w.mesh.cells().n(), false)] {
+    for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n())] {
+        let (store, air) = (w.store.amounts(class), class == Class::Air);
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
             store.get(k * len..(k + 1) * len).unwrap_or(&[]).iter().for_each(|&a| s.add(a));
@@ -52,7 +53,7 @@ pub fn totals(w: &World) -> Totals {
         }
     }
     // The light set aside in the bodies' nodes counts as heat until they store it.
-    w.e_ground.iter().chain(&w.e_air).chain(&w.e_bodies).chain(&w.e_deep).for_each(|&e| thermal.add(e));
+    [Class::Ground, Class::Air, Class::Bodies, Class::Deep].iter().flat_map(|&c| w.store.heat(c)).for_each(|&e| thermal.add(e));
     for b in w.life.alive() {
         b.store.iter().zip(subs.iter_mut()).for_each(|(&a, s)| s.add(a));
         thermal.add(b.e);
@@ -67,13 +68,13 @@ pub fn totals(w: &World) -> Totals {
         chem.add_elems(k, s.get(), &mut elems);
         chemical.add(s.get() * chem.subs[k].hf);
     }
-    let (mut boundary_energy, mut boundary_elems) = (w.e_boundary, vec![0.0; chem.n_elements]);
-    for (x, &a) in w.boundary.iter().enumerate() {
+    let (mut boundary_energy, mut boundary_elems) = (std::array::from_fn(|b| w.store.heat(Class::Boundary)[b]), vec![0.0; chem.n_elements]);
+    for (x, &a) in w.store.amounts(Class::Boundary).iter().enumerate() {
         let (k, b) = (x / BOUNDARIES, x % BOUNDARIES);
         chem.add_elems(k, a, &mut boundary_elems);
         boundary_energy[b] += a * chem.subs[k].hf;
     }
-    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.potential, boundary_energy, boundary_elems }
+    Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.store.heat(Class::Potential)[0], boundary_energy, boundary_elems }
 }
 
 /// Compare now with a start point: the world's elements and energy change only by what the boundary nodes gave it.
@@ -102,9 +103,9 @@ fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool)
 pub fn broken(w: &World) -> Option<String> {
     let at_least_0 = |x: f64| x.is_finite() && x >= 0.0;
     let above_0 = |x: f64| x.is_finite() && x > 0.0;
-    let amounts = [("ground", &w.ground), ("bed", &w.bed), ("air", &w.air), ("deep", &w.deep)];
+    let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep))];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
-    let energies = [("e_ground", &w.e_ground), ("e_air", &w.e_air), ("e_deep", &w.e_deep), ("e_bodies", &w.e_bodies), ("light", &w.light)];
+    let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light)];
     let found = (amounts.into_iter().chain(energies))
         .find_map(|(name, v)| first_bad(name, v, at_least_0))
         .or_else(|| {

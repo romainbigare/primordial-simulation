@@ -7,6 +7,7 @@ use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, lineage, nodes, World};
 use worldgen::testkit::{self, add, brood, children, eater, founder, kg, only_the_solid, out, put, put_kg_m2, scale, small_world, start, took_to_burn, Books, Brain, BURN, DISSOLVED, LIQUID, MATTER, RICH};
+use pcore::store::Class;
 
 /// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly
 /// all fuel; soaking at least a tenth a day, `body::live`), and the ground of its cell given a hundred times the level
@@ -19,7 +20,7 @@ fn feed_minerals(w: &mut World, s: usize) {
         let b = &mut w.life.bodies[s];
         (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
         b.prepare(&w.chem, &w.cfg.phys);
-        let a = (100.0 * b.level(&w.chem, mk, b.mass(&w.chem)) - w.ground[mk * n + i]).max(0.0);
+        let a = (100.0 * b.level(&w.chem, mk, b.mass(&w.chem)) - w.store.amounts(Class::Ground)[mk * n + i]).max(0.0);
         put(w, mk, i, a);
     }
 }
@@ -36,7 +37,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let b = eater(&mut w, i, brain::REST, 6.0);
     let (_, mut b) = out(&mut w, b);
     let books = Books::now(&w);
-    let (matter0, rich0, liquid0, e0) = (b.store[MATTER], b.store[RICH], b.store[LIQUID], w.e_ground.iter().sum::<f64>());
+    let (matter0, rich0, liquid0, e0) = (b.store[MATTER], b.store[RICH], b.store[LIQUID], w.store.heat(Class::Ground).iter().sum::<f64>());
     let minerals = w.chem.minerals().to_vec();
     let mineral0: Vec<f64> = minerals.iter().map(|m| b.store[m.0]).collect();
     // (Counts of the chemistry's growth: the solid in, the liquid out.)
@@ -60,7 +61,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     assert!((dliquid / (n_liquid * x + burn_liquid * burnt) - 1.0).abs() < 1e-6, "the liquid rose by {dliquid}, not {}", n_liquid * x + burn_liquid * burnt);
     // The work left the body as heat for the ground: that heat is the burnt solid's, less the fusion enthalpy the liquid it
     // made holds in the body, less the share the body keeps while it leaves (about 5%).
-    let heat = w.e_ground.iter().sum::<f64>() - e0;
+    let heat = w.store.heat(Class::Ground).iter().sum::<f64>() - e0;
     let work = burnt * (-w.chem.dh(BURN) - burn_liquid * w.chem.subs[LIQUID].lf);
     assert!(heat > 0.0 && (heat / work - 1.0).abs() < 0.06, "heat to the ground {heat:e} J, the work {work:e} J");
     // Growth is thermoneutral in a body: the matter holds the energy of the solid it was made of (the liquids holding their
@@ -211,7 +212,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     b.brood = 2.5 * child_mol;
     let (s, mut b) = out(&mut w, b);
     let books = Books::now(&w);
-    let (before, ground0, built0, size0, temp0) = (b.store.clone(), w.e_ground.iter().sum::<f64>(), b.built(&w.chem), b.size(&w.chem), b.temp(&w.chem));
+    let (before, ground0, built0, size0, temp0) = (b.store.clone(), w.store.heat(Class::Ground).iter().sum::<f64>(), b.built(&w.chem), b.size(&w.chem), b.temp(&w.chem));
     assert!(b.adult(&w.chem), "the parent is mature: built {} kg", built0);
     w.time += DAY_S;
     assert!(copy::copy(&mut w, s, &mut b), "no child");
@@ -241,7 +242,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
         let kids_hold: f64 = kids.iter().map(|&k| w.life.bodies[k].store[q]).sum();
         assert!((b.store[q] + kids_hold - was).abs() <= 1e-9 * was.max(1.0), "substance {q} not kept");
     }
-    assert_eq!(w.e_ground.iter().sum::<f64>(), ground0, "work was paid for a child");
+    assert_eq!(w.store.heat(Class::Ground).iter().sum::<f64>(), ground0, "work was paid for a child");
     // The parent's body does not fall: the matter it built is what it was (the brood left its matter and its brood
     // together), and its size, which waits on the liquid it still holds, is no smaller either.
     println!("parent: built {built0:.3} -> {:.3} kg, size {size0:.3} -> {:.3} kg", b.built(&w.chem), b.size(&w.chem));

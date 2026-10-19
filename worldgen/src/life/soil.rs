@@ -1,7 +1,7 @@
 //! The soil: the mineral the loose ground of the land gets when life starts.
 
 use super::open_land;
-use pcore::store::Boundary;
+use pcore::store::{Boundary, Node};
 use pcore::World;
 
 /// Give the loose ground of every land cell the soil `soil` (substance, mol per m²: `Init::soil`, the mineral of the
@@ -18,9 +18,7 @@ pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
         let a = per * area;
         for &i in &land {
             let e = a * w.chem.subs[s].cp * w.t_ground(i);
-            w.ground[s * n + i] += a;
-            w.e_ground[i] += e;
-            w.cross(Boundary::Outside, [(s, a)], e);
+            w.cross((Boundary::Outside, Node::ground(i)), [(s, a)], e);
         }
         said.push(format!("{per:.3} mol per m2 of substance {s} ({:.1} g per m2, {:.3e} kg in all)", per * w.chem.subs[s].molar_mass * 1000.0, a * land.len() as f64 * w.chem.subs[s].molar_mass));
     }

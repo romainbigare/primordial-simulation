@@ -29,7 +29,7 @@ struct Heat {
     /// out, J/K (it leaves at the end)
     heat: f64,
     c_out: f64,
-    /// Light it absorbed, J; light set aside for it that it took from its bodies' node (`World::e_bodies`), J
+    /// Light it absorbed, J; light set aside for it that it took from its bodies' node (`Class::Bodies`), J
     lit: f64,
     took: f64,
 }

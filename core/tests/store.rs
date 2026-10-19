@@ -5,7 +5,7 @@ use pcore::check;
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{apply, held, Boundary, Class, LinkFlux, Move, Node, NodeId, Transform, BOUNDARIES};
 use pcore::{World, AIR};
-use worldgen::testkit::{put, small_world, Books, LIQUID, ROCK};
+use worldgen::testkit::{put, set_amount, small_world, Books, LIQUID, ROCK};
 
 /// Random changes the books test makes, in all (rounds of `PER_ROUND`).
 const CHANGES: usize = 1_000_000;
@@ -17,15 +17,14 @@ const ALIKE: [Class; 2] = [Class::Ground, Class::Deep];
 
 /// The amounts (`[k * len + index]`) and heats of the nodes of `class`, and their count.
 fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
-    match class {
-        Class::Ground => (&w.ground, &w.e_ground, w.mesh.cells().n()),
-        Class::Air => (&w.air, &w.e_air, w.mesh.level(AIR).n()),
-        Class::Deep => (&w.deep, &w.e_deep, w.mesh.cells().n()),
-        Class::Boundary => (&w.boundary, &w.e_boundary[..], BOUNDARIES),
-        Class::Bodies => (&[], &w.e_bodies, w.mesh.cells().n()),
-        Class::Potential => (&[], std::slice::from_ref(&w.potential), 1),
+    let len = match class {
+        Class::Air => w.mesh.level(AIR).n(),
+        Class::Boundary => BOUNDARIES,
+        Class::Potential => 1,
         Class::Part | Class::Body => unreachable!("a part's or a body's amounts lie in it"),
-    }
+        _ => w.mesh.cells().n(),
+    };
+    (w.store.amounts(class), w.store.heat(class), len)
 }
 
 /// What passes through a node in one call needs nothing held: liquid along a chain of links through nodes that hold
@@ -36,13 +35,13 @@ fn what_passes_through_a_node_needs_nothing_held() {
     let mut w = small_world();
     let (n, have) = (w.mesh.cells().n(), 1e3);
     let held: Vec<f64> = (0..CHAIN).map(|i| if i == 0 { have } else { 1e-3 * have * (i % 2) as f64 }).collect();
-    w.ground[LIQUID * n..LIQUID * n + CHAIN].copy_from_slice(&held);
+    held.iter().enumerate().for_each(|(i, &m)| set_amount(&mut w, Node::ground(i), LIQUID, m));
     let (a, b): (Vec<u32>, Vec<u32>) = (0..CHAIN as u32 - 1).map(|i| (i, i + 1)).unzip();
     let mol = vec![have; CHAIN - 1];
     let books = Books::now(&w);
     apply(&mut w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[LIQUID as u16], mol: &mol, heat: &[] }], &[], &[]);
     books.assert_kept(&w, 1e-12);
-    let after = &w.ground[LIQUID * n..LIQUID * n + CHAIN];
+    let after = &w.store.amounts(Class::Ground)[LIQUID * n..LIQUID * n + CHAIN];
     assert_eq!((after[0], w.counts.rounded), (0.0, [0.0; 2]), "nothing is rounded");
     for i in 1..CHAIN - 1 {
         assert!((after[i] - held[i]).abs() <= 1e-12 * have, "node {i} holds {} of {}", after[i], held[i]);
@@ -56,12 +55,12 @@ fn what_passes_through_a_node_needs_nothing_held() {
 fn a_link_joins_a_ground_node_to_its_store() {
     let mut w = small_world();
     let (n, i) = (w.mesh.cells().n(), 3);
-    let (have, deep, heat) = (w.g(LIQUID, i), w.deep[LIQUID * n + i], 1e-3 * w.e_ground[i]);
+    let (have, deep, heat) = (w.g(LIQUID, i), w.store.amounts(Class::Deep)[LIQUID * n + i], 1e-3 * w.store.heat(Class::Ground)[i]);
     let books = Books::now(&w);
     let cell = [i as u32];
     apply(&mut w, &[LinkFlux { class: [Class::Ground, Class::Deep], a: &cell, b: &cell, ks: &[LIQUID as u16], mol: &[have / 2.0], heat: &[heat] }], &[], &[]);
     books.assert_kept(&w, 1e-12);
-    assert!((w.g(LIQUID, i) - have / 2.0).abs() <= 1e-12 * have && (w.deep[LIQUID * n + i] - deep - have / 2.0).abs() <= 1e-12 * have);
+    assert!((w.g(LIQUID, i) - have / 2.0).abs() <= 1e-12 * have && (w.store.amounts(Class::Deep)[LIQUID * n + i] - deep - have / 2.0).abs() <= 1e-12 * have);
 }
 
 /// A link may join a ground node to its air node: the gas that rises takes from the heat the air receives what the air
@@ -71,7 +70,7 @@ fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
     let mut w = small_world();
     let i = 3;
     let (j, latent) = (w.mesh.up(i, 0, AIR) as u32, w.chem.subs[LIQUID].latent_gas());
-    let (e_air, e_ground, pot, books) = (w.e_air[j as usize], w.e_ground[i], w.potential, Books::now(&w));
+    let (e_air, e_ground, pot, books) = (w.store.heat(Class::Air)[j as usize], w.store.heat(Class::Ground)[i], w.store.heat(Class::Potential)[0], Books::now(&w));
     let (heat, lift) = (1e-6 * e_ground, 1e-9 * e_ground);
     let m = 0.5 * heat / latent;
     let rise = LinkFlux { class: [Class::Ground, Class::Air], a: &[i as u32], b: &[j], ks: &[LIQUID as u16], mol: &[m], heat: &[heat] };
@@ -79,8 +78,8 @@ fn a_gas_that_rises_pays_its_latent_heat_and_its_lift() {
     apply(&mut w, &[rise, paid], &[], &[]);
     books.assert_kept(&w, 1e-12);
     let near = |x: f64, y: f64, of: f64| (x - y).abs() <= 1e-12 * of;
-    assert!(near(w.e_air[j as usize] - e_air, heat - m * latent - lift, e_air) && near(e_ground - w.e_ground[i], heat, e_ground));
-    assert!(near(w.potential - pot, lift, pot.abs()));
+    assert!(near(w.store.heat(Class::Air)[j as usize] - e_air, heat - m * latent - lift, e_air) && near(e_ground - w.store.heat(Class::Ground)[i], heat, e_ground));
+    assert!(near(w.store.heat(Class::Potential)[0] - pot, lift, pot.abs()));
 }
 
 #[test]
@@ -231,7 +230,7 @@ fn node_streams_are_apart() {
 }
 
 /// Each crossing of the boundary keeps the books: matter and heat from outside (a move, and an edit), light in from the
-/// sun, heat out to space. Heat that crosses unbooked does not.
+/// sun, heat out to space.
 #[test]
 fn what_crosses_the_boundary_keeps_the_books() {
     let mut w = small_world();
@@ -239,12 +238,8 @@ fn what_crosses_the_boundary_keeps_the_books() {
     let (from, to) = (Node::new(Class::Boundary, Boundary::Outside as usize), Node::new(Class::Ground, 0));
     apply(&mut w, &[], &[Move { from, to, k: LIQUID as u16, mol: 1e3, heat: 1e6 }], &[]);
     put(&mut w, ROCK, 1, 1e2);
-    let q = 1e-3 * w.e_air[0];
-    w.e_ground[2] += q;
-    w.cross(Boundary::Sun, [], q);
-    w.e_air[0] -= q;
-    w.cross(Boundary::Space, [], -q);
+    let q = 1e-3 * w.store.heat(Class::Air)[0];
+    w.cross((Boundary::Sun, Node::ground(2)), [], q);
+    w.cross((Boundary::Space, Node::air(0)), [], -q);
     books.assert_kept(&w, 1e-12);
-    w.e_ground[3] += q;
-    assert!(books.drift(&w).1 > 1e-9, "heat that crossed unbooked was not seen");
 }

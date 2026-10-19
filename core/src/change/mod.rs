@@ -57,7 +57,7 @@ pub fn step(w: &mut World, dt: f64) {
     let mut h = Held { amt: vec![0.0; ns], pool: vec![0.0; ns], made: vec![0.0; ns] };
     for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n())] {
         let ground = class == Class::Ground;
-        w.sleep.watch(class, len, if ground { &w.ground } else { &w.air }, w.cfg.wake_share, w.time);
+        w.sleep.watch(class, len, w.store.amounts(class), w.cfg.wake_share, w.time);
         // Before the law first runs, every node is due.
         if w.sleep.none(class) {
             for i in 0..len {
@@ -70,7 +70,7 @@ pub fn step(w: &mut World, dt: f64) {
         b.clear(w.mesh.level(AIR).n(), ns);
         let rests: Vec<u64> = (due.iter())
             .map(|&i| {
-                let (span, amounts) = (end.saturating_sub(w.sleep.since(class, i)) as f64, if ground { &w.ground } else { &w.air });
+                let (span, amounts) = (end.saturating_sub(w.sleep.since(class, i)) as f64, w.store.amounts(class));
                 for (k, a) in h.amt.iter_mut().enumerate() {
                     *a = amounts[k * len + i];
                 }
@@ -80,7 +80,7 @@ pub fn step(w: &mut World, dt: f64) {
                 } else {
                     // An air node holds its gas itself: no liquid's film stands between them.
                     rc.film = 0.0;
-                    rc.react(&w.chem, &mut h.amt, None, &mut { w.e_air[i] }, 0.0, None, 0.0, span);
+                    rc.react(&w.chem, &mut h.amt, None, &mut { w.store.heat(Class::Air)[i] }, 0.0, None, 0.0, span);
                     b.transform(&w.chem, Node::new(Class::Air, i), &mut rc, &mut h.made);
                 }
                 (rc.rest(CALM, SPECK * all, CALM_K).max(0.0) as u64).min(most)
@@ -90,7 +90,7 @@ pub fn step(w: &mut World, dt: f64) {
         w.batches = b;
         for (&i, rest) in due.iter().zip(rests) {
             w.sleep.sleep(class, i, end, (end + rest).saturating_sub(dt as u64));
-            w.sleep.keep(class, i, len, if ground { &w.ground } else { &w.air });
+            w.sleep.keep(class, i, len, w.store.amounts(class));
         }
     }
 }
@@ -176,12 +176,12 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     let (chem, na) = (&w.chem, w.mesh.level(AIR).n());
     let (t, j, air_share) = (nodes.tg[i], w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));
     for (k, p) in h.pool.iter_mut().enumerate() {
-        *p = w.air[k * na + j] * air_share;
+        *p = w.store.amounts(Class::Air)[k * na + j] * air_share;
     }
     rc.film = film(w, i, &h.amt, t);
     let cap = |amt: &[f64]| nodes.skin[i] + (0..chem.ns()).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
-    let fused = nodes.fused(i, w.e_ground[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
-    let mut e = w.e_ground[i] - fused;
+    let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
+    let mut e = w.store.heat(Class::Ground)[i] - fused;
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], None, 0.0, time);
     b.transform(chem, Node::new(Class::Ground, i), rc, &mut h.made);
     // What they gave to the gas around the node, or took from it, mol: the rest of what they made was in the node.

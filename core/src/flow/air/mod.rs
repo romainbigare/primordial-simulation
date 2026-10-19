@@ -20,6 +20,7 @@ use crate::math::one_minus_exp;
 use crate::units::R_GAS;
 use crate::World;
 use std::f64::consts::LN_2;
+use crate::store::Class;
 
 /// Least depth of the air over the ground, m (the air's top is `Config::air_top_m`).
 const COLUMN_MIN: f64 = 100.0;
@@ -77,7 +78,7 @@ pub(super) fn sums(w: &World, s: &mut Scratch) {
     (s.nt, s.capa, s.mass) = (vec![0.0; na], vec![0.0; na], vec![0.0; na]);
     for &k in &s.state.gas {
         let sp = s.sp[k];
-        for (j, &a) in w.air[k * na..(k + 1) * na].iter().enumerate() {
+        for (j, &a) in w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().enumerate() {
             s.nt[j] += a;
             s.capa[j] += a * sp.cp;
             s.mass[j] += a * sp.mm;
@@ -98,7 +99,7 @@ fn nodes(w: &World, s: &mut Scratch) {
         s.za[j as usize] += s.head[i] * cells.area()[i];
     }
     for &k in s.state.gas.iter().filter(|&&k| w.chem.subs[k].ir_abs > 0.0) {
-        for (j, &a) in w.air[k * na..(k + 1) * na].iter().enumerate() {
+        for (j, &a) in w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().enumerate() {
             s.fabs[j] += w.chem.depth(k, a / air.area()[j]);
         }
     }
@@ -106,7 +107,7 @@ fn nodes(w: &World, s: &mut Scratch) {
         s.za[j] /= air.area()[j];
         let (a, l) = (air.area()[j], (top - s.za[j]).max(COLUMN_MIN));
         s.vol[j] = a * l;
-        s.ta[j] = air_temp(w.e_air[j], s.capa[j]);
+        s.ta[j] = air_temp(w.store.heat(Class::Air)[j], s.capa[j]);
         s.gam[j] = g * s.mass[j] / s.capa[j].max(CAPA_MIN);
         let h = node_scale_height(s, j, g);
         s.zair[j] = s.za[j] + h - l / (l / h).exp_m1();
@@ -125,7 +126,7 @@ fn heights(w: &World, s: &mut Scratch) {
     for (gi, &k) in s.state.gas.iter().enumerate() {
         s.cond[gi] = (0..na).any(|j| {
             let t = (s.ta[j] - s.gam[j] * (top - s.zair[j])).max(1.0);
-            w.chem.p_sat(k, t) < w.air[k * na + j] * R_GAS * s.ta[j] / s.vol[j]
+            w.chem.p_sat(k, t) < w.store.amounts(Class::Air)[k * na + j] * R_GAS * s.ta[j] / s.vol[j]
         });
     }
     // Rising air in which a gas condenses cools slower: its vaporisation enthalpy is freed as

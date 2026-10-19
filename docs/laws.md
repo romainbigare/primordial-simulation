@@ -92,9 +92,9 @@ Elements are never made or lost. Three boundary nodes stand for what lies beyond
 (`store::Boundary`): the sun gives the light the world absorbs, space takes the heat it
 radiates, and outside gives and takes what edits put in and take out. They hold what crossed,
 with the sign of a node (the sun's heat falls by what it gave), and every crossing is booked
-on them (a `Move` from or to one, a link flux, or `World::cross`). The potential energy of the
-world's matter is one more node of the store (`store::Class::Potential`, whose heat is
-`World::potential`): a lift moves heat into it and a fall takes it back. So the world and the
+on them (a `Move` from or to one, a link flux, or an edit's moves, `World::cross`). The potential
+energy of the world's matter is one more node of the store (`store::Class::Potential`, whose heat
+it is): a lift moves heat into it and a fall takes it back. So the world and the
 three nodes together keep every element and the energy: `check::drift` counts it in one check. A run
 prints the drift every year; it must stay near the rounding of the numbers.
 
@@ -129,7 +129,7 @@ amounts now).
   frozen or all melted. Each substance melts at its own melting point **in that node**, lowered
   by what is dissolved in its liquid (the freezing law, 2.5). The plateaus are passed in the
   order of those points.
-- **Deep store.** Under the loose ground lies a store in the bed (`World::deep`, the store's `Class::Deep`): the
+- **Deep store.** Under the loose ground lies a store in the bed (the store's `Class::Deep`): the
   weathered zone, `bed_depth` deep, with `bed_porosity` of it as pore space. Bodies and Change do not
   reach it.
 - **Land** (`World::is_land`): a cell whose solid surface is above 0 m. This one rule is used
@@ -174,7 +174,7 @@ and over the vertical links between each ground node and its store.
   store), and does work (1.3).
 
 **Potential energy.** Lifting matter takes heat and a fall gives it back. The world holds the
-difference as potential energy (`World::potential`, the store's potential node), so energy stays
+difference as potential energy (the store's potential node), so energy stays
 exact. This holds for liquid and solids going downhill, for gas going into the air and coming out
 (1.5), and for gas between air nodes. In Flow each lift and fall is a link flux between that node
 and the node that pays or gains (`flow::Falls`), booked with the move that makes it.
@@ -187,8 +187,8 @@ Moving liquid loses energy (its lost head). That energy does work where it is lo
 - **Carrying.** It carries loose solids: `carry` m³ per J. The load leaves a cell in the share the liquid leaves it,
   so it settles where the flow slows (in pools and lakes), and what is over the capacity drops.
 - **Wear.** It breaks bonded bed into loose ground: `wear` m³ per J, divided by the bed's
-  strength. The bed is no node of the store yet (its skin's heat is the ground node's): wear and
-  digging (3.3) change it by one helper, `World::loosen`.
+  strength. The bed is a class of the store that holds amounts and no heat (`Class::Bed`: its
+  skin's heat is the ground node's); wear and digging (3.3) break it by a move (`Move::loosen`).
 - Bodies on a cell hold the ground: they cut carrying and creep by 1 / (1 + their mass per
   area / `hold`).
 - **Creep** (`flow::creep`, once a year): loose ground slides downhill like a slow diffusion,
@@ -243,8 +243,8 @@ of 6-hour steps within the seeds' noise (`tape/tests/ranges.rs`).
   its air node (with what leaves to space through it), and what each air node sends to the space
   node.
 
-**Light on bodies.** Each cell has one bodies' node for all its bodies (`store::Class::Bodies`,
-`World::e_bodies`): it holds, as heat, what its bodies will take at their updates. The light that
+**Light on bodies.** Each cell has one bodies' node for all its bodies (`store::Class::Bodies`):
+it holds, as heat, what its bodies will take at their updates. The light that
 bodies' leaves absorb warms the ground as it falls, except the share their light reactions store
 (`Body::keep`, the share each stored at its last update): Flow books that share from the sun node
 into the bodies' node. **Heat drawn from the ground** goes there too: before each physics step the
@@ -277,11 +277,11 @@ changed since (one came, went, or changed its members or what others see of it: 
 - **Lift.** Gas that goes up into the air, from the ground or from bodies, parts, ground
   reactions and growth, is lifted from the ground's head to the air's mean height: the air's heat
   pays for it. Gas that comes down (rain, gas taken by reactions or bodies) gives that back to the
-  air's heat. The difference is `World::potential`.
+  air's heat. The difference is the heat of the store's potential node.
 - **Booked by the store.** A link from each ground node to its air node carries the gas and the
   heat that leaves the ground; the air receives that heat less the latent heat it holds of the gas
   (`store::held`). The gas of bodies, parts and growth crosses as moves of their updates
-  (`store::Moves::gas`): the same lift, from the air's heat into `World::potential`.
+  (`store::Moves::gas`): the same lift, from the air's heat into the potential node.
 - **Gases dissolve** (`exchange::dissolve`, at the start of the air's step, from the air as it is).
   A gas that cannot condense on the ground dissolves in the liquid there toward Henry's share (solubility × partial pressure × the liquid's amount),
   and comes out when the liquid warms, thins or freezes. It crosses the surface through the

@@ -1,4 +1,4 @@
-//! Liquid under the surface: the pores of the loose ground and the store of the bed below (`World::deep`), two layers
+//! Liquid under the surface: the pores of the loose ground and the store of the bed below (`Class::Deep`), two layers
 //! of each cell's stack (`space::Stack`) joined by a vertical link. This file gives their physics: the rates down and
 //! up the vertical link, and the conductances and capacities of Darcy's law between cells in each layer, which
 //! `solve::spread` solves; the store books every move (`store::apply`).
@@ -57,12 +57,12 @@ pub(super) fn under(w: &mut World, s: &mut Scratch, liq: &[usize], tmin: f64, dt
     s.spread = spread;
     let links = a.len();
     // What the volumes carry: the share of the sender's mobile liquid, at its temperature, or of its store.
-    let deep: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.deep[k * n..(k + 1) * n].iter().any(|&m| m > 0.0)).collect();
+    let deep: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.store.amounts(Class::Deep)[k * n..(k + 1) * n].iter().any(|&m| m > 0.0)).collect();
     let pores = carried((&a, &b), &flux[links..], (liq, |q, i| mob.mol[q * n + i]), &mob.vol, |i, _, mol| {
         let t = t_now(w, s, i);
         liq.iter().zip(mol).map(|(&k, m)| m * (s.sp[k].cp * t + s.sp[k].lf)).sum()
     });
-    let in_stores = carried((&a, &b), &flux[..links], (&deep, |q, i| w.deep[deep[q] * n + i]), &held, |i, share, _| w.e_deep[i] * share);
+    let in_stores = carried((&a, &b), &flux[..links], (&deep, |q, i| w.store.amounts(Class::Deep)[deep[q] * n + i]), &held, |i, share, _| w.store.heat(Class::Deep)[i] * share);
     for (layer, (ks, c)) in [(DEEP, (&deep[..], &in_stores)), (PORES, (liq, &pores))] {
         let links = c.a.len();
         for l in 0..links {
@@ -193,14 +193,14 @@ fn carry(from: &[(u32, f64)], ks: &[usize], amount: impl Fn(usize, usize) -> f64
 fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[f64])) -> Vec<f64> {
     let (n, g, ns) = (w.mesh.cells().n(), w.cfg.gravity, w.chem.ns());
     let (mut got, mut rise) = (vec![0.0; n], Batch::falls(Class::Ground));
-    let holds = |i: usize| (0..ns).any(|k| w.deep[k * n + i] > 0.0);
+    let holds = |i: usize| (0..ns).any(|k| w.store.amounts(Class::Deep)[k * n + i] > 0.0);
     let ups: Vec<(u32, f64)> = share.iter().enumerate().filter(|p| *p.1 > 0.0 && holds(p.0)).map(|(i, &f)| (i as u32, f)).collect();
-    let ks: Vec<usize> = (0..ns).filter(|&k| ups.iter().any(|c| w.deep[k * n + c.0 as usize] > 0.0)).collect();
+    let ks: Vec<usize> = (0..ns).filter(|&k| ups.iter().any(|c| w.store.amounts(Class::Deep)[k * n + c.0 as usize] > 0.0)).collect();
     if ks.is_empty() {
         return got;
     }
     let (up, ks16): (Vec<u32>, Vec<u16>) = (ups.iter().map(|c| c.0).collect(), ks.iter().map(|&k| k as u16).collect());
-    let (mol, heat) = carry(&ups, &ks, |q, i| w.deep[ks[q] * n + i], |i, f, _| w.e_deep[i] * f);
+    let (mol, heat) = carry(&ups, &ks, |q, i| w.store.amounts(Class::Deep)[ks[q] * n + i], |i, f, _| w.store.heat(Class::Deep)[i] * f);
     for (l, &i) in up.iter().enumerate() {
         let (i, links) = (i as usize, up.len());
         let (lift, mut r) = (g * (s.head[i] - store_table(w, s, i, held[i])), 0.0);
@@ -220,7 +220,6 @@ fn come_up(w: &mut World, s: &mut Scratch, tmin: f64, (share, held): (&[f64], &[
 /// time / (`bed_porosity` x `hill`)) of what they hold comes up (`come_up`). Returns the volume each node got, m³,
 /// which runs off.
 pub(super) fn springs(w: &mut World, s: &mut Scratch, tmin: f64, slope: &[f64], dt: f64) -> Vec<f64> {
-    w.fit_deep();
     let p = w.cfg.phys;
     let share: Vec<f64> = slope.iter().map(|&q| one_minus_exp(p.bed_seep * q * dt / (p.bed_porosity * p.hill))).collect();
     come_up(w, s, tmin, (&share, &stores(w, s, tmin)))
@@ -232,7 +231,7 @@ fn stores(w: &World, s: &Scratch, tmin: f64) -> Vec<f64> {
     let n = w.mesh.cells().n();
     let mut vol = vec![0.0; n];
     for k in (0..w.chem.ns()).filter(|&k| s.sp[k].boil > tmin) {
-        vol.iter_mut().zip(&w.deep[k * n..(k + 1) * n]).for_each(|(v, &m)| *v += m * s.sp[k].v[1]);
+        vol.iter_mut().zip(&w.store.amounts(Class::Deep)[k * n..(k + 1) * n]).for_each(|(v, &m)| *v += m * s.sp[k].v[1]);
     }
     vol
 }

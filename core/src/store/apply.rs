@@ -14,24 +14,22 @@ const ELEMENT_ROUNDING: f64 = 1e-9;
 /// its heat), what the number held and all the changes of the call to it: more is a law that overdrew (checked in debug
 /// builds). A law's sums round at the size of what it moves, which is the size of what the node holds or less.
 const ROUNDING: f64 = 1e-9;
-/// The classes `apply` books, the first ones: those whose amounts and heat lie in arrays of `World` (a part's lie in
-/// the part, `Class::Part`, which Bond books).
+/// The classes `apply` books, the first ones: those whose amounts and heat lie in the arrays of the `Store` (a part's
+/// and a body's lie in it, `Class::Part`, `Class::Body`, which Bond and the bodies book).
 const BOOKED: usize = Class::Part as usize;
-/// The arrays `apply` books: `2 * class` holds the amounts of a class and `2 * class + 1` its heat, the order in which
-/// it counts what it rounds.
-const ARRAYS: usize = 2 * BOOKED;
 /// The first array of the nodes that give all they are asked and may hold less than nothing: the boundary nodes and
 /// the potential (`Class::Boundary`, `Class::Potential`).
 const BOUNDARY_ARRAYS: usize = 2 * Class::Boundary as usize;
 
-/// One number of the world: entry `at` of array `arr` (`ARRAYS`); an amount is at `k * len + index`.
+/// One number of the world: entry `at` of array `arr`, where array `2 * class` holds the amounts of a class and
+/// `2 * class + 1` its heat (the order in which `apply` counts what it rounds); an amount is at `k * len + index`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Slot {
     arr: usize,
     at: usize,
 }
 
-/// One column of a link flux (a substance, or the heat): from array `arr[0]` (`ARRAYS`) at the links' `a` ends to array
+/// One column of a link flux (a substance, or the heat): from array `arr[0]` (`Slot`) at the links' `a` ends to array
 /// `arr[1]` at their `b` ends, where the number of node `i` is at `at[end] + i`; `out[l]` leaves the `a` end of link `l`
 /// and `into[l]` enters its `b` end.
 struct Column<'x> {
@@ -91,7 +89,8 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
         f(Change::Column(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], a, b, out: x.heat, into }));
     }
     let mut one = |arr, at, d| f(Change::One(Slot { arr, at }, d));
-    // (A move of heat alone changes no amount: the nodes that hold none have no amounts to change.)
+    // (A move of heat alone changes no amount, and one of amounts alone no heat: a class that holds no amounts or no heat
+    // has none to change.)
     for m in moves {
         let k = m.k as usize;
         for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, m.heat - m.mol * held_more(chem, m.from.class, m.to.class, k))] {
@@ -99,7 +98,9 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
                 if mol != 0.0 {
                     one(2 * c, k * len[c] + i, mol);
                 }
-                one(2 * c + 1, i, heat);
+                if heat != 0.0 {
+                    one(2 * c + 1, i, heat);
+                }
             }
         }
     }
@@ -144,10 +145,9 @@ fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bo
 /// are asked. Panics on a link flux of the wrong shape, on a transform that does not keep its elements, and on a node
 /// beyond its class.
 pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[Transform]) {
-    w.fit_deep();
-    let World { chem, counts, mesh, ground, e_ground, air, e_air, deep, e_deep, e_bodies, boundary, e_boundary, potential, .. } = w;
+    let World { chem, counts, mesh, store, .. } = w;
     let n = mesh.cells().n();
-    let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, BOUNDARIES, 1] };
+    let cx = Ctx { chem, len: [n, mesh.level(AIR).n(), n, n, n, BOUNDARIES, 1] };
     for x in fluxes {
         let links = x.a.len();
         let heat = if x.alike(chem) { x.heat.is_empty() || x.heat.len() == links } else { x.heat.len() == links };
@@ -163,7 +163,8 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     // world got): their changes are summed apart and added once at the end, so the many small changes of a call keep
     // their size instead of rounding away against that sum.
     let (mut far_heat, mut far_lift) = ([0.0; BOUNDARIES], [0.0]);
-    let mut books: [&mut [f64]; ARRAYS] = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut [], &mut e_bodies[..], &mut boundary[..], &mut far_heat, &mut [], &mut far_lift];
+    let mut books: Vec<&mut [f64]> = store.amounts.iter_mut().zip(&mut store.heat).flat_map(|(a, h)| [&mut a[..], &mut h[..]]).collect();
+    (books[2 * Class::Boundary as usize + 1], books[2 * Class::Potential as usize + 1]) = (&mut far_heat, &mut far_lift);
     // Each number of a node that falls below zero on the way: those that end there are among them. A column books into
     // its one or two arrays.
     let mut low = Vec::new();
@@ -203,6 +204,7 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     for s in low {
         counts.rounded[s.arr % 2] -= std::mem::take(&mut books[s.arr][s.at]);
     }
-    e_boundary.iter_mut().zip(far_heat).for_each(|(v, d)| *v += d);
-    *potential += far_lift[0];
+    for (c, far) in [(Class::Boundary, &far_heat[..]), (Class::Potential, &far_lift[..])] {
+        store.heat[c as usize].iter_mut().zip(far).for_each(|(v, d)| *v += d);
+    }
 }

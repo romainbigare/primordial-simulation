@@ -16,7 +16,7 @@ pub use seeding::{seed, seed_with, Seeding, FIXERS, FIX_GENE};
 pub use soil::soil;
 
 use pcore::body::Body;
-use pcore::store::Boundary;
+use pcore::store::{Boundary, Class, Node};
 use pcore::{survey, World};
 
 /// Land under more standing liquid than this, m, gets no soil and no founder (a basin of standing liquid).
@@ -30,5 +30,5 @@ fn open_land(w: &World, i: usize) -> bool {
 
 /// Book a new body like an edit: its stores and its heat, from outside the world.
 fn book_body(w: &mut World, b: &Body) {
-    w.cross(Boundary::Outside, b.store.iter().copied().enumerate(), b.e);
+    w.cross((Boundary::Outside, Node::new(Class::Body, 0)), b.store.iter().copied().enumerate(), b.e);
 }

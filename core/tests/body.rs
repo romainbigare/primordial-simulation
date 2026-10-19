@@ -4,7 +4,7 @@
 
 use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::rng::{Purpose, Rng};
-use pcore::store::Boundary;
+use pcore::store::{Boundary, Class, Node};
 use pcore::units::{DAY, DAY_S};
 use pcore::{bond, brain, change, choose, World, AIR};
 use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
@@ -272,9 +272,9 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             assert!(moved(&mut w2, (i, 0), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass), days)));
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, &w0.cfg));
             rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * DAY);
-            let air = |k: usize| w0.air[k * na + j] - w2.air[k * na + j] + gas[k] - g[k];
+            let air = |k: usize| w0.store.amounts(Class::Air)[k * na + j] - w2.store.amounts(Class::Air)[k * na + j] + gas[k] - g[k];
             let wet = y.store[LIQUID] - x.store[LIQUID];
-            let x_air = w0.air[LIQUID * na + j] / (0..ns).map(|k| w0.air[k * na + j]).sum::<f64>();
+            let x_air = w0.store.amounts(Class::Air)[LIQUID * na + j] / (0..ns).map(|k| w0.store.amounts(Class::Air)[k * na + j]).sum::<f64>();
             let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * b.open_area(chem, &w0.cfg.phys, mass) * days);
             (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * chem.subs[LIQUID].lv
         };
@@ -888,7 +888,7 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
-    assert!(w.e_bodies.iter().sum::<f64>() > 0.0 && w.counts.clamped_heat == h0, "heat not given {:e} J", w.counts.clamped_heat - h0);
+    assert!(w.store.heat(Class::Bodies).iter().sum::<f64>() > 0.0 && w.counts.clamped_heat == h0, "heat not given {:e} J", w.counts.clamped_heat - h0);
     books.assert_kept(&w, 1e-9);
 }
 
@@ -1162,7 +1162,7 @@ fn start_wet() -> (World, usize) {
         pcore::step(&mut w);
     }
     let n = w.mesh.cells().n();
-    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3 && w.ground[DISSOLVED * n + i] > 1e5).expect("wet land");
+    let i = (0..n).find(|&i| w.life.env[i][2] > 0.0 && w.life.env[i][1] < 1e-3 && w.store.amounts(Class::Ground)[DISSOLVED * n + i] > 1e5).expect("wet land");
     (w, i)
 }
 
@@ -1206,7 +1206,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         let s = w.add(b, 1);
         let books = Books::now(&w);
         let na = w.mesh.level(AIR).n();
-        let air = |w: &World, k: usize| w.air[k * na..(k + 1) * na].iter().sum::<f64>();
+        let air = |w: &World, k: usize| w.store.amounts(Class::Air)[k * na..(k + 1) * na].iter().sum::<f64>();
         let before = (in_all(&w, mineral), air(&w, FIX_OUT));
         let mut up = 0.0;
         for _ in 0..60 {
@@ -1263,7 +1263,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let mut idle = plant.clone();
         for b in [&mut plant, &mut idle] {
             let a = b.store[mineral];
-            w.cross(Boundary::Outside, [(mineral, -a)], 0.0);
+            w.cross((Boundary::Outside, Node::new(Class::Body, 0)), [(mineral, -a)], 0.0);
             b.store[mineral] = 0.0;
         }
         idle.genes[lay.upt + mineral] = -0.1;
@@ -1291,7 +1291,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         // the dissolved mineral: the rock element in the ground, in all its forms, rises by what was over).
         let mut twin = w.clone();
         let more = 10.0 * lvl;
-        w.cross(Boundary::Outside, [(mineral, more)], more * w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem));
+        w.cross((Boundary::Outside, Node::new(Class::Body, sp)), [(mineral, more)], more * w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem));
         w.life.bodies[sp].e += more * w.chem.subs[mineral].cp * w.life.bodies[sp].temp(&w.chem);
         w.life.bodies[sp].store[mineral] += more;
         for _ in 0..40 {
@@ -1303,7 +1303,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let (held, lvl2) = (w.life.bodies[sp].store[mineral], level(&w, &w.life.bodies[sp]));
         // (Against its twin, the same world without the excess: the fixed mineral by itself, the rock element in all its
         // forms.)
-        let back = if q == 0 { w.ground[mineral * n + i] - twin.ground[mineral * n + i] } else { rock_outside_matter(&w, i) - rock_outside_matter(&twin, i) };
+        let back = if q == 0 { w.store.amounts(Class::Ground)[mineral * n + i] - twin.g(mineral, i) } else { rock_outside_matter(&w, i) - rock_outside_matter(&twin, i) };
         println!("with ten times its level more: it holds {held:.3e} against a level of {lvl2:.3e}, the rock {:.3e}; the ground gained {back:.3e} (the excess {more:.3e})", w.life.bodies[sp].store[ROCK]);
         assert!(held <= lvl2 * 1.05, "held {held} past the level {lvl2}");
         assert!(kept(&w, sp), "the rock past its level stayed in the body");
@@ -1391,7 +1391,7 @@ fn an_attacked_individual_loses_body_and_lives_on_weaker() {
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
     let before = seen(&w, v);
-    let (n, ground0, gained0) = (w.mesh.cells().n(), w.ground[RICH * w.mesh.cells().n() + i], kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER));
+    let (n, ground0, gained0) = (w.mesh.cells().n(), w.store.amounts(Class::Ground)[RICH * w.mesh.cells().n() + i], kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER));
     bite(&mut w, a, v);
     assert!(w.life.bodies[v].alive, "the victim died of a bite of {} kg", before.built);
     let after = seen(&w, v);
@@ -1408,7 +1408,7 @@ fn an_attacked_individual_loses_body_and_lives_on_weaker() {
     // Weaker: force goes by the body, so it fell by the share of the body torn.
     assert!((after.force / before.force - after.built / before.built).abs() < 1e-9, "force {} -> {} N", before.force, after.force);
     // What the taker did not take went to the ground as dead matter.
-    assert!(w.ground[RICH * n + i] > ground0, "no dead matter on the ground");
+    assert!(w.store.amounts(Class::Ground)[RICH * n + i] > ground0, "no dead matter on the ground");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -1507,7 +1507,7 @@ fn trampling_breaks_body_matter() {
     let books = Books::now(&w);
     let (b0, nb0, ns0) = (seen(&w, v), w.life.bodies[big].n(), w.life.bodies[small].n());
     let (bb0, bs0) = (seen(&w, big), seen(&w, small));
-    let (g0, e0) = (w.ground[MATTER * w.mesh.cells().n() + i], w.e_ground[i]);
+    let (g0, e0) = (w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i], w.store.heat(Class::Ground)[i]);
     let broken = moved(&mut w, (i, mv), |w| choose::wear(w, i, mv, 2_000.0));
     let (b1, bb1, bs1) = (seen(&w, v), seen(&w, big), seen(&w, small));
     let (sv, sb, ss) = (1.0 - b1.built / b0.built, 1.0 - bb1.built / bb0.built, 1.0 - bs1.built / bs0.built);
@@ -1520,7 +1520,7 @@ fn trampling_breaks_body_matter() {
     // The same energy over a node of members each lighter than the hit: members lost; of heavier: all hurt.
     assert!(w.life.bodies[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life.bodies[big].n());
     assert!(w.life.bodies[small].n() < ns0, "a node of light members kept all {ns0}");
-    assert!(w.ground[MATTER * w.mesh.cells().n() + i] > g0 && w.e_ground[i] > e0, "nothing went to the ground");
+    assert!(w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i] > g0 && w.store.heat(Class::Ground)[i] > e0, "nothing went to the ground");
     books.assert_kept(&w, 1e-9);
 }
 
