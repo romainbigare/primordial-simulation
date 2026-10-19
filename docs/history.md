@@ -821,6 +821,10 @@ Phase E review, round 1 (fixes):
   rounding leaves below zero is set to zero and counted in `Counters::rounded` (`body::add_store`), as `store::apply`
   does for the store's nodes; a debug build checks it is only rounding. The gas upkeep takes from the air is no longer
   cut to what the air holds (`apply` counts its rounding). The same world (golden; 64 x 64, seed 1, 8 years).
+- A body's upkeep books its gas through `store::Moves::gas` with the lift, as its breath, reactions, evaporation and
+  growth do: one path for every gas a body exchanges with the air. 64 x 64, seed 1, 30 years: within the noise (plants
+  10.705 to 10.713 log10 kg, plant life 4.24 to 4.63 yr, land 287.86 to 287.87 K, carbon gas 259.6 to 261.3 ppm,
+  energy drift 1.9e-14).
 
 **Phase J: the long physics step**
 

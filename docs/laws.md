@@ -281,8 +281,9 @@ changed since (one came, went, or changed its members or what others see of it: 
   air's heat. The difference is the heat of the store's potential node.
 - **Booked by the store.** A link from each ground node to its air node carries the gas and the
   heat that leaves the ground; the air receives that heat less the latent heat it holds of the gas
-  (`store::held`). The gas of bodies, parts and growth crosses as moves of their updates
-  (`store::Moves::gas`): the same lift, from the air's heat into the potential node.
+  (`store::held`). Every gas of bodies (their breath, reactions, upkeep, evaporation and growth) and
+  of parts crosses as moves of their updates (`store::Moves::gas`): the same lift, from the air's heat
+  into the potential node.
 - **Gases dissolve** (`exchange::dissolve`, at the start of the air's step, from the air as it is).
   A gas that cannot condense on the ground dissolves in the liquid there toward Henry's share (solubility × partial pressure × the liquid's amount),
   and comes out when the liquid warms, thins or freezes. It crosses the surface through the

@@ -5,7 +5,7 @@ use super::{Body, COPY_MASS, DENATURE, MAX_TAKE_SHARE, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::Melting;
 use crate::math::mean_decay;
-use crate::store::{held_more, Class, Node};
+use crate::store::Node;
 use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::{bond, World, AIR};
 
@@ -141,29 +141,17 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bo
     if left > 1e-9 * cost && !part {
         return cost;
     }
-    // (Gas is taken from the air with no heat of its own and given to it with its latent heat, which the body pays:
-    // the air holds it, `store::held_more`.)
-    let air = Node::air(w.mesh.up(b.cell as usize, 0, AIR));
-    let gas = |k: usize| w.chem.phase(k, t) == Phase::Gas;
-    let mut latent = 0.0;
+    // (Gas crosses with the air of its cell as all a body's gas does, `store::Moves::gas`: taken with no heat of its own
+    // and given with its latent heat, which the body pays, the air paying the lift.)
+    let (gas, lift, mut latent) = (|k: usize| w.chem.phase(k, t) == Phase::Gas, w.lift(b.cell as usize), 0.0);
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
-        for &(k, nu) in &w.chem.reactions[r].inputs {
-            let (k, lat) = (k as usize, w.chem.subs[k as usize].latent_gas());
-            let d = nu as f64 * ext[q];
+        for (&(k, nu), sign) in w.chem.reactions[r].inputs.iter().map(|x| (x, -1.0)).chain(w.chem.reactions[r].outputs.iter().map(|x| (x, 1.0))) {
+            let (k, d) = (k as usize, sign * nu as f64 * ext[q]);
             if gas(k) {
-                w.moves.take(&w.chem, air, k, d, 0.0);
-                latent -= d * lat;
-            } else {
-                super::add_store(&mut b.store[k], -d, &mut w.counts.rounded[0]);
-            }
-        }
-        for &(k, nu) in &w.chem.reactions[r].outputs {
-            let (k, d) = (k as usize, nu as f64 * ext[q]);
-            if gas(k) {
-                w.moves.give(&w.chem, air, k, d, d * held_more(&w.chem, Class::Body, Class::Air, k));
+                w.moves.gas(&w.chem, k, d, lift);
                 latent += d * w.chem.subs[k].latent_gas();
             } else {
-                b.store[k] += d;
+                super::add_store(&mut b.store[k], d, &mut w.counts.rounded[0]);
             }
         }
     }
