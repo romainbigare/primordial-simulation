@@ -6,10 +6,12 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::flow::scale_height;
 use pcore::rng::{Purpose, Rng};
 use pcore::space::square::Square;
-use pcore::space::Mesh;
+use pcore::space::{Level, Mesh};
 use pcore::store::{Boundary, Class, Links, Node, Store};
 use pcore::units::P_REF;
 use pcore::{Config, Counters, World, AIR};
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 
 /// Cell size, m, and ground cells per air node along a side.
 const CELL_M: f64 = 2000.0;
@@ -22,6 +24,9 @@ pub const LOOSE_M: f64 = 1.0;
 const T_EQUATOR: f64 = 302.0;
 const POLE_DROP: f64 = 45.0;
 const LAPSE: f64 = 0.0065;
+/// The least slope of ground raised to fill a closed basin, m per m: liquid still runs across the filled floor
+/// (Planchon and Darboux 2001).
+const DRAIN_SLOPE: f64 = 1e-3;
 /// Low ground starts this many K above the melting point of its liquid, so it is molten.
 const MOLTEN_MARGIN: f64 = 2.0;
 
@@ -84,6 +89,71 @@ pub fn heights(seed: u64, w: usize, h: usize) -> Vec<f64> {
     out
 }
 
+/// A cell waiting in the flood of `drain`, by its height: the lowest first, then the lowest index.
+struct Low(f64, usize);
+
+impl Ord for Low {
+    fn cmp(&self, o: &Self) -> Ordering {
+        o.0.total_cmp(&self.0).then(o.1.cmp(&self.1))
+    }
+}
+impl PartialOrd for Low {
+    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+        Some(self.cmp(o))
+    }
+}
+impl PartialEq for Low {
+    fn eq(&self, o: &Self) -> bool {
+        self.cmp(o) == Ordering::Equal
+    }
+}
+impl Eq for Low {}
+
+/// The outlet of all the land: the largest body of cells below 0 m that touch (the first found on a tie).
+fn outlet(cells: &Level, z: &[f64]) -> Vec<bool> {
+    let mut body = vec![usize::MAX; z.len()];
+    let (mut best, mut most) = (usize::MAX, 0);
+    for start in 0..z.len() {
+        if z[start] >= 0.0 || body[start] != usize::MAX {
+            continue;
+        }
+        let (mut todo, mut size) = (vec![start], 0);
+        body[start] = start;
+        while let Some(i) = todo.pop() {
+            size += 1;
+            for &j in cells.around(i).1 {
+                if z[j as usize] < 0.0 && body[j as usize] == usize::MAX {
+                    body[j as usize] = start;
+                    todo.push(j as usize);
+                }
+            }
+        }
+        if size > most {
+            (best, most) = (start, size);
+        }
+    }
+    body.iter().map(|&b| b == best).collect()
+}
+
+/// Give every cell of `cells` a way down to the outlet (`outlet`): a priority flood from it, the lowest cell reached
+/// first, raises each new neighbour to at least its height plus `DRAIN_SLOPE` times their distance (Barnes, Lehman and
+/// Mulla 2014). Noise has closed basins that no liquid ever cut; real wet land drains.
+fn drain(cells: &Level, z: &mut [f64]) {
+    let mut reached = outlet(cells, z);
+    let mut flood: BinaryHeap<Low> = (0..z.len()).filter(|&i| reached[i]).map(|i| Low(z[i], i)).collect();
+    while let Some(Low(h, i)) = flood.pop() {
+        let (links, near) = cells.around(i);
+        for (&l, &j) in links.iter().zip(near) {
+            let j = j as usize;
+            if !reached[j] {
+                reached[j] = true;
+                z[j] = z[j].max(h + DRAIN_SLOPE * cells.dist()[l as usize]);
+                flood.push(Low(z[j], j));
+            }
+        }
+    }
+}
+
 /// Air over a m² at 0 m, mol: the reference pressure over the weight of a mol of the starting air (`Init::air`).
 pub fn air_column(chem: &Chemistry, init: &Init, gravity: f64) -> f64 {
     let atot: f64 = init.air.iter().map(|p| p.1).sum();
@@ -118,15 +188,15 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let map = Square { w, h, side: CELL_M };
     let mesh = World::mesh_of(&map, AIR_SCALE, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
-    let area = map.area();
-    let hz = heights(seed, w, h);
+    let mut hz = heights(seed, w, h);
+    drain(mesh.cells(), &mut hz);
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);
 
     for i in 0..n {
         let (x, y) = map.xy(i);
-        let z = hz[i];
+        let (z, area) = (hz[i], mesh.cells().area()[i]);
         // Patchy deposits, more common in high ground.
         let mut fr: Vec<(usize, f64)> = init.bed.clone();
         for (j, &(k, f)) in init.deposits.iter().enumerate() {
@@ -149,13 +219,10 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         }
     }
 
-    // Air: a column per air node, thinner over high ground.
-    let mut air = vec![0.0; ns * na];
-    let mut zmean = vec![0.0; na];
-    let mut cnt = vec![0.0; na];
+    // Air: a column per air node, thinner over high ground (its cells' mean height, by area).
+    let (mut air, mut zmean, air_area) = (vec![0.0; ns * na], vec![0.0; na], mesh.level(AIR).area());
     for i in 0..n {
-        zmean[mesh.up(i, 0, AIR)] += hz[i].max(0.0);
-        cnt[mesh.up(i, 0, AIR)] += 1.0;
+        zmean[mesh.up(i, 0, AIR)] += hz[i].max(0.0) * mesh.cells().area()[i];
     }
     // The column over high ground is thinner by exp(-z / H), H the scale height of the air at the node's starting
     // temperature (`flow::scale_height`, as Flow's law takes it).
@@ -163,10 +230,10 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
     let m_air: f64 = init.air.iter().map(|&(k, f)| f * chem.subs[k].molar_mass).sum();
     let mut t_air = vec![0.0; na];
     for j in 0..na {
-        zmean[j] /= cnt[j];
+        zmean[j] /= air_area[j];
         let y = (j / w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
         t_air[j] = t_start((&map, &mesh), y.min(h - 1), zmean[j]);
-        let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * area * cnt[j];
+        let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * air_area[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;
         }

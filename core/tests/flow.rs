@@ -476,14 +476,26 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
     assert!(dry.g(MINERAL, top) > 0.99e6, "the mineral moved on dry ground: {}", dry.g(MINERAL, top));
 }
 
+/// How far below its lowest neighbour the pit of the evaporation test is dug, m.
+const PIT_M: f64 = 10.0;
+
 /// The dissolved mineral stays where it is when its liquid evaporates (it is no gas): a thin film on warm ground in
-/// dry air, in a pit of dry land (lower than all its neighbours, so nothing runs off it).
+/// dry air, in a pit dug in dry land (lower than all its neighbours, so nothing runs off it).
 #[test]
 fn a_dissolved_mineral_stays_when_its_liquid_evaporates() {
     let mut w = worldgen::new_world(3, 16, 16);
-    let (n, na, area) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.map.area());
-    let pit = |w: &World, i: usize| pcore::space::square::DIRS.iter().all(|&d| w.map.step(i, d).is_some_and(|j| w.surface_z(j) > w.surface_z(i)));
-    let i = (0..n).find(|&i| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0 && pit(&w, i)).expect("a pit of dry land");
+    let (n, na, ns) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns());
+    let near = |w: &World, i: usize| pcore::space::square::DIRS.iter().map(|&d| w.map.step(i, d).map(|j| w.surface_z(j))).collect::<Option<Vec<f64>>>();
+    let dry = |w: &World, i: usize| w.store.amounts(Class::Ground)[LIQUID * n + i] == 0.0 && w.surface_z(i) > 20.0;
+    let i = (0..n).find(|&i| dry(&w, i) && near(&w, i).is_some_and(|z| z.iter().all(|&z| z > 20.0))).expect("dry land among dry land");
+    let (area, lowest) = (w.mesh.cells().area()[i], near(&w, i).unwrap().into_iter().fold(f64::INFINITY, f64::min));
+    let bed: f64 = (0..ns).map(|k| w.store.amounts(Class::Bed)[k * n + i] * w.chem.molar_volume(k, Phase::Solid)).sum::<f64>() / area;
+    let keep = 1.0 - (w.surface_z(i) - lowest + PIT_M) / bed;
+    for k in 0..ns {
+        let mol = keep * w.store.amounts(Class::Bed)[k * n + i];
+        set_amount(&mut w, Node::new(Class::Bed, i), k, mol);
+    }
+    assert!(near(&w, i).unwrap().iter().all(|&z| z > w.surface_z(i)), "a pit");
     // 5 cm of the liquid.
     let film = 0.05 * area / w.chem.molar_volume(LIQUID, Phase::Liquid);
     set_amount(&mut w, Node::ground(i), LIQUID, film);

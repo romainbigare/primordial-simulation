@@ -776,7 +776,9 @@ it (`worldgen::schedule::Schedule`, carried by a snapshot, so a resumed run plac
 read a kind.
 
 - **Terrain** (`worldgen::terrain`): an island with mountains, a metre of loose ground, the sea's salt at balance with
-  the starting air (2.6), which thins with height by its scale height.
+  the starting air (2.6), which thins with height by its scale height. Every land cell drains to the sea from the
+  start (`drain`): a priority flood from the largest body of cells below 0 m raises each closed basin to its outlet,
+  with a slope of 1 m per km across the filled floor (`DRAIN_SLOPE`; Planchon and Darboux 2001, Barnes et al. 2014).
 - **Life** starts at year 2 (`--life-year`): light-eaters first, eaters 20 years later (`worldgen::life::KINDS`);
   `--roster` places ten kinds (`worldgen::life::ROSTER`) of several sizes and diets, each at its own year. Founders go
   on land under no more than half a metre of standing liquid.

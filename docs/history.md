@@ -970,6 +970,16 @@ Phase E review, round 1 (fixes):
 - K4, time per process: `series.csv` gets `ms_flow`, `ms_change`, `ms_bodies`, `ms_parts` and `ms_tape` (ms a year),
   measured in the CLI and handed to the recorder; the viewer groups them in "Time per process". The world is unchanged.
 
+**Phase G: the globe**
+
+- The start drains (with G1): every land cell has a way down to the sea from the start (`worldgen::terrain::drain`, a
+  priority flood from the largest body below 0 m, 1 m per km across a filled floor); the start's air column per node
+  from the mesh's areas. 64 x 64, seed 1, with life: closed basins 25 (138 cells, room for 122 km³, the deepest 931 m)
+  to none (seeds 2 and 3: 16 and 19 to none); liquid on land 8.3 / 16.0 / 27.3 / 40.7 km³ at years 5 / 10 / 20 / 40
+  to 2.9 / 3.2 / 2.6 / 2.2 (level from year 5); river cells at year 40 830 to 949; rain on land 1.81e-3 to 1.73e-3
+  mol/m²/s. Key numbers (3 seeds) all in range: land 287.94 K, swing 12.25 K, rain 1.76e-3, absorbing gas 246 ppm,
+  river cells 878, land worn 0.082 mm/yr, light-eaters 10.66, eaters 4.30, lives 2.58 and 4.04 yr. Golden re-pinned.
+
 **Owner's decisions after Phase A**
 
 - A4 (a), the start: the light-eater founders' neutral brains keep the hand-set bias -4 of taking from a body
