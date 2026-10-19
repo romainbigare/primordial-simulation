@@ -875,6 +875,15 @@ Phase E review, round 1 (fixes):
   0.83 against 0.87 with this). 64 x 64, seed 1, years 31 to 35: plant members 4.12e10 to 4.08e10, plant mass
   5.21e10 to 5.31e10 kg, plant life 4.60 to 4.77 yr, eaters 477 to 271 members, eater life 4.3 to 4.0 yr, carbon gas
   252 to 250 ppm. Golden re-pinned.
+- F7 follow-up, members pass a level by the steady state of a stage (`math::Pass`, for maturing): below the copy
+  mass the young's log10 bodies have a density e^(-k y) over a width, fitted to their mean and variance (the steady
+  state of a stage entered at one size, with growth and deaths at one rate each), not a normal cut at the copy mass.
+  Members spread evenly (a stage with no deaths) mature exactly as the evenly spread do (the test now says so); a
+  spread wider than the family holds is an exponential tail of the same mean (the deepest normal cut dropped the
+  rest's mean by about a decade). The normal-cut code goes (`copy::young`'s `density`, `above`, `cut`,
+  `fit`, `math::ln_upper_tail`). 64 x 64, seed 1, years 31 to 35: plant members 4.08e10 to 4.22e10, plant mass
+  5.31e10 to 5.16e10 kg, plant life 4.77 to 4.73 yr, eaters 271 to 320 members, eater life 4.0 to 4.4 yr, carbon gas
+  250 to 253 ppm. Golden re-pinned.
 
 **Phase J: the long physics step**
 

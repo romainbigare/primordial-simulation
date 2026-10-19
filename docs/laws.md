@@ -485,9 +485,13 @@ individuals.
 - **Young that grow up** (`copy/young.rs`). A kind in a cell lives as an adult node and a young node joined by a link
   (`Body::link`): births flow into the young node, maturing members into the adult one. A node keeps the mean and the
   variance of its members' log10 bodies (`Body::size_lag`, `Body::size_spread`); newborns come in at one size, so
-  those who joined earlier are larger. A young node's members grow alike in proportion, their sizes a normal cut at
-  the copy mass, and those the growth pushed past it move into the adult node with the share of the body their slice
-  holds (`copy::mature`): the flux across a size of a size-structured population (McKendrick 1926; von Foerster 1959).
+  those who joined earlier are larger. A young node's members grow alike in proportion. Below the copy mass
+  their log10 bodies have a density e^(−k y), y the distance below it, over a width, fitted to their mean and variance
+  (`math::Pass`): the steady state of a stage entered at one size, with growth at one pace and deaths at one rate, k the
+  death rate over the pace. It is memoryless: those who stay keep k, those who leave keep the mean and variance of their
+  slice. A spread no width holds is an exponential tail of the same mean. Those the growth pushed past the copy mass
+  move into the adult node with the share of the body their slice holds (`copy::mature`): the flux across a size of a
+  size-structured population (McKendrick 1926; von Foerster 1959).
 - **Merging** (`nodes::crowd`, monthly). Alike nodes of one stage in a cell merge (the young mature into their adult
   node instead). Past `crowd` nodes a cell merges its most alike pairs while they are alike; past twice `crowd`,
   however unlike (a safeguard).

@@ -336,31 +336,19 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// The integral of z^`p` times a standard normal's density above `z`, by Simpson's rule (`n` intervals out to 12).
-fn tail(z: f64, p: i32) -> f64 {
-    let (n, top) = (20_000, 12.0);
-    let hh = (top - z) / n as f64;
-    let f = |x: f64| x.powi(p) * (-0.5 * x * x).exp() / (2.0 * std::f64::consts::PI).sqrt();
-    (0..=n).map(|j| f(z + j as f64 * hh) * if j == 0 || j == n { 1.0 } else if j % 2 == 1 { 4.0 } else { 2.0 }).sum::<f64>() * hh / 3.0
-}
-
-/// Young members mature at the rate their growth gives (`copy::mature`): a young node of 1,000 members of mean body
-/// 0.6 of the copy mass, whose log10 bodies are a normal of sd 0.2 about log10 of 0.6 of the copy mass cut at the copy
-/// mass, beside its adult node. Without growth none matures. When every member grows by 0.1 decades, those who passed
-/// the copy mass join the adult node: the top 0.1 decades of the cut normal, holding the share of the body a lognormal
-/// puts there. Members, stores and heat are kept; the adult node stays mature and the young one is still young.
+/// Young members mature at the rate their growth gives (`copy::mature`): a young node of 1,000 members whose log10
+/// bodies lie evenly over the decade below the copy mass (the steady state of a stage entered at one size, with growth
+/// at one pace and no deaths), beside its adult node. Without growth none matures. When every member grows by 0.1
+/// decades, the top tenth of them join the adult node, holding the share (1 - 10^-0.1) / (1 - 10^-1) of the body (the
+/// bodies 10^x over the decade). Members, stores and heat are kept; the adult node stays mature and the young one is
+/// still young.
 #[test]
 fn young_members_mature_at_the_rate_their_growth_gives() {
     let (mut w, sa, mut y) = young_beside_adult();
-    let (mm, copy_kg) = (w.chem.subs[MATTER].molar_mass, 10f64);
-    // Their log10 bodies: the normal cut at the copy mass, `cut` its standard units, and its mean and variance.
-    let (sd, top) = (0.2f64, copy_kg.log10());
-    let cut = (top - (0.6 * copy_kg).log10()) / sd;
-    let below = tail(-cut, 0);
-    let (z1, z2) = (-tail(-cut, 1) / below, tail(-cut, 2) / below);
-    let mean = top - sd * cut + sd * z1;
-    y.size_spread = (sd * sd * (z2 - z1 * z1)) as f32;
-    y.size_lag = ((y.built(&w.chem) / y.count).log10() - mean) as f32;
+    let mm = w.chem.subs[MATTER].molar_mass;
+    let top = 10f64.log10();
+    y.size_spread = 1.0 / 12.0;
+    y.size_lag = ((y.built(&w.chem) / y.count).log10() - (top - 0.5)) as f32;
     let (sy, mut y) = out(&mut w, y);
     assert!(!y.adult(&w.chem) && w.life.bodies[sa].adult(&w.chem));
     let x0 = y.member_body(&w.chem);
@@ -373,10 +361,7 @@ fn young_members_mature_at_the_rate_their_growth_gives() {
     let (books, before) = (Books::now(&w), held(&w));
     let mut y = std::mem::take(&mut w.life.bodies[sy]);
     let (n0, matter0) = (y.count, y.store[MATTER]);
-    // After the growth the copy mass is 0.1 decades below the top of the cut normal.
-    let (lo, k) = (cut - 0.1 / sd, sd * std::f64::consts::LN_10);
-    let members = (tail(lo, 0) - tail(cut, 0)) / below;
-    let body = (tail(lo - k, 0) - tail(cut - k, 0)) / (1.0 - tail(cut - k, 0));
+    let (members, body) = (0.1, (1.0 - 10f64.powf(-0.1)) / 0.9);
     let adult0 = w.life.bodies[sa].count;
     assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives));
     let moved = n0 - y.count;
@@ -408,9 +393,10 @@ fn young_beside_adult() -> (World, usize, Body) {
 }
 
 /// Any spread of a young node's sizes matures a share of its members and of its body between 0 and 1
-/// (`copy::mature`), also one wider than a normal cut at the copy mass can hold: two cohorts far apart, as members who
-/// starved for years and newborns make (sd 2 decades about a mean 1 decade below the copy mass). Its sizes stay finite,
-/// and members and books are kept.
+/// (`copy::mature`), also one wider than the steady state of a stage can hold (`math::Pass`: then an exponential tail
+/// below the copy mass, of their mean): two cohorts far apart, as members who starved for years and newborns make (sd 2
+/// decades about a mean 1 decade below the copy mass). The rest keep a mean below the copy mass, and members and books
+/// are kept.
 #[test]
 fn any_spread_of_sizes_matures_a_share_of_the_young() {
     let (mut w, sa, y) = young_beside_adult();
@@ -430,7 +416,7 @@ fn any_spread_of_sizes_matures_a_share_of_the_young() {
     let (m, v) = y.size_moments(&w.chem);
     println!("matured {moved:.3} of {n0} members, {body:.4} of the body");
     assert!(moved > 0.0 && moved < n0 && body > 0.0 && body < 1.0, "matured {moved} members, {body} of the body");
-    assert!(m.is_finite() && v.is_finite() && y.e.is_finite(), "the rest: mean {m}, variance {v}, heat {}", y.e);
+    assert!(m.is_finite() && v.is_finite() && y.e.is_finite() && (m as f64) < 10f64.log10(), "the rest: mean {m}, variance {v}, heat {}", y.e);
     assert!((w.life.bodies[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life.bodies[sa].count - adult0);
     w.life.bodies[sy] = y;
     books.assert_kept(&w, 1e-9);

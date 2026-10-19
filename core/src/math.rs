@@ -1,4 +1,4 @@
-//! Small functions of decay the laws share, the tail of a normal, and an exact sum.
+//! Small functions of decay the laws share, members passing a level (`Pass`), and an exact sum.
 
 /// 1 - exp(-x), exact for small `x`: the share a first-order decay over `x` time constants takes.
 #[inline]
@@ -18,17 +18,77 @@ pub(crate) fn mean_decay(x: f64) -> f64 {
     if x < 1e-9 { 1.0 } else { one_minus_exp(x) / x }
 }
 
-/// The Chebyshev fit of erfc (Press et al. 1992, `erfcc`): erfc(x) = t exp(-x² + P(t)), t = 1 / (1 + x / 2), x ≥ 0;
-/// fractional error under 1.2e-7.
-const ERFC: [f64; 10] = [-1.265_512_23, 1.000_023_68, 0.374_091_96, 0.096_784_18, -0.186_288_06, 0.278_868_07, -1.135_203_98, 1.488_515_87, -0.822_152_23, 0.170_872_77];
+/// Below this steepness times width the shape of `Pass` takes its series (from the Bernoulli numbers), where the
+/// closed forms cancel; the next terms are under 1e-16 there.
+const SERIES: f64 = 0.1;
+/// The steepest shape `Pass` fits, its steepness times its width: past it all but e^-700 of the members lie at one end.
+const STEEPEST: f64 = 700.0;
+/// Halvings of the steepness in `Pass::new`: to 1e-15 of it.
+const FIT_STEPS: usize = 60;
 
-/// ln of the share of a standard normal above `z`, erfc(z / sqrt 2) / 2 (`ERFC`): finite far out, where the share
-/// underflows.
-pub(crate) fn ln_upper_tail(z: f64) -> f64 {
-    let x = (z / std::f64::consts::SQRT_2).abs();
-    let t = 1.0 / (1.0 + 0.5 * x);
-    let ln_half_erfc = (0.5 * t).ln() - x * x + ERFC.iter().rev().fold(0.0, |p, &c| p * t + c);
-    if z >= 0.0 { ln_half_erfc } else { (-ln_half_erfc.exp()).ln_1p() }
+/// The mean and the variance, in units of the width and of its square, of a density proportional to e^(-u y) on
+/// [0, 1]: 1/u - 1/(e^u - 1) and 1/u² - 1/(4 sinh²(u/2)) (1/2 and 1/12 at u = 0, the uniform).
+fn shape(u: f64) -> (f64, f64) {
+    let u2 = u * u;
+    if u.abs() < SERIES {
+        return (0.5 - u / 12.0 + u * u2 / 720.0 - u * u2 * u2 / 30240.0, 1.0 / 12.0 - u2 / 240.0 + u2 * u2 / 6048.0 - u2 * u2 * u2 / 172_800.0);
+    }
+    let h = (0.5 * u).sinh();
+    (1.0 / u - 1.0 / u.exp_m1(), 1.0 / u2 - 0.25 / (h * h))
+}
+
+/// Members whose values (log10 of their bodies, their wear) lie below a level `top` and all rise alike, by `d`: those who
+/// pass the level are the top `d` of them. Below the level their values have a density proportional to e^(-k y), y the
+/// distance below it, over a width: the steady state of a stage that members enter at one value and leave at the level,
+/// rising at one pace and dying at one rate, is exactly this, k their death rate over their pace (McKendrick 1926; von
+/// Foerster 1959), steeper the more die on the way. It is fitted to the members' mean and variance: from rising towards
+/// the level (k above 0), through even (k 0), to falling. It is memoryless, so those left below after a rise are again
+/// of it, with the same k and the width less the rise. Members so spread that no width holds them (their standard
+/// deviation at least their mean distance below the level) are an exponential tail below it, of their mean; members at
+/// or above the level all pass.
+pub(crate) struct Pass { top: f64, d: f64, k: f64, width: f64 }
+
+impl Pass {
+    /// Members of mean `mean` and variance `var` below the level `top` rise by `d`. None if they are of one value or do
+    /// not rise: they pass all together or none.
+    pub(crate) fn new(mean: f64, var: f64, top: f64, d: f64) -> Option<Pass> {
+        let (y, sd) = (top - mean, var.sqrt());
+        if sd.is_nan() || sd <= 0.0 || d <= 0.0 {
+            return None;
+        }
+        // Its mean distance below the level in standard deviations falls as the shape steepens towards the level.
+        let (depth, r) = (|u: f64| shape(u).0 / shape(u).1.sqrt(), y / sd);
+        if y <= 0.0 || r <= depth(STEEPEST) {
+            return Some(Pass { top, d, k: 1.0 / y.max(f64::MIN_POSITIVE), width: if y > 0.0 { f64::INFINITY } else { 0.0 } });
+        }
+        let (mut lo, mut hi) = (-STEEPEST, STEEPEST);
+        for _ in 0..FIT_STEPS {
+            let mid = 0.5 * (lo + hi);
+            if depth(mid) > r { lo = mid } else { hi = mid }
+        }
+        let u = 0.5 * (lo + hi);
+        let width = y / shape(u).0;
+        Some(Pass { top, d, k: u / width, width })
+    }
+    /// The share of the members who passed the level and the share left below it; with `extra` ln 10, the shares of
+    /// what members hold in proportion to 10^value (their bodies, for log10 bodies).
+    pub(crate) fn shares(&self, extra: f64) -> (f64, f64) {
+        let (k, d, width) = (self.k + extra, self.d, self.width);
+        if d >= width {
+            return (1.0, 0.0);
+        }
+        // (The integral of e^(-k y) over [0, x].)
+        let weight = |k: f64, x: f64| if k == 0.0 { x } else { -(-k * x).exp_m1() / k };
+        let all = weight(k, width);
+        (weight(k, d) / all, (-k * d).exp() * weight(k, width - d) / all)
+    }
+    /// The mean and the variance of the values of those who passed, and of those left below the level, after the rise.
+    pub(crate) fn moments(&self) -> ((f64, f64), (f64, f64)) {
+        let k = self.k;
+        let of = |w: f64| if w.is_infinite() { (1.0 / k, 1.0 / (k * k)) } else { (w * shape(k * w).0, w * w * shape(k * w).1) };
+        let (passed, left) = (of(self.d.min(self.width)), of((self.width - self.d).max(0.0)));
+        ((self.top + self.d - passed.0, passed.1), (self.top - left.0, left.1))
+    }
 }
 
 /// Veltkamp's constant, 2^27 + 1: it splits a number into two halves of 26 bits (`add_times`).
