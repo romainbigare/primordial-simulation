@@ -1235,6 +1235,9 @@ Phase E review, round 1 (fixes):
   chances, `starved` as 1 - x^a); the keep of a giver and of what a body puts out is one tuned number, `keep_min` (2;
   the tuned budget 49 to 50); what a body puts into a part is what it can give (`Body::spare`). 64 x 64, seed 1,
   years 21 to 30: land 289.1 K (289.1), plant members 2.81e10 (2.83e10), eaters at year 30 214 (219); golden re-pinned.
+- Review round 2, finding 13: selection's skips (`select::read`) and `sample_every` 2 stay (decision 4): the samples
+  cost 3.5% of a living year at 64 x 64; at every update 6.7%, without the skips 8.3%, both above the 3% at which
+  they would go. No code changed.
 
 **Owner's decisions after Phase A**
 
