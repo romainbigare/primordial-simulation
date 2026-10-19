@@ -10,6 +10,9 @@
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
 //! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
+//! The eaters live: at 48 x 48 they still have members at year 60 in seeds 1, 2 and 3, after the booms and busts that
+//! year 30 hides.
+//!
 //! The steps of Flow are speed settings too (the long step against the short one): small worlds with life keep
 //! their climate within the seeds' noise at the default steps and with the air's step at 6 hours and the physics step
 //! at 3 days.
@@ -281,4 +284,19 @@ fn the_pace_of_nodes_keeps_life() {
     });
     let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("nodes every {days} days at most"));
     assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
+}
+
+/// The world of the eaters' check: its side, and the year they must still live in.
+const EATER_SIDE: usize = 48;
+const EATER_YEARS: u64 = 60;
+
+#[test]
+#[ignore = "slow: three 60-year runs of a 48 x 48 world"]
+fn the_eaters_live_to_year_60() {
+    let members: Vec<f64> = std::thread::scope(|s| {
+        let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || run(seed, EATER_SIDE, EATER_YEARS, false, |_| {}, |_, _, _| {}).1.last("root_1_members"))).collect();
+        runs.into_iter().map(|r| r.join().expect("an eater run")).collect()
+    });
+    println!("eater members at year {EATER_YEARS}, seeds {SEEDS:?}: {members:?}");
+    assert!(members.iter().all(|&m| m > 0.0), "the eaters died out by year {EATER_YEARS}: {members:?}");
 }

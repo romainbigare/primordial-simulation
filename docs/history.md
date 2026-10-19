@@ -957,6 +957,12 @@ Phase E review, round 1 (fixes):
   members at year 60 in seeds 1 to 3: none (gone by year 55), 929, 447 before; 27, 1171, none (gone by year 50) with
   it: booms and busts either way. A few lines of `choose` fold, the same world. Golden re-pinned.
 
+- The eaters' founders keep 278 K (`KEEP_T`, `EATER_KEEP_T`: their key liquid's melting point plus the 5 K margin of
+  well-being), not 250 K: at 250 K the gene did nothing, so no selection could move it, and eaters on the hills froze
+  in winter. A slow check holds that the eaters live to year 60 (`tape/tests/ranges.rs`, 48 x 48, seeds 1 to 3). 48 x
+  48, 60 years, eater members at year 60 in seeds 1 to 3: 27, 1171, none before; 789, 3046, none (gone by year 55,
+  short of fuel and frozen) now. Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

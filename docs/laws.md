@@ -826,5 +826,6 @@ read a kind.
   mutation (`--spray`).
 - **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`worldgen::life::FIXERS`, `FIX_GENE`;
   `--fixers`).
-- **Founder genes**: some are measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); `HEAT`, `KEEP_T`,
-  `COOL_T`, `CHILD` and `ALLOC` are the same for every kind.
+- **Founder genes**: some are measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); `HEAT`, `COOL_T`,
+  `CHILD` and `ALLOC` are the same for every kind; `KEEP_T` is off for light-eaters (250 K) and, for eaters, 5 K above
+  their key liquid's melting point (`EATER_KEEP_T`).

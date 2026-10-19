@@ -1,6 +1,6 @@
 //! The table of starting kinds: the genes each starts with, and where, when and how many are placed.
 
-use pcore::body::{self, COPY_MASS, DISPERSE, GAS, HIDDEN, INTERVAL, LEAF, LEARN, LIQ, MEMORY, NSCALAR, REPAIR, SEEN, SIGHT, STRENGTH};
+use pcore::body::{self, COPY_MASS, DISPERSE, GAS, HIDDEN, INTERVAL, KEEP_T, LEAF, LEARN, LIQ, MEMORY, NSCALAR, REPAIR, SEEN, SIGHT, STRENGTH};
 use pcore::brain;
 
 /// One row of the table of starting kinds: the genes it starts with and where and how many are placed.
@@ -61,13 +61,18 @@ const LIGHT: Kind = Kind {
     hand: None,
 };
 
-/// Eaters: fast burning, take the energy-rich solid from bodies and the ground, short intervals, learning on;
-/// individuals, two in some cells where bodies already are.
+/// The temperature the eaters' founders keep their bodies at, K: the melting point of chemistry 0's key liquid (273 K)
+/// plus the margin within which a body's well-being falls for nearness to freezing (5 K, `body::PHASE_MARGIN`), so
+/// their liquid does not freeze in a winter on the hills; light-eaters keep none (`BASE`).
+const EATER_KEEP_T: f32 = 278.0;
+
+/// Eaters: fast burning, take the energy-rich solid from bodies and the ground, short intervals, learning on, keep
+/// warm (`EATER_KEEP_T`); individuals, two in some cells where bodies already are.
 const EATER: Kind = Kind {
     name: "eaters",
     year: 20,
     anywhere: false,
-    scalars: with(BASE, &[(GAS, 2.304), (LIQ, -0.5), (LEAF, -2.884), (STRENGTH, 0.6), (COPY_MASS, 1.645), (INTERVAL, 1.0), (LEARN, -1.0), (DISPERSE, 0.1), (REPAIR, -0.4)]),
+    scalars: with(BASE, &[(GAS, 2.304), (LIQ, -0.5), (LEAF, -2.884), (STRENGTH, 0.6), (COPY_MASS, 1.645), (INTERVAL, 1.0), (LEARN, -1.0), (DISPERSE, 0.1), (REPAIR, -0.4), (KEEP_T, EATER_KEEP_T)]),
     cat: [-1.0, 2.6],
     upt: [0.3, 1.0],
     cover: 0.0,
