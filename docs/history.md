@@ -852,6 +852,11 @@ Phase E review, round 1 (fixes):
   mark per body, `Body::rained`, as for light), not the yearly mean rain times the span: the seasons reach the leaves.
 - `flow_days`, `crowd` and `MIN_INTERVAL` are marked speed in `docs/numbers.md`, not tuned (`alike` stays tuned: it
   says who mixes); the speed rows lose their run results; `TUNED_BUDGET` 57 to 52 (the count was 55).
+- Phase E in all, from the plan's rows: E1 made a body update about 15% cheaper (64 x 64, seed 1, year 20: 42.5 to
+  35.5 µs); E10 removed about 226 code lines and 3 tuned numbers; E5 kept a body update's cost and added 30 code lines
+  to `core` (the move buffer and its read cache).
+- The cost model (plan 5.7) after E1: a cell 290 µs and a body node 650 µs per simulated year; after the review's
+  10-day steps: a cell about 0.48 ms, a body node about 360 µs (64 x 64, with life).
 
 **Phase J: the long physics step**
 
