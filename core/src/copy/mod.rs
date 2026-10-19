@@ -27,6 +27,11 @@ use crate::rng::{Purpose, Rng};
 use crate::World;
 use mix::{mix, mix_rows, partner};
 
+/// The brood a node holds besides what makes children, in children per member. Its members each fill their own brood and
+/// make a child when it covers one, so their broods lie evenly between none and one child (the renewal of each one's
+/// brood): half a child each on average. A member who dies loses the brood it held.
+pub const BROOD_HELD: f64 = 0.5;
+
 /// What the children of one `copy` share: each one's body, kg, its matter, mol (its body is that over 1 -
 /// `WET_TISSUE`), and its provisions, mol of each store (none of the matter: `provisions`); whether the parent is a
 /// node; whether they join no node (`nodes::may_be_node`); the partner; and the parent's id.
@@ -56,12 +61,13 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     }
     let mm = chem.subs[mi].molar_mass;
     b.brood = b.brooded(chem);
-    // A child's body (kg) and its matter (mol); the births the brood covers.
+    // A child's body (kg) and its matter (mol); the births the brood covers: an individual's whole children, a node's what
+    // its brood holds beyond `BROOD_HELD`.
     let body = 10f64.powf(b.gene_in_range(CHILD)) * mc;
     let matter = body * (1.0 - WET_TISSUE) / mm;
     let k = b.brood / matter;
     let node = n > 1.0;
-    let births = if node { k } else { (k + COUNT_SLACK).floor() };
+    let births = if node { k - BROOD_HELD * n } else { (k + COUNT_SLACK).floor() };
     if births <= 0.0 {
         return false;
     }

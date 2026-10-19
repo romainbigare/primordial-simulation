@@ -263,8 +263,8 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 1.0 / 3.0);
     scale(&mut w, &mut n, 5.0);
     n.count = 5.0;
-    // A child is a body of half the copy mass: 5 kg, matter 1.25 kg.
-    n.brood = 7.3 * 5.0 * (1.0 - h) / mm;
+    // A child is a body of half the copy mass: 5 kg, matter 1.25 kg; the members hold half a child each besides.
+    n.brood = (7.3 + copy::BROOD_HELD * 5.0) * 5.0 * (1.0 - h) / mm;
     let (s, mut n) = out(&mut w, n);
     let (before, count0, built0) = (n.store.clone(), n.count, n.built(&w.chem) / n.n());
     assert!(n.adult(&w.chem), "the node is mature: built {} kg a member", n.built(&w.chem) / n.n());
@@ -282,7 +282,8 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
         assert!((x - y).abs() <= 1e-9 * x.abs().max(1e-30), "substance {q}: {x} and {y} a child");
     }
     assert_eq!(n.count, count0, "the parent node took its children in");
-    assert!(n.brood == 0.0 && (n.built(&w.chem) / n.n() - built0).abs() < 1e-9 * built0, "the brood is left or the mean member fell: {built0} -> {}", n.built(&w.chem) / n.n());
+    let held = copy::BROOD_HELD * 5.0 * 5.0 * (1.0 - h) / mm;
+    assert!((n.brood - held).abs() < 1e-6 * held && (n.built(&w.chem) / n.n() - built0).abs() < 1e-9 * built0, "the brood is not what the members hold or the mean member fell: {built0} -> {}", n.built(&w.chem) / n.n());
     let given = c.store[MATTER] + other.store[MATTER];
     assert!((given - 7.3 * 1.25 / mm).abs() < 1e-6 * given && (before[MATTER] - n.store[MATTER] - given).abs() < 1e-9 * given);
     println!("node: {count0} members of {built0:.2} kg; children {} members of {:.2} kg", c.count, c.built(&w.chem) / c.n());
@@ -309,8 +310,8 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     for round in 0..3 {
         let mut n = std::mem::take(&mut w.life.bodies[s]);
         n.prepare(&w.chem, &w.cfg.phys);
-        // A brood of 4 children for the members together.
-        n.brood = 4.0 * child_mol;
+        // A brood of 4 children for the members together, besides what they hold.
+        n.brood = (4.0 + copy::BROOD_HELD * 5.0) * child_mol;
         assert!(n.adult(&w.chem), "round {round}: the node is mature: {} kg", n.built(&w.chem) / n.n());
         let before = n.built(&w.chem) / n.n();
         assert!(copy::copy(&mut w, s, &mut n), "round {round}: no children");
@@ -449,15 +450,16 @@ fn a_young_nodes_sizes_stay_between_birth_and_the_copy_mass() {
     (n.genes[CHILD], n.genes[DISPERSE]) = (0.1f32.log10(), 0.0);
     scale(&mut w, &mut n, 5.0);
     n.count = 5.0;
-    // A child: 1 kg of body, a quarter of it matter (h 0.75).
-    let child_mol = 0.25 / mm;
     let s = w.add(n, 1);
     let mut young = None;
     for round in 0..300 {
         let mut n = std::mem::take(&mut w.life.bodies[s]);
-        add(&mut w, &mut n, MATTER, 10.0 * 0.25);
+        // A brood of 10 children besides what the members hold, and matter that keeps them at the copy mass.
         n.prepare(&w.chem, &w.cfg.phys);
-        n.brood = 10.0 * child_mol;
+        brood(&w, &mut n, 10.0);
+        let short = (2.5 * n.count - n.matter_kg(&w.chem)).max(0.0);
+        add(&mut w, &mut n, MATTER, short);
+        n.prepare(&w.chem, &w.cfg.phys);
         assert!(copy::copy(&mut w, s, &mut n), "round {round}: no children");
         w.life.bodies[s] = n;
         let y = *young.get_or_insert_with(|| children(&w, w.life.bodies[s].id(s)).into_iter().find(|&k| k != s).expect("a young node"));

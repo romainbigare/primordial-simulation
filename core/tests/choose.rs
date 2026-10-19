@@ -274,6 +274,10 @@ fn a_body_with_no_brain_lives_and_copies() {
     // A light-eater node whose members are mature: a body (0.7 kg of the 1 kg) of more than their copy mass (0.25 kg).
     let mut b = line.founder(&mut w, 0, i);
     (b.genes[HIDDEN], b.genes[COPY_MASS]) = (0.0, -0.6);
+    // Twice the fuel of a starting light-eater: with what one holds, half its members cannot pay their upkeep in the
+    // second month, and what is left with its children is fewer than it started with.
+    let fuel = testkit::kg(&w, &b, RICH);
+    testkit::add(&mut w, &mut b, RICH, fuel);
     let (n0, s) = (b.count, w.add(b, 1));
     // It pays nothing for a brain, however costly brains are.
     let mut x = w.life.bodies[s].clone();

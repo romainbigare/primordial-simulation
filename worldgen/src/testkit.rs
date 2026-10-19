@@ -299,9 +299,11 @@ pub fn place(w: &mut World, b: Body) -> usize {
     s
 }
 
-/// The brood of `k` children for body `b` (all its members together), of the matter a child is made of.
+/// The brood of `k` children ready for body `b` (all its members together), of the matter a child is made of: a node
+/// holds `copy::BROOD_HELD` children a member besides.
 pub fn brood(w: &World, b: &mut Body, k: f64) {
-    b.brood = k * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - WET_TISSUE) / w.chem.subs[MATTER].molar_mass;
+    let held = if b.n() > 1.0 { pcore::copy::BROOD_HELD * b.n() } else { 0.0 };
+    b.brood = (k + held) * b.dec(CHILD) * b.dec(COPY_MASS) * (1.0 - WET_TISSUE) / w.chem.subs[MATTER].molar_mass;
 }
 
 /// The live children of the body of id `id`.

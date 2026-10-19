@@ -450,9 +450,11 @@ sense sizes in whole units). It decides who mixes, who joins a node and who merg
   every other store in the proportion its parent's body holds them (the key liquid times 10^`WET`, so a body can make
   dry, dormant children), its share of the heat (as warm as its parent), and its genes plus noise. The parent pays
   nothing more: the matter was paid for when it was built.
-- An individual makes whole children; a node makes fractional members. A share `DISPERSE` of a node's children starts
-  in a random neighbour cell (for an individual, the chance that they do); less than one member with no node of its
-  kind to join waits in the brood.
+- An individual makes whole children; a node makes fractional members of what its brood holds beyond half a child per
+  member (`copy::BROOD_HELD`): each member fills its own brood and makes a child when it covers one, so their broods lie
+  evenly between none and one child, and a member who dies loses what it held. A share `DISPERSE` of a node's children
+  starts in a random neighbour cell (for an individual, the chance that they do); less than one member with no node of
+  its kind to join waits in the brood.
 
 ### 4.3 Two parents
 

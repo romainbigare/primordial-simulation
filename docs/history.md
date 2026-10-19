@@ -868,6 +868,13 @@ Phase E review, round 1 (fixes):
   each update than nodes. 64 x 64, seed 1, years 31 to 35: plant members 4.22e10 to 4.12e10, plant mass 5.45e10 to
   5.21e10 kg, plant life 4.73 to 4.60 yr, eaters 730 to 477 members (noisy), eater life 5.3 to 4.3 yr, carbon gas
   247 to 252 ppm. Golden re-pinned.
+- F7 follow-up, a node holds half a child of brood per member (`copy::BROOD_HELD`): its members each fill their own
+  brood and make a child when it covers one, so their broods lie evenly between none and one child; a node made all
+  its brood into members at once, and lost none with members who died, so its adults made 1.4 times the children of
+  individuals per kg eaten (eaters, 32 x 32, seed 1, years 30 to 45: 1.25 against 0.90 children per adult a year;
+  0.83 against 0.87 with this). 64 x 64, seed 1, years 31 to 35: plant members 4.12e10 to 4.08e10, plant mass
+  5.21e10 to 5.31e10 kg, plant life 4.60 to 4.77 yr, eaters 477 to 271 members, eater life 4.3 to 4.0 yr, carbon gas
+  252 to 250 ppm. Golden re-pinned.
 
 **Phase J: the long physics step**
 
