@@ -971,6 +971,23 @@ Phase E review, round 1 (fixes):
   6.4 to 3.6 (none at the cap), Flow 354 to 277 ms a year, rain on land 1.443e-3 to 1.607e-3 mol/m²/s; 64 x 64 island
   without life: rounds 2.2 (the same), Flow 475 to 509 ms a year (the slopes of the shares), rain on land the same.
   Golden re-pinned.
+- J3, tried and not kept: a second-order air step (BDF2, Curtiss and Hirschfelder 1952: a third of what the step before
+  moved booked again, then backward Euler over two thirds of the step), 64 x 32 globe without life: unstable in year 4,
+  the history and the wind's pushes from the step's start grow a two-step swing of a small polar air node's heat (its
+  wind heat 1.4 times larger each step) until it is overdrawn; with the pushes from each round the rounds come back,
+  and it is about 50 lines past the code ceiling. A 30-day physics step with three 10-day air steps: the long-step
+  test holds (land -0.05 K, warmest month -0.08 K) and Change costs half (64 x 64 with life, 320 to 160 ms a year),
+  but the key numbers move past their noise: land 288.06 to 289.30 K, seasonal swing 11.83 to 12.83 K, eaters 4.33
+  to 4.09 log10 kg; a 15-day physics step with 5-day air steps: land 289.69 K, out of range. So the physics step
+  moves a 64 x 64 world over 30 years more than the long-step test (32 x 32, 8 years) shows. The cell pass on threads
+  (already `par::rows`): the same fingerprints, no gain on the 64 x 32 globe (gather and the banded solves are serial).
+  The slopes added one slice per pair of air nodes: no gain.
+- J3, at the end (side by side with main, one thread): 64 x 32 globe without life, 6 years: rounds 13.2 to 3.6, Flow
+  682 to 285 ms a year, Change 71 to 59; a cell's Flow and Change 0.37 to 0.17 ms a year. 64 x 64 island with life,
+  20 years: rounds 3.9 to 2.9, Flow 799 / 1,273 to 810 / 1,128 ms a year (years 5 / 20), Change the same. Key numbers
+  (3 seeds): land 288.06 K, swing 11.83 K, rain on land 1.806e-3, absorbing gas 251 ppm, river cells 837, land worn
+  0.081 mm/yr, light-eaters 10.64, eaters 4.33, lives 2.59 and 4.10 yr. The long-step test: land -0.15 K (noise 0.76),
+  warmest month -0.19 K (0.38), coldest -0.27 K (1.22), rain on land +0.1%, absorbing gas -0.2%, river cells +0.5%.
 
 **Phase K: recording and viewer**
 
