@@ -27,10 +27,10 @@ pub(crate) fn enclosure(w: &World, b: &Body) -> Option<Enclosure> {
 
 /// Standing liquid on cell `i`: depth m, density kg/m³, mol per m³.
 pub(super) fn liquid(w: &World, i: usize) -> (f64, f64, f64) {
-    let (env, n) = (w.life.env[i], w.mesh.cells().n());
+    let env = w.life.env[i];
     let (mut m, mut v, mut mol) = (0.0, 0.0, 0.0);
     for k in (0..w.chem.ns()).filter(|&k| w.chem.phase_in(k, env[0], |j| w.g(j, i)) == Phase::Liquid) {
-        let a = w.ground[k * n + i];
+        let a = w.g(k, i);
         (m, v, mol) = (m + a * w.chem.subs[k].molar_mass, v + a * w.chem.molar_volume(k, Phase::Liquid), mol + a);
     }
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }

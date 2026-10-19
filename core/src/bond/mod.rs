@@ -38,7 +38,7 @@ pub(crate) use verbs::{bears, let_go, lever};
 use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
 use crate::life::free_place;
-use crate::store::NodeId;
+use crate::store::{Node, NodeId};
 use crate::World;
 use serde::{Deserialize, Serialize};
 
@@ -328,11 +328,11 @@ fn dissolve(w: &mut World, s: usize) {
     if let Some(h) = holder(w, s) {
         w.life.bodies[h].hold = None;
     }
-    let (n, i, p) = (w.mesh.cells().n(), cell(w, s), std::mem::take(&mut w.parts.parts[s]));
-    for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate() {
-        w.ground[k * n + i] += a + f;
+    let (i, p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
+    for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate().filter(|(_, (a, f))| *a + *f != 0.0) {
+        w.moves.give(&w.chem, Node::ground(i), k, a + f, 0.0);
     }
-    w.e_ground[i] += p.e;
+    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, p.e);
     w.parts.at[i].retain(|&x| x as usize != s);
     // Its slot is free for a new part, of the next generation.
     w.parts.parts[s].gen = p.gen + 1;

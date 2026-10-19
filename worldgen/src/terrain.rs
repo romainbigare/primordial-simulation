@@ -202,6 +202,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         events: Vec::new(),
         scratch: Default::default(),
         batches: Default::default(),
+        moves: Default::default(),
         e_bodies: vec![0.0; n],
         deep: Vec::new(),
         e_deep: Vec::new(),

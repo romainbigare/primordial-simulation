@@ -773,6 +773,15 @@ The work of `docs/foundation/plan.md`, one line per task.
   seed 1, years 25 to 30: plant members 3.88e10 to 4.03e10, plant mass 4.97e10 to 4.99e10 kg, plant life 4.51 to
   4.54 yr, land 287.91 to 287.89 K, carbon gas 252 to 254 ppm, eaters 480 to 410 members (noisy); energy drift at
   year 30 1.7e-14 to 1.6e-14; a body update 30.7 to 31.8 us. Snapshot version 30; golden re-pinned.
+- E5 (1), bodies book through moves: what a body takes from and gives to its cell's ground, air and bodies' node
+  (liquids, minerals, food, breath, the gas of growth, heat, remains) and a part's monthly trades with the ground and
+  air are moves gathered over the update and booked by one `store::apply` at its end (`store::Moves`); the body or
+  part books its own side (`Class::Body`, `Class::Part`), and reads its cell's nodes as its moves leave them
+  (`World::g`, `a`, `heat_now`). A sample member drops its moves (`copy::select::Shadow` goes). `ground::draw`,
+  `take_paid`, `World::take_paid`, `flow::Sky` and the direct writes of bodies and parts go; the formulas stay. The
+  same world to the bit (every series column, 32 x 32, two seeds, 5 and 8 years; the whole world but the boundary
+  nodes and the potential, 16 x 16 with every kind, three seeds, 4 years); only the potential's sum rounds otherwise
+  (`apply` adds a call's lifts at once). Golden re-pinned.
 
 **Phase J: the long physics step**
 

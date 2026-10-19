@@ -10,6 +10,7 @@ use crate::body::{gain_to_growth, range, spread_at, Body, Layout, LiveTmp, ALLOC
 use crate::change::Reactor;
 use crate::chem::Chemistry;
 use crate::rng::{Purpose, Rng};
+use crate::store::{Class, Node};
 use crate::World;
 
 /// A sample member of a node: the gene it differs in, its step from the node's mean, its weight (the number of genes it
@@ -19,36 +20,6 @@ pub(crate) struct Sample {
     step: f32,
     genes: f32,
     gain: f64,
-}
-
-/// What an update of a body in ground cell `i` and air node `j` may change in the world (the stores and heat of its
-/// ground and air nodes, the potential energy, the heat of its bodies' node, the heat a ground node could not give, the
-/// events), kept to give back after a sample's.
-struct Shadow {
-    i: usize,
-    j: usize,
-    ground: Vec<f64>,
-    air: Vec<f64>,
-    heat: [f64; 5],
-    events: usize,
-}
-
-impl Shadow {
-    fn of(w: &World, b: &Body) -> Shadow {
-        let (i, ns, n, na) = (b.cell as usize, w.chem.ns(), w.mesh.cells().n(), w.mesh.level(crate::AIR).n());
-        let j = w.mesh.up(i, 0, crate::AIR);
-        let heat = [w.e_ground[i], w.e_air[j], w.potential, w.e_bodies[i], w.counts.clamped_heat];
-        let (ground, air) = ((0..ns).map(|k| w.ground[k * n + i]).collect(), (0..ns).map(|k| w.air[k * na + j]).collect());
-        Shadow { i, j, ground, air, heat, events: w.events.len() }
-    }
-    fn restore(self, w: &mut World) {
-        let (i, j, n, na) = (self.i, self.j, w.mesh.cells().n(), w.mesh.level(crate::AIR).n());
-        for (k, (&g, &a)) in self.ground.iter().zip(&self.air).enumerate() {
-            (w.ground[k * n + i], w.air[k * na + j]) = (g, a);
-        }
-        [w.e_ground[i], w.e_air[j], w.potential, w.e_bodies[i], w.counts.clamped_heat] = self.heat;
-        w.events.truncate(self.events);
-    }
 }
 
 /// The scalar genes an update as far as its growth never reads in a node without a brain: those of its children (read
@@ -85,8 +56,9 @@ fn read(chem: &Chemistry, lay: &Layout, b: &Body, g: usize, x: f32, y: f32) -> b
 /// The sample member of node `b` (slot `slot`, taken out of it, before its update; a node without a brain whose members
 /// differ): the node's genes but one, drawn among the genes its members differ in, one standard deviation of its spread
 /// up or down (the side drawn too, `Purpose::Select`), within its walls; its update as far as its growth
-/// (`body::gain_to_growth`) on the world as it is, which is then given back as it was: a member that might be, not one
-/// that is, so it changes nothing. None for other bodies, and where the step cannot change what the node gains in the
+/// (`body::gain_to_growth`) on the world as it is, whose moves are then dropped and its events forgotten: a member that
+/// might be, not one that is, so it changes nothing (it runs first in its node's update, when its node's moves hold no
+/// move yet). None for other bodies, and where the step cannot change what the node gains in the
 /// update (`read`), so its sample would gain what the node gains and its mean would not move. That draw costs no
 /// update, and each gene is still drawn as often, so the others move at their own rate. A sample is run on one update
 /// in `Config::sample_every`, drawn, and its weight is that many times larger, so each gene moves at the same mean rate.
@@ -111,9 +83,10 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
     let mut genes = b.genes.clone();
     genes[g] += step;
     s.set_genes(genes, &w.chem, &w.cfg.phys);
-    let shadow = Shadow::of(w, b);
+    let events = w.events.len();
     let gain = gain_to_growth(w, slot, &mut s, rc, tmp);
-    shadow.restore(w);
+    w.open_moves(b.cell as usize, Node::new(Class::Body, slot));
+    w.events.truncate(events);
     Some(Sample { gene: g, step, genes: (differ.len() * every) as f32, gain })
 }
 

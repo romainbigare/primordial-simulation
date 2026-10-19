@@ -30,7 +30,7 @@ fn reach(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> f64 {
 /// Take loose solids and liquids from the cell's ground, as `reach` allows for the mass it takes by (`Body::supply`; a
 /// node's members each work their own area: it is the node's total), and no more than its stores have room for.
 pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
-    let (i, n) = (b.cell as usize, w.mesh.cells().n());
+    let i = b.cell as usize;
     let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
     let mass = b.mass(&w.chem);
@@ -44,8 +44,8 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     for (k, &a) in m.iter().enumerate() {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let cp = w.chem.subs[k].cp;
-        let (a, took) = w.take_paid(i, a, cp, a * (cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i))));
-        w.ground[k * n + i] -= a;
+        let want = a * (cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i)));
+        let (a, took) = w.take_from_ground(i, (k, a, cp), want, w.heat_cap_ground(i));
         b.store[k] += a;
         b.e += took;
         if Some(k) == w.chem.matter() {

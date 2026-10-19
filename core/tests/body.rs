@@ -7,7 +7,7 @@ use pcore::rng::{Purpose, Rng};
 use pcore::store::Boundary;
 use pcore::units::{DAY, DAY_S};
 use pcore::{bond, brain, change, choose, World, AIR};
-use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{add, brood, eater, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, only_the_solid, open_air, out, place, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -131,7 +131,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     let (mut b, days) = (b, 10.0);
     let (temp0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
     let cost = 2e6;
-    assert!(pcore::body::pay(w, &mut b, cost, days), "it can pay");
+    assert!(moved(w, (b.cell as usize, 0), |w| pcore::body::pay(w, &mut b, cost, days)), "it can pay");
     let (temp1, g) = (b.temp(&w.chem), pcore::body::conductance_to_ground(w, &b, mass, temp0));
     let (cap, dt) = (b.heat_cap(&w.chem), b.interval(w) as f64 * DAY);
     let (rise, kept) = (temp1 - temp0, cap * (temp1 - temp0));
@@ -145,7 +145,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     books.assert_kept(w, 1e-12);
     // The same work again warms it by as much more.
     let mut c = b.clone();
-    assert!(pcore::body::pay(w, &mut c, cost, days));
+    assert!(moved(w, (c.cell as usize, 0), |w| pcore::body::pay(w, &mut c, cost, days)));
     let again = c.temp(&w.chem) - temp1;
     assert!((again / rise - 1.0).abs() < 0.05, "the second cost warms by {again} K, the first {rise} K");
 }
@@ -162,7 +162,7 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
     let w = &mut s.w;
     let rise = |w: &mut World, mut b: Body, per_kg: f64| {
         let (t0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
-        assert!(pcore::body::pay(w, &mut b, per_kg * mass, 10.0), "it can pay");
+        assert!(moved(w, (b.cell as usize, 0), |w| pcore::body::pay(w, &mut b, per_kg * mass, 10.0)), "it can pay");
         b.temp(&w.chem) - t0
     };
     let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
@@ -269,7 +269,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         let made = |t: f64| {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
             let mut y = x.clone();
-            assert!(pcore::body::pay(&mut w2, &mut y, pcore::body::upkeep(w0, &x, days, mass), days));
+            assert!(moved(&mut w2, (i, 0), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass), days)));
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, &w0.cfg));
             rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * DAY);
             let air = |k: usize| w0.air[k * na + j] - w2.air[k * na + j] + gas[k] - g[k];
@@ -324,7 +324,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
         let (up, pace) = (pcore::body::upkeep(w, &b, days, mass), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
         w.events.clear();
-        pcore::choose::act(w, slot, &mut b, &Default::default(), &mut Default::default());
+        moved(w, (b.cell as usize, slot), |w| pcore::choose::act(w, slot, &mut b, &Default::default(), &mut Default::default()));
         let id = b.id(slot);
         took.push(w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>());
         ups.push(up);
@@ -518,7 +518,8 @@ fn a_dry_body_builds_in_proportion_to_its_activity() {
     let (m0, m1) = (wet.store[m], dry.store[m]);
     // (What it may build goes with its mass^0.75 too, and the dry body has the lighter liquid.)
     let eq = dry.supply(&s.w.chem, &s.w.cfg.phys) / wet.supply(&s.w.chem, &s.w.cfg.phys);
-    assert!(pcore::copy::grow(&mut s.w, &mut wet, 10.0) && pcore::copy::grow(&mut s.w, &mut dry, 10.0));
+    let grow = |w: &mut World, b: &mut Body| moved(w, (b.cell as usize, 0), |w| pcore::copy::grow(w, b, 10.0));
+    assert!(grow(&mut s.w, &mut wet) && grow(&mut s.w, &mut dry));
     let (gw, gd) = (wet.store[m] - m0, dry.store[m] - m1);
     println!("matter built: wet {gw:.4e} mol, dry {gd:.4e}, activity {a:.4}");
     assert!(gw > 0.0 && (gd / gw / (a * eq) - 1.0).abs() < 0.02, "built {gd} against {gw} (activity {a}, mass {eq})");
@@ -584,7 +585,7 @@ fn liquid_taken_at_the_body_temperature_leaves_it_as_warm() {
     hold_ground(&mut s.w, i, t);
     let slot = s.w.add(b, 1);
     let b = std::mem::take(&mut s.w.life.bodies[slot]);
-    body::die(&mut s.w, slot, b, body::LACK);
+    moved(&mut s.w, (i, slot), |w| body::die(w, slot, b, body::LACK));
     let tg = s.w.t_ground(i);
     assert!((tg - t).abs() < 1e-6, "the ground at {t} K took the body's remains and went to {tg} K");
 }
@@ -1359,7 +1360,8 @@ fn node(w: &mut World, mut b: Body, n: f64) -> Body {
 /// Body `a` bites body `v` once.
 fn bite(w: &mut World, a: usize, v: usize) {
     let mut b = std::mem::take(&mut w.life.bodies[a]);
-    choose::take_body(w, a, &mut b, v, &mut Rng::new(1, w.day(), 7, Purpose::Choose));
+    let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
+    moved(w, (b.cell as usize, a), |w| choose::take_body(w, a, &mut b, v, r));
     w.life.bodies[a] = b;
 }
 
@@ -1506,7 +1508,7 @@ fn trampling_breaks_body_matter() {
     let (b0, nb0, ns0) = (seen(&w, v), w.life.bodies[big].n(), w.life.bodies[small].n());
     let (bb0, bs0) = (seen(&w, big), seen(&w, small));
     let (g0, e0) = (w.ground[MATTER * w.mesh.cells().n() + i], w.e_ground[i]);
-    let broken = choose::wear(&mut w, i, mv, 2_000.0);
+    let broken = moved(&mut w, (i, mv), |w| choose::wear(w, i, mv, 2_000.0));
     let (b1, bb1, bs1) = (seen(&w, v), seen(&w, big), seen(&w, small));
     let (sv, sb, ss) = (1.0 - b1.built / b0.built, 1.0 - bb1.built / bb0.built, 1.0 - bs1.built / bs0.built);
     println!("trampled: individual body -{:.2}%, node of 10 big members -{:.2}%, node of 10,000 small ones -{:.2}% (members {} of {ns0}); {broken:.3} kg broken", 100.0 * sv, 100.0 * sb, 100.0 * ss, w.life.bodies[small].n());

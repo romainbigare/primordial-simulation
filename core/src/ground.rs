@@ -1,39 +1,15 @@
 //! Heat of ground and air nodes: heat capacities, temperatures, the melting plateaus of the
-//! ground, and drawing heat from a node without taking it below `T_FLOOR`.
+//! ground, and the heat a node holds above `T_FLOOR`.
 
 use crate::chem::{self, Chemistry};
 use crate::params::Config;
 use crate::units::T_FLOOR;
-use crate::world::{Counters, World};
-
-/// Take up to `q` J from a node with energy `e` and heat capacity `cap` (at most what it holds above `T_FLOOR`), count
-/// the shortfall in `Counters::clamped_heat`, return what was taken: whoever wanted `q` passes on only that. A negative
-/// `q` gives heat to the node and is returned whole. For the moves not booked by the store (bodies, parts and ground
-/// reactions), whose guard this is; the store's is `store::apply`.
-#[inline]
-pub(crate) fn draw(e: &mut f64, counts: &mut Counters, cap: f64, q: f64) -> f64 {
-    let took = if q > 0.0 { q.min(heat_above_floor(*e, cap)) } else { q };
-    *e -= took;
-    counts.clamped_heat += q - took;
-    took
-}
+use crate::world::World;
 
 /// The share of a wanted amount that was really given (exactly 1 when all of it was).
 #[inline]
 pub(crate) fn share(took: f64, want: f64) -> f64 {
     if took >= want { 1.0 } else { took / want }
-}
-
-/// Take `d` mol (of `cp` J/(mol K) each) from a ground node of energy `e` and heat capacity `cap`, which pays `want` J with
-/// them (the heat and latent enthalpy they take): it pays as far as it holds heat above `T_FLOOR` without their heat
-/// capacity (`draw`), and as much less is taken. Returns the mol taken and the heat paid (nothing when `want` <= 0).
-#[inline]
-pub(crate) fn take_paid(e: &mut f64, counts: &mut Counters, cap: f64, d: f64, cp: f64, want: f64) -> (f64, f64) {
-    if want <= 0.0 {
-        return (0.0, 0.0);
-    }
-    let took = draw(e, counts, cap - d * cp, want);
-    (d * share(took, want), took)
 }
 
 /// Heat capacity of the skin of a ground node's bed, J/K: `skin_m` of its bonded amounts `b(k)` (mol) of the substances
@@ -106,7 +82,7 @@ impl World {
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
         let (n, ns) = (self.mesh.cells().n(), self.chem.ns());
         let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, |k| self.bed[k * n + i]);
-        (0..ns).fold(skin, |c, k| c + self.ground[k * n + i] * self.chem.subs[k].cp)
+        (0..ns).fold(skin, |c, k| c + self.g(k, i) * self.chem.subs[k].cp)
     }
     /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
     pub fn melt(&self, k: usize, i: usize) -> f64 {
@@ -121,14 +97,6 @@ impl World {
         ks.sort_by(|a, b| a.0.total_cmp(&b.0));
         let th = melting(c, self.e_ground[i], ks.into_iter().map(|(tm, k)| (tm, k, self.g(k, i) * self.chem.subs[k].lf)));
         (th.t, th.on)
-    }
-    /// `take_paid` from ground node `i`.
-    pub(crate) fn take_paid(&mut self, i: usize, d: f64, cp: f64, want: f64) -> (f64, f64) {
-        if want <= 0.0 {
-            return (0.0, 0.0);
-        }
-        let cap = self.heat_cap_ground(i);
-        take_paid(&mut self.e_ground[i], &mut self.counts, cap, d, cp, want)
     }
     /// Temperature of ground node `i` as every law and the shell read it, K, and the substance on its melting plateau with
     /// its molten share: Flow's solve of the plateaus at its last step (`flow::land::ground_state`), which keeps it for its
@@ -162,9 +130,9 @@ impl World {
     pub fn heat_cap_air(&self, j: usize) -> f64 {
         (0..self.chem.ns()).map(|k| self.a(k, j) * self.chem.subs[k].cp).sum()
     }
-    /// Temperature of air node `j`, K.
+    /// Temperature of air node `j`, K (as the moves of the update running leave it).
     pub fn t_air(&self, j: usize) -> f64 {
-        crate::flow::air_temp(self.e_air[j], self.heat_cap_air(j))
+        crate::flow::air_temp(self.heat_now(crate::store::Node::air(j)), self.heat_cap_air(j))
     }
     /// Height of the solid surface (bonded + loose solids), m, at the node's temperature now and with the solid share of a
     /// substance on its plateau (`survey::env_of` reads the last flow step's temperature and whole phases; `flow::land::surface`

@@ -5,6 +5,7 @@ use super::{Body, COPY_MASS, DENATURE, MAX_TAKE_SHARE, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::Melting;
 use crate::math::mean_decay;
+use crate::store::{held_more, Class, Node};
 use crate::units::{DAY, MAX_SUBSTANCES};
 use crate::{bond, World, AIR};
 
@@ -62,8 +63,8 @@ impl Payer {
     pub(crate) fn at(w: &World, b: &Body, days: f64, mass: f64, th: Melting) -> Payer {
         let (chem, i) = (&w.chem, b.cell as usize);
         let depth = bond::depth(w, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
-        let (na, j, air) = (w.mesh.level(AIR).n(), w.mesh.up(i, 0, AIR), &w.air);
-        let tot: f64 = (0..chem.ns()).map(|k| air[k * na + j]).sum();
+        let j = w.mesh.up(i, 0, AIR);
+        let tot: f64 = (0..chem.ns()).map(|k| w.a(k, j)).sum();
         let f = film(chem, &w.cfg, b, mass, cover_of(w, b));
         let share = (breath(chem, &w.cfg, b, &f, days, depth) / tot).min(MAX_TAKE_SHARE);
         Payer { mass, th, days, share, tot }
@@ -89,7 +90,7 @@ pub(crate) fn spend(w: &mut World, b: &mut Body, cost: f64, dt: f64, part: bool,
     let (keep, i) = (b.energy_in(&w.chem, th0), b.cell as usize);
     if b.e > keep {
         let held = hold(w, b, mass, th0.t, dt);
-        w.e_ground[i] += (b.e - keep) * (1.0 - held);
+        w.moves.give(&w.chem, Node::ground(i), 0, 0.0, (b.e - keep) * (1.0 - held));
         b.e = keep + (b.e - keep) * held;
     }
     left
@@ -106,7 +107,8 @@ pub(super) fn hold(w: &World, b: &Body, mass: f64, t: f64, dt: f64) -> f64 {
 /// over the payer's days (`change::pace`), its gases the air it exchanges (`Payer`), its other inputs its own stores. So a
 /// cold body releases little: the cold cost is the rate, not a rule.
 pub(crate) fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64) {
-    let (chem, na, j, air) = (&w.chem, w.mesh.level(AIR).n(), w.mesh.up(b.cell as usize, 0, AIR), &w.air);
+    let (chem, j) = (&w.chem, w.mesh.up(b.cell as usize, 0, AIR));
+    let air = |k: usize| w.a(k, j);
     let (t, days, share, tot) = (p.th.t, p.days, p.share, p.tot);
     let dry = b.activity(chem, &w.cfg.phys);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
@@ -114,7 +116,7 @@ pub(crate) fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64)
     for &(r, _) in &b.k.burn {
         for &(k, _) in &chem.reactions[r].inputs {
             let k = k as usize;
-            have[k] = if gas(k) { air[k * na + j] * share } else { b.store[k] };
+            have[k] = if gas(k) { air(k) * share } else { b.store[k] };
         }
     }
     let (mut ext, mut got) = (vec![0.0f64; b.k.burn.len()], 0.0);
@@ -127,7 +129,7 @@ pub(crate) fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64)
         if lim <= 0.0 {
             continue;
         }
-        let act = crate::change::pace(rx, lim, |k| have[k], |k| if gas(k) { have[k] * tot / air[k * na + j] } else { have[k] });
+        let act = crate::change::pace(rx, lim, |k| have[k], |k| if gas(k) { have[k] * tot / air(k) } else { have[k] });
         let rate = crate::change::denature(Body::catalyst(b.k.cat[r], dry), t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.arrhenius(t) * act;
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];
@@ -149,26 +151,29 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bo
     if left > 1e-9 * cost && !part {
         return cost;
     }
-    let World { chem, mesh, air, .. } = w;
-    let (na, j) = (mesh.level(AIR).n(), mesh.up(b.cell as usize, 0, AIR));
-    let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
+    // (Gas is taken from the air with no heat of its own and given to it with its latent heat, which the body pays:
+    // the air holds it, `store::held_more`.)
+    let air = Node::air(w.mesh.up(b.cell as usize, 0, AIR));
+    let gas = |k: usize| w.chem.phase(k, t) == Phase::Gas;
     let mut latent = 0.0;
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
-        let rx = &chem.reactions[r];
-        for &(k, nu) in &rx.inputs {
-            let k = k as usize;
-            let a = if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] };
-            let d = (nu as f64 * ext[q]).min(*a);
-            *a -= d;
+        for &(k, nu) in &w.chem.reactions[r].inputs {
+            let (k, lat) = (k as usize, w.chem.subs[k as usize].latent_gas());
             if gas(k) {
-                latent -= d * chem.subs[k].latent_gas();
+                let d = (nu as f64 * ext[q]).min(w.a(k, air.index));
+                w.moves.take(&w.chem, air, k, d, 0.0);
+                latent -= d * lat;
+            } else {
+                b.store[k] -= (nu as f64 * ext[q]).min(b.store[k]);
             }
         }
-        for &(k, nu) in &rx.outputs {
+        for &(k, nu) in &w.chem.reactions[r].outputs {
             let (k, d) = (k as usize, nu as f64 * ext[q]);
-            *if gas(k) { &mut air[k * na + j] } else { &mut b.store[k] } += d;
             if gas(k) {
-                latent += d * chem.subs[k].latent_gas();
+                w.moves.give(&w.chem, air, k, d, d * held_more(&w.chem, Class::Body, Class::Air, k));
+                latent += d * w.chem.subs[k].latent_gas();
+            } else {
+                b.store[k] += d;
             }
         }
     }

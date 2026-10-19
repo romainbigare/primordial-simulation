@@ -10,7 +10,7 @@ use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
-use pcore::store::Boundary;
+use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY_S;
 use pcore::World;
 
@@ -242,6 +242,15 @@ pub fn out(w: &mut World, b: Body) -> (usize, Body) {
     let mut b = std::mem::take(&mut w.life.bodies[s]);
     b.prepare(&w.chem, &w.cfg.phys);
     (s, b)
+}
+
+/// What `f` does to `w` when it calls a law of bodies or parts on its own, outside an update: its moves in ground cell
+/// `i` (`World::open_moves`, in the name of the body in slot `slot`) booked when it ends.
+pub fn moved<R>(w: &mut World, (i, slot): (usize, usize), f: impl FnOnce(&mut World) -> R) -> R {
+    w.open_moves(i, Node::new(Class::Body, slot));
+    let r = f(w);
+    w.book_moves();
+    r
 }
 
 /// Body `b` placed and prepared where it is: its slot.

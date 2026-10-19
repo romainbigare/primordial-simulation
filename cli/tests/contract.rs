@@ -11,19 +11,7 @@ const WORLD: [&str; 3] = ["w", "ww", "self"];
 
 /// The folder and the files of `core/src` that may write the arrays, each with its reason. Each must still write them
 /// (an exemption no longer needed goes).
-const EXEMPT: [(&str, &str); 11] = [
-    ("store", "the store itself: `apply`, the boundary's books (`World::cross`), and the bed's one change, `World::loosen` (until plan F6)"),
-    ("flow/air/sky.rs", "`Sky::cross`, the way bodies, parts and growth change the air until they move through the store (plan E7)"),
-    ("ground.rs", "`World::take_paid`, the guard bodies take the ground's heat through (plan E7)"),
-    ("body/death.rs", "a dead body's matter and heat go to its ground node (plan E7)"),
-    ("body/pay.rs", "a body's heat released goes to the ground, its breath to the air (plan E7)"),
-    ("body/physics.rs", "a body's trades with its ground and air node (plan E7)"),
-    ("choose/feed.rs", "a body takes from the ground (plan E7)"),
-    ("copy/grow.rs", "growth's gas brings its heat to the air (plan E7)"),
-    ("copy/select.rs", "the world given back as it was after a sample member's update (until bodies book through moves, plan E5: then its moves are dropped)"),
-        ("bond/mod.rs", "a part's own trade: a dissolved part's matter and heat go to its ground node (their amounts live in parts)"),
-    ("bond/month.rs", "a part's own trades with its ground and air node each month (their amounts live in parts)"),
-];
+const EXEMPT: [(&str, &str); 1] = [("store", "the store itself: `apply`, the boundary's books (`World::cross`), and the bed's one change, `World::loosen` (until plan F6)")];
 
 /// Does `line` (code, without its comment) write one of `ARRAYS`: an index of it on the left of an assignment, the
 /// array lent as `&mut`, or a method that changes it?

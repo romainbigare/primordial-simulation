@@ -33,9 +33,12 @@ pub enum Class {
     /// amounts, whose heat is `World::potential`. Lifting matter moves heat into it and a fall takes it back; like a
     /// boundary node it gives all it is asked (it holds less than nothing when matter ends lower than it started).
     Potential,
-    /// A part (`bond::Part`): its walls, fill and heat in `World::parts`, at its slot. The only class whose nodes come
-    /// and go, named by a `NodeId`.
+    /// A part (`bond::Part`): its walls, fill and heat in `World::parts`, at its slot. Its nodes come and go, named by a
+    /// `NodeId`.
     Part,
+    /// A body (`body::Body`): its stores and heat in the body, at its slot. Like a part, it holds its own amounts: the
+    /// law that changes it books its side of a move, the store the other (`store::apply`).
+    Body,
 }
 
 /// A fixed node: its class and its index in that class's arrays.
@@ -48,6 +51,18 @@ pub struct Node {
 impl Node {
     pub fn new(class: Class, index: usize) -> Node {
         Node { class, index }
+    }
+    /// Ground node `i`.
+    pub fn ground(i: usize) -> Node {
+        Node::new(Class::Ground, i)
+    }
+    /// Air node `j`.
+    pub fn air(j: usize) -> Node {
+        Node::new(Class::Air, j)
+    }
+    /// The bodies' node of ground cell `i`.
+    pub fn bodies(i: usize) -> Node {
+        Node::new(Class::Bodies, i)
     }
 }
 
@@ -68,5 +83,5 @@ pub const BOUNDARIES: usize = 3;
 
 impl Class {
     /// Every class, by its index (`class as usize`).
-    pub(crate) const ALL: [Class; 7] = [Class::Ground, Class::Air, Class::Deep, Class::Bodies, Class::Boundary, Class::Potential, Class::Part];
+    pub(crate) const ALL: [Class; 8] = [Class::Ground, Class::Air, Class::Deep, Class::Bodies, Class::Boundary, Class::Potential, Class::Part, Class::Body];
 }

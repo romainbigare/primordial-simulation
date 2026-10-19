@@ -24,7 +24,7 @@ fn arrays(w: &World, class: Class) -> (&[f64], &[f64], usize) {
         Class::Boundary => (&w.boundary, &w.e_boundary[..], BOUNDARIES),
         Class::Bodies => (&[], &w.e_bodies, w.mesh.cells().n()),
         Class::Potential => (&[], std::slice::from_ref(&w.potential), 1),
-        Class::Part => unreachable!("a part's amounts lie in the part"),
+        Class::Part | Class::Body => unreachable!("a part's or a body's amounts lie in it"),
     }
 }
 

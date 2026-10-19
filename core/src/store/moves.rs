@@ -5,8 +5,9 @@ use super::nodes::{Class, Node};
 use crate::chem::Chemistry;
 
 /// `mol` of substance `k` and `heat` J leave node `from` for node `to`. `to` receives `heat` less the energy the mol
-/// hold apart from heat more there than in `from` (`held`): so the law chooses who pays the latent heat of a gas that
-/// enters the air, `from` by giving it with the heat, or `to` by being given only the heat the gas carries.
+/// hold apart from heat more there than in `from` (`held_more`): so the law chooses who pays the latent heat of a gas
+/// that enters the air, `from` by giving it with the heat, or `to` by being given only the heat the gas carries. An end
+/// that holds its own amounts (a body, a part) is booked by the law that changes it.
 #[derive(Clone, Copy, Debug)]
 pub struct Move {
     pub from: Node,
@@ -50,10 +51,16 @@ pub fn held(chem: &Chemistry, class: Class, k: usize) -> f64 {
     s.hf + if class == Class::Air { s.latent_gas() } else { 0.0 }
 }
 
+/// What a mol of substance `k` holds apart from heat more in a node of class `to` than in one of class `from`, J/mol
+/// (`held`): the air's latent heat, or nothing.
+pub fn held_more(chem: &Chemistry, from: Class, to: Class, k: usize) -> f64 {
+    held(chem, to, k) - held(chem, from, k)
+}
+
 impl<'a> LinkFlux<'a> {
     /// Whether its two classes hold each of its substances apart from heat alike (`held`).
     pub(super) fn alike(&self, chem: &Chemistry) -> bool {
-        self.ks.iter().all(|&k| held(chem, self.class[0], k as usize) == held(chem, self.class[1], k as usize))
+        self.ks.iter().all(|&k| held_more(chem, self.class[0], self.class[1], k as usize) == 0.0)
     }
     /// The heat its `b` ends receive, by link: what leaves `a` less what the mol hold more at `b` (empty where the
     /// classes hold its substances alike, `alike`).
@@ -63,7 +70,7 @@ impl<'a> LinkFlux<'a> {
         }
         let (links, mut q) = (self.a.len(), self.heat.to_vec());
         for (x, &k) in self.ks.iter().enumerate() {
-            let more = held(chem, self.class[1], k as usize) - held(chem, self.class[0], k as usize);
+            let more = held_more(chem, self.class[0], self.class[1], k as usize);
             q.iter_mut().zip(&self.mol[x * links..(x + 1) * links]).for_each(|(q, m)| *q -= m * more);
         }
         q

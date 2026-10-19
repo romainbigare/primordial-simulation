@@ -5,6 +5,7 @@
 
 mod apply;
 mod batch;
+mod gather;
 pub mod links;
 pub mod moves;
 pub mod nodes;
@@ -12,7 +13,8 @@ pub mod nodes;
 pub use apply::apply;
 pub use links::Links;
 pub use batch::Batch;
-pub use moves::{held, LinkFlux, Move, Transform};
+pub use gather::Moves;
+pub use moves::{held, held_more, LinkFlux, Move, Transform};
 pub use nodes::{Boundary, Class, Node, NodeId, BOUNDARIES};
 
 use crate::World;

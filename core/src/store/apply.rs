@@ -2,7 +2,7 @@
 //! zero to zero and counts it. A law never asks a node for more than it holds (`docs/foundation/plan.md`, Idea 2), so
 //! the store only adds, checks and counts.
 
-use super::held;
+use super::{held, held_more};
 use super::moves::{LinkFlux, Move, Transform};
 use super::nodes::{Class, Node, BOUNDARIES};
 use crate::chem::Chemistry;
@@ -66,11 +66,15 @@ struct Ctx<'w> {
     len: [usize; BOOKED],
 }
 
-/// The class of node `x` and its index, in a class `apply` books.
-fn booked(cx: &Ctx, x: Node) -> (usize, usize) {
+/// The class of node `x` and its index, in a class `apply` books; none for a node that holds its own amounts (a part, a
+/// body), whose side of a move the law that changes it books.
+fn booked(cx: &Ctx, x: Node) -> Option<(usize, usize)> {
     let c = x.class as usize;
-    assert!(c < BOOKED && x.index < cx.len[c], "apply books no node {x:?}");
-    (c, x.index)
+    if c >= BOOKED {
+        return None;
+    }
+    assert!(x.index < cx.len[c], "apply books no node {x:?}");
+    Some((c, x.index))
 }
 
 /// Each change of the call, in order: each link flux's columns, its substances then its heat (the `b` end receives the
@@ -87,16 +91,20 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
         f(Change::Column(Column { arr: c.map(|c| 2 * c + 1), at: [0; 2], a, b, out: x.heat, into }));
     }
     let mut one = |arr, at, d| f(Change::One(Slot { arr, at }, d));
+    // (A move of heat alone changes no amount: the nodes that hold none have no amounts to change.)
     for m in moves {
-        let (((cf, i), (ct, j)), k) = ((booked(cx, m.from), booked(cx, m.to)), m.k as usize);
-        let into = m.heat - m.mol * (held(chem, Class::ALL[ct], k) - held(chem, Class::ALL[cf], k));
-        one(2 * cf, k * len[cf] + i, -m.mol);
-        one(2 * cf + 1, i, -m.heat);
-        one(2 * ct, k * len[ct] + j, m.mol);
-        one(2 * ct + 1, j, into);
+        let k = m.k as usize;
+        for (x, mol, heat) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, m.heat - m.mol * held_more(chem, m.from.class, m.to.class, k))] {
+            if let Some((c, i)) = booked(cx, x) {
+                if mol != 0.0 {
+                    one(2 * c, k * len[c] + i, mol);
+                }
+                one(2 * c + 1, i, heat);
+            }
+        }
     }
     for t in transforms {
-        let (c, i) = booked(cx, t.at);
+        let (c, i) = booked(cx, t.at).expect("a transform in a node of the store");
         let mut q = 0.0;
         for &(k, d) in &t.dmol {
             one(2 * c, k as usize * len[c] + i, d);
@@ -146,17 +154,16 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         let shaped = x.class.iter().all(|&c| (c as usize) < BOOKED) && x.b.len() == links && x.mol.len() == x.ks.len() * links && heat;
         assert!(shaped, "a link flux of the wrong shape");
     }
-    let mut sums = vec![0.0; chem.n_elements];
+    let mut sums = vec![0.0; if transforms.is_empty() { 0 } else { chem.n_elements }];
     for t in transforms {
         assert!(keeps_elements(chem, &t.dmol, &mut sums), "a transform that does not keep its elements: {t:?}");
     }
     let lifted: Vec<_> = fluxes.iter().map(|x| x.lifted(chem)).collect();
-    // The nodes that give all they are asked hold what a whole history gave (the sun's heat is all the light the world
-    // got): their changes are summed apart and added once at the end, so the many small changes of a call keep their
-    // size instead of rounding away against that sum.
-    let mut far = [boundary.len(), e_boundary.len(), 0, 1].map(|len| vec![0.0; len]);
-    let [far_mol, far_heat, _, far_lift] = &mut far;
-    let mut books: [&mut [f64]; ARRAYS] = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut [], &mut e_bodies[..], far_mol, far_heat, &mut [], far_lift];
+    // The heat of the nodes that give all they are asked is what a whole history gave (the sun's is all the light the
+    // world got): their changes are summed apart and added once at the end, so the many small changes of a call keep
+    // their size instead of rounding away against that sum.
+    let (mut far_heat, mut far_lift) = ([0.0; BOUNDARIES], [0.0]);
+    let mut books: [&mut [f64]; ARRAYS] = [&mut ground[..], &mut e_ground[..], &mut air[..], &mut e_air[..], &mut deep[..], &mut e_deep[..], &mut [], &mut e_bodies[..], &mut boundary[..], &mut far_heat, &mut [], &mut far_lift];
     // Each number of a node that falls below zero on the way: those that end there are among them. A column books into
     // its one or two arrays.
     let mut low = Vec::new();
@@ -196,7 +203,6 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     for s in low {
         counts.rounded[s.arr % 2] -= std::mem::take(&mut books[s.arr][s.at]);
     }
-    for (v, d) in [&mut boundary[..], &mut e_boundary[..], std::slice::from_mut(potential)].into_iter().zip([&far[0], &far[1], &far[3]]) {
-        v.iter_mut().zip(d).for_each(|(v, d)| *v += d);
-    }
+    e_boundary.iter_mut().zip(far_heat).for_each(|(v, d)| *v += d);
+    *potential += far_lift[0];
 }

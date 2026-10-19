@@ -280,8 +280,8 @@ changed since (one came, went, or changed its members or what others see of it: 
   air's heat. The difference is `World::potential`.
 - **Booked by the store.** A link from each ground node to its air node carries the gas and the
   heat that leaves the ground; the air receives that heat less the latent heat it holds of the gas
-  (`store::held`). Bodies, parts and growth still change the air through `flow::Sky::cross`
-  (`flow/air/sky.rs`).
+  (`store::held`). The gas of bodies, parts and growth crosses as moves of their updates
+  (`store::Moves::gas`): the same lift, from the air's heat into `World::potential`.
 - **Gases dissolve** (`exchange::dissolve`, at the start of the air's step, from the air as it is).
   A gas that cannot condense on the ground dissolves in the liquid there toward Henry's share (solubility × partial pressure × the liquid's amount),
   and comes out when the liquid warms, thins or freezes. It crosses the surface through the
@@ -325,9 +325,9 @@ positive by its implicit step, `downhill` by its pass, the reactor by going no f
 input, and where a law could still ask too much it cuts that node's own outgoing links
 (`solve::spread::within`), never a whole field. `store::apply` only adds: what the rounding of its sums
 leaves just below zero it sets to zero and counts (`Counters::rounded`); a debug build checks that it is
-rounding, and a real overdraw breaks the books. The moves the store does not book yet (bodies, parts,
-ground reactions) take heat from a ground node no further than `T_FLOOR` (`ground::draw`);
-whoever asked gets that much less, and it is counted (`Counters::clamped_heat`).
+rounding, and a real overdraw breaks the books. A body or a part takes heat from a ground node no
+further than `T_FLOOR` (`World::take_from_ground`); it gets that much less, and it is counted
+(`Counters::clamped_heat`).
 
 ---
 
@@ -709,8 +709,8 @@ the same patterns as individuals.
   brain also runs its update, as far as its growth, for a sample member (`copy::sample`): the
   node's genes but one, drawn among those its members differ in, which is one standard deviation
   of its spread up or down (the gene and the side drawn by keyed random numbers), within its
-  walls. The sample runs on the world as it is and the world is given back as it was: it is a
-  member that might be, and changes nothing. Its gain and the node's are the log of the body
+  walls. The sample runs on the world as it is and its moves are dropped (6): it is a member that
+  might be, and changes nothing. Its gain and the node's are the log of the body
   matter (brood with it) after growth over that before the update: growth less deaths. The mean
   of the gene then moves by the sample's step times tanh(sample's gain − node's gain), times the
   number of genes drawn from times `sample_every` (each gene is drawn that much less often: a
@@ -858,6 +858,16 @@ update in stages: upkeep, the physics of the time since the last update (`body/p
 keeping warm, the checks of the stores, growth and copying, shedding. Its decision
 (`choose::act`) then sees the body as these stages leave it: its mass, heat capacity and
 temperature after it sheds.
+
+**Books.** What a body takes from and gives to its cell's ground node, air node and bodies'
+node (its liquids, minerals and food, its breath and the gas of its growth, its heat, its
+remains) are moves (`store::Move`), gathered over its update and booked by one `store::apply` at
+its end (`store::Moves`, `World::open_moves`, `book_moves`). The body changes its own stores and
+heat; the store books the other side. While it updates, it reads its cell's nodes as its moves
+leave them (`World::g`, `a`, `heat_now`). It never asks a node for more than it holds: it takes
+at most half of what a node holds of a substance (`MAX_TAKE_SHARE`), and no heat below
+`T_FLOOR`. A sample member's update (4.4) drops its moves. A part's monthly turn books its moves
+the same way.
 
 ### 6.1 What a body is
 

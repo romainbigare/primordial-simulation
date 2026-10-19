@@ -6,7 +6,7 @@ use crate::event::Event;
 use crate::params::Config;
 use crate::space::square::Square;
 use crate::space::Mesh;
-use crate::store::BOUNDARIES;
+use crate::store::{Node, BOUNDARIES};
 use crate::{bond, flow};
 use serde::{Deserialize, Serialize};
 
@@ -96,6 +96,9 @@ pub struct World {
     /// What Change books at a step, kept between steps (not saved)
     #[serde(skip)]
     pub batches: crate::change::Batches,
+    /// The moves of the update of a body or a part running, and its cell's nodes as they leave them (not saved)
+    #[serde(skip)]
+    pub moves: crate::store::Moves,
     /// Heat of the bodies' node of each cell (`store::Class::Bodies`): the light and the heat set aside for its bodies
     /// between their updates, J
     pub e_bodies: Vec<f64>,
@@ -142,19 +145,20 @@ impl World {
     pub fn is_land(&self, i: usize) -> bool {
         self.surface_z(i) > 0.0
     }
-    /// Loose amount of substance `k` in ground node `i`, mol.
+    /// Loose amount of substance `k` in ground node `i`, mol, as the moves of the update running leave it
+    /// (`store::Moves`).
     #[inline]
     pub fn g(&self, k: usize, i: usize) -> f64 {
-        self.ground[k * self.mesh.cells().n() + i]
+        self.moves.amount(Node::ground(i), k).unwrap_or_else(|| self.ground[k * self.mesh.cells().n() + i])
     }
     /// Bonded amount of substance `k` in ground node `i`, mol.
     #[inline]
     pub fn b(&self, k: usize, i: usize) -> f64 {
         self.bed[k * self.mesh.cells().n() + i]
     }
-    /// Amount of substance `k` in air node `j`, mol.
+    /// Amount of substance `k` in air node `j`, mol, as the moves of the update running leave it.
     #[inline]
     pub fn a(&self, k: usize, j: usize) -> f64 {
-        self.air[k * self.mesh.level(AIR).n() + j]
+        self.moves.amount(Node::air(j), k).unwrap_or_else(|| self.air[k * self.mesh.level(AIR).n() + j])
     }
 }

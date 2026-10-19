@@ -9,7 +9,7 @@ use crate::math::mean_decay;
 use crate::units::DAY;
 use crate::copy::Grown;
 use crate::ground::heat_above_floor;
-use crate::store::{apply, Batch, Class};
+use crate::store::{apply, Batch, Class, Node};
 use crate::{bond, choose, World};
 
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
@@ -167,46 +167,52 @@ pub fn day(w: &mut World) {
     list.sort_unstable();
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());
-    for (_, slot, gen) in list {
+    for (cell, slot, gen) in list {
         let s = slot as usize;
         if !w.life.bodies[s].alive || w.life.bodies[s].gen != gen {
             continue;
         }
-        let mut b = std::mem::take(&mut w.life.bodies[s]);
-        w.counts.updates += 1;
-        // (Its mean member's body as it comes, for what its members grow in the update: `copy::mature`.)
-        let before = b.member_body(&w.chem);
-        // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
-        let sample = crate::copy::sample(w, s, &b, &mut rc, &mut tmp);
-        match live(w, s, &mut b, &mut rc, &mut tmp) {
-            Err(cause) => die(w, s, b, cause),
-            Ok(lived) => {
-                // A body with no brain takes no decision: its update is its physics only.
-                if !w.life.brainless(&b) {
-                    choose::act(w, s, &mut b, &lived, &mut act);
-                    // An action can leave nothing of a member (all its stores put or given
-                    // away): it dies at once, before another body deals with it.
-                    if b.empty_at(b.mass(&w.chem)) {
-                        die(w, s, b, LACK);
-                        continue;
-                    }
-                }
-                // Its mean moves by what the sample gained over its members (`copy::select`).
-                if let Some(x) = sample {
-                    crate::copy::select(w, &mut b, x, lived.gain);
-                }
-                crate::lineage::resize(w, s, &mut b);
-                // Young members who grew past their copy mass join their adult node (`copy::mature`).
-                if let Grown::Joins(t) = crate::copy::mature(w, s, &mut b, before) {
-                    w.life.bodies[s] = b;
-                    crate::nodes::merge(w, s, t);
-                    continue;
-                }
-                crate::nodes::split(w, s, &mut b);
-                w.see(&mut b);
-                w.life.schedule(w.day() + b.interval(w), slot, gen);
-                w.life.bodies[s] = b;
-            }
+        // What it takes from and gives to the store is gathered and booked once, at the end of its update.
+        w.open_moves(cell as usize, Node::new(Class::Body, s));
+        update(w, s, &mut rc, (&mut tmp, &mut act));
+        w.book_moves();
+    }
+}
+
+/// The update of the body in `slot`, due today: its physics (`live`), its decision, its sample member's selection, its
+/// lineage, its young members who mature, its split; or its death.
+fn update(w: &mut World, s: usize, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, &mut choose::ActTmp)) {
+    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    w.counts.updates += 1;
+    // (Its mean member's body as it comes, for what its members grow in the update: `copy::mature`.)
+    let before = b.member_body(&w.chem);
+    // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
+    let sample = crate::copy::sample(w, s, &b, rc, tmp);
+    let lived = match live(w, s, &mut b, rc, tmp) {
+        Err(cause) => return die(w, s, b, cause),
+        Ok(lived) => lived,
+    };
+    // A body with no brain takes no decision: its update is its physics only.
+    if !w.life.brainless(&b) {
+        choose::act(w, s, &mut b, &lived, act);
+        // An action can leave nothing of a member (all its stores put or given away): it dies at once, before another
+        // body deals with it.
+        if b.empty_at(b.mass(&w.chem)) {
+            return die(w, s, b, LACK);
         }
     }
+    // Its mean moves by what the sample gained over its members (`copy::select`).
+    if let Some(x) = sample {
+        crate::copy::select(w, &mut b, x, lived.gain);
+    }
+    crate::lineage::resize(w, s, &mut b);
+    // Young members who grew past their copy mass join their adult node (`copy::mature`).
+    if let Grown::Joins(t) = crate::copy::mature(w, s, &mut b, before) {
+        w.life.bodies[s] = b;
+        return crate::nodes::merge(w, s, t);
+    }
+    crate::nodes::split(w, s, &mut b);
+    w.see(&mut b);
+    w.life.schedule(w.day() + b.interval(w), s as u32, b.gen);
+    w.life.bodies[s] = b;
 }

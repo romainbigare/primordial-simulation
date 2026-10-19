@@ -5,7 +5,7 @@ use pcore::chem::Phase;
 use pcore::store::Boundary;
 use pcore::units::DAY;
 use pcore::{body, brain, choose, lanes, World, AIR};
-use worldgen::testkit::{ground_of, loose_volume as loose, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
+use worldgen::testkit::{ground_of, loose_volume as loose, moved, Books, Brain, Line, DISSOLVED, LIQUID, MINERAL, OFF, RICH};
 
 /// One step of radiation and the air.
 const DT: f64 = 3.0 * DAY;
@@ -629,7 +629,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     // body cannot give the push of a mover (`bump`, 0.05 of its weight) and stays; with its own (0.6) it goes.
     let mut weak = w.life.bodies[slot].clone();
     weak.genes[body::STRENGTH] = 0.05;
-    choose::go(&mut w, slot, &mut weak, b);
+    moved(&mut w, (a, slot), |w| choose::go(w, slot, &mut weak, b));
     assert_eq!(weak.cell as usize, a, "a body too weak to push walked");
     for t in 0..5000 {
         // Fuel for the trip each time (the scene is not about eating), with its heat at the body's temperature.
@@ -638,7 +638,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         m.store[RICH] = 1e3;
         let (from, to) = if t % 2 == 0 { (a, b) } else { (b, a) };
         assert_eq!(m.cell as usize, from);
-        choose::go(&mut w, slot, &mut m, to);
+        moved(&mut w, (from, slot), |w| choose::go(w, slot, &mut m, to));
         crossed += (m.cell as usize == to) as u32;
         w.life.bodies[slot] = m;
         pcore::survey::survey(&mut w);

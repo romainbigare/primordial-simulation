@@ -3,16 +3,17 @@
 use super::{light_cat, Body};
 use crate::event::{Event, EventKind};
 use crate::ground::Melting;
+use crate::store::Node;
 use crate::{bond, World};
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
 pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
     bond::let_go(w, &mut b, false);
-    let (n, i) = (w.mesh.cells().n(), b.cell as usize);
-    for (k, &a) in b.store.iter().enumerate() {
-        w.ground[k * n + i] += a;
+    let i = b.cell as usize;
+    for (k, &a) in b.store.iter().enumerate().filter(|x| *x.1 != 0.0) {
+        w.moves.give(&w.chem, Node::ground(i), k, a, 0.0);
     }
-    w.e_ground[i] += b.e;
+    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, b.e);
     let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
     w.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
     w.life.bodies[slot] = b;
@@ -22,14 +23,14 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
 /// Amounts `m` (mol of each substance, at most what it holds) go from body `b`, at the plateau state `th`, to its cell's
 /// ground as loose amounts, with their heat and fusion enthalpy (`Body::heat_with`).
 pub(crate) fn to_ground(w: &mut World, b: &mut Body, th: &Melting, m: &[f64]) {
-    let (n, i) = (w.mesh.cells().n(), b.cell as usize);
+    let i = b.cell as usize;
     let q = b.heat_with(&w.chem, th, m);
     b.lose(&w.chem, m);
-    for (k, &a) in m.iter().enumerate() {
-        w.ground[k * n + i] += a;
+    for (k, &a) in m.iter().enumerate().filter(|x| *x.1 != 0.0) {
+        w.moves.give(&w.chem, Node::ground(i), k, a, 0.0);
     }
     b.e -= q;
-    w.e_ground[i] += q;
+    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, q);
 }
 
 /// Some of a body's matter goes to its cell's ground as loose amounts: `dead` (mol of each substance), with its share of

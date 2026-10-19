@@ -4,8 +4,8 @@ use super::sense::liquid;
 use super::verbs::{bears, torn_from};
 use super::{cell, dissolve, holder, id, members, move_structure, ready, restructure, unlink, GROUND};
 use crate::change::{send_gas, GasMove, Reactor};
-use crate::flow::Sky;
-use crate::ground::{draw, share};
+use crate::ground::share;
+use crate::store::{Class, Node};
 use crate::chem::Phase;
 use crate::space::square::DIRS;
 use crate::rng::{Purpose, Rng};
@@ -31,10 +31,13 @@ pub fn step(w: &mut World) {
         if !w.parts.parts[s].alive {
             continue;
         }
+        // What it moves to and from the store is gathered and booked once, at the end of its turn.
+        w.open_moves(cell(w, s), Node::new(Class::Part, s));
         if react {
             react_part(w, &mut rc, s, &mut pool, &mut pool0, dt);
         }
         settle(w, s);
+        w.book_moves();
     }
     for r in 0..w.parts.parts.len() {
         if w.parts.parts[r].alive && w.parts.parts[r].root as usize == r {
@@ -52,7 +55,7 @@ pub fn step(w: &mut World) {
 /// fusion and vaporisation enthalpy of the gas sent (gas taken gives it back); gas the ground cannot pay for goes to the
 /// ground, with its heat.
 fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
-    let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
+    let na = w.mesh.level(AIR).n();
     let i = cell(w, s);
     let j = w.mesh.up(i, 0, AIR);
     let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), w.t_air(j));
@@ -68,20 +71,26 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     let c = p.heat_cap(chem);
     let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);
     p.e += gas.q_in - q_out;
-    (w.e_air[j], w.e_ground[i]) = (w.e_air[j] + q_out - gas.q_in, w.e_ground[i] + gas.back);
+    w.moves.give(&w.chem, Node::air(j), 0, 0.0, q_out);
+    w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
+    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, gas.back);
     let cap = w.heat_cap_ground(i);
-    let paid = share(draw(&mut w.e_ground[i], &mut w.counts, cap, gas.pay), gas.pay);
+    let paid = share(w.take_from_ground(i, (0, 0.0, 0.0), gas.pay, cap).1, gas.pay);
     // The heat of the gas that goes to the ground goes with it.
-    (w.e_ground[i], w.e_air[j]) = (w.e_ground[i] + q_out * (1.0 - paid), w.e_air[j] - q_out * (1.0 - paid));
-    let ground = &mut w.ground;
-    let mut sky = Sky { chem: &w.chem, air: &mut w.air, e_air: &mut w.e_air, potential: &mut w.potential };
-    send_gas(pool, pool0, paid, &mut sky, (j, lift), |k, kept| ground[k * n + i] += kept);
+    w.moves.take(&w.chem, Node::air(j), 0, 0.0, q_out * (1.0 - paid));
+    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
+    send_gas(pool, pool0, paid, |k, sent, kept| {
+        w.moves.give(&w.chem, Node::ground(i), k, kept, 0.0);
+        if sent != 0.0 {
+            w.moves.gas(&w.chem, k, sent, lift);
+        }
+    });
 }
 
 /// Walls of part `s` that are no longer solid run off to the ground; the part takes the ground's temperature (if the
 /// ground cannot pay the heat, it ends colder); walls lighter than `Physics::min_kg` fall apart.
 fn settle(w: &mut World, s: usize) {
-    let (ns, n) = (w.chem.ns(), w.mesh.cells().n());
+    let ns = w.chem.ns();
     let i = cell(w, s);
     let tg = w.t_ground_last(i);
     let chem = &w.chem;
@@ -90,13 +99,13 @@ fn settle(w: &mut World, s: usize) {
     for k in 0..ns {
         if p.wall[k] > 0.0 && chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid {
             let q = p.wall[k] * chem.subs[k].cp * t;
-            (w.ground[k * n + i], w.e_ground[i], p.e) = (w.ground[k * n + i] + p.wall[k], w.e_ground[i] + q, p.e - q);
-            p.wall[k] = 0.0;
+            w.moves.give(chem, Node::ground(i), k, p.wall[k], q);
+            (p.e, p.wall[k]) = (p.e - q, 0.0);
         }
     }
     let (e1, e0) = (p.heat_cap(chem) * tg, p.e);
     let cap = w.heat_cap_ground(i);
-    let got = draw(&mut w.e_ground[i], &mut w.counts, cap, e1 - e0);
+    let got = w.take_from_ground(i, (0, 0.0, 0.0), e1 - e0, cap).1;
     let p = &mut w.parts.parts[s];
     p.e = if got == e1 - e0 { e1 } else { e0 + got };
     let chem = &w.chem;

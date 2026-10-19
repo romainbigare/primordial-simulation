@@ -3,6 +3,7 @@
 use crate::body::{self, Body, Layout, ALLOC, COPY_MASS, WET_TISSUE};
 use crate::chem::{Phase, Reaction};
 use crate::ground::Melting;
+use crate::store::Node;
 use crate::units::DAY;
 use crate::{World, AIR};
 
@@ -118,8 +119,9 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
         if w.chem.phase(k, t) == Phase::Gas {
             // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `Substance::latent_gas`.)
             let q = x * w.chem.subs[k].cp * t;
-            (w.e_air[j], b.e) = (w.e_air[j] + q, b.e - q - x * w.chem.subs[k].latent_gas());
-            w.sky().cross(k, j, x, lift);
+            b.e = b.e - q - x * w.chem.subs[k].latent_gas();
+            w.moves.give(&w.chem, Node::air(j), 0, 0.0, q);
+            w.moves.gas(&w.chem, k, x, lift);
         } else {
             b.store[k] += x;
         }

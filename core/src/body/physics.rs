@@ -6,13 +6,13 @@ use super::live::{LiveTmp, Site};
 use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE, MAX_TAKE_SHARE};
 use crate::change::{send_gas, GasMove, Reactor};
-use crate::flow::Sky;
 use crate::chem::Phase;
-use crate::ground::{draw, heat_above_floor, share, take_paid, Melting};
+use crate::ground::{heat_above_floor, share, Melting};
 use crate::math::{mean_decay, one_minus_exp};
 use crate::survey::intercept;
+use crate::store::Node;
 use crate::units::{MAX_SUBSTANCES, P_REF};
-use crate::{World, AIR};
+use crate::World;
 
 /// The most share of the heat the body has and can get from the surface that pays the enthalpy of the gas it puts out.
 const GAS_HEAT_SHARE: f64 = 0.5;
@@ -104,13 +104,13 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
 /// The air the body of boundary layer `f` exchanges gas with in this time (`breath`), at the air's shares (none of an
 /// empty air node), at most `MAX_TAKE_SHARE` of each.
 fn gas_pool(w: &World, b: &Body, s: &Site, f: &Film, tmp: &mut LiveTmp) -> f64 {
-    let (chem, air, na, j) = (&w.chem, &w.air, w.mesh.level(AIR).n(), s.j);
-    let tot: f64 = (0..chem.ns()).map(|k| air[k * na + j]).sum();
+    let (chem, j) = (&w.chem, s.j);
+    let tot: f64 = (0..chem.ns()).map(|k| w.a(k, j)).sum();
     let reach = breath(chem, &w.cfg, b, f, s.days, s.depth);
     tmp.x.clear();
     tmp.pool.clear();
     for k in 0..chem.ns() {
-        let a = air[k * na + j];
+        let a = w.a(k, j);
         let x = if tot > 0.0 { a / tot } else { 0.0 };
         tmp.x.push(x);
         tmp.pool.push((x * reach).min(MAX_TAKE_SHARE * a));
@@ -147,11 +147,16 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
     let (j, lift) = (s.j, w.lift(s.i));
     let gas = GasMove::of(&w.chem, &tmp.pool, &tmp.pool0, w.t_air(j));
-    (b.e, w.e_air[j]) = (b.e + gas.q_in, w.e_air[j] - gas.q_in);
+    b.e += gas.q_in;
+    w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
     let heat = h.heat + gas.back;
     let paid = share(GAS_HEAT_SHARE * (b.e + heat + h.g * s.dt * s.tg).max(0.0), gas.pay);
-    let store = &mut b.store;
-    send_gas(&tmp.pool, &tmp.pool0, paid, &mut w.sky(), (j, lift), |k, kept| store[k] += kept);
+    send_gas(&tmp.pool, &tmp.pool0, paid, |k, sent, kept| {
+        b.store[k] += kept;
+        if sent != 0.0 {
+            w.moves.gas(&w.chem, k, sent, lift);
+        }
+    });
     (h.heat, h.c_out) = (heat - paid * gas.pay, paid * gas.c_out);
 }
 
@@ -160,8 +165,8 @@ fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat
 /// it stored now. Returns the light set aside it took, J.
 fn store_light(w: &mut World, b: &mut Body, s: &Site, caught: f64, used: f64) -> f64 {
     let stored = w.cfg.phys.light_yield * used;
-    let took = (b.keep as f64 * caught).min(w.e_bodies[s.i]).max(0.0);
-    w.e_bodies[s.i] -= took;
+    let took = (b.keep as f64 * caught).min(w.heat_now(Node::bodies(s.i))).max(0.0);
+    w.moves.take(&w.chem, Node::bodies(s.i), 0, 0.0, took);
     if caught > 0.0 {
         b.keep = (stored / caught) as f32;
     }
@@ -171,16 +176,16 @@ fn store_light(w: &mut World, b: &mut Body, s: &Site, caught: f64, used: f64) ->
 /// The liquids of the cell's ground a body soaks up (`Soil`): whatever the cell holds counts for the wetness, but a
 /// body afloat on standing liquid reaches the ground through none.
 fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
-    let (chem, ground, n, i, tg) = (&w.chem, &w.ground, w.mesh.cells().n(), s.i, s.tg);
-    let ns = chem.ns();
+    let (chem, i, tg) = (&w.chem, s.i, s.tg);
+    let (ns, g) = (chem.ns(), |k: usize| w.g(k, i));
     let standing = if s.stands && s.depth == 0.0 {
         0.0
     } else {
-        (0..ns).filter(|&k| chem.phase_in(k, tg, |j| ground[j * n + i]) == Phase::Liquid).map(|k| ground[k * n + i] * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / w.mesh.cells().area()[i]
+        (0..ns).filter(|&k| chem.phase_in(k, tg, g) == Phase::Liquid).map(|k| g(k) * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / w.mesh.cells().area()[i]
     };
     let wet = standing / (standing + w.cfg.phys.wet_depth);
-    let wets = (0..ns).filter(|&k| chem.phase_in(k, tg, |j| ground[j * n + i]) == Phase::Liquid && chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
-    let in_ground: f64 = (0..ns).filter(|&k| wets >> k & 1 == 1).map(|k| ground[k * n + i]).sum();
+    let wets = (0..ns).filter(|&k| chem.phase_in(k, tg, g) == Phase::Liquid && chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
+    let in_ground: f64 = (0..ns).filter(|&k| wets >> k & 1 == 1).map(g).sum();
     Soil { wets, in_ground, rate: b.k.liq * wet * wk }
 }
 
@@ -191,42 +196,45 @@ fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
 /// (`film`, the Lewis relation) and its liquid stays above its safe minimum. Returns what each lost past what flowed in.
 fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat, soil: &Soil, reach: f64) -> ([f64; MAX_SUBSTANCES], bool) {
     let lift = w.lift(s.i);
-    let World { cfg, chem, mesh, ground, e_ground, air, e_air, counts, potential, .. } = w;
-    let (ns, n, i, j, tg, dt, days) = (chem.ns(), mesh.cells().n(), s.i, s.j, s.tg, s.dt, s.days);
+    let (ns, i, tg, dt, days) = (w.chem.ns(), s.i, s.tg, s.dt, s.days);
     let (g, t0) = (h.g, h.t0);
     let mut moved = false;
-    let cpa: f64 = (0..ns).map(|k| tmp.x[k] * chem.subs[k].cp).sum();
-    let wide = film(chem, cfg, b, h.mass, s.cover).g / cpa.max(1e-9) * dt * s.open * (-s.depth / cfg.phys.gas_depth).exp();
-    let (lay, size) = (Layout::of(chem), b.size(chem));
+    let cpa: f64 = (0..ns).map(|k| tmp.x[k] * w.chem.subs[k].cp).sum();
+    let wide = film(&w.chem, &w.cfg, b, h.mass, s.cover).g / cpa.max(1e-9) * dt * s.open * (-s.depth / w.cfg.phys.gas_depth).exp();
+    let (lay, size) = (Layout::of(&w.chem), b.size(&w.chem));
     let mut lost = [0.0f64; MAX_SUBSTANCES];
-    for k in 0..ns {
+    for (k, lost) in lost.iter_mut().enumerate().take(ns) {
+        let (chem, cfg) = (&w.chem, &w.cfg);
         let push = (chem.p_sat(k, t0) / P_REF - tmp.x[k]).max(0.0);
         if push <= 0.0 || b.store[k] <= 0.0 || chem.phase(k, t0) == Phase::Gas || t0 < b.melt(chem, k) {
             continue;
         }
-        let (own, room) = (h.heat - h.lit + h.took, heat_above_floor(e_ground[i], h.gcap));
+        let (own, room) = (h.heat - h.lit + h.took, heat_above_floor(w.heat_now(Node::ground(i)), h.gcap));
         let heat_paid = (own + (g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0)).min(room)).max(0.0);
         let (ct, x) = (b.heat_cap(chem) + h.c_out, g * dt / (b.heat_cap(chem) + h.c_out));
         let bx = mean_decay(x);
         let e1 = one_minus_exp(x) * ct * tg + (-x).exp() * b.e + bx * h.heat;
         let need = ((e1 - ct * b.gene(COOL_T)) / bx / chem.subs[k].latent_gas()).max(0.0);
         let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
-        let soak_rate = if soil.in_ground > 0.0 && soil.liquid(k) { soil.rate * chem.subs[k].solubility * ground[k * n + i] / soil.in_ground } else { 0.0 };
+        let gk = w.g(k, i);
+        let soak_rate = if soil.in_ground > 0.0 && soil.liquid(k) { soil.rate * chem.subs[k].solubility * gk / soil.in_ground } else { 0.0 };
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach, soak_rate * days, cfg.phys.dormancy) } else { push * reach };
         let m = open_m.max((push * wide).min(need).min(spare)).min(heat_paid / chem.subs[k].latent_gas());
         // What flows through it comes from the ground, which pays its heat and fusion enthalpy.
-        let inflow = if soak_rate > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(MAX_TAKE_SHARE * ground[k * n + i]) } else { 0.0 };
-        let (fused, cp) = (chem.fused_heat(k, tg, |j| ground[j * n + i]), chem.subs[k].cp);
-        let pre = take_paid(&mut e_ground[i], counts, h.gcap, inflow, cp, inflow * (cp * tg + fused)).0;
-        (b.store[k], ground[k * n + i], b.e, h.heat) = (b.store[k] + pre, ground[k * n + i] - pre, b.e + pre * chem.subs[k].cp * tg, h.heat + pre * fused);
+        let inflow = if soak_rate > 0.0 && b.wet >> k & 1 == 1 { (m - b.store[k]).max(0.0).min(MAX_TAKE_SHARE * gk) } else { 0.0 };
+        let (cp, latent) = (chem.subs[k].cp, chem.subs[k].latent_gas());
+        let fused = w.chem.fused_heat(k, tg, |j| w.g(j, i));
+        let pre = w.take_from_ground(i, (k, inflow, cp), inflow * (cp * tg + fused), h.gcap).0;
+        (b.store[k], b.e, h.heat) = (b.store[k] + pre, b.e + pre * cp * tg, h.heat + pre * fused);
         let m = m.min(b.store[k]);
         if m > 0.0 {
             moved = true;
-            let q = m * chem.subs[k].cp * t0;
-            (b.store[k], e_air[j], b.e) = (b.store[k] - m, e_air[j] + q, b.e - q);
-            Sky { chem, air, e_air, potential }.cross(k, j, m, lift);
-            h.heat -= m * chem.subs[k].latent_gas();
-            lost[k] = (m - pre).max(0.0);
+            let q = m * cp * t0;
+            (b.store[k], b.e) = (b.store[k] - m, b.e - q);
+            w.moves.give(&w.chem, Node::air(s.j), 0, 0.0, q);
+            w.moves.gas(&w.chem, k, m, lift);
+            h.heat -= m * latent;
+            *lost = (m - pre).max(0.0);
         }
     }
     (lost, moved)
@@ -239,23 +247,29 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
 #[allow(clippy::too_many_arguments)]
 fn soak(w: &mut World, b: &mut Body, s: &Site, gcap: f64, heat: &mut f64, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
     let paces = b.paces(w);
-    let World { chem, mesh, ground, e_ground, counts, .. } = w;
-    let (n, i, tg, days) = (mesh.cells().n(), s.i, s.tg, s.days);
-    for k in (0..chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
-        let (x, room) = (ground[k * n + i] / soil.in_ground, b.room(chem, paces, k, mass2));
+    let (i, tg, days) = (s.i, s.tg, s.days);
+    for k in (0..w.chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
+        let (chem, gk) = (&w.chem, w.g(k, i));
+        let (x, room) = (gk / soil.in_ground, b.room(chem, paces, k, mass2));
         // (Rate r per day over `days`, the loss e a day: it takes (gap at the start) f + e days (1 - f / (r days)),
         // f = 1 - exp(-r days); all the gap and the loss when r days is large.)
         let rate = soil.rate * chem.subs[k].solubility;
         let f = one_minus_exp(rate * days);
         let uptake = if rate * days > 1e-9 { (room - lost[k]) * f + lost[k] * (1.0 - f / (rate * days)) } else { 0.0 };
-        let want = ((uptake + fall) * x).min(room).min(MAX_TAKE_SHARE * ground[k * n + i]).max(0.0);
-        let (per, fused) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
-        let d = take_paid(&mut e_ground[i], counts, gcap, want, chem.subs[k].cp, want * (per + fused)).0;
-        b.store[k] += d;
-        ground[k * n + i] -= d;
-        b.e += d * per;
-        *heat += d * fused;
+        let want = ((uptake + fall) * x).min(room).min(MAX_TAKE_SHARE * gk).max(0.0);
+        soak_in(w, b, (i, tg, gcap), (k, want), heat);
     }
+}
+
+/// Up to `want` mol of liquid `k` of ground node `i` (at `tg` K, of heat capacity `gcap`) go into the body with their
+/// heat and fusion enthalpy, which the ground pays, or the body takes less (`World::take_from_ground`): the body gets
+/// their heat at `tg`, and `heat` their fusion enthalpy. Returns the mol taken.
+fn soak_in(w: &mut World, b: &mut Body, (i, tg, gcap): (usize, f64, f64), (k, want): (usize, f64), heat: &mut f64) -> f64 {
+    let (cp, fused) = (w.chem.subs[k].cp, w.chem.fused_heat(k, tg, |j| w.g(j, i)));
+    let per = cp * tg;
+    let d = w.take_from_ground(i, (k, want, cp), want * (per + fused), gcap).0;
+    (b.store[k], b.e, *heat) = (b.store[k] + d, b.e + d * per, *heat + d * fused);
+    d
 }
 
 /// After growth and children, the key liquids soak in again at the same update (`soak` over the time, with nothing
@@ -276,20 +290,16 @@ pub(super) fn soak_again(w: &mut World, b: &mut Body, s: &Site) {
 /// pays their heat and fusion enthalpy, or the body takes less.
 fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f64) {
     let paces = b.paces(w);
-    let World { chem, mesh, ground, e_ground, counts, .. } = w;
-    let (n, i, tg) = (mesh.cells().n(), s.i, s.tg);
+    let (i, tg) = (s.i, s.tg);
     let soak = one_minus_exp(b.k.liq * s.days) * wk;
-    for &(k, u) in &b.k.upt {
-        if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| ground[j * n + i]) != Phase::Liquid || ground[k * n + i] <= 0.0 {
+    for x in 0..b.k.upt.len() {
+        let (k, u) = b.k.upt[x];
+        let (chem, gk) = (&w.chem, w.g(k, i));
+        if u <= 0.0 || chem.subs[k].solubility > 0.0 || chem.phase_in(k, tg, |j| w.g(j, i)) != Phase::Liquid || gk <= 0.0 {
             continue;
         }
-        let want = (b.room(chem, paces, k, mass2) * soak).min(MAX_TAKE_SHARE * ground[k * n + i]);
-        let (per, fused) = (chem.subs[k].cp * tg, chem.fused_heat(k, tg, |j| ground[j * n + i]));
-        let d = take_paid(&mut e_ground[i], counts, h.gcap, want, chem.subs[k].cp, want * (per + fused)).0;
-        b.store[k] += d;
-        ground[k * n + i] -= d;
-        b.e += d * per;
-        h.heat += d * fused;
+        let want = (b.room(chem, paces, k, mass2) * soak).min(MAX_TAKE_SHARE * gk);
+        soak_in(w, b, (i, tg, h.gcap), (k, want), &mut h.heat);
     }
 }
 
@@ -298,22 +308,23 @@ fn roots(w: &mut World, b: &mut Body, s: &Site, h: &mut Heat, mass2: f64, wk: f6
 /// first from what its bodies' node holds for it (the rate of its last update over the time, `survey`); if it cannot,
 /// the body ends colder. The gas its reactions put out leaves at the end with its share of the heat.
 fn relax_heat(w: &mut World, b: &mut Body, s: &Site, h: &Heat) {
-    let World { cfg, chem, e_ground, e_air, counts, e_bodies, .. } = w;
     let (i, j, tg, dt, g, heat) = (s.i, s.j, s.tg, s.dt, h.g, h.heat);
-    let (_, c) = b.mass_cap(chem);
+    let (_, c) = b.mass_cap(&w.chem);
     if c <= 0.0 {
         return;
     }
     let (released, ct, e_start) = (heat.max(-g * dt * tg), c + h.c_out, b.e + heat - heat.max(-g * dt * tg));
     let relax = |g: f64| ct * (tg + released / dt / g + (e_start / ct - tg - released / dt / g) * (-g * dt / ct).exp());
     let e1 = relax(g);
+    let (chem, cfg) = (&w.chem, &w.cfg);
     let e1 = if e1 > ct * h.t0 { relax(surface(cfg, b, h.mass, &film(chem, cfg, b, h.mass, s.cover), s.walls, e1 / ct, tg)) } else { e1 };
     let give = e1 - b.e - heat + h.lit - h.took;
-    let from = give.min(b.drew as f64 * dt).min(e_bodies[i]).max(0.0);
-    e_bodies[i] -= from;
-    let drawn = from + draw(&mut e_ground[i], counts, h.gcap, give - from);
+    let from = give.min(b.drew as f64 * dt).min(w.heat_now(Node::bodies(i))).max(0.0);
+    w.moves.take(&w.chem, Node::bodies(i), 0, 0.0, from);
+    let drawn = from + w.take_from_ground(i, (0, 0.0, 0.0), give - from, h.gcap).1;
     b.drew = (drawn.max(0.0) / dt) as f32;
     let e1 = if drawn == give { e1 } else { e1 - (give - drawn) };
     let out = e1 * h.c_out / ct;
-    (b.e, e_air[j]) = (e1 - out, e_air[j] + out);
+    b.e = e1 - out;
+    w.moves.give(&w.chem, Node::air(j), 0, 0.0, out);
 }
