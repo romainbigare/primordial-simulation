@@ -902,6 +902,11 @@ Phase E review, round 1 (fixes):
   336 members, eater life 5.8 to 6.4 yr, carbon gas 251 to 253 ppm; F7 differences past the noise 17 to 10. Snapshot
   version 34; golden re-pinned.
 
+  version 32; golden re-pinned.
+- F7 follow-up, speed: the maturing fit halves 40 times, on one shape a step (60, on two). 64 x 64, seed 1, years 31 to
+  35, the same world within its noise: plant members 3.43e10 to 3.29e10, plant mass 4.80e10 to 4.79e10 kg, eaters 336
+  to 315 members. Golden re-pinned.
+
 **Phase J: the long physics step**
 
 - J1, what holds the step at 3 days (worlds with no life, 64 x 64, seeds 1 and 2, years 7 to 12; the steps of the

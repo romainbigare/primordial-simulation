@@ -23,8 +23,8 @@ pub(crate) fn mean_decay(x: f64) -> f64 {
 const SERIES: f64 = 0.1;
 /// The steepest shape `Pass` fits, its steepness times its width: past it all but e^-700 of the members lie at one end.
 const STEEPEST: f64 = 700.0;
-/// Halvings of the steepness in `Pass::new`: to 1e-15 of it.
-const FIT_STEPS: usize = 60;
+/// Halvings of the steepness in `Pass::new`: to 1e-9 of its range, far finer than its effect on the shares.
+const FIT_STEPS: usize = 40;
 
 /// The mean and the variance, in units of the width and of its square, of a density proportional to e^(-u y) on
 /// [0, 1]: 1/u - 1/(e^u - 1) and 1/u² - 1/(4 sinh²(u/2)) (1/2 and 1/12 at u = 0, the uniform).
@@ -57,7 +57,11 @@ impl Pass {
             return None;
         }
         // Its mean distance below the level in standard deviations falls as the shape steepens towards the level.
-        let (depth, r) = (|u: f64| shape(u).0 / shape(u).1.sqrt(), y / sd);
+        let depth = |u: f64| {
+            let (m, v) = shape(u);
+            m / v.sqrt()
+        };
+        let r = y / sd;
         if y <= 0.0 || r <= depth(STEEPEST) {
             return Some(Pass { top, d, k: 1.0 / y.max(f64::MIN_POSITIVE), width: if y > 0.0 { f64::INFINITY } else { 0.0 } });
         }
