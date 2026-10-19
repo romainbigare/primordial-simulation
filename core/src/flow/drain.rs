@@ -2,7 +2,7 @@
 //! of each cell's stack joined by a vertical link (laws.md 1.2): the rates along that link, and Darcy's law between
 //! cells in each layer, which `solve::spread` solves.
 
-use super::{land::{t_now, table, wet}, liquid::{book, mobile}, Scratch};
+use super::{land::{filled, t_now, table, wet}, liquid::{book, mobile}, Scratch};
 use crate::{math::one_minus_exp, solve::spread::{within, Net, Spread}, space::{Layer, Stack}, store::{Batch, Class, LinkFlux}, World};
 
 /// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
@@ -84,7 +84,7 @@ fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held)
     for (i, &vol) in held.iter().enumerate() {
         let (d, q) = (stack.node(DEEP, i), stack.node(PORES, i));
         (x[d], cap[d]) = (store_table(w, s, i, vol), p.bed_porosity * area[i]);
-        (x[q], cap[q]) = (table(s, i, p.porosity), area[i] * if s.head[i] - s.z[i] >= s.pd[i] { 1.0 } else { p.porosity });
+        (x[q], cap[q]) = (table(s, i, p.porosity), area[i] * if filled(s, i, p.porosity) { 1.0 } else { p.porosity });
     }
     let free = |i: usize| mob.vol[i].min(s.pd[i] * area[i]) > p.field * s.pd[i] * area[i];
     let border: Vec<usize> = (0..cells.a().len()).filter(|&l| cells.width()[l] > 0.0).collect();

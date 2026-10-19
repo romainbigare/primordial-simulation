@@ -1241,3 +1241,4 @@ Phase E review, round 1 (fixes):
   from year 20: rounds 3.7 to 2.2 a step, Flow about 1,130 to 850 ms a year; golden re-pinned.
 - Change's reactor runs its due nodes on threads (`par::rows`, each node into a row, booked in node order); results
   unchanged (golden and threads build equal). 64 x 64 with life, 4 shared cores: Change about 270 to 220 ms a year.
+- Ground with no pores (`porosity` 0) counts as full in the liquid table (`land::filled`): its head may round a hair under its surface, and the table then divided by 0 (a NaN in the liquid test on a fresh island at 40°); no result moves.

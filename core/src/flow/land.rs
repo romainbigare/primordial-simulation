@@ -195,10 +195,16 @@ pub(super) fn stand(s: &Scratch, i: usize) -> f64 {
     (s.head[i] - s.pd[i]).max(s.z[i])
 }
 
+/// Whether the pores of node `i` (porosity `por`) are full: all its other liquid stands on it. Ground with no pores
+/// always is (its head may round a hair under its surface).
+#[inline]
+pub(super) fn filled(s: &Scratch, i: usize, por: f64) -> bool {
+    por <= 0.0 || s.head[i] - s.z[i] >= s.pd[i]
+}
+
 /// Head of the liquid table of node `i`, m: with pores not full, the bottom of its loose ground plus the depth they
 /// fill; else the head that stands.
 #[inline]
 pub(super) fn table(s: &Scratch, i: usize, por: f64) -> f64 {
-    let full = s.head[i] - s.z[i] >= s.pd[i];
-    if full { s.head[i] - s.pd[i] } else { s.z[i] - s.pd[i] / por + (s.head[i] - s.z[i]) / por }
+    if filled(s, i, por) { s.head[i] - s.pd[i] } else { s.z[i] - s.pd[i] / por + (s.head[i] - s.z[i]) / por }
 }
