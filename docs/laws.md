@@ -463,7 +463,8 @@ mature body that is alike to it (a keyed draw among equals). A node's children h
 mix their genes among themselves (one variance per gene and no covariances is free recombination, Bulmer 1971).
 
 - Each gene and each born brain row (kept whole) of the children is one parent's, drawn; then the normal mutation.
-  Many children take about the partner's share from it, and their spread is what a merge of the two parents would pool
+  The chance to take the partner's is one half: the partner is one parent (a node gives the genes of its mean member).
+  Many children take about half from it, and their spread is what a merge of the two parents would pool
   (`mix`, `mix_rows`).
 - The partner gives and loses nothing: genes are information.
 - No partner: the children copy one parent. Bodies that are not alike never mix, so **kinds are the groups that mix**.

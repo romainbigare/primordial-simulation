@@ -906,6 +906,10 @@ Phase E review, round 1 (fixes):
 - F7 follow-up, speed: the maturing fit halves 40 times, on one shape a step (60, on two). 64 x 64, seed 1, years 31 to
   35, the same world within its noise: plant members 3.43e10 to 3.29e10, plant mass 4.80e10 to 4.79e10 kg, eaters 336
   to 315 members. Golden re-pinned.
+- F7 follow-up, a partner is one parent (`copy::mix`): children take each gene and born row from one parent or the other
+  by even chances, not by the partner's share of the members of both (a node of 50 members gave 98% of its genes); the
+  branches of `share` for more than 32 children of a litter, which never ran, go. The same world to the bit at 64 x
+  64, seed 1; golden unchanged; F7 differences past the noise 10 to 9 (the default start passes all three rules).
 
 **Phase J: the long physics step**
 
