@@ -75,6 +75,8 @@ pub struct Body {
     /// The cell's cumulative light at the last update, J/m², moved since by what its shade gave
     /// it more or less than the cell's mean (`survey::shade`): it caught `light - mark` per m²
     pub mark: f64,
+    /// The cell's cumulative rain at the last update, mol/m²: it caught a share of `rained - this` (`physics::rain_caught`)
+    pub rained: f64,
     /// The share of the light it caught that its light reactions stored at its last update (J per J): its cell sets that
     /// share of the light it absorbs aside in its bodies' node (`store::Class::Bodies`); a child inherits it
     pub keep: f32,

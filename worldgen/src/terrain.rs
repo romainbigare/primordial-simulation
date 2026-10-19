@@ -192,6 +192,7 @@ pub fn build(seed: u64, w: usize, h: usize, chem: Chemistry, init: &Init, cfg: C
         canopy: vec![0.0; n],
         links,
         light: vec![0.0; n],
+        rained: vec![0.0; n],
         events: Vec::new(),
         scratch: Default::default(),
         batches: Default::default(),

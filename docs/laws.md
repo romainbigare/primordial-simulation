@@ -963,8 +963,10 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
   the body slows it (`gas_depth`). It reaches no more of each gas than its air node holds.
 - **Pores close as it dries**: for vapour only, they open as far as the activity (6.5), solved
   exactly over the update (`closing`).
-- **Rain** (`body/physics.rs`): the bodies of a cell catch 1 − e^−x of the cell's rain (x their
-  leaf area per ground area), shared by height like the light. A body catches no vapour.
+- **Rain** (`body/physics.rs`): the bodies of a cell catch 1 − e^−x of the rain that fell on the
+  cell since their last update (x their leaf area per ground area; `World::rained`, the cell's rain
+  since the start, and `Body::rained`, its mark, as for light), shared by height like the light. A
+  body catches no vapour.
 - **Soaking** (`LIQ` gene): a flow along the body's contact with the ground, at rate `LIQ` × the
   ground's wetness (standing or pore liquid; half wet at `wet_depth`) × its working share ×
   solubility per day, driven by how far it is below its level, while it loses what it

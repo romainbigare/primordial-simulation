@@ -848,6 +848,8 @@ Phase E review, round 1 (fixes):
   body matter's keep gene): 7,600 samples a year at 64 x 64 (35% that move nothing) against 14,400 (63%). A sample at
   every update would cost about 5% more than before the skips, so `sample_every` stays at 2 and the samples cost
   half. The light-eaters' `INTERVAL` gene stays the turnover time of their stores (decision 11).
+- Bodies catch the rain that fell since their last update (`World::rained`, the cell's rain since the start, and a
+  mark per body, `Body::rained`, as for light), not the yearly mean rain times the span: the seasons reach the leaves.
 
 **Phase J: the long physics step**
 

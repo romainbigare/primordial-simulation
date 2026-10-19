@@ -123,7 +123,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     let lineage = fresh.unwrap_or(b.lineage);
     // Their brain: their born rows plus what their parent learned.
     let own = w.life.inherit(rows.as_deref().unwrap_or(w.life.born(b)), lineage, b);
-    let lot = Lot { count: m, store, e, brood: 0.0, last: w.day() as f64, mark: w.light[cell] };
+    let lot = Lot { count: m, store, e, brood: 0.0, last: w.day() as f64, mark: w.light[cell], rained: w.rained[cell] };
     if fresh.is_none() && !l.alone {
         if let Some(t) = hit.or_else(|| young_node(w, slot, b, l, cell, &genes, &spread)) {
             let born = rows.unwrap_or_else(|| w.life.born(b).to_vec());
@@ -141,6 +141,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
         parent: l.parent,
         born: w.day(),
         mark: w.light[cell],
+        rained: w.rained[cell],
         keep: b.keep,
         store: lot.store,
         e,

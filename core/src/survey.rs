@@ -42,7 +42,7 @@ pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     w.life.fit_map(n);
     if w.canopy.len() != n {
-        (w.canopy, w.light) = (vec![0.0; n], vec![0.0; n]);
+        (w.canopy, w.light, w.rained) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     }
     bond::ready(w);
     let monthly = w.time.is_multiple_of(w.cfg.calendar().month);

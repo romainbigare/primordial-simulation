@@ -84,11 +84,13 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     lit / mass / s.days
 }
 
-/// The rain that fell on its capture area, mol: the cell's bodies intercept 1 - exp(-x) of the rain, x their capture
-/// area per ground area, shared out by height as the light is (`survey::shade`), at the cell's rain rate of the year.
-fn rain_caught(w: &World, slot: usize, b: &Body, s: &Site) -> f64 {
-    let (i, World { rain, life, canopy, .. }) = (s.i, w);
-    rain.get(i).map_or(0.0, |&r| r as f64) * b.vis[1] as f64 * b.n() * s.dt * s.open * life.shade.get(slot).map_or(1.0, |&f| f) * intercept(canopy.get(i).map_or(0.0, |&c| c as f64))
+/// The rain that fell on its capture area since its last update, mol: the cell's bodies intercept 1 - exp(-x) of the rain
+/// that fell on the cell since then (`World::rained`), x their capture area per ground area, shared out by height as the
+/// light is (`survey::shade`).
+fn rain_caught(w: &World, slot: usize, b: &mut Body, s: &Site) -> f64 {
+    let (i, World { rained, life, canopy, .. }) = (s.i, w);
+    let fell = rained[i] - std::mem::replace(&mut b.rained, rained[i]);
+    fell * b.vis[1] as f64 * b.n() * s.open * life.shade.get(slot).map_or(1.0, |&f| f) * intercept(canopy.get(i).map_or(0.0, |&c| c as f64))
 }
 
 /// Light caught since the last update through the openings of walls around it, less what it reflects, and what of it

@@ -105,7 +105,7 @@ pub fn broken(w: &World) -> Option<String> {
     let above_0 = |x: f64| x.is_finite() && x > 0.0;
     let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep))];
     // A heat may reach 0 J, where `store::apply` stops what takes from it, not below.
-    let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light)];
+    let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light), ("rained", &w.rained)];
     let found = (amounts.into_iter().chain(energies))
         .find_map(|(name, v)| first_bad(name, v, at_least_0))
         .or_else(|| {

@@ -59,8 +59,8 @@ pub struct World {
     pub store: Store,
     /// Elevation of the bottom of the ground column, m
     pub base_z: f64,
-    /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year (`flow::air::exchange`); bodies
-    /// catch it (`body::live`)
+    /// Liquid falling on each ground cell, mol/(m² s), a moving average over about a year (`flow::air::book`), for the
+    /// tape
     pub rain: Vec<f32>,
     /// Liquid moved out of each ground cell, mol/s, a moving average over about a year (`flow::liquid`); it pushes parts
     /// (`bond::load`)
@@ -74,6 +74,8 @@ pub struct World {
     /// Light intercepted in each cell per m² of light-capture area since the start (the mean of
     /// its bodies: taller members catch more, `survey::shade`), J/m²
     pub light: Vec<f64>,
+    /// Rain fallen on each cell since the start, mol/m² (its bodies catch what fell since their last update)
+    pub rained: Vec<f64>,
     /// What the links of the cell level remember (`store::Links`)
     pub links: crate::store::Links,
     /// Raw physical facts since the shell last drained them (not part of the saved state)

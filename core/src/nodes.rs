@@ -124,7 +124,7 @@ pub fn join(w: &mut World, t: usize, c: Body, rows: &[f32]) {
 
 /// What splits and joins as an amount when members move between nodes (Idea 3 of `docs/foundation/plan.md`): their
 /// count, mol of each store, heat, J, and brood, mol; and the day their time was last integrated from and the cell's
-/// light then, J/m² (`Body::last`, `Body::mark`).
+/// light and rain then, J/m² and mol/m² (`Body::last`, `Body::mark`, `Body::rained`).
 pub(crate) struct Lot {
     pub count: f64,
     pub store: Vec<f64>,
@@ -132,6 +132,7 @@ pub(crate) struct Lot {
     pub brood: f64,
     pub last: f64,
     pub mark: f64,
+    pub rained: f64,
 }
 
 impl Lot {
@@ -145,14 +146,14 @@ impl Lot {
             store.push(x);
             *a -= x;
         }
-        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last, mark: b.mark };
+        let c = Lot { count: f * b.count, store, e: fa * b.e, brood: fa * b.brood, last: b.last, mark: b.mark, rained: b.rained };
         (b.e, b.brood) = (b.e - c.e, b.brood - c.brood);
         life.set_count(b, b.count - c.count);
         c
     }
     /// All that body `c` holds (its stores taken out of it).
     pub(crate) fn of(c: &mut Body) -> Lot {
-        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, last: c.last, mark: c.mark }
+        Lot { count: c.count, store: std::mem::take(&mut c.store), e: c.e, brood: c.brood, last: c.last, mark: c.mark, rained: c.rained }
     }
 }
 
@@ -165,12 +166,12 @@ impl Lot {
 /// gap squared; the genes' up to `most`), so the smaller one's genes stay in the spread, not only in the mean. `rows`
 /// none: those of `o` (a member split off `o` coming back, `one`), which leaves its rows and their spread as they are:
 /// it left with the node's and comes back with them. The node's next update integrates its members' own time: its last
-/// day and its mark of light become the means by members of its own and theirs, so members who joined since its last
+/// day and its marks of light and rain become the means by members of its own and theirs, so members who joined since its last
 /// update count from when they came (as many member-days of light, upkeep and growth as they lived in it).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], size: (f32, f32), rows: Option<(&[f32], &[f32], f32)>) {
     let share = c.count / (o.count + c.count);
-    (o.last, o.mark) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark));
+    (o.last, o.mark, o.rained) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark), o.rained + share * (c.rained - o.rained));
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, share as f32);
     let (mo, vo) = o.size_moments(&w.chem);
     let gap = size.0 - mo;

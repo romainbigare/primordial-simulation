@@ -1261,8 +1261,9 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let n = w.mesh.cells().n();
         // A plant with its store of this mineral emptied, the ground full of it.
         let mut plant = eater_of(&mut w, 0, i, brain::REST);
-        // (It soaks as a plant does, 1 a day, the rate roots take what is dissolved at.)
-        plant.genes[LIQ] = 0.0;
+        // (It soaks as a plant does, 1 a day, the rate roots take what is dissolved at; with no capture area it catches no
+        // rain, whose liquid would bring what is dissolved in the ground with it.)
+        (plant.genes[LIQ], plant.genes[pcore::body::LEAF]) = (0.0, -9.0);
         let mut idle = plant.clone();
         for b in [&mut plant, &mut idle] {
             let a = b.store[mineral];
