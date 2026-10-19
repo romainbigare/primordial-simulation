@@ -113,7 +113,7 @@ fn to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &m
     if b.empty_at(mass) {
         return Err(LACK);
     }
-    let (upkeep_heat, span, mass, spare, th) = settle_upkeep(w, b, &s, mass, tmp)?;
+    let (upkeep_heat, span, mass, spare, th) = settle_upkeep(w, slot, b, &s, mass, tmp)?;
     let lit = physics(w, slot, b, rc, &mut *tmp, &s, mass, upkeep_heat, th);
     keep_warm(w, b, span, s.dt);
     let th = check_stores(w, slot, b, tmp)?;
@@ -134,66 +134,60 @@ pub(crate) fn gain_to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut 
 
 /// A body whose growth did not rebuild the body it lost in the update, below its copy mass, starves: it dies with the
 /// chance of the share of its body it lost (of `from` kg a member, or of its copy mass if it was larger), so one that
-/// starved to half its size has lived through it with even chances; a node loses that share of its members, with their
-/// share of everything, as in a frost (`check_stores`). An adult larger than its copy mass shrinks towards it as it
-/// chooses (`ALLOC`): that is no starving. False if it dies (a node: less than one member is left).
+/// starved to half its size has lived through it with even chances (`lose_share`). An adult larger than its copy mass
+/// shrinks towards it as it chooses (`ALLOC`): that is no starving. False if it dies (a node: less than one member is left).
 fn starved(w: &mut World, slot: usize, b: &mut Body, from: f64, dead: &mut Vec<f64>) -> bool {
     let (now, was) = (b.member_body(&w.chem), from.min(b.dec(COPY_MASS)));
     // (A body with no body left has starved whatever it was.)
     let f = if now > 0.0 { 1.0 - now / was } else { 1.0 };
-    if f <= 1e-9 || b.n() <= 1.0 {
-        return f <= 1e-9 || Rng::new(w.seed, w.day(), b.id(slot), Purpose::Starve).f64() >= f;
-    }
     let th = b.thermal(&w.chem);
-    members_die(w, b, f, SPENT, dead, &th)
+    f <= 1e-9 || lose_share(w, slot, b, f, SPENT, dead, &th)
 }
 
 /// Upkeep (`upkeep`), paid by the reactions that breathe as fast as they go at the body's temperature, over the time but
-/// at least an interval (a decision takes one). In a node the members whose upkeep could not be paid die: the share of
-/// its upkeep over the update left unpaid, whatever the length of the update; an individual that cannot pay dies.
-/// Living wears the body (`Body::wear`). Returns the heat the paying released (held
+/// at least an interval (a decision takes one). The share of its upkeep over the update left unpaid dies, whatever the
+/// length of the update, and so does the share its wear gives (`lose_share`). Returns the heat the paying released (held
 /// in the update's heat), the span it was paid over, the mass left, the margin of its reactions over the upkeep, and the
 /// plateau state it is left at (`Body::thermal`: the stages that follow see the body at the temperature it came with).
-fn settle_upkeep(w: &mut World, b: &mut Body, s: &Site, mut mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
+fn settle_upkeep(w: &mut World, slot: usize, b: &mut Body, s: &Site, mut mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
     // (One temperature for the stages that see the body as it came: the upkeep, the plan and the paying.)
-    let (th, node) = (b.thermal(&w.chem), b.n() > 1.0);
+    let th = b.thermal(&w.chem);
     let (cost, span) = (upkeep(w, b, s.days, mass, th.t), s.days.max(b.interval(w) as f64));
     let p = Payer::at(w, b, span, mass, th);
     let spare = plan(w, b, MARGIN * cost, &p).1 / cost.max(1e-300);
-    let short = pay_at(w, b, cost, &p, node) / cost.max(1e-300);
-    if short > 1e-9 && !node {
-        return Err(SPENT);
-    }
+    let short = pay_at(w, b, cost, &p, true) / cost.max(1e-300);
     // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it
-    // carries), over what it can turn over in its life (`Physics::e_life`). A node's members are of all ages: they die
-    // at the rate of the wear, so over the time the share 1 - e^-wear of them dies now (the same mean life, whatever the
-    // length of its updates).
+    // carries), over what it can turn over in its life (`Physics::e_life`). Its members die at the rate of the wear: over
+    // the time the share 1 - e^-wear of them (an individual, with that chance), so they live that life on average,
+    // whatever the length of its updates.
     let worn = cost / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so
     // the body keeps its temperature as its stores change (as in `pay`).
     let kept = b.energy_in(&w.chem, &p.th);
     let upkeep_heat = b.e - kept;
     b.e = kept;
-    for (f, cause) in [(short, SPENT), (if node { one_minus_exp(worn) } else { 0.0 }, AGE)] {
+    for (f, cause) in [(short, SPENT), (one_minus_exp(worn), AGE)] {
         if f > 1e-9 {
-            if !members_die(w, b, f, cause, &mut tmp.dead, &p.th) {
+            if !lose_share(w, slot, b, f, cause, &mut tmp.dead, &p.th) {
                 b.e += upkeep_heat;
                 return Err(cause);
             }
             mass = b.mass(&w.chem);
         }
     }
-    b.wear += if node { 0.0 } else { worn };
-    if b.wear >= 1.0 {
-        b.e += upkeep_heat;
-        return Err(AGE);
-    }
     Ok((upkeep_heat, span, mass, spare, p.th))
 }
 
-/// The share `f` of a node's members, at the plateau state `th`, dies of `cause`, with that share of every store (`thin`);
-/// false if less than one member is left.
-fn members_die(w: &mut World, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f64>, th: &Melting) -> bool {
+/// Draws of death a body may take in a day, one for each cause (`Rng` keyed by the day and the cause).
+const CAUSES: u64 = 8;
+
+/// The share `f` of the members of body `b` (slot `slot`), at the plateau state `th`, dies of `cause`: a node loses that
+/// share, with that share of every store (`thin`); an individual dies with that chance. One rule for both, so a node is
+/// the average of its members. False if it dies (a node: less than one member is left).
+fn lose_share(w: &mut World, slot: usize, b: &mut Body, f: f64, cause: u8, dead: &mut Vec<f64>, th: &Melting) -> bool {
+    if b.n() <= 1.0 {
+        return Rng::new(w.seed, w.day() * CAUSES + cause as u64, b.id(slot), Purpose::Death).f64() >= f;
+    }
     dead.clear();
     dead.extend(b.store.iter().map(|a| a * f));
     thin(w, b, f, dead, cause, th)
@@ -219,8 +213,8 @@ fn keep_warm(w: &mut World, b: &mut Body, span: f64, dt: f64) {
 /// A store below its safe minimum kills the body (a node loses its poorest members, `starve`). A key liquid that boiled
 /// kills it; one that froze kills the share of it that is free liquid to freeze: the share frozen (all of it below its
 /// melting point, the body being at one temperature; on its melting plateau, the share frozen there) times its
-/// activity, as a dry body holds little liquid to freeze. A node loses that share of its members (`thin`; that share of
-/// an interval of its gene, at that rate over a longer update, `Body::over_span`); an individual dies with that chance.
+/// activity, as a dry body holds little liquid to freeze: that share of an interval of its gene dies (`lose_share`), at
+/// that rate over a longer update (`Body::over_span`).
 /// Returns the plateau state it is left at.
 fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> Result<Melting, u8> {
     let mass = b.mass(&w.chem);
@@ -246,14 +240,10 @@ fn check_stores(w: &mut World, slot: usize, b: &mut Body, tmp: &mut LiveTmp) -> 
         if f >= 1.0 - 1e-9 {
             return Err(PHASE);
         }
-        if b.n() > 1.0 {
-            if !members_die(w, b, b.over_span(f, w), PHASE, &mut tmp.dead, &th) {
-                return Err(PHASE);
-            }
-            return Ok(b.thermal(&w.chem));
-        } else if Rng::new(w.seed, w.day(), b.id(slot), Purpose::Frost).f64() < f {
+        if !lose_share(w, slot, b, b.over_span(f, w), PHASE, &mut tmp.dead, &th) {
             return Err(PHASE);
         }
+        return Ok(b.thermal(&w.chem));
     }
     Ok(th)
 }

@@ -268,7 +268,7 @@ fn child_lineage(w: &mut World, b: &Body, genes: &[f32], rows: &mut Option<Vec<f
 
 /// Children `c` of `b` that join no node start a body of their own, born with `rows` (none: its parent's). Several
 /// children together that join no node at all (`alone`) are drawn from it as individuals (`nodes::open`: each with
-/// genes and born rows of its own, drawn from their spread), newborn (wear 0), the last one the body itself, with the
+/// genes and born rows of its own, drawn from their spread), the last one the body itself, with the
 /// genes and rows the draws left. Returns the body's slot.
 fn place_child(w: &mut World, b: &Body, l: &Litter, mut c: Body, rows: Option<Vec<f32>>) -> usize {
     if let Some(v) = rows {
@@ -281,9 +281,7 @@ fn place_child(w: &mut World, b: &Body, l: &Litter, mut c: Body, rows: Option<Ve
     let s = w.place(c);
     if l.alone && w.life.bodies[s].count > 1.5 {
         let k = w.life.bodies[s].count.round() as usize - 1;
-        for m in open(w, s, k) {
-            w.life.bodies[m].wear = 0.0;
-        }
+        open(w, s, k);
         let mut c = std::mem::take(&mut w.life.bodies[s]);
         (c.spread, c.row_spread) = (Vec::new(), 0.0);
         w.life.set_count(&mut c, 1.0);

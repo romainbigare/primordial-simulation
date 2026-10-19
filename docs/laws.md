@@ -517,7 +517,7 @@ individuals.
   gene (`Body::room`), frost kills at the rate its share per interval gives (`Body::over_span`); so for a body without
   a brain the gene is the turnover time of its stores (a known limit). Members who join between updates count their
   time from when they came (`nodes::add`: the node's last day and mark of light are means by members).
-- **Age.** Members of a node die of age at the rate of the wear an individual would take (6.7).
+- **Age.** Members of a node die of age at the rate of their wear, as an individual does (6.7).
 - **Individuals mode** (`Config::nodes` off, `--individuals`): bodies with a brain are never nodes; bodies without one
   stay nodes, so the check of handover 7.1 compares brains in nodes and alone.
 
@@ -646,8 +646,9 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Pace** (`Body::pace`): exp(−Ea (1/T − 1/`t_cat`)), Ea the barrier of its main burning. Supply uses the same factor,
   so the whole tempo of a body follows its temperature; seasons come from this, not from a calendar rule.
 - **Paying** (`body::pay`, `body::plan`): the body runs its burnings one after the other, each as far as the rate law
-  allows with the air it breathes. If they cannot pay, it dies of `SPENT`; a node loses the share of its members its
-  upkeep over the update left unpaid. The products take their heat at the body's temperature.
+  allows with the air it breathes. The share of its upkeep over the update left unpaid dies of `SPENT` (a node loses
+  that share of its members, an individual dies with that chance). The products take their heat at the body's
+  temperature.
 
 ### 6.3 Heat
 
@@ -714,12 +715,14 @@ growth**: lost matter is rebuilt the same way.
   in, the reverse of growth, so food enters as fuel, never as body. A body takes body matter or a built solid only if a
   catalyst of its own breaks it (`Body::can_take`), and only as much as the stores it becomes have room for.
 - **Safe minimums** (`Body::lacking`): a store below its minimum gene kills the body (`LACK`), except a store it burns,
-  where the minimum is only the reserve that growth and giving keep; short of fuel it dies when it cannot pay.
+  where the minimum is only the reserve that growth and giving keep; short of fuel it dies of what it cannot pay (6.2).
 - **Shedding** (`shed` in `body/live.rs`): at its update a body gives the ground the minerals and built solids past
   their level, the key liquid past its level, and any other solid or liquid it neither burns nor is made of.
 - **Ageing**: its wear grows by the energy its upkeep turns over per kg of living body, over `e_life` × 10^`REPAIR` (the
-  rate of living). An individual dies of `AGE` when its wear reaches 1; a node loses the share 1 − e^−wear of its
-  members for the wear over the time since. A member split off a node gets a random wear in [0, 1).
+  rate of living). The share 1 − e^−wear of the wear over the time since dies of `AGE` at each update, so as many in a
+  year whatever the length of the updates.
+- **One rule of death** (`body::live::lose_share`): what kills a share of a node's members (unpaid upkeep, wear, frost,
+  starving) kills an individual with that chance: a node is the average of its members.
 
 ### 6.8 Damage
 

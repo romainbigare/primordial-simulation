@@ -187,6 +187,9 @@ Each item names where its code or its record can be found.
   `git show 154554a:docs/reports/review-7-plants.patch`, `…:docs/reports/review-7-lives.patch`.
 - **Review 8 carbon prototypes** (a litter patch and a rough sea store):
   `git show 154554a:docs/reports/review-8-carbon-litter.patch`, `…:docs/reports/review-8-carbon-sea-prototype.patch`.
+- **Nodes keeping their members' wear** (Phase F, the mean and the variance of their wear, those past 1 dying, the
+  maturing carrying the wear of their sizes): nodes' eaters lived twice the individuals' and the eaters' life left its
+  key range (7.1 yr against at most 5.8); one rule of death for both replaced it: branch `nodes-wear-tried`.
 - **Law 2 smooth rate, the study's code** (the law itself was then rebuilt and adopted in `b147ca2`):
   `git show 154554a:docs/reports/law2-smooth-rate-not-merged.patch`.
 - **Eater density probe** (a diagnostic, no taking from the ground):
@@ -881,16 +884,23 @@ Phase E review, round 1 (fixes):
   Members spread evenly (a stage with no deaths) mature exactly as the evenly spread do (the test now says so); a
   spread wider than the family holds is an exponential tail of the same mean (the deepest normal cut dropped the
   rest's mean by about a decade). The normal-cut code goes (`copy::young`'s `density`, `above`, `cut`,
-  `fit`, `math::ln_upper_tail`). 64 x 64, seed 1, years 31 to 35: plant members 4.08e10 to 4.22e10, plant mass
-  5.31e10 to 5.16e10 kg, plant life 4.77 to 4.73 yr, eaters 271 to 320 members, eater life 4.0 to 4.4 yr, carbon gas
-  250 to 253 ppm. Golden re-pinned.
+  `fit`, `math::ln_upper_tail`). 64 x 64, seed 1, years 31 to 35: plant members 4.08e10 to 4.07e10, plant mass
+  5.31e10 to 5.27e10 kg, plant life 4.77 to 4.54 yr, eaters 271 to 269 members, eater life 4.0 to 4.8 yr, carbon gas
+  250 to 255 ppm. Golden re-pinned.
 - F7 follow-up, a starving body dies with the chance of the share of its body it lost (`body::live::starved`; a node
   loses that share of its members, as in a frost): a body whose growth did not rebuild what rotted or burnt shrank
   for ever, a node all its members alike (young light-eater members from 5.7 kg to 3 g in 30 years, their count kept),
   an individual too (eaters of a few grams living on their fuel). Below its copy mass only: an adult shrinks towards
-  it as it chooses. 64 x 64, seed 1, years 31 to 35: plant members 4.22e10 to 3.32e10, plant mass 5.16e10 to 4.88e10
-  kg, plant life 4.73 to 3.37 yr, eaters 320 to 276 members, eater life 4.4 to 3.9 yr, carbon gas 253 to 247 ppm.
+  it as it chooses. 64 x 64, seed 1, years 31 to 35: plant members 4.07e10 to 3.36e10, plant mass 5.27e10 to 4.76e10
+  kg, plant life 4.54 to 3.26 yr, eaters 269 to 340 members, eater life 4.8 to 5.8 yr, carbon gas 255 to 251 ppm.
   Golden re-pinned.
+- F7 follow-up, one rule of death (`body::live::lose_share`): what kills a share of a node's members (unpaid upkeep,
+  the wear's 1 - e^-wear, frost, starving) kills an individual with that chance; an individual died at any unpaid
+  upkeep and of age at a fixed life, a node's members at a constant hazard, so its young died of age as much as its old
+  and the eaters of remains as nodes lived 2.2 to 2.8 times shorter. `Body::wear` goes. 64 x 64, seed 1, years 31 to
+  35: plant members 3.36e10 to 3.43e10, plant mass 4.76e10 to 4.80e10 kg, plant life 3.26 to 3.36 yr, eaters 340 to
+  336 members, eater life 5.8 to 6.4 yr, carbon gas 251 to 253 ppm; F7 differences past the noise 17 to 10. Snapshot
+  version 34; golden re-pinned.
 
 **Phase J: the long physics step**
 

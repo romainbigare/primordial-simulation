@@ -83,8 +83,22 @@ fn upkeep_and_supply_follow_the_rate_law_of_the_reactions() {
     assert!((up(&at(w, &dull, 250.0)) / up(&at(w, &dull, 310.0)) - 1.0).abs() < 1e-12);
 }
 
+/// The age deaths of a day: in a copy of `w`, node `b` updates once; its wear over the day (the share that died of age
+/// is 1 - e^-wear).
+fn wear_of_a_day(w: &World, b: Body) -> f64 {
+    let mut v = w.clone();
+    let k = v.add(b, 1);
+    let n = v.life.bodies[k].count;
+    pcore::survey::survey(&mut v);
+    v.time += DAY_S;
+    v.events.clear();
+    pcore::survey::day(&mut v);
+    assert!(v.life.bodies[k].alive, "the node died");
+    -(1.0 - died(&v, pcore::body::AGE) / n).ln()
+}
+
 /// A cold body wears slower than a warm one in the same cell, in the ratio of their upkeep (wear is the energy the
-/// upkeep turns over), and the update keeps matter and energy.
+/// upkeep turns over): nodes of a thousand members lose that share of them to age in a day.
 #[test]
 fn a_cold_body_ages_slower() {
     let mut s = set();
@@ -93,21 +107,16 @@ fn a_cold_body_ages_slower() {
     warm(&mut s.w, &mut cold, t_cold);
     warm(&mut s.w, &mut hot, t_warm);
     let w = &mut s.w;
-    let (days, mass) = (1.0, cold.mass(&w.chem));
+    let (cold, hot) = (node(w, cold, 1000.0), node(w, hot, 1000.0));
+    let (mut cold, mut hot, days) = (cold, hot, 1.0);
     cold.prepare(&w.chem, &w.cfg.phys);
     hot.prepare(&w.chem, &w.cfg.phys);
+    let mass = cold.mass(&w.chem);
     let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass, cold.temp(&w.chem)), pcore::body::upkeep(w, &hot, days, mass, hot.temp(&w.chem)));
-    let (c, k) = (w.add(cold, 1), w.add(hot, 1));
-    let books = Books::now(w);
-    pcore::survey::survey(w);
-    w.time += DAY_S;
-    pcore::survey::day(w);
-    assert!(w.life.bodies[c].alive && w.life.bodies[k].alive);
-    let (wc, wk) = (w.life.bodies[c].wear, w.life.bodies[k].wear);
-    println!("wear after a day: cold (270 K) {wc:.4e}, warm (300 K) {wk:.4e}; upkeep {uc:.4e} and {uw:.4e} J");
+    let (wc, wk) = (wear_of_a_day(w, cold), wear_of_a_day(w, hot));
+    println!("wear in a day: cold (270 K) {wc:.4e}, warm (300 K) {wk:.4e}; upkeep {uc:.4e} and {uw:.4e} J");
     assert!(wc > 0.0 && wk > 10.0 * wc, "the warm body ages {} times as fast", wk / wc);
     assert!((wk / wc / (uw / uc) - 1.0).abs() < 1e-6, "wear {wk:e} / {wc:e} against the upkeep {uw:e} / {uc:e}");
-    books.assert_kept(w, 1e-9);
 }
 
 /// A body of `f` times the stores and heat (an edit), at its temperature, prepared.
@@ -215,6 +224,8 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     add(w, &mut small, MATTER, -cut);
     let lay = pcore::body::Layout::of(&w.chem);
     (small.genes[lay.min + LIQUID], small.genes[lay.keep + LIQUID]) = (0.0, 0.0);
+    // (No death of age: it lives on.)
+    w.cfg.phys.e_life = 1e30;
     small.prepare(&s.w.chem, &s.w.cfg.phys);
     // (An eighth of it and that again times 8, 2.5 and 20 kg: a bare body much bigger has no steady state at this upkeep,
     // its warmth over the ground past T² / (Ea e), about 4 K, and runs away.)
@@ -463,15 +474,10 @@ fn a_dry_body_pays_upkeep_times_activity_and_ages_slower() {
     let (uw2, ud2) = (pcore::body::upkeep(&s.w, &wet, d, m, wet.temp(&s.w.chem)), pcore::body::upkeep(&s.w, &dry, d, m, dry.temp(&s.w.chem)));
     assert!(uw2 > 2.0 * uw && (ud2 / uw2 / a - 1.0).abs() < 1e-9, "{uw2} {ud2}");
     s.w.cfg.phys.c_hidden /= 1000.0;
-    // Over two months of updates the dry body's wear is a small share of the wet one's.
-    let w0 = s.w.add(wet, 1);
-    let d0 = s.w.add(dry.clone(), 1);
-    for _ in 0..2 {
-        pcore::step(&mut s.w);
-    }
-    let (ww, wd) = (s.w.life.bodies[w0].wear, s.w.life.bodies[d0].wear);
-    println!("wear after two months: wet {ww:.3e}, dry {wd:.3e}");
-    assert!(s.w.life.bodies[w0].alive && s.w.life.bodies[d0].alive);
+    // In a day the dry body's wear is a small share of the wet one's (nodes of a thousand members).
+    let (wet, dry) = (node(&mut s.w, wet, 1000.0), node(&mut s.w, dry, 1000.0));
+    let (ww, wd) = (wear_of_a_day(&s.w, wet), wear_of_a_day(&s.w, dry));
+    println!("wear in a day: wet {ww:.3e}, dry {wd:.3e}");
     assert!(ww > 0.0 && wd < 0.1 * ww, "wear {wd} against {ww}");
 }
 
@@ -944,21 +950,23 @@ fn a_tall_member_shades_a_short_one() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// Living wears a body: an individual dies of age when the energy its upkeep turned over per kg reaches `e_life` x
-/// 10^REPAIR, and a node of the same members loses that share of them at each update, so its members' mean life is the
-/// same. More repair: a longer life (10 times per unit) at a higher upkeep (the repair share, a quarter at gene 0,
-/// doubles per unit). Matter and energy are kept.
+/// Living wears a body: its members die at the rate of the energy their upkeep turns over per kg, over `e_life` x
+/// 10^REPAIR, so they live that life on average: a node loses the share 1 - e^-wear of its members at each update, an
+/// individual dies with that chance. More repair: a longer life (10 times per unit) at a higher upkeep (the repair
+/// share, a quarter at gene 0, doubles per unit). Matter and energy are kept.
 #[test]
 fn bodies_die_of_age_by_their_rate_of_living() {
     use pcore::body::{AGE, COPY_MASS, DISPERSE, LEARN, REPAIR, STRENGTH};
     use pcore::brain;
+    const ONES: usize = 100;
     let mut w = small_world();
     // Bodies that neither grow nor soak liquid up (their mass, which the wear goes by, stays): no building work, and no
-    // liquid exchange with the ground. Their copy mass is half their body: the matter that rots is not starving.
-    w.cfg.phys.c_build = 0.0;
+    // liquid exchange with the ground. Their copy mass is half their body: the matter that rots is not starving. No one
+    // ages until they have settled, and bodies with a brain do not merge into nodes (`--individuals`).
+    (w.cfg.phys.c_build, w.cfg.phys.e_life, w.cfg.nodes) = (0.0, 1e30, false);
     // Upkeep goes with the temperature: the bodies stand on ground held at the temperature the costs are anchored to
     // (`Physics::t_cat`, booked as an edit), so that they pay what the costs say, in two cells of high ground (rain
-    // does not flood it) with other air nodes (a node would take the air an individual breathes).
+    // does not flood it) with other air nodes.
     let mut land = dry_lands(&w);
     land.sort_by(|&a, &b| w.life.env[b][2].total_cmp(&w.life.env[a][2]));
     let air = w.mesh.up(land[0], 0, AIR);
@@ -970,8 +978,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         // (And they do not learn: a body that learns from its well-being may learn to walk away in the months of the test.)
         (b.genes[STRENGTH], b.genes[DISPERSE], b.genes[REPAIR], b.genes[pcore::body::LIQ], b.genes[LEARN]) = (0.0, 0.0, repair, -4.0, -6.0);
         b.genes[COPY_MASS] -= std::f32::consts::LOG10_2;
-        // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel (the
-        // two months they settle and the long life of one of them cost more than a starting eater holds).
+        // A node of `count` such members (its matter and energy booked as an edit), with three times the fuel.
         let fuel = 2.0 * kg(w, &b, RICH);
         add(w, &mut b, RICH, fuel);
         scale(w, &mut b, count);
@@ -979,65 +986,69 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         b.prepare(&w.chem, &w.cfg.phys);
         w.add(b, 1)
     };
-    let sa = make(&mut w, cells[0], 0.0, 1.0);
-    let sb = make(&mut w, cells[0], 0.5, 1.0);
-    let c = make(&mut w, cells[1], 0.0, 1000.0);
-    // A day with the ground held; the age deaths of the day.
+    // A node of members at repair 0 alone in one cell; one at repair 0.5 and a hundred individuals at repair 0 in the
+    // other (an individual's death is of one member, a node's of a share).
+    let (sa, sb) = (make(&mut w, cells[1], 0.0, 1000.0), make(&mut w, cells[0], 0.5, 1000.0));
+    let ones: Vec<usize> = (0..ONES).map(|_| make(&mut w, cells[0], 0.0, 1.0)).collect();
+    // A day with the ground held; the age deaths of the day, as (cell, day, members).
     let t_cat = w.cfg.phys.t_cat;
-    let day = |w: &mut pcore::World, deaths: &mut Vec<(u64, f64)>| {
+    let day = |w: &mut pcore::World, deaths: &mut Vec<(usize, u64, f64)>| {
         for &i in &cells {
             hold_ground(w, i, t_cat);
         }
         w.events.clear();
         pcore::day(w);
-        deaths.extend(w.events.iter().filter(|e| matches!(e.kind, pcore::event::EventKind::Died { cause: AGE, .. })).map(|e| (e.day, e.value)));
+        deaths.extend(w.events.iter().filter(|e| matches!(e.kind, pcore::event::EventKind::Died { cause: AGE, .. })).map(|e| (e.node as usize, e.day, e.value)));
     };
-    // Two months for the bodies to settle at the temperature their heat and the ground give them (an individual does
-    // not age: `e_life` is large), then their upkeep per kg of body and day, their wear put back to nothing.
+    // Two months for the bodies to settle at the temperature their heat and the ground give them, then their upkeep per
+    // kg of body and day.
     let mut settle = Vec::new();
     for _ in 0..60 {
         day(&mut w, &mut settle);
     }
-    assert!(w.life.bodies[sa].alive && w.life.bodies[sb].alive, "a body died while settling");
     let per_kg = |w: &mut pcore::World, s: usize| {
         let mut b = std::mem::take(&mut w.life.bodies[s]);
         b.prepare(&w.chem, &w.cfg.phys);
         let (d, m) = (b.interval(w) as f64, b.mass(&w.chem));
-        let u = pcore::body::upkeep(w, &b, d, m, b.temp(&w.chem)) / (d * b.built(&w.chem));
-        let act = b.activity(&w.chem, &w.cfg.phys);
-        b.wear = 0.0;
+        let (u, act) = (pcore::body::upkeep(w, &b, d, m, b.temp(&w.chem)) / (d * b.built(&w.chem)), b.activity(&w.chem, &w.cfg.phys));
         w.life.bodies[s] = b;
         (u, act)
     };
-    let ((ua, aa), (ub, ab), (uc, ac)) = (per_kg(&mut w, sa), per_kg(&mut w, sb), per_kg(&mut w, c));
-    println!("upkeep per kg of body and day: {ua:.1}, {ub:.1}, {uc:.1} J");
-    // (The repair gene costs 0.75 + 0.25 x 2^0.5 times as much at 0.5; the second body makes a little more heat, so it is
-    // a little warmer.)
-    assert!(((ub / ab) / (ua / aa) / (0.75 + 0.25 * 2f64.sqrt()) - 1.0).abs() < 0.03 && ((uc / ac) / (ua / aa) - 1.0).abs() < 0.07, "upkeep per kg {ua} {ub} {uc}, activity {aa} {ab} {ac}");
-    // A life of 38 days at gene 0 (at its upkeep per kg now), 10^0.5 ua / ub times that at 0.5. (A body dies at an
-    // update, every 10 days: 38 puts both deaths a few percent inside an interval, not on its edge.)
+    assert!(ones.iter().all(|&s| w.life.bodies[s].alive), "an individual died while settling");
+    let ((ua, aa), (ub, ab), (ui, ai)) = (per_kg(&mut w, sa), per_kg(&mut w, sb), per_kg(&mut w, ones[0]));
+    println!("upkeep per kg of body and day: {ua:.1}, {ub:.1}, an individual {ui:.1} J");
+    // (The repair gene costs 0.75 + 0.25 x 2^0.5 times as much at 0.5.)
+    assert!(((ub / ab) / (ua / aa) / (0.75 + 0.25 * 2f64.sqrt()) - 1.0).abs() < 0.03 && ((ui / ai) / (ua / aa) - 1.0).abs() < 0.07, "upkeep per kg {ua} {ub} {ui}");
+    // A life of 38 days at gene 0, 10^0.5 ua / ub times that at 0.5. Each counts its days from its last update.
     let (life, x) = (38.0, 10f64.sqrt() * ua / ub);
     w.cfg.phys.e_life = life * ua;
-    // (Lives are counted from the last update of the first individual: wear counts from there.)
-    let (books, start, n0, node_last) = (Books::now(&w), w.life.bodies[sa].last as u64, w.life.bodies[c].count, w.life.bodies[c].last);
+    let (books, n0, every) = (Books::now(&w), w.life.bodies[sa].count, w.life.bodies[sa].interval(&w) as f64);
+    let from: Vec<f64> = [sa, sb].iter().chain(&ones).map(|&s| w.life.bodies[s].last).collect();
+    let day0 = w.day() as f64;
     let mut deaths = Vec::new();
     for _ in 0..240 {
         day(&mut w, &mut deaths);
     }
-    // The individuals' deaths (one member each) and the node's (a share of its members).
-    let (ones, node): (Vec<_>, Vec<_>) = deaths.into_iter().map(|(d, v)| (d - start, v)).partition(|x| x.1 == 1.0);
-    // The node's mean life: the days its members lived over those who died (it loses a share at each update, of
-    // members who die at a steady rate between updates, so over a span they live dead / ln(n / (n - dead)) times its
-    // days; it may die of other causes later, so only its age deaths count).
-    let (mut n, mut t, mut lived) = (n0, node_last - start as f64, 0.0);
-    for &(day, dead) in &node {
-        (lived, n, t) = (lived + dead * (day as f64 - t) / (n / (n - dead).max(f64::MIN_POSITIVE)).ln(), n - dead, day as f64);
-    }
-    let dc = lived / (n0 - n);
-    println!("lives, days: individuals {ones:?} at genes 0 and 0.5 (predicted {life} and {:.0}); node {dc:.1} ({:.0} of {n0} members died of age)", life * x, n0 - n);
-    assert!(ones.len() == 2 && (ones[0].0 as f64 / life - 1.0).abs() < 0.1 && (ones[1].0 as f64 / (life * x) - 1.0).abs() < 0.1, "lives {ones:?}");
-    // (The node's members live the same time as an individual would at their own upkeep, `ua / uc` times as long.)
-    assert!(node.len() >= 6 && (dc / (life * ua / uc) - 1.0).abs() < 0.1, "node: mean life {dc} days against {} predicted", life * ua / uc);
+    // A node's mean life: the days its members lived over those who died; it loses a share at each update of members
+    // who die evenly between updates, so over a span they live dead / ln(n / (n - dead)) times its days.
+    let node_life = |cell: usize, t0: f64| {
+        let (mut n, mut t, mut lived) = (n0, t0, 0.0);
+        for &(_, d, dead) in deaths.iter().filter(|x| x.0 == cell && x.2 != 1.0) {
+            (lived, n, t) = (lived + dead * (d as f64 - t) / (n / (n - dead).max(f64::MIN_POSITIVE)).ln(), n - dead, d as f64);
+        }
+        lived / (n0 - n)
+    };
+    let (la, lb) = (node_life(cells[1], from[0]), node_life(cells[0], from[1]));
+    // The individuals dead of age in one life: each dies at an update with the chance its wear since gives, so by day
+    // `life` one that updated last at u has died with the chance 1 - e^-((u - its first day) / its life).
+    let (li, by) = (life * ua / ui, day0 + life);
+    let chance = |f: f64| -(-((by - f) / every).floor() * every / li).exp_m1();
+    let expected: f64 = from[2..].iter().map(|&f| chance(f)).sum();
+    let sd = from[2..].iter().map(|&f| chance(f) * (1.0 - chance(f))).sum::<f64>().sqrt();
+    let dead = deaths.iter().filter(|x| x.0 == cells[0] && x.2 == 1.0 && (x.1 as f64) <= by).count() as f64;
+    println!("lives, days: nodes {la:.1} and {lb:.1} at genes 0 and 0.5 (predicted {life} and {:.0}); individuals dead in a life {dead} of {ONES} (expected {expected:.1} +- {sd:.1})", life * x);
+    assert!((la / life - 1.0).abs() < 0.1 && (lb / (life * x) - 1.0).abs() < 0.1, "node lives {la} and {lb}");
+    assert!((dead - expected).abs() < 3.5 * sd, "individuals dead in a life: {dead}, expected {expected} +- {sd}");
     books.assert_kept(&w, 1e-9);
 }
 

@@ -23,8 +23,8 @@ pub enum Purpose {
     Chem,
     /// The gene a node splits along (`nodes::split`)
     Split,
-    /// Whether a frozen individual dies (`body::live`)
-    Frost,
+    /// Whether an individual dies of a share that kills members (`body::live::lose_share`)
+    Death,
     /// The order among equally alike mates (`copy::partner`)
     Partner,
     /// The born rows of a body joining a node, carried over to its brain (`nodes::merge`)
@@ -42,8 +42,6 @@ pub enum Purpose {
     Fixer,
     /// The side of each gene of the sample member of a node (`copy::select`)
     Select,
-    /// Whether a starving individual dies (`body::live`)
-    Starve,
 }
 
 pub struct Rng(u64);

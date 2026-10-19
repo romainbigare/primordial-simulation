@@ -35,7 +35,7 @@ pub const SPENT: u8 = 2;
 pub const TAKEN: u8 = 3;
 /// Bonds broken by bodies moving through its cell.
 pub(crate) const BROKEN: u8 = 4;
-/// Worn out by living (`Body::wear`).
+/// Worn out by living (its wear, `body::live`).
 pub const AGE: u8 = 5;
 /// Margins of well-being (`Body::wellbeing_at`) count from `MARGIN_MIN` up to this: a key store's log share over its
 /// minimum, and its reactions over its upkeep (`live` plans for this many upkeeps).
@@ -115,9 +115,6 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
-    /// An individual's wear: the energy its upkeep turned over per kg over `Physics::e_life` x 10^`REPAIR`; it dies of
-    /// age at 1. A node's members are of all ages (laws.md 6.7)
-    pub wear: f64,
     /// Numbers that follow from the genes (`prepare`); not saved
     #[serde(skip)]
     pub k: Consts,

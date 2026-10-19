@@ -645,8 +645,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         // sheds no more than its still air and radiation take, so growing it sheds the rest by evaporating above 295 K
         // (`COOL_T`), and soaks fast to stay wet.
         (b.genes[STRENGTH], b.genes[ALLOC], b.genes[LIQ], b.genes[GAS], b.genes[HEAT], b.genes[body::COOL_T]) = (1.0, 0.0, 1.0, 3.0, 3.0, 295.0);
-        // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber).
-        b.genes[COPY_MASS] = 1.645;
+        // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber). It does not die of age.
+        (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
         let (s, b0) = out(&mut w, b);
         w.life.bodies[s] = b0;
         let area = w.map.area();
@@ -1345,7 +1345,7 @@ fn seen_as_it_is(w: &World, s: usize) {
     assert_eq!(b.vis, b.visible(&w.chem, &w.cfg), "body {s} is seen as it was");
 }
 
-/// `open` draws members of a node as individuals: they are in the node's cell, of count 1, with a wear in [0, 1), and
+/// `open` draws members of a node as individuals: they are in the node's cell, of count 1, and
 /// members, stores and heat are kept exactly; the node keeps its place with the members left; each is seen as what it
 /// holds (`Body::vis`); the genes of the drawn
 /// are the node's plus noise of its spread (their mean near the node's, within four standard errors, and as wide as the
@@ -1383,7 +1383,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let mut mean = vec![0.0f64; lay.len];
     for &m in &drawn {
         let b = &w.life.bodies[m];
-        assert!(b.alive && b.count == 1.0 && b.cell == cell && b.spread.is_empty() && (0.0..1.0).contains(&b.wear));
+        assert!(b.alive && b.count == 1.0 && b.cell == cell && b.spread.is_empty());
         mean.iter_mut().zip(&b.genes).for_each(|(x, &y)| *x += y as f64 / n as f64);
     }
     for (g, var) in wide {
@@ -1525,7 +1525,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         assert!(kids.len() >= 3, "{} children", kids.len());
         for k in kids {
             let c = &w.life.bodies[k];
-            assert!(c.alive && c.count == 1.0 && c.spread.is_empty() && c.wear == 0.0, "child {k}: count {}", c.count);
+            assert!(c.alive && c.count == 1.0 && c.spread.is_empty(), "child {k}: count {}", c.count);
         }
     }
 }

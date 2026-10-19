@@ -187,8 +187,7 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
     o.set_genes(mean, &w.chem, &w.cfg.phys);
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
-    // A node has no wear: its members are of all ages (`body::live`).
-    (o.e, o.wear) = (o.e + c.e, 0.0);
+    o.e += c.e;
     w.life.set_count(o, o.count + c.count);
     o.set_size(&w.chem, size_mean as f64, size_var as f64);
     w.see(o);
@@ -266,9 +265,7 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
 /// One member of node `b` (at least two) split off as an individual, to do what only a single body can (the actions of
 /// Bond, `choose::act`): its genes the node's plus noise of their spread (shrunk near a wall, so it is never clamped,
 /// as in `body::vary`), a share 1/count of its stores and heat (`part`). The node's genes and spread become those of the
-/// others, so the member going back (`take_in`) gives them back. Its wear is drawn uniform in [0, 1): members who each
-/// live as long are of all ages evenly, so members split off die at the rate the node's members die (`body::live`).
-/// Placed; returns its slot.
+/// others, so the member going back (`take_in`) gives them back. Placed; returns its slot.
 pub fn one(w: &mut World, b: &mut Body, r: &mut Rng) -> usize {
     w.counts.splits[1] += 1.0;
     draw(w, b, r, false)
@@ -328,7 +325,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng, own_rows: bool) -> usize {
         w.life.reborn(b, left);
     }
     b.set_genes(genes, &w.chem, &w.cfg.phys);
-    (c.count, c.spread, c.row_spread, c.size_spread, c.size_lag, c.wear) = (1.0, Vec::new(), 0.0, 0.0, 0.0, r.f64());
+    (c.count, c.spread, c.row_spread, c.size_spread, c.size_lag) = (1.0, Vec::new(), 0.0, 0.0, 0.0);
     w.place(c)
 }
 
