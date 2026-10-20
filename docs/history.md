@@ -1242,6 +1242,9 @@ Phase E review, round 1 (fixes):
   class test); the eaters' founders sweat from 315 K (`EATER_COOL_T`). 64 x 64, 3 seeds, island at 40°: eaters at
   year 25 24, 24 and 13 members (14, 8 and 2), plants the same; they still die out (48 x 48 by years 26 to 32),
   starving (`spent`), not by frost (decision 32). Golden re-pinned.
+- Review round 2, finding 7, tried and not kept: `node_days` 72 (after the implicit ground heat). The pace test
+  passes at 72 (births -21%, plants -15%, within the noise) but not at its x2, 144 days (births -55% against a noise
+  of 26%), so `node_days` stays 36.
 
 **Owner's decisions after Phase A**
 
