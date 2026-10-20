@@ -1281,3 +1281,5 @@ Phase E review, round 1 (fixes):
 - One standing depth: the bodies (`survey::env_of`) and Change's film read Flow's (`FlowView::standing`, the liquid
   over the pores, and Flow's surface height) instead of working it out again from the amounts. 64 x 64, seed 1, years
   21 to 30: land 287.15 to 287.72 K, rain on land +2%, light-eaters +5% at year 30; golden re-pinned.
+- Tried and not kept: routing liquid by heads without what passes in the pass (the cell's or its neighbours' still to
+  come), so rivers in quarters stand no deeper than on squares: seas drained into piles and the heat broke (decision 31).
