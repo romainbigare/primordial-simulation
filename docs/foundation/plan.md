@@ -73,8 +73,9 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 | **A planet run of 1,000 years** | **under 15 minutes** (about 0.9 s per simulated year) |
 
 - **The planet's size is not fixed.** It is the largest number of cells (on the globe) whose cost fits the budget, by
-  the cost model (5.7). It is measured again at the end of each phase. Faster code buys a bigger planet. Today about
-  1,000 to 1,400 cells fit (decision 43: the budget stays; threads over bodies wait for the owner's answer to 42).
+  the cost model (5.7). It is measured again at the end of each phase. Faster code buys a bigger planet. Today, once
+  life has settled, about 300 cells fit (decisions 43 and 55: the budget stays; threads over bodies need more lines
+  than the ceiling leaves).
 - Speed never comes from removing a law or from a rule named after an outcome (handover 12.6). It comes from doing
   less work for the same physics: longer steps where the physics allows them, fewer updates where nothing changes,
   cheaper bookkeeping, cheap cells where little happens.
@@ -220,17 +221,21 @@ with and without threads (level 1 after one level-3 change).
 
 ### 5.7 The cost model
 
-The time of a run is the cost of one cell and of one body node per simulated year, times their numbers. Measured at
-review round 3 (the CLI's stage times):
+The time of a run is the cost of one cell and of one body per simulated year, times their numbers. Measured by the
+CLI's stage times (the first two at review round 3, the last at round 5 on a shared machine):
 
 | Run | A year | Of which |
 |---|---|---|
 | 64 × 64 island, no life | about 0.98 s | Flow 630-765 ms, Change 141-190 ms |
 | 64 × 64 island, seed 1, year 30, 5,746 bodies | 2.8-3.6 s | Flow 1,132 ms, Change 313 ms, bodies 2,020 ms |
+| 48 × 48 island, seed 2, years 91 to 100 (life settled), 5,960 bodies | about 7.0 s | Flow 850 ms, Change 320 ms, bodies 5,650 ms, Parts 50 ms, tape 130 ms |
 
-So a cell's Flow and Change cost 0.30-0.35 ms per cell-year and a body node 280-350 µs per node-year. At one body node
-per cell, about 1,000 to 1,400 cells fit the budget of 0.9 s a year. Bodies run on one thread; threads over bodies
-(5.6) are the first lever if the planet is too small to watch (decision 43). Each phase report measures these again.
+So a cell's Flow and Change cost 0.30-0.50 ms per cell-year. Once life has settled a cell holds about 2.6 bodies (two
+light-eater nodes and the eaters), with about 92,000 updates a year at about 60 µs: a body costs about 0.95 ms per
+body-year, three times what it costs at year 30, as the eaters' decisions and children are dearer than plants'. A
+settled cell costs about 3.0 ms a year, and about 300 cells fit the budget of 0.9 s a year. Bodies are 80% of that
+year and run on one thread: threads over bodies (5.6) would give at most about 2.5 times on 4 cores (about 700 cells),
+for several hundred lines (decision 55). Each phase report measures these again.
 
 ---
 
@@ -289,7 +294,7 @@ end of each phase, on the same machine, with the planet size the time budget the
 than at A1; a cell's physics at least 5 times cheaper than at A1 without threads.
 
 **Open, not met:** a cell's Flow and Change cost about 1.9 times A1's (0.30-0.35 ms per cell-year), not a fifth of
-it. A body node costs 280-350 µs per node-year. About 1,000 to 1,400 cells fit the time budget (5.7).
+it. A body costs about 0.95 ms per body-year once life has settled. About 300 cells fit the time budget (5.7).
 
 ---
 

@@ -486,6 +486,9 @@ the golden test.
   its slot, uncloned; perception stops at the bodies it sees: one year from year 90, the bodies' instructions 21.18e9
   to 20.80e9 (-1.8%), `spread` 4.59e9 to 4.27e9; the golden runs are pinned again (slots and ids); years 91 to 100,
   eaters 1.83e8 to 1.85e8 kg, light-eaters 5.00e10 to 5.00e10 kg, land 290.61 to 290.63 K.
+- The cost model (plan 5.7) is measured on a settled world: 48 x 48 seed 2, years 91 to 100, side by side on one
+  machine, 8.26 s a year before the three changes above and 6.99 s after (bodies 6,643 to 5,647 ms, Parts 335 to 48);
+  about 300 cells fit the time budget, against 250.
 
 **Tried and not kept in the foundation**
 
