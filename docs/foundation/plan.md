@@ -22,19 +22,12 @@ them goes along links; a gene or a material only says how easily a link passes.*
 
 ### What the special code became
 
-| Special code | The general thing | Status |
-|---|---|---|
-| How a body trades heat, gas, liquid and salts with its cell | The formulas stay (they are the physics); each trade is a `Move` booked by `apply` at the body's update | Built (E5) |
-| Pools that held light and heat for bodies between updates | One bodies' node per cell, settled in the air's step | Built (E5, J3) |
-| The walls of a shelter keep a body warm | Links that pass heat badly | Built (D7) |
-| The chemistry's own lazy timer | The clock's one sleep and wake | Built (D6) |
-| Flow's own timers | The clock's one list of processes (`schedule.rs`) | Built (E8) |
-| Merging, splitting and opening population nodes | One helper that moves members, amounts, heat and gene moments by shares | Built (E6, F1) |
-| Ground cleared along edges | A field of the links (`store::Links`) | Built (D8) |
-| Heat sideways between cells, pore liquid between cells | `spread` on links | Built (D1, D2) |
-| The surface liquid's sorted sweep; erosion sampled every 7 months | The `downhill` pass, every step | Built (D2, D5) |
-| Taking heat from a node with a guard in each place | A law never asks a node for more than it holds; `apply` only adds | Built (D11) |
-| Caches saved with the state | A small saved state; caches rebuilt on load | Built (E8, E10) |
+All eleven pieces of special code the plan named are replaced by general ones: a body's trades are moves booked by
+`apply` (E5); one bodies' node per cell in place of the light and heat pools (E5, J3); walls as links that pass heat
+badly (D7); the clock's one sleep and wake and one list of processes in place of the chemistry's and Flow's timers (D6,
+E8); one split and join helper (E6, F1); cleared ground as a field of the links (D8); `spread` for heat and pore liquid
+and the `downhill` pass for surface liquid and erosion (D1, D2, D5); laws that never overdraw (D11); caches rebuilt on
+load, not saved (E8, E10). How each works now: `docs/laws.md`.
 
 ### How to work by the main rule
 
@@ -65,7 +58,8 @@ them goes along links; a gene or a material only says how easily a link passes.*
 | **Total** | **1,500** |
 
 - The test `cli/tests/core_size.rs` fails above the ceiling: **9,000 until the end of the foundation**, **8,000 at its
-  end (Phase L)**. The 8,000 is never a reason to build a task that costs speed or honesty.
+  end (Phase L)**. The 8,000 is never a reason to build a task that costs speed or honesty. **Open:** `core` is at
+  about 9,000; the 8,000 goal is put back to the owner (`docs/foundation/decisions.md` 42).
 - A phase may not end with more code than it started with, unless its report gives the reason.
 
 ### The time budget (the owner's rule, decision D12)
@@ -79,7 +73,8 @@ them goes along links; a gene or a material only says how easily a link passes.*
 | **A planet run of 1,000 years** | **under 15 minutes** (about 0.9 s per simulated year) |
 
 - **The planet's size is not fixed.** It is the largest number of cells (on the globe) whose cost fits the budget, by
-  the cost model (5.7). It is measured again at the end of each phase. Faster code buys a bigger planet.
+  the cost model (5.7). It is measured again at the end of each phase. Faster code buys a bigger planet. Today about
+  1,000 to 1,400 cells fit (decision 43: the budget stays; threads over bodies wait for the owner's answer to 42).
 - Speed never comes from removing a law or from a rule named after an outcome (handover 12.6). It comes from doing
   less work for the same physics: longer steps where the physics allows them, fewer updates where nothing changes,
   cheaper bookkeeping, cheap cells where little happens.
@@ -226,18 +221,16 @@ with and without threads (level 1 after one level-3 change).
 ### 5.7 The cost model
 
 The time of a run is the cost of one cell and of one body node per simulated year, times their numbers. Measured at
-review round 2 (one thread, the CLI's stage times):
+review round 3 (the CLI's stage times):
 
-| Run | One cell, Flow and Change | One body node |
+| Run | A year | Of which |
 |---|---|---|
-| 64 × 64 island, no life | 0.15 ms | |
-| 64 × 64 island, life, years 26-30 | 0.43 ms | 350 µs |
-| 64 × 32 globe, light-eaters | 0.29 ms | 320 µs |
+| 64 × 64 island, no life | about 0.98 s | Flow 630-765 ms, Change 141-190 ms |
+| 64 × 64 island, seed 1, year 30, 5,746 bodies | 2.8-3.6 s | Flow 1,132 ms, Change 313 ms, bodies 2,020 ms |
 
-At one body node per cell, about 1,100 cells fit the budget of 0.9 s a year. Threads give little today: the air's cell
-pass and Change's reactor run on threads (Flow about 5%, Change about 20% on 4 shared cores); the solves, liquid and
-the bodies run on one thread. Threads over bodies (5.6) are the first lever after the foundation if the planet is too
-small to watch. Each phase report measures these numbers again and gives the planet size they allow.
+So a cell's Flow and Change cost 0.30-0.35 ms per cell-year and a body node 280-350 µs per node-year. At one body node
+per cell, about 1,000 to 1,400 cells fit the budget of 0.9 s a year. Bodies run on one thread; threads over bodies
+(5.6) are the first lever if the planet is too small to watch (decision 43). Each phase report measures these again.
 
 ---
 
@@ -295,79 +288,46 @@ end of each phase, on the same machine, with the planet size the time budget the
 `core` per folder. Goals: **the time budget** on the largest planet that fits; a body node at least 3 times cheaper
 than at A1; a cell's physics at least 5 times cheaper than at A1 without threads.
 
+**Open, not met:** a cell's Flow and Change cost about 1.9 times A1's (0.30-0.35 ms per cell-year), not a fifth of
+it. A body node costs 280-350 µs per node-year. About 1,000 to 1,400 cells fit the time budget (5.7).
+
 ---
 
 ## 7. The work list
 
-Each phase ends with its watch report. Status in a few words; what each task did and its numbers are in
-`docs/history.md`.
+Each phase ends with its watch report. What each task did and its numbers are in `docs/history.md`; the decisions
+taken on the way in `docs/foundation/decisions.md`.
 
-### Phases A to D (done)
+### Phases A to K (built)
 
-- **A, prepare:** A1 profile, A2 reference runs, A3 key-number test, A4 two suspected bugs, A5 decisions in the
-  handover, A6 code-size test. All built. Report `docs/reports/foundation-a.md`.
-- **B, the base layers:** B1 mesh, B2 stacks, B3 node names, B5 moves and `apply`, B6 boundary nodes, B7 clock, B8
-  sleep and wake, B9 keyed draws: built. B4 sparse amounts: measured, dropped. Report `docs/reports/foundation-bc.md`.
-- **C, the shared maths:** C1 `spread`, C2 `downhill`, C3 the wind's lines (now `band`), C4 big-step tests: built.
-- **D, the physics laws on the new base:** D1 ground heat, D2 liquid, D3 air on the mesh, D4 radiation, D5 erosion
-  every step, D6 Change sleeps, D7 parts as nodes, D8 links, D9 every law through the store, D10 speed, D11 the store
-  only adds, D12 wake by gain, D13 work spaces kept: built. The phase check missed its speed and size goals. Report
+- **A, prepare:** profile, reference runs, key-number test, code-size test. Report `docs/reports/foundation-a.md`.
+- **B, the base layers:** mesh, stacks, node names, moves and `apply`, boundary nodes, clock, sleep and wake, keyed
+  draws (`space/`, `store/`, `clock/`). B4 sparse amounts measured and dropped. Report `docs/reports/foundation-bc.md`.
+- **C, the shared maths:** `spread`, `downhill`, `band` (`solve/`).
+- **D, the physics laws on the new base:** ground heat, liquid, air, radiation, erosion every step, Change sleeps, parts
+  as nodes, links, every law through the store, the store only adds. It missed its speed and size goals. Report
   `docs/reports/foundation-d.md`.
+- **E, the life engine:** bodies book through moves, one bodies' node per cell and a private `Store` (E5); the pace of
+  nodes (E4, `node_days`); one clock (E8); light-eaters without a brain (E9); culls (E10); young that grow up (E11,
+  `copy/young.rs`); selection inside a node by sample members (E12, `copy/select.rs`). E7 dropped; E2 and E3 (tables
+  for the reactor, only if it passed 5% of the bodies' time) dropped as not needed.
+- **F, population nodes:** the split and join helper (F1, F2, `nodes::Lot`), no merge of unlike nodes (F3).
+- **J, the long physics step:** liquid every 30 days, the air in one backward-Euler step every 10 days, converged
+  against 6-hour steps (J1); threads by rows (J2); fewer rounds and the bodies' node in the air's step (J3; BDF2 and a
+  30-day step dropped, decision 22).
+- **G, the globe:** the wrapping lat-lon grid (G1, `--globe`), life on the mesh's links (G2), a refined region (G4,
+  `--region`). G3 measured, not built (decision 20); G6 dropped (decision 28).
+- **K, recording and viewer:** the tape reads `&World`, the globe and regions in the tape and viewer, the viewer's
+  link layer and charts, time per process.
 
-### Phase E: the life engine
-
-| ID | What | Status |
-|---|---|---|
-| E1 | The bookkeeping of a body update | Built (a body update about 15% cheaper) |
-| E2 | A list of active reactions per gene set, only if the reactor passes 5% of the bodies' time | Open (not needed so far) |
-| E3 | Lookup tables for the rate's temperature factor, on the same condition | Open (not needed so far) |
-| E4 | The pace of population nodes (`node_days`, D13) | Built for nodes without a brain |
-| E5 | Bodies book through moves; one bodies' node per cell; a private `Store` | Built |
-| E6 | Cheap child placement | Built, not cheaper per call |
-| E7 | Members split off a node | Dropped (few after E9) |
-| E8 | One clock, state apart from cache, fixed nodes by class and index, one wind solver | Built |
-| E9 | Light-eaters without a brain | Built |
-| E10 | Culls: shared group brains, `FORGET`, old flags, the shade sort, repeated solves, saved caches | Built |
-| E11 | Young that grow up (an adult and a young node joined by a link) | Built |
-| E12 | Selection inside a node by sample members | Built for nodes without a brain |
-
-### Phase F: population nodes
+### Open from these phases
 
 | ID | What | Status |
 |---|---|---|
-| F7 | The nodes-against-individuals check (handover 7.1), slow test | Built; prints its failing rules (decision 25) |
-| F1 | The small split and join helper | Built (with E6) |
-| F2 | The node operations use F1 | Built (with E6) |
-| F3 | No merge of unlike nodes in a full cell (D8) | Built |
-| F5 | More age classes inside nodes, only if F7 shows they matter | Open |
-
-### Phase J: the long physics step
-
-| ID | What | Status |
-|---|---|---|
-| J1 | Liquid every 30 days; the air in one backward-Euler step every 10 days | Built; converged against 6-hour steps |
-| J2 | Flow and Change keep their threads by rows on the globe | Built |
-| J3 | Physics speed after J1 | Built: fewer rounds, the bodies' node in the air's step; BDF2 and a 30-day step dropped (decision 22) |
-
-### Phase G: the globe
-
-| ID | What | Status |
-|---|---|---|
-| G1 | The lat-lon grid that wraps | Built (`ew run --globe`) |
-| G2 | Life on the mesh's links | Built |
-| G3 | Cheap sea cells | Measured, not built (decision 20) |
-| G4 | A refined region built into the mesh | Built (`ew run --region`) |
-| G5 | The coarse-against-fine test | Built; river length fails (decision 31) |
-| G6 | Remove old limits | Dropped (decision 28) |
-
-### Phase K: recording and viewer
-
-| ID | What | Status |
-|---|---|---|
-| K1 | The tape takes `&World` | Built |
-| K2 | The tape and viewer file for the globe and a refined region | Built |
-| K3 | The viewer: the globe, the region, the link layer, charts grouped and searchable | Built |
-| K4 | Time per process in the tape | Built |
+| E6 | Cheap child placement | Built, but not cheaper per call: its "done when" is not met |
+| F7 | The nodes-against-individuals check (handover 7.1, `tape/tests/nodes.rs`) | Open: 3 of its 6 rules hold (default b; roster b and c, decision 25); being run again after round 3 |
+| F5 | More age classes inside nodes | Only if F7's new run asks for it |
+| G5 | The coarse-against-fine test (`tape/tests/scale.rs`) | Open: the climate and the light-eaters hold; the river length is off by -5.2 km against a limit of 4.0 after D-infinity (decisions 31, 46) |
 
 ### Phase L: the final check
 
@@ -377,13 +337,23 @@ Each phase ends with its watch report. Status in a few words; what each task did
 | L2 | Speed | The time budget met on the largest planet that fits, with the cost model's numbers |
 | L3 | Books | Elements and energy exact over 1,000 years, with threads and a refined region |
 | L4 | Show worlds: the globe, a refined region | Each one runs, with pictures |
-| L5 | The foundation watch report; then the owner decides M4 | The owner's choice is written in the handover |
+| L5 | The foundation watch report (covering E to K, decision 41); then the owner decides M4 | The owner's choice is written in the handover |
+
+Open items of review round 3, to settle before L5:
+
+- **Body costs not normalised** (finding 6): `c_basal` is a tuned third of Kleiber's rate; `c_build` keeps a 310 K
+  mammal anchor not converted to `t_cat` (decision 39); upkeep falls past the catalysts' unfolding (decision 36).
+- **Frame rot inside bodies:** reaction 26 runs inside living bodies at its bare rate (handover 13.2, "Inside bodies").
+- **The eaters:** they still get about 99% of their food from the ground and still grow at year 60 (below 5·10⁴
+  kg/km²; decision 40).
+- **The learner** fails an honest reversal test (`docs/history.md`, finding 11): bodies live about 40 decisions.
+- **Crowded cells:** bodies that may not merge (other lineages, structures) still crowd a cell, up to 134 bodies.
 
 ## 8. What is left
 
-The open findings of review round 2, F5 if F7 asks for it, `core` down to 8,000 code lines, a watch report for
-Phases E to K, then Phase L. Work like this usually takes longer than planned: report the real days in each phase
-report.
+The open items above (E6, F7 and maybe F5, G5, the speed goals of 6.5, round 3's list), the owner's answers to
+decisions 42 (the 8,000 lines) and 43 (the time budget), then Phase L. Work like this usually takes longer than
+planned: report the real days in each phase report.
 
 ---
 

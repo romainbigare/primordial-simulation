@@ -433,6 +433,8 @@ the golden test.
   open world (`Reaction::open`); eater founders bite first again (decision 47): 48 x 48, year 60, free sugar on land
   2.1 to 0.02 kg/m², eaters 1.6e4, 2.4e5, 1.4e4 to 4.6e3, 2.7e4, 1.6e4 kg/km² of land, land +0.3 to +0.8 K.
 - Docs: `laws.md` says each law once (rule, reason, files), the code's doc comments say how: 925 to 454 lines.
+- Docs: the plan's finished phases A to K in short; E6, F7, G5 and the speed goals marked open with their numbers; E2,
+  E3 dropped; the cost model of round 3; round 3's open items in Phase L.
 
 **Tried and not kept in the foundation**
 
