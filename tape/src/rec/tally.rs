@@ -69,8 +69,8 @@ pub(super) struct YearTally {
     pub pairs: BTreeSet<(u64, u64)>,
     /// By lineage: signal counts by context (`Signals`)
     pub sig: Vec<Signals>,
-    /// kg that bodies that are not light-eaters could burn of what they took: from light-eaters, from others, from
-    /// the ground
+    /// kg of what they use (`Body::uses`) that bodies that are not light-eaters took: from light-eaters, from others, from the
+    /// ground
     pub intake: [f64; 3],
     /// Bonds made by kind (held, joined, anchored); broken by bodies; failed by load
     pub made: [f64; 3],
@@ -157,7 +157,7 @@ impl Recorder {
                 let b = w.life.bodies.get(slot).filter(|b| b.alive && b.gen == gen);
                 y.gave_eaters += b.is_some_and(|b| !light_eater(&w.chem, &b.genes)) as u8 as f64;
             }
-            EventKind::Took { by, from, burn, cat } => {
+            EventKind::Took { by, from, used, cat } => {
                 if from != u64::MAX {
                     let (at, gen) = slot_gen(by);
                     let t = slot(&mut s.took, at);
@@ -167,7 +167,7 @@ impl Recorder {
                     t.1[(cat[1] < LIGHT_EATER) as usize] += e.value as f32;
                 }
                 if cat[0] < LIGHT_EATER {
-                    y.intake[if from == u64::MAX { 2 } else { (cat[1] < LIGHT_EATER) as usize }] += burn as f64;
+                    y.intake[if from == u64::MAX { 2 } else { (cat[1] < LIGHT_EATER) as usize }] += used as f64;
                 }
             }
             EventKind::BondMade => y.made[(e.value as usize).min(2)] += 1.0,

@@ -153,7 +153,8 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice,
     for (q, &(o, same)) in c.seen[..c.nseen].iter().enumerate() {
         let ob = &w.life.bodies[o];
         let v = ob.vis;
-        let known = b.recall(ob.id(o));
+        // How past dealings with it went, if it is known.
+        let known = b.known.iter().find(|k| k.0 == ob.id(o) && k.0 != 0).map(|k| k.1);
         let fq = &mut c.fb[q * NT..(q + 1) * NT];
         fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], ob.sig[0], ob.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, ob.wb / WB_SCALE]);
         for verb in 0..VERBS {

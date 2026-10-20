@@ -15,9 +15,9 @@ pub enum EventKind {
     Watched { by: u64, of: u64 },
     /// Body `from` put stores into body `to` (value: kg)
     Gave { from: u64, to: u64 },
-    /// Body `by` took kg from body `from` (`u64::MAX`: the ground); `burn` the part `by` can burn; `cat` the highest
-    /// light-reaction speed-up (log10) of taker and taken (0 for ground)
-    Took { by: u64, from: u64, burn: f32, cat: [f32; 2] },
+    /// Body `by` took kg from body `from` (`u64::MAX`: the ground); `used` the part `by` uses (kg,
+    /// `Body::uses`); `cat` the highest light-reaction speed-up (log10) of taker and taken (0 for ground)
+    Took { by: u64, from: u64, used: f32, cat: [f32; 2] },
     BondMade,
     BondBroken,
 }

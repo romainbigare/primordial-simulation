@@ -333,11 +333,12 @@ a node spreads its members over the actions by those chances (`choose::spread`).
 enter (`bond/verbs.rs`). No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`
-per kg: per kg of supply, Holling's type II take × s / (take + s), s what the swept area holds (`sweep`) of the food it
-takes (its key liquids are drink and do not count), so thin food takes time to find (Holling 1959). Another body's
+per kg, of food only (`Body::uses`: what it burns, the body matter and built solids it digests, the minerals it builds
+of; not what it cannot use, nor the key liquids it drinks, `soak`): per kg of supply, Holling's type II take × s /
+(take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). Another body's
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (of a node, maybe less than
 one member; one individual body whole), limited by force against theirs; a quicker body escapes with the chance its
-interval gives. **Giving** (`Body::spare`) is of stores only (no matter, brood, built solids or key liquid below level),
+interval gives. **Giving** (`Body::spare`) is of what the other uses, of stores only (no matter, brood, built solids or key liquid below level),
 above `keep_min` × their minimum, at most what the members met could take.
 
 ### 5.4 Learning
@@ -418,7 +419,7 @@ share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
 Intake at most `take` × supply a day (5.3). **Digestion** (`Body::digest`): matter taken is broken back into what it
-was built of, so food enters as fuel, and only if a catalyst of its own breaks it (`Body::can_take`). **Minimums**
+was built of, so food enters as fuel, and only if a catalyst of its own breaks it (`Body::uses`). **Minimums**
 (`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
 (`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:
 wear grows by the energy upkeep turns over per kg, over `e_life` × 10^`REPAIR` (the rate of living); 1 − e^−wear of

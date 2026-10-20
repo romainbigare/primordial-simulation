@@ -235,22 +235,18 @@ impl Body {
     /// Days between its updates: its `INTERVAL` gene, and at least `Config::node_days` for a population node without a
     /// brain, which takes no decisions (laws.md 4.4, the pace of nodes).
     pub fn interval(&self, w: &crate::World) -> u64 {
-        let own = self.own_interval();
+        let own = self.k.interval;
         if self.n() > 1.0 && w.life.brainless(self) { own.max(w.cfg.node_days as u64) } else { own }
     }
     /// How many of the intervals its `INTERVAL` gene asks for one update spans (1 but for a node that updates less often).
     pub(crate) fn paces(&self, w: &crate::World) -> f64 {
-        self.interval(w) as f64 / self.own_interval() as f64
+        self.interval(w) as f64 / self.k.interval as f64
     }
     /// The share that dies in an update when `f` would die in one interval of its gene: the rate -ln(1 - f) per
     /// interval over `paces` intervals, so as many die in a time whatever the length of the updates.
     pub(crate) fn over_span(&self, f: f64, w: &crate::World) -> f64 {
         let d = self.paces(w);
         if d == 1.0 { f } else { 1.0 - (1.0 - f).powf(d) }
-    }
-    /// Days between the updates its `INTERVAL` gene asks for.
-    fn own_interval(&self) -> u64 {
-        self.k.interval
     }
     /// Its genes are `genes` (`prepare` follows).
     pub(crate) fn set_genes(&mut self, genes: Vec<f32>, chem: &Chemistry, p: &crate::Physics) {
@@ -314,10 +310,6 @@ impl Body {
             }
         }
         w
-    }
-    /// How past dealings with body `id` went, if it is known.
-    pub(crate) fn recall(&self, id: u64) -> Option<f32> {
-        self.known.iter().find(|k| k.0 == id && id != 0).map(|k| k.1)
     }
     /// Remember a dealing with body `id`: better (+) or worse (-). A new one replaces the least marked.
     pub(crate) fn note(&mut self, id: u64, d: f32) {

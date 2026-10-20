@@ -443,9 +443,9 @@ pub fn took_from_ground(w: &World) -> f64 {
     w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, .. } = e.kind { e.value } else { 0.0 }).sum()
 }
 
-/// What the bodies took that they can burn, in the day's events, kg.
-pub fn took_to_burn(w: &World) -> f64 {
-    w.events.iter().filter_map(|e| if let EventKind::Took { burn, .. } = e.kind { Some(burn as f64) } else { None }).sum()
+/// What the bodies took of what they use (`Body::uses`), in the day's events, kg.
+pub fn took_used(w: &World) -> f64 {
+    w.events.iter().filter_map(|e| if let EventKind::Took { used, .. } = e.kind { Some(used as f64) } else { None }).sum()
 }
 
 /// The members born in the day's events.

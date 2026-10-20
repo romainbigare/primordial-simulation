@@ -83,7 +83,7 @@ worn edges, structures, true colour (r, g, b).
 | `mass_top2`, `mass_land` | kg/m² | body mass on the busiest cells and on other land |
 | `watched`, `watched_kin`, `watched_bodies`, `spread_max` | 1/yr, 1/yr, , bodies | watches (imitation), of them within a lineage; bodies watched; most watchers of one |
 | `gave`, `gave_kg`, `gave_eaters`, `gave_pairs`, `gave_reciprocal` | 1/yr, kg/yr, 1/yr, , | gifts, kg given, gifts by eaters, giving pairs, pairs giving both ways |
-| `ate_light_eaters`, `ate_others`, `ate_ground` | kg/yr | what eaters could burn of what they took, by source |
+| `ate_light_eaters`, `ate_others`, `ate_ground` | kg/yr | what eaters took of what they use (`Body::uses`: their food), by source |
 
 **Parts and structures**
 

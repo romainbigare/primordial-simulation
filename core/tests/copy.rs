@@ -5,7 +5,7 @@ use pcore::body::{Body, Layout, ALLOC, CHILD, COOL_T, COPY_MASS, DENATURE, DISPE
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, World};
-use worldgen::testkit::{self, add, brood, life_totals, same_totals, children, eater, kg, only_the_solid, out, put, put_kg_m2, scale, start, took_to_burn, Books, BURN, DISSOLVED, LIQUID, MATTER, RICH};
+use worldgen::testkit::{self, add, brood, life_totals, same_totals, children, eater, kg, only_the_solid, out, put, put_kg_m2, scale, start, took_used, Books, BURN, DISSOLVED, LIQUID, MATTER, RICH};
 use pcore::store::Class;
 
 /// A body whose roots take the minerals growth is built of (the uptake genes at 0.01, so that a meal is still nearly
@@ -180,7 +180,7 @@ fn storing_the_solid_costs_no_build() {
     for _ in 0..30 {
         w.events.clear();
         pcore::day(&mut w);
-        took += took_to_burn(&w);
+        took += took_used(&w);
     }
     let b = &w.life.bodies[s];
     println!("took {took:.3} kg: solid {rich0:.3} -> {:.3} kg, matter {matter0:.3} -> {:.3} kg", kg(&w, b, RICH), kg(&w, b, MATTER));
@@ -624,7 +624,7 @@ const GROWTH_GROUND_K: f64 = 289.0;
 /// of keeping its tissue with its body^1.0 (`body::upkeep`), so growth, which builds only from the spare after upkeep
 /// (`copy::grow`), stops where the two meet, a size the body's own costs set. An eater (ALLOC 0: it builds only for
 /// itself; strength 1; building fast, so that the allowance never binds) in a place with all the fuel it can take, at
-/// every update, for 360 days. With a quarter more than the starting costs of tissue the ceiling is near its size: it
+/// every update, for 360 days. With 1.625 times the starting costs of tissue the ceiling is near its size: it
 /// levels off (under a quarter more body between the 100th and the 300th day) and in its last 100 days takes about what
 /// it pays to keep what it has; with a quarter of the starting costs, a ceiling many times higher, it is still growing
 /// fast and ends larger.
@@ -672,7 +672,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             let b = &w.life.bodies[s];
             let level = b.level(&w.chem, LIQUID, b.mass(&w.chem));
             assert!(b.store[LIQUID] <= level * (1.0 + 1e-3), "day {day}: liquid over its level by a share {:.3e}", b.store[LIQUID] / level - 1.0);
-            takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, burn, .. } = e.kind { burn as f64 * joule } else { 0.0 }).sum();
+            takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, used, .. } = e.kind { used as f64 * joule } else { 0.0 }).sum();
             let mut b = w.life.bodies[s].clone();
             b.prepare(&w.chem, &w.cfg.phys);
             ups[day] = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem));
@@ -684,7 +684,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(1.25);
+    let (full, r_full) = run(1.625);
     let (cheap, r_cheap) = run(0.25);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).

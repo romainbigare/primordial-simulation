@@ -38,7 +38,7 @@ const MOVE: f64 = 0.3;
 const GENES: [(&str, usize); 11] = [("gas", GAS), ("leaf", LEAF), ("copy_log", COPY_MASS), ("interval", INTERVAL), ("hidden", HIDDEN), ("heat", HEAT), ("keep_t", KEEP_T), ("repair", REPAIR), ("wet_gene", WET), ("alloc", ALLOC), ("child", CHILD)];
 /// The rules the check holds, per plan (default, roster) and rule (a, b, c, d); it prints the others.
 const HELD: [[bool; 4]; 2] = [[false, true, true, false], [false, true, true, false]];
-/// What eaters could burn of what they took, by source.
+/// What eaters took of what they use (`Body::uses`), by source.
 const ATE: [&str; 3] = ["ate_light_eaters", "ate_others", "ate_ground"];
 /// The causes of death (`docs/tape.md`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];

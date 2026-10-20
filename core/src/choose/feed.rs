@@ -10,24 +10,25 @@ use crate::{bond, lanes, World};
 /// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
 const NOTE_SCALE: f64 = 10.0;
 
-/// Mass of the amounts `m` that the body's reactions can burn, kg.
-fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
+/// Mass of the amounts `m` that the body uses (`Body::uses`), kg.
+fn used_kg(w: &World, b: &Body, m: &[f64]) -> f64 {
     let t = b.temp(&w.chem);
-    m.iter().enumerate().filter(|&(k, _)| b.burns_at(&w.chem, k, t)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
+    m.iter().enumerate().filter(|&(k, _)| b.uses(&w.chem, k, t)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
 }
 
 /// The intake law of bodies, one for the ground and for other bodies: what body `b` can take in its update from what
 /// lies over its cell, `from` mol of each substance in `n` members (the ground: one). Per day per kg-equivalent of its
 /// supply it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to
-/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). Its key
-/// liquids are drunk, not sought: they do not count in s. A node's members each work their own area. Returns that, kg,
+/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). Only what it
+/// uses counts in s (`Body::uses`). A node's members each work their own area. Returns that, kg,
 /// and the share of the `n` members its area holds: of a node, what that area holds, which may be less than one
 /// member; of one individual body (`n` 1), all of it.
 fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64, n: f64) -> (f64, f64) {
     let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.interval(w) as f64);
-    let wants = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k) && b.wet >> k & 1 == 0);
+    let t = b.temp(&w.chem);
+    let wants = b.k.upt.iter().filter(|&&(k, _)| b.uses(&w.chem, k, t));
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
-    let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, b.temp(&w.chem)));
+    let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, t));
     let held = (p.sweep * supply * days * n / area).min(n) / n;
     (p.take * found / (p.take + found) * days * supply, if n > 1.0 { held } else { 1.0 })
 }
@@ -42,7 +43,7 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
-    let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
+    let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
     w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
     for (k, a) in m.iter_mut().enumerate() {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
@@ -111,7 +112,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
     let got = w.chem.mass_of(&m);
     transfer(&w.chem, &mut w.counts.rounded[0], &mut o, b, &m);
-    let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
+    let ev = EventKind::Took { by: b.id(slot), from: o.id(s), used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
     if body::wound(w, s, o, (hit, f), &rest, TAKEN) {
         w.life.bodies[s].note(b.id(slot), -(NOTE_SCALE * got / mo) as f32);
@@ -127,9 +128,9 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let spare = |k: usize| b.spare(chem, &w.cfg.phys, k, (size, mass));
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
     let o = &w.life.bodies[s];
-    let (mo, paces, met) = (o.mass(chem), o.paces(w), b.n().min(o.n()));
-    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys, o.temp(&w.chem)) * met / o.n() / all.max(1e-9)).min(met / b.n());
-    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.can_take(chem, k) { (spare(k) * share).min(o.room(chem, paces, k, mo) * met / o.n()) } else { 0.0 }).collect();
+    let (mo, paces, met, t) = (o.mass(chem), o.paces(w), b.n().min(o.n()), o.temp(chem));
+    let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
+    let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.uses(chem, k, t) { (spare(k) * share).min(o.room(chem, paces, k, mo) * met / o.n()) } else { 0.0 }).collect();
     o.digest_room(chem, paces, &mut m, mo);
     let got = w.chem.mass_of(&m);
     if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {

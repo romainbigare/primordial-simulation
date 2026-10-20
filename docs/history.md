@@ -489,6 +489,10 @@ the golden test.
 - The cost model (plan 5.7) is measured on a settled world: 48 x 48 seed 2, years 91 to 100, side by side on one
   machine, 8.26 s a year before the three changes above and 6.99 s after (bodies 6,643 to 5,647 ms, Parts 335 to 48);
   about 300 cells fit the time budget, against 250.
+- Intake: bodies take, and are given, only what they use (`Body::uses`: what they burn, digest or build of) and count
+  only that in Holling's response; sand and rock no longer feed individuals, and drinking no longer takes part of what
+  they take; a body no longer drinks from a part. 48 x 48 seed 2, years 36-40: eaters 1.5e5 to 4.8e5 kg, their life
+  11.5 to 10.8 yr, starving 40 to 145 a year, land 290.1 K, drift 8e-15.
 
 **Tried and not kept in the foundation**
 
