@@ -493,6 +493,9 @@ the golden test.
   only that in Holling's response; sand and rock no longer feed individuals, and drinking no longer takes part of what
   they take; a body no longer drinks from a part. 48 x 48 seed 2, years 36-40: eaters 1.5e5 to 4.8e5 kg, their life
   11.5 to 10.8 yr, starving 40 to 145 a year, land 290.1 K, drift 8e-15.
+- An individual taken by an individual is found with the chance the taker's swept area holds it, as a node's members
+  are (one draw for that and its escape). 48 x 48 seed 2, years 36-40: eaters 4.8e5 to 4.1e5 kg, taken 6 to 11 a year,
+  starving 145 to 124 a year, land 290.1 K.
 
 **Tried and not kept in the foundation**
 

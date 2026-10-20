@@ -19,10 +19,10 @@ fn used_kg(w: &World, b: &Body, m: &[f64]) -> f64 {
 /// The intake law of bodies, one for the ground and for other bodies: what body `b` can take in its update from what
 /// lies over its cell, `from` mol of each substance in `n` members (the ground: one). Per day per kg-equivalent of its
 /// supply it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to
-/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). Only what it
-/// uses counts in s (`Body::uses`). A node's members each work their own area. Returns that, kg,
-/// and the share of the `n` members its area holds: of a node, what that area holds, which may be less than one
-/// member; of one individual body (`n` 1), all of it.
+/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). Only
+/// what it uses counts in s (`Body::uses`). A node's members each work their own area. Returns that, kg, and the share
+/// of the `n` members its area holds, which may be less than one member: of one individual body, the chance it holds
+/// it.
 fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64, n: f64) -> (f64, f64) {
     let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.interval(w) as f64);
     let t = b.temp(&w.chem);
@@ -30,7 +30,7 @@ fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64, n: f64) -> (f64, f64
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
     let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, t));
     let held = (p.sweep * supply * days * n / area).min(n) / n;
-    (p.take * found / (p.take + found) * days * supply, if n > 1.0 { held } else { 1.0 })
+    (p.take * found / (p.take + found) * days * supply, held)
 }
 
 /// Take loose solids and liquids from the cell's ground by the intake law (`intake`), no more than its stores have room
@@ -84,18 +84,23 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 
 /// Take from another body in the cell by uptake selectivity, by the intake law (`intake`: its members spread over the
 /// cell, a node is found as the ground is), as far as its stores' room and its force against the other's allow. It
-/// reaches what the members its area holds hold, and a quicker body gets away with chance 1 - its interval / the
-/// taker's (the taker has paid; of a node's bites, that share). The bite tears each member it reaches (`body::wound`;
+/// reaches what the members its area holds hold (an individual taken by an individual: all of it, with the chance its
+/// area holds it), and a quicker body gets away with chance 1 - its interval / the taker's (the taker has paid; of a
+/// node's bites, that share). The bite tears each member it reaches (`body::wound`;
 /// laws.md 6.8).
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
-    let (kg, reached) = intake(w, b, |k| o.store[k], o.n());
+    let (kg, swept) = intake(w, b, |k| o.store[k], o.n());
+    // One draw finds an individual taken by an individual and, over the chance it was found, lets it get away (`hit`).
+    let u = rng.f64();
+    let one = o.n() <= 1.0 && b.n() <= 1.0;
+    let (reached, u) = if !one { (swept, u) } else if u < swept { (1.0, u / swept) } else { return };
     let m = b.wanted(&w.chem, b.paces(w), |k| reached * o.store[k], kg * fb / (fb + fo + 1e-30), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
     let away = (1.0 - o.interval(w) as f64 / b.interval(w) as f64).max(0.0);
-    let hit = reached * if b.n() > 1.0 { 1.0 - away } else { (rng.f64() >= away) as u8 as f64 };
+    let hit = reached * if b.n() > 1.0 { 1.0 - away } else { (u >= away) as u8 as f64 };
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
     // what the taker took (all they held, if they die).
     let (built, got) = (reached * o.built(&w.chem), w.chem.mass_of(&m));
