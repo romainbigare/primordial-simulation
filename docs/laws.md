@@ -1,410 +1,193 @@
 # The laws as they are now
 
-How each law of the world works, in the present tense. When and why a rule came is in `docs/history.md`. Every
-number, its unit and its anchor are in `docs/numbers.md`: this file gives a number only where it helps to read the
-rule. What a run records is in `docs/tape.md`; the plan and the rules of work in `docs/handover.md` ("handover 6.2"
-points there). The code is the truth: each part names its file and function, for example `body::upkeep` (`upkeep` in
-`core/src/body/pay.rs`).
+What each law does, its rule, its physical reason and where it lives. How the code does it (rounds, caches, buffers,
+orderings) is said once, in the code's doc comments; the code is the truth. Numbers, units and anchors are in
+`docs/numbers.md`, what a run records in `docs/tape.md`, when and why a rule came in `docs/history.md`.
 
-**Where the code is** (under `core/src/`; each law below names its own files): time in `clock/` and `schedule.rs`;
-the shape of the world in `space/` (`World::mesh`: cells, links with their widths and headings, levels; each link
-of a cell takes one of 8 compass directions, `Level::way`, the free one nearest its heading, so a square's 8
-neighbours take the 8 directions even near a pole; the laws step only on the links). The map is an island of 2 km squares, or a globe (`ew run --globe`): squares of
-latitude and longitude from pole to pole whose rows wrap east to west, each row's area and borders from its latitude
-on a sphere of 6,371 km (cells narrow toward the poles; no link crosses a pole), the air a coarser level that wraps
-too. A rectangle of squares may be refined at the start (`ew run --region X,Y,W,H`, `Square::refine`, 2 x 2 squares
-or more): each of its squares is four quarters in the mesh, under its square's air node. A square beside the region
-links to the two quarters along its side, each across half the side, as far apart as their centres lie across the
-border (three quarters of a side), and not across a corner (so it keeps at most 8 links). Heat, pore liquid and the
-like then cross the border exactly for a change across it; a change along it gives a quarter and its square a small
-false exchange (two-point fluxes on cells that do not line up); the shared maths in `solve/`; settings in `params.rs`; the nodes and their books in
-`store/`, `world.rs` and `check.rs`; ground heat in `ground.rs`; the registry of bodies in `life.rs`, the cells as
-bodies see them in `survey.rs`.
+**Where the code is** (`core/src/`): time in `clock/` and `schedule.rs`; the shape of the world in `space/`; shared
+maths in `solve/` (`spread`, `downhill`, `band`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
+`ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
+`brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
+tape's events in `event.rs`; threads in `par.rs` (the same results with and without).
 
-**Words used here**
+**Words.** A **cell** is a square of the map (2 km on the island, latitude-longitude on a globe) or a quarter of one
+in a refined region. A **node** is anything that holds stuff: a cell's ground, an air column, a body, a part. A
+**body** is a living node with genes and maybe a brain; a **member** is one living thing in it (one member: an
+**individual**; many: a **population node**). A **gene** is a number a body inherits, often log10 (1 means ×10) and
+"off" below 0. The **key liquid** is the liquid a body's chemistry runs in (substance 0). **Light-eaters** are bodies
+whose light-reaction gene is high (plant-like); the others are **eaters**.
 
-| Word | Meaning |
-|---|---|
-| cell | one square of the map (2 km × 2 km on the island; on a globe a square of latitude and longitude), or a quarter of one in a refined region, with a ground node; it sees its parent air node at the air level (`Mesh::share`: its area over the node's) |
-| node | anything that holds stuff: the ground of a cell, an air column, a body, a part |
-| body | a living node with genes and maybe a brain |
-| member | one living thing inside a body. A body of 1 member is an **individual**; of many, a **population node** (alike members counted together) |
-| gene | a number a body inherits. Many genes are log10 (1 means ×10). A gene below 0 is often "off" |
-| catalyst | a gene that makes one reaction faster inside the body (metabolism) |
-| key liquid | the liquid a body's chemistry runs in (substance 0 in chemistry 0) |
-| light-eater | a body whose light-reaction gene is high (plant-like); others are "animals" in the tape |
-| plateau | a node stays at a melting point while one substance melts or freezes in it |
+## 0. The world, one step, the books
+**The map** (`space/`, `World::mesh`): cells, links with widths and headings, and a coarser air level. The laws step
+only on links. Each link takes one of 8 compass directions (`Level::way`), so the brain's 8 directions hold everywhere.
+An island of 2 km squares, or a globe (`--globe`) of latitude-longitude squares on a sphere of 6,371 km whose rows wrap
+east to west. A rectangle may be refined at the start (`--region`, `Square::refine`): each square becomes four
+quarters, linked to a square beside them at the distance between centres across the border, so a steady change
+across it passes exactly.
 
----
+**One step** (`schedule::step`, a month; time in whole seconds, the calendar from it). Processes run by their periods
+(`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`), the parts of
+Flow that are due (air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and
+Change; on the month's first day Bond; every day the bodies whose interval ends (`survey::day`; the `INTERVAL` gene,
+5 to 360 days; a population node without a brain at least every `node_days`). Each run stands for the time to its next.
 
-## 0. One step of the world
+**Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
+than `wake_share`, then its law brings it up to date over the whole time since.
+**One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).
+**Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
-Time is a whole number of seconds (`World::time`); the day, month, year and season come from it by the calendar
-(`Config::calendar`). `step` (`schedule.rs`) moves the world one month. Each process has a period (`clock::Every`)
-and, at one time, they run in the order written once in `schedule::processes`:
-
-1. Every `phys_days` (10 days): the survey of the cells (`survey::survey`: what each cell holds, light and shade);
-   then the parts of Flow that are due: the state of ground and air that the other laws read until the
-   next physics step, the air's step (every `air_hours`, the same 10 days), liquid, drainage and erosion (every
-   `flow_days`, 30), heat conducted sideways and creep (yearly), the recheck of what is present (every 3 months); then
-   Change (`change::step`).
-2. On the first day of the month: Bond (`bond::step`).
-3. Every day: `survey::day` updates the bodies whose interval ends that day (each by its `INTERVAL` gene, 5 to 360
-   days; a population node without a brain at least every `node_days`, 4.4).
-
-Each run stands for the time to that process's next run, so Flow keeps no timer of its own.
-
-**Sleep and wake** (`clock::Sleep`). A calm node's own process may sleep until an alarm, or until one of its amounts
-has grown by more than `wake_share` of what it held when it fell asleep, whatever brought it. Its law looks for such
-gains once at its own step (`Sleep::watch`); heat wakes nothing. When due, the law brings the node up to date for all
-the time since, in one span. Change's ground and air nodes sleep so (2.2).
-
-**One ground temperature.** Every law and the tape read the ground temperature of Flow's last step
-(`World::t_ground_last`); before Flow first runs, `flow::ensure` builds it from the world as it is.
-
-**Checks before a run.** `Config::validate` (each period at least 1, the air's step divides the physics step,
-`dormancy` above 1, `light_yield` in (0, 1]) and `Chemistry::validate` (every reaction and conversion keeps its
-elements and its mass).
-
-**The books.** Every move takes from one node exactly what it gives to another, with its heat. Three boundary nodes
-stand for what lies beyond the world (`store::Boundary`): the sun gives the light the world absorbs, space takes the
-heat it radiates, outside gives and takes what edits put in and take out (`World::cross`). The potential energy of
-the world's matter is one more node (`store::Class::Potential`): a lift moves heat into it, a fall takes it back. So
-the world and these nodes keep every element and the energy; `check::drift` checks it, and a run prints the drift
-every year. It must stay near rounding.
-
-**No overdraw.** A law never asks a node for more than it holds: `spread` keeps amounts positive by its implicit
-step, `downhill` by its pass, the reactor by going no further than its scarcest input, and where a law could still ask
-too much it cuts that node's own outgoing links (`solve::spread::within`), never a whole field. `store::apply` only
-adds: what rounding leaves just below zero it sets to zero and counts (`Counters::rounded`; a debug build checks it is
-rounding). A body or part takes heat from a ground node no further than `T_FLOOR`, with as much less of the matter
-that goes with it (`World::take_from_ground`; what it could not give is counted in `Counters::clamped_heat`).
-
----
+**The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` is the
+store's only writer. Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
+potential energy is one more node (`Class::Potential`): a lift moves heat into it, a fall takes it back. So every
+element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
+**No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
+links (`solve::spread::within`), never a whole field. `apply` only adds and sets rounding below zero to zero, counted
+(`Counters::rounded`). A body takes ground heat no further than `T_FLOOR` (`World::take_from_ground`).
 
 ## 1. Flow: stuff moves from high push to low push
-
-Files: `core/src/flow/` (ground and liquid), `core/src/flow/air/` (air, radiation, rain, wind).
+Files: `core/src/flow/` (ground, liquid, erosion), `core/src/flow/air/` (air, radiation, rain, wind).
 
 ### 1.1 The ground of a cell
-
-A cell's ground has layers, from the bottom: the **bed** (bonded rock), the **loose ground** (grains that can move),
-soft cover (solids warm enough to be soft) and standing liquid. `flow::land::surface` builds them;
-`flow::land::ground_state` finds the temperature (`World::thaw` the same from the amounts now).
-
-- **Heat.** The top `skin_m` of ground and everything on it trade heat with the surface; its temperature comes from
-  its energy and heat capacity.
-- **Heat conducted sideways** (`flow::land::conduct`, once a year for the whole year): one implicit step of
-  `solve::spread` along the links with a shared border; a link passes the harmonic mean of its nodes' conductivity ×
-  thickness, times width over length (Patankar 1980). On 2 km cells a hot spot in rock spreads one cell in about
-  70,000 years, so a yearly step is enough; the implicit step holds for any length.
-- **Melting plateaus** (`ground::melting`). A ground node holds the fusion enthalpy of what is molten in it, so it
-  stays at a melting point until that substance has all frozen or melted. Each substance melts at its point in that
-  node, lowered by what is dissolved in it (2.5); the plateaus are passed in the order of those points. The air's
-  step holds the node at a melting point it is at or reaches within the step for as long as the fusion enthalpy there
-  lasts (`Surface::balance`), and only past it at its heat capacity, so a long step freezes and thaws as short ones do.
-- **Deep store** (`Class::Deep`): the weathered zone of the bed, `bed_depth` deep, with `bed_porosity` of pore space.
-  Bodies and Change do not reach it.
-- **Land** (`World::is_land`): a cell whose solid surface is above 0 m. The one rule for soil, founders and the tape.
+Layers from the bottom: the bed (bonded rock), loose ground, soft cover, standing liquid (`flow::land::surface`); under
+them a deep store (`Class::Deep`, `bed_depth`, `bed_porosity`) that bodies and Change do not reach. A cell is **land**
+when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
+sideways yearly by one implicit `solve::spread`, a link passing the harmonic mean of conductivity × thickness, times
+width over length (Patankar 1980; `flow::land::conduct`): rock spreads a hot spot one cell in about 70,000 years.
+**Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
+melting point (lowered by solutes, 2.5) until that substance has all frozen or melted, in a long step as in short ones.
 
 ### 1.2 Liquid
-
-`flow::liquid`, every `flow_days`: the stores drain to the channels (`flow::drain::springs`), what may run off moves
-down the cells in one pass (`solve::downhill`), then the liquid under the surface moves (`flow::drain::under`). The
-store books every move as link fluxes.
-
-- **Pores first.** The loose ground's pores (`porosity` × its volume) fill first; only the liquid above them stands
-  and has a head (`flow::land::stand`). That standing depth, as Flow's last step left it, is the one the bodies
-  (`survey::env_of`) and Change (2.3) read.
-- **Spill levels.** A priority flood over the ground (the surface without the liquid that may run off), from the
-  lowest cell at the head of its liquid, gives each cell its spill level (Barnes, Lehman and Mulla 2014;
-  `downhill::Order`). Liquid stands where it lies below its cell's spill level (in a depression) or in the lowest
-  basin; elsewhere it passes on.
-- **Running off.** One pass moves the liquid, the highest spill level first; at one level the standing liquid, highest
-  head first, then the cells liquid passes through, the farthest from the way out first. Each cell sends its liquid
-  down its steepest way (D-infinity, Tarboton 1997; `Level::steepest`): each two lower neighbours next in compass
-  order make a triangle with its centre, the plane through their drops gives that triangle's way down, and the
-  steepest triangle shares the liquid between its two neighbours by angle (all to one where the way runs along a
-  link); under `still` of head nothing moves. The surface of a standing cell is its head, that of a cell liquid passes
-  through is its ground, so liquid on its way never holds back the liquid behind it. A head falls no further than to
-  the surface of a neighbour still to come, and half way to one already passed; liquid passing on never goes back, and
-  on level ground it follows the flood's way out. Liquid crosses the map in one step while depressions fill and spill.
-- **Pore water** flows by Darcy's law across the borders of cells in one implicit step of `solve::spread`, on the
-  liquid table (`flow::land::table`): a link passes `seep` × the saturated thickness of its higher end × width /
-  distance. Pores at or under their field capacity (`field`) give nothing.
-- **The deep store** is the lower layer of the cell's stack, joined to the ground node by a vertical link: liquid
-  above field capacity sinks into it (at most `seep`, never past its room), and the stores flow to their neighbours
-  by Darcy's law (`bed_seep`) in the same `spread`.
-- **Channels inside a cell.** Real land drains to channels a few hundred metres apart, so the loose ground above field
-  capacity and the deep store also drain by Darcy's law down the slope of the cell's steepest way down, over a
-  hillslope of `hill`, into the runoff (not under deep liquid, which has no slope).
-- **What goes with the liquid.** A move takes its share of every liquid and of what is dissolved in it, with its
-  heat. A salt is data for a liquid that never boils (substances 23 and 24): it moves with the liquid by its share and
-  stays behind when the liquid evaporates. There is no other rule for dissolved solids.
-- **Lost head is heat** in the ground (or the deep store), and does work (1.3).
-
-**Potential energy.** Lifting matter takes heat and a fall gives it back, through the potential node: liquid and
-solids going downhill, gas going into the air and out (1.5), gas between air nodes. In Flow each lift and fall is a
-link flux booked with the move (`flow::Falls`).
+`flow::liquid`, every `flow_days`.
+- **Pores first**: the loose ground's pores (`porosity`) fill first; only liquid above them stands and has a head
+  (`flow::land::stand`), the depth bodies and Change read.
+- **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
+  `downhill::Order`). Liquid stands below it or in the lowest basin; elsewhere it passes on, counting as no higher than
+  its ground, so it crosses the map in one step while depressions fill and spill.
+- **Running off** (`solve::downhill`): each cell sends its liquid down its steepest way by D-infinity (Tarboton 1997;
+  `Level::steepest`): two neighbours next in compass order make a triangle with the centre, the plane through their
+  drops gives its slope and way, and the steepest triangle shares the liquid between its two neighbours by angle.
+- **Pore water** flows by Darcy's law (one implicit `spread` on the liquid table): `seep` × saturated thickness × width
+  / distance; pores at or under field capacity (`field`) give nothing. Liquid above it sinks to the deep store, which
+  flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
+  the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`).
+- **What goes with it**: its share of every liquid and of what is dissolved, with heat. A salt is a liquid that never
+  boils (23, 24): it moves with the liquid and stays when it evaporates. Lost head becomes heat and does work (1.3);
+  lifts and falls book through the potential node (`flow::Falls`).
 
 ### 1.3 Erosion and creep
+The head lost by moving liquid does work where it is lost (`flow::liquid::load`, `wear`): it **carries** up to `carry`
+m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and **wears** `wear` m³ of
+bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly): loose ground slides downhill as a
+slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope. Bodies hold the ground: carrying
+and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.
 
-The head moving liquid loses does work where it is lost (`flow::liquid`, in the same pass):
-
-- **Carrying:** `carry` m³ of loose solids per J, at most all that lies loose. The load leaves a cell in the share the
-  liquid leaves it, so it settles where the flow slows; what is over the capacity drops.
-- **Wear:** `wear` m³ of bonded bed per J, over the bed's strength, at most all of it, broken into loose ground
-  (`Move::loosen`; the bed is `Class::Bed`, amounts without heat).
-- Bodies hold the ground: they cut carrying and creep by 1 / (1 + their mass per area / `hold`).
-- **Creep** (`flow::creep`, yearly): loose ground slides downhill like a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) ×
-  thickness × slope, link by link, across the side of the smaller of the two cells (corners too); over a link no more
-  than levels the two surfaces.
-
-Most rock that leaves the land is lime that Change dissolves (reaction 22, 2.6) and the liquid takes away.
-
-### 1.4 The air's step
-
-`flow::air::step`, every `air_hours`. Radiation, the exchange of the ground with the air (evaporation, rain, gases
-dissolving) and the wind are one implicit step (backward Euler) over the whole span, so a long step gives the world
-of short ones: the long-step test (`tape/tests/ranges.rs`) holds each seed's climate at the 10-day steps to its own
-at 6-hour air steps and 3-day physics steps, within 0.3 K for a temperature and the year-to-year spread for the rest. The wind's pushes come from the air at the step's start
-and the clouds from what condensed in the step before; they carry the amounts and heat at the step's end, so the
-step stays implicit, and the rounds solve only the exchange with the ground.
-
-- The unknowns are each air node's temperature and gases at the step's end (the gases it holds more of than the
-  rounding of its sums, and those that can evaporate from the ground), under the sun of the step's end. The rounds
-  solve the temperature with the gases that may condense and are more than a trace of the air; each other gas that
-  leaves the ground (a trace, or one that cannot condense) is solved once after the last round, alone, from that
-  round's slopes (`newton::alone`): it does not feed back into the air's heat.
-- Each Newton round (`flow::air::newton`) solves every ground node's exchange with the air it sees (its surface
-  balance, rain and evaporation, and their slopes), then the whole air level with the wind in one banded solve
-  (`solve::band`; on a globe each row of air nodes is numbered in a folded order, 0, w-1, 1, w-2, ..., so the link
-  that closes a row and the air a ground cell sees round the wrap stay within a band of one row). A node's energy at
-  the end is the heat capacity of its gases then times its temperature. The rounds start from the air as the last
-  step left it, without the bodies' gas that comes up in this one (with it, the first round would rain out far more
-  than there is). They stop when the air moves by less than 0.05 K and 1e-5 of a node's gas, or after 16.
-- **Booked whole** (`air::book`): what the last round found crosses the links as it is solved, so the books are exact
-  whether or not the rounds converged, and the other laws read what it leaves until the next step. A ground node gives
-  no more of a gas than it holds and gets; an air node that would give more rains and blows that much less.
-
-**Sun, heat and radiation** (`flow::air::radiation`).
-
-- The sun warms each cell by latitude, season and day length (`insolation`, the daily mean; Berger 1978), with the
-  declination of a circular orbit, sin δ = sin ε sin λ (`declination`, ε the tilt, λ the sun's longitude); the surface
-  reflects part of it, as its cover reflects at the step's end (backward Euler): with the snow that falls and the ice
-  that melts in the step, at the phases its end energy gives (`land::thaw_at`, `land::reflectance`). Each node finds
-  that reflectance in its own balance, each guess followed to the end it gives and halved between two once they cross,
-  so a long step covers and bares the ground as short ones do. The test `the_sun_is_right_at_every_latitude` holds the yearly mean at the poles and the
-  equator to the analytic values, the sphere's mean to S/4 at every season, and the south's seasons half a year from
-  the north's.
-- Every surface emits σT⁴. The air absorbs 1 − exp(−x) of what the ground emits, x the optical depth summed over the
-  gases (each past its own column amount grows only as the square root) and the clouds. It emits from 4 grey layers
-  that cool with height (`flow::glow`): more gas lifts the layer that reaches space into colder air, so the ground
-  warms.
-- **Clouds** (`exchange::cloud`) are a layer of droplets whose optical depth grows with what condensed in the air node
-  in the step before. A layer of scattering depth x = rate / `cloud` reflects x / (1 + x) of the sunlight (two-stream,
-  Lacis and Hansen 1974), times the condensate's mean reflectance; its droplets absorb heat radiation with an optical
-  depth `cloud_ir` × x (Stephens 1978), added to the gases'. A globe of Earth's size without life then holds about
-  Earth's climate (a test in `tape/tests/ranges.rs`). **Known limit:** the clouds' depth is spread like the air's
-  mass, not set at the height where they condense.
-- The ground trades heat with the air touching it (`sensible`); its temperature is solved implicitly over the step,
-  with the latent heat of what evaporates and the heat of the rain.
-
-**Light and heat for bodies.** Each cell has one bodies' node (`store::Class::Bodies`) that holds, as heat, what its
-bodies will take at their updates. The light bodies' leaves absorb warms the ground, except the share their light
-reactions store (`Body::keep`): Flow books that share from the sun into the bodies' node. The heat each body draws from
-the ground between its updates is part of the ground's implicit balance in the air's step (`survey::Draw`): what it
-drew at its last update (with what it would have evaporated beyond what its node held for it, 6.3), less in proportion
-as the ground's end temperature nears where its draw stops: where what it evaporates stops (the dew point of the air it
-breathes, the vapour's deficit going nearly with the temperature above it; or `COOL_T` where it evaporated to cool),
-no nearer than its conductance to the surface allows. So a ground that cools gives its bodies less, and they cannot pull
-it below that. The ground gives the bodies' node what they draw at its end temperature (no more than it holds above
-`T_FLOOR`), and each body is owed its share (`Draw::owed`, which moves with members that join or leave). At its update
-a body takes its heat from the node, no more than it is owed. What the node holds that no body claims (a body took
-less than it was owed, or died) its bodies draw first until their next updates, so the ground is spared later rather
-than warmed at once; the rest goes back to the ground at the step's start (`survey::Draws::settle`). The test
-`the_ground_under_dense_canopies_stays_near_its_neighbours` (`tape/tests/ranges.rs`) holds the ground under dense
-canopies to its neighbours from one month to the next.
-
-**Gas from bodies.** The gas a body or a part gives off (breath, what it evaporates, the gas of paying and of growth)
-goes into its cell's bodies' node, with the latent heat it holds there as in the air (`store::held`); the air's step
-takes all of it up into the cell's air node, as a source in its backward-Euler step (`step::Start`), with its lift.
-So the air never holds a pulse of the bodies' gas at a step's start, where the step reads its optical depth. Bodies
-already give the air the warmth of their gas, so the air's temperature counts the heat capacity of the gas under it
-(`air::sums`), and bodies breathe and warm against the air with that gas (`World::a_seen`); gas a body takes from the
-air comes from the air node, no more than it holds.
-
-**Shade** (`survey.rs`). Light passes the bodies of a cell from the tallest member down; a layer of leaf area x per
-ground area takes 1 − exp(−x) of what reaches it, and equal heights share a layer. Height (3.6) is kept with the
-other visible traits (`Body::vis`, set wherever a body's stores or members change: `World::see`). Rain on bodies is
-shared the same way (6.4). The survey shares out a cell's light again only when its bodies changed (`Life::stir`).
+### 1.4 The air's step, the sun and the bodies' share
+`flow::air::step`, every `air_hours`: radiation, the ground's exchange with the air and the wind in one implicit step
+(backward Euler by Newton's method, `newton`, with a banded solve of the air level, `solve::band`), booked whole as
+solved (`air::book`). A long step gives the world of short ones: the long-step test (`tape/tests/ranges.rs`) holds each
+seed's climate at 10-day steps to its own at 6-hour steps. Wind pushes and clouds come from the step's start.
+- **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
+  λ. The surface reflects as its cover is at the step's end (`land::reflectance`), so new snow reflects at once.
+- **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the
+  square root past its own column amount) and clouds, and emits from 4 grey layers that cool with height, so more gas
+  lifts the layer that reaches space into colder air and the ground warms.
+- **Clouds** (`exchange::cloud`): scattering depth x = condensation rate / `cloud`; they reflect x / (1 + x) of the
+  sunlight (two-stream, Lacis and Hansen 1974) and absorb heat radiation at depth `cloud_ir` × x (Stephens 1978). A
+  globe of Earth's size without life holds about Earth's climate. **Known limit:** their depth is spread like the air's
+  mass, not set where they condense. The ground also trades sensible heat with the air (`sensible`).
+- **The bodies' node** (`Class::Bodies`, one per cell): light bodies absorb warms the ground, except the share their
+  light reactions store, booked from the sun into this node. Each body's draw of ground heat between its updates is
+  part of the ground's implicit balance (`survey::Draw`): its last draw, falling to nothing as the ground nears where
+  its evaporation stops (the dew point, or `COOL_T`), so a cooling ground gives less and bodies cannot pull it below
+  that. A body takes at its update no more than it is owed; what none claims goes back (`survey::Draws::settle`).
+- **Gas from bodies** goes into the bodies' node with its latent heat; the air's step takes it up with its lift.
+- **Shade** (`survey.rs`): light passes a cell's bodies from the tallest down; a layer of leaf area x per ground area
+  takes 1 − exp(−x), equal heights sharing a layer. Rain on bodies is shared the same way.
 
 ### 1.5 Evaporation, rain and dissolved gases
-
-`flow::air::exchange` and `flow::air::step`.
-
-- **Evaporation** by vapour pressure: the ground's saturation pressure at the step's end against the air's near it.
-  Wet ground (standing liquid, or pores at field capacity or more) evaporates at the open rate, drier ground in
-  proportion to its liquid (the bucket of Manabe 1969), integrated exactly over the step with the rain it gets.
-- **Rain.** Vapour over what the air a cell sees can hold at its temperature (colder on higher ground) rains out in
-  `rain_time`, out of the four air nodes the cell sees, each in the share it gives of that vapour (`air::shares`), so
-  no node gives more than it holds; it brings the heat of the air it comes from. Condensing air makes clouds that reflect
-  sunlight and absorb heat radiation in the next step (1.4).
-- **Lift.** Gas that goes up into the air (from the ground, bodies, parts, reactions, growth) is lifted from the
-  ground's head to the air's mean height, paid by the air's heat; gas that comes down gives it back.
-- **Booked by the store**: a link from each ground node to its air node carries what evaporates and its heat, and a
-  link to each of the four air nodes it sees what rains out of it; the air gets that heat less the latent heat it holds
-  of the gas (`store::held`). A link from each bodies' node to its air node carries the gas the bodies gave off
-  (1.4), with the same lift.
-- **Gases dissolve** (`exchange::dissolve`, at the start of the air's step). A gas that cannot condense on the ground
-  dissolves in the liquid there toward Henry's share and comes out when the liquid warms, thins or freezes, through the
-  air's film (`evap`) and the liquid's film (`dissolve`) in series. Dissolving frees the vaporisation enthalpy into
-  the liquid; coming out takes it back. Dissolved gas moves with the liquid and returns to the air only here.
-- **Known limit.** The whole depth of a liquid is one mixed layer, for heat and gas: a deep sea warms over centuries
-  and takes up gas in months; a real one is the other way round.
+`flow::air::exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against the air's): wet
+ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket). **Rain**: vapour beyond
+what the cell's air holds at its temperature (colder higher up) rains out in `rain_time`, from the four air nodes the
+cell sees by their shares. **Lift**: gas going up is lifted from the ground's head to the air's mean height, paid by
+the air's heat. **Dissolving** (`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid
+toward Henry's share, through the air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its
+vaporisation enthalpy, and comes out when the liquid warms, thins or freezes. **Known limit:** a liquid's whole depth
+is one mixed layer, so a deep sea takes up gas in months and warms over centuries; a real one is the other way round.
 
 ### 1.6 Wind
-
-`flow::air::wind`, inside the air's step. The air nodes are the coarser level of the mesh (`AIR`); gas moves over
-each link of that level by three pushes, each a rate:
-
-1. the pressure of the whole column (p = nRT/V), evened in the time sound takes to cross the link (Lamb waves,
-   Lindzen 1990);
-2. overturning: at equal height the lower half flows to the warmer column and the upper half back, at `wind` per K,
-   turned sideways by the planet's rotation (`rotation`, at the link's latitude); vapour crowds in the lower half;
-3. eddies mix the two columns (`mix`, across the link's width over its length).
-
-The overturning's turn reads the slope of warmth across the link, from each node's neighbours by the way between
-centres (`Level::offset`: on a globe along the parallel and the meridian, the shorter way round the wrap). A ground cell
-sees the air of its air node and the three next to it on its side of the node's centre (`flow/scratch.rs`), bilinearly
-on the map (`Mesh::on_map`: on a globe in latitude and longitude, round the wrap); at an edge with no node on its
-side, its own node alone.
-
-The pushes come from the air at the step's start and carry the amounts and heat at its end, solved implicitly with
-the rest of the step: any speed is stable. Air moves as whole columns, so there is no wind
-near the ground: bodies use the anchored `wind_ground` (6.3).
+`flow::air::wind`. Gas moves over each link of the air level by three pushes: the column's pressure (p = nRT/V),
+evened in the time sound takes to cross the link (Lamb waves, Lindzen 1990); overturning, the lower half flowing to the
+warmer column and the upper half back at `wind` per K, turned by the planet's rotation (`rotation`), vapour crowding
+low; and eddies mixing the columns (`mix`, width over length). A cell sees its air node and three neighbours
+bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the anchored `wind_ground` (6.3).
 
 ### 1.7 Paths
-
-`lanes.rs`. A body moving through a cell spends energy pushing through the bodies there (`choose::go`,
-`choose::wear`), which breaks what it pushes through (6.8) and clears the link it used (`lanes::clear`, a field of the
-links, `store/links.rs`). A cleared link is cheaper to cross (`lanes::resist`). Once a year the bodies grow back into
-cleared links (`lanes::regrow`, rate `regrow`). This one rule is what can make paths.
-
----
+`lanes.rs`. A body moving through a cell spends energy pushing through the bodies there (`choose::go`, `choose::wear`),
+which breaks them (6.8) and clears the link (`lanes::clear`); a cleared link is cheaper (`lanes::resist`) and grows
+back yearly (`lanes::regrow`, `regrow`). This one rule is what can make paths.
 
 ## 2. Change: substances react inside nodes, faster when hot
-
-Files: `core/src/change/` (the reactor), `core/src/chem/` (the chemistry and its physics), `worldgen/src/chem0.toml`.
+Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.
 
 ### 2.1 The rate law
-
 ```
-rate    = catalyst · k · exp(−Ea / T) · contact · Π over inputs (share of its phase ^ order)
+rate    = catalyst · open · k · exp(−Ea / T) · contact · Π over inputs (share of its phase ^ order)
 lim     = the least, over the inputs, of (amount / count)      (the scarce input)
 contact = what lim would be if each input were all of its phase
 extent  = lim · (1 − (1 + p·z)^(−1/p)),   z = rate / lim · time   (1 − exp(−z) when p = 0)
 p       = (order of the scarce input − 1) · (1 − its share)   for a gas or liquid; 0 for a solid
 ```
 
-- **Share** is an input's share of its phase; a solid is a phase of its own. So a reaction inside one phase goes with
-  that phase, and one between a solid and the air goes with the solid, like a surface. A trace input at order 1 loses
-  the same share of itself per second whatever its amount.
-- **Order.** The data may give each input its own power (`Reaction::order`); else the count is the power.
-- **Extent** is the integral of the rate law over the step (`gone` in `change/kernel.rs`): never past the scarce input.
-- **Heat.** A reaction unit gives −ΔH to the node (`Chemistry::dh`). A substance's formation enthalpy `hf` is that of
-  its solid: a liquid holds its fusion heat more, a gas also its vaporisation heat (in the air), so each phase is
-  counted once. `Chemistry::dh_at` gives the heat as measured (`ew chem` prints it at 290 K).
-- **Light.** A light reaction takes absorbed light instead of heat and stores `light_yield` of it; the rest is heat.
-- `change::pace` is the one formula; ground nodes, air nodes, parts and bodies all use it.
+**Share** is an input's share of its phase; a solid is a phase of its own, so a reaction between a solid and the air
+goes like a surface. **Order** is the count or `Reaction::order`. **Extent** is the exact integral over the step
+(`change/kernel.rs`), never past the scarce input. **Heat**: −ΔH to the node (`Chemistry::dh`); formation enthalpies
+are of the solid, so a liquid holds its fusion heat and a gas its vaporisation heat too. **Light** reactions take
+absorbed light and store `light_yield` of it. **Open world** (`Reaction::open`): in ground, liquid, air and parts,
+where decomposers live, a reaction runs `open` times faster (1 for most; 200 for reaction 1, the free sugar's rot,
+about a week); a body runs its reactions by its own catalysts only. `change::pace` is the one formula for all nodes.
 
 ### 2.2 Where it runs
-
-- **Ground and air nodes** (`change::step`, `Reactor::react`): each when it is due, for all the time since it last
-  reacted, with sub-steps when the temperature changes fast. Then it sleeps (0, "Sleep and wake") until its reactions
-  would use 5% of their inputs or warm it 0.5 K (`Reactor::rest`), at most `sleep_days`. A speed tool, not physics
-  (`sleep_days` 0: every node reacts every step). A reaction too slow to matter over a year is frozen.
-- **Booked together.** The nodes due in a step react from the world as it was before any of them did (a ground node
-  with its share of its air node), each into its own row (in parallel with `threads`, `par::rows`), and
-  `store::apply` books the rows in the order of the nodes, in one call. A node's reactions are one
-  `store::Transform` (`Reactor::made`, summed exactly where terms cancel, so it keeps every element); their heat
-  follows from the formation enthalpies (`store::held`).
-- **A ground node reacts at Flow's last temperature.** On a plateau the fusion heat it holds is set aside while it
-  reacts (`FlowView::fused`).
-- **Gas a ground node takes or gives** crosses the link to its air node, one flux per substance (`store::Batch`). Gas
-  taken brings its heat at the air's temperature and gives the node its latent heat; gas given takes its share of the
-  node's heat and its latent heat. The air pays the lift (1.5). A node gives no more heat than it holds: where its gas
-  would take more, each gas it gives is cut by the same share. Parts and bodies settle their gas the same way
-  (`change/gas.rs`).
-- **Parts** react every 6 months at their cell's temperature (`bond::step`); **bodies** at each update with their
-  catalysts (2.4); **growth** is a conversion that only bodies run, paid by work (6.6).
-- **Decomposers.** In the open world (ground, liquid, air and parts) a reaction runs `Reaction::open` times faster,
-  a factor of the chemistry's data: the decomposers that live there (reaction 1, the free sugar's rot). A body runs its
-  reactions by its own catalysts only.
+**Ground and air nodes** (`change::step`, `Reactor::react`) react when due over all the time since, at Flow's last
+temperature (a plateau's fusion heat set aside), then sleep until their reactions would use 5% of an input or warm
+them 0.5 K, at most `sleep_days`. A node's reactions are one `store::Transform`. Gas a ground node takes or gives
+crosses to its air node with its heat and latent heat (parts and bodies the same, `change/gas.rs`). **Parts** react
+every 6 months (`bond::step`), **bodies** at each update with their catalysts (2.4); **growth** is a conversion only
+bodies run, paid by work (6.6).
 
 ### 2.3 What gas a ground node touches
-
-Its own gas plus its cell's share of the air above. **Under standing liquid** it touches only the gas dissolved in
-that liquid, which the liquid's film renews from the air (film time τ = depth / `dissolve`, the depth standing over
-the pores as Flow's last step left it, `FlowView::standing`): each gas
-it takes is held at Henry's share × (1 + made·τ/eq) / (1 + used·τ/eq), a film in series with the reactions. So dead
-matter on the sea floor rots only as fast as the film brings the oxidising gas.
+Its own gas and its cell's share of the air. **Under standing liquid** only the gas dissolved there, renewed through
+the liquid's film in τ = depth / `dissolve` (`FlowView::standing`): a gas it takes is held at Henry's share × (1 +
+made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast as the film brings the oxidising gas.
 
 ### 2.4 Change inside bodies
-
-- **Catalysts.** A body's catalyst gene for reaction r speeds it by f = 10^gene (off below 0): metabolism. "Eating
-  plants" means "my genes speed up the reaction that burns what plants store".
-- **Activity.** The speed-up is 1 + (f − 1) · a, a the activity (6.5): a dry body's enzymes do not work, the bare
-  reaction still runs.
-- **Inhibition by the product** (`Body::inhibited`): times 1 / (1 + Σ x / x*), x the body's store of each product, x*
-  the level it keeps (gases and the key liquid do not count; a product it keeps no level of stops the enzyme). It acts
-  on the reactions a body runs at its catalyst's pace, not on the burnings it runs on demand.
-- **Heat kills enzymes** (`change::denature`): above the `DENATURE` gene the speed-up falls off within a few K
-  (`unfold`). A firmer shape costs more upkeep (`t_firm`, `c_firm`). One rule for what a catalyst does when hot
-  (`Body::rate_at`): the burnings release by it, and upkeep and supply follow it (6.2).
-- **Burnings and keepers.** A catalysed reaction that releases heat and takes a gas is a **burning**: the body runs it
-  on demand to pay its costs (`body::plan`, `body::pay`), as far as the rate law allows with the air it breathes. A
-  reaction that gets less heat out of a fuel than burning it would (`Chemistry::keeps`) keeps the rest in what it
-  makes (fixing, reaction 24): it runs at its catalyst's pace and pays no upkeep.
-- **Fuel** (`Body::burns_at`): a store that is an input of one of the body's burnings and is not a gas at its
-  temperature.
-- Enzymes cost upkeep by their **capacity**, used or not (6.2).
+- **Catalysts**: a gene speeds its reaction by f = 10^gene (off below 0). "Eating plants" means "my genes speed up the
+  reaction that burns what plants store". The speed-up is 1 + (f − 1) · a, a the activity (6.5).
+- **Product inhibition** (`Body::inhibited`): × 1 / (1 + Σ x / x*), x each product's store, x* its level (not gases or
+  the key liquid), on reactions run at the catalyst's pace, not on burnings run on demand.
+- **Heat kills enzymes** (`change::denature`): above `DENATURE` the speed-up falls within a few K (`unfold`); a firmer
+  shape costs upkeep (`t_firm`, `c_firm`). One rule (`Body::rate_at`) for release, upkeep and supply (6.2).
+- **Burnings** (catalysed, release heat, take a gas) run on demand to pay costs (`body::plan`, `body::pay`). A reaction
+  that keeps part of a fuel's energy in its product (`Chemistry::keeps`, fixing) runs at its catalyst's pace. **Fuel**
+  (`Body::burns_at`) is a non-gas store a burning takes. Enzymes cost upkeep by their capacity, used or not (6.2).
 
 ### 2.5 Phases and the freezing law
-
-A substance is solid, liquid or gas by its melting and boiling points (`Chemistry::phase`). The melting point of a
-liquid in a mixture (`Chemistry::melt_in`) is lowered by what is dissolved in it, by the ideal-solution law:
-
-```
-1/T = 1/Tm − R · ln(x) / Lf        x = the liquid's share among itself and what is dissolved in it
-```
-
-- Only the **solvent** is lowered: the liquid (at 290 K) that is the most of the liquids there.
-- Dissolved means: substances that melt below the solvent's point and are still liquid there (the salts 23 and 24,
-  and the fat 6). Gases (only Henry's share) and solids do not count. A solute keeps its own melting point.
-- The whole amount of the solvent (ice and liquid) counts, so it freezes at one point.
-- The same law serves bodies (frost, evaporation, key liquids), the ground's plateaus, ice cover and surface
-  (`World::thaw`), parts, and Change's own phases.
-
-**Latent heat.** A gas in the air holds its melting and boiling heat (`Substance::latent_gas`): every gas that enters
-or leaves the air pays or gets it. A body holds the fusion heat of its molten stores, as a ground node does
-(`Body::thermal`): it freezes and melts at a plateau, liquid it takes or gives carries its fusion heat
-(`Body::heat_with`), and liquid it evaporates takes its vaporisation heat beside.
+Solid, liquid or gas by melting and boiling points (`Chemistry::phase`). A liquid's melting point in a mixture falls by
+the ideal-solution law (`Chemistry::melt_in`): 1/T = 1/Tm − R · ln(x) / Lf, x the solvent's share among itself and
+its solutes. Only the solvent (the most abundant liquid) is lowered; solutes are liquids melting below it (the salts 23
+and 24, the fat 6); ice and liquid count together, so it freezes at one point. One law for bodies, ground plateaus,
+ice cover (`World::thaw`), parts and Change. **Latent heat**: a gas in the air holds its melting and boiling heat
+(`Substance::latent_gas`), paid or got as it enters or leaves; a body holds the fusion heat of its molten stores
+(`Body::thermal`), and liquid it takes or gives carries it (`Body::heat_with`).
 
 ### 2.6 Pairs at balance and the sea's carbon
-
-`change::reversible` finds every pair of reactions where one undoes the other; `Reactor::balance` finds from the
-chemistry alone the amount at which a pair goes at equal rates. In chemistry 0 that is the lime–salt pair: 22 makes
-the dissolved salt 23 from lime, the carbon gas and the liquid; 23 turns it back. At the start (`worldgen::terrain`)
-each wet cell holds the salt at balance with its temperature and the starting air; a dry cell holds none. So the sea
-holds several times the air's carbon and gives it back when the air thins, with no rule for the sea.
+`change::reversible` finds each pair of reactions where one undoes the other; `Reactor::balance` finds from the
+chemistry alone where a pair goes at equal rates. In chemistry 0: 22 makes the dissolved salt 23 from lime, the carbon
+gas and the liquid; 23 turns it back. Wet cells start at that balance (`worldgen::terrain`), so the sea holds several
+times the air's carbon and gives it back when the air thins, with no rule for the sea.
 
 ### 2.7 Chemistry 0 in short
-
-One fixed, Earth-like chemistry until M7 (handover 6.0): 9 elements, 26 substances, 28 reactions
-(`worldgen/src/chem0.toml`), numbers only in `core` and `worldgen`; Earth names for people are in
-`library/chem0.toml`. A substance's molar mass is the sum over its elements (`element_masses`), so every reaction keeps
-mass. The roles the laws use:
+One fixed Earth-like chemistry until M7 (handover 6.0): 9 elements, 26 substances, 28 reactions, numbers only in
+`core` and `worldgen`; Earth names in `library/chem0.toml`. Molar masses are sums over elements, so reactions keep mass.
 
 | Number | Role (≈ Earth name, for reading only) |
 |---|---|
@@ -418,508 +201,254 @@ mass. The roles the laws use:
 | 24 | the nitrogen mineral, lives dissolved |
 | 25 | the frame, a solid bodies build (≈ cellulose) |
 
-Key reactions: 0 light to sugar; 1 burning sugar; 21 rotting or burning body matter (gives back the nitrogen mineral
-and lime); 22 and 23 the lime–salt pair; 24 nitrogen fixing; 25 the nitrogen mineral breaking down when hot (the
-nitrogen goes to the air); 26 rotting of the frame; 27 splitting the frame into sugar (needs an enzyme). Dead matter
-rots at a litter constant (reactions 21, 26: about a quarter a year at 290 K in open air). The free sugar rots faster in
-the open world, where decomposers live (reaction 1 runs `Reaction::open` times faster there; no body runs that
-speed-up).
-
-**Growth conversions** (`Chemistry::build`, `Chemistry::builds`), run only by bodies and paid by work:
-- body matter: 118 sugar + 3 nitrogen mineral + 1 rock salt → 1 matter + 27 liquid (no heat in or out);
-- frame: 6 sugar → 1 frame + 1 liquid;
-- lime: 1 rock salt → 1 lime + 1 carbon gas + 1 liquid (the gas goes to the air).
-
-`Chemistry::minerals` lists the inputs of growth that no reaction burns (24 and 23), `Chemistry::materials` the
-solids bodies build (25 and 10). A random chemistry has none of these yet: its bodies do not grow.
-
----
+Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 21 rotting or burning body matter (gives
+back the nitrogen mineral and lime); 22 and 23 the lime–salt pair; 24 fixing nitrogen; 25 the nitrogen mineral
+breaking down when hot; 26 rotting of the frame; 27 splitting the frame into sugar (needs an enzyme). Dead matter rots
+at a litter constant (21, 26: about a quarter a year at 290 K). **Growth** (`Chemistry::build`, bodies only, paid by
+work): matter from 118 sugar + 3 nitrogen mineral + 1 rock salt; frame from 6 sugar; lime from 1 rock salt.
+`Chemistry::minerals` are growth's inputs no reaction burns (24, 23), `materials` the solids bodies build (25, 10).
 
 ## 3. Bond: things can be joined, joins break when pushed too hard
-
-Files: `core/src/bond/` (`verbs`: what bodies do to parts; `sense`: what parts give a body; `month`: the monthly
-step). Also `choose::go`, `Body::height`, `Body::breaking`.
+Files: `core/src/bond/` (`verbs`, `sense`, `month`, `bonds`); also `choose::go`, `Body::height`, `Body::breaking`.
 
 ### 3.1 Parts and structures
-
-- A **part** is a made object: solid walls, the liquid held in its hollow, heat, a size (3 numbers) and a hollowness.
-  It is a node of the store (`Class::Part`) that comes and goes: its id is its slot and generation (`bond::id`). A
-  fixed node (ground, air, deep, boundary, potential) is named by its class and index (`store::Node`). A part lies in a
-  cell or is held by a body. A body makes one with the action "form" (`bond::form`, `c_form` per kg), at most `form`
-  of its mass.
-- A **bond** (`bond::Bonds`) joins two parts, or a part and the bonded ground. Its strength comes from the weaker
-  material at the joint and the contact area (`tensile`, `joint`); making it costs `c_join` per m².
-- A **structure** is the parts joined by bonds. It moves as one.
-- Parts take their cell's temperature each month and react with the air every 6 months (2.2).
+A **part** is a made object (solid walls, the liquid in its hollow, heat, 3 sizes, a hollowness), a store node
+(`Class::Part`) by slot and generation (`bond::id`), lying in a cell or held. A body makes one with "form"
+(`bond::form`, `c_form` per kg, at most `form` of its mass). A **bond** (`bond::Bonds`) joins two parts or a part and
+the bed; its strength comes from the weaker material and the contact area (`tensile`, `joint`), at `c_join` per m². A
+**structure** is the parts joined by bonds and moves as one. Parts take their cell's temperature monthly.
 
 ### 3.2 Loads and failure
+Monthly (`bond/month.rs`) each bond carries the weight hanging on it, less buoyancy, plus the push of moving liquid and
+of bodies passing (`bump` of their weight); past its strength it breaks, and what has no support lies on the ground. A
+structure the liquid holds up drifts down the liquid's slope (`bond::afloat`) with the chance that the liquid crosses
+the cell in the month.
 
-Once a month (`load` in `bond/month.rs`) each bond carries the weight hanging on it from the anchored part, less
-buoyancy, plus the push of moving liquid and of bodies moving through the cell (`bump` of their weight). A bond loaded
-past its strength breaks. What has no support lies on the ground. A structure the liquid holds up floats and drifts
-down the liquid's slope (`bond::afloat`): to the neighbour whose liquid stands lowest, with the chance that the
-liquid, at its speed (the cell's outflow over the mean width of its borders and the depth), crosses that width in
-the month.
-
-### 3.3 Holding, carrying, digging
-
-- Holding a part is a bond too. Its strength is the body's **force**: strength gene × living body (`Body::built`) ×
-  gravity × `grip` (`bond::force`); a held part can add a lever (`bond::lever`). A body takes hold of a part only if
-  its force bears the weight of the part's structure, and lets go when it no longer does (checked each month). Fuel
-  adds no force; a hurt body is weaker.
-- **Digging** (`bond::dig`) breaks bonded ground; its work goes with the body's force and time.
-- **Afloat** (`bond::afloat`): a body floats where the liquid is deeper than `deep` and the liquid its volume and the
-  structure it holds displace weighs as much as they do (Archimedes, as for parts, 3.2). Afloat it has no depth of
-  liquid over it (it breathes and catches light at the surface), reaches no ground, and crosses to a neighbour at
-  `afloat` of the cost of walking, with no climb.
+### 3.3 Holding, digging, floating
+Holding is a bond whose strength is the body's **force**, strength gene × living body × gravity × `grip`
+(`bond::force`), with a lever for a held part (`bond::lever`); a body holds only while its force bears the structure's
+weight. Fuel adds no force; a hurt body is weaker. **Digging** (`bond::dig`) breaks the bed by force and time. A body
+is **afloat** where the liquid is deeper than `deep` and what it and its structure displace weighs as much as they do
+(Archimedes): it breathes and catches light at the surface, reaches no ground, and crosses at `afloat` of walking's cost.
 
 ### 3.4 Containment
-
-If a structure's walls close around a space, it has an **inside** (`bond::room`), joined to its cell by one link
-(`bond::Enclosure`). Heat passes it through the walls (conductivity × face over thickness, for the share of the space
-they close) and through the openings (`leak` per m²); light and rain pass only through the openings. A body inside
-exchanges with the outside only through its share of that link, in series with its own surface. The inside holds
-almost no heat, so it is no node: the series is solved in closed form. "Shelter" is nothing more than this low
-conductance.
+Walls that close a space make an **inside** (`bond::room`) joined to its cell by one link (`bond::Enclosure`): heat
+passes the walls (conductivity × face / thickness) and the openings (`leak` per m²), light and rain only the openings.
+A body inside exchanges through that link in series with its own surface. "Shelter" is only this low conductance.
 
 ### 3.5 Moving needs force
-
-A mover pushes what it passes with `bump` of its weight, so it moves only if its own force is at least `bump` × the
-weight it moves (its whole mass and what it carries) × gravity (`choose::go`). The starting plants are too weak to
-move; the starting eaters move while their mass is under about 6 times their living body.
+A mover pushes what it passes with `bump` of its weight, so it moves only if its force is at least `bump` × its whole
+mass and load × gravity (`choose::go`). The starting plants are too weak to move.
 
 ### 3.6 What a body is built of holds it up and resists breaking
-
-- **Height** (`Body::height`): a member stands as high as its materials hold it against its own weight, by
-  Greenhill's self-buckling column: h⁴ = 7.837 / 4π × (Σ E·V) × V / (m·g), V the volume of its soft tissue and of each
-  solid it built, E their Young's modulus (data field `modulus`), m the whole member. Height sets the order of light
-  and rain (1.4).
-- **Breaking** (`Body::breaking`): breaking a share f of a body takes f × Σ V × the stress each material breaks at
-  (data field `rupture`). A bite pays it; pushing through breaks as much as its energy pays for (6.8).
-
----
+**Height** (`Body::height`), by Greenhill's self-buckling column: h⁴ = 7.837 / 4π × (Σ E·V) × V / (m·g), V the volume
+of soft tissue and each built solid, E their Young's modulus (`modulus`); it orders light and rain (1.4). **Breaking**
+(`Body::breaking`) a share f takes f × Σ V × each material's breaking stress (`rupture`): a bite pays it, pushing
+through breaks what its energy pays for (6.8).
 
 ## 4. Copy: a piece of the graph is copied, with small changes
-
-Files: `core/src/copy/` (`mod`, `mix`, `grow`, `young`, `select`), `core/src/nodes.rs` (population nodes),
-`core/src/body/genes.rs` (genes, likeness, mutation), `core/src/lineage.rs`. The body side of growth is in 6.6.
+Files: `core/src/copy/` (`mix`, `grow`, `young`, `select`), `nodes.rs`, `body/genes.rs`, `lineage.rs`.
 
 ### 4.1 Genes
-
-A body's genes (`body::Layout`):
-- 21 **scalar genes**: `GAS`, `LIQ`, `HEAT`, `LEAF`, `STRENGTH`, `CHILD`, `COPY_MASS`, `INTERVAL`, `MUT`, `LEARN`, the
-  brain sizes `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`, and `DISPERSE`, `DENATURE`, `REPAIR`, `WET`, `ALLOC`, `KEEP_T`,
-  `COOL_T` (meanings in `body/genes.rs`);
-- one **catalyst** gene per reaction (log10 speed-up);
-- per substance a **safe minimum** (a share of the body; below it the body dies, 6.7), an **uptake** gene and a
-  **keep** gene (the most it holds);
-- the **born brain rows** (5.1).
-
-**Mutation** (`body::vary`): each gene of a child is the parent's plus noise of one step × 10^`MUT`, within the
-gene's range (`range` in `body/genes.rs`). Genes that are off have 20 steps of room below 0, so they wander without
-hitting a wall. Born brain rows change with a chance `row_chance`, by `row_noise`; rarely (`new_lineage`) a child
-changes its lineage's brain base and starts a new lineage.
-
-**Likeness** (`body::alike`): two bodies are alike when every gene is within `alike` steps of the other's (brain and
-sense sizes in whole units). It decides who mixes, who joins a node and who merges.
+21 scalar genes (`body::Layout`; `GAS`, `LIQ`, `HEAT`, `LEAF`, `STRENGTH`, `CHILD`, `COPY_MASS`, `INTERVAL`, `MUT`,
+`LEARN`, the brain sizes `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`, and `DISPERSE`, `DENATURE`, `REPAIR`, `WET`, `ALLOC`,
+`KEEP_T`, `COOL_T`; meanings in `body/genes.rs`), a catalyst per reaction, per substance a safe minimum, an uptake and
+a keep gene, and the born brain rows. **Mutation** (`body::vary`): parent's gene plus noise of one step × 10^`MUT`,
+within range; born rows change with `row_chance` by `row_noise`; rarely (`new_lineage`) a new lineage with a changed
+brain base. **Likeness** (`body::alike`): every gene within `alike` steps; it decides who mixes, joins and merges.
 
 ### 4.2 Children come from a brood
-
-- A body is **mature** (`Body::adult`) when its living body per member is at or past its `COPY_MASS` gene.
-- At each update `copy::grow` builds what it can (6.6). An immature body puts it all into its own growth; a mature
-  body puts the share `ALLOC` into a **brood** (`Body::brood`: matter held for children, not yet body), the rest into
-  its own growth. With `ALLOC` below 1 it grows all its life.
-- Matter that leaves a body (a bite, members that die, what it sheds) or that its own reactions use (it rots, reaction
-  21, or burns) takes the brood down in the same share (`Body::lose`, `Body::brood_share`): it is matter like the rest.
-- Whenever the brood covers one child's matter, children are made (`copy::copy`) at the body's update, whatever its
-  brain does: bodies copy by physics only.
-- **A child** has a body of 10^`CHILD` × its parent's copy mass. It gets that matter from the brood, provisions of
-  every other store in the proportion its parent's body holds them (the key liquid times 10^`WET`, so a body can make
-  dry, dormant children), its share of the heat (as warm as its parent), and its genes plus noise. The parent pays
-  nothing more: the matter was paid for when it was built.
-- An individual makes whole children; a node makes fractional members of what its brood holds beyond half a child per
-  member (`copy::BROOD_HELD`): each member fills its own brood and makes a child when it covers one, so their broods lie
-  evenly between none and one child, and a member who dies loses what it held. A share `DISPERSE` of a node's children
-  starts in the neighbour cell of a random compass direction (none when the cell has no link that way; for an
-individual, the chance that they do); less than one member with no node of
-  its kind to join waits in the brood.
+A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
+share `ALLOC` into a **brood** (`Body::brood`), matter held for children that leaves with the body's matter in the same
+share (`Body::lose`). Whenever the brood covers a child, children are made (`copy::copy`) whatever the brain does:
+bodies copy by physics only. A child has a body of 10^`CHILD` × the copy mass, provisions of the other stores in its
+parent's proportions (the key liquid × 10^`WET`, so children may be dry and dormant), its share of heat, and the genes
+plus noise. A node keeps half a child of brood per member (`copy::BROOD_HELD`), so its members' broods lie evenly
+between none and one child, as individuals' do. A share `DISPERSE` of the children starts in a neighbour cell in a
+random direction (for an individual, that chance). Less than one member with no node to join waits in the brood.
 
 ### 4.3 Two parents
-
-A mature individual making children looks in its cell for a **partner** (`copy::mix::partner`): the most alike other
-mature body that is alike to it (a keyed draw among equals). A node's children have one parent: its members already
-mix their genes among themselves (one variance per gene and no covariances is free recombination, Bulmer 1971).
-
-- Each gene and each born brain row (kept whole) of the children is one parent's, drawn; then the normal mutation.
-  The chance to take the partner's is one half: the partner is one parent (a node gives the genes of its mean member).
-  Many children take about half from it, and their spread is what a merge of the two parents would pool
-  (`mix`, `mix_rows`).
-- The partner gives and loses nothing: genes are information.
-- No partner: the children copy one parent. Bodies that are not alike never mix, so **kinds are the groups that mix**.
-- `Config::two_parents` off (`--no-mix`) gives one parent always (a control).
+A mature individual takes the most alike mature **partner** in its cell (`copy::mix::partner`); each gene and born row
+of the children is one parent's, drawn evenly, then mutated (`mix`, `mix_rows`). The partner gives nothing. Without a
+partner, one parent. Bodies not alike never mix, so **kinds are the groups that mix**. A node's children have one
+parent: its members mix inside it (one variance per gene and no covariances is free recombination, Bulmer 1971).
+`--no-mix` is the control.
 
 ### 4.4 Population nodes
-
-A node (count > 1) is one body for many members (handover 7.1): a speed tool that must give the patterns of
-individuals.
-
-- **Spread.** A node keeps the variance of its members' genes around its mean, per gene, and one for its born rows
-  (`Body::spread`, `Body::row_spread`), never past the split threshold (`body::most`); an off gene keeps none.
-- **Members are kept exactly** (`nodes::Lot`, `nodes::add`: one helper for every join, merge, split and birth).
-  Members, stores, heat and brood split by shares, the node keeping the remainder, and join as sums (0.4 of a member
-  adds 0.4). Genes, sizes and rows become the means **by members**; the spread pools each one's spread and its gap to
-  the new mean.
-- **One lineage.** A node has one brain, so only bodies of one lineage (one brain base) join or merge; bodies of
-  other lineages may be alike in every gene and still stay apart.
-- **Joining.** Children join the young node of their kind in their start cell when alike within `alike` steps plus
-  `WITHIN` standard deviations of both spreads (`body::within`), booked on it with no body built; else they start one.
-- **Young that grow up** (`copy/young.rs`). A kind in a cell lives as an adult node and a young node joined by a link
-  (`Body::link`): births flow into the young node, maturing members into the adult one. A node keeps the mean and the
-  variance of its members' log10 bodies (`Body::size_lag`, `Body::size_spread`); newborns come in at one size, so
-  those who joined earlier are larger. A young node's members grow alike in proportion. Below the copy mass
-  their log10 bodies have a density e^(−k y), y the distance below it, over a width, fitted to their mean and variance
-  (`math::Pass`): the steady state of a stage entered at one size, with growth at one pace and deaths at one rate, k the
-  death rate over the pace. It is memoryless: those who stay keep k, those who leave keep the mean and variance of their
-  slice. A spread no width holds is an exponential tail of the same mean. Those the growth pushed past the copy mass
-  move into the adult node with the share of the body their slice holds (`copy::mature`): the flux across a size of a
-  size-structured population (McKendrick 1926; von Foerster 1959).
-- **Merging** (`nodes::crowd`, monthly). Alike bodies of one lineage and stage in a cell join a node of more than one
-  member (the young mature into their adult node instead), however few their own members, if both are in the room of
-  the same structure or of none (its root, as the room law counts) and hold the same structure or nothing; a body that
-  joins lets go of what it holds. Past `crowd` nodes a cell merges its most alike pairs while they are alike; unlike
-  nodes never merge, however full the cell.
-- **Splitting** (`nodes::split`). A node whose two halves would no longer be alike splits along its widest gene, if its
-  cell has room; selection then acts between the halves. Splits, draws and joins keep each gene's mean exactly.
-- **Selection inside a node** (`copy/select.rs`). Members are born and die in proportion whatever their genes, so a
-  node without a brain also runs its update, as far as its growth, for a sample member: the node's genes but one, one
-  standard deviation of its spread up or down (gene and side drawn by keyed random numbers), whose moves are dropped.
-  Their gains are the log of what can become body after over before (`copy::buildable`: matter, brood, and the matter
-  the stores could build), so a gene that brings more fuel gains. The gene's mean moves by the step times
-  tanh(sample's gain − node's gain), times the number of genes drawn from and `sample_every`: Price's equation for
-  members a step either side of the mean (Price 1970), the breeder's equation (Lande 1976). No sample runs where the
-  step cannot change the gain in one update (`copy::select::read`: genes read only for children or a brain, genes off
-  at both ends, thresholds the step does not reach); a wrong skip only slows that gene. A node with a brain runs no
-  sample: its update is also its decisions.
-- **Choices as a spread of actions** (`choose/spread.rs`). A node with a brain spreads its members over the actions
-  by the chances its brain gives, those an individual draws from (5.3).
-- **Members as individuals.** `nodes::open` draws members as individuals for a close view.
-- **Brain size** (`lineage::resize`): a node whose mean brain-size gene is a whole unit from its lineage's moves to a
-  new lineage of that size.
-- **The pace of nodes** (`Body::interval`). A node without a brain updates at most every `node_days`: it takes no
-  decisions, and its update integrates the time since. A body with a brain keeps its `INTERVAL` gene. The rules that
-  count by the gene's interval are rates over the update (`Body::paces`): stores refill a level per interval of the
-  gene (`Body::room`), frost kills at the rate its share per interval gives (`Body::over_span`); so for a body without
-  a brain the gene is the turnover time of its stores (a known limit). Members who join between updates count their
-  time from when they came (`nodes::add`: the node's last day and mark of light are means by members).
-- **Age.** Members of a node die of age at the rate of their wear, as an individual does (6.7).
-- **Individuals mode** (`Config::nodes` off, `--individuals`): bodies with a brain are never nodes; bodies without one
-  stay nodes, so the check of handover 7.1 compares brains in nodes and alone.
-
----
+A node is one body for many members (handover 7.1): a speed tool that must give the patterns of individuals.
+- **Exact members** (`nodes::Lot`, `nodes::add`, one helper for every join, merge, split and birth): members, stores,
+  heat and brood split by shares and join as sums; genes, sizes and rows become means by members; the spread per gene
+  (`Body::spread`, `Body::row_spread`) pools each one's spread and its gap to the new mean.
+- **One lineage** per node (one brain). Children join the young node of their kind in their cell when alike within
+  `alike` steps plus `WITHIN` standard deviations (`body::within`), else start one.
+- **Young that grow up** (`copy/young.rs`): a kind in a cell is an adult and a young node joined by a link. Below the
+  copy mass the young's log10 bodies have a density e^(−k y) fitted to their mean and variance (`math::Pass`), the
+  steady state of a stage entered at one size; those pushed past the copy mass move to the adult node with their slice
+  (`copy::mature`): the flux across a size of a size-structured population (McKendrick 1926; von Foerster 1959).
+- **Merging** (`nodes::crowd`, monthly): alike bodies of one lineage and stage in a cell join a node of more than one
+  member if they are in the room of the same structure (its root) or none and hold the same structure or nothing
+  (`nodes::Kin`). Past `crowd` nodes a cell merges its most alike pairs while alike; unlike nodes never merge.
+- **Splitting** (`nodes::split`): a node whose halves would no longer be alike splits along its widest gene if its cell
+  has room; selection then acts between the halves. Means are kept exactly.
+- **Selection inside a node** (`copy/select.rs`): a node without a brain also runs its update for a sample member one
+  standard deviation up or down in one drawn gene, its moves dropped; the gene's mean moves by the step × tanh(sample's
+  gain − node's gain) × genes drawn from × `sample_every`, the gain the log of what can become body (`copy::buildable`):
+  Price's equation (Price 1970), the breeder's equation (Lande 1976). Skipped where the step cannot change the gain.
+- **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
+- **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`; rules per interval are rates
+  over the update (`Body::paces`), so its `INTERVAL` gene is the turnover time of its stores (a known limit).
+- **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage.
+  `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).
 
 ## 5. Choose: a small brain sees a little, acts, learns and copies others
-
-Files: `core/src/choose/` (`mod`: the decision; `perceive`, `learn`, `feed`: taking and giving, `go`: moving),
-`core/src/brain.rs` (the network and the named actions).
+Files: `core/src/choose/` (`mod`, `perceive`, `learn`, `feed`, `go`, `spread`), `core/src/brain.rs`.
 
 ### 5.1 The brain
-
-- One hidden layer over what the body perceives and remembers. Its **base** belongs to a **lineage** and changes only
-  by evolution; its **rows** (the readers of the hidden layer) are genes of each body.
-- The rows give fixed action scores, shared scorers (one for every neighbour direction, one per verb for every body or
-  part perceived), a signal, the shape of a part to make, the next memory, and a critic's estimate of well-being.
-- Sizes are genes, each with a cost: hidden units (0 to 64; 0 is no brain), memory numbers (0 to 12), bodies
-  perceived (1 to 6), sight (1 to 4 cells). A body with no hidden units takes no decisions, pays nothing for a brain
-  and has no rows: its update is physics only. The light-eaters start so (8); a lineage may grow a brain back through
-  the same gene if it pays, its rows starting as new weights (`brain::rerow`).
-- **One brain per body or node** (`Body::rows`): the rows it was born with plus what it learned; a node's members
-  share the node's. A child starts with its born rows plus what its parent learned (`Life::inherit`). When members join
-  a node, of their lineage only, its rows become the means by members (4.4).
+One hidden layer over what the body perceives and remembers. Its **base** belongs to a lineage and changes only by
+evolution; its **rows** are genes of each body: fixed action scores, shared scorers (per direction, per verb and body
+or part seen), a signal, the shape of a part, the next memory and a critic. Sizes are genes with costs: hidden units
+(0 to 64; 0 is no brain, no decisions, no cost; light-eaters start so), memory (0 to 12), bodies seen (1 to 6), sight
+(1 to 4 cells). One brain per body or node (`Body::rows`); a child starts with its born rows plus what its parent
+learned (`Life::inherit`).
 
 ### 5.2 Perception
-
-Limited and local (`choose/perceive.rs`): its own stores against their safe minimums, warmth, size and light; its
-cell's loose substances, liquid, temperature and crowding; the season; signals heard; its memory; the cells as far
-as its sight, a walk over the mesh's links ring by ring (`perceive::walk`; nearer rings count more, 1 / ring²), each
-seen toward the link of its cell whose heading lies nearest the way to it; up to `SEEN` bodies in or next to its
-cell, the neighbours by compass direction from a random one (looks, signals, well-being, how past dealings went); up
-to 3 parts in its cell. Walls and cover hide bodies. Each input is scaled to about one by a fixed table.
+Local (`choose/perceive.rs`): own stores against minimums, warmth, size, light; its cell's loose substances, liquid,
+temperature and crowding; the season; signals; memory; cells within sight ring by ring (weight 1 / ring²); up to
+`SEEN` bodies in or next to its cell (looks, signals, well-being, past dealings); up to 3 parts. Walls and cover hide.
 
 ### 5.3 Actions
+One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
+a node spreads its members over the actions by those chances (`choose::spread`). **rest**; **move** (`choose::go`:
+`walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
+(`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go, anchor, dig,
+enter (`bond/verbs.rs`). No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 
-One action is drawn by the scores at each decision (once per update, `choose::act`); with none open the body rests.
-Each costs energy its own reactions must pay (`body::pay`), or it fails. A node spreads its members over the actions
-by those chances instead (`choose::spread`): count × chance members do each, a part of less than one member being one
-member with that chance. A part acts as so many members would, together, split off by shares and back in (4.4); a part
-that moves joins the first node of its kind and stage in the cell it reaches, or lives on there, and one that holds or
-is inside something after an action of Bond lives on as a body of its own.
-
-**rest**; **move** to a neighbour (`choose::go`: `Physics::walk` per kg and metre, the real cost of transport, plus
-climbing and the bodies in the way; it needs force, 3.5); **take** from the ground or another body, **put** to the
-ground, **give** to another body (`choose/feed.rs`); **watch** another body (5.5); and Bond's actions: form, hold,
-take from or put to a part, join, break bonds, let go, anchor, dig, enter an inside (`bond/verbs.rs`). There is no copy
-action (children come from the brood), and no "farm", "trade" or "attack": those must be patterns of these.
-
-**Taking** goes by uptake genes (`Body::wanted`, `body/intake.rs`), up to what the body can take in the time (6.7),
-at `c_handle` per kg. One intake law serves the ground and other bodies (`feed::intake`): per kg it takes Holling's
-type II response to what the area it works holds (`sweep`): take × s / (take + s) for s found, so thin food takes time
-to find (Holling 1959). The members of another body lie over the cell as the ground's food does (a node is found as one
-body, 5.2, and taken as its members are): the taker reaches the members its area holds in the update (`sweep` × its
-supply × interval × members per m², at least one) and what they hold, and it is also limited by its force against the
-other's. A quicker body (shorter interval) gets away with the chance its interval gives (of a node's bites, that
-share). A bite tears the body of each member it reaches (6.8).
-
-**Giving**, to a body or into a part (`Body::spare`), is of stores only: never body matter, brood or built solids,
-nor a key liquid below its level, and only from stores above `keep_min` times their safe minimum (as a body keeps
-when it forms a part); to a body, at most what the members it meets could take in the time (each member meets one,
-as in taking).
+**Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`
+per kg: per kg of supply, Holling's type II take × s / (take + s), s what the swept area holds (`sweep`), so thin food
+takes time to find (Holling 1959). Another body's members lie over the cell like the ground's food: a bite reaches
+those the swept area holds (at least one), limited by force against theirs; a quicker body escapes with the chance its
+interval gives. **Giving** (`Body::spare`) is of stores only (no matter, brood, built solids or key liquid below
+level), above `keep_min` × their minimum, at most what the members met could take.
 
 ### 5.4 Learning
-
-- **Well-being** (`Body::wellbeing_at`): the energy its reactions could release from its stores, in decisions' worth,
-  less how near it is to its limits (stores to their minimums, release to upkeep, key liquids to freezing or boiling).
-  No reward is hand-shaped.
-- **Within a life** (`choose::learn`, `brain::learn`): at its next decision the brain learns from the change of its own
-  well-being, by a policy gradient against the critic (actor-critic), into its own rows, at the rate of its `LEARN`
-  gene. A node learns as from one member drawn among those who stayed: from what it did, with the change of the
-  node's well-being plus how much more its part's action raised its members' well-being than the mean of the members
-  (`choose::spread`); so its brain moves, decision by decision, as an individual's does.
-- **Across lives**: evolution of the born rows and the base (4.1).
+**Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is
+to its limits; no reward is hand-shaped. **Within a life** (`choose::learn`, `brain::learn`): a policy gradient
+against the critic (actor-critic) on the change of its own well-being, at its `LEARN` rate. A node learns as from one
+member drawn among those who stayed, with the node's change plus how much more its part's action raised it than the
+mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
 
 ### 5.5 Imitation, signals, memory
-
-- **Watching** (`choose::learn::watch`) costs the turn: the watcher's rows move part of the way (`blend`) toward the
-  watched body's, if the brains have the same sizes, less the less alike the bodies are.
-- **Signals**: each decision emits 2 numbers with noise (`signal_noise`), with no meaning at first, at an upkeep
-  (`c_signal`).
-- **Memory of individuals**: a body remembers up to 4 others and how dealings with them went (`Body::note`,
-  `Body::recall`).
-- **Cost of thinking** (`Physics::think`): each decision costs by the brain's sizes and weakly by the member's mass
-  (mass^0.25), so a long interval saves brain cost.
-- **Null run** (`Config::null`, `--null`): no learning, no imitation, brain rows frozen; genes still evolve. The run to
-  compare a real run with.
-
----
+**Watching** (`choose::learn::watch`) costs the turn and moves the watcher's rows part way (`blend`) toward the
+watched one's, if the brains have the same sizes, less the less alike they are. **Signals**: 2 numbers a decision with
+noise (`signal_noise`), meaningless at first, at an upkeep (`c_signal`). **Memory**: up to 4 others and how dealings
+went (`Body::note`, `Body::recall`). **Thinking** (`Physics::think`) costs by brain size and mass^0.25 per decision, so
+a long interval saves it. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.
 
 ## 6. Bodies
-
-Files: `core/src/body/` and `copy::grow`. `body::live` runs one update in stages: upkeep, the physics of the time since
-the last update (`body/physics.rs`), keeping warm, the checks of the stores, growth and children, shedding. The
-decision (`choose::act`) then sees the body as these stages leave it.
-
-**Books.** What a body takes from and gives to its cell's ground, air and bodies' node (liquids, minerals, food,
-breath, the gas of growth, heat, remains; the gas it gives off goes to the bodies' node, 1.4) are moves gathered over
-its update and booked by one `store::apply` at its end (`store::Moves`). The body changes its own stores and heat; the
-store books the other side. While it updates it reads its cell's nodes as its moves leave them (`World::g`, `a`,
-`heat_now`). What it breathes, soaks up, takes by its roots or eats is set by the law's own rate over the update's
-span (6.4), so nodes and individuals take alike, and is never more than is there. A sample member's update (4.4) drops
-its moves. A part's monthly turn books the same way.
+Files: `core/src/body/`, `copy::grow`. `body::live` runs an update in stages: upkeep, the physics of the time since
+(`body/physics.rs`), keeping warm, store checks, growth and children, shedding; then the decision. Its trades are
+gathered and booked by one `store::apply` (`store::Moves`), each set by its law's rate over the update's span, so nodes
+and individuals take alike, never more than is there.
 
 ### 6.1 What a body is
-
-- **Stores**: an amount of every substance (mol, all members together), and heat. Its temperature comes from its heat
-  and heat capacity, with the fusion heat of its molten stores (`Body::thermal`).
-- **Body matter** (substance 22) is what it is built of. Its **living body** (`Body::built`) is its matter less the
-  brood, over 1 − `WET_TISSUE` (living tissue is three quarters liquid). What a body takes, builds, pays to keep,
-  wears, pushes with and catches light with goes by its living body.
-- **Fuel** and liquid beyond the body are carried, not body. Storing fuel costs no work; building matter does (6.6).
-- `Body::size` is the body with the liquid it holds (for height, volume and the safe minimums); `Body::mass` is
-  everything (for moving, weight and load).
-- The **key liquids** are the liquids its keep gene keeps (`Body::key_liquids`).
-- **Levels** (`Body::level`): the most it holds of each substance. The key liquid: h / (1 − h) of its matter, h its
-  keep gene; a solid it builds: what its share makes of its matter; any other store: keep gene × kg of living body. A
-  full store is the satiety: there is no other limit on eating.
-- **Supply** (`Body::supply`): what it can take and build per day, its living body to the power `intake_exp` from
-  `m_ref`, times the pace of its temperature (6.2).
+**Stores**: every substance (all members together) and heat. **Body matter** (22) is what it is built of; its
+**living body** (`Body::built`) is matter less brood, over 1 − `WET_TISSUE`. Taking, building, upkeep, force and light
+go by the living body; fuel and extra liquid are carried, and storing fuel costs no work. `Body::size` (with its
+liquid) sets height, volume and minimums; `Body::mass` (everything) moving and load. **Levels** (`Body::level`): the
+key liquid h / (1 − h) of matter (h its keep gene), a built solid its share of matter, others keep gene × kg of living
+body; a full store is satiety. **Supply** (`Body::supply`): living body^`intake_exp` from `m_ref` × its pace (6.2).
 
 ### 6.2 Upkeep and paying
-
-`body::upkeep` (`body/pay.rs`): the cost of living over the interval.
+`body::upkeep` (`body/pay.rs`):
 
 ```
 tissue = living body × (copy mass / m_ref)^(intake_exp − 1)
 upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH + learning + signal)
-                    + c_leaf × leaf area )
-           + one decision ]
+                    + c_leaf × leaf area ) + one decision ]
          × (1 − c_repair + c_repair·2^REPAIR) × activity × pace(T)
 ```
 
-- **By the kg of living body**, while supply goes with mass^0.75 (West, Brown and Enquist): a body grows until keeping
-  what it has takes all it can supply, so its own costs set its size, not a cap. Across kinds the cost per kg is also
-  times (copy mass / 1 kg)^−0.25, so adults pay Kleiber's mass^0.75.
-- **Catalysts cost by capacity**: the sum over the catalyst genes that are on of 10^gene × k × exp(−Ea / `t_cat`), its
-  gases at their share of the starting air to their order.
-- **Repair**: `c_repair` of upkeep at `REPAIR` 0, doubling with each unit of the gene.
-- **Pace** (`Body::pace`): the rate constant of its main burning as the body catalyses it (`Body::rate_at`: its
-  catalyst unfolded past `DENATURE`, 2.4, times k exp(−Ea/T)) at T over that at `t_cat`. It rises by Arrhenius up to
-  the unfolding and falls past it, as the release of energy does: upkeep is the work of the same catalysts. Supply uses
-  the same factor, so the whole tempo of a body follows its temperature; seasons come from this, not from a calendar
-  rule.
-- **Paying** (`body::pay`, `body::plan`): the body runs its burnings one after the other, each as far as the rate law
-  allows with the air it breathes. The share of its upkeep over the update left unpaid dies of `SPENT` (a node loses
-  that share of its members, an individual dies with that chance). The products take their heat at the body's
-  temperature.
+Costs go by the kg while supply goes with mass^0.75 (West, Brown and Enquist 1997), so a body grows until keeping what
+it has takes all it can supply: its costs set its size, not a cap; across kinds adults pay Kleiber's mass^0.75.
+**Capacity**: Σ over catalysts on of 10^gene × k × exp(−Ea / `t_cat`). **Pace** (`Body::pace`): its main burning's
+rate constant as its catalyst runs it at T (`Body::rate_at`, unfolding past `DENATURE`) over that at `t_cat`; upkeep and
+supply follow it, so seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::plan`): burnings run
+as far as the rate law allows with the air breathed; the unpaid share dies (`SPENT`).
 
 ### 6.3 Heat
-
-- **One heat network** (`body/exchange.rs`). Heat goes from the core through the coat (the `HEAT` gene, with
-  mass^(2/3)) to the outer surface (skin and both faces of the leaf), then in parallel to the still air and by
-  radiation to the ground. The still air passes forced convection: `forced` × √(`wind_ground` / d) × the air's heat
-  capacity, d the body's length or `leaf_size`. Cover of other bodies (`shelter`, `cover_of`) and walls (3.4) are in
-  series.
-- **Work heat stays** (`body::spend`, `body::hold`): the heat of upkeep and work leaves through that network over the
-  interval; the share (1 − e^−x)/x stays, x = conductance × time / heat capacity, the rest goes to the ground.
-- **Reactions' heat** (`body/physics.rs`): a body reacts at its temperature, held by the ground it stands on (Flow's
-  last ground temperature) as a store of the heat that ground can conduct into it over the update. The gas they put
-  out takes its latent heat as far as heat pays for it (the body's above `T_FLOOR`, what they released, what its surface
-  conducts in of what its bodies' node holds for it); the rest stays in its stores (`physics::settle_gas`).
-- **The ground's heat** a body reaches in an update is what its bodies' node holds for it (`Draw::owed`, 1.4): it pays
-  for what it evaporates with its own heat and that, as far as its surface conducts it in; what it would have
-  evaporated with more it asks of the ground until its next update (`survey::Draw`).
-- **KEEP_T**: if the update would leave the body colder than this gene, it burns on demand the heat that brings it
-  there, as far as its reactions can.
-- **COOL_T**: if warmer than this gene, it evaporates the latent heat that brings it there, no faster than its still
-  air carries vapour away (the Lewis relation), never below its liquid's safe minimum. Between the two it does neither.
+One heat network (`body/exchange.rs`): core → coat (`HEAT`, × mass^(2/3)) → surface → still air (forced convection,
+`forced` × √(`wind_ground` / d)) and radiation in parallel; others' cover (`shelter`) and walls (3.4) in series. Work
+heat leaves through it; the share (1 − e^−x)/x stays, x = conductance × time / heat capacity (`body::spend`).
+Reactions run at the body's temperature, held by the ground as a store of what it can conduct in over the update; the
+gas they release takes its latent heat as far as heat pays (`physics::settle_gas`). Below `KEEP_T` the body burns the
+heat that brings it there; above `COOL_T` it evaporates it, no faster than the still air carries vapour (the Lewis
+relation), never below its liquid's minimum.
 
 ### 6.4 Water: breath, rain, soaking, roots
-
-- **Breath** (`breath` in `body/exchange.rs`): the `GAS` gene is the conductance of the body's pores (stomata), per m²
-  of open surface (its light-capture area and skin) per day, in series with the still air; liquid over the body slows it
-  (`gas_depth`). It reaches no more of a gas than its air node holds.
-- **Pores close as it dries**: for vapour only they open as far as the activity (6.5), solved exactly over the update
-  (`closing`).
-- **Rain**: the bodies of a cell catch 1 − e^−x of the rain that fell on the cell since their last update (x their
-  leaf area per ground area; `World::rained` and the mark `Body::rained`, as for light), shared by height like light.
-- **Soaking** (`LIQ` gene): a flow through the body's contact with the ground, at `LIQ` × the ground's wetness (half
-  wet at `wet_depth`) × its working share × solubility, driven by how far it is below its level, while it loses what it
-  evaporates; solved exactly over the update. A body afloat reaches no ground. After growth and children it soaks again
-  in the same update (`soak_again`), so its activity does not lag one update.
-- **What flows through** (`through`): a soaking body loses where its soaking meets what its pores pass; what passes
-  beyond its store comes from the ground as it goes. This is transpiration. Its latent heat is paid by the body's heat
-  and what the ground can conduct in, counted after that liquid has left the ground with its own heat
-  (`physics::heat_bound`), and the body pays for warming it to its temperature.
-- **Roots for minerals**: the uptake genes of the minerals take them from the loose ground at the rate it soaks
-  liquids, up to its level.
+**Breath** (`breath`): `GAS` is the pores' (stomata) conductance per m² of open surface, in series with still air,
+slowed by liquid over the body (`gas_depth`); for vapour the pores close as the body dries (`closing`). **Rain**: a
+cell's bodies catch 1 − e^−x of the rain since their last update, shared by height. **Soaking** (`LIQ`): through its
+ground contact at `LIQ` × wetness (half at `wet_depth`) × solubility, driven by how far it is below its level, solved
+exactly (`soak_again` after growth). **Transpiration** (`through`): where soaking meets what the pores pass, liquid
+flows through the body, its latent heat paid by the body and what the ground conducts in (`physics::heat_bound`).
+**Roots**: mineral uptake genes take them from the loose ground at the soaking rate.
 
 ### 6.5 Activity and dormancy
-
-`Body::activity`: a = min(1, l / l*)^n, l the key liquid it holds, l* its level, n = `dormancy`. It multiplies the
-catalysts' speed-up (2.4), the whole upkeep (6.2) and the building allowance (6.6). A dry body pays almost nothing,
-ages hardly at all and can hardly act.
-
-- **Frost**: a key liquid that freezes (at its lowered point, 2.5) kills its frozen share times the activity (a node
-  loses that share of its members, as a rate over a long update, 4.4; an individual dies with that chance; `PHASE`).
-- **Boiling**: a key liquid that boils kills the body.
+`Body::activity`: a = min(1, l / l*)^`dormancy`, l the key liquid, l* its level. It multiplies the catalysts' speed-up,
+upkeep and the building allowance: a dry body pays and ages almost nothing and can hardly act. **Frost** kills a key
+liquid's frozen share × a (`PHASE`); **boiling** kills.
 
 ### 6.6 Growth
-
-`copy::grow`. A body turns sugar and the minerals into body matter and pays `c_copy` of work per kg, through
-`body::pay` (the work leaves as heat). It builds as far as all of these allow:
-
-1. its **allowance**: `c_build` × its supply / `m_ref` × the days of its interval × its activity;
-2. its **spare**: after the work, its reactions must still release its upkeep over an interval at today's rate;
-3. what its reactions can release now;
-4. its stores, which must also cover the fuel the work burns (with none of a mineral it builds no matter).
-
-The solids it builds besides matter (frame, lime) come first, each with its share (`Body::share`) of the allowance and
-the spare, up to the level its share makes of its matter. They pay no upkeep and are not living body. **Healing is
-growth**: lost matter is rebuilt the same way.
+`copy::grow`. Sugar and minerals become matter at `c_copy` of work per kg, paid by `body::pay`, as far as all allow:
+the **allowance** (`c_build` × supply / `m_ref` × days × activity), the **spare** (its reactions must still release an
+interval's upkeep), what its reactions release now, and its stores. Built solids (frame, lime) come first by their
+share (`Body::share`), up to level; they pay no upkeep. **Healing is growth.**
 
 ### 6.7 Taking, digesting, minimums, ageing
-
-- **Intake limits**: per day at most `take` × supply; from the ground less as its food thins (5.3).
-- **Digestion** (`Body::digest`): body matter taken from outside is broken back into what it was built of as it comes
-  in, the reverse of growth, so food enters as fuel, never as body. A body takes body matter or a built solid only if a
-  catalyst of its own breaks it (`Body::can_take`), and only as much as the stores it becomes have room for.
-- **Safe minimums** (`Body::lacking`): a store below its minimum gene kills the body (`LACK`), except a store it burns,
-  where the minimum is only the reserve that growth and giving keep; short of fuel it dies of what it cannot pay (6.2).
-- **Shedding** (`shed` in `body/live.rs`): at its update a body gives the ground the minerals and built solids past
-  their level, the key liquid past its level, and any other solid or liquid it neither burns nor is made of.
-- **Ageing**: its wear grows by the energy its upkeep turns over per kg of living body, over `e_life` × 10^`REPAIR` (the
-  rate of living). The share 1 − e^−wear of the wear over the time since dies of `AGE` at each update, so as many in a
-  year whatever the length of the updates.
-- **One rule of death** (`body::live::lose_share`): what kills a share of a node's members (unpaid upkeep, wear, frost,
-  starving) kills an individual with that chance: a node is the average of its members.
+Intake at most `take` × supply a day (5.3). **Digestion** (`Body::digest`): matter taken is broken back into what it
+was built of, so food enters as fuel, and only if a catalyst of its own breaks it (`Body::can_take`). **Minimums**
+(`Body::lacking`): a store below its minimum kills (`LACK`), except a fuel, whose minimum is a reserve. **Shedding**
+(`shed`): minerals, built solids and key liquid past level, and anything it neither burns nor is made of. **Ageing**:
+wear grows by the energy upkeep turns over per kg, over `e_life` × 10^`REPAIR` (the rate of living); 1 − e^−wear of
+the time since dies (`AGE`), in nodes as in individuals. **One rule of death** (`body::live::lose_share`): what kills
+a share of a node's members kills an individual with that chance.
 
 ### 6.8 Damage
-
-`body/death.rs` (`thin`, `wound`, `die`).
-
-- **A bite** (`take_body`) tears, of each member it reaches, the share of its living body the taker takes (or of its
-  matter eaten, if more) and pays the energy to break it (3.6); body matter breaks first and spills the stores it held
-  to the ground.
-- **Pushing through** (`choose::wear`) breaks the share of each body there that the energy spent on it pays for, each
-  of its members alike.
-- **Heat** burns body matter by its own reaction (21).
-- A member lives on smaller and weaker and dies when the share `lethal` of its body or more is torn at once (an
-  individual also when a store falls below its minimum). A hurt adult is immature until it heals: no children
-  meanwhile. Pushing through breaks at most all of a body.
-- **Starving** (`starved` in `body/live.rs`): a body whose growth did not rebuild what it lost in an update (what rots,
-  what it burns), below its copy mass, keeps the share x of its body (of its body at the start, or of its copy mass if
-  less) and dies with the chance 1 − x^a, a = ln 2 / −ln(1 − `lethal`): one that starved to the lethal loss lived
-  through it with even chances, in one update or in many. A node loses that share of its members with their share of
-  everything, so it does not shrink alike forever. An adult larger than its copy mass shrinks towards it as it chooses
-  (`ALLOC`): no starving. Cause `SPENT`.
-- **In a node** the members a bite reaches lose what it tears, so the node's mean body falls (grazing), or die with all
-  they held (`body::wound`).
-- **Death causes**: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN` (by bodies moving through), `AGE`. At death matter,
-  stores and heat go to the ground (`body::die`).
+`body/death.rs`. **A bite** (`take_body`) tears from each member reached the share taken and pays to break it (3.6);
+matter breaks first and spills its stores; in a node those members lose it (grazing) or die (`body::wound`). **Pushing
+through** (`choose::wear`) breaks what its energy pays for. **Heat** burns matter by reaction 21. A member dies when
+`lethal` of its body is torn at once; a hurt adult is immature until healed. **Starving** (`starved`): a body below its
+copy mass that did not rebuild what it lost keeps the share x and dies with chance 1 − x^a, a = ln 2 / −ln(1 −
+`lethal`), so starving to the lethal loss is survived with even chances in one update or many (`SPENT`). Causes:
+`LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN`, `AGE`; at death all goes to the ground (`body::die`).
 
 ### 6.9 Materials and minerals in bodies
-
-- Built solids count in the mass and set height, but are not living body; children get them as provisions, gifts
-  never give them. Hard parts protect mostly by not being digested.
-- Plants get the minerals of growth by roots (6.4), animals by digesting what they eat (6.7). The rock salt falls out
-  of a body as lime by reaction 23. Fixing (reaction 24) lets a body with the gene make the nitrogen mineral from the
-  air, slowed as its store nears its level (2.4).
-
----
+Built solids count in mass and height, not living body; children get them, gifts never give them. Light-eaters get
+minerals by roots, eaters by digestion. The rock salt falls out of a body as lime (23). Fixing (24) makes the nitrogen
+mineral from the air, slowed as the store nears its level.
 
 ## 7. Soil and minerals
-
-The two minerals (`Chemistry::minerals`) live in the liquid of the ground.
-
-- **Nitrogen mineral (24).** Placed when life starts (`worldgen::life::soil`) on every land cell not under half a
-  metre of standing liquid. After that its only input is fixing by bodies; rotting (21) gives it back; heat breaks it
-  down (25) and sends the nitrogen to the air.
-- **Rock salt (23).** Made in wet cells from lime, the carbon gas and the liquid (22), turned back by 23; the pores of
-  wet land hold it near its balance (2.6). Rotting gives the rock element back as lime, which becomes the salt again.
-- Both move with the liquid (1.2): rain washes them from slopes into low ground and the sea, and they stay where liquid
-  evaporates. So fertility differs from place to place, and plants that fix nitrogen and shed it enrich the ground.
-
----
+The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
+and the sea and fertility differs by place. **Nitrogen mineral (24)**: placed when life starts (`worldgen::life::soil`)
+on land under less than half a metre of liquid; then only fixing adds it, rotting (21) returns it, heat (25) sends it
+to the air. **Rock salt (23)**: made in wet cells from lime (22), turned back by 23, near balance (2.6).
 
 ## 8. Starting conditions (not laws)
-
-What is placed at the start is an initial condition; every run prints a seeding line for each kind. `worldgen` places
-it (`worldgen::schedule::Schedule`, carried by a snapshot, so a resumed run places what is still due); the laws never
+Placed by `worldgen` (`worldgen::schedule::Schedule`, carried by a snapshot) and printed by every run; the laws never
 read a kind.
+- **Terrain** (`worldgen::terrain`): an island, or a globe with 29% of its area above 0 m (`LAND_SHARE`); a metre of
+  loose ground; the sea's salt at balance (2.6); ground and air temperatures falling with latitude and height. Every
+  land cell drains from the start (`drain`): a priority flood raises closed basins to their outlet at 1 m per km
+  (`DRAIN_SLOPE`; Planchon and Darboux 2001), from every cell below 0 m on a globe, from those joined to the lowest
+  cell on an island. Quarters read the same noise at their own centres.
+- **Life** at year 2 (`--life-year`): light-eaters, then eaters 20 years later (`worldgen::life::KINDS`); `--roster`
+  places ten kinds (`ROSTER`). Founders are adults on land under at most half a metre of liquid; mass 30% sugar (60%
+  for the two big slow kinds).
+- **Brains**: eaters start with hand-set biases (`Seeding::hand`; `--neutral-eaters` without), since neutral founders
+  die before they learn: they bite a body (2) before they take from the ground (0.5) and keep out of deep liquid (a
+  move's odds fall as 1 / (1 + depth / m)). Light-eaters have no brain. Genes and rows get a spray (`--spray`).
+- **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
+- **Founder genes**: some measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); `HEAT`, `CHILD`,
+  `ALLOC` the same for all; `KEEP_T`, `COOL_T` off for light-eaters and, for eaters, 5 K above their liquid's melting
+  point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`, `EATER_COOL_T`).
 
-- **Terrain** (`worldgen::terrain`): an island with mountains, or a globe (`new_globe`) whose noise is sampled at each
-  cell's centre on a sphere (no seam where the rows wrap) and whose level leaves 29% of the area above 0 m (the land
-  share of the one planet known; `LAND_SHARE`). Both have a metre of loose ground, the sea's salt at balance with
-  the starting air (2.6), which thins with height by its scale height. The ground starts at a temperature that falls
-  with latitude and height (`t_start`); each air node starts at that temperature at the mean height of its air, where
-  Flow reads a node's temperature (1.4), not at the ground's. Every land cell drains to the sea from the
-  start (`drain`): a priority flood from the cells below 0 m raises each closed basin to its outlet, with a slope
-  of 1 m per km across the filled floor (`DRAIN_SLOPE`; Planchon and Darboux 2001, Barnes et al. 2014). On a globe
-  every cell below 0 m starts it; on an island only those joined to its lowest cell, so ground below 0 m inland is a
-  closed basin too.
-  The quarters of a refined region read the same noise at their own centres (finer detail, not a blurred copy) and
-  take the same drainage pass and starting state as any cell.
-- **Life** starts at year 2 (`--life-year`): light-eaters first, eaters 20 years later (`worldgen::life::KINDS`);
-  `--roster` places ten kinds (`worldgen::life::ROSTER`) of several sizes and diets, each at its own year. Founders go
-  on land under no more than half a metre of standing liquid.
-- **Founders are adults**: a founder's living body is its copy-mass gene; its mass is 30% sugar (60% for the two big
-  slow kinds), the rest liquid and matter.
-- **Brains**: animals start with hand-set brain biases (`Seeding::hand`; `--neutral-eaters` for neutral brains),
-  because neutral founders die before they learn: they bite a body before they take from the ground (they eat the
-  light-eaters, 5.3) and keep out of deep standing liquid (a move's odds fall as 1 / (1 + depth / m)), as land
-  animals that sink do. Light-eaters start with no brain. Genes and rows get a spray of
-  mutation (`--spray`).
-- **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`worldgen::life::FIXERS`, `FIX_GENE`;
-  `--fixers`).
-- **Founder genes**: some are measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); `HEAT`, `CHILD`
-  and `ALLOC` are the same for every kind; `KEEP_T` and `COOL_T` are off for light-eaters (250 and 320 K) and, for
-  eaters, 5 K above their key liquid's melting point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`,
-  `EATER_COOL_T`).
