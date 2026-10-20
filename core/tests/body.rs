@@ -1261,6 +1261,9 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         // below their body, so the matter that rots unrebuilt in the 60 days is not starving.)
         b.store[w.chem.minerals()[1].0] = 0.0;
         b.genes[pcore::body::COPY_MASS] += 0.9f32.log10();
+        // (In the dark: no light-capture area, so neither makes fuel and the two differ by what they burn alone; in the
+        // light the fixer's reaction changes the gas its light reactions take up.)
+        b.genes[pcore::body::LEAF] = -9.0;
         let s = w.add(b, 1);
         let books = Books::now(&w);
         let na = w.mesh.level(AIR).n();

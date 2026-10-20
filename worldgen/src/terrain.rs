@@ -265,7 +265,14 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         zmean[j] /= air_area[j];
         // At the latitude of the first cell of a row near the middle of the node's block.
         let y = (j / map.w.div_ceil(AIR_SCALE)) * AIR_SCALE + AIR_SCALE / 2;
-        t_air[j] = t_start(mesh.cells().lat()[map.idx(0, y.min(map.h - 1))], zmean[j]);
+        let lat = mesh.cells().lat()[map.idx(0, y.min(map.h - 1))];
+        // A node's temperature is its air's at the column's mean height (`flow::air`), which lies higher the warmer the
+        // air: it starts at the starting temperature there, the height taken twice from the scale height it gives.
+        let at_mean = |t: f64| {
+            let (h, l) = (scale_height(t, atot, m_air, cfg.gravity), cfg.air_top_m - zmean[j]);
+            t_start(lat, zmean[j] + h - l / (l / h).exp_m1())
+        };
+        t_air[j] = at_mean(at_mean(t_start(lat, zmean[j])));
         let col = column * (-zmean[j] / scale_height(t_air[j], atot, m_air, cfg.gravity)).exp() * air_area[j];
         for &(k, f) in &init.air {
             air[k * na + j] = f / atot * col;

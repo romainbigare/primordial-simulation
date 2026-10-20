@@ -1288,3 +1288,7 @@ Phase E review, round 1 (fixes):
   plants that cannot pay their upkeep. 64 x 64, 3 seeds: first-year deaths of unpaid upkeep 675, 565, 563 to 410,
   305, 295 (of about 860); eaters at year 23 194 to 212 to 436 to 464, at year 35 31, 89, 13 to 51, 118, 38; their
   log10 kg at year 30 3.53 to 3.76 (mean); 48 x 48, year 60: 0, 0, 0 to 0, 21, 0. Golden re-pinned.
+- Each air node starts at the starting temperature of its air's mean height, where Flow reads it, not at the ground's
+  (about 30 K colder). 64 x 64, seed 1, years 21 to 30: land 287.7 to 286.7 K, ice 5.7 to 7.2% of the area, rivers
+  230 to 164; golden re-pinned. The fixer test runs its twins in the dark and the dissolved-solid test runs liquid steps
+  alone, as the colder air froze or fed what they compare.

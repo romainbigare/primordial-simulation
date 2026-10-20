@@ -492,17 +492,15 @@ fn a_dissolved_solid_moves_with_the_liquid_that_runs_off_and_stays_with_the_pore
         w.cross((Boundary::Outside, Node::ground(top)), [(MINERAL, 1e6)], e);
         w
     };
-    // (No evaporation and no vapour in the air to rain, which would add or take liquid and not the mineral: the liquid
-    // there is all there is, and what it does is the pores' and the slope's.)
+    // (Liquid steps alone: no air's step to evaporate, rain or freeze, which would add or take liquid and not the
+    // mineral: the liquid there is all there is, and what it does is the pores' and the slope's.)
     let run = |x: f64, steps: usize| {
         let mut w = scene(x);
-        w.cfg.evap = 0.0;
-        let na = w.mesh.level(AIR).n();
-        (0..na).for_each(|j| set_amount(&mut w, Node::air(j), LIQUID, 0.0));
         let books = Books::now(&w);
         let liquid0 = w.store.amounts(Class::Ground)[LIQUID * n + top];
         for _ in 0..steps {
-            worldgen::testkit::flow_step(&mut w, DT);
+            pcore::flow::state(&mut w, true);
+            pcore::flow::liquid(&mut w, DT);
         }
         books.assert_kept(&w, 1e-9);
         let downstream: f64 = (0..n).filter(|&i| i != top).map(|i| w.store.amounts(Class::Ground)[MINERAL * n + i]).sum::<f64>() + w.store.amounts(Class::Deep).get(MINERAL * n..(MINERAL + 1) * n).map_or(0.0, |v| v.iter().sum::<f64>());

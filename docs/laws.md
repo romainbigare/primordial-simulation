@@ -878,7 +878,9 @@ read a kind.
 - **Terrain** (`worldgen::terrain`): an island with mountains, or a globe (`new_globe`) whose noise is sampled at each
   cell's centre on a sphere (no seam where the rows wrap) and whose level leaves 29% of the area above 0 m (the land
   share of the one planet known; `LAND_SHARE`). Both have a metre of loose ground, the sea's salt at balance with
-  the starting air (2.6), which thins with height by its scale height. Every land cell drains to the sea from the
+  the starting air (2.6), which thins with height by its scale height. The ground starts at a temperature that falls
+  with latitude and height (`t_start`); each air node starts at that temperature at the mean height of its air, where
+  Flow reads a node's temperature (1.4), not at the ground's. Every land cell drains to the sea from the
   start (`drain`): a priority flood from the cells below 0 m raises each closed basin above 0 m to its outlet,
   with a slope of 1 m per km across the filled floor (`DRAIN_SLOPE`; Planchon and Darboux 2001, Barnes et al. 2014).
   The quarters of a refined region read the same noise at their own centres (finer detail, not a blurred copy) and
