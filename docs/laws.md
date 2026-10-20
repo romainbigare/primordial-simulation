@@ -331,11 +331,12 @@ a node spreads its members over the actions by those chances (`choose::spread`).
 enter (`bond/verbs.rs`). No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`
-per kg: per kg of supply, Holling's type II take × s / (take + s), s what the swept area holds (`sweep`) of the food
-it takes (its key liquids are drink and do not count), so thin food takes time to find (Holling 1959). Another body's members lie over the cell like the ground's food: a bite reaches
-those the swept area holds (at least one), limited by force against theirs; a quicker body escapes with the chance its
-interval gives. **Giving** (`Body::spare`) is of stores only (no matter, brood, built solids or key liquid below
-level), above `keep_min` × their minimum, at most what the members met could take.
+per kg: per kg of supply, Holling's type II take × s / (take + s), s what the swept area holds (`sweep`) of the food it
+takes (its key liquids are drink and do not count), so thin food takes time to find (Holling 1959). Another body's
+members lie over the cell like the ground's food: a bite reaches those the swept area holds (of a node, maybe less than
+one member; one individual body whole), limited by force against theirs; a quicker body escapes with the chance its
+interval gives. **Giving** (`Body::spare`) is of stores only (no matter, brood, built solids or key liquid below level),
+above `keep_min` × their minimum, at most what the members met could take.
 
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is

@@ -21,13 +21,15 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
 /// supply it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to
 /// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). Its key
 /// liquids are drunk, not sought: they do not count in s. A node's members each work their own area. Returns that, kg,
-/// and the share of the `n` members its area holds (at least one).
+/// and the share of the `n` members its area holds: of a node, what that area holds, which may be less than one
+/// member; of one individual body (`n` 1), all of it.
 fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64, n: f64) -> (f64, f64) {
     let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.interval(w) as f64);
     let wants = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k) && b.wet >> k & 1 == 0);
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
     let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, b.temp(&w.chem)));
-    (p.take * found / (p.take + found) * days * supply, (p.sweep * supply * days * n / area).clamp(1.0, n) / n)
+    let held = (p.sweep * supply * days * n / area).min(n) / n;
+    (p.take * found / (p.take + found) * days * supply, if n > 1.0 { held } else { 1.0 })
 }
 
 /// Take loose solids and liquids from the cell's ground by the intake law (`intake`), no more than its stores have room

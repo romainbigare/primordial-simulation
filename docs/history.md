@@ -451,6 +451,8 @@ the golden test.
   0.064.
 - Finding 4: a taker's key liquids do not count as food in Holling's search (`feed::intake`): 48 x 48 seed 1, year
   30, eaters 4.3 to 2.9 kg/km² of land (placed at year 22).
+- Finding 5: a bite reaches at least one whole member only of an individual body; of a node, what the swept area
+  holds: 48 x 48 seed 1, year 30, eaters 2.9 to 2.5 kg/km² of land.
 
 **Tried and not kept in the foundation**
 
