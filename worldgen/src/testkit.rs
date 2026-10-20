@@ -210,7 +210,7 @@ pub fn rock_outside_matter(w: &World, i: usize) -> f64 {
 }
 
 /// Thickness of rock-making solids (those that melt above 1000 K, but body matter, which chars before it melts) in the
-/// loose ground of cell `i` and the bed below it, m, and the mean softness (1 / (hardness + 0.05)) of the loose ones, by
+/// loose ground of cell `i` and the bed below it, m, and the mean softness (1 / (hardness + `Config::hard_min`)) of the loose ones, by
 /// volume.
 pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
@@ -219,7 +219,7 @@ pub fn ground_of(w: &World, i: usize) -> (f64, f64, f64) {
         let v = w.chem.molar_volume(k, Phase::Solid);
         loose += w.store.amounts(Class::Ground)[k * n + i] * v / area;
         bed += w.store.amounts(Class::Bed)[k * n + i] * v / area;
-        soft += w.store.amounts(Class::Ground)[k * n + i] * v / area / (w.chem.subs[k].hardness + 0.05);
+        soft += w.store.amounts(Class::Ground)[k * n + i] * v / area / (w.chem.subs[k].hardness + w.cfg.hard_min);
     }
     (loose, bed, soft / loose.max(1e-300))
 }

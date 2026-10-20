@@ -48,6 +48,7 @@ Every field of `Config` and of `Physics` (`core/src/params.rs`) has one row. A r
 | `wear` | m³/J, times 1/bond strength | bonded volume broken per J dissipated | the same 2e-11 m³/J for the starting bed: over its sum of volume share / bond strength, 1.39, it is 1.4e-11. Bedrock lowers about as the land does, 0.05 mm a year (checked: Wittmann et al. 2020; Portenga and Bierman 2011) | anchored |
 | `regrow` | m/s | speed at which bodies spread back into a cleared lane, from each side, under dense cover (times cover / `rho_pass` below that) | 1 nm/s is 3 cm a year, the slow end of the spread of a ground cover by runners (my arithmetic, unchecked) | anchored |
 | `creep` | m/s per unit slope, times 1/hardness | loose solids creeping down a slope: a flux of D x slope, D = creep x softness x thickness | hillslope diffusivity 1e-3 to 1e-2 m²/yr (Roering et al. 1999; Fernandes and Dietrich 1997; Hanks 2000; checked in part in Whipple's MIT notes, 2004); 3e-3 m²/yr on the starting loose ground (1 m, softness 1.53) is 6.3e-11 m/s | anchored |
+| `hard_min` | none (a hardness) | added to a solid's hardness before its softness, 1 / (hardness + this), is taken: a solid of hardness 0 creeps about 20 times as fast as one of hardness 1 | none found | tuned, first guess |
 | `nodes` | on/off | bodies with a brain may be population nodes (off, `--individuals`: they are individuals; bodies without a brain stay nodes) | a setting, for the check that nodes give the same patterns as individuals (handover 7.1) | switch |
 | `two_parents` | on/off | a mature body's children may have a second, alike parent (off, `--no-mix`: copies of one parent) | a setting: the check that nodes keep the mean of their genes without selection, and the measure of what mixing changes (handover 6.4) | switch |
 | `null` | on/off | a null run: no learning, no imitation, born rows and brain bases never change; genes still mutate | the run to compare a seed with | switch |
@@ -137,7 +138,9 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `leak` | W/(m² K) | heat passed through an opening | free and light-wind exchange at a surface, 5 to 25 (unchecked) | anchored |
 | `form` | share | most of its mass a body puts into one part | none found | tuned, first guess |
 | `min_kg` | kg | walls lighter than this fall apart | none found | tuned, first guess |
-| `lever` | none | a held part multiplies a body's force by 1 + lever x hardness x m / (m + 0.05 body mass) | none found | tuned, first guess |
+| `lever` | none | a held part multiplies a body's force by 1 + lever x hardness x m / (m + `lever_ref` x body mass) | none found | tuned, first guess |
+| `lever_ref` | share of built mass | a held part of this share of the holder's built mass gives half its full lever | none found; a hand tool of 1 to 3 kg is 2% to 5% of a 60 kg person (from memory) | tuned, first guess |
+| `grab` | share | the work of taking hold of a part, as a share of the work of handling its mass (`c_handle`) | none found | tuned, first guess |
 | `grip` | share of weight | force of a body of strength 1 | none found; animals push and pull about their own weight (unchecked) | tuned, first guess |
 | `bump` | share of weight | push of a body moving through a cell on each structure there; also the push its own force must give for it to move (`choose::go`) | none found; the starting plants (force 0.025 of their weight) stay put | tuned, first guess |
 | `dig` | share per day | most bonded ground a body breaks per day of its interval, as a share of its mass | none found | tuned, first guess |
@@ -190,11 +193,12 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 
 | name | unit | fact | anchor (source) | mark |
 |---|---|---|---|---|
-| `WITHIN` (0.5, `core/src/body/genes.rs`) | standard deviations | children may lie this far beyond `alike` (in the spreads of both) and still join a node; nodes of a full cell merge within it | run: small enough that nodes of two kinds never join: a speed tool must not mix genes that individuals would never mix; it says how members are grouped, not what they do | speed |
+| `WITHIN` (0.5, `core/src/body/genes.rs`) | standard deviations | children may lie this far beyond `alike` (in the spreads of both) and still join a node; nodes of a full cell merge within it | run: small enough that nodes of two kinds never join. It says who is grouped with whom, as `alike` says who is alike: ×2 and ÷2 moved the eaters' life at year 30 by about a third (48 x 48, seed 2, one run each) where `--crowd 8` moved it 2% | tuned |
 | `MIN_INTERVAL` (5, `core/src/body/genes.rs`) | days | the shortest time between a body's updates | bounds how often the fastest bodies update | speed |
 | `MAX_INTERVAL` (360, `core/src/body/genes.rs`) | days | the longest time between updates | one year | anchored |
 | `EATER_KEEP_T`/`EATER_COOL_T` (278 and 315, `worldgen/src/life/kinds.rs`) | K | the temperatures the eaters' founders keep their bodies between (`KEEP_T`, `COOL_T`; initial conditions) | the melting point of chemistry 0's key liquid (273 K) plus, and the founders' catalysts' unfolding (`DENATURE`, 320 K) less, the margin in which well-being falls for nearness to a limit (`PHASE_MARGIN`, 5 K): an animal must keep its liquid from freezing and sweat before its enzymes unfold; at 250 K the keep gene did nothing and never moved, and the eaters froze in winter on the hills | anchored |
 | `body::WET_TISSUE` (0.75) | share | the liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of living body (`Body::built`), whatever liquid the body holds | lean animal tissue is 0.7 to 0.75 liquid, herbs 0.8 to 0.9 (from memory) | anchored |
+| `body::MAX_KEEP` (0.95, `core/src/body/tissue.rs`) | share | the most share of a body its keep gene of a key liquid, or the solids it builds together, may make up (the level goes with share / (1 - share), so it must stay below 1) | the wettest bodies, jellies, are about 95% liquid (from memory) | anchored |
 | `pcore::units::T_SURF` (290) | K | typical surface temperature: where the starting kinds' reactions, the richness checks and `ew chem` look at phases | the same as `t_cat` | anchored |
 | `MOVE_REF` (30 kg) and `MOVE_EXP` (-0.32), `core/src/params.rs` | kg; none | the mass at which `c_move` is the cost of moving, and the exponent of the cost of transport in the mover's mass (`Physics::walk`) | Taylor et al. 1982 (see `c_move`) | anchored |
 | `Kind::store` of the roster (0.3; 0.6 for the two big slow eater kinds) | share of mass | the energy-rich solid a starting member holds as fuel; the rest is liquid and body matter | run: see "the roster's stores" above | tuned |
@@ -246,16 +250,16 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 111 rows of `Config` and `Physics` are their 111 fields.
+The 114 rows of `Config` and `Physics` are their 114 fields.
 
 | mark | rows | which |
 |---|---|---|
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
-| anchored | 50, and 8 outside the structs | 50 fields (among them `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE` and `LIGHT_X` |
-| tuned (run or reason named) | 8, and 5 outside the structs | the threshold of who is alike (`alike`), set for an outcome (`rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
-| tuned, first guess | 37 | 33 free numbers (`wind`, `cloud`, `gas_depth`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
+| anchored | 50, and 9 outside the structs | 50 fields (among them `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE`, `LIGHT_X` and `MAX_KEEP` |
+| tuned (run or reason named) | 8, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`; outside: `WITHIN`), set for an outcome (`rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
+| tuned, first guess | 40 | 36 free numbers (`wind`, `cloud`, `gas_depth`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 8, and 2 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL`, `WITHIN` |
+| speed | 8, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 50 (45 in the structs, 5 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 54 (48 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

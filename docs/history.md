@@ -422,6 +422,8 @@ the golden test.
 - Finding 2b: `ew` runs Flow and Change on threads by default (`--no-default-features` without; wasm without).
 - Finding 7: liquid with no load does work on its bed at any capacity (no 1 m³ threshold): at year 30 (48 x 48, seed 2)
   eaters 1.25e5 to 1.07e5 kg, light-eaters 1.83e10 kg (the same), land 289.50 to 289.48 K.
+- Finding 7: `grab`, `lever_ref`, `hard_min` become fields, `WITHIN` tuned, `MAX_KEEP` a row (decision 45); tuned
+  budget 50 to 54; the same series.
 
 **Tried and not kept in the foundation**
 

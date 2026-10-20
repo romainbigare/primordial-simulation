@@ -4,11 +4,6 @@
 use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
 use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, store::{Class, Move}, World};
 
-/// Taking hold of a part costs this share of the work of handling its mass (`Physics::c_handle`).
-const GRAB_COST: f64 = 0.1;
-/// A held part of this share of the body's built mass gives half its full lever (`Physics::lever`).
-const LEVER_REF: f64 = 0.05;
-
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
     let s = w.parts.parts[w.parts.parts[p].root as usize].s;
@@ -40,7 +35,7 @@ pub(super) fn torn_from(w: &mut World, o: usize) {
 pub(crate) fn lever(w: &World, b: &Body) -> f64 {
     held(w, b).map_or(1.0, |p| {
         let walls = w.parts.parts[p].walls(&w.chem);
-        1.0 + w.cfg.phys.lever * walls.hardness * walls.mass / (walls.mass + LEVER_REF * b.built(&w.chem))
+        1.0 + w.cfg.phys.lever * walls.hardness * walls.mass / (walls.mass + w.cfg.phys.lever_ref * b.built(&w.chem))
     })
 }
 
@@ -60,7 +55,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
     let (mb, days) = (b.mass(&w.chem), b.interval(w) as f64);
     match v {
         0 => {
-            if w.parts.parts[p].held == NOBODY && body::pay(w, b, GRAB_COST * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
+            if w.parts.parts[p].held == NOBODY && body::pay(w, b, w.cfg.phys.grab * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
                 let_go(w, b, false);
                 grab(w, slot, b, p);
             }

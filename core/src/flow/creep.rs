@@ -3,9 +3,6 @@
 use super::{bare_share, land::{lift, melted, molten, rise}, range, Scratch};
 use crate::{store::{apply, Batch, Class}, World};
 
-/// Added to a substance's hardness before its softness (1 / hardness) is taken.
-const HARD_MIN: f64 = 0.05;
-
 /// Yearly: loose solids creep to lower neighbours, link by link, each from what the links before it left, booked in one
 /// call; then bodies spread back into cleared links (`lanes::regrow`). Over each link they creep from the higher node
 /// `a` to `b` with their heat, and the fall heats `b`; they cross a border as wide as the side of the smaller of the two
@@ -13,7 +10,7 @@ const HARD_MIN: f64 = 0.05;
 pub(super) fn creep(w: &mut World, s: &mut Scratch, dt: f64) {
     let (n, area, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.gravity);
     let sol = s.solids(range(&s.state.tg).0);
-    let soft: Vec<f64> = sol.iter().map(|&k| 1.0 / (w.chem.subs[k].hardness + HARD_MIN)).collect();
+    let soft: Vec<f64> = sol.iter().map(|&k| 1.0 / (w.chem.subs[k].hardness + w.cfg.hard_min)).collect();
     // Each solid in each node, mol (`[q * n + i]`), and the volume able to creep by softness, m³, as the links so far
     // leave them; what moves over each link with its heat, and the fall that heats the lower node.
     let mut amt: Vec<f64> = sol.iter().flat_map(|&k| w.store.amounts(Class::Ground)[k * n..(k + 1) * n].iter().copied()).collect();

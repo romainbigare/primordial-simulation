@@ -154,7 +154,7 @@ The head moving liquid loses does work where it is lost (`flow::liquid`, in the 
 - **Wear:** `wear` m³ of bonded bed per J, over the bed's strength, at most all of it, broken into loose ground
   (`Move::loosen`; the bed is `Class::Bed`, amounts without heat).
 - Bodies hold the ground: they cut carrying and creep by 1 / (1 + their mass per area / `hold`).
-- **Creep** (`flow::creep`, yearly): loose ground slides downhill like a slow diffusion, `creep` × softness ×
+- **Creep** (`flow::creep`, yearly): loose ground slides downhill like a slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) ×
   thickness × slope, link by link, across the side of the smaller of the two cells (corners too); over a link no more
   than levels the two surfaces.
 

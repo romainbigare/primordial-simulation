@@ -73,6 +73,8 @@ pub struct Config {
     pub regrow: f64,
     /// Speed of loose solids creeping down a unit slope, times 1 / hardness, m/s
     pub creep: f64,
+    /// Added to a solid's hardness before its softness, 1 / (hardness + this), is taken
+    pub hard_min: f64,
 
     // Run switches (control runs to compare with)
     /// Bodies with a brain may be population nodes (off, `--individuals`: they are always individuals)
@@ -197,8 +199,12 @@ pub struct Physics {
     pub form: f64,
     /// Walls lighter than this fall apart (so a part is made of at least this), kg
     pub min_kg: f64,
-    /// A held part multiplies a body's force by 1 + lever · hardness · m / (m + 0.05 body mass)
+    /// A held part multiplies a body's force by 1 + lever · hardness · m / (m + `lever_ref` · body mass)
     pub lever: f64,
+    /// Share of a body's built mass at which a held part gives half its full lever
+    pub lever_ref: f64,
+    /// Work to take hold of a part, as a share of the work of handling its mass (`c_handle`)
+    pub grab: f64,
     /// Force of a body of strength 1, as a share of its weight
     pub grip: f64,
     /// Push of a mover on each structure of a cell, and the push its own force must give to move, share of its weight
@@ -328,6 +334,8 @@ impl Default for Physics {
             form: 0.1,
             min_kg: 1.0,
             lever: 3.0,
+            lever_ref: 0.05,
+            grab: 0.1,
             grip: 0.5,
             bump: 0.05,
             dig: 0.01,
@@ -431,6 +439,7 @@ impl Default for Config {
             wear: 1.4e-11,
             regrow: 1e-9,
             creep: 6.3e-11,
+            hard_min: 0.05,
             nodes: true,
             two_parents: true,
             null: false,
