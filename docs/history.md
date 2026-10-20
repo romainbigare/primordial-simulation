@@ -499,6 +499,7 @@ the golden test.
 - Decisions 45 to 54 are cut to one sentence of decision and one of why; decision 50 names the known over-count of
   strength and catalysts paid on top of Kleiber (about 17% at the eater founder), decision 52 the frame's real worth
   (shading order, bite cost) and the plan names selection's blind spot inside a node.
+- The owner allows 700 more code lines for running the bodies on threads: the core ceiling is 9,700 (decision 42).
 
 **Tried and not kept in the foundation**
 

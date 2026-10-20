@@ -45,7 +45,7 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 
 ### The line budget (decision D2)
 
-- **`core` may hold at most 8,000 lines of code, not counting comments and blank lines** (handover 14.3). Comments
+- **`core` may hold at most 9,700 lines of code, not counting comments and blank lines** (handover 14.3). Comments
   help the next agent: do not delete them to save lines.
 - The new base has a fixed allowance of code lines. It must not grow past it without the owner's agreement:
 
@@ -57,9 +57,9 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 | `solve/` (`spread`, `downhill`, `band`) | 350 |
 | **Total** | **1,500** |
 
-- The test `cli/tests/core_size.rs` fails above the ceiling: **9,000 until the end of the foundation**, **8,000 at its
-  end (Phase L)**. The 8,000 is never a reason to build a task that costs speed or honesty. **Open:** `core` is at
-  about 9,000; the 8,000 goal is put back to the owner (`docs/foundation/decisions.md` 42).
+- The test `cli/tests/core_size.rs` fails above the ceiling: **9,700**, which is 9,000 and 700 more for running the
+  bodies on threads (the owner, `docs/foundation/decisions.md` 42). The ceiling is never a reason to build a task that
+  costs speed or honesty.
 - A phase may not end with more code than it started with, unless its report gives the reason.
 
 ### The time budget (the owner's rule, decision D12)
@@ -121,7 +121,7 @@ All decided on 17 October 2026. Later decisions are in `docs/foundation/decision
 | # | Decision | Status |
 |---|---|---|
 | D1 | The M3 check point choice (handover 13.1) | **Decided:** a foundation phase (this plan), then M4. Written in handover 13.1. |
-| D2 | The `core` code budget (handover 14.3) | **Decided:** at most 8,000 lines of code in `core`, not counting comments and blank lines, at the end of the foundation (9,000 until then). The foundation replaces the special code, it does not sit on top of it. The new base has fixed allowances; a test keeps the ceiling (A6). |
+| D2 | The `core` code budget (handover 14.3) | **Decided:** at most 9,700 lines of code in `core`, not counting comments and blank lines: 9,000, and 700 more for running the bodies on threads. The foundation replaces the special code, it does not sit on top of it. The new base has fixed allowances; a test keeps the ceiling (A6). |
 | D3 | The cell shape for the planet | **Decided:** a latitude-longitude grid of squares that wraps east to west (5.5). It keeps today's square laws, the brain's 8 directions, the exact split of a cell into 4, and the viewer (the grid is the map). |
 | D4 | Speed settings (when a node sleeps, how many nodes a cell keeps, the node pace) | **Decided:** a table "speed settings" in `docs/numbers.md`, outside the tuned budget. Each must pass an equivalence test (6.4): changing it 2× must not change the key numbers beyond their noise. |
 | D5 | Old snapshots | **Decided:** no backwards compatibility; snapshots carry a format version (`tape/src/snapshot.rs`). |
@@ -357,8 +357,8 @@ Open items of review round 3, to settle before L5:
 
 ## 8. What is left
 
-The open items above (E6, F7 and maybe F5, G5, the speed goals of 6.5, round 3's list), the owner's answers to
-decisions 42 (the 8,000 lines) and 43 (the time budget), then Phase L. Work like this usually takes longer than
+The open items above (E6, F7 and maybe F5, G5, the speed goals of 6.5, round 3's list), threads over
+bodies (decisions 42 and 43), then Phase L. Work like this usually takes longer than
 planned: report the real days in each phase report.
 
 ---

@@ -975,7 +975,7 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters settle by years 90 to 100, so report their log10 kg and their births less deaths over years 91 to 100, three seeds at least. Under 2 times is noise.
-- **Core size.** `core` is at its ceiling of 9,000 code lines (14.3, counted by `cli/tests/core_size.rs`); the goal of 8,000 at the end of the foundation is put back to the owner (`docs/foundation/decisions.md` 42).
+- **Core size.** `core` holds at most 9,700 code lines (14.3, counted by `cli/tests/core_size.rs`): 9,000, and 700 more for running the bodies on threads (`docs/foundation/decisions.md` 42).
 
 ---
 
@@ -1002,7 +1002,7 @@ All of these must be true:
 
 | Part | Budget |
 |---|---|
-| `core` (five laws, state, random numbers) | ≤ 8,000 lines of code through M7, not counting comments and blank lines (the owner's decision, 17 October 2026) |
+| `core` (five laws, state, random numbers) | ≤ 9,700 lines of code through M7 (9,000, and 700 more for running the bodies on threads), not counting comments and blank lines |
 | `worldgen` | ≤ 3,000 lines |
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
@@ -1011,8 +1011,8 @@ All of these must be true:
 
 **Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
 the code lines of `core/src`, prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`)
-and fails above its ceiling: 9,000 while the foundation is built, 8,000 at its end (that goal is back with the owner,
-`docs/foundation/decisions.md` 42). Comments are not counted, so do not delete them to save lines. The foundation
+and fails above its ceiling: 9,700 lines, which are 9,000 and 700 more for running the bodies on threads
+(`docs/foundation/decisions.md` 42). Comments are not counted, so do not delete them to save lines. The foundation
 keeps `core` small by replacing special code with general pieces, not by adding to it (`docs/foundation/plan.md`,
 "The main rule" and "The line budget").
 

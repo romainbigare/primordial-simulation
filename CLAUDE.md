@@ -41,7 +41,7 @@ ask the owner.
 9. **No Earth words in `core/` and `worldgen/`** (`cli/tests/word_ban.rs`), including substance names (nitrogen,
    carbon, salt, sugar...). Use numbers and physical words.
 10. `cargo clippy --release --workspace --all-targets` gives no warnings.
-11. **Size.** `core` holds at most 8,000 lines of code at the end of the foundation, and 9,000 until then, not counting
+11. **Size.** `core` holds at most 9,700 lines of code: 9,000, and 700 more for running the bodies on threads; not counting
     comments and blank lines (`docs/handover.md` 14.3; the test `cli/tests/core_size.rs` counts them). Simplify before
     you add. Never delete useful comments to save lines: they are not counted. Never pick a slower or less honest
     design to save lines.
