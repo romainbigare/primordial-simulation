@@ -618,19 +618,28 @@ fn rain_crosses_the_land_in_one_step() {
     assert!(fell > 0.0 && wet - dry > 0.1 * fell, "{} of {fell} m³ reached the low ground", wet - dry);
 }
 
-/// Moving liquid works on its bed at every liquid step: once rain runs off (the pores of the land are full after
-/// three months), each of the next eight liquid steps breaks bonded ground on the land.
+/// Moving liquid wears its bed only with the work its load leaves free (the cover effect, Sklar and Dietrich 2004).
+/// Once rain runs off (the pores of the land are full after three months), the land under its loose ground keeps its
+/// bed in the next liquid step; stripped of its loose solids, it breaks bonded ground at each of the next eight.
 #[test]
-fn liquid_wears_its_bed_at_every_liquid_step() {
+fn liquid_wears_its_bed_with_the_work_its_load_leaves_free() {
     let mut w = worldgen::new_world(1, 16, 16);
     (0..3).for_each(|_| pcore::step(&mut w));
     let n = w.mesh.cells().n();
     let land: Vec<usize> = (0..n).filter(|&i| w.surface_z(i) > 0.0).collect();
     let bed = |w: &World| land.iter().map(|&i| (0..w.chem.ns()).map(|k| w.store.amounts(Class::Bed)[k * n + i]).sum::<f64>()).sum::<f64>();
+    let mut covered = w.clone();
+    flow_step(&mut covered, LIQUID_STEP);
+    assert_eq!(bed(&covered), bed(&w), "the land under its loose ground wore its bed");
+    for &i in &land {
+        let t = w.t_ground(i);
+        let solids: Vec<usize> = (0..w.chem.ns()).filter(|&k| w.chem.phase(k, t) == Phase::Solid).collect();
+        solids.into_iter().for_each(|k| set_amount(&mut w, Node::ground(i), k, 0.0));
+    }
     for step in 0..8 {
         let before = bed(&w);
-        worldgen::testkit::flow_step(&mut w, LIQUID_STEP);
-        assert!(bed(&w) < before, "step {step}: the bed on land kept {} of {before} mol", bed(&w));
+        flow_step(&mut w, LIQUID_STEP);
+        assert!(bed(&w) < before, "step {step}: the bed on bare land kept {} of {before} mol", bed(&w));
     }
 }
 

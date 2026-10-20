@@ -77,7 +77,8 @@ melting point (lowered by solutes, 2.5) until that substance has all frozen or m
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost (`flow::liquid::load`, `wear`): it **carries** up to `carry`
-m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and **wears** `wear` m³ of
+m³ of loose solids per J (dropping what is over capacity, so load settles where flow slows), and with the work its
+load leaves free (the free share of that capacity: the cover effect, Sklar and Dietrich 2004) **wears** `wear` m³ of
 bed per J over its strength into loose ground. **Creep** (`flow::creep`, yearly): loose ground slides downhill as a
 slow diffusion, `creep` × softness (1 / (hardness + `hard_min`)) × thickness × slope. Bodies hold the ground: carrying
 and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving the land is lime dissolved by reaction 22.

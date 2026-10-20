@@ -173,7 +173,8 @@ fn by_link(crossed: &Crossed, rows: usize, col_of: &[usize], (a, b): (&[u32], &[
 }
 
 /// The work `bedwork`, J, of the liquid leaving node `i` (a share `out`) on its load: it drops what is over capacity,
-/// else picks up loose solids up to it (at most all that lies loose). Returns the work left to break bonded ground.
+/// else picks up loose solids up to it (at most all that lies loose). Returns the work left to break bonded ground: the
+/// share of the capacity its load leaves free (the cover effect, Sklar and Dietrich 2004).
 fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops::Range<usize>, &[usize]), bedwork: f64, out: f64) -> f64 {
     let held: f64 = rows.clone().zip(sol).map(|(r, &k)| q[r] * s.sp[k].v[0]).sum();
     let capv = w.cfg.carry * bedwork * bare_share(w, i);
@@ -187,7 +188,7 @@ fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops:
     let avail: f64 = sol.iter().map(|&k| solid(w, s, k, i) * s.sp[k].v[0]).sum();
     let f = if avail > 0.0 { ((capv - held) / avail).min(1.0) } else { 0.0 };
     rows.zip(sol).for_each(|(r, &k)| q[r] += solid(w, s, k, i) * f);
-    bedwork
+    if capv > 0.0 { bedwork * (1.0 - (held + f * avail) / capv).max(0.0) } else { 0.0 }
 }
 
 /// Break bonded ground of node `i` into loose by `bedwork` over bond strength (`wear`), each substance by its share of

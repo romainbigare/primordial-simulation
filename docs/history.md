@@ -443,6 +443,8 @@ the golden test.
 
 - Finding 1: a move out of the bed takes only what the bed can lose exactly (`Move::loosen`): worn amounts below the
   bed's rounding made matter; 48 x 48 seed 1 without life, energy drift at year 20 1.8e-13 to 3.4e-14 (flat).
+- Finding 2: moving liquid wears its bed only with the work its load leaves free (`flow::liquid::load`): 48 x 48 seed
+  1, year 30, light-eaters 1.60e10 to 1.52e10 kg, land 285.49 to 285.48 K.
 
 **Tried and not kept in the foundation**
 
