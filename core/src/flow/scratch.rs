@@ -143,7 +143,7 @@ pub struct Scratch {
     pub(super) alb: Vec<f64>,
     /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
     pub(super) rc: Vec<f64>,
-    /// Cells by the head of the liquid that may run off, highest first: the order of the liquid's pass (`liquid`).
+    /// The order of the liquid's pass, by a priority flood over the ground (`liquid`).
     pub(super) order: Order,
     /// The work space of `solve::spread` (heat through the ground, the liquid under the surface).
     pub(super) spread: Spread,

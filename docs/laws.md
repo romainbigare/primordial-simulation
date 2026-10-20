@@ -116,10 +116,17 @@ store books every move as link fluxes.
 - **Pores first.** The loose ground's pores (`porosity` × its volume) fill first; only the liquid above them stands
   and has a head (`flow::land::stand`). That standing depth, as Flow's last step left it, is the one the bodies
   (`survey::env_of`) and Change (2.3) read.
-- **Running off.** Cells are ordered by head, highest first (`downhill::Order`), and one pass moves the liquid: each
-  cell sends to every lower neighbour (all 8) at least `split` as steep as the steepest, by slope; under `still` of
-  head nothing moves. A head falls no further than to a neighbour still to come, and half way to one already passed,
-  so heads never cross. Liquid can cross the map in one step while depressions fill and spill.
+- **Spill levels.** A priority flood over the ground (the surface without the liquid that may run off), from the
+  lowest cell at the head of its liquid, gives each cell its spill level (Barnes, Lehman and Mulla 2014;
+  `downhill::Order`). Liquid stands where it lies below its cell's spill level (in a depression) or in the lowest
+  basin; elsewhere it passes on.
+- **Running off.** One pass moves the liquid, the highest spill level first; at one level the standing liquid,
+  highest head first, then the cells liquid passes through, the farthest from the way out first. Each cell sends to
+  every lower neighbour (all 8) at least `split` as steep as the steepest, by slope; under `still` of head nothing
+  moves. The surface of a standing cell is its head, that of a cell liquid passes through is its ground, so liquid on
+  its way never holds back the liquid behind it. A head falls no further than to the surface of a neighbour still to
+  come, and half way to one already passed; liquid passing on never goes back, and on level ground it follows the
+  flood's way out. Liquid crosses the map in one step while depressions fill and spill.
 - **Pore water** flows by Darcy's law across the borders of cells in one implicit step of `solve::spread`, on the
   liquid table (`flow::land::table`): a link passes `seep` × the saturated thickness of its higher end × width /
   distance. Pores at or under their field capacity (`field`) give nothing.

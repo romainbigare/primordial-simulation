@@ -1307,3 +1307,10 @@ Phase E review, round 1 (fixes):
   real plant-eaters, still growing. Light-eaters at year 30 10.50, 10.52, 10.50 log10 kg; land 287.77 K. Tests whose scene moved: the
   learning body carries a third of a founder's fuel over 400 seeds, the body that evaporates stands on 299 K ground,
   dear tissue is 6 times the start, the walls that keep a body warm are of 1 t blocks. Golden re-pinned.
+- The surface liquid's pass follows the spill levels of a priority flood over the ground (`downhill::Order`): liquid
+  stands only below its cell's spill level or in the lowest basin; liquid passing on counts as no higher than the
+  ground it crosses, so it no longer holds back the liquid behind it, and a level stretch drains toward the flood's
+  way out (decision 31). Seed 1, 32 x 32 in quarters, year 1: river cells deeper than 1 m 9 of 71 to 0 of 86; G5's
+  river length off by -11.5 km (limit 8.0) to -9.0 km (limit 6.7). 64 x 64, seed 1, years 21 to 30: land 285.6 K
+  (same), rain on land the same, liquid on land 5.18 to 5.21 km³, rivers 105 to 107, light-eaters +0.3%; drift
+  unchanged. Golden re-pinned.

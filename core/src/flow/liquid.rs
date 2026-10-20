@@ -1,5 +1,5 @@
 //! Liquid on and in the loose ground at each liquid step: the stores of the bed drain to the channels inside the cells
-//! (`drain::springs`); what may run off runs down the cells in the order of their heads in one pass
+//! (`drain::springs`); what may run off runs down the cells in one pass in the order of a priority flood
 //! (`solve::downhill`), doing work on its bed; then the liquid under the surface moves (`drain::under`).
 
 use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, HALF_WAY}, range, year_weight, Scratch};
@@ -90,10 +90,10 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         q[i * width + vol] = mob.vol[i] * off;
     }
     let head = |q: &[f64], j: usize| s.z[j] + q[j * width + vol] / area[j];
-    let mut order = std::mem::take(&mut s.order);
-    order.update(&(0..n).map(|i| head(&q, i)).collect::<Vec<_>>());
     let (q0, cells) = (q.clone(), w.mesh.cells());
     let adj = Adjacency { start: cells.start(), link: cells.adj_link(), other: cells.adj_cell(), a: cells.a() };
+    let mut order = std::mem::take(&mut s.order);
+    order.update(&adj, &s.z, |i| head(&q, i));
     let (mut power, mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], Vec::new());
     let mut crossed = Crossed::default();
     let (ww, ss) = (&*w, &*s);
@@ -102,18 +102,26 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         if sv <= 0.0 {
             return;
         }
-        // Each lower neighbour: its weight by slope, how far the head may fall toward it, and the drop.
+        // Each lower neighbour: its weight by slope, how far the head may fall toward it, and the drop. The surface of a
+        // cell whose liquid stands is its head; of one its liquid passes on through, its ground (a neighbour still to
+        // come holds the head back only by what it keeps). Liquid passing on never goes back to a neighbour already
+        // passed, and on level ground it follows the flood's way out.
         outs.clear();
-        let mut wmax = 0.0f64;
-        for e in adj.start[i] as usize..adj.start[i + 1] as usize {
+        let (top, mut wmax, mut way) = (if order.stands[i] { hd } else { zi }, 0.0f64, None);
+        for (k, e) in (adj.start[i] as usize..adj.start[i + 1] as usize).enumerate() {
             let (j, l) = (adj.other[e] as usize, adj.link[e] as usize);
-            let (hj, mut o) = (head(q, j), [0.0; 3]);
-            if hd - hj > ph.still {
-                let room = if order.before(j, i) { HALF_WAY * (hd - hj) } else { hd - hj.max(zi) };
-                o = [(hd - hj) / cells.dist()[l], room, hd - hj];
+            let (hj, passed, mut o) = (head(q, j), order.before(j, i), [0.0; 3]);
+            let (from, to) = (if passed { top } else { hd }, if passed || order.stands[j] { hj } else { ss.z[j] });
+            if from - to > ph.still {
+                let room = if passed { HALF_WAY * (from - to) } else { hd - to.max(zi) };
+                o = [(top - to).max(0.0) / cells.dist()[l], room, (hd - hj).max(0.0)];
+                way = way.or((j == order.outlet[i] as usize).then_some(k));
             }
             wmax = wmax.max(o[0]);
             outs.push(o);
+        }
+        if let (true, Some(k)) = (wmax <= 0.0, way) {
+            (outs[k][0], wmax) = (1.0, 1.0);
         }
         // Neighbours much less steep than the steepest get nothing.
         let mut wsum = 0.0;

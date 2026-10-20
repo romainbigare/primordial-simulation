@@ -277,11 +277,11 @@ mod spread {
 
 use pcore::solve::downhill::{self, Adjacency, Crossed, Order};
 
-// ---- downhill: the order of cells by head, and the pass down it ----
+// ---- downhill: the order of a priority flood, and the pass down it ----
 
 /// Rain is the same whether it falls at once or in 4 parts, each followed by a pass, when the rule is linear in the
-/// amounts: here all that a cell holds leaves in equal shares to its lower neighbours (by ground height), so one pass
-/// carries it all the way to the cells with no lower neighbour. The cells with a lower neighbour end empty, the
+/// amounts: here all that a cell holds leaves in equal shares to its lower neighbours (by ground height) still to come,
+/// so one pass carries it all the way to the cells with none. The cells with a lower neighbour end empty, the
 /// sinks hold the same amounts, the link fluxes add up to those of the one pass, and every amount is kept.
 #[test]
 fn downhill_one_rain_in_one_pass_or_in_parts() {
@@ -292,11 +292,12 @@ fn downhill_one_rain_in_one_pass_or_in_parts() {
     let (start, other, a) = (cells.start(), cells.adj_cell(), cells.a());
     let adj = Adjacency { start, link: cells.adj_link(), other, a };
     let mut order = Order::default();
-    order.update(&z);
+    order.update(&adj, &z, |i| z[i]);
+    let down = |i: usize, e: usize| z[other[e] as usize] < z[i] && order.before(i, other[e] as usize);
     let rule = |i: usize, _: &mut [f64], share: &mut [f64]| {
         let es = start[i] as usize..start[i + 1] as usize;
-        let lower = es.clone().filter(|&e| z[other[e] as usize] < z[i]).count();
-        es.zip(share.iter_mut()).filter(|(e, _)| z[other[*e] as usize] < z[i]).for_each(|(_, s)| *s = 1.0 / lower as f64);
+        let lower = es.clone().filter(|&e| down(i, e)).count();
+        es.zip(share.iter_mut()).filter(|(e, _)| down(i, *e)).for_each(|(_, s)| *s = 1.0 / lower as f64);
     };
     let rain: Vec<f64> = (0..n).map(|i| 1.0 + (i * 37 % 11) as f64).collect();
     let total: f64 = rain.iter().sum();
@@ -311,7 +312,7 @@ fn downhill_one_rain_in_one_pass_or_in_parts() {
         downhill::pass(&order, &adj, &mut parts, &mut crossed, rule);
         add(&mut flux, &crossed);
     }
-    let sinks = (0..n).filter(|&i| (start[i]..start[i + 1]).all(|e| z[other[e as usize] as usize] >= z[i])).count();
+    let sinks = (0..n).filter(|&i| (start[i]..start[i + 1]).all(|e| !down(i, e as usize))).count();
     assert!(sinks < n / 2 && whole.iter().filter(|&&q| q > 1e-12 * total).count() == sinks, "only the sinks hold liquid");
     for i in 0..n {
         assert!((whole[i] - parts[i]).abs() <= 1e-12 * total, "cell {i}: {} against {}", whole[i], parts[i]);
@@ -324,25 +325,29 @@ fn downhill_one_rain_in_one_pass_or_in_parts() {
     }
 }
 
-/// The order is the order of the heads now, highest first and ties by cell (heads of both signs, many equal), also
-/// after some heads change.
+/// The order of a valley: a slope, a level stretch, a pit behind a sill, another level stretch, and the lowest cell,
+/// dry and then wet up to 1.5 m. Higher spill levels come first; the pit's liquid stands and leaves it before the sill;
+/// a level stretch is passed from its far end toward its way out; liquid stands below the lowest cell's head.
 #[test]
-fn the_order_is_the_order_of_the_heads() {
-    let n = 4096u32;
-    let sorted = |h: &[f64]| {
-        let mut c: Vec<u32> = (0..n).collect();
-        c.sort_by(|&a, &b| h[b as usize].total_cmp(&h[a as usize]).then(a.cmp(&b)));
-        c
-    };
-    let mut head: Vec<f64> = (0..n).map(|i| (i * 7919 % 1000) as f64 * 0.1 - 50.0).collect();
-    let mut order = Order::default();
-    // Each cell is visited before the next one of the heads' order, and the next one not before it.
-    let in_order = |order: &Order, c: &[u32]| c.windows(2).all(|p| order.before(p[0] as usize, p[1] as usize) && !order.before(p[1] as usize, p[0] as usize));
-    order.update(&head);
-    assert!(in_order(&order, &sorted(&head)));
-    for i in (0..n as usize).step_by(97) {
-        head[i] += 0.35;
+fn the_order_follows_the_spill_levels() {
+    let floor = [9.0, 7.0, 7.0, 7.0, 3.0, 5.0, 2.0, 2.0, 1.0, 0.0];
+    let n = floor.len() as u32;
+    // A line of cells: link k joins cells k and k + 1.
+    let (mut start, mut link, mut other) = (vec![0], vec![], vec![]);
+    for i in 0..n {
+        for j in [i.wrapping_sub(1), i + 1].into_iter().filter(|&j| j < n) {
+            link.push(i.min(j));
+            other.push(j);
+        }
+        start.push(other.len() as u32);
     }
-    order.update(&head);
-    assert!(in_order(&order, &sorted(&head)));
+    let a: Vec<u32> = (0..n - 1).collect();
+    let adj = Adjacency { start: &start, link: &link, other: &other, a: &a };
+    let mut order = Order::default();
+    for (wet, standing) in [(0.0, vec![4, 9]), (1.5, vec![4, 8, 9])] {
+        order.update(&adj, &floor, |i| floor[i].max(wet));
+        assert!((1..n as usize).all(|i| order.before(i - 1, i)), "the pass goes down the valley");
+        assert_eq!((0..n as usize).filter(|&i| order.stands[i]).collect::<Vec<_>>(), standing);
+        assert_eq!([1, 2, 3, 4, 6].map(|i| order.outlet[i] as usize), [2, 3, 4, 5, 7], "the way out of each level stretch and of the pit");
+    }
 }

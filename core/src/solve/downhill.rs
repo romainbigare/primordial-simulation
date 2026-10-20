@@ -1,7 +1,12 @@
-//! Downhill: the cells from the highest head to the lowest, and one pass down that order. Liquid runs from higher to
-//! lower heads, so the order by falling head is a topological order of its links (Kahn 1962; the "priority flood" of
-//! Barnes and others 2014) and one pass carries it across the map while depressions fill and spill. A new sort each
-//! step costs less than mending the last order. The law says how much leaves a cell; this module moves it.
+//! Downhill: the cells in the order liquid leaves them, and one pass down that order. A priority flood over the floor
+//! (the ground without the liquid that may run off), from the lowest cell at the head of its liquid, gives each cell
+//! its spill level: the lowest level from which liquid there can reach the lowest cell (Barnes, Lehman and Mulla 2014).
+//! Liquid runs from higher levels to lower ones, and at one level from where it stands (below the spill level) out
+//! through the cells the flood reached earlier, so the pass by falling level, standing liquid first, then the last
+//! reached first, is a topological order of its links: one pass carries liquid across the map while depressions fill
+//! and spill, and a level stretch drains toward its outlet. The law says how much leaves a cell; this module moves it.
+
+use std::{cmp::Reverse, collections::BinaryHeap};
 
 /// A mesh's adjacency as slices: cell `i`'s entries are `start[i]..start[i + 1]`, each a link and its other cell.
 #[derive(Clone, Copy, Debug)]
@@ -16,27 +21,58 @@ pub struct Adjacency<'a> {
     pub a: &'a [u32],
 }
 
-/// The cells from the highest head to the lowest, ties by cell, and the rank of each cell in that order.
+/// The cells in the order of the pass, the rank of each cell in it, whether the liquid of each cell stands (it lies
+/// below the cell's spill level, in a depression, or in the lowest basin), and the cell the flood reached each from.
 #[derive(Clone, Debug, Default)]
 pub struct Order {
     cells: Vec<u32>,
     rank: Vec<u32>,
+    /// Does the liquid of each cell stand (below its spill level, or in the lowest basin) rather than pass on?
+    pub stands: Vec<bool>,
+    /// The cell from which the flood reached each cell: its way out (`u32::MAX` for the lowest cell).
+    pub outlet: Vec<u32>,
 }
 
-/// A key that sorts heads from the highest down: the bits of `h` in the total order of `f64::total_cmp`, reversed.
+/// A key that sorts levels from the lowest up: the bits of `h` in the total order of `f64::total_cmp`.
 #[inline]
-fn falling(h: f64) -> u64 {
+fn rising(h: f64) -> u64 {
     let b = h.to_bits();
-    !(if b >> 63 == 1 { !b } else { b | 1 << 63 })
+    if b >> 63 == 1 { !b } else { b | 1 << 63 }
 }
 
 impl Order {
-    /// Bring the order up to date for the heads `head` (one per cell, m).
-    pub fn update(&mut self, head: &[f64]) {
-        let mut keys: Vec<(u64, u32)> = head.iter().enumerate().map(|(i, &h)| (falling(h), i as u32)).collect();
+    /// Bring the order up to date for the floor of each cell, `floor`, m, and the head of the liquid of cell `i`,
+    /// `head(i)`, m.
+    pub fn update(&mut self, adj: &Adjacency, floor: &[f64], head: impl Fn(usize) -> f64) {
+        let n = floor.len();
+        let Some(lowest) = (0..n).min_by(|&a, &b| floor[a].total_cmp(&floor[b])) else { return };
+        let low = head(lowest).max(floor[lowest]);
+        // Each cell's spill level (infinite until reached); equal levels leave the heap in the order they entered it.
+        let mut level = vec![f64::INFINITY; n];
+        level[lowest] = low;
+        let mut flood = BinaryHeap::from([Reverse((rising(low), 0u32, lowest as u32))]);
+        (self.cells, self.outlet) = (Vec::with_capacity(n), vec![u32::MAX; n]);
+        while let Some(Reverse((_, _, c))) = flood.pop() {
+            self.cells.push(c);
+            let i = c as usize;
+            for j in adj.other[adj.start[i] as usize..adj.start[i + 1] as usize].iter().map(|&j| j as usize) {
+                if level[j] == f64::INFINITY {
+                    // What entered the heap so far: the cells taken out of it and those in it.
+                    let entered = (self.cells.len() + flood.len()) as u32;
+                    (level[j], self.outlet[j]) = (floor[j].max(level[i]), c);
+                    flood.push(Reverse((rising(level[j]), entered, j as u32)));
+                }
+            }
+        }
+        debug_assert_eq!(self.cells.len(), n, "the mesh is connected");
+        self.stands = (0..n).map(|i| floor[i] < level[i] || level[i] <= low).collect();
+        // The pass: the highest level first; at one level the standing liquid first, highest head first (as liquid levels
+        // out), then the cells it passes on through, the last reached first (`r`: the order the flood reached them in).
+        let key = |(r, &c): (usize, &u32)| (!rising(level[c as usize]), !self.stands[c as usize], if self.stands[c as usize] { !rising(head(c as usize)) } else { !(r as u64) }, c);
+        let mut keys: Vec<_> = self.cells.iter().enumerate().map(key).collect();
         keys.sort_unstable();
-        self.cells = keys.iter().map(|k| k.1).collect();
-        self.rank.resize(head.len(), 0);
+        self.cells = keys.iter().map(|k| k.3).collect();
+        self.rank.resize(n, 0);
         self.cells.iter().enumerate().for_each(|(r, &c)| self.rank[c as usize] = r as u32);
     }
 
