@@ -458,6 +458,11 @@ the golden test.
   48 x 48 seeds 1, 2, 3, year 60, light-eaters 10.49, 10.51, 10.54 to 10.40, 10.46, 10.54 log10 kg, eaters 5.6e3,
   8.0e4, 4.4e3 to 1.3e3, 2.6e4, 2.9e3 kg/km² of land (year 30: 2.5, 13, 14 to 1.6, 8.2, 9.3), land 287.0, 290.7,
   289.5 to 287.2, 290.9, 289.7 K; under 0.1% of body-days lay past the unfolding.
+- Item 2b: founder light-eaters build their frame at a herb's share of cell walls (`WALL_SHARE` 0.4, decision 52):
+  48 x 48 seeds 1, 2, 3, year 60, light-eaters 10.40, 10.46, 10.54 to 10.31, 10.37, 10.38 log10 kg, eaters 1.3e3,
+  2.6e4, 2.9e3 to 190, 1.9e4, 5.7e3 kg/km² of land, land 287.2, 290.9, 289.7 to 286.6, 290.7, 289.3 K; year 100,
+  eaters 8.6e3, 8.0e4, 3.8e3 to 7.8e3, 6.3e4, 2.8e3; seed 2's light-eaters' frame share falls to 0.26 by year 60 and
+  0.20 by year 100.
 
 **Tried and not kept in the foundation**
 

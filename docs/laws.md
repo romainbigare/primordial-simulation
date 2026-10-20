@@ -459,7 +459,8 @@ read a kind.
   die before they learn: they bite a body (2) before they take from the ground (0.5) and keep out of deep liquid (a
   move's odds fall as 1 / (1 + depth / m)). Light-eaters have no brain. Genes and rows get a spray (`--spray`).
 - **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`FIXERS`, `FIX_GENE`; `--fixers`).
-- **Founder genes**: some measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); `HEAT`, `CHILD`,
-  `ALLOC` the same for all; `KEEP_T`, `COOL_T` off for light-eaters and, for eaters, 5 K above their liquid's melting
-  point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`, `EATER_COOL_T`).
+- **Founder genes**: some measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); light-eaters build
+  their frame at a herb's share of cell walls (`WALL_SHARE`), other solids at a small share (`BUILT_SHARE`); `HEAT`,
+  `CHILD`, `ALLOC` the same for all; `KEEP_T`, `COOL_T` off for light-eaters and, for eaters, 5 K above their
+  liquid's melting point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`, `EATER_COOL_T`).
 

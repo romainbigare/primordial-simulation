@@ -14,6 +14,9 @@ pub const LITTER_X: f32 = 0.602;
 pub const LIGHT_X: f32 = 2.26;
 /// Every founder's keep gene of each solid bodies build besides their matter: small, so selection finds its worth.
 const BUILT_SHARE: f32 = 0.02;
+/// A light-eater founder's keep gene of the solid it builds of its fuel alone, its walls: the cell walls of herbs are
+/// 30 to 60% of their dry mass.
+const WALL_SHARE: f32 = 0.4;
 /// A gene that is off starts below zero, so small changes keep it off: catalysts and the rest.
 const CAT_OFF: f32 = -1.0;
 const GENE_OFF: f32 = -0.1;
@@ -65,6 +68,9 @@ fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
     genes[lay.keep + liquid] = KEEP_LIQUID;
     genes[lay.keep + rich] = KEEP_SOLID.max((KEEP_MARGIN * kind.store / (1.0 - kind.store)) as f32);
     chem.materials().for_each(|k| genes[lay.keep + k] = BUILT_SHARE);
+    for bk in chem.builds.iter().filter(|bk| light(kind) && bk.inputs.iter().all(|p| p.0 as usize == rich)) {
+        genes[lay.keep + bk.outputs[0].0 as usize] = WALL_SHARE;
+    }
     Some(genes)
 }
 
