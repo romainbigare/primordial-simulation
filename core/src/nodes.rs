@@ -2,11 +2,11 @@
 //! `take_in`), a node splitting in two (`split`), and members drawn from a node as individuals (`open`). Members,
 //! stores and heat are kept exactly in every join and split.
 
+use crate::bond::{held, let_go, room};
 use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{row_step, shake};
 use crate::rng::{Purpose, Rng};
 use crate::life::Life;
-use crate::store::NodeId;
 use crate::World;
 use std::f32::consts::FRAC_2_PI;
 
@@ -25,22 +25,30 @@ pub(crate) fn crowd(w: &mut World) {
     }
 }
 
-/// Each node of cell `i` holding nothing, largest first, joins the first larger one alike in genes (`body::alike`, on
-/// the means only, so a split's halves stay apart for selection), of its lineage (a node has one brain), of its stage
-/// (both mature or both young: the young join their adult node member by member as they mature, `copy::young`) and
-/// inside the same (or none). Returns the bodies left.
+/// What a node shares with those it joins or merges with: its lineage (a node has one brain), its stage (both mature or
+/// both young: the young join their adult node member by member as they mature, `copy::young`), the structure whose
+/// room it is in (its root, as the room law counts those inside, `bond::room`) and the structure it holds (its root).
+type Kin = (u32, bool, Option<usize>, Option<usize>);
+
+/// The `Kin` of body `b`.
+fn kin_of(w: &World, b: &Body) -> Kin {
+    (b.lineage, b.adult(&w.chem), room(w, b).map(|r| r.0), held(w, b).map(|p| w.parts.parts[p].root as usize))
+}
+
+/// Each body of cell `i`, largest first, however few its members, joins the first larger node (more than one member,
+/// as in `copy::kin`) alike in genes (`body::alike`, on the means only, so a split's halves stay apart for selection)
+/// of its `Kin`. Returns the bodies left.
 fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     let b = &w.life.bodies;
-    let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| b[s].hold.is_none() && may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
+    let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_unstable();
     let mut head: Vec<usize> = (0..list.len()).collect();
-    // Each one's lineage, stage and the inside it is in once, tested before the genes.
-    let kind: Vec<(u32, bool, Option<NodeId>)> = list.iter().map(|&(_, s)| (b[s].lineage, b[s].adult(&w.chem), b[s].inside)).collect();
+    // Each one's kin once, tested before the genes.
+    let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_of(w, &b[s])).collect();
     for x in 0..list.len() {
         let a = &b[list[x].1];
-        if a.n() > 1.0 {
-            head[x] = (0..x).find(|&y| head[y] == y && kind[y] == kind[x] && alike(lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
-        }
+        let joins = |y: usize| head[y] == y && b[list[y].1].n() > 1.0 && kind[y] == kind[x];
+        head[x] = (0..x).find(|&y| joins(y) && alike(lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
     }
     for x in (0..list.len()).filter(|&x| head[x] != x) {
         merge(w, list[x].1, list[head[x]].1);
@@ -48,17 +56,16 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its lineage, whether it is mature and
-/// what it is inside (`merge_closest`).
-type Likeness = (Vec<f32>, Vec<f32>, (u32, bool, Option<NodeId>));
+/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its `Kin` (`merge_closest`).
+type Likeness = (Vec<f32>, Vec<f32>, Kin);
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
 /// are left or no pair is alike: here each within the other's spread, as children join a node (`body::within`), of one
-/// lineage and stage and inside the same; unlike nodes never merge, however full the cell. A pair's key: the squared
-/// distance of their genes in steps (infinite if unlike).
+/// `Kin`; unlike nodes never merge, however full the cell. A pair's key: the squared distance of their genes in steps
+/// (infinite if unlike).
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
-    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), (w.life.bodies[s].lineage, w.life.bodies[s].adult(&w.chem), w.life.bodies[s].inside));
+    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), kin_of(w, &w.life.bodies[s]));
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
         let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
@@ -96,9 +103,10 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
     w.cfg.nodes || w.life.brainless(b)
 }
 
-/// The body in slot `s` joins the body in slot `t`, of its lineage (`take_in`).
+/// The body in slot `s` joins the body in slot `t`, of its lineage (`take_in`), letting go of what it holds.
 pub fn merge(w: &mut World, s: usize, t: usize) {
-    let (c, born) = (w.life.bodies[s].clone(), w.life.born(&w.life.bodies[s]).to_vec());
+    let (mut c, born) = (w.life.bodies[s].clone(), w.life.born(&w.life.bodies[s]).to_vec());
+    let_go(w, &mut c, false);
     w.life.remove(s);
     let mut o = std::mem::take(&mut w.life.bodies[t]);
     take_in(w, &mut o, c, Some(&born));

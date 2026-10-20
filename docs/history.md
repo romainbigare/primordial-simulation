@@ -427,6 +427,8 @@ the golden test.
 - Surface liquid takes its steepest way down by D-infinity (`Level::steepest`, decision 46), `split` removed (tuned
   54 to 53): G5's river length -7.7 to -5.2 km (limit 6.7 to 4.0); 48 x 48 seed 1, years 21 to 30: rivers 27.2 to
   27.8, land 284.5 K both.
+- Finding 3: nodes merge by the root of the structure they are in or hold, and bodies of one member join a node
+  (`nodes::Kin`): 48 x 48 seed 2 at year 60, most bodies in a cell 407 to 134, animal bodies 2,428 to 1,905.
 
 **Tried and not kept in the foundation**
 

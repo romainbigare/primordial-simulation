@@ -578,9 +578,11 @@ individuals.
   slice. A spread no width holds is an exponential tail of the same mean. Those the growth pushed past the copy mass
   move into the adult node with the share of the body their slice holds (`copy::mature`): the flux across a size of a
   size-structured population (McKendrick 1926; von Foerster 1959).
-- **Merging** (`nodes::crowd`, monthly). Alike nodes of one lineage and stage in a cell merge (the young mature into
-  their adult node instead), if they hold nothing and are inside the same structure or none. Past `crowd` nodes a cell
-  merges its most alike pairs while they are alike; unlike nodes never merge, however full the cell.
+- **Merging** (`nodes::crowd`, monthly). Alike bodies of one lineage and stage in a cell join a node of more than one
+  member (the young mature into their adult node instead), however few their own members, if both are in the room of
+  the same structure or of none (its root, as the room law counts) and hold the same structure or nothing; a body that
+  joins lets go of what it holds. Past `crowd` nodes a cell merges its most alike pairs while they are alike; unlike
+  nodes never merge, however full the cell.
 - **Splitting** (`nodes::split`). A node whose two halves would no longer be alike splits along its widest gene, if its
   cell has room; selection then acts between the halves. Splits, draws and joins keep each gene's mean exactly.
 - **Selection inside a node** (`copy/select.rs`). Members are born and die in proportion whatever their genes, so a
