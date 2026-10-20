@@ -1238,6 +1238,10 @@ Phase E review, round 1 (fixes):
 - Review round 2, finding 13: selection's skips (`select::read`) and `sample_every` 2 stay (decision 4): the samples
   cost 3.5% of a living year at 64 x 64; at every update 6.7%, without the skips 8.3%, both above the 3% at which
   they would go. No code changed.
+- Review round 2, finding 5: a body floats by its own density against its liquid as parts do (`bond::afloat`, no
+  class test); the eaters' founders sweat from 315 K (`EATER_COOL_T`). 64 x 64, 3 seeds, island at 40°: eaters at
+  year 25 24, 24 and 13 members (14, 8 and 2), plants the same; they still die out (48 x 48 by years 26 to 32),
+  starving (`spent`), not by frost (decision 32). Golden re-pinned.
 
 **Owner's decisions after Phase A**
 

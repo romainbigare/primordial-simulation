@@ -33,17 +33,22 @@ pub(super) fn liquid(w: &World, i: usize) -> (f64, f64, f64) {
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
 }
 
-/// Is body `b` (mass `mb`) held up in cell `j`'s liquid by the structure it holds?
+/// Is body `b` (mass `mb`) held up in cell `j`'s liquid: does the liquid that its volume and the structure it holds
+/// displace weigh as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`, nor
+/// holding a structure bonded to the ground.
 pub fn afloat(w: &World, b: &Body, j: usize, mb: f64) -> bool {
-    let Some(p) = held(w, b) else { return false };
-    let s = &w.parts.parts[w.parts.parts[p].root as usize].s;
+    let s = held(w, b).map(|p| w.parts.parts[w.parts.parts[p].root as usize].s);
     let (depth, rho, _) = liquid(w, j);
-    depth >= w.cfg.phys.deep && !s.anchored && rho * s.outer >= s.mass + mb
+    if depth < w.cfg.phys.deep || s.is_some_and(|s| s.anchored) {
+        return false;
+    }
+    let (outer, mass) = s.map_or((0.0, 0.0), |s| (s.outer, s.mass));
+    rho * (b.volume(&w.chem, b.temp(&w.chem)) + outer) >= mb + mass
 }
 
 /// Depth of liquid over a body: none while afloat.
 pub fn depth(w: &World, b: &Body, d: f64) -> f64 {
-    if d > 0.0 && b.hold.is_some() && afloat(w, b, b.cell as usize, b.mass(&w.chem)) { 0.0 } else { d }
+    if d > 0.0 && afloat(w, b, b.cell as usize, b.mass(&w.chem)) { 0.0 } else { d }
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).

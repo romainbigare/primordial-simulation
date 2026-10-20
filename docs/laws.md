@@ -446,6 +446,10 @@ the month.
   its force bears the weight of the part's structure, and lets go when it no longer does (checked each month). Fuel
   adds no force; a hurt body is weaker.
 - **Digging** (`bond::dig`) breaks bonded ground; its work goes with the body's force and time.
+- **Afloat** (`bond::afloat`): a body floats where the liquid is deeper than `deep` and the liquid its volume and the
+  structure it holds displace weighs as much as they do (Archimedes, as for parts, 3.2). Afloat it has no depth of
+  liquid over it (it breathes and catches light at the surface), reaches no ground, and crosses to a neighbour at
+  `afloat` of the cost of walking, with no climb.
 
 ### 3.4 Containment
 
@@ -881,6 +885,7 @@ read a kind.
   mutation (`--spray`).
 - **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`worldgen::life::FIXERS`, `FIX_GENE`;
   `--fixers`).
-- **Founder genes**: some are measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); `HEAT`, `COOL_T`,
-  `CHILD` and `ALLOC` are the same for every kind; `KEEP_T` is off for light-eaters (250 K) and, for eaters, 5 K above
-  their key liquid's melting point (`EATER_KEEP_T`).
+- **Founder genes**: some are measured from the laws (`LIGHT_X`, `LITTER_X`, a real leaf's `GAS`); `HEAT`, `CHILD`
+  and `ALLOC` are the same for every kind; `KEEP_T` and `COOL_T` are off for light-eaters (250 and 320 K) and, for
+  eaters, 5 K above their key liquid's melting point and 5 K below their catalysts' unfolding (`EATER_KEEP_T`,
+  `EATER_COOL_T`).

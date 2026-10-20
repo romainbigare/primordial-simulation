@@ -13,7 +13,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
         return;
     }
     let carried = bond::carry(w, b);
-    let afloat = carried.is_some() && bond::afloat(w, b, j, mb);
+    let afloat = bond::afloat(w, b, j, mb);
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = lanes::resist(w, i, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
