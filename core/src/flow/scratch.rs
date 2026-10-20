@@ -64,9 +64,18 @@ pub(crate) struct FlowView<'a> {
     /// Per ground node: the fusion enthalpy held off a plateau, and the substance on its plateau (or `NONE`)
     latent: &'a [Latent],
     pk: &'a [usize],
+    /// Per ground node: the height of its solid surface, m, and its pore space as a depth of liquid, m
+    z: &'a [f64],
+    pd: &'a [f64],
 }
 
 impl FlowView<'_> {
+    /// Depth of the liquid standing on ground node `i` over what its pores hold, m (`land::stand`), and the height of
+    /// its solid surface, m.
+    #[inline]
+    pub(crate) fn standing(&self, i: usize) -> (f64, f64) {
+        ((self.head[i] - self.pd[i] - self.z[i]).max(0.0), self.z[i])
+    }
     /// Energy to lift a kg from the head of ground node `i` to the mean height of its air node `j`, J/kg.
     #[inline]
     pub(crate) fn lift(&self, i: usize, j: usize, g: f64) -> f64 {
@@ -189,7 +198,7 @@ impl Scratch {
     }
     /// For Law 2, from the last flow step (`flow::ensure` builds it where Flow has not run).
     pub(crate) fn view(&self) -> FlowView<'_> {
-        FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.state.pk }
+        FlowView { tg: &self.state.tg, skin: &self.skin, head: &self.head, ta: &self.ta, zair: &self.zair, latent: &self.latent, pk: &self.state.pk, z: &self.z, pd: &self.pd }
     }
     /// Loose substances that may be liquid between `tmin` and `tmax`, K, or (with `dissolved`) gases dissolved in it.
     pub(super) fn liquids(&self, chem: &Chemistry, (tmin, tmax): (f64, f64), dissolved: bool) -> Vec<usize> {

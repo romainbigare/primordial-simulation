@@ -11,7 +11,7 @@ pub(crate) use gas::{send_gas, GasMove};
 pub use kernel::Reactor;
 pub(crate) use kernel::{denature, frac, pace, scarce};
 
-use crate::{chem::Phase, flow::FlowView, ground::share, store::{apply, Batch, Class, LinkFlux, Node, Transform}, AIR, World};
+use crate::{flow::FlowView, ground::share, store::{apply, Batch, Class, LinkFlux, Node, Transform}, AIR, World};
 
 /// A node sleeps until its reactions would use this share of their inputs (but for those on a `SPECK` of what it
 /// holds) or warm it `CALM_K` kelvin: for so little, one long span is as good as many steps.
@@ -118,27 +118,17 @@ impl Batches {
     }
 }
 
-/// Time the liquid standing over ground node `i` takes to renew its gas through its film, s: depth / `dissolve` (the
-/// air's side is 100 times faster or more, left out). 0: no liquid stands.
-fn film(w: &World, i: usize, amt: &[f64], t: f64) -> f64 {
-    let (chem, mut vol) = (&w.chem, [0.0; 3]);
-    for k in (0..chem.ns()).filter(|&k| amt[k] != 0.0) {
-        let p = chem.phase_in(k, t, |j| amt[j]);
-        vol[p as usize] += if p != Phase::Gas { amt[k] * chem.molar_volume(k, p) } else { 0.0 };
-    }
-    let wet = vol[Phase::Liquid as usize];
-    if wet > w.cfg.phys.porosity * vol[Phase::Solid as usize] { wet / (w.mesh.cells().area()[i] * w.cfg.dissolve) } else { 0.0 }
-}
-
 /// React ground node `i` for `time` s with the gas over it, noting in its row what it changes (laws.md 2.2). The
 /// reactor sees sensible heat: the fusion enthalpy stays apart (`FlowView::fused`). A node gives no more heat than it
 /// holds: each gas it gives is cut by the same share.
 fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: usize, time: f64, row: &mut [f64]) {
     let ns = w.chem.ns();
     let (chem, na) = (&w.chem, w.mesh.level(AIR).n());
-    let (t, j, air_share) = (nodes.tg[i], w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));
+    let (j, air_share) = (w.mesh.up(i, 0, AIR), w.mesh.share(i, AIR));
     h.pool.iter_mut().enumerate().for_each(|(k, p)| *p = w.store.amounts(Class::Air)[k * na + j] * air_share);
-    rc.film = film(w, i, &h.amt, t);
+    // The time the liquid standing over it takes to renew its gas through its film, s: depth / `dissolve` (the air's
+    // side is 100 times faster or more, left out).
+    rc.film = nodes.standing(i).0 / w.cfg.dissolve;
     let cap = |amt: &[f64]| nodes.skin[i] + (0..chem.ns()).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.store.heat(Class::Ground)[i] - fused;

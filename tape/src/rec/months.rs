@@ -65,8 +65,8 @@ impl Recorder {
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
         let mut last = vec![(u32::MAX, 0); w.life.bodies.len()];
         // The surface heights of the last survey (`Life::env`, not saved), or, before the first survey of a resumed world,
-        // as the survey works them out.
-        let z_of = |i: usize| w.life.env.get(i).map_or_else(|| pcore::survey::env_of(w, i)[2], |e| e[2]);
+        // from the amounts (`World::surface_z`).
+        let z_of = |i: usize| w.life.env.get(i).map_or_else(|| w.surface_z(i), |e| e[2]);
         y.months += 1.0;
         for (at, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
             let i = b.cell as usize;

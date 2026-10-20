@@ -1278,3 +1278,6 @@ Phase E review, round 1 (fixes):
   unfolding (`Body::rate_at`, decision 36). Island at 40°, 64 x 64, 3 seeds, year 35: eaters 26, 53, 12 members
   (before 0, 0, 0), births after their first year 90 to 156 (before 3 to 13), light-eaters 10.46 to 10.56 log10 kg
   (10.49 to 10.53); 48 x 48, year 60: 4, 26 and 0 members (seed 3 died out by year 45). Golden re-pinned.
+- One standing depth: the bodies (`survey::env_of`) and Change's film read Flow's (`FlowView::standing`, the liquid
+  over the pores, and Flow's surface height) instead of working it out again from the amounts. 64 x 64, seed 1, years
+  21 to 30: land 287.15 to 287.72 K, rain on land +2%, light-eaters +5% at year 30; golden re-pinned.

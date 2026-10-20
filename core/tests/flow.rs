@@ -253,7 +253,7 @@ fn gas_dissolves_and_comes_out_when_warmed() {
 }
 
 /// The pore space of a cell is the porosity times the volume of its loose solids; the liquid in it does not stand:
-/// what the bodies feel as liquid depth (`env_of`) is only the liquid over it.
+/// what the bodies feel as liquid depth (`env_of`, as Flow's state of the world now has it) is only the liquid over it.
 #[test]
 fn pore_space_is_the_porosity_times_the_loose_solids() {
     let mut w = worldgen::new_world(3, 16, 16);
@@ -261,12 +261,15 @@ fn pore_space_is_the_porosity_times_the_loose_solids() {
     let (pores, area) = (w.cfg.phys.porosity * loose(&w, i), w.mesh.cells().area()[0]);
     // The loose layer of the generated land is 1 m of a mix of loose solids, 0.4 of it pores (random packing: 0.36 to 0.44).
     assert!((pores / area / 0.4 - 1.0).abs() < 0.05, "{} m of pore depth under a metre of loose ground", pores / area);
-    let depth = |w: &World| pcore::survey::env_of(w, i)[1];
-    assert_eq!(depth(&w), 0.0);
+    let depth = |w: &mut World| {
+        pcore::flow::state(w, true);
+        pcore::survey::env_of(w, i)[1]
+    };
+    assert_eq!(depth(&mut w), 0.0);
     pour(&mut w, i, 0.5 * pores);
-    assert_eq!(depth(&w), 0.0, "liquid that fits in the pores does not stand");
+    assert_eq!(depth(&mut w), 0.0, "liquid that fits in the pores does not stand");
     pour(&mut w, i, pores);
-    let stands = depth(&w) * area;
+    let stands = depth(&mut w) * area;
     assert!((stands / (0.5 * pores) - 1.0).abs() < 1e-6, "{stands} m³ stands, {} over the pores", 0.5 * pores);
 }
 
@@ -364,7 +367,8 @@ fn pore_liquid_flows_down_the_liquid_table_at_darcys_rate() {
 /// off (it does not stay in the cell); under deep standing liquid (no slope) it loses none that way.
 #[test]
 fn liquid_drains_inside_a_cell_to_its_channels() {
-    let w0 = worldgen::new_world(3, 16, 16);
+    let mut w0 = worldgen::new_world(3, 16, 16);
+    pcore::flow::state(&mut w0, true);
     let (n, gw, area, p) = (w0.mesh.cells().n(), w0.map.w, w0.mesh.cells().area()[0], w0.cfg.phys);
     let year = w0.days_per_year() as f64 * DAY;
     assert!(p.seep * w0.map.side * 1e-3 * year / (p.porosity * area) < 2e-4);

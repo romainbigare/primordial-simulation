@@ -591,7 +591,7 @@ fn frost_kills_in_proportion_to_activity() {
         s.w.add(b, 1)
     };
     let (wet, dry) = (node(&mut s, 0, 1.0), node(&mut s, 1, 0.5));
-    let a = s.w.life.bodies[dry].activity(&s.w.chem, &s.w.cfg.phys);
+    let (a, wet_gen) = (s.w.life.bodies[dry].activity(&s.w.chem, &s.w.cfg.phys), s.w.life.bodies[wet].gen);
     let books = Books::now(&s.w);
     // The key liquid freezes at the temperature the bodies are at (they are at their cell's, and stay there as their
     // liquid gives up its fusion enthalpy: an edit).
@@ -604,7 +604,8 @@ fn frost_kills_in_proportion_to_activity() {
     }
     pcore::step(&mut s.w);
     let killed = died(&s.w, PHASE);
-    let (cw, cd) = (s.w.life.bodies[wet].alive, s.w.life.bodies[dry].count);
+    // (A body born later may take the dead node's slot.)
+    let (cw, cd) = (s.w.life.bodies[wet].alive && s.w.life.bodies[wet].gen == wet_gen, s.w.life.bodies[dry].count);
     println!("wet node alive {cw}; dry node {cd:.0} of {count} left (activity {a:.4}); died of PHASE {killed:.0}");
     assert!(!cw, "a wet node frozen dies");
     assert!(s.w.life.bodies[dry].alive, "a dry node lives");

@@ -2,7 +2,6 @@
 //! (`survey`), and every day the updates due (`day`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
-use crate::chem::Phase;
 use crate::change::Reactor;
 use crate::life::Life;
 use crate::math::mean_decay;
@@ -15,23 +14,11 @@ use serde::{Deserialize, Serialize};
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
 const LOOSE_SENSE: f32 = 0.2;
 
-/// Temperature (of the last flow step), depth of the standing liquid and surface height of a ground cell (whole phases).
+/// Temperature, depth of the standing liquid and surface height of a ground cell, as Flow's last step left them (once
+/// Flow's working memory is built, `flow::ensure`).
 pub fn env_of(w: &World, i: usize) -> [f64; 3] {
-    let t = w.t_ground_last(i);
-    let (mut z, mut d, mut loose) = (0.0, 0.0, 0.0);
-    for k in 0..w.chem.ns() {
-        z += w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
-        match w.chem.phase_in(k, t, |j| w.g(j, i)) {
-            Phase::Solid => {
-                loose += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid);
-                z += w.g(k, i) * w.chem.molar_volume(k, Phase::Solid);
-            }
-            Phase::Liquid => d += w.g(k, i) * w.chem.molar_volume(k, Phase::Liquid),
-            Phase::Gas => {}
-        }
-    }
-    let area = w.mesh.cells().area()[i];
-    [t, (d - w.cfg.phys.porosity * loose).max(0.0) / area, w.base_z + z / area]
+    let (d, z) = w.scratch.view().standing(i);
+    [w.t_ground_last(i), d, z]
 }
 
 /// Before each physics step: what each cell holds (`sum_cells`); once a month the merge of alike nodes, the traffic
@@ -53,6 +40,8 @@ pub fn survey(w: &mut World) {
         traffic(w);
     }
     if monthly || w.life.env.len() != n || w.life.seen.len() != n * w.chem.ns() {
+        // From Flow's state rebuilt in full, as at a month's start, so a resumed run reads what an unbroken one does.
+        crate::flow::state(w, true);
         w.life.env = (0..n).map(|i| env_of(w, i)).collect();
         let (ns, area) = (w.chem.ns(), w.mesh.cells().area());
         w.life.seen = (0..n * ns).map(|x| LOOSE_SENSE * crate::brain::ln(1.0 + (w.store.amounts(Class::Ground)[(x % ns) * n + x / ns] / area[x / ns]) as f32)).collect();

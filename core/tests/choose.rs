@@ -46,6 +46,9 @@ fn scene(seed: u64) -> World {
         let rich = w.g(RICH, i) + STRIP_MOL * w.mesh.cells().area()[0];
         set_amount(&mut w, Node::ground(i), RICH, rich);
     }
+    // Flow and the survey see the edited ground.
+    pcore::flow::refresh(&mut w);
+    pcore::flow::state(&mut w, true);
     w.life.env.clear();
     pcore::survey::survey(&mut w);
     w

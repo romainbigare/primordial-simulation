@@ -114,7 +114,8 @@ down the cells in one pass (`solve::downhill`), then the liquid under the surfac
 store books every move as link fluxes.
 
 - **Pores first.** The loose ground's pores (`porosity` × its volume) fill first; only the liquid above them stands
-  and has a head (`flow::land::stand`).
+  and has a head (`flow::land::stand`). That standing depth, as Flow's last step left it, is the one the bodies
+  (`survey::env_of`) and Change (2.3) read.
 - **Running off.** Cells are ordered by head, highest first (`downhill::Order`), and one pass moves the liquid: each
   cell sends to every lower neighbour (all 8) at least `split` as steep as the steepest, by slope; under `still` of
   head nothing moves. A head falls no further than to a neighbour still to come, and half way to one already passed,
@@ -329,7 +330,8 @@ p       = (order of the scarce input − 1) · (1 − its share)   for a gas or 
 ### 2.3 What gas a ground node touches
 
 Its own gas plus its cell's share of the air above. **Under standing liquid** it touches only the gas dissolved in
-that liquid, which the liquid's film renews from the air (film time τ = depth / `dissolve`, `change::film`): each gas
+that liquid, which the liquid's film renews from the air (film time τ = depth / `dissolve`, the depth standing over
+the pores as Flow's last step left it, `FlowView::standing`): each gas
 it takes is held at Henry's share × (1 + made·τ/eq) / (1 + used·τ/eq), a film in series with the reactions. So dead
 matter on the sea floor rots only as fast as the film brings the oxidising gas.
 

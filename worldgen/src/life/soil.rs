@@ -8,6 +8,8 @@ use pcore::World;
 /// each cell's temperature: placed at year 0, rain would wash it into the basins before any body. Returns one line.
 pub fn soil(w: &mut World, soil: &[(usize, f64)]) -> String {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area().to_vec());
+    // The standing liquid as Flow's state of the world now has it (`survey::env_of`).
+    pcore::flow::state(w, true);
     let land: Vec<usize> = (0..n).filter(|&i| open_land(w, i)).collect();
     let land_area: f64 = land.iter().map(|&i| area[i]).sum();
     let mut said = Vec::new();
