@@ -2,7 +2,7 @@
 //! heads, and heat conducted sideways (`conduct`).
 
 use super::scratch::{Latent, Scratch, Sp};
-use crate::{solve::spread::Net, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
+use crate::{ground::{melting, Melting}, solve::spread::Net, store::{apply, Class, LinkFlux}, units::{MAX_SUBSTANCES, T_FLOOR}, World};
 
 /// No substance on a melting plateau (`Scratch::pk`).
 pub(super) const NONE: usize = usize::MAX;
@@ -96,9 +96,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         let cp = s.sp[k].cp;
         cap.iter_mut().zip(&w.store.amounts(Class::Ground)[k * n..(k + 1) * n]).for_each(|(c, &a)| *c += a * cp);
     }
-    // Temperature on the melting plateaus (`ground::melting`), each at its point lowered by what is dissolved (laws.md 2.5).
-    let mut ord = [(0.0, 0); MAX_SUBSTANCES];
-    let mix: Vec<Option<Vec<_>>> = s.state.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect();
+    let mix = mixes(w, s);
     for (i, &ci) in cap.iter().enumerate().take(n) {
         let same = (ci - s.cap[i]).abs() <= CAP_SAME * ci;
         s.cap[i] = ci;
@@ -107,12 +105,8 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             s.state.tg[i] = (e - held) / c;
             continue;
         }
-        let (pk, m) = (s.state.pk[i], s.state.vary.len());
-        for ((o, &k), js) in ord.iter_mut().zip(&s.state.vary).zip(&mix) {
-            *o = (js.as_ref().map_or(s.sp[k].melt, |js| w.chem.melt_with(k, |j| w.store.amounts(Class::Ground)[j * n + i], js.iter().copied())), k);
-        }
-        ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
-        let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.store.amounts(Class::Ground)[k * n + i] * s.sp[k].lf)));
+        let pk = s.state.pk[i];
+        let th = thaw_at(w, s, &mix, c, e, |k| w.store.amounts(Class::Ground)[k * n + i]);
         (s.state.pk[i], s.state.phi[i]) = th.on.unwrap_or((NONE, s.state.phi[i]));
         s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, lat: th.lat, molten: th.bits };
         s.state.tg[i] = th.t;
@@ -120,6 +114,26 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             surface(w, s, i);
         }
     }
+}
+
+/// What may share each liquid of the substances that vary and lower its melting point (`Chemistry::mixes`), in their
+/// order.
+pub(super) type Mixes = Vec<Option<Vec<(usize, bool, bool)>>>;
+
+/// `Mixes` of the substances that vary now.
+pub(super) fn mixes(w: &World, s: &Scratch) -> Mixes {
+    s.state.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect()
+}
+
+/// Where a ground node of heat capacity `c`, J/K, energy `e`, J, and amounts `amt(k)`, mol, stands on the melting
+/// plateaus of the substances that vary (`ground::melting`), each at its point lowered by what is dissolved (laws.md 2.5).
+pub(super) fn thaw_at(w: &World, s: &Scratch, mix: &Mixes, c: f64, e: f64, amt: impl Fn(usize) -> f64) -> Melting {
+    let (mut ord, m) = ([(0.0, 0); MAX_SUBSTANCES], s.state.vary.len());
+    for ((o, &k), js) in ord.iter_mut().zip(&s.state.vary).zip(mix) {
+        *o = (js.as_ref().map_or(s.sp[k].melt, |js| w.chem.melt_with(k, &amt, js.iter().copied())), k);
+    }
+    ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
+    melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, amt(k) * s.sp[k].lf)))
 }
 
 /// Heat conducts sideways through the ground's active layer over `dt` seconds: one backward-Euler step of
@@ -155,18 +169,28 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
     apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[], &[]);
 }
 
-/// Solid surface, head, soft cover's heat resistance and reflectance of node `i` from its layers [soft solid, liquid,
-/// loose solid], top down: each covers depth / (depth + `hide`) of what lies below; the pores hold the first liquid.
+/// Solid surface, head, soft cover's heat resistance and reflectance of node `i` from its layers (`layers`); the pores
+/// hold the first liquid.
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
-    let (n, area, t) = (w.mesh.cells().n(), w.mesh.cells().area()[i], s.state.tg[i]);
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
+    let (l, z, rc) = layers(w, s, i, s.state.tg[i], |k| w.store.amounts(Class::Ground)[k * n + i], |k| molten(s, k, i));
+    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, reflectance(w, s, i, &l));
+    s.pd[i] = w.cfg.phys.porosity * (l[0] + l[4]) / area;
+}
+
+/// The layers of ground node `i` at temperature `t` with amounts `amt(k)`, of which the share `molten(k)` is molten:
+/// the volume and volume × reflectance of each of [soft solid, liquid, loose solid] top down, m³; its solid surface, m;
+/// and its soft cover's heat resistance, m² K/W.
+pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64) -> ([f64; 6], f64, f64) {
+    let area = w.mesh.cells().area()[i];
     let mut l = [0.0, 0.0, 0.0, 0.0, s.state.fix[i][0], s.state.fix[i][1]];
     let (mut z, mut rc) = (w.base_z + (s.state.bed[i].vol + s.state.fix[i][0]) / area, 0.0);
     for &k in &s.state.vary {
-        let (p, a) = (&s.sp[k], w.store.amounts(Class::Ground)[k * n + i]);
+        let (p, a) = (&s.sp[k], amt(k));
         if a <= 0.0 || t >= p.boil {
             continue;
         }
-        let liq = molten(s, k, i);
+        let liq = molten(k);
         let vs = a * (1.0 - liq) * p.v[0];
         let o = if t > w.cfg.phys.soft * p.melt { 0 } else { 4 };
         (l[o], l[o + 1]) = (l[o] + vs, l[o + 1] + vs * p.refl[0]);
@@ -176,6 +200,13 @@ pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
             rc += vs / area / p.cond;
         }
     }
+    (l, z, rc)
+}
+
+/// Reflectance of ground node `i` with `layers` `l`: soft solid, liquid and loose solid, top down, each cover depth /
+/// (depth + `hide`) of what lies below, and its bed the rest.
+pub(super) fn reflectance(w: &World, s: &Scratch, i: usize, l: &[f64; 6]) -> f64 {
+    let area = w.mesh.cells().area()[i];
     let (mut a, mut seen) = (0.0, 1.0);
     for c in 0..3 {
         if l[2 * c] > 0.0 {
@@ -185,8 +216,7 @@ pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
             seen *= 1.0 - cover;
         }
     }
-    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, a + seen * s.state.bed[i].refl);
-    s.pd[i] = w.cfg.phys.porosity * (l[0] + l[4]) / area;
+    a + seen * s.state.bed[i].refl
 }
 
 /// Head of the liquid that stands on node `i` over what its pores hold (the solid surface when none does), m.

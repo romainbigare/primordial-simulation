@@ -182,7 +182,10 @@ step stays implicit, and the rounds solve only the exchange with the ground.
 
 - The sun warms each cell by latitude, season and day length (`insolation`, the daily mean; Berger 1978), with the
   declination of a circular orbit, sin δ = sin ε sin λ (`declination`, ε the tilt, λ the sun's longitude); the surface
-  reflects part of it. The test `the_sun_is_right_at_every_latitude` holds the yearly mean at the poles and the
+  reflects part of it, as its cover reflects at the step's end (backward Euler): with the snow that falls and the ice
+  that melts in the step, at the phases its end energy gives (`land::thaw_at`, `land::reflectance`). Each node finds
+  that reflectance in its own balance, each guess followed to the end it gives and halved between two once they cross,
+  so a long step covers and bares the ground as short ones do. The test `the_sun_is_right_at_every_latitude` holds the yearly mean at the poles and the
   equator to the analytic values, the sphere's mean to S/4 at every season, and the south's seasons half a year from
   the north's.
 - Every surface emits σT⁴. The air absorbs 1 − exp(−x) of what the ground emits, x the optical depth summed over the

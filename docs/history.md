@@ -1292,3 +1292,7 @@ Phase E review, round 1 (fixes):
   (about 30 K colder). 64 x 64, seed 1, years 21 to 30: land 287.7 to 286.7 K, ice 5.7 to 7.2% of the area, rivers
   230 to 164; golden re-pinned. The fixer test runs its twins in the dark and the dissolved-solid test runs liquid steps
   alone, as the colder air froze or fed what they compare.
+- The air's step takes the surface's reflectance at the step's end (the snow that falls and the ice that melts in it),
+  found in each ground node's balance, not the one at its start. The long-step test at 40° (32 x 32, 3 seeds): land
+  +0.62 to -0.01 K, summer +0.88 to +0.05 K, rivers +5.3 to +0.1. 64 x 64, seed 1, years 21 to 30: land 286.7 to
+  285.6 K, ice 7.2 to 8.9% of the area, rivers 165 to 105; Flow 17% slower; golden re-pinned.
