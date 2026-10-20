@@ -453,6 +453,11 @@ the golden test.
   30, eaters 4.3 to 2.9 kg/km² of land (placed at year 22).
 - Finding 5: a bite reaches at least one whole member only of an individual body; of a node, what the swept area
   holds: 48 x 48 seed 1, year 30, eaters 2.9 to 2.5 kg/km² of land.
+- Items 6 and 7: upkeep follows the bare rate law (`Body::upkeep_pace`, decision 49); `c_basal` at Kleiber (2e4 to
+  6.3e4), `c_strength` at the resting muscle (7.677e4 to 1.31e4), `c_build` anchored on herbs (decisions 50, 51):
+  48 x 48 seeds 1, 2, 3, year 60, light-eaters 10.49, 10.51, 10.54 to 10.40, 10.46, 10.54 log10 kg, eaters 5.6e3,
+  8.0e4, 4.4e3 to 1.3e3, 2.6e4, 2.9e3 kg/km² of land (year 30: 2.5, 13, 14 to 1.6, 8.2, 9.3), land 287.0, 290.7,
+  289.5 to 287.2, 290.9, 289.7 K; under 0.1% of body-days lay past the unfolding.
 
 **Tried and not kept in the foundation**
 

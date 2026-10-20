@@ -341,8 +341,6 @@ taken on the way in `docs/foundation/decisions.md`.
 
 Open items of review round 3, to settle before L5:
 
-- **Body costs not normalised** (finding 6): `c_basal` is a tuned third of Kleiber's rate; `c_build` keeps a 310 K
-  mammal anchor not converted to `t_cat` (decision 39); upkeep falls past the catalysts' unfolding (decision 36).
 - **Frame rot inside bodies:** reaction 26 runs inside living bodies at its bare rate (handover 13.2, "Inside bodies").
 - **The eaters:** they still get about 99% of their food from the ground and still grow at year 60 (below 5·10⁴
   kg/km²; decision 40).

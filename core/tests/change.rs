@@ -537,8 +537,9 @@ fn dead_matter_on_the_ground_returns_the_minerals_to_the_ground() {
 fn hot_cover_burns() {
     let run = |hot: bool| {
         let mut w = worldgen::new_world(1, 16, 16);
-        // (No growth: building body matter takes the solid too, and this is about the burning.)
-        w.cfg.phys.c_build = 0.0;
+        // (No growth and no basal upkeep: building body matter and keeping it take the solid too, and this is about the
+        // burning.)
+        (w.cfg.phys.c_build, w.cfg.phys.c_basal) = (0.0, 0.0);
         pcore::step(&mut w);
         worldgen::life::seed(&mut w, 0);
         let node = w.life.alive().max_by(|a, b| a.count.total_cmp(&b.count)).expect("a node");

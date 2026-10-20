@@ -172,7 +172,8 @@ made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast a
 - **Product inhibition** (`Body::inhibited`): × 1 / (1 + Σ x / x*), x each product's store, x* its level (not gases or
   the key liquid), on reactions run at the catalyst's pace, not on burnings run on demand.
 - **Heat kills enzymes** (`change::denature`): above `DENATURE` the speed-up falls within a few K (`unfold`); a firmer
-  shape costs upkeep (`t_firm`, `c_firm`). One rule (`Body::rate_at`) for release, upkeep and supply (6.2).
+  shape costs upkeep (`t_firm`, `c_firm`). One rule (`Body::rate_at`) for release and supply; upkeep never falls with
+  heat (6.2).
 - **Burnings** (catalysed, release heat, take a gas) run on demand to pay costs (`body::plan`, `body::pay`). A reaction
   that keeps part of a fuel's energy in its product (`Chemistry::keeps`, fixing) runs at its catalyst's pace. **Fuel**
   (`Body::burns_at`) is a non-gas store a burning takes. Enzymes cost upkeep by their capacity, used or not (6.2).
@@ -373,14 +374,16 @@ body; a full store is satiety. **Supply** (`Body::supply`): living body^`intake_
 tissue = living body × (copy mass / m_ref)^(intake_exp − 1)
 upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH + learning + signal)
                     + c_leaf × leaf area ) + one decision ]
-         × (1 − c_repair + c_repair·2^REPAIR) × activity × pace(T)
+         × (1 − c_repair + c_repair·2^REPAIR) × activity × upkeep pace(T)
 ```
 
 Costs go by the kg while supply goes with mass^0.75 (West, Brown and Enquist 1997), so a body grows until keeping what
 it has takes all it can supply: its costs set its size, not a cap; across kinds adults pay Kleiber's mass^0.75.
 **Capacity**: Σ over catalysts on of 10^gene × k × exp(−Ea / `t_cat`). **Pace** (`Body::pace`): its main burning's
-rate constant as its catalyst runs it at T (`Body::rate_at`, unfolding past `DENATURE`) over that at `t_cat`; upkeep and
-supply follow it, so seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::plan`): burnings run
+rate constant as its catalyst runs it at T (`Body::rate_at`, unfolding past `DENATURE`) over that at `t_cat`; supply
+follows it. **Upkeep pace** (`Body::upkeep_pace`): the bare rate law of that reaction, k e^(−Ea/T), over its value at
+`t_cat`: it never falls past the unfolding, as unfolded proteins are replaced, not saved (Hofmann and Somero 1995).
+Seasons come from temperature, not a calendar. **Paying** (`body::pay`, `body::plan`): burnings run
 as far as the rate law allows with the air breathed; the unpaid share dies (`SPENT`).
 
 ### 6.3 Heat
