@@ -1,7 +1,5 @@
 # Handover: Emergent World, version 2
 
-Revised: 17 October 2026, after the M3 clean-up.
-
 **For:** an AI agent (or engineer) who works on version 2.
 **From:** a design conversation between the project owner and Claude, after a review of version 1, an earlier attempt with the same goal. You do not have version 1. Everything useful from it is written in this document.
 
@@ -12,7 +10,7 @@ The other documents:
 - `docs/laws.md`: how each law works **now**, part by part, with the code that does it.
 - `docs/numbers.md`: every free number, its unit, its source and whether it is physical, anchored or tuned.
 - `docs/tape.md`: what a run records.
-- `docs/history.md`: what changed in M0 to M3, what was tried and not kept, and where old files are in git.
+- `docs/history.md`: what changed, phase by phase, what was tried and not kept, and where old files are in git.
 - `docs/reports/`: the watch reports (Section 12.4).
 - `docs/foundation/plan.md`: the foundation work before M4 (the owner's choice at the M3 check point, 13.1). Its decisions are in its Section 3. Its first rule: the foundation replaces the special code, it is not one more patch. Where it and this document differ, this document wins until it is updated.
 
@@ -446,7 +444,7 @@ Not everything needs the same step. These are suggested defaults to measure and 
 | Individual bodies in detailed areas | 1 day |
 | Snapshots for the history tape | every 10 years (and before every god action) |
 
-As built (`docs/laws.md` 0): the survey, the state of ground and air, Change and the air every 10 days (`phys_days`, `air_hours` 240). The air's step solves radiation, evaporation, rain, gases dissolving and the wind together (backward Euler, by Newton's method with a banded solve of the whole air level) and is booked whole as it is solved, so it divides the physics step. Liquid every 30 days (`flow_days`); bodies every 5 to 360 days (their `INTERVAL` gene; a population node without a brain at least every `node_days`, 36); the loads of parts once a month and their reactions every 6 months. Backward Euler is first order in the step, so a longer step needs a step of second order.
+As built (`docs/laws.md` 0): the survey, the state of ground and air, Change and the air every 10 days (`phys_days`, `air_hours` 240). The air's step solves radiation, evaporation, rain, gases dissolving and the wind together (backward Euler, by Newton's method with a banded solve of the whole air level) and is booked whole as it is solved, so it divides the physics step. Liquid every 30 days (`flow_days`); the loose ground creeps once a year; bodies every 5 to 360 days (their `INTERVAL` gene; a population node without a brain at least every `node_days`, 36); the loads of parts once a month and their reactions every 6 months. Backward Euler is first order in the step, so a longer step needs a step of second order.
 
 There is **one world clock**. Fast processes in detailed areas sub-step inside a month. Seasons must exist, because they matter for food and migration.
 
@@ -883,7 +881,7 @@ How the suite is built:
 - **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). Only a bug fix may change a fingerprint: `GOLDEN=print` prints the new values. Run it again with `--features pcore/threads`, which must give the same fingerprints.
 - **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes, nodes and the island's erosion, and the key-number test (`tape/tests/ranges.rs`: ten numbers of climate, land and life of three 30-year runs, each near its reference of `docs/foundation/plan.md` 6.3). Run them before the last push of a phase (`cargo test --release --workspace -- --ignored --no-fail-fast`); there is no CI on GitHub for now.
 
-That is the core of testing, until something emerges. Reviews of the code and of the laws happen in rounds, by the agent and the owner together (M0 to M3 used several). What stays banned is proof machinery: receipts, proof campaigns, cross-machine determinism, replay proofs.
+That is the core of testing, until something emerges. Reviews of the code and of the laws happen in rounds, by the agent and the owner together. What stays banned is proof machinery: receipts, proof campaigns, cross-machine determinism, replay proofs.
 
 ### 12.4 Watch reports
 
@@ -965,8 +963,8 @@ Use it only to **choose worlds and tune free physics numbers**. Never use it to 
 
 Only items that are still open. Do not build them before M4 starts unless the owner asks.
 
-- **Nodes against individuals.** The check of Section 7.1 is M4's first job. It needs a small test world where the animals stay near 10⁵ members.
-- **Long runs.** Three 300-year runs at 128×128 (seeds 1, 5, 7) are in `docs/reports/foundation-a.md`: life lasts, the seasons hold, the light gene rises only a little (11.30 to about 11.45), fixing does not fall by itself (22% to 58% of plant members at year 300). Open: the carbon gas settles near 300 ppm in seeds 5 and 7, but falls to about 200 ppm in seed 1 (see "Carbon").
+- **Nodes against individuals.** The check of Section 7.1 runs as a slow test (`tape/tests/nodes.rs`). It holds the rules that pass and prints the others, which still fail (`docs/foundation/decisions.md` 25).
+- **Long runs.** The 300-year runs at 128×128 are in `docs/reports/foundation-a.md`. Open: the absorbing gas falls in one seed of three (see "Carbon").
 - **No people-like kind is expected from M4 itself.** Nothing on the island pays for a tool, a shelter or a bigger brain yet, and planning is not built (6.5). The intelligence step is option 2 of the check point (13.1), after M4.
 - **What eaters eat.** Eaters live almost only on dead plant matter, digested in full; nothing stops them before they eat most of the plants' production. A structural plant matter that only a priced catalyst breaks is an option (the owner decides).
 - **Warm blood.** A body whose upkeep rises about 9% a kelvin has no steady warmth with real fur, because no body can raise its conductance (no sweating or blood flow to the skin). `KEEP_T` and `COOL_T` are not selected on the mild island; M4's cold and seasons will test them.
@@ -1009,14 +1007,13 @@ All of these must be true:
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
 
-**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET` (**61** at the end of M3), or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
+**Budget for tuned numbers.** `docs/numbers.md` has one row for every field of `Physics` and `Config` (and for the free constants outside them), with its unit, the fact it is, the real size it is anchored to and a mark: physical, anchored or tuned. A tuned number is one set so a run came out a certain way (a rule in a smaller coat, Section 2, lesson 3), or one with no real size behind it. A test (`core/tests/numbers.rs`) fails when a field has no row, when the tuned rows are more than `TUNED_BUDGET`, or when the second table, "Rules chosen for a run" (things picked for a run that are not numbers, such as the hand-set eater start and the fixing founders), has more than `RULES_BUDGET` (**3**) rows. **The rule: the counts may not grow.** A new number must be physical or anchored, or it replaces a tuned one. When a tuned number is anchored or removed, lower the budget in the test. The M7 world search varies only tuned and anchored numbers, within their anchors, never the physical ones.
 
-**Code size at the end of M3:** `core` is 10,372 lines: 7,508 of code, 2,260 of comments, 604 blank. A comment line
-starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts the code lines of `core/src`, prints them
-per folder (`cargo test --release -p cli --test core_size -- --nocapture`) and fails above its ceiling: 9,000 while
-the foundation is built, 8,000 at its end. Comments are not counted, so do not delete them to
-save lines. The foundation work keeps `core` at or under 8,000 code lines by replacing special code with general
-pieces, not by adding to it (`docs/foundation/plan.md`, "The main rule" and "The line budget").
+**Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
+the code lines of `core/src`, prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`)
+and fails above its ceiling: 9,000 while the foundation is built, 8,000 at its end. Comments are not counted, so do
+not delete them to save lines. The foundation keeps `core` at or under 8,000 code lines by replacing special code with
+general pieces, not by adding to it (`docs/foundation/plan.md`, "The main rule" and "The line budget").
 
 If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
 
