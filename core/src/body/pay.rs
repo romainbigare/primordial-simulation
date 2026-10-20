@@ -1,7 +1,7 @@
 //! Upkeep, and paying a cost by running the body's burnings at the rate Change gives them (laws.md 6.2).
 
 use super::exchange::{breath, conductance_to_ground, cover_of, film};
-use super::{Body, COPY_MASS, DENATURE, REPAIR, STRENGTH};
+use super::{Body, COPY_MASS, REPAIR, STRENGTH};
 use crate::chem::{Chemistry, Phase};
 use crate::ground::Melting;
 use crate::math::mean_decay;
@@ -106,7 +106,7 @@ pub fn plan(w: &World, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>, f64) {
             continue;
         }
         let act = crate::change::pace(rx, lim, |k| have[k], |k| if gas(k) { have[k] * tot / air(k) } else { have[k] });
-        let rate = crate::change::denature(Body::catalyst(b.k.cat[r], dry), t, b.gene(DENATURE), w.cfg.phys.unfold) * rx.arrhenius(t) * act;
+        let rate = b.rate_at(chem, &w.cfg.phys, r, dry, t) * act;
         ext[q] = (lim * crate::change::frac(rate * days * DAY)).min((cost - got) / e);
         got += e * ext[q];
         for &(k, nu) in &rx.inputs {

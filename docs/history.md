@@ -1274,3 +1274,7 @@ Phase E review, round 1 (fixes):
 - The air's step holds a ground node at a melting point it reaches within the step while the fusion enthalpy lasts
   (it passed it at its heat capacity alone), and past a plateau it goes on from the energy left. Long-step test at
   40°: land 0.99 to 0.91 K warmer at 10-day steps than at 6-hour ones; golden re-pinned.
+- Upkeep and supply follow the release's temperature factor, the Arrhenius rise and the fall past the catalysts'
+  unfolding (`Body::rate_at`, decision 36). Island at 40°, 64 x 64, 3 seeds, year 35: eaters 26, 53, 12 members
+  (before 0, 0, 0), births after their first year 90 to 156 (before 3 to 13), light-eaters 10.46 to 10.56 log10 kg
+  (10.49 to 10.53); 48 x 48, year 60: 4, 26 and 0 members (seed 3 died out by year 45). Golden re-pinned.

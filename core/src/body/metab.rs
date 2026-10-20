@@ -1,16 +1,22 @@
 //! The body's chemistry: the pace of its temperature, its catalysts, digestion and the fuel it burns.
 
-use super::{Body, Layout};
+use super::{Body, Layout, DENATURE};
 use crate::chem::{Chemistry, Phase};
 
 impl Body {
-    /// How fast the body's chemistry runs at `t` against `t_cat`: exp(-Ea (1/t - 1/t_cat)), Ea the barrier of its main
-    /// burning (1 for a body that burns nothing).
+    /// How fast the body's chemistry runs at `t`: its main burning's rate constant (`rate_at`, active) over that at
+    /// `t_cat`, so it rises by Arrhenius up to the catalysts' unfolding and falls past it (1 for a body that burns
+    /// nothing). The work its catalysts do for upkeep and supply goes as the energy they release.
     pub fn pace(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
         match self.k.burn.first() {
-            Some(&(r, _)) => (-chem.reactions[r].ea * (1.0 / t.max(1.0) - 1.0 / p.t_cat)).exp(),
+            Some(&(r, _)) => self.rate_at(chem, p, r, 1.0, t.max(1.0)) / self.rate_at(chem, p, r, 1.0, p.t_cat),
             None => 1.0,
         }
+    }
+    /// The rate constant of reaction `r` as the body catalyses it at activity `a` and `t`, 1/s: its catalyst's factor
+    /// (`catalyst`), unfolded past its `DENATURE` gene (`change::denature`), times k exp(-Ea/t).
+    pub(crate) fn rate_at(&self, chem: &Chemistry, p: &crate::Physics, r: usize, a: f64, t: f64) -> f64 {
+        crate::change::denature(Self::catalyst(self.k.cat[r], a), t, self.gene(DENATURE), p.unfold) * chem.reactions[r].arrhenius(t)
     }
     /// End-product inhibition, 0..1: 1 / (1 + Σ x / x*), x the store of each product and x* its level (non-competitive
     /// inhibition with the body's own level as the constant; laws.md 2.4). Gases and key liquids do not count.

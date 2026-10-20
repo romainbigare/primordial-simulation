@@ -2,7 +2,7 @@
 //! and what it keeps, digestion, light and shade, its age, intake, upkeep and leaf by mass, its roots and enzymes.
 //! Damage: `damage.rs`.
 
-use pcore::body::{self, Body, Layout, COPY_MASS, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
+use pcore::body::{self, Body, Layout, COPY_MASS, DENATURE, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::{DAY, DAY_S, T_FLOOR};
 use pcore::{brain, change, World, AIR};
@@ -53,10 +53,12 @@ fn at(w: &World, b: &Body, t: f64) -> Body {
     x
 }
 
-/// The tempo of a body follows the rate law of its reactions: its upkeep at a temperature is its upkeep at `t_cat`
-/// times exp(-Ea (1/T - 1/T_ref)), Ea the barrier of the first reaction it burns with (`Consts::burn`), and what it
-/// can take and build a day (`Body::supply`, by `Body::pace`) goes by the same factor: about 2.5 times for each 10 K at
-/// 290 K. A body that burns nothing pays the same at every temperature.
+/// The tempo of a body follows the rate law of its catalysed reactions: its upkeep at a temperature is its upkeep at
+/// `t_cat` times the rate constant of the first reaction it burns with (`Consts::burn`) there over that at `t_cat`,
+/// exp(-Ea/T) f^s, f its catalyst and s = 1 / (1 + exp((T - DENATURE) / unfold)) the share of its speed-up kept as it
+/// unfolds; what it can take and build a day (`Body::supply`, by `Body::pace`) goes by the same factor. It rises about
+/// 2.5 times for each 10 K at 290 K, and falls past the unfolding as the release of energy does. A body that burns
+/// nothing pays the same at every temperature.
 #[test]
 fn upkeep_and_supply_follow_the_rate_law_of_the_reactions() {
     let mut s = set();
@@ -64,18 +66,21 @@ fn upkeep_and_supply_follow_the_rate_law_of_the_reactions() {
     let (w, p) = (&s.w, s.w.cfg.phys);
     let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
     let up = |x: &Body| pcore::body::upkeep(w, x, days, mass, x.temp(&w.chem));
-    let ea = w.chem.reactions[b.k.burn[0].0].ea;
+    let r = b.k.burn[0].0;
+    let (ea, f, td) = (w.chem.reactions[r].ea, b.k.cat[r], b.gene(DENATURE));
+    let law = |t: f64| (-ea / t).exp() * f.powf(1.0 / (1.0 + ((t - td) / p.unfold).exp()));
     let (b0, u0) = (at(w, &b, p.t_cat), up(&at(w, &b, p.t_cat)));
     assert!(u0 > 0.0);
-    for t in [250.0, 270.0, 280.0, 285.0, 295.0, 300.0, 310.0] {
+    for t in [250.0, 270.0, 280.0, 285.0, 295.0, 300.0, 310.0, td, td + 5.0, td + 15.0] {
         let x = at(w, &b, t);
-        let (want, got, supply) = ((-ea * (1.0 / t - 1.0 / p.t_cat)).exp(), up(&x) / u0, x.supply(&w.chem, &p, x.temp(&w.chem)) / b0.supply(&w.chem, &p, b0.temp(&w.chem)));
+        let (want, got, supply) = (law(t) / law(p.t_cat), up(&x) / u0, x.supply(&w.chem, &p, x.temp(&w.chem)) / b0.supply(&w.chem, &p, b0.temp(&w.chem)));
         println!("{t} K: upkeep x {got:.4}, supply x {supply:.4} (the law: {want:.4})");
         assert!((got / want - 1.0).abs() < 1e-9 && (supply / want - 1.0).abs() < 1e-9, "{t} K: upkeep {got}, supply {supply}, the law {want}");
     }
-    // About 2.5 times per 10 K at 290 K (Ea 7,760 K).
-    let q10 = up(&at(w, &b, p.t_cat + 10.0)) / u0;
+    // About 2.5 times per 10 K at 290 K (Ea 7,760 K), and less past the unfolding than before it.
+    let q10 = up(&at(w, &b, p.t_cat + 10.0)) / up(&at(w, &b, p.t_cat));
     assert!(q10 > 2.0 && q10 < 3.0, "10 K warmer: x {q10}");
+    assert!(up(&at(w, &b, td + 15.0)) < up(&at(w, &b, td - 5.0)), "upkeep does not fall past the unfolding");
     // A body that burns nothing pays the same at every temperature.
     let mut dull = b.clone();
     dull.k.burn.clear();

@@ -343,7 +343,8 @@ matter on the sea floor rots only as fast as the film brings the oxidising gas.
   the level it keeps (gases and the key liquid do not count; a product it keeps no level of stops the enzyme). It acts
   on the reactions a body runs at its catalyst's pace, not on the burnings it runs on demand.
 - **Heat kills enzymes** (`change::denature`): above the `DENATURE` gene the speed-up falls off within a few K
-  (`unfold`). A firmer shape costs more upkeep (`t_firm`, `c_firm`).
+  (`unfold`). A firmer shape costs more upkeep (`t_firm`, `c_firm`). One rule for what a catalyst does when hot
+  (`Body::rate_at`): the burnings release by it, and upkeep and supply follow it (6.2).
 - **Burnings and keepers.** A catalysed reaction that releases heat and takes a gas is a **burning**: the body runs it
   on demand to pay its costs (`body::plan`, `body::pay`), as far as the rate law allows with the air it breathes. A
   reaction that gets less heat out of a fuel than burning it would (`Chemistry::keeps`) keeps the rest in what it
@@ -727,8 +728,11 @@ upkeep = [ days × ( tissue × (c_basal + c_cat·capacity + c_strength·STRENGTH
 - **Catalysts cost by capacity**: the sum over the catalyst genes that are on of 10^gene × k × exp(−Ea / `t_cat`), its
   gases at their share of the starting air to their order.
 - **Repair**: `c_repair` of upkeep at `REPAIR` 0, doubling with each unit of the gene.
-- **Pace** (`Body::pace`): exp(−Ea (1/T − 1/`t_cat`)), Ea the barrier of its main burning. Supply uses the same factor,
-  so the whole tempo of a body follows its temperature; seasons come from this, not from a calendar rule.
+- **Pace** (`Body::pace`): the rate constant of its main burning as the body catalyses it (`Body::rate_at`: its
+  catalyst unfolded past `DENATURE`, 2.4, times k exp(−Ea/T)) at T over that at `t_cat`. It rises by Arrhenius up to
+  the unfolding and falls past it, as the release of energy does: upkeep is the work of the same catalysts. Supply uses
+  the same factor, so the whole tempo of a body follows its temperature; seasons come from this, not from a calendar
+  rule.
 - **Paying** (`body::pay`, `body::plan`): the body runs its burnings one after the other, each as far as the rate law
   allows with the air it breathes. The share of its upkeep over the update left unpaid dies of `SPENT` (a node loses
   that share of its members, an individual dies with that chance). The products take their heat at the body's
