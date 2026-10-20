@@ -102,7 +102,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     for (i, &ci) in cap.iter().enumerate().take(n) {
         let same = (ci - s.cap[i]).abs() <= CAP_SAME * ci;
         s.cap[i] = ci;
-        let (c, e, Latent { held, lo, hi, molten: was }) = (s.cap[i].max(1.0), w.store.heat(Class::Ground)[i], s.latent[i]);
+        let (c, e, Latent { held, lo, hi, molten: was, .. }) = (s.cap[i].max(1.0), w.store.heat(Class::Ground)[i], s.latent[i]);
         if !full && same && e >= lo && e < hi {
             s.state.tg[i] = (e - held) / c;
             continue;
@@ -114,7 +114,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
         let th = crate::ground::melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, w.store.amounts(Class::Ground)[k * n + i] * s.sp[k].lf)));
         (s.state.pk[i], s.state.phi[i]) = th.on.unwrap_or((NONE, s.state.phi[i]));
-        s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, molten: th.bits };
+        s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, lat: th.lat, molten: th.bits };
         s.state.tg[i] = th.t;
         if full || pk != NONE || s.state.pk[i] != NONE || th.bits != was {
             surface(w, s, i);

@@ -27,9 +27,11 @@ pub struct Melting {
     pub on: Option<(usize, f64)>,
     /// Fusion enthalpy held by what is molten (not counting `on`), J
     pub held: f64,
-    /// The energies between which the node stays off a plateau with this `held`, J (`f64::MIN` for `hi` on a plateau)
+    /// The energies between which the node stays off a plateau with this `held`, J (`f64::MIN` for `hi` on a plateau),
+    /// and the fusion enthalpy of the plateaus there, J
     pub lo: f64,
     pub hi: f64,
+    pub lat: [f64; 2],
     /// What is at or over its melting point, a bit per substance
     pub bits: u64,
 }
@@ -48,21 +50,21 @@ impl Melting {
 /// `melts` gives, in melting order, each substance's point there and its fusion enthalpy, J. It stays at a melting point
 /// until that substance has all frozen or melted (laws.md 1.1).
 pub(crate) fn melting(c: f64, e: f64, melts: impl IntoIterator<Item = (f64, usize, f64)>) -> Melting {
-    let (mut held, mut lo, mut hi, mut bits) = (0.0, f64::MIN, f64::MAX, 0u64);
+    let (mut held, mut lo, mut hi, mut bits, mut lats) = (0.0, f64::MIN, f64::MAX, 0u64, [0.0; 2]);
     for (tm, k, lat) in melts {
         let at = c * tm + held;
         if e < at {
-            hi = at;
+            (hi, lats[1]) = (at, lat);
             break;
         }
         bits |= 1 << k;
         if e < at + lat {
-            return Melting { t: tm, on: Some((k, (e - at) / lat)), held, lo, hi: f64::MIN, bits };
+            return Melting { t: tm, on: Some((k, (e - at) / lat)), held, lo, hi: f64::MIN, lat: lats, bits };
         }
         held += lat;
-        lo = at + lat;
+        (lo, lats[0]) = (at + lat, lat);
     }
-    Melting { t: (e - held) / c, on: None, held, lo, hi, bits }
+    Melting { t: (e - held) / c, on: None, held, lo, hi, lat: lats, bits }
 }
 
 /// Heat a node with energy `e` and heat capacity `cap` can give before it falls to `T_FLOOR`, J.

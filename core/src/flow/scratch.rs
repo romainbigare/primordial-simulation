@@ -32,9 +32,11 @@ pub(super) struct Sp {
 pub(super) struct Latent {
     /// Fusion enthalpy held by what is molten, J
     pub(super) held: f64,
-    /// The node keeps `held` while its energy is in [`lo`, `hi`), J (`hi` is `f64::MIN` on a plateau or when stale)
+    /// The node keeps `held` while its energy is in [`lo`, `hi`), J (`hi` is `f64::MIN` on a plateau or when stale), and
+    /// the fusion enthalpy of the plateaus there, J
     pub(super) lo: f64,
     pub(super) hi: f64,
+    pub(super) lat: [f64; 2],
     /// What is at or over its melting point, one bit per substance (`melted`)
     pub(super) molten: u64,
 }
@@ -268,7 +270,7 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
 /// Room for the caches of every ground and air node (`ensure` then builds them).
 pub(super) fn room(w: &World, s: &mut Scratch) {
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
-    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, molten: 0 }; n];
+    s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, lat: [0.0; 2], molten: 0 }; n];
     for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc] {
         *v = vec![0.0; n];
     }

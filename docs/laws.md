@@ -100,7 +100,9 @@ soft cover (solids warm enough to be soft) and standing liquid. `flow::land::sur
   70,000 years, so a yearly step is enough; the implicit step holds for any length.
 - **Melting plateaus** (`ground::melting`). A ground node holds the fusion enthalpy of what is molten in it, so it
   stays at a melting point until that substance has all frozen or melted. Each substance melts at its point in that
-  node, lowered by what is dissolved in it (2.5); the plateaus are passed in the order of those points.
+  node, lowered by what is dissolved in it (2.5); the plateaus are passed in the order of those points. The air's
+  step holds the node at a melting point it is at or reaches within the step for as long as the fusion enthalpy there
+  lasts (`Surface::balance`), and only past it at its heat capacity, so a long step freezes and thaws as short ones do.
 - **Deep store** (`Class::Deep`): the weathered zone of the bed, `bed_depth` deep, with `bed_porosity` of pore space.
   Bodies and Change do not reach it.
 - **Land** (`World::is_land`): a cell whose solid surface is above 0 m. The one rule for soil, founders and the tape.

@@ -74,22 +74,40 @@ pub(super) struct Balance {
 impl Surface {
     /// The balance of ground node `i` over `dt` seconds: σT⁴ out, the air's layers back (`column`), contact heat
     /// (`sensible`) and the gas's heat; solved implicitly about the temperature before the step, the node's heat capacity
-    /// in series with any soft cover. A plateau holds the node only while its fusion enthalpy lasts.
+    /// in series with any soft cover. A melting point the node is at or reaches in the step holds it while the fusion
+    /// enthalpy there lasts, `fusion` on its plateau (`plateau`), so a long step freezes and thaws as short ones do.
     pub(super) fn balance(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, fusion: f64) -> Balance {
         let (adt, f, t) = (area * dt, s.seen[i][2], s.state.tg[i]);
         let ((down, d_down), (emit, d_emit)) = (glow(f, self.tl, &s.lay[i][0]), glow(f, self.tl, &s.lay[i][1]));
         let t3 = SIGMA * t * t * t;
         let num = self.sw + down + 3.0 * t3 * t + sensible * self.tl + self.gain - self.slope * self.t0 + self.g_rain * self.t_rain;
         let den = 4.0 * t3 + sensible + self.g_rain - self.slope;
-        let surface = |r: f64| if r > 0.0 { ((t / r + num) / (1.0 / r + den), 1.0 / (1.0 / r + den)) } else { (t, 0.0) };
+        // The surface's end temperature and response with the node from `tn` behind a resistance `r` (none: held at `tn`).
+        let surface = |tn: f64, r: f64| if r > 0.0 { ((tn / r + num) / (1.0 / r + den), 1.0 / (1.0 / r + den)) } else { (tn, 0.0) };
         let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), sensible * (ts - self.tl));
-        let (plateau, free) = (s.state.pk[i] != NONE, adt / s.cap[i] + s.rc[i]);
-        let (mut ts, mut give) = surface(if plateau { s.rc[i] } else { free });
-        if plateau {
+        // The heat the node gets over the step with the surface at `ts`, J.
+        let net = |ts: f64| {
             let (up, hs) = flux(ts);
-            let net = adt * (self.sw + down - up - hs + self.gain + self.slope * (ts - self.t0) + self.g_rain * (self.t_rain - ts));
-            if net < -s.state.phi[i] * fusion || net > (1.0 - s.state.phi[i]) * fusion {
-                (ts, give) = surface(free);
+            adt * (self.sw + down - up - hs + self.gain + self.slope * (ts - self.t0) + self.g_rain * (self.t_rain - ts))
+        };
+        let (c, free) = (s.cap[i].max(1.0), adt / s.cap[i] + s.rc[i]);
+        let plateau = |tm: f64, (melt, freeze): (f64, f64)| {
+            let at = surface(tm, s.rc[i]);
+            match net(at.0) - c * (tm - t) {
+                q if q < -freeze => surface(t - freeze / c, free),
+                q if q > melt => surface(t + melt / c, free),
+                _ => at,
+            }
+        };
+        let (l, phi) = (s.latent[i], s.state.phi[i]);
+        let (mut ts, mut give) = if s.state.pk[i] != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { surface(t, free) };
+        // Off a plateau, the node's end temperature past the melting point below or above it.
+        let end = t + net(ts) / c;
+        if s.state.pk[i] == NONE && l.hi != f64::MIN {
+            if l.lo > f64::MIN && end < (l.lo - l.held) / c {
+                (ts, give) = plateau((l.lo - l.held) / c, (f64::INFINITY, l.lat[0]));
+            } else if l.hi < f64::MAX && end > (l.hi - l.held) / c {
+                (ts, give) = plateau((l.hi - l.held) / c, (l.lat[1], f64::INFINITY));
             }
         }
         // How far the node follows a change of the air touching it, per K.

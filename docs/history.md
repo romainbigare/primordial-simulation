@@ -1271,3 +1271,6 @@ Phase E review, round 1 (fixes):
   unchanged (golden and threads build equal). 64 x 64 with life, 4 shared cores: Change about 270 to 220 ms a year.
 - Ground with no pores (`porosity` 0) counts as full in the liquid table (`land::filled`): its head may round a hair under its surface, and the table then divided by 0 (a NaN in the liquid test on a fresh island at 40°); no result moves.
 - Clouds absorb heat radiation (`cloud_ir`, decision 34): a 64 x 32 globe without life, year 30, land 221.7 to 284.4 K, ice 0.95 to 0.12, 245 W/m² out, albedo 0.28; the island moves from 31° (tuned) to 40° (anchored), land 289.1 to 289.0 K; climate references and golden set again.
+- The air's step holds a ground node at a melting point it reaches within the step while the fusion enthalpy lasts
+  (it passed it at its heat capacity alone), and past a plateau it goes on from the energy left. Long-step test at
+  40°: land 0.99 to 0.91 K warmer at 10-day steps than at 6-hour ones; golden re-pinned.
