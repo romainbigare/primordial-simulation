@@ -35,20 +35,23 @@ fn part_acts(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k: &Kit, (
         act_as(w, slot, node, c, k, o, rng);
         return ((k.wb)(w, node) - before, (node.cell == cell).then_some(false));
     }
-    let q = nodes::part(&mut w.life, node, x / node.count, x / node.count);
-    let s = w.place(q);
-    let mut m = std::mem::take(&mut w.life.bodies[s]);
+    let mut m = nodes::part(&mut w.life, node, x / node.count, x / node.count);
+    // Only a move or a bond takes a part out of its cell, or makes it hold or go inside: such a part is placed as a body
+    // of its own; the others act under the node's name, out of any slot.
+    let s = if moves || bond { w.place(std::mem::take(&mut m)) } else { slot };
+    if s == slot { w.see(&mut m) } else { m = std::mem::take(&mut w.life.bodies[s]) }
     let before = (k.wb)(w, &m);
-    // (A part that stays acts under the node's name.)
-    act_as(w, if moves || bond { s } else { slot }, &mut m, c, k, o, rng);
+    act_as(w, s, &mut m, c, k, o, rng);
     let gain = (k.wb)(w, &m) - before;
     if m.cell == cell && m.hold.is_none() && m.inside.is_none() {
         let born = ((TO_BODY..TO_PART).contains(&o) && (o - TO_BODY) % VERBS == WATCH).then(|| w.life.born(node).to_vec());
-        w.life.bodies[s] = m.clone();
-        w.life.remove(s);
+        if s != slot {
+            w.life.remove(s, &m);
+        }
         nodes::take_in(w, node, m, born.as_deref(), true);
         return (gain, Some(false));
     }
+    debug_assert_ne!(s, slot, "only a placed part leaves its node");
     m.trace = trace(w, &m, c, k, o, 0.0);
     w.see(&mut m);
     // (Out of its slot, it is no node of its cell for `kin`.)

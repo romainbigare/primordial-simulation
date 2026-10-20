@@ -16,8 +16,7 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
     w.moves.give(&w.chem, Node::ground(i), 0, 0.0, b.e);
     let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
     w.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
-    w.life.bodies[slot] = b;
-    w.life.remove(slot);
+    w.life.remove(slot, &b);
 }
 
 /// Amounts `m` (mol of each substance, at most what it holds) go from body `b`, at the plateau state `th`, to its cell's

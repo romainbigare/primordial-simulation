@@ -117,13 +117,11 @@ impl Life {
         self.bodies[slot] = b;
         slot
     }
-    pub(crate) fn remove(&mut self, slot: usize) {
-        let mut b = std::mem::take(&mut self.bodies[slot]);
+    /// Body `b`, taken out of `slot`, leaves the world: its slot is free, for a body of the next generation.
+    pub(crate) fn remove(&mut self, slot: usize, b: &Body) {
         let cell = b.cell as usize;
-        self.leave(&b);
-        (b.alive, b.store, b.genes, b.spread, b.trace, b.mem, b.rows, b.ms) = (false, Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
-        b.gen += 1;
-        self.bodies[slot] = b;
+        self.leave(b);
+        self.bodies[slot] = Body { gen: b.gen + 1, ..Default::default() };
         self.at[cell].retain(|&s| s as usize != slot);
         self.stir(cell as u32);
         self.free.push(slot as u32);

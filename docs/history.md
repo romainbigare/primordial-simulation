@@ -482,6 +482,10 @@ the golden test.
   with no genes): the bodies' instructions in a year from year 90 (48 x 48 seed 2) -2.2%, `nodes::add` 2.77e9 to
   2.31e9; a rounding of the spreads, so the golden runs are pinned again; years 91 to 100, eaters 1.86e8 to 1.83e8
   kg, light-eaters 5.07e10 to 5.00e10 kg, land 290.61 K both.
+- A node's part that stays in its cell acts out of any slot (`choose::spread`); `Life::remove` takes the body out of
+  its slot, uncloned; perception stops at the bodies it sees: one year from year 90, the bodies' instructions 21.18e9
+  to 20.80e9 (-1.8%), `spread` 4.59e9 to 4.27e9; the golden runs are pinned again (slots and ids); years 91 to 100,
+  eaters 1.83e8 to 1.85e8 kg, light-eaters 5.00e10 to 5.00e10 kg, land 290.61 to 290.63 K.
 
 **Tried and not kept in the foundation**
 

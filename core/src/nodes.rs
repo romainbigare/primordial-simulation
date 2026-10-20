@@ -110,9 +110,9 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
 
 /// The body in slot `s` joins the body in slot `t`, of its lineage (`take_in`), letting go of what it holds.
 pub fn merge(w: &mut World, s: usize, t: usize) {
-    let (mut c, born) = (w.life.bodies[s].clone(), w.life.born(&w.life.bodies[s]).to_vec());
+    let (born, mut c) = (w.life.born(&w.life.bodies[s]).to_vec(), std::mem::take(&mut w.life.bodies[s]));
     let_go(w, &mut c, false);
-    w.life.remove(s);
+    w.life.remove(s, &c);
     let mut o = std::mem::take(&mut w.life.bodies[t]);
     take_in(w, &mut o, c, Some(&born), false);
     w.life.bodies[t] = o;
@@ -198,15 +198,15 @@ pub(crate) fn take_in(w: &mut World, o: &mut Body, mut c: Body, rows: Option<&[f
 }
 
 /// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body
-/// (not placed, `Lot::split`); lineage, genome, brain rows, link and memory as the node's; holding nothing, inside
-/// nothing.
+/// (not placed, `Lot::split`); lineage, genome, genes and their constants, brain rows, link and memory as the node's;
+/// holding nothing, inside nothing.
 pub(crate) fn part(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Body {
     let lot = Lot::split(life, b, f, fa);
-    // (The trace, the constants and the stores are not the part's: set aside, not cloned.)
-    let (trace, k, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.k), std::mem::take(&mut b.store));
+    // (The trace and the stores are not the part's: set aside, not cloned.)
+    let (trace, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.store));
     let draw = crate::survey::Draw { owed: lot.owed, ..Default::default() };
     let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, draw, hold: None, inside: None, ..b.clone() };
-    (b.trace, b.k, b.store) = (trace, k, store);
+    (b.trace, b.store) = (trace, store);
     c
 }
 
