@@ -436,6 +436,7 @@ the golden test.
 - Docs: the plan's finished phases A to K in short; E6, F7, G5 and the speed goals marked open with their numbers; E2,
   E3 dropped; the cost model of round 3; round 3's open items in Phase L.
 - Docs: `decisions.md` without run results (every row and number kept; the runs are in this file and the commits).
+- Docs: handover sentences made true: the golden re-pin rule, the 8,000 lines back with the owner (decision 42).
 
 **Tried and not kept in the foundation**
 

@@ -878,7 +878,7 @@ How the suite is built:
   fields of `store::Store`, which only `store::apply` writes, so the compiler checks it. A test or an edit changes the
   store by moves from the outside node (`World::cross`).
 - **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked from the outside node, the rock of a cell, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
-- **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). Only a bug fix may change a fingerprint: `GOLDEN=print` prints the new values. It runs with threads in the workspace's tests (the `cli` turns them on) and must give the same fingerprints without them: `cargo test --release -p tape --test golden`.
+- **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). A pure clean-up keeps the fingerprints; a change of the laws, or speed work that changes the order of sums, re-pins them in the same commit and says why: `GOLDEN=print` prints the new values. It runs with threads in the workspace's tests (the `cli` turns them on) and must give the same fingerprints without them: `cargo test --release -p tape --test golden`.
 - **Slow tests** are marked `#[ignore]`: a century that keeps its books, the speed benchmark (`speed`), the learning scene over many seeds, long checks of genes, nodes and the island's erosion, and the key-number test (`tape/tests/ranges.rs`: ten numbers of climate, land and life of three 30-year runs, each near its reference of `docs/foundation/plan.md` 6.3). Run them before the last push of a phase (`cargo test --release --workspace -- --ignored --no-fail-fast`); there is no CI on GitHub for now.
 
 That is the core of testing, until something emerges. Reviews of the code and of the laws happen in rounds, by the agent and the owner together. What stays banned is proof machinery: receipts, proof campaigns, cross-machine determinism, replay proofs.
@@ -974,8 +974,8 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **Tuned numbers that matter.** `bump` (tuned) decides whether a body can move; `c_brain` sets most of what an animal pays to think (plants have no brain).
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
-- **Reading the eaters.** Eaters still grow about 0.2 a year at year 60, so report log10 kg at year 60 with the growth rate over years 30 to 60, three seeds at least. Under 2 times is noise.
-- **Core size.** `core` must reach its budget of 8,000 code lines (14.3, counted by `cli/tests/core_size.rs`) by the end of the foundation, mostly by a small store and by deleting the special code the foundation replaces (`docs/foundation/plan.md`, "The line budget").
+- **Reading the eaters.** Eaters still grow at year 60, so report log10 kg at year 60 with the growth rate over years 30 to 60, three seeds at least. Under 2 times is noise.
+- **Core size.** `core` is at its ceiling of 9,000 code lines (14.3, counted by `cli/tests/core_size.rs`); the goal of 8,000 at the end of the foundation is put back to the owner (`docs/foundation/decisions.md` 42).
 
 ---
 
@@ -1011,9 +1011,10 @@ All of these must be true:
 
 **Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
 the code lines of `core/src`, prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`)
-and fails above its ceiling: 9,000 while the foundation is built, 8,000 at its end. Comments are not counted, so do
-not delete them to save lines. The foundation keeps `core` at or under 8,000 code lines by replacing special code with
-general pieces, not by adding to it (`docs/foundation/plan.md`, "The main rule" and "The line budget").
+and fails above its ceiling: 9,000 while the foundation is built, 8,000 at its end (that goal is back with the owner,
+`docs/foundation/decisions.md` 42). Comments are not counted, so do not delete them to save lines. The foundation
+keeps `core` small by replacing special code with general pieces, not by adding to it (`docs/foundation/plan.md`,
+"The main rule" and "The line budget").
 
 If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
 
