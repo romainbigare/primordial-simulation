@@ -435,6 +435,7 @@ the golden test.
 - Docs: `laws.md` says each law once (rule, reason, files), the code's doc comments say how: 925 to 454 lines.
 - Docs: the plan's finished phases A to K in short; E6, F7, G5 and the speed goals marked open with their numbers; E2,
   E3 dropped; the cost model of round 3; round 3's open items in Phase L.
+- Docs: `decisions.md` without run results (every row and number kept; the runs are in this file and the commits).
 
 **Tried and not kept in the foundation**
 
