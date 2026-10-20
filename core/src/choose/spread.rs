@@ -46,7 +46,7 @@ fn part_acts(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k: &Kit, (
         let born = ((TO_BODY..TO_PART).contains(&o) && (o - TO_BODY) % VERBS == WATCH).then(|| w.life.born(node).to_vec());
         w.life.bodies[s] = m.clone();
         w.life.remove(s);
-        nodes::take_in(w, node, m, born.as_deref());
+        nodes::take_in(w, node, m, born.as_deref(), true);
         return (gain, Some(false));
     }
     m.trace = trace(w, &m, c, k, o, 0.0);

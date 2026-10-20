@@ -478,6 +478,10 @@ the golden test.
 - Item 5: past `crowd` nodes a cell merges its most alike bodies whatever they hold (decision 56): 48 x 48 seed 2,
   years 91 to 100, the most bodies in a cell 61-803 to 15-53, bodies 6,641 to 5,950, parts 980 to 112, eaters
   1.85e8 to 1.86e8 kg, light-eaters 5.10e10 to 5.07e10 kg, land 290.63 to 290.61 K; body time -20%.
+- Members of a node that come back after acting (`choose::spread`) keep the node's genes and spreads (`nodes::add`
+  with no genes): the bodies' instructions in a year from year 90 (48 x 48 seed 2) -2.2%, `nodes::add` 2.77e9 to
+  2.31e9; a rounding of the spreads, so the golden runs are pinned again; years 91 to 100, eaters 1.86e8 to 1.83e8
+  kg, light-eaters 5.07e10 to 5.00e10 kg, land 290.61 K both.
 
 **Tried and not kept in the foundation**
 

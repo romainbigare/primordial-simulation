@@ -114,7 +114,7 @@ pub fn merge(w: &mut World, s: usize, t: usize) {
     let_go(w, &mut c, false);
     w.life.remove(s);
     let mut o = std::mem::take(&mut w.life.bodies[t]);
-    take_in(w, &mut o, c, Some(&born));
+    take_in(w, &mut o, c, Some(&born), false);
     w.life.bodies[t] = o;
 }
 
@@ -151,9 +151,9 @@ impl Lot {
 }
 
 /// Members `c` join body `o` (taken out of its slot): amounts add up, genes, sizes and rows become the means by members
-/// and the spreads pool around them (laws.md 4.4); `rows` none: a member coming back with the node's own rows.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[f32], size: (f32, f32), rows: Option<(&[f32], &[f32], f32)>) {
+/// and the spreads pool around them (laws.md 4.4); `rows` none: a member coming back with the node's own rows; `genes`
+/// (and spread) none: members coming back with the node's own, which a mean and a pool by members leave as they are.
+pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: Option<(&[f32], &[f32])>, size: (f32, f32), rows: Option<(&[f32], &[f32], f32)>) {
     let share = c.count / (o.count + c.count);
     (o.last, o.mark, o.rained) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark), o.rained + share * (c.rained - o.rained));
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, share as f32);
@@ -162,8 +162,14 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
     let (size_mean, size_var) = (mo + a * gap, (1.0 - a) * vo + a * size.1 + a * (1.0 - a) * gap * gap);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    let mean = mix(&o.genes, genes);
-    o.spread = (0..o.genes.len()).map(|g| spread_kept(&lay, g, mean[g], pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0))).collect();
+    let mean = genes.map(|(genes, spread)| {
+        let mean = mix(&o.genes, genes);
+        let v = |g| {
+            pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0)
+        };
+        o.spread = (0..o.genes.len()).map(|g| spread_kept(&lay, g, mean[g], v(g))).collect();
+        mean
+    });
     if let Some((rows, own, row_spread)) = rows {
         let born = w.life.born(o);
         let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
@@ -172,7 +178,9 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
         o.rows = mix(&o.rows, own);
         w.life.reborn(o, rows);
     }
-    o.set_genes(mean, &w.chem, &w.cfg.phys);
+    if let Some(mean) = mean {
+        o.set_genes(mean, &w.chem, &w.cfg.phys);
+    }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     (o.e, o.draw.owed) = (o.e + c.e, o.draw.owed + c.owed);
@@ -181,11 +189,12 @@ pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: &[f32], spread: &[
     w.see(o);
 }
 
-/// Members `c` (out of any slot) join body `o`, taken out of its slot (`add`), born with `rows` (none: those of `o`).
-pub(crate) fn take_in(w: &mut World, o: &mut Body, mut c: Body, rows: Option<&[f32]>) {
+/// Members `c` (out of any slot) join body `o`, taken out of its slot (`add`), born with `rows` (none: those of `o`);
+/// `own`: members of `o` itself coming back with its genes and spread.
+pub(crate) fn take_in(w: &mut World, o: &mut Body, mut c: Body, rows: Option<&[f32]>, own: bool) {
     let size = c.size_moments(&w.chem);
     let lot = Lot::of(&mut c);
-    add(w, o, lot, &c.genes, &c.spread, size, rows.map(|r| (r, c.rows.as_slice(), c.row_spread)));
+    add(w, o, lot, (!own).then_some((&c.genes, &c.spread)), size, rows.map(|r| (r, c.rows.as_slice(), c.row_spread)));
 }
 
 /// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body
