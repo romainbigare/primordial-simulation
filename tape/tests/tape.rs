@@ -399,12 +399,12 @@ fn null_run_freezes_the_brain_rows() {
             w.add(b, 1);
         }
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-        let start: Vec<&Vec<f32>> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &g.rows).collect();
+        let start: Vec<&[f32]> = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).map(|g| &*g.rows).collect();
         let (lo, hi): (Vec<f32>, Vec<f32>) = (0..start[0].len()).map(|k| start.iter().fold((f32::MAX, f32::MIN), |m, r| (m.0.min(r[k]), m.1.max(r[k])))).unzip();
         run(&mut w, 24);
         // (Rows of the starting shape only: genes still mutate in a null run, and a lineage whose size genes moved a whole unit
         // has rows of another length, carried over from the starting ones.)
-        let out = |r: &Vec<f32>| r.len() == lo.len() && r.iter().enumerate().any(|(k, &x)| x < lo[k] - 1e-5 || x > hi[k] + 1e-5);
+        let out = |r: &[f32]| r.len() == lo.len() && r.iter().enumerate().any(|(k, &x)| x < lo[k] - 1e-5 || x > hi[k] + 1e-5);
         let new = w.life.genomes.iter().filter(|g| !g.rows.is_empty() && out(&g.rows)).count();
         let moved = w.life.alive().filter(|b| b.rows.as_slice() != w.life.born(b)).count();
         (new, moved, w.counts.updates)

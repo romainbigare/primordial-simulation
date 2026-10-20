@@ -167,7 +167,7 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         w.add(b, 1);
         pcore::survey::survey(&mut w);
         w.time += DAY_S;
-        pcore::survey::day(&mut w);
+        pcore::waves::day(&mut w);
         let all: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l).collect();
         let members: f64 = all.iter().map(|b| b.count).sum();
         assert!((members - n0).abs() < 1e-9 * n0, "case {case}: {members} members of {n0}");

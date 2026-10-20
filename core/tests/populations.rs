@@ -28,8 +28,8 @@ fn pair(w: &mut World, i: usize, gap: f32) -> (usize, Body, usize) {
     for g in lay.cat..lay.min {
         (a.genes[g], b.genes[g]) = (BASE, BASE + gap * STEP);
     }
-    let rows = w.life.born(&b).iter().map(|x| x + 1.0).collect();
-    w.life.genomes[b.genome as usize].rows = rows;
+    let rows: Vec<f32> = w.life.born(&b).iter().map(|x| x + 1.0).collect();
+    w.life.genomes[b.genome as usize].rows = rows.into();
     let sb = w.add(b, 1);
     let (sa, a) = out(w, a);
     (sa, a, sb)

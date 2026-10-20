@@ -30,7 +30,6 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     w.life.relocate(slot, i, j);
     b.cell = j as u32;
     (b.mark, b.rained) = (w.light[j], w.rained[j]);
-    w.counts.crossings.resize(w.mesh.cells().n(), 0.0);
     w.counts.crossings[j] += b.n() as f32;
     let cover = w.life.sum[j][1] / w.mesh.cells().area()[j];
     let broken = wear(w, j, slot, cost * (1.0 - 1.0 / resist));

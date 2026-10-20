@@ -15,7 +15,8 @@ pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, anchor, carry, dig, force, form, moved, release};
 pub(crate) use verbs::{bears, let_go, lever};
 
-use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::free_place, store::{Node, NodeId}, World};
+use crate::life::{free_place, Pool};
+use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, store::{Node, NodeId}, World};
 use serde::{Deserialize, Serialize};
 
 /// Held by no body; the bonded ground (as the other end of a bond).
@@ -90,10 +91,13 @@ pub struct Parts {
     /// By slot (`Class::Part`); a free slot holds a part that is not alive
     pub parts: Vec<Part>,
     /// The free slots, the last freed first
-    free: Vec<u32>,
+    pub(crate) free: Vec<u32>,
     pub bonds: Bonds,
     /// Parts in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
+    /// While a block of cells runs apart from the others of its wave: where its new parts go (`life::Pool`)
+    #[serde(skip)]
+    pub(crate) pool: Option<Pool>,
 }
 
 /// Of a part's walls: their mass, kg, and volume, m³, and by volume their hardness, bond strength (0..1) and heat
@@ -186,7 +190,7 @@ fn members(w: &World, r: usize) -> Vec<usize> {
 
 /// Place part `p` in cell `i`, in the slot freed last (whose generation moved on, so an old id names nothing) or a new one.
 fn add(w: &mut World, mut p: Part, i: usize) -> usize {
-    let x = free_place(&mut w.parts.parts, &mut w.parts.free);
+    let x = free_place(&mut w.parts.parts, &mut w.parts.free, w.parts.pool.as_mut());
     (p.alive, p.root, p.gen, p.cell) = (true, x as u32, w.parts.parts[x].gen, i as u32);
     w.parts.at[i].push(x as u32);
     w.parts.parts[x] = p;
@@ -304,7 +308,7 @@ fn dissolve(w: &mut World, s: usize) {
     w.parts.at[i].retain(|&x| x as usize != s);
     // Its slot is free for a new part, of the next generation.
     w.parts.parts[s].gen = p.gen + 1;
-    w.parts.free.push(s as u32);
+    w.parts.pool.as_mut().map_or(&mut w.parts.free, |p| &mut p.free).push(s as u32);
 }
 
 /// The part body `b` holds.

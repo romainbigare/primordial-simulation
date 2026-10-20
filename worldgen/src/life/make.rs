@@ -79,7 +79,7 @@ fn genes(w: &World, which: usize) -> Option<Vec<f32>> {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, genome: u32, rounds: u32, gmul: f32, id: u64) -> Option<Body> {
     let ((_, rich, liquid, _), kind, mut genes) = (w.chem.life_roles()?, KINDS.get(which)?, genes(w, which)?);
-    let rows = w.life.genomes[genome as usize].rows.clone();
+    let rows = w.life.genomes[genome as usize].rows.to_vec();
     let mut rg = Rng::new(w.seed, w.day(), id, Purpose::Make);
     let (chem, t) = (&w.chem, w.life.env[i][0]);
     let (lay, ns) = (Layout::of(chem), chem.ns());

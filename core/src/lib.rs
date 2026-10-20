@@ -18,6 +18,7 @@ pub mod lineage;
 mod math;
 pub mod nodes;
 pub mod par;
+pub mod waves;
 mod params;
 pub mod rng;
 mod schedule;

@@ -22,6 +22,10 @@ pub struct Moves {
     seen: Vec<f64>,
     /// Heat a ground node could not give (`World::take_from_ground`), J
     short: f64,
+    /// While the bodies' day runs on threads: the nodes of the store whose numbers updates booked moves of, for the
+    /// worlds of the threads (`waves`)
+    #[cfg(feature = "threads")]
+    pub(crate) booked: Option<Vec<Node>>,
 }
 
 impl Moves {
@@ -93,6 +97,11 @@ impl World {
     pub fn book_moves(&mut self) {
         let list = std::mem::take(&mut self.moves.list);
         apply(self, &[], &list, &[]);
+        #[cfg(feature = "threads")]
+        if let Some(b) = &mut self.moves.booked {
+            let stored = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies];
+            b.extend(list.iter().flat_map(|m| [m.from, m.to]).filter(|x| stored.contains(&x.class)));
+        }
         self.counts.clamped_heat += self.moves.short;
         (self.moves.list, self.moves.who) = (list, None);
     }
