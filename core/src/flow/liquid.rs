@@ -5,8 +5,6 @@
 use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, HALF_WAY}, range, year_weight, Scratch};
 use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{apply, Batch, Class, LinkFlux, Move}, units::T_FLOOR, World};
 
-/// A node with no load and less carrying capacity than this does no work on its bed, m³.
-const CARRY_MIN: f64 = 1.0;
 /// Least bond strength wear divides by.
 const STRENGTH_MIN: f64 = 0.05;
 
@@ -196,7 +194,7 @@ fn by_link(crossed: &Crossed, rows: usize, col_of: &[usize], (a, b): (&[u32], &[
 fn load(w: &World, s: &Scratch, i: usize, q: &mut [f64], (rows, sol): (std::ops::Range<usize>, &[usize]), bedwork: f64, out: f64) -> f64 {
     let held: f64 = rows.clone().zip(sol).map(|(r, &k)| q[r] * s.sp[k].v[0]).sum();
     let capv = w.cfg.carry * bedwork * bare_share(w, i);
-    if (held <= 0.0 && capv < CARRY_MIN) || out <= 0.0 {
+    if out <= 0.0 {
         return 0.0;
     }
     if held > capv {
