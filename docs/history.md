@@ -416,6 +416,10 @@ the golden test.
 - The island's start fills its inland basins below 0 m (`terrain::drain`, decision 17): G5's river length -9.0 to
   -7.9 km; land 285.6 to 285.2 K.
 
+**After the round-3 review**
+
+- Finding 4: `load_snapshot` rebuilds each cell's sums (`survey::sums`): a resume after paths exist panicked.
+
 **Tried and not kept in the foundation**
 
 - Nodes keeping their members' wear: eaters' life 7.1 yr against at most 5.8 (branch `nodes-wear-tried`).

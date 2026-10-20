@@ -16,7 +16,8 @@ pub struct Life {
     /// Bodies in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
     /// Per cell, from the last survey: members, then their visible traits summed. The survey's caches are not saved:
-    /// a snapshot is taken at a month's start, where the survey builds them before any law reads them.
+    /// a snapshot is taken at a month's start, where the survey builds them before any law reads them; this one the
+    /// tape reads first, so `tape::load_snapshot` rebuilds it (`survey::sums`).
     #[serde(skip)]
     pub sum: Vec<[f64; 7]>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb

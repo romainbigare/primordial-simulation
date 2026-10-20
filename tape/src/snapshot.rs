@@ -34,7 +34,7 @@ pub fn save_snapshot<P: Serialize>(w: &World, plan: &P, path: impl AsRef<Path>) 
 }
 
 /// Load a snapshot of this format version; caches come back empty and are rebuilt (the mesh from the map, each body's
-/// numbers from its genes).
+/// numbers from its genes, each cell's sums of its bodies that the tape reads before the first survey).
 pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<(World, P)> {
     let mut z = BufReader::with_capacity(BUFFER, GzDecoder::new(std::fs::File::open(path)?));
     let mut head = [0u8; 8];
@@ -50,6 +50,7 @@ pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
     w.mesh = World::mesh_of(&w.map, w.air_scale, &w.cfg);
     w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.prepare(&w.chem, &w.cfg.phys));
+    pcore::survey::sums(&mut w);
     Ok((w, plan))
 }
 

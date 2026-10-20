@@ -44,8 +44,9 @@ fn a_file_without_the_snapshot_header_is_refused() {
     assert!(e.to_string().contains("not a snapshot"), "{e}");
 }
 
-/// Save and load in the middle of the slow cycles of Flow (refresh, work, creep) and with life
-/// about: the resumed run must give the same history as the unbroken one.
+/// Save and load in the middle of the slow cycles of Flow (refresh, work, creep) with life and a cleared lane about:
+/// the tape can read the lanes before the resumed run's first survey, and the resumed run must give the same history
+/// as the unbroken one.
 #[test]
 fn snapshot_round_trip_mid_cycle() {
     let dir = tmp("snap_mid");
@@ -53,11 +54,13 @@ fn snapshot_round_trip_mid_cycle() {
     for w in [&mut a, &mut whole] {
         worldgen::life::seed(w, 0);
         worldgen::life::seed_with(w, 1, &worldgen::life::Seeding::neutral());
+        w.links.cleared[0] = 1.0;
     }
     run(&mut a, 17);
     tape::save_snapshot(&a, &(), dir.join("s.bin.gz")).unwrap();
     let (mut b, ()) = tape::load_snapshot(dir.join("s.bin.gz")).unwrap();
     assert_eq!(fingerprint(&a), fingerprint(&b));
+    assert!(pcore::lanes::eased(&b, 0) >= 1.0, "the lane's ease, from the rebuilt sums");
     run(&mut b, 14);
     run(&mut whole, 31);
     assert_eq!(fingerprint(&b), fingerprint(&whole));

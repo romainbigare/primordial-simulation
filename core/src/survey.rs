@@ -54,18 +54,12 @@ pub fn survey(w: &mut World) {
 fn sum_cells(w: &mut World) {
     let n = w.mesh.cells().n();
     let (mut abs, mut kept) = (vec![0.0; n], vec![0.0; n]);
-    let mut sum = vec![[0.0; 7]; n];
+    sums(w);
     for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-        let (i, m, k) = (b.cell as usize, b.n(), b.keep as f64);
-        sum[i][0] += m;
-        for (x, &v) in sum[i][1..].iter_mut().zip(&b.vis) {
-            *x += v as f64 * m;
-        }
-        let s = light_area(b) * w.life.shade[slot];
-        (abs[i], kept[i]) = (abs[i] + s, kept[i] + s * k);
+        let (i, s) = (b.cell as usize, light_area(b) * w.life.shade[slot]);
+        (abs[i], kept[i]) = (abs[i] + s, kept[i] + s * b.keep as f64);
     }
     let World { life, mesh, canopy, .. } = w;
-    life.sum = sum;
     life.absorb.resize(n, 0.0);
     life.keep.resize(n, 0.0);
     let area = mesh.cells().area();
@@ -74,6 +68,16 @@ fn sum_cells(w: &mut World) {
         canopy[i] = (s / area[i]) as f32;
         life.absorb[i] = if s > 0.0 { (abs[i] / s) as f32 } else { 0.0 };
         life.keep[i] = if abs[i] > 0.0 { (kept[i] / abs[i]) as f32 } else { 0.0 };
+    }
+}
+
+/// Per cell: its members, then their visible traits summed (`Life::sum`).
+pub fn sums(w: &mut World) {
+    w.life.sum = vec![[0.0; 7]; w.mesh.cells().n()];
+    for b in w.life.bodies.iter().filter(|b| b.alive) {
+        let (s, m) = (&mut w.life.sum[b.cell as usize], b.n());
+        s[0] += m;
+        s[1..].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
     }
 }
 
