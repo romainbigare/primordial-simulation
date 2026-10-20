@@ -437,8 +437,8 @@ the golden test.
   E3 dropped; the cost model of round 3; round 3's open items in Phase L.
 - Docs: `decisions.md` without run results (every row and number kept; the runs are in this file and the commits).
 - Docs: handover sentences made true: the golden re-pin rule, the 8,000 lines back with the owner (decision 42).
-
 - The review report of M0 to M3 leaves `docs/reports/` (only watch reports stay there).
+
 **Tried and not kept in the foundation**
 
 - Nodes keeping their members' wear: eaters' life 7.1 yr against at most 5.8 (branch `nodes-wear-tried`).
