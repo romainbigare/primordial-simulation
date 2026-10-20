@@ -2,7 +2,8 @@
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
 //! seeds in the reference runs: the runs of the world after the foundation's law changes of Phases E, F and J, at the
 //! steps of Phase J's end (decision 27); for the climate, the land worn down and the rivers, the runs since clouds absorb
-//! heat radiation and the island lies at 40° (decision 34). The climate and the land worn down are means over years 21 to 30; life is read
+//! heat radiation and the island lies at 40°, with the air starting at its mean height and the air's step taking the
+//! surface's reflectance at its end (decision 34). The climate and the land worn down are means over years 21 to 30; life is read
 //! at year 30, ten years after the eaters came. Each run also keeps its books.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
@@ -36,17 +37,17 @@ const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
 /// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 289.03;
+const T_LAND: f64 = 287.83;
 /// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
-const SWING: f64 = 14.31;
+const SWING: f64 = 13.61;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
-const RAIN_LAND: f64 = 1.769e-3;
+const RAIN_LAND: f64 = 1.714e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
-const ABSORBER_PPM: f64 = 329.1;
+const ABSORBER_PPM: f64 = 339.0;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
-const RIVERS: f64 = 271.2;
+const RIVERS: f64 = 136.1;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.0578;
+const WORN: f64 = 0.0424;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
 const PLANT_KG: f64 = 10.610;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.

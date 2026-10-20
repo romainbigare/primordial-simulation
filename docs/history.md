@@ -1296,3 +1296,6 @@ Phase E review, round 1 (fixes):
   found in each ground node's balance, not the one at its start. The long-step test at 40° (32 x 32, 3 seeds): land
   +0.62 to -0.01 K, summer +0.88 to +0.05 K, rivers +5.3 to +0.1. 64 x 64, seed 1, years 21 to 30: land 286.7 to
   285.6 K, ice 7.2 to 8.9% of the area, rivers 165 to 105; Flow 17% slower; golden re-pinned.
+- The six climate references of the key numbers set again from 3 seeds x 30 years with the air's new start and the
+  reflectance at the step's end: land 289.03 to 287.83 K, swing 14.31 to 13.61 K, rain on land 1.769e-3 to 1.714e-3,
+  the absorber 329.1 to 339.0 ppm, rivers 271.2 to 136.1, land worn down 0.0578 to 0.0424 mm/yr (ranges kept).
