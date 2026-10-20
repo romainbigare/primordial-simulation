@@ -3,8 +3,9 @@
 //! seeds in the reference runs: the runs of the world after the foundation's law changes of Phases E, F and J, at the
 //! steps of Phase J's end (decision 27); for the climate, the land worn down and the rivers, the runs since clouds absorb
 //! heat radiation and the island lies at 40°, with the air starting at its mean height and the air's step taking the
-//! surface's reflectance at its end (decision 34); for the heat-absorbing gas and life, the runs after the body costs
-//! and the light-eaters' walls (decision 53). The climate and the land worn down are means over years 21 to 30; life
+//! surface's reflectance at its end (decision 34); for the heat-absorbing gas and the light-eaters, the runs after the
+//! body costs and the light-eaters' walls (decision 53); for the eaters, the runs after bodies take only what they use
+//! (decision 57). The climate and the land worn down are means over years 21 to 30; life
 //! is read at year 30, ten years after the eaters came. Each run also keeps its books.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
@@ -54,7 +55,7 @@ const WORN: f64 = 0.0424;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
 const PLANT_KG: f64 = 10.38;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
-const EATER_KG: f64 = 4.54;
+const EATER_KG: f64 = 4.86;
 /// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the reference runs.
 const PLANT_LIFE: f64 = 1.81;
 /// The factor either way the light-eaters' life may lie from `PLANT_LIFE`.
@@ -63,7 +64,7 @@ const PLANT_LIFE_RANGE: f64 = 2.0;
 /// make a noisy mean (decision 33).
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
-const EATER_LIFE: f64 = 9.32;
+const EATER_LIFE: f64 = 10.47;
 
 /// How far a number may lie from its reference: by at most so much, or by at most a factor either way.
 #[derive(Clone, Copy)]

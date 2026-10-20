@@ -500,6 +500,10 @@ the golden test.
   strength and catalysts paid on top of Kleiber (about 17% at the eater founder), decision 52 the frame's real worth
   (shading order, bite cost) and the plan names selection's blind spot inside a node.
 - The owner allows 700 more code lines for running the bodies on threads: the core ceiling is 9,700 (decision 42).
+- The key numbers after the intake changes (64 x 64, seeds 1 to 3, year 30) all hold; the eaters' references are set
+  from them (decision 57): eaters 4.54 to 4.86 log10 kg, their life 9.32 to 10.47 yr; land 287.51 K, gas 389.1 ppm,
+  rivers 170.8. The eaters' check fails: at 48 x 48, years 91 to 100, seed 1's eaters still grow (births pass deaths
+  by 12% of births; 2.6e4, 9.1e4, 2.8e4 kg/km² of land; +12%, -1%, -22%).
 
 **Tried and not kept in the foundation**
 
