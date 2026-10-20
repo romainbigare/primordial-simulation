@@ -19,12 +19,12 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
 /// The intake law of bodies, one for the ground and for other bodies: what body `b` can take in its update from what
 /// lies over its cell, `from` mol of each substance in `n` members (the ground: one). Per day per kg-equivalent of its
 /// supply it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to
-/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). A
-/// node's members each work their own area. Returns that, kg, and the share of the `n` members its area holds (at
-/// least one).
+/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). Its key
+/// liquids are drunk, not sought: they do not count in s. A node's members each work their own area. Returns that, kg,
+/// and the share of the `n` members its area holds (at least one).
 fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64, n: f64) -> (f64, f64) {
     let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.interval(w) as f64);
-    let wants = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k));
+    let wants = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k) && b.wet >> k & 1 == 0);
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
     let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, b.temp(&w.chem)));
     (p.take * found / (p.take + found) * days * supply, (p.sweep * supply * days * n / area).clamp(1.0, n) / n)

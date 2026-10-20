@@ -449,6 +449,8 @@ the golden test.
   the frame rots only in the open world (26: `k` / 1e6, `open` 1e6), body matter 5 times faster there (decision 48):
   48 x 48 seed 1, year 30, dead body matter on land 0.75 to 0.37 kg/m², frame 0.024 to 0.065, free sugar 0.009 to
   0.064.
+- Finding 4: a taker's key liquids do not count as food in Holling's search (`feed::intake`): 48 x 48 seed 1, year
+  30, eaters 4.3 to 2.9 kg/km² of land (placed at year 22).
 
 **Tried and not kept in the foundation**
 
