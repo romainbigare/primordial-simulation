@@ -281,7 +281,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let (s, gas) = (&chem.subs[k], chem.phase(k, t) == pcore::chem::Phase::Gas);
             s.hf + if gas { s.lf + s.lv } else { s.cp * t + chem.fused_heat(k, t, |j| b.store[j]) }
         };
-        // (The bare burning gets the burning gas its breath brings, not the open air's.)
+        // (The bare burning, all catalysts off, gets the burning gas its breath brings, not the open air's.)
         let reach = b.k.gas * open_area(&b, chem, &w0.cfg.phys, mass) * days;
         let gas: Vec<f64> = chem.air.iter().enumerate().map(|(k, x)| if k == FIX_GAS || k == OX { x * reach } else { 0.0 }).collect();
         let made = |t: f64| {
@@ -289,7 +289,9 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let mut y = x.clone();
             assert!(moved(&mut w2, (i, 0), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass, x.temp(&w0.chem)), days)));
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, &w0.cfg));
-            rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, None, 0.0, days * DAY);
+            let off = vec![1.0; chem.reactions.len()];
+            let bare = Some((&off[..], x.gene(DENATURE), w0.cfg.phys.unfold));
+            rc.react(chem, &mut y.store, Some(&mut g), &mut (t * 1e18), 1e18, bare, 0.0, days * DAY);
             // (The gas it gives off waits in its cell's bodies' node for the air's step.)
             let n = w0.mesh.cells().n();
             let held = |w: &World, k: usize| w.store.amounts(Class::Air)[k * na + j] + w.store.amounts(Class::Bodies)[k * n + i];
@@ -782,6 +784,10 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     assert!(w.life.shade[sb] > 1.2 * w.life.shade[sa], "the body of more matter is the taller: shade {} against {}", w.life.shade[sb], w.life.shade[sa]);
 }
 
+/// The free solid the ground of the keep test gets each day, kg/m² (it starts with 50 days of it): many times what the
+/// body can take, though it rots in about a week.
+const TOP_UP: f64 = 0.05;
+
 /// What a body carries is bounded by its body, not its whole mass: the keep gene of the liquid is the share of the body
 /// it makes up (so it holds h / (1 - h) of its matter), the keep gene of any other store (not body matter) is kg of it
 /// per kg of body (`Body::size`). So more fuel does not raise the level of the liquid or of another store, and a body
@@ -808,15 +814,17 @@ fn a_body_cannot_store_more_than_keep_times_body() {
     let mut big = b.clone();
     scale(&mut w, &mut big, 4.0);
     assert!((big.level(&w.chem, RICH, big.mass(&w.chem)) * mm_rich / lv_rich - 4.0).abs() < 1e-9);
-    // A long take from ground rich in both: the stores stop at their levels.
+    // A long take from ground rich in both: the stores stop at their levels. (The free solid rots in about a week, so
+    // the ground gets `TOP_UP` of it each day.)
     w.cfg.phys.c_handle = 0.0;
     w.cfg.phys.c_build = 0.0;
-    put_kg_m2(&mut w, RICH, i, 50.0);
+    put_kg_m2(&mut w, RICH, i, 50.0 * TOP_UP);
     put_kg_m2(&mut w, LIQUID, i, 50.0);
     let rich0 = b.store[RICH];
     let s = w.add(b, 1);
     let (mut top_rich, mut top_liq) = (0.0f64, 0.0f64);
     for _ in 0..120 {
+        put_kg_m2(&mut w, RICH, i, TOP_UP);
         pcore::day(&mut w);
         let b = &w.life.bodies[s];
         let mass = b.mass(&w.chem);

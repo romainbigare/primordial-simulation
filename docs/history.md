@@ -429,6 +429,9 @@ the golden test.
   27.8, land 284.5 K both.
 - Finding 3: nodes merge by the root of the structure they are in or hold, and bodies of one member join a node
   (`nodes::Kin`): 48 x 48 seed 2 at year 60, most bodies in a cell 407 to 134, animal bodies 2,428 to 1,905.
+- Finding 1: one intake law for the ground and bodies (`feed::intake`); the free sugar rots 200 times faster in the
+  open world (`Reaction::open`); eater founders bite first again (decision 47): 48 x 48, year 60, free sugar on land
+  2.1 to 0.02 kg/m², eaters 1.6e4, 2.4e5, 1.4e4 to 4.6e3, 2.7e4, 1.6e4 kg/km² of land, land +0.3 to +0.8 K.
 
 **Tried and not kept in the foundation**
 

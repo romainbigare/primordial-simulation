@@ -69,6 +69,9 @@ pub struct Reaction {
     pub ea: f64,
     /// Takes absorbed light instead of heat
     pub light: bool,
+    /// How many times faster it runs in the open world (ground, liquid, air and parts: wherever no body's catalysts run
+    /// it), where decomposers live; 1 for a reaction they do not speed
+    pub open: f64,
     /// The power of each input's share in the rate law; empty: the counts (mass action). A big molecule is not a
     /// meeting of 40 molecules: the rate law keeps the power it was measured at.
     pub ord: Vec<u16>,
@@ -77,7 +80,7 @@ pub struct Reaction {
 impl Reaction {
     /// A conversion (`Chemistry::build`, `builds`): balanced in elements like a reaction, with no rate.
     pub fn conversion(inputs: Vec<(u16, u16)>, outputs: Vec<(u16, u16)>) -> Self {
-        Reaction { inputs, outputs, k: 0.0, ea: 0.0, light: false, ord: Vec::new() }
+        Reaction { inputs, outputs, k: 0.0, ea: 0.0, light: false, open: 1.0, ord: Vec::new() }
     }
 
     /// Its rate constant at `t` K (Arrhenius): k exp(-Ea / T), per second.
@@ -199,6 +202,9 @@ impl Chemistry {
             }
             if rx.ord.len() > rx.inputs.len() {
                 return Err(format!("{name}: more orders than inputs"));
+            }
+            if rx.open.is_nan() || rx.open <= 0.0 {
+                return Err(format!("{name}: its speed in the open world must be above 0"));
             }
             if self.side_elems(&rx.inputs) != self.side_elems(&rx.outputs) {
                 return Err(format!("{name} does not balance"));

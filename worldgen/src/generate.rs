@@ -169,7 +169,7 @@ pub fn generate(seed: u64) -> (Chemistry, Init) {
         let t_start = 340.0 * (top / 340.0f64).powf(r.f64());
         // A reaction not driven by light ignites at `t_start` (`richness::ignition`), warmer the more heat it takes.
         let (k, ea) = if light { (1e-9, 5800.0 * noise(&mut r, 0.1)) } else { (k, t_start * (k / IGNITION_RATE).ln() + dh.max(0.0) / R_GAS) };
-        reactions.push(Reaction { inputs: a, outputs: b, k, ea, light, ord: Vec::new() });
+        reactions.push(Reaction { inputs: a, outputs: b, k, ea, light, open: 1.0, ord: Vec::new() });
     }
     // (No growth in a random chemistry yet: its bodies are their mass, `Chemistry::build`.)
     let chem = Chemistry::new(ne, subs, reactions, None, Vec::new(), &init.air);

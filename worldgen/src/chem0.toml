@@ -401,12 +401,14 @@ k = 1e-6
 ea = 5800
 light = true
 
-# 1: burning the energy-rich solid; in the open also the decay of dead matter, 0.27 a year at 290 K: docs/numbers.md, "reaction 1".
+# 1: burning the energy-rich solid, 0.27 a year at 290 K bare; in the open world the decomposers' rot of the free solid,
+# 200 times faster (about a week): docs/numbers.md, "reaction 1".
 [[r]] # 1
 i = [[5,1],[2,1]]
 o = [[3,1],[0,1]]
 k = 1.72e4
 ea = 7760
+open = 200
 
 [[r]] # 2
 i = [[6,2],[2,3]]

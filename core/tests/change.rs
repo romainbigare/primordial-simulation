@@ -5,7 +5,7 @@ use pcore::change::{self, Reactor};
 use pcore::chem::{Chemistry, Phase};
 use pcore::store::{Class, Node};
 use pcore::units::{DAY, DAY_S, P_REF, R_GAS, T_SURF};
-use worldgen::testkit::{empty_cell, hold_ground, in_all, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{empty_cell, hold_ground, in_all, set_amount, set_heat, BURN, BURNING_GAS, node_totals, open_air, put, rock_outside_matter, start, Books, ABSORBER, AIR_COLUMN, DISSOLVED, FIX_GAS, FRAME, LIQUID, MATTER, MINERAL, OPEN_CAP, OX, RICH, ROCK};
 use pcore::AIR;
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
@@ -31,18 +31,18 @@ fn air_over_m2(chem: &Chemistry, ppm: f64) -> Vec<f64> {
     gas
 }
 
-/// The energy-rich solid burns with the gas far faster when hot (2.5e4 s: long enough for the cold node to burn a
-/// little, short enough for the hot one not to burn out).
+/// The frame burns with the gas far faster when hot (2.5e4 s: long enough for the cold node to burn a little, short
+/// enough for the hot one not to burn out).
 #[test]
 fn hot_reacts_faster() {
     let (chem, _) = worldgen::chemistry0();
     let mut rc = Reactor::new(&chem, &cfg());
     let mut used = |t: f64| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
-        (n[RICH], gas[OX]) = (1000.0, 1e6);
+        (n[FRAME], gas[OX]) = (1000.0, 1e6);
         let mut e = t * HUGE_CAP;
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, None, 0.0, 2.5e4);
-        1000.0 - n[RICH]
+        1000.0 - n[FRAME]
     };
     let (cold, hot) = (used(300.0), used(450.0));
     assert!(cold > 0.0 && hot > 100.0 * cold, "cold {cold}, hot {hot}");
@@ -163,12 +163,12 @@ fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
 }
 
 /// A body's catalyst works below the temperature where it loses its shape, and a few K above it the reaction goes
-/// about as fast as bare (at once, for a catalyst that loses its shape over no width).
+/// about as fast as bare in a body (all catalysts off; at once, for a catalyst that loses its shape over no width).
 #[test]
 fn catalysts_fail_when_hot() {
     let (chem, _) = worldgen::chemistry0();
     let mut rc = Reactor::new(&chem, &cfg());
-    let mut cat = vec![1.0; chem.reactions.len()];
+    let (mut cat, off) = (vec![1.0; chem.reactions.len()], vec![1.0; chem.reactions.len()]);
     cat[1] = 1e6;
     let mut used = |t: f64, c: Option<(&[f64], f64, f64)>| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], vec![0.0; chem.ns()]);
@@ -177,8 +177,8 @@ fn catalysts_fail_when_hot() {
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, HUGE_CAP, c, 0.0, 1.0);
         1e6 - gas[OX]
     };
-    let (cool, cool_bare) = (used(310.0, Some((&cat, 320.0, 3.0))), used(310.0, None));
-    let (hot, hot_bare) = (used(340.0, Some((&cat, 320.0, 3.0))), used(340.0, None));
+    let (cool, cool_bare) = (used(310.0, Some((&cat, 320.0, 3.0))), used(310.0, Some((&off, 320.0, 3.0))));
+    let (hot, hot_bare) = (used(340.0, Some((&cat, 320.0, 3.0))), used(340.0, Some((&off, 320.0, 3.0))));
     assert!(cool > 1e5 * cool_bare && hot < 1.2 * hot_bare, "310 K: {cool:e} vs bare {cool_bare:e}; 340 K: {hot:e} vs bare {hot_bare:e}");
     // With no width it is whole up to its temperature and gone above it.
     let (sharp_cool, sharp_hot) = (used(310.0, Some((&cat, 320.0, 0.0))), used(340.0, Some((&cat, 320.0, 0.0))));
@@ -186,24 +186,30 @@ fn catalysts_fail_when_hot() {
 }
 
 /// Dead matter in the open goes with what there is of it (first order: the same share lost for 1 and 1,000 mol) at
-/// its litter constant, 0.27 a year at 290 K for the energy-rich solid (Olson 1963; `docs/numbers.md`), the burning
-/// gas at its share of the air.
+/// its litter constant, 0.27 a year at 290 K for the frame (Olson 1963; `docs/numbers.md`), the burning gas at its
+/// share of the air; the free energy-rich solid rots `Reaction::open` times faster, by the decomposers of the open
+/// world.
 #[test]
 fn litter_goes_first_order_at_its_constant() {
     let (chem, _) = worldgen::chemistry0();
     let mut rc = Reactor::new(&chem, &cfg());
     let year = 3.156e7;
-    let mut lost = |a: f64| {
+    let mut lost = |k: usize, a: f64, dt: f64| {
         let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
-        n[RICH] = a;
+        n[k] = a;
         let mut e = 290.0 * OPEN_CAP;
-        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, year);
-        1.0 - n[RICH] / a
+        rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, dt);
+        1.0 - n[k] / a
     };
-    let (few, many) = (lost(1.0), lost(1000.0));
+    let (few, many) = (lost(FRAME, 1.0, year), lost(FRAME, 1000.0, year));
     assert!((many - few).abs() < 1e-3 * few, "1 mol lost {few}, 1,000 mol lost {many}");
-    // 0.27 a year, the rest of the bare decay (reactions 4 and 9, far slower) aside.
     assert!((0.235..0.25).contains(&few), "share lost in a year {few} (1 - e^-0.27 = 0.237)");
+    // The free solid in a day, against the frame's rate times the speed-up (the rest of its bare decay, reactions 4
+    // and 9, far slower, aside).
+    let (day, open) = (year / 365.25, chem.reactions[BURN].open);
+    let (k_frame, k_free) = (-(1.0 - few).ln() / year, -(1.0 - lost(RICH, 1.0, day)).ln() / day);
+    let report = format!("the free solid {k_free:e} /s, the frame {k_frame:e} /s x {open}");
+    assert!((k_free / (open * k_frame) - 1.0).abs() < 0.05, "{report}");
 }
 
 /// 1 m² of wet land (0.4 m of liquid in its pores) under the air at 400 ppm, with `rock` mol of the rock; the
@@ -367,7 +373,7 @@ fn a_long_run_settles_to_the_balance() {
     }
 }
 
-/// Under a liquid the dead matter burns with the burning gas dissolved there, which the liquid's film renews
+/// Under a liquid the dead frame burns with the burning gas dissolved there, which the liquid's film renews
 /// (`Reactor::film`): a pile that uses little of what the film can bring burns as in the open air; one that uses the
 /// gas faster than the film brings it, slower by 1 / (1 + used x film / Henry's share), the series law.
 #[test]
@@ -377,7 +383,7 @@ fn under_a_liquid_dead_matter_burns_as_its_film_lets_the_gas_through() {
     let film = depth / 5e-5;
     let burn = |pile: f64, film: f64| {
         let (mut n, mut gas) = column(&chem, depth, 400.0);
-        n[RICH] = pile;
+        n[FRAME] = pile;
         let mut rc = Reactor::new(&chem, &cfg());
         rc.film = film;
         let (mut e, gas0) = (t * OPEN_CAP, gas[OX]);
@@ -386,7 +392,7 @@ fn under_a_liquid_dead_matter_burns_as_its_film_lets_the_gas_through() {
     };
     let air: f64 = column(&chem, depth, 400.0).1.iter().sum();
     let eq = depth * MOL_PER_M3 * chem.henry(OX, t, 0.21 * AIR_COLUMN / air * P_REF);
-    for pile in [10.0, 1e4] {
+    for pile in [1.0, 1e4] {
         let open = burn(pile, 0.0);
         let law = 1.0 / (1.0 + open * film / eq);
         assert!((burn(pile, film) / open / law - 1.0).abs() < 0.05, "{pile} mol: x{} against the law's x{law}", burn(pile, film) / open);

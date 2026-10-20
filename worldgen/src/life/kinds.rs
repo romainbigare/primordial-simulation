@@ -29,11 +29,10 @@ pub struct Kind {
 /// Hand-set brain biases: the fixed actions (`brain::FIXED`), moving, the weight a move gives the depth of standing
 /// liquid where it leads (`choose::WET`), then the verbs toward a body and a part.
 pub(super) type Hand = ([f32; brain::FIXED], f32, f32, [f32; brain::VERBS + brain::OVERBS]);
-/// The eaters' founders take from the ground (2) before they bite a body (0.5): a bite reaches one member of a node
-/// (laws.md 5.3), a plant's stores, about a third of an update's upkeep, while from the ground where litter lies they
-/// take up to their intake ceiling. They keep out of deep standing liquid, as a land animal that sinks does: the weight
-/// -1 on ln(1 + depth / m) makes a move's odds fall as 1 / (1 + depth / m).
-const H_EATER: Hand = ([0.0, -3.0, 2.0, -2.5, -2.0, -2.5, -3.0], -1.0, -1.0, [0.5, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
+/// The eaters' founders bite a body (2) before they take from the ground (0.5): they eat the light-eaters. They keep
+/// out of deep standing liquid, as a land animal that sinks does: the weight -1 on ln(1 + depth / m) makes a move's
+/// odds fall as 1 / (1 + depth / m).
+const H_EATER: Hand = ([0.0, -3.0, 0.5, -2.5, -2.0, -2.5, -3.0], -1.0, -1.0, [2.0, -2.0, -2.0, -1.0, 0.0, -2.0, -2.0, -2.5, -1.0]);
 
 /// `s` with the genes of `d` (gene, value) set.
 const fn with(mut s: [f32; NSCALAR], d: &[(usize, f32)]) -> [f32; NSCALAR] {

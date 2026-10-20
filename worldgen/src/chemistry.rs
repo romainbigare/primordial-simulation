@@ -63,6 +63,8 @@ struct R {
     /// Driven by light (`Reaction::light`); optional in the file (none: not)
     #[serde(default)]
     light: bool,
+    /// How many times faster it runs in the open world (`Reaction::open`); optional in the file (none: 1)
+    open: Option<f64>,
     /// The power of each input's share in the rate law (`Reaction::ord`); optional in the file (none: each its count)
     #[serde(default)]
     ord: Vec<u16>,
@@ -118,7 +120,7 @@ pub fn parse(text: &str) -> Result<(Chemistry, Init), String> {
             rupture: s.rupture * 1e6,
         })
         .collect();
-    let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, ord: r.ord }).collect();
+    let reactions = f.r.into_iter().map(|r| Reaction { inputs: pair(&r.i), outputs: pair(&r.o), k: r.k, ea: r.ea, light: r.light, open: r.open.unwrap_or(1.0), ord: r.ord }).collect();
     let conversion = |b: &B| Reaction::conversion(pair(&b.i), pair(&b.o));
     let chem = Chemistry::new(f.element_masses.len(), subs, reactions, Some(conversion(&f.build)), f.builds.iter().map(conversion).collect(), &f.init.air);
     chem.validate()?;

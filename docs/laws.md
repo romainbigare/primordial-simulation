@@ -338,6 +338,9 @@ p       = (order of the scarce input − 1) · (1 − its share)   for a gas or 
   (`change/gas.rs`).
 - **Parts** react every 6 months at their cell's temperature (`bond::step`); **bodies** at each update with their
   catalysts (2.4); **growth** is a conversion that only bodies run, paid by work (6.6).
+- **Decomposers.** In the open world (ground, liquid, air and parts) a reaction runs `Reaction::open` times faster,
+  a factor of the chemistry's data: the decomposers that live there (reaction 1, the free sugar's rot). A body runs its
+  reactions by its own catalysts only.
 
 ### 2.3 What gas a ground node touches
 
@@ -418,7 +421,9 @@ mass. The roles the laws use:
 Key reactions: 0 light to sugar; 1 burning sugar; 21 rotting or burning body matter (gives back the nitrogen mineral
 and lime); 22 and 23 the lime–salt pair; 24 nitrogen fixing; 25 the nitrogen mineral breaking down when hot (the
 nitrogen goes to the air); 26 rotting of the frame; 27 splitting the frame into sugar (needs an enzyme). Dead matter
-rots at a litter constant (reactions 1, 21, 26: about a quarter a year at 290 K in open air).
+rots at a litter constant (reactions 21, 26: about a quarter a year at 290 K in open air). The free sugar rots faster in
+the open world, where decomposers live (reaction 1 runs `Reaction::open` times faster there; no body runs that
+speed-up).
 
 **Growth conversions** (`Chemistry::build`, `Chemistry::builds`), run only by bodies and paid by work:
 - body matter: 118 sugar + 3 nitrogen mineral + 1 rock salt → 1 matter + 27 liquid (no heat in or out);
@@ -656,12 +661,13 @@ take from or put to a part, join, break bonds, let go, anchor, dig, enter an ins
 action (children come from the brood), and no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** goes by uptake genes (`Body::wanted`, `body/intake.rs`), up to what the body can take in the time (6.7),
-at `c_handle` per kg. From the ground it takes per kg Holling's type II response to what the area it works holds
-(`sweep`): take × s / (take + s) for s found, so thin food takes time to find (Holling 1959). From another body it is also limited by
-its force against the other's. Each member of the taker meets one member of the other, as many as both have, and
-reaches what they hold (a node is found as one body, 5.2, and taken as its members are); a quicker body (shorter
-interval) gets away with the chance its interval gives (of a node's bites, that share). A bite tears the body of each
-member it reaches (6.8).
+at `c_handle` per kg. One intake law serves the ground and other bodies (`feed::intake`): per kg it takes Holling's
+type II response to what the area it works holds (`sweep`): take × s / (take + s) for s found, so thin food takes time
+to find (Holling 1959). The members of another body lie over the cell as the ground's food does (a node is found as one
+body, 5.2, and taken as its members are): the taker reaches the members its area holds in the update (`sweep` × its
+supply × interval × members per m², at least one) and what they hold, and it is also limited by its force against the
+other's. A quicker body (shorter interval) gets away with the chance its interval gives (of a node's bites, that
+share). A bite tears the body of each member it reaches (6.8).
 
 **Giving**, to a body or into a part (`Body::spare`), is of stores only: never body matter, brood or built solids,
 nor a key liquid below its level, and only from stores above `keep_min` times their safe minimum (as a body keeps
@@ -907,9 +913,9 @@ read a kind.
 - **Founders are adults**: a founder's living body is its copy-mass gene; its mass is 30% sugar (60% for the two big
   slow kinds), the rest liquid and matter.
 - **Brains**: animals start with hand-set brain biases (`Seeding::hand`; `--neutral-eaters` for neutral brains),
-  because neutral founders die before they learn: they take from the ground before they bite a body (a bite reaches
-  one member of a node, 5.3) and keep out of deep standing liquid (a move's odds fall as 1 / (1 + depth / m)), as
-  land animals that sink do. Light-eaters start with no brain. Genes and rows get a spray of
+  because neutral founders die before they learn: they bite a body before they take from the ground (they eat the
+  light-eaters, 5.3) and keep out of deep standing liquid (a move's odds fall as 1 / (1 + depth / m)), as land
+  animals that sink do. Light-eaters start with no brain. Genes and rows get a spray of
   mutation (`--spray`).
 - **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`worldgen::life::FIXERS`, `FIX_GENE`;
   `--fixers`).

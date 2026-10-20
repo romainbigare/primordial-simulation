@@ -1,10 +1,10 @@
 //! Law 5 (Choose): one body learns to move to what it can take; each body learns into its own brain; giving; moving; a
 //! body with no brain.
 //!
-//! The learning scene: flat ground, the energy-rich solid lying loose only in a strip on the east side, one body (of
-//! the starting kind that burns that solid and takes it from the ground) just west of the strip, with a neutral
-//! brain. Over its first 200 decisions, with learning on against off, over many seeds. Its children are taken out at
-//! once.
+//! The learning scene: flat ground, the energy-rich solid lying loose only in a strip on the east side (kept at its
+//! amount each day, as it rots in about a week), one body (of the starting kind that burns that solid and takes it from
+//! the ground) just west of the strip, with a neutral brain. Over its first 200 decisions, with learning on against
+//! off, over many seeds. Its children are taken out at once.
 
 use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::rng::{Purpose, Rng};
@@ -80,12 +80,15 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
     let slot = w.add(b, 1);
+    let strip: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| i % W >= STRIP).collect();
+    let strip: Vec<(usize, f64)> = strip.into_iter().map(|i| (i, w.g(RICH, i))).collect();
     let mut log = Vec::new();
     // Day by day, to see each decision.
     while log.len() < DECISIONS && w.life.bodies[slot].alive {
         let (u, from) = (w.counts.updates, w.life.bodies[slot].cell as usize);
         let near: Vec<usize> = w.mesh.cells().around(from).1.iter().map(|&j| j as usize).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
+        strip.iter().for_each(|&(i, a)| set_amount(&mut w, Node::ground(i), RICH, a));
         pcore::day(&mut w);
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene
         // stays one body.

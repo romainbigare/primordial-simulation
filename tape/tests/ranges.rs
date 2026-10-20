@@ -12,7 +12,8 @@
 //! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
 //! The eaters live: at 48 x 48 they still have members at year 60 in seeds 1, 2 and 3, after the booms and busts that
-//! year 30 hides. The ground under dense canopies follows its neighbours from one month to the next.
+//! year 30 hides, and none boom past a few times the densest real plant-eaters. The ground under dense canopies
+//! follows its neighbours from one month to the next.
 //!
 //! A globe of Earth's size without life keeps an Earth-like climate: its land near Earth's, steady, with no runaway ice.
 //!
@@ -295,16 +296,32 @@ fn the_pace_of_nodes_keeps_life() {
 /// The world of the eaters' check: its side, and the year they must still live in.
 const EATER_SIDE: usize = 48;
 const EATER_YEARS: u64 = 60;
+/// The most eaters a km² of land may hold at year 60, kg: large plant-eaters reach 53 to 11,810 kg/km² (Hempson et
+/// al. 2015, `docs/numbers.md`), and this bound lies above them by a few times.
+const EATER_MOST_KG_KM2: f64 = 5e4;
+/// Square metres in a km².
+const KM2: f64 = 1e6;
 
+/// The eaters at year `EATER_YEARS` of a 48 x 48 world of `seed`: their members, and their mass per km² of land, kg.
+fn eaters_at_60(seed: u64) -> (f64, f64) {
+    let (w, rec) = run(seed, EATER_SIDE, EATER_YEARS, false, |_| {}, |_, _, _| {});
+    let land: f64 = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.mesh.cells().area()[i]).sum();
+    (rec.last("root_1_members"), rec.last("root_1_kg") / land * KM2)
+}
+
+/// The eaters live to year 60, after the booms and busts that year 30 hides, in seeds 1, 2 and 3, and none boom past
+/// `EATER_MOST_KG_KM2`.
 #[test]
 #[ignore = "slow: three 60-year runs of a 48 x 48 world"]
 fn the_eaters_live_to_year_60() {
-    let members: Vec<f64> = std::thread::scope(|s| {
-        let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || run(seed, EATER_SIDE, EATER_YEARS, false, |_| {}, |_, _, _| {}).1.last("root_1_members"))).collect();
+    let eaters: Vec<(f64, f64)> = std::thread::scope(|s| {
+        let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || eaters_at_60(seed))).collect();
         runs.into_iter().map(|r| r.join().expect("an eater run")).collect()
     });
-    println!("eater members at year {EATER_YEARS}, seeds {SEEDS:?}: {members:?}");
-    assert!(members.iter().all(|&m| m > 0.0), "the eaters died out by year {EATER_YEARS}: {members:?}");
+    println!("eaters at year {EATER_YEARS}, seeds {SEEDS:?}: (members, kg per km2 of land) {eaters:?}");
+    assert!(eaters.iter().all(|&(m, _)| m > 0.0), "the eaters died out by year {EATER_YEARS}: {eaters:?}");
+    let boomed = eaters.iter().any(|&(_, d)| d > EATER_MOST_KG_KM2);
+    assert!(!boomed, "the eaters boomed past {EATER_MOST_KG_KM2} kg/km2: {eaters:?}");
 }
 
 /// The canopy check: the years before it, the body mass per area over which a cell is a dense canopy, kg/m², how far

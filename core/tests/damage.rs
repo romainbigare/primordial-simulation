@@ -5,7 +5,7 @@ use pcore::rng::{Purpose, Rng};
 use pcore::store::Class;
 use pcore::units::DAY_S;
 use pcore::{bond, brain, choose, World};
-use worldgen::testkit::{node_of, eater, died, hold_ground, kg, moved, only_the_solid, place, scale, start, Books, LIQUID, MATTER, RICH};
+use worldgen::testkit::{node_of, eater, died, hold_ground, kg, moved, place, scale, start, Books, LIQUID, MATTER, RICH};
 
 /// A world with a dry land cell where a bite costs no handling, and the area a taker works does not bind (a node's
 /// members are reached as an individual is).
@@ -124,16 +124,19 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A taker meets one member of a node as it would meet an individual: a big bite kills the member it reaches, so the
-/// count falls by one (the body and the brood by the same share), and the survivors keep their bodies.
+/// The area a taker works in the big-bite test, m² per kg per day: it holds a few of the node's members.
+const SWEEP_FEW: f64 = 50.0;
+
+/// A bite reaches the members the taker's area holds (`choose::take_body`). A taker that takes body matter takes all
+/// that thinly lying members hold and kills them: the count falls by those members (the body and the brood by the
+/// same share), and the survivors keep their bodies.
 #[test]
-fn a_big_bite_kills_the_member_it_reaches() {
+fn a_big_bite_kills_the_members_it_reaches() {
     let (mut w, i) = bite_start();
-    // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg that eats no body matter; most of the members'
-    // matter is brood.
+    w.cfg.phys.sweep = SWEEP_FEW;
+    // Members of 0.3 kg (a body of 0.21 kg) against a taker of 240 kg; most of the members' matter is brood.
     let mut a = resting(&mut w, i, 6.0, 1.0);
     scale(&mut w, &mut a, 8.0);
-    only_the_solid(&w, &mut a);
     let mut m = resting(&mut w, i, 6.0, 0.0);
     scale(&mut w, &mut m, 0.01);
     let mut v = node_of(&mut w, m, 1000.0);
@@ -141,16 +144,16 @@ fn a_big_bite_kills_the_member_it_reaches() {
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
     let b = &w.life.bodies[v];
-    let (n0, mean0, brood0) = (b.n(), b.built(&w.chem) / b.n(), b.brood);
+    let (n0, mean0, brood0, held0) = (b.n(), b.built(&w.chem) / b.n(), b.brood, b.mass(&w.chem) / b.n());
     let before = seen(&w, v);
     w.events.clear();
     bite(&mut w, a, v);
     let got: f64 = w.events.iter().map(|e| if let pcore::event::EventKind::Took { .. } = e.kind { e.value } else { 0.0 }).sum();
     let (b, after) = (&w.life.bodies[v], seen(&w, v));
-    let (mean1, share) = (b.built(&w.chem) / b.n(), 1.0 - after.built / before.built);
-    println!("{n0} members of {mean0:.4} kg: {:.1} members left of {mean1:.4} kg ({:.2}% of the body torn by a bite of {got:.4} kg)", b.n(), 100.0 * share);
-    assert!((n0 - b.n() - 1.0).abs() < 1e-9 && (share - 1.0 / n0).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
-    assert!(got > 0.0 && got <= mean0, "a bite of {got} kg from members of {mean0} kg");
+    let (mean1, share, killed) = (b.built(&w.chem) / b.n(), 1.0 - after.built / before.built, n0 - b.n());
+    println!("{n0} members of {mean0:.4} kg: {:.2} members left of {mean1:.4} kg ({:.2}% of the body torn by a bite of {got:.4} kg)", b.n(), 100.0 * share);
+    assert!(killed > 1.0 && killed < n0 && (share - killed / n0).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
+    assert!(got > 0.0 && got <= killed * held0 * (1.0 + 1e-9), "a bite of {got} kg from {killed} members of {held0} kg");
     assert!((mean1 / mean0 - 1.0).abs() < 1e-9, "survivors changed: {mean0} -> {mean1} kg");
     assert!((b.brood / brood0 - b.n() / n0).abs() < 1e-9, "brood {} of {brood0}, count {} of {n0}", b.brood, b.n());
     books.assert_kept(&w, 1e-9);

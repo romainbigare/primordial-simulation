@@ -2,7 +2,7 @@
 //! another body (`give`), each by the intake law of bodies (`Body::wanted`).
 
 use crate::body::{self, light_cat, Body, STRENGTH, TAKEN};
-use crate::chem::Phase;
+use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
 use crate::{bond, lanes, World};
@@ -16,35 +16,42 @@ fn burnable(w: &World, b: &Body, m: &[f64]) -> f64 {
     m.iter().enumerate().filter(|&(k, _)| b.burns_at(&w.chem, k, t)).map(|(k, a)| a * w.chem.subs[k].molar_mass).sum()
 }
 
-/// Take loose solids and liquids from the cell's ground, no more than its stores have room for. Per day per kg of its
-/// mass it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to `take`:
-/// take s / (take + s), so the thinner what it takes lies, the more of its time goes to finding it (Holling 1959). A
-/// node's members each work their own area.
+/// The intake law of bodies, one for the ground and for other bodies: what body `b` can take in its update from what
+/// lies over its cell, `from` mol of each substance in `n` members (the ground: one). Per day per kg-equivalent of its
+/// supply it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to
+/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). A
+/// node's members each work their own area. Returns that, kg, and the share of the `n` members its area holds (at
+/// least one).
+fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64, n: f64) -> (f64, f64) {
+    let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.interval(w) as f64);
+    let wants = b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k));
+    let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
+    let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, b.temp(&w.chem)));
+    (p.take * found / (p.take + found) * days * supply, (p.sweep * supply * days * n / area).clamp(1.0, n) / n)
+}
+
+/// Take loose solids and liquids from the cell's ground by the intake law (`intake`), no more than its stores have room
+/// for.
 pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let i = b.cell as usize;
     let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
-    let (mass, take) = (b.mass(&w.chem), w.cfg.phys.take);
-    let found = w.cfg.phys.sweep * b.k.upt.iter().filter(|&&(k, _)| b.can_take(&w.chem, k)).map(|&(k, _)| free(k).max(0.0) * w.chem.subs[k].molar_mass).sum::<f64>() / w.mesh.cells().area()[i];
-    let m = b.wanted(&w.chem, b.paces(w), free, take * found / (take + found) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mass);
+    let mut m = b.wanted(&w.chem, b.paces(w), free, intake(w, b, free, 1.0).0, b.mass(&w.chem));
     if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
     let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
     w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
-    let mut matter = 0.0;
-    for (k, &a) in m.iter().enumerate() {
+    for (k, a) in m.iter_mut().enumerate() {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let cp = w.chem.subs[k].cp;
-        let want = a * (cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i)));
-        let (a, took) = w.take_from_ground(i, (k, a, cp), want, w.heat_cap_ground(i));
-        b.store[k] += a;
+        let want = *a * (cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i)));
+        let took;
+        (*a, took) = w.take_from_ground(i, (k, *a, cp), want, w.heat_cap_ground(i));
+        b.store[k] += *a;
         b.e += took;
-        if Some(k) == w.chem.matter() {
-            matter = a;
-        }
     }
-    b.digest(&w.chem, matter, &mut w.counts.rounded[0]);
+    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
 }
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
@@ -59,27 +66,30 @@ pub(super) fn put(w: &mut World, b: &mut Body) {
     body::to_ground(w, b, &th, &m);
 }
 
-/// Move amounts `m` (mol) from `from` to `to`, with their heat and their share of `from`'s brood.
-fn transfer(w: &World, from: &mut Body, to: &mut Body, m: &[f64]) {
-    let q = from.heat_with(&w.chem, &from.thermal(&w.chem), m);
-    from.lose(&w.chem, m);
+/// Move amounts `m` (mol) from `from` to `to`, with their heat and their share of `from`'s brood; `to` digests the body
+/// matter among them (`Body::digest`, its rounding counted in `rounded`).
+fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body, m: &[f64]) {
+    let q = from.heat_with(chem, &from.thermal(chem), m);
+    from.lose(chem, m);
     for (k, &a) in m.iter().enumerate() {
         to.store[k] += a;
     }
     from.e -= q;
     to.e += q;
+    to.digest(chem, chem.matter().map_or(0.0, |k| m[k]), rounded);
 }
 
-/// Take from another body in the cell by uptake selectivity, as far as its supply, its stores' room and its force
-/// against the other's allow. Each of its members meets one member of the other, as many as both have: it reaches what
-/// they hold, and a quicker body gets away with chance 1 - its interval / the taker's (the taker has paid; of a node's
-/// bites, that share). The bite tears each member it reaches (`body::wound`; laws.md 6.8).
+/// Take from another body in the cell by uptake selectivity, by the intake law (`intake`: its members spread over the
+/// cell, a node is found as the ground is), as far as its stores' room and its force against the other's allow. It
+/// reaches what the members its area holds hold, and a quicker body gets away with chance 1 - its interval / the
+/// taker's (the taker has paid; of a node's bites, that share). The bite tears each member it reaches (`body::wound`;
+/// laws.md 6.8).
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
-    let reached = b.n().min(o.n()) / o.n();
-    let m = b.wanted(&w.chem, b.paces(w), |k| reached * o.store[k], w.cfg.phys.take * fb / (fb + fo + 1e-30) * b.interval(w) as f64 * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)), mb);
+    let (kg, reached) = intake(w, b, |k| o.store[k], o.n());
+    let m = b.wanted(&w.chem, b.paces(w), |k| reached * o.store[k], kg * fb / (fb + fo + 1e-30), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
     let away = (1.0 - o.interval(w) as f64 / b.interval(w) as f64).max(0.0);
     let hit = reached * if b.n() > 1.0 { 1.0 - away } else { (rng.f64() >= away) as u8 as f64 };
@@ -98,8 +108,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let torn = if body::torn_to_death(&w.cfg.phys, f) { hit } else { f * hit };
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
     let got = w.chem.mass_of(&m);
-    transfer(w, &mut o, b, &m);
-    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
+    transfer(&w.chem, &mut w.counts.rounded[0], &mut o, b, &m);
     let ev = EventKind::Took { by: b.id(slot), from: o.id(s), burn: burnable(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
     w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
     if body::wound(w, s, o, (hit, f), &rest, TAKEN) {
@@ -109,7 +118,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
 
 /// Give to another body in the cell what it can spare (`Body::spare`, laws.md 5.3), up to what the
 /// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
-/// both have, as in `take_body`). The other remembers the giver.
+/// both have). The other remembers the giver.
 pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     let chem = &w.chem;
     let (size, mass) = (b.size(chem), b.mass(chem));
@@ -127,8 +136,7 @@ pub(super) fn give(w: &mut World, slot: usize, b: &mut Body, s: usize) {
     // Paying may have used some of what was to be put.
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
     let mut o = std::mem::take(&mut w.life.bodies[s]);
-    transfer(w, b, &mut o, &m);
-    o.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
+    transfer(&w.chem, &mut w.counts.rounded[0], b, &mut o, &m);
     o.note(b.id(slot), (NOTE_SCALE * got / mo) as f32);
     w.see(&mut o);
     w.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id(slot), to: o.id(s) }, node: b.cell, value: got });

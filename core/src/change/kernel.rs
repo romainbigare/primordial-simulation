@@ -315,7 +315,7 @@ impl Reactor {
             if self.needs[r] & !self.held != 0 {
                 continue;
             }
-            let cr = cat.map_or(1.0, |(c, td, wk)| denature(c[r], t, td, wk));
+            let cr = cat.map_or(rx.open, |(c, td, wk)| denature(c[r], t, td, wk));
             if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (self.lit[r] && light <= 0.0) {
                 continue;
             }
