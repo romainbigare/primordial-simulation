@@ -64,6 +64,9 @@ pub struct Reactor {
     /// Time, s, the liquid standing over the node takes to renew its gas through its film; 0: the node touches the gas
     /// around it. Its gas is then held where film and reactions balance (laws.md 2.3).
     pub film: f64,
+    /// How moist the node is, 0 to 1 (`FlowView::moist`): the decomposers' catalysts of the open world work so far
+    /// (`Reaction::open`); 0 until its caller sets it.
+    pub moist: f64,
     /// Per substance, used and made, mol/s (scratch for `film`).
     flux: Vec<[f64; 2]>,
     /// Over the last `react`: how far each reaction went and those that went; per substance, what they made less what
@@ -315,7 +318,7 @@ impl Reactor {
             if self.needs[r] & !self.held != 0 {
                 continue;
             }
-            let cr = cat.map_or(rx.open, |(c, td, wk)| denature(c[r], t, td, wk));
+            let cr = cat.map_or(crate::body::Body::catalyst(rx.open, self.moist), |(c, td, wk)| denature(c[r], t, td, wk));
             if cr <= 0.0 || (t < self.thr[r] && cr <= 1.0) || (self.lit[r] && light <= 0.0) {
                 continue;
             }

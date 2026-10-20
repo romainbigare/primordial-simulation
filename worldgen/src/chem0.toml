@@ -524,13 +524,15 @@ o = [[16,2]]
 k = 0.1
 ea = 8000
 
-# 21: burning body matter, orders 1 and 6 (`ord`): docs/numbers.md, "reaction 21".
+# 21: burning body matter, orders 1 and 6 (`ord`); in the open world the decomposers rot it 5 times faster:
+# docs/numbers.md, "reaction 21".
 [[r]] # 21
 i = [[22,1],[2,118]]
 o = [[3,119],[0,92],[24,3],[10,1]]
 ord = [1,6]
 k = 2.28e9
 ea = 9000
+open = 5
 
 # 22 and 23: the liquid's store of the gas of 22, both ways, at balance with the air (`pcore::change::Reactor::balance`):
 # docs/numbers.md, "reaction 22" and "reaction 23".
@@ -563,13 +565,15 @@ o = [[1,2],[0,4],[2,1]]
 k = 2.6e9
 ea = 20000
 
-# 26: the frame rots, as reaction 1: docs/numbers.md, "reaction 26".
+# 26: the frame rots, by the decomposers of the open world only (a million times faster there, as reaction 1 bare):
+# docs/numbers.md, "reaction 26".
 [[r]] # 26
 i = [[25,1],[2,6]]
 o = [[3,6],[0,5]]
 ord = [1,1]
-k = 1.72e4
+k = 1.72e-2
 ea = 7760
+open = 1e6
 
 # 27: an enzyme splits the frame into the energy-rich solid; nothing without a catalyst: docs/numbers.md, "reaction 27".
 [[r]] # 27

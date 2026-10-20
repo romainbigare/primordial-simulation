@@ -52,6 +52,8 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     pool0.iter_mut().enumerate().for_each(|(k, p0)| *p0 = w.store.amounts(Class::Air)[k * na + j] * air_share);
     pool.copy_from_slice(pool0);
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
+    // It lies on its cell's ground, as moist as that.
+    rc.moist = w.scratch.view().moist(i, w.cfg.phys.field);
     rc.react(chem, &mut p.wall, Some(pool), &mut p.e, fixed, None, 0.0, dt);
     let gas = GasMove::of(chem, pool, pool0, ta);
     let c = p.heat_cap(chem);

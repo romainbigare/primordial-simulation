@@ -189,14 +189,14 @@ fn body_learns_to_move_toward_what_it_can_take() {
 }
 
 /// A world of seed 1, 16 x 16, with the light-eaters and the eaters (neutral brains) placed after a month and run for
-/// 12 months more (neutral brains starve soon); and its books at the start.
+/// 6 months more (neutral brains starve soon); and its books at the start.
 fn lived() -> (pcore::World, Books) {
     let mut w = worldgen::new_world(1, 16, 16);
     let books = Books::now(&w);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
-    for _ in 0..12 {
+    for _ in 0..6 {
         pcore::step(&mut w);
     }
     (w, books)

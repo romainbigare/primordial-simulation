@@ -136,11 +136,13 @@ fn gas_a_ground_node_exchanges_with_the_air_crosses_the_air_s_height() {
 
 /// A ground node reacts at its temperature: one half frozen, on the melting plateau of its liquid, burns the energy-rich
 /// solid as fast as the same node all frozen a millionth of a kelvin below (the fusion enthalpy its liquid holds is no
-/// heat the reactor sees). The burning is the world's only reaction, and the rock holds the node's heat and its liquid.
+/// heat the reactor sees). The burning is the world's only reaction, bare (the decomposers' factor, which goes with the
+/// liquid, aside), and the rock holds the node's heat and its liquid.
 #[test]
 fn a_node_on_its_melting_plateau_reacts_at_its_melting_point() {
     let (mut chem, init) = worldgen::chemistry0();
     chem.reactions = vec![chem.reactions[BURN].clone()];
+    chem.reactions[0].open = 1.0;
     let base = worldgen::terrain::build(1, worldgen::terrain::island(16, 16), chem, &init, pcore::Config::default());
     let (n, i, liquid) = (base.mesh.cells().n(), 17, 2000.0);
     let burned = |half: bool| {
@@ -185,31 +187,34 @@ fn catalysts_fail_when_hot() {
     assert!(sharp_cool >= cool && sharp_hot == hot_bare, "no width: 310 K {sharp_cool:e}, 340 K {sharp_hot:e}");
 }
 
-/// Dead matter in the open goes with what there is of it (first order: the same share lost for 1 and 1,000 mol) at
-/// its litter constant, 0.27 a year at 290 K for the frame (Olson 1963; `docs/numbers.md`), the burning gas at its
-/// share of the air; the free energy-rich solid rots `Reaction::open` times faster, by the decomposers of the open
-/// world.
+/// Dead matter in the wet open world goes with what there is of it (first order: the same share lost for 1 and 1,000
+/// mol) at its litter constant, 0.27 a year at 290 K for the frame (Olson 1963; `docs/numbers.md`), the burning gas at
+/// its share of the air; the free energy-rich solid rots `Reaction::open` times faster, by the decomposers of the open
+/// world. Where they do not work (a dry node, a body without the catalyst) the frame does not rot.
 #[test]
 fn litter_goes_first_order_at_its_constant() {
     let (chem, _) = worldgen::chemistry0();
     let mut rc = Reactor::new(&chem, &cfg());
     let year = 3.156e7;
-    let mut lost = |k: usize, a: f64, dt: f64| {
+    let mut lost = |k: usize, a: f64, dt: f64, moist: f64| {
+        rc.moist = moist;
         let (mut n, mut gas) = (vec![0.0; chem.ns()], air_over_m2(&chem, 400.0));
         n[k] = a;
         let mut e = 290.0 * OPEN_CAP;
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, dt);
         1.0 - n[k] / a
     };
-    let (few, many) = (lost(FRAME, 1.0, year), lost(FRAME, 1000.0, year));
+    let (few, many) = (lost(FRAME, 1.0, year, 1.0), lost(FRAME, 1000.0, year, 1.0));
     assert!((many - few).abs() < 1e-3 * few, "1 mol lost {few}, 1,000 mol lost {many}");
     assert!((0.235..0.25).contains(&few), "share lost in a year {few} (1 - e^-0.27 = 0.237)");
     // The free solid in a day, against the frame's rate times the speed-up (the rest of its bare decay, reactions 4
     // and 9, far slower, aside).
     let (day, open) = (year / 365.25, chem.reactions[BURN].open);
-    let (k_frame, k_free) = (-(1.0 - few).ln() / year, -(1.0 - lost(RICH, 1.0, day)).ln() / day);
+    let (k_frame, k_free) = (-(1.0 - few).ln() / year, -(1.0 - lost(RICH, 1.0, day, 1.0)).ln() / day);
     let report = format!("the free solid {k_free:e} /s, the frame {k_frame:e} /s x {open}");
     assert!((k_free / (open * k_frame) - 1.0).abs() < 0.05, "{report}");
+    let dry = lost(FRAME, 1.0, year, 0.0);
+    assert!(dry < 1e-5, "share of the frame lost dry in a year {dry}");
 }
 
 /// 1 m² of wet land (0.4 m of liquid in its pores) under the air at 400 ppm, with `rock` mol of the rock; the
@@ -385,7 +390,7 @@ fn under_a_liquid_dead_matter_burns_as_its_film_lets_the_gas_through() {
         let (mut n, mut gas) = column(&chem, depth, 400.0);
         n[FRAME] = pile;
         let mut rc = Reactor::new(&chem, &cfg());
-        rc.film = film;
+        (rc.film, rc.moist) = (film, 1.0);
         let (mut e, gas0) = (t * OPEN_CAP, gas[OX]);
         rc.react(&chem, &mut n, Some(&mut gas), &mut e, OPEN_CAP, None, 0.0, dt);
         (gas0 - gas[OX]) / dt

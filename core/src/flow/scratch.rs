@@ -76,6 +76,11 @@ impl FlowView<'_> {
     pub(crate) fn standing(&self, i: usize) -> (f64, f64) {
         ((self.head[i] - self.pd[i] - self.z[i]).max(0.0), self.z[i])
     }
+    /// How moist ground node `i` is, 0 to 1: the depth of its liquid over what its pores hold at field capacity
+    /// (`field`), as the bucket of evaporation (Manabe 1969; `flow::air::exchange::bucket`).
+    pub(crate) fn moist(&self, i: usize, field: f64) -> f64 {
+        ((self.head[i] - self.z[i]) / (field * self.pd[i]).max(1e-9)).clamp(0.0, 1.0)
+    }
     /// Energy to lift a kg from the head of ground node `i` to the mean height of its air node `j`, J/kg.
     #[inline]
     pub(crate) fn lift(&self, i: usize, j: usize, g: f64) -> f64 {

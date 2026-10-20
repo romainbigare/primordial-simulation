@@ -44,8 +44,8 @@ pub fn step(w: &mut World, dt: f64) {
             if class == Class::Ground {
                 react_ground(ww, rc, h, &nodes, i, span, row);
             } else {
-                // An air node holds its gas itself: no liquid's film stands between them.
-                rc.film = 0.0;
+                // An air node holds its gas itself: no liquid's film stands between them, and it is no moist ground
+                // (the reactor's `film` and `moist` stay 0: it reacts only air nodes).
                 rc.react(&ww.chem, &mut h.amt, None, &mut { ww.store.heat(Class::Air)[i] }, 0.0, None, 0.0, span);
                 rc.made(&ww.chem, &mut row[..ns]);
             }
@@ -128,7 +128,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     h.pool.iter_mut().enumerate().for_each(|(k, p)| *p = w.store.amounts(Class::Air)[k * na + j] * air_share);
     // The time the liquid standing over it takes to renew its gas through its film, s: depth / `dissolve` (the air's
     // side is 100 times faster or more, left out).
-    rc.film = nodes.standing(i).0 / w.cfg.dissolve;
+    (rc.film, rc.moist) = (nodes.standing(i).0 / w.cfg.dissolve, nodes.moist(i, w.cfg.phys.field));
     let cap = |amt: &[f64]| nodes.skin[i] + (0..chem.ns()).map(|k| amt[k] * chem.subs[k].cp).sum::<f64>();
     let fused = nodes.fused(i, w.store.heat(Class::Ground)[i], cap(&h.amt), |k| h.amt[k] * chem.subs[k].lf);
     let mut e = w.store.heat(Class::Ground)[i] - fused;

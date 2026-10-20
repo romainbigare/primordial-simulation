@@ -133,7 +133,7 @@ Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its phy
 
 ### 2.1 The rate law
 ```
-rate    = catalyst · open · k · exp(−Ea / T) · contact · Π over inputs (share of its phase ^ order)
+rate    = catalyst · k · exp(−Ea / T) · contact · Π over inputs (share of its phase ^ order)
 lim     = the least, over the inputs, of (amount / count)      (the scarce input)
 contact = what lim would be if each input were all of its phase
 extent  = lim · (1 − (1 + p·z)^(−1/p)),   z = rate / lim · time   (1 − exp(−z) when p = 0)
@@ -144,9 +144,14 @@ p       = (order of the scarce input − 1) · (1 − its share)   for a gas or 
 goes like a surface. **Order** is the count or `Reaction::order`. **Extent** is the exact integral over the step
 (`change/kernel.rs`), never past the scarce input. **Heat**: −ΔH to the node (`Chemistry::dh`); formation enthalpies
 are of the solid, so a liquid holds its fusion heat and a gas its vaporisation heat too. **Light** reactions take
-absorbed light and store `light_yield` of it. **Open world** (`Reaction::open`): in ground, liquid, air and parts,
-where decomposers live, a reaction runs `open` times faster (1 for most; 200 for reaction 1, the free sugar's rot,
-about a week); a body runs its reactions by its own catalysts only. `change::pace` is the one formula for all nodes.
+absorbed light and store `light_yield` of it. **Catalyst**: a body's own (2.4, 6.5). **Open world**
+(`Reaction::open`): in ground, liquid, air and parts live the decomposers, whose catalyst `open` works as far as the
+node is moist, by the body's rule 1 + (`open` − 1) × moisture (`Body::catalyst`). Moisture is the node's liquid over
+what its pores hold at field capacity, at most 1 (`FlowView::moist`, the bucket of evaporation); a part has its cell
+ground's; an air node has none. `open` is 1 for most reactions; 200 for reaction 1 (the free sugar's rot, about a
+week); 5 for 21 (body matter rots 3.8 times faster than the frame); 10^6 for 26 (the frame rots by the decomposers
+only: bare, a millionth of that). No decomposer works in a body: it runs its reactions by its own catalysts.
+`change::pace` is the one formula for all nodes.
 
 ### 2.2 Where it runs
 **Ground and air nodes** (`change::step`, `Reactor::react`) react when due over all the time since, at Flow's last
@@ -206,7 +211,7 @@ One fixed Earth-like chemistry until M7 (handover 6.0): 9 elements, 26 substance
 Reactions: 0 light to sugar; 1 burning sugar (its rot in the open world); 21 rotting or burning body matter (gives
 back the nitrogen mineral and lime); 22 and 23 the lime–salt pair; 24 fixing nitrogen; 25 the nitrogen mineral
 breaking down when hot; 26 rotting of the frame; 27 splitting the frame into sugar (needs an enzyme). Dead matter rots
-at a litter constant (21, 26: about a quarter a year at 290 K). **Growth** (`Chemistry::build`, bodies only, paid by
+in moist open ground at a litter constant (26: about a quarter a year at 290 K; 21: about one a year). **Growth** (`Chemistry::build`, bodies only, paid by
 work): matter from 118 sugar + 3 nitrogen mineral + 1 rock salt; frame from 6 sugar; lime from 1 rock salt.
 `Chemistry::minerals` are growth's inputs no reaction burns (24, 23), `materials` the solids bodies build (25, 10).
 

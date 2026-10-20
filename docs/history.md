@@ -445,6 +445,10 @@ the golden test.
   bed's rounding made matter; 48 x 48 seed 1 without life, energy drift at year 20 1.8e-13 to 3.4e-14 (flat).
 - Finding 2: moving liquid wears its bed only with the work its load leaves free (`flow::liquid::load`): 48 x 48 seed
   1, year 30, light-eaters 1.60e10 to 1.52e10 kg, land 285.49 to 285.48 K.
+- Finding 3: the decomposers' catalyst `open` works as far as the node is moist (`Body::catalyst`, `FlowView::moist`);
+  the frame rots only in the open world (26: `k` / 1e6, `open` 1e6), body matter 5 times faster there (decision 48):
+  48 x 48 seed 1, year 30, dead body matter on land 0.75 to 0.37 kg/m², frame 0.024 to 0.065, free sugar 0.009 to
+  0.064.
 
 **Tried and not kept in the foundation**
 

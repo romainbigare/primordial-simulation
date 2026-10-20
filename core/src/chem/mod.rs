@@ -69,8 +69,8 @@ pub struct Reaction {
     pub ea: f64,
     /// Takes absorbed light instead of heat
     pub light: bool,
-    /// How many times faster it runs in the open world (ground, liquid, air and parts: wherever no body's catalysts run
-    /// it), where decomposers live; 1 for a reaction they do not speed
+    /// The decomposers' catalyst of the open world (ground, liquid, air and parts: wherever no body's catalysts run it),
+    /// a factor that works as far as the node is moist (`Body::catalyst`); 1 for a reaction they do not speed
     pub open: f64,
     /// The power of each input's share in the rate law; empty: the counts (mass action). A big molecule is not a
     /// meeting of 40 molecules: the rate law keeps the power it was measured at.
