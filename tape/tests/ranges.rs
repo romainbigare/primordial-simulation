@@ -3,8 +3,9 @@
 //! seeds in the reference runs: the runs of the world after the foundation's law changes of Phases E, F and J, at the
 //! steps of Phase J's end (decision 27); for the climate, the land worn down and the rivers, the runs since clouds absorb
 //! heat radiation and the island lies at 40°, with the air starting at its mean height and the air's step taking the
-//! surface's reflectance at its end (decision 34). The climate and the land worn down are means over years 21 to 30; life is read
-//! at year 30, ten years after the eaters came. Each run also keeps its books.
+//! surface's reflectance at its end (decision 34); for the heat-absorbing gas and life, the runs after the body costs
+//! and the light-eaters' walls (decision 53). The climate and the land worn down are means over years 21 to 30; life
+//! is read at year 30, ten years after the eaters came. Each run also keeps its books.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
@@ -45,24 +46,24 @@ const SWING: f64 = 13.61;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
 const RAIN_LAND: f64 = 1.714e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
-const ABSORBER_PPM: f64 = 339.0;
+const ABSORBER_PPM: f64 = 388.8;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
 const RIVERS: f64 = 136.1;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.0424;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
-const PLANT_KG: f64 = 10.49;
+const PLANT_KG: f64 = 10.38;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
-const EATER_KG: f64 = 5.20;
+const EATER_KG: f64 = 4.54;
 /// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the reference runs.
-const PLANT_LIFE: f64 = 2.07;
+const PLANT_LIFE: f64 = 1.81;
 /// The factor either way the light-eaters' life may lie from `PLANT_LIFE`.
 const PLANT_LIFE_RANGE: f64 = 2.0;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, as a few hundred eaters
 /// make a noisy mean (decision 33).
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
-const EATER_LIFE: f64 = 11.3;
+const EATER_LIFE: f64 = 9.32;
 
 /// How far a number may lie from its reference: by at most so much, or by at most a factor either way.
 #[derive(Clone, Copy)]

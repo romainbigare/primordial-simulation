@@ -466,6 +466,9 @@ the golden test.
 - Items 2c, 2d: the eaters' check runs to year 100 and holds that they stop growing (in years 91 to 100 their births
   pass their deaths by under a tenth of the births); its bound is set on soil animals, 3e5 kg/km²: 48 x 48 seeds 1,
   2, 3, year 100, 7.8e3, 6.3e4, 2.8e3 kg/km² of land, births less deaths +6%, +6%, -15% of the births.
+- The key-number references of the heat-absorbing gas and of life are set from the 3-seed runs after items 6, 7 and 2b
+  (decision 53): the gas 339 to 388.8 ppm, light-eaters 10.49 to 10.38 log10 kg, eaters 5.20 to 4.54, their lives
+  2.07 to 1.81 and 11.3 to 9.32 yr; the other keys hold (land 287.51 K, rivers 170.5).
 
 **Tried and not kept in the foundation**
 
