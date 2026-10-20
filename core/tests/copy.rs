@@ -624,10 +624,9 @@ const GROWTH_GROUND_K: f64 = 289.0;
 /// of keeping its tissue with its body^1.0 (`body::upkeep`), so growth, which builds only from the spare after upkeep
 /// (`copy::grow`), stops where the two meet, a size the body's own costs set. An eater (ALLOC 0: it builds only for
 /// itself; strength 1; building fast, so that the allowance never binds) in a place with all the fuel it can take, at
-/// every update, for 360 days. With tissue dear enough that the ceiling is near (costs 6 times the starting ones)
-/// it levels off (under a quarter more body between the 100th and the 300th day) and in its last 100 days takes about
-/// what it pays to keep what it has; with the costs of the start, a ceiling many times higher, it is still growing
-/// fast and ends larger.
+/// every update, for 360 days. With the starting costs of tissue the ceiling is near: it levels off (under a quarter
+/// more body between the 100th and the 300th day) and in its last 100 days takes about what it pays to keep what it
+/// has; with a quarter of those costs, a ceiling many times higher, it is still growing fast and ends larger.
 #[test]
 fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
     use pcore::event::EventKind;
@@ -684,8 +683,8 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         println!("costs x {cost}: body (kg) every 50 days {built:.1?}; in the last 100 days it took {ratio:.2} times its upkeep");
         (built, ratio)
     };
-    let (full, r_full) = run(6.0);
-    let (cheap, r_cheap) = run(1.0);
+    let (full, r_full) = run(1.0);
+    let (cheap, r_cheap) = run(0.25);
     let n = full.len();
     // Relative growth between the 100th and the 300th day (the first days only fill the body with the liquid it keeps).
     let rel = |x: &[f64]| x[5] / x[1] - 1.0;

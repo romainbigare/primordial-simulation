@@ -309,7 +309,7 @@ impl Default for Physics {
             wind_ground: 1.7,
             forced: 0.189,
             leaf_size: 0.05,
-            take: 0.05,
+            take: 0.01042,
             sweep: 1.0,
             intake_exp: 0.75,
             c_handle: 1e3,

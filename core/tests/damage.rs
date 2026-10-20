@@ -83,13 +83,13 @@ fn an_attacked_individual_loses_body_and_lives_on_weaker() {
 fn a_bite_of_more_than_half_the_body_kills() {
     let (mut w, i) = bite_start();
     let mut a = resting(&mut w, i, 6.0, 1.0);
-    scale(&mut w, &mut a, 8.0);
+    scale(&mut w, &mut a, 20.0);
     let v = resting(&mut w, i, 6.0, 0.0);
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
     w.events.clear();
     bite(&mut w, a, v);
-    assert!(!w.life.bodies[v].alive && died(&w, body::TAKEN) > 0.0, "a victim bitten by a body 8 times its size lived");
+    assert!(!w.life.bodies[v].alive && died(&w, body::TAKEN) > 0.0, "a victim bitten by a body 20 times its size lived");
     books.assert_kept(&w, 1e-9);
 }
 

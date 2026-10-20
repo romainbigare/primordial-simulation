@@ -854,6 +854,9 @@ fn the_safe_minimum_is_a_share_of_the_body() {
     assert!(b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)));
 }
 
+/// Days the eater of the digestion test takes from the ground.
+const TAKE_DAYS: usize = 50;
+
 /// Digestion: body matter that a body takes in from outside is broken into the energy-rich solid and the minerals as it
 /// comes in (the reverse of growth), so it enters as fuel, never as body, and the body builds its own matter from it at
 /// the cost of work. Elements and energy are kept. A body whose catalyst for burning matter is off takes none.
@@ -878,7 +881,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
         let books = Books::now(&w);
         // (What the body took from the ground, by the events, not what left it: dead matter on the ground also rots.)
         let mut took = 0.0;
-        for _ in 0..10 {
+        for _ in 0..TAKE_DAYS {
             w.events.clear();
             pcore::day(&mut w);
             took += took_from_ground(&w);
@@ -890,7 +893,7 @@ fn matter_taken_from_outside_is_digested_into_the_solid() {
     let (rich, matter, taken, size) = take_from_ground(true);
     println!("an eater took {taken:.2} mol of matter from the ground: solid +{rich:.2} mol, its own matter {matter:+.3} mol, body {size:+.3} kg");
     assert!(taken > 0.5, "it took none");
-    // The solid rose by 118 per mol taken, less what it burnt in ten days; its own matter did not rise.
+    // The solid rose by 118 per mol taken, less what it burnt in those days; its own matter did not rise.
     assert!(rich > 20.0 * taken, "solid +{rich} mol for {taken} mol of matter");
     assert!(matter <= 1e-9 && size <= 1e-9, "matter entered as body: {matter} mol, body {size} kg");
     let (_, _, none, _) = take_from_ground(false);

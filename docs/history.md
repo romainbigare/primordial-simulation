@@ -411,6 +411,8 @@ the golden test.
   eaters at year 30 4.63 to 5.20 log10 kg.
 - Surface liquid follows the spill levels of a priority flood (`downhill::Order`, decision 31): G5's river length
   -11.5 to -9.0 km.
+- `take`, an intake rate of warm animals, is brought from 310 K to `t_cat` (decision 39): 0.05 to 0.01042; eaters at
+  year 30 5.20 log10 kg, at year 60 (48 x 48) 4.3e3, 2.6e5, 2.1e4 kg per km² of land.
 
 **Tried and not kept in the foundation**
 
