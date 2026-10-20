@@ -166,7 +166,6 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 |---|---|---|---|---|
 | `hide` | m, three numbers | thickness of a layer that hides half of what lies below it, for the reflectance and the work on the bed: soft solid 0.2, liquid 0.5, loose 0.02 | none found | tuned, first guess |
 | `soft` | share of melting point | a solid warmer than this share of its melting point is soft cover lying on top | none found; solids soften and sinter at 0.3 to 0.8 of their melting point in K (unchecked) | tuned, first guess |
-| `split` | share | liquid goes only to neighbours at least this share as steep as the steepest | none found; a rule of the routing of liquid | tuned, first guess |
 | `still` | m | liquid does not move for a smaller head difference | none found; a film of a centimetre does not run on rough ground (unchecked) | tuned, first guess |
 | `hold` | kg/m² | body mass per area that halves what moving liquid can carry off a cell and how fast its loose solids creep | none found | tuned, first guess |
 | `porosity` | share | the share of the volume of the loose ground that is pore space: a cell's liquid fills the pores first, and only what is over them stands and runs off | random close packing leaves 0.36 (Scott 1960; checked in part, Radin 2008), the loosest random packing 0.445 (Onoda and Liniger 1990); sand and loam 0.43, clay 0.47 (Schaake 2000, VIC model docs): 0.4 | anchored |
@@ -257,9 +256,9 @@ The 114 rows of `Config` and `Physics` are their 114 fields.
 | physical | 4 | `sun`, `tilt`, `gravity`, `rho_body` |
 | anchored | 50, and 9 outside the structs | 50 fields (among them `lethal`, `lat_south`, `lat_north`, `cloud_ir`, `mix`, `light_yield`, `wind_ground`, `forced`, `leaf_size`, `c_build`, `c_move`, `take`, `dormancy`, `porosity`, `seep`, `field`, `bed_depth`, `bed_porosity`, `bed_seep`, `hill`, `carry`, `wear` and `creep`) and the constants `MAX_INTERVAL`, `EATER_KEEP_T`/`EATER_COOL_T`, `WET_TISSUE`, `T_SURF`, `MOVE_REF`/`MOVE_EXP`, `FIXERS`, `FIX_GENE`, `LIGHT_X` and `MAX_KEEP` |
 | tuned (run or reason named) | 8, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`; outside: `WITHIN`), set for an outcome (`rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`, `c_basal`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
-| tuned, first guess | 40 | 36 free numbers (`wind`, `cloud`, `gas_depth`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
+| tuned, first guess | 39 | 35 free numbers (`wind`, `cloud`, `gas_depth`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
 | speed | 8, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL` |
 | container | 1 | `phys` |
 
-Rows marked tuned in all: 54 (48 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.
+Rows marked tuned in all: 53 (47 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

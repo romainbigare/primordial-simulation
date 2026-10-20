@@ -2,8 +2,8 @@
 //! once on its squares and once with every square in quarters (64 x 64 cells of 1 km, a refined region over the whole
 //! map), each seed against itself: the mean over the seeds of what the quarters move each key number per area (the
 //! mean of its last years) is less than its year-to-year spread on the squares (the mean over the seeds of its highest
-//! less its lowest yearly value). The length of the rivers is printed, not held: it depends on the size of the cells
-//! through the routing of liquid (decision 31).
+//! less its lowest yearly value). The length of the rivers is printed, not held: it still moves by more than its noise
+//! (decision 31).
 
 mod common;
 

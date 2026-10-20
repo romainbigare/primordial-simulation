@@ -120,13 +120,15 @@ store books every move as link fluxes.
   lowest cell at the head of its liquid, gives each cell its spill level (Barnes, Lehman and Mulla 2014;
   `downhill::Order`). Liquid stands where it lies below its cell's spill level (in a depression) or in the lowest
   basin; elsewhere it passes on.
-- **Running off.** One pass moves the liquid, the highest spill level first; at one level the standing liquid,
-  highest head first, then the cells liquid passes through, the farthest from the way out first. Each cell sends to
-  every lower neighbour (all 8) at least `split` as steep as the steepest, by slope; under `still` of head nothing
-  moves. The surface of a standing cell is its head, that of a cell liquid passes through is its ground, so liquid on
-  its way never holds back the liquid behind it. A head falls no further than to the surface of a neighbour still to
-  come, and half way to one already passed; liquid passing on never goes back, and on level ground it follows the
-  flood's way out. Liquid crosses the map in one step while depressions fill and spill.
+- **Running off.** One pass moves the liquid, the highest spill level first; at one level the standing liquid, highest
+  head first, then the cells liquid passes through, the farthest from the way out first. Each cell sends its liquid
+  down its steepest way (D-infinity, Tarboton 1997; `Level::steepest`): each two lower neighbours next in compass
+  order make a triangle with its centre, the plane through their drops gives that triangle's way down, and the
+  steepest triangle shares the liquid between its two neighbours by angle (all to one where the way runs along a
+  link); under `still` of head nothing moves. The surface of a standing cell is its head, that of a cell liquid passes
+  through is its ground, so liquid on its way never holds back the liquid behind it. A head falls no further than to
+  the surface of a neighbour still to come, and half way to one already passed; liquid passing on never goes back, and
+  on level ground it follows the flood's way out. Liquid crosses the map in one step while depressions fill and spill.
 - **Pore water** flows by Darcy's law across the borders of cells in one implicit step of `solve::spread`, on the
   liquid table (`flow::land::table`): a link passes `seep` × the saturated thickness of its higher end × width /
   distance. Pores at or under their field capacity (`field`) give nothing.
@@ -134,8 +136,8 @@ store books every move as link fluxes.
   above field capacity sinks into it (at most `seep`, never past its room), and the stores flow to their neighbours
   by Darcy's law (`bed_seep`) in the same `spread`.
 - **Channels inside a cell.** Real land drains to channels a few hundred metres apart, so the loose ground above field
-  capacity and the deep store also drain by Darcy's law down the cell's slope, over a hillslope of `hill`, into the
-  runoff (not under deep liquid, which has no slope).
+  capacity and the deep store also drain by Darcy's law down the slope of the cell's steepest way down, over a
+  hillslope of `hill`, into the runoff (not under deep liquid, which has no slope).
 - **What goes with the liquid.** A move takes its share of every liquid and of what is dissolved in it, with its
   heat. A salt is data for a liquid that never boils (substances 23 and 24): it moves with the liquid by its share and
   stays behind when the liquid evaporates. There is no other rule for dissolved solids.

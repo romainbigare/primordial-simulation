@@ -239,8 +239,6 @@ pub struct Physics {
     pub hide: [f64; 3],
     /// A solid warmer than this share of its melting point is soft cover lying on top
     pub soft: f64,
-    /// Liquid leaving a node goes only to neighbours at least this share as steep as the steepest
-    pub split: f64,
     /// Liquid does not move for a smaller head difference, m
     pub still: f64,
     /// Body mass per area that halves what moving liquid carries off a cell and how fast its loose solids creep, kg/m²
@@ -351,7 +349,6 @@ impl Default for Physics {
             alike: 4.0,
             hide: [0.2, 0.5, 0.02],
             soft: 0.75,
-            split: 0.2,
             still: 0.01,
             hold: 2.0,
             porosity: 0.4,

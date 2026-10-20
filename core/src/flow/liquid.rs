@@ -55,14 +55,12 @@ pub(super) fn liquid(w: &mut World, s: &mut Scratch, dt: f64) {
     under(w, s, &liq, tmin, dt);
 }
 
-/// The slope of the surface of each ground node down to its steepest lower neighbour (by more than `still`), 0 for none.
+/// The slope of the surface of each ground node down its steepest way (`Level::steepest`) to the lower neighbours (by
+/// more than `still`), 0 for none.
 fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
-    let cells = w.mesh.cells();
-    let lower = |i: usize, l: u32, j: u32| {
-        let dh = stand(s, i) - stand(s, j as usize);
-        if dh > w.cfg.phys.still { dh / cells.dist()[l as usize] } else { 0.0 }
-    };
-    (0..w.mesh.cells().n()).map(|i| (cells.around(i).0.iter().zip(cells.around(i).1)).map(|(&l, &j)| lower(i, l, j)).fold(0.0, f64::max)).collect()
+    let (cells, still) = (w.mesh.cells(), w.cfg.phys.still);
+    let drop = |i: usize, k: usize| Some(stand(s, i) - stand(s, cells.around(i).1[k] as usize)).filter(|&d| d > still);
+    (0..cells.n()).map(|i| cells.steepest(i, |k| drop(i, k)).map_or(0.0, |way| way.0)).collect()
 }
 
 /// The liquid that may run off (what stands, what came up from the store, and the pores' drainage to the channels, a
@@ -100,42 +98,27 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         if sv <= 0.0 {
             return;
         }
-        // Each lower neighbour: its weight by slope, how far the head may fall toward it, and the drop. The surface of a
-        // cell whose liquid stands is its head; of one its liquid passes on through, its ground (a neighbour still to
-        // come holds the head back only by what it keeps). Liquid passing on never goes back to a neighbour already
-        // passed, and on level ground it follows the flood's way out.
+        // Each lower neighbour: the drop toward it, how far the head may fall toward it, and the fall of the head.
+        // The surface of a cell whose liquid stands is its head; of one its liquid passes on through, its ground (a
+        // neighbour still to come holds the head back only by what it keeps). Liquid passing on never goes back to a
+        // neighbour already passed; it takes the steepest way down (`Level::steepest`), and on level ground the flood's
+        // way out.
         outs.clear();
-        let (top, mut wmax, mut way) = (if order.stands[i] { hd } else { zi }, 0.0f64, None);
-        for (k, e) in (adj.start[i] as usize..adj.start[i + 1] as usize).enumerate() {
-            let (j, l) = (adj.other[e] as usize, adj.link[e] as usize);
-            let (hj, passed, mut o) = (head(q, j), order.before(j, i), [0.0; 3]);
+        let (top, mut way) = (if order.stands[i] { hd } else { zi }, None);
+        for (k, j) in cells.around(i).1.iter().map(|&j| j as usize).enumerate() {
+            let (hj, passed) = (head(q, j), order.before(j, i));
             let (from, to) = (if passed { top } else { hd }, if passed || order.stands[j] { hj } else { ss.z[j] });
-            if from - to > ph.still {
-                let room = if passed { HALF_WAY * (from - to) } else { hd - to.max(zi) };
-                o = [(top - to).max(0.0) / cells.dist()[l], room, (hd - hj).max(0.0)];
-                way = way.or((j == order.outlet[i] as usize).then_some(k));
+            let (down, room) = (from - to > ph.still, if passed { HALF_WAY * (from - to) } else { hd - to.max(zi) });
+            if down && j == order.outlet[i] as usize {
+                way = Some([(k, 1.0), (k, 0.0)]);
             }
-            wmax = wmax.max(o[0]);
-            outs.push(o);
+            outs.push((down.then_some((top - to).max(0.0)), room, (hd - hj).max(0.0)));
         }
-        if let (true, Some(k)) = (wmax <= 0.0, way) {
-            (outs[k][0], wmax) = (1.0, 1.0);
-        }
-        // Neighbours much less steep than the steepest get nothing.
-        let mut wsum = 0.0;
-        for o in outs.iter_mut() {
-            if o[0] < ph.split * wmax {
-                o[0] = 0.0;
-            }
-            wsum += o[0];
-        }
-        if wsum <= 0.0 {
-            return;
-        }
+        let Some(ways) = cells.steepest(i, |k| outs[k].0).map(|w| w.1).or(way) else { return };
         let (mut out, mut drop) = (0.0, 0.0);
-        for (sh, o) in share.iter_mut().zip(&outs).filter(|p| p.1[0] > 0.0) {
-            *sh = (sv * o[0] / wsum).min(area[i] * o[1]) / sv;
-            (out, drop) = (out + *sh, drop + *sh * o[2]);
+        for (k, f) in ways.into_iter().filter(|p| p.1 > 0.0) {
+            share[k] = (sv * f).min(area[i] * outs[k].1) / sv;
+            (out, drop) = (out + share[k], drop + share[k] * outs[k].2);
         }
         // The node's temperature with what came in (no warmer than at the last `ground_state`).
         let (mut c, mut held) = (ss.cap[i], ss.latent[i].held);

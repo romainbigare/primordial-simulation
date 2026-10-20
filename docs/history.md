@@ -424,6 +424,9 @@ the golden test.
   eaters 1.25e5 to 1.07e5 kg, light-eaters 1.83e10 kg (the same), land 289.50 to 289.48 K.
 - Finding 7: `grab`, `lever_ref`, `hard_min` become fields, `WITHIN` tuned, `MAX_KEEP` a row (decision 45); tuned
   budget 50 to 54; the same series.
+- Surface liquid takes its steepest way down by D-infinity (`Level::steepest`, decision 46), `split` removed (tuned
+  54 to 53): G5's river length -7.7 to -5.2 km (limit 6.7 to 4.0); 48 x 48 seed 1, years 21 to 30: rivers 27.2 to
+  27.8, land 284.5 K both.
 
 **Tried and not kept in the foundation**
 

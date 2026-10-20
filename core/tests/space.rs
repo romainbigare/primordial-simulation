@@ -193,3 +193,26 @@ fn a_refined_region_splits_its_squares_in_four_and_keeps_the_borders() {
         assert!(border.iter().zip(plain.cells().width()).all(|(&b, &w)| b == w || near(b, w)), "each square keeps its borders");
     }
 }
+
+/// The steepest way down (`Level::steepest`, D-infinity) of a tilted flat surface is its own slope on squares and on
+/// the quarters of a refined region alike, so the way liquid runs does not depend on the size of the cells; on
+/// squares a surface falling 30° south of east sends a third east and two thirds south-east (Tarboton 1997).
+#[test]
+fn the_steepest_way_down_a_tilted_surface_is_its_slope_on_any_cells() {
+    let fall = [0.02 * 30f64.to_radians().cos(), 0.02 * 30f64.to_radians().sin()];
+    let plain = Square { w: 10, h: 7, side: SIDE, wrap: false, region: None };
+    for sq in [plain, Square { region: Some([3, 2, 4, 3]), ..plain }] {
+        let mesh = sq.mesh(&[SCALE], 31.0, 33.3);
+        let lv = mesh.cells();
+        let h = |i: usize| -(fall[0] * lv.centre()[i][0] + fall[1] * lv.centre()[i][1]);
+        for i in (0..lv.n()).filter(|&i| sq.step(sq.square_of(i), (1, 1)).is_some() && sq.step(sq.square_of(i), (-1, -1)).is_some()) {
+            let drop = |k: usize| Some(h(i) - h(lv.around(i).1[k] as usize)).filter(|&d| d > 0.0);
+            let (slope, ways) = lv.steepest(i, drop).expect("a way down");
+            assert!((slope / fall[0].hypot(fall[1]) - 1.0).abs() < 1e-12, "cell {i}: slope {slope}");
+            if sq.region.is_none() {
+                let share = |d: usize| ways.iter().filter(|w| lv.way(i, d) == Some(lv.start()[i] as usize + w.0)).map(|w| w.1).sum::<f64>();
+                assert!((share(0) - 1.0 / 3.0).abs() < 1e-12 && (share(1) - 2.0 / 3.0).abs() < 1e-12, "cell {i}: {ways:?}");
+            }
+        }
+    }
+}
