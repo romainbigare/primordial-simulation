@@ -463,6 +463,9 @@ the golden test.
   2.6e4, 2.9e3 to 190, 1.9e4, 5.7e3 kg/km² of land, land 287.2, 290.9, 289.7 to 286.6, 290.7, 289.3 K; year 100,
   eaters 8.6e3, 8.0e4, 3.8e3 to 7.8e3, 6.3e4, 2.8e3; seed 2's light-eaters' frame share falls to 0.26 by year 60 and
   0.20 by year 100.
+- Items 2c, 2d: the eaters' check runs to year 100 and holds that they stop growing (in years 91 to 100 their births
+  pass their deaths by under a tenth of the births); its bound is set on soil animals, 3e5 kg/km²: 48 x 48 seeds 1,
+  2, 3, year 100, 7.8e3, 6.3e4, 2.8e3 kg/km² of land, births less deaths +6%, +6%, -15% of the births.
 
 **Tried and not kept in the foundation**
 

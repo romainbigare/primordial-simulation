@@ -11,8 +11,9 @@
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
 //! gene (`Config::node_days` 0), and with the setting x2 and /2.
 //!
-//! The eaters live: at 48 x 48 they still have members at year 60 in seeds 1, 2 and 3, after the booms and busts that
-//! year 30 hides, and none boom past a few times the densest real plant-eaters. The ground under dense canopies
+//! The eaters live: at 48 x 48 they still have members at year 100 in seeds 1, 2 and 3, after the booms and busts
+//! that year 30 hides; they have stopped growing by their last ten years, and none hold more than a few times the
+//! densest soil animals. The ground under dense canopies
 //! follows its neighbours from one month to the next.
 //!
 //! A globe of Earth's size without life keeps an Earth-like climate: its land near Earth's, steady, with no runaway ice.
@@ -293,34 +294,51 @@ fn the_pace_of_nodes_keeps_life() {
     assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
 }
 
-/// The world of the eaters' check: its side, and the year they must still live in.
+/// The world of the eaters' check: its side, its years, and the first of its last years, over which the eaters must
+/// have stopped growing.
 const EATER_SIDE: usize = 48;
-const EATER_YEARS: u64 = 60;
-/// The most eaters a km² of land may hold at year 60, kg: large plant-eaters reach 53 to 11,810 kg/km² (Hempson et
-/// al. 2015, `docs/numbers.md`), and this bound lies above them by a few times.
-const EATER_MOST_KG_KM2: f64 = 5e4;
+const EATER_YEARS: u64 = 100;
+const EATER_FROM: u64 = 91;
+/// The most the eaters' births may exceed their deaths over those years, as a share of their births: a population that
+/// replaces itself to within a tenth has stopped growing.
+const EATER_GROWTH: f64 = 0.1;
+/// The most eaters a km² of land may hold at the end, kg: soil animals that live on dead matter, as these do, reach
+/// 1e4 to 1e5 kg/km² (earthworms, `docs/numbers.md`), and this bound lies above them by a few times.
+const EATER_MOST_KG_KM2: f64 = 3e5;
 /// Square metres in a km².
 const KM2: f64 = 1e6;
+/// The causes of death (`docs/tape.md`).
+const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
 
-/// The eaters at year `EATER_YEARS` of a 48 x 48 world of `seed`: their members, and their mass per km² of land, kg.
-fn eaters_at_60(seed: u64) -> (f64, f64) {
-    let (w, rec) = run(seed, EATER_SIDE, EATER_YEARS, false, |_| {}, |_, _, _| {});
+/// The eaters of a 48 x 48 world of `seed` after `EATER_YEARS`: their members, their mass per km² of land, kg, and
+/// their births and deaths in the years from `EATER_FROM`.
+fn eaters_at_end(seed: u64) -> [f64; 4] {
+    let (mut born, mut died) = (0.0, 0.0);
+    let (w, rec) = run(seed, EATER_SIDE, EATER_YEARS, false, |_| {}, |y, _, rec| {
+        if y >= EATER_FROM {
+            born += rec.last("root_1_births");
+            died += CAUSES.iter().map(|c| rec.last(&format!("root_1_died_{c}"))).sum::<f64>();
+        }
+    });
     let land: f64 = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| w.mesh.cells().area()[i]).sum();
-    (rec.last("root_1_members"), rec.last("root_1_kg") / land * KM2)
+    [rec.last("root_1_members"), rec.last("root_1_kg") / land * KM2, born, died]
 }
 
-/// The eaters live to year 60, after the booms and busts that year 30 hides, in seeds 1, 2 and 3, and none boom past
-/// `EATER_MOST_KG_KM2`.
+/// The eaters live to year 100 in seeds 1, 2 and 3, after the booms and busts of their first decades; by their last
+/// ten years they have stopped growing (their births exceed their deaths by less than `EATER_GROWTH` of their births);
+/// and none hold more than `EATER_MOST_KG_KM2`.
 #[test]
-#[ignore = "slow: three 60-year runs of a 48 x 48 world"]
-fn the_eaters_live_to_year_60() {
-    let eaters: Vec<(f64, f64)> = std::thread::scope(|s| {
-        let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || eaters_at_60(seed))).collect();
+#[ignore = "slow: three 100-year runs of a 48 x 48 world"]
+fn the_eaters_live_and_stop_growing() {
+    let eaters: Vec<[f64; 4]> = std::thread::scope(|s| {
+        let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || eaters_at_end(seed))).collect();
         runs.into_iter().map(|r| r.join().expect("an eater run")).collect()
     });
-    println!("eaters at year {EATER_YEARS}, seeds {SEEDS:?}: (members, kg per km2 of land) {eaters:?}");
-    assert!(eaters.iter().all(|&(m, _)| m > 0.0), "the eaters died out by year {EATER_YEARS}: {eaters:?}");
-    let boomed = eaters.iter().any(|&(_, d)| d > EATER_MOST_KG_KM2);
+    println!("eaters at year {EATER_YEARS}, seeds {SEEDS:?}: (members, kg per km2 of land, births and deaths from year {EATER_FROM}) {eaters:?}");
+    assert!(eaters.iter().all(|e| e[0] > 0.0), "the eaters died out by year {EATER_YEARS}: {eaters:?}");
+    let growing = eaters.iter().any(|e| e[2] - e[3] > EATER_GROWTH * e[2]);
+    assert!(!growing, "the eaters still grow in years {EATER_FROM} to {EATER_YEARS}: {eaters:?}");
+    let boomed = eaters.iter().any(|e| e[1] > EATER_MOST_KG_KM2);
     assert!(!boomed, "the eaters boomed past {EATER_MOST_KG_KM2} kg/km2: {eaters:?}");
 }
 

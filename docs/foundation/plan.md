@@ -342,8 +342,8 @@ taken on the way in `docs/foundation/decisions.md`.
 Open items of review round 3, to settle before L5:
 
 - **Frame rot inside bodies:** reaction 26 runs inside living bodies at its bare rate (handover 13.2, "Inside bodies").
-- **The eaters:** they still get about 99% of their food from the ground and still grow at year 60 (below 5·10⁴
-  kg/km²; decision 40).
+- **The eaters:** they get about 99% of their food from the ground; they stop growing by year 100, held by starving
+  in summer where the dead matter under them runs low (`tape/tests/ranges.rs`).
 - **The learner** fails an honest reversal test (`docs/history.md`, finding 11): bodies live about 40 decisions.
 - **Crowded cells:** bodies that may not merge (other lineages, structures) still crowd a cell, up to 134 bodies.
 

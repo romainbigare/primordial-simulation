@@ -248,6 +248,7 @@ Chemistry 0 (`worldgen/src/chem0.toml`) is data, not a struct of numbers, so it 
 Not rows of the model: real sizes that a run's results can be held against.
 
 - **Biomass of large plant-eaters.** Hempson et al. 2015 (Science 350: 1056): reconstructed African large herbivores 53 to 11,810 kg/km² over 1° squares, typical about 1,700 kg/km² (without elephants). Damuth 1981 (Nature 290: 699; from memory): density = 4.23 m^-0.75 per km² for plant-eaters, about 250 to 450 kg/km² for 50 to 500 kg animals.
+- **Biomass of soil animals that live on dead matter.** Earthworms in temperate grassland and pasture hold 10 to 100 g of fresh mass per m², 1e4 to 1e5 kg/km² (Edwards and Bohlen 1996; Lee 1985; from memory). The eaters live on dead body matter from the ground, so their bound in `tape/tests/ranges.rs` is set on these, not on large plant-eaters.
 - **Remaining lives of adults.** Bison: adult cows survive 0.92 to 0.95 a year (Fuller et al. 2007, J Wildl Manage 71; Yellowstone report 2023), so 12 to 20 years. Deer: wild adults survive 0.83 to 0.91 a year with no hunting (a Wisconsin study, quoted), so 5 to 11 years. Mouse: a farm study found apparent survival 0.54 a month (it counts leaving too). Rabbit: no source found.
 - **P/B a year** (mouse 3 to 5, rabbit 1 to 2, deer 0.3 to 0.5, bison 0.15 to 0.25): from memory, not checked. Banse and Mosher 1980 (Ecol. Monogr. 50: 355) and Humphreys 1979 (J Anim Ecol 48: 427) are the sources to read.
 
