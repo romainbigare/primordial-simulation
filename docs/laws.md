@@ -37,7 +37,8 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` is the
-store's only writer. Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
+store's only writer. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
+lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
 potential energy is one more node (`Class::Potential`): a lift moves heat into it, a fall takes it back. So every
 element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing

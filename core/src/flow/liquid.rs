@@ -199,9 +199,9 @@ fn wear(w: &World, s: &mut Scratch, i: usize, bedwork: f64, broke: &mut Vec<Move
         let b = w.store.amounts(Class::Bed)[k * n + i];
         if b > 0.0 && bv > 0.0 {
             let v = w.cfg.wear * bedwork * (b * s.sp[k].v[0] / bv) / w.chem.subs[k].strength.max(STRENGTH_MIN);
-            let (m, area) = ((v / s.sp[k].v[0]).min(b), w.mesh.cells().area()[i]);
-            let dz = m * s.sp[k].v[0] / area;
-            broke.push(Move::loosen(i, k, m));
+            let (go, area) = (Move::loosen(i, k, (v / s.sp[k].v[0]).min(b), b), w.mesh.cells().area()[i]);
+            let (m, dz) = (go.mol, go.mol * s.sp[k].v[0] / area);
+            broke.push(go);
             s.state.bed[i].vol -= m * s.sp[k].v[0];
             s.add_loose(k, false);
             s.note(k, i, m, area);

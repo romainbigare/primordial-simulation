@@ -231,7 +231,8 @@ pub fn dig(w: &mut World, b: &mut Body) {
     if !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
         return;
     }
-    m.iter().enumerate().for_each(|(k, &a)| w.moves.push(&w.chem, Move::loosen(i, k, a)));
+    let bed = |k: usize| w.store.amounts(Class::Bed)[k * n + i];
+    m.iter().enumerate().for_each(|(k, &a)| w.moves.push(&w.chem, Move::loosen(i, k, a, bed(k))));
 }
 
 /// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets go.

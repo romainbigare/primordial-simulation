@@ -439,6 +439,11 @@ the golden test.
 - Docs: handover sentences made true: the golden re-pin rule, the 8,000 lines back with the owner (decision 42).
 - The review report of M0 to M3 leaves `docs/reports/` (only watch reports stay there).
 
+**After the round-4 review**
+
+- Finding 1: a move out of the bed takes only what the bed can lose exactly (`Move::loosen`): worn amounts below the
+  bed's rounding made matter; 48 x 48 seed 1 without life, energy drift at year 20 1.8e-13 to 3.4e-14 (flat).
+
 **Tried and not kept in the foundation**
 
 - Nodes keeping their members' wear: eaters' life 7.1 yr against at most 5.8 (branch `nodes-wear-tried`).

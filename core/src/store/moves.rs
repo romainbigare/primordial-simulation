@@ -16,9 +16,11 @@ pub struct Move {
 }
 
 impl Move {
-    /// `mol` of substance `k` of the bed under ground node `i` break into its loose ground (wear, digging).
-    pub fn loosen(i: usize, k: usize, mol: f64) -> Move {
-        Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol, heat: 0.0 }
+    /// `mol` of substance `k` of the bed under ground node `i`, which holds `bed` of it, break into its loose ground
+    /// (wear, digging). It moves only what the bed can lose exactly (`bed - (bed - mol)`): the bed holds far more than
+    /// its loose ground, so an amount below the bed's rounding would leave the bed whole and still reach the ground.
+    pub fn loosen(i: usize, k: usize, mol: f64, bed: f64) -> Move {
+        Move { from: Node::new(Class::Bed, i), to: Node::ground(i), k: k as u16, mol: bed - (bed - mol), heat: 0.0 }
     }
 }
 
