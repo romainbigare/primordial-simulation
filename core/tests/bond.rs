@@ -35,7 +35,7 @@ fn walls_keep_a_body_warm() {
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
     // Six blocks joined around a small space, one bonded to the ground.
-    let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 2e3, true)).collect();
+    let parts: Vec<usize> = (0..6).map(|_| plate(&mut w, i, 1e3, true)).collect();
     bond::link(&mut w, parts[0], GROUND, 1e9);
     for p in &parts[1..] {
         bond::link(&mut w, *p, parts[0] as u32, 1e9);
@@ -69,6 +69,7 @@ fn walls_keep_a_body_warm() {
     pcore::step(&mut w);
     pcore::step(&mut inside);
     assert!(w.life.bodies[slot].alive && inside.life.bodies[slot].alive);
+    println!("inside {:.2} K, outside {:.2} K above the ground", temp(&inside), temp(&w));
     assert!(temp(&inside) > temp(&w) + 1.0, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
 }
 

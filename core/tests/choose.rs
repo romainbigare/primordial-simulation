@@ -74,8 +74,8 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let mut b = founder(&mut w, 1, start, &brain);
     let f = BODY_KG / b.mass(&w.chem);
     scale(&mut w, &mut b, f);
-    // Twice the fuel of a starting eater besides, so that what it learns has the decisions to show before it starves.
-    let fuel = 2.0 * testkit::kg(&w, &b, RICH);
+    // A third of the fuel of a starting eater, so that what it takes, not what it carries, decides how long it lives.
+    let fuel = -2.0 / 3.0 * testkit::kg(&w, &b, RICH);
     testkit::add(&mut w, &mut b, RICH, fuel);
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
@@ -153,13 +153,13 @@ fn report(on: &Tally, off: &Tally) -> String {
     )
 }
 
-/// Over 200 seeds the body that learns lives to make more decisions than the one that does not, by more than three
+/// Over 400 seeds the body that learns lives to make more decisions than the one that does not, by more than three
 /// standard errors of the difference of their means: it learns to take what it finds and to stay where it is. Of all
 /// its decisions a clearly larger share is made on the strip. (Whether its moves go toward the richer cells is a
 /// smaller effect, which needs the seeds of the slow version.)
 #[test]
 fn a_body_that_learns_lives_on_what_it_can_take() {
-    let (on, off) = (measure(LEARN_ON, 200), measure(LEARN_OFF, 200));
+    let (on, off) = (measure(LEARN_ON, 400), measure(LEARN_OFF, 400));
     let ((life_on, e_on), (life_off, e_off)) = (mean_and_error(&on.lives), mean_and_error(&off.lives));
     let se = (e_on * e_on + e_off * e_off).sqrt();
     let report = format!("{}; decisions per body {life_on:.1} and {life_off:.1}, standard error of the difference {se:.1}", report(&on, &off));

@@ -1299,3 +1299,11 @@ Phase E review, round 1 (fixes):
 - The six climate references of the key numbers set again from 3 seeds x 30 years with the air's new start and the
   reflectance at the step's end: land 289.03 to 287.83 K, swing 14.31 to 13.61 K, rain on land 1.769e-3 to 1.714e-3,
   the absorber 329.1 to 339.0 ppm, rivers 271.2 to 136.1, land worn down 0.0578 to 0.0424 mm/yr (ranges kept).
+- The costs anchored to a resting mammal are taken at its 310 K and brought to `t_cat` by the eater founder's pace
+  (4.80; decision 38): `c_strength` 3.683e5 to 7.677e4, `c_cat` 2.6306e10 to 5.483e9; the founder's upkeep at 290 K
+  falls from 4.96e6 to 1.64e6 J a day. The eaters now live and grow without a stop: 64 x 64, year 30, 4.63, 5.20,
+  5.17 log10 kg (a mean of 3.76 before the air start), their life 7.9 years (3.8); 48 x 48, year 60, 2.0e5, 4.0e6,
+  1.2e6 members (0, 21, 0); there two seeds of three hold 2.3e4 and 7.8e4 kg per km² of land, over the 1e3 to 2e4 of
+  real plant-eaters, still growing. Light-eaters at year 30 10.50, 10.52, 10.50 log10 kg; land 287.77 K. Tests whose scene moved: the
+  learning body carries a third of a founder's fuel over 400 seeds, the body that evaporates stands on 299 K ground,
+  dear tissue is 6 times the start, the walls that keep a body warm are of 1 t blocks. Golden re-pinned.

@@ -403,8 +403,8 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
 }
 
 /// A body keeps its temperature from above by evaporating: a bare resting eater (the founders' `HEAT`) that evaporates
-/// above 300 K (`COOL_T`) on ground held at 295 K holds 300 K, the latent heat of what it evaporates carrying off what
-/// its upkeep makes past what its surface passes at 5 K; its twin that does not (`COOL_T` 320 K, the founders') stands
+/// above 300 K (`COOL_T`) on ground held at 299 K holds 300 K, the latent heat of what it evaporates carrying off what
+/// its upkeep makes past what its surface passes at 1 K; its twin that does not (`COOL_T` 320 K, the founders') stands
 /// warmer. Matter and energy are kept.
 #[test]
 fn a_body_keeps_its_temperature_from_above_by_evaporating() {
@@ -420,12 +420,13 @@ fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     let (w, cell) = (&mut s.w, sweat.cell as usize);
     let slots = [w.add(sweat, 1), w.add(dry, 1)];
     let books = Books::now(w);
-    held_days(w, &[cell], &[295.0], 21);
+    let tg = 299.0;
+    held_days(w, &[cell], &[tg], 21);
     let (a, b) = (&w.life.bodies[slots[0]], &w.life.bodies[slots[1]]);
     assert!(a.alive && b.alive);
     let (t, t_dry) = (a.temp(&w.chem), b.temp(&w.chem));
     let kg = (b.store[LIQUID] - a.store[LIQUID]) * w.chem.subs[LIQUID].molar_mass;
-    println!("on 295 K ground: evaporating above 300 K, {t:.2} K; not evaporating {t_dry:.2} K; {kg:.1} kg less liquid");
+    println!("on {tg} K ground: evaporating above 300 K, {t:.2} K; not evaporating {t_dry:.2} K; {kg:.1} kg less liquid");
     assert!((t - 300.0).abs() < 0.5 && t_dry > t + 1.0, "{t} K, the twin {t_dry} K");
     assert!(kg > 0.0, "{kg} kg");
     books.assert_kept(w, 1e-9);
