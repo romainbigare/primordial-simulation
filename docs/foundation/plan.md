@@ -351,6 +351,9 @@ Open items of review round 3, to settle before L5:
   in summer where the dead matter under them runs low (`tape/tests/ranges.rs`).
 - **The learner** fails an honest reversal test (`docs/history.md`, finding 11): bodies live about 40 decisions.
 - **Crowded cells:** bodies that may not merge (other lineages, structures) still crowd a cell, up to 134 bodies.
+- **Selection inside a node is blind to what others feel:** `copy::sample` (`copy/select.rs`) runs one member's update
+  and sees only the cost to that member, not the shade it casts on others or what its frame costs a biter, so it
+  lowers the founders' frame (decision 52).
 
 ## 8. What is left
 

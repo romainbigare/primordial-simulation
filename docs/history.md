@@ -496,6 +496,9 @@ the golden test.
 - An individual taken by an individual is found with the chance the taker's swept area holds it, as a node's members
   are (one draw for that and its escape). 48 x 48 seed 2, years 36-40: eaters 4.8e5 to 4.1e5 kg, taken 6 to 11 a year,
   starving 145 to 124 a year, land 290.1 K.
+- Decisions 45 to 54 are cut to one sentence of decision and one of why; decision 50 names the known over-count of
+  strength and catalysts paid on top of Kleiber (about 17% at the eater founder), decision 52 the frame's real worth
+  (shading order, bite cost) and the plan names selection's blind spot inside a node.
 
 **Tried and not kept in the foundation**
 
