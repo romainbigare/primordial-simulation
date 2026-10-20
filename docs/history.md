@@ -504,6 +504,11 @@ the golden test.
   from them (decision 57): eaters 4.54 to 4.86 log10 kg, their life 9.32 to 10.47 yr; land 287.51 K, gas 389.1 ppm,
   rivers 170.8. The eaters' check fails: at 48 x 48, years 91 to 100, seed 1's eaters still grow (births pass deaths
   by 12% of births; 2.6e4, 9.1e4, 2.8e4 kg/km² of land; +12%, -1%, -22%).
+- F7: the nodes check compares rule (d) at matched density and reads the default plan over years 31 to 40 (decision
+  58); it runs in 5 minutes. After the intake changes the eaters' starving agrees: at matched density nodes against
+  individuals 1.22, 1.40 and 0.68 times (32 x 32, seeds 2, 3, 5). Rules b (both plans) and c (roster) hold; a and c
+  fail for the default seed 1 (a few dozen eaters); d fails on rare causes (eaters taken: nodes 0.0013 a member-year,
+  individuals none) and on the roster's small eaters' starving.
 
 **Tried and not kept in the foundation**
 
@@ -525,3 +530,6 @@ the golden test.
   against 1.9 without (caps 8 and 8), so at most a few % of Flow.
 - R3 finding 11: a reversal test (the strip moves to the other side after 10, 20 or 30 decisions; 800 seeds): the
   learner against the null after the move +2.3, -0.7 and -3.5 standard errors; it does not follow the strip.
+- Round 5 finding 4: a node's members' excess over the copy mass spread evenly from none to twice the mean, the
+  starving rule averaged over it (closed form): at matched density nodes starved 2.12, 0.30 and 0.35 times as much
+  as individuals (seeds 2, 3, 5) against 1.22, 1.40 and 0.68 without it.

@@ -330,7 +330,7 @@ taken on the way in `docs/foundation/decisions.md`.
 | ID | What | Status |
 |---|---|---|
 | E6 | Cheap child placement | Built, but not cheaper per call: its "done when" is not met |
-| F7 | The nodes-against-individuals check (handover 7.1, `tape/tests/nodes.rs`) | Open: it runs in about 25 minutes on 4 cores; 4 of its 8 rules hold (b and c in both plans). (a) holds for the default plan's seed 5, not for seed 1, whose eaters are a few dozen, nor for the roster; (d) fails: eaters in nodes die of starving about 3 times as often as individuals (seed 5), past the noise |
+| F7 | The nodes-against-individuals check (handover 7.1, `tape/tests/nodes.rs`) | Open: it runs in about 5 minutes on 4 cores; 3 of its 8 rules hold (b in both plans, c with the roster). (a) and (c) fail for the default plan's seed 1 only, whose eaters are a few dozen; (a) fails for small kinds of the roster; (d), at matched density, fails on rare causes: eaters in nodes are taken by bites (0.0013 a member-year in seed 5) and individuals never are, and the roster's small eaters starve up to 4 times more or less in one mode than the other |
 | F5 | More age classes inside nodes | Only if F7's new run asks for it |
 | G5 | The coarse-against-fine test (`tape/tests/scale.rs`) | Open: the climate and the light-eaters hold; the river length is off by -5.2 km against a limit of 4.0 after D-infinity (decisions 31, 46) |
 
