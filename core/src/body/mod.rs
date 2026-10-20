@@ -321,14 +321,11 @@ impl Body {
     }
     /// Remember a dealing with body `id`: better (+) or worse (-). A new one replaces the least marked.
     pub(crate) fn note(&mut self, id: u64, d: f32) {
-        let s = match self.known.iter().position(|k| k.0 == id) {
-            Some(s) => s,
-            None => {
-                let s = (0..KNOWN).min_by(|&a, &b| self.known[a].1.abs().total_cmp(&self.known[b].1.abs())).unwrap_or(0);
-                self.known[s] = (id, 0.0);
-                s
-            }
-        };
+        let s = self.known.iter().position(|k| k.0 == id).unwrap_or_else(|| {
+            let s = (0..KNOWN).min_by(|&a, &b| self.known[a].1.abs().total_cmp(&self.known[b].1.abs())).unwrap_or(0);
+            self.known[s] = (id, 0.0);
+            s
+        });
         self.known[s].1 = (self.known[s].1 + d).clamp(-1.0, 1.0);
     }
 }

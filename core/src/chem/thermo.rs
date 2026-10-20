@@ -65,10 +65,7 @@ impl Chemistry {
     /// is dissolved in it, where `k` is the solvent (laws.md 2.5). A gas counts not: it dissolves only to Henry's share,
     /// a thousandth of a kelvin. Where `k` is absent it melts at its own point.
     pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
-        match self.mixes(k) {
-            Some(js) => self.melt_with(k, a, js),
-            None => self.subs[k].melt,
-        }
+        self.mixes(k).map_or(self.subs[k].melt, |js| self.melt_with(k, a, js))
     }
 
     /// What may share the liquid `k` (`melt_in`), each with whether it dissolves in `k` and whether it is a liquid of the

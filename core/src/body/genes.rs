@@ -134,13 +134,10 @@ impl Layout {
 }
 
 impl Body {
-    /// Learning rate of its brain within its life (0 when off).
+    /// Learning rate of its brain within its life: 10 to the power of its gene, 0 when it is off (at the lower end of
+    /// its range).
     pub fn learn_rate(&self) -> f32 {
-        self.rate_gene(LEARN)
-    }
-    /// 10 to the power of gene `g`, 0 when it is off (at the lower end of its range).
-    fn rate_gene(&self, g: usize) -> f32 {
-        if self.genes[g] <= GENE_OFF { 0.0 } else { 10f32.powf(self.genes[g]) }
+        if self.genes[LEARN] <= GENE_OFF { 0.0 } else { 10f32.powf(self.genes[LEARN]) }
     }
     /// Scalar gene `g` kept within its range.
     pub(crate) fn gene_in_range(&self, g: usize) -> f64 {
