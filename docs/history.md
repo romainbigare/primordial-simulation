@@ -413,6 +413,8 @@ the golden test.
   -11.5 to -9.0 km.
 - `take`, an intake rate of warm animals, is brought from 310 K to `t_cat` (decision 39): 0.05 to 0.01042; eaters at
   year 30 5.20 log10 kg, at year 60 (48 x 48) 4.3e3, 2.6e5, 2.1e4 kg per km² of land.
+- The island's start fills its inland basins below 0 m (`terrain::drain`, decision 17): G5's river length -9.0 to
+  -7.9 km; land 285.6 to 285.2 K.
 
 **Tried and not kept in the foundation**
 

@@ -891,8 +891,10 @@ read a kind.
   the starting air (2.6), which thins with height by its scale height. The ground starts at a temperature that falls
   with latitude and height (`t_start`); each air node starts at that temperature at the mean height of its air, where
   Flow reads a node's temperature (1.4), not at the ground's. Every land cell drains to the sea from the
-  start (`drain`): a priority flood from the cells below 0 m raises each closed basin above 0 m to its outlet,
-  with a slope of 1 m per km across the filled floor (`DRAIN_SLOPE`; Planchon and Darboux 2001, Barnes et al. 2014).
+  start (`drain`): a priority flood from the cells below 0 m raises each closed basin to its outlet, with a slope
+  of 1 m per km across the filled floor (`DRAIN_SLOPE`; Planchon and Darboux 2001, Barnes et al. 2014). On a globe
+  every cell below 0 m starts it; on an island only those joined to its lowest cell, so ground below 0 m inland is a
+  closed basin too.
   The quarters of a refined region read the same noise at their own centres (finer detail, not a blurred copy) and
   take the same drainage pass and starting state as any cell.
 - **Life** starts at year 2 (`--life-year`): light-eaters first, eaters 20 years later (`worldgen::life::KINDS`);

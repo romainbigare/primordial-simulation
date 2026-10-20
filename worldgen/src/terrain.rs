@@ -145,11 +145,24 @@ impl PartialEq for Low {
 }
 impl Eq for Low {}
 
-/// Give every cell of `cells` a way down to a cell below 0 m: a priority flood from those cells, the lowest cell reached
-/// first, raises each new neighbour to at least its height plus `DRAIN_SLOPE` times their distance (Barnes, Lehman and
-/// Mulla 2014). Noise has closed basins that no liquid ever cut; real wet land drains.
-fn drain(cells: &Level, z: &mut [f64]) {
-    let mut reached: Vec<bool> = z.iter().map(|&h| h < 0.0).collect();
+/// Give every cell of `cells` a way down to the low ground: a priority flood from it, the lowest cell reached first,
+/// raises each new neighbour to at least its height plus `DRAIN_SLOPE` times their distance (Barnes, Lehman and Mulla
+/// 2014). Noise has closed basins that no liquid ever cut; real wet land drains. On a globe (`wrap`) the low ground is
+/// every cell below 0 m; on an island, the cells below 0 m joined to its lowest cell, so ground below 0 m inland is a
+/// closed basin too.
+fn drain(cells: &Level, z: &mut [f64], wrap: bool) {
+    let mut reached: Vec<bool> = z.iter().map(|&h| h < 0.0 && wrap).collect();
+    let lowest = (0..z.len()).min_by(|&a, &b| z[a].total_cmp(&z[b])).filter(|&i| !wrap && z[i] < 0.0);
+    let mut low: Vec<usize> = lowest.into_iter().collect();
+    low.iter().for_each(|&i| reached[i] = true);
+    while let Some(i) = low.pop() {
+        for &j in cells.around(i).1 {
+            if z[j as usize] < 0.0 && !reached[j as usize] {
+                reached[j as usize] = true;
+                low.push(j as usize);
+            }
+        }
+    }
     let mut flood: BinaryHeap<Low> = (0..z.len()).filter(|&i| reached[i]).map(|i| Low(z[i], i)).collect();
     while let Some(Low(h, i)) = flood.pop() {
         let (links, near) = cells.around(i);
@@ -222,7 +235,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     let mesh = World::mesh_of(&map, AIR_SCALE, &cfg);
     let (n, na, ns) = (mesh.cells().n(), mesh.level(AIR).n(), chem.ns());
     let mut hz = heights(seed, &map, mesh.cells());
-    drain(mesh.cells(), &mut hz);
+    drain(mesh.cells(), &mut hz, map.wrap);
     let mut ground = vec![0.0; ns * n];
     let mut bed = vec![0.0; ns * n];
     let mv = |k: usize| chem.molar_volume(k, Phase::Solid);
