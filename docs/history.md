@@ -439,3 +439,9 @@ the golden test.
   latitudes 1.4 K colder, polar rain 20 times more).
 - Finding 7: `node_days` 72: fails the pace test at 144 days (births -55% against 26% noise).
 - Liquid routed without what still passes: seas drained into piles (decision 31).
+- R3 finding 2d: growth's payer kept across its three conversions: most repeats follow a conversion that spent, so
+  only 0.45% fewer instructions in a living year, for 5 code lines.
+- R3 finding 2c: a smooth draw of the bodies' heat: not built; a cell with bodies runs 3.0 surface solves a round
+  against 1.9 without (caps 8 and 8), so at most a few % of Flow.
+- R3 finding 11: a reversal test (the strip moves to the other side after 10, 20 or 30 decisions; 800 seeds): the
+  learner against the null after the move +2.3, -0.7 and -3.5 standard errors; it does not follow the strip.
