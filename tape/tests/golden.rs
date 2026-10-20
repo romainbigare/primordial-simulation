@@ -1,8 +1,9 @@
 //! Whole runs: small worlds with every starting kind placed by worldgen's schedule. The golden runs stay whole, keep
 //! their books and end on pinned fingerprints; a century keeps its books; and the speed of a run.
 //!
-//! The threads build must give the same fingerprints, which one test binary cannot compare: run this file again with
-//! `--features pcore/threads`.
+//! The builds with and without threads must give the same fingerprints, which one test binary cannot compare. The
+//! workspace's tests build with threads (the `cli` turns them on); run this file alone for the build without:
+//! `cargo test --release -p tape --test golden`.
 
 use pcore::World;
 use std::time::Instant;

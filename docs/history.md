@@ -419,6 +419,7 @@ the golden test.
 **After the round-3 review**
 
 - Finding 4: `load_snapshot` rebuilds each cell's sums (`survey::sums`): a resume after paths exist panicked.
+- Finding 2b: `ew` runs Flow and Change on threads by default (`--no-default-features` without; wasm without).
 
 **Tried and not kept in the foundation**
 

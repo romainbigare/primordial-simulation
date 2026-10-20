@@ -15,7 +15,7 @@ cargo run --release -p cli --bin ew -- resume --from out/run/snap_00300.bin.gz -
 cargo run --release -p cli --bin ew -- chem                                                   # chemistry 0 as a table
 cargo run --release -p cli --bin ew -- numbers out/a out/b                                    # the numbers two runs differ in
 cargo run --release -p cli --bin ew                                                           # every command and flag
-cargo run --release -p cli --features threads --bin ew -- run ...                             # flow and change on threads (same hash)
+cargo run --release -p cli --no-default-features --bin ew -- run ...                         # flow and change without threads (same hash)
 cd web && npm run build && cp ../out/run/world.ewf.gz dist/                                   # viewer: open dist/index.html via a local server
 ```
 
