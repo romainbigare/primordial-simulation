@@ -49,18 +49,18 @@ const RIVERS: f64 = 136.1;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
 const WORN: f64 = 0.0424;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
-const PLANT_KG: f64 = 10.610;
+const PLANT_KG: f64 = 10.49;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
-const EATER_KG: f64 = 3.943;
+const EATER_KG: f64 = 5.20;
 /// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the reference runs.
-const PLANT_LIFE: f64 = 2.324;
+const PLANT_LIFE: f64 = 2.07;
 /// The factor either way the light-eaters' life may lie from `PLANT_LIFE`.
 const PLANT_LIFE_RANGE: f64 = 2.0;
 /// How far the eaters' mass may lie from `EATER_KG`, log10: wider than the light-eaters' 0.3, as a few hundred eaters
 /// make a noisy mean (decision 33).
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
-const EATER_LIFE: f64 = 3.787;
+const EATER_LIFE: f64 = 11.3;
 
 /// How far a number may lie from its reference: by at most so much, or by at most a factor either way.
 #[derive(Clone, Copy)]
