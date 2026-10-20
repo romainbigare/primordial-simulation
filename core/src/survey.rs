@@ -2,13 +2,8 @@
 //! (`survey`), and every day the updates due (`day`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
-use crate::change::Reactor;
-use crate::life::Life;
-use crate::math::mean_decay;
-use crate::copy::Grown;
-use crate::units::DAY;
+use crate::{bond, change::Reactor, choose, copy::Grown, life::Life, math::mean_decay, units::DAY, World};
 use crate::store::{apply, Batch, Class, Node};
-use crate::{bond, choose, World};
 use serde::{Deserialize, Serialize};
 
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).

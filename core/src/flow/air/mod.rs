@@ -14,12 +14,8 @@ pub use radiation::{column, declination, glow, insolation};
 pub(super) use step::step;
 
 use super::Scratch;
-use crate::AIR;
-use crate::math::one_minus_exp;
-use crate::units::R_GAS;
-use crate::World;
+use crate::{math::one_minus_exp, store::Class, units::R_GAS, World, AIR};
 use std::f64::consts::LN_2;
-use crate::store::Class;
 
 /// Least depth of the air over the ground, m (the air's top is `Config::air_top_m`).
 const COLUMN_MIN: f64 = 100.0;

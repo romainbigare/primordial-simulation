@@ -11,11 +11,7 @@ use super::exchange::{bucket_slope, dissolve};
 use super::newton::{alone, far, gather, solve, Drive, Wind};
 use super::radiation::{declination, insolation, Surface};
 use super::{lerp, over_cell, shares};
-use crate::ground::heat_above_floor;
-use crate::units::{MAX_SUBSTANCES, R_GAS};
-use crate::{World, AIR};
-use crate::store::Class;
-use crate::survey::Draws;
+use crate::{ground::heat_above_floor, store::Class, survey::Draws, units::{MAX_SUBSTANCES, R_GAS}, World, AIR};
 
 /// The rounds stop when no air node's temperature moves by more than this from one round to the next, K,
 const STILL_K: f64 = 5e-2;

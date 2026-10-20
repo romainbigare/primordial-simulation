@@ -6,13 +6,9 @@ use super::live::{LiveTmp, Site};
 use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE};
 use crate::change::{send_gas, GasMove, Reactor};
-use crate::chem::Phase;
 use crate::ground::{heat_above_floor, share, Melting};
-use crate::math::{mean_decay, one_minus_exp};
-use crate::survey::intercept;
-use crate::store::Node;
+use crate::{chem::Phase, math::{mean_decay, one_minus_exp}, store::Node, survey::intercept, World};
 use crate::units::{MAX_SUBSTANCES, P_REF};
-use crate::World;
 
 /// The heat of an update as its stages go.
 struct Heat {
