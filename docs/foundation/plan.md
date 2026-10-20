@@ -274,7 +274,7 @@ A speed tool must not make the world. Each one gets a test that runs a small wor
 
 | Test | Compares | Task |
 |---|---|---|
-| nodes against individuals | handover 7.1, exactly as written there (`tape/tests/nodes.rs`) | F7 |
+| nodes against individuals | handover 7.1, with rates per member-year added and seed 5 as the noise (decision 54; `tape/tests/nodes.rs`) | F7 |
 | coarse against fine | the same island on its squares and in quarters (`tape/tests/scale.rs`) | G5 |
 | long step against short step | each seed at the 10-day steps against itself at 6-hour air steps and 3-day physics steps (`tape/tests/ranges.rs`) | J1 |
 | sleep against no sleep | sleep on, and every node awake every step | B8, D12 |
@@ -325,7 +325,7 @@ taken on the way in `docs/foundation/decisions.md`.
 | ID | What | Status |
 |---|---|---|
 | E6 | Cheap child placement | Built, but not cheaper per call: its "done when" is not met |
-| F7 | The nodes-against-individuals check (handover 7.1, `tape/tests/nodes.rs`) | Open: 3 of its 6 rules hold (default b; roster b and c, decision 25); being run again after round 3 |
+| F7 | The nodes-against-individuals check (handover 7.1, `tape/tests/nodes.rs`) | Open: it runs in about 25 minutes on 4 cores; 4 of its 8 rules hold (b and c in both plans). (a) holds for the default plan's seed 5, not for seed 1, whose eaters are a few dozen, nor for the roster; (d) fails: eaters in nodes die of starving about 3 times as often as individuals (seed 5), past the noise |
 | F5 | More age classes inside nodes | Only if F7's new run asks for it |
 | G5 | The coarse-against-fine test (`tape/tests/scale.rs`) | Open: the climate and the light-eaters hold; the river length is off by -5.2 km against a limit of 4.0 after D-infinity (decisions 31, 46) |
 

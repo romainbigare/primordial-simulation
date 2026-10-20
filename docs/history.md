@@ -469,6 +469,9 @@ the golden test.
 - The key-number references of the heat-absorbing gas and of life are set from the 3-seed runs after items 6, 7 and 2b
   (decision 53): the gas 339 to 388.8 ppm, light-eaters 10.49 to 10.38 log10 kg, eaters 5.20 to 4.54, their lives
   2.07 to 1.81 and 11.3 to 9.32 yr; the other keys hold (land 287.51 K, rivers 170.5).
+- F7: the nodes check adds rates per member-year (rule d) and takes seed 5 as its noise (decision 54); it runs in 24
+  minutes on 4 cores. Rules b and c hold in both plans; a holds for the default plan's seed 5 only; d fails: eaters in
+  nodes die of starving 0.20 a member-year against 0.063 as individuals (seed 5; noise 0.20 against 0.089).
 
 **Tried and not kept in the foundation**
 

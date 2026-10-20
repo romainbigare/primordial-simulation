@@ -1,17 +1,18 @@
 //! The check of population nodes against individuals (`docs/handover.md` 7.1, fixed before it runs): seeds 1 and 5 at
-//! 32 x 32, with nodes and with `--individuals`, then with `--roster`; seed 1 with `--crowd 8` beside its run at the
-//! default `--crowd 4` as the noise. On the columns by starting kind (means over a window of years) the modes agree if
+//! 32 x 32, with nodes and with `--individuals`, then with `--roster`; seed 5 with `--crowd 8` beside its run at the
+//! default `--crowd 4` as the noise (seed 1's eaters are a few dozen at 32 x 32). On the columns by starting kind (means over a window of years) the modes agree if
 //! (a) each kind's mass and real life are within a factor of two, and no kind lives in one mode only; (b) the main gene
 //! means move the same way wherever one moves more than 0.3 (of the copy-mass gene: each gene's move in its mutation
 //! steps, `body::steps`, times the copy-mass gene's step, so a gene in kelvins counts as one in decades); (c) the same
-//! kind wins (most mass, heaviest member, the
-//! order of what eaters eat). A difference larger than the noise is a bug in the node rules: a rule the modes break
-//! counts only where the two crowd settings keep it, or break it by less. It also prints a census of the young: the
-//! share of each kind's members in young (immature) bodies, and their median member body over the copy mass.
+//! kind wins (most mass, heaviest member, the order of what eaters eat); and, as masses race apart when populations
+//! grow or crash at different times, (d) each kind's births and its deaths by each main cause per member-year, and
+//! what the eaters eat a year per kg, are within a factor of two. A difference larger than the noise is a bug in the
+//! node rules: a rule the modes break counts only where the two crowd settings keep it, or break it by less. It also
+//! prints a census of the young: the share of each kind's members in young (immature) bodies, and their median member
+//! body over the copy mass.
 //!
 //! The windows are years 41-50, and 26-30 with the roster (after its last kind is placed, in year 24): at 32 x 32 the
-//! eaters as individuals pass 10^4 bodies by year 70, and the roster's eaters of remains 10^5 by year 28, doubling each
-//! year: too slow for longer runs, let alone a test.
+//! eaters as individuals pass 10^4 bodies by year 45, so longer runs are too slow for a test.
 
 mod common;
 
@@ -26,7 +27,7 @@ const SIDE: usize = 32;
 /// with its window.
 const PLANS: [(bool, (u64, u64)); 2] = [(false, (41, 50)), (true, (26, 30))];
 /// The seed run at a second crowd setting, and that setting (`Config::crowd`; the default is the other).
-const NOISE_SEED: u64 = 1;
+const NOISE_SEED: u64 = 5;
 const NOISE_CROWD: usize = 8;
 /// The factor within which a kind's mass and real life must agree (rule a).
 const FACTOR: f64 = 2.0;
@@ -35,14 +36,19 @@ const FACTOR: f64 = 2.0;
 const MOVE: f64 = 0.3;
 /// The main genes (`docs/tape.md`, `root_<k>_*`) and their place in the genome.
 const GENES: [(&str, usize); 11] = [("gas", GAS), ("leaf", LEAF), ("copy_log", COPY_MASS), ("interval", INTERVAL), ("hidden", HIDDEN), ("heat", HEAT), ("keep_t", KEEP_T), ("repair", REPAIR), ("wet_gene", WET), ("alloc", ALLOC), ("child", CHILD)];
-/// The rules the check holds, per plan (default, roster) and rule (a, b, c); it prints the others.
-const HELD: [[bool; 3]; 2] = [[false, true, false], [false, true, true]];
+/// The rules the check holds, per plan (default, roster) and rule (a, b, c, d); it prints the others.
+const HELD: [[bool; 4]; 2] = [[false, true, true, false], [false, true, true, false]];
 /// What eaters could burn of what they took, by source.
 const ATE: [&str; 3] = ["ate_light_eaters", "ate_others", "ate_ground"];
+/// The causes of death (`docs/tape.md`).
+const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
+/// A rate is compared (rule d) where it counts at least this many births or deaths over the window in either run:
+/// fewer are the noise of counting (a third of the count at ten).
+const EVENTS: f64 = 10.0;
 
 /// One starting kind over the window: alive at its end; means of its mass (kg), real life (yr), member mass (kg), each
 /// of `GENES` less its founders' value, its share of members in young bodies, and their median member body over the
-/// copy mass.
+/// copy mass; its member-years, and its births and its deaths by each of `CAUSES` per member-year.
 #[derive(Clone, Default)]
 struct Kind {
     alive: bool,
@@ -52,23 +58,28 @@ struct Kind {
     moves: Vec<f64>,
     young: f64,
     young_size: f64,
+    member_years: f64,
+    rates: Vec<f64>,
 }
 
-/// A run over its window: its kinds, and the order of what its eaters ate (most first).
+/// A run over its window: its kinds, the order of what its eaters ate (most first), and what they ate a year per kg
+/// of the kinds that are not the light-eaters (kind 0).
 struct Window {
     kinds: Vec<Kind>,
     ate: [usize; 3],
+    intake: f64,
 }
 
-/// One year of a run in its window: per kind its members, mass, real life, member mass, the young (`young`) and the
-/// `GENES` (from `GENE_AT`); and what its eaters ate (`ATE`).
+/// One year of a run in its window: per kind its members, mass, real life, member mass, the young (`young`), the
+/// `GENES` (from `GENE_AT`), and its births and deaths by cause (from `RATE_AT`); and what its eaters ate (`ATE`).
 struct Year {
     kinds: Vec<Vec<f64>>,
     ate: [f64; 3],
 }
 
-/// Where a kind's genes start in a row of `Year::kinds`.
+/// Where a kind's genes and its births start in a row of `Year::kinds`.
 const GENE_AT: usize = 6;
+const RATE_AT: usize = GENE_AT + GENES.len();
 
 /// The young of kind `k` at the end of a year: the share of its members in immature bodies (`Body::adult`), nodes or
 /// individuals, and the median by members of their member body over their copy mass (NaN without young).
@@ -127,7 +138,10 @@ fn check_run(seed: u64, roster: bool, window: (u64, u64), nodes: bool, crowd: us
         if y >= window.0 {
             let row = |k: usize| {
                 let (share, size) = young(w, k as u32);
-                [col(k, "members"), col(k, "kg"), col(k, "life_real"), col(k, "mass"), share, size].into_iter().chain(GENES.iter().map(|g| col(k, g.0))).collect()
+                let first = [col(k, "members"), col(k, "kg"), col(k, "life_real"), col(k, "mass"), share, size];
+                let genes = GENES.iter().map(|g| col(k, g.0));
+                let rates = std::iter::once(col(k, "births")).chain(CAUSES.iter().map(|c| col(k, &format!("died_{c}"))));
+                first.into_iter().chain(genes).chain(rates).collect()
             };
             years.push(Year { kinds: (0..kinds(rec)).map(row).collect(), ate: ATE.map(|c| rec.last(c)) });
         }
@@ -138,13 +152,18 @@ fn check_run(seed: u64, roster: bool, window: (u64, u64), nodes: bool, crowd: us
             let m = |q: usize| mean(years.iter().filter_map(|y| y.kinds.get(k).map(|v| v[q])));
             let start = founders[k].clone().unwrap_or_default();
             let moves = (0..GENES.len()).map(|g| (m(GENE_AT + g) - start.get(g).copied().unwrap_or(f64::NAN)) * unit[g]).collect();
-            Kind { alive: last[k][0] > 0.0, kg: m(1), life: m(2), member: m(3), young: m(4), young_size: m(5), moves }
+            // Per member-year: the sum over the window of each count over the sum of the members.
+            let sum = |q: usize| years.iter().filter_map(|y| y.kinds.get(k).map(|v| v[q])).sum::<f64>();
+            let rates = (0..=CAUSES.len()).map(|c| sum(RATE_AT + c) / sum(0)).collect();
+            let (alive, member_years) = (last[k][0] > 0.0, sum(0));
+            Kind { alive, kg: m(1), life: m(2), member: m(3), young: m(4), young_size: m(5), moves, member_years, rates }
         })
-        .collect();
+        .collect::<Vec<Kind>>();
     let eaten: Vec<f64> = (0..ATE.len()).map(|c| mean(years.iter().map(|y| y.ate[c]))).collect();
     let mut ate = [0, 1, 2];
     ate.sort_by(|&a, &b| eaten[b].total_cmp(&eaten[a]));
-    Window { kinds, ate }
+    let intake = eaten.iter().sum::<f64>() / kinds.iter().skip(1).map(|k| k.kg).sum::<f64>();
+    Window { kinds, ate, intake }
 }
 
 /// How far apart two positive numbers are, as the log of their ratio (infinite if one is not positive).
@@ -158,9 +177,9 @@ fn winners(r: &Window) -> (Option<usize>, Option<usize>) {
     (by(|k| k.kg), by(|k| k.member))
 }
 
-/// One thing the three rules compare between two runs: its rule (0, 1, 2 for a, b, c), what it is, the runs' values,
-/// and how far apart the runs are on it: for rule (a) the log of the ratio (infinite where the kind lives in one run
-/// only), for (b) and (c) 1 where they disagree, else 0.
+/// One thing the four rules compare between two runs: its rule (0 to 3 for a to d), what it is, the runs' values, and
+/// how far apart the runs are on it: for rules (a) and (d) the log of the ratio (infinite where the kind lives in one
+/// run only), for (b) and (c) 1 where they disagree, else 0.
 struct Diff {
     rule: usize,
     what: String,
@@ -185,18 +204,25 @@ fn diffs(x: &Window, y: &Window) -> Vec<Diff> {
             let flip = (u.abs() > MOVE || v.abs() > MOVE) && (u > 0.0) != (v > 0.0);
             push(1, format!("kind {k} {name}"), format!("{u:+.2} against {v:+.2}"), flip as u8 as f64);
         }
+        // Births, and deaths by each cause, where they count at least `EVENTS` in either run.
+        let counted = |c: usize| (p.rates[c] * p.member_years).max(q.rates[c] * q.member_years) >= EVENTS;
+        for c in (0..=CAUSES.len()).filter(|&c| both && counted(c)) {
+            let name = if c == 0 { "births".to_string() } else { format!("died {}", CAUSES[c - 1]) };
+            push(3, format!("kind {k} {name} per member-year"), format!("{:.3e} against {:.3e}", p.rates[c], q.rates[c]), apart(p.rates[c], q.rates[c]));
+        }
     }
     let ((mx, hx), (my, hy)) = (winners(x), winners(y));
     push(2, "most mass".into(), format!("kind {mx:?} against {my:?}"), (mx != my) as u8 as f64);
     push(2, "heaviest member".into(), format!("kind {hx:?} against {hy:?}"), (hx != hy) as u8 as f64);
     let (ox, oy) = (x.ate.map(|c| ATE[c]), y.ate.map(|c| ATE[c]));
     push(2, "what eaters eat".into(), format!("{ox:?} against {oy:?}"), (ox != oy) as u8 as f64);
+    push(3, "what eaters eat per kg".into(), format!("{:.3} against {:.3} a year", x.intake, y.intake), apart(x.intake, y.intake));
     d
 }
 
-/// The rule a difference breaks: past a factor of `FACTOR` for rule (a), any for (b) and (c).
+/// The rule a difference breaks: past a factor of `FACTOR` for rules (a) and (d), any for (b) and (c).
 fn breaks(d: &Diff) -> bool {
-    d.size > if d.rule == 0 { FACTOR.ln() } else { 0.0 }
+    d.size > if d.rule == 0 || d.rule == 3 { FACTOR.ln() } else { 0.0 }
 }
 
 /// Prints run `r`'s kinds alive, with their census of the young and the genes that moved, and its winners.
@@ -208,9 +234,10 @@ fn print(name: &str, r: &Window) {
     println!("  {name}: most mass, heaviest member {:?}; eaters ate most to least {:?}", winners(r), r.ate.map(|c| ATE[c]));
 }
 
-/// Nodes against individuals, by the three rules of handover 7.1, against the noise of the crowd setting.
+/// Nodes against individuals, by the three rules of handover 7.1 and the rates (d), against the noise of the crowd
+/// setting.
 #[test]
-#[ignore = "slow: ten runs of a 32 x 32 world, 50 and 30 years"]
+#[ignore = "slow: ten runs of a 32 x 32 world, 50 and 30 years (about 25 minutes on 4 cores)"]
 fn nodes_and_individuals_make_the_same_world() {
     let crowd = Config::default().crowd;
     let mut runs: Vec<(u64, usize, bool, usize)> = vec![];
@@ -239,7 +266,7 @@ fn nodes_and_individuals_make_the_same_world() {
             print(&format!("seed {seed} nodes"), n);
             print(&format!("seed {seed} individuals"), i);
             let modes = diffs(n, i);
-            for (rule, label) in ["a", "b", "c"].iter().enumerate() {
+            for (rule, label) in ["a", "b", "c", "d"].iter().enumerate() {
                 let broke: Vec<&Diff> = modes.iter().filter(|d| d.rule == rule && breaks(d)).collect();
                 let noise_of = |d: &Diff| kept.iter().find(|x| x.what == d.what).map_or(0.0, |x| x.size);
                 let past: Vec<&&Diff> = broke.iter().filter(|d| d.size > noise_of(d)).collect();
