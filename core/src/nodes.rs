@@ -56,16 +56,21 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its `Kin` (`merge_closest`).
-type Likeness = (Vec<f32>, Vec<f32>, Kin);
+/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its `Kin` but for what it holds
+/// (`merge_closest`).
+type Likeness = (Vec<f32>, Vec<f32>, (u32, bool, Option<usize>));
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
 /// are left or no pair is alike: here each within the other's spread, as children join a node (`body::within`), of one
-/// `Kin`; unlike nodes never merge, however full the cell. A pair's key: the squared distance of their genes in steps
-/// (infinite if unlike).
+/// `Kin` but for what they hold; unlike nodes never merge, however full the cell. What a body holds does not keep it
+/// apart in a full cell: a part is one more state of its members, not a likeness, and the one that joins lets go of it
+/// (`merge`). A pair's key: the squared distance of their genes in steps (infinite if unlike).
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
-    let steps = |w: &World, s: usize| (steps(lay, &w.life.bodies[s].genes), spreads(&w.life.bodies[s]), kin_of(w, &w.life.bodies[s]));
+    let steps = |w: &World, s: usize| {
+        let (b, k) = (&w.life.bodies[s], kin_of(w, &w.life.bodies[s]));
+        (steps(lay, &b.genes), spreads(b), (k.0, k.1, k.2))
+    };
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
         let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);

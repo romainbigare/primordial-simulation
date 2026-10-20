@@ -473,6 +473,12 @@ the golden test.
   minutes on 4 cores. Rules b and c hold in both plans; a holds for the default plan's seed 5 only; d fails: eaters in
   nodes die of starving 0.20 a member-year against 0.063 as individuals (seed 5; noise 0.20 against 0.089).
 
+**After the round-5 review**
+
+- Item 5: past `crowd` nodes a cell merges its most alike bodies whatever they hold (decision 56): 48 x 48 seed 2,
+  years 91 to 100, the most bodies in a cell 61-803 to 15-53, bodies 6,641 to 5,950, parts 980 to 112, eaters
+  1.85e8 to 1.86e8 kg, light-eaters 5.10e10 to 5.07e10 kg, land 290.63 to 290.61 K; body time -20%.
+
 **Tried and not kept in the foundation**
 
 - Nodes keeping their members' wear: eaters' life 7.1 yr against at most 5.8 (branch `nodes-wear-tried`).
