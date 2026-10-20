@@ -322,8 +322,9 @@ learned (`Life::inherit`).
 
 ### 5.2 Perception
 Local (`choose/perceive.rs`): own stores against minimums, warmth, size, light; its cell's loose substances, liquid,
-temperature and crowding; the season; signals; memory; cells within sight ring by ring (weight 1 / ring²); up to
-`SEEN` bodies in or next to its cell (looks, signals, well-being, past dealings); up to 3 parts. Walls and cover hide.
+temperature and crowding; the season; signals; memory; cells within sight ring by ring (weight 1 / ring²), with their
+parts, as the last survey saw them; up to `SEEN` bodies in or next to its cell (looks, signals, well-being, past
+dealings); up to 3 parts. Walls and cover hide.
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;

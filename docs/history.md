@@ -509,6 +509,9 @@ the golden test.
   individuals 1.22, 1.40 and 0.68 times (32 x 32, seeds 2, 3, 5). Rules b (both plans) and c (roster) hold; a and c
   fail for the default seed 1 (a few dozen eaters); d fails on rare causes (eaters taken: nodes 0.0013 a member-year,
   individuals none) and on the roster's small eaters' starving.
+- A body sees the parts of the cells within its sight as the last survey saw them, as it sees their other features
+  (`choose::cells`), so what an update reads lies one link from it. 48 x 48 seed 2, years 51-60: light-eaters 2.05e10
+  to 2.19e10 kg, eaters 7.1e7 to 9.7e7 kg (seed noise), land 290.66 to 290.71 K, drift 1e-14.
 
 **Tried and not kept in the foundation**
 

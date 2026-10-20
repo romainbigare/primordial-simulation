@@ -132,11 +132,10 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice,
         let along = |h: [f64; 2]| o[0] * h[0] + o[1] * h[1];
         let &(d, j, _) = ways[..nw].iter().max_by(|p, q| along(p.2).total_cmp(&along(q.2))).expect("a cell seen lies past a link");
         let (fd, ck, e) = (&mut f[d * NF..(d + 1) * NF], &w.life.cellf[k], w.life.env[k]);
-        fd[..8].iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
+        fd.iter_mut().zip(ck).for_each(|(x, c)| *x += wt * c);
         fd[0] += wt * ((e[2] - env[2]) / DZ_SCALE) as f32;
         fd[6] += wt * ((e[0] - env[0]) / DT_NEAR) as f32;
         fd[8] += wt * smell(k);
-        fd[9] += wt * ln(1.0 + w.parts.at[k].len() as f32);
         // The step into the next cell is felt along its link, worn or not.
         if k == j {
             fd[7] += wt * (ln(lanes::resist(w, i, j) as f32) - ck[7]);

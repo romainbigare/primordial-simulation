@@ -129,15 +129,18 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
 }
 
 /// After each survey: what a brain perceives of each cell as a place to move to (the height and temperature differences
-/// are added per move, in places 0 and 6; the depth of standing liquid is in place `WET`).
+/// are added per move, in places 0 and 6, and what the body can take there in place 8; the depth of standing liquid is
+/// in place `WET`, its parts in the last place).
 pub fn cells(w: &mut World) {
-    let life = &w.life;
-    let cellf = life.sum.iter().zip(&life.env).zip(w.mesh.cells().area()).map(|((c, e), &area)| {
+    let (life, parts) = (&w.life, &w.parts.at);
+    let cellf = life.sum.iter().zip(&life.env).zip(w.mesh.cells().area()).zip(parts).map(|(((c, e), &area), p)| {
         let resist = 1.0 + thickness(w, c[1], area) as f32;
         let c = c.map(|v| v as f32);
         let n = c[0].max(1.0);
         let leaf = if c[0] > 0.0 { ln(c[2] / c[1].max(1.0)) / LN_LEAF } else { 0.0 };
-        [0.0, ln(1.0 + e[1] as f32), ln(1.0 + c[0]) / LN_MEMBERS, ln((c[1] / n).max(1.0)) / LN_MASS - 1.0, leaf, c[3] / n, 0.0, ln(resist)]
+        let (members, mass) = (ln(1.0 + c[0]) / LN_MEMBERS, ln((c[1] / n).max(1.0)) / LN_MASS - 1.0);
+        let parts = ln(1.0 + p.len() as f32);
+        [0.0, ln(1.0 + e[1] as f32), members, mass, leaf, c[3] / n, 0.0, ln(resist), 0.0, parts]
     });
     w.life.cellf = cellf.collect();
 }

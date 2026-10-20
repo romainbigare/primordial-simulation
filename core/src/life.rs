@@ -38,9 +38,9 @@ pub struct Life {
     /// Per cell, from the last monthly survey: its loose substances as a brain perceives them, [cell * substances + k]
     #[serde(skip)]
     pub seen: Vec<f32>,
-    /// Per cell, from the last survey: what a brain perceives of it as a place to move to
+    /// Per cell, from the last survey: what a brain perceives of it as a place to move to (`choose::cells`)
     #[serde(skip)]
-    pub cellf: Vec<[f32; 8]>,
+    pub cellf: Vec<[f32; crate::choose::NF]>,
     /// Updates due, by day modulo RING: (slot, generation)
     due: Vec<Vec<(u32, u32)>>,
     /// The brain of each lineage (None once it died out), and its living bodies
