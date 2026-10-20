@@ -23,6 +23,8 @@ use crate::{bond, lanes, World};
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
 pub(crate) const NT: usize = 11;
+/// The feature of a neighbour direction that is the depth of standing liquid there, ln(1 + depth / m) (`perceive::cells`).
+pub const WET: usize = 1;
 /// Most bodies perceived (the `SEEN` gene sets how many); parts perceived; moves (one per compass direction of the
 /// mesh's links, `Level::way`); options.
 const MAX_SEEN: usize = 6;

@@ -129,7 +129,7 @@ pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, 
 }
 
 /// After each survey: what a brain perceives of each cell as a place to move to (the height and temperature differences
-/// are added per move, in places 0 and 6).
+/// are added per move, in places 0 and 6; the depth of standing liquid is in place `WET`).
 pub fn cells(w: &mut World) {
     let life = &w.life;
     let cellf = life.sum.iter().zip(&life.env).zip(w.mesh.cells().area()).map(|((c, e), &area)| {

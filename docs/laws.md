@@ -889,7 +889,9 @@ read a kind.
 - **Founders are adults**: a founder's living body is its copy-mass gene; its mass is 30% sugar (60% for the two big
   slow kinds), the rest liquid and matter.
 - **Brains**: animals start with hand-set brain biases (`Seeding::hand`; `--neutral-eaters` for neutral brains),
-  because neutral founders die before they learn. Light-eaters start with no brain. Genes and rows get a spray of
+  because neutral founders die before they learn: they take from the ground before they bite a body (a bite reaches
+  one member of a node, 5.3) and keep out of deep standing liquid (a move's odds fall as 1 / (1 + depth / m)), as
+  land animals that sink do. Light-eaters start with no brain. Genes and rows get a spray of
   mutation (`--spray`).
 - **Fixers**: a tenth of the starting light-eaters carry the fixing gene (`worldgen::life::FIXERS`, `FIX_GENE`;
   `--fixers`).

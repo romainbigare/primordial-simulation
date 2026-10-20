@@ -1283,3 +1283,8 @@ Phase E review, round 1 (fixes):
   21 to 30: land 287.15 to 287.72 K, rain on land +2%, light-eaters +5% at year 30; golden re-pinned.
 - Tried and not kept: routing liquid by heads without what passes in the pass (the cell's or its neighbours' still to
   come), so rivers in quarters stand no deeper than on squares: seas drained into piles and the heat broke (decision 31).
+- The eaters' founders take from the ground before they bite a body (hand-set biases 2 and 0.5, were 0.5 and 2) and a
+  move weighs the depth of standing liquid by -1 (`choose::WET`; decision 37): founders drowned in the sea and bit
+  plants that cannot pay their upkeep. 64 x 64, 3 seeds: first-year deaths of unpaid upkeep 675, 565, 563 to 410,
+  305, 295 (of about 860); eaters at year 23 194 to 212 to 436 to 464, at year 35 31, 89, 13 to 51, 118, 38; their
+  log10 kg at year 30 3.53 to 3.76 (mean); 48 x 48, year 60: 0, 0, 0 to 0, 21, 0. Golden re-pinned.

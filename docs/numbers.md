@@ -180,7 +180,7 @@ These are not numbers of the world and not rows of `Physics` or `Config`, but th
 
 | rule | what it does | chosen for (run) | where |
 |---|---|---|---|
-| the hand-set brain biases at the start (the default in `ew run` and `--roster`) | animals are placed with hand-set brain biases (`Seeding::hand`), not neutral brains; `--neutral-eaters` for the neutral start | nearly all neutral-brained founder eaters died in their first year, a lottery | `worldgen::life::Seeding::default`, `founder_lineage` |
+| the hand-set brain biases at the start (the default in `ew run` and `--roster`) | animals are placed with hand-set brain biases (`Seeding::hand`), not neutral brains: they take from the ground (2) before they bite a body (0.5) and weigh the depth of standing liquid in a move by -1 (on ln(1 + depth / m)); `--neutral-eaters` for the neutral start | nearly all neutral-brained founder eaters died in their first year, a lottery; founders that bit plants first (one member a bite) and walked into the sea starved or drowned in their first year | `worldgen::life::Seeding::default`, `H_EATER`, `founder_lineage` |
 | the roster's stores (`Kind::store`: 30% of mass, 60% for the two big slow eater kinds) | the fuel a starting member holds | seed 1, 64x64 roster: with half the store the two big kinds died out in their first decades | `worldgen::life::KINDS` |
 | the fixing founders (`worldgen::life::FIXERS` 0.1 and `FIX_GENE` 9.8, rows below) | a tenth of the starting light-eaters carry the gene of the reaction that fixes the air's nitrogen; `--fixers 0` for the control | with one gift of soil nitrogen and no input the plants collapsed. The share is anchored to real floras, but it was wanted after a run collapsed | `worldgen::life` |
 

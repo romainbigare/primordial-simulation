@@ -140,8 +140,15 @@ pub fn seed_with(w: &mut World, which: usize, how: &Seeding) -> String {
 fn founder_lineage(w: &mut World, which: usize, kind: &Kind, hand: Option<Hand>, r: &mut Rng) -> (Shape, u32, Vec<f32>) {
     let [h, mem, seen, sight] = lineage::sizes(&kind.scalars);
     let shape = lineage::shape(w.chem.ns(), h, mem);
-    let (fixed, dir, verbs) = hand.unwrap_or(([0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]));
-    let mut base = brain::random(shape, r, BRAIN_NOISE, fixed, dir, verbs);
+    let mut base = match hand {
+        Some((fixed, dir, wet, verbs)) => {
+            let mut base = brain::random(shape, r, BRAIN_NOISE, fixed, dir, verbs);
+            // The bias of the row that weighs the depth of standing liquid in a move's score.
+            base[shape.base() + (shape.dir() + 1 + pcore::choose::WET) * shape.r() + shape.h] = wet;
+            base
+        }
+        None => brain::random(shape, r, BRAIN_NOISE, [0.0; brain::FIXED], 0.0, [0.0; brain::VERBS + brain::OVERBS]),
+    };
     let mut rows = base.split_off(shape.base());
     // (A brain of no hidden units has no born rows: nothing reads them, `brain::rerow`.)
     if shape.h == 0 {
