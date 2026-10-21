@@ -82,8 +82,11 @@ impl Surface {
         let t3 = SIGMA * t * t * t;
         let num = self.sw + down + 3.0 * t3 * t + sensible * self.tl + self.gain - self.slope * self.t0 + self.g_rain * self.t_rain;
         let den = 4.0 * t3 + sensible + self.g_rain - self.slope;
-        // The surface's end temperature and response with the node from `tn` behind a resistance `r` (none: held at `tn`).
-        let surface = |tn: f64, r: f64| if r > 0.0 { ((tn / r + num) / (1.0 / r + den), 1.0 / (1.0 / r + den)) } else { (tn, 0.0) };
+        // The surface's end temperature and response with the node from `tn` behind a resistance `r`; held at `tn` where
+        // `r` is too small to change it (`r den` below the last digit, where `1 / r` may overflow).
+        let surface = |tn: f64, r: f64| {
+            if r * den > f64::EPSILON { ((tn / r + num) / (1.0 / r + den), 1.0 / (1.0 / r + den)) } else { (tn, 0.0) }
+        };
         let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), sensible * (ts - self.tl));
         // The heat the node gets over the step with the surface at `ts`, J.
         let net = |ts: f64| {

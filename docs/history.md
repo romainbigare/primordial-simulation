@@ -593,6 +593,9 @@ the golden test.
   (5e-16 a year once bodies crowd such cells). Golden re-pinned; snapshot 43. 22 x 22 island seed 1 at year 300:
   element 0's drift -7.5e-15 to 1.6e-16 (flat), energy 7.8e-15 to 1.8e-15; the step of a lifeless island 5% more
   instructions (callgrind).
+- L3: the surface balance holds a ground node at its temperature where its soft cover's resistance is too small to
+  change it (`r den` under the last digit): a cover of almost nothing gave 1 / r = inf, a NaN in the air step and a
+  stop of the 24 x 24 refined-region run at year 884. Bit for bit the same on the golden runs.
 
 **Tried and not kept in the foundation**
 
