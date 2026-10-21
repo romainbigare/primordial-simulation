@@ -569,6 +569,11 @@ the golden test.
 - The checks of a world's inputs (`Config::validate`, `Chemistry::validate`) are one line each (`params::require`); a
   NaN density or vaporisation enthalpy is refused too. Bit for bit the same. Core 8,993 to 8,971 code
   lines.
+- An air node keeps what rounding takes from its amounts as `store::apply` adds to them (`Store::air_carry`, a
+  Neumaier sum folded back into the amount), and the books count it: a body's small take of a main gas no longer
+  rounds away. Golden re-pinned; snapshot 42. 48 x 48 seed 1 at year 100: element 2's drift 3.3e-14 to 9e-17, the
+  worst element 7e-16, flat from year 10 (before: 7.0e-15 a decade in years 91-100, rising). Flow about 6% dearer
+  (530 against 500 ms a year at year 90, bodies unchanged; about 1% of the year).
 
 **Tried and not kept in the foundation**
 

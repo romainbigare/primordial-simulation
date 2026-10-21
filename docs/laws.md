@@ -38,7 +38,9 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` is the
 store's only writer. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
-lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
+lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. An air node holds
+far more of the main gases than a body or a ground node moves: what rounding takes from its amounts is kept apart and
+counted in the books (`Store::air_carry`, Neumaier 1974). Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
 potential energy is one more node (`Class::Potential`): a lift moves heat into it, a fall takes it back. So every
 element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing

@@ -26,7 +26,7 @@ struct Sum(f64, f64);
 impl Sum {
     fn add(&mut self, x: f64) {
         let y = self.0 + x;
-        self.1 += if self.0.abs() >= x.abs() { (self.0 - y) + x } else { (x - y) + self.0 };
+        self.1 += crate::math::rounding_lost(self.0, x, y);
         self.0 = y;
     }
     fn get(self) -> f64 {
@@ -40,9 +40,12 @@ pub fn totals(w: &World) -> Totals {
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
     for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n()), (Class::Bodies, w.mesh.cells().n())] {
         let (store, latent) = (w.store.amounts(class), matches!(class, Class::Air | Class::Bodies));
+        // The air's amounts with what rounding took from their sums (`Store::air_carry`).
+        let carry = if class == Class::Air { w.store.air_carry() } else { &[] };
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
-            store.get(k * len..(k + 1) * len).unwrap_or(&[]).iter().for_each(|&a| s.add(a));
+            let at = k * len..(k + 1) * len;
+            store.get(at.clone()).unwrap_or(&[]).iter().chain(carry.get(at).unwrap_or(&[])).for_each(|&a| s.add(a));
             sum.add(s.get());
             // Air and the bodies' nodes hold their gases' fusion and vaporisation enthalpy; the ground holds fusion in
             // `e_ground`.

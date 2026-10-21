@@ -6,6 +6,13 @@ pub(crate) fn one_minus_exp(x: f64) -> f64 {
     -(-x).exp_m1()
 }
 
+/// What rounding took from `a + b`, given their computed sum `s`, exactly (Neumaier 1974): kept apart, it makes a sum
+/// exact.
+#[inline]
+pub(crate) fn rounding_lost(a: f64, b: f64, s: f64) -> f64 {
+    if a.abs() >= b.abs() { (a - s) + b } else { (b - s) + a }
+}
+
 /// `n` times the surface of a cube of volume `v`: n 6 v^(2/3) (`n` first, for the order of the products).
 #[inline]
 pub(crate) fn cube_area(n: f64, v: f64) -> f64 {

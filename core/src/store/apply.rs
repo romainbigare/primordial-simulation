@@ -6,6 +6,7 @@ use super::{held, held_more};
 use super::moves::{LinkFlux, Move, Transform};
 use super::nodes::{Class, Node, BOUNDARIES};
 use crate::chem::Chemistry;
+use crate::math::rounding_lost;
 use crate::{World, AIR};
 
 /// What a transform may lose or gain of an element to rounding, relative to all the elements it changes.
@@ -16,6 +17,8 @@ pub(crate) const ROUNDING: f64 = 1e-9;
 /// The classes `apply` books, the first ones: those whose amounts and heat lie in the `Store` (a part or a body books
 /// its own).
 const BOOKED: usize = Class::Part as usize;
+/// The array of the air's amounts, which `apply` sums with what rounding takes from them (`Store::air_carry`).
+const AIR_AMOUNTS: usize = 2 * Class::Air as usize;
 /// The first array of the nodes that give all they are asked and may hold less than nothing: the boundary nodes and
 /// the potential (`Class::Boundary`, `Class::Potential`).
 const BOUNDARY_ARRAYS: usize = 2 * Class::Boundary as usize;
@@ -112,10 +115,18 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
 }
 
 /// Adds `d` to number `s`, `v`, noting it in `low` when it falls below zero (but of a node that gives all it is asked).
+/// An air node holds much of the main gases, so a small move of a body or a ground node would round away against it:
+/// what rounding takes from an air amount is kept in `carry` and folded back as far as the amount can hold it
+/// (Neumaier 1974).
 #[inline(always)]
-fn add(v: &mut f64, s: Slot, d: f64, low: &mut Vec<Slot>) {
+fn add(v: &mut f64, s: Slot, d: f64, low: &mut Vec<Slot>, carry: &mut [f64]) {
     let was = *v;
     *v += d;
+    if s.arr == AIR_AMOUNTS {
+        let lost = carry[s.at] + rounding_lost(was, d, *v);
+        let folded = *v + lost;
+        (carry[s.at], *v) = (rounding_lost(*v, lost, folded), folded);
+    }
     if *v < 0.0 && was >= 0.0 && s.arr < BOUNDARY_ARRAYS {
         low.push(s);
     }
@@ -155,19 +166,20 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
     // The heat of the boundary nodes and the potential is a whole history's sum: their changes are summed apart and added
     // once, so small changes do not round away against it.
     let (mut far_heat, mut far_lift) = ([0.0; BOUNDARIES], [0.0]);
+    let carry = &mut store.air_carry[..];
     let mut books: Vec<&mut [f64]> = store.amounts.iter_mut().zip(&mut store.heat).flat_map(|(a, h)| [&mut a[..], &mut h[..]]).collect();
     (books[2 * Class::Boundary as usize + 1], books[2 * Class::Potential as usize + 1]) = (&mut far_heat, &mut far_lift);
     // Each number that falls below zero on the way (those that end there are among them).
     let mut low = Vec::new();
     each_change(&cx, (fluxes, &lifted), moves, transforms, |change| match change {
-        Change::One(s, d) => add(&mut books[s.arr][s.at], s, d, &mut low),
+        Change::One(s, d) => add(&mut books[s.arr][s.at], s, d, &mut low, carry),
         Change::Column(c) if c.arr[0] == c.arr[1] => {
             let v = &mut *books[c.arr[0]];
-            c.each(|s, d| add(&mut v[s.at], s, d, &mut low));
+            c.each(|s, d| add(&mut v[s.at], s, d, &mut low, carry));
         }
         Change::Column(c) => {
             let [p, q] = books.get_disjoint_mut(c.arr).expect("two arrays");
-            c.each(|s, d| add(if s.arr == c.arr[0] { &mut p[s.at] } else { &mut q[s.at] }, s, d, &mut low));
+            c.each(|s, d| add(if s.arr == c.arr[0] { &mut p[s.at] } else { &mut q[s.at] }, s, d, &mut low, carry));
         }
     });
     low.sort_unstable();
