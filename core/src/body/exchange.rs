@@ -25,8 +25,8 @@ impl Body {
     }
 }
 
-/// Halvings of the interval in `through`.
-const BISECT_STEPS: usize = 40;
+/// Most values of Newton's method in `through` (it stops as soon as a step no longer falls, in a few).
+const NEWTON_STEPS: usize = 40;
 
 /// The cover of other bodies over a body's cell, kg/m²: the mass of the others there now per ground area.
 pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
@@ -91,18 +91,18 @@ fn closing(l: f64, ls: f64, e: f64, n: f64) -> f64 {
 }
 
 /// What a key liquid loses through the pores in an update while it soaks at `rd` of its gap below `ls`: it settles in
-/// days where the two meet, `rd` (1 - u) `ls` = `e` u^n (found by halving), and loses `e` u^n, or `closing` if more.
+/// days where the two meet, `rd` (1 - u) `ls` = `e` u^n, and loses `e` u^n, or `closing` if more. The meeting is found
+/// by Newton's method on e u^n + a u - a (a = `rd` `ls`), which rises and curves up on 0..1: from the smaller of 1 and
+/// where its first term alone reaches a, above the meeting, each step falls toward it.
 pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
     let dry = closing(l, ls, e, n);
     if rd <= 0.0 || ls <= 0.0 || e <= 0.0 {
         return dry;
     }
-    let (mut lo, mut hi) = (0.0f64, 1.0f64);
-    for _ in 0..BISECT_STEPS {
-        let u = 0.5 * (lo + hi);
-        if rd * (1.0 - u) * ls > e * u.powf(n) { lo = u } else { hi = u }
-    }
-    dry.max(e * (0.5 * (lo + hi)).powf(n))
+    let (a, u0) = (rd * ls, (rd * ls / e).powf(1.0 / n).min(1.0));
+    let step = |&u: &f64| Some(u - (e * u.powf(n) + a * u - a) / (n * e * u.powf(n) / u + a)).filter(|&v| v < u);
+    let u = std::iter::successors(Some(u0), step).take(NEWTON_STEPS).last().unwrap_or(u0);
+    dry.max(e * u.powf(n))
 }
 
 /// The heat conductance of a body of `mass` kg at `t` to the ground (`surface`, with its cover and walls), W/K.

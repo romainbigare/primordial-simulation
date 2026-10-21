@@ -535,6 +535,11 @@ the golden test.
   substance. Bit for bit the same; the bodies' instructions per update 231k to 220k.
 - A body finds once which of its ground's substances are liquid (`physics::soil`) and once what it wants of each
   (`Body::wanted`). Bit for bit the same; the bodies' instructions per update 220k to 216k.
+- Where a key liquid's soaking and its loss through the pores meet (`exchange::through`) is found by Newton's method
+  from above (5 to 8 steps) instead of 40 halvings; it is more exact, so the history differs by rounding. Golden
+  re-pinned. 48 x 48 seeds 1-3, years 51-60: light-eaters 1.94, 2.10, 2.08e10 to 1.85, 2.09, 2.16e10 kg, eaters 5.9e6,
+  7.4e7, 7.7e7 to 6.1e6, 1.0e8, 4.7e7 kg (seed noise), land 286.6, 290.7, 289.3 K unchanged, drift 1e-14. The bodies'
+  instructions per update 216k to 211k.
 
 **Tried and not kept in the foundation**
 
