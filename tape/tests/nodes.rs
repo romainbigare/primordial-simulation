@@ -8,7 +8,8 @@
 //! and (d) each kind's births and its deaths by each main cause per member-year, and what the eaters eat a year per kg,
 //! are within a factor of two at the same density. Populations boom and crash at different times, and these rates go
 //! with how crowded a kind is, so (d) compares them over all the years of a run, matched by the kind's kg per km² of
-//! land (`matched`). A difference larger than the noise is a bug in the node rules: a rule the modes break counts only
+//! land (`matched`). Deaths by being taken go with how many eaters hunt too (the linear part of Holling's response), so
+//! they are counted per member-year and per kg of eaters per km² of the same year. A difference larger than the noise is a bug in the node rules: a rule the modes break counts only
 //! where the two crowd settings keep it, or break it by less.
 //!
 //! The windows are years 31-40, and 26-30 with the roster (after its last kind is placed, in year 24): at 32 x 32 the
@@ -43,6 +44,8 @@ const HELD: [[bool; 4]; 2] = [[false, true, false, false], [false, true, true, f
 const ATE: [&str; 3] = ["ate_light_eaters", "ate_others", "ate_ground"];
 /// The causes of death (`docs/tape.md`).
 const CAUSES: [&str; 6] = ["lack", "phase", "spent", "taken", "broken", "age"];
+/// Being taken, among the rates rule (d) compares (births first, then `CAUSES`).
+const TAKEN: usize = 4;
 /// A rate is compared (rule d) where it counts at least this many births or deaths at matched density in either run:
 /// fewer are the noise of counting (a third of the count at ten).
 const EVENTS: f64 = 10.0;
@@ -134,22 +137,23 @@ fn check_run(seed: u64, roster: bool, window: (u64, u64), nodes: bool, crowd: us
         years.push(Year { year: y, kinds: (0..kinds(rec)).map(row).collect(), ate: ATE.map(|c| rec.last(c)) });
     });
     let last = &years.last().expect("a year").kinds;
+    let eaters = |y: &Year| y.kinds.iter().skip(1).map(|v| v[1]).sum::<f64>();
     let window: Vec<&Year> = years.iter().filter(|y| y.year >= window.0).collect();
     let kinds = (0..last.len())
         .map(|k| {
             let m = |q: usize| mean(window.iter().filter_map(|y| y.kinds.get(k).map(|v| v[q])));
             let start = founders[k].clone().unwrap_or_default();
             let moves = (0..GENES.len()).map(|g| (m(GENE_AT + g) - start.get(g).copied().unwrap_or(f64::NAN)) * unit[g]).collect();
-            // Each year it lives: its density, its members and each count.
-            let lived = || years.iter().filter_map(|y| y.kinds.get(k)).filter(|v| v[0] > 0.0);
-            let rates = (0..=CAUSES.len()).map(|c| lived().map(|v| (v[1] / land, v[0], v[RATE_AT + c])).collect()).collect();
+            // Each year it lives: its density, its members (for being taken, times the eaters' kg per km²) and each count.
+            let lived = || years.iter().filter_map(|y| y.kinds.get(k).map(|v| (v, eaters(y) / land))).filter(|x| x.0[0] > 0.0);
+            let per = |c: usize, hunters: f64| if c == TAKEN { hunters } else { 1.0 };
+            let rates = (0..=CAUSES.len()).map(|c| lived().map(|(v, e)| (v[1] / land, v[0] * per(c, e), v[RATE_AT + c])).collect()).collect();
             Kind { alive: last[k][0] > 0.0, kg: m(1), life: m(2), member: m(3), moves, rates }
         })
         .collect::<Vec<Kind>>();
     let eaten: Vec<f64> = (0..ATE.len()).map(|c| mean(window.iter().map(|y| y.ate[c]))).collect();
     let mut ate = [0, 1, 2];
     ate.sort_by(|&a, &b| eaten[b].total_cmp(&eaten[a]));
-    let eaters = |y: &Year| y.kinds.iter().skip(1).map(|v| v[1]).sum::<f64>();
     let intake = years.iter().map(|y| (eaters(y) / land, eaters(y), y.ate.iter().sum())).filter(|e| e.1 > 0.0).collect();
     Window { kinds, ate, intake }
 }
@@ -161,7 +165,7 @@ fn check_run(seed: u64, roster: bool, window: (u64, u64), nodes: bool, crowd: us
 fn matched(x: &[Exposed], y: &[Exposed]) -> Option<(f64, f64, f64)> {
     let bins = |r: &[Exposed]| {
         let mut m: BTreeMap<i64, (f64, f64)> = BTreeMap::new();
-        for &(d, e, c) in r.iter().filter(|p| p.0 > 0.0) {
+        for &(d, e, c) in r.iter().filter(|p| p.0 > 0.0 && p.1 > 0.0) {
             let b = m.entry((d.log10() / BIN).floor() as i64).or_default();
             (b.0, b.1) = (b.0 + e, b.1 + c);
         }
@@ -219,8 +223,9 @@ fn diffs(x: &Window, y: &Window) -> Vec<Diff> {
         // Births, and deaths by each cause, at matched density where they count at least `EVENTS` in either run.
         for c in (0..=CAUSES.len()).filter(|_| both) {
             let name = if c == 0 { "births".to_string() } else { format!("died {}", CAUSES[c - 1]) };
+            let per = if c == TAKEN { "per member-year per kg of eaters a km²" } else { "per member-year" };
             if let Some((u, v, n)) = matched(&p.rates[c], &q.rates[c]).filter(|m| m.2 >= EVENTS) {
-                push(3, format!("kind {k} {name} per member-year"), format!("{u:.3e} against {v:.3e} ({n:.0} events)"), apart(u, v));
+                push(3, format!("kind {k} {name} {per}"), format!("{u:.3e} against {v:.3e} ({n:.0} events)"), apart(u, v));
             }
         }
     }

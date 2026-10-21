@@ -576,6 +576,13 @@ the golden test.
   (530 against 500 ms a year at year 90, bodies unchanged; about 1% of the year).
 - The frost test builds its chemistry again after it changes a melting point, as what follows from the substances is
   made once (`Chemistry::subs` says so).
+- The nodes check counts deaths by being taken per member-year and per kg of eaters per km² of the same year (the
+  linear part of Holling's response), as the eaters grow many times over in a window. Default plan: light-eaters taken
+  agree (seed 5: 1.1e-6 against 3.1e-6 a member-year before, no break now); rule (d) still fails on seed 1's few
+  eaters (spent 0.30 against 1.58 a member-year). Roster, seed 1: light-eaters taken 2.2 times, past the noise. Rule
+  (d) stays not held. Judging "less than one member" per taker member (`per = reached.max(b.n() / o.n()).min(1.0)`)
+  brought the roster's light-eaters taken within a factor of two in one run, not past the noise: not kept, an open
+  item of F7.
 
 **Tried and not kept in the foundation**
 
