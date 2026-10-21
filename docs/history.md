@@ -723,6 +723,10 @@ the golden test.
   = evaporation 0.62 + runoff 2.33 (Earth: 0.76 = 0.48 + 0.28, Trenberth et al. 2007); the sea evaporates 1.40 m a
   year and gets 0.45 of rain (Earth about 1.2 and 1.1); vapour 0.82% of the air (Earth about 0.4%), the ground 293.4 K
   (land 290.4). The air carries the sea's vapour onto land and rains it there: open.
+- The key-number test holds two numbers to wide bounds around Earth's: rain on land within 3 times 0.76 m a year, and
+  the light-eaters' stored solid under half their dry mass; the lifeless globe's test holds its whole surface within 4
+  K of 288 K, its vapour within 2 times 0.4% and its rain on land as the island's. The globe passes (290.05 K, 0.69%,
+  1.78 m); the island's rain passes (1.02 m) and its stored share fails (0.552; seeds 0.558, 0.547, 0.551): open.
 
 **Tried and not kept in the foundation**
 

@@ -7,7 +7,9 @@
 //! heat-absorbing gas and the light-eaters, the runs after the
 //! body costs and the light-eaters' walls (decision 53); for the eaters, the runs after bodies take only what they use
 //! (decision 57). The climate and the land worn down are means over years 21 to 30; life
-//! is read at year 30, ten years after the eaters came. Each run also keeps its books.
+//! is read at year 30, ten years after the eaters came. Each run also keeps its books. Two numbers are also held to
+//! wide bounds around Earth's, as the references only keep a world near itself: the rain on land, and the share of the
+//! light-eaters' dry mass they hold as their stored solid.
 //!
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
@@ -19,7 +21,8 @@
 //! densest soil animals. The ground under dense canopies
 //! follows its neighbours from one month to the next.
 //!
-//! A globe of Earth's size without life keeps an Earth-like climate: its land near Earth's, steady, with no runaway ice.
+//! A globe of Earth's size without life keeps an Earth-like climate: its land near Earth's, steady, with no runaway
+//! ice, and its surface, vapour and rain on land within wide bounds around Earth's.
 //!
 //! The steps of Flow are speed settings too (the long step against the short one): small worlds with life, each seed
 //! against itself, keep their climate at the default steps and with the air's step at 6 hours and the physics step at
@@ -28,9 +31,10 @@
 mod common;
 
 use common::run;
+use pcore::chem::Phase;
 use pcore::{Config, World};
 use std::fmt;
-use worldgen::testkit::{ground_of, ABSORBER};
+use worldgen::testkit::{ground_of, ABSORBER, LIQUID, RICH};
 
 const SEEDS: [u64; 3] = [1, 2, 3];
 const SIDE: usize = 64;
@@ -66,6 +70,30 @@ const PLANT_LIFE_RANGE: f64 = 2.0;
 const EATER_KG_RANGE: f64 = 0.5;
 /// The life eaters live at year 30, yr (`root_1_life_real`), in the reference runs.
 const EATER_LIFE: f64 = 10.47;
+
+/// Earth's rain on land, m/yr (Trenberth et al. 2007), and the factor either way a run's may lie from it: the island
+/// lies at 40°, where land gets 0.5 to 1 m (from memory), and a globe's land spans every belt.
+const EARTH_RAIN_LAND: f64 = 0.76;
+const EARTH_RAIN_RANGE: f64 = 3.0;
+/// The most share of the light-eaters' dry mass their stored solid may make: plants hold about a tenth of theirs as
+/// stored sugars and starch, rarely over a third in storage organs (from memory).
+const STORED_MOST: f64 = 0.5;
+
+/// Rain of the key liquid, mol/m²/s, in m of liquid a year of `w`.
+fn rain_m_yr(w: &World, rain: f64) -> f64 {
+    rain * w.chem.molar_volume(LIQUID, Phase::Liquid) * w.cfg.calendar().year as f64
+}
+
+/// The share of the live light-eaters' dry mass (all but their key liquids) that is their stored solid.
+fn stored_share(w: &World) -> f64 {
+    let (mut stored, mut dry) = (0.0, 0.0);
+    for b in w.life.alive().filter(|b| pcore::body::light_eater(&w.chem, &b.genes)) {
+        let kg = |k: usize| b.store[k] * w.chem.subs[k].molar_mass;
+        let wet: f64 = (0..w.chem.ns()).filter(|&k| b.wet >> k & 1 == 1).map(kg).sum();
+        (stored, dry) = (stored + kg(RICH), dry + b.mass(&w.chem) - wet);
+    }
+    stored / dry.max(f64::MIN_POSITIVE)
+}
 
 /// How far a number may lie from its reference: by at most so much, or by at most a factor either way.
 #[derive(Clone, Copy)]
@@ -111,8 +139,9 @@ fn rock(w: &World, land: &[usize]) -> f64 {
     land.iter().map(|&i| ground_of(w, i)).map(|g| g.0 + g.1).sum::<f64>() / land.len() as f64
 }
 
-/// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`.
-fn key_numbers(seed: u64) -> [f64; KEYS.len()] {
+/// `YEARS` years of `ew run --seed <seed> --size 64`: the key numbers in the order of `KEYS`, then the rain on land in
+/// m/yr and the light-eaters' stored share (`stored_share`) at the end.
+fn key_numbers(seed: u64) -> ([f64; KEYS.len()], [f64; 2]) {
     let gas = format!("air_{ABSORBER}");
     let climate = ["t_land", "t_land_summer", "t_land_winter", "rain_land", gas.as_str(), "rivers"];
     let (mut mean, mut land, mut rock_from) = ([0.0; 6], vec![], 0.0);
@@ -129,20 +158,23 @@ fn key_numbers(seed: u64) -> [f64; KEYS.len()] {
     let worn = (rock_from - rock(&w, &land)) / span * MM;
     let [t, summer, winter, rain, air, rivers] = mean;
     let (plants, eaters) = (rec.last("root_0_kg").log10(), rec.last("root_1_kg").log10());
-    [t, summer - winter, rain, air * PPM, rivers, worn, plants, eaters, rec.last("root_0_life_real"), rec.last("root_1_life_real")]
+    let lives = [rec.last("root_0_life_real"), rec.last("root_1_life_real")];
+    let keys = [t, summer - winter, rain, air * PPM, rivers, worn, plants, eaters, lives[0], lives[1]];
+    (keys, [rain_m_yr(&w, rain), stored_share(&w)])
 }
 
-/// The key numbers of three seeds, each mean in its range around its reference.
+/// The key numbers of three seeds, each mean in its range around its reference; the rain on land within
+/// `EARTH_RAIN_RANGE` of Earth's, and the light-eaters' stored share under `STORED_MOST`.
 #[test]
 #[ignore = "slow: three 30-year runs of a 64 x 64 world"]
 fn the_key_numbers_stay_in_their_ranges() {
-    let runs: Vec<[f64; KEYS.len()]> = std::thread::scope(|s| {
+    let runs: Vec<([f64; KEYS.len()], [f64; 2])> = std::thread::scope(|s| {
         let runs: Vec<_> = SEEDS.iter().map(|&seed| s.spawn(move || key_numbers(seed))).collect();
         runs.into_iter().map(|r| r.join().expect("a run")).collect()
     });
     let mut out = vec![];
     for (k, &(name, unit, reference, range)) in KEYS.iter().enumerate() {
-        let seeds: Vec<f64> = runs.iter().map(|r| r[k]).collect();
+        let seeds: Vec<f64> = runs.iter().map(|r| r.0[k]).collect();
         let mean = seeds.iter().sum::<f64>() / seeds.len() as f64;
         let ok = range.holds(mean, reference);
         println!("{name}: {mean:.6} {unit} (seeds {seeds:.6?}), reference {reference} {range}{}", if ok { "" } else { ": OUT" });
@@ -150,6 +182,13 @@ fn the_key_numbers_stay_in_their_ranges() {
             out.push(name);
         }
     }
+    let earth = |q: usize| runs.iter().map(|r| r.1[q]).collect::<Vec<f64>>();
+    let (rain, stored) = (earth(0).iter().sum::<f64>() / 3.0, earth(1).iter().sum::<f64>() / 3.0);
+    let rain_ok = Range::Times(EARTH_RAIN_RANGE).holds(rain, EARTH_RAIN_LAND);
+    println!("rain on land {rain:.3} m/yr, against Earth's {EARTH_RAIN_LAND} x/ {EARTH_RAIN_RANGE}");
+    println!("light-eaters' stored share {stored:.3} (seeds {:.3?}), under {STORED_MOST}", earth(1));
+    out.extend((!rain_ok).then_some("rain on land against Earth's"));
+    out.extend((stored >= STORED_MOST).then_some("light-eaters' stored share"));
     assert!(out.is_empty(), "out of their ranges: {out:?}");
 }
 
@@ -387,13 +426,21 @@ const GLOBE_YEARS: u64 = 20;
 const GLOBE_FROM: u64 = 11;
 /// Earth's land, K: its mean surface is about 282 K, its whole surface 288 K (from memory); the bounds leave a few K.
 const EARTH_LAND: [f64; 2] = [280.0, 292.0];
+/// Earth's whole surface, 288 K, and how far a globe's may lie from it, K.
+const EARTH_SURFACE: f64 = 288.0;
+const EARTH_SURFACE_RANGE: f64 = 4.0;
+/// Earth's vapour, mole fraction of the air: 25 kg/m² of precipitable water over 1e4 kg/m² of air (Trenberth et al.
+/// 2005) times 29 / 18; and the factor either way a globe's may lie from it (about 7% a K, Clausius-Clapeyron).
+const EARTH_VAPOUR: f64 = 0.004;
+const EARTH_VAPOUR_RANGE: f64 = 2.0;
 /// The most the globe's land may drift in a year over those years, K, and the most of its surface ice may cover.
 const GLOBE_DRIFT_K: f64 = 0.2;
 const GLOBE_ICE: f64 = 0.25;
 
 /// A globe of Earth's size under Earth's sun, without life, keeps an Earth-like climate: over years `GLOBE_FROM` to
 /// `GLOBE_YEARS` its land stays within `EARTH_LAND` and drifts by less than `GLOBE_DRIFT_K` a year, and ice covers
-/// less than `GLOBE_ICE` of it (no runaway of the ice's reflectance).
+/// less than `GLOBE_ICE` of it (no runaway of the ice's reflectance); its whole surface, its vapour and its rain on
+/// land lie within their bounds around Earth's.
 #[test]
 #[ignore = "slow: a 20-year run of a 64 x 32 globe without life"]
 fn a_globe_without_life_keeps_an_earth_like_climate() {
@@ -408,9 +455,17 @@ fn a_globe_without_life_keeps_an_earth_like_climate() {
             common::record(&mut rec, &mut w);
         }
         if y >= GLOBE_FROM {
-            years.push([rec.last("t_land"), rec.last("ice_frac")]);
+            let earth = [rec.last("t_ground"), rec.last(&format!("air_{LIQUID}")), rec.last("rain_land")];
+            years.push([rec.last("t_land"), rec.last("ice_frac"), earth[0], earth[1], earth[2]]);
         }
     }
+    let mean = |q: usize| years.iter().map(|y| y[q]).sum::<f64>() / years.len() as f64;
+    let (surface, vapour, rain) = (mean(2), mean(3), rain_m_yr(&w, mean(4)));
+    let earth = format!("surface {surface:.2} K, vapour {vapour:.4}, rain on land {rain:.3} m/yr");
+    println!("{earth}");
+    let warm_ok = Range::Plus(EARTH_SURFACE_RANGE).holds(surface, EARTH_SURFACE);
+    let vapour_ok = Range::Times(EARTH_VAPOUR_RANGE).holds(vapour, EARTH_VAPOUR);
+    assert!(warm_ok && vapour_ok && Range::Times(EARTH_RAIN_RANGE).holds(rain, EARTH_RAIN_LAND), "{earth}");
     let (first, last) = (years[0], years[years.len() - 1]);
     let land = years.iter().map(|y| y[0]).sum::<f64>() / years.len() as f64;
     let drift = (last[0] - first[0]) / (GLOBE_YEARS - GLOBE_FROM) as f64;

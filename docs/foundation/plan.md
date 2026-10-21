@@ -269,6 +269,11 @@ One slow test (`tape/tests/ranges.rs`, `#[ignore]`) on 3 seeds × 30 years × 64
 | land worn down per year | the reference ×/÷ 2 |
 | river cells (over the viewer's threshold) | the reference ×/÷ 1.5 |
 | books | elements and energy to 1e-12 |
+| rain on land, against Earth's 0.76 m/yr | ×/÷ 3 |
+| light-eaters' stored solid, share of their dry mass at year 30 | under 0.5 (plants: about 0.1) |
+
+The lifeless globe's climate test also holds its whole surface to 288 ± 4 K, its vapour to 0.4% ×/÷ 2 of the air and
+its rain on land to 0.76 m/yr ×/÷ 3.
 
 The references are the means over three seeds at the default steps, set again by the owner when the laws change
 (decision 27). If a range is too tight for the seeds' own noise, widen it and say so in the report.
@@ -350,10 +355,20 @@ Open items of review round 3, to settle before L5:
   years 71 to 100 (`tape/tests/ranges.rs`); a single decade of a settled seed swings by about 15% of its births, so
   the check reads thirty years.
 - **The learner** fails an honest reversal test (`docs/history.md`, finding 11): bodies live about 40 decisions.
-- **Crowded cells:** bodies that may not merge (other lineages, structures) still crowd a cell, up to 134 bodies.
 - **Selection inside a node is blind to what others feel:** `copy::sample` (`copy/select.rs`) runs one member's update
   and sees only the cost to that member, not the shade it casts on others or what its frame costs a biter, so it
   lowers the founders' frame (decision 52).
+
+Open items of the final review:
+
+- **The light-eaters' stored solid:** 55% of their dry mass at year 30 (64 x 64, seeds 1 to 3), against a bound of
+  50% around real plants' tenth (`tape/tests/ranges.rs`, the key-number test fails on it). Selection no longer
+  rewards a hoard (decision 69), but the founders keep 0.9 kg of it a kg of living body and build almost no frame.
+- **Water on a globe with life:** on the 36 x 18 globe (years 31 to 40) land gets 3.1 m of rain a year, 2.3 of it
+  running back to the sea, and the sea 0.45 m (Earth: 0.76 and about 1.1); vapour is 0.82% of the air, the surface
+  293.4 K. The lifeless 64 x 32 globe of the climate test keeps within its bounds (1.8 m, 0.69%, 290.1 K).
+- **Crowded cells:** past `crowd`, rooms no longer keep nodes apart (decision 56), but nodes of one lineage unlike in
+  their genes still crowd a cell: up to 142 bodies on the 36 x 18 globe at year 200.
 
 ## 8. What is left
 
