@@ -523,6 +523,9 @@ the golden test.
   kg, light-eaters 1.95, 2.19, 2.11e10 to 1.93, 2.10, 2.08e10 kg, land 286.58, 290.71, 289.29 to 286.58, 290.69,
   289.33 K, drift 1e-14. F7: the eaters' deaths by bites agree; rule (d) fails on light-eaters taken (seed 5: nodes
   1.1e-6 a member-year against 3.1e-6, noise 2.3 times) and the roster's small eaters.
+- The eaters' check reads births less deaths over years 71 to 100, as a settled decade swings by about 15% of births
+  (seed 1 by decade from year 81: 11.5, 5.7, 10.1, -14.9, 7.8%); the limit stays 10%. Seeds 1-3: 7.7, 3.7 and -6.0%,
+  1.7e4, 8.8e4 and 3.0e4 kg/km² of land at year 100: it passes.
 
 **Tried and not kept in the foundation**
 

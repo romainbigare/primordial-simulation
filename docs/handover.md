@@ -974,7 +974,7 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **Tuned numbers that matter.** `bump` (tuned) decides whether a body can move; `c_brain` sets most of what an animal pays to think (plants have no brain).
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
-- **Reading the eaters.** Eaters settle by years 90 to 100, so report their log10 kg and their births less deaths over years 91 to 100, three seeds at least. Under 2 times is noise.
+- **Reading the eaters.** Eaters settle by years 90 to 100, so report their log10 kg over years 91 to 100 and their births less deaths over years 71 to 100 (a decade swings by about 15% of births), three seeds at least. Under 2 times is noise.
 - **Core size.** `core` holds at most 9,000 code lines (14.3, counted by `cli/tests/core_size.rs`); 700 more wait for threads over bodies that pay (`docs/foundation/decisions.md` 42).
 
 ---

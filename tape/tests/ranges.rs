@@ -297,10 +297,10 @@ fn the_pace_of_nodes_keeps_life() {
 }
 
 /// The world of the eaters' check: its side, its years, and the first of its last years, over which the eaters must
-/// have stopped growing.
+/// have stopped growing: thirty years, as a settled seed's births less deaths swing by about 15% of births a decade.
 const EATER_SIDE: usize = 48;
 const EATER_YEARS: u64 = 100;
-const EATER_FROM: u64 = 91;
+const EATER_FROM: u64 = 71;
 /// The most the eaters' births may exceed their deaths over those years, as a share of their births: a population that
 /// replaces itself to within a tenth has stopped growing.
 const EATER_GROWTH: f64 = 0.1;
@@ -327,8 +327,8 @@ fn eaters_at_end(seed: u64) -> [f64; 4] {
 }
 
 /// The eaters live to year 100 in seeds 1, 2 and 3, after the booms and busts of their first decades; by their last
-/// ten years they have stopped growing (their births exceed their deaths by less than `EATER_GROWTH` of their births);
-/// and none hold more than `EATER_MOST_KG_KM2`.
+/// thirty years they have stopped growing (their births exceed their deaths by less than `EATER_GROWTH` of their
+/// births); and none hold more than `EATER_MOST_KG_KM2`.
 #[test]
 #[ignore = "slow: three 100-year runs of a 48 x 48 world"]
 fn the_eaters_live_and_stop_growing() {
