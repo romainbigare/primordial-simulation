@@ -219,7 +219,8 @@ impl Body {
     }
     /// Its energy at `t`, what is at or over its melting point molten, J: the inverse of `temp` off a plateau.
     pub fn energy_at(&self, chem: &Chemistry, t: f64) -> f64 {
-        self.heat_cap(chem) * t + (0..chem.ns()).map(|k| self.store[k] * chem.fused_heat(k, t, |j| self.store[j])).sum::<f64>()
+        let held = (0..chem.ns()).filter(|&k| self.store[k] != 0.0);
+        self.heat_cap(chem) * t + held.map(|k| self.store[k] * chem.fused_heat(k, t, |j| self.store[j])).sum::<f64>()
     }
     /// The heat that leaves with amounts `m` (mol) at the plateau state `th`, with their molten shares' fusion enthalpy, J.
     pub(crate) fn heat_with(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
@@ -227,7 +228,8 @@ impl Body {
     }
     /// Volume of its solids and liquids at its temperature `t`, m³.
     pub fn volume(&self, chem: &Chemistry, t: f64) -> f64 {
-        self.store.iter().enumerate().map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
+        let held = self.store.iter().enumerate().filter(|x| *x.1 != 0.0);
+        held.map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
     }
     /// Days between its updates: its `INTERVAL` gene, and at least `Config::node_days` for a population node without a
     /// brain, which takes no decisions (laws.md 4.4, the pace of nodes).
@@ -277,9 +279,9 @@ impl Body {
     pub fn visible(&self, chem: &Chemistry, cfg: &crate::Config) -> [f32; 7] {
         let (m1, p, t) = (self.mass(chem) / self.n(), &cfg.phys, self.temp(chem));
         let (mut v, mut c) = (1e-12, [0.0; 3]);
-        for (k, &a) in self.store.iter().enumerate() {
+        for (k, &a) in self.store.iter().enumerate().filter(|x| *x.1 > 0.0) {
             let p = chem.phase_in(k, t, |j| self.store[j]);
-            if p != Phase::Gas && a > 0.0 {
+            if p != Phase::Gas {
                 let vol = a * chem.molar_volume(k, p);
                 v += vol;
                 for (x, r) in c.iter_mut().zip(chem.subs[k].refl[(p == Phase::Liquid) as usize]) {

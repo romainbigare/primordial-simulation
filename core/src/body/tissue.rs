@@ -106,7 +106,7 @@ impl Body {
         if keep <= 0.0 {
             return 1.0;
         }
-        (have / keep).clamp(0.0, 1.0).powf(p.dormancy)
+        if have >= keep { 1.0 } else { (have / keep).max(0.0).powf(p.dormancy) }
     }
     /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::melt_in`).
     pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {

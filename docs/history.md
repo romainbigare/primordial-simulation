@@ -540,6 +540,8 @@ the golden test.
   re-pinned. 48 x 48 seeds 1-3, years 51-60: light-eaters 1.94, 2.10, 2.08e10 to 1.85, 2.09, 2.16e10 kg, eaters 5.9e6,
   7.4e7, 7.7e7 to 6.1e6, 1.0e8, 4.7e7 kg (seed noise), land 286.6, 290.7, 289.3 K unchanged, drift 1e-14. The bodies'
   instructions per update 216k to 211k.
+- A body's colour, volume and energy at a temperature read only the stores it holds, and its activity takes no power
+  when its key liquids are at their level. Bit for bit the same; the bodies' instructions per update 211k to 206k.
 
 **Tried and not kept in the foundation**
 
