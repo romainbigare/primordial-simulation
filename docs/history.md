@@ -686,6 +686,11 @@ the golden test.
   136.1 -> 712.4, land worn down 0.0424 -> 0.141 mm/yr are their new references (decision 67); rain 1.793e-3, gas
   406.0 ppm, light-eaters 10.25 and eaters 5.34 log10 kg, their lives 1.33 and 13.95 yr hold their old ones.
 
+**After the final review**
+
+- The yearly line prints what `store::apply` set from just below zero to zero (`Counters::rounded`, mol and J) next to
+  the heat not given, so an overdraw cannot hide.
+
 **Tried and not kept in the foundation**
 
 - Threads over bodies in waves of blocks, each block on a world of its thread's own (decision 59): the bodies of a
