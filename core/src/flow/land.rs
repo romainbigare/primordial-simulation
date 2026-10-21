@@ -159,22 +159,24 @@ pub(super) fn conduct(w: &mut World, s: &mut Scratch, dt: f64) {
     apply(w, &[LinkFlux { class: [Class::Ground; 2], a: &a, b: &b, ks: &[], mol: &[], heat: &heat }], &[], &[]);
 }
 
-/// Solid surface, head, soft cover's heat resistance and reflectance of node `i` from its layers (`layers`); the pores
-/// hold the first liquid.
+/// Solid surface, head, soft cover and reflectance of node `i` from its layers (`layers`); the pores of the loose
+/// ground hold the first liquid. A soft cover holds none: its pores close as it settles, as snow becomes ice (Cuffey
+/// and Paterson 2010), so the liquid on it stands and runs off.
 pub(super) fn surface(w: &World, s: &mut Scratch, i: usize) {
     let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area()[i]);
-    let (l, z, rc) = layers(w, s, i, s.state.tg[i], |k| w.store.amounts(Class::Ground)[k * n + i], |k| molten(s, k, i));
-    (s.z[i], s.head[i], s.rc[i], s.alb[i]) = (z, z + l[2] / area, rc, reflectance(w, s, i, &l));
-    s.pd[i] = w.cfg.phys.porosity * (l[0] + l[4]) / area;
+    let (l, z, [rc, tc]) = layers(w, s, i, s.state.tg[i], |k| w.store.amounts(Class::Ground)[k * n + i], |k| molten(s, k, i));
+    (s.z[i], s.head[i], s.cover[i], s.alb[i]) = (z, z + l[2] / area, [rc, tc, l[0] / area], reflectance(w, s, i, &l));
+    s.pd[i] = w.cfg.phys.porosity * l[4] / area;
 }
 
 /// The layers of ground node `i` at temperature `t` with amounts `amt(k)`, of which the share `molten(k)` is molten:
 /// the volume and volume × reflectance of each of [soft solid, liquid, loose solid] top down, m³; its solid surface, m;
-/// and its soft cover's heat resistance, m² K/W.
-pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64) -> ([f64; 6], f64, f64) {
+/// and of its soft cover the heat resistance, m² K/W, and the melting point, K: its solids' melting points (lowered by
+/// what is dissolved, `Chemistry::melt_in`), a mean by volume; infinite with no cover.
+pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usize) -> f64, molten: impl Fn(usize) -> f64) -> ([f64; 6], f64, [f64; 2]) {
     let area = w.mesh.cells().area()[i];
     let mut l = [0.0, 0.0, 0.0, 0.0, s.state.fix[i][0], s.state.fix[i][1]];
-    let (mut z, mut rc) = (w.base_z + (s.state.bed[i].vol + s.state.fix[i][0]) / area, 0.0);
+    let (mut z, mut cover) = (w.base_z + (s.state.bed[i].vol + s.state.fix[i][0]) / area, [0.0; 2]);
     for &k in &s.state.vary {
         let (p, a) = (&s.sp[k], amt(k));
         if a <= 0.0 || t >= p.boil {
@@ -187,10 +189,11 @@ pub(super) fn layers(w: &World, s: &Scratch, i: usize, t: f64, amt: impl Fn(usiz
         (l[2], l[3]) = (l[2] + a * liq * p.v[1], l[3] + a * liq * p.v[1] * p.refl[1]);
         z += vs / area;
         if o == 0 {
-            rc += vs / area / p.cond;
+            (cover[0], cover[1]) = (cover[0] + vs / area / p.cond, cover[1] + vs * w.chem.melt_in(k, &amt));
         }
     }
-    (l, z, rc)
+    cover[1] = if l[0] > 0.0 { cover[1] / l[0] } else { f64::INFINITY };
+    (l, z, cover)
 }
 
 /// Reflectance of ground node `i` with `layers` `l`: soft solid, liquid and loose solid, top down, each cover depth /
@@ -222,9 +225,16 @@ pub(super) fn filled(s: &Scratch, i: usize, por: f64) -> bool {
     por <= 0.0 || s.head[i] - s.z[i] >= s.pd[i]
 }
 
+/// Height of the bottom of the loose ground of node `i` (porosity `por`), m: the depth its pores take as liquid under
+/// its soft cover.
+#[inline]
+pub(super) fn bottom(s: &Scratch, i: usize, por: f64) -> f64 {
+    s.z[i] - s.cover[i][2] - if por > 0.0 { s.pd[i] / por } else { 0.0 }
+}
+
 /// Head of the liquid table of node `i`, m: with pores not full, the bottom of its loose ground plus the depth they
 /// fill; else the head that stands.
 #[inline]
 pub(super) fn table(s: &Scratch, i: usize, por: f64) -> f64 {
-    if filled(s, i, por) { s.head[i] - s.pd[i] } else { s.z[i] - s.pd[i] / por + (s.head[i] - s.z[i]) / por }
+    if filled(s, i, por) { s.head[i] - s.pd[i] } else { bottom(s, i, por) + (s.head[i] - s.z[i]) / por }
 }

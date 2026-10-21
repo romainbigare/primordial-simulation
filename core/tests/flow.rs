@@ -94,8 +94,11 @@ fn a_pool_with_a_solute_freezes_lower() {
         assert!(at == t && plateau.is_some_and(|(q, f)| q == k && (f - 0.5).abs() < 1e-9), "{at} K, {plateau:?}");
     }
     let books = Books::now(&w);
-    worldgen::testkit::flow_step(&mut w, DT);
-    // (Liquid ran off the pools in the step, and some evaporated: each is held at its melting point as the step left it.)
+    // An air step: some of each pool evaporates, and each is held at its melting point as the step leaves it (a liquid
+    // step would run the liquid off its ice, which holds none).
+    pcore::flow::state(&mut w, true);
+    pcore::flow::air(&mut w, DT);
+    pcore::flow::state(&mut w, false);
     for i in [pure, mixed] {
         let held = w.t_ground_last(i);
         assert!((held - w.melt(k, i)).abs() < MELT_HELD && w.thaw_last(i).1.is_some_and(|(q, _)| q == k), "{held} K, melting at {} K", w.melt(k, i));

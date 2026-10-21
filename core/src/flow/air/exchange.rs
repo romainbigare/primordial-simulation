@@ -5,41 +5,24 @@ use super::super::{land::wet, Scratch};
 use super::{lerp, over_cell};
 use crate::{chem::Chemistry, math::one_minus_exp, store::{apply, Batch, Class}, units::R_GAS, AIR, World};
 
-/// Entries of the table of a saturation pressure (`Sat`) per K, and the step between them, K.
+/// Entries of the table of a saturation pressure (`Sat`) per K.
 const SAT_PER_K: f64 = 20.0;
-const SAT_STEP: f64 = 0.05;
-/// Every this many entries the table is exact.
-const SAT_EXACT: usize = 64;
 /// The table starts at `SAT_LOWEST`, K, and reaches this far above the warmest temperature it is asked for, K.
 const SAT_MARGIN: f64 = 1.0;
 const SAT_LOWEST: f64 = 1.0;
 
-/// Saturation pressure of one substance, tabulated every `SAT_STEP` from `SAT_LOWEST`, Pa; each entry depends only on
-/// its place, so a table rebuilt further up holds the same numbers.
+/// Saturation pressure of one substance (`Chemistry::p_sat`), tabulated every 1 / `SAT_PER_K` K from `SAT_LOWEST`, Pa;
+/// each entry depends only on its place, so a table rebuilt further up holds the same numbers.
 #[derive(Clone, Debug, Default)]
 pub(in crate::flow) struct Sat(Vec<f64>);
 
 impl Sat {
-    /// Reaches `hi` + `SAT_MARGIN` K at least for substance `k`: exact every `SAT_EXACT` entries, between each from the
-    /// last by their ratio exp(b (1/t' - 1/t)), to its fifth term (ln p is linear in 1/t).
+    /// Reaches `hi` + `SAT_MARGIN` K at least for substance `k`.
     pub(super) fn fit(&mut self, chem: &Chemistry, k: usize, hi: f64) {
         let len = ((hi + SAT_MARGIN - SAT_LOWEST) * SAT_PER_K) as usize + 2;
-        if self.0.len() >= len {
-            return;
+        if self.0.len() < len {
+            self.0 = (0..len).map(|i| chem.p_sat(k, SAT_LOWEST + i as f64 / SAT_PER_K)).collect();
         }
-        let (b, mut p) = (chem.subs[k].lv / R_GAS, 0.0);
-        self.0 = (0..len)
-            .map(|i| {
-                let t = SAT_LOWEST + i as f64 / SAT_PER_K;
-                if i % SAT_EXACT == 0 {
-                    p = chem.p_sat(k, t);
-                } else {
-                    let x = b * SAT_STEP / (t * (t - SAT_STEP));
-                    p *= 1.0 + x * (1.0 + x / 2.0 * (1.0 + x / 3.0 * (1.0 + x / 4.0)));
-                }
-                p
-            })
-            .collect();
     }
     pub(super) fn at(&self, t: f64) -> f64 {
         let x = ((t - SAT_LOWEST) * SAT_PER_K).clamp(0.0, (self.0.len() - 2) as f64);

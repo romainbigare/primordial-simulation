@@ -652,6 +652,15 @@ the golden test.
   kept: byte planes of the f32 (-6% of that stream), a gene-major layout (-5% more), XOR with the born rows (-2%) and
   with the parent's genes (no gene equals its parent's), gzip level 6 (-1%), the stream split by width with planes
   (-5% in all, -9% with level 6). Save 0.2 s and load 0.15 s at 48 x 48 (0.34 and 0.35 s at 128 x 128, year 10).
+- The air step's table of saturation pressures takes each entry from `Chemistry::p_sat` (one exponential each, built
+  once), not from a series between exact entries: 15 code lines fewer, the same speed; the last digits move. Golden
+  re-pinned.
+- A soft cover (snow, ice) holds no liquid in pores, and its top melts: its surface warms no further than its melting
+  point, and the node under it takes the heat past that (decision 65). With loam's pores the cover held a quarter of
+  its volume as melt, and a thick cover kept its node from the summer air, so snow on mountains grew for good and the
+  sea shrank. Seed 1, year 300: 22 x 22 island liquid on land 44 -> 0.14 km³, ice on land 196 -> 0 km³, sea 428 ->
+  651 km³, land 287.8 -> 292.3 K, gas 3 534 -> 291 ppm, rivers 6 -> 84, eaters 0 -> 1.8e5 members, element drift
+  1.8e-16 -> 3.6e-16; GLOBE. Golden re-pinned.
 
 **Tried and not kept in the foundation**
 

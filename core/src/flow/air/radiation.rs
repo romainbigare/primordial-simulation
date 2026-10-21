@@ -74,8 +74,9 @@ pub(super) struct Balance {
 impl Surface {
     /// The balance of ground node `i` over `dt` seconds: σT⁴ out, the air's layers back (`column`), contact heat
     /// (`sensible`) and the gas's heat; solved implicitly about the temperature before the step, the node's heat capacity
-    /// in series with any soft cover. A melting point the node is at or reaches in the step holds it while the fusion
-    /// enthalpy there lasts, `fusion` on its plateau (`plateau`), so a long step freezes and thaws as short ones do.
+    /// in series with any soft cover, whose top melts. A melting point the node is at or reaches in the step holds it
+    /// while the fusion enthalpy there lasts, `fusion` on its plateau (`plateau`), so a long step freezes and thaws as
+    /// short ones do.
     pub(super) fn balance(&self, s: &Scratch, (i, area, dt): (usize, f64, f64), sensible: f64, fusion: f64) -> Balance {
         let (adt, f, t) = (area * dt, s.seen[i][2], s.state.tg[i]);
         let ((down, d_down), (emit, d_emit)) = (glow(f, self.tl, &s.lay[i][0]), glow(f, self.tl, &s.lay[i][1]));
@@ -83,9 +84,14 @@ impl Surface {
         let num = self.sw + down + 3.0 * t3 * t + sensible * self.tl + self.gain - self.slope * self.t0 + self.g_rain * self.t_rain;
         let den = 4.0 * t3 + sensible + self.g_rain - self.slope;
         // The surface's end temperature and response with the node from `tn` behind a resistance `r`; held at `tn` where
-        // `r` is too small to change it (`r den` below the last digit, where `1 / r` may overflow).
+        // `r` is too small to change it (`r den` below the last digit, where `1 / r` may overflow). The surface of a
+        // soft cover warms no further than the cover's melting point `tc`: past it the top melts and the melt soaks in,
+        // so the node takes all the heat that reaches the surface.
+        let [rc, tc, _] = s.cover[i];
         let surface = |tn: f64, r: f64| {
-            if r * den > f64::EPSILON { ((tn / r + num) / (1.0 / r + den), 1.0 / (1.0 / r + den)) } else { (tn, 0.0) }
+            let d = 1.0 / r + den;
+            let at = if r * den > f64::EPSILON { ((tn / r + num) / d, 1.0 / d) } else { (tn, 0.0) };
+            if at.0 > tc { (tc, 0.0) } else { at }
         };
         let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), sensible * (ts - self.tl));
         // The heat the node gets over the step with the surface at `ts`, J.
@@ -93,9 +99,9 @@ impl Surface {
             let (up, hs) = flux(ts);
             adt * (self.sw + down - up - hs + self.gain + self.slope * (ts - self.t0) + self.g_rain * (self.t_rain - ts))
         };
-        let (c, free) = (s.cap[i].max(1.0), adt / s.cap[i] + s.rc[i]);
+        let (c, free) = (s.cap[i].max(1.0), adt / s.cap[i] + rc);
         let plateau = |tm: f64, (melt, freeze): (f64, f64)| {
-            let at = surface(tm, s.rc[i]);
+            let at = surface(tm, rc);
             match net(at.0) - c * (tm - t) {
                 q if q < -freeze => surface(t - freeze / c, free),
                 q if q > melt => surface(t + melt / c, free),

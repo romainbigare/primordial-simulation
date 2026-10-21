@@ -52,7 +52,11 @@ Files: `core/src/flow/` (ground, liquid, erosion), `core/src/flow/air/` (air, ra
 
 ### 1.1 The ground of a cell
 Layers from the bottom: the bed (bonded rock), loose ground, soft cover, standing liquid (`flow::land::surface`); under
-them a deep store (`Class::Deep`, `bed_depth`, `bed_porosity`) that bodies and Change do not reach. A cell is **land**
+them a deep store (`Class::Deep`, `bed_depth`, `bed_porosity`) that bodies and Change do not reach. The soft cover is
+a solid near its melting point (`soft`), as snow and ice. It holds no liquid: its pores close as it settles, as snow
+becomes ice (Cuffey and Paterson 2010). It insulates the node under it (its depth over its conductivity), and its
+surface warms no further than its melting point: past it the top melts and the melt soaks in, so the node takes all
+the heat that reaches the surface (`air::radiation`). A cell is **land**
 when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades heat with the surface. Heat spreads
 sideways yearly by one implicit `solve::spread`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`): rock spreads a hot spot one cell in about 70,000 years.
@@ -61,8 +65,8 @@ melting point (lowered by solutes, 2.5) until that substance has all frozen or m
 
 ### 1.2 Liquid
 `flow::liquid`, every `flow_days`.
-- **Pores first**: the loose ground's pores (`porosity`) fill first; only liquid above them stands and has a head
-  (`flow::land::stand`), the depth bodies and Change read.
+- **Pores first**: the loose ground's pores (`porosity`) fill first, under any soft cover; only liquid above them stands
+  and has a head (`flow::land::stand`), the depth bodies and Change read.
 - **Spill levels**: a priority flood over the ground gives each cell its spill level (Barnes, Lehman and Mulla 2014;
   `downhill::Order`). Liquid stands below it or in the lowest basin; elsewhere it passes on, counting as no higher than
   its ground, so it crosses the map in one step while depressions fill and spill.

@@ -146,8 +146,9 @@ pub struct Scratch {
     pub(super) pd: Vec<f64>,
     /// Reflectance of the ground's surface.
     pub(super) alb: Vec<f64>,
-    /// Heat resistance of the soft solid cover (depth / conductivity), m² K / W.
-    pub(super) rc: Vec<f64>,
+    /// Of the soft solid cover: heat resistance (depth / conductivity), m² K / W; melting point (infinite with none), K;
+    /// depth, m.
+    pub(super) cover: Vec<[f64; 3]>,
     /// The order of the liquid's pass, by a priority flood over the ground (`liquid`).
     pub(super) order: Order,
     /// The work space of `solve::spread` (heat through the ground, the liquid under the surface).
@@ -285,13 +286,14 @@ pub(super) fn refresh(w: &World, s: &mut Scratch) {
 pub(super) fn room(w: &World, s: &mut Scratch) {
     let (n, na) = (w.mesh.cells().n(), w.mesh.level(AIR).n());
     s.latent = vec![Latent { held: 0.0, lo: 0.0, hi: f64::MIN, lat: [0.0; 2], molten: 0 }; n];
-    for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb, &mut s.rc] {
+    for v in [&mut s.skin, &mut s.cap, &mut s.z, &mut s.head, &mut s.pd, &mut s.alb] {
         *v = vec![0.0; n];
     }
     for v in [&mut s.za, &mut s.vol, &mut s.nt, &mut s.capa, &mut s.mass, &mut s.fabs, &mut s.gam, &mut s.zair, &mut s.ta] {
         *v = vec![0.0; na];
     }
     s.seen = vec![[0.0; 3]; n];
+    s.cover = vec![[0.0; 3]; n];
 }
 
 /// Tables of the map and the chemistry alone (not saved): substance constants, and the four air nodes each cell reads.

@@ -2,7 +2,7 @@
 //! of each cell's stack joined by a vertical link (laws.md 1.2): the rates along that link, and Darcy's law between
 //! cells in each layer, which `solve::spread` solves.
 
-use super::{land::{filled, t_now, table, wet}, liquid::{book, mobile}, Scratch};
+use super::{land::{bottom, filled, t_now, table, wet}, liquid::{book, mobile}, Scratch};
 use crate::{math::one_minus_exp, solve::spread::{within, Net, Spread}, space::{Layer, Stack}, store::{Batch, Class, LinkFlux}, World};
 
 /// The layers of each cell's stack under its surface, bottom up: the bed's store and the loose ground's pores.
@@ -97,7 +97,10 @@ fn flows(w: &World, s: &Scratch, spread: &mut Spread, stack: &Stack, (mob, held)
             let up = if x[ni] >= x[nj] { i } else { j };
             let thick = match layer {
                 DEEP => p.bed_seep * held[up] / (p.bed_porosity * area[up]),
-                _ if free(up) => p.seep * (x[stack.node(PORES, up)].min(s.z[up]) - bottom(w, s, i).max(bottom(w, s, j))).max(0.0),
+                _ if free(up) => {
+                    let top = x[stack.node(PORES, up)].min(s.z[up] - s.cover[up][2]);
+                    p.seep * (top - bottom(s, i, p.porosity).max(bottom(s, j, p.porosity))).max(0.0)
+                }
                 _ => 0.0,
             };
             na.push(ni as u32);
@@ -202,10 +205,5 @@ fn stores(w: &World, s: &Scratch, tmin: f64) -> Vec<f64> {
 /// Height of the table of the store under ground node `i` holding `vol` m³, m: the bottom of its zone, `bed_depth`
 /// under the loose ground, plus the depth its liquid fills.
 fn store_table(w: &World, s: &Scratch, i: usize, vol: f64) -> f64 {
-    bottom(w, s, i) - w.cfg.phys.bed_depth + vol / (w.cfg.phys.bed_porosity * w.mesh.cells().area()[i])
-}
-
-/// Height of the bottom of the loose ground of node `i`, m: the depth its pores take as liquid under its solid surface.
-fn bottom(w: &World, s: &Scratch, i: usize) -> f64 {
-    s.z[i] - if w.cfg.phys.porosity > 0.0 { s.pd[i] / w.cfg.phys.porosity } else { 0.0 }
+    bottom(s, i, w.cfg.phys.porosity) - w.cfg.phys.bed_depth + vol / (w.cfg.phys.bed_porosity * w.mesh.cells().area()[i])
 }
