@@ -610,6 +610,8 @@ the golden test.
   script runs before the world's tag): open.
 - `ew` checks its words against the usage text: an unknown word or a flag without its value stops with the usage
   (exit 2), and `--help` or `help` prints it; before, `ew run --help` started a run in `./out`.
+- The viewer's `standalone.html` puts the world's tag ahead of its script, which reads it as it runs: it loads the
+  world it embeds (checked headless) instead of asking for a file.
 
 **Tried and not kept in the foundation**
 
