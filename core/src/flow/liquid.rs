@@ -65,7 +65,7 @@ fn slopes(w: &World, s: &Scratch) -> Vec<f64> {
 
 /// The liquid that may run off (what stands, what came up from the store, and the pores' drainage to the channels, a
 /// share 1 - exp(-`seep` × slope × time / (`porosity` × `hill`))) moves down the cells in one pass (`solve::downhill`;
-/// laws.md 1.2), with its heat; lost head heats the node and does work on the bed (`load`, `wear`).
+/// laws.md 1.2), with its heat; lost head heats what runs out and does work on the bed (`load`, `wear`).
 fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope, runs): (&[f64], &[f64]), dt: f64) {
     let (n, area, ph, g) = (w.mesh.cells().n(), w.mesh.cells().area(), w.cfg.phys, w.cfg.gravity);
     let mob = mobile(w, s, liq, tmin);
@@ -138,6 +138,9 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         worn[i] = load(ww, ss, i, q, (nl..rows, &sol), bedwork, out);
         q[heat] = ks.iter().enumerate().map(|(r, &k)| q[r] * (ss.sp[k].cp * t + if r < nl { ss.sp[k].lf } else { 0.0 })).sum();
         power[i] = g * drop * kg(q, 0..rows);
+        // The head lost on the way out heats what runs out: booked to the node from the potential, it leaves with the
+        // liquid (as under the surface, `drain::under`), so a node the liquid runs out of keeps none of the fall's heat.
+        q[heat] += if out > 0.0 { power[i] / out } else { 0.0 };
         sent[i] = out * q[..nl].iter().sum::<f64>();
     });
     // The crossings as a link flux: each substance once (liquid and load rows of one substance share it), then the heat.

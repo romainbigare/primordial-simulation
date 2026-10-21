@@ -632,6 +632,9 @@ the golden test.
   none), so what passes on leaves at a temperature the node pays for: liquid at 244 K running through a frozen node at
   268 K was warmed to 268 K at the node's cost and overdrew it by 1.5e19 J (36 x 18 globe, year 868). Golden
   re-pinned. That globe resumed at year 860: energy drift at year 870 4.8e-9 to 1.9e-13, heat not given 2.1e7 J to 0.
+- L3: the head liquid loses running out of a node heats what runs out (as under the surface, where it goes), not the
+  node it leaves: a hot node that 97% of its liquid left kept the fall's 1e17 J, reached 465 K, boiled off the rest in
+  the next air step with more heat than it held and overdrew it (128 x 128 island seed 5, year 94). Golden re-pinned.
 
 **Tried and not kept in the foundation**
 

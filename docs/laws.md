@@ -76,8 +76,9 @@ melting point (lowered by solutes, 2.5) until that substance has all frozen or m
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
   keeps its fusion heat whatever the node's phase and leaves at the node's temperature, no warmer than the node's
   energy with what came in pays for, so it never takes more heat than the node holds. A salt is a liquid that never
-  boils (23, 24): it moves with the liquid and stays when it evaporates. Lost head becomes heat and does work (1.3);
-  lifts and falls book through the potential node (`flow::Falls`).
+  boils (23, 24): it moves with the liquid and stays when it evaporates. Lost head heats the liquid that loses it (on
+  the surface what runs out of a node, under it where it goes) and does work (1.3); lifts and falls book through the
+  potential node (`flow::Falls`).
 
 ### 1.3 Erosion and creep
 The head lost by moving liquid does work where it is lost (`flow::liquid::load`, `wear`): it **carries** up to `carry`
