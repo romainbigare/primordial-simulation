@@ -277,8 +277,9 @@ Files: `core/src/copy/` (`mix`, `grow`, `young`, `select`), `nodes.rs`, `body/ge
 `LEARN`, the brain sizes `HIDDEN`, `MEMORY`, `SEEN`, `SIGHT`, and `DISPERSE`, `DENATURE`, `REPAIR`, `WET`, `ALLOC`,
 `KEEP_T`, `COOL_T`; meanings in `body/genes.rs`), a catalyst per reaction, per substance a safe minimum, an uptake and
 a keep gene, and the born brain rows. **Mutation** (`body::vary`): parent's gene plus noise of one step × 10^`MUT`,
-within range; born rows change with `row_chance` by `row_noise`; rarely (`new_lineage`) a new lineage with a changed
-brain base. **Likeness** (`body::alike`): every gene within `alike` steps; it decides who mixes, joins and merges.
+within range (not the brain-size genes of a body with no brain, 4.4); born rows change with `row_chance` by
+`row_noise`; rarely (`new_lineage`) a new lineage with a changed brain base. **Likeness** (`body::alike`): every
+gene within `alike` steps; it decides who mixes, joins and merges.
 
 ### 4.2 Children come from a brood
 A body is **mature** (`Body::adult`) when its living body per member reaches `COPY_MASS`; then growth (6.6) puts the
@@ -325,7 +326,9 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`; rules per interval are rates
   over the update (`Body::paces`), so its `INTERVAL` gene is the turnover time of its stores (a known limit).
-- **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. An
+- **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
+  body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
+  arises only in a lineage founded with one (decision 72). An
   individual's child joins its parent's lineage when its size genes fit it, else its partner's when they fit that
   (its rows carried over to that brain); only a child that fits neither starts a new lineage (`copy::child_lineage`).
   `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).

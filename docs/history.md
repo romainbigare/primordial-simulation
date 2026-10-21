@@ -712,6 +712,16 @@ the golden test.
   without a brain, drift a unit: 3 -> 4 and 0 -> 1), 38 from children that fit neither parent, 2 from a new base
   (decision 72, open). 17 x 17 island 1,000 years in 15.9 min beside the region run: bodies 1,523 (29 in a cell) at
   year 500, 1,535 (28) at year 1,000; eaters alive (1.4e5 members, 8.7e6 kg).
+- A body with no brain does not mutate its brain-size genes (`body::vary`, decision 72): light-eaters' seen and
+  hidden genes drifted a unit and each node started a lineage of its own. Golden re-pinned. The 24 x 24 region run,
+  seed 1, now runs 1,000 years in 86 min: lineages alive 2 / 4 / 4 / 6 at years 100 / 400 / 780 / 1,000 (412 at 780
+  before); bodies 2,891 (at most 21 in a cell) / 7,676 (49) / 10,026 (59) / 11,536 (73), 33,301 (319) at 780 before;
+  a year 2.4 / 4.1 / 7.6 / 9.6 s (bodies 1.9 / 3.6 / 7.0 / 9.0 s, Flow 0.34 s, Change 0.11 s, parts under 0.02 s),
+  45 s at 780 before. Elements within 3.7e-16, energy 4.4e-14, heat not given 0. Land 293.5 / 293.6 / 293.8 / 293.8
+  K, gas 3 442 / 432 / 415 / 417 ppm, light-eaters 2.5e9 / 5.4e9 / 6.0e9 / 5.0e9 kg, eaters 1.1e6 / 6.5e6 / 3.0e7 /
+  3.5e7 kg. The bodies still grow (eaters 1.4e6 members at year 1,000). 17 x 17 island 1,000 years in 18.2 min
+  beside it: bodies 1,706 (28 in a cell) at year 500, 2,251 (46) at year 1,000; eaters alive (2.2e5 members, 9.3e6
+  kg).
 
 **After the final review**
 

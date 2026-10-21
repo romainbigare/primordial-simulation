@@ -102,7 +102,7 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
 fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) -> bool {
     let mixed = l.mate.map(|t| mix(b, &w.life.bodies[t], m, r));
     let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));
-    let (genes, spread) = vary(&Layout::of(&w.chem), from, pooled, m, w.cfg.phys.alike, r);
+    let (genes, spread) = vary(&Layout::of(&w.chem), from, pooled, m, w.cfg.phys.alike, !w.life.brainless(b), r);
     let size = mutation_size(from);
     // The young node of their kind they join there: for a node's children who stay, its young node (`young::linked`);
     // else the first young node there of their genes and spread (`kin`). Nothing between here and the join changes the

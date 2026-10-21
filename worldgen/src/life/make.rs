@@ -85,8 +85,9 @@ pub(super) fn make_with(w: &mut World, which: usize, i: usize, lineage: u32, gen
     let (lay, ns) = (Layout::of(chem), chem.ns());
     // Its mutation size is raised by `gmul` for the rounds (and taken back, whatever the walk made of it).
     genes[body::MUT] += gmul.log10();
+    let brain = w.life.brains[lineage as usize].as_ref().is_some_and(|l| !l.none());
     for _ in 0..rounds {
-        genes = pcore::body::mutate(&lay, &genes, &mut rg);
+        genes = body::vary(&lay, &genes, &[], 1.0, 0.0, brain, &mut rg).0;
     }
     genes[body::MUT] -= gmul.log10();
     // A founder is an adult: its living body is its copy mass after the spray, with the share `store` of fuel on top.

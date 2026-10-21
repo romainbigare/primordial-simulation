@@ -1,7 +1,8 @@
 //! Law 4 (Copy): growth builds body matter, a mature body fills a brood and a child is made of it, and a hurt body
 //! rebuilds. Two parents and population nodes: `populations.rs`.
 
-use pcore::body::{Body, Layout, ALLOC, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, KEEP_T, LIQ, MUT, STRENGTH};
+use pcore::body::{Body, Layout, ALLOC, BRAIN_SIZES, CHILD, COOL_T, COPY_MASS, DENATURE, DISPERSE, GAS, HEAT, KEEP_T, LIQ};
+use pcore::body::{MUT, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::units::DAY_S;
 use pcore::{body, brain, copy, World};
@@ -773,14 +774,18 @@ fn growth_stops_without_a_mineral_and_goes_on_with_them() {
     }
 }
 
-/// A child's genes are its parent's plus noise of the size its mutation gene sets.
+/// A child's genes are its parent's plus noise of the size its mutation gene sets; a body with no brain keeps its
+/// brain-size genes.
 #[test]
 fn child_has_parent_genes_plus_noise() {
     let mut w = worldgen::new_world(1, 16, 16);
     worldgen::life::seed(&mut w, 0);
     let parent = w.life.alive().next().expect("a body").genes.clone();
     let lay = Layout::of(&w.chem);
-    let child = pcore::body::mutate(&lay, &parent, &mut Rng::new(1, 0, 0, Purpose::Mutate));
+    let r = || Rng::new(1, 0, 0, Purpose::Mutate);
+    let (child, brainless) = [true, false].map(|brain| pcore::body::vary(&lay, &parent, &[], 1.0, 0.0, brain, &mut r()).0).into();
+    assert!(BRAIN_SIZES.iter().all(|&g| brainless[g] == parent[g]), "a body with no brain mutated a brain-size gene");
+    assert!(BRAIN_SIZES.iter().any(|&g| child[g] != parent[g]), "a body with a brain kept every brain-size gene");
     let size = 10f32.powf(parent[MUT]);
     let diff: Vec<f32> = parent.iter().zip(&child).map(|(a, b)| (a - b).abs()).collect();
     assert!(diff.iter().any(|&d| d > 0.0), "no change");

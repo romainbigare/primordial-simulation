@@ -258,13 +258,16 @@ pub(crate) fn most(step: f32, alike: f32) -> f32 {
 /// The genes of `m` members drawn from a node of mean `genes` and variance `spread`, changed by a generation's
 /// mutation: their mean (plus noise of that variance over `m`) and the variance left among them ((1 - 1/m) of it, up to
 /// `most`). The spread's share of the noise shrinks near a wall, so the mean is never clamped: a clamp would be a drift
-/// no selection made.
-pub(crate) fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
+/// no selection made. A body with no `brain` does not mutate its brain-size genes (`BRAIN_SIZES`): they do nothing
+/// without one, so a brain arises only in a lineage founded with one ("no brain where nothing is decided").
+pub fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f32, brain: bool, r: &mut Rng)
+    -> (Vec<f32>, Vec<f32>) {
     let (size, m, mut left) = (mutation_size(genes), m.max(1.0) as f32, Vec::with_capacity(genes.len()));
     let genes = (genes.iter().enumerate())
         .map(|(g, &v)| {
             let (step, lo, hi) = range(lay, g);
-            let (u2, s2) = ((step * size).powi(2), spread_at(spread, g));
+            let held = !brain && BRAIN_SIZES.contains(&g);
+            let (u2, s2) = (if held { 0.0 } else { (step * size).powi(2) }, spread_at(spread, g));
             let room = wall_room(v, lo, hi) / REACH;
             let x = (v + ((u2 + s2.min((room * room * m - u2).max(0.0))) / m).sqrt() * noise(r)).clamp(lo, hi);
             if m > 1.0 {
@@ -274,9 +277,4 @@ pub(crate) fn vary(lay: &Layout, genes: &[f32], spread: &[f32], m: f64, alike: f
         })
         .collect();
     (genes, left)
-}
-
-/// Parent genes plus a generation's noise, kept in range.
-pub fn mutate(lay: &Layout, genes: &[f32], r: &mut Rng) -> Vec<f32> {
-    vary(lay, genes, &[], 1.0, 0.0, r).0
 }
