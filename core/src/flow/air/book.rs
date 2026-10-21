@@ -36,7 +36,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
             let m = row[o].min(a + r);
             (up[e + i], up_heat[e + i], of_rain[x * n + i]) = (m.min(a), sp.cp * ts + sp.lf + sp.lv, (m - a).max(0.0));
             for (c, (q, share)) in shares(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i).into_iter().enumerate() {
-                (up[e + (c + 1) * n + i], up_heat[e + (c + 1) * n + i]) = (-r * share, sp.cp * it.t[q] + sp.lf);
+                (up[e + (c + 1) * n + i], up_heat[e + (c + 1) * n + i]) = (-r * share, sp.cp * it.t[q] + row[o + 7]);
             }
             rain[i] += r;
         }

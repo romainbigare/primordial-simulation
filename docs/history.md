@@ -660,7 +660,15 @@ the golden test.
   its volume as melt, and a thick cover kept its node from the summer air, so snow on mountains grew for good and the
   sea shrank. Seed 1, year 300: 22 x 22 island liquid on land 44 -> 0.14 km³, ice on land 196 -> 0 km³, sea 428 ->
   651 km³, land 287.8 -> 292.3 K, gas 3 534 -> 291 ppm, rivers 6 -> 84, eaters 0 -> 1.8e5 members, element drift
-  1.8e-16 -> 3.6e-16; GLOBE. Golden re-pinned.
+  1.8e-16 -> 3.6e-16; 36 x 18 globe liquid on land 4.6e6 -> 6.4e5 km³ (an inland sea now fills toward its
+  rim at 952 m), ice on land 3.2e7 -> 4.2e3 km³, sea 5.1e7 -> 8.4e7 km³ (8.45e7 at the start), land 286.1 -> 288.3 K,
+  gas 3 434 -> 162 ppm, element drift 3.1e-16 -> 2.0e-16. Golden re-pinned.
+- Rain from air below its melting point at the ground falls as a solid (snow): the air keeps the fusion enthalpy its
+  freezing frees. All rain brought the ground its fusion enthalpy, which froze out in cold ground and held snowy
+  mountains at the melting point (42 W/m² on a cell with 4 m of rain a year). Seed 1, year 300: 22 x 22 island land
+  292.3 -> 292.4 K, gas 3 291 -> 277 ppm, rivers 84 -> 89; 36 x 18 globe ice on land 4.2e3 -> 5.1e3 km³, liquid on
+  land 6.4e5 -> 7.0e5 km³, land 288.3 -> 288.9 K, gas 3 162 -> 211 ppm; element drift 2.6e-16 and 2.0e-16. Golden
+  re-pinned.
 
 **Tried and not kept in the foundation**
 

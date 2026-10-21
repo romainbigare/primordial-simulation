@@ -48,7 +48,7 @@ pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], (rows
         own[0] = row[1];
         for (x, ac) in act.iter().enumerate() {
             let (sp, o) = (s.sp[ac.k], FIXED + PER_GAS * x);
-            let [m, m_col, m_tl, r, r_col, r_tl, h_col] = <[f64; PER_GAS]>::try_from(&row[o..o + PER_GAS]).unwrap();
+            let [m, m_col, m_tl, r, r_col, r_tl, h_col, lf] = <[f64; PER_GAS]>::try_from(&row[o..o + PER_GAS]).unwrap();
             let mol_up = sp.cp * row[4] - sp.mm * s.view().lift(i, p, g);
             out.heat[p] += m * mol_up;
             out.up[x * na + p] += m;
@@ -60,9 +60,9 @@ pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], (rows
             let (v, k) = (&it.x[ac.gi * na..(ac.gi + 1) * na], 1 + 3 * x);
             let (sum, r_col) = (lerp(s, v, i), r_col * over);
             for (c, (qc, share)) in shares(s, v, i).into_iter().enumerate().filter(|&(c, _)| wt[c] > 0.0) {
-                // Per mol that rains out of air node `qc`: the vaporisation enthalpy it frees, less its heat and its fall
-                // to the ground, J.
-                let down = sp.lv - sp.cp * it.t[qc] + sp.mm * s.view().lift(i, qc, g);
+                // Per mol that rains out of air node `qc`: the vaporisation enthalpy it frees and the fusion enthalpy
+                // its rain does not bring the ground, less its heat and its fall to the ground, J.
+                let down = sp.lv + sp.lf - lf - sp.cp * it.t[qc] + sp.mm * s.view().lift(i, qc, g);
                 out.heat[qc] += r * share * down;
                 out.up[x * na + qc] -= r * share;
                 out.rained[qc] = [out.rained[qc][0] + r * share, out.rained[qc][1] + r * share * sp.refl[0]];

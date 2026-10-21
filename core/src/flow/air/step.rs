@@ -52,8 +52,9 @@ pub(super) struct Active {
 /// of its surface at its end state; then `PER_GAS` numbers per active gas.
 pub(super) const FIXED: usize = 9;
 /// Per active gas: what evaporates, mol, and its slopes with the column's gas and the air's temperature; what rains and
-/// its two slopes; the slope of the heat the node gives its air with the column's gas, J/mol.
-pub(super) const PER_GAS: usize = 7;
+/// its two slopes; the slope of the heat the node gives its air with the column's gas, J/mol; the fusion enthalpy a mol
+/// of its rain brings the ground, J/mol.
+pub(super) const PER_GAS: usize = 8;
 
 /// The air during the rounds: per node the temperature, K; per gas and node (`[gas * nodes + node]`) the amount, mol.
 #[derive(Clone)]
@@ -247,6 +248,8 @@ struct Fall {
 /// Rain on ground node `i` under air at `tl` at the ground, `over` the share of the air it sees over it: where that air
 /// (colder on higher ground) holds more of a gas than it can, it rains out in `rain_time`, with its heat at the
 /// temperature of the air it comes from (`shares`) and its fusion enthalpy, of which the node keeps what stays molten.
+/// Where the air at the ground is below the gas's melting point, it falls as a solid and the air keeps the fusion
+/// enthalpy its freezing frees.
 /// Until the balance is solved, each gas's first number in `row` holds its vapour's partial pressure near the ground, Pa.
 fn rain(cx: &Ctx, i: usize, tl: f64, over: f64, row: &mut [f64]) -> Fall {
     let (w, s, it, dt) = (cx.w, cx.s, cx.it, cx.dt);
@@ -256,15 +259,16 @@ fn rain(cx: &Ctx, i: usize, tl: f64, over: f64, row: &mut [f64]) -> Fall {
     for (x, ac) in cx.act.iter().enumerate() {
         let (o, sp) = (FIXED + PER_GAS * x, s.sp[ac.k]);
         let (col, hk) = (lerp(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i) * over, fixed[FIXED_CELL + x]);
-        row[o..o + PER_GAS].copy_from_slice(&[col * R_GAS * tl / (area * hk), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        row[o..o + PER_GAS].copy_from_slice(&[col * R_GAS * tl / (area * hk), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
         let full = s.sat[ac.k].at(tl) * area * hk / (R_GAS * tl);
         if ac.cond && col > full {
             let f = dt / w.cfg.rain_time;
             let r = f * (col - full);
             row[o + 3..o + 6].copy_from_slice(&[r, f, -f * full * (sp.lv / (R_GAS * tl * tl) - 1.0 / tl)]);
+            row[o + 7] = if tl >= sp.melt { sp.lf } else { 0.0 };
             let t_from: f64 = shares(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i).iter().map(|&(q, share)| share * it.t[q]).sum();
-            (g_rain, rain_heat, rain_in) = (g_rain + r * sp.cp / adt, rain_heat + r * sp.cp / adt * t_from, rain_in + r * (sp.cp * t_from + sp.lf));
-            gain += (r * sp.lf - s.fusion(ac.k, i, r)) / adt;
+            (g_rain, rain_heat, rain_in) = (g_rain + r * sp.cp / adt, rain_heat + r * sp.cp / adt * t_from, rain_in + r * (sp.cp * t_from + row[o + 7]));
+            gain += (r * row[o + 7] - s.fusion(ac.k, i, r)) / adt;
         }
     }
     Fall { gain, g_rain, t_rain: if g_rain > 0.0 { rain_heat / g_rain } else { 0.0 }, rain_in }
