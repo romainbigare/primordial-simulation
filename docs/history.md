@@ -517,6 +517,12 @@ the golden test.
 
 - The bodies run on one thread again (decision 59, "tried and not kept" below); the core ceiling is back to 9,000 and
   the 700 lines the owner allowed wait for threads over bodies that pay (decision 42). Core 9,567 to 8,998 code lines.
+- A bite that reaches less than one member of a node meets one whole member with that chance and takes, tears and
+  pays that meeting's outcome times the chance (`feed::take_body`), as an individual's draw does: 48 x 48 seeds 1-3,
+  years 51-60, eaters taken 363, 1,080, 421 to 4, 731, 111 a year, eaters 8.8e6, 9.7e7, 7.3e7 to 5.9e6, 7.4e7, 7.7e7
+  kg, light-eaters 1.95, 2.19, 2.11e10 to 1.93, 2.10, 2.08e10 kg, land 286.58, 290.71, 289.29 to 286.58, 290.69,
+  289.33 K, drift 1e-14. F7: the eaters' deaths by bites agree; rule (d) fails on light-eaters taken (seed 5: nodes
+  1.1e-6 a member-year against 3.1e-6, noise 2.3 times) and the roster's small eaters.
 
 **Tried and not kept in the foundation**
 

@@ -337,8 +337,9 @@ enter (`bond/verbs.rs`). No copy action, no "farm", "trade" or "attack": those m
 per kg, of food only (`Body::uses`: what it burns, the body matter and built solids it digests, the minerals it builds
 of; not what it cannot use, nor the key liquids it drinks, `soak`): per kg of supply, Holling's type II take × s /
 (take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). Another body's
-members lie over the cell like the ground's food: a bite reaches those the swept area holds (of a node, maybe less than
-one member; one individual body whole), limited by force against theirs; a quicker body escapes with the chance its
+members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
+whole, with the chance the area holds it; of a node, less than one member is one whole member met with that chance:
+it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs; a quicker body escapes with the chance its
 interval gives. **Giving** (`Body::spare`) is of what the other uses, of stores only (no matter, brood, built solids or key liquid below level),
 above `keep_min` × their minimum, at most what the members met could take.
 
