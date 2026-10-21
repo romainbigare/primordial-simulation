@@ -2,6 +2,7 @@
 
 use crate::render::RIVER_PNG;
 use pcore::body::light_eater;
+use pcore::check::Totals;
 use pcore::{World, AIR};
 use tape::{Recorder, Spent, RIVER_WEB, TAPE};
 use worldgen::life::Seeding;
@@ -53,9 +54,11 @@ impl Clock {
     }
 }
 
-/// The yearly line: drift, bodies and members, speed, and the counts of the year.
-pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder) -> String {
-    let (de, dq) = drift;
+/// The yearly line: drift since `t0` (the worst, and of each element signed), bodies and members, speed, and the counts
+/// of the year.
+pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> String {
+    let ((de, dq), now) = (pcore::check::drift(w, t0), pcore::check::totals(w));
+    let each: Vec<String> = (0..now.elems.len()).map(|j| format!("{:+.1e}", pcore::check::elem_drift(&now, t0, j))).collect();
     let (all, le) = (w.life.alive().count(), w.life.alive().filter(|b| light_eater(&w.chem, &b.genes)).count());
     // Members of light-eaters; individuals, nodes and members of the others.
     let mut m = [0.0; 4];
@@ -71,7 +74,8 @@ pub fn year(w: &World, y: u64, drift: (f64, f64), clock: &Clock, rec: &Recorder)
     let most = w.life.at.iter().map(|v| v.len()).max().unwrap_or(0);
     let born = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count();
     format!(
-        "year {y}: element drift {de:.2e}, energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); node splits {:.0} in two; kinds {} ({} by members), gifts {}/yr, watches {}/yr",
+        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, heat not given {:.2e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); node splits {:.0} in two; kinds {} ({} by members), gifts {}/yr, watches {}/yr",
+        each.join(" "),
         w.counts.clamped_heat,
         m[0],
         m[1],

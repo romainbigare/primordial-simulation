@@ -91,7 +91,7 @@ fn drive(mut w: World, a: &Args, plan: Schedule, kept: Option<Kept>) {
             std::process::exit(1);
         }
         if y % every == 0 || y == y0 + years {
-            println!("{}", report::year(&w, y, pcore::check::drift(&w, &t0), &clock, &rec));
+            println!("{}", report::year(&w, y, &t0, &clock, &rec));
             clock.print_at(y, w.counts.updates);
             render::save(&w, &format!("{out}/year{y:04}.png"));
         }

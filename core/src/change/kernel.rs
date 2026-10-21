@@ -69,12 +69,12 @@ pub struct Reactor {
     pub moist: f64,
     /// Per substance, used and made, mol/s (scratch for `film`).
     flux: Vec<[f64; 2]>,
-    /// Over the last `react`: how far each reaction went and those that went; per substance, what they made less what
-    /// they used of the node's own amounts, mol, and whether they touched the gas around it.
+    /// Over the last `react`: how far each reaction went and those that went; per substance, what they took from the
+    /// gas around the node (below 0) and gave to it, mol, summed from what each asked, never as the pool's change: a
+    /// small draw on a large pool rounds away in the pool but not here.
     done: Vec<f64>,
     ran: Vec<usize>,
-    pub(super) own: Vec<f64>,
-    pub(super) pooled: Vec<bool>,
+    pub(crate) dpool: Vec<f64>,
     /// Per substance, the sum of the terms of its change and of their sizes, mol, and room for an exact sum (`made`).
     sums: Vec<[f64; 2]>,
     parts: Vec<f64>,
@@ -177,12 +177,11 @@ impl Reactor {
             boil: chem.subs.iter().map(|s| s.boil).collect(),
             ph: vec![Phase::Solid; ns],
             minor: vec![false; nr],
-            pooled: vec![false; ns],
             ..Default::default()
         };
         // The scratch of each reaction and of each substance, empty; the lists of reactions fill as they run.
         [&mut rc.kap, &mut rc.lim, &mut rc.far, &mut rc.pw, &mut rc.kap0, &mut rc.lim0, &mut rc.done].into_iter().for_each(|v| *v = vec![0.0; nr]);
-        [&mut rc.av, &mut rc.own].into_iter().for_each(|v| *v = vec![0.0; ns]);
+        [&mut rc.av, &mut rc.dpool].into_iter().for_each(|v| *v = vec![0.0; ns]);
         (rc.flux, rc.sums) = (vec![[0.0; 2]; ns], vec![[0.0; 2]; ns]);
         rc
     }
@@ -281,8 +280,7 @@ impl Reactor {
         self.on0.clear();
         self.ran.iter().for_each(|&r| self.done[r] = 0.0);
         self.ran.clear();
-        self.own.fill(0.0);
-        self.pooled.fill(false);
+        self.dpool.fill(0.0);
         for iter in 0..=MAX_SUBSTEPS {
             if left <= 0.0 {
                 break;
@@ -375,18 +373,17 @@ impl Reactor {
                 let (k, d) = (k as usize, nu as f64 * ext);
                 let from_pool = if self.ph[k] == Phase::Gas && has_pool { pool[k].min(d) } else { 0.0 };
                 if from_pool > 0.0 {
-                    (pool[k], self.pooled[k]) = (pool[k] - from_pool, true);
+                    (pool[k], self.dpool[k]) = (pool[k] - from_pool, self.dpool[k] - from_pool);
                 }
                 n[k] = (n[k] - (d - from_pool)).max(0.0);
-                self.own[k] -= d - from_pool;
                 self.av[k] = (self.av[k] - d).max(0.0);
             }
             for &(k, nu) in &rx.outputs {
                 let (k, d) = (k as usize, nu as f64 * ext);
                 if self.ph[k] == Phase::Gas && has_pool {
-                    (pool[k], self.pooled[k]) = (pool[k] + d, true);
+                    (pool[k], self.dpool[k]) = (pool[k] + d, self.dpool[k] + d);
                 } else {
-                    (n[k], self.own[k]) = (n[k] + d, self.own[k] + d);
+                    n[k] += d;
                 }
                 self.av[k] += d;
             }

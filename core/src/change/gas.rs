@@ -2,7 +2,7 @@
 
 use crate::chem::Chemistry;
 
-/// The gas a reactor put out to and took from the air around it: `pool` after it reacted, `pool0` before, mol of each.
+/// The gas a reactor put out to and took from the air around it (`Reactor::dpool`).
 pub(crate) struct GasMove {
     /// Fusion and vaporisation enthalpy the gas put out takes, J; that the gas taken gives up, J
     pub pay: f64,
@@ -13,11 +13,11 @@ pub(crate) struct GasMove {
 }
 
 impl GasMove {
-    /// The exchange of `pool` against `pool0`, with air at `ta` K.
-    pub(crate) fn of(chem: &Chemistry, pool: &[f64], pool0: &[f64], ta: f64) -> Self {
+    /// The exchange `gas`, mol of each put out (+) or taken, with air at `ta` K.
+    pub(crate) fn of(chem: &Chemistry, gas: &[f64], ta: f64) -> Self {
         let (mut pay, mut back, mut c_out, mut q_in) = (0.0, 0.0, 0.0, 0.0);
-        for (k, (&p, &p0)) in pool.iter().zip(pool0).enumerate() {
-            let (d, s) = (p - p0, &chem.subs[k]);
+        for (k, &d) in gas.iter().enumerate() {
+            let s = &chem.subs[k];
             (pay, back) = (pay + d.max(0.0) * s.latent_gas(), back - d.min(0.0) * s.latent_gas());
             (c_out, q_in) = (c_out + d.max(0.0) * s.cp, q_in - d.min(0.0) * s.cp * ta);
         }
@@ -25,11 +25,10 @@ impl GasMove {
     }
 }
 
-/// Settle the gas of `pool` against `pool0`: of what was put out the share `paid` goes up (`sent`) and the rest stays
-/// (`kept`); what was taken (`sent` below 0) comes down: `settle(k, sent, kept)` for each substance.
-pub(crate) fn send_gas(pool: &[f64], pool0: &[f64], paid: f64, mut settle: impl FnMut(usize, f64, f64)) {
-    for (k, (&p, &p0)) in pool.iter().zip(pool0).enumerate() {
-        let d = p - p0;
+/// Settle the exchange `gas`, mol of each put out (+) or taken: of what was put out the share `paid` goes up (`sent`)
+/// and the rest stays (`kept`); what was taken (`sent` below 0) comes down: `settle(k, sent, kept)` for each substance.
+pub(crate) fn send_gas(gas: &[f64], paid: f64, mut settle: impl FnMut(usize, f64, f64)) {
+    for (k, &d) in gas.iter().enumerate() {
         let sent = if d > 0.0 { d * paid } else { d };
         settle(k, sent, d - sent);
     }

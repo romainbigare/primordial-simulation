@@ -22,10 +22,8 @@ const KEEP_T_SLACK: f64 = 1e-6;
 /// Working memory of `live`, kept from body to body.
 #[derive(Default)]
 pub(crate) struct LiveTmp {
-    /// The gas the body exchanges with its air node in this update, mol of each (`pool`; `pool0` as it was before its
-    /// reactions), and the air's shares
+    /// The gas the body may exchange with its air node in this update, mol of each, and the air's shares
     pub(super) pool: Vec<f64>,
-    pub(super) pool0: Vec<f64>,
     pub(super) x: Vec<f64>,
     /// The catalyst factors of the reactions that run on their own
     pub(super) cat: Vec<f64>,

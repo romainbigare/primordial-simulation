@@ -562,6 +562,10 @@ the golden test.
   kg, eaters 4.9e6, 8.6e7, 4.4e7 to 5.6e6, 1.1e8, 6.9e7 kg, eaters taken 3, 903, 243 to 64, 1,358, 292 a year,
   light-eaters taken 2.0e3, 6.7e5, 1.6e5 to 1.2e5, 8.9e5, 2.7e5 members a year, land 286.58, 290.71, 289.37 to 286.60,
   290.71, 289.35 K, drift 1e-14.
+- A reactor counts what it took from and gave to the gas around it as each reaction asked (`Reactor::dpool`), not as
+  the pool's change, where a small draw on a large pool rounds away; bodies, parts and the ground read that one count.
+  The yearly line prints each element's signed drift. Golden re-pinned. 48 x 48 seed 1 at year 100: element 2's drift
+  3.6e-14 to 3.3e-14, 7.0e-15 in years 91-100 both times: the most of it rounds away in the air nodes' sums.
 
 **Tried and not kept in the foundation**
 

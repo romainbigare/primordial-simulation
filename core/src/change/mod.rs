@@ -136,7 +136,7 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     let (made, out) = row.split_at_mut(ns);
     rc.made(chem, made);
     // What they gave to the gas around the node, or took from it, mol: the rest of what they made was in the node.
-    let gas = |k: usize| if rc.pooled[k] { made[k] - rc.own[k] } else { 0.0 };
+    let gas = |k: usize| rc.dpool[k];
     // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.
     let c_out = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].cp).sum::<f64>();
     let per_c = e.max(0.0) / (cap(&h.amt) + c_out).max(1e-9);

@@ -64,7 +64,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0, stop: None, asked: 0.0 };
     let reach = gas_pool(w, b, s, &f0, tmp);
     let used = react(w, b, rc, tmp, s, &mut h, c0, upkeep_heat);
-    settle_gas(w, b, tmp, s, &mut h);
+    settle_gas(w, b, &rc.dpool, s, &mut h);
     h.took = store_light(w, b, s, caught, used);
     let soil = soil(w, b, s, wk);
     let mass1 = b.mass(&w.chem);
@@ -109,7 +109,6 @@ fn gas_pool(w: &World, b: &Body, s: &Site, f: &Film, tmp: &mut LiveTmp) -> f64 {
         tmp.x.push(x);
         tmp.pool.push((x * reach).min(w.a(k, j)));
     }
-    tmp.pool0.clone_from(&tmp.pool);
     reach
 }
 
@@ -139,15 +138,15 @@ fn react(w: &World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site,
 /// Gas taken brings its heat at the air's temperature and its latent heat; gas put out takes its latent heat, as far as
 /// heat pays for it: the body's above `T_FLOOR`, what it released, and what the surface conducts in, no more than its
 /// bodies' node holds for it.
-fn settle_gas(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat) {
+fn settle_gas(w: &mut World, b: &mut Body, dpool: &[f64], s: &Site, h: &mut Heat) {
     let (j, lift) = (s.j, w.lift(s.i));
-    let gas = GasMove::of(&w.chem, &tmp.pool, &tmp.pool0, w.t_air(j));
+    let gas = GasMove::of(&w.chem, dpool, w.t_air(j));
     b.e += gas.q_in;
     w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
     let heat = h.heat + gas.back;
     let conduct = (h.g * s.dt * s.tg).min(held_for(w, b, s.i));
     let paid = share((heat_above_floor(b.e, b.heat_cap(&w.chem)) + heat + conduct).max(0.0), gas.pay);
-    send_gas(&tmp.pool, &tmp.pool0, paid, |k, sent, kept| {
+    send_gas(dpool, paid, |k, sent, kept| {
         b.store[k] += kept;
         if sent != 0.0 {
             w.moves.gas(&w.chem, k, sent, lift);

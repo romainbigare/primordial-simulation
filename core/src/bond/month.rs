@@ -17,7 +17,7 @@ pub fn step(w: &mut World) {
     let (month, ns) = (w.cfg.calendar().month, w.chem.ns());
     let react = w.month().is_multiple_of(REACT_MONTHS);
     let mut rc = Reactor::new(&w.chem, &w.cfg);
-    let (mut pool, mut pool0) = (vec![0.0; ns], vec![0.0; ns]);
+    let mut pool = vec![0.0; ns];
     let dt = (REACT_MONTHS * month) as f64;
     for s in 0..w.parts.parts.len() {
         if !w.parts.parts[s].alive {
@@ -26,7 +26,7 @@ pub fn step(w: &mut World) {
         // What it moves to and from the store is gathered and booked once, at the end of its turn.
         w.open_moves(cell(w, s), Node::new(Class::Part, s));
         if react {
-            react_part(w, &mut rc, s, &mut pool, &mut pool0, dt);
+            react_part(w, &mut rc, s, &mut pool, dt);
         }
         settle(w, s);
         w.book_moves();
@@ -43,19 +43,18 @@ pub fn step(w: &mut World) {
 
 /// Part `s` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
 /// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
-fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0: &mut [f64], dt: f64) {
+fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], dt: f64) {
     let (na, i) = (w.mesh.level(AIR).n(), cell(w, s));
     let j = w.mesh.up(i, 0, AIR);
     let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), w.t_air(j));
     let chem = &w.chem;
     let p = &mut w.parts.parts[s];
-    pool0.iter_mut().enumerate().for_each(|(k, p0)| *p0 = w.store.amounts(Class::Air)[k * na + j] * air_share);
-    pool.copy_from_slice(pool0);
+    pool.iter_mut().enumerate().for_each(|(k, p)| *p = w.store.amounts(Class::Air)[k * na + j] * air_share);
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
     // It lies on its cell's ground, as moist as that.
     rc.moist = w.scratch.view().moist(i, w.cfg.phys.field);
     rc.react(chem, &mut p.wall, Some(pool), &mut p.e, fixed, None, 0.0, dt);
-    let gas = GasMove::of(chem, pool, pool0, ta);
+    let gas = GasMove::of(chem, &rc.dpool, ta);
     let c = p.heat_cap(chem);
     let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);
     p.e += gas.q_in - q_out;
@@ -67,7 +66,7 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], pool0
     // The heat of the gas that goes to the ground goes with it.
     w.moves.take(&w.chem, Node::air(j), 0, 0.0, q_out * (1.0 - paid));
     w.moves.give(&w.chem, Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
-    send_gas(pool, pool0, paid, |k, sent, kept| {
+    send_gas(&rc.dpool, paid, |k, sent, kept| {
         w.moves.give(&w.chem, Node::ground(i), k, kept, 0.0);
         if sent != 0.0 {
             w.moves.gas(&w.chem, k, sent, lift);

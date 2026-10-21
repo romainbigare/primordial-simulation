@@ -76,12 +76,16 @@ pub fn totals(w: &World) -> Totals {
     Totals { elems, thermal: thermal.get(), chemical: chemical.get(), potential: w.store.heat(Class::Potential)[0], boundary_energy, boundary_elems }
 }
 
+/// The relative drift of element `j` from `start` to `now`, signed: its change less what the boundary nodes gave.
+pub fn elem_drift(now: &Totals, start: &Totals, j: usize) -> f64 {
+    (now.elems[j] - start.elems[j] - (start.boundary_elems[j] - now.boundary_elems[j])) / start.elems[j].abs().max(1.0)
+}
+
 /// Compare now with a start point: the world's elements and energy change only by what the boundary nodes gave it.
 /// Returns the worst relative drift of elements and of energy.
 pub fn drift(w: &World, start: &Totals) -> (f64, f64) {
     let now = totals(w);
-    let elem_drift = |j: usize| (now.elems[j] - start.elems[j] - (start.boundary_elems[j] - now.boundary_elems[j])).abs() / start.elems[j].abs().max(1.0);
-    let worst_e = (0..start.elems.len()).map(elem_drift).fold(0.0, f64::max);
+    let worst_e = (0..start.elems.len()).map(|j| elem_drift(&now, start, j).abs()).fold(0.0, f64::max);
     let given: [f64; BOUNDARIES] = std::array::from_fn(|b| start.boundary_energy[b] - now.boundary_energy[b]);
     let change = (now.thermal + now.chemical + now.potential) - (start.thermal + start.chemical + start.potential);
     let scale = given[Boundary::Sun as usize].abs().max(start.thermal.abs()).max(1.0);
