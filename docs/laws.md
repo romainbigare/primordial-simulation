@@ -74,8 +74,9 @@ melting point (lowered by solutes, 2.5) until that substance has all frozen or m
   flows by `bed_seep`. Real land drains to channels a few hundred metres apart, so both also drain by Darcy's law down
   the cell's steepest slope over a hillslope of `hill` into the runoff (`flow::drain`).
 - **What goes with it**: its share of every liquid and of what is dissolved, with heat. Liquid passing through a node
-  keeps its fusion heat whatever the node's phase and leaves at the node's temperature, no warmer than the node's
-  energy with what came in pays for, so it never takes more heat than the node holds. A salt is a liquid that never
+  keeps its fusion heat whatever the node's phase and leaves at the temperature of the node mixed with what came in
+  (on a melting plateau the plateau's substance melts or freezes first), so it never takes more heat than the node
+  holds and what stays keeps that temperature. A salt is a liquid that never
   boils (23, 24): it moves with the liquid and stays when it evaporates. Lost head heats the liquid that loses it (on
   the surface what runs out of a node, under it where it goes) and does work (1.3); lifts and falls book through the
   potential node (`flow::Falls`).

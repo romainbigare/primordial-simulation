@@ -2,7 +2,7 @@
 //! (`drain::springs`); what may run off runs down the cells in one pass in the order of a priority flood
 //! (`solve::downhill`), doing work on its bed; then the liquid under the surface moves (`drain::under`).
 
-use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, HALF_WAY}, range, year_weight, Scratch};
+use super::{bare_share, drain::{springs, under}, follow, land::{lift, solid, stand, wet, HALF_WAY, NONE}, range, year_weight, Scratch};
 use crate::{math::one_minus_exp, solve::downhill::{pass, Adjacency, Crossed}, store::{apply, Batch, Class, LinkFlux, Move}, units::T_FLOOR, World};
 
 /// Least bond strength wear divides by.
@@ -120,9 +120,8 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             share[k] = (sv * f).min(area[i] * outs[k].1) / sv;
             (out, drop) = (out + share[k], drop + share[k] * outs[k].2);
         }
-        // The node's temperature with what came in (no warmer than at the last `ground_state`). Liquid that came in holds
-        // its fusion enthalpy as it passes, whatever the node's own phase (its heat brought it); a load holds none. So
-        // the liquid passing on leaves at a temperature the node's energy pays for, never more than it holds.
+        // The node's heat capacity and fusion enthalpy with what came in. Liquid that came in holds its fusion enthalpy
+        // as it passes, whatever the node's own phase (its heat brought it); a load holds none.
         let (mut c, mut held) = (ss.cap[i], ss.latent[i].held);
         let (cell, was) = (i * width..(i + 1) * width, &q0[i * width..(i + 1) * width]);
         for (r, &k) in ks.iter().enumerate().filter(|p| q[cell.start + p.0] != was[p.0]) {
@@ -130,7 +129,13 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             (c, held) = (c + d * ss.sp[k].cp, held + if r < nl { d * ss.sp[k].lf } else { 0.0 });
         }
         let q = &mut q[cell];
-        let t = ((ww.store.heat(Class::Ground)[i] + q[heat] - held) / c.max(1.0)).min(ss.state.tg[i]).max(T_FLOOR);
+        // The temperature of the node mixed with what came in, at which what runs out leaves: off a melting plateau its
+        // energy over its fusion enthalpy and heat capacity; on one, what it gains or loses on the plateau's
+        // temperature melts or freezes the plateau's substance first (`FlowView::fused`), and only the rest warms or
+        // cools it. So the liquid passing on leaves at a temperature the node pays for, and what stays keeps it.
+        let lat = match ss.state.pk[i] { NONE => 0.0, k => ww.store.amounts(Class::Ground)[k * n + i] * ss.sp[k].lf };
+        let x = ww.store.heat(Class::Ground)[i] + q[heat] - held - c * ss.state.tg[i];
+        let t = (ss.state.tg[i] + (x.min(0.0) + (x - lat).max(0.0)) / c.max(1.0)).max(T_FLOOR);
         let kg = |q: &[f64], rs: std::ops::Range<usize>| rs.map(|r| q[r] * ss.sp[ks[r]].mm).sum::<f64>();
         // The work, on the bed below the liquid left standing (which hides it).
         let left = sv * (1.0 - out) / area[i];

@@ -635,6 +635,10 @@ the golden test.
 - L3: the head liquid loses running out of a node heats what runs out (as under the surface, where it goes), not the
   node it leaves: a hot node that 97% of its liquid left kept the fall's 1e17 J, reached 465 K, boiled off the rest in
   the next air step with more heat than it held and overdrew it (128 x 128 island seed 5, year 94). Golden re-pinned.
+- L3: what runs out of a node on the surface leaves at the temperature of the node mixed with what came in (on a
+  melting plateau the plateau's substance melts or freezes first), not at most at the node's last temperature: liquid
+  at 365 K running through a node at 292 K left at 292 K and the node kept the difference (the same run, the next
+  node down). Golden re-pinned.
 
 **Tried and not kept in the foundation**
 
