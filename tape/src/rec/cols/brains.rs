@@ -1,11 +1,12 @@
 //! Brains and kinds: how far learning moved the brains, how often the best-scored action was drawn, the brains'
-//! sizes, how much signals say about their sender's state, and the kinds of bodies by their genes and diet.
+//! sizes, how much signals say about their sender's state, the members' masses and what each starting kind eats.
 
 use super::Row;
 use crate::measure;
 use crate::rec::tally::Signals;
 use crate::rec::Recorder;
 use pcore::World;
+use std::collections::BTreeMap;
 use std::f64::consts::LN_2;
 
 /// Fewest signals of a lineage in a context for its information to count.
@@ -69,32 +70,32 @@ impl Recorder {
         row.push("hidden_max", "1", top);
     }
 
-    /// Kinds of live bodies by genes and diet (`measure::kinds`), their members' mass range (kg), and the share of what a
-    /// kind took from bodies that came from animals: for the kind with most bodies, and the highest of any.
+    /// The members' mass range (kg), and the share of what a starting kind took from bodies that came from animals:
+    /// for the kind with most bodies, and the highest of any.
     fn variety(&self, w: &World, row: &mut Row) {
-        let (of, k) = measure::kinds(w);
         let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();
         // Each member's mass with the starting kind of its lineage (NaN: none), the heaviest last.
         let mut heavy: Vec<(f64, f64)> = live.iter().map(|(_, b)| (b.mass(&w.chem) / b.n(), w.life.brains[b.lineage as usize].as_ref().map_or(f64::NAN, |l| l.root as f64))).collect();
         heavy.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mass: Vec<f64> = heavy.iter().map(|m| m.0).collect();
         let at = |q: usize| mass.get(q).copied().unwrap_or(f64::NAN);
-        let (mut cnt, mut took) = (vec![0usize; k], vec![[0f64; 2]; k]);
-        for (&j, (i, b)) in of.iter().zip(&live) {
-            cnt[j] += 1;
-            let t = self.social.eaten(b.id(*i)).unwrap_or([0.0; 2]);
-            (took[j][0], took[j][1]) = (took[j][0] + t[0] as f64, took[j][1] + t[1] as f64);
+        // Per starting kind: its bodies, and what they took from light-eaters and from others.
+        let mut kinds: BTreeMap<u32, (usize, [f64; 2])> = BTreeMap::new();
+        for (i, b) in &live {
+            if let Some(l) = &w.life.brains[b.lineage as usize] {
+                let (cnt, took) = kinds.entry(l.root).or_default();
+                let t = self.social.eaten(b.id(*i)).unwrap_or([0.0; 2]);
+                (*cnt, took[0], took[1]) = (*cnt + 1, took[0] + t[0] as f64, took[1] + t[1] as f64);
+            }
         }
-        let share = |j: usize| took[j][1] / (took[j][0] + took[j][1]).max(1e-9);
-        let big = (0..k).max_by(|&a, &b| cnt[a].cmp(&cnt[b]).then(b.cmp(&a)));
-        let none = live.is_empty();
-        row.push("kinds", "1", if none { 0.0 } else { k as f64 });
-        row.push("kinds_members", "1", if none { 0.0 } else { measure::kinds_by_members(w) as f64 });
+        let share = |t: &[f64; 2]| t[1] / (t[0] + t[1]).max(1e-9);
+        // (The first of the kinds with most bodies.)
+        let big = kinds.values().rev().max_by_key(|k| k.0);
         row.push("mass_min", "kg", at(0));
         row.push("mass_median", "kg", at(mass.len() / 2));
         row.push("mass_max", "kg", at(mass.len().wrapping_sub(1)));
         row.push("mass_max_root", "1", heavy.last().map_or(f64::NAN, |m| m.1));
-        row.push("trophic_max", "1", big.map_or(f64::NAN, share));
-        row.push("trophic_high", "1", (0..k).map(share).fold(0.0, f64::max));
+        row.push("trophic_max", "1", big.map_or(f64::NAN, |k| share(&k.1)));
+        row.push("trophic_high", "1", kinds.values().map(|k| share(&k.1)).fold(0.0, f64::max));
     }
 }

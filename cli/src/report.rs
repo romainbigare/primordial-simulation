@@ -74,7 +74,7 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
     let most = w.life.at.iter().map(|v| v.len()).max().unwrap_or(0);
     let born = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count();
     format!(
-        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); node splits {:.0} in two; kinds {} ({} by members), gifts {}/yr, watches {}/yr",
+        "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); node splits {:.0} in two; gifts {}/yr, watches {}/yr",
         each.join(" "),
         w.counts.clamped_heat,
         w.counts.rounded[0],
@@ -91,8 +91,6 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
         ms[TAPE],
         w.parts.alive().count(),
         w.counts.splits,
-        rec.last("kinds"),
-        rec.last("kinds_members"),
         rec.last("gave"),
         rec.last("watched")
     )

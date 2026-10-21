@@ -12,7 +12,7 @@ const SECTIONS: [string, RegExp][] = [
   ['Air gases', /^air_/],
   ['Minerals', /^min\d/],
   ['Dead matter', /^dead_/],
-  ['Population', /^(bodies|plants|plant_members|animal_|cover_|body_mass|lineages|updates|kinds|mass_(min|median|max)|trophic_|eat_animals)/],
+  ['Population', /^(bodies|plants|plant_members|animal_|cover_|body_mass|lineages|updates|mass_(min|median|max)|trophic_|eat_animals)/],
   ['Births and deaths', /^(births|died_)/],
   ['Brains', /^(learned|greedy|hidden|memory|seen|sight|mi_)/],
   ['Movement and paths', /^(crossings|traffic_|worn_|mass_top2|mass_land)/],

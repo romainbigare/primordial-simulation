@@ -70,9 +70,8 @@ worn edges, structures, true colour (r, g, b).
 | `learned`, `greedy` | | how far learning moved the brains; share of decisions that drew the top-scored action |
 | `hidden`, `memory`, `seen`, `sight`, `hidden_max` | , , , cells, | mean brain and sense sizes; the largest hidden layer |
 | `mi_cold`, `mi_hurt`, `mi_low` | bit | how much signals say about cold ground, harm met and low well-being |
-| `kinds`, `kinds_members` | | kinds found by clustering genes and diet (bodies; members) |
 | `mass_min`, `mass_median`, `mass_max`, `mass_max_root` | kg | member mass; the kind of the heaviest |
-| `trophic_max`, `trophic_high` | | share of what a kind took from bodies that came from eaters: the kind with most bodies; the highest |
+| `trophic_max`, `trophic_high` | | share of what a starting kind took from bodies that came from eaters: the kind with most bodies; the highest |
 
 **Movement, imitation, giving**
 

@@ -712,6 +712,9 @@ the golden test.
   mass. 64 x 64 key numbers (seeds 1-3): land 291.79 -> 292.15 K, gas 406.1 -> 411.3 ppm, light-eaters 10.24 both,
   eaters 5.32 -> 5.34 log10 kg, all in range. Counting built solids at their mass too kept the frame at 7 to 14% of
   fresh mass but made lime a fifth of it (seed 1, year 290): not kept.
+- The tape no longer clusters bodies into kinds (the columns `kinds` and `kinds_members`, a weighted k-means that the
+  handover said not to read); `trophic_max` and `trophic_high` go by starting kind. 22 x 22 island at year 290, ten
+  years: the tape 83 -> 21 ms a year, the year 1,596 -> 1,533 ms, the same world.
 
 **Tried and not kept in the foundation**
 
