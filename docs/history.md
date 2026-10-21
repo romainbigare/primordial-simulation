@@ -702,6 +702,16 @@ the golden test.
 - Clean-up, bit for bit the same: a body's energy at a plateau state is the heat that would leave with all its stores
   (`Body::heat_with`; `fusion_in` goes), the light a layer intercepts is `math::mean_decay` (the alias `intercept`
   goes), and the survey no longer sizes the cells' light, canopy and rain sums the world is made with.
+- Selection inside a node counts as gain body matter and, of the matter the stores could make, at most what one
+  interval's growth allowance builds (`copy::buildable`, decision 69): storing cost nothing, so the keep gene of the
+  stored solid climbed and plants hoarded it. Golden re-pinned. 22 x 22 island seed 1, years 291-300 (the solid as
+  share of plants' dry mass and their keep gene at year 290): heat-absorbing gas 268 -> 435 ppm, flat from year 100
+  (before, falling), the solid 86 -> 70% of dry mass, keep gene 4.9 -> 1.0 (0.9 at the start), frame 0.6 -> 0.1% of
+  fresh mass, light-eaters 1.6e10 -> 3.6e9 kg, eaters 1.3e6 -> 4.5e6 kg, bodies 2,898 -> 2,463, land 292.2 -> 293.7 K,
+  element drift 1.4e-16 -> 2.1e-16. Seed 2: gas 324 -> 445 ppm, keep gene 4.7 -> 2.5, the solid 86 -> 80% of dry
+  mass. 64 x 64 key numbers (seeds 1-3): land 291.79 -> 292.15 K, gas 406.1 -> 411.3 ppm, light-eaters 10.24 both,
+  eaters 5.32 -> 5.34 log10 kg, all in range. Counting built solids at their mass too kept the frame at 7 to 14% of
+  fresh mass but made lime a fifth of it (seed 1, year 290): not kept.
 
 **Tried and not kept in the foundation**
 

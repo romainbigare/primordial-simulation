@@ -40,9 +40,9 @@ pub struct Lived {
     pub spare: f64,
     /// Its mass as its update leaves it, after it sheds (valid until its stores change)
     pub mass: f64,
-    /// The log of what it holds that can become body (`copy::buildable`: its matter, brood with it, and what its fuel
-    /// could build) after its growth over that as its update began: what its members gained in the time, by growth and
-    /// reserves, less the deaths (`copy::select`)
+    /// The log of what it holds that is or soon becomes body (`copy::buildable`: its matter, brood with it, and what
+    /// its stores could build in an interval) after its growth over that as its update began: what its members gained
+    /// in the time, by growth and reserves, less the deaths (`copy::select`)
     pub gain: f64,
 }
 

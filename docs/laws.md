@@ -317,8 +317,10 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   has room; selection then acts between the halves. Means are kept exactly.
 - **Selection inside a node** (`copy/select.rs`): a node without a brain also runs its update for a sample member one
   standard deviation up or down in one drawn gene, its moves dropped; the gene's mean moves by the step × tanh(sample's
-  gain − node's gain) × genes drawn from × `sample_every`, the gain the log of what can become body (`copy::buildable`):
-  Price's equation (Price 1970), the breeder's equation (Lande 1976). Skipped where the step cannot change the gain.
+  gain − node's gain) × genes drawn from × `sample_every`, the gain the log of what is or soon becomes body
+  (`copy::buildable`: body matter with its brood, and of what its stores could make as much as one interval's growth
+  allowance builds; built solids count by what they do, decision 69): Price's equation (Price 1970), the breeder's
+  equation (Lande 1976). Skipped where the step cannot change the gain.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`; rules per interval are rates
   over the update (`Body::paces`), so its `INTERVAL` gene is the turnover time of its stores (a known limit).

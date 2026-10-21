@@ -11,15 +11,14 @@ use crate::{World, AIR};
 /// and the stores it converts allow; past its copy mass a share `ALLOC` goes into the brood (laws.md 6.6). `th` is its
 /// plateau state. Returns whether it built anything.
 pub fn grow(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
-    let (chem, p) = (&w.chem, &w.cfg.phys);
+    let chem = &w.chem;
     let Some(bl) = chem.build.clone() else { return false };
     let (m, n) = (bl.outputs[0].0 as usize, b.n());
     b.brood = b.brooded(chem);
     // The matter a body of the size of maturity is made of: the living body is its matter over 1 - `WET_TISSUE` (`Body::built`).
     let full = b.dec(COPY_MASS) * n * (1.0 - WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
-    // (Building is chemistry: it goes with the body's activity, `Body::activity`; a dry body hardly grows.)
-    let room0 = p.c_build * b.supply(chem, p, th.t) / p.m_ref * days.min(b.interval(w) as f64) * b.activity(chem, p);
+    let room0 = allowance(w, b, th.t, days.min(b.interval(w) as f64));
     // (The plateau state holds until a conversion changes the body.)
     let mut th = Some(th);
     // The other solids it builds first, each with its share (`Body::share`) of the allowance and of what it can spare, and up
@@ -52,12 +51,23 @@ fn reach(chem: &Chemistry, p: &crate::Physics, b: &Body, bl: &Reaction, t: f64) 
     (floors, most)
 }
 
-/// What body `b` at `t` K holds that can become body, mol of body matter: its matter (its brood with it) and the matter
-/// its stores could make (`reach`). Selection inside a node counts its members' gain in it (`copy::select`), so a gene
-/// that brings more of what growth converts gains though the update builds no more.
+/// The work body `b` at `t` K may spend on building over `days`, J: `c_build` a day per kg-equivalent of its supply at
+/// `m_ref` (`Body::supply`). Building is chemistry: it goes with the body's activity (`Body::activity`), so a dry body
+/// hardly grows.
+fn allowance(w: &World, b: &Body, t: f64, days: f64) -> f64 {
+    let p = &w.cfg.phys;
+    p.c_build * b.supply(&w.chem, p, t) / p.m_ref * days * b.activity(&w.chem, p)
+}
+
+/// What body `b` at `t` K holds that is or soon becomes body, kg: its matter (its brood with it), and of the matter its
+/// stores could make (`reach`) as much as one interval's allowance builds. Selection inside a node counts its members'
+/// gain in it (`copy::select`): a gene that brings more of what growth converts gains though the update builds no
+/// more, but a store past what growth can use in an interval gains nothing, and a solid it builds counts only by what
+/// it does (its height and strength), as neither becomes children.
 pub fn buildable(w: &World, b: &Body, t: f64) -> f64 {
     let (Some(bl), Some(m)) = (w.chem.build.as_ref(), w.chem.matter()) else { return 0.0 };
-    b.store[m] + reach(&w.chem, &w.cfg.phys, b, bl, t).1 / w.chem.subs[m].molar_mass
+    let soon = allowance(w, b, t, b.interval(w) as f64) / w.cfg.phys.c_copy;
+    b.store[m] * w.chem.subs[m].molar_mass + reach(&w.chem, &w.cfg.phys, b, bl, t).1.min(soon)
 }
 
 /// It plans on this share of what its reactions can release, so rounding never leaves it short.
