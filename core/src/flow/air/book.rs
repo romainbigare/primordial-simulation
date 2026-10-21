@@ -98,9 +98,10 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     ];
     apply(w, &fluxes, &[], &[]);
     let ema = year_weight(w, dt);
-    for (((r, sum), &got), &a) in w.rain.iter_mut().zip(&mut w.rained).zip(&rain).zip(&area) {
-        follow(r, (got / (a * dt)) as f32, ema);
-        *sum += got / a;
+    for (i, ((r, sum), e)) in w.rain.iter_mut().zip(&mut w.rained).zip(&mut w.evap).enumerate() {
+        follow(r, (rain[i] / (area[i] * dt)) as f32, ema);
+        follow(e, ((0..act.len()).map(|x| up[x * ne + i]).sum::<f64>() / (area[i] * dt)) as f32, ema);
+        *sum += rain[i] / area[i];
     }
     sums(w, s);
 }

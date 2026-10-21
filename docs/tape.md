@@ -53,6 +53,7 @@ worn edges, structures, true colour (r, g, b).
 | `liquid_land` | km³ | liquid on land |
 | `ice_land` | km³ | frozen cover on land |
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
+| `evap_land`, `runoff_sea` | mol/m²/s | on land, what rises into the air less what condenses on the ground, and what runs over the surface into cells under the sea's level, per m² of land (moving averages over about a year): with `rain_land` the land's water budget |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) with a liquid flux over the web viewer's threshold (`tape::RIVER_WEB`) |
 | `bodies`, `plants` | | bodies (nodes and individuals), of them light-eaters |
 | `plant_members`, `animal_members`, `animal_nodes` | | members of light-eaters and of the others; nodes of the others |

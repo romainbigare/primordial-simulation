@@ -311,6 +311,8 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         counts: Counters::default(),
         rain: vec![0.0; n],
         liquid_flux: vec![0.0; n],
+        evap: vec![0.0; n],
+        off_land: vec![0.0; n],
         life: Life::new(n),
         parts,
         canopy: vec![0.0; n],

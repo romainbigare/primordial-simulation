@@ -717,6 +717,12 @@ the golden test.
   years: the tape 83 -> 21 ms a year, the year 1,596 -> 1,533 ms, the same world.
 - Clean-up, bit for bit the same: the world is made with its per-cell lists of bodies and parts and its ring of updates
   sized (`Life::new`), so `Life::fit_map` and `bond::ready`, which sized them at each survey and month, go.
+- The series records the land's water budget: what evaporates from land (`evap_land`) and what runs over it into the
+  sea (`runoff_sea`), from moving averages Flow keeps per cell (`World::evap`, `World::off_land`; snapshot 44). Golden
+  re-pinned (the world holds two more lists), the same laws. 36 x 18 globe seed 1, years 31-40: land rain 3.1 m a year
+  = evaporation 0.62 + runoff 2.33 (Earth: 0.76 = 0.48 + 0.28, Trenberth et al. 2007); the sea evaporates 1.40 m a
+  year and gets 0.45 of rain (Earth about 1.2 and 1.1); vapour 0.82% of the air (Earth about 0.4%), the ground 293.4 K
+  (land 290.4). The air carries the sea's vapour onto land and rains it there: open.
 
 **Tried and not kept in the foundation**
 

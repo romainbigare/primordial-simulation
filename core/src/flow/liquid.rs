@@ -91,6 +91,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let mut order = std::mem::take(&mut s.order);
     order.update(&adj, &s.z, |i| head(&q, i));
     let (mut power, mut sent, mut worn, mut outs) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], Vec::new());
+    let (land, mut off_land): (Vec<bool>, Vec<f64>) = ((0..n).map(|i| w.is_land(i)).collect(), vec![0.0; n]);
     let mut crossed = Crossed::default();
     let (ww, ss) = (&*w, &*s);
     pass(&order, &adj, &mut q, &mut crossed, |i, q, share| {
@@ -146,7 +147,10 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
         // The head lost on the way out heats what runs out: booked to the node from the potential, it leaves with the
         // liquid (as under the surface, `drain::under`), so a node the liquid runs out of keeps none of the fall's heat.
         q[heat] += if out > 0.0 { power[i] / out } else { 0.0 };
-        sent[i] = out * q[..nl].iter().sum::<f64>();
+        // What leaves a land cell for cells that are not land runs off the land.
+        let off = (0..share.len()).filter(|&k| land[i] && !land[cells.around(i).1[k] as usize]).map(|k| share[k]);
+        let liquid = q[..nl].iter().sum::<f64>();
+        (sent[i], off_land[i]) = (out * liquid, off.sum::<f64>() * liquid);
     });
     // The crossings as a link flux: each substance once (liquid and load rows of one substance share it), then the heat.
     let kinds: Vec<u16> = liq.iter().chain(sol.iter().filter(|k| !liq.contains(k))).map(|&k| k as u16).collect();
@@ -158,6 +162,7 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
     let (ema, mut broke) = (year_weight(w, dt), Vec::new());
     for i in 0..n {
         follow(&mut w.liquid_flux[i], (sent[i] / dt) as f32, ema);
+        follow(&mut w.off_land[i], (off_land[i] / dt) as f32, ema);
         if worn[i] > 0.0 {
             wear(w, s, i, worn[i], &mut broke);
         }

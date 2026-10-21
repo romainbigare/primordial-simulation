@@ -43,6 +43,10 @@ impl Recorder {
         row.push("ice_land", "km3", land.iter().map(|&i| c.f.ice[i] * area[i]).sum::<f64>() / GIGA);
         row.push("rain", "mol/m2/s", area_mean(w.rain.iter().zip(area).map(|(&v, &a)| (v as f64, a))));
         row.push("rain_land", "mol/m2/s", area_mean(land.iter().map(|&i| (w.rain[i] as f64, area[i]))));
+        // The land's water budget: what rises from it, and what runs over it into the sea, per m² of land.
+        row.push("evap_land", "mol/m2/s", area_mean(land.iter().map(|&i| (w.evap[i] as f64, area[i]))));
+        let land_area = land.iter().map(|&i| area[i]).sum::<f64>().max(f64::MIN_POSITIVE);
+        row.push("runoff_sea", "mol/m2/s", land.iter().map(|&i| w.off_land[i] as f64).sum::<f64>() / land_area);
         // Rivers as the web viewer draws them.
         row.push("rivers", "1", dry_land_flux(w, &c.f).iter().filter(|&&q| q > RIVER_WEB).count() as f64);
         // Bodies (nodes and individuals) and light-eaters; members of light-eaters and of the others; nodes of the others.

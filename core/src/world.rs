@@ -62,6 +62,11 @@ pub struct World {
     pub rain: Vec<f32>,
     /// Liquid moved out of each ground cell, mol/s, a moving average over about a year; it pushes parts (`bond::load`)
     pub liquid_flux: Vec<f32>,
+    /// What rises from each ground cell into the air less what condenses on it, mol/(m² s), and what runs over the
+    /// surface of each land cell into cells that are not land (`is_land`), mol/s: moving averages over about a year,
+    /// for the tape
+    pub evap: Vec<f32>,
+    pub off_land: Vec<f32>,
     pub counts: Counters,
     /// Bodies, and the parts they made: the sparse graph
     pub life: crate::life::Life,
