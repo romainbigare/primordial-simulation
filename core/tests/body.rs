@@ -6,7 +6,7 @@ use pcore::body::{self, Body, Layout, COPY_MASS, DENATURE, DISPERSE, LIQ, PHASE,
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::{DAY, DAY_S, T_FLOOR};
 use pcore::{brain, change, World, AIR};
-use worldgen::testkit::{add, brood, node_of, open_area, release, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, open_air, out, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, FIX_OUT, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
+use worldgen::testkit::{add, brood, node_of, open_area, release, dry_land, eater, empty_cell, in_all, rock_outside_matter, children, died, dry_lands, founder, hold_ground, kg, moved, open_air, out, put, put_kg_m2, scale, small_world, start, took_from_ground, warm, Books, Brain, Line, DISSOLVED, FIX_GAS, LIQUID, MATTER, OPEN_CAP, OX, RICH, ROCK};
 
 /// The default world's settings (its year: a reaction too slow to matter over it is frozen).
 fn cfg() -> pcore::Config {
@@ -1251,8 +1251,8 @@ fn eater_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
 }
 
 /// Fixing the air's gas: in the open it is nothing, and a body whose genes speed the reaction up makes the mineral from
-/// the air's gas and the energy-rich solid it burns, and gives off the reaction's gas, at the cost of the reaction: it
-/// burns 14 units of its fuel for each mol of the mineral, and their heat pays none of its upkeep (it burns that much
+/// the air's gas and the energy-rich solid it burns, at the cost of the reaction: it burns 14 units of its fuel for each
+/// mol of the mineral, and their heat pays none of its upkeep (it burns that much
 /// more than its twin), and the enzyme costs upkeep by its capacity like the others. A body that has none fixes none.
 /// Elements and energy are kept.
 #[test]
@@ -1285,11 +1285,7 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         b.genes[pcore::body::LEAF] = -9.0;
         let s = w.add(b, 1);
         let books = Books::now(&w);
-        let na = w.mesh.level(AIR).n();
-        let n = w.mesh.cells().n();
-        // (What it gives off waits in the bodies' nodes for the air's step.)
-        let air = |w: &World, k: usize| [(Class::Air, na), (Class::Bodies, n)].iter().map(|&(c, len)| w.store.amounts(c)[k * len..(k + 1) * len].iter().sum::<f64>()).sum::<f64>();
-        let before = (in_all(&w, mineral), air(&w, FIX_OUT));
+        let before = in_all(&w, mineral);
         let mut up = 0.0;
         for _ in 0..60 {
             pcore::day(&mut w);
@@ -1303,22 +1299,20 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         }
         assert!(w.life.bodies[s].alive);
         books.assert_kept(&w, 1e-9);
-        let after = (in_all(&w, mineral), air(&w, FIX_OUT));
         let b = &w.life.bodies[s];
-        (after.0 - before.0, after.1 - before.1, up, b.k.cats, b.store[rich], b.mass(&w.chem))
+        (in_all(&w, mineral) - before, up, b.k.cats, b.store[rich], b.mass(&w.chem))
     };
-    let (fixed, co, up_with, cats_with, fuel_with, mass) = run(FIX);
-    let (none, co_none, up_without, cats_without, fuel_without, _) = run(-1.0);
-    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral and put out {co:.3e} mol of the gas fixing gives off, upkeep {up_with:.4} times that with the gene off ({up_without:.4}); the other {none:.3e} mol; fuel {fuel_with:.4e} against {fuel_without:.4e}");
+    let (fixed, up_with, cats_with, fuel_with, mass) = run(FIX);
+    let (none, up_without, cats_without, fuel_without, _) = run(-1.0);
+    println!("60 days: the fixing plant made {fixed:.3e} mol of the mineral, upkeep {up_with:.4} times that with the gene off ({up_without:.4}); the other {none:.3e} mol; fuel {fuel_with:.4e} against {fuel_without:.4e}");
     // (What the enzyme made is the difference.)
     let made = fixed - none;
     assert!(made > 1.0, "the plant fixed {made} mol");
     println!("it fixed {:.2e} mol of the mineral a kg of plant and second", made / (mass * 60.0 * DAY));
-    // One mol of the gas fixing gives off for each mol of the mineral made; it is where the energy of the reaction went.
-    assert!((co - co_none) / made > 0.9 && (co - co_none) / made < 1.1, "{} mol of the gas for {made} of the mineral", co - co_none);
     // And 14 mol of its fuel for each, the units the reaction burns (and the enzyme's upkeep, a little more): their heat
     // paid no upkeep.
-    let units = chem.reactions[fix].inputs.iter().find(|p| p.0 as usize == rich).expect("the fuel").1 as f64;
+    let count = |v: &[(u16, u16)], k: usize| v.iter().find(|p| p.0 as usize == k).expect("in the reaction").1 as f64;
+    let units = count(&chem.reactions[fix].inputs, rich) / count(&chem.reactions[fix].outputs, mineral);
     assert!((fuel_without - fuel_with) / made > 0.95 * units && (fuel_without - fuel_with) / made < 1.2 * units, "{} mol of fuel for {made} of the mineral", fuel_without - fuel_with);
     // The enzyme costs by its capacity: the plant that fixes pays more upkeep than it would with the gene off.
     assert!(cats_with > cats_without && up_with > 1.0 && up_without == 1.0, "capacity {cats_with} against {cats_without}, upkeep {up_with} against {up_without}");

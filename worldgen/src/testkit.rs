@@ -32,8 +32,6 @@ pub const RICH: usize = 5;
 pub const ROCK: usize = 10;
 /// What `ROCK` leaves when it gives off the absorbing gas (reaction 15).
 pub const BURNT_ROCK: usize = 11;
-/// The gas the fixing reaction gives off.
-pub const FIX_OUT: usize = 21;
 /// Body matter.
 pub const MATTER: usize = 22;
 /// The mineral that exists only dissolved in the liquid, its store of the absorbing gas.

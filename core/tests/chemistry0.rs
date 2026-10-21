@@ -18,10 +18,10 @@ const SETTLING: usize = 23;
 /// its formula unit) and one atom of the rock element, 1.16% of its mass, in the range of the dry matter of land plants
 /// (0.5 to 2%); it is made of 118 of the energy-rich solid, 3 of the fixed mineral and 1 of the dissolved one without
 /// a gain or loss of heat, and burns for 16.0 MJ a kg giving the fixed gas's element back as its mineral and the rock
-/// element as the rock; the minerals live dissolved in the liquid; fixing the gas takes 490 kJ a mol of it, what 16
-/// molecules of the carrier of the enzyme's energy (30.5 kJ each) hold; every reaction and growth balance in elements.
+/// element as the rock; the minerals live dissolved in the liquid; fixing the gas burns what real fixers respire for it
+/// and gives all the solid's element back as the heat-absorbing gas; every reaction and growth balance in elements.
 #[test]
-fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
+fn the_chemistry_balances_and_fixing_costs_what_fixers_respire() {
     let (chem, _) = worldgen::chemistry0();
     assert!(chem.validate().is_ok());
     let (m, minerals) = (chem.matter().expect("matter"), chem.minerals());
@@ -59,21 +59,24 @@ fn the_chemistry_balances_and_fixing_costs_what_the_enzyme_spends() {
     assert!(chem.phase(DISSOLVED, 290.0) == Phase::Liquid && chem.subs[DISSOLVED].boil > 2000.0);
     let takes: Vec<usize> = (0..chem.reactions.len()).filter(|&r| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == DISSOLVED)).collect();
     assert!(takes.len() == 1 && chem.dh(takes[0]) > 0.0 && chem.reactions[takes[0]].outputs.iter().any(|p| p.0 as usize == ROCK));
-    // The fixing reaction: the fixed gas, the energy-rich solid and the burning gas make the mineral, the gas fixing gives
-    // off, the heat-absorbing gas and the liquid. It is the reaction that takes 490 kJ a mol of the fixed gas (16 x 30.5,
-    // what the enzyme of real fixers spends) together with the burning of the units of the solid that real fixers
-    // respire for it: 4.7 to 6.6 g of the solid's element a g of the fixed gas's (Layzell et al. 1979; models take 6). It
-    // releases heat, but less from each unit of the solid than burning does: it keeps a part (`Chemistry::keeps`), so it
-    // is no burning and a body never pays its upkeep with it.
+    // The fixing reaction: the fixed gas, the energy-rich solid and the burning gas make the mineral, the
+    // heat-absorbing gas and the liquid, nothing else, so all the solid's element it burns goes back to the air as the
+    // gas. It burns the units of the solid that real fixers respire for it: 4.7 to 6.6 g of the solid's element a g of
+    // the fixed gas's (Layzell et al. 1979; models take 6). It keeps in the mineral the mineral's own formation energy
+    // from the gas, the liquid and the burning gas (about 200 kJ a mol of the gas); the energy the enzyme spends is
+    // respired as heat. It releases heat, but less from each unit of the solid than burning does: it keeps a part
+    // (`Chemistry::keeps`), so it is no burning and a body never pays its upkeep with it.
     let fix = chem.fixing().expect("fixing");
     let (_, rich, _, burn1) = chem.life_roles().expect("roles");
     assert_eq!(rich, RICH);
+    let rx = &chem.reactions[fix];
+    assert!(rx.outputs.iter().all(|p| [MINERAL, ABSORBER, LIQUID].contains(&(p.0 as usize))), "fixing makes {:?}", rx.outputs);
     let units = |r: usize| chem.reactions[r].inputs.iter().find(|p| p.0 as usize == rich).map_or(0.0, |p| p.1 as f64);
-    let (unit, n, dh_fix) = (-chem.dh_at(burn1, T_SURF) / units(burn1), units(fix), chem.dh_at(fix, T_SURF));
+    let gas = rx.inputs.iter().find(|p| p.0 as usize == FIX_GAS).expect("the fixed gas").1 as f64;
+    let (unit, n, dh_fix) = (-chem.dh_at(burn1, T_SURF) / units(burn1), units(fix) / gas, chem.dh_at(fix, T_SURF) / gas);
     let ratio = n * 12.0 / 28.0;
-    println!("fixing burns {n} units of the solid a mol of the gas ({ratio:.1} g a g), {:.1} kJ; less the {:.1} kJ of each unit, {:.0}: 16 x 30.5 = {:.0}", dh_fix / 1e3, unit / 1e3, (dh_fix + n * unit) / 1e3, 16.0 * 30.5);
+    println!("fixing burns {n} units of the solid a mol of the gas ({ratio:.1} g a g), {:.1} kJ; it keeps {:.0} kJ of their {:.1} kJ each", dh_fix / 1e3, (dh_fix + n * unit) / 1e3, unit / 1e3);
     assert!((4.7..=6.6).contains(&ratio), "{ratio} g of the solid's element a g of the fixed gas's");
-    assert!(((dh_fix + n * unit) / (16.0 * 30.5e3) - 1.0).abs() < 0.01, "{} J", dh_fix + n * unit);
     assert!(chem.dh(fix) < 0.0 && chem.keeps(fix) && !chem.keeps(burn1) && !chem.keeps(burn));
     // The fixed mineral lives dissolved in the liquid and never boils; nothing burns it in a gas, and hot it breaks down
     // into the fixed gas (releasing heat).

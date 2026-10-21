@@ -549,11 +549,11 @@ k = 1.8e12
 ea = 7647
 
 
-# 24: fixing the gas 1 into the mineral 24, paid by the fuel it burns; it keeps energy (`Chemistry::keeps`):
-# docs/numbers.md, "reaction 24".
+# 24: fixing the gas 1 into the mineral 24, paid by the fuel it burns, whose element 1 all goes back as the gas 3; it
+# keeps energy (`Chemistry::keeps`); written for two of the gas 1: docs/numbers.md, "reaction 24".
 [[r]] # 24
-i = [[1,1],[5,14],[2,14]]
-o = [[24,1],[21,1],[3,13],[0,12]]
+i = [[1,2],[5,28],[2,29]]
+o = [[24,2],[3,28],[0,24]]
 ord = [1,1,1]
 k = 8e-8
 ea = 6600

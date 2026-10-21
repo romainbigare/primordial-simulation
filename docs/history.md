@@ -612,6 +612,12 @@ the golden test.
   (exit 2), and `--help` or `help` prints it; before, `ew run --help` started a run in `./out`.
 - The viewer's `standalone.html` puts the world's tag ahead of its script, which reads it as it runs: it loads the
   world it embeds (checked headless) instead of asking for a file.
+- Fixing (reaction 24) gives all the carbon it burns back as the heat-absorbing gas, written for two of the fixed gas
+  (decision 61): its one unit of the burnable gas 21 per fixing has no sink at the air's temperatures, so it piled up in
+  the air for good. 22 x 22 island seed 1, years 300 and 830: gas 21 in the air 9.9e10 and 2.4e11 mol before (the air
+  started with 2.6e11 mol of the heat-absorbing gas), none now; that gas 156 and 111 ppm before, 149 and 166 now; land
+  286.0 and 281.9 K before, 285.5 and 286.3 now; light-eaters 2.4e10 and 2.2e10 kg before, 2.4e10 and 3.4e10 now;
+  bodies 3,010 and 8,024 before, 3,691 and 7,692 now; element drift 3.9e-16 at year 300. Golden re-pinned.
 
 **Tried and not kept in the foundation**
 
