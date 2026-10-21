@@ -252,7 +252,7 @@ fn starve(w: &mut World, b: &mut Body, th: &Melting, dead: &mut Vec<f64>) -> boo
     let x = |k: usize| b.store[k] * chem.subs[k].molar_mass;
     // (Safe minimums are shares of the body; the survivors, a share `live` of the members, have that share of it.)
     let size = b.size(chem);
-    let short = |&k: &usize| !b.burns_at(chem, k, t) && x(k) < b.gene(lay.min + k) * size;
+    let short = |&k: &usize| x(k) < b.gene(lay.min + k) * size && !b.burns_at(chem, k, t);
     let live = (0..chem.ns()).filter(short).map(|k| x(k) / (b.gene(lay.min + k) * size).max(1e-30)).fold(1.0, f64::min);
     let f = 1.0 - live.max(0.0);
     dead.clear();

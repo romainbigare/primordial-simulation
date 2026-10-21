@@ -139,6 +139,9 @@ pub struct Consts {
     pub upt: Vec<(usize, f32)>,
     /// Its catalysts' capacity (`upkeep`; an exponential per catalyst, so kept)
     pub cats: f64,
+    /// What its burnings take, and what the reactions its catalysts run take (their inputs, a bit per substance)
+    pub fuel: u64,
+    pub broken: u64,
 }
 
 /// Store amount `x` of a body changes by `d` mol; what rounding leaves below zero is set to zero and counted, as
@@ -261,6 +264,8 @@ impl Body {
         k.cat.extend((0..nr).map(|r| if on(r) { self.dec(cat + r) } else { 1.0 }));
         k.burn.clear();
         k.burn.extend(chem.burners().iter().filter(|x| on(x.0)));
+        k.fuel = k.burn.iter().flat_map(|x| &chem.reactions[x.0].inputs).fold(0, |m, p| m | 1 << p.0);
+        k.broken = (0..nr).filter(|&r| on(r)).flat_map(|r| &chem.reactions[r].inputs).fold(0, |m, p| m | 1 << p.0);
         k.upt.clear();
         k.upt.extend((0..chem.ns()).filter(|&x| self.genes[lay.upt + x] > 0.0).map(|x| (x, self.genes[lay.upt + x])));
         // Catalysts' capacity: the catalysed rate per unit of contact at `t_cat`, summed over the genes that are on, its

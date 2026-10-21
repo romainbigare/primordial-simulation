@@ -102,18 +102,18 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
         *known = Some(payer.th);
         return 0.0;
     }
-    let (ins, outs, dh, cost) = (ins.clone(), outs.clone(), chem.dh_of(bl), p.c_copy * kg);
+    let (dh, cost) = (chem.dh_of(bl), p.c_copy * kg);
     if body::spend(w, b, cost, ivl * DAY, false, &payer) > 0.0 {
         return 0.0;
     }
     // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.
     let ext = ins.iter().zip(&floors).fold(kg / (mm * nu0), |e, (&(k, nu), f)| e.min((b.store[k as usize] - f).max(0.0) / nu as f64));
-    for &(k, nu) in &ins {
+    for &(k, nu) in ins {
         body::add_store(&mut b.store[k as usize], -(nu as f64) * ext, &mut w.counts.rounded[0]);
     }
     b.e -= dh * ext;
     let (j, lift, t) = (w.mesh.up(b.cell as usize, 0, AIR), w.lift(b.cell as usize), b.temp(&w.chem));
-    for &(k, nu) in &outs {
+    for &(k, nu) in outs {
         let (k, x) = (k as usize, nu as f64 * ext);
         if w.chem.phase(k, t) == Phase::Gas {
             // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `Substance::latent_gas`.)

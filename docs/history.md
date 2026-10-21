@@ -542,6 +542,9 @@ the golden test.
   instructions per update 216k to 211k.
 - A body's colour, volume and energy at a temperature read only the stores it holds, and its activity takes no power
   when its key liquids are at their level. Bit for bit the same; the bodies' instructions per update 211k to 206k.
+- A body knows from its genes, as bits, what its burnings take and what its catalysts break (`Consts::fuel`,
+  `Consts::broken`), instead of searching its reactions for each substance. Bit for bit the same; the bodies'
+  instructions per update 206k to 201k.
 
 **Tried and not kept in the foundation**
 

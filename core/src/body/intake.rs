@@ -5,11 +5,11 @@ use crate::chem::Chemistry;
 
 impl Body {
     /// Does it use `k` at `t`, so that it takes it in: body matter and built solids if a catalyst of its own breaks
-    /// them (it digests them), and what it burns (`burns_at`) or builds of (`Chemistry::minerals`)? A solid none of its
+    /// them (`Consts::broken`: it digests them), and what it burns (`burns_at`) or builds of (`Chemistry::minerals`)? A solid none of its
     /// reactions takes is of no use to it, nor are the key liquids it does not burn: it drinks them (`physics::soak`).
     pub(crate) fn uses(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
         let built = chem.matter() == Some(k) || chem.is_material(k);
-        if built { self.breaks(chem, k) } else { self.burns_at(chem, k, t) || chem.minerals().iter().any(|m| m.0 == k) }
+        if built { self.k.broken >> k & 1 == 1 } else { self.burns_at(chem, k, t) || chem.minerals().iter().any(|m| m.0 == k) }
     }
 
     /// The room of its store of `k` in one update, mol: up to its level once for each of the `paces` intervals of its

@@ -1,6 +1,6 @@
 //! The body's chemistry: the pace of its temperature, its catalysts, digestion and the fuel it burns.
 
-use super::{Body, Layout, DENATURE};
+use super::{Body, DENATURE};
 use crate::chem::{Chemistry, Phase};
 
 impl Body {
@@ -63,11 +63,6 @@ impl Body {
         }
         self.k.burn.iter().filter_map(|&(r, e)| chem.reactions[r].inputs.iter().find(|x| x.0 as usize == k).map(|x| e / x.1 as f64)).fold(0.0, f64::max)
     }
-    /// Does it break substance `k`: is its catalyst on for a reaction that takes `k`?
-    pub fn breaks(&self, chem: &Chemistry, k: usize) -> bool {
-        let cat = Layout::of(chem).cat;
-        (0..chem.reactions.len()).any(|r| self.genes[cat + r] > 0.0 && chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
-    }
     /// Energy its burnings could release from its stores at `t`, J.
     pub fn fuel(&self, chem: &Chemistry, t: f64) -> f64 {
         let mut e = 0.0;
@@ -79,6 +74,6 @@ impl Body {
     }
     /// Does it burn substance `k` at `t`: is `k` an input, not a gas, of one of `Consts::burn`? Such a store is fuel.
     pub fn burns_at(&self, chem: &Chemistry, k: usize, t: f64) -> bool {
-        chem.phase(k, t) != Phase::Gas && self.k.burn.iter().any(|&(r, _)| chem.reactions[r].inputs.iter().any(|p| p.0 as usize == k))
+        self.k.fuel >> k & 1 == 1 && chem.phase(k, t) != Phase::Gas
     }
 }
