@@ -642,6 +642,8 @@ the golden test.
 - L3: a ground node evaporates of the rain of an air step only what it gets once the air's cut has set it: what
   evaporates was limited by what it held and the rain asked of the air, so a cut rain let a node give 2e6 mol more of
   a gas than it held (the same run, years 94-95; element drift 3e-11). Golden re-pinned.
+- `docs/reports/foundation-l/` keeps the 11 pictures and, per run, the series gzipped (the 1,000-year runs: the rows of
+  every tenth year) and the run log gzipped: 14 to 2.4 MB (`docs/reports/README.md`). No code change.
 
 **Tried and not kept in the foundation**
 
