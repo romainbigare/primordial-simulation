@@ -120,12 +120,14 @@ fn surface(w: &mut World, s: &mut Scratch, (liq, tmin): (&[usize], f64), (slope,
             share[k] = (sv * f).min(area[i] * outs[k].1) / sv;
             (out, drop) = (out + share[k], drop + share[k] * outs[k].2);
         }
-        // The node's temperature with what came in (no warmer than at the last `ground_state`).
+        // The node's temperature with what came in (no warmer than at the last `ground_state`). Liquid that came in holds
+        // its fusion enthalpy as it passes, whatever the node's own phase (its heat brought it); a load holds none. So
+        // the liquid passing on leaves at a temperature the node's energy pays for, never more than it holds.
         let (mut c, mut held) = (ss.cap[i], ss.latent[i].held);
         let (cell, was) = (i * width..(i + 1) * width, &q0[i * width..(i + 1) * width]);
         for (r, &k) in ks.iter().enumerate().filter(|p| q[cell.start + p.0] != was[p.0]) {
             let d = q[cell.start + r] - was[r];
-            (c, held) = (c + d * ss.sp[k].cp, held + ss.fusion(k, i, d));
+            (c, held) = (c + d * ss.sp[k].cp, held + if r < nl { d * ss.sp[k].lf } else { 0.0 });
         }
         let q = &mut q[cell];
         let t = ((ww.store.heat(Class::Ground)[i] + q[heat] - held) / c.max(1.0)).min(ss.state.tg[i]).max(T_FLOOR);

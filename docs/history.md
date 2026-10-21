@@ -628,6 +628,10 @@ the golden test.
   1 / (1 + store / level) plants held their stored solid at 2.1 to 4.5 times their level, 88 to 95% of their carbon.
   Seed 1, year 300: 22 x 22 island 149 -> 466 ppm, land 285.5 -> 287.7 K, light-eaters 2.4e10 -> 1.1e10 kg; 36 x 18
   globe 86 -> 333 ppm, land 282.3 -> 285.3 K, ice 11.5 -> 7.2% of the area.
+- L3: liquid that comes into a node holds its fusion enthalpy as it passes, whatever the node's phase (a load holds
+  none), so what passes on leaves at a temperature the node pays for: liquid at 244 K running through a frozen node at
+  268 K was warmed to 268 K at the node's cost and overdrew it by 1.5e19 J (36 x 18 globe, year 868). Golden
+  re-pinned. That globe resumed at year 860: energy drift at year 870 4.8e-9 to 1.9e-13, heat not given 2.1e7 J to 0.
 
 **Tried and not kept in the foundation**
 
