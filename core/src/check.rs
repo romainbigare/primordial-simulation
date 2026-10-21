@@ -40,8 +40,8 @@ pub fn totals(w: &World) -> Totals {
     let (mut subs, mut held, mut thermal) = (vec![Sum::default(); ns], Sum::default(), Sum::default());
     for (class, len) in [(Class::Ground, w.mesh.cells().n()), (Class::Bed, w.mesh.cells().n()), (Class::Air, w.mesh.level(AIR).n()), (Class::Deep, w.mesh.cells().n()), (Class::Bodies, w.mesh.cells().n())] {
         let (store, latent) = (w.store.amounts(class), matches!(class, Class::Air | Class::Bodies));
-        // The air's amounts with what rounding took from their sums (`Store::air_carry`).
-        let carry = if class == Class::Air { w.store.air_carry() } else { &[] };
+        // The amounts with what rounding took from their sums (`Store::carry`).
+        let carry = w.store.carry(class);
         for (k, sum) in subs.iter_mut().enumerate() {
             let mut s = Sum::default();
             let at = k * len..(k + 1) * len;

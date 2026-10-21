@@ -586,6 +586,14 @@ the golden test.
 - Decision 42 says the present (ceiling 9,000, the 8,000 goal gone, 700 lines waiting for threads that pay) and is the
   one place for it; the handover and the plan point to it. Plan 5.7 and 6.5, and 5.6 and 10.1, each say a thing once.
 
+**Phase L**
+
+- L3: a ground node keeps what rounding takes from its amounts as `store::apply` adds to them, as an air node does
+  (`Store::carry`): a body's small exchange with a node under deep standing liquid rounded away and lost element 0
+  (5e-16 a year once bodies crowd such cells). Golden re-pinned; snapshot 43. 22 x 22 island seed 1 at year 300:
+  element 0's drift -7.5e-15 to 1.6e-16 (flat), energy 7.8e-15 to 1.8e-15; the step of a lifeless island 5% more
+  instructions (callgrind).
+
 **Tried and not kept in the foundation**
 
 - Threads over bodies in waves of blocks, each block on a world of its thread's own (decision 59): the bodies of a
