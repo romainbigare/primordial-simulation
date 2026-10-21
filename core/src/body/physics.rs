@@ -100,7 +100,7 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
 /// more than the node holds.
 fn gas_pool(w: &World, b: &Body, s: &Site, f: &Film, tmp: &mut LiveTmp) -> f64 {
     let (chem, j) = (&w.chem, s.j);
-    let tot: f64 = (0..chem.ns()).map(|k| w.a_seen(k, j)).sum();
+    let tot = w.a_seen_all(j);
     let reach = breath(chem, &w.cfg, b, f, s.days, s.depth);
     tmp.x.clear();
     tmp.pool.clear();

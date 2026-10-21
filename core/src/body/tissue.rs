@@ -103,10 +103,7 @@ impl Body {
             have += self.store[k] * mm;
             keep += self.level(chem, k, 0.0) * mm;
         }
-        if keep <= 0.0 {
-            return 1.0;
-        }
-        if have >= keep { 1.0 } else { (have / keep).max(0.0).powf(p.dormancy) }
+        if keep <= 0.0 || have >= keep { 1.0 } else { (have / keep).max(0.0).powf(p.dormancy) }
     }
     /// The melting point of its liquid `k`, lowered by what is dissolved in it (`Chemistry::melt_in`).
     pub fn melt(&self, chem: &Chemistry, k: usize) -> f64 {

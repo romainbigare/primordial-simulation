@@ -96,9 +96,9 @@ impl World {
         self.counts.clamped_heat += self.moves.short;
         (self.moves.list, self.moves.who) = (list, None);
     }
-    /// What bodies see of substance `k` in the air node of the update running (`a_seen`), if `j` is that node.
-    pub(crate) fn seen_now(&self, k: usize, j: usize) -> Option<f64> {
-        (self.moves.who.is_some() && self.moves.near[1].0.index == j).then(|| self.moves.seen[k])
+    /// What bodies see of each substance in the air node of the update running (`a_seen`), if `j` is that node.
+    pub(crate) fn seen_now(&self, j: usize) -> Option<&[f64]> {
+        (self.moves.who.is_some() && self.moves.near[1].0.index == j).then_some(&self.moves.seen)
     }
     /// Heat of node `x` (a ground node, an air node or a bodies' node) as the moves of the update running leave it, J.
     pub(crate) fn heat_now(&self, x: Node) -> f64 {

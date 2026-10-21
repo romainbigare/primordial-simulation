@@ -545,6 +545,8 @@ the golden test.
 - A body knows from its genes, as bits, what its burnings take and what its catalysts break (`Consts::fuel`,
   `Consts::broken`), instead of searching its reactions for each substance. Bit for bit the same; the bodies'
   instructions per update 206k to 201k.
+- What a body's air node holds in all, as bodies see it (`World::a_seen_all`), is summed from what its update
+  already gathered. Bit for bit the same; the bodies' instructions per update 201k to 197k.
 
 **Tried and not kept in the foundation**
 
