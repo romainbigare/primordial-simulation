@@ -2,7 +2,7 @@
 //! (`survey`), and every day the updates due (`day`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
-use crate::{bond, change::Reactor, choose, copy::Grown, life::Life, math::mean_decay, units::DAY, World};
+use crate::{change::Reactor, choose, copy::Grown, life::Life, math::mean_decay, units::DAY, World};
 use crate::store::{apply, Batch, Class, Node};
 use serde::{Deserialize, Serialize};
 
@@ -20,8 +20,6 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 /// and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
-    w.life.fit_map(n);
-    bond::ready(w);
     let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
     if monthly {
         crate::nodes::crowd(w);

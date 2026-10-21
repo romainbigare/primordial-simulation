@@ -1,9 +1,11 @@
 //! Terrain: an island or a globe with mountains, and the starting state of ground, low liquid and air.
 
 use crate::chemistry::{chemistry0, Init};
+use pcore::bond::Parts;
 use pcore::change::Reactor;
 use pcore::chem::{Chemistry, Phase};
 use pcore::flow::scale_height;
+use pcore::life::Life;
 use pcore::rng::{Purpose, Rng};
 use pcore::space::square::Square;
 use pcore::space::Level;
@@ -293,6 +295,8 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     }
 
     let links = Links::new(mesh.cells().a().len());
+    let mut parts = Parts::default();
+    parts.at = vec![Vec::new(); n];
     let mut world = World {
         cfg,
         chem,
@@ -307,8 +311,8 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         counts: Counters::default(),
         rain: vec![0.0; n],
         liquid_flux: vec![0.0; n],
-        life: Default::default(),
-        parts: Default::default(),
+        life: Life::new(n),
+        parts,
         canopy: vec![0.0; n],
         links,
         light: vec![0.0; n],

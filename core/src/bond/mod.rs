@@ -92,7 +92,7 @@ pub struct Parts {
     /// The free slots, the last freed first
     free: Vec<u32>,
     pub bonds: Bonds,
-    /// Parts in each cell, in a fixed order
+    /// Parts in each cell, in a fixed order (sized when the world is made)
     pub at: Vec<Vec<u32>>,
 }
 
@@ -200,13 +200,6 @@ fn move_structure(w: &mut World, r: usize, to: usize) {
         w.parts.at[from].retain(|&y| y as usize != x);
         w.parts.at[to].push(x as u32);
         w.parts.parts[x].cell = to as u32;
-    }
-}
-
-/// Size the per-cell lists.
-pub(crate) fn ready(w: &mut World) {
-    if w.parts.at.len() != w.mesh.cells().n() {
-        w.parts.at = vec![Vec::new(); w.mesh.cells().n()];
     }
 }
 

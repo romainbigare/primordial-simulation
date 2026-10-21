@@ -171,11 +171,9 @@ impl Life {
             *x = true;
         }
     }
-    /// Size the cell lists and the ring of updates for a map of `n` cells (once, on a new map).
-    pub(crate) fn fit_map(&mut self, n: usize) {
-        if self.at.len() != n {
-            (self.at, self.due) = (vec![Vec::new(); n], vec![Vec::new(); RING as usize]);
-        }
+    /// No bodies yet on a map of `n` cells: its cell lists and the ring of updates sized.
+    pub fn new(n: usize) -> Life {
+        Life { at: vec![Vec::new(); n], due: vec![Vec::new(); RING as usize], ..Default::default() }
     }
     /// File an update of body (`slot`, `gen`) on `day`.
     pub(crate) fn schedule(&mut self, day: u64, slot: u32, gen: u32) {

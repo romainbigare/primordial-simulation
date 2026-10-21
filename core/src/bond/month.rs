@@ -1,6 +1,6 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
-use super::{cell, dissolve, holder, id, members, move_structure, ready, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
+use super::{cell, dissolve, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
 use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, AIR, World};
 
 /// Parts react with the air every this many months.
@@ -10,7 +10,6 @@ const STILL_DEPTH: f64 = 0.01;
 
 /// Monthly: heat, Change, load and failure, floating and drifting.
 pub fn step(w: &mut World) {
-    ready(w);
     if w.parts.parts.iter().all(|p| !p.alive) {
         return;
     }

@@ -715,6 +715,8 @@ the golden test.
 - The tape no longer clusters bodies into kinds (the columns `kinds` and `kinds_members`, a weighted k-means that the
   handover said not to read); `trophic_max` and `trophic_high` go by starting kind. 22 x 22 island at year 290, ten
   years: the tape 83 -> 21 ms a year, the year 1,596 -> 1,533 ms, the same world.
+- Clean-up, bit for bit the same: the world is made with its per-cell lists of bodies and parts and its ring of updates
+  sized (`Life::new`), so `Life::fit_map` and `bond::ready`, which sized them at each survey and month, go.
 
 **Tried and not kept in the foundation**
 
