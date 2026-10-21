@@ -583,6 +583,8 @@ the golden test.
   (d) stays not held. Judging "less than one member" per taker member (`per = reached.max(b.n() / o.n()).min(1.0)`)
   brought the roster's light-eaters taken within a factor of two in one run, not past the noise: not kept, an open
   item of F7.
+- Decision 42 says the present (ceiling 9,000, the 8,000 goal gone, 700 lines waiting for threads that pay) and is the
+  one place for it; the handover and the plan point to it. Plan 5.7 and 6.5, and 5.6 and 10.1, each say a thing once.
 
 **Tried and not kept in the foundation**
 

@@ -57,9 +57,8 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 | `solve/` (`spread`, `downhill`, `band`) | 350 |
 | **Total** | **1,500** |
 
-- The test `cli/tests/core_size.rs` fails above the ceiling: **9,000**. The 700 more lines the owner allowed for
-  threads over bodies wait for a design that pays (10.1; `docs/foundation/decisions.md` 42). The ceiling is never a
-  reason to build a task that costs speed or honesty.
+- The test `cli/tests/core_size.rs` fails above the ceiling: **9,000** (`docs/foundation/decisions.md` 42). The
+  ceiling is never a reason to build a task that costs speed or honesty.
 - A phase may not end with more code than it started with, unless its report gives the reason.
 
 ### The time budget (the owner's rule, decision D12)
@@ -121,7 +120,7 @@ All decided on 17 October 2026. Later decisions are in `docs/foundation/decision
 | # | Decision | Status |
 |---|---|---|
 | D1 | The M3 check point choice (handover 13.1) | **Decided:** a foundation phase (this plan), then M4. Written in handover 13.1. |
-| D2 | The `core` code budget (handover 14.3) | **Decided:** at most 9,000 lines of code in `core`, not counting comments and blank lines (700 more wait for threads over bodies that pay, decision 42). The foundation replaces the special code, it does not sit on top of it. The new base has fixed allowances; a test keeps the ceiling (A6). |
+| D2 | The `core` code budget (handover 14.3) | **Decided:** at most 9,000 lines of code in `core`, not counting comments and blank lines (decision 42). The foundation replaces the special code, it does not sit on top of it. The new base has fixed allowances; a test keeps the ceiling (A6). |
 | D3 | The cell shape for the planet | **Decided:** a latitude-longitude grid of squares that wraps east to west (5.5). It keeps today's square laws, the brain's 8 directions, the exact split of a cell into 4, and the viewer (the grid is the map). |
 | D4 | Speed settings (when a node sleeps, how many nodes a cell keeps, the node pace) | **Decided:** a table "speed settings" in `docs/numbers.md`, outside the tuned budget. Each must pass an equivalence test (6.4): changing it 2× must not change the key numbers beyond their noise. |
 | D5 | Old snapshots | **Decided:** no backwards compatibility; snapshots carry a format version (`tape/src/snapshot.rs`). |
@@ -215,11 +214,10 @@ pole; rows near the poles can be merged later if they cost too much.
 
 The bodies run on one thread; Flow and Change run on threads. At the planet size the time budget allows (about 470
 cells), a bodies' day holds only 1.5 to 15 ms of work, too little to share between threads: waves of blocks, each on
-a world of its thread's own, were built and made the bodies slower (decision 59). Threads over bodies come back when a
-planet of several thousand settled cells fits a longer budget (10.1). What any design must keep: an update reads and
-changes only its cell and the cells one link away (what a body sees further off is the last survey's); new ids,
-counters and events do not depend on which thread ran first; random numbers are keyed by body and time; the history
-is the same with and without threads.
+a world of its thread's own, were built and made the bodies slower (decision 59). They wait (10.1). What any design
+must keep: an update reads and changes only its cell and the cells one link away (what a body sees further off is the
+last survey's); new ids, counters and events do not depend on which thread ran first; random numbers are keyed by body
+and time; the history is the same with and without threads.
 
 ### 5.7 The cost model
 
@@ -236,9 +234,8 @@ So a cell's Flow and Change cost 0.30-0.50 ms per cell-year. Once life has settl
 light-eater nodes and the eaters), with about 89,000 updates a year at about 40 µs (about 197,000 instructions each,
 callgrind): a body costs about 0.65 ms per body-year, about twice what it costs at year 30, as the eaters' decisions
 and children are dearer than plants'. A settled cell costs about 1.9 ms a year, and about 470 cells fit the budget of
-0.9 s a year. Bodies are about 80% of that year. Threads over bodies do not pay at this size (5.6): on a settled 24 × 24 island at year 90 the bodies took
-611 ms a year on one thread, and 665 on one and 800 on four with the waves of blocks; on 48 × 48 four threads gave 1.4
-times. Each phase report measures these again.
+0.9 s a year. Bodies are about 80% of that year. Threads over bodies do not pay at this size (5.6). Each phase report
+measures these again.
 
 ---
 
@@ -296,9 +293,7 @@ end of each phase, on the same machine, with the planet size the time budget the
 `core` per folder. Goals: **the time budget** on the largest planet that fits; a body node at least 3 times cheaper
 than at A1; a cell's physics at least 5 times cheaper than at A1 without threads.
 
-**Open, not met:** a cell's Flow and Change cost about 1.9 times A1's (0.30-0.35 ms per cell-year), not a fifth of
-it. A body costs about 0.65 ms per body-year on one thread once life has settled. About 470 cells fit the time budget
-(5.7).
+**Open, not met:** a cell's Flow and Change cost about 1.9 times A1's, not a fifth of it (the numbers are in 5.7).
 
 ---
 
@@ -392,7 +387,7 @@ planned: report the real days in each phase report.
 | Automatic zoom while running | A refined region built into the mesh (G4) gives detail in places with much less code | When a player must zoom anywhere, at any time |
 | Patches: parts of a cell's ground with their own surface | Their first use is a burning share of a cell | With fire (M4) |
 | More memories on links | A channel would repeat what erosion does to a cell's height | With the law that needs one |
-| Threads over bodies (5.6) | At the planet size the budget allows a bodies' day holds 1.5 to 15 ms of work, too little to share: the waves of blocks made bodies slower (decision 59). The 700 lines the owner allowed wait for a design that pays (decision 42) | When a planet of several thousand settled cells fits a longer budget |
+| Threads over bodies (5.6) | Too little work to share at the planet size the budget allows (5.6) | When a planet of several thousand settled cells fits a longer budget |
 | Snapshots of changes only | In 10 years almost everything changes | If snapshots are still too big |
 
 ### 10.2 What M4 still needs
