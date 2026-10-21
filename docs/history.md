@@ -621,6 +621,11 @@ the golden test.
 
 **Tried and not kept in the foundation**
 
+- A full store stops the enzyme that fills it (end-product inhibition max(0, 1 - store / level), waiting for the
+  owner's call; branch `full-store-tried`): under 1 / (1 + store / level) plants hold their stored solid at 2.1 to 4.5
+  times their level from year 20 on, 88 to 95% of their carbon, and that stock draws the heat-absorbing gas down. Seed
+  1, year 300: 22 x 22 island 149 -> 466 ppm, land 285.5 -> 287.7 K, light-eaters 2.4e10 -> 1.1e10 kg; 36 x 18 globe
+  86 -> 333 ppm, land 282.3 -> 285.3 K, ice 11.5 -> 7.2% of the area.
 - Threads over bodies in waves of blocks, each block on a world of its thread's own (decision 59): the bodies of a
   settled 24 x 24 island at year 90 took 611 ms a year before, 665 on one thread and 800 on four; 48 x 48 gained 1.4
   times on four; an update on a thread's world cost 24-33% more, with about 1,475 waits between waves a year. Before
