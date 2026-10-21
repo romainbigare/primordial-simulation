@@ -74,7 +74,7 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 
 - **The planet's size is not fixed.** It is the largest number of cells (on the globe) whose cost fits the budget, by
   the cost model (5.7). It is measured again at the end of each phase. Faster code buys a bigger planet. Today, once
-  life has settled, about 375 cells fit, the bodies on one thread (decision 43: the budget stays; threads over bodies
+  life has settled, about 470 cells fit, the bodies on one thread (decision 43: the budget stays; threads over bodies
   do not pay at this size, 5.6).
 - Speed never comes from removing a law or from a rule named after an outcome (handover 12.6). It comes from doing
   less work for the same physics: longer steps where the physics allows them, fewer updates where nothing changes,
@@ -213,7 +213,7 @@ pole; rows near the poles can be merged later if they cost too much.
 
 ### 5.6 Threads over bodies (after the foundation, D14)
 
-The bodies run on one thread; Flow and Change run on threads. At the planet size the time budget allows (about 375
+The bodies run on one thread; Flow and Change run on threads. At the planet size the time budget allows (about 470
 cells), a bodies' day holds only 1.5 to 15 ms of work, too little to share between threads: waves of blocks, each on
 a world of its thread's own, were built and made the bodies slower (decision 59). Threads over bodies come back when a
 planet of several thousand settled cells fits a longer budget (10.1). What any design must keep: an update reads and
@@ -224,19 +224,19 @@ is the same with and without threads.
 ### 5.7 The cost model
 
 The time of a run is the cost of one cell and of one body per simulated year, times their numbers. Measured by the
-CLI's stage times, on one thread for the bodies (the last row from the year-90 snapshot, years 91 to 94):
+CLI's stage times, on one thread for the bodies (the last row from the year-90 snapshot, years 91 to 93):
 
 | Run | A year | Of which |
 |---|---|---|
 | 64 × 64 island, no life | about 0.98 s | Flow 630-765 ms, Change 141-190 ms |
-| 64 × 64 island, seed 1, year 30, 5,746 bodies | 2.8-3.6 s | Flow 1,132 ms, Change 313 ms, bodies 2,020 ms |
-| 48 × 48 island, seed 2, life settled, 5,600 bodies | about 5.5 s | Flow 540 ms, Change 166 ms, bodies 4,700 ms, tape 126 ms |
+| 64 × 64 island, seed 1, year 30, 6,127 bodies | about 3.0 s | Flow 833 ms, Change 233 ms, bodies 1,740 ms |
+| 48 × 48 island, seed 2, life settled, 5,550 bodies | about 4.4 s | Flow 535 ms, Change 160 ms, bodies 3,600 ms, tape 120 ms |
 
 So a cell's Flow and Change cost 0.30-0.50 ms per cell-year. Once life has settled a cell holds about 2.4 bodies (two
-light-eater nodes and the eaters), with about 90,000 updates a year at about 52 µs: a body costs about 0.85 ms per
-body-year, three times what it costs at year 30, as the eaters' decisions and children are dearer than plants'. A
-settled cell costs about 2.4 ms a year, and about 375 cells fit the budget of 0.9 s a year. Bodies are about 85% of
-that year. Threads over bodies do not pay at this size (5.6): on a settled 24 × 24 island at year 90 the bodies took
+light-eater nodes and the eaters), with about 89,000 updates a year at about 40 µs (about 197,000 instructions each,
+callgrind): a body costs about 0.65 ms per body-year, about twice what it costs at year 30, as the eaters' decisions
+and children are dearer than plants'. A settled cell costs about 1.9 ms a year, and about 470 cells fit the budget of
+0.9 s a year. Bodies are about 80% of that year. Threads over bodies do not pay at this size (5.6): on a settled 24 × 24 island at year 90 the bodies took
 611 ms a year on one thread, and 665 on one and 800 on four with the waves of blocks; on 48 × 48 four threads gave 1.4
 times. Each phase report measures these again.
 
@@ -297,7 +297,7 @@ end of each phase, on the same machine, with the planet size the time budget the
 than at A1; a cell's physics at least 5 times cheaper than at A1 without threads.
 
 **Open, not met:** a cell's Flow and Change cost about 1.9 times A1's (0.30-0.35 ms per cell-year), not a fifth of
-it. A body costs about 0.85 ms per body-year on one thread once life has settled. About 375 cells fit the time budget
+it. A body costs about 0.65 ms per body-year on one thread once life has settled. About 470 cells fit the time budget
 (5.7).
 
 ---

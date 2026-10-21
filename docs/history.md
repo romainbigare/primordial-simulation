@@ -547,6 +547,9 @@ the golden test.
   instructions per update 206k to 201k.
 - What a body's air node holds in all, as bodies see it (`World::a_seen_all`), is summed from what its update
   already gathered. Bit for bit the same; the bodies' instructions per update 201k to 197k.
+- The cost model (plan 5.7) after these: the bodies of a settled 48 x 48 year (seed 2, years 91-93) 4.2 to 3.6 s on
+  one thread, 47 to 40 µs an update (242k to 197k instructions); a settled cell 2.2 to 1.9 ms a year, so about 470
+  settled cells fit 0.9 s a year (375 before).
 
 **Tried and not kept in the foundation**
 
