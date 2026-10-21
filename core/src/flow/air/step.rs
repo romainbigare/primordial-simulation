@@ -361,7 +361,8 @@ fn end_reflectance(cx: &Ctx, i: usize, row: &[f64], rain_in: f64) -> f64 {
 
 /// What evaporates of active gas `x` from ground node `i` over the step, ending at `t` under a vapour pressure `pa` with
 /// `rain` mol falling on it, mol, and its slopes with `t` and `pa`: the saturation deficit through the air's film
-/// (`evap`), at the open rate while wet (`exchange::bucket_slope`); over the boiling point, all of it.
+/// (`evap`), at the open rate while wet (`exchange::bucket_slope`); over the boiling point, all of it that the node's
+/// heat over that point boils (`Scratch::boil_off`).
 fn evaporate(cx: &Ctx, i: usize, x: usize, t: f64, pa: f64, rain: f64) -> (f64, f64, f64) {
     let (w, s, ac) = (cx.w, cx.s, cx.act[x]);
     let (n, sp, area) = (w.mesh.cells().n(), s.sp[ac.k], w.mesh.cells().area()[i]);
@@ -370,7 +371,7 @@ fn evaporate(cx: &Ctx, i: usize, x: usize, t: f64, pa: f64, rain: f64) -> (f64, 
         return (0.0, 0.0, 0.0);
     }
     if s.state.tg[i] >= sp.boil {
-        return (a + rain, 0.0, 0.0);
+        return ((a + rain).min(s.boil_off(ac.k, i, s.state.tg[i])), 0.0, 0.0);
     }
     let (ps, c, v) = (s.sat[ac.k].at(t), w.cfg.evap / R_GAS * area, sp.v[melted(s, ac.k, i) as usize]);
     let (e, wet) = (c * (ps - pa) / t, w.cfg.phys.field * s.pd[i] * area / v);

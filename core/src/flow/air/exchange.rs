@@ -107,7 +107,7 @@ pub(super) fn dissolve(w: &mut World, s: &mut Scratch, dt: f64, henry: &[(usize,
             let tau = b * hk / w.cfg.evap + v / area / w.cfg.dissolve;
             let m = (b * (a + col) / (1.0 + b) - a) * one_minus_exp(dt * (1.0 + b) / tau);
             // Coming out cools the node, no further than the boiling point.
-            let m = if m >= 0.0 { m.min(left[x * na + j]) } else { -(-m).min(s.cap[i].max(1.0) * (t - sp.boil) / (sp.cp * (t - sp.boil) + sp.lv)) };
+            let m = if m >= 0.0 { m.min(left[x * na + j]) } else { -(-m).min(s.boil_off(k, i, t)) };
             if m == 0.0 {
                 continue;
             }

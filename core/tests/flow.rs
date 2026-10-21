@@ -110,6 +110,24 @@ fn a_pool_with_a_solute_freezes_lower() {
 /// How near its melting point Flow holds a pool after a step, K: the step's evaporation changes what is dissolved.
 const MELT_HELD: f64 = 1e-3;
 
+/// A ground node over a liquid's boiling point boils of it only what its heat over that point pays: a deep pool 2 K
+/// over boils a small share in an air step, keeps its books, and stays near the boiling point.
+#[test]
+fn a_hot_pool_boils_only_what_its_heat_pays() {
+    let mut w = worldgen::new_world(3, 16, 16);
+    let (k, i) = (LIQUID, 0);
+    let pool = 100.0 * w.mesh.cells().area()[i] / w.chem.molar_volume(k, Phase::Liquid);
+    set_amount(&mut w, Node::ground(i), k, pool);
+    let e = w.energy_ground(i, w.chem.subs[k].boil + 2.0);
+    set_heat(&mut w, Node::ground(i), e);
+    let books = Books::now(&w);
+    pcore::flow::state(&mut w, true);
+    pcore::flow::air(&mut w, DT);
+    books.assert_within(&w, 1e-12, 1e-9);
+    let (left, t) = (w.g(k, i) / pool, w.t_ground(i));
+    assert!(left > 0.99 && t > w.chem.subs[k].boil - 5.0, "{left} of the pool left, at {t} K");
+}
+
 /// A warmer air node gives its heat to its neighbours.
 #[test]
 fn warm_air_spreads() {

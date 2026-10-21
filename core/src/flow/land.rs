@@ -65,6 +65,13 @@ impl Scratch {
         self.cap[i] += m * self.sp[k].cp;
         self.latent[i].held += self.fusion(k, i, m);
     }
+    /// Most mol of `k` ground node `i` at `t` K can boil with its heat over `k`'s boiling point, cooling to it: each
+    /// takes its vaporisation enthalpy and its heat over that point.
+    #[inline]
+    pub(super) fn boil_off(&self, k: usize, i: usize, t: f64) -> f64 {
+        let p = &self.sp[k];
+        self.cap[i].max(1.0) * (t - p.boil) / (p.cp * (t - p.boil) + p.lv)
+    }
     /// Fusion enthalpy `m` mol of `k` hold in ground node `i`, J: none where `k` is solid or on its plateau.
     #[inline]
     pub(super) fn fusion(&self, k: usize, i: usize, m: f64) -> f64 {

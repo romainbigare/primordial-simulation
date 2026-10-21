@@ -669,6 +669,10 @@ the golden test.
   292.3 -> 292.4 K, gas 3 291 -> 277 ppm, rivers 84 -> 89; 36 x 18 globe ice on land 4.2e3 -> 5.1e3 km³, liquid on
   land 6.4e5 -> 7.0e5 km³, land 288.3 -> 288.9 K, gas 3 162 -> 211 ppm; element drift 2.6e-16 and 2.0e-16. Golden
   re-pinned.
+- The air step boils of a substance over its boiling point only what the node's heat over that point pays, cooling it
+  to that point (`Scratch::boil_off`, shared with gas coming out of the liquid): it boiled all of it whatever heat that
+  took (a 100 m pool 2 K over its boiling point lost all its liquid in a step and ended at 4,900 K). Bit for bit the
+  same on the golden runs; a test holds it.
 
 **Tried and not kept in the foundation**
 
