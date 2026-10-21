@@ -84,9 +84,9 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 
 /// Take from another body in the cell by uptake selectivity, by the intake law (`intake`: its members spread over the
 /// cell, a node is found as the ground is), as far as its stores' room and its force against the other's allow. It
-/// reaches what the members its area holds hold (an individual taken by an individual: all of it, with the chance its
-/// area holds it), and a quicker body gets away with chance 1 - its interval / the taker's (the taker has paid; of a
-/// node's bites, that share). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
+/// reaches what the members its area holds hold (an individual, by any taker: all of it, with the chance its area
+/// holds it), and a quicker body gets away with chance 1 - its interval / the taker's (the taker has paid; of a node's
+/// members, that share). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
 /// would, times the chance, the expected outcome of an individual's draw.
 pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut Rng) {
@@ -94,9 +94,9 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let (kg, swept) = intake(w, b, |k| o.store[k]);
-    // One draw finds an individual taken by an individual and, over the chance it was found, lets it get away (`hit`).
+    // One draw finds an individual prey and, over the chance it was found, lets it get away (`hit`).
     let u = rng.f64();
-    let one = o.n() <= 1.0 && b.n() <= 1.0;
+    let one = o.n() <= 1.0;
     let (reached, u) = if !one { (swept, u) } else if u < swept { (1.0, u / swept) } else { return };
     // The share of the members a meeting reaches (at least one whole member) and the chance of that meeting.
     let per = reached.max(1.0 / o.n());
@@ -104,7 +104,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let m = b.wanted(&w.chem, b.paces(w), |k| per * o.store[k], kg * fb / (fb + fo + 1e-30), mb);
     let resist = 1.0 + lanes::thickness(w, w.life.sum[b.cell as usize][1], w.mesh.cells().area()[b.cell as usize]);
     let away = (1.0 - o.interval(w) as f64 / b.interval(w) as f64).max(0.0);
-    let hit = reached * if b.n() > 1.0 { 1.0 - away } else { (u >= away) as u8 as f64 };
+    let hit = reached * if !one { 1.0 - away } else { (u >= away) as u8 as f64 };
     // The bite tears this share of the body of each member it reaches; the stores they held spill in proportion, less
     // what the taker took (all they held, if they die).
     let (built, got) = (per * o.built(&w.chem), w.chem.mass_of(&m));

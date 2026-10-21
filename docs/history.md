@@ -556,6 +556,12 @@ the golden test.
 - The intake law (`feed::intake`) loses its member count, which changed nothing but rounding. Golden re-pinned.
   48 x 48 seeds 1-3, years 51-60: light-eaters 2.01, 2.18, 2.18e10 kg, eaters 4.9e6, 8.6e7, 4.4e7 kg (seed noise),
   land 286.58, 290.71, 289.37 K, drift 1e-14.
+- The prey decides the draw of a bite (`feed::take_body`): an individual taken by a node escapes or dies whole by one
+  draw with the chance the node's area holds it, as when an individual takes it; before, a node's bite killed it for
+  certain. Golden re-pinned. 48 x 48 seeds 1-3, years 51-60: light-eaters 2.01, 2.18, 2.18e10 to 1.96, 2.13, 2.05e10
+  kg, eaters 4.9e6, 8.6e7, 4.4e7 to 5.6e6, 1.1e8, 6.9e7 kg, eaters taken 3, 903, 243 to 64, 1,358, 292 a year,
+  light-eaters taken 2.0e3, 6.7e5, 1.6e5 to 1.2e5, 8.9e5, 2.7e5 members a year, land 286.58, 290.71, 289.37 to 286.60,
+  290.71, 289.35 K, drift 1e-14.
 
 **Tried and not kept in the foundation**
 
