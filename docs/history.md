@@ -574,6 +574,8 @@ the golden test.
   rounds away. Golden re-pinned; snapshot 42. 48 x 48 seed 1 at year 100: element 2's drift 3.3e-14 to 9e-17, the
   worst element 7e-16, flat from year 10 (before: 7.0e-15 a decade in years 91-100, rising). Flow about 6% dearer
   (530 against 500 ms a year at year 90, bodies unchanged; about 1% of the year).
+- The frost test builds its chemistry again after it changes a melting point, as what follows from the substances is
+  made once (`Chemistry::subs` says so).
 
 **Tried and not kept in the foundation**
 

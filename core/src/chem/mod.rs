@@ -99,6 +99,8 @@ impl Reaction {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Chemistry {
     pub n_elements: usize,
+    /// The substances, fixed after the chemistry's first use: what follows from them (`Derived`) is made once (a test
+    /// that changes one builds the chemistry again, as a saved one is read back)
     pub subs: Vec<Substance>,
     pub reactions: Vec<Reaction>,
     /// How bodies grow: a conversion of stores into body matter (its first output), with no rate, paid by work

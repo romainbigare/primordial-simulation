@@ -603,7 +603,10 @@ fn frost_kills_in_proportion_to_activity() {
     // The key liquid freezes at the temperature the bodies are at (they are at their cell's, and stay there as their
     // liquid gives up its fusion enthalpy: an edit).
     let temps = [wet, dry].map(|x| s.w.life.bodies[x].temp(&s.w.chem));
-    s.w.chem.subs[LIQUID].melt = 400.0;
+    // A changed substance needs a new chemistry: what follows from them is made once (`Chemistry::subs`).
+    let mut chem = s.w.chem.clone();
+    chem.subs[LIQUID].melt = 400.0;
+    s.w.chem = serde_json::from_value(serde_json::to_value(&chem).unwrap()).unwrap();
     for (x, t) in [wet, dry].into_iter().zip(temps) {
         let mut b = std::mem::take(&mut s.w.life.bodies[x]);
         warm(&mut s.w, &mut b, t);
