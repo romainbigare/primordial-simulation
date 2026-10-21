@@ -618,6 +618,12 @@ the golden test.
   started with 2.6e11 mol of the heat-absorbing gas), none now; that gas 156 and 111 ppm before, 149 and 166 now; land
   286.0 and 281.9 K before, 285.5 and 286.3 now; light-eaters 2.4e10 and 2.2e10 kg before, 2.4e10 and 3.4e10 now;
   bodies 3,010 and 8,024 before, 3,691 and 7,692 now; element drift 3.9e-16 at year 300. Golden re-pinned.
+- L1: the reference runs on the new engine (`3546680`; A2's 64 x 64 runs, normal and roster, 60 years; the 128 x 128
+  runs to 100 years, decision 62; series in `docs/reports/foundation-l/`): the key numbers hold (land 287.52 K, gas
+  387.9 ppm, rivers 170, light-eaters 10.40, eaters 4.88 log10 kg). Against A2: swing +3 K, rivers / 2.2, gas +130
+  ppm and eaters' life x 3.7 at 64 x 64, by the converged air step, clouds and 40°, the plants' costs and the costs at
+  `t_cat`; at 128 x 128 the light-eaters still grow at year 100 (+0.5 log10 kg, bodies x 4) and seed 5's energy drift
+  is 1.0e-7 from years 94-95, as a ground node reaches `T_FLOOR`: open.
 
 **Tried and not kept in the foundation**
 
