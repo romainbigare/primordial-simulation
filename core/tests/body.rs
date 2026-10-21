@@ -100,7 +100,7 @@ fn wear_of_a_day(w: &World, b: Body) -> f64 {
     pcore::survey::survey(&mut v);
     v.time += DAY_S;
     v.events.clear();
-    pcore::waves::day(&mut v);
+    pcore::survey::day(&mut v);
     assert!(v.life.bodies[k].alive, "the node died");
     -(1.0 - died(&v, pcore::body::AGE) / n).ln()
 }
@@ -460,7 +460,7 @@ fn a_body_evaporates_no_more_than_the_ground_can_pay() {
     let (books, rounded) = (Books::now(&w), w.counts.rounded);
     w.time += days * DAY_S;
     pcore::survey::survey(&mut w);
-    pcore::waves::day(&mut w);
+    pcore::survey::day(&mut w);
     let b = &w.life.bodies[slot];
     let floor = w.heat_cap_ground(i) * T_FLOOR;
     let e = w.store.heat(Class::Ground)[i] - floor;

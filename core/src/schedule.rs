@@ -1,8 +1,7 @@
 //! The order of the laws, as processes of the clock: each runs on its own period, and at one time they run in the
 //! order of `processes`, written once here (laws.md 0).
 
-use crate::clock::{self, Every};
-use crate::{bond, change, check, flow, params::Config, survey, units::HOUR_S, waves, world::World};
+use crate::{bond, change, check, clock::{self, Every}, flow, params::Config, survey, units::HOUR_S, world::World};
 
 /// A stage of the month, as `step_marked` reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,7 +10,7 @@ pub enum Stage {
     Flow,
     /// `change::step`
     Change,
-    /// `survey::survey` and `waves::day`
+    /// `survey::survey` and `survey::day`
     Bodies,
     /// `bond::step`
     Parts,
@@ -31,9 +30,6 @@ pub fn step_marked(w: &mut World, mark: &mut dyn FnMut(Stage)) {
 pub fn day(w: &mut World) {
     run_for(w, w.cfg.calendar().day, &mut |_| {});
 }
-
-/// The name of the bodies' day among the processes.
-const BODY_DAY: &str = "body day";
 
 /// A process: its stage, its name (for the debug check) and what it does for the seconds its run stands for.
 type Run = (Stage, &'static str, fn(&mut World, u64));
@@ -59,9 +55,9 @@ fn processes(w: &World) -> [(Every, Run); 9] {
         (from_start(flow::CREEP_YEARS * cal.year), (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
         (from_start(flow::REFRESH_MONTHS * cal.month), (Stage::Flow, "refresh", |w, _| flow::refresh(w))),
         (physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
-        // (Bond's own spans are months, `bond::step`; the bodies' intervals whole days, `waves::day`.)
+        // (Bond's own spans are months, `bond::step`; the bodies' intervals whole days, `survey::day`.)
         (from_start(cal.month), (Stage::Parts, "bond", |w, _| bond::step(w))),
-        (days(cfg, 1), (Stage::Bodies, BODY_DAY, |w, _| waves::day(w))),
+        (days(cfg, 1), (Stage::Bodies, "body day", |w, _| survey::day(w))),
     ]
 }
 
@@ -69,13 +65,10 @@ fn processes(w: &World) -> [(Every, Run); 9] {
 /// stop at the first stage that leaves the world broken.
 fn run_for(w: &mut World, span: u64, mark: &mut dyn FnMut(Stage)) {
     let (list, end) = (processes(w), w.time + span);
-    // (What the bodies read besides their reach changes outside their day: the worlds of the threads copy it again.)
-    w.crew.stale = true;
     while w.time < end {
         let t = w.time;
         for ((stage, what, run), span) in clock::due(&list, t) {
             run(w, span);
-            w.crew.stale |= what != BODY_DAY;
             mark(stage);
             if let Some(e) = cfg!(debug_assertions).then(|| check::broken(w)).flatten() {
                 panic!("broken after {what} (day {}): {e}", w.day());

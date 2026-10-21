@@ -45,32 +45,6 @@ impl Store {
     pub fn heat(&self, class: Class) -> &[f64] {
         self.heat.get(class as usize).map_or(&[], |v| v)
     }
-    /// The numbers of the nodes beyond the world's edge and of the potential, which only add up, taken out: they start
-    /// again from zero (`waves` adds the sums of each block of a wave in a fixed order).
-    pub(crate) fn take_far(&mut self) -> [Vec<f64>; 3] {
-        let (b, p) = (Class::Boundary as usize, Class::Potential as usize);
-        let [x, y] = self.heat.get_disjoint_mut([b, p]).expect("two classes");
-        [&mut self.amounts[b], x, y].map(|v| std::mem::replace(v, vec![0.0; v.len()]))
-    }
-    /// The numbers of node `x` of a class of `len` nodes, as `from` (a store of the same shape) holds them.
-    #[cfg(feature = "threads")]
-    pub(crate) fn copy_node(&mut self, from: &Store, x: Node, len: usize) {
-        let c = x.class as usize;
-        for at in (x.index..self.amounts[c].len()).step_by(len) {
-            self.amounts[c][at] = from.amounts[c][at];
-        }
-        if let Some(&h) = from.heat[c].get(x.index) {
-            self.heat[c][x.index] = h;
-        }
-    }
-    /// Add the sums `far` (`take_far`).
-    pub(crate) fn add_far(&mut self, far: &[Vec<f64>; 3]) {
-        let (b, p) = (Class::Boundary as usize, Class::Potential as usize);
-        let [x, y] = self.heat.get_disjoint_mut([b, p]).expect("two classes");
-        for (v, d) in [&mut self.amounts[b], x, y].into_iter().zip(far) {
-            v.iter_mut().zip(d).for_each(|(v, d)| *v += d);
-        }
-    }
 }
 
 impl World {

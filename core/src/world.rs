@@ -29,35 +29,6 @@ pub struct Counters {
     pub rounded: [f64; 2],
 }
 
-impl Counters {
-    /// The counts that add up over the blocks of a wave (`waves`), taken out: they start again from zero.
-    pub(crate) fn take_sums(&mut self) -> Counters {
-        let mut s = Counters::default();
-        s.add_sums(self);
-        let (traffic, crossings) = (std::mem::take(&mut self.traffic), std::mem::take(&mut self.crossings));
-        *self = Counters { traffic, crossings, ..Default::default() };
-        s
-    }
-    /// Add the sums `s` (`take_sums`).
-    pub(crate) fn add_sums(&mut self, s: &Counters) {
-        let ((p, q), [r0, r1]) = ((&mut self.parts, &s.parts), &mut self.rounded);
-        let sums = [
-            (&mut self.decisions, s.decisions),
-            (&mut self.greedy, s.greedy),
-            (&mut self.splits, s.splits),
-            (&mut self.clamped_heat, s.clamped_heat),
-            (r0, s.rounded[0]),
-            (r1, s.rounded[1]),
-            (&mut p.afloat, q.afloat),
-            (&mut p.formed, q.formed),
-            (&mut p.to_parts, q.to_parts),
-            (&mut p.from_parts, q.from_parts),
-        ];
-        sums.into_iter().for_each(|(x, y)| *x += y);
-        self.updates += s.updates;
-    }
-}
-
 /// The counts the shell takes once a year (`World::take_counters`).
 #[derive(Debug, Default)]
 pub struct Taken {
@@ -114,9 +85,6 @@ pub struct World {
     /// The moves of the update of a body or a part running, and its cell's nodes as they leave them (not saved)
     #[serde(skip)]
     pub moves: crate::store::Moves,
-    /// What runs the bodies' day in waves, and the worlds of the threads (not saved)
-    #[serde(skip)]
-    pub crew: crate::waves::Crew,
 }
 
 /// The level of the world's mesh its air nodes live on.

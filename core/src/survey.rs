@@ -1,5 +1,5 @@
 //! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
-//! (`survey`), and the updates of a block of cells (`run`).
+//! (`survey`), and every day the updates due (`day`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
 use crate::{bond, change::Reactor, choose, copy::Grown, life::Life, math::mean_decay, units::DAY, World};
@@ -21,7 +21,6 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     w.life.fit_map(n);
-    w.counts.crossings.resize(n, 0.0);
     if w.canopy.len() != n {
         (w.canopy, w.light, w.rained) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     }
@@ -207,6 +206,7 @@ impl Draws {
 fn traffic(w: &mut World) {
     let (n, d) = (w.mesh.cells().n(), &mut w.counts);
     d.traffic.resize(n, 0.0);
+    d.crossings.resize(n, 0.0);
     let a = 1.0 / w.cfg.months_per_year as f32;
     for (t, c) in d.traffic.iter_mut().zip(d.crossings.iter_mut()) {
         *t += a * (*c * w.cfg.months_per_year as f32 - *t);
@@ -245,12 +245,19 @@ fn shade(w: &mut World) {
     }
 }
 
-/// Update the bodies `due` (cell, slot, generation) in that order, those still alive in their slot: a block of a
-/// wave (`waves`).
-pub(crate) fn run(w: &mut World, due: &[(u32, u32, u32)]) {
+/// Update the bodies due today.
+pub fn day(w: &mut World) {
+    let due = w.life.take_due(w.day());
+    if due.is_empty() {
+        return;
+    }
+    // Cell by cell (a fixed order that keeps memory reads close together).
+    let bodies = &w.life.bodies;
+    let mut list: Vec<(u32, u32, u32)> = due.iter().filter(|&&(s, g)| bodies[s as usize].alive && bodies[s as usize].gen == g).map(|&(s, g)| (bodies[s as usize].cell, s, g)).collect();
+    list.sort_unstable();
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());
-    for &(cell, slot, gen) in due {
+    for (cell, slot, gen) in list {
         let s = slot as usize;
         if !w.life.bodies[s].alive || w.life.bodies[s].gen != gen {
             continue;

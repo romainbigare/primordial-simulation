@@ -512,18 +512,20 @@ the golden test.
 - A body sees the parts of the cells within its sight as the last survey saw them, as it sees their other features
   (`choose::cells`), so what an update reads lies one link from it. 48 x 48 seed 2, years 51-60: light-eaters 2.05e10
   to 2.19e10 kg, eaters 7.1e7 to 9.7e7 kg (seed noise), land 290.66 to 290.71 K, drift 1e-14.
-- The bodies' day runs in waves of blocks, apart and on threads (`waves`, decision 59), with the same history with any
-  number of threads and without; the golden runs are pinned again (the order of updates and of new ids). 48 x 48 seeds
-  1-3, years 51-60, against the code before the parts change: light-eaters 1.87, 2.05 and 2.17e10 to 1.97, 2.24 and
-  2.14e10 kg, eaters 3.6e6, 7.1e7 and 6.7e7 to 7.2e6, 7.3e7 and 6.6e7 kg, land 286.55, 290.66 and 289.30 to 286.63,
-  290.66 and 289.30 K, drift 1e-14; seed 2 from year 90: bodies 4,700 ms a year to 3,610 on 4 threads (4,560 on 2).
+
+**After the round-6 review**
+
+- The bodies run on one thread again (decision 59, "tried and not kept" below); the core ceiling is back to 9,000 and
+  the 700 lines the owner allowed wait for threads over bodies that pay (decision 42). Core 9,567 to 8,998 code lines.
 
 **Tried and not kept in the foundation**
 
-- Threads over bodies: blocks in four fixed colours moving their whole reach, the bodies by value and the store's
-  nodes by copy: moving cost more than the updates, slower than one thread; regions holding a quarter of the
-  day's updates run before the waves: half the updates fell on their borders and the dearest region ran alone (bodies
-  3.6 to 4.0 s a year).
+- Threads over bodies in waves of blocks, each block on a world of its thread's own (decision 59): the bodies of a
+  settled 24 x 24 island at year 90 took 611 ms a year before, 665 on one thread and 800 on four; 48 x 48 gained 1.4
+  times on four; an update on a thread's world cost 24-33% more, with about 1,475 waits between waves a year. Before
+  it: blocks in four fixed colours moving their whole reach (moving cost more than the updates), and regions run
+  before the waves (half the updates fell on their borders; bodies 3.6 to 4.0 s a year).
+
 - Nodes keeping their members' wear: eaters' life 7.1 yr against at most 5.8 (branch `nodes-wear-tried`).
 - The wind on the mesh solver: five times dearer; forced, rain on land -28%, rivers 503 to 104.
 - E12: all genes at once with one sample: genes that do nothing drifted by chance, a run failed.

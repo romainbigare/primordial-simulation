@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// The most code lines `core/src` may hold: 9,000, and 700 more for running the bodies on threads (decision 42).
-const CEILING: usize = 9_700;
+/// The most code lines `core/src` may hold (decision 42).
+const CEILING: usize = 9_000;
 
 /// Is `line` a line of code (not blank, not a comment)?
 fn is_code(line: &str) -> bool {

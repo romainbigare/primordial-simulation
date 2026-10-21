@@ -8,8 +8,7 @@ orderings) is said once, in the code's doc comments; the code is the truth. Numb
 maths in `solve/` (`spread`, `downhill`, `band`); nodes and books in `store/`, `world.rs`, `check.rs`; ground heat in
 `ground.rs`; settings in `params.rs`, constants in `units.rs`; bodies in `body/`, `life.rs`, `nodes.rs`, `lineage.rs`,
 `brain.rs`; the cells as bodies see them in `survey.rs`; paths in `lanes.rs`; keyed random numbers in `rng.rs`; the
-tape's events in `event.rs`; the bodies' day in waves of blocks in `waves.rs`; threads in `par.rs` and `waves.rs` (the
-same results with and without).
+tape's events in `event.rs`; threads in `par.rs` (the same results with and without).
 
 **Words.** A **cell** is a square of the map (2 km on the island, latitude-longitude on a globe) or a quarter of one
 in a refined region. A **node** is anything that holds stuff: a cell's ground, an air column, a body, a part. A
@@ -29,11 +28,8 @@ across it passes exactly.
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it). Processes run by their periods
 (`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`), the parts of
 Flow that are due (air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and
-Change; on the month's first day Bond; every day the bodies whose interval ends (`waves::day`; the `INTERVAL` gene,
+Change; on the month's first day Bond; every day the bodies whose interval ends (`survey::day`; the `INTERVAL` gene,
 5 to 360 days; a population node without a brain at least every `node_days`). Each run stands for the time to its next.
-A day's bodies run block by block (the cells under one air node), in waves of blocks whose updates reach no common
-cell, each block in the order of its cells; the waves take turns at coming first. The blocks of a wave run apart and
-are put together in a fixed order, so the history is the same with any number of threads and without (`waves`).
 
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.

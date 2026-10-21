@@ -45,7 +45,7 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 
 ### The line budget (decision D2)
 
-- **`core` may hold at most 9,700 lines of code, not counting comments and blank lines** (handover 14.3). Comments
+- **`core` may hold at most 9,000 lines of code, not counting comments and blank lines** (handover 14.3). Comments
   help the next agent: do not delete them to save lines.
 - The new base has a fixed allowance of code lines. It must not grow past it without the owner's agreement:
 
@@ -57,9 +57,9 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 | `solve/` (`spread`, `downhill`, `band`) | 350 |
 | **Total** | **1,500** |
 
-- The test `cli/tests/core_size.rs` fails above the ceiling: **9,700**, which is 9,000 and 700 more for running the
-  bodies on threads (the owner, `docs/foundation/decisions.md` 42). The ceiling is never a reason to build a task that
-  costs speed or honesty.
+- The test `cli/tests/core_size.rs` fails above the ceiling: **9,000**. The 700 more lines the owner allowed for
+  threads over bodies wait for a design that pays (10.1; `docs/foundation/decisions.md` 42). The ceiling is never a
+  reason to build a task that costs speed or honesty.
 - A phase may not end with more code than it started with, unless its report gives the reason.
 
 ### The time budget (the owner's rule, decision D12)
@@ -74,8 +74,8 @@ load, not saved (E8, E10). How each works now: `docs/laws.md`.
 
 - **The planet's size is not fixed.** It is the largest number of cells (on the globe) whose cost fits the budget, by
   the cost model (5.7). It is measured again at the end of each phase. Faster code buys a bigger planet. Today, once
-  life has settled, about 460 cells fit with four threads and 375 with one (decision 43: the budget stays; the bodies
-  run on threads, 5.6).
+  life has settled, about 375 cells fit, the bodies on one thread (decision 43: the budget stays; threads over bodies
+  do not pay at this size, 5.6).
 - Speed never comes from removing a law or from a rule named after an outcome (handover 12.6). It comes from doing
   less work for the same physics: longer steps where the physics allows them, fewer updates where nothing changes,
   cheaper bookkeeping, cheap cells where little happens.
@@ -121,7 +121,7 @@ All decided on 17 October 2026. Later decisions are in `docs/foundation/decision
 | # | Decision | Status |
 |---|---|---|
 | D1 | The M3 check point choice (handover 13.1) | **Decided:** a foundation phase (this plan), then M4. Written in handover 13.1. |
-| D2 | The `core` code budget (handover 14.3) | **Decided:** at most 9,700 lines of code in `core`, not counting comments and blank lines: 9,000, and 700 more for running the bodies on threads. The foundation replaces the special code, it does not sit on top of it. The new base has fixed allowances; a test keeps the ceiling (A6). |
+| D2 | The `core` code budget (handover 14.3) | **Decided:** at most 9,000 lines of code in `core`, not counting comments and blank lines (700 more wait for threads over bodies that pay, decision 42). The foundation replaces the special code, it does not sit on top of it. The new base has fixed allowances; a test keeps the ceiling (A6). |
 | D3 | The cell shape for the planet | **Decided:** a latitude-longitude grid of squares that wraps east to west (5.5). It keeps today's square laws, the brain's 8 directions, the exact split of a cell into 4, and the viewer (the grid is the map). |
 | D4 | Speed settings (when a node sleeps, how many nodes a cell keeps, the node pace) | **Decided:** a table "speed settings" in `docs/numbers.md`, outside the tuned budget. Each must pass an equivalence test (6.4): changing it 2× must not change the key numbers beyond their noise. |
 | D5 | Old snapshots | **Decided:** no backwards compatibility; snapshots carry a format version (`tape/src/snapshot.rs`). |
@@ -211,45 +211,34 @@ A lat-lon grid of squares that wraps east to west: the square code carries over,
 everywhere, the split into 4 is exact and the grid is the map. Cells near the poles are narrow and no link crosses a
 pole; rows near the poles can be merged later if they cost too much.
 
-### 5.6 Threads over bodies
+### 5.6 Threads over bodies (after the foundation, D14)
 
-A day's bodies run in waves of blocks (`waves`, decision 59). A block is the cells under one air node, as its bodies
-breathe from it; the updates due today in a block reach their cells and those one link away, as a body sees, bites,
-moves and has children no further (what it sees further off is the last survey's). Each block, those with the most
-updates first, joins the first wave in which no block reaches a cell of its reach; the waves take turns at running
-first. The blocks of a wave share nothing their bodies change, so they run apart: with threads each on a world of its
-thread's own, which keeps what bodies read besides their reach (the survey's caches, the store, born rows and
-lineages, brought up to date from a log of what changed) and takes in the cell lists of the block's reach with the
-boxes of their bodies (`life::Bodies`). What a block did goes back to the world block by block in the order of the
-blocks: its bodies and lists, the store's nodes it booked moves of, its events, the counts that add up, and the
-changes to the counts of lineages and born rows (`life::Op`). New bodies, born rows, lineages and parts take places
-from pools of their own block (`life::Pool`), so no id depends on which block ran first; random numbers are keyed by
-body and day. Blocks that reach a part run on the world itself after the others, as the bonds are one list. A run
-without threads runs the same waves on the world itself, so the history is the same with any number of threads and
-without them (the golden runs, both builds). Fixed chunks in four colours would run four passes a day and move each
-chunk's whole reach; waves by today's reach move only the cells that hold updates and their neighbours.
+The bodies run on one thread; Flow and Change run on threads. At the planet size the time budget allows (about 375
+cells), a bodies' day holds only 1.5 to 15 ms of work, too little to share between threads: waves of blocks, each on
+a world of its thread's own, were built and made the bodies slower (decision 59). Threads over bodies come back when a
+planet of several thousand settled cells fits a longer budget (10.1). What any design must keep: an update reads and
+changes only its cell and the cells one link away (what a body sees further off is the last survey's); new ids,
+counters and events do not depend on which thread ran first; random numbers are keyed by body and time; the history
+is the same with and without threads.
 
 ### 5.7 The cost model
 
 The time of a run is the cost of one cell and of one body per simulated year, times their numbers. Measured by the
-CLI's stage times (the first two rows on one thread, the settled world side by side on 4 cores, years 91 to 94):
+CLI's stage times, on one thread for the bodies (the last row from the year-90 snapshot, years 91 to 94):
 
 | Run | A year | Of which |
 |---|---|---|
 | 64 × 64 island, no life | about 0.98 s | Flow 630-765 ms, Change 141-190 ms |
 | 64 × 64 island, seed 1, year 30, 5,746 bodies | 2.8-3.6 s | Flow 1,132 ms, Change 313 ms, bodies 2,020 ms |
-| 48 × 48 island, seed 2, life settled, 5,600 bodies, bodies on one thread | about 5.5 s | Flow 540 ms, Change 166 ms, bodies 4,700 ms, tape 126 ms |
-| the same, bodies on 2 threads | about 5.5 s | Flow 609 ms, Change 204 ms, bodies 4,560 ms |
-| the same, bodies on 4 threads | about 4.5 s | Flow 553 ms, Change 177 ms, bodies 3,610 ms, tape 140 ms |
+| 48 × 48 island, seed 2, life settled, 5,600 bodies | about 5.5 s | Flow 540 ms, Change 166 ms, bodies 4,700 ms, tape 126 ms |
 
 So a cell's Flow and Change cost 0.30-0.50 ms per cell-year. Once life has settled a cell holds about 2.4 bodies (two
 light-eater nodes and the eaters), with about 90,000 updates a year at about 52 µs: a body costs about 0.85 ms per
-body-year on one thread, three times what it costs at year 30, as the eaters' decisions and children are dearer than
-plants'. A settled cell costs about 2.4 ms a year on one thread, and about 375 cells fit the budget of 0.9 s a year.
-With 4 threads the bodies take 1.3 times less time and a cell about 1.9 ms a year: about 460 cells fit. The threads
-are busy about half the time: the crowded cells' blocks, the dearest, run one after another in their waves; a body
-costs about a quarter more when four threads share the memory; and putting the blocks back together, the blocks that
-reach a part and the survey run on one thread. Each phase report measures these again.
+body-year, three times what it costs at year 30, as the eaters' decisions and children are dearer than plants'. A
+settled cell costs about 2.4 ms a year, and about 375 cells fit the budget of 0.9 s a year. Bodies are about 85% of
+that year. Threads over bodies do not pay at this size (5.6): on a settled 24 × 24 island at year 90 the bodies took
+611 ms a year on one thread, and 665 on one and 800 on four with the waves of blocks; on 48 × 48 four threads gave 1.4
+times. Each phase report measures these again.
 
 ---
 
@@ -309,7 +298,7 @@ than at A1; a cell's physics at least 5 times cheaper than at A1 without threads
 
 **Open, not met:** a cell's Flow and Change cost about 1.9 times A1's (0.30-0.35 ms per cell-year), not a fifth of
 it. A body costs about 0.85 ms per body-year on one thread once life has settled. About 375 cells fit the time budget
-on one thread and 460 on four (5.7).
+(5.7).
 
 ---
 
@@ -355,7 +344,7 @@ taken on the way in `docs/foundation/decisions.md`.
 |---|---|---|
 | L1 | A2's reference runs on the new engine | Ranges hold; every larger difference explained |
 | L2 | Speed | The time budget met on the largest planet that fits, with the cost model's numbers |
-| L3 | Books | Elements and energy exact over 1,000 years, with threads and a refined region |
+| L3 | Books | Elements and energy exact over 1,000 years, with threads (Flow and Change; the bodies run on one) and a refined region |
 | L4 | Show worlds: the globe, a refined region | Each one runs, with pictures |
 | L5 | The foundation watch report (covering E to K, decision 41); then the owner decides M4 | The owner's choice is written in the handover |
 
@@ -373,8 +362,7 @@ Open items of review round 3, to settle before L5:
 
 ## 8. What is left
 
-The open items above (E6, F7 and maybe F5, G5, the speed goals of 6.5, round 3's list), threads over
-bodies (decisions 42 and 43), then Phase L. Work like this usually takes longer than
+The open items above (E6, F7 and maybe F5, G5, the speed goals of 6.5, round 3's list), then Phase L. Work like this usually takes longer than
 planned: report the real days in each phase report.
 
 ---
@@ -404,7 +392,7 @@ planned: report the real days in each phase report.
 | Automatic zoom while running | A refined region built into the mesh (G4) gives detail in places with much less code | When a player must zoom anywhere, at any time |
 | Patches: parts of a cell's ground with their own surface | Their first use is a burning share of a cell | With fire (M4) |
 | More memories on links | A channel would repeat what erosion does to a cell's height | With the law that needs one |
-| The chunk layout | The waves of blocks (5.6) move a block's bodies by their boxes, with no layout of their own | When moving a block's reach costs more than its updates |
+| Threads over bodies (5.6) | At the planet size the budget allows a bodies' day holds 1.5 to 15 ms of work, too little to share: the waves of blocks made bodies slower (decision 59). The 700 lines the owner allowed wait for a design that pays (decision 42) | When a planet of several thousand settled cells fits a longer budget |
 | Snapshots of changes only | In 10 years almost everything changes | If snapshots are still too big |
 
 ### 10.2 What M4 still needs
