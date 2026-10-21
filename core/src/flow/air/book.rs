@@ -23,19 +23,20 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     let v = |len: usize| vec![0.0; len];
     let (mut sun, mut heat, mut light, mut kept, mut drawn, mut rain, mut out) = (v(n), v(ne), v(n), v(n), v(n), v(n), v(na));
     // Per gas and link (`[x * ne + e]`): what goes up, mol (what evaporates into its own air node, what rains out of each
-    // node it sees by its share), and the heat that leaves the ground with it, J.
-    let (mut up, mut up_heat) = (v(act.len() * ne), v(act.len() * ne));
+    // node it sees by its share), and the heat each mol takes from the ground, J; per gas and node (`[x * n + i]`),
+    // what evaporates of the rain it gets in the step.
+    let (mut up, mut up_heat, mut of_rain) = (v(act.len() * ne), v(act.len() * ne), v(act.len() * n));
     for (i, row) in rows.chunks_exact(width).enumerate() {
         let (j, ts) = (parent[i] as usize, row[4]);
         (sun[i], heat[i], light[i], kept[i], drawn[i]) = (row[3], row[0] + row[2], row[5], row[6] * area[i] * dt, row[7]);
         out[j] += row[2];
         for (x, ac) in act.iter().enumerate() {
             let (o, sp, e) = (FIXED + PER_GAS * x, s.sp[ac.k], x * ne);
-            let r = row[o + 3];
-            let m = row[o].min(w.store.amounts(Class::Ground)[ac.k * n + i] + r);
-            (up[e + i], up_heat[e + i]) = (m, m * (sp.cp * ts + sp.lf + sp.lv));
+            let (r, a) = (row[o + 3], w.store.amounts(Class::Ground)[ac.k * n + i]);
+            let m = row[o].min(a + r);
+            (up[e + i], up_heat[e + i], of_rain[x * n + i]) = (m.min(a), sp.cp * ts + sp.lf + sp.lv, (m - a).max(0.0));
             for (c, (q, share)) in shares(s, &it.x[ac.gi * na..(ac.gi + 1) * na], i).into_iter().enumerate() {
-                (up[e + (c + 1) * n + i], up_heat[e + (c + 1) * n + i]) = (-r * share, -r * share * (sp.cp * it.t[q] + sp.lf));
+                (up[e + (c + 1) * n + i], up_heat[e + (c + 1) * n + i]) = (-r * share, sp.cp * it.t[q] + sp.lf);
             }
             rain[i] += r;
         }
@@ -46,10 +47,15 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     s.state.cloud_depth = (0..n).map(|i| lerp(s, &depth, i)).collect();
     // The wind and the rain of each gas, cut where an air node would give more than it holds.
     let links = Links::of(w.mesh.level(AIR));
-    let (nl, mut wind_mol, cut) = (links.a.len(), wind.mol.clone(), up.clone());
+    let (nl, mut wind_mol) = (links.a.len(), wind.mol.clone());
     for (gi, &k) in s.state.gas.iter().enumerate() {
         let rain = act.iter().position(|a| a.k == k).map_or(&mut [][..], |x| &mut up[x * ne..(x + 1) * ne]);
         hold_air(&start.x[gi * na..(gi + 1) * na], (&links.a, &links.b), &mut wind_mol[gi * nl..(gi + 1) * nl], (&ends, rain));
+    }
+    // What evaporates of the rain comes up once the cut has set the rain each node gets, so no node gives more than it
+    // holds and gets (the cut counted on none of it).
+    for (x, i) in (0..act.len() * n).filter(|&y| of_rain[y] > 0.0).map(|y| (y / n, y % n)) {
+        up[x * ne + i] += of_rain[x * n + i].min((1..ne / n).map(|c| -up[x * ne + c * n + i]).sum());
     }
     let World { light: lit, life, .. } = w;
     for (i, (l, &got)) in lit.iter_mut().zip(&light).enumerate() {
@@ -64,7 +70,7 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     for (x, ac) in act.iter().enumerate() {
         for e in (0..ne).filter(|&e| up[x * ne + e] != 0.0) {
             let (m, i, j) = (up[x * ne + e], e % n, ends[e] as usize);
-            heat[e] += up_heat[x * ne + e] * m / cut[x * ne + e];
+            heat[e] += up_heat[x * ne + e] * m;
             paid[j] += m * s.sp[ac.k].mm * view.lift(i, j, g);
             net[x * n + i] += m;
         }

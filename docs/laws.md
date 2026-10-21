@@ -116,7 +116,8 @@ seed's climate at 10-day steps to its own at 6-hour steps. Wind pushes and cloud
 `flow::air::exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against the air's): wet
 ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket). **Rain**: vapour beyond
 what the cell's air holds at its temperature (colder higher up) rains out in `rain_time`, from the four air nodes the
-cell sees by their shares. **Lift**: gas going up is lifted from the ground's head to the air's mean height, paid by
+cell sees by their shares; where an air node holds less than it would give, its rain is cut, and the ground
+evaporates of the rain only what it gets (`book::hold_air`). **Lift**: gas going up is lifted from the ground's head to the air's mean height, paid by
 the air's heat. **Dissolving** (`exchange::dissolve`): a gas that cannot condense dissolves in the ground's liquid
 toward Henry's share, through the air's film (`evap`) and the liquid's (`dissolve`) in series, freeing its
 vaporisation enthalpy, and comes out when the liquid warms, thins or freezes. **Known limit:** a liquid's whole depth

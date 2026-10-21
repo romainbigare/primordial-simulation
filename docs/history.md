@@ -639,6 +639,9 @@ the golden test.
   melting plateau the plateau's substance melts or freezes first), not at most at the node's last temperature: liquid
   at 365 K running through a node at 292 K left at 292 K and the node kept the difference (the same run, the next
   node down). Golden re-pinned.
+- L3: a ground node evaporates of the rain of an air step only what it gets once the air's cut has set it: what
+  evaporates was limited by what it held and the rain asked of the air, so a cut rain let a node give 2e6 mol more of
+  a gas than it held (the same run, years 94-95; element drift 3e-11). Golden re-pinned.
 
 **Tried and not kept in the foundation**
 
