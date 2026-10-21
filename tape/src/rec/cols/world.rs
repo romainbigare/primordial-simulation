@@ -40,6 +40,7 @@ impl Recorder {
         }
         row.push("ice_frac", "1", area_mean(c.f.ice.iter().zip(area).map(|(&v, &a)| ((v >= COVER_MIN) as u8 as f64, a))));
         row.push("liquid_land", "km3", land.iter().map(|&i| c.f.depth[i] * area[i]).sum::<f64>() / GIGA);
+        row.push("ice_land", "km3", land.iter().map(|&i| c.f.ice[i] * area[i]).sum::<f64>() / GIGA);
         row.push("rain", "mol/m2/s", area_mean(w.rain.iter().zip(area).map(|(&v, &a)| (v as f64, a))));
         row.push("rain_land", "mol/m2/s", area_mean(land.iter().map(|&i| (w.rain[i] as f64, area[i]))));
         // Rivers as the web viewer draws them.

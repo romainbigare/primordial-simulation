@@ -8,7 +8,7 @@ interface Section { title: string; el: HTMLDetailsElement; cards: Card[]; open: 
 
 /** Sections in display order: the first pattern a column name matches decides (tape/src/rec/cols/ names). */
 const SECTIONS: [string, RegExp][] = [
-  ['Climate', /^(t_|absorber$|ice_frac$|liquid_land$|rain|rivers$)/],
+  ['Climate', /^(t_|absorber$|ice_frac$|liquid_land$|ice_land$|rain|rivers$)/],
   ['Air gases', /^air_/],
   ['Minerals', /^min\d/],
   ['Dead matter', /^dead_/],

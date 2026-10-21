@@ -51,6 +51,7 @@ worn edges, structures, true colour (r, g, b).
 | `air_<k>` | | mole fraction of heat-absorbing gas k in the air |
 | `ice_frac` | | share of the area under ice |
 | `liquid_land` | km³ | liquid on land |
+| `ice_land` | km³ | frozen cover on land |
 | `rain`, `rain_land` | mol/m²/s | mean rain, and on land (a moving average over about a year) |
 | `rivers` | | dry land cells (under at most `tape::STANDING_M` of liquid) with a liquid flux over the web viewer's threshold (`tape::RIVER_WEB`) |
 | `bodies`, `plants` | | bodies (nodes and individuals), of them light-eaters |

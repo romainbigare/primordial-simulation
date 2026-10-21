@@ -678,6 +678,10 @@ the golden test.
   warmer than the node, which then paid heat it did not hold. Seed 1, year 300: 22 x 22 island land 292.4 -> 292.8 K,
   gas 3 277 -> 298 ppm, rivers 89 -> 96; 36 x 18 globe land 288.9 -> 288.5 K, gas 3 211 -> 193 ppm, ice on land 5.1e3
   -> 4.4e3 km³; element drift 2.3e-16 and 5.2e-16. Golden re-pinned.
+- The series records the frozen cover on land (`ice_land`, km³): `liquid_land` and `ice_frac` did not show the ice
+  that grew on mountains. Open: ice does not flow (decision 66); on the 16 x 8 globe, whose land starts at 271 K, ice
+  on land still grows (3.3e7 km³ at year 100, 7.9e7 at year 300, the sea from 8.8e7 to 1.6e7 km³), and on the 36 x 18
+  globe an inland sea fills toward its rim at 952 m (6.5e5 km³ standing on land at year 300).
 
 **Tried and not kept in the foundation**
 
