@@ -362,6 +362,11 @@ impl Default for Physics {
     }
 }
 
+/// Ok if `ok`, else the error `why` writes: one check of a world's inputs.
+pub(crate) fn require(ok: bool, why: impl FnOnce() -> String) -> Result<(), String> {
+    if ok { Ok(()) } else { Err(why()) }
+}
+
 impl Config {
     /// The world's calendar: its day, month and year, s.
     pub fn calendar(&self) -> Calendar {
@@ -370,32 +375,23 @@ impl Config {
     }
     /// Check a run's settings before it starts: the time steps, and the numbers of the physics the laws need in range.
     pub fn validate(&self) -> Result<(), String> {
-        if self.phys_days == 0 || self.air_hours == 0 || self.flow_days == 0 {
-            return Err(format!("phys_days ({}), air_hours ({}) and flow_days ({}) must be at least 1", self.phys_days, self.air_hours, self.flow_days));
-        }
+        let (d, h, f, p) = (self.phys_days, self.air_hours, self.flow_days, &self.phys);
+        let each = d > 0 && h > 0 && f > 0;
+        require(each, || format!("phys_days ({d}), air_hours ({h}) and flow_days ({f}) must be at least 1"))?;
         // The air's step is booked whole as it runs: a longer one would book its moves ahead of the physics steps.
-        if !(self.phys_days as u64 * self.calendar().day).is_multiple_of(self.air_hours as u64 * HOUR_S) {
-            return Err(format!("the air's step ({} hours) must divide the physics step ({} days)", self.air_hours, self.phys_days));
-        }
-        if self.node_days as f64 > crate::body::MAX_INTERVAL {
-            return Err(format!("node_days ({}) must be at most {} days, the longest interval", self.node_days, crate::body::MAX_INTERVAL));
-        }
-        if self.sample_every == 0 {
-            return Err("sample_every must be at least 1 (a sample on one update in that many)".to_string());
-        }
-        if !(self.wake_share > 0.0 && self.wake_share.is_finite()) {
-            return Err(format!("wake_share ({}) must be above 0", self.wake_share));
-        }
+        let divides = (d as u64 * self.calendar().day).is_multiple_of(h as u64 * HOUR_S);
+        require(divides, || format!("the air's step ({h} hours) must divide the physics step ({d} days)"))?;
+        let (days, most) = (self.node_days as f64, crate::body::MAX_INTERVAL);
+        require(days <= most, || format!("node_days ({days}) must be at most {most} days, the longest interval"))?;
+        let why = "sample_every must be at least 1 (a sample on one update in that many)";
+        require(self.sample_every > 0, || why.into())?;
+        let wake = self.wake_share;
+        require(wake > 0.0 && wake.is_finite(), || format!("wake_share ({wake}) must be above 0"))?;
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
         // what it stores over this share).
-        let p = &self.phys;
-        if p.dormancy.is_nan() || p.dormancy <= 1.0 {
-            return Err(format!("dormancy ({}) must be above 1", p.dormancy));
-        }
-        if !(p.light_yield > 0.0 && p.light_yield <= 1.0) {
-            return Err(format!("light_yield ({}) must be above 0 and at most 1", p.light_yield));
-        }
-        Ok(())
+        require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
+        let light = p.light_yield;
+        require(light > 0.0 && light <= 1.0, || format!("light_yield ({light}) must be above 0 and at most 1"))
     }
     /// Spread of the new weights of a brain carried over to other sizes (none in a null run).
     pub(crate) fn new_noise(&self) -> f32 {

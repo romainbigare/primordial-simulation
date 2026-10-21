@@ -4,7 +4,7 @@
 mod roles;
 mod thermo;
 
-use crate::units::MAX_SUBSTANCES;
+use crate::{params::require, units::MAX_SUBSTANCES};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
@@ -181,19 +181,11 @@ impl Chemistry {
     /// curve and densities; every reaction and conversion names substances that exist and keeps its elements and mass.
     pub fn validate(&self) -> Result<(), String> {
         let ns = self.ns();
-        if ns > MAX_SUBSTANCES {
-            return Err(format!("{ns} substances: at most {MAX_SUBSTANCES}"));
-        }
+        require(ns <= MAX_SUBSTANCES, || format!("{ns} substances: at most {MAX_SUBSTANCES}"))?;
         for (k, s) in self.subs.iter().enumerate() {
-            if s.elems.len() != self.n_elements {
-                return Err(format!("substance {k}: wrong element count"));
-            }
-            if s.lv <= 0.0 {
-                return Err(format!("substance {k}: vaporisation enthalpy must be above 0"));
-            }
-            if s.density.iter().any(|&d| d <= 0.0) {
-                return Err(format!("substance {k}: densities must be above 0"));
-            }
+            require(s.elems.len() == self.n_elements, || format!("substance {k}: wrong element count"))?;
+            require(s.lv > 0.0, || format!("substance {k}: vaporisation enthalpy must be above 0"))?;
+            require(s.density.iter().all(|&d| d > 0.0), || format!("substance {k}: densities must be above 0"))?;
         }
         // Each reaction, then each conversion: a conversion needs inputs and a product, a reaction no more orders than
         // inputs. Its molar masses must agree with its elements to rounding: it keeps mass.
@@ -201,24 +193,16 @@ impl Chemistry {
         let reactions = self.reactions.iter().enumerate().map(|(r, rx)| (format!("reaction {r}"), rx, false));
         let builds = self.build.iter().map(|b| (String::from("build"), b, true));
         for (name, rx, conversion) in reactions.chain(builds).chain(self.builds.iter().enumerate().map(|(q, b)| (format!("builds {q}"), b, true))) {
-            if conversion && (rx.outputs.is_empty() || rx.inputs.is_empty()) {
-                return Err(format!("{name} needs inputs and a product"));
-            }
-            if !rx.inputs.iter().chain(&rx.outputs).all(|p| (p.0 as usize) < ns) {
-                return Err(format!("{name}: a substance beyond the {ns}"));
-            }
-            if rx.ord.len() > rx.inputs.len() {
-                return Err(format!("{name}: more orders than inputs"));
-            }
-            if rx.open.is_nan() || rx.open <= 0.0 {
-                return Err(format!("{name}: its speed in the open world must be above 0"));
-            }
-            if self.side_elems(&rx.inputs) != self.side_elems(&rx.outputs) {
-                return Err(format!("{name} does not balance"));
-            }
-            if (mass(&rx.inputs) - mass(&rx.outputs)).abs() > MASS_ROUNDING * mass(&rx.inputs).max(mass(&rx.outputs)) {
-                return Err(format!("{name} does not keep mass"));
-            }
+            let whole = !conversion || !(rx.outputs.is_empty() || rx.inputs.is_empty());
+            require(whole, || format!("{name} needs inputs and a product"))?;
+            let known = rx.inputs.iter().chain(&rx.outputs).all(|p| (p.0 as usize) < ns);
+            require(known, || format!("{name}: a substance beyond the {ns}"))?;
+            require(rx.ord.len() <= rx.inputs.len(), || format!("{name}: more orders than inputs"))?;
+            require(rx.open > 0.0, || format!("{name}: its speed in the open world must be above 0"))?;
+            let balanced = self.side_elems(&rx.inputs) == self.side_elems(&rx.outputs);
+            require(balanced, || format!("{name} does not balance"))?;
+            let (m_in, m_out) = (mass(&rx.inputs), mass(&rx.outputs));
+            require((m_in - m_out).abs() <= MASS_ROUNDING * m_in.max(m_out), || format!("{name} does not keep mass"))?;
         }
         Ok(())
     }

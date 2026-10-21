@@ -566,6 +566,9 @@ the golden test.
   the pool's change, where a small draw on a large pool rounds away; bodies, parts and the ground read that one count.
   The yearly line prints each element's signed drift. Golden re-pinned. 48 x 48 seed 1 at year 100: element 2's drift
   3.6e-14 to 3.3e-14, 7.0e-15 in years 91-100 both times: the most of it rounds away in the air nodes' sums.
+- The checks of a world's inputs (`Config::validate`, `Chemistry::validate`) are one line each (`params::require`); a
+  NaN density or vaporisation enthalpy is refused too. Bit for bit the same. Core 8,993 to 8,971 code
+  lines.
 
 **Tried and not kept in the foundation**
 
