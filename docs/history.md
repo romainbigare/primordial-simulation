@@ -526,6 +526,8 @@ the golden test.
 - The eaters' check reads births less deaths over years 71 to 100, as a settled decade swings by about 15% of births
   (seed 1 by decade from year 81: 11.5, 5.7, 10.1, -14.9, 7.8%); the limit stays 10%. Seeds 1-3: 7.7, 3.7 and -6.0%,
   1.7e4, 8.8e4 and 3.0e4 kg/km² of land at year 100: it passes.
+- laws.md says that merging past `crowd` drops the structure the joiners held, and that the minerals a body builds of
+  count in Holling's s.
 
 **Tried and not kept in the foundation**
 

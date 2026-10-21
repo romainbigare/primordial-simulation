@@ -296,7 +296,8 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
 - **Merging** (`nodes::crowd`, monthly): alike bodies of one lineage and stage in a cell join a node of more than one
   member if they are in the room of the same structure (its root) or none and hold the same structure or nothing
   (`nodes::Kin`). Past `crowd` nodes a cell merges its most alike pairs while alike, whatever they hold (the one that
-  joins lets go of its part); unlike nodes never merge.
+  joins lets go of its part); unlike nodes never merge. This merge is a speed tool with a physical side effect: the
+  joiners' members drop the structure they held, which stays in the cell for any body to take (decision 56).
 - **Splitting** (`nodes::split`): a node whose halves would no longer be alike splits along its widest gene if its cell
   has room; selection then acts between the halves. Means are kept exactly.
 - **Selection inside a node** (`copy/select.rs`): a node without a brain also runs its update for a sample member one
@@ -336,12 +337,14 @@ enter (`bond/verbs.rs`). No copy action, no "farm", "trade" or "attack": those m
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`
 per kg, of food only (`Body::uses`: what it burns, the body matter and built solids it digests, the minerals it builds
 of; not what it cannot use, nor the key liquids it drinks, `soak`): per kg of supply, Holling's type II take × s /
-(take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). Another body's
+(take + s), s what the swept area holds (`sweep`) of its food, so thin food takes time to find (Holling 1959). The
+minerals it builds of count in s as food does: one search finds all it uses, so rich ground shortens it. Another body's
 members lie over the cell like the ground's food: a bite reaches those the swept area holds (one individual body
 whole, with the chance the area holds it; of a node, less than one member is one whole member met with that chance:
-it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs; a quicker body escapes with the chance its
-interval gives. **Giving** (`Body::spare`) is of what the other uses, of stores only (no matter, brood, built solids or key liquid below level),
-above `keep_min` × their minimum, at most what the members met could take.
+it takes, tears and pays that meeting's outcome times the chance), limited by force against theirs; a quicker body
+escapes with the chance its interval gives. **Giving** (`Body::spare`) is of what the other uses, of stores only (no
+matter, brood, built solids or key liquid below level), above `keep_min` × their minimum, at most what the members met
+could take.
 
 ### 5.4 Learning
 **Well-being** (`Body::wellbeing_at`): the energy its stores could release, in decisions' worth, less how near it is
