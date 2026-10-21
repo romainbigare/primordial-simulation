@@ -1,7 +1,8 @@
-//! Moving: a body steps to a neighbour cell (`go`), wearing the bodies it pushes through (`wear`) and clearing a lane.
+//! Moving: a body steps to a neighbour cell (`go`), clearing a lane, and what it pushes through wears (`wear`).
 
 use crate::body::{self, Body, BROKEN};
 use crate::chem::Phase;
+use crate::store::{Class, Node};
 use crate::{bond, lanes, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
@@ -32,32 +33,35 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     (b.mark, b.rained) = (w.light[j], w.rained[j]);
     w.counts.crossings.resize(w.mesh.cells().n(), 0.0);
     w.counts.crossings[j] += b.n() as f32;
-    let cover = w.life.sum[j][1] / w.mesh.cells().area()[j];
-    let broken = wear(w, j, slot, cost * (1.0 - 1.0 / resist));
-    if broken > 0.0 && cover > 0.0 {
-        // The cover broken along the way was the lane's: that much ground is now clear.
-        lanes::clear(w, i, j, broken / cover);
+    // What it spends pushing through the bodies there breaks them at the next survey (`wear`) and clears the lane: the
+    // ground whose cover that energy breaks.
+    let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum[j][7]);
+    w.life.pushed.resize(w.mesh.cells().n(), 0.0);
+    w.life.pushed[j] += pushed;
+    if all > 0.0 {
+        lanes::clear(w, i, j, pushed * w.mesh.cells().area()[j] / all);
     }
 }
 
-/// Energy dissipated pushing through the bodies of cell `j` breaks their body matter: each takes its share by mass and
-/// loses what that pays to break, each of its members alike (`Body::breaking`, `body::wound`; laws.md 6.8). Returns the mass broken, kg.
-pub fn wear(w: &mut World, j: usize, mover: usize, energy: f64) -> f64 {
-    let chem = &w.chem;
-    let others: Vec<u32> = w.life.at[j].iter().copied().filter(|&s| s as usize != mover).collect();
-    let total: f64 = others.iter().map(|&s| w.life.bodies[s as usize].mass(chem)).sum();
-    let mut broken = 0.0;
-    if energy <= 0.0 || total <= 0.0 {
-        return 0.0;
+/// Before each survey: the energy movers spent pushing through the bodies of each cell since the last (`Life::pushed`)
+/// breaks their body matter. Each body there takes its share by mass and loses what that pays to break, each of its
+/// members alike (`Body::breaking`, `body::wound`; laws.md 6.8). A cell's bodies are worn once a survey, not once a move.
+pub fn wear(w: &mut World) {
+    let pushed = std::mem::take(&mut w.life.pushed);
+    for (j, &energy) in pushed.iter().enumerate().filter(|e| *e.1 > 0.0) {
+        let here = w.life.at[j].clone();
+        let total: f64 = here.iter().map(|&s| w.life.bodies[s as usize].mass(&w.chem)).sum();
+        if total <= 0.0 {
+            continue;
+        }
+        w.open_moves(j, Node::new(Class::Body, here[0] as usize));
+        for s in here.into_iter().map(|s| s as usize) {
+            let o = std::mem::take(&mut w.life.bodies[s]);
+            let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
+            let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
+            let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
+            body::wound(w, s, o, (1.0, f), &dead, BROKEN);
+        }
+        w.book_moves();
     }
-    for s in others {
-        let s = s as usize;
-        let o = std::mem::take(&mut w.life.bodies[s]);
-        let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
-        let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
-        broken += m * f;
-        let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
-        body::wound(w, s, o, (1.0, f), &dead, BROKEN);
-    }
-    broken
 }

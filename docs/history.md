@@ -685,6 +685,12 @@ the golden test.
 - The key numbers after snow melts (64 x 64, seeds 1 to 3): land 287.83 -> 291.79 K, swing 13.61 -> 15.13 K, rivers
   136.1 -> 712.4, land worn down 0.0424 -> 0.141 mm/yr are their new references (decision 67); rain 1.793e-3, gas
   406.0 ppm, light-eaters 10.25 and eaters 5.34 log10 kg, their lives 1.33 and 13.95 yr hold their old ones.
+- Pushing through wears a cell's bodies once a survey (`choose::wear`, decision 70): the energy movers spend in a cell
+  is kept (`Life::pushed`, snapshot 45) and then shared by mass over the bodies there, so a move no longer wounds every
+  body of its cell (a cell's moves cost the square of its bodies: the 24 x 24 region run took 17 min for year 421). The
+  lane clears by that energy over the cell's breaking energy per m² (`Life::sum`). Golden re-pinned. 22 x 22 island
+  seed 1, years 291-300: land 293.7 -> 294.6 K, light-eaters 3.6e9 -> 5.8e9 kg, eaters 4.5e6 -> 6.5e6 kg; at year 300
+  bodies 2,386 -> 2,107, element drift 2.1e-16 -> 2.6e-16.
 
 **After the final review**
 

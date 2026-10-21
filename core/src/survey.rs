@@ -16,11 +16,12 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [w.t_ground_last(i), d, z]
 }
 
-/// Before each physics step: what each cell holds (`sum_cells`); once a month the merge of alike nodes, the traffic
-/// and each cell's surroundings.
+/// Before each physics step: what movers broke since the last (`choose::wear`), what each cell holds (`sum_cells`);
+/// once a month the merge of alike nodes, the traffic and each cell's surroundings.
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
+    choose::wear(w);
     if monthly {
         crate::nodes::crowd(w);
     }
@@ -61,13 +62,14 @@ fn sum_cells(w: &mut World) {
     }
 }
 
-/// Per cell: its members, then their visible traits summed (`Life::sum`).
+/// Per cell: its members, then their visible traits summed, then the energy to break its bodies (`Life::sum`).
 pub fn sums(w: &mut World) {
-    w.life.sum = vec![[0.0; 7]; w.mesh.cells().n()];
+    w.life.sum = vec![[0.0; 8]; w.mesh.cells().n()];
     for b in w.life.bodies.iter().filter(|b| b.alive) {
         let (s, m) = (&mut w.life.sum[b.cell as usize], b.n());
         s[0] += m;
-        s[1..].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
+        s[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
+        s[7] += b.breaking(&w.chem, &w.cfg, 1.0);
     }
 }
 

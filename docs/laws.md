@@ -139,8 +139,9 @@ bilinearly (`flow/scratch.rs`). Air moves as whole columns, so bodies use the an
 
 ### 1.7 Paths
 `lanes.rs`. A body moving through a cell spends energy pushing through the bodies there (`choose::go`, `choose::wear`),
-which breaks them (6.8) and clears the link (`lanes::clear`); a cleared link is cheaper (`lanes::resist`) and grows
-back yearly (`lanes::regrow`, `regrow`). This one rule is what can make paths.
+which breaks them (6.8) and clears the link (`lanes::clear`) of the ground whose cover that energy breaks (the energy
+over the cell's breaking energy per m²); a cleared link is cheaper (`lanes::resist`) and grows back yearly
+(`lanes::regrow`, `regrow`). This one rule is what can make paths.
 
 ## 2. Change: substances react inside nodes, faster when hot
 Files: `core/src/change/` (the reactor), `core/src/chem/` (chemistry and its physics), `worldgen/src/chem0.toml`.
@@ -453,11 +454,14 @@ a share of a node's members kills an individual with that chance.
 ### 6.8 Damage
 `body/death.rs`. **A bite** (`take_body`) tears from each member reached the share taken and pays to break it (3.6);
 matter breaks first and spills its stores; in a node those members lose it (grazing) or die (`body::wound`). **Pushing
-through** (`choose::wear`) breaks what its energy pays for. **Heat** burns matter by reaction 21. A member dies when
-`lethal` of its body is torn at once; a hurt adult is immature until healed. **Starving** (`starved`): a body below its
-copy mass that did not rebuild what it lost keeps the share x and dies with chance 1 − x^a, a = ln 2 / −ln(1 −
-`lethal`), so starving to the lethal loss is survived with even chances in one update or many (`SPENT`). Causes:
-`LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN`, `AGE`; at death all goes to the ground (`body::die`).
+through** (`choose::wear`) breaks what its energy pays for: the energy movers spent in a cell is kept until the next
+survey (`Life::pushed`); then each body there, a mover that stayed too, takes its share by mass and loses what that
+breaks of it, each of its members alike. So a cell's bodies are worn once a survey, not once for each move into it.
+**Heat** burns matter by reaction 21. A member dies when `lethal` of its body is torn at once; a hurt adult is
+immature until healed. **Starving** (`starved`): a body below its copy mass that did not rebuild what it lost keeps
+the share x and dies with chance 1 − x^a, a = ln 2 / −ln(1 − `lethal`), so starving to the lethal loss is survived
+with even chances in one update or many (`SPENT`).
+Causes: `LACK`, `PHASE`, `SPENT`, `TAKEN`, `BROKEN`, `AGE`; at death all goes to the ground (`body::die`).
 
 ### 6.9 Materials and minerals in bodies
 Built solids count in mass and height, not living body; children get them, gifts never give them. Light-eaters get

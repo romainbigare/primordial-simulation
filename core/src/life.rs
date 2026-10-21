@@ -15,11 +15,15 @@ pub struct Life {
     free: Vec<u32>,
     /// Bodies in each cell, in a fixed order
     pub at: Vec<Vec<u32>>,
-    /// Per cell, from the last survey: members, then their visible traits summed. The survey's caches are not saved:
-    /// a snapshot is taken at a month's start, where the survey builds them before any law reads them; this one the
-    /// tape reads first, so `tape::load_snapshot` rebuilds it (`survey::sums`).
+    /// Per cell, from the last survey: members, then their visible traits summed, then the energy to break all its
+    /// bodies, J. The survey's caches are not saved: a snapshot is taken at a month's start, where the survey builds
+    /// them before any law reads them; this one the tape reads first, so `tape::load_snapshot` rebuilds it
+    /// (`survey::sums`).
     #[serde(skip)]
-    pub sum: Vec<[f64; 7]>,
+    pub sum: Vec<[f64; 8]>,
+    /// Per cell: the energy movers spent pushing through its bodies since the last survey, which then breaks them, J
+    /// (`choose::wear`; empty: none)
+    pub pushed: Vec<f64>,
     /// Per cell, from the last survey: the share of the light reaching its bodies' capture area that they absorb
     #[serde(skip)]
     pub absorb: Vec<f32>,

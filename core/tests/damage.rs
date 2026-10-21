@@ -164,23 +164,25 @@ fn a_big_bite_kills_the_members_it_reaches() {
 #[test]
 fn trampling_breaks_body_matter() {
     let (mut w, i) = bite_start();
-    let mover = resting(&mut w, i, 6.0, 1.0);
     let v = resting(&mut w, i, 15f32.log10(), 0.0);
     let m = resting(&mut w, i, 6.0, 0.0);
     let big = node_of(&mut w, m, 10.0);
     let mut small = resting(&mut w, i, 6.0, 0.0);
     scale(&mut w, &mut small, 0.001);
     let small = node_of(&mut w, small, 10000.0);
-    let (mv, v, big, small) = (place(&mut w, mover), place(&mut w, v), place(&mut w, big), place(&mut w, small));
+    let (v, big, small) = (place(&mut w, v), place(&mut w, big), place(&mut w, small));
     let books = Books::now(&w);
     let (b0, nb0, ns0) = (seen(&w, v), w.life.bodies[big].n(), w.life.bodies[small].n());
     let (bb0, bs0) = (seen(&w, big), seen(&w, small));
     let (g0, e0) = (w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i], w.store.heat(Class::Ground)[i]);
-    let broken = moved(&mut w, (i, mv), |w| choose::wear(w, i, mv, 2_000.0));
+    // Movers spent 2 kJ pushing through the cell's bodies since the last survey.
+    w.life.pushed = vec![0.0; w.mesh.cells().n()];
+    w.life.pushed[i] = 2_000.0;
+    choose::wear(&mut w);
     let (b1, bb1, bs1) = (seen(&w, v), seen(&w, big), seen(&w, small));
     let (sv, sb, ss) = (1.0 - b1.built / b0.built, 1.0 - bb1.built / bb0.built, 1.0 - bs1.built / bs0.built);
-    println!("trampled: individual body -{:.2}%, node of 10 big members -{:.2}%, node of 10,000 small ones -{:.2}% (members {} of {ns0}); {broken:.3} kg broken", 100.0 * sv, 100.0 * sb, 100.0 * ss, w.life.bodies[small].n());
-    assert!(broken > 0.0 && sv > 0.0 && w.life.bodies[v].alive, "an individual was not hurt");
+    println!("trampled: individual body -{:.2}%, node of 10 big members -{:.2}%, node of 10,000 small ones -{:.2}% (members {} of {ns0})", 100.0 * sv, 100.0 * sb, 100.0 * ss, w.life.bodies[small].n());
+    assert!(sv > 0.0 && w.life.bodies[v].alive, "an individual was not hurt");
     // The share of the matter broken is the share of the body and of every store (not gas).
     assert!((1.0 - b1.matter / b0.matter - sv).abs() < 1e-9 && (1.0 - b1.solid / b0.solid - sv).abs() < 1e-9 && (1.0 - b1.liquid / b0.liquid - sv).abs() < 1e-9);
     // Weaker.

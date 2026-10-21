@@ -561,15 +561,15 @@ fn an_immature_body_never_reproduces() {
 #[test]
 fn a_hurt_body_rebuilds_within_its_allowance_and_is_immature_until_healed() {
     let (mut w, i) = start();
-    let mover = eater(&mut w, i, brain::REST, 6.0);
-    // A body of 21 kg that is mature from 15 kg.
+    // A body of 21 kg that is mature from 15 kg, alone in its cell.
     let v = eater(&mut w, i, brain::REST, 15f32.log10());
-    let (mv, v) = (testkit::place(&mut w, mover), testkit::place(&mut w, v));
+    let v = testkit::place(&mut w, v);
     let books = Books::now(&w);
     assert!(w.life.bodies[v].adult(&w.chem));
-    // The energy that breaks 40% of it (`Body::breaking`).
-    let e = w.life.bodies[v].breaking(&w.chem, &w.cfg, 0.4);
-    testkit::moved(&mut w, (i, mv), |w| pcore::choose::wear(w, i, mv, e));
+    // Movers spent in its cell the energy that breaks 40% of it (`Body::breaking`).
+    w.life.pushed = vec![0.0; w.mesh.cells().n()];
+    w.life.pushed[i] = w.life.bodies[v].breaking(&w.chem, &w.cfg, 0.4);
+    pcore::choose::wear(&mut w);
     let mut b = std::mem::take(&mut w.life.bodies[v]);
     assert!(!b.adult(&w.chem), "a body torn by 40% is still mature: {} kg", b.built(&w.chem));
     let days = b.interval(&w) as f64;
