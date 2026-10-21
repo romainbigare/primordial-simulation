@@ -20,7 +20,7 @@ use crate::body::{most, mutation_size, vary, within, Body, Layout, CHILD, COPY_M
 use crate::brain::{self, row_step, shake};
 use crate::chem::Chemistry;
 use crate::event::{Event, EventKind};
-use crate::lineage::resized;
+use crate::lineage::{resized, sizes_of, wanted};
 use crate::nodes::{add, may_be_node, open, Lot, COUNT_SLACK};
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
@@ -117,21 +117,19 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     }
     let (store, e) = give(w, b, l, cell, m);
     let (mut rows, row_spread) = child_rows(w, b, l, m, size, r);
-    // A node's children start no new lineage: a change of the brain's base in one child is lost in the mean of many; a
-    // node whose mean sizes moved moves itself (`lineage::resize`).
-    let fresh = if l.node { None } else { child_lineage(w, b, &genes, &mut rows, r) };
-    let lineage = fresh.unwrap_or(b.lineage);
+    // A node's children stay in its lineage: a change of the brain's base in one child is lost in the mean of many; a
+    // node whose mean sizes moved moves itself (`lineage::resize`). In another lineage they join its young node there.
+    let lineage = if l.node { b.lineage } else { child_lineage(w, b, l, &genes, &mut rows, r) };
+    let hit = if lineage == b.lineage || l.alone { hit } else { kin(w, cell, lineage, (&genes, &spread), false) };
     // Their brain: their born rows plus what their parent learned.
     let own = w.life.inherit(rows.as_deref().unwrap_or(w.life.born(b)), lineage, b);
     let lot = Lot { count: m, store, e, brood: 0.0, owed: 0.0, last: w.day() as f64, mark: w.light[cell], rained: w.rained[cell] };
-    if fresh.is_none() {
-        if let Some(t) = hit {
-            let born = rows.unwrap_or_else(|| w.life.born(b).to_vec());
-            let mut o = std::mem::take(&mut w.life.bodies[t]);
-            add(w, &mut o, lot, Some((&genes, &spread)), (l.body.log10() as f32, 0.0), Some((&born, &own, row_spread)));
-            w.life.bodies[t] = o;
-            return true;
-        }
+    if let Some(t) = hit {
+        let born = rows.unwrap_or_else(|| w.life.born(b).to_vec());
+        let mut o = std::mem::take(&mut w.life.bodies[t]);
+        add(w, &mut o, lot, Some((&genes, &spread)), (l.body.log10() as f32, 0.0), Some((&born, &own, row_spread)));
+        w.life.bodies[t] = o;
+        return true;
     }
     let c = Body {
         cell: cell as u32,
@@ -237,25 +235,34 @@ fn child_rows(w: &World, b: &Body, l: &Litter, m: f64, size: f32, r: &mut Rng) -
     }
 }
 
-/// An individual's child whose brain-size genes are a whole unit away from its lineage's sizes starts a new lineage
-/// with the new sizes, its brain carried over where they overlap (`lineage::resized`, its rows by `brain::rerow`);
-/// rarely (`Physics::new_lineage`) the base of its lineage's brain is copied with small noise, which starts a new
-/// lineage too (in a null run neither adds noise, `Config::new_noise`). Returns the new lineage (none: the child is of
-/// its parent's).
-fn child_lineage(w: &mut World, b: &Body, genes: &[f32], rows: &mut Option<Vec<f32>>, r: &mut Rng) -> Option<u32> {
+/// The lineage of an individual's child: its parent's if its brain-size genes fit it (no size a whole unit away,
+/// `lineage::wanted`), else its partner's (`Litter::mate`) if they fit that, its rows carried over to that brain as
+/// `mix_rows` carries them, else a new lineage with the new sizes, its brain carried over where they overlap
+/// (`lineage::resized`, its rows by `brain::rerow`). So unlike lineages, which never merge, start only where neither
+/// parent's brain fits. Rarely (`Physics::new_lineage`) a child that fits its parent's lineage copies its brain's base
+/// with small noise, which starts a new lineage too (in a null run neither adds noise, `Config::new_noise`).
+fn child_lineage(w: &mut World, b: &Body, l: &Litter, genes: &[f32], rows: &mut Option<Vec<f32>>, r: &mut Rng) -> u32 {
     let (noise, base_noise) = (w.cfg.new_noise(), if w.cfg.null { 0.0 } else { w.cfg.phys.base_noise });
-    let lin = w.life.brains[b.lineage as usize].as_ref()?;
-    let fresh = if let Some(l) = resized(lin, genes, w.chem.ns(), r, noise) {
-        *rows = Some(brain::rerow(rows.as_deref().unwrap_or(w.life.born(b)), lin.shape, l.shape, r, noise));
-        Some(l)
-    } else if r.f64() < w.cfg.phys.new_lineage {
-        let mut l = lin.clone();
-        shake(&mut l.base, r, base_noise);
-        Some(l)
+    let fits = |k: u32| w.life.brains[k as usize].as_ref().filter(|x| wanted(x, genes) == sizes_of(x));
+    let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return b.lineage };
+    let fresh = if fits(b.lineage).is_some() {
+        if r.f64() >= w.cfg.phys.new_lineage {
+            return b.lineage;
+        }
+        let mut shaken = lin.clone();
+        shake(&mut shaken.base, r, base_noise);
+        shaken
     } else {
-        None
+        let born = rows.as_deref().unwrap_or(w.life.born(b));
+        if let Some((k, to)) = l.mate.map(|t| w.life.bodies[t].lineage).and_then(|k| Some((k, fits(k)?.shape))) {
+            *rows = Some(brain::rerow(born, lin.shape, to, r, noise));
+            return k;
+        }
+        let Some(sized) = resized(lin, genes, w.chem.ns(), r, noise) else { return b.lineage };
+        *rows = Some(brain::rerow(born, lin.shape, sized.shape, r, noise));
+        sized
     };
-    Some(w.life.new_lineage(fresh?))
+    w.life.new_lineage(fresh)
 }
 
 /// Children `c` of `b` that join no node start a body of their own, born with `rows` (none: its parent's). Several

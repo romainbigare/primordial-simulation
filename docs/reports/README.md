@@ -16,7 +16,7 @@ a folder with the same name as the report.
   pictures, and per run only the numbers the history cites: the full `series.csv.gz` for the runs of 60 and 100
   years, `decades.csv.gz` (the rows of every tenth year, all columns) for the long runs (`globe18`, `island22` and
   `region24`, seed 1, final foundation code; `globe8`, older), and `run.log.gz` (the whole log) where the run has one.
-  `region24` stops at year 420 (see the history). Read them with `zcat`. Snapshots, `months.csv` and the viewer's
+  `region24` stops at year 780 (see the history). Read them with `zcat`. Snapshots, `months.csv` and the viewer's
   files are not kept. The viewer's pictures show the first Phase L runs (before the final foundation code). The
   folder is 2.5 MB.
 

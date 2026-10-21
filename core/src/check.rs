@@ -108,21 +108,15 @@ pub fn broken(w: &World) -> Option<String> {
     let energies = [("e_ground", w.store.heat(Class::Ground)), ("e_air", w.store.heat(Class::Air)), ("e_deep", w.store.heat(Class::Deep)), ("e_bodies", w.store.heat(Class::Bodies)), ("light", &w.light), ("rained", &w.rained)];
     let f32s = [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)];
     let found = amounts.into_iter().chain(energies).find_map(|(name, v)| first_bad(name, v, at_least_0));
-    if let Some(e) = found.or_else(|| f32s.into_iter().find_map(|(name, v)| first_bad(name, v, at_least_0))) {
-        return Some(e);
-    }
-    for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-        if !above_0(b.e) || !above_0(b.count) || !b.store.iter().all(|&x| at_least_0(x)) {
-            return Some(format!("body {s}: energy {}, members {}, stores {:?}", b.e, b.count, b.store));
-        }
-    }
-    if let Some(s) = w.life.bodies.iter().position(|b| b.alive && !b.rows.iter().all(|x| x.is_finite())) {
-        return Some(format!("body {s}: a brain weight is not finite"));
-    }
-    for (s, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
-        if !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x)) {
-            return Some(format!("part {s}: energy {}, walls {:?}, fill {:?}", p.e, p.wall, p.fill));
-        }
-    }
-    None
+    let found = found.or_else(|| f32s.into_iter().find_map(|(name, v)| first_bad(name, v, at_least_0)));
+    let body = w.life.bodies.iter().enumerate().filter(|e| e.1.alive).find_map(|(s, b)| {
+        let finite = b.rows.iter().all(|x| x.is_finite());
+        let bad = !finite || !above_0(b.e) || !above_0(b.count) || !b.store.iter().all(|&x| at_least_0(x));
+        bad.then(|| format!("body {s}: energy {}, members {}, stores {:?}, brain ok {finite}", b.e, b.count, b.store))
+    });
+    let part = w.parts.parts.iter().enumerate().filter(|e| e.1.alive).find_map(|(s, p)| {
+        let bad = !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));
+        bad.then(|| format!("part {s}: energy {}, walls {:?}, fill {:?}", p.e, p.wall, p.fill))
+    });
+    found.or(body).or(part)
 }

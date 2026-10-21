@@ -325,7 +325,9 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
 - **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`; rules per interval are rates
   over the update (`Body::paces`), so its `INTERVAL` gene is the turnover time of its stores (a known limit).
-- **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage.
+- **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. An
+  individual's child joins its parent's lineage when its size genes fit it, else its partner's when they fit that
+  (its rows carried over to that brain); only a child that fits neither starts a new lineage (`copy::child_lineage`).
   `nodes::open` draws members as individuals. `--individuals` keeps bodies with a brain out of nodes (handover 7.1).
 
 ## 5. Choose: a small brain sees a little, acts, learns and copies others

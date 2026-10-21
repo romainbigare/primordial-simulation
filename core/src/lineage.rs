@@ -49,12 +49,17 @@ pub fn sizes_of(l: &Lineage) -> [usize; 4] {
     [l.shape.h, l.shape.mem, l.seen, l.sight]
 }
 
+/// The sizes `genes` ask of lineage `lin`: where a size gene is a whole unit away from `lin`'s size, the gene's; else
+/// `lin`'s (all of `lin`'s: the genes fit it).
+pub(crate) fn wanted(lin: &Lineage, genes: &[f32]) -> [usize; 4] {
+    let (old, want) = (sizes_of(lin), sizes(genes));
+    std::array::from_fn(|k| if (genes[BRAIN_SIZES[k]] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] })
+}
+
 /// A lineage with the sizes `genes` ask for, if one is a whole unit away from `lin`'s, its base carried over
 /// (`brain::rebase`).
 pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, noise: f32) -> Option<Lineage> {
-    let (old, want) = (sizes_of(lin), sizes(genes));
-    let gene = BRAIN_SIZES.map(|g| genes[g]);
-    let new: [usize; 4] = std::array::from_fn(|k| if (gene[k] - old[k] as f32).abs() >= 1.0 { want[k] } else { old[k] });
+    let (old, new) = (sizes_of(lin), wanted(lin, genes));
     let to = shape(ns, new[0], new[1]);
     (new != old).then(|| Lineage { shape: to, seen: new[2], sight: new[3], base: brain::rebase(&lin.base, lin.shape, to, r, noise), root: lin.root })
 }

@@ -700,6 +700,18 @@ the golden test.
   from year 370 (lineages alive 16 at year 370, 402 at year 405, eater bodies 2,142 to 7,454 at the same 2e5
   members); this one in the light-eaters from year 720 (alive 18 at year 700, 412 at year 780). Most of those bodies
   are in the refined cells: the crowd merge keeps some nodes per cell, and those cells have a quarter of the area.
+- An individual's child joins its parent's lineage when its brain-size genes fit it, else its partner's when they
+  fit that, its rows carried over to that brain; a new lineage starts only when neither fits (decision 71). The golden
+  runs keep their fingerprints (no child there fits only its partner's lineage). The 24 x 24 region run, seed 1, the
+  same to year 720; stopped at year 780 after 88 min as before: lineages alive 41 / 72 / 328 at years 730 / 740 / 780
+  (42 / 88 / 412 before), bodies 33,301 (at most 319 in a cell; 32,427 and 261 before), a year 45 s (bodies 34 s, parts
+  10 s); at year 100 / 400 a year 2.5 / 3.8 s, bodies 3,502 (19) / 6,077 (39). Elements within 5.2e-16, energy 2.3e-14,
+  heat not given 0. Land 293.4 / 293.4 / 292.6 K, gas 3 439 / 424 / 422 ppm, light-eaters 2.5e9 / 5.0e9 / 4.9e9 kg,
+  eaters 4.0e6 / 9.9e5 / 2.1e6 kg at years 100 / 400 / 780. In years 730-740 no child joined its partner's lineage;
+  of 174 new lineages 134 came from `lineage::resize` (light-eater nodes whose seen and hidden genes, which do nothing
+  without a brain, drift a unit: 3 -> 4 and 0 -> 1), 38 from children that fit neither parent, 2 from a new base
+  (decision 72, open). 17 x 17 island 1,000 years in 15.9 min beside the region run: bodies 1,523 (29 in a cell) at
+  year 500, 1,535 (28) at year 1,000; eaters alive (1.4e5 members, 8.7e6 kg).
 
 **After the final review**
 
