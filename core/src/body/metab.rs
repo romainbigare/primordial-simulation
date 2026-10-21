@@ -24,11 +24,12 @@ impl Body {
     pub(crate) fn rate_at(&self, chem: &Chemistry, p: &crate::Physics, r: usize, a: f64, t: f64) -> f64 {
         crate::change::denature(Self::catalyst(self.k.cat[r], a), t, self.gene(DENATURE), p.unfold) * chem.reactions[r].arrhenius(t)
     }
-    /// End-product inhibition, 0..1: 1 / (1 + Σ x / x*), x the store of each product and x* its level (non-competitive
-    /// inhibition with the body's own level as the constant; laws.md 2.4). Gases and key liquids do not count.
+    /// End-product inhibition, 0..1: 1 - Σ x / x*, at least 0, x the store of each product and x* its level: a full
+    /// store stops the enzyme that fills it, as roots take up to the level (laws.md 2.4). Gases and key liquids do not
+    /// count.
     pub fn inhibited(&self, chem: &Chemistry, r: usize, mass: f64, t: f64) -> f64 {
         let out = chem.reactions[r].outputs.iter().map(|p| p.0 as usize).filter(|&k| self.wet >> k & 1 == 0 && chem.phase(k, t) != Phase::Gas);
-        1.0 / (1.0 + out.map(|k| (self.level(chem, k, mass), self.store[k].max(0.0))).map(|(l, x)| if l > 0.0 { x / l } else { f64::INFINITY }).sum::<f64>())
+        (1.0 - out.map(|k| (self.level(chem, k, mass), self.store[k].max(0.0))).map(|(l, x)| if l > 0.0 { x / l } else { f64::INFINITY }).sum::<f64>()).max(0.0)
     }
     /// A catalyst's factor `f` at activity `a`: 1 + (f - 1) a (a dry body's bare reactions still run).
     #[inline]

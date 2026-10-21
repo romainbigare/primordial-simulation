@@ -1390,7 +1390,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
 }
 
 /// End-product inhibition: a body's catalyst is slowed by its store of each product it keeps a level of, by
-/// 1 / (1 + store / level): with none held it runs at full speed, at its level at half. Gases and the key liquid do not
+/// 1 - store / level: with none held it runs at full speed, at its level not at all. Gases and the key liquid do not
 /// count, so a burning (gas and the liquid) is not slowed.
 #[test]
 fn a_catalyst_is_slowed_by_the_product_the_body_holds() {
@@ -1406,7 +1406,7 @@ fn a_catalyst_is_slowed_by_the_product_the_body_holds() {
         let none = b.inhibited(&w.chem, r, mass, t);
         b.store[k] = b.level(&w.chem, k, mass);
         let full = b.inhibited(&w.chem, r, mass, t);
-        assert!(none == 1.0 && (full - 0.5).abs() < 1e-9, "reaction {r}: {none} with none held, {full} at its level");
+        assert!(none == 1.0 && full.abs() < 1e-9, "reaction {r}: {none} with none held, {full} at its level");
     }
     assert_eq!(b.inhibited(&w.chem, burn, mass, t), 1.0, "a burning makes gas and the liquid");
 }

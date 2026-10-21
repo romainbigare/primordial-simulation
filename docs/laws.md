@@ -171,7 +171,7 @@ made·τ/eq) / (1 + used·τ/eq). So dead matter on the sea floor rots as fast a
 ### 2.4 Change inside bodies
 - **Catalysts**: a gene speeds its reaction by f = 10^gene (off below 0). "Eating plants" means "my genes speed up the
   reaction that burns what plants store". The speed-up is 1 + (f − 1) · a, a the activity (6.5).
-- **Product inhibition** (`Body::inhibited`): × 1 / (1 + Σ x / x*), x each product's store, x* its level (not gases or
+- **Product inhibition** (`Body::inhibited`): × max(0, 1 − Σ x / x*), x each product's store, x* its level (not gases or
   the key liquid), on reactions run at the catalyst's pace, not on burnings run on demand.
 - **Heat kills enzymes** (`change::denature`): above `DENATURE` the speed-up falls within a few K (`unfold`); a firmer
   shape costs upkeep (`t_firm`, `c_firm`). One rule (`Body::rate_at`) for release and supply; upkeep never falls with
@@ -445,7 +445,7 @@ copy mass that did not rebuild what it lost keeps the share x and dies with chan
 ### 6.9 Materials and minerals in bodies
 Built solids count in mass and height, not living body; children get them, gifts never give them. Light-eaters get
 minerals by roots, eaters by digestion. The rock salt falls out of a body as lime (23). Fixing (24) makes the nitrogen
-mineral from the air, slowed as the store nears its level.
+mineral from the air, slowed as the store fills and stopped at its level.
 
 ## 7. Soil and minerals
 The minerals (`Chemistry::minerals`) live in the ground's liquid and move with it, so rain washes them to low ground
