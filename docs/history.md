@@ -691,6 +691,15 @@ the golden test.
   lane clears by that energy over the cell's breaking energy per m² (`Life::sum`). Golden re-pinned. 22 x 22 island
   seed 1, years 291-300: land 293.7 -> 294.6 K, light-eaters 3.6e9 -> 5.8e9 kg, eaters 4.5e6 -> 6.5e6 kg; at year 300
   bodies 2,386 -> 2,107, element drift 2.1e-16 -> 2.6e-16.
+- The 24 x 24 island with the 8 x 8 refined region again, after decision 70 (seed 1, `docs/reports/foundation-l/`):
+  stopped at year 780 after 90 min, as a year then took 40 s and climbed. A year: 2.1 s at year 100 (bodies 1.7 s), 4.1
+  s at year 400 (bodies 2.9 s, parts 0.65 s), 40 s at year 780 (bodies 30 s, parts 9.4 s). Bodies 3,502 (at most 19 in
+  a cell), 6,077 (39), 32,427 (261). Elements within 5.2e-16, energy within 2.3e-14, heat not given 0. The bodies grow
+  by lineages that never merge (decision 71, open): a child takes its brain-size genes from a partner of another
+  lineage a whole unit off its own and starts a lineage of its own. The run before decision 70 had it in the eaters
+  from year 370 (lineages alive 16 at year 370, 402 at year 405, eater bodies 2,142 to 7,454 at the same 2e5
+  members); this one in the light-eaters from year 720 (alive 18 at year 700, 412 at year 780). Most of those bodies
+  are in the refined cells: the crowd merge keeps some nodes per cell, and those cells have a quarter of the area.
 
 **After the final review**
 
