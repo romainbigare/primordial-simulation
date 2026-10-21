@@ -694,6 +694,11 @@ the golden test.
   of steps does, not by a second number (0.05). `body::MARGIN` and `PHASE_MARGIN` have rows in numbers.md (decision
   68). Golden re-pinned. 48 x 48 seed 1, years 31-40: light-eaters 1.15e10 kg both, eaters 7.1e5 -> 6.5e5 kg, land
   292.1 K both, element drift 2e-16 both.
+- Past `crowd` nodes in a cell the most alike pairs merge whatever room they are in, as whatever they hold (decision
+  56): the one that joins takes the other's room. The golden runs keep their fingerprints (no rooms in two years). 36 x
+  18 globe seed 1, years 101-200: bodies 2,974 -> 2,497, the bodies' stage 2.25 -> 1.98 s a year, parts 167 -> 127 ms
+  a year, land 289.1 -> 289.2 K, eaters 6.6e12 -> 6.3e12 kg; at year 200 at most 142 bodies in a cell both times (in
+  the new run 89 eater nodes of that cell are unlike in their genes, not apart by rooms).
 
 **Tried and not kept in the foundation**
 

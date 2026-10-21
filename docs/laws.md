@@ -309,9 +309,10 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   (`copy::mature`): the flux across a size of a size-structured population (McKendrick 1926; von Foerster 1959).
 - **Merging** (`nodes::crowd`, monthly): alike bodies of one lineage and stage in a cell join a node of more than one
   member if they are in the room of the same structure (its root) or none and hold the same structure or nothing
-  (`nodes::Kin`). Past `crowd` nodes a cell merges its most alike pairs while alike, whatever they hold (the one that
-  joins lets go of its part); unlike nodes never merge. This merge is a speed tool with a physical side effect: the
-  joiners' members drop the structure they held, which stays in the cell for any body to take (decision 56).
+  (`nodes::Kin`). Past `crowd` nodes a cell merges its most alike pairs of one lineage and stage while alike, whatever
+  they hold and whatever room they are in (the one that joins lets go of its part and takes the other's room); unlike
+  nodes never merge. This merge is a speed tool with a physical side effect: the joiners' members drop the structure
+  they held, which stays in the cell for any body to take, and leave or enter a room (decision 56).
 - **Splitting** (`nodes::split`): a node whose halves would no longer be alike splits along its widest gene if its cell
   has room; selection then acts between the halves. Means are kept exactly.
 - **Selection inside a node** (`copy/select.rs`): a node without a brain also runs its update for a sample member one

@@ -25,7 +25,7 @@ pub(crate) fn crowd(w: &mut World) {
     }
 }
 
-/// What a node shares with those it joins or merges with: its lineage (a node has one brain), its stage (both mature or
+/// What a node shares with those it joins (`join_alike`): its lineage (a node has one brain), its stage (both mature or
 /// both young: the young join their adult node member by member as they mature, `copy::young`), the structure whose
 /// room it is in (its root, as the room law counts those inside, `bond::room`) and the structure it holds (its root).
 type Kin = (u32, bool, Option<usize>, Option<usize>);
@@ -56,20 +56,21 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its `Kin` but for what it holds
+/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its lineage and stage
 /// (`merge_closest`).
-type Likeness = (Vec<f32>, Vec<f32>, (u32, bool, Option<usize>));
+type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 
 /// The most alike pair of `left` merges first, the smaller into the larger (ties: the earlier, larger ones), until `max`
 /// are left or no pair is alike: here each within the other's spread, as children join a node (`body::within`), of one
-/// `Kin` but for what they hold; unlike nodes never merge, however full the cell. What a body holds does not keep it
-/// apart in a full cell: a part is one more state of its members, not a likeness, and the one that joins lets go of it
-/// (`merge`). A pair's key: the squared distance of their genes in steps (infinite if unlike).
+/// lineage and stage; unlike nodes never merge, however full the cell. What a body holds and the room it is in do not
+/// keep it apart in a full cell: they are states of its members, not a likeness; the one that joins lets go of its
+/// part and takes the other's room (`merge`). A pair's key: the squared distance of their genes in steps (infinite if
+/// unlike).
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
     let steps = |w: &World, s: usize| {
-        let (b, k) = (&w.life.bodies[s], kin_of(w, &w.life.bodies[s]));
-        (steps(lay, &b.genes), spreads(b), (k.0, k.1, k.2))
+        let b = &w.life.bodies[s];
+        (steps(lay, &b.genes), spreads(b), (b.lineage, b.adult(&w.chem)))
     };
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
