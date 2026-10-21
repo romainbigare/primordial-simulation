@@ -7,7 +7,7 @@ use super::pay::breathes;
 use super::{Body, Layout, COOL_T, DENATURE};
 use crate::change::{send_gas, GasMove, Reactor};
 use crate::ground::{heat_above_floor, share, Melting};
-use crate::{chem::Phase, math::{mean_decay, one_minus_exp}, store::Node, survey::intercept, World};
+use crate::{chem::Phase, math::{mean_decay, one_minus_exp}, store::Node, World};
 use crate::units::{MAX_SUBSTANCES, P_REF};
 
 /// The heat of an update as its stages go.
@@ -72,7 +72,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let mass2 = if moved { b.mass(&w.chem) } else { mass1 };
     soak(w, b, s, h.gcap, &mut h.heat, &soil, &lost, fall, mass2);
     roots(w, b, s, &mut h, mass2, wk);
-    let fusion1 = b.fusion_in(&w.chem, &th0);
+    let fusion1 = b.fused_of(&w.chem, &th0, &b.store);
     h.heat += fusion0 - fusion1;
     relax_heat(w, b, s, &h);
     b.e += fusion1;
@@ -84,7 +84,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
 fn rain_caught(w: &World, slot: usize, b: &mut Body, s: &Site) -> f64 {
     let (i, World { rained, life, canopy, .. }) = (s.i, w);
     let fell = rained[i] - std::mem::replace(&mut b.rained, rained[i]);
-    fell * b.vis[1] as f64 * b.n() * s.open * life.shade.get(slot).map_or(1.0, |&f| f) * intercept(canopy.get(i).map_or(0.0, |&c| c as f64))
+    fell * b.vis[1] as f64 * b.n() * s.open * life.shade.get(slot).map_or(1.0, |&f| f) * mean_decay(canopy.get(i).map_or(0.0, |&c| c as f64))
 }
 
 /// Light caught since the last update through any openings, less what it reflects, and what liquid over it leaves, J.

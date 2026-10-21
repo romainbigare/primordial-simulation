@@ -699,6 +699,9 @@ the golden test.
   18 globe seed 1, years 101-200: bodies 2,974 -> 2,497, the bodies' stage 2.25 -> 1.98 s a year, parts 167 -> 127 ms
   a year, land 289.1 -> 289.2 K, eaters 6.6e12 -> 6.3e12 kg; at year 200 at most 142 bodies in a cell both times (in
   the new run 89 eater nodes of that cell are unlike in their genes, not apart by rooms).
+- Clean-up, bit for bit the same: a body's energy at a plateau state is the heat that would leave with all its stores
+  (`Body::heat_with`; `fusion_in` goes), the light a layer intercepts is `math::mean_decay` (the alias `intercept`
+  goes), and the survey no longer sizes the cells' light, canopy and rain sums the world is made with.
 
 **Tried and not kept in the foundation**
 

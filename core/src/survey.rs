@@ -21,9 +21,6 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
 pub fn survey(w: &mut World) {
     let n = w.mesh.cells().n();
     w.life.fit_map(n);
-    if w.canopy.len() != n {
-        (w.canopy, w.light, w.rained) = (vec![0.0; n], vec![0.0; n], vec![0.0; n]);
-    }
     bond::ready(w);
     let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
     if monthly {
@@ -214,16 +211,12 @@ fn traffic(w: &mut World) {
     }
 }
 
-/// The share of what falls that a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
-pub(crate) fn intercept(x: f64) -> f64 {
-    mean_decay(x)
-}
-
 /// Light passes the bodies of a cell from the tallest member down, equal heights sharing a layer; a layer of capture
 /// area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the shades,
 /// weighted by capture area, have mean 1). Only cells whose bodies changed are worked out again (`Life::stir`).
 fn shade(w: &mut World) {
-    let g = intercept;
+    // What a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
+    let g = mean_decay;
     let (Life { bodies, at, shade, stale, .. }, area) = (&mut w.life, w.mesh.cells().area());
     shade.resize(bodies.len(), 1.0);
     if stale.len() != at.len() {
