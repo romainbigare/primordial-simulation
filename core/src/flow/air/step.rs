@@ -352,7 +352,7 @@ fn end_reflectance(cx: &Ctx, i: usize, row: &[f64], rain_in: f64) -> f64 {
         let (r, m) = (row[o + 3], row[o].min(a0(ac.k) + row[o + 3]));
         gained[ac.k] += r - m;
         c += (r - m) * sp.cp;
-        e -= m * (sp.cp * row[4] + sp.lf + sp.lv);
+        e -= m * (sp.cp * s.state.tg[i] + sp.lf + sp.lv);
     }
     let amt = |k: usize| a0(k) + gained[k];
     let th = thaw_at(w, s, c.max(1.0), e, amt);

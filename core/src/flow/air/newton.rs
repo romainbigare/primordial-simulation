@@ -33,9 +33,9 @@ pub(super) fn far(s: &Scratch) -> usize {
 }
 
 /// The rows summed over the air nodes, in the order of the cells, with their slopes: each ground node gives its own air
-/// node its heat and what comes up with its heat less its lift, with slopes to the four air nodes it sees by their
-/// weights; what rains comes out of those four in their shares (`shares`), which move with each node's gas, and leaves
-/// with its node's heat.
+/// node its heat and what comes up with its heat (at the ground node's temperature) less its lift, with slopes to the
+/// four air nodes it sees by their weights; what rains comes out of those four in their shares (`shares`), which move
+/// with each node's gas, and leaves with its node's heat.
 pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], (rows, width): (&[f64], usize), far: usize) -> Gathered {
     let (na, cells, g, nx) = (w.mesh.level(AIR).n(), w.mesh.cells(), w.cfg.gravity, act.len());
     let kinds = 1 + 3 * nx;
@@ -49,7 +49,7 @@ pub(super) fn gather(w: &World, s: &Scratch, it: &Iterate, act: &[Active], (rows
         for (x, ac) in act.iter().enumerate() {
             let (sp, o) = (s.sp[ac.k], FIXED + PER_GAS * x);
             let [m, m_col, m_tl, r, r_col, r_tl, h_col, lf] = <[f64; PER_GAS]>::try_from(&row[o..o + PER_GAS]).unwrap();
-            let mol_up = sp.cp * row[4] - sp.mm * s.view().lift(i, p, g);
+            let mol_up = sp.cp * s.state.tg[i] - sp.mm * s.view().lift(i, p, g);
             out.heat[p] += m * mol_up;
             out.up[x * na + p] += m;
             own[0] += m_tl * mol_up;

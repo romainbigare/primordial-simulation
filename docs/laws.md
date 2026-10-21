@@ -118,9 +118,9 @@ seed's climate at 10-day steps to its own at 6-hour steps. Wind pushes and cloud
 
 ### 1.5 Evaporation, rain and dissolved gases
 `flow::air::exchange`. **Evaporation** by vapour pressure (the ground's saturation pressure against the air's): wet
-ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket); a node over a substance's
-boiling point boils of it what its heat over that point pays, cooling to it (`Scratch::boil_off`; gas coming out of
-the liquid too). **Rain**: vapour beyond what the cell's air holds at its temperature (colder higher up) rains out
+ground at the open rate, drier ground in proportion to its liquid (Manabe 1969's bucket), taking the heat it held at
+the node's temperature; a node over a substance's boiling point boils of it what its heat over that point pays,
+cooling to it (`Scratch::boil_off`; gas coming out of the liquid too). **Rain**: vapour beyond what the cell's air holds at its temperature (colder higher up) rains out
 in `rain_time`, from the four air nodes the cell sees by their shares; where the air at the ground is below the gas's
 melting point it falls as a solid (snow) and the air keeps the fusion enthalpy its freezing frees; where an air node
 holds less than it would give, its rain is cut, and the ground evaporates of the rain only what it gets

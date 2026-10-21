@@ -673,6 +673,11 @@ the golden test.
   to that point (`Scratch::boil_off`, shared with gas coming out of the liquid): it boiled all of it whatever heat that
   took (a 100 m pool 2 K over its boiling point lost all its liquid in a step and ended at 4,900 K). Bit for bit the
   same on the golden runs; a test holds it.
+- What evaporates leaves at its node's temperature (the heat it held there), not at its surface's, in the solve, the
+  books and the end state, as gas coming out of the liquid does: under a soft cover the surface may be tens of K
+  warmer than the node, which then paid heat it did not hold. Seed 1, year 300: 22 x 22 island land 292.4 -> 292.8 K,
+  gas 3 277 -> 298 ppm, rivers 89 -> 96; 36 x 18 globe land 288.9 -> 288.5 K, gas 3 211 -> 193 ppm, ice on land 5.1e3
+  -> 4.4e3 km³; element drift 2.3e-16 and 5.2e-16. Golden re-pinned.
 
 **Tried and not kept in the foundation**
 
