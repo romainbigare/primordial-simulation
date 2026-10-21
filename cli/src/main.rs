@@ -18,6 +18,14 @@ const SNAP_EVERY: u64 = 10;
 
 fn main() {
     let args = Args(std::env::args().collect());
+    if args.wants_help() {
+        println!("{USAGE}");
+        return;
+    }
+    if let Err(e) = args.check() {
+        eprintln!("{e}\n\n{USAGE}");
+        std::process::exit(2);
+    }
     match args.command() {
         "run" => {
             let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));
@@ -41,7 +49,7 @@ fn main() {
         }
         "chem" => chem::run(&args),
         "numbers" => numbers::run(&args.0),
-        _ => println!("{USAGE}"),
+        _ => unreachable!("`Args::check` passes only the commands of the usage"),
     }
 }
 

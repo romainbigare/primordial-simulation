@@ -608,6 +608,8 @@ the golden test.
 - L4: the run's maps of the globe and of the refined island at years 10, 100 and 1,000, and the viewer's map and charts
   taken headless (`docs/reports/foundation-l/`). The viewer's `standalone.html` does not load the world it embeds (its
   script runs before the world's tag): open.
+- `ew` checks its words against the usage text: an unknown word or a flag without its value stops with the usage
+  (exit 2), and `--help` or `help` prints it; before, `ew run --help` started a run in `./out`.
 
 **Tried and not kept in the foundation**
 

@@ -67,6 +67,32 @@ impl Args {
         self.0.get(1).map_or("help", String::as_str)
     }
 
+    /// Whether to print the usage: no command, `help`, or `--help` anywhere.
+    pub fn wants_help(&self) -> bool {
+        ["help", "--help", "-h"].contains(&self.command()) || self.has("--help")
+    }
+
+    /// Check the words after the command against its part of `USAGE`: the words it names first (`OLD NEW`), then only
+    /// its flags, each with its value where the usage writes one in capitals (`N`, `DIR`). Returns the first word that
+    /// does not fit.
+    pub fn check(&self) -> Result<(), String> {
+        let cmd = self.command();
+        let part = USAGE.split("\n  ew ").skip(1).find(|p| p.split_whitespace().next() == Some(cmd)).ok_or(format!("unknown command {cmd}"))?;
+        let words: Vec<&str> = part.split_whitespace().map(|w| w.trim_end_matches(',')).collect();
+        let value = |w: &&str| w.starts_with(|c: char| c.is_ascii_uppercase());
+        let takes = |flag: &str| words.windows(2).any(|p| p[0] == flag && value(&p[1]));
+        let mut rest = self.0.iter().skip(2 + words[1..].iter().take_while(|w| value(w)).count());
+        while let Some(a) = rest.next() {
+            if !a.starts_with("--") || !words.contains(&a.as_str()) {
+                return Err(format!("ew {cmd}: unknown word {a}"));
+            }
+            if takes(a) && rest.next().is_none() {
+                return Err(format!("ew {cmd}: {a} needs a value"));
+            }
+        }
+        Ok(())
+    }
+
     /// Set what the flags of `ew run` change in a new world: the sun, the switches, the time steps, the
     /// heat-absorbing gases.
     pub fn apply(&self, w: &mut World) {
