@@ -17,19 +17,19 @@ fn used_kg(w: &World, b: &Body, m: &[f64]) -> f64 {
 }
 
 /// The intake law of bodies, one for the ground and for other bodies: what body `b` can take in its update from what
-/// lies over its cell, `from` mol of each substance in `n` members (the ground: one). Per day per kg-equivalent of its
-/// supply it takes Holling's type II response to what the area it works (`sweep`) holds of what it takes, s, up to
-/// `take`: take s / (take + s), so the thinner it lies, the more of its time goes to finding it (Holling 1959). Only
-/// what it uses counts in s (`Body::uses`). A node's members each work their own area. Returns that, kg, and the share
-/// of the `n` members its area holds, which may be less than one member: of one individual body, the chance it holds
-/// it.
-fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64, n: f64) -> (f64, f64) {
+/// lies over its cell, `from` mol of each substance. Per day per kg-equivalent of its supply it takes Holling's type II
+/// response to what the area it works (`sweep`) holds of what it takes, s, up to `take`: take s / (take + s), so the
+/// thinner it lies, the more of its time goes to finding it (Holling 1959). Only what it uses counts in s
+/// (`Body::uses`). A node's members each work their own area. Returns that, kg, and the share of the cell its area
+/// holds, which is the share of another body's members it holds and may be less than one member: of one individual
+/// body, the chance it holds it.
+fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> (f64, f64) {
     let (p, area, days) = (&w.cfg.phys, w.mesh.cells().area()[b.cell as usize], b.interval(w) as f64);
     let t = b.temp(&w.chem);
     let wants = b.k.upt.iter().filter(|&&(k, _)| b.uses(&w.chem, k, t));
     let lying: f64 = wants.map(|&(k, _)| from(k).max(0.0) * w.chem.subs[k].molar_mass).sum();
     let (found, supply) = (p.sweep * lying / area, b.supply(&w.chem, p, t));
-    let held = (p.sweep * supply * days * n / area).min(n) / n;
+    let held = (p.sweep * supply * days / area).min(1.0);
     (p.take * found / (p.take + found) * days * supply, held)
 }
 
@@ -39,7 +39,7 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     let i = b.cell as usize;
     let tg = w.t_ground_last(i);
     let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
-    let mut m = b.wanted(&w.chem, b.paces(w), free, intake(w, b, free, 1.0).0, b.mass(&w.chem));
+    let mut m = b.wanted(&w.chem, b.paces(w), free, intake(w, b, free).0, b.mass(&w.chem));
     if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
@@ -93,7 +93,7 @@ pub fn take_body(w: &mut World, slot: usize, b: &mut Body, s: usize, rng: &mut R
     let o = &w.life.bodies[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
-    let (kg, swept) = intake(w, b, |k| o.store[k], o.n());
+    let (kg, swept) = intake(w, b, |k| o.store[k]);
     // One draw finds an individual taken by an individual and, over the chance it was found, lets it get away (`hit`).
     let u = rng.f64();
     let one = o.n() <= 1.0 && b.n() <= 1.0;

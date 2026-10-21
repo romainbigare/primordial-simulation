@@ -551,6 +551,12 @@ the golden test.
   one thread, 47 to 40 µs an update (242k to 197k instructions); a settled cell 2.2 to 1.9 ms a year, so about 470
   settled cells fit 0.9 s a year (375 before).
 
+**After the round-7 review**
+
+- The intake law (`feed::intake`) loses its member count, which changed nothing but rounding. Golden re-pinned.
+  48 x 48 seeds 1-3, years 51-60: light-eaters 2.01, 2.18, 2.18e10 kg, eaters 4.9e6, 8.6e7, 4.4e7 kg (seed noise),
+  land 286.58, 290.71, 289.37 K, drift 1e-14.
+
 **Tried and not kept in the foundation**
 
 - Threads over bodies in waves of blocks, each block on a world of its thread's own (decision 59): the bodies of a
