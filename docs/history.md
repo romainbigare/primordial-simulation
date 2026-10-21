@@ -757,3 +757,7 @@ the golden test.
 - Round 5 finding 4: a node's members' excess over the copy mass spread evenly from none to twice the mean, the
   starving rule averaged over it (closed form): at matched density nodes starved 2.12, 0.30 and 0.35 times as much
   as individuals (seeds 2, 3, 5) against 1.22, 1.40 and 0.68 without it.
+- Final review item 8: a node that expects less than one death in an update loses one whole member with that chance
+  (`body::live::lose_share`). Nodes check: rule (a) past the noise 4 -> 2 (the roster's small kinds' lives closer), but
+  rule (d) 5 -> 7, and the default plan's seed 1, which held every rule, broke (d) (its eaters died spent 2.4e-2
+  against 5.0e-2 a member-year): not kept.
