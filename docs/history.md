@@ -644,6 +644,14 @@ the golden test.
   a gas than it held (the same run, years 94-95; element drift 3e-11). Golden re-pinned.
 - `docs/reports/foundation-l/` keeps the 11 pictures and, per run, the series gzipped (the 1,000-year runs: the rows of
   every tenth year) and the run log gzipped: 14 to 2.4 MB (`docs/reports/README.md`). No code change.
+- Snapshot size measured, no code change (decision 64). 48 x 48 seed 2, year 60: 19.6 MB (25.6 MB before gzip; 5,134
+  bodies, 1,083 of them with a brain); 82% of the file is four sets of f32: brain rows 6.3 MB, born rows 6.0 MB, genes
+  2.4 MB, spreads 1.2 MB; the nodes' store, sleep and flow state 1.6 MB. 128 x 128 seed 1, years 10 and 20 (plants
+  only, 22,725 bodies at year 10): 31.7 and 35.4 MB; genes 10.8 and spreads 5.6 MB of the 31.7, the fixed nodes' store
+  6.2, sleep 2.2 (the rounding carry of the ground, 2.0 MB, is noise in its low bits). Tried on these files and not
+  kept: byte planes of the f32 (-6% of that stream), a gene-major layout (-5% more), XOR with the born rows (-2%) and
+  with the parent's genes (no gene equals its parent's), gzip level 6 (-1%), the stream split by width with planes
+  (-5% in all, -9% with level 6). Save 0.2 s and load 0.15 s at 48 x 48 (0.34 and 0.35 s at 128 x 128, year 10).
 
 **Tried and not kept in the foundation**
 
