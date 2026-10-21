@@ -682,6 +682,9 @@ the golden test.
   that grew on mountains. Open: ice does not flow (decision 66); on the 16 x 8 globe, whose land starts at 271 K, ice
   on land still grows (3.3e7 km³ at year 100, 7.9e7 at year 300, the sea from 8.8e7 to 1.6e7 km³), and on the 36 x 18
   globe an inland sea fills toward its rim at 952 m (6.5e5 km³ standing on land at year 300).
+- The key numbers after snow melts (64 x 64, seeds 1 to 3): land 287.83 -> 291.79 K, swing 13.61 -> 15.13 K, rivers
+  136.1 -> 712.4, land worn down 0.0424 -> 0.141 mm/yr are their new references (decision 67); rain 1.793e-3, gas
+  406.0 ppm, light-eaters 10.25 and eaters 5.34 log10 kg, their lives 1.33 and 13.95 yr hold their old ones.
 
 **Tried and not kept in the foundation**
 

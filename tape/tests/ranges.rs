@@ -1,9 +1,10 @@
 //! The key numbers of a normal run: `ew run --seed N --size 64` for seeds 1, 2 and 3, 30 years each, on threads. The
 //! mean of each number over the three seeds must lie in its range around its reference, the mean of the same three
 //! seeds in the reference runs: the runs of the world after the foundation's law changes of Phases E, F and J, at the
-//! steps of Phase J's end (decision 27); for the climate, the land worn down and the rivers, the runs since clouds absorb
-//! heat radiation and the island lies at 40°, with the air starting at its mean height and the air's step taking the
-//! surface's reflectance at its end (decision 34); for the heat-absorbing gas and the light-eaters, the runs after the
+//! steps of Phase J's end (decision 27); for the climate (but the rain), the land worn down and the rivers, the runs
+//! since a soft cover holds no liquid and melts at its top and snow brings the ground no fusion enthalpy (decision 67);
+//! for the rain, the runs since clouds absorb heat radiation and the island lies at 40° (decision 34); for the
+//! heat-absorbing gas and the light-eaters, the runs after the
 //! body costs and the light-eaters' walls (decision 53); for the eaters, the runs after bodies take only what they use
 //! (decision 57). The climate and the land worn down are means over years 21 to 30; life
 //! is read at year 30, ten years after the eaters came. Each run also keeps its books.
@@ -41,17 +42,17 @@ const PPM: f64 = 1e6;
 const MM: f64 = 1e3;
 
 /// Ground temperature on land, K (series `t_land`), in the reference runs.
-const T_LAND: f64 = 287.83;
+const T_LAND: f64 = 291.79;
 /// Seasonal swing on land, K (`t_land_summer` less `t_land_winter`), in the reference runs.
-const SWING: f64 = 13.61;
+const SWING: f64 = 15.13;
 /// Rain on land, mol/m²/s (`rain_land`, a moving average over about a year), in the reference runs.
 const RAIN_LAND: f64 = 1.714e-3;
 /// The heat-absorbing gas of the air, ppm (`air_<ABSORBER>`), in the reference runs.
 const ABSORBER_PPM: f64 = 388.8;
 /// Dry land cells with a liquid flux over the web viewer's threshold (`rivers`), in the reference runs.
-const RIVERS: f64 = 136.1;
+const RIVERS: f64 = 712.4;
 /// Rock lost on the land of year 20, mm/yr (`testkit::ground_of`, loose and bonded), in the reference runs.
-const WORN: f64 = 0.0424;
+const WORN: f64 = 0.141;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
 const PLANT_KG: f64 = 10.38;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
