@@ -722,6 +722,7 @@ the golden test.
   3.5e7 kg. The bodies still grow (eaters 1.4e6 members at year 1,000). 17 x 17 island 1,000 years in 18.2 min
   beside it: bodies 1,706 (28 in a cell) at year 500, 2,251 (46) at year 1,000; eaters alive (2.2e5 members, 9.3e6
   kg).
+- L5: the foundation watch report (`docs/reports/foundation-l.md`), covering Phases E to L.
 
 **After the final review**
 

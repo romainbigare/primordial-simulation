@@ -346,7 +346,7 @@ taken on the way in `docs/foundation/decisions.md`.
 | L2 | Speed | The time budget met on the largest planet that fits, with the cost model's numbers |
 | L3 | Books | Elements and energy exact over 1,000 years, with threads (Flow and Change; the bodies run on one) and a refined region |
 | L4 | Show worlds: the globe, a refined region | Each one runs, with pictures |
-| L5 | The foundation watch report (covering E to K, decision 41); then the owner decides M4 | The owner's choice is written in the handover |
+| L5 | The foundation watch report (`docs/reports/foundation-l.md`, covering E to L, decision 41); then the owner decides M4 | The owner's choice is written in the handover |
 
 Open items of review round 3, to settle before L5:
 

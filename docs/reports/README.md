@@ -10,8 +10,9 @@ a folder with the same name as the report.
   owner's bite decision, sizes, and what Phase D must do.
 - `foundation-d.md`: the foundation's Phase D: the physics laws on the new base; the same world, but the speed and
   size goals of the phase are not met (the owner decides before Phase E).
-
-- `foundation-l/`: the runs of Phase L (`docs/history.md`, L1 to L4), with no report text of their own. It keeps the
+- `foundation-l.md`: the foundation's Phases E to L and its final check: the books over 1,000 years, the time budget,
+  what the long runs found, what is open and what the owner decides.
+- `foundation-l/`: the pictures and runs of that report. It keeps the
   maps of the long runs (`globe18`, `island22`, `region24` at years 10, 100 and the last year) and the viewer's 3
   pictures, and per run only the numbers the history cites: the full `series.csv.gz` for the runs of 60 and 100
   years, `decades.csv.gz` (the rows of every tenth year, all columns) for the long runs (`globe18`, `island22` and
