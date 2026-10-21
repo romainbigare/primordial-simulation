@@ -3,7 +3,7 @@
 //! exchange and its slopes (`cell`), then solves the air level (`newton`); what the last round found is booked whole
 //! (`book`), so the books are exact whether or not the rounds converged.
 
-use super::super::land::{layers, melted, mixes, reflectance, thaw_at, Mixes, NONE};
+use super::super::land::{layers, melted, reflectance, thaw_at, NONE};
 use super::super::scratch::may_evaporate;
 use super::super::{range, Scratch};
 use super::book::book;
@@ -94,9 +94,8 @@ struct Ctx<'a> {
     /// Temperature each ground node ended the last round at, K (the point its exchange is linearised about).
     ts: &'a [f64],
     /// Reflectance of each ground node's surface at the end state the last round found (the step's start before the
-    /// first), and what may lower each melting point (`land::thaw_at`).
+    /// first).
     alb: &'a [f64],
-    mix: &'a Mixes,
     /// What does not change in a step, per ground node (`Fixed`).
     fixed: &'a [f64],
     /// The heat the bodies of each cell draw from its ground, and how much heat each ground node holds above `T_FLOOR`, J.
@@ -143,10 +142,10 @@ pub(crate) fn step(w: &mut World, s: &mut Scratch, dt: f64, draws: &Draws) {
     let (mut ts, mut alb, mut rows, mut wind) = (s.state.tg.clone(), s.alb.clone(), std::mem::take(&mut s.rad), Wind::default());
     let width = FIXED + PER_GAS * act.len();
     rows.resize(n * width, 0.0);
-    let (fixed, far, mix) = (fixed(w, s, &act), far(s), mixes(w, s));
+    let (fixed, far) = (fixed(w, s, &act), far(s));
     let room: Vec<f64> = (0..n).map(|i| if draws.any(i) { heat_above_floor(w.store.heat(Class::Ground)[i], w.heat_cap_ground(i)) } else { 0.0 }).collect();
     for round in 0.. {
-        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, alb: &alb, mix: &mix, fixed: &fixed, draws, room: &room, dt, decl }, &mut rows, width);
+        pass(&Ctx { w, s, it: &it, act: &act, ts: &ts, alb: &alb, fixed: &fixed, draws, room: &room, dt, decl }, &mut rows, width);
         ts.iter_mut().zip(alb.iter_mut()).zip(rows.chunks_exact(width)).for_each(|((t, a), row)| (*t, *a) = (row[4], row[8]));
         let g = gather(w, s, &it, &act, (&rows, width), far);
         let (next, coef) = solve(w, s, (&act, &drive), (&start, &g), &it, dt, &mut wind);
@@ -352,7 +351,7 @@ fn end_reflectance(cx: &Ctx, i: usize, row: &[f64], rain_in: f64) -> f64 {
         e -= m * (sp.cp * row[4] + sp.lf + sp.lv);
     }
     let amt = |k: usize| a0(k) + gained[k];
-    let th = thaw_at(w, s, cx.mix, c.max(1.0), e, amt);
+    let th = thaw_at(w, s, c.max(1.0), e, amt);
     reflectance(w, s, i, &layers(w, s, i, th.t, amt, |k| th.molten(k)).0)
 }
 

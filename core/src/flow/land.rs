@@ -96,7 +96,6 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
         let cp = s.sp[k].cp;
         cap.iter_mut().zip(&w.store.amounts(Class::Ground)[k * n..(k + 1) * n]).for_each(|(c, &a)| *c += a * cp);
     }
-    let mix = mixes(w, s);
     for (i, &ci) in cap.iter().enumerate().take(n) {
         let same = (ci - s.cap[i]).abs() <= CAP_SAME * ci;
         s.cap[i] = ci;
@@ -106,7 +105,7 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
             continue;
         }
         let pk = s.state.pk[i];
-        let th = thaw_at(w, s, &mix, c, e, |k| w.store.amounts(Class::Ground)[k * n + i]);
+        let th = thaw_at(w, s, c, e, |k| w.store.amounts(Class::Ground)[k * n + i]);
         (s.state.pk[i], s.state.phi[i]) = th.on.unwrap_or((NONE, s.state.phi[i]));
         s.latent[i] = Latent { held: th.held, lo: th.lo, hi: th.hi, lat: th.lat, molten: th.bits };
         s.state.tg[i] = th.t;
@@ -116,21 +115,12 @@ pub(super) fn ground_state(w: &World, s: &mut Scratch, full: bool) {
     }
 }
 
-/// What may share each liquid of the substances that vary and lower its melting point (`Chemistry::mixes`), in their
-/// order.
-pub(super) type Mixes = Vec<Option<Vec<(usize, bool, bool)>>>;
-
-/// `Mixes` of the substances that vary now.
-pub(super) fn mixes(w: &World, s: &Scratch) -> Mixes {
-    s.state.vary.iter().map(|&k| w.chem.mixes(k).map(|js| js.collect())).collect()
-}
-
 /// Where a ground node of heat capacity `c`, J/K, energy `e`, J, and amounts `amt(k)`, mol, stands on the melting
 /// plateaus of the substances that vary (`ground::melting`), each at its point lowered by what is dissolved (laws.md 2.5).
-pub(super) fn thaw_at(w: &World, s: &Scratch, mix: &Mixes, c: f64, e: f64, amt: impl Fn(usize) -> f64) -> Melting {
+pub(super) fn thaw_at(w: &World, s: &Scratch, c: f64, e: f64, amt: impl Fn(usize) -> f64) -> Melting {
     let (mut ord, m) = ([(0.0, 0); MAX_SUBSTANCES], s.state.vary.len());
-    for ((o, &k), js) in ord.iter_mut().zip(&s.state.vary).zip(mix) {
-        *o = (js.as_ref().map_or(s.sp[k].melt, |js| w.chem.melt_with(k, &amt, js.iter().copied())), k);
+    for (o, &k) in ord.iter_mut().zip(&s.state.vary) {
+        *o = (w.chem.melt_in(k, &amt), k);
     }
     ord[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
     melting(c, e, ord[..m].iter().map(|&(t, k)| (t, k, amt(k) * s.sp[k].lf)))

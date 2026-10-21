@@ -65,26 +65,33 @@ impl Chemistry {
     /// is dissolved in it, where `k` is the solvent (laws.md 2.5). A gas counts not: it dissolves only to Henry's share,
     /// a thousandth of a kelvin. Where `k` is absent it melts at its own point.
     pub fn melt_in(&self, k: usize, a: impl Fn(usize) -> f64) -> f64 {
-        self.mixes(k).map_or(self.subs[k].melt, |js| self.melt_with(k, a, js))
-    }
-
-    /// What may share the liquid `k` (`melt_in`), each with whether it dissolves in `k` and whether it is a liquid of the
-    /// world; none: `k` is no liquid of the world.
-    pub fn mixes(&self, k: usize) -> Option<impl Iterator<Item = (usize, bool, bool)> + '_> {
-        let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < T_SURF && d.boil > T_SURF);
-        let mix = move |j: usize, d: &Substance| (j, d.melt < s.melt && d.boil > s.melt, liquid(d));
-        liquid(s).then(move || (0..self.ns()).filter(move |&j| j != k).map(move |j| mix(j, &self.subs[j])).filter(|m| m.1 || m.2))
-    }
-
-    /// `melt_in` over the list `mixes` gave.
-    pub(crate) fn melt_with(&self, k: usize, a: impl Fn(usize) -> f64, js: impl Iterator<Item = (usize, bool, bool)>) -> f64 {
+        let Some(js) = self.mixes(k) else { return self.subs[k].melt };
         let (x, mut other, mut most) = (a(k).max(0.0), 0.0, 0.0f64);
-        for (j, dissolved, liquid) in js {
+        for &(j, dissolved, liquid) in js {
             let y = a(j).max(0.0);
             other += if dissolved { y } else { 0.0 };
             most = if liquid { most.max(y) } else { most };
         }
         if most > x || x <= 0.0 { self.subs[k].melt } else { self.t_melt(k, x / (x + other).max(LEAST_MOL)) }
+    }
+
+    /// What may share the liquid `k` (`melt_in`), each with whether it dissolves in `k` and whether it is a liquid of the
+    /// world; none: `k` is no liquid of the world. Found once per chemistry (`find_mixes`).
+    pub fn mixes(&self, k: usize) -> Option<&[(usize, bool, bool)]> {
+        self.derived().mixes[k].as_deref()
+    }
+
+    /// `mixes` of `k`, from the substances' points.
+    pub(super) fn find_mixes(&self, k: usize) -> Option<Vec<(usize, bool, bool)>> {
+        let (s, liquid) = (&self.subs[k], |d: &Substance| d.melt < T_SURF && d.boil > T_SURF);
+        let mix = |(j, d): (usize, &Substance)| (j, d.melt < s.melt && d.boil > s.melt, liquid(d));
+        liquid(s).then(|| self.subs.iter().enumerate().filter(|e| e.0 != k).map(mix).filter(|m| m.1 || m.2).collect())
+    }
+
+    /// The substances that hold a fusion enthalpy, by their own melting points (ties by number): the order a body's
+    /// plateaus come in where nothing dissolved lowers a point (`Body::thermal`).
+    pub(crate) fn by_melt(&self) -> &[usize] {
+        &self.derived().by_melt
     }
 
     /// Phase of `k` at `t` among the amounts `a(j)` of one node or body, at its melting point there (`melt_in`).

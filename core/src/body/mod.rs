@@ -188,22 +188,19 @@ impl Body {
     /// fusion enthalpy in `e`, each melting at its point lowered by what is dissolved in it (`melt`). What is dissolved
     /// only lowers a point, so the solve at the stores' own points holds when every such store is molten above it.
     pub fn thermal(&self, chem: &Chemistry) -> Melting {
-        let (held, cap) = (|k: usize| self.store[k] > 0.0 && chem.subs[k].lf > 0.0, self.heat_cap(chem));
-        let own = self.melting_at(chem, cap, |k| chem.subs[k].melt);
-        if (0..chem.ns()).all(|k| !held(k) || chem.mixes(k).is_none() || own.t > chem.subs[k].melt) {
+        let (held, lat) = (|k: &usize| self.store[*k] > 0.0, |k: usize| self.store[k] * chem.subs[k].lf);
+        // At their own points they melt in the chemistry's order (`Chemistry::by_melt`).
+        let (cap, by) = (self.heat_cap(chem).max(1e-9), || chem.by_melt().iter().copied().filter(held));
+        let own = melting(cap, self.e, by().map(|k| (chem.subs[k].melt, k, lat(k))));
+        if by().all(|k| chem.mixes(k).is_none() || own.t > chem.subs[k].melt) {
             return own;
         }
-        self.melting_at(chem, cap, |k| self.melt(chem, k))
-    }
-    /// `thermal` with each store melting at `melt(k)`.
-    fn melting_at(&self, chem: &Chemistry, cap: f64, melt: impl Fn(usize) -> f64) -> Melting {
         let (mut ks, mut m) = ([(0.0, 0usize); MAX_SUBSTANCES], 0);
-        for k in (0..chem.ns()).filter(|&k| self.store[k] > 0.0 && chem.subs[k].lf > 0.0) {
-            ks[m] = (melt(k), k);
-            m += 1;
+        for k in (0..chem.ns()).filter(|&k| held(&k) && chem.subs[k].lf > 0.0) {
+            (ks[m], m) = ((self.melt(chem, k), k), m + 1);
         }
         ks[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
-        melting(cap.max(1e-9), self.e, ks[..m].iter().map(|&(tm, k)| (tm, k, self.store[k] * chem.subs[k].lf)))
+        melting(cap, self.e, ks[..m].iter().map(|&(tm, k)| (tm, k, lat(k))))
     }
     /// Its energy at the plateau state `th`: heat capacity times `th.t` plus the fusion enthalpy molten there, J.
     pub(crate) fn energy_in(&self, chem: &Chemistry, th: &Melting) -> f64 {

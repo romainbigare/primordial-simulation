@@ -125,6 +125,10 @@ struct Derived {
     air_cp: f64,
     /// `Chemistry::burners`
     burners: Vec<(usize, f64)>,
+    /// `Chemistry::mixes` of each substance
+    mixes: Vec<Option<Vec<(usize, bool, bool)>>>,
+    /// `Chemistry::by_melt`
+    by_melt: Vec<usize>,
 }
 
 impl Chemistry {
@@ -146,7 +150,10 @@ impl Chemistry {
             let minerals = self.build.as_ref().map_or(Vec::new(), |bl| bl.inputs.iter().filter(|p| !self.burnt(p.0 as usize)).map(|p| (p.0 as usize, p.1 as f64 / bl.outputs[0].1 as f64)).collect());
             let air_cp: f64 = self.air.iter().zip(&self.subs).map(|(x, s)| x * s.cp).sum();
             let burners = (0..self.reactions.len()).filter(|&r| self.dh(r) < 0.0 && !self.keeps(r)).map(|r| (r, -self.dh(r))).collect();
-            Derived { minerals, air_cp: if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP }, burners }
+            let mut by_melt: Vec<usize> = (0..self.ns()).filter(|&k| self.subs[k].lf > 0.0).collect();
+            by_melt.sort_by(|&a, &b| self.subs[a].melt.total_cmp(&self.subs[b].melt));
+            let air_cp = if air_cp > 0.0 { air_cp } else { thermo::DIATOMIC_CP };
+            Derived { minerals, air_cp, burners, mixes: (0..self.ns()).map(|k| self.find_mixes(k)).collect(), by_melt }
         })
     }
 

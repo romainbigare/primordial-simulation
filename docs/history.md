@@ -528,6 +528,9 @@ the golden test.
   1.7e4, 8.8e4 and 3.0e4 kg/km² of land at year 100: it passes.
 - laws.md says that merging past `crowd` drops the structure the joiners held, and that the minerals a body builds of
   count in Holling's s.
+- The chemistry finds once what may share each liquid (`Chemistry::mixes`) and the order its substances melt in
+  (`Chemistry::by_melt`); a body's plateau state reads that order and sorts nothing where nothing dissolved lowers a
+  point. Bit for bit the same; the bodies' instructions per update 242k to 231k (48 x 48 seed 2, year 91).
 
 **Tried and not kept in the foundation**
 
