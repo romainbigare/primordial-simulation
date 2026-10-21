@@ -124,7 +124,7 @@ The five costs of keeping tissue (`c_basal`, `c_cat`, `c_strength`, `c_learn`, `
 | `signal_noise` | none | spread of the signal, around its mean | none found | tuned, first guess |
 | `discount` | none | weight of well-being one decision ahead against well-being now | the usual 0.9 of learning machines | anchored |
 | `blend` | share | share of the way a watcher's rows move toward the watched one's | none found | tuned, first guess |
-| `learn_beta` | share | weight of the newest step in a learned row's mean square of steps | the usual 0.1 of a running average in learning machines | anchored |
+| `learn_beta` | share | weight of the newest value in a learner's running mean squares: of a learned row's steps, and of the critic's errors | the usual 0.1 of a running average in learning machines | anchored |
 | `learn_most` | learning-rate units | the most a row moves in one step | none found | tuned, first guess |
 
 ### Bond
@@ -195,6 +195,8 @@ These are in the code, not in `Physics`. They are not covered by the test. Numer
 | `WITHIN` (0.5, `core/src/body/genes.rs`) | standard deviations | children may lie this far beyond `alike` (in the spreads of both) and still join a node; nodes of a full cell merge within it | run: small enough that nodes of two kinds never join. It says who is grouped with whom, as `alike` says who is alike: ×2 and ÷2 moved the eaters' life at year 30 by about a third (48 x 48, seed 2, one run each) where `--crowd 8` moved it 2% | tuned |
 | `MIN_INTERVAL` (5, `core/src/body/genes.rs`) | days | the shortest time between a body's updates | bounds how often the fastest bodies update | speed |
 | `MAX_INTERVAL` (360, `core/src/body/genes.rs`) | days | the longest time between updates | one year | anchored |
+| `body::MARGIN` (2) | none | well-being's margins count up to this: a key store's log share over its safe minimum, and what its reactions could release against its upkeep (`live` plans for this many upkeeps) | none found: a body twice its needs is taken as safe | tuned, first guess |
+| `PHASE_MARGIN` (5, `core/src/body/mod.rs`) | K | well-being falls as a key liquid comes within this of freezing or boiling | none found: a few kelvin, as a body's temperature swings within a day | tuned, first guess |
 | `EATER_KEEP_T`/`EATER_COOL_T` (278 and 315, `worldgen/src/life/kinds.rs`) | K | the temperatures the eaters' founders keep their bodies between (`KEEP_T`, `COOL_T`; initial conditions) | the melting point of chemistry 0's key liquid (273 K) plus, and the founders' catalysts' unfolding (`DENATURE`, 320 K) less, the margin in which well-being falls for nearness to a limit (`PHASE_MARGIN`, 5 K): an animal must keep its liquid from freezing and sweat before its enzymes unfold; at 250 K the keep gene did nothing and never moved, and the eaters froze in winter on the hills | anchored |
 | `body::WET_TISSUE` (0.75) | share | the liquid share of living tissue: a kg of body matter makes 1 / (1 - this) kg of living body (`Body::built`), whatever liquid the body holds | lean animal tissue is 0.7 to 0.75 liquid, herbs 0.8 to 0.9 (from memory) | anchored |
 | `body::MAX_KEEP` (0.95, `core/src/body/tissue.rs`) | share | the most share of a body its keep gene of a key liquid, or the solids it builds together, may make up (the level goes with share / (1 - share), so it must stay below 1) | the wettest bodies, jellies, are about 95% liquid (from memory) | anchored |

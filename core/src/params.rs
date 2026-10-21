@@ -179,7 +179,7 @@ pub struct Physics {
     pub discount: f32,
     /// Share of the way a watcher's rows move toward the watched one's
     pub blend: f32,
-    /// Weight of the newest step in a learned row's mean square of steps
+    /// Weight of the newest value in a learner's running mean squares: of a row's steps, and of the critic's errors
     pub learn_beta: f32,
     /// Most a row moves in one step, in units of the learning rate
     pub learn_most: f32,

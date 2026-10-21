@@ -6,8 +6,7 @@ use crate::brain::{self, ln, Shape};
 use crate::event::{Event, EventKind};
 use crate::World;
 
-/// Weight of each new error in the critic's moving average of its square (`Body::var`), and the floor of its root.
-const CRITIC_RATE: f32 = 0.05;
+/// The floor of the root of the critic's moving mean square of its errors (`Body::var`).
 const CRITIC_FLOOR: f32 = 1e-3;
 /// A body copies less of one whose strength differs by this much (one standard deviation, as one of ln mass or ln
 /// capture area).
@@ -26,8 +25,9 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
     let (h, c) = b.trace.split_at(nh);
     let v = |x: &[f32]| b.rows[cr + nh] + brain::dot(&b.rows[cr..cr + nh], x);
     let delta = wb - b.wb + c[l] + w.cfg.phys.discount * v(now) - v(h);
-    // An error too big for a number teaches nothing.
-    let var = if b.var > 0.0 { b.var + CRITIC_RATE * (delta * delta - b.var) } else { delta * delta };
+    // The critic's errors are averaged as the rows' steps are (`learn_beta`). An error too big for a number teaches
+    // nothing.
+    let var = if b.var > 0.0 { b.var + w.cfg.phys.learn_beta * (delta * delta - b.var) } else { delta * delta };
     let a = lr * delta / (var.sqrt() + CRITIC_FLOOR);
     if !(a.is_finite() && var.is_finite()) {
         return;

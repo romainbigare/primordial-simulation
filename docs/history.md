@@ -690,6 +690,10 @@ the golden test.
 
 - The yearly line prints what `store::apply` set from just below zero to zero (`Counters::rounded`, mol and J) next to
   the heat not given, so an overdraw cannot hide.
+- The critic's running mean square of errors weighs the newest error by `learn_beta` (0.1), as each row's mean square
+  of steps does, not by a second number (0.05). `body::MARGIN` and `PHASE_MARGIN` have rows in numbers.md (decision
+  68). Golden re-pinned. 48 x 48 seed 1, years 31-40: light-eaters 1.15e10 kg both, eaters 7.1e5 -> 6.5e5 kg, land
+  292.1 K both, element drift 2e-16 both.
 
 **Tried and not kept in the foundation**
 
