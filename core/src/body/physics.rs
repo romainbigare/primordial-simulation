@@ -172,13 +172,11 @@ fn store_light(w: &mut World, b: &mut Body, s: &Site, caught: f64, used: f64) ->
 fn soil(w: &World, b: &Body, s: &Site, wk: f64) -> Soil {
     let (chem, i, tg) = (&w.chem, s.i, s.tg);
     let (ns, g) = (chem.ns(), |k: usize| w.g(k, i));
-    let standing = if s.stands && s.depth == 0.0 {
-        0.0
-    } else {
-        (0..ns).filter(|&k| chem.phase_in(k, tg, g) == Phase::Liquid).map(|k| g(k) * chem.molar_volume(k, Phase::Liquid)).sum::<f64>() / w.mesh.cells().area()[i]
-    };
+    let liquid = (0..ns).filter(|&k| chem.phase_in(k, tg, g) == Phase::Liquid).fold(0u64, |m, k| m | 1 << k);
+    let vol: f64 = (0..ns).filter(|&k| liquid >> k & 1 == 1).map(|k| g(k) * chem.molar_volume(k, Phase::Liquid)).sum();
+    let standing = if s.stands && s.depth == 0.0 { 0.0 } else { vol / w.mesh.cells().area()[i] };
     let wet = standing / (standing + w.cfg.phys.wet_depth);
-    let wets = (0..ns).filter(|&k| chem.phase_in(k, tg, g) == Phase::Liquid && chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
+    let wets = (0..ns).filter(|&k| liquid >> k & 1 == 1 && chem.subs[k].solubility > 0.0).fold(0u64, |m, k| m | 1 << k);
     let in_ground: f64 = (0..ns).filter(|&k| wets >> k & 1 == 1).map(g).sum();
     Soil { wets, in_ground, rate: b.k.liq * wet * wk }
 }

@@ -23,13 +23,15 @@ impl Body {
     /// Amounts (mol) of what it uses (`uses`) to take from `from` by uptake selectivity, up to `kg` in all, no more
     /// than is there and within the room of its stores.
     pub(crate) fn wanted(&self, chem: &Chemistry, paces: f64, from: impl Fn(usize) -> f64, kg: f64, mass: f64) -> Vec<f64> {
-        let (lay, t) = (Layout::of(chem), self.temp(chem));
-        let from = |k: usize| from(k).max(0.0);
+        let (lay, t, from) = (Layout::of(chem), self.temp(chem), |k: usize| from(k).max(0.0));
         let up = |k: usize| if from(k) > 0.0 && self.uses(chem, k, t) { self.gene(lay.upt + k).max(0.0) } else { 0.0 };
-        let sum: f64 = (0..chem.ns()).map(up).sum();
+        let mut m: Vec<f64> = (0..chem.ns()).map(up).collect();
+        let sum: f64 = m.iter().sum();
         // A built solid it takes past its own level until its reactions break it down; the rest it sheds.
         let room = |k: usize| if chem.is_material(k) { f64::MAX } else { self.room(chem, paces, k, mass) };
-        let mut m: Vec<f64> = (0..chem.ns()).map(|k| if up(k) > 0.0 { (kg * up(k) / sum / chem.subs[k].molar_mass).min(from(k)).min(room(k)) } else { 0.0 }).collect();
+        for (k, x) in m.iter_mut().enumerate().filter(|x| *x.1 > 0.0) {
+            *x = (kg * *x / sum / chem.subs[k].molar_mass).min(from(k)).min(room(k));
+        }
         self.digest_room(chem, paces, &mut m, mass);
         m
     }

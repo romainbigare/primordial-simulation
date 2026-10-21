@@ -533,6 +533,8 @@ the golden test.
   point. Bit for bit the same; the bodies' instructions per update 242k to 231k (48 x 48 seed 2, year 91).
 - A body taking from the ground works out the ground's heat capacity only for what it takes, not for every
   substance. Bit for bit the same; the bodies' instructions per update 231k to 220k.
+- A body finds once which of its ground's substances are liquid (`physics::soil`) and once what it wants of each
+  (`Body::wanted`). Bit for bit the same; the bodies' instructions per update 220k to 216k.
 
 **Tried and not kept in the foundation**
 
