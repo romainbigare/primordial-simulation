@@ -596,6 +596,18 @@ the golden test.
 - L3: the surface balance holds a ground node at its temperature where its soft cover's resistance is too small to
   change it (`r den` under the last digit): a cover of almost nothing gave 1 / r = inf, a NaN in the air step and a
   stop of the 24 x 24 refined-region run at year 884. Bit for bit the same on the golden runs.
+- L2: planet runs of 1,000 years (threads for Flow and Change, on a machine shared with three other runs): the 36 x 18
+  globe the cost model allows took 102 minutes (bodies 1,068 at year 100 to 19,517, up to 236 in a cell), a 22 x 22
+  island 24 minutes (its eaters died by year 28), the 16 x 8 globe 2.6 minutes (decision 60). A body update costs 31 to
+  48 us, as the cost model says; the number of bodies does not stay near 2.4 a cell. The budget is not met on a planet
+  where the eaters live.
+- L3: the books over 1,000 years with threads and a refined region (24 x 24, 8 x 8 refined): elements within 5e-16,
+  energy 3.0e-13 at the end (a rise in years 890 to 940). The 36 x 18 globe (before the ground carry): energy drift
+  4.3e-9 from one liquid step in year 868 that overdrew a ground node's heat by 1.5e19 J, set to zero and counted in
+  `Counters::rounded`: open.
+- L4: the run's maps of the globe and of the refined island at years 10, 100 and 1,000, and the viewer's map and charts
+  taken headless (`docs/reports/foundation-l/`). The viewer's `standalone.html` does not load the world it embeds (its
+  script runs before the world's tag): open.
 
 **Tried and not kept in the foundation**
 
