@@ -727,6 +727,14 @@ the golden test.
   the light-eaters' stored solid under half their dry mass; the lifeless globe's test holds its whole surface within 4
   K of 288 K, its vapour within 2 times 0.4% and its rain on land as the island's. The globe passes (290.05 K, 0.69%,
   1.78 m); the island's rain passes (1.02 m) and its stored share fails (0.552; seeds 0.558, 0.547, 0.551): open.
+- L2-L4: the long runs again on the final foundation code (seed 1, threads for Flow and Change, 4 cores with one other
+  run at most; `docs/reports/foundation-l/`). 22 x 22 island 1,000 years in 25.1 min (1.5 s a year; 2,351 bodies, at
+  most 35 in a cell; land 293.2 K; eaters alive); 36 x 18 globe 1,000 years in 36.6 min (2.2 s a year; 1,559 bodies, at
+  most 31; land 290.5 K, ice 1.8% of the area); 17 x 17 island 11.5 min and 24 x 12 globe 9.0 min (the sizes that fit 15
+  minutes). Over all years: elements within 7e-16, energy within 9e-14, heat not given 0. The 24 x 24 island with the 8
+  x 8 refined region was stopped in year 421, 63 min in: the eaters' bodies grew from 10,403 (year 400) to 28,187
+  (year 420, 312 in a cell) and year 421 took over 17 min (a mover's wear touches every body of its cell: open). CPU time is 1.0 to 1.03 of
+  wall time: only two stages run on threads.
 
 **Tried and not kept in the foundation**
 

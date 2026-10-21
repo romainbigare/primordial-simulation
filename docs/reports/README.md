@@ -12,10 +12,13 @@ a folder with the same name as the report.
   size goals of the phase are not met (the owner decides before Phase E).
 
 - `foundation-l/`: the runs of Phase L (`docs/history.md`, L1 to L4), with no report text of their own. It keeps the
-  11 pictures, and per run only the numbers the history cites: the full `series.csv.gz` for the runs of 60 and 100
-  years, `decades.csv.gz` (the rows of every tenth year, all columns) for the 1,000-year runs (`globe18`, `globe8`,
-  `island22`, `region24`), and `run.log.gz` (its drift lines) where the run has one. Read them with `zcat`. Snapshots,
-  `months.csv` and the viewer's files are not kept. The folder is 2.4 MB (it was 14 MB).
+  maps of the long runs (`globe18`, `island22`, `region24` at years 10, 100 and the last year) and the viewer's 3
+  pictures, and per run only the numbers the history cites: the full `series.csv.gz` for the runs of 60 and 100
+  years, `decades.csv.gz` (the rows of every tenth year, all columns) for the long runs (`globe18`, `island22` and
+  `region24`, seed 1, final foundation code; `globe8`, older), and `run.log.gz` (the whole log) where the run has one.
+  `region24` stops at year 420 (see the history). Read them with `zcat`. Snapshots, `months.csv` and the viewer's
+  files are not kept. The viewer's pictures show the first Phase L runs (before the final foundation code). The
+  folder is 2.5 MB.
 
 Folder sizes today: `foundation-a/` 11 MB (series and pictures of the A2 runs; it is not trimmed yet),
 `foundation-bc/` 84 KB, `foundation-d/` 320 KB.
