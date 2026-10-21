@@ -419,6 +419,25 @@ The foundation gives the machinery. M4 then adds the content (handover 13):
   zones.
 - **Long watch runs** on the planet, 1,000 years and more, several seeds, against null runs (handover 18.3).
 
+### 10.3 Proposals of the final review (for the owner)
+
+Not built; each is the owner's choice. Ordered by value.
+
+| Proposal | Why | Cost |
+|---|---|---|
+| One node per kind per cell, its young inside it as its size spread (`copy/young.rs`, `Body::link` and the stage in `Kin` go) | Bodies, not the cost of an update, break the time budget; young nodes are about 74% of an island's bodies | about -80 lines |
+| Selection sees height: the sample member reads the light at its own height from the cell's sorted canopy (`survey::shade`) | The frame shows only as a cost and falls to under 1% of mass (decision 52) | about +20 lines |
+| Rain from a reference humidity with an adjustment time (Betts and Miller 1986), replacing the tuned `rain_time`, once `evap_land` and `runoff_sea` say where the land's extra rain comes from | Land gets about 4 times Earth's rain on a globe with life, the sea half | small |
+| Ice leaves the land by a balance flux routed downhill like a slow river (Budd and Warner 1996; decision 66) | A small cold globe runs away into ice | about +35 lines |
+| Warm blood: a skin conductance the body sets before it burns or sweats | Eaters at 40° live on a cold body (decision 32) | about +20 lines |
+| Denitrification: one reaction row and a waterlogged-soil factor | Nitrogen in the sea grows about 15 times in 300 years | about 0 core lines |
+| A prey's escape from force and mass, not from the ratio of update intervals (`feed::take_body`) | A cadence decides a physical outcome | small |
+| The runoff ratio (Earth 0.35 to 0.40) in place of the river-cell count among the key numbers | The count saturates at about 1.3 cells of runoff | test only |
+| Strength and catalyst upkeep inside Kleiber's rate (decision 50) | Removes a known 17% double count | about 0 lines |
+| The island's latitude checked again against its anchor (decision 34) | Land is now about 5 K above the 287 K that placed it at 40° | a run |
+| The planet's size and threads over bodies measured again after the first proposal (decisions 43, 59, 60) | The cost model's 2.4 bodies a cell is 10 to 50 times too few on long runs | runs |
+| The M5+ design (handover 9, 10, 18; about 430 lines) moves out of the spec; `history.md` to one line per change | A lean spec | docs |
+
 ---
 
 ## 11. Words used in this plan
