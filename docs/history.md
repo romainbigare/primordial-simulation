@@ -531,6 +531,8 @@ the golden test.
 - The chemistry finds once what may share each liquid (`Chemistry::mixes`) and the order its substances melt in
   (`Chemistry::by_melt`); a body's plateau state reads that order and sorts nothing where nothing dissolved lowers a
   point. Bit for bit the same; the bodies' instructions per update 242k to 231k (48 x 48 seed 2, year 91).
+- A body taking from the ground works out the ground's heat capacity only for what it takes, not for every
+  substance. Bit for bit the same; the bodies' instructions per update 231k to 220k.
 
 **Tried and not kept in the foundation**
 

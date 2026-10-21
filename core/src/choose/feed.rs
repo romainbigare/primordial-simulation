@@ -45,7 +45,7 @@ pub(super) fn take_node(w: &mut World, slot: usize, b: &mut Body) {
     }
     let ev = EventKind::Took { by: b.id(slot), from: u64::MAX, used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
     w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
-    for (k, a) in m.iter_mut().enumerate() {
+    for (k, a) in m.iter_mut().enumerate().filter(|x| *x.1 != 0.0) {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let cp = w.chem.subs[k].cp;
         let want = *a * (cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i)));
