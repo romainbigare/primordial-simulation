@@ -1,6 +1,6 @@
 //! The outbox and the serial phase of a batch (plan 3.6): an entry whose body or target is gone does nothing and keeps
 //! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
-//! domains run changes nothing.
+//! domains run and the threads that run them change nothing.
 
 use pcore::body::{die, Body, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ};
 use pcore::event::EventKind;
@@ -152,10 +152,11 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
     books.assert_kept(&w, 1e-12);
 }
 
-/// The order in which the domains run in the parallel phase of a batch changes nothing: the lineages and born rows
-/// made there get the same global ids (plan 3.3), and the world ends the same, bit for bit, with its events and
-/// counters. In the batches each kind of the serial phase happens: a dispersing litter lands, a watch and a part act are
-/// applied, a body that holds a part runs, one anchors its part, lineages are made; the books are kept.
+/// The order in which the domains run in the parallel phase of a batch, and the threads that run them, change nothing:
+/// the lineages and born rows made there get the same global ids (plan 3.3), and the world ends the same, bit for bit,
+/// with its events and counters. In the batches each kind of the serial phase happens: a dispersing litter lands, a
+/// watch and a part act are applied, a body that holds a part runs, one anchors its part, lineages are made; the books
+/// are kept.
 #[test]
 fn the_order_of_the_domains_changes_nothing() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -193,17 +194,21 @@ fn the_order_of_the_domains_changes_nothing() {
     w.drain_events();
     let books = Books::now(&w);
     let lineages = w.life.brains.len();
-    let ends = [false, true].map(|reversed| {
-        let mut v = w.clone();
-        for _ in 0..30 {
-            pcore::survey::batch(&mut v, reversed);
-            v.time += v.cfg.batch_days as u64 * DAY_S;
-        }
-        v
+    // On pools of 1 and 4 threads (with the feature `threads`; in order without it), in order and reversed.
+    let ends = [(1, false), (1, true), (4, false), (4, true)].map(|(threads, reversed)| {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+        pool.install(|| {
+            let mut v = w.clone();
+            for _ in 0..30 {
+                pcore::survey::batch(&mut v, reversed);
+                v.time += v.cfg.batch_days as u64 * DAY_S;
+            }
+            v
+        })
     });
     // (The whole saved world, and the events and counters of the batches, which are not saved.)
     let state = |v: &World| (serde_json::to_string(v).unwrap(), format!("{:?} {:?}", v.events, v.counts));
-    assert!(state(&ends[0]) == state(&ends[1]), "the order of the domains changed the world");
+    assert!(ends.iter().all(|v| state(v) == state(&ends[0])), "the threads or the order of the domains changed the world");
     let v = &ends[0];
     let kind = |f: &dyn Fn(&EventKind) -> bool| v.events.iter().filter(|e| f(&e.kind)).count();
     let landed = children(v, parent).iter().filter(|&&c| v.life[c].cell as usize != at(0)).count();

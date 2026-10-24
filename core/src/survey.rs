@@ -284,16 +284,17 @@ impl Faces {
 }
 
 /// Update the bodies due in this batch, all at its first day (plan 3.6). First the parallel phase: the domains are taken
-/// out of the world (`life::Domain`), and each runs its bodies that hold no part and are inside none, cell by cell, and
-/// in a cell by id (an order that does not depend on where bodies are stored, and keeps memory reads close together),
-/// with the world read only. They see each other as they were at the batch's start (`Faces`) and the store as their
-/// domain's moves leave it (`store::Moves`); what they do outside their domain goes to its outbox (`outbox`), and the
-/// lineages and born rows they make are provisional. Then the serial phase: the domains back, the moves booked, the
-/// world settles (`World::settle`: events, counters, those ids made global), the outboxes applied, then the bodies that
-/// hold or are inside a part, each a serial step on its domain (`World::in_domain`) with its outbox applied after it,
-/// and last the changes of holders are added: the lineages and born rows left with no holder die out or are freed.
-/// With `reversed`, the domains of the parallel phase run in reversed order: only for the test that this order changes
-/// nothing.
+/// out of the world (`life::Domain`), and each runs, on a thread of the pool with the feature `threads` (`par::each`),
+/// its bodies that hold no part and are inside none, cell by cell, and in a cell by id (an order that does not depend on
+/// where bodies are stored, and keeps memory reads close together), with the world read only. They see each other as
+/// they were at the batch's start (`Faces`) and the store as their domain's moves leave it (`store::Moves`); what they
+/// do outside their domain goes to its outbox (`outbox`), and the lineages and born rows they make are provisional. Then
+/// the serial phase: the domains back, the moves booked, the world settles (`World::settle`: events, counters, those ids
+/// made global), the outboxes applied, then the bodies that hold or are inside a part, each a serial step on its domain
+/// (`World::in_domain`) with its outbox applied after it, and last the changes of holders are added: the lineages and
+/// born rows left with no holder die out or are freed.
+/// With `reversed`, the domains of the parallel phase start in reversed order: only for the test that this order (and
+/// which thread runs a domain) changes nothing.
 pub fn batch(w: &mut World, reversed: bool) {
     let due = w.life.take_due(w.batch());
     if due.is_empty() {
@@ -316,10 +317,13 @@ pub fn batch(w: &mut World, reversed: bool) {
     }
     w.life.batch = true;
     let mut domains = std::mem::take(&mut w.life.domains);
-    for run in list.chunk_by(|a, b| a.0 == b.0) {
-        let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
-        run.iter().for_each(|&(d, cell, id, _)| update(w, &mut domains[d], (cell, id), &mut scratch));
-    }
+    let mut free: Vec<Option<&mut Domain>> = domains.iter_mut().map(Some).collect();
+    let mut runs: Vec<_> = list.chunk_by(|a, b| a.0 == b.0).map(|run| (free[run[0].0].take().expect("one run a domain"), run)).collect();
+    let v = &*w;
+    crate::par::each(&mut runs, |(d, run)| {
+        let mut scratch = (Reactor::new(&v.chem, &v.cfg), LiveTmp::default(), choose::ActTmp::default());
+        run.iter().for_each(|&(_, cell, id, _)| update(v, d, (cell, id), &mut scratch));
+    });
     w.life.domains = domains;
     w.book_moves();
     w.settle(0..w.life.domains.len());

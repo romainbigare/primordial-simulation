@@ -30,6 +30,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.3 (benches remade, `/tmp/d23-bench`) | D2.3 | 1.395 | 141 | 50 | 1,153 | 33 | 19 | 3,026 | 39,306 | 1.530 | 226 | 53 | 1,187 | 43 | 21 | 2,412 | 29,278 | 9,364 |
 | D2.4a (benches remade, `/tmp/d24-bench`) | D2.4a | 1.442 | 149 | 51 | 1,201 | 20 | 21 | 2,839 | 36,465 | 1.174 | 205 | 54 | 892 | 9 | 15 | 1,512 | 22,280 | 9,577 |
 | D2.4b (island22 remade at `eec6f1d`, `/tmp/d24b-bench`; `eec6f1d` there: 2.093 s/yr) | D2.4b | 2.108 | 141 | 50 | 1,885 | 3 | 28 | 3,679 | 53,648 | — | — | — | — | — | — | — | — | 9,684 |
+| D2.5 (benches remade, `d25-bench` in a scratch folder; island22 the same world as D2.4b's) | D2.5 | 1.187 | 137 | 51 | 971 | 3 | 25 | 3,679 | 53,648 | 0.858 | 204 | 51 | 571 | 18 | 14 | 1,648 | 23,373 | 9,678 |
 
 ### A2: compiler settings
 
@@ -399,6 +400,78 @@ Cost, callgrind on one thread, one year from that save (54,486 updates in both b
 
 The updates are cheaper (the store's view by domain, no `opened` list); the serial phase costs more, as each of its
 steps takes its domain out and settles it.
+
+### D2.5: the domains on threads
+
+Level 1 against D2.4b (`929d0ef`): the golden fingerprints do not move, with and without threads. The parallel phase
+runs its domains on rayon's pool, one task a domain (`par::each`). The order test runs 30 batches on pools of 1 and 4
+threads, in order and reversed, and the four worlds are the same (the saved world, events and counters). The three
+benches were remade with D2.5's code (`BENCH_DIR=<scratch>/d25-bench`, saves of `929d0ef` plus D2.5). island22 gives the
+numbers of D2.4b's save (3,679 bodies, 53,648 updates a year; 54,486 updates in the year under callgrind): D2.4b's
+code and D2.5's make the same island in 300 years.
+
+| Bench | s/yr | flow | change | bodies | parts | tape | alive | updates/yr | busiest domain |
+|---|---|---|---|---|---|---|---|---|---|
+| island22 | 1.187 | 137 | 51 | 971 | 3 | 25 | 3,679 | 53,648 | 0.146 |
+| globe36 | 0.858 | 204 | 51 | 571 | 18 | 14 | 1,648 | 23,373 | 0.198 |
+| region24 | 1.249 | 201 | 73 | 942 | 5 | 28 | 4,086 | 51,695 | 0.269 |
+
+**The gain (S41, S65).** Wall time: 7 runs of 2 years from each save with `RAYON_NUM_THREADS=1` and with 4 threads,
+interleaved in the same hour, the medians (the range in brackets). Cost per update: callgrind on one thread, one year,
+the body batch inclusive (`survey::day` for `main`, `survey::batch` for D2.5) over the year's updates, each build on its
+own remade save. The numbers of `main` (`5a04c54`, before D2.1) for island22 and globe36 are D2.1a's (the same
+definition); region24 was remade with `main` for this row.
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| bodies' stage (survey included), 1 thread, ms a year | 1,954 (1,845 to 2,000) | 982 (933 to 1,022) | 1,700 (1,674 to 1,728) |
+| bodies' stage, 4 threads | 1,092 (1,043 to 1,121) | 589 (526 to 668) | 968 (911 to 1,046) |
+| **gain of the threads** | **1.79** | **1.67** | **1.76** |
+| whole year, 1 thread and 4 threads, ms | 2,208 and 1,321 (1.67) | 1,328 and 878 (1.51) | 2,076 and 1,271 (1.63) |
+| busiest domain's share | 0.147 | 0.199 | 0.269 |
+| `main` per update (updates in the year) | 147,068 (31,132; D2.1a) | 198,703 (26,353; D2.1a) | 146,560 (54,021) |
+| D2.5 per update, 1 thread (updates in the year) | 169,747 (54,486) | 203,921 (23,155) | 152,783 (51,514) |
+| overhead factor, `main` over D2.5 | 0.866 | 0.974 | 0.959 |
+| **gain against `main`** | **1.55** | **1.63** | **1.69** |
+
+island22 is under the kill line (1.6), globe36 and region24 between it and the target (2.2). The island's overhead
+factor compares two worlds far apart (`main`'s island has 31,132 updates a year, D2.5's 54,486; S65 says such a
+comparison measures the worlds). On one world the steps D2.1b to D2.4b each cost +0.4 to +0.9% an update (the rows
+above): about +3% together, a factor of 0.97, which would give 1.74 on the island. The plan's kill decision comes after
+D2.6 (S41), which puts the survey on threads.
+
+**What limits it.** In instructions (the same callgrind runs), the parallel phase is 81.1%, 78.8% and 81.7% of the
+bodies' stage (survey included), so four threads give at most 2.55, 2.46 and 2.58 times. In wall time, from a build
+with timers around the phases (kept off `main`; one year, the mean of two runs):
+
+| ms a year | island22, 1 thread | 4 threads | globe36, 1 | 4 | region24, 1 | 4 |
+|---|---|---|---|---|---|---|
+| bodies' stage | 1,956 | 1,074 | 1,018 | 566 | 1,724 | 1,025 |
+| before the phases (the list, the faces) | 55 | 49 | 26 | 22 | 66 | 60 |
+| the parallel phase | 1,490 | 605 | 761 | 318 | 1,317 | 613 |
+| of it, the domains' work summed | 1,485 | 1,882 | 757 | 919 | 1,312 | 1,685 |
+| of it, the busiest domain of each batch summed | 212 | 293 | 148 | 182 | 322 | 414 |
+| the serial phase | 242 | 251 | 161 | 161 | 191 | 200 |
+| the survey (and the rest of the stage) | 168 | 169 | 71 | 66 | 150 | 153 |
+
+- The parallel phase is 2.46, 2.40 and 2.15 times faster on 4 threads.
+- A domain's work costs 21 to 28% more when four threads run at once (the domains' work summed), with the same
+  instructions: the threads share the memory and the last cache.
+- The parts that stay on one thread (before the phases, the serial phase, the survey) are 44%, 44% and 40% of the
+  stage on 4 threads.
+- On region24 the busiest domain of each batch is 68% of the parallel phase on 4 threads.
+
+**Ideas** (not built):
+
+1. The largest domains first: sort the tasks by their number of updates before `par::each` (one line; the order changes
+   nothing). With a build that does it, 5 interleaved runs on 4 threads: the parallel phase -7.0% (island22), -2.5%
+   (globe36), -7.7% (region24); the bodies' stage -9.6%, +0.5%, -2.7% (noisy).
+2. Less on one thread: D2.6 puts the survey on threads (16%, 12% and 15% of the stage on 4 threads); the serial phase
+   (23%, 28%, 20%) is mostly the domains' moves booked and the outboxes applied (D2.4a): a domain's moves that touch
+   only its own nodes could be booked by its own task.
+3. A cheaper update on threads: the 21 to 28% more each domain costs on 4 threads; a fresh `Reactor`, `LiveTmp` and
+   `ActTmp` per domain and batch, and the allocations of an update, are where to look first (a profile of cache misses,
+   as E1's gate).
 
 ## Profile of the baseline
 
