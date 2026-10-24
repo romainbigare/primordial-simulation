@@ -224,10 +224,12 @@ fn the_order_of_the_domains_changes_nothing() {
         pool.install(|| {
             let mut v = w.clone();
             pcore::survey::survey(&mut v, reversed);
-            // What the first survey did: a death by breaking, a part let go of, the merged node's born rows.
-            let did = |f: &dyn Fn(&EventKind) -> bool| v.events.iter().any(|e| f(&e.kind));
+            // What the first survey did: a death by breaking in a cell with no part (on the pool), a part let go of,
+            // the merged node's born rows.
+            let did = |f: &dyn Fn(&pcore::event::Event) -> bool| v.events.iter().any(f);
             let merged = v.life.find(big).map(|h| v.life.born(&v.life[h]).to_vec());
-            let first = (did(&|k| matches!(k, EventKind::Died { cause: BROKEN, .. })), did(&|k| matches!(k, EventKind::BondBroken)), merged);
+            let broken = did(&|e| matches!(e.kind, EventKind::Died { cause: BROKEN, .. }) && e.node != x as u32);
+            let first = (broken, did(&|e| matches!(e.kind, EventKind::BondBroken)), merged);
             for _ in 0..30 {
                 pcore::survey::batch(&mut v, reversed);
                 v.time += v.cfg.batch_days as u64 * DAY_S;

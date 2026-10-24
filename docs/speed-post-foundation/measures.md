@@ -527,8 +527,8 @@ in the same hour, the medians (the range in brackets).
 The survey's instructions (`survey::survey` inclusive; callgrind, one thread, one year), D2.5b then D2.6: 800 and 801
 million on island22, 315 and 331 on globe36, 651 and 655 on region24. They are the same but on globe36, which costs 5%
 more: its survey does little work, and the two `on_domains` rounds of each survey (the domains taken out and put back,
-their moves booked, the world settled, the outboxes applied) weigh more there. The gain is the threads. `scripts/bench.sh` (row above): island22 1.062 s/yr,
-globe36 0.777, region24 1.080 (bodies 841, 493 and 768 ms).
+their moves booked, the world settled, the outboxes applied) weigh more there. The gain is the threads.
+`scripts/bench.sh` (row above): island22 1.062 s/yr, globe36 0.777, region24 1.080 (bodies 841, 493 and 768 ms).
 
 ### After D2.6: two steps not kept, and the gain (S41, S65)
 
