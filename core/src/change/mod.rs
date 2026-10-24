@@ -135,8 +135,11 @@ fn react_ground(w: &World, rc: &mut Reactor, h: &mut Held, nodes: &FlowView, i: 
     rc.react(chem, &mut h.amt, Some(&mut h.pool), &mut e, nodes.skin[i], None, 0.0, time);
     let (made, out) = row.split_at_mut(ns);
     rc.made(chem, made);
-    // What they gave to the gas around the node, or took from it, mol: the rest of what they made was in the node.
-    let gas = |k: usize| rc.dpool[k];
+    // What they gave to the gas around the node, or took from it, mol: what they made less what the node itself gained
+    // (its amount's change), so the node's books end at what it really holds. The reactor's own sum of the gas it
+    // exchanged sums large terms that cancel apart from `made`, and could differ from it by their rounding.
+    let kept = |k: usize| h.amt[k] - w.store.amounts(Class::Ground)[k * w.mesh.cells().n() + i];
+    let gas = |k: usize| if rc.dpool[k] != 0.0 { made[k] - kept(k) } else { 0.0 };
     // Gas given to the air takes the node's heat by heat capacity, shared with the node as it is after its reactions.
     let c_out = (0..chem.ns()).map(|k| gas(k).max(0.0) * chem.subs[k].cp).sum::<f64>();
     let per_c = e.max(0.0) / (cap(&h.amt) + c_out).max(1e-9);

@@ -181,7 +181,7 @@ only: bare, a millionth of that). No decomposer works in a body: it runs its rea
 **Ground and air nodes** (`change::step`, `Reactor::react`) react when due over all the time since, at Flow's last
 temperature (a plateau's fusion heat set aside), then sleep until their reactions would use 5% of an input or warm
 them 0.5 K, at most `sleep_days`. A node's reactions are one `store::Transform`. Gas a ground node takes or gives
-crosses to its air node with its heat and latent heat (parts and bodies the same, `change/gas.rs`). **Parts** react
+(what its reactions made less what the node itself gained, so it never gives more than it holds) crosses to its air node with its heat and latent heat (parts and bodies the same, `change/gas.rs`). **Parts** react
 every 6 months (`bond::step`), **bodies** at each update with their catalysts (2.4); **growth** is a conversion only
 bodies run, paid by work (6.6).
 
