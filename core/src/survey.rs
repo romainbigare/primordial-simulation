@@ -316,28 +316,25 @@ pub fn batch(w: &mut World, reversed: bool) {
     if reversed {
         list.sort_by_key(|x| std::cmp::Reverse(x.0));
     }
-    let mut rc = Reactor::new(&w.chem, &w.cfg);
-    let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());
-    w.life.batch = true;
-    for (d, cell, id, _) in list {
-        w.life.parallel = Some(d);
+    let (mut rc, mut tmp, mut act) = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
+    // The update of a body, in the parallel phase or a serial body with its outbox applied after it.
+    let mut run = |w: &mut World, (d, cell, id, serial): (usize, usize, u64, bool)| {
+        w.life.parallel = (!serial).then_some(d);
         // (It may have died or joined another body since.)
-        let Some(s) = w.life.find(id) else { continue };
+        let Some(s) = w.life.find(id) else { return };
         w.open_moves(cell, Node::new(Class::Body, s.slot as usize));
         update(w, s, &mut rc, (&mut tmp, &mut act));
-    }
+        if serial {
+            crate::outbox::deliver(w);
+        }
+    };
+    w.life.batch = true;
+    list.into_iter().for_each(|x| run(w, x));
     w.life.parallel = None;
     w.book_moves();
     w.life.remap();
     crate::outbox::deliver(w);
-    w.book_moves();
-    for (_, cell, id, _) in serial {
-        let Some(s) = w.life.find(id) else { continue };
-        w.open_moves(cell, Node::new(Class::Body, s.slot as usize));
-        update(w, s, &mut rc, (&mut tmp, &mut act));
-        crate::outbox::deliver(w);
-        w.book_moves();
-    }
+    serial.into_iter().for_each(|x| run(w, x));
     w.life.settle();
     w.life.faces.clear();
 }

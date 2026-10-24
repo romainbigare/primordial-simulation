@@ -12,7 +12,15 @@ use std::collections::BTreeSet;
 /// The bit that marks a provisional id of a lineage or of born rows, made in the parallel phase of a batch (plan 3.3):
 /// its domain lies above `PROV_SHIFT`, its place in that domain's list below.
 const PROVISIONAL: u32 = 1 << 31;
+/// The bits of a provisional id below its domain: room for 65,536 made in one domain and batch, and 32,768 domains.
 const PROV_SHIFT: u32 = 16;
+
+/// What a count of holders is of: a lineage (its living bodies) or born rows (the bodies born with them).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Held {
+    Lineage,
+    Rows,
+}
 
 /// Born brain rows and how many hold them: the living bodies born with them (most children share their parent's, `copy`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -81,39 +89,43 @@ impl Life {
     }
     /// Count body `b` into its lineage and its born rows.
     pub(super) fn enter(&mut self, b: &Body) {
-        self.count(b.cell, (false, b.lineage), 1);
-        self.count(b.cell, (true, b.genome), 1);
+        self.count(b.cell, (Held::Lineage, b.lineage), 1);
+        self.count(b.cell, (Held::Rows, b.genome), 1);
     }
     /// Count body `b` out of its born rows and its lineage.
     pub(super) fn leave(&mut self, b: &Body) {
-        self.count(b.cell, (true, b.genome), -1);
-        self.count(b.cell, (false, b.lineage), -1);
+        self.count(b.cell, (Held::Rows, b.genome), -1);
+        self.count(b.cell, (Held::Lineage, b.lineage), -1);
     }
-    /// The holders of lineage (`rows` false) or born rows (true) `x` change by `by`, for a body of cell `cell`. In a
+    /// The holders of lineage or born rows `x` change by `by`, for a body of cell `cell`. In a
     /// batch the change waits in that cell's domain until the batch ends (`settle`), so what its bodies hold or made
     /// stays readable to its end; outside, it is at once, and a lineage left with no body dies out, born rows with no
     /// holder are freed.
-    fn count(&mut self, cell: u32, (rows, x): (bool, u32), by: i32) {
+    fn count(&mut self, cell: u32, (what, x): (Held, u32), by: i32) {
         if self.batch {
-            return self.domains[self.cell_in[cell as usize].0 as usize].counted.push((rows, x, by));
+            return self.domains[self.cell_in[cell as usize].0 as usize].counted.push((what, x, by));
         }
-        let n = self.holders((rows, x));
+        let n = self.holders((what, x));
         *n = n.wrapping_add_signed(by);
         if *n == 0 {
-            self.gone((rows, x));
+            self.gone((what, x));
         }
     }
-    /// The holders of lineage (`rows` false) or born rows (true) `x`.
-    fn holders(&mut self, (rows, x): (bool, u32)) -> &mut u32 {
-        if rows { &mut self.genomes[x as usize].refs } else { &mut self.members[x as usize] }
+    /// The holders of lineage or born rows `x`.
+    fn holders(&mut self, (what, x): (Held, u32)) -> &mut u32 {
+        match what {
+            Held::Rows => &mut self.genomes[x as usize].refs,
+            Held::Lineage => &mut self.members[x as usize],
+        }
     }
-    /// Lineage (`rows` false) or born rows (true) `x` has no holder: it dies out, or its rows are freed.
-    fn gone(&mut self, (rows, x): (bool, u32)) {
-        if rows {
-            self.genomes[x as usize].rows = Vec::new();
-            self.free_genomes.push(x);
-        } else {
-            self.brains[x as usize] = None;
+    /// Lineage or born rows `x` has no holder: it dies out, or its rows are freed.
+    fn gone(&mut self, (what, x): (Held, u32)) {
+        match what {
+            Held::Rows => {
+                self.genomes[x as usize].rows = Vec::new();
+                self.free_genomes.push(x);
+            }
+            Held::Lineage => self.brains[x as usize] = None,
         }
     }
     /// The serial phase of a batch (plan 3.3): the lineages and born rows made in its parallel phase get global ids,
@@ -126,9 +138,9 @@ impl Life {
             let gen = std::mem::take(&mut self.domains[d].genomes).into_iter().map(|g| self.new_genome(g)).collect();
             map.push([lin, gen]);
         }
-        let to = |x: u32, rows: bool| provisional(x).map_or(x, |(d, k)| map[d][rows as usize][k]);
+        let to = |x: u32, what: Held| provisional(x).map_or(x, |(d, k)| map[d][what as usize][k]);
         for d in &mut self.domains {
-            d.bodies.iter_mut().for_each(|b| (b.lineage, b.genome) = (to(b.lineage, false), to(b.genome, true)));
+            d.bodies.iter_mut().for_each(|b| (b.lineage, b.genome) = (to(b.lineage, Held::Lineage), to(b.genome, Held::Rows)));
             d.out.iter_mut().for_each(|e| e.remap(&to));
             d.counted.iter_mut().for_each(|c| c.1 = to(c.1, c.0));
         }
@@ -137,10 +149,10 @@ impl Life {
     /// of their ids, the lineages changed that have no body die out and the born rows changed with no holder are freed.
     pub(crate) fn settle(&mut self) {
         self.batch = false;
-        let counted: Vec<(bool, u32, i32)> = self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.counted)).collect();
-        let changed: BTreeSet<(bool, u32)> = counted.iter().map(|c| (c.0, c.1)).collect();
-        for (rows, x, by) in counted {
-            let n = self.holders((rows, x));
+        let counted: Vec<(Held, u32, i32)> = self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.counted)).collect();
+        let changed: BTreeSet<(Held, u32)> = counted.iter().map(|c| (c.0, c.1)).collect();
+        for (what, x, by) in counted {
+            let n = self.holders((what, x));
             *n = n.wrapping_add_signed(by);
         }
         for x in changed {
@@ -155,8 +167,8 @@ impl Life {
             return;
         }
         let g = self.new_genome(rows);
-        self.count(b.cell, (true, g), 1);
-        self.count(b.cell, (true, b.genome), -1);
+        self.count(b.cell, (Held::Rows, g), 1);
+        self.count(b.cell, (Held::Rows, b.genome), -1);
         b.genome = g;
     }
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`.

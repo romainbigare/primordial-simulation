@@ -1,4 +1,4 @@
-//! Moving: a body steps to a neighbour cell (`go`), landing there when its batch ends (`land`), clearing a lane, and
+//! Moving: a body steps to a neighbour cell (`go`), landing there when its batch ends (`land_move`), clearing a lane, and
 //! what it pushes through wears (`wear`).
 
 use crate::body::{self, Body, BROKEN};
@@ -9,7 +9,7 @@ use crate::{bond, copy, lanes, nodes, outbox::Entry, World};
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
 /// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`); less
 /// afloat. The part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays
-/// now and lands when the batch ends (`land`); until then it is leaving (`Body::leaving`). With `kin`, it is members of a
+/// now and lands when the batch ends (`land_move`); until then it is leaving (`Body::leaving`). With `kin`, it is members of a
 /// node who join their kind where they land.
 pub fn go(w: &mut World, b: &mut Body, j: usize, kin: bool) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
@@ -35,16 +35,20 @@ pub fn go(w: &mut World, b: &mut Body, j: usize, kin: bool) {
     let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum[j][7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     b.leaving = true;
-    w.life.queue(i, Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, kin });
+    w.life.queue(i, Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin });
 }
 
 /// The move of body `id` from cell `i` to `j` that `go` queued lands, if the body still lives: it enters `j` (its
-/// marks of light and rain those of `j`), carries what it holds and pushes the structures there (`bond::moved`), its
-/// push breaks the bodies there at the next survey and clears `lane` m² of the lane. With `kin`, the members of a node
-/// who moved join the first node of their kind and stage there (`copy::kin`).
-pub(crate) fn land(w: &mut World, id: u64, (i, j): (usize, usize), (pushed, lane): (f64, f64), kin: bool) {
+/// marks of light and rain those of `j`), carries what it holds if it paid for that (`carries`; else it lets go of it)
+/// and pushes the structures there (`bond::moved`), its push breaks the bodies there at the next survey and clears
+/// `lane` m² of the lane. With `kin`, the members of a node who moved join the first node of their kind and stage there
+/// (`copy::kin`).
+pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
     let Some(s) = w.life.find(id) else { return };
     let mut b = std::mem::take(&mut w.life[s]);
+    if !carries {
+        bond::let_go(w, &mut b, false);
+    }
     let (carried, mb) = (bond::carry(w, &mut b), b.mass(&w.chem));
     bond::moved(w, &mut b, carried, j, mb);
     w.life.relocate(id, i, j);

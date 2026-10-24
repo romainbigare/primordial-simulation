@@ -10,10 +10,10 @@ mod spread;
 
 pub use feed::take_body;
 pub use go::{go, wear};
-pub(crate) use go::land;
+pub(crate) use go::land_move;
 pub(crate) use learn::watched;
 pub use perceive::cells;
-pub(crate) use spread::part_act;
+pub(crate) use spread::land_act;
 
 use perceive::{inputs, perceive, walk, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_SCALE};
 
@@ -263,17 +263,17 @@ fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f3
 /// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
 fn act_as(w: &mut World, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
     b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
-    let (i, act) = (b.cell as usize, |on| Entry::Act { id: b.id, on, shape: [k.form[0], 0.5 * (k.form[1] + 1.0)], node: part_of });
+    let (i, act) = (b.cell as usize, |on| Entry::Act { id: b.id, on, node: part_of });
     match a {
         REST => {}
         PUT => feed::put(w, b),
         TAKE => feed::take_node(w, b),
-        FORM => w.life.queue(i, act(None)),
+        FORM => w.life.queue(i, act(Err([k.form[0], 0.5 * (k.form[1] + 1.0)]))),
         RELEASE => bond::release(w, b),
         ANCHOR => bond::anchor(w, b),
         DIG => bond::dig(w, b),
         a if a < TO_BODY => go(w, b, c.to[a - FIXED], part_of.is_some()),
-        a if a >= TO_PART => w.life.queue(i, act(Some(((a - TO_PART) % OVERBS, bond::id(w, c.parts[(a - TO_PART) / OVERBS]))))),
+        a if a >= TO_PART => w.life.queue(i, act(Ok(((a - TO_PART) % OVERBS, bond::id(w, c.parts[(a - TO_PART) / OVERBS]))))),
         a => {
             let (id, verb) = (c.seen[(a - TO_BODY) / VERBS].0.id, (a - TO_BODY) % VERBS);
             if verb == WATCH {

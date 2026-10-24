@@ -1,7 +1,8 @@
 //! The outbox and the serial phase of a batch (plan 3.6): an entry whose body or target is gone does nothing and keeps
-//! the books, and the order in which the domains run changes nothing.
+//! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
+//! domains run changes nothing.
 
-use pcore::body::{die, CHILD, DISPERSE, HIDDEN, LACK};
+use pcore::body::{die, Body, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ};
 use pcore::event::EventKind;
 use pcore::life::Handle;
 use pcore::outbox::{deliver, Entry};
@@ -9,12 +10,22 @@ use pcore::store::NodeId;
 use pcore::units::DAY_S;
 use pcore::{bond, brain, copy, nodes, World};
 use worldgen::schedule::Schedule;
-use worldgen::testkit::{brood, children, eater, moved, node_of, plate, start, Books, MATTER};
+use worldgen::testkit::{brood, children, dry_lands, eater, founder, moved, node_of, plate, scale, start, Books, Brain, EATER_KG, MATTER};
 
 /// The body at `h` dies where it is.
 fn kill(w: &mut World, h: Handle) {
     let b = std::mem::take(&mut w.life[h]);
     moved(w, (b.cell as usize, h), |w| die(w, h, b, LACK));
+}
+
+/// A node of 5 resting members in cell `i` whose children all start in a neighbour cell, with a brood of `k` children
+/// ready.
+fn dispersing(w: &mut World, i: usize, k: f64) -> Body {
+    let mut n = eater(w, i, brain::REST, 1.0);
+    (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 1.0);
+    let mut n = node_of(w, n, 5.0);
+    brood(w, &mut n, k);
+    n
 }
 
 /// Each kind of entry fails once and changes nothing but what its failure rule says: a move of a body that died, whole
@@ -29,13 +40,12 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let j = w.mesh.cells().around(i).1[0] as usize;
     let books = Books::now(&w);
     let rest = |w: &mut World| eater(w, i, brain::REST, 1.0);
-    let shape = [0.0, 0.5];
 
     // Moves of a body that died before its batch ended.
     let (e, at_j) = (rest(&mut w), w.life.in_cell(j));
     let a = w.add(e, 1);
     for kin in [false, true] {
-        w.life.queue(i, Entry::Go { id: w.life[a].id, from: i as u32, to: j as u32, pushed: 1.0, lane: 1.0, kin });
+        w.life.queue(i, Entry::Go { id: w.life[a].id, from: i as u32, to: j as u32, pushed: 1.0, lane: 1.0, carries: false, kin });
     }
     kill(&mut w, a);
     deliver(&mut w);
@@ -44,23 +54,23 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     // Less than one member of a node's children, all starting in a neighbour cell where no node of theirs is: back
     // into the parent's brood, or to the ground of its cell if it died.
     for dies in [false, true] {
-        let mut n = rest(&mut w);
-        (n.genes[CHILD], n.genes[DISPERSE]) = (-std::f32::consts::LOG10_2, 1.0);
-        let mut n = node_of(&mut w, n, 5.0);
-        brood(&w, &mut n, 0.6);
+        let n = dispersing(&mut w, i, 0.6);
         let s = w.add(n, 1);
         let mut n = std::mem::take(&mut w.life[s]);
-        let (id, matter) = (n.id, n.store[MATTER]);
+        n.brood = n.brooded(&w.chem);
+        let (id, before) = (n.id, [n.store[MATTER], n.brood, n.e]);
         assert!(copy::copy(&mut w, &mut n), "no children");
-        assert!(n.store[MATTER] < matter, "the litter was not taken from its parent");
+        assert!(n.store[MATTER] < before[0], "the litter was not taken from its parent");
         w.life[s] = n;
         if dies {
             kill(&mut w, s);
         }
         deliver(&mut w);
         assert!(children(&w, id).is_empty(), "a litter of less than one member started a node of its own");
-        if !dies {
-            assert!((w.life[s].store[MATTER] / matter - 1.0).abs() < 1e-12, "the litter did not come back to its parent");
+        let p = &w.life[s];
+        let now = if dies { before } else { [p.store[MATTER], p.brood, p.e] };
+        for (now, was) in now.iter().zip(before) {
+            assert!((now / was - 1.0).abs() < 1e-12, "the litter did not come back to its parent: {now} against {was}");
         }
     }
 
@@ -81,8 +91,8 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let (a, c_handle) = (w.add(e, 1), w.cfg.phys.c_handle);
     let id = w.life[a].id;
     w.cfg.phys.c_handle = 1e30;
-    w.life.queue(i, Entry::Act { id, on: Some((1, part)), shape, node: None });
-    w.life.queue(i, Entry::Act { id, on: Some((1, NodeId { gen: part.gen + 1, ..part })), shape, node: None });
+    w.life.queue(i, Entry::Act { id, on: Ok((1, part)), node: None });
+    w.life.queue(i, Entry::Act { id, on: Ok((1, NodeId { gen: part.gen + 1, ..part })), node: None });
     deliver(&mut w);
     w.cfg.phys.c_handle = c_handle;
     assert_eq!(w.parts.parts[p].mass(&w.chem), kg, "a part act was applied");
@@ -98,7 +108,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let ids: Vec<u64> = parts.iter().map(|&h| w.life[h].id).collect();
     for (&h, verb) in parts.iter().zip([1, 0]) {
         w.life[h].leaving = true;
-        w.life.queue(i, Entry::Act { id: w.life[h].id, on: Some((verb, part)), shape, node: Some(node) });
+        w.life.queue(i, Entry::Act { id: w.life[h].id, on: Ok((verb, part)), node: Some(node) });
     }
     deliver(&mut w);
     let s = w.life.find(node).unwrap();
@@ -108,8 +118,42 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     books.assert_kept(&w, 1e-12);
 }
 
+/// A body of the parallel phase that kills a body holding a part: the dead holder lets go of the part in the serial
+/// phase (`bond::LET_GO`), as parts change only there, and elements and energy are kept.
+#[test]
+fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
+    let (mut w, i) = start();
+    let books = Books::now(&w);
+    let p = plate(&mut w, i, 5.0, false);
+    // A small holder, not due for a long time, and a taker due at the next batch whose area holds the whole cell.
+    let mut h = eater(&mut w, i, brain::REST, 1.0);
+    scale(&mut w, &mut h, 0.01);
+    h.hold = Some(bond::id(&w, p));
+    let h = w.add(h, 300);
+    let id = w.life[h].id;
+    w.parts.parts[p].held = id;
+    let mut t = founder(&mut w, 1, i, &Brain::verb(brain::TAKE_FROM));
+    let m = t.mass(&w.chem);
+    scale(&mut w, &mut t, EATER_KG / m);
+    (t.genes[DISPERSE], t.genes[COPY_MASS], t.genes[LIQ]) = (0.0, 1.0, -4.0);
+    w.add(t, 1);
+    w.cfg.phys.sweep *= 1e9;
+    for _ in 0..10 {
+        w.time += w.cfg.batch_days as u64 * DAY_S;
+        pcore::survey::batch(&mut w, false);
+    }
+    assert!(w.life.find(id).is_none(), "the taker did not kill the holder");
+    // (It let go after its death, when the outboxes were applied.)
+    let at = |f: &dyn Fn(&EventKind) -> bool| w.events.iter().position(|e| f(&e.kind));
+    assert!(at(&|k| matches!(k, EventKind::BondBroken)) > at(&|k| matches!(k, EventKind::Died { .. })), "it let go before it died");
+    assert_eq!(w.parts.parts[p].held, bond::NOBODY, "the dead holder still holds the part");
+    books.assert_kept(&w, 1e-12);
+}
+
 /// The order in which the domains run in the parallel phase of a batch changes nothing: the lineages and born rows
-/// made there get the same global ids (plan 3.3), and the world ends the same, bit for bit.
+/// made there get the same global ids (plan 3.3), and the world ends the same, bit for bit. In the batches each kind of
+/// the serial phase happens: a dispersing litter lands, a watch and a part act are applied, a body that holds a part
+/// runs, lineages are made.
 #[test]
 fn the_order_of_the_domains_changes_nothing() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -121,6 +165,25 @@ fn the_order_of_the_domains_changes_nothing() {
     }
     // Every body with a brain moves to a new lineage at its next update (`lineage::resize`).
     w.life.each_mut(|b| b.genes[HIDDEN] += if b.rows.is_empty() { 0.0 } else { 1.5 });
+    // A dispersing node, a watcher, a body that takes hold of an anchored part and one that holds a part, in cells
+    // spread over the island.
+    let land = dry_lands(&w);
+    let at = |k: usize| land[k * land.len() / 5];
+    let n = dispersing(&mut w, at(0), 3.0);
+    let parent = w.add(n, 1);
+    let parent = w.life[parent].id;
+    let watcher = founder(&mut w, 1, at(1), &Brain::verb(brain::WATCH));
+    w.add(watcher, 1);
+    let (p, q) = (plate(&mut w, at(2), 5.0, false), plate(&mut w, at(3), 5.0, false));
+    bond::link(&mut w, p, bond::GROUND, 1e9);
+    let grabber = founder(&mut w, 1, at(2), &Brain::verb(brain::VERBS));
+    w.add(grabber, 1);
+    let mut holder = eater(&mut w, at(3), brain::REST, 1.0);
+    holder.hold = Some(bond::id(&w, q));
+    let holder = w.add(holder, 1);
+    let (holder, last) = (w.life[holder].id, w.life[holder].last);
+    w.parts.parts[q].held = holder;
+    w.drain_events();
     let lineages = w.life.brains.len();
     let ends = [false, true].map(|reversed| {
         let mut v = w.clone();
@@ -132,7 +195,11 @@ fn the_order_of_the_domains_changes_nothing() {
     });
     let state = |v: &World| (serde_json::to_string(&v.life).unwrap(), serde_json::to_string(&v.store).unwrap());
     assert!(state(&ends[0]) == state(&ends[1]), "the order of the domains changed the world");
-    let (made, crossed) = (ends[0].life.brains.len() - lineages, ends[0].counts.crossings.iter().sum::<f32>());
-    let born = ends[0].events.iter().filter(|e| matches!(e.kind, EventKind::Born { .. })).count();
-    assert!(made > 1 && crossed > 0.0 && born > 0, "{made} lineages made, {crossed} members moved, {born} litters born");
+    let v = &ends[0];
+    let kind = |f: &dyn Fn(&EventKind) -> bool| v.events.iter().filter(|e| f(&e.kind)).count();
+    let landed = children(v, parent).iter().filter(|&&c| v.life[c].cell as usize != at(0)).count();
+    let (watched, held) = (kind(&|k| matches!(k, EventKind::Watched { .. })), kind(&|k| matches!(k, EventKind::BondMade)));
+    let ran = v.life.find(holder).is_none_or(|h| v.life[h].last > last);
+    let made = v.life.brains.len() - lineages;
+    assert!(landed > 0 && watched > 0 && held > 0 && ran && made > 1, "litters landed {landed}, watches {watched}, holds {held}, holder ran {ran}, lineages {made}");
 }

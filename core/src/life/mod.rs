@@ -7,6 +7,7 @@
 mod registry;
 
 pub use registry::Genome;
+pub(crate) use registry::Held;
 
 use crate::body::{Body, MAX_INTERVAL};
 use crate::lineage::Lineage;
@@ -51,9 +52,9 @@ struct Domain {
     /// (`PROVISIONAL`) until the serial phase makes them global (`Life::remap`)
     brains: Vec<Lineage>,
     genomes: Vec<Vec<f32>>,
-    /// The changes of the holders its bodies made in the batch running: of lineage (false) or born rows (true) `x`
+    /// The changes of the holders its bodies made in the batch running: of a lineage or born rows, its id, the change
     /// (`Life::count`)
-    counted: Vec<(bool, u32, i32)>,
+    counted: Vec<(Held, u32, i32)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -328,6 +329,11 @@ impl Life {
     /// Queue `e`, made by an update of a body of cell `i`, in the outbox of its domain (`outbox`).
     pub fn queue(&mut self, i: usize, e: Entry) {
         self.domains[self.cell_in[i].0 as usize].out.push(e);
+    }
+    /// Body `b` has a move or a part act queued in its domain's outbox: it does not split in this update (`nodes::split`).
+    pub(crate) fn queued(&self, b: &Body) -> bool {
+        let out = &self.domains[self.cell_in[b.cell as usize].0 as usize].out;
+        out.iter().any(|e| matches!(*e, Entry::Go { id, .. } | Entry::Act { id, .. } if id == b.id))
     }
     /// The entries of the outboxes, domain by domain, each's in the order made; they are left empty.
     pub(crate) fn take_queued(&mut self) -> Vec<Entry> {

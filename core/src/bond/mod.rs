@@ -12,8 +12,8 @@ pub use bonds::{Bonds, Enclosure};
 pub use month::step;
 pub use sense::{afloat, depth, features, room};
 pub(crate) use sense::{enclosure, possible, sense, SENSE};
-pub use verbs::{act, anchor, carry, dig, force, form, moved, release};
-pub(crate) use verbs::{bears, let_go, lever};
+pub use verbs::{act, anchor, carry, dig, force, form, moved, release, LET_GO};
+pub(crate) use verbs::{bears, dropped, let_go, lever};
 
 use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Handle}, store::{Node, NodeId}, World};
 use serde::{Deserialize, Serialize};

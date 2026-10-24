@@ -51,22 +51,23 @@ start. A sample member's update (`copy::sample`) runs in a checkpoint of the vie
 are inside none update, domain by domain. What an update does outside it goes to its domain's outbox
 (`outbox::Entry`), in the order made: every move to another cell, inside the domain or across its edge (`choose::go`
 pays and queues it), children who start in another cell (`copy::emit` takes them from the parent), a watch, and every
-act on a part (Bond's verbs, form among them). A body with a move queued, or a node's part with a part act queued, is
-**leaving** (`Body::leaving`): it stays in its old cell until the batch ends, where the rest of its update runs, but it
-does not split, and the others there neither see it in their cell nor take from it, give to it, join it or mix with
-it. Lineages and born rows made in this phase get provisional ids of their domain, and the changes of the holders of
+act on a part (Bond's verbs, form among them; a body that dies or joins another lets go of its part there too). A body
+with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it stays in its old
+cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
+it in their cell nor take from it, give to it, join it or mix with it. A body with a move or a part act queued does not
+split in that update. Lineages and born rows made in this phase get provisional ids of their domain, and the changes of the holders of
 lineages and born rows wait in each domain. Then the serial phase, in a fixed order: the domains' moves booked, one
 `apply` per domain in domain order; the provisional lineages and born rows made global, domain by domain in the order
 made (`Life::remap`); the outboxes applied, domain by domain in the order made; the bodies that hold or are inside a
 part, whole updates in domain and body order, each with its domain's view opened fresh and booked after it, its own
 outbox applied after it; last the holders' changes added in domain order, and a lineage left with no body dies out,
 born rows left with no holder are freed (`Life::settle`). Each entry is applied by its law on the bodies and parts as
-they are then. A move lands (`choose::land`): the body enters the cell with its marks of light and rain, carries what
-it holds, pushes the structures there, counts in the crossings, and its push breaks the bodies there at the next
+they are then. A move lands (`choose::land_move`): the body enters the cell with its marks of light and rain, carries
+what it holds if it paid to (else it lets go of it), pushes the structures there, counts in the crossings, and its push breaks the bodies there at the next
 survey and clears the lane; members of a node who moved join their kind there (`copy::kin`). A litter joins its kind
-there or starts a body, and its birth is recorded then (`copy::land`). A watch blends by the share of the watcher's
-members who watched (5.5). A part act runs whole (`choose::part_act`); a node's part then comes back to its node if it
-holds nothing, is inside nothing and both are in one cell. An entry whose body or target is gone does nothing: a move
+there or starts a body, and its birth is recorded then (`copy::land_litter`). A watch blends by the share of the watcher's
+members who watched (5.5). A part act runs whole on a part in the body's cell (`choose::land_act`); a node's part then comes back
+to its node if it holds nothing, is inside nothing, and the node is in its cell and not leaving it. An entry whose body or target is gone does nothing: a move
 of a body that died (its cost was paid), a watch whose watcher is no longer of its lineage, a part act no longer
 possible or that cannot be paid; less than one member of a node's children with no node to join goes back into the
 parent's brood, or to the ground of the parent's cell if it died. So a body is seen as it was at the batch's start,

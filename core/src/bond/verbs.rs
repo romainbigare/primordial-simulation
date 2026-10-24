@@ -2,7 +2,7 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, life::Handle, store::Move, World};
+use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::Handle, outbox::Entry, store::{Move, NodeId}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, b: &mut Body, p: usize) {
@@ -15,13 +15,30 @@ fn grab(w: &mut World, b: &mut Body, p: usize) {
     event(w, true, b.cell as usize, HELD);
 }
 
-/// Let go of the held part (also when the body dies).
+/// The verb of the part act by which a body that dies or joins another in the parallel phase of a batch lets go of
+/// its part (`let_go`), after the verbs of `act`: parts change only in the serial phase.
+pub const LET_GO: usize = OVERBS;
+
+/// Let go of the held part (also when the body dies or joins another): at once, or in the parallel phase of a batch
+/// as a part act queued in the outbox (`LET_GO`, `dropped`). The body holds nothing from now.
 pub(crate) fn let_go(w: &mut World, b: &mut Body, load: bool) {
     if let Some(p) = held(w, b) {
-        w.parts.parts[p].held = NOBODY;
-        event(w, false, b.cell as usize, HELD + if load { LOAD } else { 0.0 });
+        if w.life.parallel.is_none() {
+            dropped(w, b.id, id(w, p), load);
+        } else {
+            debug_assert!(!load, "a load breaks a hold only outside the parallel phase");
+            w.life.queue(b.cell as usize, Entry::Act { id: b.id, on: Ok((LET_GO, id(w, p))), node: None });
+        }
     }
     b.hold = None;
+}
+
+/// Body `by` lets go of part `p` if it still holds it, broken off by a load if `load`.
+pub(crate) fn dropped(w: &mut World, by: u64, p: NodeId, load: bool) {
+    if let Some(p) = super::part(w, p).filter(|&p| w.parts.parts[p].held == by) {
+        w.parts.parts[p].held = NOBODY;
+        event(w, false, super::cell(w, p), HELD + if load { LOAD } else { 0.0 });
+    }
 }
 
 /// The body at `o` lets go of what it holds, broken off by a load.

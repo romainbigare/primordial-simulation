@@ -211,9 +211,10 @@ pub(crate) fn part(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Body {
 const TIE: f32 = 1e-4;
 
 /// At its update a node whose two halves would not be alike splits in two along its widest gene, the mean and the
-/// spread of both kept, while its cell has room (fewer than `Config::crowd` - 1 bodies); laws.md 4.4.
+/// spread of both kept, while its cell has room (fewer than `Config::crowd` - 1 bodies) and it has no move or part act
+/// queued in this batch (`Life::queued`: its act runs on it whole); laws.md 4.4.
 pub fn split(w: &mut World, b: &mut Body) {
-    if b.count < 2.0 || b.leaving || b.spread.is_empty() || w.life.in_cell(b.cell as usize) + 1 >= w.cfg.crowd || !may_be_node(w, b) {
+    if b.count < 2.0 || b.spread.is_empty() || w.life.in_cell(b.cell as usize) + 1 >= w.cfg.crowd || !may_be_node(w, b) || w.life.queued(b) {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);

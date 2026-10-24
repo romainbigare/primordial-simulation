@@ -11,10 +11,10 @@ use crate::math::Pass;
 use crate::nodes::{may_be_node, merge, part};
 use crate::{life::Handle, World};
 
-/// The node that node `b` (taken out of its slot) is linked to, if that is alive, a node of `b`'s cell and lineage
-/// and mature as `mature` asks; else the first node of the cell at that stage and of `b`'s kind (`copy::kin`), linked from then on.
+/// The node that node `b` (taken out of its slot) is linked to, if that is alive, a node of `b`'s cell (of its domain,
+/// tested first: another domain's bodies are not read) and lineage, mature as `mature` asks and not leaving; else the first node of the cell at that stage and of `b`'s kind (`copy::kin`), linked from then on.
 pub(crate) fn linked(w: &mut World, b: &mut Body, mature: bool) -> Option<Handle> {
-    let at = b.link.and_then(|id| w.life.find(id)).filter(|&t| {
+    let at = b.link.and_then(|id| w.life.find(id)).filter(|&t| t.domain as usize == w.life.domain_of(b.cell as usize)).filter(|&t| {
         let o = &w.life[t];
         o.alive && !o.leaving && o.n() > 1.0 && o.cell == b.cell && o.lineage == b.lineage && o.adult(&w.chem) == mature
     });
@@ -42,7 +42,8 @@ pub enum Grown {
 /// Young node `b` (taken out of its slot) after an update in which its mean member grew from `before` kg: those who
 /// passed the copy mass join its adult node with their share (`math::Pass`; McKendrick 1926, von Foerster 1959).
 pub fn mature(w: &mut World, b: &mut Body, before: f64) -> Grown {
-    if b.n() <= 1.0 || b.adult(&w.chem) || !may_be_node(w, b) {
+    // (A body leaving its cell does not mature in this update, S70: the members who mature would stay behind.)
+    if b.n() <= 1.0 || b.leaving || b.adult(&w.chem) || !may_be_node(w, b) {
         return Grown::Lives;
     }
     let (mean, v) = b.size_moments(&w.chem);

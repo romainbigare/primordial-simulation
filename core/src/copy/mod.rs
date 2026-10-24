@@ -34,6 +34,10 @@ use mix::{mix, mix_rows, partner};
 /// brood): half a child each on average. A member who dies loses the brood it held.
 pub const BROOD_HELD: f64 = 0.5;
 
+/// The node in whose name the remains of a litter whose parent died go to the ground (`land_litter`): no body holds
+/// them now, and the store books no body's side of a move (`store::apply`), so a body node of any slot serves.
+const NO_BODY: Node = Node { class: Class::Body, index: 0 };
+
 /// What the children of one `copy` share: each one's body, kg, its matter, mol (its body is that over 1 -
 /// `WET_TISSUE`), and its provisions, mol of each store (none of the matter: `provisions`); whether the parent is a
 /// node; whether they join no node (`nodes::may_be_node`); the partner; and the parent's id.
@@ -98,7 +102,7 @@ pub fn copy(w: &mut World, b: &mut Body) -> bool {
     made
 }
 
-/// Children that start in another cell than their parent's (`emit`), in the outbox until the batch ends (`land`): their
+/// Children that start in another cell than their parent's (`emit`), in the outbox until the batch ends (`land_litter`): their
 /// body (in the cell they start in), their born rows (none: their parent's), the log10 of their bodies' mass, whether
 /// they join no node (`Births::alone`), the cell their parent was in, and their birth.
 #[derive(Clone, Debug)]
@@ -114,7 +118,7 @@ pub struct Litter {
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
 /// lineage there (`kin`), or a body of their own (`place_child`). Less than one member of a node's children with no
 /// node to join waits in the brood (false). Children who start in another cell are a litter that lands when the batch
-/// ends (`land`).
+/// ends (`land_litter`).
 fn emit(w: &mut World, b: &mut Body, l: &Births, cell: usize, m: f64, r: &mut Rng) -> bool {
     let mixed = l.mate.map(|t| mix(b, &w.life[t], m, r));
     let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));
@@ -186,7 +190,7 @@ fn start(w: &mut World, mut c: Body, rows: Option<Vec<f32>>, size: f32, alone: b
 /// (`kin`) or starts a body of its own (`start`), and its birth is recorded. Less than one member (of a node's children:
 /// an individual's are whole) with no node to join goes back into its parent's brood if the parent lives; else what
 /// they hold goes to the ground of the cell their parent was in, as remains do (`body::remains`).
-pub(crate) fn land(w: &mut World, x: Litter) {
+pub(crate) fn land_litter(w: &mut World, x: Litter) {
     let Litter { mut c, rows, size, alone, from, born } = x;
     let hit = if alone { None } else { kin(w, c.cell as usize, c.lineage, (&c.genes, &c.spread), false) };
     if hit.is_some() || c.count >= 1.0 {
@@ -198,7 +202,7 @@ pub(crate) fn land(w: &mut World, x: Litter) {
         (p.e, p.brood) = (p.e + c.e, p.brood + c.store[mi]);
     } else {
         c.cell = from;
-        w.open_moves(from as usize, Node::new(Class::Body, 0));
+        w.open_moves(from as usize, NO_BODY);
         remains(w, &c);
     }
 }

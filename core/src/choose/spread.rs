@@ -33,7 +33,7 @@ pub(super) fn spread(w: &mut World, node: &mut Body, c: &Choice, k: &Kit, rng: &
 /// Members that move or bond are placed as a body of their own (`nodes::part`); unless they queued a move or a part
 /// act (`outbox`), they then come back as well; else they live on as a body, leaving the node (`Body::leaving`), with
 /// the trace of what they did: those who move join the first node of their kind and stage where they land
-/// (`choose::land`), those who act on a part come back after it if they can (`part_act`). The node acts itself if less
+/// (`choose::land_move`), those who act on a part come back after it if they can (`land_act`). The node acts itself if less
 /// than one member would be left. Returns the change of their well-being, and whether they left the node (none: it
 /// moved whole).
 fn part_acts(w: &mut World, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
@@ -80,16 +80,17 @@ fn back(w: &mut World, node: &mut Body, s: Handle, mut m: Body) {
 }
 
 /// The part act body `id` queued in a batch (`outbox`), run whole on it and on the part as they are now: verb `on.0`
-/// to part `on.1` if that part still exists and the act is still possible (`bond::possible`), or a part of `shape`
-/// formed (none); the body pays as it acts, and does nothing if it cannot. A part of node `node` then comes back to it
-/// if it holds nothing, is inside nothing and both are in one cell; else it lives on as a body.
-pub(crate) fn part_act(w: &mut World, id: u64, (on, shape): (Option<(usize, NodeId)>, [f32; 2]), node: Option<u64>) {
+/// to part `on.1` if that part still exists, lies in the body's cell and the act is still possible (`bond::possible`),
+/// or a part of the shape given formed; the body pays as it acts, and does nothing if it cannot. A part of node `node` then comes back to it if it holds
+/// nothing, is inside nothing, and the node is in its cell and not leaving it; else it lives on as a body.
+pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32; 2]>, node: Option<u64>) {
     let Some(s) = w.life.find(id) else { return };
     let mut b = std::mem::take(&mut w.life[s]);
     w.open_moves(b.cell as usize, Node::new(Class::Body, s.slot as usize));
-    match on.map(|(v, p)| (v, bond::part(w, p))) {
-        None => bond::form(w, &mut b, shape),
-        Some((v, Some(p))) if bond::possible(w, &b, v, p, b.volume(&w.chem, b.temp(&w.chem)) / b.n()) => bond::act(w, &mut b, v, p),
+    let here = |v: usize, p: usize| bond::cell(w, p) == b.cell as usize && bond::possible(w, &b, v, p, b.volume(&w.chem, b.temp(&w.chem)) / b.n());
+    match on.map(|(v, p)| (v, bond::part(w, p).filter(|&p| here(v, p)))) {
+        Err(shape) => bond::form(w, &mut b, shape),
+        Ok((v, Some(p))) => bond::act(w, &mut b, v, p),
         _ => {}
     }
     b.leaving = false;
@@ -97,7 +98,7 @@ pub(crate) fn part_act(w: &mut World, id: u64, (on, shape): (Option<(usize, Node
     if b.empty_at(b.mass(&w.chem)) {
         return die(w, s, b, LACK);
     }
-    let its = node.and_then(|n| w.life.find(n)).filter(|&t| w.life[t].cell == b.cell && b.hold.is_none() && b.inside.is_none());
+    let its = node.and_then(|n| w.life.find(n)).filter(|&t| w.life[t].cell == b.cell && !w.life[t].leaving && b.hold.is_none() && b.inside.is_none());
     let Some(t) = its else {
         w.see(&mut b);
         w.life[s] = b;
