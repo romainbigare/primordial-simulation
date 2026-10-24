@@ -31,6 +31,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.4a (benches remade, `/tmp/d24-bench`) | D2.4a | 1.442 | 149 | 51 | 1,201 | 20 | 21 | 2,839 | 36,465 | 1.174 | 205 | 54 | 892 | 9 | 15 | 1,512 | 22,280 | 9,577 |
 | D2.4b (island22 remade at `eec6f1d`, `/tmp/d24b-bench`; `eec6f1d` there: 2.093 s/yr) | D2.4b | 2.108 | 141 | 50 | 1,885 | 3 | 28 | 3,679 | 53,648 | — | — | — | — | — | — | — | — | 9,684 |
 | D2.5 (benches remade, `d25-bench` in a scratch folder; island22 the same world as D2.4b's) | D2.5 | 1.187 | 137 | 51 | 971 | 3 | 25 | 3,679 | 53,648 | 0.858 | 204 | 51 | 571 | 18 | 14 | 1,648 | 23,373 | 9,678 |
+| D2.5b, the largest domains first (the same saves) | D2.5b | 1.179 | 143 | 51 | 956 | 3 | 27 | 3,679 | 53,648 | 0.801 | 203 | 50 | 515 | 18 | 14 | 1,648 | 23,373 | 9,679 |
 
 ### A2: compiler settings
 
@@ -472,6 +473,25 @@ with timers around the phases (kept off `main`; one year, the mean of two runs):
 3. A cheaper update on threads: the 21 to 28% more each domain costs on 4 threads; a fresh `Reactor`, `LiveTmp` and
    `ActTmp` per domain and batch, and the allocations of an update, are where to look first (a profile of cache misses,
    as E1's gate).
+
+### D2.5b: the largest domains first
+
+Level 1: the golden fingerprints do not move, with and without threads, and the bench gives the same bodies and updates.
+The tasks of the parallel phase are sorted by their number of updates, largest first (ties by domain index), and the
+pool's idle threads take them in that order (`par::each` hands the items out through `par_bridge`; before, rayon cut
+the list in halves, so a large domain could start last). So no batch waits on a large domain started late (longest
+processing time first, Graham 1969). With `reversed` (the order test) the sorted list is run backwards.
+
+The bodies' stage on 4 threads, ms a year: 7 runs of 2 years from each D2.5 save, the three builds interleaved in the
+same hour, the medians (the range in brackets). "Sorted only" sorts the list but keeps rayon's halving.
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| D2.5 | 1,041 (963 to 1,087) | 577 (518 to 609) | 964 (866 to 1,088) |
+| sorted only | 989 (970 to 1,083), -5.1% | 590 (541 to 638), +2.4% | 923 (860 to 1,095), -4.3% |
+| **sorted, taken in order (kept)** | **959 (904 to 1,014), -7.9%** | **552 (474 to 594), -4.3%** | **836 (727 to 853), -13.3%** |
+
+`scripts/bench.sh` (row above): island22 1.179 s/yr, globe36 0.801, region24 1.103 (bodies 956, 515 and 809 ms).
 
 ## Profile of the baseline
 

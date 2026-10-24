@@ -55,7 +55,7 @@ added, those ids made global in the order made; the holders' changes are added a
 one, and a lineage left with no body dies out, born rows left with no holder are freed. Every serial step, a body or
 part law run on its own (a part act, a landing, the monthly merge, the wear of movers), runs so too, on the domain of
 its cell (`World::in_domain`). First the parallel phase: the bodies due that hold no part and are inside none update,
-each domain on a thread of the pool with the feature `threads` (`par::each`), one after another without it. What an
+each domain on a thread of the pool with the feature `threads` (`par::each`, the domains with the most updates first), one after another without it. What an
 update does outside it goes to its domain's outbox (`outbox::Entry`), in the order made: every move to another cell, inside the domain or across its edge (`choose::go` pays and queues it), children who start
 in another cell (`copy::emit` takes them from the parent), a watch, and every act on a part (Bond's verbs, form and
 anchoring among them; a body that lets go of its part, or dies or joins another holding one, lets go there too). A body

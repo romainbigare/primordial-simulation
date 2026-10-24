@@ -311,14 +311,17 @@ pub fn batch(w: &mut World, reversed: bool) {
     let mut faces = std::mem::take(&mut w.life.faces);
     faces.make(w);
     w.life.faces = faces;
-    let (serial, mut list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
-    if reversed {
-        list.sort_by_key(|x| std::cmp::Reverse(x.0));
-    }
+    let (serial, list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
     w.life.batch = true;
     let mut domains = std::mem::take(&mut w.life.domains);
     let mut free: Vec<Option<&mut Domain>> = domains.iter_mut().map(Some).collect();
     let mut runs: Vec<_> = list.chunk_by(|a, b| a.0 == b.0).map(|run| (free[run[0].0].take().expect("one run a domain"), run)).collect();
+    // The domains with the most updates start first, so the batch does not wait on a large one started last (longest
+    // processing time first, Graham 1969).
+    runs.sort_by_key(|(_, run)| (std::cmp::Reverse(run.len()), run[0].0));
+    if reversed {
+        runs.reverse();
+    }
     let v = &*w;
     crate::par::each(&mut runs, |(d, run)| {
         let mut scratch = (Reactor::new(&v.chem, &v.cfg), LiveTmp::default(), choose::ActTmp::default());

@@ -32,13 +32,14 @@ pub fn rows<S>(out: &mut [f64], width: usize, init: impl Fn() -> S + Sync + Send
     }
 }
 
-/// Run `f` on each item, one task an item taken by idle threads (work stealing), or in order without threads. Each item
-/// owns all it writes (a domain of bodies, `survey::batch`), so the order and the threads change nothing.
+/// Run `f` on each item, each idle thread taking the next item in their order (so the first items start first), or in
+/// order without threads. Each item owns all it writes (a domain of bodies, `survey::batch`), so the order and the
+/// threads change nothing.
 pub fn each<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
     #[cfg(feature = "threads")]
     {
         use rayon::prelude::*;
-        items.par_iter_mut().with_max_len(1).for_each(f);
+        items.iter_mut().par_bridge().for_each(f);
     }
     #[cfg(not(feature = "threads"))]
     items.iter_mut().for_each(f);
