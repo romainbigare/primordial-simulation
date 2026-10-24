@@ -678,6 +678,10 @@ the design that was tried. B2 and C2 work on today's nodes.
 
 ### Phase C: fewer updates
 
+**Status (S62, S63):** C2 missed its kill line and is not kept (branch `speed/c2-not-kept`); its gate's finding (the
+interval's energy budget) is a law question for the owner. C1 is not built (its gate). `node_days` stays 36 until D2.2
+sets it to 40, a multiple of `batch_days`.
+
 #### C2. A closer step over a node's interval (node_days 36 → 70)
 
 - **What:** find what makes nodes that update rarely differ from nodes that update often (the pace test fails at 144
