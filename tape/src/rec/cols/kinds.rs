@@ -58,7 +58,7 @@ impl Kind {
         self.mass += b.mass(chem);
         self.matter += matter_mm.map_or(0.0, |(m, mm)| b.store[m] * mm);
         self.body += b.size(chem);
-        self.copy_mass += n * b.dec(body::COPY_MASS);
+        self.copy_mass += n * b.k.copy_mass;
         (self.alloc, self.child) = (self.alloc + n * b.gene(body::ALLOC), self.child + n * b.gene(body::CHILD));
         self.brood += b.brooded(chem) * matter_mm.map_or(0.0, |(_, mm)| mm);
         let a = b.activity(chem, &w.cfg.phys);
@@ -77,14 +77,6 @@ impl Kind {
 
 /// Years a member of `b` lives at its upkeep now: `e_life` × 10^`REPAIR` per kg of living body over its upkeep.
 fn life_years(w: &World, b: &Body) -> f64 {
-    let mut x = Body::default();
-    let b = if b.k.cat.is_empty() {
-        x.clone_from(b);
-        x.prepare(&w.chem, &w.cfg.phys);
-        &x
-    } else {
-        b
-    };
     let (m, d) = (b.mass(&w.chem), b.interval(w) as f64);
     w.cfg.phys.e_life * b.dec(body::REPAIR) * b.built(&w.chem).max(1e-9 * m) * d / body::upkeep(w, b, d, m, b.temp(&w.chem)).max(1e-300) / w.days_per_year() as f64
 }

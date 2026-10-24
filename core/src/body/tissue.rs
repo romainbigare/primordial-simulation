@@ -1,7 +1,7 @@
 //! The body as tissue: matter and brood, size and supply, the levels of its stores, its materials and height (laws.md
 //! 6.1, 3.6).
 
-use super::{Body, Layout, COPY_MASS, WET_TISSUE};
+use super::{Body, Layout, WET_TISSUE};
 use crate::chem::{Chemistry, Phase};
 
 /// The most share of a body its keep gene of a key liquid, or the solids it builds together, may make up.
@@ -89,7 +89,7 @@ impl Body {
     }
     /// A member body (`member_body`) is at or past the copy mass (`adult`).
     pub fn mature(&self, member: f64) -> bool {
-        member >= (1.0 - 1e-9) * self.dec(COPY_MASS)
+        member >= (1.0 - 1e-9) * self.k.copy_mass
     }
     /// Activity, 0..1: min(1, l / l*)^n, l the key liquids it holds, l* their `level`, n `Physics::dormancy`, as a body's
     /// chemistry runs in its liquid (laws.md 6.5). 1 without a key liquid it keeps a level of.
@@ -186,7 +186,7 @@ impl Body {
             return (mass / n / cfg.phys.rho_body).cbrt();
         }
         let [v, ev, _] = self.solids(chem, cfg);
-        (GREENHILL / (4.0 * std::f64::consts::PI) * ev * v / (n * mass * cfg.gravity).max(1e-30)).max(0.0).powf(0.25)
+        (GREENHILL / (4.0 * std::f64::consts::PI) * ev * v / (n * mass * cfg.gravity).max(1e-30)).max(0.0).sqrt().sqrt()
     }
     /// The energy to break the share `f` of the body, J: its materials' volumes times their breaking stresses, so hard
     /// parts protect.

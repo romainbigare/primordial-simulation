@@ -6,7 +6,7 @@
 //! such size hierarchies (Weiner 1990).
 
 use super::kin;
-use crate::body::{Body, COPY_MASS};
+use crate::body::Body;
 use crate::math::Pass;
 use crate::nodes::{may_be_node, merge, part};
 use crate::World;
@@ -47,7 +47,7 @@ pub fn mature(w: &mut World, slot: usize, b: &mut Body, before: f64) -> Grown {
     }
     let (mean, v) = b.size_moments(&w.chem);
     let (mean, v, d) = (mean as f64, v as f64, (b.member_body(&w.chem) / before.max(f64::MIN_POSITIVE)).log10());
-    let Some(pass) = Pass::new(mean - d, v, b.dec(COPY_MASS).log10(), d) else { return Grown::Lives };
+    let Some(pass) = Pass::new(mean - d, v, b.k.copy_mass.log10(), d) else { return Grown::Lives };
     let ((members, rest), held) = (pass.shares(0.0), pass.shares(std::f64::consts::LN_10).0);
     let adult = linked(w, slot, b, true);
     match adult {

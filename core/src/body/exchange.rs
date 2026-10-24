@@ -12,7 +12,7 @@ impl Body {
     /// Heat conductance of its coat, W/K (the `HEAT` gene), through each member's surface, as mass^(2/3).
     pub fn conductance(&self, m_ref: f64, mass: f64) -> f64 {
         let n = self.n();
-        self.k.heat * n * m_ref.cbrt() * (mass / n).max(0.0).powf(2.0 / 3.0)
+        self.k.heat * n * (m_ref * (mass / n).max(0.0).powi(2)).cbrt()
     }
     /// Its light-capture area, all members', m²: `LEAF` per kg-equivalent of its body (`equiv` of `built`).
     pub fn leaf_area(&self, chem: &Chemistry, p: &crate::Physics) -> f64 {

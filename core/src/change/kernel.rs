@@ -337,14 +337,17 @@ impl Reactor {
     /// The length of sub-step `iter` of the `left` seconds still to go, at heat capacity `c`: halved while the reactions'
     /// heat would move the temperature more than `MAX_DT_K` (not the last). Sets `far`, and on the first `kap0`, `lim0`.
     fn sub_step(&mut self, left: f64, c: f64, iter: usize) -> f64 {
-        // The heat of the reactions not driven by light over `sub` seconds, J.
-        let heat = |sub: f64| (self.on.iter()).filter(|&&r| self.kap[r] > 0.0 && !self.lit[r]).map(|&r| self.dh[r].abs() * self.lim[r] * gone(self.kap[r] * sub, self.pw[r])).sum::<f64>();
+        // Sets `far`, the share of its scarcest input each running reaction uses in `sub` seconds, and returns the heat of
+        // those not driven by light over that time, J.
+        let mut reach = |sub: f64| self.on.iter().filter(|&&r| self.kap[r] > 0.0).fold(0.0, |heat, &r| {
+            self.far[r] = gone(self.kap[r] * sub, self.pw[r]);
+            heat + if self.lit[r] { 0.0 } else { self.dh[r].abs() * self.lim[r] * self.far[r] }
+        });
         let mut sub = left;
-        while iter < MAX_SUBSTEPS && heat(sub) > MAX_DT_K * c && sub > left * MIN_SUB {
+        while reach(sub) > MAX_DT_K * c && iter < MAX_SUBSTEPS && sub > left * MIN_SUB {
             sub *= 0.5;
         }
         for &r in self.on.iter().filter(|&&r| self.kap[r] > 0.0) {
-            self.far[r] = gone(self.kap[r] * sub, self.pw[r]);
             if iter == 0 && !self.lit[r] && !self.minor[r] {
                 (self.kap0[r], self.lim0[r]) = (self.kap[r], self.lim[r]);
                 self.on0.push(r);

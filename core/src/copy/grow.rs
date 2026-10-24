@@ -1,6 +1,6 @@
 //! Growth: a body builds body matter (and the other solids it builds) from its stores, paid by work (`grow`).
 
-use crate::body::{self, Body, Layout, ALLOC, COPY_MASS, WET_TISSUE};
+use crate::body::{self, Body, Layout, ALLOC, WET_TISSUE};
 use crate::chem::{Chemistry, Phase, Reaction};
 use crate::ground::Melting;
 use crate::store::Node;
@@ -16,7 +16,7 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
     let (m, n) = (bl.outputs[0].0 as usize, b.n());
     b.brood = b.brooded(chem);
     // The matter a body of the size of maturity is made of: the living body is its matter over 1 - `WET_TISSUE` (`Body::built`).
-    let full = b.dec(COPY_MASS) * n * (1.0 - WET_TISSUE);
+    let full = b.k.copy_mass * n * (1.0 - WET_TISSUE);
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     let room0 = allowance(w, b, th.t, days.min(b.interval(w) as f64));
     // (The plateau state holds until a conversion changes the body.)

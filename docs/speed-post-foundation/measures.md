@@ -24,6 +24,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | A2 | A2 | 0.702 | 128 | 40 | 525 | 0 | 10 | 2,744 | 27,762 | 1.220 | 210 | 49 | 905 | 43 | 12 | 1,955 | 25,626 | 8,998 |
 | E2.1 | E2.1 | 0.728 | 135 | 46 | 538 | 0 | 10 | 2,744 | 27,762 | 1.274 | 225 | 55 | 940 | 40 | 14 | 1,932 | 25,410 | 8,996 |
 | D3 | D3 | 0.730 | 122 | 44 | 553 | 0 | 11 | 2,744 | 27,762 | 1.215 | 188 | 48 | 922 | 43 | 13 | 1,955 | 25,626 | 9,001 |
+| E2.2 | E2.2 | 0.735 | 126 | 45 | 552 | 0 | 12 | 2,769 | 27,974 | 1.214 | 200 | 54 | 906 | 40 | 14 | 1,904 | 25,345 | 9,008 |
 
 ### A2: compiler settings
 
@@ -142,6 +143,52 @@ globe. The whole year (row D3 above) went from 0.792 to 0.730 s on the island an
 fingerprints are unchanged with and without threads, and the 5-year runs of both benches from their saves give the same
 `series.csv` (outside the `ms_*` columns) as before D3. The S48 target (Flow 1.2 times faster on 4 cores) is reached on both
 benches, by `par.rs` and not by the loops of the list. Core code: 9,002 lines (+4).
+
+### E2.2: powers and exponentials in the body update
+
+Judged on callgrind instructions of one year on one thread (S45; `RAYON_NUM_THREADS=1`, so idle threads add no
+instructions), before at D3, which keeps E2.1's bits:
+
+| | island22 before | island22 after | globe36 before | globe36 after |
+|---|---|---|---|---|
+| all instructions, million | 6,269.8 | 6,138.4 (-2.10%) | 9,996.4 | 9,855.4 (-1.41%) |
+| body updates in the year (`updates`) | 27,672 | 27,691 | 25,267 | 25,277 |
+| `survey::day` (inclusive) per body update | 125,372 | 121,056 (-3.44%) | 197,935 | 193,627 (-2.18%) |
+| outside `survey::day`, million | 2,800.5 | 2,786.2 | 4,995.2 | 4,961.1 |
+| `pow` (exclusive, million) | 200.1 | 138.1 | 234.9 | 160.7 |
+| `exp` | 169.3 | 140.6 | 220.4 | 202.7 |
+| `expm1` | 79.2 | 67.9 | 133.5 | 118.9 |
+| `cbrt` | 34.2 | 33.1 | 48.2 | 47.2 |
+| `log` | 38.2 | 38.3 | 57.5 | 57.6 |
+| `log1p` | 10.4 | 7.8 | 26.8 | 22.4 |
+
+The other rounding changes the history, so the instructions of a year could move with the number of bodies. The
+measure per body update cannot be moved by that: the saving of the body day per update, times the updates of the year
+before, is 119.4 million on the island (1.91% of the year's instructions) and 108.9 million on the globe (1.09%). The
+work outside the body day (Change's reactor, `sub_step`) saves 14.3 and 34.1 million more (0.23% and 0.34%). By the
+measure per update the step is under its kill line of 2% on both benches (the island at 1.91%, 2.14% with the work
+outside the bodies; the globe at 1.09%, 1.43% with it). In the first year the history moves the updates by under 0.1%,
+so the whole-year measure is not inflated by it. The wall times in the row are of another hour than the rows before
+(the machine drifts by about 7%), so they are not compared. What was cheaper:
+
+- Values that follow from the genes and the chemistry, worked out once in `Body::prepare` (`Body::k`): the rate of the
+  main burning at `t_cat` that `pace` and `upkeep_pace` divide by (two `exp` and a `pow` per call before), the copy
+  mass (an `exp` per `dec(COPY_MASS)`, in eight places) and the tissue factor of upkeep (a `pow` per upkeep). This part
+  gives the same bits as before (the golden test did not move with it): island22 -52 million.
+- Fixed exponents: the power 2/3 of a cube's surface and of the coat's conductance as a cube root (one `cbrt` in
+  `conductance`, which had two), the power 1/4 of `Physics::think` and of the height as two square roots, `10^WET` as
+  `dec`; the film's leaf area is taken from the one `film` of `physics` (it was worked out twice).
+- `Reactor::sub_step` worked out `gone` (an `expm1` and a `ln_1p`) twice for each running reaction, once for the heat
+  guard and once for `far`; now once (same bits).
+
+Not done: `equiv` (`mass^intake_exp`, 338,000 `pow` calls a year on the island, 44 million instructions) because
+`intake_exp` is a free number of `Physics`; as the constant 3/4 it would be two square roots. The same for
+`activity` (`dormancy`), the Newton steps of `exchange::through` and `denature`. Level 2 (other rounding): golden
+re-pinned. Five years from the bench saves, island22 against E2.1: `t_land` differs by 1e-5 to 1.2e-4 (relative) in
+each year, `bodies` by up to 2.4% and `root_0_kg` by up to 2.7% (year 1: 0.2% and 0.3%); globe36 `t_land` by 2e-4,
+`bodies` -4.7%, `root_0_kg` -2.5% at year 5. Life's choices amplify rounding, as in A2 (the first year of the island
+differs in the bodies by 0.2%). The level-2 world check (the key numbers) is covered by the next key-number run (B1
+with B3); if that run falls out of range, the key numbers are run at E2.2 alone to tell the causes apart.
 
 ## Profile of the baseline
 

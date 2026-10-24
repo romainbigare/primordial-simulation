@@ -1185,6 +1185,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     // per kg.
     let mut big = b.clone();
     big.genes[pcore::body::COPY_MASS] += 16f32.log10();
+    big.prepare(&w.chem, &w.cfg.phys);
     assert!((up(&w, &big) / up(&w, &b) - 0.5).abs() < 1e-6, "a kind 16 times larger pays {} of the upkeep per kg", up(&w, &big) / up(&w, &b));
     // A node of 5 such members pays for each member.
     let mut node = b.clone();

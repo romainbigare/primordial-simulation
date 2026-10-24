@@ -8,16 +8,13 @@ impl Body {
     /// `t_cat`, so it rises by Arrhenius up to the catalysts' unfolding and falls past it (1 for a body that burns
     /// nothing). What its catalysts do for its supply, taking and building, goes as the energy they release.
     pub fn pace(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
-        match self.k.burn.first() {
-            Some(&(r, _)) => self.rate_at(chem, p, r, 1.0, t.max(1.0)) / self.rate_at(chem, p, r, 1.0, p.t_cat),
-            None => 1.0,
-        }
+        self.k.burn.first().map_or(1.0, |&(r, _)| self.rate_at(chem, p, r, 1.0, t.max(1.0)) / self.k.ref_rate[0])
     }
     /// The pace of its upkeep at `t`: the bare rate law of its main burning, k exp(-Ea/t), over its value at `t_cat` (1
     /// for a body that burns nothing). It never falls with heat: unfolded proteins are tagged and replaced, so a body past
     /// its catalysts' unfolding pays more, not less (Hofmann and Somero 1995).
-    pub fn upkeep_pace(&self, chem: &Chemistry, p: &crate::Physics, t: f64) -> f64 {
-        self.k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(t.max(1.0)) / chem.reactions[r].arrhenius(p.t_cat))
+    pub fn upkeep_pace(&self, chem: &Chemistry, t: f64) -> f64 {
+        self.k.burn.first().map_or(1.0, |&(r, _)| chem.reactions[r].arrhenius(t.max(1.0)) / self.k.ref_rate[1])
     }
     /// The rate constant of reaction `r` as the body catalyses it at activity `a` and `t`, 1/s: its catalyst's factor
     /// (`catalyst`), unfolded past its `DENATURE` gene (`change::denature`), times k exp(-Ea/t).

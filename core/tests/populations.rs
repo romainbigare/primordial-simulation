@@ -133,6 +133,7 @@ fn with_no_partner_a_child_has_one_parent() {
     let (mut w, i) = start();
     let (s, mut a, sb) = pair(&mut w, i, 2.0);
     w.life.bodies[sb].genes[COPY_MASS] = 3.0;
+    w.life.bodies[sb].prepare(&w.chem, &w.cfg.phys);
     assert!(!w.life.bodies[sb].adult(&w.chem));
     w.events.clear();
     let kids = copies(&mut w, s, &mut a, 30);
@@ -306,6 +307,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             w.life.bodies[s].spread = vec![1e9; len];
             w.life.bodies[s].genes[HIDDEN] = 12.0;
         }
+        w.life.bodies[s].prepare(&w.chem, &w.cfg.phys);
     }
     let mean = |w: &pcore::World| {
         let (mut g, mut n) = (vec![0.0f64; len], 0.0);
@@ -329,10 +331,10 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
         for s in order {
             let mut b = std::mem::take(&mut w.life.bodies[s]);
             (b.store, b.e) = (per.iter().map(|a| a * b.count).collect(), e1 * b.count);
-            b.prepare(&w.chem, &w.cfg.phys);
             // Mature with a body of twice its copy mass after the brood, children half the copy mass.
             let (body, n) = (b.built(&w.chem) / b.n(), b.count);
             (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -std::f32::consts::LOG10_2, 0.0);
+            b.prepare(&w.chem, &w.cfg.phys);
             brood(&w, &mut b, n);
             let (before, id) = (live(&w), b.id(s));
             copy::copy(&mut w, s, &mut b);

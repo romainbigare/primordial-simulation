@@ -13,10 +13,11 @@ pub(crate) fn rounding_lost(a: f64, b: f64, s: f64) -> f64 {
     if a.abs() >= b.abs() { (a - s) + b } else { (b - s) + a }
 }
 
-/// `n` times the surface of a cube of volume `v`: n 6 v^(2/3) (`n` first, for the order of the products).
+/// `n` times the surface of a cube of volume `v`: n 6 v^(2/3), as the square of the edge (`n` first, for the order of
+/// the products).
 #[inline]
 pub(crate) fn cube_area(n: f64, v: f64) -> f64 {
-    n * 6.0 * v.powf(2.0 / 3.0)
+    n * 6.0 * v.cbrt().powi(2)
 }
 
 /// (1 - exp(-x)) / x: the mean over a time of a pulse that decays `x` time constants in it (1 below 1e-9).

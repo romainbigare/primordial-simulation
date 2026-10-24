@@ -16,7 +16,7 @@ pub use grow::buildable;
 pub(crate) use select::{sample, select};
 pub use young::{mature, Grown};
 
-use crate::body::{most, mutation_size, vary, within, Body, Layout, CHILD, COPY_MASS, DISPERSE, WET, WET_TISSUE};
+use crate::body::{most, mutation_size, vary, within, Body, Layout, CHILD, DISPERSE, WET, WET_TISSUE};
 use crate::brain::{self, row_step, shake};
 use crate::chem::Chemistry;
 use crate::event::{Event, EventKind};
@@ -49,7 +49,7 @@ struct Litter {
 /// node fractional members of one parent beyond `BROOD_HELD`; a share `DISPERSE` starts in a neighbour cell (laws.md
 /// 4.2-4.4). Returns whether any were made.
 pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
-    let (chem, n, mc) = (&w.chem, b.n(), b.dec(COPY_MASS));
+    let (chem, n, mc) = (&w.chem, b.n(), b.k.copy_mass);
     let Some(mi) = chem.matter() else { return false };
     if !b.adult(chem) {
         return false;
@@ -179,7 +179,7 @@ fn give(w: &mut World, b: &mut Body, l: &Litter, cell: usize, m: f64) -> (Vec<f6
 /// births, so children who leave and children who stay get alike.
 fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -> Vec<f64> {
     let share = (births * matter).min(b.store[mi]) / (b.store[mi] - b.brooded(chem)).max(1e-300);
-    let wet = share * 10f64.powf(b.gene(WET));
+    let wet = share * b.dec(WET);
     b.store.iter().enumerate().map(|(k, a)| if k == mi { 0.0 } else { a * (if b.wet >> k & 1 == 1 { wet } else { share }).min(1.0) / births }).collect()
 }
 

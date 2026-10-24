@@ -268,7 +268,7 @@ impl Physics {
     /// Energy of one decision of a brain of cost `c` (`Lineage::cost`) for a member of `m` kg, J: weakly more for a
     /// bigger body; paid per decision, so it pushes bodies toward long intervals.
     pub(crate) fn think(&self, c: f64, m: f64) -> f64 {
-        c * self.m_ref * (m / self.m_ref).powf(0.25)
+        c * self.m_ref * (m / self.m_ref).sqrt().sqrt()
     }
     /// Energy to move one kg one metre on the flat for a member of `m1` kg, J: the real cost of transport, 10.7
     /// m1^-0.32 J per kg per m (Taylor et al. 1982), scaled to `c_move` at `MOVE_REF`. Climbing is the weight lifted.

@@ -4,7 +4,7 @@
 use super::exchange::cover_of;
 use super::pay::{hold, pay_at, plan, spend, upkeep, Payer};
 use super::physics::{physics, soak_again};
-use super::{thin, to_ground, Body, Layout, AGE, COPY_MASS, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
+use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::bond::{self, Enclosure};
 use crate::change::Reactor;
 use crate::chem::Phase;
@@ -136,7 +136,7 @@ pub(crate) fn gain_to_growth(w: &mut World, slot: usize, b: &mut Body, rc: &mut 
 /// in many (`lose_share`). An adult larger than its copy mass shrinks towards it as it chooses (`ALLOC`): that is no
 /// starving. False if it dies (a node: less than one member is left).
 fn starved(w: &mut World, slot: usize, b: &mut Body, from: f64, dead: &mut Vec<f64>) -> bool {
-    let (now, was) = (b.member_body(&w.chem), from.min(b.dec(COPY_MASS)));
+    let (now, was) = (b.member_body(&w.chem), from.min(b.k.copy_mass));
     let a = -std::f64::consts::LN_2 / (1.0 - w.cfg.phys.lethal).ln();
     // (A body with no body left has starved whatever it was.)
     let f = if now > 0.0 { 1.0 - (now / was).min(1.0).powf(a) } else { 1.0 };

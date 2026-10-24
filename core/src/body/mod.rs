@@ -139,6 +139,12 @@ pub struct Consts {
     pub upt: Vec<(usize, f32)>,
     /// Its catalysts' capacity (`upkeep`; an exponential per catalyst, so kept)
     pub cats: f64,
+    /// 10 to the power of the copy mass gene, kg
+    pub copy_mass: f64,
+    /// Factor of upkeep per kg of living body, (copy mass / `m_ref`)^(`intake_exp` - 1), 1
+    pub tissue: f64,
+    /// The rate of the main burning at `t_cat`, catalysed (`Body::rate_at`) and bare, 1/s (`Body::pace`, `Body::upkeep_pace`)
+    pub ref_rate: [f64; 2],
     /// What its burnings take, and what the reactions its catalysts run take (their inputs, a bit per substance)
     pub fuel: u64,
     pub broken: u64,
@@ -269,8 +275,10 @@ impl Body {
         let cats: f64 = chem.contact_rates(p.t_cat).iter().zip(&k.cat).filter(|x| *x.1 > 1.0).map(|(c, f)| f * c).sum();
         k.cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
         k.interval = self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64;
-        (k.gas, k.liq, k.heat, k.leaf) = (self.dec(GAS), self.dec(LIQ), self.dec(HEAT), self.dec(LEAF));
+        (k.gas, k.liq, k.heat, k.leaf, k.copy_mass) = (self.dec(GAS), self.dec(LIQ), self.dec(HEAT), self.dec(LEAF), self.dec(COPY_MASS));
+        k.tissue = (k.copy_mass / p.m_ref).powf(p.intake_exp - 1.0);
         self.k = k;
+        self.k.ref_rate = self.k.burn.first().map_or([1.0; 2], |&(r, _)| [self.rate_at(chem, p, r, 1.0, p.t_cat), chem.reactions[r].arrhenius(p.t_cat)]);
     }
     /// The reflectance of a member, the mean of its colour's three bands (`visible`).
     pub(crate) fn reflectance(&self) -> f64 {

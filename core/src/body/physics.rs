@@ -52,7 +52,6 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     let fall = rain_caught(w, slot, b, s);
     // It soaks through the mass that works; its conductance is taken at its temperature at the start.
     let wk = b.size(chem) / mass;
-    let leaf = b.leaf_area(chem, &cfg.phys);
     // The stages move sensible heat; liquids that come and go bring and take their fusion enthalpy as heat, until the
     // stores hold theirs again at the end.
     let c0 = b.heat_cap(chem);
@@ -60,7 +59,7 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
     // One boundary layer for its heat and its breath until its stores change.
     let f0 = film(chem, cfg, b, mass, s.cover);
     let g = surface(cfg, b, mass, &f0, s.walls, t0, s.tg);
-    let (caught, lit) = catch_light(w, b, s, leaf);
+    let (caught, lit) = catch_light(w, b, s, f0.leaf);
     let mut h = Heat { mass, t0, g, gcap, heat: 0.0, c_out: 0.0, lit, took: 0.0, stop: None, asked: 0.0 };
     let reach = gas_pool(w, b, s, &f0, tmp);
     let used = react(w, b, rc, tmp, s, &mut h, c0, upkeep_heat);
