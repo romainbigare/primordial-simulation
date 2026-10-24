@@ -526,6 +526,64 @@ The survey costs the same instructions (callgrind, one thread, one year: 800 to 
 globe36, 651 to 655 on region24); the gain is its threads. `scripts/bench.sh` (row above): island22 1.062 s/yr,
 globe36 0.777, region24 1.080 (bodies 841, 493 and 768 ms).
 
+### After D2.6: two steps not kept, and the gain (S41, S65)
+
+**Scratch kept per domain, not kept.** Each domain kept its `Reactor`, `LiveTmp` and `ActTmp` from batch to batch (not
+saved, empty in a copy, made again when absent). Level 1 (golden held). The bodies' stage on 4 threads, 7 interleaved
+runs of 2 years, medians against D2.6: -1.6% (island22, 895 to 881 ms), +3.1% (globe36, 509 to 525), +3.9% (region24,
+756 to 785): no gain above the noise. A fresh scratch costs little against a domain's batch.
+
+**Booking in the task, not built.** Three measures:
+
+- A build that books each domain's moves on the pool after the parallel phase (each `apply` writing the shared store
+  through a raw pointer, the domains' numbers disjoint; a probe only, never for `main`) keeps golden but is slower on 4
+  threads: +6.3%, +5.7%, +7.1% (7 interleaved runs). The store's arrays go by substance, then by cell, so the numbers
+  of neighbouring domains share cache lines, and threads writing them fight over the lines.
+- The whole booking after the parallel passes (batch and survey) takes 44, 21 and 46 ms a year on 4 threads (a probe
+  build, 3 runs of one year): 5.3%, 4.2% and 5.9% of the bodies' stage. That is the most this step could save. Settling
+  and applying the outboxes after it takes 150, 93 and 115 ms.
+- A safe design must not write the store in the parallel phase (the others read it as it was at the batch's start): the
+  task works out the booked numbers itself and the serial phase only copies them. The store's view would then sum as
+  `apply` does (the rounding carried for the ground and the air, the numbers that fall below zero counted and set to
+  zero, all of it undone with a checkpoint), the lift to the potential would stay a serial `apply`, and `book_moves`
+  would copy each domain's view. About +30 core lines; the core has 9 left (S3). Stopped for the owner's decision.
+
+**The gain** (S41, S65; the same definitions and the same `main` numbers as D2.5's). Wall time: 7 runs of 2 years from
+each D2.5 save with `RAYON_NUM_THREADS=1` and with 4 threads, interleaved in the same hour, the medians (the range in
+brackets), build `2bbcf39` (D2.6). Cost per update: callgrind on one thread, one year, `survey::batch` inclusive over
+the year's updates (the build of D2.6; D2.5's were 169,747, 203,921 and 152,783: the batch costs what it cost).
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| bodies' stage (survey included), 1 thread, ms a year | 1,855 (1,786 to 1,959) | 980 (894 to 1,004) | 1,604 (1,585 to 1,791) |
+| bodies' stage, 4 threads | 883 (846 to 977) | 535 (487 to 587) | 776 (714 to 800) |
+| **gain of the threads** | **2.10** | **1.83** | **2.07** |
+| whole year, 1 thread and 4 threads, ms | 2,100 and 1,105 (1.90) | 1,347 and 834 (1.61) | 1,960 and 1,088 (1.80) |
+| busiest domain's share | 0.147 | 0.199 | 0.269 |
+| `main` per update | 147,068 | 198,703 | 146,560 |
+| D2.6 per update, 1 thread (updates in the year) | 169,753 (54,486) | 203,880 (23,155) | 152,795 (51,514) |
+| overhead factor, `main` over D2.6 | 0.866 | 0.975 | 0.959 |
+| **gain against `main`** | **1.82** | **1.79** | **1.98** |
+| D2.5's gain against `main`, for comparison | 1.55 | 1.63 | 1.69 |
+
+All three are above the kill line (1.6) and under the target (2.2). With the island's overhead factor taken on one
+world (about 0.97, D2.5's note), island22 would give about 2.04.
+
+**What is left on one thread** (a probe build timing the parallel calls, `par::each` in `on_domains` and `par::rows`
+in `sums`; 3 runs of one year, the middle run):
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| bodies' stage, 1 thread: in parallel calls, on one thread anyway (ms) | 1,707, 329 | 730, 190 | 1,501, 282 |
+| share on one thread, 1 thread | 16% | 21% | 16% |
+| bodies' stage, 4 threads: in parallel calls, on one thread (ms) | 590, 331 | 316, 210 | 511, 241 |
+| **share on one thread, 4 threads** (after D2.5: 44%, 44%, 40%) | **36%** | **40%** | **32%** |
+| the parallel calls, 4 threads against 1 | 2.9 | 2.3 | 2.9 |
+
+The Amdahl ceiling of four threads from the shares on one thread: 2.70, 2.45 and 2.74. What stays on one thread is
+mostly the serial phase of a batch: settling the world and applying the outboxes (150, 93 and 115 ms a year on 4
+threads), the booking (44, 21, 46 ms), the faces and the list of updates, and the bodies that hold or are inside a part.
+
 ## Profile of the baseline
 
 One year from the same saves under `valgrind --tool=callgrind` (`scripts/bench.sh profile island22` and `... globe36`),
