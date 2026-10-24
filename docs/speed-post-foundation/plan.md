@@ -585,6 +585,10 @@ instructions (callgrind, 2.6) is taken out again.
 `speed/b1-b3-not-kept`, `docs/history.md`). Kinds in a cell stay an adult node and a young node; section 3.8 describes
 the design that was tried. B2 and C2 work on today's nodes.
 
+**Status (S66, S67):** B2's milder rule failed its equivalence test and its one predicate cost more than it saved: neither
+is kept (branches `speed/b2-rule-not-kept`, `speed/b2-predicate-not-kept`). Phase B gives no speed; rule 1 of 2.2 waits
+for the step that brings minds that must stay individual.
+
 #### B1. One node per kind per cell, its young inside it
 
 - **Measure first** (a Haiku agent, both benches): the share of bodies that are young nodes, the share of updates they
