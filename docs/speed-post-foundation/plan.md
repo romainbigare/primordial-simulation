@@ -144,8 +144,8 @@ shape become one. Every commit message ends with its line count: `Lines: +X -Y (
 - `docs/laws.md` changes in the same commit as each law change (E2.1, B1, B3, B2, C2, C1, D2.2, D2.3, D2.4, E3).
 - `docs/numbers.md` gets a row for each new setting in the step that adds it (`merge_cap` in B2, `rest_activity` in
   C1, `batch_days` in D2.2), and the rows of `crowd` and `node_days` change where B2, C2 and D2.2 change them.
-- `SNAPSHOT_VERSION` (in `tape`) is bumped at every step that changes the saved world: B1, C1 (`Body::due`,
-  `Body::gap`), D2.1, D2.2, E1, and any step that adds a saved field.
+- `SNAPSHOT_VERSION` (in `tape`) is bumped at every step that changes the saved world: B1, B2 (`Config::merge_cap`),
+  C1 (`Body::due`, `Body::gap`), D2.1, D2.2, E1, and any step that adds a saved field.
 - `docs/tape.md` changes when events or counters carry new ids or columns (D2.1's body ids, D2.3's busiest-domain
   share).
 - `CLAUDE.md`'s table "Where things are" lists this folder; Z4 checks it points to the final state.
@@ -177,7 +177,8 @@ The work must not close the door to smart, people-like bodies later (handover 13
 | `cargo build -p pcore --target wasm32-unknown-unknown` | every step |
 | `cargo test --release -p tape --test golden` (the golden test without threads) | every step that touches threads or order |
 | `scripts/bench.sh` (the benches, 5 years each) | every step that touches speed |
-| The key-number test (`tape/tests/ranges.rs`, about 10 minutes today, faster later) | once in each level-3 step that changes a law or a speed setting: E2.1; B1 and B3 together (one run after B3); B2, C2, C1, D2.2, D2.3, D2.4, E3 (S33) |
+| The key-number test (`tape/tests/ranges.rs`, about 10 minutes today, faster later) | once in each level-3 step that changes a law or a speed setting: E2.1; B1 and B3 together (one run after B3); B2, C2, C1, D2.2 (its run also checks D2.1's new rng keys), D2.3, D2.4, E3 (S33) |
+| The nodes check (F7, `tape/tests/nodes.rs`, about 5 minutes) | before B1 merges, against today's result (S36); at the end of phases B and D |
 | The equivalence test of a new speed setting (× 2 and ÷ 2) | in the step that adds or changes it |
 | The slow suite (`cargo test --release --workspace -- --ignored --no-fail-fast`) | at the end of each phase |
 
@@ -206,7 +207,7 @@ ceiling is **9,700** code lines on `main` from the commit of this plan (`cli/tes
 |---|---|---|---|
 | E2.1, E2.2 | about 15 | about 15 | about 0 |
 | D3 | about 40 | about 10 | about +30 |
-| B1 | about 130 (the parts' state, the mapping of matter changes, the growth split, maturing inside a node, a gain per part, the size rules by part) | about 70 (`copy/young.rs`, 50 code lines; `Body::link` and its uses; `Grown::Joins` and the merge after maturing in `survey::update`; the stage in `nodes::Kin` and in `merge_closest`'s key; `copy::emit`'s young-node branches) | about +60 |
+| B1 | about 160 (the parts' state as shares, the parts in `Lot` and in `add`/`take_in`, the growth split, maturing inside a node, `open`'s draw of a part, the per-part helper and its about 15 uses, the two starvations, a gain per part, one think per part for nodes with a brain) | about 70 (`copy/young.rs`, 50 code lines; `Body::link` and its uses; `Grown::Joins` and the merge after maturing in `survey::update`; the stage in `nodes::Kin` and in `merge_closest`'s key; `copy::emit`'s young-node branches) | about +90 |
 | B3 | about 20 | — | about +20 |
 | B2 | about 25 | about 35 (one predicate replaces the tests of `kin_of`, `merge_closest`'s distance and `copy::kin`) | about -10 |
 | C2 | about 30 to 50 (by the method chosen) | — | about +40 |
@@ -215,9 +216,10 @@ ceiling is **9,700** code lines on `main` from the commit of this plan (`cli/tes
 | D1 (b), if built | about 80 | — | about +80 |
 | E2.3, E1, E3 | each simplifies as much as it adds | | about 0 |
 
-That is about 9,760 with everything built, over the ceiling; about 9,680 without D1 (b). Both are above the aim of
+That is about 9,790 with everything built, over the ceiling; about 9,710 without D1 (b). Both are above the aim of
 9,500. So each step looks for what it can simplify in the files it touches, and the reviews ask for it; D1 (b) is built
-only if it pays and the lines are there.
+only if it pays and the lines are there. **A step that would cross 9,700** simplifies first; if it cannot, it stops,
+and the architect decides (logged in `decisions.md`).
 
 ### 2.5 How a step is worked and closed (the agents)
 
@@ -240,6 +242,14 @@ The architect plans, splits the work, reviews and merges. For each step:
 A step that does not reach its "done when" stops. If it does not pay (its gain is under its kill line), it is taken
 out again and gets one line in `docs/history.md` under "tried and not kept". If it pays but breaks a check, the cause is
 found and fixed; a range or a tolerance is never loosened to pass (`CLAUDE.md` 5.5).
+
+**How a gain is judged against its kill line** (S45). The machine drifts by about 7% between hours, so:
+
+- a step on one thread (E2, B, C, E3, a serial loop of D3) is judged on callgrind instructions,
+  which are exact;
+- a gain from threads (D2, D3's threads, D1) and a gain from memory layout (E1) is judged on wall time, 5 or more runs
+  of each build interleaved in the same hour, compared by their medians;
+- "a gain above the noise" means above the spread of those runs (or any gain in instructions, which have none).
 
 ---
 
@@ -329,7 +339,9 @@ found and fixed; a range or a tolerance is never loosened to pass (`CLAUDE.md` 5
   - `World::b` and the skin in `World::heat_cap_ground` (the Bed: the body's physics and `feed::take_node` read it),
     and `World::thaw` (the ground's heat, read straight from `w.store`, where `World::t_ground_last` falls back to it
     before Flow has run);
-  - `bond::anchor` and `bond::dig` (the Bed's amounts, `bond/verbs.rs`), which only serial bodies run.
+  - `bond::dig` (the Bed's amounts, `bond/verbs.rs`): DIG is open to every body (`choose::options` masks only ANCHOR
+    and RELEASE), so it reads the Bed through the view; `bond::anchor` reads the Bed too, but only serial bodies hold
+    a part to anchor.
 - **Reads of another domain's cells read the store as it was at the batch's start** (S42): `bond::afloat` reads the
   liquid of the target cell through `w.g` (`bond/sense.rs`, called by `choose::go`), and `choose::go` reads the target
   cell's survey sums. The builder lists every such read and every read of the first list again with
@@ -371,12 +383,16 @@ inside the domain as well as across its edge** (S22): one path, so a cell at a d
 
 **A body with a queued relocation is leaving** (S39). It stays in its old cell until the move lands, but:
 
-- it does not split (`nodes::split`) or mature in this update; the rest of its update (selection,
-  `lineage::resize`, `World::see`) runs in its old cell, in its own domain;
+- it does not split (`nodes::split`) in this update; the rest of its update (selection, `lineage::resize`, maturing
+  inside the node, `World::see`) runs in its old cell, in its own domain;
 - `copy::kin`, `copy::mix::partner`, `nodes::merge`, the targets of `take_body` and `feed::give`, and perception's
   own-cell lists skip it;
 - `spread::part_acts` and the whole-node branch of `spread::spread` both return "left" (the loop breaks), so no
   second relocation is queued.
+
+**A node's part with a queued FORM** (S44) stays a body of its own until the serial phase, as a moving part does
+(`part_acts` treats it as leaving the node). After its Form entry is applied, the part body rejoins its node
+(`nodes::take_in`) if it holds nothing and both are in one cell; else it stays a body of its own.
 
 The kinds, in the order the serial phase applies them:
 
@@ -386,7 +402,7 @@ The kinds, in the order the serial phase applies them:
 | Arriving members | `spread::part_acts` (members that move) | a relocation, marked "look for kin" | after the relocation lands: the kin search in the new cell (`copy::kin`, through `nodes::may_join`) and the merge (`nodes::merge`); no kin: it stays a body of its own, as today | the part is gone: nothing lands, nothing joins |
 | Litter | `copy::emit`, children who start in another cell | the cell the parent was in, the target cell, members, stores and heat (taken from the parent by `give`), genes, spread, size, rows, lineage, parent id, whether it may be a node, whether it is mixed | the kin search in the target cell; it joins the young part of a node there (`nodes::add`) or is placed (`place_child`, ids as in 3.3); the `Born` event is made here (S25) | no kin and less than one member: back into the parent's brood if the parent lives (by id: stores, heat and brood back), else to the ground node of the cell the parent was in, as a move |
 | Watch | `learn::watch` | watcher id, its member count and lineage at watch time, the share of its members who watched (1 for an individual, x / count for a node's part), target id | if both live, the watcher is still of that lineage and their brains have one shape: the watcher's rows move toward the target's by `blend` × alike × the share × (count then / count now) (alike from the target's `vis` and the watcher's `visible`); the `Watched` event. The blend is linear, so this is the mean by members that `nodes::take_in` makes today (S40) | either is gone, or the watcher's lineage changed: nothing (the turn was spent) |
-| Form | `bond::form` in the parallel phase (its cell holds no part) | body id, the shape drawn | run whole as today: the body pays, the part is made in its cell | the body is gone or can no longer pay: nothing |
+| Form | `bond::form` in the parallel phase (its cell holds no part), by a body or by a node's part placed by `part_acts` | body id, the shape drawn, and for a part the id of its node | run whole as today: the body pays, the part is made in its cell; a node's part then rejoins its node if it holds nothing and both are in one cell | the body is gone or can no longer pay: nothing (a part that can no longer pay rejoins its node by the same rule) |
 | New lineage, new born rows | `lineage::resize`, `copy::child_lineage`, `copy::place_child` | provisional id and its `Lineage` or rows | mapped to a global id; ids rewritten (3.3) | cannot fail |
 | Counts | every body placed or removed | per lineage and per born rows, the change of their holders | added; a lineage at zero dies out (`Life::brains` none), born rows at zero are freed | cannot fail |
 | Events and counters | all body code | the domain's list and sums | appended and added in domain order | cannot fail |
@@ -406,7 +422,7 @@ The kinds, in the order the serial phase applies them:
 8. The id table and the rings are final; the next batch starts with new faces.
 
 **What changes in the world (level 3):** bodies are seen as they were at the batch's start; every move to another
-cell, every watch and every new part land at the batch's end; a leaving body does not split or mature in that update.
+cell, every watch and every new part land at the batch's end; a leaving body does not split in that update.
 This is the same kind of lag a body already has when it sees far cells "as the last survey saw them" (handover 5.6 of
 the foundation). A fractional litter that disperses is now made and may come back (S25).
 
@@ -421,27 +437,54 @@ for it (S8).
   with or without a brain** (S29), a kind in a cell is **one node** with two parts. **One store**: the parts share the
   node's stores, heat and brood; they differ only in members and sizes. `copy/young.rs`, `Body::link` and
   `Grown::Joins` go.
-- **The state:** `count` (members, n), the adult members `n_a`, the adult member's body `m_a` (kg), and the young
-  part's log10 moments for its `n_y = n − n_a` members: mean, variance, and `size_lag` as today but defined against the
-  young part's mean member.
-- **The invariant:** the store's built matter = `n_a · m_a + n_y · (the young mean member's body)`; the brood is apart
-  (the adults' only).
-- **Each change of matter maps to the parts:**
-  - losses and gains of body matter that are not growth (`Body::lose`, `Body::digest`, `death::thin` when it is not a
-    death, `death::wound`, transfers between bodies, burning, upkeep) scale both parts' bodies by the same factor `f`
-    (a uniform relative change): the young log10 moments shift by `log10 f`, `m_a` becomes `m_a · f`;
-  - deaths (`death::thin`, `live::lose_share`, `live::starve`) remove the same share of members from each part;
-  - growth is split by supply (members × mass^0.75 at each part's size, Kleiber);
+- **The state:** `count` (members, n), the adult members `n_a`, **the adults' share of the built matter** (not the
+  adult member's body in kg), and the young part's log10 moments for its `n_y = n − n_a` members: mean, variance, and
+  `size_lag` as today but defined against the young part's mean member. The adult member's body is the adults' share
+  of the built matter over `n_a`; the young mean member's body is the rest over `n_y`.
+- **The invariant** (the store's built matter = adults' matter + young matter; the brood apart, the adults' only)
+  holds by construction: the parts are shares of one built matter, so it cannot drift. Every uniform change of the
+  body matter needs no code: `brood_share` and its callers (`body/physics.rs`, `body/pay.rs`), `Body::lose`,
+  `Body::digest`, transfers between bodies, burning and upkeep leave the shares as they are.
+- **What changes the parts:**
+  - growth is split by supply (members × mass^0.75 at each part's size, Kleiber): the shares move;
   - maturing moves members and their matter from the young part to the adult part by `math::Pass`, as
-    `copy::young::mature` does today between two bodies (`m_a` becomes the mean by members);
+    `copy::young::mature` does today between two bodies; it runs only for `count` ≥ 2;
+  - deaths that are not by size (`death::thin`, `live::lose_share`, `death::wound`) remove the same share of members
+    from each part: the shares stay;
+  - growth starvation (`live::starved`) is a death in the young part only, followed by a uniform rescale;
+  - `live::starve` (members without their short stores) is a death of the same share of each part, and the matter it
+    leaves behind is a uniform rescale;
   - children who stay join the young part (members and moments); their matter leaves the brood for the body inside the
     same store.
+- **The parts rules** (S43):
+  - a `nodes::Lot` carries the members of each part; any split (`Lot::split`, `nodes::part`, `nodes::split`,
+    `nodes::open`) takes the same share of each part, and stores taken beyond that share (`fa − f`) are a uniform
+    rescale of both parts' bodies;
+  - `nodes::add` and `nodes::take_in` pool adults with adults and young with young (each part's moments pooled as
+    today's one set is);
+  - an individual (`count` 1) is one part, chosen by its size: it moves to the adult part when it passes the copy mass;
+  - `nodes::open` and its `draw` draw a part by a chance by members, and a size from that part;
+  - every law that is not linear per member is evaluated per part and summed by members through **one helper**
+    (for example `Body::per_part(|member_body, members| ...)`); linear laws run on the totals. The B1 audit lists the
+    `\.n()` sites (about 50) and assigns each to "totals" or "per part": leaf area through `equiv`
+    (`body/exchange.rs`), the skin area's member mass (`body/exchange.rs`, `skin_area` and its other use), the
+    thinking cost (`body/pay.rs`, `upkeep`: not linear per member, so upkeep is not linear as a whole), `walk`
+    (`choose/go.rs`, `bond/verbs.rs`), perception's `pm` and `vol`, `fuel / n` in well-being, and `take_body`'s
+    `fb`, `fo` and `per`;
+  - a part's gain for the selection sample is ln(that part's buildable matter after / before), the shared reserves
+    counted to each part by its share of the built matter (S37).
 - **Height and visible traits:** one composition (one store), so a part's height is that of a member of its size with
-  the node's material shares (`Body::height`, `Body::visible`).
+  the node's material shares. `Body::vis` keeps its meaning (the node's mean member) for perception, the survey's sums,
+  faces and watching; the shade reads each part's height and capture area through the per-part helper (two layers,
+  B3).
 - **Why E11 cannot come back.** When sizes were pooled across the copy mass, variances ran to 1e16 and NaN
   (`docs/history.md`, E11). Here young and adults keep separate moments, never pooled across the copy mass: the adults
-  sit at one size `m_a`, children enter only the young moments, and maturing moves members across by `math::Pass`.
-- **Young animals** act with their adults through the node's spread of actions (`choose::spread`) (S36).
+  sit at one size, children enter only the young moments, `add` pools each part with its own kind, and maturing moves
+  members across by `math::Pass`.
+- **Nodes with a brain** (S36): a node with both parts thinks once per part, with the inputs at that part's member
+  size, and that part's members spread over its options (`choose::spread`). So young members act on their own state.
+  Such a node thinks twice an update: its thinking cost is paid per part's members (it is per member), and the bench
+  counts the extra think.
 - B3: the light of a cell passes the young part and the adult part of each node as two layers by their heights
   (Purves et al. 2008, the perfect plasticity approximation; Moorcroft et al. 2001).
 
@@ -455,7 +498,8 @@ spread stays within its cap on every gene (S7).
 
 Per-cell work that today runs in a serial loop runs through `par::rows` (rows made in parallel, then summed in the
 fixed order of the cells). Sums across cells keep their order, so the history is the same bit for bit (level 1). D3
-does it for Flow and Change; D2.6 does it for the survey, per domain.
+does it for Flow and Change; D2.6 does it for the survey, per domain (level 2: its parallel crowd changes the order of
+merges and of the remap of new born rows).
 
 ### 3.11 Columns and the stage path (E1, E3: gated)
 
@@ -488,8 +532,8 @@ are listed in the order they are built (section 5).
 
 ### E2.1 and E2.2: two hot spots (right after phase A)
 
-Each its own commit with its measured gain (S31). **Kill line:** a spot that gains under 2% of a bench is taken out
-again.
+Each its own commit with its measured gain (S31). **Kill line:** a spot that gains under 2% of a bench's
+instructions (callgrind, 2.6) is taken out again.
 
 - **E2.1 `spread::part_acts`.** For each option part, `nodes::part` makes a full clone of the node (`b.clone()`, with
   its genes, spreads, rows and memory) and `nodes::take_in` puts it back through `nodes::add`'s pooling of genes,
@@ -526,7 +570,8 @@ again.
   own row; the sums are made afterwards in the old order. The golden test runs with and without threads.
 - **Check level:** 1 (bit for bit), but 2 for a change of the reactor's arithmetic. **Done when:** the golden test
   keeps its fingerprints with and without threads; Flow is at least 1.5 times faster on 4 cores on the benches.
-  **Kill line:** a loop that gains under 1% of Flow (or of Change) stays serial.
+  **Kill line:** a loop stays serial unless it gains above the noise (2.6): in instructions for its serial share, in
+  interleaved wall time for its threads.
 - **Code:** about +30. **Agent:** Sonnet. **Parallel with:** E2, B, C (it touches `flow/`, `solve/` and `change/`
   only).
 
@@ -539,22 +584,28 @@ again.
   are young nodes **with** an adult node of their kind in their cell, and `u` their share of updates. Those young
   nodes go into their adult node; a young node without an adult of its kind becomes the node of its kind holding only
   young (`n_a` = 0; no fewer bodies there).
-- **What:** as in 3.8, for every population node: the state (`n_a`, `m_a`, the young moments), the invariant, the
-  mapping of each change of matter to the parts, growth split by supply, maturing inside the node, children who stay in
-  the young part. `copy/young.rs`, `Body::link`, `Grown::Joins`, the stage in `nodes::Kin` and in `merge_closest`'s
+- **What:** as in 3.8, for every population node: the state (`n_a`, the adults' share of the built matter, the young
+  moments), the parts rules, growth split by supply, maturing inside the node, the two starvations, children who stay
+  in the young part. `copy/young.rs`, `Body::link`, `Grown::Joins`, the stage in `nodes::Kin` and in `merge_closest`'s
   key, and `copy::emit`'s young-node branches go. Brood is made from the adult part's growth only (`ALLOC`).
 - **Why:** young nodes update as often as adults; one node per kind removes a body wherever both live, and one
   mechanism replaces two (the main rule).
-- **The size rules that read a part's member size:** `Body::adult()`, `Body::member_body`, `live::starved`,
-  `copy::copy`'s `BROOD_HELD * n` (adult members only), supply by mass^0.75 (`Body::supply`), `take_body`'s per-member
-  force and reach, `Body::height`, `Body::visible`. The builder lists every use of `member_body` and `size` (a Haiku
-  agent) and assigns each to "the node's totals" or "a part's member"; the list goes in the commit message. Upkeep,
-  costs by kg, the store checks and death by wear run on the node's totals as now (they are linear in mass).
+- **The audit** (a Haiku agent): every `\.n()` site (about 50), every use of `member_body` and `size`, each assigned
+  to "totals" (laws linear per member: costs by kg, the store checks, death by wear) or "per part" through the one
+  per-part helper (3.8): among them `Body::adult()`, `Body::member_body`, `live::starved`, `copy::copy`'s
+  `BROOD_HELD * n` (adult members only), supply by mass^0.75 (`Body::supply`), leaf area through `equiv`, the skin's
+  member mass, the thinking cost in `upkeep` (so upkeep is not linear as a whole), `walk`, perception's `pm` and `vol`,
+  `fuel / n` in well-being, `take_body`'s `fb`, `fo` and `per`, `Body::height`. `Body::vis` stays the node's mean
+  member. The list goes in the commit message.
 - **The selection sample** (S37): drawn from one part (a chance by members), at that part's size, and compared with
-  that same part's gain in the node's own update. The update computes a gain per part from its growth split, so a
-  young member is compared with the young, not with the whole node.
-- **Young animals** act with their adults through the node's spread of actions (S36); the nodes check (F7) is run at
-  phase B's end.
+  that same part's gain in the node's own update: ln(the part's buildable matter after / before), the shared reserves
+  counted to each part by its share of the built matter. So a young member is compared with the young, not with the
+  whole node.
+- **Nodes with a brain** think once per part (3.8, S36).
+- **The nodes check first** (S36): F7 (`tape/tests/nodes.rs`, `nodes_and_individuals_make_the_same_world`, about 5
+  minutes) runs **before B1 merges**, against today's result. **The fallback, decided now:** if a rule of F7 that holds
+  today breaks because of nodes with a brain, B1 is restricted to nodes without a brain, `copy/young.rs` stays for
+  nodes with a brain, and that two-mechanism exception is logged as a decision.
 - **Children** who start in another cell, and children of individuals, join the young part of the node of their kind
   there when they are alike (`copy::kin`, which B2 folds into `nodes::may_join`), else start a node.
 - **References:** Lefkovitch 1965 and Caswell 2001 (stage-structured populations); McKendrick 1926 and von Foerster
@@ -564,13 +615,14 @@ again.
     tests that hold the books of young and adult nodes are rewritten for one node. A test holds the invariant of 3.8
     after each kind of matter change.
   - *E11.* Separate moments for the young and the adults, never pooled across the copy mass (3.8).
-  - *The nodes check (F7).* It may move. It is run once at the end of phase B and its result written in the report; a
-    rule that newly fails is a bug to find, not a range to widen.
+  - *The nodes check (F7).* It may move. It runs before B1 merges (above) and again at the end of phase B, its result
+    written in the report; a rule that newly fails is a bug to find, not a range to widen.
 - **Check level:** 3, checked with B3 (two commits, one key-number run after B3; S33). **Done when:** on both benches
   the bodies alive fall by at least 0.8 `s` and the updates by at least 0.8 `u`; the pace test holds; the key numbers
   hold after B3.
-- **Kill line:** if the bodies' time on the benches falls by less than half of `u`, stop and report.
-- **Code:** about +130 −70 (2.4). Snapshot version bumped; `docs/laws.md` (4.4, the nodes) changes. **Agent:** Opus.
+- **Kill line:** if the bodies' instructions on the benches (callgrind, 2.6) fall by less than half of `u`, stop and
+  report.
+- **Code:** about +160 −70 (2.4). Snapshot version bumped; `docs/laws.md` (4.4, the nodes) changes. **Agent:** Opus.
   **Parallel with:** D3.
 
 #### B3. Light and selection read the sizes in a node
@@ -613,7 +665,8 @@ again.
 - **Check level:** 3. **Done when:** measured on the benches (the most bodies in a cell at a month's start, before and
   after B2) and in phase Z on a 1,000-year run of the refined region. If the milder rule does not bound the bodies, B2
   reports with numbers; a stronger rule needs a new decision.
-- **Code:** about -10. `docs/laws.md` 4.4 and the `crowd` row change. **Agent:** Sonnet. **Depends on:** B3.
+- **Code:** about -10. Snapshot version bumped (`Config::merge_cap` is a new saved field). `docs/laws.md` 4.4, the
+  `crowd` row and a new `merge_cap` row change. **Agent:** Sonnet. **Depends on:** B3.
 
 ### Phase C: fewer updates
 
@@ -650,23 +703,27 @@ again.
 
 - **Measure first** (S12): a Haiku agent counts, on both benches, the share of updates of bodies without a brain
   whose activity (`Body::activity`, laws.md 6.5) is under 0.05. **Kill line:** under 5% of updates, C1 is not built
-  and is logged.
-- **What** (S27): a body without a brain whose activity at its update is under `Config::rest_activity` (dry or frozen)
-  files its next update in the ring at `MAX_INTERVAL`. A new field `Body::due` (its due day; its due batch after D2.2)
-  makes ring entries that no longer match it skip. At each month's survey, a wake check reads the cell's ground
-  temperature and liquid (the monthly `Life::env`): when they would raise the body's activity past the threshold, it
-  moves its due day earlier (a new ring entry, `due` and `gap` set again; the old entry then skips). The body
-  integrates the whole time since its last update when it runs, as every update does. `clock::Sleep` is not used: it
-  stays the sleep of store nodes.
-- **The real gap.** Laws that read the time until the next update read a stored real gap, `Body::gap` (days, set when
-  the update is filed), not `interval(w)`: `feed`'s intake days and the chance to get away (`take_body`'s `away`),
+  and is logged; once built, it is judged on the benches' instructions (2.6).
+- **What** (S27): a body without a brain whose activity at its update is under `Config::rest_activity` files its
+  next update in the ring at `MAX_INTERVAL`. `Body::activity` measures the key liquids held, whatever their phase, so
+  this is a **dry** body (little liquid held); frozen bodies are not singled out. A new field `Body::due` (its due day;
+  its due batch after D2.2) makes ring entries that no longer match it skip; `due` is checked when an entry is
+  processed, not when the batch's list is built. At each month's survey, a wake check reads the cell (its ground
+  temperature and liquid, the monthly `Life::env`) **and** the body's own activity, since a resting node can take in
+  active members by kin joins and arrivals; when either would raise its activity past the threshold, it moves its due
+  day earlier (a new ring entry; the old entry then skips). The body integrates the whole time since its last update
+  when it runs, as every update does. `clock::Sleep` is not used: it stays the sleep of store nodes.
+- **One place sets `due` and `gap`:** `Life::add` (and the filing of an update after it ran). `nodes::part` clones a
+  body, so it resets them, and the part gets them from `Life::add` when placed.
+- **The real gap.** Laws that read the time until the next update read a stored real gap, `Body::gap` (days: the due
+  day minus the last update's day, set when the update is filed and again after a wake), not `interval(w)`: `feed`'s intake days and the chance to get away (`take_body`'s `away`),
   `copy/grow.rs` (its allowances), `survey::Draws::settle`, `body::pay` and the span of `live::settle_upkeep`, and
   `keep_warm`'s span; the callers of `body::pay` that pass `b.interval(w)` as an act's span (`choose::go`, `feed`,
   `bond::verbs`) read it too. The builder lists every read of `interval` and assigns each to "the gap" or "the gene's
   pace" (`Body::paces`); the list goes in the commit message.
 - **The threshold** `Config::rest_activity` (not `dormant`: `Physics::dormancy` exists) is a speed setting with its
   row in `docs/numbers.md` and its test (× 2 and ÷ 2 against no rest), in this step.
-- **Why:** a dry or frozen body's chemistry is nearly stopped (handover 4, "a dry body is nearly dormant"); updating it
+- **Why:** a dry body's chemistry is nearly stopped (handover 4, "a dry body is nearly dormant"); updating it
   every interval costs time and changes nothing.
 - **Check level:** 3. Snapshot version bumped (`Body::due`, `Body::gap`). **Code:** about +25. `docs/laws.md` (6.5)
   changes. **Agent:** Sonnet. **Depends on:** C2.
@@ -720,19 +777,24 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
   phase (S23); provisional lineages, born rows and counts settled there (S24, S11); dispersing litters as in S25;
   watches as in S40. **Tests:** one makes each outbox kind fail once (a relocation of a body that died, arriving
   members that are gone, a litter with no kin back to a living parent and to the ground of a dead one's cell, a watch
-  of a body that died and of one whose lineage changed, a form that can no longer be paid) and checks the books; one
+  of a body that died and of one whose lineage changed, a form that can no longer be paid, and a node's part with a
+  queued FORM that rejoins its node after the form and one that cannot rejoin) and checks the books; one
   checks that the remap gives the same lineages and born rows with and without threads. Level 3. `docs/laws.md`
   changes.
 - **D2.5 Threads.** With the feature `threads`, the domains of a batch, taken out of `World`, run on rayon's pool
   (`par_iter_mut`); without it, in order. The golden test gives the same fingerprints both ways. **The order test**
   (S42): in one test binary, a small world forced to have many cross-edge moves, litters and watches runs with rayon
   pools of 1 and of 4 threads and with the domains in reversed order inside the parallel phase, and gives the same
-  fingerprint each time.
+  fingerprint each time. The reversed order is an argument of the batch runner that only the test passes, not a
+  `Config` switch (`CLAUDE.md` 2.6).
 - **D2.6 The survey on threads.** Wear, the monthly crowd, shade and sums run per domain in parallel; the Draws of the
   air step and the marks of light are filled per domain. Cells whose bodies hold or are inside a part, or that hold a
   part, run their wear and crowd serially after the domains (a death or a merge may let go of a part). Deaths in the
-  parallel `wear` change lineage counts by per-domain deltas merged in order. `counts.clamped_heat` (saved) stays
-  summed in cell order. Level 1. Built before the kill decision.
+  parallel `wear` change lineage counts by per-domain deltas merged in order. A merge in the parallel crowd can make
+  new born rows (`nodes::add` → `Life::reborn` → `Life::new_genome`): they get provisional ids of the domain and are
+  remapped after the domains, in domain order and then in the order made, as in 3.3; then the cells with parts run.
+  `counts.clamped_heat` (saved) stays summed in cell order. Level 2 (the order of merges and of the remap changes
+  rounding): the golden test is re-pinned. Built before the kill decision.
 - **Why:** bodies are three quarters of a year on one core. The waves of blocks of the foundation failed (decision
   59) because a day held too little work and each block was copied onto a world of its thread's own; here a batch holds
   five days of work, and nothing is copied: each domain owns its bodies.
@@ -750,7 +812,8 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
   - *wasm:* without `threads`, the domains run in order, the same history.
 - **Done when** (S41): the golden test and the order test hold; the key numbers hold; on the benches **the bodies'
   stage (survey included) is at least 2.2 times faster on 4 cores than in the last `measures.md` row before D2.1**.
-- **Kill line:** under 1.6 times, stop and report; D2's commits are reverted.
+- **Kill line:** under 1.6 times (wall time, 5 or more interleaved runs, 2.6), stop and report; D2's commits are
+  reverted.
 - **Code:** about +520 (2.4). **Agent:** Opus for D2.1, D2.3, D2.4, D2.5; Sonnet for D2.2 and D2.6. Sequential
   (they touch the same files).
 
@@ -759,13 +822,13 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
 - **D1 (a):** the tape's file writing (snapshot compression, series rows, viewer frames) runs on a thread of the `cli`
   while the world runs on. **Why:** the tape is 10 to 12 ms a year: about 1 to 2% of a year today, more of a faster
   one. **Check level:** 1 (the world is the same; only the shell's timing moves). **Done when:** the tape's stage
-  falls by at least half on the benches. **Code:** no core line. **Parallel with:** D2 (it touches `cli/` and `tape/`
+  falls by at least half on the benches (interleaved wall time, 2.6). **Code:** no core line. **Parallel with:** D2 (it touches `cli/` and `tape/`
   only).
 - **D1 (b):** after D2 and D3, measure the cores' idle time in a year. If more than 25% of a year leaves three cores
   idle, build the physics of the next step to run beside the bodies through a double bodies' node (S9). **Check
   level:** 3 (bodies take from what the last air step filled for them). **Done when:** the measure is in
   `measures.md`; if built, a year falls by at least half the idle share measured, and the key numbers hold.
-  **Kill line:** under 5% of a year, taken out. **Code:** about +80.
+  **Kill line:** under 5% of a year (interleaved wall time, 2.6), taken out. **Code:** about +80.
 - **Agent:** Sonnet.
 
 ### Phase E: a cheaper update, after D2
@@ -773,7 +836,7 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
 #### E2.3. Hot spots after D2
 
 - **What:** profile both benches and `region24` after D2 and pick the new hot spots, each its own commit with its
-  measured gain, as E2.1 and E2.2. **Kill line:** 2% of a bench. **Code:** each simplifies as much as it adds.
+  measured gain, as E2.1 and E2.2. **Kill line:** 2% of a bench's instructions (2.6). **Code:** each simplifies as much as it adds.
   **Agent:** Sonnet (Opus for a spot in the update's structure).
 
 #### E1. Bodies as columns (gated)
@@ -784,8 +847,10 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
 - **What:** as in 3.11. A domain stores its bodies as columns; the code reads a body through `BodyRef` and `BodyMut`;
   field writes become methods where the columns need them.
 - **Why:** each body is a struct with its own heap lists; columns keep a domain's bodies together in memory.
-- **Check level:** 1 (only the layout changes). **Done when:** the golden test is unchanged; the bodies' stage is
-  faster by at least half the share the gate measured. **Kill line:** under 3% faster, it is taken out again.
+- **Check level:** 1 in what it computes (only the layout changes), but the snapshot version is bumped and the
+  fingerprint hashes the saved world, so **the check is: the golden test re-pinned, and the series of the golden worlds
+  bit for bit equal for 2 years** before and after. **Done when:** the bodies' stage is faster by at least half the
+  share the gate measured. **Kill line:** under 3% faster (interleaved wall time, 2.6), it is taken out again.
 - **Code:** simplifies as much as it adds. Snapshot version bumped. **Agent:** Opus.
 
 #### E3. A stage path for bodies without a brain (gated)
@@ -798,7 +863,7 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
   per-body path (rule 3): the code with a brain (`choose::act`, 19% of the globe) is not touched by E3.
 - **Check level:** 3 (S15). **Gain:** unknown until the gate's profile. **Done when:** the bodies' stage is faster by at
   least 5% of the bodies' time; the key numbers hold.
-- **Kill line:** a stage that gains under 5% of the bodies' time keeps the per-body path.
+- **Kill line:** a stage that gains under 5% of the bodies' instructions (2.6) keeps the per-body path.
 - **Code:** simplifies as much as it adds. **Agent:** Opus. **Depends on:** D2 (and E1 if built).
 
 ### Phase Z: the final check
@@ -851,7 +916,7 @@ A (done) ──► E2.1 ──► E2.2 ──► B1 ──► B3 ──► (key 
 | D2 does not pay | Its kill line: its commits are reverted; E's gates read profiles of `main` |
 | Too many bodies run serially (near parts) | The Haiku count before D2.3; over 10%, the architect revisits (S23) |
 | A speed tool changes the world (B2, C1, D2.2, `node_days`) | Its equivalence test and the key-number test are part of its "done when"; a change past noise stops the step |
-| B1 removes fewer bodies than hoped, or changes animals | Its target comes from its own measure; its kill line stops it; F7 runs at phase B's end (S36) |
+| B1 removes fewer bodies than hoped, or changes animals | Its target comes from its own measure; its kill line stops it; F7 runs before B1 merges, with the fallback to nodes without a brain written in S36 |
 | The size moments blow up again (E11) | Separate moments for young and adults, never pooled across the copy mass; a test holds the invariant (3.8) |
 | The milder merge of B2 does not bound the bodies | B2 reports with numbers; a stronger rule needs a new decision |
 | The nodes check (F7) breaks more | Run at the end of phase B and of phase D; a new failure is a bug to find |
@@ -874,7 +939,7 @@ A (done) ──► E2.1 ──► E2.2 ──► B1 ──► B3 ──► (key 
 | serial phase | the part of a batch after it: the moves and the outboxes booked, then the serial bodies, in a fixed order |
 | serial body | a due body that holds or is inside a part, or whose cell holds a part: it runs in the serial phase |
 | relocation | a body, or members of a node, going to another cell; it lands at the batch's end |
-| leaving | a body with a queued relocation: it does not split or mature, and others' searches skip it |
+| leaving | a body with a queued relocation (or a node's part with a queued FORM): it does not split, and others' searches skip it |
 | outbox | what a domain's bodies did that lands at the batch's end, applied in a fixed order |
 | store view | a domain's store nodes as the moves of its batch leave them, with checkpoints |
 | face | what others see of a body (id, cell, members, lineage, visible traits, signal, well-being, room), kept from the batch's start |
