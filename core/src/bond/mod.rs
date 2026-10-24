@@ -12,8 +12,8 @@ pub use bonds::{Bonds, Enclosure};
 pub use month::step;
 pub use sense::{afloat, depth, features, room};
 pub(crate) use sense::{enclosure, possible, sense, SENSE};
-pub use verbs::{act, anchor, carry, dig, force, form, moved, release, LET_GO};
-pub(crate) use verbs::{bears, dropped, let_go, lever};
+pub use verbs::{act, carry, dig, force, form, moved, release, ANCHORS, LET_GO, TORN};
+pub(crate) use verbs::{bears, dropped, let_go, let_go_now, lever};
 
 use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Handle}, store::{Node, NodeId}, World};
 use serde::{Deserialize, Serialize};
@@ -290,10 +290,13 @@ fn dissolve(w: &mut World, s: usize) {
         w.life[h].hold = None;
     }
     let (i, p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
-    for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate().filter(|(_, (a, f))| *a + *f != 0.0) {
-        w.give_move(Node::ground(i), k, a + f, 0.0);
-    }
-    w.give_move(Node::ground(i), 0, 0.0, p.e);
+    w.in_domain(i, |w, d| {
+        for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate().filter(|(_, (a, f))| *a + *f != 0.0) {
+            d.moves.give(w, Node::ground(i), k, a + f, 0.0);
+        }
+        d.moves.give(w, Node::ground(i), 0, 0.0, p.e);
+    });
+
     w.parts.at[i].retain(|&x| x as usize != s);
     // Its slot is free for a new part, of the next generation.
     w.parts.parts[s].gen = p.gen + 1;

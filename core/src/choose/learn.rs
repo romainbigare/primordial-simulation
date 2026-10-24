@@ -49,7 +49,8 @@ pub(crate) fn watched(w: &mut World, by: u64, (n, lineage): (f64, u32), of: u64)
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / STRENGTH_STEP).powi(2))).exp();
     let alike = if w.cfg.null { 0.0 } else { w.cfg.phys.blend * alike * (n / b.n()).min(1.0) as f32 };
-    if w.life.shape_of(o.lineage) == w.life.shape_of(b.lineage) && o.rows.len() == b.rows.len() {
+    let shape = |x: u32| w.life.brain(x).map(|l| l.shape);
+    if shape(o.lineage) == shape(b.lineage) && o.rows.len() == b.rows.len() {
         brain::blend(&mut b.rows, &o.rows, alike);
     }
     let same = (o.lineage == b.lineage) as u8 as f64;

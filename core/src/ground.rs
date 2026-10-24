@@ -76,21 +76,25 @@ pub(crate) fn heat_above_floor(e: f64, cap: f64) -> f64 {
 impl World {
     /// Heat capacity of a ground node's active layer, J/K: its bed's skin, then its loose amounts in order.
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
-        let (ns, g) = (self.chem.ns(), self.amounts_now(Node::ground(i)));
-        let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, self.amounts_now(Node::new(Class::Bed, i)));
+        self.heat_cap_of(i, self.stock(Node::ground(i)), self.stock(Node::new(Class::Bed, i)))
+    }
+    /// Heat capacity of ground node `i`'s active layer with loose amounts `g` and bonded amounts `bed`, mol of each, J/K.
+    pub(crate) fn heat_cap_of(&self, i: usize, g: impl Fn(usize) -> f64, bed: impl Fn(usize) -> f64) -> f64 {
+        let ns = self.chem.ns();
+        let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, bed);
         (0..ns).fold(skin, |c, k| c + g(k) * self.chem.subs[k].cp)
     }
     /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
     pub fn melt(&self, k: usize, i: usize) -> f64 {
-        self.chem.melt_in(k, self.amounts_now(Node::ground(i)))
+        self.chem.melt_in(k, self.stock(Node::ground(i)))
     }
-    /// Temperature of a ground node from its amounts and heat now (as the moves gathered leave them), and the substance on
-    /// its plateau with its liquid share.
+    /// Temperature of a ground node from its amounts and heat in the store, and the substance on its plateau with its
+    /// liquid share.
     pub fn thaw(&self, i: usize) -> (f64, Option<(usize, f64)>) {
-        let (c, g) = (self.heat_cap_ground(i).max(1.0), self.amounts_now(Node::ground(i)));
+        let (c, g) = (self.heat_cap_ground(i).max(1.0), self.stock(Node::ground(i)));
         let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| g(k) > 0.0).map(|k| (self.chem.melt_in(k, &g), k)).collect();
         ks.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let th = melting(c, self.heat_now(Node::ground(i)), ks.into_iter().map(|(tm, k)| (tm, k, g(k) * self.chem.subs[k].lf)));
+        let th = melting(c, self.store.heat(Class::Ground)[i], ks.into_iter().map(|(tm, k)| (tm, k, g(k) * self.chem.subs[k].lf)));
         (th.t, th.on)
     }
     /// Temperature of ground node `i` as every law and the shell read it, K, with its plateau: Flow's solve at its last
@@ -108,7 +112,7 @@ impl World {
     }
     /// Thermal energy of a ground node at temperature `t` with the fusion enthalpy molten there: the inverse of `thaw`.
     pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
-        let g = self.amounts_now(Node::ground(i));
+        let g = self.stock(Node::ground(i));
         let held: f64 = (0..self.chem.ns()).map(|k| g(k) * self.chem.fused_heat(k, t, &g)).sum();
         self.heat_cap_ground(i) * t + held
     }
@@ -121,11 +125,15 @@ impl World {
     }
     /// Heat capacity of air node `j`, J/K.
     pub fn heat_cap_air(&self, j: usize) -> f64 {
-        (0..self.chem.ns()).map(|k| self.a_seen(k, j) * self.chem.subs[k].cp).sum()
+        self.cap_air(|k| self.a_seen(k, j))
     }
-    /// Temperature of air node `j`, K (as the moves of the update running leave it).
+    /// Heat capacity of air that bodies see `seen` mol of each substance in, J/K.
+    pub(crate) fn cap_air(&self, seen: impl Fn(usize) -> f64) -> f64 {
+        (0..self.chem.ns()).map(|k| seen(k) * self.chem.subs[k].cp).sum()
+    }
+    /// Temperature of air node `j`, K.
     pub fn t_air(&self, j: usize) -> f64 {
-        crate::flow::air_temp(self.heat_now(Node::air(j)), self.heat_cap_air(j))
+        crate::flow::air_temp(self.store.heat(Class::Air)[j], self.heat_cap_air(j))
     }
     /// Height of the solid surface (bonded and loose solids), m, at the node's temperature now, with the solid share of a
     /// substance on its plateau.

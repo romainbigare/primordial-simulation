@@ -1,18 +1,22 @@
 //! The lineages and the born rows of `Life`: their registries, the holders counted into them, and the provisional ids
-//! of those made in the parallel phase of a batch, kept by their domain until the serial phase makes them global
-//! (plan 3.3).
+//! of those body code makes, kept by their domain until the world settles and makes them global (plan 3.3, S72).
 
-use super::{free_place, Life};
+use super::{free_place, Domain, Life};
 use crate::body::Body;
 use crate::brain::Shape;
 use crate::lineage::Lineage;
+use crate::World;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-/// The bit that marks a provisional id of a lineage or of born rows, made in the parallel phase of a batch (plan 3.3):
-/// its domain lies above `PROV_SHIFT`, its place in that domain's list below.
+/// The bit that marks a provisional id of a lineage or of born rows, made by body code (plan 3.3): its domain lies above
+/// `PROV_SHIFT`, its place in that domain's list below.
 const PROVISIONAL: u32 = 1 << 31;
-/// The bits of a provisional id below its domain: room for 65,536 made in one domain and batch, and 32,768 domains.
+/// The bit of a provisional lineage's id that says it has no brain (`Lineage::none`), so `Life::brainless` reads it
+/// through the world alone (`Body::interval`, `body::upkeep`) while its domain is out.
+const NONE: u32 = 1 << 30;
+/// The bits of a provisional id below its domain: room for 65,536 made in one domain between two settlings, and 16,384
+/// domains.
 const PROV_SHIFT: u32 = 16;
 
 /// What a count of holders is of: a lineage (its living bodies) or born rows (the bodies born with them).
@@ -33,83 +37,43 @@ impl Life {
     pub fn lineages(&self) -> usize {
         self.members.iter().filter(|&&m| m > 0).count()
     }
-    /// A new lineage, of no bodies yet; in the parallel phase of a batch a provisional one of the domain running.
+    /// A new lineage, of no bodies yet (body code makes provisional ones, `Domain::new_lineage`).
     pub fn new_lineage(&mut self, l: Lineage) -> u32 {
-        if let Some(d) = self.parallel {
-            let x = &mut self.domains[d].brains;
-            x.push(l);
-            return provisional_id(d, x.len() - 1);
-        }
         self.brains.push(Some(l));
         self.members.push(0);
         (self.brains.len() - 1) as u32
     }
-    /// The brain of `lineage`, provisional or not (none once it died out).
+    /// The brain of `lineage`, provisional (its domain in the world) or not (none once it died out).
     pub fn brain(&self, lineage: u32) -> Option<&Lineage> {
         match provisional(lineage) {
             Some((d, k)) => Some(&self.domains[d].brains[k]),
             None => self.brains.get(lineage as usize)?.as_ref(),
         }
     }
-    /// The brain shape of `lineage` (none once it died out).
-    pub(crate) fn shape_of(&self, lineage: u32) -> Option<Shape> {
-        self.brain(lineage).map(|l| l.shape)
-    }
-    /// The rows of a body born with `born` from body `b`: its born rows plus what `b` learned, where the brains have one
-    /// shape; else its born rows.
-    pub(crate) fn inherit(&self, born: &[f32], lineage: u32, b: &Body) -> Vec<f32> {
-        let (from, rows) = (self.born(b), &b.rows);
-        if self.shape_of(lineage) != self.shape_of(b.lineage) || born.len() != rows.len() || from.len() != rows.len() {
-            return born.to_vec();
+    /// Whether `lineage` has a brain (none once it died out); of a provisional one, from its id.
+    pub(crate) fn has_brain(&self, lineage: u32) -> Option<bool> {
+        match provisional(lineage) {
+            Some(_) => Some(lineage & NONE == 0),
+            None => self.brains.get(lineage as usize)?.as_ref().map(|l| !l.none()),
         }
-        born.iter().zip(rows).zip(from).map(|((x, r), f)| x + (r - f)).collect()
     }
-    /// New born rows (not yet given to a body); in the parallel phase of a batch provisional ones of the domain running.
+    /// New born rows, not yet given to a body (body code makes provisional ones, `Domain::new_genome`).
     pub fn new_genome(&mut self, rows: Vec<f32>) -> u32 {
-        if let Some(d) = self.parallel {
-            let x = &mut self.domains[d].genomes;
-            x.push(rows);
-            return provisional_id(d, x.len() - 1);
-        }
         let i = free_place(&mut self.genomes, &mut self.free_genomes);
         self.genomes[i] = Genome { rows, refs: 0 };
         i as u32
     }
     /// Body `b` has no brain (`Lineage::none`).
     pub(crate) fn brainless(&self, b: &Body) -> bool {
-        self.brain(b.lineage).is_some_and(|l| l.none())
+        self.has_brain(b.lineage) == Some(false)
     }
     /// The starting kind body `b` descends from (`Lineage::root`); `u32::MAX` if its lineage is gone.
     pub fn root(&self, b: &Body) -> u32 {
         self.brain(b.lineage).map_or(u32::MAX, |l| l.root)
     }
-    /// The rows body `b` was born with (provisional or not).
+    /// The rows body `b` was born with (provisional, its domain in the world, or not).
     pub fn born(&self, b: &Body) -> &[f32] {
         provisional(b.genome).map_or_else(|| &self.genomes[b.genome as usize].rows, |(d, k)| &self.domains[d].genomes[k])
-    }
-    /// Count body `b` into its lineage and its born rows.
-    pub(super) fn enter(&mut self, b: &Body) {
-        self.count(b.cell, (Held::Lineage, b.lineage), 1);
-        self.count(b.cell, (Held::Rows, b.genome), 1);
-    }
-    /// Count body `b` out of its born rows and its lineage.
-    pub(super) fn leave(&mut self, b: &Body) {
-        self.count(b.cell, (Held::Rows, b.genome), -1);
-        self.count(b.cell, (Held::Lineage, b.lineage), -1);
-    }
-    /// The holders of lineage or born rows `x` change by `by`, for a body of cell `cell`. In a
-    /// batch the change waits in that cell's domain until the batch ends (`settle`), so what its bodies hold or made
-    /// stays readable to its end; outside, it is at once, and a lineage left with no body dies out, born rows with no
-    /// holder are freed.
-    fn count(&mut self, cell: u32, (what, x): (Held, u32), by: i32) {
-        if self.batch {
-            return self.domains[self.cell_in[cell as usize].0 as usize].counted.push((what, x, by));
-        }
-        let n = self.holders((what, x));
-        *n = n.wrapping_add_signed(by);
-        if *n == 0 {
-            self.gone((what, x));
-        }
     }
     /// The holders of lineage or born rows `x`.
     fn holders(&mut self, (what, x): (Held, u32)) -> &mut u32 {
@@ -128,28 +92,25 @@ impl Life {
             Held::Lineage => self.brains[x as usize] = None,
         }
     }
-    /// The serial phase of a batch (plan 3.3): the lineages and born rows made in its parallel phase get global ids,
-    /// domain by domain in the order made, and the bodies, the outboxes and the changes of holders held by the domains
-    /// name those.
-    pub(crate) fn remap(&mut self) {
-        let mut map: Vec<[Vec<u32>; 2]> = Vec::with_capacity(self.domains.len());
-        for d in 0..self.domains.len() {
+    /// The lineages and born rows the domains made get global ids, domain by domain in the order made, and the bodies,
+    /// the outbox and the changes of holders of each domain name those (plan 3.3).
+    pub(crate) fn remap(&mut self, ds: std::ops::Range<usize>) {
+        let made: Vec<usize> = ds.filter(|&d| !self.domains[d].brains.is_empty() || !self.domains[d].genomes.is_empty()).collect();
+        for d in made {
             let lin = std::mem::take(&mut self.domains[d].brains).into_iter().map(|l| self.new_lineage(l)).collect();
             let gen = std::mem::take(&mut self.domains[d].genomes).into_iter().map(|g| self.new_genome(g)).collect();
-            map.push([lin, gen]);
-        }
-        let to = |x: u32, what: Held| provisional(x).map_or(x, |(d, k)| map[d][what as usize][k]);
-        for d in &mut self.domains {
-            d.bodies.iter_mut().for_each(|b| (b.lineage, b.genome) = (to(b.lineage, Held::Lineage), to(b.genome, Held::Rows)));
-            d.out.iter_mut().for_each(|e| e.remap(&to));
-            d.counted.iter_mut().for_each(|c| c.1 = to(c.1, c.0));
+            let map: [Vec<u32>; 2] = [lin, gen];
+            let to = |x: u32, what: Held| provisional(x).map_or(x, |(_, k)| map[what as usize][k]);
+            let x = &mut self.domains[d];
+            x.bodies.iter_mut().for_each(|b| (b.lineage, b.genome) = (to(b.lineage, Held::Lineage), to(b.genome, Held::Rows)));
+            x.out.iter_mut().for_each(|e| e.remap(&to));
+            x.counted.iter_mut().for_each(|c| c.1 = to(c.1, c.0));
         }
     }
-    /// The end of a batch: the changes of holders are added, domain by domain in the order made; then, in the order
-    /// of their ids, the lineages changed that have no body die out and the born rows changed with no holder are freed.
-    pub(crate) fn settle(&mut self) {
-        self.batch = false;
-        let counted: Vec<(Held, u32, i32)> = self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.counted)).collect();
+    /// The changes of holders the domains made are added, domain by domain in the order made; then, in the order of
+    /// their ids, the lineages changed that have no body die out and the born rows changed with no holder are freed.
+    pub(crate) fn count_all(&mut self, ds: std::ops::Range<usize>) {
+        let counted: Vec<(Held, u32, i32)> = self.domains[ds].iter_mut().flat_map(|d| std::mem::take(&mut d.counted)).collect();
         let changed: BTreeSet<(Held, u32)> = counted.iter().map(|c| (c.0, c.1)).collect();
         for (what, x, by) in counted {
             let n = self.holders((what, x));
@@ -161,14 +122,63 @@ impl Life {
             }
         }
     }
+}
+
+impl Domain {
+    /// A new lineage, of no bodies yet: a provisional one of this domain.
+    pub fn new_lineage(&mut self, l: Lineage) -> u32 {
+        let none = if l.none() { NONE } else { 0 };
+        self.brains.push(l);
+        provisional_id(self.index as usize, self.brains.len() - 1) | none
+    }
+    /// New born rows, not yet given to a body: provisional ones of this domain.
+    pub fn new_genome(&mut self, rows: Vec<f32>) -> u32 {
+        self.genomes.push(rows);
+        provisional_id(self.index as usize, self.genomes.len() - 1)
+    }
+    /// The brain of `lineage`, provisional (of this domain) or not (none once it died out).
+    pub(crate) fn brain<'a>(&'a self, w: &'a World, lineage: u32) -> Option<&'a Lineage> {
+        provisional(lineage).map_or_else(|| w.life.brain(lineage), |(_, k)| Some(&self.brains[k]))
+    }
+    /// The brain shape of `lineage` (none once it died out).
+    pub(crate) fn shape_of(&self, w: &World, lineage: u32) -> Option<Shape> {
+        self.brain(w, lineage).map(|l| l.shape)
+    }
+    /// The starting kind body `b` descends from (`Lineage::root`); `u32::MAX` if its lineage is gone.
+    pub(crate) fn root(&self, w: &World, b: &Body) -> u32 {
+        self.brain(w, b.lineage).map_or(u32::MAX, |l| l.root)
+    }
+    /// The rows body `b` was born with (provisional, of this domain, or not).
+    pub(crate) fn born<'a>(&'a self, w: &'a World, b: &Body) -> &'a [f32] {
+        provisional(b.genome).map_or_else(|| w.life.born(b), |(_, k)| &self.genomes[k])
+    }
+    /// The rows of a body born with `born` from body `b`: its born rows plus what `b` learned, where the brains have one
+    /// shape; else its born rows.
+    pub(crate) fn inherit(&self, w: &World, born: &[f32], lineage: u32, b: &Body) -> Vec<f32> {
+        let (from, rows) = (self.born(w, b), &b.rows);
+        if self.shape_of(w, lineage) != self.shape_of(w, b.lineage) || born.len() != rows.len() || from.len() != rows.len() {
+            return born.to_vec();
+        }
+        born.iter().zip(rows).zip(from).map(|((x, r), f)| x + (r - f)).collect()
+    }
+    /// Count body `b` into its lineage and its born rows.
+    pub(super) fn enter(&mut self, b: &Body) {
+        self.counted.push((Held::Lineage, b.lineage, 1));
+        self.counted.push((Held::Rows, b.genome, 1));
+    }
+    /// Count body `b` out of its born rows and its lineage.
+    pub(super) fn leave(&mut self, b: &Body) {
+        self.counted.push((Held::Rows, b.genome, -1));
+        self.counted.push((Held::Lineage, b.lineage, -1));
+    }
     /// Body `b` (taken out of its slot) is now born with `rows` (its own rows are the caller's).
-    pub(crate) fn reborn(&mut self, b: &mut Body, rows: Vec<f32>) {
-        if rows == self.born(b) {
+    pub(crate) fn reborn(&mut self, w: &World, b: &mut Body, rows: Vec<f32>) {
+        if rows == self.born(w, b) {
             return;
         }
         let g = self.new_genome(rows);
-        self.count(b.cell, (Held::Rows, g), 1);
-        self.count(b.cell, (Held::Rows, b.genome), -1);
+        self.counted.push((Held::Rows, g, 1));
+        self.counted.push((Held::Rows, b.genome, -1));
         b.genome = g;
     }
     /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`.
@@ -179,13 +189,13 @@ impl Life {
     }
 }
 
-/// The provisional id of the `k`-th lineage or born rows made in domain `d` in the batch running.
+/// The provisional id of the `k`-th lineage or born rows made in domain `d` since the world last settled.
 fn provisional_id(d: usize, k: usize) -> u32 {
-    assert!(k < 1 << PROV_SHIFT && d < 1 << (31 - PROV_SHIFT), "provisional id {k} of domain {d} out of its bits");
+    assert!(k < 1 << PROV_SHIFT && d < 1 << (30 - PROV_SHIFT), "provisional id {k} of domain {d} out of its bits");
     PROVISIONAL | (d as u32) << PROV_SHIFT | k as u32
 }
 
 /// The domain and the place in its list of provisional id `x`; none for a global id.
 fn provisional(x: u32) -> Option<(usize, usize)> {
-    (x & PROVISIONAL != 0).then_some((((x & !PROVISIONAL) >> PROV_SHIFT) as usize, (x & ((1 << PROV_SHIFT) - 1)) as usize))
+    (x & PROVISIONAL != 0).then_some((((x & !(PROVISIONAL | NONE)) >> PROV_SHIFT) as usize, (x & ((1 << PROV_SHIFT) - 1)) as usize))
 }

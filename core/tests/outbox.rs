@@ -15,7 +15,7 @@ use worldgen::testkit::{brood, children, dry_lands, eater, founder, moved, node_
 /// The body at `h` dies where it is.
 fn kill(w: &mut World, h: Handle) {
     let b = std::mem::take(&mut w.life[h]);
-    moved(w, (b.cell as usize, h), |w| die(w, h, b, LACK));
+    moved(w, (b.cell as usize, h), |w, d| die(w, d, h, b, LACK));
 }
 
 /// A node of 5 resting members in cell `i` whose children all start in a neighbour cell, with a brood of `k` children
@@ -45,7 +45,8 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let (e, at_j) = (rest(&mut w), w.life.in_cell(j));
     let a = w.add(e, 1);
     for kin in [false, true] {
-        w.life.queue(i, Entry::Go { id: w.life[a].id, from: i as u32, to: j as u32, pushed: 1.0, lane: 1.0, carries: false, kin });
+        let id = w.life[a].id;
+        w.in_domain(i, |_, d| d.out.push(Entry::Go { id, from: i as u32, to: j as u32, pushed: 1.0, lane: 1.0, carries: false, kin }));
     }
     kill(&mut w, a);
     deliver(&mut w);
@@ -59,7 +60,7 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
         let mut n = std::mem::take(&mut w.life[s]);
         n.brood = n.brooded(&w.chem);
         let (id, before) = (n.id, [n.store[MATTER], n.brood, n.e]);
-        assert!(copy::copy(&mut w, &mut n), "no children");
+        assert!(w.in_domain(n.cell as usize, |w, d| copy::copy(w, d, &mut n)), "no children");
         assert!(n.store[MATTER] < before[0], "the litter was not taken from its parent");
         w.life[s] = n;
         if dies {
@@ -79,8 +80,8 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let (by, of, gone) = (w.add(e, 1), w.add(f, 1), w.add(g, 1));
     let (rows, lineage, ids) = (w.life[by].rows.clone(), w.life[by].lineage, [by, of, gone].map(|h| w.life[h].id));
     kill(&mut w, gone);
-    w.life.queue(i, Entry::Watch { by: ids[0], n: 1.0, lineage, of: ids[2] });
-    w.life.queue(i, Entry::Watch { by: ids[0], n: 1.0, lineage: lineage + 1, of: ids[1] });
+    w.in_domain(i, |_, d| d.out.push(Entry::Watch { by: ids[0], n: 1.0, lineage, of: ids[2] }));
+    w.in_domain(i, |_, d| d.out.push(Entry::Watch { by: ids[0], n: 1.0, lineage: lineage + 1, of: ids[1] }));
     deliver(&mut w);
     assert!(w.life[by].rows == rows && !w.events.iter().any(|e| matches!(e.kind, EventKind::Watched { .. })), "a watch was applied");
 
@@ -91,8 +92,8 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let (a, c_handle) = (w.add(e, 1), w.cfg.phys.c_handle);
     let id = w.life[a].id;
     w.cfg.phys.c_handle = 1e30;
-    w.life.queue(i, Entry::Act { id, on: Ok((1, part)), node: None });
-    w.life.queue(i, Entry::Act { id, on: Ok((1, NodeId { gen: part.gen + 1, ..part })), node: None });
+    w.in_domain(i, |_, d| d.out.push(Entry::Act { id, on: Ok((1, part)), node: None }));
+    w.in_domain(i, |_, d| d.out.push(Entry::Act { id, on: Ok((1, NodeId { gen: part.gen + 1, ..part })), node: None }));
     deliver(&mut w);
     w.cfg.phys.c_handle = c_handle;
     assert_eq!(w.parts.parts[p].mass(&w.chem), kg, "a part act was applied");
@@ -103,12 +104,13 @@ fn an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books() {
     let e = rest(&mut w);
     let n = node_of(&mut w, e, 5.0);
     let s = w.add(n, 1);
-    let parts = nodes::open(&mut w, s, 2);
+    let parts = w.in_domain(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, 2));
     let (node, count) = (w.life[s].id, w.life[s].count);
     let ids: Vec<u64> = parts.iter().map(|&h| w.life[h].id).collect();
     for (&h, verb) in parts.iter().zip([1, 0]) {
         w.life[h].leaving = true;
-        w.life.queue(i, Entry::Act { id: w.life[h].id, on: Ok((verb, part)), node: Some(node) });
+        let id = w.life[h].id;
+        w.in_domain(i, |_, d| d.out.push(Entry::Act { id, on: Ok((verb, part)), node: Some(node) }));
     }
     deliver(&mut w);
     let s = w.life.find(node).unwrap();
@@ -151,9 +153,9 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
 }
 
 /// The order in which the domains run in the parallel phase of a batch changes nothing: the lineages and born rows
-/// made there get the same global ids (plan 3.3), and the world ends the same, bit for bit. In the batches each kind of
-/// the serial phase happens: a dispersing litter lands, a watch and a part act are applied, a body that holds a part
-/// runs, lineages are made.
+/// made there get the same global ids (plan 3.3), and the world ends the same, bit for bit, with its events and
+/// counters. In the batches each kind of the serial phase happens: a dispersing litter lands, a watch and a part act are
+/// applied, a body that holds a part runs, lineages are made.
 #[test]
 fn the_order_of_the_domains_changes_nothing() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -193,7 +195,8 @@ fn the_order_of_the_domains_changes_nothing() {
         }
         v
     });
-    let state = |v: &World| (serde_json::to_string(&v.life).unwrap(), serde_json::to_string(&v.store).unwrap());
+    // (The whole saved world, and the events and counters of the batches, which are not saved.)
+    let state = |v: &World| (serde_json::to_string(v).unwrap(), format!("{:?} {:?}", v.events, v.counts));
     assert!(state(&ends[0]) == state(&ends[1]), "the order of the domains changed the world");
     let v = &ends[0];
     let kind = |f: &dyn Fn(&EventKind) -> bool| v.events.iter().filter(|e| f(&e.kind)).count();

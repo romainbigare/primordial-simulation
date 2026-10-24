@@ -6,7 +6,7 @@ use crate::bond::{self, Enclosure};
 use crate::chem::Chemistry;
 use crate::math::cube_area;
 use crate::units::{DAY, SIGMA};
-use crate::World;
+use crate::{life::Domain, World};
 
 impl Body {
     /// Heat conductance of its coat, W/K (the `HEAT` gene), through each member's surface, as mass^(2/3).
@@ -29,9 +29,9 @@ impl Body {
 const NEWTON_STEPS: usize = 40;
 
 /// The cover of other bodies over a body's cell, kg/m²: the mass of the others there now per ground area.
-pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
+pub(super) fn cover_of(w: &World, d: &Domain, b: &Body) -> f64 {
     let i = b.cell as usize;
-    let others = w.life.cell(i).map(|s| &w.life[s]).filter(|o| o.alive && !std::ptr::eq(*o, b));
+    let others = d.cell(i).map(|s| &d[s]).filter(|o| o.alive && !std::ptr::eq(*o, b));
     others.map(|o| o.vis[0] as f64 * o.n()).sum::<f64>() / w.mesh.cells().area()[i]
 }
 
@@ -106,10 +106,10 @@ pub(super) fn through(l: f64, ls: f64, e: f64, rd: f64, n: f64) -> f64 {
 }
 
 /// The heat conductance of a body of `mass` kg at `t` to the ground (`surface`, with its cover and walls), W/K.
-pub fn conductance_to_ground(w: &World, b: &Body, mass: f64, t: f64) -> f64 {
+pub fn conductance_to_ground(w: &World, d: &Domain, b: &Body, mass: f64, t: f64) -> f64 {
     let i = b.cell as usize;
     let tg = w.t_ground_last(i);
-    surface(&w.cfg, b, mass, &film(&w.chem, &w.cfg, b, mass, cover_of(w, b)), bond::enclosure(w, b), t, tg)
+    surface(&w.cfg, b, mass, &film(&w.chem, &w.cfg, b, mass, cover_of(w, d, b)), bond::enclosure(w, d, b), t, tg)
 }
 
 /// Heat conductance of radiation between a surface of `area` m² at `t` and the ground at `tg`, W/K: σ (T² + tg²)

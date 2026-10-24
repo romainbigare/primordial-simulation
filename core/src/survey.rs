@@ -2,7 +2,7 @@
 //! (`survey`), and every batch of days the updates due, in a parallel and a serial phase (`batch`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
-use crate::{brain::SIG, change::Reactor, choose, copy::Grown, life::Handle, math::mean_decay, units::DAY, World};
+use crate::{brain::SIG, change::Reactor, choose, copy::Grown, life::{Domain, Handle}, math::mean_decay, units::DAY, World};
 use crate::store::{apply, Batch, Class, Node};
 use serde::{Deserialize, Serialize};
 
@@ -214,18 +214,14 @@ fn traffic(w: &mut World) {
 
 /// Light passes the bodies of a cell from the tallest member down, equal heights sharing a layer; a layer of capture
 /// area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the shades,
-/// weighted by capture area, have mean 1). Only cells whose bodies changed are worked out again (`Life::stir`).
+/// weighted by capture area, have mean 1). Only cells whose bodies changed are worked out again (`Domain::stir`).
 fn shade(w: &mut World) {
     // What a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
     let g = mean_decay;
-    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
-    let life = &mut w.life;
-    if life.stale.len() != n {
-        life.stale = vec![true; n];
-    }
+    let (area, life) = (w.mesh.cells().area(), &mut w.life);
     let mut l: Vec<(f32, f64, Handle)> = Vec::new();
     for (i, &a) in area.iter().enumerate() {
-        if !std::mem::take(&mut life.stale[i]) {
+        if !life.take_stale(i) {
             continue;
         }
         l.clear();
@@ -287,15 +283,17 @@ impl Faces {
     }
 }
 
-/// Update the bodies due in this batch, all at its first day (plan 3.6). First the parallel phase: the bodies that hold
-/// no part and are inside none, domain by domain (`life::Domain`), cell by cell, and in a cell by id (an order that does
-/// not depend on where bodies are stored, and keeps memory reads close together). They see each other as they were at
-/// the batch's start (`Faces`) and the store as this batch's moves of their domain leave it (`store::Moves`); what they
-/// do outside their domain goes to its outbox (`outbox`), and the lineages and born rows they make are provisional.
-/// Then the serial phase: the moves booked, those ids made global (`Life::remap`), the outboxes applied, then the
-/// bodies that hold or are inside a part, each with its domain's view opened fresh and its outbox applied after it, and
-/// last the lineages and born rows left with no holder die out or are freed (`Life::settle`). With `reversed`, the
-/// domains of the parallel phase run in reversed order: only for the test that this order changes nothing.
+/// Update the bodies due in this batch, all at its first day (plan 3.6). First the parallel phase: the domains are taken
+/// out of the world (`life::Domain`), and each runs its bodies that hold no part and are inside none, cell by cell, and
+/// in a cell by id (an order that does not depend on where bodies are stored, and keeps memory reads close together),
+/// with the world read only. They see each other as they were at the batch's start (`Faces`) and the store as their
+/// domain's moves leave it (`store::Moves`); what they do outside their domain goes to its outbox (`outbox`), and the
+/// lineages and born rows they make are provisional. Then the serial phase: the domains back, the moves booked, the
+/// world settles (`World::settle`: events, counters, those ids made global), the outboxes applied, then the bodies that
+/// hold or are inside a part, each a serial step on its domain (`World::in_domain`) with its outbox applied after it,
+/// and last the changes of holders are added: the lineages and born rows left with no holder die out or are freed.
+/// With `reversed`, the domains of the parallel phase run in reversed order: only for the test that this order changes
+/// nothing.
 pub fn batch(w: &mut World, reversed: bool) {
     let due = w.life.take_due(w.batch());
     if due.is_empty() {
@@ -316,61 +314,62 @@ pub fn batch(w: &mut World, reversed: bool) {
     if reversed {
         list.sort_by_key(|x| std::cmp::Reverse(x.0));
     }
-    let (mut rc, mut tmp, mut act) = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
-    // The update of a body, in the parallel phase or a serial body with its outbox applied after it.
-    let mut run = |w: &mut World, (d, cell, id, serial): (usize, usize, u64, bool)| {
-        w.life.parallel = (!serial).then_some(d);
-        // (It may have died or joined another body since.)
-        let Some(s) = w.life.find(id) else { return };
-        w.open_moves(cell, Node::new(Class::Body, s.slot as usize));
-        update(w, s, &mut rc, (&mut tmp, &mut act));
-        if serial {
-            crate::outbox::deliver(w);
-        }
-    };
     w.life.batch = true;
-    list.into_iter().for_each(|x| run(w, x));
-    w.life.parallel = None;
+    let mut domains = std::mem::take(&mut w.life.domains);
+    for run in list.chunk_by(|a, b| a.0 == b.0) {
+        let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
+        run.iter().for_each(|&(d, cell, id, _)| update(w, &mut domains[d], (cell, id), &mut scratch));
+    }
+    w.life.domains = domains;
     w.book_moves();
-    w.life.remap();
+    w.settle(0..w.life.domains.len());
     crate::outbox::deliver(w);
-    serial.into_iter().for_each(|x| run(w, x));
-    w.life.settle();
+    let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
+    for (_, cell, id, _) in serial {
+        w.in_domain(cell, |w, d| update(w, d, (cell, id), &mut scratch));
+        crate::outbox::deliver(w);
+    }
+    w.life.batch = false;
+    w.settle(0..w.life.domains.len());
+    w.life.settle_moved();
     w.life.faces.clear();
 }
 
-/// The update of the body stored at `s`: its physics, decision, selection, lineage, maturing and split; or its death.
-fn update(w: &mut World, s: Handle, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, &mut choose::ActTmp)) {
-    let mut b = std::mem::take(&mut w.life[s]);
-    w.counts.updates += 1;
+/// The update of body `id` of cell `cell` in domain `d`, if it is still stored there (it may have died or joined
+/// another body since): its physics, decision, selection, lineage, maturing and split; or its death.
+fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (rc, tmp, act): &mut (Reactor, LiveTmp, choose::ActTmp)) {
+    let Some(s) = d.find(id) else { return };
+    d.moves.open(w, cell, Node::new(Class::Body, s.slot as usize));
+    let mut b = std::mem::take(&mut d[s]);
+    (d.counts.updates, d.began) = (d.counts.updates + 1, d.out.len());
     // Its mean member's body before the update, for what its members grow (`copy::mature`).
     let before = b.member_body(&w.chem);
     // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
-    let sample = crate::copy::sample(w, &b, rc, tmp);
-    let lived = match live(w, &mut b, rc, tmp) {
-        Err(cause) => return die(w, s, b, cause),
+    let sample = crate::copy::sample(w, d, &b, rc, tmp);
+    let lived = match live(w, d, &mut b, rc, tmp) {
+        Err(cause) => return die(w, d, s, b, cause),
         Ok(lived) => lived,
     };
     // A body with no brain takes no decision: its update is its physics only.
     if !w.life.brainless(&b) {
-        choose::act(w, &mut b, &lived, act);
+        choose::act(w, d, &mut b, &lived, act);
         // An action can leave nothing of a member: it dies at once, before another body deals with it.
         if b.empty_at(b.mass(&w.chem)) {
-            return die(w, s, b, LACK);
+            return die(w, d, s, b, LACK);
         }
     }
     // Its mean moves by what the sample gained over its members (`copy::select`).
     if let Some(x) = sample {
         crate::copy::select(w, &mut b, x, lived.gain);
     }
-    crate::lineage::resize(w, &mut b);
+    crate::lineage::resize(w, d, &mut b);
     // Young members who grew past their copy mass join their adult node (`copy::mature`).
-    if let Grown::Joins(t) = crate::copy::mature(w, &mut b, before) {
-        let s = w.life.put(s, b);
-        return crate::nodes::merge(w, s, t);
+    if let Grown::Joins(t) = crate::copy::mature(w, d, &mut b, before) {
+        d[s] = b;
+        return crate::nodes::merge(w, d, s, t);
     }
-    crate::nodes::split(w, &mut b);
-    w.see(&mut b);
-    w.life.schedule(w.due_in(b.interval(w)), &mut b);
-    w.life.put(s, b);
+    crate::nodes::split(w, d, &mut b);
+    d.see(w, &mut b);
+    d.schedule(w.due_in(b.interval(w)), &mut b);
+    d[s] = b;
 }

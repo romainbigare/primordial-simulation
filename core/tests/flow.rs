@@ -750,7 +750,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     // body cannot give the push of a mover (`bump`, 0.05 of its weight) and stays; with its own (0.6) it goes.
     let mut weak = w.life[slot].clone();
     weak.genes[body::STRENGTH] = 0.05;
-    moved(&mut w, (a, slot), |w| choose::go(w, &mut weak, b, false));
+    moved(&mut w, (a, slot), |w, d| choose::go(w, d, &mut weak, b, false));
     assert!(!weak.leaving, "a body too weak to push walked");
     for t in 0..5000 {
         // Fuel for the trip each time (the scene is not about eating), with its heat at the body's temperature.
@@ -759,8 +759,8 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         m.store[RICH] = 1e3;
         let ((from, to), id) = (if t % 2 == 0 { (a, b) } else { (b, a) }, m.id);
         assert_eq!(m.cell as usize, from);
-        moved(&mut w, (from, slot), |w| choose::go(w, &mut m, to, false));
-        w.life.put(slot, m);
+        moved(&mut w, (from, slot), |w, d| choose::go(w, d, &mut m, to, false));
+        w.life[slot] = m;
         // (The move lands from the outbox.)
         pcore::outbox::deliver(&mut w);
         slot = w.life.find(id).expect("the body lives");

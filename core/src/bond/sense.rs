@@ -1,7 +1,7 @@
 //! What bodies perceive of parts, and what parts give a body: the inside of a structure, and being held up afloat.
 
 use super::{cell, held, part, Enclosure, NO, NOBODY};
-use crate::{body::Body, brain::LN_MASS, chem::Phase, World};
+use crate::{body::Body, brain::LN_MASS, chem::Phase, life::Domain, store::Node, World};
 
 /// A body perceives the ln of a part's length (m) over this (its mass as every mass, `brain::LN_MASS`).
 const LN_SIZE_SCALE: f32 = 3.0;
@@ -16,18 +16,18 @@ pub fn room(w: &World, b: &Body) -> Option<(usize, Enclosure)> {
 
 /// For a body's update: the link between it and the outside through the walls around it, its share of their
 /// enclosure among the bodies inside.
-pub(crate) fn enclosure(w: &World, b: &Body) -> Option<Enclosure> {
+pub(crate) fn enclosure(w: &World, d: &Domain, b: &Body) -> Option<Enclosure> {
     let (r, e) = room(w, b)?;
-    let others = w.life.cell(b.cell as usize).filter(|&o| w.life[o].alive && room(w, &w.life[o]).is_some_and(|x| x.0 == r)).count();
+    let others = d.cell(b.cell as usize).filter(|&o| d[o].alive && room(w, &d[o]).is_some_and(|x| x.0 == r)).count();
     Some(Enclosure { g: e.g / (others + 1) as f64, ..e })
 }
 
-/// Standing liquid on cell `i`: depth m, density kg/m³, mol per m³.
-pub(super) fn liquid(w: &World, i: usize) -> (f64, f64, f64) {
+/// Standing liquid on cell `i` whose ground holds `g` mol of each substance: depth m, density kg/m³, mol per m³.
+pub(super) fn liquid(w: &World, i: usize, g: impl Fn(usize) -> f64) -> (f64, f64, f64) {
     let env = w.life.env[i];
     let (mut m, mut v, mut mol) = (0.0, 0.0, 0.0);
-    for k in (0..w.chem.ns()).filter(|&k| w.chem.phase_in(k, env[0], |j| w.g(j, i)) == Phase::Liquid) {
-        let a = w.g(k, i);
+    for k in (0..w.chem.ns()).filter(|&k| w.chem.phase_in(k, env[0], &g) == Phase::Liquid) {
+        let a = g(k);
         (m, v, mol) = (m + a * w.chem.subs[k].molar_mass, v + a * w.chem.molar_volume(k, Phase::Liquid), mol + a);
     }
     if v > 0.0 { (env[1], m / v, mol / v) } else { (0.0, 0.0, 0.0) }
@@ -36,9 +36,9 @@ pub(super) fn liquid(w: &World, i: usize) -> (f64, f64, f64) {
 /// Is body `b` (mass `mb`) held up in cell `j`'s liquid: does the liquid that its volume and the structure it holds
 /// displace weigh as much as they do (Archimedes, as for parts)? Not where the liquid is shallower than `deep`, nor
 /// holding a structure bonded to the ground.
-pub fn afloat(w: &World, b: &Body, j: usize, mb: f64) -> bool {
+pub fn afloat(w: &World, d: &Domain, b: &Body, j: usize, mb: f64) -> bool {
     let s = held(w, b).map(|p| w.parts.parts[w.parts.parts[p].root as usize].s);
-    let (depth, rho, _) = liquid(w, j);
+    let (depth, rho, _) = liquid(w, j, d.moves.amounts(w, Node::ground(j)));
     if depth < w.cfg.phys.deep || s.is_some_and(|s| s.anchored) {
         return false;
     }
@@ -47,8 +47,8 @@ pub fn afloat(w: &World, b: &Body, j: usize, mb: f64) -> bool {
 }
 
 /// Depth of liquid over a body: none while afloat.
-pub fn depth(w: &World, b: &Body, d: f64) -> f64 {
-    if d > 0.0 && afloat(w, b, b.cell as usize, b.mass(&w.chem)) { 0.0 } else { d }
+pub fn depth(w: &World, d: &Domain, b: &Body, depth: f64) -> f64 {
+    if depth > 0.0 && afloat(w, d, b, b.cell as usize, b.mass(&w.chem)) { 0.0 } else { depth }
 }
 
 /// Numbers a body perceives of what it holds and of the walls around it (`sense`).

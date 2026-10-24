@@ -11,12 +11,12 @@ use crate::nodes;
 /// than one member being one member with that chance. A part acts as so many members together (`part_acts`; the moves
 /// last, so the others act where the node is). Its brain learns as from one member drawn among those who stayed (`trace`): from what that member did,
 /// and how much more its part's action raised their well-being than the mean of the members.
-pub(super) fn spread(w: &mut World, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
+pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
     let x: [f64; OPTS] = std::array::from_fn(|o| match node.count * c.p[o] as f64 { x if x > 0.0 && x < 1.0 => (rng.f64() < x) as u8 as f64, x => x });
     // The members of each option in the node after acting, and the change of their well-being.
     let (mut kept, mut gain) = ([0.0; OPTS], [0f32; OPTS]);
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
-        let (g, left) = if o == REST { (0.0, Some(false)) } else { part_acts(w, node, c, k, (o, x[o]), rng) };
+        let (g, left) = if o == REST { (0.0, Some(false)) } else { part_acts(w, d, node, c, k, (o, x[o]), rng) };
         (gain[o], kept[o]) = (g, if left == Some(true) { 0.0 } else { x[o] });
         let Some(_) = left else { break };
     }
@@ -36,47 +36,47 @@ pub(super) fn spread(w: &mut World, node: &mut Body, c: &Choice, k: &Kit, rng: &
 /// (`choose::land_move`), those who act on a part come back after it if they can (`land_act`). The node acts itself if less
 /// than one member would be left. Returns the change of their well-being, and whether they left the node (none: it
 /// moved whole).
-fn part_acts(w: &mut World, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
+fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
     let (moves, bond) = ((FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
-    let mut acts = |w: &mut World, b: &mut Body, part_of: Option<u64>| {
+    let mut acts = |d: &mut Domain, b: &mut Body, part_of: Option<u64>| {
         let before = (k.wb)(w, b);
-        act_as(w, b, c, k, (o, part_of), rng);
+        act_as(w, d, b, c, k, (o, part_of), rng);
         (k.wb)(w, b) - before
     };
     if node.count - x < 1.0 {
-        return (acts(w, node, None), (!node.leaving).then_some(false));
+        return (acts(d, node, None), (!node.leaving).then_some(false));
     }
     let f = x / node.count;
     if !(moves || bond) {
         // The others wait aside with their share; as members split by shares, their sizes are the node's.
         let size = node.size_moments(&w.chem);
-        let rest = nodes::Lot::split(&mut w.life, node, 1.0 - f, 1.0 - f);
+        let rest = nodes::Lot::split(d, node, 1.0 - f, 1.0 - f);
         let held = (node.hold.take(), node.inside.take());
-        let gain = acts(w, node, None);
+        let gain = acts(d, node, None);
         debug_assert!(node.hold.is_none() && node.inside.is_none(), "an action that stays in its cell takes no hold and enters nothing");
         (node.hold, node.inside) = held;
-        nodes::rejoin(w, node, rest, size, None);
+        nodes::rejoin(w, d, node, rest, size, None);
         return (gain, Some(false));
     }
-    let part = nodes::part(&mut w.life, node, f, f);
-    let s = w.place(part);
-    let mut m = std::mem::take(&mut w.life[s]);
-    let gain = acts(w, &mut m, Some(node.id));
+    let part = nodes::part(d, node, f, f);
+    let s = d.place(w, part);
+    let mut m = std::mem::take(&mut d[s]);
+    let gain = acts(d, &mut m, Some(node.id));
     if !m.leaving {
-        back(w, node, s, m);
+        back(w, d, node, s, m);
         return (gain, Some(false));
     }
     m.trace = trace(w, &m, c, k, o, 0.0);
-    w.see(&mut m);
-    w.life.put(s, m);
+    d.see(w, &mut m);
+    d[s] = m;
     (gain, Some(true))
 }
 
 /// Part `m` of node `node` (both taken out of their slots, `m`'s at `s`) comes back to it (`nodes::rejoin`).
-fn back(w: &mut World, node: &mut Body, s: Handle, mut m: Body) {
-    w.life.remove(s, &m);
+fn back(w: &World, d: &mut Domain, node: &mut Body, s: Handle, mut m: Body) {
+    d.remove(s, &m);
     let size = m.size_moments(&w.chem);
-    nodes::rejoin(w, node, nodes::Lot::of(&mut m), size, None);
+    nodes::rejoin(w, d, node, nodes::Lot::of(&mut m), size, None);
 }
 
 /// The part act body `id` queued in a batch (`outbox`), run whole on it and on the part as they are now: verb `on.0`
@@ -86,7 +86,8 @@ fn back(w: &mut World, node: &mut Body, s: Handle, mut m: Body) {
 pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32; 2]>, node: Option<u64>) {
     let Some(s) = w.life.find(id) else { return };
     let mut b = std::mem::take(&mut w.life[s]);
-    w.open_moves(b.cell as usize, Node::new(Class::Body, s.slot as usize));
+    let i = b.cell as usize;
+    w.in_domain(i, |w, d| d.moves.open(w, i, Node::new(Class::Body, s.slot as usize)));
     let here = |v: usize, p: usize| bond::cell(w, p) == b.cell as usize && bond::possible(w, &b, v, p, b.volume(&w.chem, b.temp(&w.chem)) / b.n());
     match on.map(|(v, p)| (v, bond::part(w, p).filter(|&p| here(v, p)))) {
         Err(shape) => bond::form(w, &mut b, shape),
@@ -94,18 +95,20 @@ pub(crate) fn land_act(w: &mut World, id: u64, on: Result<(usize, NodeId), [f32;
         _ => {}
     }
     b.leaving = false;
-    // Paying can leave nothing of a member: it dies.
-    if b.empty_at(b.mass(&w.chem)) {
-        return die(w, s, b, LACK);
-    }
     let its = node.and_then(|n| w.life.find(n)).filter(|&t| w.life[t].cell == b.cell && !w.life[t].leaving && b.hold.is_none() && b.inside.is_none());
-    let Some(t) = its else {
-        w.see(&mut b);
-        w.life[s] = b;
-        return;
-    };
-    let mut o = std::mem::take(&mut w.life[t]);
-    back(w, &mut o, s, b);
-    w.see(&mut o);
-    w.life[t] = o;
+    w.in_domain(i, move |w, d| {
+        // Paying can leave nothing of a member: it dies.
+        if b.empty_at(b.mass(&w.chem)) {
+            return die(w, d, s, b, LACK);
+        }
+        let Some(t) = its else {
+            d.see(w, &mut b);
+            d[s] = b;
+            return;
+        };
+        let mut o = std::mem::take(&mut d[t]);
+        back(w, d, &mut o, s, b);
+        d.see(w, &mut o);
+        d[t] = o;
+    });
 }

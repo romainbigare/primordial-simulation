@@ -50,7 +50,7 @@ pub(crate) const KNOWN: usize = 4;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Body {
-    /// Its id, given at birth (`Life::add`); 0 for none
+    /// Its id, given at birth (`Domain::add`); 0 for none
     pub id: u64,
     /// Whether it is a living body (not an empty slot)
     pub alive: bool,

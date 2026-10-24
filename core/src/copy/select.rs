@@ -10,7 +10,7 @@ use crate::body::{gain_to_growth, range, spread_at, Body, Layout, LiveTmp, ALLOC
 use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::rng::{Purpose, Rng};
-use crate::World;
+use crate::{life::Domain, store::Node, World};
 
 /// A sample member of a node: the gene it differs in, its step from the node's mean, its weight (the number of genes it
 /// was drawn from, times `Config::sample_every`), and the log of what it gained in the update.
@@ -33,7 +33,7 @@ const MIN_REACH: f32 = 2.0;
 /// Can a step from `x` to `y` of gene `g` change what node `b` (without a brain) gains as far as its growth? Not for
 /// genes in `UNREAD`, genes off at both ends, or thresholds the step cannot reach. A skipped sample costs no update; a
 /// wrong skip only slows that gene.
-fn read(w: &World, lay: &Layout, b: &Body, g: usize, (x, y): (f32, f32)) -> bool {
+fn read(w: &World, d: &Domain, lay: &Layout, b: &Body, g: usize, (x, y): (f32, f32)) -> bool {
     let (chem, i) = (&w.chem, b.cell as usize);
     let (hi, step) = (x.max(y) as f64, (y - x).abs() as f64);
     if g < lay.cat {
@@ -56,19 +56,19 @@ fn read(w: &World, lay: &Layout, b: &Body, g: usize, (x, y): (f32, f32)) -> bool
     }
     if g < lay.keep {
         let k = g - lay.upt;
-        return roots(k) && (x > 0.0) != (y > 0.0) && chem.phase_in(k, w.t_ground_last(i), |j| w.g(j, i)) == Phase::Liquid && w.g(k, i) > 0.0;
+        return roots(k) && (x > 0.0) != (y > 0.0) && chem.phase_in(k, w.t_ground_last(i), |j| d.moves.amount(w, Node::ground(i), j)) == Phase::Liquid && d.moves.amount(w, Node::ground(i), k) > 0.0;
     }
     let (k, tg) = (g - lay.keep, w.t_ground_last(i));
     let product = b.store[k] > 0.0 && chem.phase(k, tg) != Phase::Gas && chem.reactions.iter().enumerate().any(|(r, rx)| b.genes[lay.cat + r] > 0.0 && rx.outputs.iter().any(|p| p.0 as usize == k));
-    let liquid = chem.phase_in(k, tg, |j| w.g(j, i)) == Phase::Liquid && w.g(k, i) > 0.0;
+    let liquid = chem.phase_in(k, tg, |j| d.moves.amount(w, Node::ground(i), j)) == Phase::Liquid && d.moves.amount(w, Node::ground(i), k) > 0.0;
     let taken = (!roots(k) || b.genes[lay.upt + k] > 0.0) && liquid && b.store[k] < b.level_at(chem, k, b.mass(chem), hi);
     chem.is_material(k) || b.wet >> k & 1 == 1 || product || taken
 }
 
 /// The sample member of node `b` (without a brain, before its update): its genes but one, a standard deviation of its
 /// spread up or down, run as far as its growth on the world as it is, inside a checkpoint of the store's view rolled
-/// back after (`World::checkpoint`), so its moves, events and counters are dropped. None where the step cannot change the gain (`read`); run on one update in `Config::sample_every`.
-pub(crate) fn sample(w: &mut World, b: &Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Option<Sample> {
+/// back after (`Domain::checkpoint`), so its moves, events and counters are dropped. None where the step cannot change the gain (`read`); run on one update in `Config::sample_every`.
+pub(crate) fn sample(w: &World, d: &mut Domain, b: &Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Option<Sample> {
     if b.n() <= 1.0 || !w.life.brainless(b) {
         return None;
     }
@@ -82,23 +82,23 @@ pub(crate) fn sample(w: &mut World, b: &Body, rc: &mut Reactor, tmp: &mut LiveTm
     let g = *differ.get(r.below(differ.len().max(1)))?;
     let ((_, lo, hi), x, sd) = (range(&lay, g), b.genes[g], spread_at(&b.spread, g).sqrt());
     let step = (if r.below(2) == 0 { x + sd } else { x - sd }).clamp(lo, hi) - x;
-    if step == 0.0 || !read(w, &lay, b, g, (x, x + step)) {
+    if step == 0.0 || !read(w, d, &lay, b, g, (x, x + step)) {
         return None;
     }
     let mut s = b.clone();
     let mut genes = b.genes.clone();
     genes[g] += step;
     s.set_genes(genes, &w.chem, &w.cfg);
-    let mark = w.checkpoint();
-    let gain = gain_to_growth(w, &mut s, rc, tmp);
-    w.roll_back(mark);
+    let mark = d.checkpoint();
+    let gain = gain_to_growth(w, d, &mut s, rc, tmp);
+    d.roll_back(mark);
     Some(Sample { gene: g, step, genes: (differ.len() * every) as f32, gain })
 }
 
 /// The mean of node `b` after its update, in which it gained `gain`: the sample's gene moves by its step times
 /// tanh(sample's gain - gain) times the sample's weight, at most `sample_every` steps (Robertson 1966). Within the
 /// walls.
-pub(crate) fn select(w: &mut World, b: &mut Body, s: Sample, gain: f64) {
+pub(crate) fn select(w: &World, b: &mut Body, s: Sample, gain: f64) {
     let f = (s.gain - gain).tanh() as f32;
     if f == 0.0 || !f.is_finite() {
         return;

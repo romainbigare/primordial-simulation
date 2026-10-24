@@ -33,16 +33,21 @@ impl Entry {
     }
 }
 
-/// The outboxes are applied, domain by domain, each in the order made; then the moves gathered are booked.
+/// The outboxes are applied, domain by domain, each in the order made, and then what applying them queued (a body that
+/// dies or joins another lets go of its part, `bond::let_go`); then the moves gathered are booked.
 pub fn deliver(w: &mut World) {
-    for e in w.life.take_queued() {
-        match e {
-            Entry::Go { id, from, to, pushed, lane, carries, kin } => choose::land_move(w, id, (from as usize, to as usize), (pushed, lane), (carries, kin)),
-            Entry::Litter(x) => copy::land_litter(w, *x),
-            Entry::Watch { by, n, lineage, of } => choose::watched(w, by, (n, lineage), of),
-            Entry::Act { id, on: Ok((bond::LET_GO, p)), .. } => bond::dropped(w, id, p, false),
-            Entry::Act { id, on, node } => choose::land_act(w, id, on, node),
+    let mut queued = w.life.take_queued();
+    while !queued.is_empty() {
+        for e in queued {
+            match e {
+                Entry::Go { id, from, to, pushed, lane, carries, kin } => choose::land_move(w, id, (from as usize, to as usize), (pushed, lane), (carries, kin)),
+                Entry::Litter(x) => copy::land_litter(w, *x),
+                Entry::Watch { by, n, lineage, of } => choose::watched(w, by, (n, lineage), of),
+                Entry::Act { id, on: Ok((v @ (bond::LET_GO | bond::TORN), p)), .. } => bond::dropped(w, id, p, v == bond::TORN),
+                Entry::Act { id, on, node } => choose::land_act(w, id, on, node),
+            }
         }
+        queued = w.life.take_queued();
     }
     w.book_moves();
 }

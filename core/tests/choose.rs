@@ -10,7 +10,7 @@ use pcore::body::{self, Layout, INTERVAL, LEARN};
 use pcore::rng::{Purpose, Rng};
 use pcore::World;
 use pcore::store::{Class, Node};
-use worldgen::testkit::{self, dry_land, founder, scale, set_amount, set_heat, start, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
+use worldgen::testkit::{self, moved, dry_land, founder, scale, set_amount, set_heat, start, Books, Brain, Line, LIQUID, MATTER, MILD_LAT, OFF, RICH};
 
 /// The scene's grid.
 const W: usize = 12;
@@ -98,7 +98,7 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         for s in w.life.living().map(|x| x.0).collect::<Vec<_>>() {
             if w.life[s].id != id {
                 let c = std::mem::take(&mut w.life[s]);
-                body::die(&mut w, s, c, body::LACK);
+                moved(&mut w, (c.cell as usize, s), |w, d| body::die(w, d, s, c, body::LACK));
             }
         }
         if let Some(slot) = w.life.find(id).filter(|_| w.counts.updates > u) {

@@ -23,7 +23,7 @@ use crate::outbox::Entry;
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::survey::Face;
-use crate::{bond, lanes, World};
+use crate::{bond, lanes, life::Domain, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
@@ -76,7 +76,7 @@ struct Choice {
 
 /// A body's decision at its update: perceive, think and learn from the last decision, score the options, emit the
 /// signal; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
-pub fn act(w: &mut World, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
+pub fn act(w: &World, d: &mut Domain, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
@@ -85,24 +85,24 @@ pub fn act(w: &mut World, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let think = w.cfg.phys.think(w.cfg.phys.c_brain, b.k.copy_mass);
     let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, b.temp(&w.chem), lived.spare);
     let wb = now(w, b);
-    let Some(lin) = w.life.brain(b.lineage) else { return };
+    let Some(lin) = d.brain(w, b.lineage) else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
-    let mut c = perceive(w, b, nseen, &mut rng);
+    let mut c = perceive(w, d, b, nseen, &mut rng);
     inputs(w, b, lived, temp, &c, &mut t.input);
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
     walk(w, b.cell as usize, sight, t);
     options(w, b, s, (pm, b.volume(&w.chem, temp) / b.n()), &mut c, t);
-    pick(w, &mut c, &mut rng);
+    pick(d, &mut c, &mut rng);
     let (form, z) = noise(w, b, s, t, &mut rng);
     b.wb = wb;
     let k = Kit { s, t, z, form, wb: &now };
     if b.n() > 1.0 {
-        spread::spread(w, b, &c, &k, &mut rng);
+        spread::spread(w, d, b, &c, &k, &mut rng);
     } else {
         b.trace = trace(w, b, &c, &k, c.a, 0.0);
-        act_as(w, b, &c, &k, (c.a, None), &mut rng);
+        act_as(w, d, b, &c, &k, (c.a, None), &mut rng);
     }
 }
 
@@ -185,7 +185,7 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice,
 }
 
 /// Draw one action by its score (a softmax); with no option open, rest.
-fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
+fn pick(d: &mut Domain, c: &mut Choice, rng: &mut Rng) {
     let top = c.logit.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     if top == f32::NEG_INFINITY {
         (c.p, c.a) = ([0.0; OPTS], REST);
@@ -201,7 +201,7 @@ fn pick(w: &mut World, c: &mut Choice, rng: &mut Rng) {
         });
         c.a = a.unwrap_or(REST);
     }
-    (w.counts.decisions, w.counts.greedy) = (w.counts.decisions + 1.0, w.counts.greedy + (c.logit[c.a] >= top) as u8 as f64);
+    (d.counts.decisions, d.counts.greedy) = (d.counts.decisions + 1.0, d.counts.greedy + (c.logit[c.a] >= top) as u8 as f64);
 }
 
 /// The signal it emits, the shape of a part it would make and its next memory, with the noise drawn for the signal and
@@ -261,27 +261,27 @@ fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f3
 /// Body `b` (taken out of its slot), a part of node `part_of` if any (`spread`), does option `a`. Forming a part, acting
 /// on one and watching are queued in the outbox (`outbox`), applied when the batch ends; so is a move (`go`). A node's
 /// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
-fn act_as(w: &mut World, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
+fn act_as(w: &World, d: &mut Domain, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
     b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
-    let (i, act) = (b.cell as usize, |on| Entry::Act { id: b.id, on, node: part_of });
+    let act = |on| Entry::Act { id: b.id, on, node: part_of };
     match a {
         REST => {}
-        PUT => feed::put(w, b),
-        TAKE => feed::take_node(w, b),
-        FORM => w.life.queue(i, act(Err([k.form[0], 0.5 * (k.form[1] + 1.0)]))),
-        RELEASE => bond::release(w, b),
-        ANCHOR => bond::anchor(w, b),
-        DIG => bond::dig(w, b),
-        a if a < TO_BODY => go(w, b, c.to[a - FIXED], part_of.is_some()),
-        a if a >= TO_PART => w.life.queue(i, act(Ok(((a - TO_PART) % OVERBS, bond::id(w, c.parts[(a - TO_PART) / OVERBS]))))),
+        PUT => feed::put(w, d, b),
+        TAKE => feed::take_node(w, d, b),
+        FORM => d.out.push(act(Err([k.form[0], 0.5 * (k.form[1] + 1.0)]))),
+        RELEASE => bond::release(w, d, b),
+        ANCHOR => if let Some(p) = bond::held(w, b) { d.out.push(act(Ok((bond::ANCHORS, bond::id(w, p))))) },
+        DIG => bond::dig(w, d, b),
+        a if a < TO_BODY => go(w, d, b, c.to[a - FIXED], part_of.is_some()),
+        a if a >= TO_PART => d.out.push(act(Ok(((a - TO_PART) % OVERBS, bond::id(w, c.parts[(a - TO_PART) / OVERBS]))))),
         a => {
             let (id, verb) = (c.seen[(a - TO_BODY) / VERBS].0.id, (a - TO_BODY) % VERBS);
             if verb == WATCH {
-                return w.life.queue(i, Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: id });
+                return d.out.push(Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: id });
             }
             // The body seen as it is now, if it lives, is still in the cell and is not leaving it.
-            let Some(o) = w.life.find(id).filter(|&o| w.life[o].alive && !w.life[o].leaving && w.life[o].cell == b.cell) else { return };
-            if verb == TAKE_FROM { take_body(w, b, o, rng) } else { feed::give(w, b, o) }
+            let Some(o) = d.find(id).filter(|&o| d[o].alive && !d[o].leaving && d[o].cell == b.cell) else { return };
+            if verb == TAKE_FROM { take_body(w, d, b, o, rng) } else { feed::give(w, d, b, o) }
         }
     }
 }

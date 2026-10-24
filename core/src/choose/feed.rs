@@ -5,7 +5,7 @@ use crate::body::{self, light_cat, Body, STRENGTH, TAKEN};
 use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
-use crate::{bond, lanes, life::Handle, World};
+use crate::{bond, lanes, life::{Domain, Handle}, store::Node, World};
 
 /// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
 const NOTE_SCALE: f64 = 10.0;
@@ -35,38 +35,38 @@ fn intake(w: &World, b: &Body, from: impl Fn(usize) -> f64) -> (f64, f64) {
 
 /// Take loose solids and liquids from the cell's ground by the intake law (`intake`), no more than its stores have room
 /// for.
-pub(super) fn take_node(w: &mut World, b: &mut Body) {
+pub(super) fn take_node(w: &World, d: &mut Domain, b: &mut Body) {
     let i = b.cell as usize;
     let tg = w.t_ground_last(i);
-    let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { w.g(k, i) } else { 0.0 };
+    let free = |k: usize| if w.chem.phase(k, tg) != Phase::Gas { d.moves.amount(w, Node::ground(i), k) } else { 0.0 };
     let mut m = b.wanted(&w.chem, b.paces(w), free, intake(w, b, free).0, b.mass(&w.chem));
-    if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
     let ev = EventKind::Took { by: b.id, from: u64::MAX, used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), 0.0] };
-    w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
+    d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: w.chem.mass_of(&m) });
     for (k, a) in m.iter_mut().enumerate().filter(|x| *x.1 != 0.0) {
         // The ground pays the heat that goes with what is taken; if it cannot, less is taken.
         let cp = w.chem.subs[k].cp;
-        let want = *a * (cp * tg + w.chem.fused_heat(k, tg, |j| w.g(j, i)));
+        let want = *a * (cp * tg + w.chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
         let took;
-        (*a, took) = w.take_from_ground(i, (k, *a, cp), want, w.heat_cap_ground(i));
+        (*a, took) = d.moves.take_from_ground(w, i, (k, *a, cp), want, d.moves.heat_cap_ground(w, i));
         b.store[k] += *a;
         b.e += took;
     }
-    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut w.counts.rounded[0]);
+    b.digest(&w.chem, w.chem.matter().map_or(0.0, |k| m[k]), &mut d.counts.rounded[0]);
 }
 
 /// Release stores above the level the body keeps (`Body::level`) to the cell's ground.
-pub(super) fn put(w: &mut World, b: &mut Body) {
+pub(super) fn put(w: &World, d: &mut Domain, b: &mut Body) {
     let mass = b.mass(&w.chem);
     let m: Vec<f64> = (0..w.chem.ns()).map(|k| (b.store[k] - b.level(&w.chem, k, mass)).clamp(0.0, b.store[k])).collect();
-    if !body::pay(w, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
+    if !body::pay(w, d, b, w.cfg.phys.c_handle * w.chem.mass_of(&m), b.interval(w) as f64) {
         return;
     }
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(&a, &held)| a.min(held)).collect();
     let th = b.thermal(&w.chem);
-    body::to_ground(w, b, &th, &m);
+    body::to_ground(w, d, b, &th, &m);
 }
 
 /// Move amounts `m` (mol) from `from` to `to`, with their heat and their share of `from`'s brood; `to` digests the body
@@ -89,8 +89,8 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// members, that share). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
 /// would, times the chance, the expected outcome of an individual's draw.
-pub fn take_body(w: &mut World, b: &mut Body, s: Handle, rng: &mut Rng) {
-    let o = &w.life[s];
+pub fn take_body(w: &World, d: &mut Domain, b: &mut Body, s: Handle, rng: &mut Rng) {
+    let o = &d[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
     let (kg, swept) = intake(w, b, |k| o.store[k]);
@@ -112,45 +112,45 @@ pub fn take_body(w: &mut World, b: &mut Body, s: Handle, rng: &mut Rng) {
     let f = (got / built.max(1e-30)).max(eaten).min(1.0);
     // The taker pays to handle what it takes and to break the share it tears (`Body::breaking`).
     let cost = (w.cfg.phys.c_handle * got * resist + o.breaking(&w.chem, &w.cfg, f * per)) * chance;
-    if !body::pay(w, b, cost, b.interval(w) as f64) || hit <= 0.0 {
+    if !body::pay(w, d, b, cost, b.interval(w) as f64) || hit <= 0.0 {
         return;
     }
-    let mut o = std::mem::take(&mut w.life[s]);
+    let mut o = std::mem::take(&mut d[s]);
     let m: Vec<f64> = m.iter().map(|a| a * hit / per).collect();
     let torn = if body::torn_to_death(&w.cfg.phys, f) { hit } else { f * hit };
     let rest: Vec<f64> = o.store.iter().zip(&m).map(|(s, a)| (torn * s - a).max(0.0)).collect();
     let got = w.chem.mass_of(&m);
-    transfer(&w.chem, &mut w.counts.rounded[0], &mut o, b, &m);
+    transfer(&w.chem, &mut d.counts.rounded[0], &mut o, b, &m);
     let ev = EventKind::Took { by: b.id, from: o.id, used: used_kg(w, b, &m) as f32, cat: [light_cat(&w.chem, &b.genes), light_cat(&w.chem, &o.genes)] };
-    w.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
-    if body::wound(w, s, o, (hit, f), &rest, TAKEN) {
-        w.life[s].note(b.id, -(NOTE_SCALE * got / mo) as f32);
+    d.events.push(Event { day: w.day(), kind: ev, node: b.cell, value: got });
+    if body::wound(w, d, s, o, (hit, f), &rest, TAKEN) {
+        d[s].note(b.id, -(NOTE_SCALE * got / mo) as f32);
     }
 }
 
 /// Give to another body in the cell what it can spare (`Body::spare`, laws.md 5.3), up to what the
 /// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
 /// both have). The other remembers the giver.
-pub(super) fn give(w: &mut World, b: &mut Body, s: Handle) {
+pub(super) fn give(w: &World, d: &mut Domain, b: &mut Body, s: Handle) {
     let chem = &w.chem;
     let (size, mass) = (b.size(chem), b.mass(chem));
     let spare = |k: usize| b.spare(chem, &w.cfg.phys, k, (size, mass));
     let all: f64 = (0..chem.ns()).map(|k| spare(k) * chem.subs[k].molar_mass).sum();
-    let o = &w.life[s];
+    let o = &d[s];
     let (mo, paces, met, t) = (o.mass(chem), o.paces(w), b.n().min(o.n()), o.temp(chem));
     let share = (w.cfg.phys.take * b.interval(w) as f64 * o.supply(&w.chem, &w.cfg.phys, t) * met / o.n() / all.max(1e-9)).min(met / b.n());
     let mut m: Vec<f64> = (0..chem.ns()).map(|k| if o.uses(chem, k, t) { (spare(k) * share).min(o.room(chem, paces, k, mo) * met / o.n()) } else { 0.0 }).collect();
     o.digest_room(chem, paces, &mut m, mo);
     let got = w.chem.mass_of(&m);
-    if got <= 0.0 || !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
+    if got <= 0.0 || !body::pay(w, d, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
         return;
     }
     // Paying may have used some of what was to be put.
     let m: Vec<f64> = m.iter().zip(&b.store).map(|(a, s)| a.min(*s)).collect();
-    let mut o = std::mem::take(&mut w.life[s]);
-    transfer(&w.chem, &mut w.counts.rounded[0], b, &mut o, &m);
+    let mut o = std::mem::take(&mut d[s]);
+    transfer(&w.chem, &mut d.counts.rounded[0], b, &mut o, &m);
     o.note(b.id, (NOTE_SCALE * got / mo) as f32);
-    w.see(&mut o);
-    w.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id, to: o.id }, node: b.cell, value: got });
-    w.life[s] = o;
+    d.see(w, &mut o);
+    d.events.push(Event { day: w.day(), kind: EventKind::Gave { from: b.id, to: o.id }, node: b.cell, value: got });
+    d[s] = o;
 }

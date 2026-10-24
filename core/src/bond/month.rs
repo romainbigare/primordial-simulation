@@ -1,7 +1,8 @@
 //! The monthly step of parts: heat, Change, loads and failure, floating and drifting.
 
-use super::{cell, dissolve, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
-use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, AIR, World};
+use super::{cell, Part,
+ dissolve, holder, id, members, move_structure, restructure, sense::liquid, unlink, verbs::{bears, torn_from}, GROUND};
+use crate::{change::{send_gas, GasMove, Reactor}, chem::Phase, ground::share, rng::{Purpose, Rng}, space::COMPASS, store::{Class, Node}, life::Domain, AIR, World};
 
 /// Parts react with the air every this many months.
 const REACT_MONTHS: u64 = 6;
@@ -22,12 +23,20 @@ pub fn step(w: &mut World) {
         if !w.parts.parts[s].alive {
             continue;
         }
-        // What it moves to and from the store is gathered and booked once, at the end of its turn.
-        w.open_moves(cell(w, s), Node::new(Class::Part, s));
-        if react {
-            react_part(w, &mut rc, s, &mut pool, dt);
+        // What it moves to and from the store is gathered and booked once, at the end of its turn (a serial step on
+        // its domain, the part taken out of its slot).
+        let (i, mut p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
+        let gone = w.in_domain(i, |w, d| {
+            d.moves.open(w, i, Node::new(Class::Part, s));
+            if react {
+                react_part(w, d, &mut rc, (&mut p, i), &mut pool, dt);
+            }
+            settle(w, d, &mut p, i)
+        });
+        w.parts.parts[s] = p;
+        if gone {
+            dissolve(w, s);
         }
-        settle(w, s);
         w.book_moves();
     }
     for r in 0..w.parts.parts.len() {
@@ -40,14 +49,12 @@ pub fn step(w: &mut World) {
     }
 }
 
-/// Part `s` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
+/// Part `p` of cell `i` reacts with its share of its cell's air for `dt` s and settles the gas as a ground node does
 /// (`change::send_gas`); the ground under it pays the gas's latent heat, and gas it cannot pay for goes to the ground.
-fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], dt: f64) {
-    let (na, i) = (w.mesh.level(AIR).n(), cell(w, s));
-    let j = w.mesh.up(i, 0, AIR);
+fn react_part(w: &World, d: &mut Domain, rc: &mut Reactor, (p, i): (&mut Part, usize), pool: &mut [f64], dt: f64) {
+    let (na, j) = (w.mesh.level(AIR).n(), w.mesh.up(i, 0, AIR));
     let (air_share, lift, ta) = (w.mesh.share(i, AIR), w.lift(i), w.t_air(j));
     let chem = &w.chem;
-    let p = &mut w.parts.parts[s];
     pool.iter_mut().enumerate().for_each(|(k, p)| *p = w.store.amounts(Class::Air)[k * na + j] * air_share);
     let fixed: f64 = p.fill.iter().zip(&chem.subs).map(|(a, x)| a * x.cp).sum();
     // It lies on its cell's ground, as moist as that.
@@ -57,52 +64,48 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], dt: f
     let c = p.heat_cap(chem);
     let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);
     p.e += gas.q_in - q_out;
-    w.give_move(Node::air(j), 0, 0.0, q_out);
-    w.take_move(Node::air(j), 0, 0.0, gas.q_in);
-    w.give_move(Node::ground(i), 0, 0.0, gas.back);
-    let cap = w.heat_cap_ground(i);
-    let paid = share(w.take_from_ground(i, (0, 0.0, 0.0), gas.pay, cap).1, gas.pay);
+    let m = &mut d.moves;
+    m.give(w, Node::air(j), 0, 0.0, q_out);
+    m.take(w, Node::air(j), 0, 0.0, gas.q_in);
+    m.give(w, Node::ground(i), 0, 0.0, gas.back);
+    let cap = m.heat_cap_ground(w, i);
+    let paid = share(m.take_from_ground(w, i, (0, 0.0, 0.0), gas.pay, cap).1, gas.pay);
     // The heat of the gas that goes to the ground goes with it.
-    w.take_move(Node::air(j), 0, 0.0, q_out * (1.0 - paid));
-    w.give_move(Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
+    m.take(w, Node::air(j), 0, 0.0, q_out * (1.0 - paid));
+    m.give(w, Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
     send_gas(&rc.dpool, paid, |k, sent, kept| {
-        w.give_move(Node::ground(i), k, kept, 0.0);
+        m.give(w, Node::ground(i), k, kept, 0.0);
         if sent != 0.0 {
-            w.gas_move(k, sent, lift);
+            m.gas(w, k, sent, lift);
         }
     });
 }
 
-/// Walls of part `s` no longer solid run off; the part takes the ground's temperature; walls under `min_kg` fall apart.
-fn settle(w: &mut World, s: usize) {
-    let (ns, i) = (w.chem.ns(), cell(w, s));
-    let tg = w.t_ground_last(i);
-    let t = w.parts.parts[s].e / w.parts.parts[s].heat_cap(&w.chem).max(1e-9);
+/// Walls of part `p` of cell `i` no longer solid run off; the part takes the ground's temperature. Returns whether its
+/// walls are under `min_kg`: it falls apart (`dissolve`).
+fn settle(w: &World, d: &mut Domain, p: &mut Part, i: usize) -> bool {
+    let (ns, chem, tg) = (w.chem.ns(), &w.chem, w.t_ground_last(i));
+    let t = p.e / p.heat_cap(chem).max(1e-9);
     for k in 0..ns {
-        let (p, chem) = (&mut w.parts.parts[s], &w.chem);
         if p.wall[k] > 0.0 && chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid {
             let (a, q) = (p.wall[k], p.wall[k] * chem.subs[k].cp * t);
             (p.e, p.wall[k]) = (p.e - q, 0.0);
-            w.give_move(Node::ground(i), k, a, q);
+            d.moves.give(w, Node::ground(i), k, a, q);
         }
     }
-    let (e1, e0) = (w.parts.parts[s].heat_cap(&w.chem) * tg, w.parts.parts[s].e);
-    let cap = w.heat_cap_ground(i);
-    let got = w.take_from_ground(i, (0, 0.0, 0.0), e1 - e0, cap).1;
-    let p = &mut w.parts.parts[s];
+    let (e1, e0) = (p.heat_cap(chem) * tg, p.e);
+    let cap = d.moves.heat_cap_ground(w, i);
+    let got = d.moves.take_from_ground(w, i, (0, 0.0, 0.0), e1 - e0, cap).1;
     p.e = if got == e1 - e0 { e1 } else { e0 + got };
-    let chem = &w.chem;
     let gone = p.walls(chem).mass < w.cfg.phys.min_kg;
     p.resize(chem);
-    if gone {
-        dissolve(w, s);
-    }
+    gone
 }
 
 /// Load one structure: weights less buoyancy, pushes of liquid and bodies; break what is overloaded; float and drift.
 fn load(w: &mut World, r: usize) {
     let (list, i, g) = (members(w, r), cell(w, r), w.cfg.gravity);
-    let (depth, rho, molv) = liquid(w, i);
+    let (depth, rho, molv) = liquid(w, i, w.stock(Node::ground(i)));
     let flux = w.liquid_flux.get(i).copied().unwrap_or(0.0) as f64;
     // The liquid's speed through the cell, m/s: its flux over the mean width of the borders it crosses times its depth.
     let cells = w.mesh.cells();

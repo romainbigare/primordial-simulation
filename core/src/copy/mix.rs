@@ -3,22 +3,22 @@
 
 use crate::body::{distance, spread_at, Body, Layout};
 use crate::rng::{Purpose, Rng};
-use crate::{life::Handle, World};
+use crate::{life::{Domain, Handle}, World};
 use crate::brain;
 
 /// The partner of body `b` (taken out of its slot) for its children: another body of its cell that is mature
 /// (`Body::adult`) and alike to it (`body::alike`), the most alike of them (the least squared gap in steps,
 /// `body::distance`), a keyed random pick among equals; never itself. None: the children are copies of one parent. It
 /// takes nothing from the partner. `Config::two_parents` off: none.
-pub(super) fn partner(w: &World, b: &Body, r: &mut Rng) -> Option<Handle> {
+pub(super) fn partner(w: &World, d: &Domain, b: &Body, r: &mut Rng) -> Option<Handle> {
     if !w.cfg.two_parents {
         return None;
     }
     let (lay, lim) = (Layout::of(&w.chem), w.cfg.phys.alike);
     // Among equals the one with the least key (a draw keyed by the call and its id, not by the order of the cell's list).
     let (mut best, mut pick, draw) = (f32::INFINITY, None, r.u64());
-    for s in w.life.cell(b.cell as usize) {
-        let t = &w.life[s];
+    for s in d.cell(b.cell as usize) {
+        let t = &d[s];
         if !t.alive || t.leaving {
             continue;
         }
@@ -61,9 +61,9 @@ pub(super) fn mix(a: &Body, t: &Body, m: f64, r: &mut Rng) -> (Vec<f32>, Vec<f32
 /// whole stays coherent, and a weight drawn alone would not), the group's mean between them as in `mix`; and the spread
 /// of the rows pooled as a merge pools it. None where a brain has no rows alike (a brain of no size, or rows of other
 /// lengths): the children keep `a`'s.
-pub(super) fn mix_rows(w: &World, a: &Body, t: &Body, m: f64, r: &mut Rng) -> Option<(Vec<f32>, f32)> {
-    let (sa, st) = (w.life.shape_of(a.lineage)?, w.life.shape_of(t.lineage)?);
-    let (ra, rt) = (w.life.born(a), w.life.born(t));
+pub(super) fn mix_rows(w: &World, d: &Domain, a: &Body, t: &Body, m: f64, r: &mut Rng) -> Option<(Vec<f32>, f32)> {
+    let (sa, st) = (d.shape_of(w, a.lineage)?, d.shape_of(w, t.lineage)?);
+    let (ra, rt) = (d.born(w, a), d.born(w, t));
     let moved;
     let rt = if sa == st { rt } else {
         moved = brain::rerow(rt, st, sa, r, w.cfg.phys.new_noise);

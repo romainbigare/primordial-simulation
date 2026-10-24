@@ -4,20 +4,23 @@
 use crate::body::{self, Body, BROKEN};
 use crate::chem::Phase;
 use crate::store::{Class, Node};
-use crate::{bond, copy, lanes, nodes, outbox::Entry, World};
+use crate::{bond, copy, lanes, nodes, life::Domain, outbox::Entry, World};
 
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
 /// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`); less
 /// afloat. The part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one. It pays
 /// now and lands when the batch ends (`land_move`); until then it is leaving (`Body::leaving`). With `kin`, it is members of a
 /// node who join their kind where they land.
-pub fn go(w: &mut World, b: &mut Body, j: usize, kin: bool) {
+pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
     if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.mesh.cells().area()[j] {
         return;
     }
     let carried = bond::carry(w, b);
-    let afloat = bond::afloat(w, b, j, mb);
+    if carried.is_none() {
+        bond::let_go(w, d, b, true);
+    }
+    let afloat = bond::afloat(w, d, b, j, mb);
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = lanes::resist(w, i, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
@@ -26,16 +29,16 @@ pub fn go(w: &mut World, b: &mut Body, j: usize, kin: bool) {
         return;
     }
     let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.mesh.cells().dist()[lanes::link(w, i, j)] + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
-    if !body::pay(w, b, cost, b.interval(w) as f64) {
+    if !body::pay(w, d, b, cost, b.interval(w) as f64) {
         return;
     }
-    w.counts.parts.afloat += afloat as u8 as f64;
+    d.counts.parts.afloat += afloat as u8 as f64;
     // What it spends pushing through the bodies there breaks them at the next survey (`wear`) and clears the lane: the
     // ground whose cover that energy breaks.
     let (pushed, all) = (cost * (1.0 - 1.0 / resist), w.life.sum[j][7]);
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     b.leaving = true;
-    w.life.queue(i, Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin });
+    d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin });
 }
 
 /// The move of body `id` from cell `i` to `j` that `go` queued lands, if the body still lives: it enters `j` (its
@@ -46,23 +49,24 @@ pub fn go(w: &mut World, b: &mut Body, j: usize, kin: bool) {
 pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed, lane): (f64, f64), (carries, kin): (bool, bool)) {
     let Some(s) = w.life.find(id) else { return };
     let mut b = std::mem::take(&mut w.life[s]);
-    if !carries {
-        bond::let_go(w, &mut b, false);
+    let carried = bond::carry(w, &b).filter(|_| carries);
+    if carried.is_none() {
+        bond::let_go_now(w, &mut b, carries);
     }
-    let (carried, mb) = (bond::carry(w, &mut b), b.mass(&w.chem));
+    let mb = b.mass(&w.chem);
+    // (Before it enters `j` and out of its slot, it is no node of its cell for `kin`.)
+    let t = if kin { w.in_domain(j, |w, d| copy::kin(w, d, j, b.lineage, (&b.genes, &b.spread), b.adult(&w.chem))) } else { None };
     bond::moved(w, &mut b, carried, j, mb);
-    w.life.relocate(id, i, j);
     (b.cell, b.mark, b.rained, b.leaving) = (j as u32, w.light[j], w.rained[j], false);
     w.counts.crossings.resize(w.mesh.cells().n(), 0.0);
     w.counts.crossings[j] += b.n() as f32;
     w.life.pushed.resize(w.mesh.cells().n(), 0.0);
     w.life.pushed[j] += pushed;
     lanes::clear(w, i, j, lane);
-    // (Out of its slot, it is no node of its cell for `kin`.)
-    let t = if kin { copy::kin(w, j, b.lineage, (&b.genes, &b.spread), b.adult(&w.chem)) } else { None };
-    let s = w.life.put(s, b);
+    let s = w.life.relocate(s, i, b);
+
     if let Some(t) = t {
-        nodes::merge(w, s, t);
+        w.in_domain(j, |w, d| nodes::merge(w, d, s, t));
     }
 }
 
@@ -77,14 +81,17 @@ pub fn wear(w: &mut World) {
         if total <= 0.0 {
             continue;
         }
-        w.open_moves(j, Node::new(Class::Body, here[0].slot as usize));
-        for s in here {
-            let o = std::mem::take(&mut w.life[s]);
-            let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
-            let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
-            let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
-            body::wound(w, s, o, (1.0, f), &dead, BROKEN);
-        }
-        w.book_moves();
+        w.in_domain(j, |w, d| {
+            d.moves.open(w, j, Node::new(Class::Body, here[0].slot as usize));
+            for s in here {
+                let o = std::mem::take(&mut d[s]);
+                let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
+                let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
+                let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
+                body::wound(w, d, s, o, (1.0, f), &dead, BROKEN);
+            }
+        });
+        // (Those who held a part let go of it, `bond::let_go`; the moves are booked.)
+        crate::outbox::deliver(w);
     }
 }

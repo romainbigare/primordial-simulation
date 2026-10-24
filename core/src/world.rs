@@ -34,6 +34,15 @@ pub struct Counters {
     pub rounded: [f64; 2],
 }
 
+impl Counters {
+    /// The counts `c` of a domain's bodies are added (`World::settle`), and start again.
+    pub(crate) fn add(&mut self, c: &mut Counters) {
+        let c = std::mem::take(c);
+        (self.updates, self.splits, self.decisions, self.greedy) = (self.updates + c.updates, self.splits + c.splits, self.decisions + c.decisions, self.greedy + c.greedy);
+        (self.rounded[0], self.rounded[1], self.parts.afloat) = (self.rounded[0] + c.rounded[0], self.rounded[1] + c.rounded[1], self.parts.afloat + c.parts.afloat);
+    }
+}
+
 /// The counts the shell takes once a year (`World::take_counters`).
 #[derive(Debug, Default)]
 pub struct Taken {
@@ -94,10 +103,6 @@ pub struct World {
     /// What Change books at a step, kept between steps (not saved)
     #[serde(skip)]
     pub batches: crate::change::Batches,
-    /// The moves of the bodies' updates of a batch, or of one update of a body or a part, and the view of their domain's
-    /// nodes as they leave them (not saved)
-    #[serde(skip)]
-    pub moves: crate::store::Moves,
 }
 
 /// The level of the world's mesh its air nodes live on.
@@ -142,32 +147,31 @@ impl World {
     pub fn is_land(&self, i: usize) -> bool {
         self.surface_z(i) > 0.0
     }
-    /// Loose amount of substance `k` in ground node `i`, mol, as the moves gathered leave it (`store::Moves`).
+    /// The amounts of node `x` of the store (a ground, bed, bodies' or air node): of substance `k`, mol, at `k`.
+    #[inline]
+    pub(crate) fn stock(&self, x: Node) -> impl Fn(usize) -> f64 + '_ {
+        let (a, n) = (self.store.amounts(x.class), if x.class == Class::Air { self.mesh.level(AIR).n() } else { self.mesh.cells().n() });
+        move |k| a[k * n + x.index]
+    }
+    /// Loose amount of substance `k` in ground node `i`, mol.
     #[inline]
     pub fn g(&self, k: usize, i: usize) -> f64 {
-        self.amount_now(Node::ground(i), k)
+        self.stock(Node::ground(i))(k)
     }
-    /// Bonded amount of substance `k` in ground node `i`, mol, as the moves gathered leave it.
+    /// Bonded amount of substance `k` in ground node `i`, mol.
     #[inline]
     pub fn b(&self, k: usize, i: usize) -> f64 {
-        self.amount_now(Node::new(Class::Bed, i), k)
+        self.stock(Node::new(Class::Bed, i))(k)
     }
-    /// Amount of substance `k` in air node `j`, mol, as the moves gathered leave it.
+    /// Amount of substance `k` in air node `j`, mol.
     #[inline]
     pub fn a(&self, k: usize, j: usize) -> f64 {
-        self.amount_now(Node::air(j), k)
+        self.stock(Node::air(j))(k)
     }
     /// Amount of substance `k` that bodies and parts see in air node `j`, mol: what it holds (`a`) and what the bodies'
-    /// nodes under it hold until the air's step takes it up, as the moves gathered leave them.
+    /// nodes under it hold until the air's step takes it up.
     pub fn a_seen(&self, k: usize, j: usize) -> f64 {
-        if let Some(x) = self.seen_now(j) {
-            return x[k];
-        }
         let kids = self.mesh.level(AIR).children(j);
-        self.a(k, j) + kids.iter().map(|&i| self.amount_now(Node::bodies(i as usize), k)).sum::<f64>()
-    }
-    /// All that bodies and parts see in air node `j` (`a_seen` summed over the substances), mol.
-    pub fn a_seen_all(&self, j: usize) -> f64 {
-        self.seen_now(j).map_or_else(|| (0..self.chem.ns()).map(|k| self.a_seen(k, j)).sum(), |x| x.iter().sum())
+        self.a(k, j) + kids.iter().map(|&i| self.stock(Node::bodies(i as usize))(k)).sum::<f64>()
     }
 }

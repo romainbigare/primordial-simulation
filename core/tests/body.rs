@@ -150,8 +150,8 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     let (mut b, days) = (b, 10.0);
     let (temp0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
     let cost = 2e6;
-    assert!(moved(w, (b.cell as usize, Handle::default()), |w| pcore::body::pay(w, &mut b, cost, days)), "it can pay");
-    let (temp1, g) = (b.temp(&w.chem), pcore::body::conductance_to_ground(w, &b, mass, temp0));
+    assert!(moved(w, (b.cell as usize, Handle::default()), |w, d| pcore::body::pay(w, d, &mut b, cost, days)), "it can pay");
+    let (temp1, g) = (b.temp(&w.chem), pcore::body::conductance_to_ground(w, w.life.domain(b.cell as usize), &b, mass, temp0));
     let (cap, dt) = (b.heat_cap(&w.chem), b.interval(w) as f64 * DAY);
     let (rise, kept) = (temp1 - temp0, cap * (temp1 - temp0));
     println!("a cost of {cost:.1e} J warms a body of {mass:.0} kg by {rise:.4} K (g {g:.2} W/K, {:.1} h time constant): the rate law says {:.4} K", cap / g / 3600.0, cost / (g * dt));
@@ -164,7 +164,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     books.assert_kept(w, 1e-12);
     // The same work again warms it by as much more.
     let mut c = b.clone();
-    assert!(moved(w, (c.cell as usize, Handle::default()), |w| pcore::body::pay(w, &mut c, cost, days)));
+    assert!(moved(w, (c.cell as usize, Handle::default()), |w, d| pcore::body::pay(w, d, &mut c, cost, days)));
     let again = c.temp(&w.chem) - temp1;
     assert!((again / rise - 1.0).abs() < 0.05, "the second cost warms by {again} K, the first {rise} K");
 }
@@ -181,10 +181,10 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
     let w = &mut s.w;
     let rise = |w: &mut World, mut b: Body, per_kg: f64| {
         let (t0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
-        assert!(moved(w, (b.cell as usize, Handle::default()), |w| pcore::body::pay(w, &mut b, per_kg * mass, 10.0)), "it can pay");
+        assert!(moved(w, (b.cell as usize, Handle::default()), |w, d| pcore::body::pay(w, d, &mut b, per_kg * mass, 10.0)), "it can pay");
         b.temp(&w.chem) - t0
     };
-    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
+    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, w.life.domain(b.cell as usize), b, b.mass(&w.chem), b.temp(&w.chem));
     let want = 8.0 * g(w, &small) / g(w, &big);
     let (a, c) = (rise(w, small, 1e5), rise(w, big, 1e5));
     println!("warmth over the ground for the same work per kg: {a:.4} K, 8 times the body {c:.4} K ({:.3} times; 8 g / g' = {want:.3})", c / a);
@@ -295,7 +295,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         let made = |t: f64| {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
             let mut y = x.clone();
-            assert!(moved(&mut w2, (i, Handle::default()), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass, x.temp(&w0.chem)), days)));
+            assert!(moved(&mut w2, (i, Handle::default()), |w2, d| pcore::body::pay(w2, d, &mut y, pcore::body::upkeep(w0, &x, days, mass, x.temp(&w0.chem)), days)));
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, &w0.cfg));
             let off = vec![1.0; chem.reactions.len()];
             let bare = Some((&off[..], x.gene(DENATURE), w0.cfg.phys.unfold));
@@ -309,7 +309,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
             let vapour = wet.min((chem.p_sat(LIQUID, t) / pcore::units::P_REF - x_air) * b.k.gas * open_area(&b, chem, &w0.cfg.phys, mass) * days);
             (0..ns).map(|k| (x.store[k] - y.store[k] + air(k)) * h(k, t)).sum::<f64>() - vapour * chem.subs[LIQUID].lv
         };
-        let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, &b, mass, t) * days * DAY;
+        let lost = |t: f64| (t - tg) * pcore::body::conductance_to_ground(w0, w0.life.domain(b.cell as usize), &b, mass, t) * days * DAY;
         let (mut lo, mut hi) = (tg, tg + 20.0);
         for _ in 0..80 {
             let mid = 0.5 * (lo + hi);
@@ -355,7 +355,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
         let (up, pace) = (pcore::body::upkeep(w, &b, days, mass, b.temp(&w.chem)), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
         w.events.clear();
-        moved(w, (b.cell as usize, slot), |w| pcore::choose::act(w, &mut b, &Default::default(), &mut Default::default()));
+        moved(w, (b.cell as usize, slot), |w, d| pcore::choose::act(w, d, &mut b, &Default::default(), &mut Default::default()));
         let id = b.id;
         took.push(w.events.iter().filter_map(|e| if let EventKind::Took { by, from: u64::MAX, .. } = e.kind { (by == id).then_some(e.value) } else { None }).sum::<f64>());
         ups.push(up);
@@ -392,7 +392,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let books = Books::now(w);
     held_days(w, &[cell], &[280.0], 21);
     // One update more: the fuel it burns against the heat it loses (by the mean of its conductance at its start and end).
-    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
+    let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, w.life.domain(b.cell as usize), b, b.mass(&w.chem), b.temp(&w.chem));
     let (b, tg) = (w.life[slots[0]].clone(), 280.0);
     let mut fur = b.clone();
     fur.genes[pcore::body::HEAT] = -1.0;
@@ -578,7 +578,7 @@ fn a_dry_body_builds_in_proportion_to_its_activity() {
     let (m0, m1) = (wet.store[m], dry.store[m]);
     // (What it may build goes with its mass^0.75 too, and the dry body has the lighter liquid.)
     let eq = dry.supply(&s.w.chem, &s.w.cfg.phys, dry.temp(&s.w.chem)) / wet.supply(&s.w.chem, &s.w.cfg.phys, wet.temp(&s.w.chem));
-    let grow = |w: &mut World, b: &mut Body| moved(w, (b.cell as usize, Handle::default()), |w| worldgen::testkit::grow(w, b, 10.0));
+    let grow = |w: &mut World, b: &mut Body| moved(w, (b.cell as usize, Handle::default()), |w, d| worldgen::testkit::grow(w, d, b, 10.0));
     assert!(grow(&mut s.w, &mut wet) && grow(&mut s.w, &mut dry));
     let (gw, gd) = (wet.store[m] - m0, dry.store[m] - m1);
     println!("matter built: wet {gw:.4e} mol, dry {gd:.4e}, activity {a:.4}");
@@ -648,7 +648,7 @@ fn liquid_taken_at_the_body_temperature_leaves_it_as_warm() {
     hold_ground(&mut s.w, i, t);
     let slot = s.w.add(b, 1);
     let b = std::mem::take(&mut s.w.life[slot]);
-    moved(&mut s.w, (i, slot), |w| body::die(w, slot, b, body::LACK));
+    moved(&mut s.w, (i, slot), |w, d| body::die(w, d, slot, b, body::LACK));
     let tg = s.w.t_ground(i);
     assert!((tg - t).abs() < 1e-6, "the ground at {t} K took the body's remains and went to {tg} K");
 }
@@ -673,7 +673,7 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
         let (slot, id) = {
             let slot = s.w.add(b, 1);
             let mut b = std::mem::take(&mut s.w.life[slot]);
-            assert!(pcore::copy::copy(&mut s.w, &mut b));
+            assert!(s.w.in_domain(b.cell as usize, |w, d| pcore::copy::copy(w, d, &mut b)));
             let id = b.id;
             s.w.life[slot] = b;
             (slot, id)
@@ -980,9 +980,8 @@ fn a_tall_member_shades_a_short_one() {
     for s in w.life.cell(i).filter(|&s| s != short).collect::<Vec<_>>() {
         let j = i ^ 1;
         let mut b = std::mem::take(&mut w.life[s]);
-        w.life.relocate(b.id, i, j);
         (b.cell, b.mark) = (j as u32, w.light[j]);
-        w.life.put(s, b);
+        w.life.relocate(s, i, b);
     }
     // Two nodes of capture area 0.5 per ground area each, the same but for member mass (and the copy mass gene, so they
     // are not alike and stay apart).

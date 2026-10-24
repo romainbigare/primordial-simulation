@@ -5,12 +5,12 @@ use crate::chem::{Chemistry, Phase, Reaction};
 use crate::ground::Melting;
 use crate::store::Node;
 use crate::units::DAY;
-use crate::{World, AIR};
+use crate::{life::Domain, World, AIR};
 
 /// Growth: a member builds body matter, paid by work, as far as its allowance, its spare, what its reactions release
 /// and the stores it converts allow; past its copy mass a share `ALLOC` goes into the brood (laws.md 6.6). `th` is its
 /// plateau state. Returns whether it built anything.
-pub fn grow(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
+pub fn grow(w: &World, d: &mut Domain, b: &mut Body, days: f64, th: Melting) -> bool {
     let chem = &w.chem;
     let Some(bl) = chem.build.clone() else { return false };
     let (m, n) = (bl.outputs[0].0 as usize, b.n());
@@ -27,10 +27,10 @@ pub fn grow(w: &mut World, b: &mut Body, days: f64, th: Melting) -> bool {
     for bk in chem.builds.clone() {
         let k = bk.outputs[0].0 as usize;
         let gap = (b.level(&w.chem, k, 0.0) - b.store[k]).max(0.0) * w.chem.subs[k].molar_mass;
-        let made = convert(w, b, &bk, room0, b.share(&w.chem, k), gap, 0.0, &mut th);
+        let made = convert(w, d, b, &bk, room0, b.share(&w.chem, k), gap, 0.0, &mut th);
         (room, built) = (room - w.cfg.phys.c_copy * made, built || made > 0.0);
     }
-    let made = convert(w, b, &bl, room, 1.0, f64::MAX, full, &mut th);
+    let made = convert(w, d, b, &bl, room, 1.0, f64::MAX, full, &mut th);
     // What it made: up to what its maturity lacks it is body, of the rest the share `ALLOC` is brood.
     b.brood += (made - made.min(needs)) * b.gene_in_range(ALLOC) / w.chem.subs[m].molar_mass;
     built || made > 0.0
@@ -81,7 +81,7 @@ const LEAST_MADE: f64 = 1e-12;
 /// it was found; a conversion that changes the body takes it. Returns the kg made: none below `LEAST_MADE` of `full`
 /// (kg of matter of the size of maturity; 0 for the other solids).
 #[allow(clippy::too_many_arguments)]
-fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, most: f64, full: f64, known: &mut Option<Melting>) -> f64 {
+fn convert(w: &World, d: &mut Domain, b: &mut Body, bl: &Reaction, room: f64, part: f64, most: f64, full: f64, known: &mut Option<Melting>) -> f64 {
     if room <= 0.0 || most <= 0.0 {
         return 0.0;
     }
@@ -92,9 +92,9 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
     let ivl = b.interval(w) as f64;
     let mass = b.mass(chem);
     let th = known.take().unwrap_or_else(|| b.thermal(chem));
-    let payer = body::Payer::at(w, b, ivl, mass, th);
+    let payer = body::Payer::at(w, d, b, ivl, mass, th);
     let t = payer.th.t;
-    let r = RELEASE_MARGIN * body::plan(w, b, f64::MAX, &payer).1;
+    let r = RELEASE_MARGIN * body::plan(w, d, b, f64::MAX, &payer).1;
     if r <= 0.0 {
         *known = Some(payer.th);
         return 0.0;
@@ -113,13 +113,13 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
         return 0.0;
     }
     let (dh, cost) = (chem.dh_of(bl), p.c_copy * kg);
-    if body::spend(w, b, cost, ivl * DAY, false, &payer) > 0.0 {
+    if body::spend(w, d, b, cost, ivl * DAY, false, &payer) > 0.0 {
         return 0.0;
     }
     // What was paid may have burnt some of the solid: convert what is left of it, to its minimum.
     let ext = ins.iter().zip(&floors).fold(kg / (mm * nu0), |e, (&(k, nu), f)| e.min((b.store[k as usize] - f).max(0.0) / nu as f64));
     for &(k, nu) in ins {
-        body::add_store(&mut b.store[k as usize], -(nu as f64) * ext, &mut w.counts.rounded[0]);
+        body::add_store(&mut b.store[k as usize], -(nu as f64) * ext, &mut d.counts.rounded[0]);
     }
     b.e -= dh * ext;
     let (j, lift, t) = (w.mesh.up(b.cell as usize, 0, AIR), w.lift(b.cell as usize), b.temp(&w.chem));
@@ -129,8 +129,8 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
             // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `Substance::latent_gas`.)
             let q = x * w.chem.subs[k].cp * t;
             b.e = b.e - q - x * w.chem.subs[k].latent_gas();
-            w.give_move(Node::air(j), 0, 0.0, q);
-            w.gas_move(k, x, lift);
+            d.moves.give(w, Node::air(j), 0, 0.0, q);
+            d.moves.gas(w, k, x, lift);
         } else {
             b.store[k] += x;
         }

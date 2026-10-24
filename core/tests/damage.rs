@@ -28,7 +28,7 @@ fn resting(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
 fn bite(w: &mut World, a: Handle, v: Handle) {
     let mut b = std::mem::take(&mut w.life[a]);
     let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
-    moved(w, (b.cell as usize, a), |w| choose::take_body(w, &mut b, v, r));
+    moved(w, (b.cell as usize, a), |w, d| choose::take_body(w, d, &mut b, v, r));
     w.life[a] = b;
 }
 

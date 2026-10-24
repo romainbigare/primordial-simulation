@@ -323,7 +323,6 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         events: Vec::new(),
         scratch: Default::default(),
         batches: Default::default(),
-        moves: Default::default(),
     };
     // The ground and the air at their starting temperatures. (The world is made: its store is built whole at each stage,
     // never written outside `store::apply` once it runs.)

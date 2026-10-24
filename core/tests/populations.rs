@@ -41,7 +41,7 @@ fn copies(w: &mut World, a: &mut Body, n: usize) -> Vec<Body> {
     for _ in 0..n {
         w.time += DAY_S;
         brood(w, a, 1.0);
-        assert!(copy::copy(w, a), "no child");
+        assert!(w.in_domain(a.cell as usize, |w, d| copy::copy(w, d, a)), "no child");
     }
     let out: Vec<Body> = children(w, a.id).into_iter().map(|k| w.life[k].clone()).collect();
     assert_eq!(out.len(), n);
@@ -244,7 +244,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let n0 = b.count;
     brood(&w, &mut b, n0);
     let before = live(&w);
-    assert!(b.spread.is_empty() && copy::copy(&mut w, &mut b), "no children");
+    assert!(b.spread.is_empty() && w.in_domain(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
     assert_eq!(b.count, n0, "the children joined their mature parents");
     w.life[s] = b;
     let kids: Vec<Handle> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
@@ -253,7 +253,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     assert!((c.count - n0).abs() < 1e-6 * n0 && !c.adult(&w.chem), "{} young members", c.count);
     assert!(c.spread.iter().all(|&v| v >= 0.0) && c.spread.iter().any(|&v| v > 0.0) && c.row_spread > 0.0, "children keep no spread");
     // Grown, they join the node (as the month's merge does): its spread is widened.
-    nodes::merge(&mut w, kids[0], s);
+    w.in_domain(w.life[s].cell as usize, |w, d| nodes::merge(w, d, kids[0], s));
     let mut b = std::mem::take(&mut w.life[s]);
     assert!(b.count > 1.5 * n0 && b.spread.iter().any(|&v| v > 0.0) && b.row_spread > 0.0, "the merge widened nothing");
 
@@ -261,7 +261,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     b.spread[COPY_MASS] = 1.0;
     let (count, store, e, m) = (b.count, b.store.clone(), b.e, b.genes[COPY_MASS]);
     let before = live(&w);
-    nodes::split(&mut w, &mut b);
+    w.in_domain(b.cell as usize, |w, d| nodes::split(w, d, &mut b));
     w.life[s] = b;
     let new: Vec<Handle> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
     assert_eq!(new.len(), 1, "not split in two");
@@ -338,15 +338,18 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             b.prepare(&w.chem, &w.cfg);
             brood(&w, &mut b, n);
             let (before, id) = (live(&w), b.id);
-            copy::copy(&mut w, &mut b);
-            lineage::resize(&mut w, &mut b);
-            nodes::split(&mut w, &mut b);
-            w.life[s] = b;
+            // (One serial step, which puts it back in its slot, so the ids it makes reach it.)
+            w.in_domain(b.cell as usize, |w, d| {
+                copy::copy(w, d, &mut b);
+                lineage::resize(w, d, &mut b);
+                nodes::split(w, d, &mut b);
+                d[s] = b;
+            });
             // The children are young nodes of their own (immature, `copy::young`); here they grow up at once, and
             // would mature into their parent's node: they join it now, so the update's node math is the same.
             let kids: Vec<Handle> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life[*k].parent == id).collect();
             for k in kids {
-                nodes::merge(&mut w, k, s);
+                w.in_domain(w.life[s].cell as usize, |w, d| nodes::merge(w, d, k, s));
             }
         }
         for s in live(&w) {
@@ -445,7 +448,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();
         w.time += DAY_S;
-        assert!(copy::copy(&mut w, &mut c), "no children");
+        assert!(w.in_domain(c.cell as usize, |w, d| copy::copy(w, d, &mut c)), "no children");
         (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);
         w.events.clear();
     }
@@ -463,25 +466,30 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
     let books = Books::now(&w);
     let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0).expect("a node");
-    let mut b = std::mem::take(&mut w.life[s]);
-    let lin0 = b.lineage;
-    assert!(w.life.born(&b).is_empty() && b.rows.is_empty(), "a light-eater has a brain");
-    b.genes[HIDDEN] += 0.9;
-    lineage::resize(&mut w, &mut b);
-    assert_eq!(b.lineage, lin0, "moved for less than a unit");
-    b.genes[HIDDEN] += 0.3;
-    lineage::resize(&mut w, &mut b);
+    // (Its genes grow by `by` and it updates its lineage: a serial step, in its slot so the new ids reach it.)
+    let grow = |w: &mut World, by: f32| {
+        w.life[s].genes[HIDDEN] += by;
+        w.in_domain(w.life[s].cell as usize, |w, d| {
+            let mut b = std::mem::take(&mut d[s]);
+            lineage::resize(w, d, &mut b);
+            d[s] = b;
+        });
+    };
+    let lin0 = w.life[s].lineage;
+    assert!(w.life.born(&w.life[s]).is_empty() && w.life[s].rows.is_empty(), "a light-eater has a brain");
+    grow(&mut w, 0.9);
+    assert_eq!(w.life[s].lineage, lin0, "moved for less than a unit");
+    grow(&mut w, 0.3);
     let shape = |w: &World, b: &Body| w.life.brains[b.lineage as usize].as_ref().expect("its lineage").shape;
-    let (lin1, s1) = (b.lineage, shape(&w, &b));
+    let b = &w.life[s];
+    let (lin1, s1) = (b.lineage, shape(&w, b));
     assert!(lin1 != lin0 && s1.h == 1, "no new lineage of one hidden unit");
     assert_eq!(w.life.members[lin1 as usize], 1);
-    assert_eq!(w.life.born(&b).len(), s1.rows() * s1.r());
-    assert_eq!(b.rows.as_slice(), w.life.born(&b));
-    b.rows[s1.h] += 0.5;
-    let learned = b.rows[s1.h] - w.life.born(&b)[s1.h];
-    b.genes[HIDDEN] += 1.0;
-    lineage::resize(&mut w, &mut b);
-    w.life[s] = b;
+    assert_eq!(w.life.born(b).len(), s1.rows() * s1.r());
+    assert_eq!(b.rows.as_slice(), w.life.born(b));
+    w.life[s].rows[s1.h] += 0.5;
+    let learned = w.life[s].rows[s1.h] - w.life.born(&w.life[s])[s1.h];
+    grow(&mut w, 1.0);
     let b = &w.life[s];
     let h = shape(&w, b).h;
     assert!(b.lineage != lin1 && h == 2, "no new lineage of two hidden units");
@@ -526,7 +534,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let rows0 = w.life.born(&w.life[s]).to_vec();
     let (before, count0, cell) = (life_totals(&w), w.life[s].count, w.life[s].cell);
     let n = 400;
-    let drawn = nodes::open(&mut w, s, n);
+    let drawn = w.in_domain(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, n));
     assert_eq!(drawn.len(), n);
     same_totals(&before, &life_totals(&w));
     assert!((life_totals(&w).0 - before.0).abs() <= 1e-9 * before.0, "members {} then {}", before.0, life_totals(&w).0);
@@ -562,7 +570,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     // many members do not each get rows of their own.)
     w.life[s].row_spread = 0.0;
     let rest = w.life[s].count.floor() as usize;
-    assert_eq!(nodes::open(&mut w, s, rest + 5).len(), rest - 1);
+    assert_eq!(w.in_domain(w.life[s].cell as usize, |w, d| nodes::open(w, d, s, rest + 5)).len(), rest - 1);
     assert!(w.life[s].count < 2.0);
     books.assert_kept(&w, 1e-9);
 }
@@ -580,7 +588,7 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     let mut c = o.clone();
     (c.count, c.genes) = (1.4, o.genes.iter().map(|g| g + 0.1).collect());
     let s = w.add(c, 1);
-    nodes::merge(&mut w, s, t);
+    w.in_domain(w.life[t].cell as usize, |w, d| nodes::merge(w, d, s, t));
     let (after, node) = (life_totals(&w).0, &w.life[t]);
     assert!((after - (before + 1.4)).abs() < 1e-12 * after && (node.count - 4.4).abs() < 1e-12, "members {before} + 1.4 then {after}");
     for (g, (x, y)) in o.genes.iter().zip(&node.genes).enumerate() {
@@ -612,10 +620,10 @@ fn splitting_and_joining_give_the_node_back() {
         b.spread[g] = (1.0 - 0.1 * r.f64() as f32) * 0.3f32.powi(2) * (w.cfg.phys.alike.powi(2) * std::f32::consts::FRAC_PI_8 + 1.0);
         let (genes, spread) = (b.genes.clone(), b.spread.clone());
         let others = live(&w);
-        nodes::split(&mut w, &mut b);
+        w.in_domain(b.cell as usize, |w, d| nodes::split(w, d, &mut b));
         w.life[s] = b;
         let half = live(&w).into_iter().find(|x| *x != s && !others.contains(x)).expect("split in two");
-        nodes::merge(&mut w, half, s);
+        w.in_domain(w.life[s].cell as usize, |w, d| nodes::merge(w, d, half, s));
         let b = &w.life[s];
         assert!((b.genes[g] - genes[g]).abs() < 1e-5 && (b.spread[g] - spread[g]).abs() < 1e-5 * spread[g], "gene {g}: {} and {} back as {} and {}", genes[g], spread[g], b.genes[g], b.spread[g]);
     }
@@ -653,7 +661,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         b.prepare(&w.chem, &w.cfg);
         brood(&w, &mut b, 1.0);
         w.time += DAY_S;
-        assert!(copy::copy(&mut w, &mut b), "no child");
+        assert!(w.in_domain(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no child");
         w.life[s] = b;
         let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
         println!("nodes {nodes}: bodies added {}, node of the kind now {}", kids.len(), w.life[t].count);
@@ -670,7 +678,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         b.prepare(&w.chem, &w.cfg);
         brood(&w, &mut b, 3.5);
         w.time += DAY_S;
-        assert!(copy::copy(&mut w, &mut b), "no children");
+        assert!(w.in_domain(b.cell as usize, |w, d| copy::copy(w, d, &mut b)), "no children");
         w.life[s] = b;
         let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
         println!("many at once: {} children", kids.len());

@@ -3,7 +3,7 @@
 use crate::body::{Body, BRAIN_SIZES, HIDDEN, MEMORY, SEEN, SIGHT};
 use crate::brain::{self, Shape};
 use crate::rng::{Purpose, Rng};
-use crate::{bond, choose, World};
+use crate::{bond, choose, life::Domain, World};
 use serde::{Deserialize, Serialize};
 
 /// What the bodies of a lineage share: the sizes of brain and senses, the brain's base, and where it came from.
@@ -22,17 +22,17 @@ impl Lineage {
     pub fn none(&self) -> bool {
         self.shape.h == 0
     }
-    /// Energy one decision takes, J per kg of a member of `m_ref` kg: by the body's own size genes, not the rounded
-    /// sizes, so a smaller brain pays less at once and selection can lead a node's sizes down to none.
-    pub fn cost(&self, p: &crate::Physics, genes: &[f32]) -> f64 {
-        if self.none() {
+    /// Energy one decision of a lineage with a brain (`brain`) or none takes, J per kg of a member of `m_ref` kg: by the
+    /// body's own size genes, not the rounded sizes, so a smaller brain pays less at once and selection can lead a node's
+    /// sizes down to none.
+    pub fn cost(brain: bool, p: &crate::Physics, genes: &[f32]) -> f64 {
+        if !brain {
             return 0.0;
         }
         let g = |k: usize| genes[k].max(0.0) as f64;
         p.c_hidden * g(HIDDEN) + p.c_memory * g(MEMORY) + p.c_seen * g(SEEN) + p.c_sight * g(SIGHT).powi(2)
     }
 }
-
 
 /// The brain's sizes for `ns` substances, `h` hidden units and `mem` memory numbers.
 pub fn shape(ns: usize, h: usize, mem: usize) -> Shape {
@@ -66,18 +66,18 @@ pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, nois
 
 /// At its update, a body whose brain-size genes are a whole unit away from its lineage's moves to a new lineage of
 /// those sizes, its born rows and its own rows carried over with the same new weights. Moves no matter and no energy.
-pub fn resize(w: &mut World, b: &mut Body) {
+pub fn resize(w: &World, d: &mut Domain, b: &mut Body) {
     let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id);
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
-    let Some(lin) = w.life.brain(b.lineage) else { return };
+    let Some(lin) = d.brain(w, b.lineage) else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };
     let from = lin.shape;
     // The born rows and its own get the same new weights (two streams of one key, the body's id turned over).
     let rerow = |x: &[f32]| brain::rerow(x, from, l.shape, &mut Rng::new(w.seed, w.day(), !id, Purpose::Resize), noise);
-    let born = rerow(w.life.born(b));
+    let born = rerow(d.born(w, b));
     b.rows = if b.rows.is_empty() { born.clone() } else { rerow(&b.rows) };
-    let lineage = w.life.new_lineage(l);
-    w.life.move_to(b, lineage, born);
+    let lineage = d.new_lineage(l);
+    d.move_to(b, lineage, born);
     // With no brain it has no decision to learn from, no memory and no signal.
     if w.life.brainless(b) {
         (b.trace, b.mem, b.sig, b.wb, b.var, b.ms) = (Vec::new(), Vec::new(), Default::default(), 0.0, 0.0, Vec::new());

@@ -29,6 +29,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.1b (the same saves) | D2.1b | 1.281 | 150 | 55 | 981 | 75 | 19 | 2,836 | 32,886 | 1.609 | 222 | 54 | 1,185 | 125 | 23 | 2,142 | 27,570 | 9,149 |
 | D2.3 (benches remade, `/tmp/d23-bench`) | D2.3 | 1.395 | 141 | 50 | 1,153 | 33 | 19 | 3,026 | 39,306 | 1.530 | 226 | 53 | 1,187 | 43 | 21 | 2,412 | 29,278 | 9,364 |
 | D2.4a (benches remade, `/tmp/d24-bench`) | D2.4a | 1.442 | 149 | 51 | 1,201 | 20 | 21 | 2,839 | 36,465 | 1.174 | 205 | 54 | 892 | 9 | 15 | 1,512 | 22,280 | 9,577 |
+| D2.4b (island22 remade at `eec6f1d`, `/tmp/d24b-bench`; `eec6f1d` there: 2.093 s/yr) | D2.4b | 2.108 | 141 | 50 | 1,885 | 3 | 28 | 3,679 | 53,648 | — | — | — | — | — | — | — | — | 9,684 |
 
 ### A2: compiler settings
 
@@ -362,6 +363,39 @@ nodes check (F7, `tape/tests/nodes.rs`): differences past the noise in the rules
 (D2.3) on the same machine (default plan 0 against 2, roster 8 against 10); rules (b) and (c) hold everywhere, rule (a)
 breaks once past the noise (roster, seed 1, kind 4 mass, broken but within the noise on `main`), the rest are rule
 (d)'s rarer deaths, as on `main`.
+
+### D2.4b: the context `(&World, &mut Domain)`
+
+Level 2 (S72; the golden fingerprints are re-pinned, the same with and without threads; no change of the snapshot).
+Body code takes the world read only and its domain writable; the domains are taken out of the world for the parallel
+phase, and every serial step runs on the domain of its cell taken out the same way (`World::in_domain`). Lineages and
+born rows are always provisional and the changes of holders always deferred, settled after the parallel phase and
+after each serial step (outside a batch, the holders at once; in a batch, at its end); let-goes and anchors are part
+acts. The island bench was remade with the code of `eec6f1d` (D2.4a and its review; `/tmp/d24b-bench`, 300 years).
+
+**The same world.** Two years from that save: all 229 columns of `series.csv` but the timings, and `months.csv`, are
+the same to the last digit (plant members 7,041,668,247.591711, bodies 3,630, updates 54,298, land 293.50516462337765
+K, `air_3` 0.0004036156847595971, births 9,909,766,397.899576 in the second year, both builds). The two end saves
+differ only in the ids of born rows: the store, the parts, the counters, the lineages and every body are the same, bit
+for bit, but for its `genome` (1,927 of 3,630 bodies), and the rows each body was born with are the same. The ids
+differ because outside a batch (the monthly merge, `nodes::crowd`) the changes of holders are now added after each
+serial step: a merge's new born rows take a free slot before the rows it leaves with no holder are freed. No random
+draw reads a lineage's or born rows' id, so the history does not depart. A body that holds a part and lets go of it or anchors it
+in its own update now does so when its outbox is applied, after its update (and pays to anchor then): that changes a
+history where it happens (S72's level 3 part), not in these two years. A 16 x 16 world of seed 3 ends four years on the
+same fingerprint in both builds.
+
+Cost, callgrind on one thread, one year from that save (54,486 updates in both builds):
+
+| | `eec6f1d` | D2.4b |
+|---|---|---|
+| the body batch (`survey::batch`, inclusive), per update | 168,902 | 170,150 (+0.74%) |
+| of it: the updates (`survey::update`) | 8,208 M | 8,142 M (-0.81%) |
+| of it: the outboxes applied (`outbox::deliver`; a serial step per entry) | 472 M | 561 M (+19%) |
+| all instructions of the year | 13,930 M | 13,903 M (-0.20%) |
+
+The updates are cheaper (the store's view by domain, no `opened` list); the serial phase costs more, as each of its
+steps takes its domain out and settles it.
 
 ## Profile of the baseline
 

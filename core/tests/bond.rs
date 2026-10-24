@@ -6,7 +6,7 @@ use pcore::body::{Body, COPY_MASS, LIQ, STRENGTH};
 use pcore::brain;
 use pcore::chem::Phase;
 use pcore::units::DAY_S;
-use worldgen::testkit::{dry_land, moved, plate, scale, small_world, start as world, Books, Brain, Line};
+use worldgen::testkit::{dry_land, moved_serial, plate, scale, small_world, start as world, Books, Brain, Line};
 
 /// A bond breaks when the weight it bears is more than it holds: of two parts hung on an anchored one by bonds that
 /// hold 10 t weight, the one of 1 t stays and the one of 100 t falls.
@@ -47,9 +47,8 @@ fn walls_keep_a_body_warm() {
     let slot = bs.living().map(|x| x.0).filter(|&s| pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
     let from = w.life[slot].cell as usize;
     let mut b = std::mem::take(&mut w.life[slot]);
-    w.life.relocate(b.id, from, i);
     b.cell = i as u32;
-    let slot = w.life.put(slot, b);
+    let slot = w.life.relocate(slot, from, b);
     // Enough liquid for a month without rain.
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
     let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;
@@ -93,7 +92,7 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
         let t = b.temp(&w.chem);
         (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] = b.store[k].max(fed[k]));
         b.e = b.energy_at(&w.chem, t);
-        moved(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
+        moved_serial(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
         b.hold = None;
     }
     assert!(w.parts.at[i].len() > 6, "{} parts in the cell", w.parts.at[i].len());
@@ -125,7 +124,7 @@ fn forming_never_takes_more_than_is_left() {
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
     let mut b = std::mem::take(&mut w.life[slot]);
-    moved(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
+    moved_serial(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
     assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
     w.life[slot] = b;
     assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
