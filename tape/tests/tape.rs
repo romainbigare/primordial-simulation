@@ -192,7 +192,7 @@ fn recording() -> &'static Recording {
         let World { life, chem, cfg, .. } = &mut w;
         life.each_mut(|b| {
             b.genes[lay.cat + fix] = -1.0;
-            b.prepare(chem, &cfg.phys);
+            b.prepare(chem, cfg);
         });
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let cells = |w: &World| {

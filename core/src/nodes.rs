@@ -165,7 +165,7 @@ pub(crate) fn add(w: &mut World, t: Handle, c: Lot, (genes, spread): (&[f32], &[
     let gap = was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32;
     o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
     w.life.reborn(&mut o, mix(was, born));
-    o.set_genes(mean, &w.chem, &w.cfg.phys);
+    o.set_genes(mean, &w.chem, &w.cfg);
     rejoin(w, &mut o, c, size, Some(own));
     w.see(&mut o);
     w.life[t] = o;
@@ -241,7 +241,7 @@ pub fn split(w: &mut World, b: &mut Body) {
     (genes[g], c.genes[g]) = (genes[g] + d, genes[g] - d);
     b.spread[g] = (b.spread[g] - d * d).max(0.0);
     c.spread[g] = b.spread[g];
-    b.set_genes(genes, &w.chem, &w.cfg.phys);
+    b.set_genes(genes, &w.chem, &w.cfg);
     w.counts.splits += 1.0;
     w.place(c);
 }
@@ -301,7 +301,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng) -> Handle {
         (c.genome, b.row_spread) = (w.life.new_genome(mine), spread);
         w.life.reborn(b, left);
     }
-    b.set_genes(genes, &w.chem, &w.cfg.phys);
+    b.set_genes(genes, &w.chem, &w.cfg);
     (c.count, c.spread, c.row_spread, c.size_spread, c.size_lag) = (1.0, Vec::new(), 0.0, 0.0, 0.0);
     w.place(c)
 }

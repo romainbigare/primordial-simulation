@@ -1,5 +1,5 @@
 //! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
-//! (`survey`), and every day the updates due (`day`).
+//! (`survey`), and every batch of days the updates due (`batch`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
 use crate::{change::Reactor, choose, copy::Grown, life::Handle, math::mean_decay, units::DAY, World};
@@ -242,10 +242,10 @@ fn shade(w: &mut World) {
     }
 }
 
-/// Update the bodies due today, domain by domain (`life::Domain`), cell by cell, and in a cell by id: an order that does
-/// not depend on where bodies are stored, and keeps memory reads close together.
-pub fn day(w: &mut World) {
-    let due = w.life.take_due(w.day());
+/// Update the bodies due in this batch, all at its first day, domain by domain (`life::Domain`), cell by cell, and in a
+/// cell by id: an order that does not depend on where bodies are stored, and keeps memory reads close together.
+pub fn batch(w: &mut World) {
+    let due = w.life.take_due(w.batch());
     if due.is_empty() {
         return;
     }
@@ -297,6 +297,6 @@ fn update(w: &mut World, s: Handle, rc: &mut Reactor, (tmp, act): (&mut LiveTmp,
     }
     crate::nodes::split(w, &mut b);
     w.see(&mut b);
-    w.life.schedule(w.day() + b.interval(w), &mut b);
+    w.life.schedule(w.due_in(b.interval(w)), &mut b);
     w.life.put(s, b);
 }

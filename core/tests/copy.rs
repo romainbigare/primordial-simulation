@@ -20,7 +20,7 @@ fn feed_minerals(w: &mut World, s: Handle) {
     for (mk, _) in w.chem.minerals().to_vec() {
         let b = &mut w.life[s];
         (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         let a = (100.0 * b.level(&w.chem, mk, b.mass(&w.chem)) - w.store.amounts(Class::Ground)[mk * n + i]).max(0.0);
         put(w, mk, i, a);
     }
@@ -310,7 +310,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     pcore::survey::survey(&mut w);
     for round in 0..3 {
         let mut n = std::mem::take(&mut w.life[s]);
-        n.prepare(&w.chem, &w.cfg.phys);
+        n.prepare(&w.chem, &w.cfg);
         // A brood of 4 children for the members together, besides what they hold.
         n.brood = (4.0 + copy::BROOD_HELD * 5.0) * child_mol;
         assert!(n.adult(&w.chem), "round {round}: the node is mature: {} kg", n.built(&w.chem) / n.n());
@@ -442,11 +442,11 @@ fn a_young_nodes_sizes_stay_between_birth_and_the_copy_mass() {
     for round in 0..300 {
         let mut n = std::mem::take(&mut w.life[s]);
         // A brood of 10 children besides what the members hold, and matter that keeps them at the copy mass.
-        n.prepare(&w.chem, &w.cfg.phys);
+        n.prepare(&w.chem, &w.cfg);
         brood(&w, &mut n, 10.0);
         let short = (n.k.copy_mass * (1.0 - body::WET_TISSUE) * n.count - n.matter_kg(&w.chem)).max(0.0);
         add(&mut w, &mut n, MATTER, short);
-        n.prepare(&w.chem, &w.cfg.phys);
+        n.prepare(&w.chem, &w.cfg);
         assert!(copy::copy(&mut w, &mut n), "round {round}: no children");
         w.life[s] = n;
         let y = *young.get_or_insert_with(|| children(&w, w.life[s].id).into_iter().find(|&k| k != s).expect("a young node"));
@@ -676,7 +676,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             assert!(b.store[LIQUID] <= level * (1.0 + 1e-3), "day {day}: liquid over its level by a share {:.3e}", b.store[LIQUID] / level - 1.0);
             takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, used, .. } = e.kind { used as f64 * joule } else { 0.0 }).sum();
             let mut b = w.life[s].clone();
-            b.prepare(&w.chem, &w.cfg.phys);
+            b.prepare(&w.chem, &w.cfg);
             ups[day] = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem));
             if day % 50 == 49 {
                 built.push(b.built(&w.chem));

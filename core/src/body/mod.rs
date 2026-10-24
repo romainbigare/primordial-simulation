@@ -62,7 +62,7 @@ pub struct Body {
     /// The body it was copied from (id; 0 for a founder) and its day of birth
     pub parent: u64,
     pub born: u64,
-    /// Day of its next update (`Life::schedule`)
+    /// Batch of its next update (`Life::schedule`)
     pub due: u64,
     /// Day of the last update; for a node, the mean by members of the days its members' time was last integrated from
     /// (members who joined since count from when they came, `nodes::rejoin`)
@@ -137,7 +137,7 @@ pub struct Consts {
     pub leaf: f64,
     /// Catalyst factor of each reaction (1 when off)
     pub cat: Vec<f64>,
-    /// Days between the updates its `INTERVAL` gene asks for (`Body::interval`)
+    /// Days between the updates its `INTERVAL` gene asks for, a whole number of batches (`Body::interval`)
     pub interval: u64,
     /// Catalysed reactions that release heat, with the heat per unit, J (not those that keep a part of a fuel's heat,
     /// `Chemistry::keeps`)
@@ -240,8 +240,8 @@ impl Body {
         let held = self.store.iter().enumerate().filter(|x| *x.1 != 0.0);
         held.map(|(k, a)| a * chem.molar_volume(k, chem.phase_in(k, t, |j| self.store[j]))).sum()
     }
-    /// Days between its updates: its `INTERVAL` gene, and at least `Config::node_days` for a population node without a
-    /// brain, which takes no decisions (laws.md 4.4, the pace of nodes).
+    /// Days between its updates, a whole number of batches (`Config::batch_days`): its `INTERVAL` gene, and at least
+    /// `Config::node_days` for a population node without a brain, which takes no decisions (laws.md 4.4, the pace of nodes).
     pub fn interval(&self, w: &crate::World) -> u64 {
         let own = self.k.interval;
         if self.n() > 1.0 && w.life.brainless(self) { own.max(w.cfg.node_days as u64) } else { own }
@@ -257,12 +257,13 @@ impl Body {
         if d == 1.0 { f } else { 1.0 - (1.0 - f).powf(d) }
     }
     /// Its genes are `genes` (`prepare` follows).
-    pub(crate) fn set_genes(&mut self, genes: Vec<f32>, chem: &Chemistry, p: &crate::Physics) {
+    pub(crate) fn set_genes(&mut self, genes: Vec<f32>, chem: &Chemistry, cfg: &crate::Config) {
         self.genes = genes;
-        self.prepare(chem, p);
+        self.prepare(chem, cfg);
     }
-    /// Work `k` out from the genes and the physics, at every change of the genes.
-    pub fn prepare(&mut self, chem: &Chemistry, p: &crate::Physics) {
+    /// Work `k` out from the genes and the settings, at every change of the genes.
+    pub fn prepare(&mut self, chem: &Chemistry, cfg: &crate::Config) {
+        let p = &cfg.phys;
         let (lay, nr) = (Layout::of(chem), chem.reactions.len());
         let (cat, on) = (lay.cat, |r: usize| self.genes[lay.cat + r] > 0.0);
         let mut k = std::mem::take(&mut self.k);
@@ -278,7 +279,9 @@ impl Body {
         // gases at their share of the open air to their order; dearer when firm past `t_firm` (laws.md 6.2).
         let cats: f64 = chem.contact_rates(p.t_cat).iter().zip(&k.cat).filter(|x| *x.1 > 1.0).map(|(c, f)| f * c).sum();
         k.cats = cats * (1.0 + (self.gene(DENATURE) - p.t_firm).max(0.0) / p.c_firm);
-        k.interval = self.dec(INTERVAL).round().clamp(MIN_INTERVAL, MAX_INTERVAL) as u64;
+        // The gene's days to the nearest whole batch, at least one, so every update starts a batch.
+        let batch = cfg.batch_days as f64;
+        k.interval = ((self.dec(INTERVAL).clamp(MIN_INTERVAL, MAX_INTERVAL) / batch).round().max(1.0) * batch) as u64;
         (k.gas, k.liq, k.heat, k.leaf, k.copy_mass) = (self.dec(GAS), self.dec(LIQ), self.dec(HEAT), self.dec(LEAF), self.dec(COPY_MASS));
         k.tissue = (k.copy_mass / p.m_ref).powf(p.intake_exp - 1.0);
         self.k = k;

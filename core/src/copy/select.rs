@@ -89,7 +89,7 @@ pub(crate) fn sample(w: &mut World, h: Handle, b: &Body, rc: &mut Reactor, tmp: 
     let mut s = b.clone();
     let mut genes = b.genes.clone();
     genes[g] += step;
-    s.set_genes(genes, &w.chem, &w.cfg.phys);
+    s.set_genes(genes, &w.chem, &w.cfg);
     let events = w.events.len();
     let gain = gain_to_growth(w, &mut s, rc, tmp);
     w.open_moves(b.cell as usize, Node::new(Class::Body, h.slot as usize));
@@ -109,5 +109,5 @@ pub(crate) fn select(w: &mut World, b: &mut Body, s: Sample, gain: f64) {
     let mut genes = b.genes.clone();
     let cap = w.cfg.sample_every as f32 * s.step.abs();
     genes[s.gene] = (genes[s.gene] + (s.genes * s.step * f).clamp(-cap, cap)).clamp(lo, hi);
-    b.set_genes(genes, &w.chem, &w.cfg.phys);
+    b.set_genes(genes, &w.chem, &w.cfg);
 }

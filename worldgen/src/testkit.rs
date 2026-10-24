@@ -139,7 +139,7 @@ impl Line {
         let mut b = crate::life::make(w, kind, i, self.lineage, genome).expect("a founder");
         let sizes = w.life.brains[self.lineage as usize].as_ref().map(lineage::sizes_of).expect("the lineage");
         BRAIN_SIZES.iter().zip(sizes).for_each(|(&g, x)| b.genes[g] = x as f32);
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         b
     }
 }
@@ -159,7 +159,7 @@ pub fn eater(w: &mut World, i: usize, act: usize, copy: f32) -> Body {
     let m = b.mass(&w.chem);
     scale(w, &mut b, EATER_KG / m);
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[COPY_MASS], b.genes[LIQ]) = (0.0, 0.0, copy, -4.0);
-    b.prepare(&w.chem, &w.cfg.phys);
+    b.prepare(&w.chem, &w.cfg);
     b
 }
 
@@ -267,7 +267,7 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     pcore::survey::survey(w);
     w.time += DAY_S;
     let mut b = std::mem::take(&mut w.life[s]);
-    b.prepare(&w.chem, &w.cfg.phys);
+    b.prepare(&w.chem, &w.cfg);
     (s, b)
 }
 
@@ -363,7 +363,7 @@ pub fn only_the_solid(w: &World, b: &mut Body) {
     let lay = Layout::of(&w.chem);
     let (m, burn_matter) = w.chem.matter_roles().expect("body matter");
     (b.genes[lay.cat + burn_matter], b.genes[lay.upt + m]) = (-1.0, -0.1);
-    b.prepare(&w.chem, &w.cfg.phys);
+    b.prepare(&w.chem, &w.cfg);
 }
 
 /// The volume of the loose solids of cell `i`, m³.

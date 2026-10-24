@@ -39,6 +39,8 @@ pub struct Config {
     pub wake_share: f64,
     /// Speed setting: the longest a ground or air node's reactions sleep, days (0: every node reacts every step)
     pub sleep_days: u32,
+    /// Speed setting: bodies update in batches of this many days; an interval is a whole number of batches (`Body::interval`)
+    pub batch_days: u32,
     /// Speed setting: a population node (more than one member) updates at most every this many days (`Body::interval`)
     pub node_days: u32,
     /// Speed setting: a node without a brain runs its sample member on one update in this many, drawn (`copy::select`)
@@ -383,6 +385,11 @@ impl Config {
         require(divides, || format!("the air's step ({h} hours) must divide the physics step ({d} days)"))?;
         let (days, most) = (self.node_days as f64, crate::body::MAX_INTERVAL);
         require(days <= most, || format!("node_days ({days}) must be at most {most} days, the longest interval"))?;
+        // A batch is a whole number of days that starts every body's update: it fits in the physics step and the month,
+        // and nodes' intervals are whole batches.
+        let b = self.batch_days;
+        require(b > 0 && d.is_multiple_of(b) && self.days_per_month.is_multiple_of(b), || format!("batch_days ({b}) must be at least 1 and divide phys_days ({d}) and days_per_month ({})", self.days_per_month))?;
+        require(self.node_days.is_multiple_of(b), || format!("node_days ({}) must be a multiple of batch_days ({b})", self.node_days))?;
         let why = "sample_every must be at least 1 (a sample on one update in that many)";
         require(self.sample_every > 0, || why.into())?;
         let wake = self.wake_share;
@@ -416,6 +423,7 @@ impl Default for Config {
             crowd: 4,
             wake_share: 0.05,
             sleep_days: 90,
+            batch_days: 2,
             node_days: 36,
             sample_every: 2,
             skin_m: 2.0,

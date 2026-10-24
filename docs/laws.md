@@ -28,13 +28,16 @@ across it passes exactly.
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it). Processes run by their periods
 (`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`), the parts of
 Flow that are due (air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and
-Change; on the month's first day Bond; every day the bodies whose interval ends (`survey::day`; the `INTERVAL` gene,
-5 to 360 days; a population node without a brain at least every `node_days`). Each run stands for the time to its next.
+Change; on the month's first day Bond; every `batch_days` days (2) the bodies whose interval ends (`survey::batch`).
+**Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
+brain at least `node_days`, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
+(`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
+placed during a batch first updates in a later one. Each run stands for the time to its next.
 **Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
 the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the
 domain it was placed in and that domain's count of bodies placed (children, split halves, parts of nodes acting apart,
 members drawn); it never changes, and its random draws are keyed by it. The bodies
-due on a day update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
+due in a batch update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
 cell, each cell's bodies in the order they came. No order depends on where a body is stored.
 
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
@@ -334,8 +337,9 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   allowance builds; built solids count by what they do, decision 69): Price's equation (Price 1970), the breeder's
   equation (Lande 1976). Skipped where the step cannot change the gain.
 - **Choices as a spread of actions** (`choose/spread.rs`) for a node with a brain (5.3).
-- **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`; rules per interval are rates
-  over the update (`Body::paces`), so its `INTERVAL` gene is the turnover time of its stores (a known limit).
+- **Pace** (`Body::interval`): a node without a brain updates at most every `node_days`, and every interval is a whole
+  number of batches (0); rules per interval are rates over the update (`Body::paces`), so its `INTERVAL` gene is the
+  turnover time of its stores (a known limit).
 - **Brain size** (`lineage::resize`): a mean brain-size gene a whole unit off its lineage's starts a new lineage. A
   body with no brain does not mutate its brain-size genes (`body::vary`): they do nothing without one, so a brain
   arises only in a lineage founded with one (decision 72). An

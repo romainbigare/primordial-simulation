@@ -33,7 +33,7 @@ impl Set {
     fn eater(&mut self, at: usize) -> Body {
         let mut b = self.line.founder(&mut self.w, 1, self.land[at]);
         (b.genes[REPAIR], b.genes[LIQ], b.genes[DISPERSE]) = (0.0, -4.0, 0.0);
-        b.prepare(&self.w.chem, &self.w.cfg.phys);
+        b.prepare(&self.w.chem, &self.w.cfg);
         b
     }
 
@@ -92,18 +92,19 @@ fn upkeep_and_supply_follow_the_rate_law_of_the_reactions() {
     assert!((up(&at(w, &dull, 250.0)) / up(&at(w, &dull, 310.0)) - 1.0).abs() < 1e-12);
 }
 
-/// The age deaths of a day: in a copy of `w`, node `b` updates once; its wear over the day (the share that died of age
-/// is 1 - e^-wear).
+/// The age deaths of a day: in a copy of `w`, node `b` updates once, a batch on; its wear over the batch per day (the
+/// share that died of age is 1 - e^-wear).
 fn wear_of_a_day(w: &World, b: Body) -> f64 {
     let mut v = w.clone();
-    let k = v.add(b, 1);
+    let days = v.cfg.batch_days as u64;
+    let k = v.add(b, days);
     let n = v.life[k].count;
     pcore::survey::survey(&mut v);
-    v.time += DAY_S;
+    v.time += days * DAY_S;
     v.events.clear();
-    pcore::survey::day(&mut v);
+    pcore::survey::batch(&mut v);
     assert!(v.life[k].alive, "the node died");
-    -(1.0 - died(&v, pcore::body::AGE) / n).ln()
+    -(1.0 - died(&v, pcore::body::AGE) / n).ln() / days as f64
 }
 
 /// A cold body wears slower than a warm one in the same cell, in the ratio of their upkeep (wear is the energy the
@@ -118,8 +119,8 @@ fn a_cold_body_ages_slower() {
     let w = &mut s.w;
     let (cold, hot) = (node_of(w, cold, 1000.0), node_of(w, hot, 1000.0));
     let (mut cold, mut hot, days) = (cold, hot, 1.0);
-    cold.prepare(&w.chem, &w.cfg.phys);
-    hot.prepare(&w.chem, &w.cfg.phys);
+    cold.prepare(&w.chem, &w.cfg);
+    hot.prepare(&w.chem, &w.cfg);
     let mass = cold.mass(&w.chem);
     let (uc, uw) = (pcore::body::upkeep(w, &cold, days, mass, cold.temp(&w.chem)), pcore::body::upkeep(w, &hot, days, mass, hot.temp(&w.chem)));
     let (wc, wk) = (wear_of_a_day(w, cold), wear_of_a_day(w, hot));
@@ -132,7 +133,7 @@ fn a_cold_body_ages_slower() {
 fn scaled(w: &mut World, b: &Body, f: f64) -> Body {
     let mut x = b.clone();
     scale(w, &mut x, f);
-    x.prepare(&w.chem, &w.cfg.phys);
+    x.prepare(&w.chem, &w.cfg);
     x
 }
 
@@ -220,7 +221,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     let mut small = s.eater(0);
     // (In the dark: no light-capture area to absorb the sun, which warms a body too.)
     small.genes[pcore::body::LEAF] = -9.0;
-    small.prepare(&s.w.chem, &s.w.cfg.phys);
+    small.prepare(&s.w.chem, &s.w.cfg);
     small.vis = small.visible(&s.w.chem, &s.w.cfg);
     // (And with no liquid, which would evaporate and cool it; what its burning makes is little.)
     let w = &mut s.w;
@@ -235,7 +236,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     (small.genes[lay.min + LIQUID], small.genes[lay.keep + LIQUID]) = (0.0, 0.0);
     // (No death of age: it lives on.)
     w.cfg.phys.e_life = 1e30;
-    small.prepare(&s.w.chem, &s.w.cfg.phys);
+    small.prepare(&s.w.chem, &s.w.cfg);
     // (An eighth of it and that again times 8, 2.5 and 20 kg: a bare body much bigger has no steady state at this upkeep,
     // its warmth over the ground past T² / (Ea e), about 4 K, and runs away.)
     let small = scaled(&mut s.w, &small, 0.125);
@@ -274,7 +275,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         held_day(w, &held(w), t_cat);
         let slot = stored(w, id);
         let w0 = &w0;
-        b.prepare(&w0.chem, &w0.cfg.phys);
+        b.prepare(&w0.chem, &w0.cfg);
         let (i, mass, days) = (b.cell as usize, b.mass(&w0.chem), b.interval(w0) as f64);
         let (tg, chem) = (w0.t_ground_last(i), &w0.chem);
         let (ns, na, j) = (chem.ns(), w0.mesh.level(AIR).n(), w0.mesh.up(i, 0, AIR));
@@ -350,7 +351,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         pcore::survey::survey(w);
         w.time += DAY_S;
         let mut b = std::mem::take(&mut w.life[slot]);
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         let (days, mass) = (b.interval(w) as f64, b.mass(&w.chem));
         let (up, pace) = (pcore::body::upkeep(w, &b, days, mass, b.temp(&w.chem)), b.pace(&w.chem, &w.cfg.phys, b.temp(&w.chem)));
         w.events.clear();
@@ -382,7 +383,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
         // Fuel for the test (an edit): at 30 K over its ground it burns about its own fuel in an update.
         let fuel = 4.0 * kg(&s.w, &b, RICH);
         add(&mut s.w, &mut b, RICH, fuel);
-        b.prepare(&s.w.chem, &s.w.cfg.phys);
+        b.prepare(&s.w.chem, &s.w.cfg);
         b
     };
     let (keeps, twin) = (make(&mut s, 300.0), make(&mut s, 250.0));
@@ -395,7 +396,7 @@ fn a_body_keeps_its_temperature_by_burning_the_heat_it_loses() {
     let (b, tg) = (w.life[slots[0]].clone(), 280.0);
     let mut fur = b.clone();
     fur.genes[pcore::body::HEAT] = -1.0;
-    fur.prepare(&w.chem, &w.cfg.phys);
+    fur.prepare(&w.chem, &w.cfg);
     let g_fur = g(w, &fur);
     assert!(g_fur < 3.0, "with fur {g_fur} W/K for {} kg", fur.mass(&w.chem));
     let (fuel0, g0, next) = (b.store[RICH], g(w, &b), b.last as u64 + b.interval(w));
@@ -422,7 +423,7 @@ fn a_body_keeps_its_temperature_from_above_by_evaporating() {
     let make = |s: &mut Set, cool: f32| {
         let mut b = s.eater(0);
         b.genes[pcore::body::COOL_T] = cool;
-        b.prepare(&s.w.chem, &s.w.cfg.phys);
+        b.prepare(&s.w.chem, &s.w.cfg);
         b
     };
     let (sweat, dry) = (make(&mut s, 300.0), make(&mut s, 320.0));
@@ -463,7 +464,7 @@ fn a_body_evaporates_no_more_than_the_ground_can_pay() {
     let (books, rounded) = (Books::now(&w), w.counts.rounded);
     w.time += days * DAY_S;
     pcore::survey::survey(&mut w);
-    pcore::survey::day(&mut w);
+    pcore::survey::batch(&mut w);
     let b = &w.life[slot];
     let floor = w.heat_cap_ground(i) * T_FLOOR;
     let e = w.store.heat(Class::Ground)[i] - floor;
@@ -547,7 +548,7 @@ fn a_dry_bodys_catalysed_rate_falls_toward_the_bare_rate() {
         for r in on {
             x.genes[lay.cat + r] = 1e-9;
         }
-        x.prepare(&s.w.chem, &s.w.cfg.phys);
+        x.prepare(&s.w.chem, &s.w.cfg);
         x
     };
     let rel = |x: f64| {
@@ -666,7 +667,7 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
         (b.genes[WET], b.genes[DISPERSE], b.genes[STRENGTH]) = (wet, 0.0, 0.0);
         // A mature body (a body of 21 kg, its copy mass 1.6 kg) with a brood of three children.
         b.genes[COPY_MASS] = 0.2;
-        b.prepare(&s.w.chem, &s.w.cfg.phys);
+        b.prepare(&s.w.chem, &s.w.cfg);
         brood(&s.w, &mut b, 3.0);
         let (before, t) = (b.store.clone(), b.temp(&s.w.chem));
         let (slot, id) = {
@@ -696,7 +697,7 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
         for &k in &kids {
             let c = &mut s.w.life[k];
             c.genes[LIQ] = -0.5;
-            c.prepare(&s.w.chem, &s.w.cfg.phys);
+            c.prepare(&s.w.chem, &s.w.cfg);
         }
         let mut a2: f64 = 0.0;
         for _ in 0..3 {
@@ -758,8 +759,8 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     let (mut a, mut c) = (eater(&mut w, i, brain::REST, 6.0), eater(&mut w, i, brain::REST, 6.0));
     (a.genes[body::LEAF], c.genes[body::LEAF]) = (0.0, 0.0);
     add(&mut w, &mut c, RICH, 100.0);
-    a.prepare(&w.chem, &w.cfg.phys);
-    c.prepare(&w.chem, &w.cfg.phys);
+    a.prepare(&w.chem, &w.cfg);
+    c.prepare(&w.chem, &w.cfg);
     let (va, vc) = (a.visible(&w.chem, &w.cfg), c.visible(&w.chem, &w.cfg));
     assert!(va[1] > 0.0 && va[1] == vc[1], "leaf {} and {}", va[1], vc[1]);
     assert!(vc[0] > 4.0 * va[0], "the mass differs: {} and {}", va[0], vc[0]);
@@ -779,7 +780,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     let (sa, sb) = (w.add(ha, 1), w.add(hb, 1));
     for s in [sa, sb] {
         let mut x = std::mem::take(&mut w.life[s]);
-        x.prepare(&w.chem, &w.cfg.phys);
+        x.prepare(&w.chem, &w.cfg);
         x.vis = x.visible(&w.chem, &w.cfg);
         w.life[s] = x;
     }
@@ -955,7 +956,7 @@ fn a_big_node_stores_light_set_aside_as_it_fell() {
     b.e *= 1e3;
     // It decides once a year: a year's stored light at once.
     b.genes[pcore::body::INTERVAL] = 2.556;
-    b.prepare(&w.chem, &w.cfg.phys);
+    b.prepare(&w.chem, &w.cfg);
     let (books, h0) = (Books::now(&w), w.counts.clamped_heat);
     for _ in 0..14 {
         pcore::step(&mut w);
@@ -994,7 +995,7 @@ fn a_tall_member_shades_a_short_one() {
     // one's LEAF gene is raised by 0.5 to make the areas equal.
     (tall.count, tall.genes[pcore::body::COPY_MASS]) = (b.n() / 100.0, b.genes[pcore::body::COPY_MASS] + 2.0);
     tall.genes[pcore::body::LEAF] += 0.5;
-    tall.prepare(&w.chem, &w.cfg.phys);
+    tall.prepare(&w.chem, &w.cfg);
     (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg), tall.visible(&w.chem, &w.cfg));
     let slots = [w.add(tall, 1), short];
     let books = Books::now(&w);
@@ -1049,7 +1050,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
         add(w, &mut b, RICH, fuel);
         scale(w, &mut b, count);
         b.count = count;
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         w.add(b, 1)
     };
     // A node of members at repair 0 alone in one cell; one at repair 0.5 and a hundred individuals at repair 0 in the
@@ -1074,7 +1075,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     }
     let per_kg = |w: &mut pcore::World, s: Handle| {
         let mut b = std::mem::take(&mut w.life[s]);
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         let (d, m) = (b.interval(w) as f64, b.mass(&w.chem));
         let (u, act) = (pcore::body::upkeep(w, &b, d, m, b.temp(&w.chem)) / (d * b.built(&w.chem)), b.activity(&w.chem, &w.cfg.phys));
         w.life[s] = b;
@@ -1161,7 +1162,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     // A starting eater: strength 0.6, a burning catalyst, learning on.
     let mut b = founder(&mut w, 1, i, &Brain::neutral());
     (b.genes[STRENGTH], b.genes[LEARN], b.genes[REPAIR]) = (0.6, -1.0, 0.0);
-    b.prepare(&w.chem, &w.cfg.phys);
+    b.prepare(&w.chem, &w.cfg);
     // At the temperature the costs are anchored to, where upkeep is what the costs say.
     b.e = b.energy_at(&w.chem, w.cfg.phys.t_cat);
     let p = &mut w.cfg.phys;
@@ -1191,7 +1192,7 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
     // per kg.
     let mut big = b.clone();
     big.genes[pcore::body::COPY_MASS] += 16f32.log10();
-    big.prepare(&w.chem, &w.cfg.phys);
+    big.prepare(&w.chem, &w.cfg);
     assert!((up(&w, &big) / up(&w, &b) - 0.5).abs() < 1e-6, "a kind 16 times larger pays {} of the upkeep per kg", up(&w, &big) / up(&w, &b));
     // A node of 5 such members pays for each member.
     let mut node = b.clone();
@@ -1208,7 +1209,8 @@ fn upkeep_per_kg_of_body_is_the_same_at_every_size() {
 fn leaf_area_per_kg_falls_with_mass() {
     use pcore::body::{Body, COPY_MASS, LEAF};
     let w = small_world();
-    let (chem, p) = (w.chem.clone(), w.cfg.phys);
+    let (chem, cfg) = (w.chem.clone(), w.cfg.clone());
+    let p = cfg.phys;
     // A member of `kg` (that copies at 10^`copy` kg), 0.5 m² of leaf per kg of 1 kg.
     let member = |count: f64, kg: f64, copy: f32| {
         let mut b = Body { count, genes: vec![0.0; pcore::body::Layout::of(&chem).len], store: vec![0.0; chem.ns()], ..Default::default() };
@@ -1216,7 +1218,7 @@ fn leaf_area_per_kg_falls_with_mass() {
         // Body matter for a living body of `kg` per member (`Body::built`: matter over 1 - `WET_TISSUE`; no key liquid).
         let m = chem.matter().expect("body matter");
         b.store[m] = count * kg * (1.0 - pcore::body::WET_TISSUE) / chem.subs[m].molar_mass;
-        b.prepare(&chem, &p);
+        b.prepare(&chem, &cfg);
         b
     };
     let leaf = |b: &Body| b.visible(&chem, &w.cfg)[1] as f64;
@@ -1253,7 +1255,7 @@ fn start_wet() -> (World, usize) {
 fn eater_of(w: &mut World, which: usize, i: usize, act: usize) -> Body {
     let mut b = founder(w, which, i, &Brain::only(act));
     (b.genes[DISPERSE], b.genes[STRENGTH], b.genes[LIQ], b.genes[REPAIR]) = (0.0, 0.0, -4.0, 0.0);
-    b.prepare(&w.chem, &w.cfg.phys);
+    b.prepare(&w.chem, &w.cfg);
     b
 }
 
@@ -1297,11 +1299,11 @@ fn a_body_that_fixes_makes_the_mineral_at_the_cost_of_the_reaction() {
         for _ in 0..60 {
             pcore::day(&mut w);
             let mut b = w.life[s].clone();
-            b.prepare(&w.chem, &w.cfg.phys);
+            b.prepare(&w.chem, &w.cfg);
             // Its upkeep over that of the same body with the gene off.
             let mut off = b.clone();
             off.genes[lay.cat + fix] = -1.0;
-            off.prepare(&w.chem, &w.cfg.phys);
+            off.prepare(&w.chem, &w.cfg);
             up = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem)) / body::upkeep(&w, &off, 1.0, b.mass(&w.chem), off.temp(&w.chem));
         }
         assert!(w.life[s].alive);

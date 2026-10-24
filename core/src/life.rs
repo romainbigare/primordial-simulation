@@ -11,7 +11,8 @@ use crate::{World, AIR};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
 
-/// Updates are kept in a ring of this many days (more than the longest interval).
+/// Updates are kept in a ring of this many batches: more than the longest interval is in batches (`MAX_INTERVAL`) with
+/// a batch of one day, the shortest.
 const RING: u64 = 384;
 /// A body's id is the domain it was placed in shifted left by this many bits, plus that domain's count of bodies placed
 /// then (from 1, so no body has id 0; it stays below 2^this, `Life::add`).
@@ -37,7 +38,7 @@ struct Domain {
     free: Vec<u32>,
     /// The bodies of each of its cells (by their order in `cells`), in the order they came
     at: Vec<Vec<Handle>>,
-    /// Updates due, by day modulo RING: body ids (`Body::due`)
+    /// Updates due, by batch modulo RING: body ids (`Body::due`)
     ring: Vec<Vec<u64>>,
 }
 
@@ -182,7 +183,7 @@ impl Life {
     }
     /// The first break of the storage, if any: a cell's list that holds a body of another cell or stored in another
     /// domain, an id table that points elsewhere, or a living body not filed exactly once in the rings, in its domain's
-    /// at its due day (`check::broken`).
+    /// at its due batch (`check::broken`).
     pub fn unsound(&self) -> Option<String> {
         let mut filed: BTreeMap<u64, usize> = BTreeMap::new();
         self.domains.iter().flat_map(|x| x.ring.iter().flatten()).for_each(|&id| *filed.entry(id).or_default() += 1);
@@ -248,15 +249,15 @@ impl Life {
         b.count = count;
         self.stir(b.cell);
     }
-    /// Place a new body on `day`, in the domain of its cell; it first updates `delay` days later
-    /// (1..=`MAX_INTERVAL`), and has its cell's mean light until the survey shares it out again (`survey::shade`).
-    pub(crate) fn add(&mut self, mut b: Body, day: u64, delay: u64) -> Handle {
+    /// Place a new body on `day`, in the domain of its cell; it first updates in batch `due`, and has its cell's mean
+    /// light until the survey shares it out again (`survey::shade`).
+    pub(crate) fn add(&mut self, mut b: Body, day: u64, due: u64) -> Handle {
         let d = self.cell_in[b.cell as usize].0;
         let placed = &mut self.domains[d as usize].placed;
         *placed += 1;
         assert!(*placed < 1 << ID_SHIFT, "domain {d} placed 2^{ID_SHIFT} bodies: its ids would run into the next domain's");
         (b.id, b.alive, b.last, b.count, b.shade) = ((d as u64) << ID_SHIFT | *placed, true, day as f64, b.n(), 1.0);
-        b.due = day + delay.clamp(1, MAX_INTERVAL as u64);
+        b.due = due;
         self.enter(&b);
         self.store(b)
     }
@@ -372,14 +373,15 @@ impl Life {
         let domain = |cells: Vec<u32>| Domain { at: vec![Vec::new(); cells.len()], ring: vec![Vec::new(); RING as usize], cells, ..Default::default() };
         self.domains = cells.into_iter().map(domain).collect();
     }
-    /// File the next update of body `b` on `day`, in the ring of its cell's domain.
-    pub(crate) fn schedule(&mut self, day: u64, b: &mut Body) {
-        b.due = day;
+    /// File the next update of body `b` in batch `due`, in the ring of its cell's domain.
+    pub(crate) fn schedule(&mut self, due: u64, b: &mut Body) {
+        b.due = due;
         self.file(self.cell_in[b.cell as usize].0, b);
     }
-    /// The ids of the bodies due on `day`, taken out of the rings, domain by domain (some may have left the world since).
-    pub(crate) fn take_due(&mut self, day: u64) -> Vec<u64> {
-        let k = (day % RING) as usize;
+    /// The ids of the bodies due in `batch`, taken out of the rings, domain by domain (some may have left the world
+    /// since).
+    pub(crate) fn take_due(&mut self, batch: u64) -> Vec<u64> {
+        let k = (batch % RING) as usize;
         self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.ring[k])).collect()
     }
     /// The body with id `id` moves from cell `from` to `to` (its cell is the caller's to set; its storage moves when it
@@ -407,18 +409,29 @@ impl std::ops::IndexMut<Handle> for Life {
 }
 
 impl World {
+    /// The batch the world is in: whole batches since the start (`Config::batch_days`).
+    pub fn batch(&self) -> u64 {
+        self.day() / self.cfg.batch_days as u64
+    }
+    /// The first batch that starts `delay` days from now or later (`delay` 1 to `MAX_INTERVAL`): never the batch the
+    /// world is in, so a body placed during a batch updates in a later one.
+    pub(crate) fn due_in(&self, delay: u64) -> u64 {
+        (self.day() + delay.clamp(1, MAX_INTERVAL as u64)).div_ceil(self.cfg.batch_days as u64)
+    }
     /// Place body `c`, its first update after its interval; its visible traits are worked out from what it holds now,
     /// so others see it before its first update.
     pub(crate) fn place(&mut self, mut c: Body) -> Handle {
-        c.prepare(&self.chem, &self.cfg.phys);
+        c.prepare(&self.chem, &self.cfg);
         self.see(&mut c);
-        let delay = c.interval(self);
-        self.life.add(c, self.day(), delay)
+        let due = self.due_in(c.interval(self));
+        self.life.add(c, self.day(), due)
     }
-    /// Place body `b` made outside the laws (a founder, an edit), its first update `delay` days on.
+    /// Place body `b` made outside the laws (a founder, an edit), its first update in the first batch `delay` days on or
+    /// later.
     pub fn add(&mut self, mut b: Body, delay: u64) -> Handle {
-        b.prepare(&self.chem, &self.cfg.phys);
-        self.life.add(b, self.day(), delay)
+        b.prepare(&self.chem, &self.cfg);
+        let due = self.due_in(delay);
+        self.life.add(b, self.day(), due)
     }
     /// What others see of body `b` is worked out again (`Body::visible`), and its cell's light shared out again.
     pub(crate) fn see(&mut self, b: &mut Body) {

@@ -65,6 +65,7 @@ Fields of `Config` that say when the model may save time (mark **speed**). The t
 | `flow_days` | days | how often liquid moves, drains and wears the ground (`flow::liquid`) | 30: the rain on land and the river cells of 15 days within 1% (worlds without life) | speed |
 | `wake_share` | share | a sleeping node wakes before its alarm when one of its amounts has grown by more than this share of what it held when it fell asleep (`clock::Sleep::watch`) | the share of its inputs a calm node's own reactions may use while it sleeps (`change`, `CALM`, 0.05) | speed |
 | `sleep_days` | days | the longest a ground or air node's reactions sleep before they run for the time since (`change::step`); 0: every node reacts at every physics step | a season: a node does not react through a whole season at the temperature of another | speed |
+| `batch_days` | days | bodies update in batches of this many days; a body's interval is its `INTERVAL` gene's days rounded to a whole number of batches, at least one, and `node_days` is a multiple (`Body::interval`); it divides `phys_days` and the month | 2: the shortest interval is 5 days (`MIN_INTERVAL`, which rounds to 6) and a pool's call costs 30 to 55 µs against 3 to 6 ms of body work in a 2-day batch (S64); 1 against 2 moves no key number of life beyond its noise (`the_batches_of_bodies_keep_life`, `tape/tests/ranges.rs`) | speed |
 | `node_days` | days | a population node without a brain updates at most every this many days; a body with a brain by its `INTERVAL` gene (`Body::interval`) | about 10 updates a year (handover 7.3 suggests a month for population nodes) | speed |
 | `crowd` | nodes per cell | past this many body nodes in a cell at a month's start the most alike merge (unlike ones never); a node splits only while its cell has fewer than this minus one; it never bounds the members | 4; nodes must give the patterns of individuals (handover 7.1: the check takes `--crowd 4` and `8` as its noise) | speed |
 | `sample_every` | updates | a node without a brain runs its sample member on one update in this many, drawn; its weight and its cap are that many times larger, so each gene moves at the same mean rate (`copy::select`) | 2 halves the samples' time; ×2 and ÷2 keep plants, animals, carbon gas and land temperature within their noise | speed |
@@ -256,7 +257,7 @@ Not rows of the model: real sizes that a run's results can be held against.
 
 ## Counts
 
-The 114 rows of `Config` and `Physics` are their 114 fields.
+The 115 rows of `Config` and `Physics` are their 115 fields.
 
 | mark | rows | which |
 |---|---|---|
@@ -265,7 +266,7 @@ The 114 rows of `Config` and `Physics` are their 114 fields.
 | tuned (run or reason named) | 7, and 6 outside the structs | the thresholds of who is alike and who is grouped (`alike`; outside: `WITHIN`), set for an outcome (`rain_time`, `shelter`, `c_leaf`, `c_brain`, `sweep`, `c_handle`; outside: the roster's stores, genes and years, the spray of the start, `BUILT_SHARE`) |
 | tuned, first guess | 39 | 35 free numbers (`wind`, `cloud`, `gas_depth`, `hard_min`, `c_firm`, `c_learn`, `c_signal`, `rho_pass`, `keep_min`, `shape_noise`, `signal_noise`, `blend`, `learn_most`, the Bond numbers `joint` to `afloat`, the mutation numbers `new_lineage` to `new_noise`, and the Flow numbers `hide` to `hold`) and the four `c_hidden`, `c_memory`, `c_seen`, `c_sight`, which are the split of `c_brain` and not four numbers |
 | switch | 3 | `nodes`, `two_parents`, `null` |
-| speed | 8, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL` |
+| speed | 9, and 1 outside the structs | `phys_days`, `air_hours`, `flow_days`, `wake_share`, `sleep_days`, `batch_days`, `node_days`, `crowd`, `sample_every`; outside: `MIN_INTERVAL` |
 | container | 1 | `phys` |
 
 Rows marked tuned in all: 52 (46 in the structs, 6 outside). The test holds that count at its budget or below (handover 14.3). Rules chosen for a run: 3, held by the test too.

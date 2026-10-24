@@ -49,7 +49,7 @@ fn day_month_and_season_come_from_the_seconds() {
 
 /// A month of `step`: on its first day the survey, the parts of Flow due (at a month's start at least its state, the air
 /// and liquid) and Change, then Bond, then the bodies; the physics every `phys_days` days and the
-/// bodies every day. The clock ends a whole month on, and `day` moves it by one day.
+/// bodies every `batch_days` days. The clock ends a whole month on, and `day` moves it by one day.
 #[test]
 fn a_month_runs_its_processes_in_their_order() {
     let mut w = small_world();
@@ -63,7 +63,7 @@ fn a_month_runs_its_processes_in_their_order() {
     let count = |s: Stage| marks.iter().filter(|&&m| m == s).count() as u32;
     let (dpm, phys) = (w.cfg.days_per_month, w.cfg.phys_days);
     assert_eq!((count(Stage::Change), count(Stage::Parts)), (dpm.div_ceil(phys), 1));
-    assert_eq!(count(Stage::Bodies), dpm + dpm.div_ceil(phys));
+    assert_eq!(count(Stage::Bodies), dpm / w.cfg.batch_days + dpm.div_ceil(phys));
     let (d, m) = (w.day(), w.month());
     pcore::day(&mut w);
     assert_eq!((w.day(), w.month(), w.time % cal.day), (d + 1, m, 0));
@@ -138,13 +138,24 @@ fn a_sleeping_node_catches_up_as_an_awake_node_steps() {
     assert!(amount[0] > 0.9, "the law ran: {amount:?}");
 }
 
-/// The default settings pass; a time step of 0, an air step that does not divide the physics step, or a dormancy of 1
-/// is refused.
+/// The default settings pass; a time step of 0, an air step that does not divide the physics step, a batch that does not
+/// divide the physics step or the month, a pace of nodes that is not whole batches, or a dormancy of 1 is refused.
 #[test]
 fn the_default_settings_pass_and_a_step_off_its_base_or_out_of_step_or_a_dormancy_of_1_is_refused() {
     assert_eq!(Config::default().validate(), Ok(()));
     let dormant = Config { phys: Physics { dormancy: 1.0, ..Default::default() }, ..Default::default() };
-    for c in [Config { flow_days: 0, ..Default::default() }, Config { air_hours: 0, ..Default::default() }, Config { air_hours: 480, ..Default::default() }, Config { phys_days: 0, ..Default::default() }, dormant] {
-        assert!(c.validate().is_err(), "{} {} {} {}", c.phys_days, c.air_hours, c.flow_days, c.phys.dormancy);
+    let refused = [
+        Config { flow_days: 0, ..Default::default() },
+        Config { air_hours: 0, ..Default::default() },
+        Config { air_hours: 480, ..Default::default() },
+        Config { phys_days: 0, ..Default::default() },
+        Config { batch_days: 0, ..Default::default() },
+        Config { batch_days: 4, ..Default::default() },
+        Config { batch_days: 5, node_days: 36, ..Default::default() },
+        Config { batch_days: 10, node_days: 36, phys_days: 30, ..Default::default() },
+        dormant,
+    ];
+    for c in refused {
+        assert!(c.validate().is_err(), "{} {} {} {} {}", c.phys_days, c.air_hours, c.flow_days, c.batch_days, c.phys.dormancy);
     }
 }

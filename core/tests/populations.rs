@@ -134,7 +134,7 @@ fn with_no_partner_a_child_has_one_parent() {
     let (mut w, i) = start();
     let (_, mut a, sb) = pair(&mut w, i, 2.0);
     w.life[sb].genes[COPY_MASS] = 3.0;
-    w.life[sb].prepare(&w.chem, &w.cfg.phys);
+    w.life[sb].prepare(&w.chem, &w.cfg);
     assert!(!w.life[sb].adult(&w.chem));
     w.events.clear();
     let kids = copies(&mut w, &mut a, 30);
@@ -240,7 +240,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let mut b = std::mem::take(&mut w.life[s]);
     // Members are mature (a low copy mass), each has a child and all children stay in the cell.
     (b.genes[COPY_MASS], b.genes[DISPERSE]) = (-0.4, 0.0);
-    b.prepare(&w.chem, &w.cfg.phys);
+    b.prepare(&w.chem, &w.cfg);
     let n0 = b.count;
     brood(&w, &mut b, n0);
     let before = live(&w);
@@ -308,7 +308,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             w.life[s].spread = vec![1e9; len];
             w.life[s].genes[HIDDEN] = 12.0;
         }
-        w.life[s].prepare(&w.chem, &w.cfg.phys);
+        w.life[s].prepare(&w.chem, &w.cfg);
     }
     let mean = |w: &pcore::World| {
         let (mut g, mut n) = (vec![0.0f64; len], 0.0);
@@ -335,7 +335,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             // Mature with a body of twice its copy mass after the brood, children half the copy mass.
             let (body, n) = (b.built(&w.chem) / b.n(), b.count);
             (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -std::f32::consts::LOG10_2, 0.0);
-            b.prepare(&w.chem, &w.cfg.phys);
+            b.prepare(&w.chem, &w.cfg);
             brood(&w, &mut b, n);
             let (before, id) = (live(&w), b.id);
             copy::copy(&mut w, &mut b);
@@ -426,7 +426,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     (genes[COPY_MASS], genes[DISPERSE]) = ((0.65 * w.life[s].member_body(&w.chem) as f32).log10(), 1.0);
     for t in live(&w) {
         (w.life[t].genes, w.life[t].spread) = (genes.clone(), spread.clone());
-        w.life[t].prepare(&w.chem, &w.cfg.phys);
+        w.life[t].prepare(&w.chem, &w.cfg);
         // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes
         // of children are: a child joins no mature node (`copy::kin`).
         if t != s {
@@ -441,7 +441,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     for _ in 0..200 {
         let mut c = b.clone();
         (c.count, c.store, c.e) = (2.0, per.iter().map(|x| 2.0 * x).collect(), 2.0 * b.e / b.count);
-        c.prepare(&w.chem, &w.cfg.phys);
+        c.prepare(&w.chem, &w.cfg);
         brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();
         w.time += DAY_S;
@@ -650,7 +650,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         let (was, before) = (live(&w), life_totals(&w));
         let mut b = std::mem::take(&mut w.life[s]);
         b.genes[COPY_MASS] = (0.5 * b.built(&w.chem) as f32).log10();
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         brood(&w, &mut b, 1.0);
         w.time += DAY_S;
         assert!(copy::copy(&mut w, &mut b), "no child");
@@ -667,7 +667,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         let (was, before) = (live(&w), life_totals(&w));
         let mut b = std::mem::take(&mut w.life[s]);
         b.genes[COPY_MASS] = (0.3 * b.built(&w.chem) as f32).log10();
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         brood(&w, &mut b, 3.5);
         w.time += DAY_S;
         assert!(copy::copy(&mut w, &mut b), "no children");
@@ -762,7 +762,7 @@ fn selection_inside_a_node_moves_its_mean_as_its_members_would() {
         let sd = 0.3 * pcore::body::steps(&lay, &vec![1.0; lay.len])[g].recip();
         let b = &mut w.life[s];
         (b.genes[ALLOC], b.brood) = (0.0, 0.0);
-        b.prepare(&w.chem, &w.cfg.phys);
+        b.prepare(&w.chem, &w.cfg);
         b.spread = vec![0.0; lay.len];
         b.spread[g] = sd * sd;
         let (z, m0) = (b.genes[g], worth(&w, s));
@@ -771,7 +771,7 @@ fn selection_inside_a_node_moves_its_mean_as_its_members_would() {
             let mut v = w.clone();
             let b = &mut v.life[s];
             (b.genes[g], b.spread) = (z + d, Vec::new());
-            b.prepare(&v.chem, &v.cfg.phys);
+            b.prepare(&v.chem, &v.cfg);
             (after_update(&mut v, s, g).0 / m0).ln()
         };
         let (up, down) = (half(sd), half(-sd));

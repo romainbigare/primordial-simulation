@@ -109,7 +109,7 @@ fn forming_never_takes_more_than_is_left() {
     worldgen::life::seed(&mut w, 1);
     let slot = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("an eater");
     let (chem, b) = (&w.chem, &mut w.life[slot]);
-    b.prepare(chem, &w.cfg.phys);
+    b.prepare(chem, &w.cfg);
     let t = b.temp(chem);
     let solid = |k: usize| chem.phase(k, t) == Phase::Solid;
     let k = b.k.burn.iter().flat_map(|&(r, _)| chem.reactions[r].inputs.iter().map(|p| p.0 as usize)).find(|&k| solid(k)).expect("a solid fuel");
@@ -168,8 +168,8 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         let (n0, genes) = (b.count, b.genes.clone());
         w.add(b, 1);
         pcore::survey::survey(&mut w);
-        w.time += DAY_S;
-        pcore::survey::day(&mut w);
+        w.time += w.cfg.batch_days as u64 * DAY_S;
+        pcore::survey::batch(&mut w);
         let all: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l).collect();
         let members: f64 = all.iter().map(|b| b.count).sum();
         assert!((members - n0).abs() < 1e-9 * n0, "case {case}: {members} members of {n0}");

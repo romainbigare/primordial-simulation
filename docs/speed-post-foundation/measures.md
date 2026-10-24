@@ -235,6 +235,43 @@ bodies are walked often: `exchange::cover_of` (the cover of the other bodies of 
 island22, six interleaved runs of each build, median 1,008 ms (D2.1a) and 1,017 ms (D2.1b), +0.9%; on globe36, two
 runs each, 1,202 and 1,264 against 1,185 and 1,234 ms.
 
+### D2.2: batches of two days
+
+Level 3 (the golden fingerprints are re-pinned, the same with and without threads; snapshot version 47). Both benches
+were remade with D2.2's code (`BENCH_DIR=/tmp/d22-bench scripts/bench.sh --remake`, saves of commit `3cdc57d` plus
+D2.2), so the rows are other worlds than D2.1b's (S65).
+
+**The work per batch** (D2.5's unit; 180 batches a year), from the bench (lowest of two runs, mean of the last 5 years):
+
+| | island22 | globe36 |
+|---|---|---|
+| bodies' updates a year | 32,105 | 25,915 |
+| updates per batch | 178 | 144 |
+| bodies' stage a year (survey included), ms | 891 | 992 |
+| ms per batch | 4.95 | 5.51 |
+| µs per update (wall) | 27.7 | 38.3 |
+
+A batch holds 4.95 and 5.51 ms of body work against a pool's call of 30 to 55 µs (about 100 times as much).
+
+Cost per body update, callgrind on one thread, one year from each remade save (the body batch inclusive,
+`processes::closure#9`, over the year's updates):
+
+| | island22 | globe36 |
+|---|---|---|
+| updates in the year | 32,122 | 26,659 |
+| D2.1b, per update (its own saves) | 153,605 | 212,909 |
+| D2.2, per update | 151,533 (-1.3%) | 205,525 (-3.5%) |
+| all instructions of the year, million | 9,467 | 10,965 |
+
+The two rows come from other worlds, so the change in the code itself is no more than this: an update costs about what
+it cost, as the batch only moves when an update runs (S65).
+
+Key numbers (`the_key_numbers_stay_in_their_ranges`): all in their ranges; the eaters 5.350 (seeds 5.298, 5.401, 5.351)
+against 5.354 (S49); the light-eaters' stored share fails as before (S50), 0.558 (seeds 0.563, 0.556, 0.554) against
+0.552 to 0.557. The equivalence test (`the_batches_of_bodies_keep_life`, batches of 1 day against 2): each mean moves
+by 9% of its noise or less (the move as a share of the mean, then of the noise): `plant_members` +1.3% (1.4%),
+`root_0_kg` +0.6% (0.8%), `births` +1.5% (2.0%), `root_0_life_real` -0.1% (2.6%), `air_3` -0.02% (8.8%).
+
 ## Profile of the baseline
 
 One year from the same saves under `valgrind --tool=callgrind` (`scripts/bench.sh profile island22` and `... globe36`),

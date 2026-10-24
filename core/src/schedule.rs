@@ -10,7 +10,7 @@ pub enum Stage {
     Flow,
     /// `change::step`
     Change,
-    /// `survey::survey` and `survey::day`
+    /// `survey::survey` and `survey::batch`
     Bodies,
     /// `bond::step`
     Parts,
@@ -55,9 +55,9 @@ fn processes(w: &World) -> [(Every, Run); 9] {
         (from_start(flow::CREEP_YEARS * cal.year), (Stage::Flow, "creep", |w, s| flow::creep(w, s as f64))),
         (from_start(flow::REFRESH_MONTHS * cal.month), (Stage::Flow, "refresh", |w, _| flow::refresh(w))),
         (physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
-        // (Bond's own spans are months, `bond::step`; the bodies' intervals whole days, `survey::day`.)
+        // (Bond's own spans are months, `bond::step`; the bodies' intervals whole batches of days, `survey::batch`.)
         (from_start(cal.month), (Stage::Parts, "bond", |w, _| bond::step(w))),
-        (days(cfg, 1), (Stage::Bodies, "body day", |w, _| survey::day(w))),
+        (days(cfg, cfg.batch_days), (Stage::Bodies, "body batch", |w, _| survey::batch(w))),
     ]
 }
 

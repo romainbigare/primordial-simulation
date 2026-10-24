@@ -14,7 +14,8 @@
 //! The sleep of Change's nodes is a speed tool: a small world with life keeps the chemistry's key numbers
 //! within their noise with every node awake every step (`Config::sleep_days` 0), and with the setting x2 and /2. So is
 //! the pace of population nodes: the same world keeps its life's key numbers with every node at its own `INTERVAL`
-//! gene (`Config::node_days` 0), and with the setting x2 and /2.
+//! gene (`Config::node_days` 0), and with the setting x2 and /2. So are the batches of bodies: the same world keeps its
+//! life's key numbers with bodies updated every day (`Config::batch_days` 1).
 //!
 //! The eaters live: at 48 x 48 they still have members at year 100 in seeds 1, 2 and 3, after the booms and busts
 //! that year 30 hides; they have stopped growing by their last ten years, and none hold more than a few times the
@@ -334,6 +335,22 @@ fn the_pace_of_nodes_keeps_life() {
     });
     let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("nodes every {days} days at most"));
     assert!(out.is_empty(), "the pace of nodes changed life: {out:?}");
+}
+
+/// Bodies updated every day against in batches of `Config::batch_days` (`docs/numbers.md`, speed settings; the batch
+/// cannot be doubled, 4 days does not divide the physics step, and 5 or 10 would change the shortest interval itself):
+/// the mean of each of life's key numbers over the last years moves by less than its noise, the spread of its values over
+/// those years with bodies updated every day.
+#[test]
+#[ignore = "slow: two 8-year runs of a 32 x 32 world with life"]
+fn the_batches_of_bodies_keep_life() {
+    let settings = [1, Config::default().batch_days];
+    let runs: Vec<Vec<Vec<f64>>> = std::thread::scope(|s| {
+        let runs: Vec<_> = settings.iter().map(|&days| s.spawn(move || yearly(&LIFE, |c| c.batch_days = days))).collect();
+        runs.into_iter().map(|r| r.join().expect("a run")).collect()
+    });
+    let out = off_by_noise(&LIFE, &runs, &settings, |days| format!("batches of {days} days"));
+    assert!(out.is_empty(), "the batches changed life: {out:?}");
 }
 
 /// The world of the eaters' check: its side, its years, and the first of its last years, over which the eaters must
