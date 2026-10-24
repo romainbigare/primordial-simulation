@@ -504,8 +504,10 @@ its outbox applied after it. The shade runs per domain on the pool, the sums per
 change the holders of lineages and born rows by the domains' deltas, and the born rows a merge makes are provisional,
 made global in domain order when the world settles (S72's mechanism, no second one). `counts.clamped_heat` is added
 domain by domain in order (`World::book_moves`). The Draws of the air step and the marks of light stay serial (S73).
-The order test runs a survey before each batch, every cell pushed through at the start (so wear runs in parallel and in
-the cells with parts), with the monthly merge joining nodes, on pools of 1 and 4 threads, in order and reversed.
+The order test runs a survey before each batch on pools of 1 and 4 threads, in order and reversed. Its first survey, at
+a month's start, kills a body by wear in a cell with no part (a `Died` of cause `BROKEN`), kills a holder in its cell
+with a part, which lets go of it (`BondBroken`), and merges two alike nodes with different born rows into new born rows;
+the test asserts all three, and that the four runs end the same with the books kept.
 
 **The same world.** The three golden worlds end with the same events in the same order, and the same store, parts,
 counters, lineages and bodies, bit for bit, but for the ids of born rows (104 of 434 bodies in seed 1, 88 of 400 in seed
@@ -522,8 +524,10 @@ in the same hour, the medians (the range in brackets).
 | D2.5b | 938 (856 to 996) | 543 (494 to 566) | 818 (746 to 899) |
 | **D2.6** | **854 (768 to 896), -8.9%** | **506 (491 to 553), -6.9%** | **782 (711 to 832), -4.4%** |
 
-The survey costs the same instructions (callgrind, one thread, one year: 800 to 801 million on island22, 315 to 331 on
-globe36, 651 to 655 on region24); the gain is its threads. `scripts/bench.sh` (row above): island22 1.062 s/yr,
+The survey's instructions (`survey::survey` inclusive; callgrind, one thread, one year), D2.5b then D2.6: 800 and 801
+million on island22, 315 and 331 on globe36, 651 and 655 on region24. They are the same but on globe36, which costs 5%
+more: its survey does little work, and the two `on_domains` rounds of each survey (the domains taken out and put back,
+their moves booked, the world settled, the outboxes applied) weigh more there. The gain is the threads. `scripts/bench.sh` (row above): island22 1.062 s/yr,
 globe36 0.777, region24 1.080 (bodies 841, 493 and 768 ms).
 
 ### After D2.6: two steps not kept, and the gain (S41, S65)
@@ -546,7 +550,7 @@ runs of 2 years, medians against D2.6: -1.6% (island22, 895 to 881 ms), +3.1% (g
   task works out the booked numbers itself and the serial phase only copies them. The store's view would then sum as
   `apply` does (the rounding carried for the ground and the air, the numbers that fall below zero counted and set to
   zero, all of it undone with a checkpoint), the lift to the potential would stay a serial `apply`, and `book_moves`
-  would copy each domain's view. About +30 core lines; the core has 9 left (S3). Stopped for the owner's decision.
+  would copy each domain's view. About +30 core lines; the core had 9 left (S3). Not built (S74).
 
 **The gain** (S41, S65; the same definitions and the same `main` numbers as D2.5's). Wall time: 7 runs of 2 years from
 each D2.5 save with `RAYON_NUM_THREADS=1` and with 4 threads, interleaved in the same hour, the medians (the range in
@@ -566,8 +570,9 @@ the year's updates (the build of D2.6; D2.5's were 169,747, 203,921 and 152,783:
 | **gain against `main`** | **1.82** | **1.79** | **1.98** |
 | D2.5's gain against `main`, for comparison | 1.55 | 1.63 | 1.69 |
 
-All three are above the kill line (1.6) and under the target (2.2). With the island's overhead factor taken on one
-world (about 0.97, D2.5's note), island22 would give about 2.04.
+All three are above the kill line (1.6) and under the target (2.2); the headline for island22 is 1.82. (A side note:
+with the island's overhead factor taken on one world, about 0.97 by D2.5's note, it would be about 2.04; S65 compares
+the two remade benches, so 1.82 is the number that counts.)
 
 **What is left on one thread** (a probe build timing the parallel calls, `par::each` in `on_domains` and `par::rows`
 in `sums`; 3 runs of one year, the middle run):

@@ -26,11 +26,11 @@ quarters, linked to a square beside them at the distance between centres across 
 across it passes exactly.
 
 **One step** (`schedule::step`, a month; time in whole seconds, the calendar from it). Processes run by their periods
-(`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`: the wear of movers and the monthly merge per domain on the
-pool with the feature `threads`, where no part is and no body holds or is inside one, then in those cells one by one;
-the shade per domain, the sums per cell), the parts of
-Flow that are due (air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and
-Change; on the month's first day Bond; every `batch_days` days (2) the bodies whose interval ends (`survey::batch`).
+(`clock::Every`) in the order of `schedule::processes`: every `phys_days` the survey (`survey::survey`: the wear of
+movers and the monthly merge per domain on the pool with the feature `threads`, where no part is and no body holds or is
+inside one, then in those cells one by one; the shade per domain, the sums per cell), the parts of Flow that are due
+(air every `air_hours`, liquid and erosion every `flow_days`, heat sideways and creep yearly) and Change; on the month's
+first day Bond; every `batch_days` days (2) the bodies whose interval ends (`survey::batch`).
 **Intervals are whole batches**: a body's interval is its `INTERVAL` gene (5 to 360 days; a population node without a
 brain at least `node_days`, a multiple of `batch_days`) rounded to the nearest whole number of batches, at least one
 (`Body::interval`), so an update always starts a batch, all the updates of a batch run at its first day, and a body
@@ -55,12 +55,14 @@ and counters and its outbox; the lineages and born rows it makes get provisional
 their holders wait there. When the domain is back the world settles (`World::settle`): its events and counters are
 added, those ids made global in the order made; the holders' changes are added at once outside a batch, at its end in
 one, and a lineage left with no body dies out, born rows left with no holder are freed. Every serial step, a body or
-part law run on its own (a part act, a landing, the monthly merge and the wear of movers in a cell with a part), runs so too, on the domain of
-its cell (`World::in_domain`). First the parallel phase: the bodies due that hold no part and are inside none update,
-each domain on a thread of the pool with the feature `threads` (`par::each`, the domains with the most updates first), one after another without it. What an
-update does outside it goes to its domain's outbox (`outbox::Entry`), in the order made: every move to another cell, inside the domain or across its edge (`choose::go` pays and queues it), children who start
-in another cell (`copy::emit` takes them from the parent), a watch, and every act on a part (Bond's verbs, form and
-anchoring among them; a body that lets go of its part, or dies or joins another holding one, lets go there too). A body
+part law run on its own (a part act, a landing, the monthly merge and the wear of movers in a cell with a part), runs so
+too, on the domain of its cell (`World::in_domain`). First the parallel phase: the bodies due that hold no part and are
+inside none update, each domain on a thread of the pool with the feature `threads` (`par::each`, the domains with the
+most updates first), one after another without it. What an update does outside it goes to its domain's outbox
+(`outbox::Entry`), in the order made: every move to another cell, inside the domain or across its edge (`choose::go`
+pays and queues it), children who start in another cell (`copy::emit` takes them from the parent), a watch, and every
+act on a part (Bond's verbs, form and anchoring among them; a body that lets go of its part, or dies or joins another
+holding one, lets go there too). A body
 with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it stays in its old
 cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
 it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go or an anchor, does not

@@ -34,7 +34,7 @@ pub const PHASE: u8 = 1;
 pub const SPENT: u8 = 2;
 pub const TAKEN: u8 = 3;
 /// Bonds broken by bodies moving through its cell.
-pub(crate) const BROKEN: u8 = 4;
+pub const BROKEN: u8 = 4;
 /// Worn out by living (its wear, `body::live`).
 pub const AGE: u8 = 5;
 /// Margins of well-being (`Body::wellbeing_at`) count from `MARGIN_MIN` up to this: a key store's log share over its

@@ -805,13 +805,13 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
   pools of 1 and of 4 threads and with the domains in reversed order inside the parallel phase, and gives the same
   fingerprint each time. The reversed order is an argument of the batch runner that only the test passes, not a
   `Config` switch (`CLAUDE.md` 2.6).
-- **D2.6 The survey on threads.** Wear, the monthly crowd, shade and sums run per domain in parallel; the Draws of the
-  air step and the marks of light are filled per domain. Cells whose bodies hold or are inside a part, or that hold a
+- **D2.6 The survey on threads.** Wear, the monthly crowd and shade run per domain in parallel, the sums per cell; the
+  Draws of the air step and the marks of light stay serial (S73). Cells whose bodies hold or are inside a part, or that hold a
   part, run their wear and crowd serially after the domains (a death or a merge may let go of a part). Deaths in the
   parallel `wear` change lineage counts by per-domain deltas merged in order. A merge in the parallel crowd can make
   new born rows (`nodes::add` → `Life::reborn` → `Life::new_genome`): they get provisional ids of the domain and are
   remapped after the domains, in domain order and then in the order made, as in 3.3; then the cells with parts run.
-  `counts.clamped_heat` (saved) stays summed in cell order. Level 2 (the order of merges and of the remap changes
+  `counts.clamped_heat` (saved) is added in domain order, as since D2.3. Level 2 (the order of merges and of the remap changes
   rounding): the golden test is re-pinned. Built before the kill decision.
 - **Why:** bodies are three quarters of a year on one core. The waves of blocks of the foundation failed (decision
   59) because a day held too little work and each block was copied onto a world of its thread's own; here a batch holds

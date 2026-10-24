@@ -2,7 +2,7 @@
 //! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
 //! domains run and the threads that run them change nothing.
 
-use pcore::body::{die, Body, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ};
+use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ};
 use pcore::event::EventKind;
 use pcore::life::Handle;
 use pcore::outbox::{deliver, Entry};
@@ -156,8 +156,9 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
 /// change nothing: the lineages and born rows made there get the same global ids (plan 3.3), and the world ends the
 /// same, bit for bit, with its events and counters. In the batches each kind of the serial phase happens: a dispersing
 /// litter lands, a watch and a part act are applied, a body that holds a part runs, one anchors its part, lineages are
-/// made; in the surveys, movers wear the bodies of every cell (those with parts one by one) and the monthly merge joins
-/// nodes; the books are kept.
+/// made; in the first survey, movers kill a body in a cell with no part and a holder in its cell with a part, which lets
+/// go of the part, and the month's merge joins two nodes with different born rows into new born rows; the books are
+/// kept.
 #[test]
 fn the_order_of_the_domains_changes_nothing() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -192,8 +193,28 @@ fn the_order_of_the_domains_changes_nothing() {
     anchorer.hold = Some(bond::id(&w, r));
     let anchorer = w.add(anchorer, 1);
     w.parts.parts[r].held = w.life[anchorer].id;
-    // Movers pushed through the bodies of every cell, those with parts among them.
-    w.life.pushed = vec![1e3; w.mesh.cells().n()];
+    // A holder in a cell of its own with a part, and two alike nodes of one lineage whose born rows differ.
+    let busy: Vec<usize> = (0..5).map(at).collect();
+    let free: Vec<usize> = land.iter().copied().filter(|c| !busy.contains(c) && c % 3 != 0).collect();
+    let (x, m) = (free[0], free[free.len() / 2]);
+    let s = plate(&mut w, x, 5.0, false);
+    let mut doomed = eater(&mut w, x, brain::REST, 1.0);
+    doomed.hold = Some(bond::id(&w, s));
+    let doomed = w.add(doomed, 300);
+    let doomed_id = w.life[doomed].id;
+    w.parts.parts[s].held = doomed_id;
+    let e = eater(&mut w, m, brain::REST, 1.0);
+    let (big, mut small) = (node_of(&mut w, e.clone(), 8.0), node_of(&mut w, e, 4.0));
+    let rows = [w.life.born(&big).to_vec(), w.life.born(&small).iter().map(|r| r + 0.5).collect()];
+    small.genome = w.life.new_genome(rows[1].clone());
+    let big = w.add(big, 300);
+    let big = w.life[big].id;
+    w.add(small, 300);
+    // Movers pushed through every third cell and the holder's hard enough to kill (`Body::breaking`; each body there
+    // takes its share by mass).
+    let (h, all) = (w.life.find(doomed_id).unwrap(), w.life.cell(x).map(|o| w.life[o].mass(&w.chem)).sum::<f64>());
+    let kill_holder = 2.0 * w.life[h].breaking(&w.chem, &w.cfg, 1.0) * all / w.life[h].mass(&w.chem);
+    w.life.pushed = (0..w.mesh.cells().n()).map(|i| if i == x { kill_holder } else if i % 3 == 0 && !busy.contains(&i) { 3e6 } else { 0.0 }).collect();
     w.drain_events();
     let books = Books::now(&w);
     let lineages = w.life.brains.len();
@@ -202,14 +223,24 @@ fn the_order_of_the_domains_changes_nothing() {
         let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
         pool.install(|| {
             let mut v = w.clone();
+            pcore::survey::survey(&mut v, reversed);
+            // What the first survey did: a death by breaking, a part let go of, the merged node's born rows.
+            let did = |f: &dyn Fn(&EventKind) -> bool| v.events.iter().any(|e| f(&e.kind));
+            let merged = v.life.find(big).map(|h| v.life.born(&v.life[h]).to_vec());
+            let first = (did(&|k| matches!(k, EventKind::Died { cause: BROKEN, .. })), did(&|k| matches!(k, EventKind::BondBroken)), merged);
             for _ in 0..30 {
-                pcore::survey::survey(&mut v, reversed);
                 pcore::survey::batch(&mut v, reversed);
                 v.time += v.cfg.batch_days as u64 * DAY_S;
+                pcore::survey::survey(&mut v, reversed);
             }
-            v
+            (v, first)
         })
     });
+    let (killed, let_go, merged) = &ends[0].1;
+    let new_rows = merged.as_ref().is_some_and(|r| !rows.contains(r));
+    assert!(*killed && *let_go && new_rows, "the first survey: killed {killed}, let go {let_go}, new born rows {new_rows}");
+    assert!(ends.iter().all(|e| e.1 == ends[0].1), "the threads or the order of the domains changed the first survey");
+    let ends = ends.map(|e| e.0);
     // (The whole saved world, and the events and counters of the batches, which are not saved.)
     let state = |v: &World| (serde_json::to_string(v).unwrap(), format!("{:?} {:?}", v.events, v.counts));
     assert!(ends.iter().all(|v| state(v) == state(&ends[0])), "the threads or the order of the domains changed the world");

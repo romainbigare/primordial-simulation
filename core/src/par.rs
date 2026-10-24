@@ -33,7 +33,7 @@ pub fn rows<S>(out: &mut [f64], width: usize, init: impl Fn() -> S + Sync + Send
 }
 
 /// Run `f` on each item, each idle thread taking the next item in their order (so the first items start first), or in
-/// order without threads. Each item owns all it writes (a domain of bodies, `survey::batch`), so the order and the
+/// order without threads. Each item owns all it writes (a domain of bodies, `survey::on_domains`), so the order and the
 /// threads change nothing.
 pub fn each<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
     #[cfg(feature = "threads")]

@@ -13,11 +13,7 @@ use std::f32::consts::FRAC_2_PI;
 /// The monthly merge of nodes in cell `i` of domain `d`, a speed setting, not a law: a node joins the first larger one
 /// alike to it (`join_alike`), then past `Config::crowd` the most alike pairs merge (`merge_closest`); laws.md 4.4.
 pub(crate) fn crowd(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
-    let max = w.cfg.crowd.max(1);
-    if d.cell(i).nth(1).is_none() {
-        return;
-    }
-    let left = join_alike(w, d, lay, i);
+    let (left, max) = (join_alike(w, d, lay, i), w.cfg.crowd.max(1));
     if left.len() > max {
         merge_closest(w, d, lay, left, max);
     }

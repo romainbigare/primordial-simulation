@@ -44,10 +44,11 @@ pub struct Life {
     /// there is left out at the end of each batch, `settle_moved`)
     away: BTreeMap<u64, u32>,
     /// Per cell, from the last survey: members, then their visible traits summed, then the energy to break all its
-    /// bodies, J. The survey's caches are not saved: a snapshot is taken at a month's start, where the survey builds
+    /// bodies, J; then their capture area times their shade, m², and that times the share set aside for their light
+    /// reactions. The survey's caches are not saved: a snapshot is taken at a month's start, where the survey builds
     /// them before any law reads them; this one the tape reads first, so `tape::load_snapshot` rebuilds it
     /// (`survey::sums`).
-    pub sum: Vec<[f64; 8]>,
+    pub sum: Vec<[f64; crate::survey::ROW]>,
     /// Per cell: the energy movers spent pushing through its bodies since the last survey, which then breaks them, J
     /// (`choose::wear`; empty: none)
     pub pushed: Vec<f64>,
