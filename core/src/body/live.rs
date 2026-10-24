@@ -2,7 +2,7 @@
 //! the end checks are here; the physics of the time between is in `physics`.
 
 use super::exchange::cover_of;
-use super::pay::{hold, pay_at, plan, spend, upkeep, Payer};
+use super::pay::{hold, pay_at, plan, spend, upkeep_at, Payer};
 use super::physics::{physics, soak_again};
 use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::bond::{self, Enclosure};
@@ -104,22 +104,23 @@ struct Growth {
 /// `ALLOC` of it goes into the brood). Returns what it did and where it is, or a death cause.
 fn to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<(Growth, Site), u8> {
     let s = site(w, d, b);
-    let mass = b.mass(&w.chem);
-    let (held, from) = (crate::copy::buildable(w, b, s.tg), b.member_body(&w.chem));
+    // (Its activity as the update begins: the stages that pay and what it can build read it from here.)
+    let (mass, dry) = (b.mass(&w.chem), b.activity(&w.chem, &w.cfg.phys));
+    let (held, from) = (crate::copy::buildable(w, b, s.tg, dry), b.member_body(&w.chem));
     b.last = w.day() as f64;
     // With nothing left of a member there is no heat capacity to hold a temperature: it dies.
     if b.empty_at(mass) {
         return Err(LACK);
     }
-    let (upkeep_heat, span, mass, spare, th) = settle_upkeep(w, d, b, &s, mass, tmp)?;
+    let (upkeep_heat, span, mass, spare, th) = settle_upkeep(w, d, b, &s, (mass, dry), tmp)?;
     let lit = physics(w, d, b, rc, &mut *tmp, &s, mass, upkeep_heat, th);
-    keep_warm(w, d, b, span, s.dt);
+    keep_warm(w, d, b, span, &s);
     let th = check_stores(w, d, b, tmp)?;
-    let built = crate::copy::grow(w, d, b, s.days, th);
+    let built = crate::copy::grow(w, d, b, s.days, th, s.cover);
     if !starved(w, d, b, from, &mut tmp.dead) {
         return Err(SPENT);
     }
-    let gain = (crate::copy::buildable(w, b, s.tg) / held.max(f64::MIN_POSITIVE)).ln();
+    let gain = (crate::copy::buildable(w, b, s.tg, b.activity(&w.chem, &w.cfg.phys)) / held.max(f64::MIN_POSITIVE)).ln();
     Ok((Growth { lit, spare, built, gain }, s))
 }
 
@@ -140,17 +141,18 @@ fn starved(w: &World, d: &mut Domain, b: &mut Body, from: f64, dead: &mut Vec<f6
     let a = -std::f64::consts::LN_2 / (1.0 - w.cfg.phys.lethal).ln();
     // (A body with no body left has starved whatever it was.)
     let f = if now > 0.0 { 1.0 - (now / was).min(1.0).powf(a) } else { 1.0 };
-    let th = b.thermal(&w.chem);
-    f <= 1e-9 || lose_share(w, d, b, f, SPENT, dead, &th)
+    // (Its plateau state is worked out only if it loses a share.)
+    let th = (f > 1e-9).then(|| b.thermal(&w.chem));
+    th.is_none_or(|th| lose_share(w, d, b, f, SPENT, dead, &th))
 }
 
 /// Upkeep over the time, at least an interval: the share left unpaid dies, and so does the share its wear gives
 /// (`lose_share`). Returns the heat released, the span, the mass left, its spare and the plateau state it came at.
-fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, s: &Site, mut mass: f64, tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
-    // (One temperature for the stages that see the body as it came: the upkeep, the plan and the paying.)
-    let th = b.thermal(&w.chem);
-    let (cost, span) = (upkeep(w, b, s.days, mass, th.t), s.days.max(b.interval(w) as f64));
-    let p = Payer::at(w, d, b, span, mass, th);
+fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, s: &Site, (mut mass, dry): (f64, f64), tmp: &mut LiveTmp) -> Result<(f64, f64, f64, f64, Melting), u8> {
+    // (One temperature and one activity for the stages that see the body as it came: the upkeep, the plan and the paying.)
+    let span = s.days.max(b.interval(w) as f64);
+    let p = Payer::at(w, d, b, span, mass, b.thermal(&w.chem), (s.cover, dry));
+    let cost = upkeep_at(w, b, s.days, mass, p.th.t, dry);
     let spare = plan(w, d, b, MARGIN * cost, &p).1 / cost.max(1e-300);
     let short = pay_at(w, d, b, cost, &p, true) / cost.max(1e-300);
     // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it
@@ -193,15 +195,15 @@ fn lose_share(w: &World, d: &mut Domain, b: &mut Body, f: f64, cause: u8, dead: 
 /// It keeps its temperature at its `KEEP_T` gene: if the update left it colder, it burns on demand, as for its upkeep,
 /// the heat its surface sheds at that level over the time (the share `hold` of a heat released over the time stays in
 /// it), as far as its reactions can release it. Twice, as its products take a part of the heat at its temperature.
-fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, span: f64, dt: f64) {
+fn keep_warm(w: &World, d: &mut Domain, b: &mut Body, span: f64, s: &Site) {
     for _ in 0..KEEP_T_PASSES {
         let (m, c) = b.mass_cap(&w.chem);
         let short = b.energy_at(&w.chem, b.gene(KEEP_T)) - b.e;
         if c <= 0.0 || short <= KEEP_T_SLACK * b.e {
             break;
         }
-        let p = Payer::at(w, d, b, span, m, b.thermal(&w.chem));
-        if spend(w, d, b, short / hold(w, d, b, m, p.th.t, dt), dt, true, &p) > 0.0 {
+        let p = Payer::at(w, d, b, span, m, b.thermal(&w.chem), (s.cover, b.activity(&w.chem, &w.cfg.phys)));
+        if spend(w, d, b, short / hold(w, d, b, m, p.th.t, s.dt), s.dt, true, &p) > 0.0 {
             break;
         }
     }

@@ -303,14 +303,15 @@ pub fn flow_step(w: &mut World, dt: f64) {
 
 /// Body `b` grows for `days` days at the plateau state it stands at (`copy::grow`). Returns whether it built anything.
 pub fn grow(w: &World, d: &mut Domain, b: &mut Body, days: f64) -> bool {
-    let th = b.thermal(&w.chem);
-    pcore::copy::grow(w, d, b, days, th)
+    let (th, cover) = (b.thermal(&w.chem), pcore::body::cover_of(w, d, b));
+    pcore::copy::grow(w, d, b, days, th, cover)
 }
 
 /// Energy body `b`'s reactions can release over `days` at its temperature now, J (the most `body::pay` could pay).
 pub fn release(w: &World, b: &Body, days: f64) -> f64 {
     let d = w.life.domain(b.cell as usize);
-    pcore::body::plan(w, d, b, f64::MAX, &pcore::body::Payer::at(w, d, b, days, b.mass(&w.chem), b.thermal(&w.chem))).1
+    let (cover, dry) = (pcore::body::cover_of(w, d, b), b.activity(&w.chem, &w.cfg.phys));
+    pcore::body::plan(w, d, b, f64::MAX, &pcore::body::Payer::at(w, d, b, days, b.mass(&w.chem), b.thermal(&w.chem), (cover, dry))).1
 }
 
 /// The surface body `b` of `mass` kg exchanges gas with the air through, m²: its light-capture area and its skin.

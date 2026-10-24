@@ -33,6 +33,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.5 (benches remade, `d25-bench` in a scratch folder; island22 the same world as D2.4b's) | D2.5 | 1.187 | 137 | 51 | 971 | 3 | 25 | 3,679 | 53,648 | 0.858 | 204 | 51 | 571 | 18 | 14 | 1,648 | 23,373 | 9,678 |
 | D2.5b, the largest domains first (the same saves) | D2.5b | 1.179 | 143 | 51 | 956 | 3 | 27 | 3,679 | 53,648 | 0.801 | 203 | 50 | 515 | 18 | 14 | 1,648 | 23,373 | 9,679 |
 | D2.6, the survey on threads (the same saves) | D2.6 | 1.062 | 143 | 48 | 841 | 3 | 27 | 3,679 | 53,648 | 0.777 | 203 | 50 | 493 | 18 | 14 | 1,648 | 23,373 | 9,691 |
+| E2.3, the repeated reads of one update (the same saves) | E2.3 | 1.044 | 147 | 48 | 821 | 3 | 25 | 3,679 | 53,648 | 0.796 | 209 | 49 | 505 | 20 | 13 | 1,648 | 23,373 | 9,689 |
 
 ### A2: compiler settings
 
@@ -619,6 +620,41 @@ instructions (range 2 to 5%; island22 300 million of 10,051), under the 10% of t
 53.2% (globe36), over the 25% of the gate. The physics that D1 (b) could hide behind the bodies (Flow, Change, parts,
 tape) is 223 ms of a 1,079 ms year (21%) and 304 of 842 ms (36%); the rest of the time on one thread is the bodies'
 own serial phase, which D1 (b) does not touch.
+
+### E2.3: the repeated reads of one update
+
+Judged on callgrind instructions of one year on one thread (S45; `RAYON_NUM_THREADS=1`) from the bench saves of the gates
+(D2.5's), before at `f3c3c97`. The updates of the year are the same (54,486 and 23,155), and the world is the same bit
+for bit (two years of the three benches: the series without its timing columns and the last snapshot hash equal; the
+golden test holds with and without threads).
+
+| | island22 before | island22 after | globe36 before | globe36 after |
+|---|---|---|---|---|
+| all instructions, million | 13,968.2 | 13,639.5 (-2.35%) | 9,169.5 | 9,036.8 (-1.45%) |
+| `Body::activity` calls | 639,897 | 287,212 | | |
+| `cover_of` calls | 303,374 | 178,367 | | |
+| `Body::thermal` calls | 745,171 | 703,584 | | |
+| `Reaction::clone` calls | 171,588 | 0 | | |
+
+What changed:
+
+- A `Payer` (a body about to pay, valid until its stores or heat change) holds the body's activity (`Payer::dry`) and is
+  made with the cover of other bodies over it. The update reads its activity once as it begins (the first `buildable`,
+  the upkeep, both plans of `settle_upkeep`, and the payer), once after the pay (`react`), once for `grow` (its
+  allowance, its payer and the upkeep and plan of `convert`; `convert` keeps the payer while no conversion changes the
+  body), and once for the last `buildable`: 4 reads where there were about 11. The cover is read once in `site`
+  and given to the payers of `settle_upkeep`, `keep_warm` and `grow` (others do not change in an update).
+- `starved` works out the plateau state only if it loses a share, so `shed` no longer repeats it.
+- `grow` no longer clones `Chemistry::build` and `builds` (171,588 reaction copies a year, with their lists): the world
+  is only read there. This part alone is 97 million (0.69%) on the island and 42 million (0.45%) on the globe; the rest
+  of the step gives 234 million (1.67%) and 92 million (1.01%).
+
+Not done: `visible` repeats the plateau state of the end of `shed` in about 90% of updates, but between the two
+the body goes through `select`, `mature` and `split`, which can change it; knowing when it has not would be a cache of
+the state (S31). The depth of liquid over a body is the same two comparisons on dry land, and in `Payer::at` it is
+read again at the mass of that moment (a body afloat changes with its mass), so it is not given along. The prologue and
+the burnings' rates of `plan` are repeated in its second call (an estimate of about 70 million, 0.5%) and would need arrays in
+`Payer`; they are left for a later spot.
 
 ## Profile of the baseline
 

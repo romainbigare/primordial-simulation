@@ -748,7 +748,7 @@ fn after_update(w: &mut World, s: Handle, g: usize) -> (f64, f32) {
 /// What the body at `s` holds that can become body (`copy::buildable`), at its ground's temperature.
 fn worth(w: &World, s: Handle) -> f64 {
     let b = &w.life[s];
-    copy::buildable(w, b, w.t_ground_last(b.cell as usize))
+    copy::buildable(w, b, w.t_ground_last(b.cell as usize), b.activity(&w.chem, &w.cfg.phys))
 }
 
 /// Selection inside a node moves its mean as selection among its members would (`copy::sample`, `copy::select`): a

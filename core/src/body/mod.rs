@@ -14,12 +14,12 @@ mod tissue;
 pub use death::{die, wound};
 use death::thin;
 pub(crate) use death::{remains, to_ground, torn_to_death};
-pub use exchange::conductance_to_ground;
+pub use exchange::{conductance_to_ground, cover_of};
 pub use genes::*;
 pub(crate) use live::{gain_to_growth, live, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, plan, upkeep, Payer};
-pub(crate) use pay::spend;
+pub(crate) use pay::{spend, upkeep_at};
 
 use crate::brain::{ln, SIG};
 use crate::chem::{Chemistry, Phase};
