@@ -43,19 +43,13 @@ impl Life {
         self.members.push(0);
         (self.brains.len() - 1) as u32
     }
-    /// The brain of `lineage`, provisional (its domain in the world) or not (none once it died out).
+    /// The brain of `lineage` (none once it died out; a provisional one is read through its domain, `Domain::brain`).
     pub fn brain(&self, lineage: u32) -> Option<&Lineage> {
-        match provisional(lineage) {
-            Some((d, k)) => Some(&self.domains[d].brains[k]),
-            None => self.brains.get(lineage as usize)?.as_ref(),
-        }
+        self.brains.get(lineage as usize)?.as_ref()
     }
     /// Whether `lineage` has a brain (none once it died out); of a provisional one, from its id.
     pub(crate) fn has_brain(&self, lineage: u32) -> Option<bool> {
-        match provisional(lineage) {
-            Some(_) => Some(lineage & NONE == 0),
-            None => self.brains.get(lineage as usize)?.as_ref().map(|l| !l.none()),
-        }
+        provisional(lineage).map_or_else(|| self.brain(lineage).map(|l| !l.none()), |_| Some(lineage & NONE == 0))
     }
     /// New born rows, not yet given to a body (body code makes provisional ones, `Domain::new_genome`).
     pub fn new_genome(&mut self, rows: Vec<f32>) -> u32 {
@@ -71,9 +65,9 @@ impl Life {
     pub fn root(&self, b: &Body) -> u32 {
         self.brain(b.lineage).map_or(u32::MAX, |l| l.root)
     }
-    /// The rows body `b` was born with (provisional, its domain in the world, or not).
+    /// The rows body `b` was born with (provisional ones are read through their domain, `Domain::born`).
     pub fn born(&self, b: &Body) -> &[f32] {
-        provisional(b.genome).map_or_else(|| &self.genomes[b.genome as usize].rows, |(d, k)| &self.domains[d].genomes[k])
+        &self.genomes[b.genome as usize].rows
     }
     /// The holders of lineage or born rows `x`.
     fn holders(&mut self, (what, x): (Held, u32)) -> &mut u32 {
@@ -97,10 +91,9 @@ impl Life {
     pub(crate) fn remap(&mut self, ds: std::ops::Range<usize>) {
         let made: Vec<usize> = ds.filter(|&d| !self.domains[d].brains.is_empty() || !self.domains[d].genomes.is_empty()).collect();
         for d in made {
-            let lin = std::mem::take(&mut self.domains[d].brains).into_iter().map(|l| self.new_lineage(l)).collect();
-            let gen = std::mem::take(&mut self.domains[d].genomes).into_iter().map(|g| self.new_genome(g)).collect();
-            let map: [Vec<u32>; 2] = [lin, gen];
-            let to = |x: u32, what: Held| provisional(x).map_or(x, |(_, k)| map[what as usize][k]);
+            let lin: Vec<u32> = std::mem::take(&mut self.domains[d].brains).into_iter().map(|l| self.new_lineage(l)).collect();
+            let gen: Vec<u32> = std::mem::take(&mut self.domains[d].genomes).into_iter().map(|g| self.new_genome(g)).collect();
+            let to = |x: u32, what: Held| provisional(x).map_or(x, |(_, k)| [&lin, &gen][what as usize][k]);
             let x = &mut self.domains[d];
             x.bodies.iter_mut().for_each(|b| (b.lineage, b.genome) = (to(b.lineage, Held::Lineage), to(b.genome, Held::Rows)));
             x.out.iter_mut().for_each(|e| e.remap(&to));

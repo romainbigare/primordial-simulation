@@ -246,7 +246,6 @@ pub fn split(w: &World, d: &mut Domain, b: &mut Body) {
     c.spread[g] = b.spread[g];
     b.set_genes(genes, &w.chem, &w.cfg);
     d.counts.splits += 1.0;
-
     d.place(w, c);
 }
 

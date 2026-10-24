@@ -3,7 +3,7 @@
 //! another cell, its watches and its acts on parts. Each kind is applied by its law on the bodies and parts as they are
 //! then; one whose body or target is gone does nothing, as its law says.
 
-use crate::life::Held;
+use crate::{body::Body, life::Held};
 use crate::{bond, choose, copy, store::NodeId, World};
 
 /// One effect of an update outside it.
@@ -17,8 +17,9 @@ pub enum Entry {
     Litter(Box<copy::Litter>),
     /// Body `by`, of `n` members who watched and of `lineage` then, watched body `of` (`choose::watched`)
     Watch { by: u64, n: f64, lineage: u32, of: u64 },
-    /// Body `id` does verb `on.0` to part `on.1` (`bond::act`, or `bond::LET_GO`), or forms a part of the shape given
-    /// (`bond::form`), as a part of node `node` if any (`choose::land_act`)
+    /// Body `id` does verb `on.0` to part `on.1` (`bond::act`; `bond::ANCHORS` anchors it; `bond::LET_GO` and
+    /// `bond::TORN` let go of it, `bond::dropped`), or forms a part of the shape given (`bond::form`), as a part of node
+    /// `node` if any (`choose::land_act`)
     Act { id: u64, on: Result<(usize, NodeId), [f32; 2]>, node: Option<u64> },
 }
 
@@ -43,7 +44,7 @@ pub fn deliver(w: &mut World) {
                 Entry::Go { id, from, to, pushed, lane, carries, kin } => choose::land_move(w, id, (from as usize, to as usize), (pushed, lane), (carries, kin)),
                 Entry::Litter(x) => copy::land_litter(w, *x),
                 Entry::Watch { by, n, lineage, of } => choose::watched(w, by, (n, lineage), of),
-                Entry::Act { id, on: Ok((v @ (bond::LET_GO | bond::TORN), p)), .. } => bond::dropped(w, id, p, v == bond::TORN),
+                Entry::Act { id, on: Ok((v @ (bond::LET_GO | bond::TORN), p)), .. } => bond::dropped(w, &mut Body { id, hold: Some(p), ..Default::default() }, v == bond::TORN),
                 Entry::Act { id, on, node } => choose::land_act(w, id, on, node),
             }
         }

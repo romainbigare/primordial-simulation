@@ -227,6 +227,10 @@ impl Moves {
     pub(crate) fn a_seen(&self, w: &World, k: usize, j: usize) -> f64 {
         self.view_at(w, Node::air(j)).map_or_else(|| w.a_seen(k, j), |_| self.view[SEEN][k])
     }
+    /// All that bodies and parts see in air node `j` (`a_seen` summed over the substances), mol.
+    pub(crate) fn a_seen_all(&self, w: &World, j: usize) -> f64 {
+        (0..w.chem.ns()).map(|k| self.a_seen(w, k, j)).sum()
+    }
     /// Heat capacity of ground node `i`'s active layer as the moves gathered leave it, J/K (`World::heat_cap_ground`).
     pub(crate) fn heat_cap_ground(&self, w: &World, i: usize) -> f64 {
         w.heat_cap_of(i, self.amounts(w, Node::ground(i)), self.amounts(w, Node::new(Class::Bed, i)))

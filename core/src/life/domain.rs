@@ -27,10 +27,9 @@ pub struct Domain {
     pub(super) ring: Vec<Vec<u64>>,
     /// Per cell (by its order in `cells`): whether its bodies changed since the survey last shared out its light
     pub(super) stale: Vec<bool>,
-    /// What its bodies' updates do outside them, in the order made (`outbox`), and its length when the update running
-    /// began
+    /// What its bodies' updates do outside them, in the order made (`outbox`)
     pub out: Vec<Entry>,
-
+    /// The length of `out` when the update running began (`queued`)
     pub(crate) began: usize,
     /// The lineages and the born rows its bodies made since the world last settled, by provisional id (`PROVISIONAL`),
     /// and the changes of the holders they made: of a lineage or born rows, its id, the change (`World::settle`)
@@ -92,10 +91,15 @@ impl Domain {
     /// Body `b`, taken out of `h`, leaves the world: its slot is free.
     pub(crate) fn remove(&mut self, h: Handle, b: &Body) {
         self.leave(b);
-        self.table.remove(&b.id);
-        let k = self.slot(b.cell as usize);
+        self.unstore(h, b.id, b.cell as usize);
+    }
+    /// Body `id`, taken out of `h` in cell `i`, is no longer stored here: it leaves the cell's list and the id table, and
+    /// its slot is free.
+    pub(super) fn unstore(&mut self, h: Handle, id: u64, i: usize) {
+        let k = self.slot(i);
         self.at[k].retain(|&x| x != h);
         self.stale[k] = true;
+        self.table.remove(&id);
         self.bodies[h.slot as usize] = Body::default();
         self.free.push(h.slot);
     }
@@ -104,9 +108,8 @@ impl Domain {
         b.due = due;
         self.ring[(due % RING) as usize].push(b.id);
     }
-
-    /// Body `b` queued a part act of its own (not a let-go) in the update running: it does not split in it
-    /// (`nodes::split`; a queued move leaves it `Body::leaving`).
+    /// Body `b` queued a part act of its own but a let-go or an anchor (`bond::LET_GO`, `TORN`, `ANCHORS`) in the update
+    /// running: it does not split in it (`nodes::split`; a queued move leaves it `Body::leaving`).
     pub(crate) fn queued(&self, b: &Body) -> bool {
         let mine = |e: &Entry| matches!(e, Entry::Act { id, on, .. } if *id == b.id && on.as_ref().map_or(true, |x| x.0 < crate::bond::LET_GO));
         self.out[self.began.min(self.out.len())..].iter().any(mine)

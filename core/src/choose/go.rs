@@ -51,7 +51,7 @@ pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed,
     let mut b = std::mem::take(&mut w.life[s]);
     let carried = bond::carry(w, &b).filter(|_| carries);
     if carried.is_none() {
-        bond::let_go_now(w, &mut b, carries);
+        bond::dropped(w, &mut b, carries);
     }
     let mb = b.mass(&w.chem);
     // (Before it enters `j` and out of its slot, it is no node of its cell for `kin`.)
@@ -64,7 +64,6 @@ pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed,
     w.life.pushed[j] += pushed;
     lanes::clear(w, i, j, lane);
     let s = w.life.relocate(s, i, b);
-
     if let Some(t) = t {
         w.in_domain(j, |w, d| nodes::merge(w, d, s, t));
     }

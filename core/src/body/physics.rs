@@ -99,7 +99,7 @@ fn catch_light(w: &World, b: &mut Body, s: &Site, leaf: f64) -> (f64, f64) {
 /// more than the node holds.
 fn gas_pool(w: &World, d: &Domain, b: &Body, s: &Site, f: &Film, tmp: &mut LiveTmp) -> f64 {
     let (chem, j) = (&w.chem, s.j);
-    let tot = (0..w.chem.ns()).map(|k| d.moves.a_seen(w, k, j)).sum::<f64>();
+    let tot = d.moves.a_seen_all(w, j);
     let reach = breath(chem, &w.cfg, b, f, s.days, s.depth);
     tmp.x.clear();
     tmp.pool.clear();
@@ -232,7 +232,7 @@ fn evaporate(w: &World, d: &mut Domain, b: &mut Body, tmp: &LiveTmp, s: &Site, h
             d.moves.give(w, Node::air(s.j), 0, 0.0, q);
             d.moves.gas(w, k, m, lift);
             let stop = if cool > open_m { b.gene(COOL_T) } else { w.chem.t_sat(k, tmp.x[k]) };
-            (h.heat, h.stop) = (h.heat - m * latent, Some(h.stop.map_or(stop, |d| d.max(stop))));
+            (h.heat, h.stop) = (h.heat - m * latent, Some(h.stop.map_or(stop, |x| x.max(stop))));
             *lost = (m - pre).max(0.0);
         }
     }
@@ -285,9 +285,9 @@ fn soak(w: &World, d: &mut Domain, b: &mut Body, s: &Site, gcap: f64, heat: &mut
 fn soak_in(w: &World, d: &mut Domain, b: &mut Body, (i, tg, gcap): (usize, f64, f64), (k, want): (usize, f64), heat: &mut f64) -> f64 {
     let (cp, fused) = (w.chem.subs[k].cp, w.chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
     let per = cp * tg;
-    let d = d.moves.take_from_ground(w, i, (k, want, cp), want * (per + fused), gcap).0;
-    (b.store[k], b.e, *heat) = (b.store[k] + d, b.e + d * per, *heat + d * fused);
-    d
+    let took = d.moves.take_from_ground(w, i, (k, want, cp), want * (per + fused), gcap).0;
+    (b.store[k], b.e, *heat) = (b.store[k] + took, b.e + took * per, *heat + took * fused);
+    took
 }
 
 /// After growth and children the key liquids soak in again at the same update: new matter raises their level and

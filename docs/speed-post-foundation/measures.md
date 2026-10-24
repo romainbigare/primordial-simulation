@@ -380,9 +380,12 @@ differ only in the ids of born rows: the store, the parts, the counters, the lin
 for bit, but for its `genome` (1,927 of 3,630 bodies), and the rows each body was born with are the same. The ids
 differ because outside a batch (the monthly merge, `nodes::crowd`) the changes of holders are now added after each
 serial step: a merge's new born rows take a free slot before the rows it leaves with no holder are freed. No random
-draw reads a lineage's or born rows' id, so the history does not depart. A body that holds a part and lets go of it or anchors it
-in its own update now does so when its outbox is applied, after its update (and pays to anchor then): that changes a
-history where it happens (S72's level 3 part), not in these two years. A 16 x 16 world of seed 3 ends four years on the
+draw reads a lineage's or born rows' id, so the history does not depart. S72's level-3 parts, which change a history where they
+happen (not in these two years): a body that holds a part and lets go of it or anchors it in its own update now does
+so when its outbox is applied, after its update (and pays to anchor then); a body that dies or joins another while the
+outboxes are applied, or in `wear` or `crowd`, lets go after the rest of that pass (in golden seed 2, month 16, a
+`BondBroken` event moves after a later `Died` of the same cell and day: the same set of events), and a later part act
+of the same pass could in principle find the part still held. A 16 x 16 world of seed 3 ends four years on the
 same fingerprint in both builds.
 
 Cost, callgrind on one thread, one year from that save (54,486 updates in both builds):

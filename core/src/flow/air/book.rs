@@ -61,7 +61,10 @@ pub(super) fn book(w: &mut World, s: &mut Scratch, (act, rained): (&[Active], &[
     let World { light: lit, life, .. } = w;
     for (i, (l, &got)) in lit.iter_mut().zip(&light).enumerate() {
         *l += got;
-        life.for_cell(i, |b| b.mark -= (b.shade - 1.0) * got);
+        for k in 0..life.in_cell(i) {
+            let h = life.cell(i).nth(k).expect("a body of the cell");
+            life[h].mark -= (life[h].shade - 1.0) * got;
+        }
     }
     // Each ground node's gas crosses its links to the air, one column per gas, with its heat; the air pays the lift.
     let (g, view) = (w.cfg.gravity, s.view());

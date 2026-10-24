@@ -61,7 +61,7 @@ in another cell (`copy::emit` takes them from the parent), a watch, and every ac
 anchoring among them; a body that lets go of its part, or dies or joins another holding one, lets go there too). A body
 with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it stays in its old
 cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
-it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go, does not
+it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go or an anchor, does not
 split in that update. Then the serial phase, in a fixed order: the domains back, their moves booked, one `apply` per
 domain in domain order, and the world settles, domain by domain; the outboxes applied, domain by domain in the order
 made, then what applying them queued; the bodies that hold or are inside a part, whole updates in domain and body

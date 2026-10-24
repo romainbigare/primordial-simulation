@@ -155,7 +155,7 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
 /// The order in which the domains run in the parallel phase of a batch changes nothing: the lineages and born rows
 /// made there get the same global ids (plan 3.3), and the world ends the same, bit for bit, with its events and
 /// counters. In the batches each kind of the serial phase happens: a dispersing litter lands, a watch and a part act are
-/// applied, a body that holds a part runs, lineages are made.
+/// applied, a body that holds a part runs, one anchors its part, lineages are made; the books are kept.
 #[test]
 fn the_order_of_the_domains_changes_nothing() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -167,8 +167,8 @@ fn the_order_of_the_domains_changes_nothing() {
     }
     // Every body with a brain moves to a new lineage at its next update (`lineage::resize`).
     w.life.each_mut(|b| b.genes[HIDDEN] += if b.rows.is_empty() { 0.0 } else { 1.5 });
-    // A dispersing node, a watcher, a body that takes hold of an anchored part and one that holds a part, in cells
-    // spread over the island.
+    // A dispersing node, a watcher, a body that takes hold of an anchored part, one that holds a part and one that
+    // anchors the part it holds, in cells spread over the island.
     let land = dry_lands(&w);
     let at = |k: usize| land[k * land.len() / 5];
     let n = dispersing(&mut w, at(0), 3.0);
@@ -185,7 +185,13 @@ fn the_order_of_the_domains_changes_nothing() {
     let holder = w.add(holder, 1);
     let (holder, last) = (w.life[holder].id, w.life[holder].last);
     w.parts.parts[q].held = holder;
+    let r = plate(&mut w, at(4), 5.0, false);
+    let mut anchorer = eater(&mut w, at(4), brain::ANCHOR, 1.0);
+    anchorer.hold = Some(bond::id(&w, r));
+    let anchorer = w.add(anchorer, 1);
+    w.parts.parts[r].held = w.life[anchorer].id;
     w.drain_events();
+    let books = Books::now(&w);
     let lineages = w.life.brains.len();
     let ends = [false, true].map(|reversed| {
         let mut v = w.clone();
@@ -205,4 +211,7 @@ fn the_order_of_the_domains_changes_nothing() {
     let ran = v.life.find(holder).is_none_or(|h| v.life[h].last > last);
     let made = v.life.brains.len() - lineages;
     assert!(landed > 0 && watched > 0 && held > 0 && ran && made > 1, "litters landed {landed}, watches {watched}, holds {held}, holder ran {ran}, lineages {made}");
+    let anchored = v.parts.bonds.of(r).any(|b| b.0 == bond::GROUND);
+    assert!(anchored && v.parts.parts[r].held == bond::NOBODY, "the part was not anchored and let go of (anchored {anchored})");
+    books.assert_kept(v, 1e-12);
 }

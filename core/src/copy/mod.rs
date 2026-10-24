@@ -83,7 +83,6 @@ pub fn copy(w: &World, d: &mut Domain, b: &mut Body) -> bool {
     let prov = provisions(&w.chem, b, mi, matter, births);
     let litter = Births { body, matter, prov, node, alone: !may_be_node(w, b), mate, parent: id };
     let m = if node { disperse * births } else { (r.f64() < disperse) as u8 as f64 };
-
     let cells = w.mesh.cells();
     let to = if m > 0.0 { cells.way(i, r.below(COMPASS)).map(|e| cells.adj_cell()[e] as usize) } else { None };
     let (cell, m) = match to {

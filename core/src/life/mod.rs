@@ -141,26 +141,15 @@ impl Life {
     pub fn each_mut(&mut self, f: impl FnMut(&mut Body)) {
         self.domains.iter_mut().flat_map(|d| &mut d.bodies).filter(|b| b.alive).for_each(f);
     }
-    /// The list of the bodies of cell `i`, in the order they came.
-    fn list(&self, i: usize) -> &Vec<Handle> {
-        let (d, k) = self.cell_in[i];
-        &self.domains[d as usize].at[k as usize]
-    }
 
     /// The handles of the bodies of cell `i`, in the order they came.
-    pub fn cell(&self, i: usize) -> impl Iterator<Item = Handle> + '_ {
-        self.list(i).iter().copied()
-    }
-    /// Run `f` on each body of cell `i`, in the order they came.
-    pub(crate) fn for_cell(&mut self, i: usize, mut f: impl FnMut(&mut Body)) {
-        for k in 0..self.in_cell(i) {
-            let h = self.list(i)[k];
-            f(&mut self[h]);
-        }
+    pub fn cell(&self, i: usize) -> impl ExactSizeIterator<Item = Handle> + '_ {
+        let (d, k) = self.cell_slot(i);
+        self.domains[d].at[k].iter().copied()
     }
     /// How many bodies cell `i` holds.
     pub fn in_cell(&self, i: usize) -> usize {
-        self.list(i).len()
+        self.cell(i).len()
     }
     /// Where the body with id `id` is stored, if it lives: in the domain it was placed in, unless it moved away.
     pub fn find(&self, id: u64) -> Option<Handle> {
@@ -206,11 +195,7 @@ impl Life {
     pub fn relocate(&mut self, h: Handle, from: usize, b: Body) -> Handle {
         let (d, due) = (self.domain_of(b.cell as usize), (b.due % RING) as usize);
         let x = &mut self.domains[h.domain as usize];
-        let k = x.slot(from);
-        x.at[k].retain(|&y| y != h);
-        x.stale[k] = true;
-        x.table.remove(&b.id);
-        x.free.push(h.slot);
+        x.unstore(h, b.id, from);
         if d != h.domain as usize {
             x.ring[due].retain(|&y| y != b.id);
             self.domains[d].ring[due].push(b.id);

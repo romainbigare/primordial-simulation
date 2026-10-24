@@ -2,7 +2,7 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Domain, Handle}, outbox::Entry, store::{Class, Move, Node, NodeId}, World};
+use crate::{body::{self, Body, STRENGTH}, brain::OVERBS, chem::{Chemistry, Phase}, life::{Domain, Handle}, outbox::Entry, store::{Class, Move, Node}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, b: &mut Body, p: usize) {
@@ -22,18 +22,10 @@ pub const TORN: usize = OVERBS + 1;
 pub const ANCHORS: usize = OVERBS + 2;
 
 /// Let go of the held part (also when the body dies or joins another), broken off by a load if `load`: a part act
-/// queued in the outbox (`dropped`). The body holds nothing from now.
+/// queued in the outbox (`dropped`, applied on a body of its id that holds that part). The body holds nothing from now.
 pub(crate) fn let_go(w: &World, d: &mut Domain, b: &mut Body, load: bool) {
     if let Some(p) = held(w, b) {
         d.out.push(Entry::Act { id: b.id, on: Ok((if load { TORN } else { LET_GO }, id(w, p))), node: None });
-    }
-    b.hold = None;
-}
-
-/// Body `b` (taken out of its slot) lets go of the part it holds in a serial step, broken off by a load if `load`.
-pub(crate) fn let_go_now(w: &mut World, b: &mut Body, load: bool) {
-    if let Some(p) = held(w, b) {
-        dropped(w, b.id, id(w, p), load);
     }
     b.hold = None;
 }
@@ -43,18 +35,20 @@ fn pay(w: &mut World, b: &mut Body, cost: f64, days: f64) -> bool {
     w.in_domain(b.cell as usize, |w, d| body::pay(w, d, b, cost, days))
 }
 
-/// Body `by` lets go of part `p` if it still holds it, broken off by a load if `load`.
-pub(crate) fn dropped(w: &mut World, by: u64, p: NodeId, load: bool) {
-    if let Some(p) = super::part(w, p).filter(|&p| w.parts.parts[p].held == by) {
+/// Body `b` (taken out of its slot) lets go of the part it holds in a serial step, if the part is still held by it,
+/// broken off by a load if `load`; it holds nothing from now.
+pub(crate) fn dropped(w: &mut World, b: &mut Body, load: bool) {
+    if let Some(p) = held(w, b).filter(|&p| w.parts.parts[p].held == b.id) {
         w.parts.parts[p].held = NOBODY;
         event(w, false, super::cell(w, p), HELD + if load { LOAD } else { 0.0 });
     }
+    b.hold = None;
 }
 
 /// The body at `o` lets go of what it holds, broken off by a load.
 pub(super) fn torn_from(w: &mut World, o: Handle) {
     let mut ob = std::mem::take(&mut w.life[o]);
-    let_go_now(w, &mut ob, true);
+    dropped(w, &mut ob, true);
     w.life[o] = ob;
 }
 
@@ -83,7 +77,7 @@ pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
     match v {
         0 => {
             if w.parts.parts[p].held == NOBODY && pay(w, b, w.cfg.phys.grab * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
-                let_go_now(w, b, false);
+                dropped(w, b, false);
                 grab(w, b, p);
             }
         }
@@ -148,7 +142,7 @@ fn take(w: &mut World, b: &mut Body, p: usize, mb: f64, days: f64) {
     w.counts.parts.from_parts += got;
     if pt.walls(chem).mass < w.cfg.phys.min_kg {
         if b.hold == me {
-            let_go_now(w, b, false);
+            dropped(w, b, false);
         }
         dissolve(w, p);
     } else {
@@ -225,16 +219,16 @@ pub fn release(w: &World, d: &mut Domain, b: &mut Body) {
 /// Bond the held part to the cell's bonded ground and let go of it.
 pub fn anchor(w: &mut World, b: &mut Body) {
     let (Some(p), i) = (held(w, b), b.cell as usize) else { return };
-    let (mut v, mut sv) = (0.0, 0.0);
-    for k in 0..w.chem.ns() {
-        let vol = w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
-        (v, sv) = (v + vol, sv + vol * w.chem.subs[k].strength);
-    }
+    // (Its bed as the moves of the step leave it, through its domain's view.)
+    let (v, sv) = w.in_domain(i, |w, d| (0..w.chem.ns()).fold((0.0, 0.0), |(v, sv), k| {
+        let vol = d.moves.amount(w, Node::new(Class::Bed, i), k) * w.chem.molar_volume(k, Phase::Solid);
+        (v + vol, sv + vol * w.chem.subs[k].strength)
+    }));
     let ac = w.parts.parts[p].contact();
     let s = strength(w, w.parts.parts[p].walls(&w.chem).strength, sv / v.max(1e-12), ac);
     if v > 0.0 && pay(w, b, w.cfg.phys.c_join * ac, b.interval(w) as f64) {
         link(w, p, GROUND, s);
-        let_go_now(w, b, false);
+        dropped(w, b, false);
     }
 }
 

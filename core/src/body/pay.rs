@@ -47,7 +47,7 @@ impl Payer {
     pub fn at(w: &World, d: &Domain, b: &Body, days: f64, mass: f64, th: Melting) -> Payer {
         let (chem, i, j) = (&w.chem, b.cell as usize, w.mesh.up(b.cell as usize, 0, AIR));
         let depth = bond::depth(w, d, b, w.life.env.get(i).map_or(0.0, |e| e[1]));
-        let tot: f64 = (0..chem.ns()).map(|k| d.moves.a_seen(w, k, j)).sum();
+        let tot = d.moves.a_seen_all(w, j);
         let f = film(chem, &w.cfg, b, mass, cover_of(w, d, b));
         let share = (breath(chem, &w.cfg, b, &f, days, depth) / tot).min(1.0);
         Payer { mass, th, days, share, tot }

@@ -8,7 +8,6 @@ use pcore::check::{self, Totals};
 use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
 use pcore::life::{Domain, Handle};
-
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{Boundary, Class, Move, Node};

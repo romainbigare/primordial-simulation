@@ -13,7 +13,7 @@ pub use month::step;
 pub use sense::{afloat, depth, features, room};
 pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, carry, dig, force, form, moved, release, ANCHORS, LET_GO, TORN};
-pub(crate) use verbs::{bears, dropped, let_go, let_go_now, lever};
+pub(crate) use verbs::{bears, dropped, let_go, lever};
 
 use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Handle}, store::{Node, NodeId}, World};
 use serde::{Deserialize, Serialize};
@@ -296,7 +296,6 @@ fn dissolve(w: &mut World, s: usize) {
         }
         d.moves.give(w, Node::ground(i), 0, 0.0, p.e);
     });
-
     w.parts.at[i].retain(|&x| x as usize != s);
     // Its slot is free for a new part, of the next generation.
     w.parts.parts[s].gen = p.gen + 1;
