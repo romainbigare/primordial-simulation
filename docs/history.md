@@ -812,3 +812,4 @@ the golden test.
 
 - A1: the bench kit (scripts/bench.sh) and the baseline (docs/speed-post-foundation/measures.md).
 - A2: `codegen-units = 1` kept (island22 -7%, globe36 -4% a year; build 25.6 -> 36.4 s; golden re-pinned at level 2). Not kept: fat LTO (under 2%), `target-cpu=native` (slower), `panic = "abort"` (tests use `should_panic`), PGO (5% and 4% over the kept setting, under 8%).
+- A3: three `ew` runs side by side take 3.94 s against 11.33 s one after another (2.9 times faster); `RAYON_NUM_THREADS` 1, 2 or default changes the total by 1% only. Seeds in one test process share rayon's one global pool, so they do not oversubscribe. Advice in `docs/speed-post-foundation/measures.md`.

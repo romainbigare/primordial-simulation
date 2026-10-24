@@ -52,6 +52,28 @@ Stage times are in ms a year. The plan's guess of 1.5 and 2.1 s a year (from `do
 higher than today's 0.86 and 1.35 s: the worlds here are the two benches, and the code is the one after the
 foundation. These are the numbers the later rows are compared with.
 
+### A3: many worlds at once
+
+Three runs of `ew resume --from island22.bin.gz --years 5` (island22 at `target/release/ew`), wall time of the whole
+set, the lower of two sets. One run alone takes about 3.9 s. All three runs end with the same hash.
+
+| Way | Wall time, three 5-year runs | Worlds per minute |
+|---|---|---|
+| a. one after another (4 threads each) | 11.33 s | 15.9 |
+| b. all at once, default threads (4 each, 12 in all) | 3.94 s | 45.7 |
+| c. all at once, `RAYON_NUM_THREADS=1` each | 3.98 s | 45.2 |
+| d. all at once, `RAYON_NUM_THREADS=2` each | 3.99 s | 45.1 |
+
+Running side by side is 2.9 times faster than one after another. The three pool settings differ by 1%, which is
+inside the noise (the other set of each way was 3.99, 4.07 and 4.01 s). Bodies are three quarters of a year and run on
+one thread, so a world uses about one core and the pools hardly compete. In one process (`tape/tests/ranges.rs`) the
+seeds are `std::thread`s that all call the one global rayon pool in `core/src/par.rs` (no other pool is made), so the
+four workers are shared and the cores are not oversubscribed.
+
+Advice: start the seeds as separate `ew` runs at the same time (`ew run ... --seed 1 & ew run ... --seed 2 & ... wait`),
+up to the number of cores. `RAYON_NUM_THREADS` does not matter on 4 cores with 3 runs; set it to 1 only with more runs
+than cores.
+
 ## Profile of the baseline
 
 One year from the same saves under `valgrind --tool=callgrind` (`scripts/bench.sh profile island22` and `... globe36`),
