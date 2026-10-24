@@ -755,22 +755,24 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
   shared (S11). Bodies still run one after another, in the order of their cells. Level 3 (new ids key the random
   draws). Snapshot version bumped; `docs/tape.md` (the ids in events).
 - **D2.2 Batches (C3).**
-  - **What** (S8): bodies update in **batches** of `Config::batch_days` days (5, the shortest interval
-    `MIN_INTERVAL`). A batch runs, at its first day, every body due in it. `survey::day` runs once a batch.
+  - **What** (S8, S64): bodies update in **batches** of `Config::batch_days` days (2). A batch runs, at its first day,
+    every body due in it. `survey::day` runs once a batch.
   - **A body's interval is a whole number of batches:** its `INTERVAL` gene's days rounded to the nearest multiple of
     `batch_days`, at least one batch (the gene constant `Body::k.interval`; `Body::prepare` gets `batch_days` from the
     `Config`). So every due day is a batch's start, no body runs early, and there is no jitter.
   - **The ring** (`life::RING`) is indexed by batch, with at least `MAX_INTERVAL / batch_days + 1` slots.
-  - `node_days` must be a multiple of `batch_days`: 70 after C2; if C2 was killed, this step sets it to 40.
-    `MAX_INTERVAL` (360) is one already.
+  - `node_days` must be a multiple of `batch_days`: 36 is one (C2 was not kept, S62); `MAX_INTERVAL` (360) is one.
   - `Config::validate` refuses a `batch_days` that does not divide `phys_days` and the month, and a `node_days` that is
     not a multiple of it.
   - A body placed during a batch (`World::add`, `World::place`, children, splits, parts placed by `part_acts`) is first
     due at the next batch's start or later.
   - **Why:** a day holds 1.5 to 15 ms of body work: too little to share between threads (decision 59 of the
-    foundation). A batch of 5 days holds five times more, and D2 needs one batch as its unit of work.
-  - **Cost:** short intervals lose resolution (6 and 7 days both become 5).
-  - **The equivalence test** compares `batch_days` 1 and 5 only (10 would change the shortest interval itself, a law):
+    foundation). A batch of 2 days holds twice that, against a pool's call of 30 to 55 µs (D3), and D2 needs one batch
+    as its unit of work (S64).
+  - **Cost:** odd intervals lose a day of resolution (5 days becomes 4 or 6, by the nearest multiple; `MIN_INTERVAL`
+    5 rounds to 6).
+  - **The equivalence test** compares `batch_days` 1 and 2 (the ÷ 2 side; 4 does not divide `phys_days`, and 5 or 10
+    would change the shortest interval itself, a law):
     on the pace test's world (32 × 32, 8 years, through the `yearly(&LIFE, ...)` machinery of
     `tape/tests/ranges.rs`) and its columns (`plant_members`, `root_0_kg`, `births`, `root_0_life_real`, `air_3`),
     each mean moves by less than its noise.
@@ -822,8 +824,11 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
     domains one by one; the bench prints the busiest domain's share; `region24` shows the worst case.
   - *The store view must not overdraw:* 3.4.
   - *wasm:* without `threads`, the domains run in order, the same history.
-- **Done when** (S41): the golden test and the order test hold; the key numbers hold; on the benches **the bodies'
-  stage (survey included) is at least 2.2 times faster on 4 cores than in the last `measures.md` row before D2.1**.
+- **Done when** (S41, S65): the golden test and the order test hold; the key numbers hold; and the gain, measured on
+  **one world** (each bench remade with D2's code; worlds remade with other laws are not comparable, as B2 and C2
+  showed), is at least 2.2 times: the bodies' stage (survey included) with 4 threads against the same build with 1
+  thread (`RAYON_NUM_THREADS=1`), times the cost per body update of `main` before D2.1 over D2's with 1 thread
+  (callgrind instructions per update, each on its own remade bench, which tells D2's overhead).
 - **Kill line:** under 1.6 times (wall time, 5 or more interleaved runs, 2.6), stop and report; D2's commits are
   reverted.
 - **Code:** about +520 (2.4). **Agent:** Opus for D2.1, D2.3, D2.4, D2.5; Sonnet for D2.2 and D2.6. Sequential
