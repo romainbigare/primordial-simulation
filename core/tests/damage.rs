@@ -41,7 +41,7 @@ struct Seen {
     force: f64,
 }
 
-/// What the body in slot `s` looks like.
+/// What the body at `s` looks like.
 fn seen(w: &World, s: Handle) -> Seen {
     let b = &w.life[s];
     Seen { built: b.built(&w.chem), matter: kg(w, b, MATTER), solid: kg(w, b, RICH), liquid: kg(w, b, LIQUID), force: bond::force(w, b) }

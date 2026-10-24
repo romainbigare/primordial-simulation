@@ -737,7 +737,7 @@ fn after_update(w: &mut World, s: Handle, g: usize) -> (f64, f32) {
     (worth(w, s), w.life[s].genes[g])
 }
 
-/// What the body in slot `s` holds that can become body (`copy::buildable`), at its ground's temperature.
+/// What the body at `s` holds that can become body (`copy::buildable`), at its ground's temperature.
 fn worth(w: &World, s: Handle) -> f64 {
     let b = &w.life[s];
     copy::buildable(w, b, w.t_ground_last(b.cell as usize))

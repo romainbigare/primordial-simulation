@@ -53,8 +53,8 @@ pub struct ActTmp {
 
 /// One decision: what the body perceives, its options with their scores and features, their chances and the action drawn.
 struct Choice {
-    /// The bodies perceived: slot, id (a body seen may die and its slot be reused before a member of a node acts on it)
-    /// and whether it is in its own cell
+    /// The bodies perceived: where they are stored, their ids (a body seen may die and its slot be reused before a member
+    /// of a node acts on it) and whether each is in its own cell
     seen: [(Handle, u64, bool); MAX_SEEN],
     nseen: usize,
     parts: [usize; PARTS],

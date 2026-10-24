@@ -100,7 +100,8 @@ fn first_bad<T: Copy + Into<f64>>(name: &str, v: &[T], ok: impl Fn(f64) -> bool)
     v.iter().position(|&x| !ok(x.into())).map(|i| format!("{name}[{i}] = {}", v[i].into()))
 }
 
-/// The first state value that is NaN or infinite, or below 0 where it cannot be: None for a sound world.
+/// The first state value that is NaN or infinite, or below 0 where it cannot be, or the first break of how bodies are
+/// stored (`Life::unsound`): None for a sound world.
 pub fn broken(w: &World) -> Option<String> {
     let (at_least_0, above_0) = (|x: f64| x.is_finite() && x >= 0.0, |x: f64| x.is_finite() && x > 0.0);
     let amounts = [("ground", w.store.amounts(Class::Ground)), ("bed", w.store.amounts(Class::Bed)), ("air", w.store.amounts(Class::Air)), ("deep", w.store.amounts(Class::Deep)), ("bodies", w.store.amounts(Class::Bodies))];
@@ -118,5 +119,5 @@ pub fn broken(w: &World) -> Option<String> {
         let bad = !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));
         bad.then(|| format!("part {s}: energy {}, walls {:?}, fill {:?}", p.e, p.wall, p.fill))
     });
-    found.or(body).or(part)
+    found.or(body).or(part).or_else(|| w.life.unsound())
 }

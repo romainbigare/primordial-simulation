@@ -46,8 +46,10 @@ fn walls_keep_a_body_warm() {
     let bs = &w.life;
     let slot = bs.living().map(|x| x.0).filter(|&s| pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
     let from = w.life[slot].cell as usize;
-    w.life.relocate(w.life[slot].id, from, i);
-    w.life[slot].cell = i as u32;
+    let mut b = std::mem::take(&mut w.life[slot]);
+    w.life.relocate(b.id, from, i);
+    b.cell = i as u32;
+    let slot = w.life.put(slot, b);
     // Enough liquid for a month without rain.
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
     let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;

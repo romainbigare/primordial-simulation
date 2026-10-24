@@ -272,7 +272,7 @@ pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
 }
 
 /// What `f` does to `w` when it calls a law of bodies or parts on its own, outside an update: its moves in ground cell
-/// `i` (`World::open_moves`, in the name of the body in slot `slot`) booked when it ends.
+/// `i` (`World::open_moves`, in the name of the body at `h`) booked when it ends.
 pub fn moved<R>(w: &mut World, (i, h): (usize, Handle), f: impl FnOnce(&mut World) -> R) -> R {
     w.open_moves(i, Node::new(Class::Body, h.slot as usize));
     let r = f(w);

@@ -1,7 +1,7 @@
 //! The registry of bodies: their storage, ids and cells, lineages, born rows, and the rings of updates due. The cells are
 //! cut into domains, the cells under one air node (`Domain`); each domain stores the bodies of its cells, their lists
-//! and its ring. A body's id is its domain of birth and that domain's count of births, and never changes, wherever the
-//! body is stored; a body that moves to a cell of another domain moves to that domain's storage.
+//! and its ring. A body's id is the domain it was placed in and that domain's count of bodies placed; it never changes,
+//! wherever the body is stored. A body that moves to a cell of another domain moves to that domain's storage.
 
 use crate::body::{Body, MAX_INTERVAL};
 use crate::brain::Shape;
@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 
 /// Updates are kept in a ring of this many days (more than the longest interval).
 const RING: u64 = 384;
-/// A body's id is its domain of birth shifted left by this many bits, plus that domain's count of births then (from 1,
-/// so no body has id 0).
+/// A body's id is the domain it was placed in shifted left by this many bits, plus that domain's count of bodies placed
+/// then (from 1, so no body has id 0; it stays below 2^this, `Life::add`).
 const ID_SHIFT: u32 = 40;
 
 /// Where a body is stored: its domain and its slot there (`Life`'s index). It holds until the body leaves the world or
@@ -25,27 +25,27 @@ pub struct Handle {
     pub slot: u32,
 }
 
-/// The cells under one air node, the bodies born there, and the bodies of its cells: their slots (the last freed taken
+/// The cells under one air node, how many bodies were placed in it, and the bodies of its cells: their slots (the last freed taken
 /// first), each cell's list and the ring of their updates.
 #[derive(Clone, Debug, Default)]
 struct Domain {
     /// Its cells, in order (`Level::children` of its air node)
     cells: Vec<u32>,
-    /// Bodies born in it so far
-    births: u64,
+    /// Bodies placed in it so far (children, split halves, parts of nodes, members drawn, founders)
+    placed: u64,
     bodies: Vec<Body>,
     free: Vec<u32>,
     /// The bodies of each of its cells (by their order in `cells`), in the order they came
     at: Vec<Vec<Handle>>,
     /// Updates due, by day modulo RING: body ids (`Body::due`)
-    due: Vec<Vec<u64>>,
+    ring: Vec<Vec<u64>>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct Life {
     domains: Vec<Domain>,
-    /// Each cell's domain and its place in that domain's cells
-    place: Vec<(u32, u32)>,
+    /// Each cell's domain and its index in that domain's cells
+    cell_in: Vec<(u32, u32)>,
     /// Where each body is stored, by id
     table: BTreeMap<u64, Handle>,
     /// Per cell, from the last survey: members, then their visible traits summed, then the energy to break all its
@@ -76,7 +76,7 @@ pub struct Life {
     free_genomes: Vec<u32>,
 }
 
-/// What a snapshot keeps of `Life`: per domain its cells, its births and its living bodies in the order of `Life::alive`;
+/// What a snapshot keeps of `Life`: per domain its cells, its count of bodies placed and its living bodies in the order of `Life::alive`;
 /// the energy movers spent in each cell; the lineages and born rows. Where bodies are stored, the ring and the id table
 /// follow from the bodies, and the survey's caches are rebuilt (`Life::sum`).
 #[derive(Serialize)]
@@ -103,7 +103,7 @@ struct Loaded {
 impl Serialize for Life {
     fn serialize<S: Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
         let bodies = |d: &Domain| d.at.iter().flatten().map(|&h| &self[h]).filter(|b| b.alive).collect();
-        let domains = self.domains.iter().map(|d| (&d.cells[..], d.births, bodies(d))).collect();
+        let domains = self.domains.iter().map(|d| (&d.cells[..], d.placed, bodies(d))).collect();
         let (pushed, brains, members, genomes, free_genomes) = (&self.pushed[..], &self.brains[..], &self.members[..], &self.genomes[..], &self.free_genomes[..]);
         Saved { domains, pushed, brains, members, genomes, free_genomes }.serialize(to)
     }
@@ -115,8 +115,8 @@ impl<'de> Deserialize<'de> for Life {
         let x = Loaded::deserialize(from)?;
         let mut life = Life { pushed: x.pushed, brains: x.brains, members: x.members, genomes: x.genomes, free_genomes: x.free_genomes, ..Default::default() };
         life.cut(x.domains.iter().map(|d| d.0.clone()).collect());
-        for (d, (_, births, bodies)) in x.domains.into_iter().enumerate() {
-            life.domains[d].births = births;
+        for (d, (_, placed, bodies)) in x.domains.into_iter().enumerate() {
+            life.domains[d].placed = placed;
             for b in bodies {
                 life.store(b);
             }
@@ -142,18 +142,18 @@ impl Life {
     pub fn alive(&self) -> impl Iterator<Item = &Body> {
         self.living().map(|x| x.1)
     }
-    /// Run `f` on each living body, in the order they are stored.
+    /// Run `f` on each living body, in the order they are stored, for work that does not depend on order.
     pub fn each_mut(&mut self, f: impl FnMut(&mut Body)) {
         self.domains.iter_mut().flat_map(|d| &mut d.bodies).filter(|b| b.alive).for_each(f);
     }
     /// The list of the bodies of cell `i`, in the order they came.
     fn list(&self, i: usize) -> &Vec<Handle> {
-        let (d, k) = self.place[i];
+        let (d, k) = self.cell_in[i];
         &self.domains[d as usize].at[k as usize]
     }
     /// The list of the bodies of cell `i`, to change.
     fn list_mut(&mut self, i: usize) -> &mut Vec<Handle> {
-        let (d, k) = self.place[i];
+        let (d, k) = self.cell_in[i];
         &mut self.domains[d as usize].at[k as usize]
     }
     /// The handles of the bodies of cell `i`, in the order they came.
@@ -180,9 +180,29 @@ impl Life {
     pub(crate) fn holds(&self, h: Handle, id: u64) -> bool {
         self[h].alive && self[h].id == id
     }
+    /// The first break of the storage, if any: a cell's list that holds a body of another cell or stored in another
+    /// domain, an id table that points elsewhere, or a living body not filed exactly once in the rings, in its domain's
+    /// at its due day (`check::broken`).
+    pub fn unsound(&self) -> Option<String> {
+        let mut filed: BTreeMap<u64, usize> = BTreeMap::new();
+        self.domains.iter().flat_map(|x| x.ring.iter().flatten()).for_each(|&id| *filed.entry(id).or_default() += 1);
+        for (d, x) in self.domains.iter().enumerate() {
+            for (&cell, list) in x.cells.iter().zip(&x.at) {
+                for &h in list {
+                    let b = &self[h];
+                    let ring = x.ring[(b.due % RING) as usize].contains(&b.id) && filed.get(&b.id) == Some(&1);
+                    if h.domain as usize != d || b.cell != cell || !b.alive || self.table.get(&b.id) != Some(&h) || !ring {
+                        return Some(format!("body {} at {h:?} in the list of cell {cell} (domain {d}): its cell {}, filed {ring}", b.id, b.cell));
+                    }
+                }
+            }
+        }
+        let listed: usize = self.domains.iter().map(|x| x.at.iter().map(|l| l.len()).sum::<usize>()).sum();
+        (listed != self.table.len()).then(|| format!("{listed} bodies in the cells' lists, {} in the id table", self.table.len()))
+    }
     /// The domain of cell `i`.
-    pub fn domain_of(&self, i: usize) -> usize {
-        self.place[i].0 as usize
+    pub(crate) fn domain_of(&self, i: usize) -> usize {
+        self.cell_in[i].0 as usize
     }
     pub fn lineages(&self) -> usize {
         self.members.iter().filter(|&&m| m > 0).count()
@@ -228,13 +248,14 @@ impl Life {
         b.count = count;
         self.stir(b.cell);
     }
-    /// Place a new body on `day`, born in the domain of its cell; it first updates `delay` days later
+    /// Place a new body on `day`, in the domain of its cell; it first updates `delay` days later
     /// (1..=`MAX_INTERVAL`), and has its cell's mean light until the survey shares it out again (`survey::shade`).
     pub(crate) fn add(&mut self, mut b: Body, day: u64, delay: u64) -> Handle {
-        let d = self.place[b.cell as usize].0;
-        let births = &mut self.domains[d as usize].births;
-        *births += 1;
-        (b.id, b.alive, b.last, b.count, b.shade) = ((d as u64) << ID_SHIFT | *births, true, day as f64, b.n(), 1.0);
+        let d = self.cell_in[b.cell as usize].0;
+        let placed = &mut self.domains[d as usize].placed;
+        *placed += 1;
+        assert!(*placed < 1 << ID_SHIFT, "domain {d} placed 2^{ID_SHIFT} bodies: its ids would run into the next domain's");
+        (b.id, b.alive, b.last, b.count, b.shade) = ((d as u64) << ID_SHIFT | *placed, true, day as f64, b.n(), 1.0);
         b.due = day + delay.clamp(1, MAX_INTERVAL as u64);
         self.enter(&b);
         self.store(b)
@@ -252,13 +273,13 @@ impl Life {
     }
     /// A free slot in the domain of `cell`.
     fn slot_for(&mut self, cell: u32) -> Handle {
-        let d = self.place[cell as usize].0;
+        let d = self.cell_in[cell as usize].0;
         let x = &mut self.domains[d as usize];
         Handle { domain: d, slot: free_place(&mut x.bodies, &mut x.free) as u32 }
     }
     /// File body `b`'s next update in the ring of domain `d`.
     fn file(&mut self, d: u32, b: &Body) {
-        self.domains[d as usize].due[(b.due % RING) as usize].push(b.id);
+        self.domains[d as usize].ring[(b.due % RING) as usize].push(b.id);
     }
     /// Body `b`, taken out of `h`, leaves the world: its slot is free.
     pub(crate) fn remove(&mut self, h: Handle, b: &Body) {
@@ -273,13 +294,13 @@ impl Life {
     /// Body `b`, taken out of `h`, is put back. If it moved into a cell of another domain (`relocate`), it moves to that
     /// domain's storage, keeping its id and its place in its cell's list, its update due filed there; returns where it is.
     pub fn put(&mut self, h: Handle, b: Body) -> Handle {
-        if self.place[b.cell as usize].0 == h.domain {
+        if self.cell_in[b.cell as usize].0 == h.domain {
             self[h] = b;
             return h;
         }
         let (to, from) = (self.slot_for(b.cell), &mut self.domains[h.domain as usize]);
         from.free.push(h.slot);
-        let ring = &mut from.due[(b.due % RING) as usize];
+        let ring = &mut from.ring[(b.due % RING) as usize];
         if let Some(k) = ring.iter().position(|&x| x == b.id) {
             ring.swap_remove(k);
             self.file(to.domain, &b);
@@ -344,22 +365,22 @@ impl Life {
     }
     /// The domains are `cells` (each a list of cells; together every cell once): their cell lists and rings sized.
     fn cut(&mut self, cells: Vec<Vec<u32>>) {
-        self.place = vec![(0, 0); cells.iter().map(|c| c.len()).sum()];
+        self.cell_in = vec![(0, 0); cells.iter().map(|c| c.len()).sum()];
         for (d, c) in cells.iter().enumerate() {
-            c.iter().enumerate().for_each(|(k, &i)| self.place[i as usize] = (d as u32, k as u32));
+            c.iter().enumerate().for_each(|(k, &i)| self.cell_in[i as usize] = (d as u32, k as u32));
         }
-        let domain = |cells: Vec<u32>| Domain { at: vec![Vec::new(); cells.len()], due: vec![Vec::new(); RING as usize], cells, ..Default::default() };
+        let domain = |cells: Vec<u32>| Domain { at: vec![Vec::new(); cells.len()], ring: vec![Vec::new(); RING as usize], cells, ..Default::default() };
         self.domains = cells.into_iter().map(domain).collect();
     }
     /// File the next update of body `b` on `day`, in the ring of its cell's domain.
     pub(crate) fn schedule(&mut self, day: u64, b: &mut Body) {
         b.due = day;
-        self.file(self.place[b.cell as usize].0, b);
+        self.file(self.cell_in[b.cell as usize].0, b);
     }
     /// The ids of the bodies due on `day`, taken out of the rings, domain by domain (some may have left the world since).
     pub(crate) fn take_due(&mut self, day: u64) -> Vec<u64> {
         let k = (day % RING) as usize;
-        self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.due[k])).collect()
+        self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.ring[k])).collect()
     }
     /// The body with id `id` moves from cell `from` to `to` (its cell is the caller's to set; its storage moves when it
     /// is put back, `put`).

@@ -31,8 +31,9 @@ Flow that are due (air every `air_hours`, liquid and erosion every `flow_days`, 
 Change; on the month's first day Bond; every day the bodies whose interval ends (`survey::day`; the `INTERVAL` gene,
 5 to 360 days; a population node without a brain at least every `node_days`). Each run stands for the time to its next.
 **Bodies and their order** (`life`): the cells are cut into domains, the cells under one air node; each domain stores
-the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is its
-domain of birth and that domain's count of births; it never changes, and its random draws are keyed by it. The bodies
+the bodies of its cells, and a body that moves into a cell of another domain moves to its storage. A body's id is the
+domain it was placed in and that domain's count of bodies placed (children, split halves, parts of nodes acting apart,
+members drawn); it never changes, and its random draws are keyed by it. The bodies
 due on a day update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
 cell, each cell's bodies in the order they came. No order depends on where a body is stored.
 

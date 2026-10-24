@@ -978,8 +978,10 @@ fn a_tall_member_shades_a_short_one() {
     // The cell's other nodes move next door.
     for s in w.life.cell(i).filter(|&s| s != short).collect::<Vec<_>>() {
         let j = i ^ 1;
-        w.life.relocate(w.life[s].id, i, j);
-        (w.life[s].cell, w.life[s].mark) = (j as u32, w.light[j]);
+        let mut b = std::mem::take(&mut w.life[s]);
+        w.life.relocate(b.id, i, j);
+        (b.cell, b.mark) = (j as u32, w.light[j]);
+        w.life.put(s, b);
     }
     // Two nodes of capture area 0.5 per ground area each, the same but for member mass (and the copy mass gene, so they
     // are not alike and stay apart).

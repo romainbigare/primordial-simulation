@@ -376,7 +376,7 @@ fn young_members_mature_at_the_rate_their_growth_gives() {
     books.assert_kept(&w, 1e-9);
 }
 
-/// A world with an adult node of 5 eaters of copy mass 10 kg (its slot), and out of any slot a young node of 1,000
+/// A world with an adult node of 5 eaters of copy mass 10 kg (where it is stored), and taken out a young node of 1,000
 /// members of its kind whose mean body is 6 kg (matter over 1 - 0.75), their sizes not set.
 fn young_beside_adult() -> (World, Handle, Body) {
     let (mut w, i) = start();

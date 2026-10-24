@@ -24,7 +24,7 @@ pub(crate) fn let_go(w: &mut World, b: &mut Body, load: bool) {
     b.hold = None;
 }
 
-/// The body in slot `o` lets go of what it holds, broken off by a load.
+/// The body at `o` lets go of what it holds, broken off by a load.
 pub(super) fn torn_from(w: &mut World, o: Handle) {
     let mut ob = std::mem::take(&mut w.life[o]);
     let_go(w, &mut ob, true);
