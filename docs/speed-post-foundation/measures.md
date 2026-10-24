@@ -589,6 +589,37 @@ The Amdahl ceiling of four threads from the shares on one thread: 2.70, 2.45 and
 mostly the serial phase of a batch: settling the world and applying the outboxes (150, 93 and 115 ms a year on 4
 threads), the booking (44, 21, 46 ms), the faces and the list of updates, and the bodies that hold or are inside a part.
 
+### After D2: profiles and the gates of E1, E3 and D1 (b)
+
+At 5fa02b0 (the code of 485faa3), on D2.5's saves; callgrind one year on one thread; raw files in the scratch of that
+run. Share of the simulation's instructions (load, save and pictures left out):
+
+| Stage | island22 | globe36 | region24 |
+|---|---|---|---|
+| bodies: batch | 76.6% | 58.2% | 68.2% |
+| bodies: survey | 6.6% | 4.1% | 5.7% |
+| Flow | 10.8% | 27.6% | 17.2% |
+| Change | 4.0% | 6.4% | 6.7% |
+| parts | 0.2% | 2.0% | 0.3% |
+| tape recorder | 1.7% | 1.7% | 2.0% |
+| of the bodies' stage, on one thread | 12.9% | 18.6% | 12.6% |
+| the batch's serial phase: `outbox::deliver`, `book_moves`, `settle` | 4.5%, 3.5%, 0.9% | 5.0%, 2.8%, 0.7% | 3.2%, 3.3%, 0.6% |
+
+**E1 gate** (callgrind `--cache-sim=yes`, cycles estimated as Ir + 10 L1 misses + 100 LL misses): the body update
+loses 21.8% (island22) and 22.2% (globe36) of its estimated cycles to misses, over the 10% of the gate. Of that, the
+instruction cache is 12.0% and 11.9%, which columns do not change; the data cache is 9.7% and 10.3%; the last level
+is 0.0% and 0.1%. The worst data misses are in `nodes::add`, `outbox::deliver` and `copy::young::mature`.
+
+**E3 gate:** work an update of a body without a brain repeats with the same inputs (`Body::activity` about 11 calls
+for 3 to 4 states, `Body::thermal`, `cover_of` and `depth`, the prologue of `plan`) is about 3% of the bodies'
+instructions (range 2 to 5%; island22 300 million of 10,051), under the 10% of the gate.
+
+**D1 (b) gate:** a sampler of the threads' states every millisecond (2 and 5 years from one save, the difference,
+3 interleaved repeats on a quiet machine): with 4 threads, one thread runs alone 41.2% of a year (island22) and
+53.2% (globe36), over the 25% of the gate. The physics that D1 (b) could hide behind the bodies (Flow, Change, parts,
+tape) is 223 ms of a 1,079 ms year (21%) and 304 of 842 ms (36%); the rest of the time on one thread is the bodies'
+own serial phase, which D1 (b) does not touch.
+
 ## Profile of the baseline
 
 One year from the same saves under `valgrind --tool=callgrind` (`scripts/bench.sh profile island22` and `... globe36`),
