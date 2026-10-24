@@ -807,3 +807,7 @@ the golden test.
   (`body::live::lose_share`). Nodes check: rule (a) past the noise 4 -> 2 (the roster's small kinds' lives closer), but
   rule (d) 5 -> 7, and the default plan's seed 1, which held every rule, broke (d) (its eaters died spent 2.4e-2
   against 5.0e-2 a member-year): not kept.
+
+## 5. Speed after the foundation
+
+- A1: the bench kit (scripts/bench.sh) and the baseline (docs/speed-post-foundation/measures.md).
