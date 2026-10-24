@@ -31,7 +31,9 @@ pub enum Class {
     Potential,
     /// A part (`bond::Part`), at its slot in `World::parts`, named by a `NodeId`
     Part,
-    /// A body (`body::Body`): like a part it holds its own amounts, and its law books its side of a move
+    /// A body (`body::Body`): like a part it holds its own amounts, and its law books its side of a move. Its index is
+    /// its slot in its domain (`life::Handle`), a name for the length of its update only: `apply` never reads a body's
+    /// side, and a body may be stored elsewhere after its update.
     Body,
 }
 

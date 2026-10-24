@@ -7,6 +7,7 @@ use pcore::brain::{self, FIXED, OVERBS, VERBS};
 use pcore::check::{self, Totals};
 use pcore::chem::{Chemistry, Phase};
 use pcore::event::EventKind;
+use pcore::life::Handle;
 use pcore::lineage::{self, Lineage};
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{Boundary, Class, Move, Node};
@@ -260,8 +261,8 @@ pub fn warm(w: &mut World, b: &mut Body, t: f64) {
     b.e = e;
 }
 
-/// Body `b` placed and taken out again, prepared, to call the laws on directly: its slot and the body.
-pub fn out(w: &mut World, b: Body) -> (usize, Body) {
+/// Body `b` placed and taken out again, prepared, to call the laws on directly: where it is stored, and the body.
+pub fn out(w: &mut World, b: Body) -> (Handle, Body) {
     let s = w.add(b, 1);
     pcore::survey::survey(w);
     w.time += DAY_S;
@@ -272,8 +273,8 @@ pub fn out(w: &mut World, b: Body) -> (usize, Body) {
 
 /// What `f` does to `w` when it calls a law of bodies or parts on its own, outside an update: its moves in ground cell
 /// `i` (`World::open_moves`, in the name of the body in slot `slot`) booked when it ends.
-pub fn moved<R>(w: &mut World, (i, slot): (usize, usize), f: impl FnOnce(&mut World) -> R) -> R {
-    w.open_moves(i, Node::new(Class::Body, slot));
+pub fn moved<R>(w: &mut World, (i, h): (usize, Handle), f: impl FnOnce(&mut World) -> R) -> R {
+    w.open_moves(i, Node::new(Class::Body, h.slot as usize));
     let r = f(w);
     w.book_moves();
     r
@@ -338,8 +339,8 @@ pub fn same_totals(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
     }
 }
 
-/// Body `b` placed and prepared where it is: its slot.
-pub fn place(w: &mut World, b: Body) -> usize {
+/// Body `b` placed and prepared where it is: where it is stored.
+pub fn place(w: &mut World, b: Body) -> Handle {
     let (s, b) = out(w, b);
     w.life[s] = b;
     s
@@ -353,7 +354,7 @@ pub fn brood(w: &World, b: &mut Body, k: f64) {
 }
 
 /// The live children of the body of id `id`.
-pub fn children(w: &World, id: u64) -> Vec<usize> {
+pub fn children(w: &World, id: u64) -> Vec<Handle> {
     w.life.living().filter(|x| x.1.parent == id).map(|x| x.0).collect()
 }
 

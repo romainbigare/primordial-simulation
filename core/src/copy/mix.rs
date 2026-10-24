@@ -3,14 +3,14 @@
 
 use crate::body::{distance, spread_at, Body, Layout};
 use crate::rng::{Purpose, Rng};
-use crate::World;
+use crate::{life::Handle, World};
 use crate::brain;
 
 /// The partner of body `b` (taken out of its slot) for its children: another body of its cell that is mature
 /// (`Body::adult`) and alike to it (`body::alike`), the most alike of them (the least squared gap in steps,
 /// `body::distance`), a keyed random pick among equals; never itself. None: the children are copies of one parent. It
 /// takes nothing from the partner. `Config::two_parents` off: none.
-pub(super) fn partner(w: &World, b: &Body, r: &mut Rng) -> Option<usize> {
+pub(super) fn partner(w: &World, b: &Body, r: &mut Rng) -> Option<Handle> {
     if !w.cfg.two_parents {
         return None;
     }

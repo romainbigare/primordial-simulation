@@ -26,6 +26,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D3 | D3 | 0.730 | 122 | 44 | 553 | 0 | 11 | 2,744 | 27,762 | 1.215 | 188 | 48 | 922 | 43 | 13 | 1,955 | 25,626 | 9,001 |
 | E2.2 | E2.2 | 0.735 | 126 | 45 | 552 | 0 | 12 | 2,769 | 27,974 | 1.214 | 200 | 54 | 906 | 40 | 14 | 1,904 | 25,345 | 9,008 |
 | D2.1a (benches remade, `/tmp/d21-bench`) | D2.1a | 1.267 | 184 | 52 | 931 | 82 | 18 | 2,836 | 32,886 | 1.641 | 233 | 57 | 1,202 | 125 | 23 | 2,142 | 27,570 | 9,107 |
+| D2.1b (the same saves) | D2.1b | 1.281 | 150 | 55 | 981 | 75 | 19 | 2,836 | 32,886 | 1.609 | 222 | 54 | 1,185 | 125 | 23 | 2,142 | 27,570 | 9,149 |
 
 ### A2: compiler settings
 
@@ -212,6 +213,27 @@ rng keys give other worlds, and the difference is spread over the laws (on the g
 `choose::act` cost 2 times and 1.3 times as much: more parts and more bodies with a brain), not in the code D2.1a
 adds: the id table (a `BTreeMap`) costs 0.2% of the island's instructions in that run, and the walks of the cells'
 lists (`Life::alive`) about 0.1%. D2.1's own cost is measured exactly by D2.1b against D2.1a, on one world.
+
+### D2.1b: domains own their bodies
+
+Level 1 against D2.1a: the golden fingerprints do not move (with and without threads), and 3 years from each of
+D2.1a's saves give the same fingerprint (`ew resume` prints it as `hash`: island22 `cd5d9b3a6ee9bfe9`, globe36
+`c49613dcff20132e`), the same series and the same last snapshot with both builds. In the golden runs 314 bodies change
+domain (298 already filed in their new domain's ring, 16 placed parts whose due update moves with them).
+
+Cost per body update, callgrind on one thread, one year from the same saves (the same history):
+
+| | island22 | globe36 |
+|---|---|---|
+| D2.1a, `survey::day` per update | 152,243 | 210,957 |
+| D2.1b | 153,605 (+0.89%) | 212,909 (+0.93%) |
+| all instructions of the year | +0.69% | +0.52% |
+
+Under the 3% allowed for the handles. Most of it is the extra index of a body through its domain where a cell's
+bodies are walked often: `exchange::cover_of` (the cover of the other bodies of a cell, at each update) is about +19 and
++18 million of the +68 and +66 million, then perception and the survey's sums. Wall time agrees: the bodies' stage on
+island22, six interleaved runs of each build, median 1,008 ms (D2.1a) and 1,017 ms (D2.1b), +0.9%; on globe36, two
+runs each, 1,202 and 1,264 against 1,185 and 1,234 ms.
 
 ## Profile of the baseline
 

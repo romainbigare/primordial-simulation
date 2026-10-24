@@ -9,11 +9,11 @@ use super::kin;
 use crate::body::Body;
 use crate::math::Pass;
 use crate::nodes::{may_be_node, merge, part};
-use crate::World;
+use crate::{life::Handle, World};
 
 /// The node that node `b` (taken out of its slot) is linked to, if that is alive, a node of `b`'s cell and lineage
 /// and mature as `mature` asks; else the first node of the cell at that stage and of `b`'s kind (`copy::kin`), linked from then on.
-pub(crate) fn linked(w: &mut World, b: &mut Body, mature: bool) -> Option<usize> {
+pub(crate) fn linked(w: &mut World, b: &mut Body, mature: bool) -> Option<Handle> {
     let at = b.link.and_then(|id| w.life.find(id)).filter(|&t| {
         let o = &w.life[t];
         o.alive && o.n() > 1.0 && o.cell == b.cell && o.lineage == b.lineage && o.adult(&w.chem) == mature
@@ -25,8 +25,8 @@ pub(crate) fn linked(w: &mut World, b: &mut Body, mature: bool) -> Option<usize>
     })
 }
 
-/// Node `b` (taken out of its slot) and the node in slot `t` are linked.
-pub(crate) fn link(w: &mut World, b: &mut Body, t: usize) {
+/// Node `b` (taken out of its slot) and the node at `t` are linked.
+pub(crate) fn link(w: &mut World, b: &mut Body, t: Handle) {
     b.link = Some(w.life[t].id);
     w.life[t].link = Some(b.id);
 }
@@ -35,8 +35,8 @@ pub(crate) fn link(w: &mut World, b: &mut Body, t: usize) {
 pub enum Grown {
     /// The node, perhaps with fewer members
     Lives,
-    /// Less than one member: the rest joins its adult node, in this slot
-    Joins(usize),
+    /// Less than one member: the rest joins its adult node, stored here
+    Joins(Handle),
 }
 
 /// Young node `b` (taken out of its slot) after an update in which its mean member grew from `before` kg: those who

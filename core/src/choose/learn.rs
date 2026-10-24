@@ -4,7 +4,7 @@
 use crate::body::Body;
 use crate::brain::{self, ln, Shape};
 use crate::event::{Event, EventKind};
-use crate::World;
+use crate::{life::Handle, World};
 
 /// The floor of the root of the critic's moving mean square of its errors (`Body::var`).
 const CRITIC_FLOOR: f32 = 1e-3;
@@ -39,7 +39,7 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 
 /// Watch another body (it costs the turn): its rows move part of the way toward the other's if the brains have the same
 /// sizes, less the less alike the bodies are, as a body can only copy what its own body can do.
-pub(super) fn watch(w: &mut World, b: &mut Body, s: usize) {
+pub(super) fn watch(w: &mut World, b: &mut Body, s: Handle) {
     let o = &w.life[s];
     let (u, v) = (o.vis, b.visible(&w.chem, &w.cfg));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);

@@ -24,7 +24,7 @@ use crate::lineage::{resized, sizes_of, wanted};
 use crate::nodes::{add, may_be_node, open, Lot, COUNT_SLACK};
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
-use crate::World;
+use crate::{life::Handle, World};
 use mix::{mix, mix_rows, partner};
 
 /// The brood a node holds besides what makes children, in children per member. Its members each fill their own brood and
@@ -41,7 +41,7 @@ struct Litter {
     prov: Vec<f64>,
     node: bool,
     alone: bool,
-    mate: Option<usize>,
+    mate: Option<Handle>,
     parent: u64,
 }
 
@@ -187,7 +187,7 @@ fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -
 /// genes `genes` and spread `spread` (`body::within`, tested last: it reads every gene): the young node children join
 /// (they are below their parents' copy mass, and a mature node must keep its mean there), the adult node young members
 /// mature into, or the node members who moved join.
-pub(crate) fn kin(w: &World, cell: usize, lineage: u32, (genes, spread): (&[f32], &[f32]), mature: bool) -> Option<usize> {
+pub(crate) fn kin(w: &World, cell: usize, lineage: u32, (genes, spread): (&[f32], &[f32]), mature: bool) -> Option<Handle> {
     let (lay, alike) = (Layout::of(&w.chem), w.cfg.phys.alike);
     w.life.cell(cell).find(|&s| {
         let t = &w.life[s];
@@ -266,8 +266,8 @@ fn child_lineage(w: &mut World, b: &Body, l: &Litter, genes: &[f32], rows: &mut 
 /// Children `c` of `b` that join no node start a body of their own, born with `rows` (none: its parent's). Several
 /// children together that join no node at all (`alone`) are drawn from it as individuals (`nodes::open`: each with
 /// genes and born rows of its own, drawn from their spread), the last one the body itself, with the
-/// genes and rows the draws left. Returns the body's slot.
-fn place_child(w: &mut World, b: &Body, l: &Litter, mut c: Body, rows: Option<Vec<f32>>) -> usize {
+/// genes and rows the draws left. Returns where the body is stored.
+fn place_child(w: &mut World, b: &Body, l: &Litter, mut c: Body, rows: Option<Vec<f32>>) -> Handle {
     if let Some(v) = rows {
         c.genome = w.life.new_genome(v);
     }

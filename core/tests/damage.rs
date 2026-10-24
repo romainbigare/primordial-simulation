@@ -1,5 +1,6 @@
 //! Damage to a body: bites, trampling and heat break its body matter, and what it leaves.
 
+use pcore::life::Handle;
 use pcore::body::{self, Body, COPY_MASS, STRENGTH};
 use pcore::rng::{Purpose, Rng};
 use pcore::store::Class;
@@ -24,7 +25,7 @@ fn resting(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
 }
 
 /// Body `a` bites body `v` once.
-fn bite(w: &mut World, a: usize, v: usize) {
+fn bite(w: &mut World, a: Handle, v: Handle) {
     let mut b = std::mem::take(&mut w.life[a]);
     let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
     moved(w, (b.cell as usize, a), |w| choose::take_body(w, &mut b, v, r));
@@ -41,7 +42,7 @@ struct Seen {
 }
 
 /// What the body in slot `s` looks like.
-fn seen(w: &World, s: usize) -> Seen {
+fn seen(w: &World, s: Handle) -> Seen {
     let b = &w.life[s];
     Seen { built: b.built(&w.chem), matter: kg(w, b, MATTER), solid: kg(w, b, RICH), liquid: kg(w, b, LIQUID), force: bond::force(w, b) }
 }

@@ -1,6 +1,7 @@
 //! Law 1 (Flow): heat and radiation, the air, gases dissolving, liquid in the pores, drainage and runoff, what the
 //! liquid carries, erosion, and the edges that moving bodies clear.
 
+use pcore::life::Handle;
 use pcore::chem::Phase;
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::DAY;
@@ -713,7 +714,7 @@ const COVER: f64 = 20.0;
 
 /// Two land cells side by side in a warm world, each under `COVER` of light-eaters, and an eater in the first: the
 /// world, the two cells and the eater's slot.
-fn lane_scene() -> (World, usize, usize, usize) {
+fn lane_scene() -> (World, usize, usize, Handle) {
     let (chem, init) = worldgen::chemistry0();
     let cfg = pcore::Config { lat_south: 5.0, lat_north: 10.0, ..Default::default() };
     let mut w = worldgen::terrain::build(3, worldgen::terrain::island(12, 8), chem, &init, cfg);
@@ -740,7 +741,7 @@ fn lane_scene() -> (World, usize, usize, usize) {
 /// give the push of a mover does not move.
 #[test]
 fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
-    let (mut w, a, b, slot) = lane_scene();
+    let (mut w, a, b, mut slot) = lane_scene();
     let link = w.mesh.cells().link(a, b).expect("the cells are neighbours");
     pcore::survey::survey(&mut w);
     assert!((lanes::eased(&w, link) - 1.0).abs() < 1e-9);
@@ -760,7 +761,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         assert_eq!(m.cell as usize, from);
         moved(&mut w, (from, slot), |w| choose::go(w, &mut m, to));
         crossed += (m.cell as usize == to) as u32;
-        w.life[slot] = m;
+        slot = w.life.put(slot, m);
         pcore::survey::survey(&mut w);
         if lanes::eased(&w, link) > 3.0 {
             break;

@@ -4,10 +4,10 @@ use super::{light_cat, Body};
 use crate::event::{Event, EventKind};
 use crate::ground::Melting;
 use crate::store::Node;
-use crate::{bond, World};
+use crate::{bond, life::Handle, World};
 
 /// Remains go to the ground node as loose amounts, with the body's heat.
-pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
+pub fn die(w: &mut World, h: Handle, mut b: Body, cause: u8) {
     bond::let_go(w, &mut b, false);
     let i = b.cell as usize;
     for (k, &a) in b.store.iter().enumerate().filter(|x| *x.1 != 0.0) {
@@ -16,7 +16,7 @@ pub fn die(w: &mut World, slot: usize, mut b: Body, cause: u8) {
     w.moves.give(&w.chem, Node::ground(i), 0, 0.0, b.e);
     let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
     w.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
-    w.life.remove(slot, &b);
+    w.life.remove(h, &b);
 }
 
 /// Amounts `m` (mol of each substance, at most what it holds) go from body `b`, at the plateau state `th`, to its cell's
@@ -50,17 +50,17 @@ pub(super) fn thin(w: &mut World, b: &mut Body, f: f64, dead: &[f64], cause: u8,
 pub(crate) fn torn_to_death(p: &crate::Physics, f: f64) -> bool { f >= p.lethal * (1.0 - 1e-9) }
 
 /// A hit tears the share `f` of the body (`Body::built`) of the share `hit` of the members of body `b`, taken out of
-/// `slot`: it breaks body matter, which holds a body together, and spills the stores it held (`dead`, mol of each, as
+/// `h`: it breaks body matter, which holds a body together, and spills the stores it held (`dead`, mol of each, as
 /// `thin`). Those it tears `Physics::lethal` of their body or more die (an individual also when a store falls below its
 /// safe minimum), and `dead` holds all they held; else they live on, smaller, and the node's mean body falls. True if
 /// the body lives (back in its slot).
-pub fn wound(w: &mut World, slot: usize, mut b: Body, (hit, f): (f64, f64), dead: &[f64], cause: u8) -> bool {
+pub fn wound(w: &mut World, h: Handle, mut b: Body, (hit, f): (f64, f64), dead: &[f64], cause: u8) -> bool {
     let (dies, th) = (torn_to_death(&w.cfg.phys, f), b.thermal(&w.chem));
     if !thin(w, &mut b, if dies { hit } else { 0.0 }, dead, cause, &th) || (b.n() <= 1.0 && (dies || b.lacking(&w.chem, b.mass(&w.chem), b.temp(&w.chem)))) {
-        die(w, slot, b, cause);
+        die(w, h, b, cause);
         return false;
     }
     w.see(&mut b);
-    w.life[slot] = b;
+    w.life[h] = b;
     true
 }

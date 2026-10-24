@@ -11,7 +11,7 @@ use crate::change::Reactor;
 use crate::chem::Phase;
 use crate::rng::{Purpose, Rng};
 use crate::store::{Class, Node};
-use crate::World;
+use crate::{life::Handle, World};
 
 /// A sample member of a node: the gene it differs in, its step from the node's mean, its weight (the number of genes it
 /// was drawn from, times `Config::sample_every`), and the log of what it gained in the update.
@@ -66,10 +66,10 @@ fn read(w: &World, lay: &Layout, b: &Body, g: usize, (x, y): (f32, f32)) -> bool
     chem.is_material(k) || b.wet >> k & 1 == 1 || product || taken
 }
 
-/// The sample member of node `b` (without a brain, taken out of slot `slot`, before its update): its genes but one, a
+/// The sample member of node `b` (without a brain, taken out of `h`, before its update): its genes but one, a
 /// standard deviation of its spread up or down, run as far as its growth on the world as it is, its moves and events
 /// then dropped. None where the step cannot change the gain (`read`); run on one update in `Config::sample_every`.
-pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Option<Sample> {
+pub(crate) fn sample(w: &mut World, h: Handle, b: &Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Option<Sample> {
     if b.n() <= 1.0 || !w.life.brainless(b) {
         return None;
     }
@@ -92,7 +92,7 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
     s.set_genes(genes, &w.chem, &w.cfg.phys);
     let events = w.events.len();
     let gain = gain_to_growth(w, &mut s, rc, tmp);
-    w.open_moves(b.cell as usize, Node::new(Class::Body, slot));
+    w.open_moves(b.cell as usize, Node::new(Class::Body, h.slot as usize));
     w.events.truncate(events);
     Some(Sample { gene: g, step, genes: (differ.len() * every) as f32, gain })
 }

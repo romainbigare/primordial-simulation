@@ -49,12 +49,12 @@ pub fn go(w: &mut World, b: &mut Body, j: usize) {
 pub fn wear(w: &mut World) {
     let pushed = std::mem::take(&mut w.life.pushed);
     for (j, &energy) in pushed.iter().enumerate().filter(|e| *e.1 > 0.0) {
-        let here: Vec<usize> = w.life.cell(j).collect();
+        let here: Vec<_> = w.life.cell(j).collect();
         let total: f64 = here.iter().map(|&s| w.life[s].mass(&w.chem)).sum();
         if total <= 0.0 {
             continue;
         }
-        w.open_moves(j, Node::new(Class::Body, here[0]));
+        w.open_moves(j, Node::new(Class::Body, here[0].slot as usize));
         for s in here {
             let o = std::mem::take(&mut w.life[s]);
             let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));

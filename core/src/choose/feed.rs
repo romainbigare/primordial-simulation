@@ -5,7 +5,7 @@ use crate::body::{self, light_cat, Body, STRENGTH, TAKEN};
 use crate::chem::{Chemistry, Phase};
 use crate::event::{Event, EventKind};
 use crate::rng::Rng;
-use crate::{bond, lanes, World};
+use crate::{bond, lanes, life::Handle, World};
 
 /// A dealing counts in a body's memory (`Body::note`) as this many times the share of its mass moved.
 const NOTE_SCALE: f64 = 10.0;
@@ -89,7 +89,7 @@ fn transfer(chem: &Chemistry, rounded: &mut f64, from: &mut Body, to: &mut Body,
 /// members, that share). The bite tears each member it reaches (`body::wound`; laws.md 6.8). A bite that reaches
 /// less than one member of a node meets one whole member with that chance: it takes, tears and pays what that meeting
 /// would, times the chance, the expected outcome of an individual's draw.
-pub fn take_body(w: &mut World, b: &mut Body, s: usize, rng: &mut Rng) {
+pub fn take_body(w: &mut World, b: &mut Body, s: Handle, rng: &mut Rng) {
     let o = &w.life[s];
     let (mb, mo) = (b.mass(&w.chem), o.mass(&w.chem));
     let (fb, fo) = (b.gene(STRENGTH) * bond::lever(w, b) * b.built(&w.chem) / b.n(), o.gene(STRENGTH) * bond::lever(w, o) * o.built(&w.chem) / o.n());
@@ -131,7 +131,7 @@ pub fn take_body(w: &mut World, b: &mut Body, s: usize, rng: &mut Rng) {
 /// Give to another body in the cell what it can spare (`Body::spare`, laws.md 5.3), up to what the
 /// members it meets could take in the time and have room for (each of its members meets one of the other's, as many as
 /// both have). The other remembers the giver.
-pub(super) fn give(w: &mut World, b: &mut Body, s: usize) {
+pub(super) fn give(w: &mut World, b: &mut Body, s: Handle) {
     let chem = &w.chem;
     let (size, mass) = (b.size(chem), b.mass(chem));
     let spare = |k: usize| b.spare(chem, &w.cfg.phys, k, (size, mass));

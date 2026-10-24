@@ -79,12 +79,15 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     testkit::add(&mut w, &mut b, RICH, fuel);
     // Decisions every 5 days (the shortest interval).
     (b.genes[LEARN], b.genes[INTERVAL]) = (learn, 0.7);
+    // (It is found by its id: it is stored elsewhere when it steps into another domain.)
     let slot = w.add(b, 1);
+    let id = w.life[slot].id;
     let strip: Vec<usize> = (0..w.mesh.cells().n()).filter(|&i| i % W >= STRIP).collect();
     let strip: Vec<(usize, f64)> = strip.into_iter().map(|i| (i, w.g(RICH, i))).collect();
     let mut log = Vec::new();
     // Day by day, to see each decision.
-    while log.len() < DECISIONS && w.life[slot].alive {
+    while log.len() < DECISIONS {
+        let Some(slot) = w.life.find(id) else { break };
         let (u, from) = (w.counts.updates, w.life[slot].cell as usize);
         let near: Vec<usize> = w.mesh.cells().around(from).1.iter().map(|&j| j as usize).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
@@ -93,12 +96,12 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene
         // stays one body.
         for s in w.life.living().map(|x| x.0).collect::<Vec<_>>() {
-            if s != slot {
+            if w.life[s].id != id {
                 let c = std::mem::take(&mut w.life[s]);
                 body::die(&mut w, s, c, body::LACK);
             }
         }
-        if w.counts.updates > u && w.life[slot].alive {
+        if let Some(slot) = w.life.find(id).filter(|_| w.counts.updates > u) {
             let to = w.life[slot].cell as usize;
             log.push((from % W >= STRIP, to != from, !richer.is_empty(), richer.contains(&to), richer.len() as f64 / near.len() as f64));
         }

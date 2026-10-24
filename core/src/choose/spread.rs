@@ -70,7 +70,7 @@ fn part_acts(w: &mut World, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize
     w.see(&mut m);
     // (Out of its slot, it is no node of its cell for `kin`.)
     let kin = crate::copy::kin(w, m.cell as usize, m.lineage, (&m.genes, &m.spread), m.adult(&w.chem)).filter(|_| moves);
-    w.life[s] = m;
+    let s = w.life.put(s, m);
     if let Some(t) = kin {
         nodes::merge(w, s, t);
     }

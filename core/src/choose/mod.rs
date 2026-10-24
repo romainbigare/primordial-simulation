@@ -18,7 +18,7 @@ use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
-use crate::{bond, lanes, World};
+use crate::{bond, lanes, life::Handle, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
@@ -55,7 +55,7 @@ pub struct ActTmp {
 struct Choice {
     /// The bodies perceived: slot, id (a body seen may die and its slot be reused before a member of a node acts on it)
     /// and whether it is in its own cell
-    seen: [(usize, u64, bool); MAX_SEEN],
+    seen: [(Handle, u64, bool); MAX_SEEN],
     nseen: usize,
     parts: [usize; PARTS],
     nparts: usize,

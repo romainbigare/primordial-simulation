@@ -67,7 +67,7 @@ pub(super) fn walk(w: &World, i: usize, sight: usize, t: &mut ActTmp) {
 /// they are, cover with chance 1 - exp(-a), a the others' capture area per m². Then the parts in its cell.
 pub(super) fn perceive(w: &World, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
     let i = b.cell as usize;
-    let (mut seen, mut cnt, side, cells) = ([(0usize, 0u64, false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
+    let (mut seen, mut cnt, side, cells) = ([(Default::default(), 0u64, false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
     let room = bond::room(w, b);
     for q in 0..9 {
         let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };

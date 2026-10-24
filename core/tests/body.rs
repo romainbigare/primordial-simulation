@@ -2,6 +2,7 @@
 //! and what it keeps, digestion, light and shade, its age, intake, upkeep and leaf by mass, its roots and enzymes.
 //! Damage: `damage.rs`.
 
+use pcore::life::Handle;
 use pcore::body::{self, Body, Layout, COPY_MASS, DENATURE, DISPERSE, LIQ, PHASE, REPAIR, STRENGTH, WET};
 use pcore::store::{Boundary, Class, Node};
 use pcore::units::{DAY, DAY_S, T_FLOOR};
@@ -148,7 +149,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     let (mut b, days) = (b, 10.0);
     let (temp0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
     let cost = 2e6;
-    assert!(moved(w, (b.cell as usize, 0), |w| pcore::body::pay(w, &mut b, cost, days)), "it can pay");
+    assert!(moved(w, (b.cell as usize, Handle::default()), |w| pcore::body::pay(w, &mut b, cost, days)), "it can pay");
     let (temp1, g) = (b.temp(&w.chem), pcore::body::conductance_to_ground(w, &b, mass, temp0));
     let (cap, dt) = (b.heat_cap(&w.chem), b.interval(w) as f64 * DAY);
     let (rise, kept) = (temp1 - temp0, cap * (temp1 - temp0));
@@ -162,7 +163,7 @@ fn heat_made_by_work_stays_in_the_body_and_leaves_by_its_conductance() {
     books.assert_kept(w, 1e-12);
     // The same work again warms it by as much more.
     let mut c = b.clone();
-    assert!(moved(w, (c.cell as usize, 0), |w| pcore::body::pay(w, &mut c, cost, days)));
+    assert!(moved(w, (c.cell as usize, Handle::default()), |w| pcore::body::pay(w, &mut c, cost, days)));
     let again = c.temp(&w.chem) - temp1;
     assert!((again / rise - 1.0).abs() < 0.05, "the second cost warms by {again} K, the first {rise} K");
 }
@@ -179,7 +180,7 @@ fn a_bigger_body_of_the_same_genes_is_warmer() {
     let w = &mut s.w;
     let rise = |w: &mut World, mut b: Body, per_kg: f64| {
         let (t0, mass) = (b.temp(&w.chem), b.mass(&w.chem));
-        assert!(moved(w, (b.cell as usize, 0), |w| pcore::body::pay(w, &mut b, per_kg * mass, 10.0)), "it can pay");
+        assert!(moved(w, (b.cell as usize, Handle::default()), |w| pcore::body::pay(w, &mut b, per_kg * mass, 10.0)), "it can pay");
         b.temp(&w.chem) - t0
     };
     let g = |w: &World, b: &Body| pcore::body::conductance_to_ground(w, b, b.mass(&w.chem), b.temp(&w.chem));
@@ -252,24 +253,26 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
     for b in [&mut small, &mut big] {
         warm(w, b, t_cat);
     }
-    let slots = [w.add(small, 1), w.add(big, 1)];
+    let ids = [w.add(small, 1), w.add(big, 1)].map(|s| w.life[s].id);
     let books = Books::now(w);
     // (The ground held is that under the bodies: they have brains and may step to a neighbour cell, and the law tested is
-    // the heat balance with the ground a body stands on.)
-    let held = |w: &World| slots.map(|s| w.life[s].cell as usize);
+    // the heat balance with the ground a body stands on. They are found by their ids: a body that steps into another
+    // domain is stored there.)
+    let stored = |w: &World, id: u64| w.life.find(id).expect("it lives");
+    let held = |w: &World| ids.map(|id| w.life[stored(w, id)].cell as usize);
     for _ in 0..90 {
         held_day(w, &held(w), t_cat);
     }
     let mut rises = [0.0; 2];
-    for (n, &slot) in slots.iter().enumerate() {
+    for (n, &id) in ids.iter().enumerate() {
         // The world and the body as its next update finds them, and the body as that update leaves it.
-        let next = w.life[slot].last as u64 + w.life[slot].interval(w);
+        let next = w.life[stored(w, id)].last as u64 + w.life[stored(w, id)].interval(w);
         while w.day() < next {
             held_day(w, &held(w), t_cat);
         }
-        let (w0, mut b) = (w.clone(), w.life[slot].clone());
+        let (w0, mut b) = (w.clone(), w.life[stored(w, id)].clone());
         held_day(w, &held(w), t_cat);
-        assert!(w.life[slot].alive, "it lives");
+        let slot = stored(w, id);
         let w0 = &w0;
         b.prepare(&w0.chem, &w0.cfg.phys);
         let (i, mass, days) = (b.cell as usize, b.mass(&w0.chem), b.interval(w0) as f64);
@@ -291,7 +294,7 @@ fn a_resting_body_settles_where_the_heat_it_makes_is_the_heat_it_loses() {
         let made = |t: f64| {
             let (x, mut w2) = (at(w0, &b, t), w0.clone());
             let mut y = x.clone();
-            assert!(moved(&mut w2, (i, 0), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass, x.temp(&w0.chem)), days)));
+            assert!(moved(&mut w2, (i, Handle::default()), |w2| pcore::body::pay(w2, &mut y, pcore::body::upkeep(w0, &x, days, mass, x.temp(&w0.chem)), days)));
             let (mut g, mut rc) = (gas.clone(), pcore::change::Reactor::new(chem, &w0.cfg));
             let off = vec![1.0; chem.reactions.len()];
             let bare = Some((&off[..], x.gene(DENATURE), w0.cfg.phys.unfold));
@@ -574,7 +577,7 @@ fn a_dry_body_builds_in_proportion_to_its_activity() {
     let (m0, m1) = (wet.store[m], dry.store[m]);
     // (What it may build goes with its mass^0.75 too, and the dry body has the lighter liquid.)
     let eq = dry.supply(&s.w.chem, &s.w.cfg.phys, dry.temp(&s.w.chem)) / wet.supply(&s.w.chem, &s.w.cfg.phys, wet.temp(&s.w.chem));
-    let grow = |w: &mut World, b: &mut Body| moved(w, (b.cell as usize, 0), |w| worldgen::testkit::grow(w, b, 10.0));
+    let grow = |w: &mut World, b: &mut Body| moved(w, (b.cell as usize, Handle::default()), |w| worldgen::testkit::grow(w, b, 10.0));
     assert!(grow(&mut s.w, &mut wet) && grow(&mut s.w, &mut dry));
     let (gw, gd) = (wet.store[m] - m0, dry.store[m] - m1);
     println!("matter built: wet {gw:.4e} mol, dry {gd:.4e}, activity {a:.4}");
@@ -674,7 +677,7 @@ fn a_dry_child_waits_and_wakes_when_it_soaks_liquid() {
             s.w.life[slot] = b;
             (slot, id)
         };
-        let kids: Vec<usize> = children(&s.w, id).into_iter().filter(|&k| k != slot).collect();
+        let kids: Vec<Handle> = children(&s.w, id).into_iter().filter(|&k| k != slot).collect();
         assert!(!kids.is_empty(), "no children");
         let c = &s.w.life[kids[0]];
         let (share_rich, share_liquid) = (c.store[RICH] / before[RICH], c.store[LIQUID] / before[LIQUID]);
@@ -997,8 +1000,8 @@ fn a_tall_member_shades_a_short_one() {
     let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * DAY);
     worldgen::testkit::flow_step(&mut w, dt);
     let bs = &w.life;
-    let per = |s: usize| w.light[i] - bs[s].mark;
-    let cap = |s: usize| bs[s].vis[1] as f64 * bs[s].n();
+    let per = |s: Handle| w.light[i] - bs[s].mark;
+    let cap = |s: Handle| bs[s].vis[1] as f64 * bs[s].n();
     let (t, sh) = (per(slots[0]), per(slots[1]));
     println!("light per m² of capture area: tall {t:.4e}, short {sh:.4e} J");
     assert!(sh > 0.0 && (t / sh / (cap(slots[0]) / area).exp() - 1.0).abs() < 1e-6, "tall {t:e}, short {sh:e}");
@@ -1050,7 +1053,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     // A node of members at repair 0 alone in one cell; one at repair 0.5 and a hundred individuals at repair 0 in the
     // other (an individual's death is of one member, a node's of a share).
     let (sa, sb) = (make(&mut w, cells[1], 0.0, 1000.0), make(&mut w, cells[0], 0.5, 1000.0));
-    let ones: Vec<usize> = (0..ONES).map(|_| make(&mut w, cells[0], 0.0, 1.0)).collect();
+    let ones: Vec<Handle> = (0..ONES).map(|_| make(&mut w, cells[0], 0.0, 1.0)).collect();
     // A day with the ground held; the age deaths of the day, as (cell, day, members).
     let t_cat = w.cfg.phys.t_cat;
     let day = |w: &mut pcore::World, deaths: &mut Vec<(usize, u64, f64)>| {
@@ -1067,7 +1070,7 @@ fn bodies_die_of_age_by_their_rate_of_living() {
     for _ in 0..60 {
         day(&mut w, &mut settle);
     }
-    let per_kg = |w: &mut pcore::World, s: usize| {
+    let per_kg = |w: &mut pcore::World, s: Handle| {
         let mut b = std::mem::take(&mut w.life[s]);
         b.prepare(&w.chem, &w.cfg.phys);
         let (d, m) = (b.interval(w) as f64, b.mass(&w.chem));
@@ -1362,7 +1365,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         let (took, lvl) = (w.life[sp].store[mineral], level(&w, &w.life[sp]));
         println!("substance {mineral}: a plant with the gene on held {took:.3e} mol (at most {most:.3e}), its level {lvl:.3e}, the rock {:.3e}; the other {:.3e}", w.life[sp].store[ROCK], w.life[si].store[mineral]);
         assert!(most > 0.1 * lvl && most <= lvl * (1.0 + 1e-6), "held at most {most}, level {lvl}");
-        let kept = |w: &World, s: usize| w.life[s].store[ROCK] <= w.life[s].level(&w.chem, ROCK, 0.0) * (1.0 + 1e-9);
+        let kept = |w: &World, s: Handle| w.life[s].store[ROCK] <= w.life[s].level(&w.chem, ROCK, 0.0) * (1.0 + 1e-9);
         assert!(kept(&w, sp) && kept(&w, si), "the rock past its level stayed in a body");
         assert!(w.life[si].store[mineral] < 1e-9 * lvl, "a body whose gene is off took substance {mineral}");
         books.assert_kept(&w, 1e-9);
@@ -1370,7 +1373,7 @@ fn roots_take_the_minerals_up_to_the_level_and_the_excess_goes_back() {
         // the dissolved mineral: the rock element in the ground, in all its forms, rises by what was over).
         let mut twin = w.clone();
         let more = 10.0 * lvl;
-        w.cross((Boundary::Outside, Node::new(Class::Body, sp)), [(mineral, more)], more * w.chem.subs[mineral].cp * w.life[sp].temp(&w.chem));
+        w.cross((Boundary::Outside, Node::new(Class::Body, sp.slot as usize)), [(mineral, more)], more * w.chem.subs[mineral].cp * w.life[sp].temp(&w.chem));
         w.life[sp].e += more * w.chem.subs[mineral].cp * w.life[sp].temp(&w.chem);
         w.life[sp].store[mineral] += more;
         for _ in 0..40 {

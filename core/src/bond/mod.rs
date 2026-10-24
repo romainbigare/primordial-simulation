@@ -15,7 +15,7 @@ pub(crate) use sense::{enclosure, possible, sense, SENSE};
 pub use verbs::{act, anchor, carry, dig, force, form, moved, release};
 pub(crate) use verbs::{bears, let_go, lever};
 
-use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::free_place, store::{Node, NodeId}, World};
+use crate::{chem::{Chemistry, Phase}, event::{Event, EventKind}, life::{free_place, Handle}, store::{Node, NodeId}, World};
 use serde::{Deserialize, Serialize};
 
 /// Held by no body; the bonded ground (as the other end of a bond).
@@ -306,7 +306,7 @@ pub fn held(w: &World, b: &crate::body::Body) -> Option<usize> {
 }
 
 /// The body holding part `p` (not one taken out of the list for its update).
-fn holder(w: &World, p: usize) -> Option<usize> {
+fn holder(w: &World, p: usize) -> Option<Handle> {
     let (s, me) = (w.life.find(w.parts.parts[p].held)?, Some(id(w, p)));
     (w.life[s].alive && w.life[s].hold == me).then_some(s)
 }

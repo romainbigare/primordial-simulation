@@ -2,7 +2,7 @@
 //! (`survey`), and every day the updates due (`day`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
-use crate::{change::Reactor, choose, copy::Grown, math::mean_decay, units::DAY, World};
+use crate::{change::Reactor, choose, copy::Grown, life::Handle, math::mean_decay, units::DAY, World};
 use crate::store::{apply, Batch, Class, Node};
 use serde::{Deserialize, Serialize};
 
@@ -130,8 +130,8 @@ impl Draw {
 pub(crate) struct Draws {
     /// Per cell, its entries `at[i]..at[i + 1]`
     at: Vec<u32>,
-    /// Per entry: the body's slot and its draw
-    slot: Vec<u32>,
+    /// Per entry: the body and its draw
+    body: Vec<Handle>,
     each: Vec<Draw>,
     /// Per cell, the heat its bodies' node holds that no body claims and its bodies draw first, over the step, W
     pool: Vec<f64>,
@@ -144,16 +144,16 @@ impl Draws {
     /// once; the rest goes back to the ground now, so the step starts from it.
     pub(crate) fn settle(w: &mut World, dt: f64) -> Draws {
         let n = w.mesh.cells().n();
-        let mut d = Draws { at: vec![0], slot: Vec::new(), each: Vec::new(), pool: vec![0.0; n] };
+        let mut d = Draws { at: vec![0], body: Vec::new(), each: Vec::new(), pool: vec![0.0; n] };
         // What the bodies of each cell could draw until their next updates, J.
         let mut most = vec![0.0; n];
         for (i, most) in most.iter_mut().enumerate() {
             for b in w.life.cell(i).map(|s| (s, &w.life[s])).filter(|(_, b)| b.alive && b.draw.most > 0.0) {
-                d.slot.push(b.0 as u32);
+                d.body.push(b.0);
                 d.each.push(b.1.draw);
                 *most += b.1.draw.most * b.1.interval(w) as f64 * DAY;
             }
-            d.at.push(d.slot.len() as u32);
+            d.at.push(d.body.len() as u32);
         }
         let mut back = Batch::new([Class::Bodies, Class::Ground], &[]);
         for (i, c) in claims(w).into_iter().enumerate() {
@@ -193,7 +193,7 @@ impl Draws {
             if r > 0.0 {
                 let per = (got + r.min(self.pool[i]) * dt) / r;
                 for x in self.at[i] as usize..self.at[i + 1] as usize {
-                    w.life[self.slot[x] as usize].draw.owed += self.each[x].at(t(i)).0 * per;
+                    w.life[self.body[x]].draw.owed += self.each[x].at(t(i)).0 * per;
                 }
             }
         }
@@ -223,7 +223,7 @@ fn shade(w: &mut World) {
     if life.stale.len() != n {
         life.stale = vec![true; n];
     }
-    let mut l: Vec<(f32, f64, usize)> = Vec::new();
+    let mut l: Vec<(f32, f64, Handle)> = Vec::new();
     for (i, &a) in area.iter().enumerate() {
         if !std::mem::take(&mut life.stale[i]) {
             continue;
@@ -259,14 +259,14 @@ pub fn day(w: &mut World) {
         // (It may have died or joined another body since.)
         let Some(s) = w.life.find(id) else { continue };
         // What it takes from and gives to the store is gathered and booked once, at the end of its update.
-        w.open_moves(cell, Node::new(Class::Body, s));
+        w.open_moves(cell, Node::new(Class::Body, s.slot as usize));
         update(w, s, &mut rc, (&mut tmp, &mut act));
         w.book_moves();
     }
 }
 
-/// The update of the body in `slot`: its physics, decision, selection, lineage, maturing and split; or its death.
-fn update(w: &mut World, s: usize, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, &mut choose::ActTmp)) {
+/// The update of the body stored at `s`: its physics, decision, selection, lineage, maturing and split; or its death.
+fn update(w: &mut World, s: Handle, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, &mut choose::ActTmp)) {
     let mut b = std::mem::take(&mut w.life[s]);
     w.counts.updates += 1;
     // Its mean member's body before the update, for what its members grow (`copy::mature`).
@@ -292,11 +292,11 @@ fn update(w: &mut World, s: usize, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, 
     crate::lineage::resize(w, &mut b);
     // Young members who grew past their copy mass join their adult node (`copy::mature`).
     if let Grown::Joins(t) = crate::copy::mature(w, &mut b, before) {
-        w.life[s] = b;
+        let s = w.life.put(s, b);
         return crate::nodes::merge(w, s, t);
     }
     crate::nodes::split(w, &mut b);
     w.see(&mut b);
     w.life.schedule(w.day() + b.interval(w), &mut b);
-    w.life[s] = b;
+    w.life.put(s, b);
 }

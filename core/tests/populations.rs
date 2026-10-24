@@ -1,5 +1,6 @@
 //! Law 4 (Copy) in populations: two parents mix, and population nodes spread, split, merge and open.
 
+use pcore::life::Handle;
 use pcore::body::{Body, Layout, ALLOC, CHILD, COPY_MASS, DISPERSE, GAS, HIDDEN, LEAF, LIQ, MEMORY, MUT, SEEN, SIGHT, STRENGTH};
 use pcore::event::EventKind;
 use pcore::rng::{Purpose, Rng};
@@ -22,7 +23,7 @@ fn mixer(w: &mut World, i: usize, copy: f32) -> Body {
 
 /// Two mature eaters in one cell whose catalyst genes are `BASE` and `BASE` + `gap` steps; the second (the partner) is
 /// placed, the first is taken out to copy. The second's born rows are the first's plus 1.
-fn pair(w: &mut World, i: usize, gap: f32) -> (usize, Body, usize) {
+fn pair(w: &mut World, i: usize, gap: f32) -> (Handle, Body, Handle) {
     let lay = Layout::of(&w.chem);
     let (mut a, mut b) = (mixer(w, i, 1.0), mixer(w, i, 1.0));
     for g in lay.cat..lay.min {
@@ -221,7 +222,7 @@ fn the_partner_loses_nothing() {
 }
 
 /// Slots of the live bodies.
-fn live(w: &pcore::World) -> Vec<usize> {
+fn live(w: &pcore::World) -> Vec<Handle> {
     w.life.living().map(|x| x.0).collect()
 }
 
@@ -246,7 +247,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     assert!(b.spread.is_empty() && copy::copy(&mut w, &mut b), "no children");
     assert_eq!(b.count, n0, "the children joined their mature parents");
     w.life[s] = b;
-    let kids: Vec<usize> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
+    let kids: Vec<Handle> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
     assert_eq!(kids.len(), 1, "the children are one node of their own");
     let c = &w.life[kids[0]];
     assert!((c.count - n0).abs() < 1e-6 * n0 && !c.adult(&w.chem), "{} young members", c.count);
@@ -262,7 +263,7 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     let before = live(&w);
     nodes::split(&mut w, &mut b);
     w.life[s] = b;
-    let new: Vec<usize> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
+    let new: Vec<Handle> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
     assert_eq!(new.len(), 1, "not split in two");
     seen_as_it_is(&w, new[0]);
     let (a, c) = (&w.life[s], &w.life[new[0]]);
@@ -343,7 +344,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             w.life[s] = b;
             // The children are young nodes of their own (immature, `copy::young`); here they grow up at once, and
             // would mature into their parent's node: they join it now, so the update's node math is the same.
-            let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life[*k].parent == id).collect();
+            let kids: Vec<Handle> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life[*k].parent == id).collect();
             for k in kids {
                 nodes::merge(&mut w, k, s);
             }
@@ -492,9 +493,9 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
 }
 
 /// Body `s` is seen as what it holds now: its visible traits are those its stores, genes and members give.
-fn seen_as_it_is(w: &World, s: usize) {
+fn seen_as_it_is(w: &World, s: Handle) {
     let b = &w.life[s];
-    assert_eq!(b.vis, b.visible(&w.chem, &w.cfg), "body {s} is seen as it was");
+    assert_eq!(b.vis, b.visible(&w.chem, &w.cfg), "body {s:?} is seen as it was");
 }
 
 /// `open` draws members of a node as individuals: they are in the node's cell, of count 1, and
@@ -654,7 +655,7 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         w.time += DAY_S;
         assert!(copy::copy(&mut w, &mut b), "no child");
         w.life[s] = b;
-        let kids: Vec<usize> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
+        let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
         println!("nodes {nodes}: bodies added {}, node of the kind now {}", kids.len(), w.life[t].count);
         same_totals(&before, &life_totals(&w));
         if nodes {
@@ -671,13 +672,13 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         w.time += DAY_S;
         assert!(copy::copy(&mut w, &mut b), "no children");
         w.life[s] = b;
-        let kids: Vec<usize> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
+        let kids: Vec<Handle> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
         println!("many at once: {} children", kids.len());
         same_totals(&before, &life_totals(&w));
         assert!(kids.len() >= 3, "{} children", kids.len());
         for k in kids {
             let c = &w.life[k];
-            assert!(c.alive && c.count == 1.0 && c.spread.is_empty(), "child {k}: count {}", c.count);
+            assert!(c.alive && c.count == 1.0 && c.spread.is_empty(), "child {k:?}: count {}", c.count);
         }
     }
 }
@@ -728,7 +729,7 @@ fn individuals_mode_merges_no_animal() {
 
 /// What body `s` holds that can become body (`worth`), mol, and its gene `g`, after its next update (`pcore::day` until
 /// it has updated).
-fn after_update(w: &mut World, s: usize, g: usize) -> (f64, f32) {
+fn after_update(w: &mut World, s: Handle, g: usize) -> (f64, f32) {
     let last = w.life[s].last;
     while w.life[s].last == last {
         pcore::day(w);
@@ -737,7 +738,7 @@ fn after_update(w: &mut World, s: usize, g: usize) -> (f64, f32) {
 }
 
 /// What the body in slot `s` holds that can become body (`copy::buildable`), at its ground's temperature.
-fn worth(w: &World, s: usize) -> f64 {
+fn worth(w: &World, s: Handle) -> f64 {
     let b = &w.life[s];
     copy::buildable(w, b, w.t_ground_last(b.cell as usize))
 }

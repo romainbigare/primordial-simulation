@@ -2,7 +2,7 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, store::{Class, Move}, World};
+use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, life::Handle, store::{Class, Move}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, b: &mut Body, p: usize) {
@@ -25,7 +25,7 @@ pub(crate) fn let_go(w: &mut World, b: &mut Body, load: bool) {
 }
 
 /// The body in slot `o` lets go of what it holds, broken off by a load.
-pub(super) fn torn_from(w: &mut World, o: usize) {
+pub(super) fn torn_from(w: &mut World, o: Handle) {
     let mut ob = std::mem::take(&mut w.life[o]);
     let_go(w, &mut ob, true);
     w.life[o] = ob;
