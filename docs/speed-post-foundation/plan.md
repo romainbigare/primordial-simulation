@@ -289,12 +289,13 @@ found and fixed; a range or a tolerance is never loosened to pass (`CLAUDE.md` 5
   - its counter of new body ids, its **provisional lineages** and **provisional born rows**, and its integer deltas of
     lineage member counts and of born-row holders (3.3);
   - its **outbox** (3.6).
-- **Parts stay one global registry, touched only in the serial phase** (S23). A due body that holds a part or is inside
-  one (`hold` or `inside` set), or whose cell holds any part at the batch's start, is a **serial body**: it runs its
-  whole update in the serial phase, so body–part exchanges stay immediate and no part id changes. A body in the
-  parallel phase can only form a part (its cell has none): FORM is a deferred action of the outbox. `bond::step` stays
-  serial. Before D2.3 a Haiku agent counts on both benches the share of updates that would be serial; over 10%, the
-  architect revisits.
+- **Parts stay one global registry, touched only in the serial phase** (S23, S52). A due body that holds a part or is
+  inside one (`hold` or `inside` set) is a **serial body**: it runs its whole update in the serial phase, so its
+  exchanges with the part it holds or is in stay immediate and no part id changes. Every other body runs in the
+  parallel phase and reads parts only (perception, `bond::possible`, depth and walls, which do not change there); an
+  action it takes on a part (any of Bond's verbs, FORM among them) is a **part act** of the outbox, run whole in the
+  serial phase on the part and the body as they are then. `bond::step` stays serial. Measured on `globe36` (S52):
+  bodies that hold or are inside a part take 8.5% of the updates; bodies in a cell with a part, 37%.
 - **What is written only in the serial phase:** parts, the id table (id → domain and slot), `Life::brains`,
   `Life::members`, `Life::genomes` and their counts, `Life::pushed`, `Links::cleared`, `World::counts.crossings`, the
   bodies that change domain, and the world's event list.
@@ -390,8 +391,8 @@ inside the domain as well as across its edge** (S22): one path, so a cell at a d
 - `spread::part_acts` and the whole-node branch of `spread::spread` both return "left" (the loop breaks), so no
   second relocation is queued.
 
-**A node's part with a queued FORM** (S44) stays a body of its own until the serial phase, as a moving part does
-(`part_acts` treats it as leaving the node). After its Form entry is applied, the part body rejoins its node
+**A node's part with a queued part act** (S44, S52) stays a body of its own until the serial phase, as a moving part does
+(`part_acts` treats it as leaving the node). After its part act is applied, the part body rejoins its node
 (`nodes::rejoin`) if it holds nothing and both are in one cell; else it stays a body of its own.
 
 The kinds, in the order the serial phase applies them:
@@ -402,7 +403,7 @@ The kinds, in the order the serial phase applies them:
 | Arriving members | `spread::part_acts` (members that move) | a relocation, marked "look for kin" | after the relocation lands: the kin search in the new cell (`copy::kin`, through `nodes::may_join`) and the merge (`nodes::merge`); no kin: it stays a body of its own, as today | the part is gone: nothing lands, nothing joins |
 | Litter | `copy::emit`, children who start in another cell | the cell the parent was in, the target cell, members, stores and heat (taken from the parent by `give`), genes, spread, size, rows, lineage, parent id, whether it may be a node, whether it is mixed | the kin search in the target cell; it joins the young part of a node there (`nodes::add`) or is placed (`place_child`, ids as in 3.3); the `Born` event is made here (S25) | no kin and less than one member: back into the parent's brood if the parent lives (by id: stores, heat and brood back), else to the ground node of the cell the parent was in, as a move |
 | Watch | `learn::watch` | watcher id, its member count and lineage at watch time, the share of its members who watched (1 for an individual, x / count for a node's part), target id | if both live, the watcher is still of that lineage and their brains have one shape: the watcher's rows move toward the target's by `blend` × alike × the share × (count then / count now) (alike from the target's `vis` and the watcher's `visible`); the `Watched` event. The blend is linear, so this is the mean by members that `nodes::rejoin` makes today (S40) | either is gone, or the watcher's lineage changed: nothing (the turn was spent) |
-| Form | `bond::form` in the parallel phase (its cell holds no part), by a body or by a node's part placed by `part_acts` | body id, the shape drawn, and for a part the id of its node | run whole as today: the body pays, the part is made in its cell; a node's part then rejoins its node if it holds nothing and both are in one cell | the body is gone or can no longer pay: nothing (a part that can no longer pay rejoins its node by the same rule) |
+| Part act | any of Bond's verbs (FORM, take from or put into a part, grab, join, push...) chosen in the parallel phase, by a body or by a node's part placed by `part_acts` | body id, the verb, the part's id (or for FORM the shape drawn), and for a node's part the id of its node | run whole as today on the part and the body as they are then (`bond::act`, `bond::form`): the body pays, the part changes or is made; a node's part then rejoins its node if it holds nothing and both are in one cell | the body or the part is gone, the act is no longer possible (`bond::possible`), or the body can no longer pay: nothing (a node's part rejoins its node by the same rule) |
 | New lineage, new born rows | `lineage::resize`, `copy::child_lineage`, `copy::place_child` | provisional id and its `Lineage` or rows | mapped to a global id; ids rewritten (3.3) | cannot fail |
 | Counts | every body placed or removed | per lineage and per born rows, the change of their holders | added; a lineage at zero dies out (`Life::brains` none), born rows at zero are freed | cannot fail |
 | Events and counters | all body code | the domain's list and sums | appended and added in domain order | cannot fail |
@@ -776,12 +777,12 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
   domain still happen at once here (one thread). **Tests:** a sampled update leaves the view as an unsampled one would.
   Level 3 (faces from the batch's start; one `apply` a batch).
 - **D2.4 The outbox and the serial phase, whole.** Every kind of 3.6 with its fixed order and its failure rule; every
-  relocation goes through it and a leaving body follows S39; FORM is deferred; the serial bodies run in the serial
+  relocation goes through it and a leaving body follows S39; every action on a part is a part act (S52); the serial bodies run in the serial
   phase (S23); provisional lineages, born rows and counts settled there (S24, S11); dispersing litters as in S25;
   watches as in S40. **Tests:** one makes each outbox kind fail once (a relocation of a body that died, arriving
   members that are gone, a litter with no kin back to a living parent and to the ground of a dead one's cell, a watch
-  of a body that died and of one whose lineage changed, a form that can no longer be paid, and a node's part with a
-  queued FORM that rejoins its node after the form and one that cannot rejoin) and checks the books; one
+  of a body that died and of one whose lineage changed, a part act that can no longer be paid or whose part is gone, and a node's part with a
+  queued part act that rejoins its node after it and one that cannot rejoin) and checks the books; one
   checks that the remap gives the same lineages and born rows with and without threads. Level 3. `docs/laws.md`
   changes.
 - **D2.5 Threads.** With the feature `threads`, the domains of a batch, taken out of `World`, run on rayon's pool
@@ -808,7 +809,7 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
   - *A body reads other bodies:* only through faces (3.5); acts in its own cell are live; watching goes to the outbox.
   - *A body reads other cells:* the store as it was at the batch's start (3.4); the compiler refuses a live read of
     another domain (3.2).
-  - *Parts:* only serial bodies touch them (3.2).
+  - *Parts:* only serial bodies and part acts touch them, in the serial phase (3.2).
   - *Load balance:* sea domains hold few bodies, a refined region's one domain holds many. Rayon's work stealing takes
     domains one by one; the bench prints the busiest domain's share; `region24` shows the worst case.
   - *The store view must not overdraw:* 3.4.
@@ -940,9 +941,10 @@ A (done) ──► E2.1 ──► E2.2 ──► B1 ──► B3 ──► (key 
 | batch | the bodies due in `batch_days` days, run together at the batch's first day |
 | parallel phase | the part of a batch where each domain runs its due bodies, on threads |
 | serial phase | the part of a batch after it: the moves and the outboxes booked, then the serial bodies, in a fixed order |
-| serial body | a due body that holds or is inside a part, or whose cell holds a part: it runs in the serial phase |
+| serial body | a due body that holds or is inside a part: it runs in the serial phase |
+| part act | an action of a body in the parallel phase on a part, run whole in the serial phase |
 | relocation | a body, or members of a node, going to another cell; it lands at the batch's end |
-| leaving | a body with a queued relocation (or a node's part with a queued FORM): it does not split, and others' searches skip it |
+| leaving | a body with a queued relocation (or a node's part with a queued part act): it does not split, and others' searches skip it |
 | outbox | what a domain's bodies did that lands at the batch's end, applied in a fixed order |
 | store view | a domain's store nodes as the moves of its batch leave them, with checkpoints |
 | face | what others see of a body (id, cell, members, lineage, visible traits, signal, well-being, room), kept from the batch's start |
