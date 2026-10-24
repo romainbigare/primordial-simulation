@@ -823,11 +823,9 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
 
 #### D1. Work off the main thread
 
-- **D1 (a):** the tape's file writing (snapshot compression, series rows, viewer frames) runs on a thread of the `cli`
-  while the world runs on. **Why:** the tape is 10 to 12 ms a year: about 1 to 2% of a year today, more of a faster
-  one. **Check level:** 1 (the world is the same; only the shell's timing moves). **Done when:** the tape's stage
-  falls by at least half on the benches (interleaved wall time, 2.6). **Code:** no core line. **Parallel with:** D2 (it touches `cli/` and `tape/`
-  only).
+- **D1 (a): not built** (S56). The bench's tape stage is the recorder reading the world on the main thread (its month
+  about 6.5 ms and its yearly row about 5.5 ms a year on `island22`); the file writing a thread could take is outside
+  it and about 0.5% of a year in a real run. The recorder's reading is a hot spot for E2.3 (`tape/`, no core line).
 - **D1 (b):** after D2 and D3, measure the cores' idle time in a year. If more than 25% of a year leaves three cores
   idle, build the physics of the next step to run beside the bodies through a double bodies' node (S9). **Check
   level:** 3 (bodies take from what the last air step filled for them). **Done when:** the measure is in
@@ -839,7 +837,8 @@ reverted. The adversarial review runs after D2.3 and after D2.6.
 
 #### E2.3. Hot spots after D2
 
-- **What:** profile both benches and `region24` after D2 and pick the new hot spots, each its own commit with its
+- **What:** profile both benches and `region24` after D2 and pick the new hot spots (among them the tape's recorder,
+  about 12 ms a year of reading the world on the main thread: S56), each its own commit with its
   measured gain, as E2.1 and E2.2. **Kill line:** 2% of a bench's instructions (2.6). **Code:** each simplifies as much as it adds.
   **Agent:** Sonnet (Opus for a spot in the update's structure).
 
