@@ -27,6 +27,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | E2.2 | E2.2 | 0.735 | 126 | 45 | 552 | 0 | 12 | 2,769 | 27,974 | 1.214 | 200 | 54 | 906 | 40 | 14 | 1,904 | 25,345 | 9,008 |
 | D2.1a (benches remade, `/tmp/d21-bench`) | D2.1a | 1.267 | 184 | 52 | 931 | 82 | 18 | 2,836 | 32,886 | 1.641 | 233 | 57 | 1,202 | 125 | 23 | 2,142 | 27,570 | 9,107 |
 | D2.1b (the same saves) | D2.1b | 1.281 | 150 | 55 | 981 | 75 | 19 | 2,836 | 32,886 | 1.609 | 222 | 54 | 1,185 | 125 | 23 | 2,142 | 27,570 | 9,149 |
+| D2.3 (benches remade, `/tmp/d23-bench`) | D2.3 | 1.395 | 141 | 50 | 1,153 | 33 | 19 | 3,026 | 39,306 | 1.530 | 226 | 53 | 1,187 | 43 | 21 | 2,412 | 29,278 | 9,339 |
 
 ### A2: compiler settings
 
@@ -271,6 +272,45 @@ against 5.354 (S49); the light-eaters' stored share fails as before (S50), 0.558
 0.552 to 0.557. The equivalence test (`the_batches_of_bodies_keep_life`, batches of 1 day against 2): each mean moves
 by 9% of its noise or less (the move as a share of the mean, then of the noise): `plant_members` +1.3% (1.4%),
 `root_0_kg` +0.6% (0.8%), `births` +1.5% (2.0%), `root_0_life_real` -0.1% (2.6%), `air_3` -0.02% (8.8%).
+
+### D2.3: faces and the store's view
+
+Level 3 (the golden fingerprints are re-pinned, the same with and without threads; no change of the snapshot). Bodies
+see each other by the faces taken at the batch's start and the store through their domain's view; the batch's moves
+are booked by one `apply` per domain. The benches were remade with D2.3's code (`BENCH_DIR=/tmp/d23-bench
+scripts/bench.sh --remake`, saves of commit `e15c30c` plus D2.3), with the third bench `region24` (S41):
+
+| Bench | s/yr | flow | change | bodies | parts | tape | alive | updates/yr | busiest domain |
+|---|---|---|---|---|---|---|---|---|---|
+| island22 | 1.395 | 141 | 50 | 1,153 | 33 | 19 | 3,026 | 39,306 | 0.170 |
+| globe36 | 1.530 | 226 | 53 | 1,187 | 43 | 21 | 2,412 | 29,278 | 0.228 |
+| region24 | 3.185 | 207 | 72 | 2,859 | 1 | 46 | 5,407 | 83,017 | 0.274 |
+
+The busiest domain holds 17%, 23% and 27% of a batch's updates (the year's mean, column `busiest_domain`): four
+threads could at best share a batch 4 times on the island, 4 times on the globe and 3.6 times on `region24`.
+
+Cost per body update, callgrind on one thread, one year, the body batch inclusive (`survey::batch`) over the year's
+updates. The same save gives the same start to both builds (D2.3 does not change the snapshot), so these compare the
+code; the histories then part (level 3):
+
+| Saves | Build | island22 | globe36 | region24 |
+|---|---|---|---|---|
+| D2.2's (`/tmp/d22-bench`) | `main` (D2.2) | 151,528 | 205,549 | — |
+| | D2.3 | 152,221 (+0.46%) | 205,948 (+0.19%) | — |
+| D2.3's (`/tmp/d23-bench`) | `main` (D2.2) | 156,458 | 204,785 | 177,148 |
+| | D2.3 | 156,413 (-0.03%) | 205,863 (+0.53%) | 169,572 (-4.3%) |
+| | all instructions of the year, D2.3 against `main` | +0.29% | +0.67% | -1.46% |
+
+The view and the faces cost under 1% an update (the plan allows 5%). What it costs and saves: a move is gathered
+through the view (`World::gather`, 3.4% of island22's instructions, against 1.6% for the three nodes of one update
+before); one `apply` a domain and batch in place of one an update books as many moves (`apply` itself costs the same);
+a cell's nodes are taken into the view when a move first touches them, not three nodes at every update; the faces of
+every living body each batch. A first build that filled the whole view of a domain at once cost 7 to 8% an update
+more: its reads went through a look-up that the compiler did not inline, and Bond's monthly step and `wear` (outside
+the batches, one view a part or a cell) filled all of a domain's cells each time.
+
+Key numbers (`the_key_numbers_stay_in_their_ranges`): all in their ranges; the eaters 5.364 (seeds 5.271, 5.403, 5.419)
+against 5.354 (S49); the light-eaters' stored share fails as before (S50), 0.555 (seeds 0.560, 0.554, 0.549).
 
 ## Profile of the baseline
 

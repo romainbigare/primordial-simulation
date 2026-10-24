@@ -39,6 +39,15 @@ domain it was placed in and that domain's count of bodies placed (children, spli
 members drawn); it never changes, and its random draws are keyed by it. The bodies
 due in a batch update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
 cell, each cell's bodies in the order they came. No order depends on where a body is stored.
+**What a body sees in a batch** (`survey::batch`). At a batch's start each living body leaves a face (`survey::Faces`:
+its id, members, visible traits, signal, well-being, and the room it is in), cell by cell. A body perceives the others
+only by these faces, as they were then, whatever they did in the batch since; a body placed in the batch is seen from
+the next. It acts on a body it saw only if that body still lives and, to take from it or give to it, is still in its
+cell; the partner of its children and the cover over its cell are the bodies there now. It reads the store through its
+domain's view (`store::Moves`): the ground, bed and bodies' node of each cell of its domain and its air node, as the
+moves of the bodies before it in the batch left them; a node of another domain as it was at the batch's start. The
+batch's moves are booked when it ends, by one `apply` per domain in domain order. A sample member's update
+(`copy::sample`) runs in a checkpoint of the view and is rolled back.
 
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
@@ -53,7 +62,8 @@ amounts is kept apart and counted in the books (`Store::carry`, Neumaier 1974). 
 potential energy is one more node (`Class::Potential`): a lift moves heat into it, a fall takes it back. So every
 element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
-links (`solve::spread::within`), never a whole field. `apply` only adds and sets rounding below zero to zero, counted
+links (`solve::spread::within`), never a whole field. A body takes no more than its domain's view holds, what the
+bodies before it in the batch left (checked in debug builds). `apply` only adds and sets rounding below zero to zero, counted
 (`Counters::rounded`). A body takes ground heat no further than `T_FLOOR` (`World::take_from_ground`).
 
 ## 1. Flow: stuff moves from high push to low push
@@ -361,8 +371,8 @@ learned (`Life::inherit`).
 ### 5.2 Perception
 Local (`choose/perceive.rs`): own stores against minimums, warmth, size, light; its cell's loose substances, liquid,
 temperature and crowding; the season; signals; memory; cells within sight ring by ring (weight 1 / ring²), with their
-parts, as the last survey saw them; up to `SEEN` bodies in or next to its cell (looks, signals, well-being, past
-dealings); up to 3 parts. Walls and cover hide.
+parts, as the last survey saw them; up to `SEEN` bodies in or next to its cell as the batch's start saw them (their
+faces, 0: looks, signals, well-being, past dealings); up to 3 parts. Walls and cover hide.
 
 ### 5.3 Actions
 One action is drawn by the scores at each decision (`choose::act`), paid by its own reactions (`body::pay`) or failed;
@@ -402,8 +412,8 @@ a long interval saves it. **Null run** (`--null`): no learning or imitation, row
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. `body::live` runs an update in stages: upkeep, the physics of the time since
 (`body/physics.rs`), keeping warm, store checks, growth and children, shedding; then the decision. Its trades are
-gathered and booked by one `store::apply` (`store::Moves`), each set by its law's rate over the update's span, so nodes
-and individuals take alike, never more than is there.
+gathered as moves and booked with its batch's by one `store::apply` per domain (`store::Moves`, 0), each set by its
+law's rate over the update's span, so nodes and individuals take alike, never more than is there.
 
 ### 6.1 What a body is
 **Stores**: every substance (all members together) and heat. **Body matter** (22) is what it is built of; its

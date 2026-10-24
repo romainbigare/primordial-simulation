@@ -11,9 +11,9 @@ pub fn die(w: &mut World, h: Handle, mut b: Body, cause: u8) {
     bond::let_go(w, &mut b, false);
     let i = b.cell as usize;
     for (k, &a) in b.store.iter().enumerate().filter(|x| *x.1 != 0.0) {
-        w.moves.give(&w.chem, Node::ground(i), k, a, 0.0);
+        w.give_move(Node::ground(i), k, a, 0.0);
     }
-    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, b.e);
+    w.give_move(Node::ground(i), 0, 0.0, b.e);
     let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
     w.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
     w.life.remove(h, &b);
@@ -26,10 +26,10 @@ pub(crate) fn to_ground(w: &mut World, b: &mut Body, th: &Melting, m: &[f64]) {
     let q = b.heat_with(&w.chem, th, m);
     b.lose(&w.chem, m);
     for (k, &a) in m.iter().enumerate().filter(|x| *x.1 != 0.0) {
-        w.moves.give(&w.chem, Node::ground(i), k, a, 0.0);
+        w.give_move(Node::ground(i), k, a, 0.0);
     }
     b.e -= q;
-    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, q);
+    w.give_move(Node::ground(i), 0, 0.0, q);
 }
 
 /// `dead` (mol of each, at most what it holds) goes from body `b` at the plateau state `th` to the ground; in a node

@@ -18,6 +18,7 @@ use crate::body::{Body, Lived};
 use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
+use crate::survey::Face;
 use crate::{bond, lanes, life::Handle, World};
 
 /// Features of a neighbour direction and of a perceived body.
@@ -53,9 +54,9 @@ pub struct ActTmp {
 
 /// One decision: what the body perceives, its options with their scores and features, their chances and the action drawn.
 struct Choice {
-    /// The bodies perceived: where they are stored, their ids (a body seen may die and its slot be reused before a member
-    /// of a node acts on it) and whether each is in its own cell
-    seen: [(Handle, u64, bool); MAX_SEEN],
+    /// The bodies perceived, as they were at the batch's start (their faces, with their ids), and whether each is in
+    /// its own cell
+    seen: [(Face, bool); MAX_SEEN],
     nseen: usize,
     parts: [usize; PARTS],
     nparts: usize,
@@ -151,15 +152,14 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice,
         c.logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd);
         c.to[d] = j;
     }
-    for (q, &(o, _, same)) in c.seen[..c.nseen].iter().enumerate() {
-        let ob = &w.life[o];
-        let v = ob.vis;
+    for (q, (o, same)) in c.seen[..c.nseen].iter().enumerate() {
+        let v = o.vis;
         // How past dealings with it went, if it is known.
-        let known = b.known.iter().find(|k| k.0 == ob.id && k.0 != 0).map(|k| k.1);
+        let known = b.known.iter().find(|k| k.0 == o.id && k.0 != 0).map(|k| k.1);
         let fq = &mut c.fb[q * NT..(q + 1) * NT];
-        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], ob.sig[0], ob.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, ob.wb / WB_SCALE]);
+        fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], o.sig[0], o.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, o.wb / WB_SCALE]);
         for verb in 0..VERBS {
-            if same || verb == WATCH {
+            if *same || verb == WATCH {
                 c.logit[TO_BODY + q * VERBS + verb] = score(&out[s.verb(verb)..s.verb(verb) + NT + 1], fq);
             }
         }
@@ -268,9 +268,11 @@ fn act_as(w: &mut World, b: &mut Body, c: &Choice, k: &Kit, a: usize, rng: &mut 
         // (Members of a node acting before may have used up the part or killed the body.)
         a if a >= TO_PART && !w.parts.parts[c.parts[(a - TO_PART) / OVERBS]].alive => {}
         a if a >= TO_PART => bond::act(w, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
-        a if !w.life.holds(c.seen[(a - TO_BODY) / VERBS].0, c.seen[(a - TO_BODY) / VERBS].1) => {}
         a => {
-            let (o, verb) = (c.seen[(a - TO_BODY) / VERBS].0, (a - TO_BODY) % VERBS);
+            let (id, verb) = (c.seen[(a - TO_BODY) / VERBS].0.id, (a - TO_BODY) % VERBS);
+            // The body seen as it is now, if it lives and, to take from it or give to it, is still in the cell.
+            let live = |o: Handle| w.life[o].alive && (verb == WATCH || w.life[o].cell == b.cell);
+            let Some(o) = w.life.find(id).filter(|&o| live(o)) else { return };
             match verb {
                 TAKE_FROM => take_body(w, b, o, rng),
                 GIVE => feed::give(w, b, o),

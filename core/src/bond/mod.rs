@@ -291,9 +291,9 @@ fn dissolve(w: &mut World, s: usize) {
     }
     let (i, p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
     for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate().filter(|(_, (a, f))| *a + *f != 0.0) {
-        w.moves.give(&w.chem, Node::ground(i), k, a + f, 0.0);
+        w.give_move(Node::ground(i), k, a + f, 0.0);
     }
-    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, p.e);
+    w.give_move(Node::ground(i), 0, 0.0, p.e);
     w.parts.at[i].retain(|&x| x as usize != s);
     // Its slot is free for a new part, of the next generation.
     w.parts.parts[s].gen = p.gen + 1;

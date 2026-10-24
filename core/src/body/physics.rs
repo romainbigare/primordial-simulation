@@ -141,14 +141,14 @@ fn settle_gas(w: &mut World, b: &mut Body, dpool: &[f64], s: &Site, h: &mut Heat
     let (j, lift) = (s.j, w.lift(s.i));
     let gas = GasMove::of(&w.chem, dpool, w.t_air(j));
     b.e += gas.q_in;
-    w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
+    w.take_move(Node::air(j), 0, 0.0, gas.q_in);
     let heat = h.heat + gas.back;
     let conduct = (h.g * s.dt * s.tg).min(held_for(w, b, s.i));
     let paid = share((heat_above_floor(b.e, b.heat_cap(&w.chem)) + heat + conduct).max(0.0), gas.pay);
     send_gas(dpool, paid, |k, sent, kept| {
         b.store[k] += kept;
         if sent != 0.0 {
-            w.moves.gas(&w.chem, k, sent, lift);
+            w.gas_move(k, sent, lift);
         }
     });
     (h.heat, h.c_out) = (heat - paid * gas.pay, paid * gas.c_out);
@@ -159,7 +159,7 @@ fn settle_gas(w: &mut World, b: &mut Body, dpool: &[f64], s: &Site, h: &mut Heat
 fn store_light(w: &mut World, b: &mut Body, s: &Site, caught: f64, used: f64) -> f64 {
     let stored = w.cfg.phys.light_yield * used;
     let took = (b.keep as f64 * caught).min(w.heat_now(Node::bodies(s.i))).max(0.0);
-    w.moves.take(&w.chem, Node::bodies(s.i), 0, 0.0, took);
+    w.take_move(Node::bodies(s.i), 0, 0.0, took);
     if caught > 0.0 {
         b.keep = (stored / caught) as f32;
     }
@@ -229,8 +229,8 @@ fn evaporate(w: &mut World, b: &mut Body, tmp: &LiveTmp, s: &Site, h: &mut Heat,
             moved = true;
             let q = m * cp * t0;
             (b.store[k], b.e) = (b.store[k] - m, b.e - q);
-            w.moves.give(&w.chem, Node::air(s.j), 0, 0.0, q);
-            w.moves.gas(&w.chem, k, m, lift);
+            w.give_move(Node::air(s.j), 0, 0.0, q);
+            w.gas_move(k, m, lift);
             let stop = if cool > open_m { b.gene(COOL_T) } else { w.chem.t_sat(k, tmp.x[k]) };
             (h.heat, h.stop) = (h.heat - m * latent, Some(h.stop.map_or(stop, |d| d.max(stop))));
             *lost = (m - pre).max(0.0);
@@ -336,11 +336,11 @@ fn relax_heat(w: &mut World, b: &mut Body, s: &Site, h: &Heat) {
     let e1 = relax(g);
     let give = e1 - b.e - heat + h.lit - h.took;
     let from = give.min(held_for(w, b, i)).max(0.0);
-    w.moves.take(&w.chem, Node::bodies(i), 0, 0.0, from);
+    w.take_move(Node::bodies(i), 0, 0.0, from);
     let drawn = from + w.take_from_ground(i, (0, 0.0, 0.0), give - from, h.gcap).1;
     b.draw = crate::survey::Draw::after((drawn + h.asked) / dt, g, tg, h.stop);
     let e1 = if drawn == give { e1 } else { e1 - (give - drawn) };
     let out = e1 * h.c_out / ct;
     b.e = e1 - out;
-    w.moves.give(&w.chem, Node::air(j), 0, 0.0, out);
+    w.give_move(Node::air(j), 0, 0.0, out);
 }

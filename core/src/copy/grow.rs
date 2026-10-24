@@ -129,8 +129,8 @@ fn convert(w: &mut World, b: &mut Body, bl: &Reaction, room: f64, part: f64, mos
             // (Its heat goes with it, and the body pays the latent heat a gas holds in the air, `Substance::latent_gas`.)
             let q = x * w.chem.subs[k].cp * t;
             b.e = b.e - q - x * w.chem.subs[k].latent_gas();
-            w.moves.give(&w.chem, Node::air(j), 0, 0.0, q);
-            w.moves.gas(&w.chem, k, x, lift);
+            w.give_move(Node::air(j), 0, 0.0, q);
+            w.gas_move(k, x, lift);
         } else {
             b.store[k] += x;
         }

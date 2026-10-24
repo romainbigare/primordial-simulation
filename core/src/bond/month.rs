@@ -57,18 +57,18 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], dt: f
     let c = p.heat_cap(chem);
     let q_out = p.e.max(0.0) * gas.c_out / (c + gas.c_out).max(1e-9);
     p.e += gas.q_in - q_out;
-    w.moves.give(&w.chem, Node::air(j), 0, 0.0, q_out);
-    w.moves.take(&w.chem, Node::air(j), 0, 0.0, gas.q_in);
-    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, gas.back);
+    w.give_move(Node::air(j), 0, 0.0, q_out);
+    w.take_move(Node::air(j), 0, 0.0, gas.q_in);
+    w.give_move(Node::ground(i), 0, 0.0, gas.back);
     let cap = w.heat_cap_ground(i);
     let paid = share(w.take_from_ground(i, (0, 0.0, 0.0), gas.pay, cap).1, gas.pay);
     // The heat of the gas that goes to the ground goes with it.
-    w.moves.take(&w.chem, Node::air(j), 0, 0.0, q_out * (1.0 - paid));
-    w.moves.give(&w.chem, Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
+    w.take_move(Node::air(j), 0, 0.0, q_out * (1.0 - paid));
+    w.give_move(Node::ground(i), 0, 0.0, q_out * (1.0 - paid));
     send_gas(&rc.dpool, paid, |k, sent, kept| {
-        w.moves.give(&w.chem, Node::ground(i), k, kept, 0.0);
+        w.give_move(Node::ground(i), k, kept, 0.0);
         if sent != 0.0 {
-            w.moves.gas(&w.chem, k, sent, lift);
+            w.gas_move(k, sent, lift);
         }
     });
 }
@@ -76,17 +76,17 @@ fn react_part(w: &mut World, rc: &mut Reactor, s: usize, pool: &mut [f64], dt: f
 /// Walls of part `s` no longer solid run off; the part takes the ground's temperature; walls under `min_kg` fall apart.
 fn settle(w: &mut World, s: usize) {
     let (ns, i) = (w.chem.ns(), cell(w, s));
-    let (tg, chem) = (w.t_ground_last(i), &w.chem);
-    let p = &mut w.parts.parts[s];
-    let t = p.e / p.heat_cap(chem).max(1e-9);
+    let tg = w.t_ground_last(i);
+    let t = w.parts.parts[s].e / w.parts.parts[s].heat_cap(&w.chem).max(1e-9);
     for k in 0..ns {
+        let (p, chem) = (&mut w.parts.parts[s], &w.chem);
         if p.wall[k] > 0.0 && chem.phase_in(k, t, |j| p.wall[j]) != Phase::Solid {
-            let q = p.wall[k] * chem.subs[k].cp * t;
-            w.moves.give(chem, Node::ground(i), k, p.wall[k], q);
+            let (a, q) = (p.wall[k], p.wall[k] * chem.subs[k].cp * t);
             (p.e, p.wall[k]) = (p.e - q, 0.0);
+            w.give_move(Node::ground(i), k, a, q);
         }
     }
-    let (e1, e0) = (p.heat_cap(chem) * tg, p.e);
+    let (e1, e0) = (w.parts.parts[s].heat_cap(&w.chem) * tg, w.parts.parts[s].e);
     let cap = w.heat_cap_ground(i);
     let got = w.take_from_ground(i, (0, 0.0, 0.0), e1 - e0, cap).1;
     let p = &mut w.parts.parts[s];

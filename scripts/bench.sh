@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The speed bench kit (docs/speed-post-foundation/plan.md 1.2).
-#   scripts/bench.sh [--remake]        run both benches for 5 years each, print one line per bench
-#   scripts/bench.sh profile BENCH     run 1 year of BENCH (island22 or globe36) under callgrind, print the top functions
+#   scripts/bench.sh [--remake]        run the three benches for 5 years each, print one line per bench
+#   scripts/bench.sh profile BENCH     run 1 year of BENCH (island22, globe36 or region24) under callgrind, print the top
+#                                      functions
 # The bench worlds are snapshots kept in $BENCH_DIR (default ~/.cache/ew-bench), each with a stamp of the commit and
 # the snapshot version. A missing snapshot is made. A snapshot of another version stops the script: use --remake.
 # Run it with nothing else on the machine. Outputs stay in $BENCH_DIR and /tmp.
@@ -13,9 +14,12 @@ EW=target/release/ew
 VERSION=$(grep -o 'SNAPSHOT_VERSION: u32 = [0-9]*' tape/src/snapshot.rs | grep -o '[0-9]*$')
 # Per bench: the flags of `ew run`, and the year of the snapshot. No pictures or frames beyond the first and the last.
 QUIET="--monthly-years 0 --frames-every 100000 --every 100000"
-declare -A RUN=([island22]="--size 22 --seed 1 --years 300" [globe36]="--globe --size 18 --seed 1 --years 200")
-declare -A YEAR=([island22]=300 [globe36]=200)
-BENCHES=(island22 globe36)
+# region24 is an island with a refined region whose one air node holds 64 cells and the densest life: the worst case
+# for the domains (plan 1.2).
+declare -A RUN=([island22]="--size 22 --seed 1 --years 300" [globe36]="--globe --size 18 --seed 1 --years 200"
+    [region24]="--size 24 --seed 1 --region 8,8,8,8 --years 200")
+declare -A YEAR=([island22]=300 [globe36]=200 [region24]=200)
+BENCHES=(island22 globe36 region24)
 
 make_world() { # make_world NAME: run the world and keep its last snapshot with a stamp
     local tmp; tmp=$(mktemp -d /tmp/ew-bench-make.XXXXXX)
@@ -61,9 +65,9 @@ bench() { # bench NAME: two runs of 5 years, print the line of the lower total
             rm -rf "$best" "$best.log"; best=$out; low=$total
         else rm -rf "$out" "$out.log"; fi
     done
-    means "$best/series.csv" ms_flow ms_change ms_bodies ms_parts ms_tape bodies updates | awk -v name="$name" '{
-        printf "%-9s %6.3f s/yr  flow %6.0f  change %6.0f  bodies %6.0f  parts %6.0f  tape %6.0f (ms)  alive %7.0f  updates/yr %9.0f\n",
-            name, ($1+$2+$3+$4+$5)/1000, $1, $2, $3, $4, $5, $6, $7}'
+    means "$best/series.csv" ms_flow ms_change ms_bodies ms_parts ms_tape bodies updates busiest_domain | awk -v name="$name" '{
+        printf "%-9s %6.3f s/yr  flow %6.0f  change %6.0f  bodies %6.0f  parts %6.0f  tape %6.0f (ms)  alive %7.0f  updates/yr %9.0f  busiest domain %5.3f\n",
+            name, ($1+$2+$3+$4+$5)/1000, $1, $2, $3, $4, $5, $6, $7, $8}'
     rm -rf "$best" "$best.log"
 }
 
@@ -88,7 +92,7 @@ mkdir -p "$DIR"
 cargo build --release -p cli >&2
 REMAKE=0; [[ ${1:-} == --remake ]] && REMAKE=1
 if [[ ${1:-} == profile ]]; then
-    [[ -n ${YEAR[${2:-}]:-} ]] || { echo "usage: scripts/bench.sh [--remake] | profile island22|globe36" >&2; exit 1; }
+    [[ -n ${YEAR[${2:-}]:-} ]] || { echo "usage: scripts/bench.sh [--remake] | profile island22|globe36|region24" >&2; exit 1; }
     check_world "$2" 0; profile "$2"
 else
     for b in "${BENCHES[@]}"; do check_world "$b" $REMAKE; done

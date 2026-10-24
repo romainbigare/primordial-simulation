@@ -71,7 +71,7 @@ pub(crate) fn spend(w: &mut World, b: &mut Body, cost: f64, dt: f64, part: bool,
     let (keep, i) = (b.energy_in(&w.chem, th0), b.cell as usize);
     if b.e > keep {
         let held = hold(w, b, mass, th0.t, dt);
-        w.moves.give(&w.chem, Node::ground(i), 0, 0.0, (b.e - keep) * (1.0 - held));
+        w.give_move(Node::ground(i), 0, 0.0, (b.e - keep) * (1.0 - held));
         b.e = keep + (b.e - keep) * held;
     }
     left
@@ -129,14 +129,18 @@ pub(super) fn pay_at(w: &mut World, b: &mut Body, cost: f64, p: &Payer, part: bo
     if left > 1e-9 * cost && !part {
         return cost;
     }
-    // Gas crosses as all a body's gas does (`store::Moves::gas`): given with its latent heat, the air paying the lift.
-    let (gas, lift, mut latent) = (|k: usize| w.chem.phase(k, t) == Phase::Gas, w.lift(b.cell as usize), 0.0);
+    // Gas crosses as all a body's gas does (`World::gas_move`): given with its latent heat, the air paying the lift.
+    let (lift, mut latent) = (w.lift(b.cell as usize), 0.0);
     let held = b.matter_mol(&w.chem);
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
-        for (&(k, nu), sign) in w.chem.reactions[r].inputs.iter().map(|x| (x, -1.0)).chain(w.chem.reactions[r].outputs.iter().map(|x| (x, 1.0))) {
+        // Its inputs, then its outputs.
+        let ins = w.chem.reactions[r].inputs.len();
+        for x in 0..ins + w.chem.reactions[r].outputs.len() {
+            let rx = &w.chem.reactions[r];
+            let ((k, nu), sign) = if x < ins { (rx.inputs[x], -1.0) } else { (rx.outputs[x - ins], 1.0) };
             let (k, d) = (k as usize, sign * nu as f64 * ext[q]);
-            if gas(k) {
-                w.moves.gas(&w.chem, k, d, lift);
+            if w.chem.phase(k, t) == Phase::Gas {
+                w.gas_move(k, d, lift);
                 latent += d * w.chem.subs[k].latent_gas();
             } else {
                 super::add_store(&mut b.store[k], d, &mut w.counts.rounded[0]);

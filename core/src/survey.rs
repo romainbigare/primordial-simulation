@@ -2,7 +2,7 @@
 //! (`survey`), and every batch of days the updates due (`batch`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
-use crate::{change::Reactor, choose, copy::Grown, life::Handle, math::mean_decay, units::DAY, World};
+use crate::{brain::SIG, change::Reactor, choose, copy::Grown, life::Handle, math::mean_decay, units::DAY, World};
 use crate::store::{apply, Batch, Class, Node};
 use serde::{Deserialize, Serialize};
 
@@ -242,27 +242,80 @@ fn shade(w: &mut World) {
     }
 }
 
+/// What a body shows others in a batch, as it was at the batch's start (plan 3.5): what they perceive of it.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Face {
+    pub id: u64,
+    /// Its members (`Body::n`), visible traits (`Body::vis`), signal and well-being at its last decision
+    pub n: f64,
+    pub vis: [f32; 7],
+    pub sig: [f32; SIG],
+    pub wb: f32,
+    /// The root of the structure it is inside and how closed its walls are (`bond::room`)
+    pub room: Option<(u32, f32)>,
+}
+
+/// The faces of the living bodies at the start of the batch running: of cell `i`, `all[at[i]..at[i + 1]]`, in the
+/// order they came. Perception reads only these (`choose::perceive`), whatever happened in the batch since.
+#[derive(Clone, Debug, Default)]
+pub struct Faces {
+    all: Vec<Face>,
+    at: Vec<u32>,
+}
+
+impl Faces {
+    /// The faces of the bodies of cell `i` (none outside a batch).
+    pub fn of(&self, i: usize) -> &[Face] {
+        self.at.get(i + 1).map_or(&[], |&e| &self.all[self.at[i] as usize..e as usize])
+    }
+    /// The face of every living body of `w` as it is now, cell by cell.
+    fn make(&mut self, w: &World) {
+        self.clear();
+        self.at.push(0);
+        for i in 0..w.mesh.cells().n() {
+            for b in w.life.cell(i).map(|h| &w.life[h]).filter(|b| b.alive) {
+                let room = crate::bond::room(w, b).map(|(r, e)| (r as u32, e.closed));
+                self.all.push(Face { id: b.id, n: b.n(), vis: b.vis, sig: b.sig, wb: b.wb, room });
+            }
+            self.at.push(self.all.len() as u32);
+        }
+    }
+    /// No batch runs.
+    fn clear(&mut self) {
+        self.all.clear();
+        self.at.clear();
+    }
+}
+
 /// Update the bodies due in this batch, all at its first day, domain by domain (`life::Domain`), cell by cell, and in a
-/// cell by id: an order that does not depend on where bodies are stored, and keeps memory reads close together.
+/// cell by id: an order that does not depend on where bodies are stored, and keeps memory reads close together. They
+/// see each other as they were at the batch's start (`Faces`), and the store as this batch's moves of their domain
+/// leave it (`store::Moves`), booked when the batch ends.
 pub fn batch(w: &mut World) {
     let due = w.life.take_due(w.batch());
     if due.is_empty() {
         return;
     }
     let life = &w.life;
-    let at = |id: u64| life.find(id).map(|s| life[s].cell as usize).map(|i| (life.domain_of(i), i, id));
+    let at = |id: u64| life.find(id).map(|s| life[s].cell as usize).map(|i| (life.place(i).0, i, id));
     let mut list: Vec<(usize, usize, u64)> = due.into_iter().filter_map(at).collect();
     list.sort_unstable();
+    // The busiest domain's share of the batch's updates (`Counters::busiest`).
+    let most = list.chunk_by(|a, b| a.0 == b.0).map(|d| d.len()).max().unwrap_or(0);
+    (w.counts.busiest, w.counts.batches) = (w.counts.busiest + most as f64 / list.len().max(1) as f64, w.counts.batches + 1.0);
+    let mut faces = std::mem::take(&mut w.life.faces);
+    faces.make(w);
+    w.life.faces = faces;
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());
     for (_, cell, id) in list {
         // (It may have died or joined another body since.)
         let Some(s) = w.life.find(id) else { continue };
-        // What it takes from and gives to the store is gathered and booked once, at the end of its update.
         w.open_moves(cell, Node::new(Class::Body, s.slot as usize));
         update(w, s, &mut rc, (&mut tmp, &mut act));
-        w.book_moves();
     }
+    w.book_moves();
+    w.life.faces.clear();
 }
 
 /// The update of the body stored at `s`: its physics, decision, selection, lineage, maturing and split; or its death.
@@ -272,7 +325,7 @@ fn update(w: &mut World, s: Handle, rc: &mut Reactor, (tmp, act): (&mut LiveTmp,
     // Its mean member's body before the update, for what its members grow (`copy::mature`).
     let before = b.member_body(&w.chem);
     // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
-    let sample = crate::copy::sample(w, s, &b, rc, tmp);
+    let sample = crate::copy::sample(w, &b, rc, tmp);
     let lived = match live(w, &mut b, rc, tmp) {
         Err(cause) => return die(w, s, b, cause),
         Ok(lived) => lived,

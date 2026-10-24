@@ -2,7 +2,7 @@
 //! let go, and carry what they hold when they move. A body's force decides what it can hold and break.
 
 use super::{dissolve, event, held, holder, id, link, make, move_structure, restructure, sense::room, strength, unlink, GROUND, HELD, LOAD, NOBODY};
-use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, life::Handle, store::{Class, Move}, World};
+use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, life::Handle, store::Move, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
 fn grab(w: &mut World, b: &mut Body, p: usize) {
@@ -196,10 +196,10 @@ pub fn release(w: &mut World, b: &mut Body) {
 
 /// Bond the held part to the cell's bonded ground and let go of it.
 pub fn anchor(w: &mut World, b: &mut Body) {
-    let (Some(p), i, n) = (held(w, b), b.cell as usize, w.mesh.cells().n()) else { return };
+    let (Some(p), i) = (held(w, b), b.cell as usize) else { return };
     let (mut v, mut sv) = (0.0, 0.0);
     for k in 0..w.chem.ns() {
-        let vol = w.store.amounts(Class::Bed)[k * n + i] * w.chem.molar_volume(k, Phase::Solid);
+        let vol = w.b(k, i) * w.chem.molar_volume(k, Phase::Solid);
         (v, sv) = (v + vol, sv + vol * w.chem.subs[k].strength);
     }
     let ac = w.parts.parts[p].contact();
@@ -213,17 +213,17 @@ pub fn anchor(w: &mut World, b: &mut Body) {
 /// Break bonded ground with force: each substance weaker than the body's strength (times a held part's lever) comes
 /// loose, the more the weaker, as far as `dig` × its living body allows in the time.
 pub fn dig(w: &mut World, b: &mut Body) {
-    let (i, n, mb) = (b.cell as usize, w.mesh.cells().n(), b.built(&w.chem));
+    let (i, mb) = (b.cell as usize, b.built(&w.chem));
     let (lev, chem) = (lever(w, b), &w.chem);
     let f = b.gene(STRENGTH) * lev;
-    let vol: f64 = (0..chem.ns()).map(|k| w.store.amounts(Class::Bed)[k * n + i] * chem.molar_volume(k, Phase::Solid)).sum();
+    let vol: f64 = (0..chem.ns()).map(|k| w.b(k, i) * chem.molar_volume(k, Phase::Solid)).sum();
     if vol <= 0.0 {
         return;
     }
     let most = w.cfg.phys.dig * b.interval(w) as f64 * mb;
     let m: Vec<f64> = (0..chem.ns())
         .map(|k| {
-            let (a, s) = (w.store.amounts(Class::Bed)[k * n + i], &chem.subs[k]);
+            let (a, s) = (w.b(k, i), &chem.subs[k]);
             if f <= s.strength || a <= 0.0 { 0.0 } else { (most * a * chem.molar_volume(k, Phase::Solid) / vol * (1.0 - s.strength / f) / s.molar_mass).min(a) }
         })
         .collect();
@@ -231,8 +231,10 @@ pub fn dig(w: &mut World, b: &mut Body) {
     if !body::pay(w, b, w.cfg.phys.c_handle * got, b.interval(w) as f64) {
         return;
     }
-    let bed = |k: usize| w.store.amounts(Class::Bed)[k * n + i];
-    m.iter().enumerate().for_each(|(k, &a)| w.moves.push(&w.chem, Move::loosen(i, k, a, bed(k))));
+    for (k, &a) in m.iter().enumerate() {
+        let bed = w.b(k, i);
+        w.gather(Move::loosen(i, k, a, bed));
+    }
 }
 
 /// Before a body moves: the structure it holds and its mass, if it can carry it; else it lets go.

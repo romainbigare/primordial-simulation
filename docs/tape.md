@@ -66,6 +66,7 @@ worn edges, structures, true colour (r, g, b).
 | `dead_<k>` | kg/m² | dead fuel, matter and built solids on the ground of the land |
 | `births`, `died_<cause>` | 1/yr | members born; died by cause (`lack`, `phase`, `spent`, `taken`, `broken`, `age`) |
 | `lineages`, `lineages_ever`, `updates` | , , 1/yr | brain lineages alive and ever; body updates |
+| `busiest_domain` | | the busiest domain's share of a batch's body updates (its due bodies over all of the batch's), the year's mean over its batches: how evenly the domains share the work |
 | `cat_<r>` | log10 | mean catalyst gene of reaction r over all members (mixes kinds; read the per-kind columns) |
 
 **Brains and kinds**

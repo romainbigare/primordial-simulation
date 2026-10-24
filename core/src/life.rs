@@ -69,6 +69,9 @@ pub struct Life {
     pub seen: Vec<f32>,
     /// Per cell, from the last survey: what a brain perceives of it as a place to move to (`choose::cells`)
     pub cellf: Vec<[f32; crate::choose::NF]>,
+    /// What each living body showed others at the start of the batch running, cell by cell (`survey::Faces`; empty
+    /// outside the batches)
+    pub faces: crate::survey::Faces,
     /// The brain of each lineage (None once it died out), and its living bodies
     pub brains: Vec<Option<Lineage>>,
     pub members: Vec<u32>,
@@ -176,11 +179,6 @@ impl Life {
     pub fn find(&self, id: u64) -> Option<Handle> {
         self.table.get(&id).copied()
     }
-    /// Whether the body with id `id` is still stored at `h` (a body seen earlier may have left the world since, and its
-    /// slot taken by another).
-    pub(crate) fn holds(&self, h: Handle, id: u64) -> bool {
-        self[h].alive && self[h].id == id
-    }
     /// The first break of the storage, if any: a cell's list that holds a body of another cell or stored in another
     /// domain, an id table that points elsewhere, or a living body not filed exactly once in the rings, in its domain's
     /// at its due batch (`check::broken`).
@@ -201,9 +199,15 @@ impl Life {
         let listed: usize = self.domains.iter().map(|x| x.at.iter().map(|l| l.len()).sum::<usize>()).sum();
         (listed != self.table.len()).then(|| format!("{listed} bodies in the cells' lists, {} in the id table", self.table.len()))
     }
-    /// The domain of cell `i`.
-    pub(crate) fn domain_of(&self, i: usize) -> usize {
-        self.cell_in[i].0 as usize
+    /// The domain of cell `i` and its place among that domain's cells (`cells_of`).
+    #[inline]
+    pub(crate) fn place(&self, i: usize) -> (usize, usize) {
+        let (d, k) = self.cell_in[i];
+        (d as usize, k as usize)
+    }
+    /// The cells of domain `d`, in order.
+    pub(crate) fn cells_of(&self, d: usize) -> &[u32] {
+        &self.domains[d].cells
     }
     pub fn lineages(&self) -> usize {
         self.members.iter().filter(|&&m| m > 0).count()

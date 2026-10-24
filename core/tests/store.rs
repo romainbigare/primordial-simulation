@@ -1,11 +1,12 @@
 //! The store: `apply` keeps the books of changes that ask no node for more than it holds (what
-//! rounding leaves below zero is set to zero), and what crosses the world's boundary is booked on its boundary nodes.
+//! rounding leaves below zero is set to zero), what crosses the world's boundary is booked on its boundary nodes, and
+//! a sample member's update leaves the bodies' view of the store as it found it.
 
 use pcore::check;
 use pcore::rng::{Purpose, Rng};
 use pcore::store::{apply, held, Boundary, Class, LinkFlux, Move, Node, NodeId, Transform, BOUNDARIES};
 use pcore::{World, AIR};
-use worldgen::testkit::{put, set_amount, small_world, Books, LIQUID, ROCK};
+use worldgen::testkit::{founder, node_of, put, set_amount, small_world, start, Books, Brain, LIQUID, ROCK};
 
 /// Random changes the books test makes, in all (rounds of `PER_ROUND`).
 const CHANGES: usize = 1_000_000;
@@ -242,4 +243,34 @@ fn what_crosses_the_boundary_keeps_the_books() {
     w.cross((Boundary::Sun, Node::ground(2)), [], q);
     w.cross((Boundary::Space, Node::air(0)), [], -q);
     books.assert_kept(&w, 1e-12);
+}
+
+/// A sampled update leaves the store's view as an unsampled one would (`copy::sample` runs in a checkpoint of the view
+/// and rolls back): a node without a brain alone in the world, its members differing in one gene or alike, books the
+/// same moves at its update, bit for bit, and only its mean differs after.
+#[test]
+fn a_sampled_update_leaves_the_view_as_an_unsampled_one() {
+    let (mut w, i) = start();
+    w.cfg.sample_every = 1;
+    let lay = pcore::body::Layout::of(&w.chem);
+    let one = founder(&mut w, 0, i, &Brain { hidden: 0, ..Brain::only(pcore::brain::REST) });
+    let mut b = node_of(&mut w, one, 50.0);
+    let sd = 0.3 * pcore::body::steps(&lay, &vec![1.0; lay.len])[pcore::body::STRENGTH].recip();
+    (b.genes[pcore::body::ALLOC], b.brood, b.spread) = (0.0, 0.0, vec![0.0; lay.len]);
+    b.spread[pcore::body::STRENGTH] = sd * sd;
+    let s = w.add(b, 1);
+    let mut alike = w.clone();
+    alike.life[s].spread.clear();
+    let ends = [&mut w, &mut alike].map(|w| {
+        let last = w.life[s].last;
+        while w.life[s].last == last {
+            pcore::day(w);
+        }
+        let classes = [Class::Ground, Class::Air, Class::Deep, Class::Bed, Class::Bodies, Class::Boundary, Class::Potential];
+        let store: Vec<u64> = classes.iter().flat_map(|&c| w.store.amounts(c).iter().chain(w.store.heat(c))).map(|x| x.to_bits()).collect();
+        (store, w.counts.rounded, w.counts.clamped_heat, w.life[s].genes[pcore::body::STRENGTH])
+    });
+    assert!(ends[0].3 != ends[1].3, "no sample ran: the mean did not move");
+    assert!(ends[0].0 == ends[1].0, "the sampled update changed the store");
+    assert_eq!((ends[0].1, ends[0].2), (ends[1].1, ends[1].2), "the sampled update changed the counters");
 }

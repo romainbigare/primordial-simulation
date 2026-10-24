@@ -74,8 +74,9 @@ pub(super) struct YearTally {
     /// Body-months of bodies that are not light-eaters, [cold, warm] x [all, inside walls]
     pub inside: [[f64; 2]; 2],
     /// The core's tallies of the year, taken at the yearly row: decisions drawn and those where the action drawn had
-    /// the top score; what bodies did with parts
+    /// the top score; batches of bodies' updates and the busiest domain's share of each summed; what bodies did with parts
     pub decisions: [f64; 2],
+    pub busiest: [f64; 2],
     pub parts: pcore::bond::Tally,
 }
 
