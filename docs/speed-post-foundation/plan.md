@@ -484,7 +484,9 @@ for it (S8).
 - **Nodes with a brain** (S36): a node with both parts thinks once per part, with the inputs at that part's member
   size, and that part's members spread over its options (`choose::spread`). So young members act on their own state.
   Such a node thinks twice an update: its thinking cost is paid per part's members (it is per member), and the bench
-  counts the extra think.
+  counts the extra think. The node keeps one brain state (S47): its trace and well-being come from one member drawn
+  across both parts by members, as `spread` draws one member across the options today; its memory and signal come
+  from that member's part's think.
 - B3: the light of a cell passes the young part and the adult part of each node as two layers by their heights
   (Purves et al. 2008, the perfect plasticity approximation; Moorcroft et al. 2001).
 
