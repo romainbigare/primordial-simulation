@@ -173,7 +173,7 @@ impl Recorder {
             return;
         }
         if let Some(t) = taken.filter(|_| yearly) {
-            (self.year.decisions, self.year.busiest, self.year.parts) = ([t.decisions, t.greedy], [t.batches, t.busiest], t.parts);
+            (self.year.decisions, self.year.busiest, self.year.parts) = ([t.decisions, t.greedy], [t.body_batches, t.busiest_share], t.parts);
         }
         let c = Ctx::new(w);
         if yearly {

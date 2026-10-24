@@ -71,7 +71,9 @@ pub(super) fn perceive(w: &World, b: &Body, nseen: usize, rng: &mut Rng) -> Choi
     let i = b.cell as usize;
     let (mut seen, mut cnt, side, cells) = ([(Face::default(), false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
     let room = bond::room(w, b);
-    let mine = room.map(|(r, e)| (r as u32, e.closed));
+    // Its own room as the others' are seen, from its face (outside a batch, where there are none, as it is now).
+    let face = w.life.faces.of(i).iter().find(|o| o.id == b.id);
+    let mine = face.map_or_else(|| room.map(|(r, e)| (r as u32, e.closed)), |o| o.room);
     for q in 0..9 {
         let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
         for o in w.life.faces.of(j).iter().filter(|o| o.id != b.id) {

@@ -1,6 +1,6 @@
 //! Heat of ground and air nodes: heat capacities, temperatures, melting plateaus, and the heat above `T_FLOOR`.
 
-use crate::{chem::{self, Chemistry}, params::Config, store::Node, units::T_FLOOR, world::World};
+use crate::{chem::{self, Chemistry}, params::Config, store::{Class, Node}, units::T_FLOOR, world::World};
 
 /// The share of a wanted amount that was really given (exactly 1 when all of it was).
 #[inline]
@@ -76,21 +76,21 @@ pub(crate) fn heat_above_floor(e: f64, cap: f64) -> f64 {
 impl World {
     /// Heat capacity of a ground node's active layer, J/K: its bed's skin, then its loose amounts in order.
     pub fn heat_cap_ground(&self, i: usize) -> f64 {
-        let ns = self.chem.ns();
-        let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, |k| self.b(k, i));
-        (0..ns).fold(skin, |c, k| c + self.g(k, i) * self.chem.subs[k].cp)
+        let (ns, g) = (self.chem.ns(), self.amounts_now(Node::ground(i)));
+        let skin = skin_cap(&self.chem, &self.cfg, self.mesh.cells().area()[i], 0..ns, self.amounts_now(Node::new(Class::Bed, i)));
+        (0..ns).fold(skin, |c, k| c + g(k) * self.chem.subs[k].cp)
     }
     /// Melting point of substance `k` in ground node `i`, lowered by what is dissolved in its liquid (`Chemistry::melt_in`).
     pub fn melt(&self, k: usize, i: usize) -> f64 {
-        self.chem.melt_in(k, |j| self.g(j, i))
+        self.chem.melt_in(k, self.amounts_now(Node::ground(i)))
     }
     /// Temperature of a ground node from its amounts and heat now (as the moves gathered leave them), and the substance on
     /// its plateau with its liquid share.
     pub fn thaw(&self, i: usize) -> (f64, Option<(usize, f64)>) {
-        let c = self.heat_cap_ground(i).max(1.0);
-        let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| self.g(k, i) > 0.0).map(|k| (self.melt(k, i), k)).collect();
+        let (c, g) = (self.heat_cap_ground(i).max(1.0), self.amounts_now(Node::ground(i)));
+        let mut ks: Vec<(f64, usize)> = (0..self.chem.ns()).filter(|&k| g(k) > 0.0).map(|k| (self.chem.melt_in(k, &g), k)).collect();
         ks.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let th = melting(c, self.heat_now(Node::ground(i)), ks.into_iter().map(|(tm, k)| (tm, k, self.g(k, i) * self.chem.subs[k].lf)));
+        let th = melting(c, self.heat_now(Node::ground(i)), ks.into_iter().map(|(tm, k)| (tm, k, g(k) * self.chem.subs[k].lf)));
         (th.t, th.on)
     }
     /// Temperature of ground node `i` as every law and the shell read it, K, with its plateau: Flow's solve at its last
@@ -108,7 +108,8 @@ impl World {
     }
     /// Thermal energy of a ground node at temperature `t` with the fusion enthalpy molten there: the inverse of `thaw`.
     pub fn energy_ground(&self, i: usize, t: f64) -> f64 {
-        let held: f64 = (0..self.chem.ns()).map(|k| self.g(k, i) * self.chem.fused_heat(k, t, |j| self.g(j, i))).sum();
+        let g = self.amounts_now(Node::ground(i));
+        let held: f64 = (0..self.chem.ns()).map(|k| g(k) * self.chem.fused_heat(k, t, &g)).sum();
         self.heat_cap_ground(i) * t + held
     }
     /// Molten share of substance `k` in ground node `i` at temperature `t` (from `thaw`).

@@ -233,7 +233,7 @@ pub fn dig(w: &mut World, b: &mut Body) {
     }
     for (k, &a) in m.iter().enumerate() {
         let bed = w.b(k, i);
-        w.gather(Move::loosen(i, k, a, bed));
+        w.gather_move(Move::loosen(i, k, a, bed));
     }
 }
 

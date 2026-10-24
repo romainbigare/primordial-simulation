@@ -3,8 +3,9 @@
 //! moves leave them (plan 3.4): the ground, bed and bodies' node of each of its cells and its air node, each taken from
 //! the store when a move first touches it (until then the store holds what the view would). A read of another domain's
 //! node reads the store, which nothing changes until the moves are booked; so does the potential, which no body reads,
-//! its lift kept in the moves. A checkpoint of the view can be rolled back: a sample member's update changes nothing
-//! (`copy::sample`).
+//! its lift kept in the moves. The view's sums are plain, not compensated as `apply` compensates the ground and the air
+//! (`Store::carry`): what a body reads differs from what is booked by less than `ROUNDING`. A checkpoint of the view can
+//! be rolled back: a sample member's update changes nothing (`copy::sample`).
 
 use super::{apply, held_more, Class, Move, Node};
 use crate::chem::Chemistry;
@@ -36,14 +37,12 @@ pub struct Moves {
     open: usize,
     air: usize,
     ns: usize,
-    /// The view of the domain open: by class, the amounts of the nodes it holds (`[2 * class][x * ns + k]`, mol) and
-    /// their heat (`[2 * class + 1][x]`, J), `x` a cell's place in `held` (the air node: 0); then at `SEEN` what bodies
-    /// see of each substance in its air node, mol
+    /// The view of the domain open: by class, the amounts of its nodes (`[2 * class][x * ns + k]`, mol) and their heat
+    /// (`[2 * class + 1][x]`, J), `x` a cell's slot in its domain (`Life::cell_slot`; the air node: 0); then at `SEEN`
+    /// what bodies see of each substance in its air node, mol
     view: [Vec<f64>; SEEN + 1],
-    /// The cells whose nodes the view holds, in the order taken; per ground cell of the world, 1 + its place there (0:
-    /// not held); whether it holds the air node
-    held: Vec<u32>,
-    place: Vec<u32>,
+    /// Which cells of the domain open the view holds, by slot, and whether it holds its air node
+    held: Vec<bool>,
     air_held: bool,
     /// Heat a ground node could not give (`World::take_from_ground`), J
     short: f64,
@@ -62,21 +61,15 @@ pub struct Mark {
 
 impl Default for Moves {
     fn default() -> Moves {
-        let (list, opened, view, held, place) = (Vec::new(), Vec::new(), Default::default(), Vec::new(), Vec::new());
-        Moves { who: None, list, opened, open: NONE, air: NONE, ns: 0, view, held, place, air_held: false, short: 0.0, undo: None }
+        let (list, opened, view, held) = (Vec::new(), Vec::new(), Default::default(), Vec::new());
+        Moves { who: None, list, opened, open: NONE, air: NONE, ns: 0, view, held, air_held: false, short: 0.0, undo: None }
     }
 }
 
 impl Moves {
-    /// The view holds nothing: what is read is read from the store.
-    fn empty(&mut self) {
-        self.held.drain(..).for_each(|i| self.place[i as usize] = 0);
-        self.view.iter_mut().for_each(Vec::clear);
-        self.air_held = false;
-    }
     /// Number `at` of array `arr` of the view changes by `d`; noted while a checkpoint is set. A take never passes what
     /// the view holds (a law that does overdraws its node; checked in debug builds).
-    fn change(&mut self, arr: usize, at: usize, d: f64) {
+    fn alter(&mut self, arr: usize, at: usize, d: f64) {
         let v = &mut self.view[arr][at];
         debug_assert!(arr == SEEN || d >= 0.0 || *v + d >= -super::ROUNDING * (v.abs() + d.abs()), "a take of {d} from a view that holds {v} (array {arr}, at {at})");
         if let Some(u) = &mut self.undo {
@@ -84,21 +77,21 @@ impl Moves {
         }
         *v += d;
     }
-    /// Gather move `m`, whose ends lie at places `at` of the view (none: not held); the view changes as `apply` will
+    /// Gather move `m`, whose ends lie at slots `at` of the view (none: not held); the view changes as `apply` will
     /// change the store.
     fn push(&mut self, chem: &Chemistry, m: Move, at: [Option<usize>; 2]) {
         let (k, ns, into) = (m.k as usize, self.ns, m.heat - m.mol * held_more(chem, m.from.class, m.to.class, m.k as usize));
         for ((x, mol, heat), at) in [(m.from, -m.mol, -m.heat), (m.to, m.mol, into)].into_iter().zip(at) {
             let (Some(at), c) = (at, x.class as usize) else { continue };
             if mol != 0.0 {
-                self.change(2 * c, at * ns + k, mol);
+                self.alter(2 * c, at * ns + k, mol);
                 // (The air node and the bodies' nodes under it are what bodies see of the air.)
                 if matches!(x.class, Class::Air | Class::Bodies) {
-                    self.change(SEEN, k, mol);
+                    self.alter(SEEN, k, mol);
                 }
             }
             if heat != 0.0 {
-                self.change(2 * c + 1, at, heat);
+                self.alter(2 * c + 1, at, heat);
             }
         }
         self.list.push(m);
@@ -106,61 +99,78 @@ impl Moves {
 }
 
 impl World {
-    /// The place of node `x` in the view, if the view holds it.
+    /// The slot of node `x` in the view, if the view holds it.
     #[inline(always)]
-    fn kept(&self, x: Node) -> Option<usize> {
+    fn view_at(&self, x: Node) -> Option<usize> {
         match x.class {
             Class::Air => (x.index == self.moves.air && self.moves.air_held).then_some(0),
-            Class::Ground | Class::Bed | Class::Bodies => match self.moves.place.get(x.index) {
-                Some(&p) if p > 0 => Some(p as usize - 1),
-                _ => None,
-            },
+            Class::Ground | Class::Bed | Class::Bodies => {
+                let (d, at) = self.life.cell_slot(x.index);
+                (d == self.moves.open && self.moves.held[at]).then_some(at)
+            }
             _ => None,
         }
     }
     /// The moves of the update of `who` in ground cell `i` open, on the view of its domain: as this batch's moves left
     /// it if the domain is open, else empty, its nodes as the store holds them.
     pub fn open_moves(&mut self, i: usize, who: Node) {
-        let d = self.life.place(i).0;
+        let d = self.life.domain_of(i);
         self.moves.who = Some((who, i));
         if self.moves.open == d {
             return;
         }
         debug_assert!(self.moves.opened.iter().all(|o| o.0 != d), "domain {d} opened twice before its moves were booked");
-        let (n, m) = (self.mesh.cells().n(), &mut self.moves);
-        m.empty();
-        m.place.resize(n, 0);
+        let (cells, ns, m) = (self.life.cells_of(d).len(), self.chem.ns(), &mut self.moves);
         m.opened.push((d, m.list.len()));
-        (m.open, m.air, m.ns) = (d, self.mesh.up(i, 0, AIR), self.chem.ns());
+        (m.open, m.air, m.ns, m.air_held) = (d, self.mesh.up(i, 0, AIR), ns, false);
+        m.held.clear();
+        m.held.resize(cells, false);
+        // (Room for its numbers, taken from the store as they are first touched, `view_load`: the bed holds no heat.)
+        let size = |arr: usize| match (Class::ALL.get(arr / 2), arr.is_multiple_of(2)) {
+            _ if arr == SEEN => ns,
+            (Some(Class::Air), amounts) => if amounts { ns } else { 1 },
+            (Some(Class::Ground | Class::Bodies), false) => cells,
+            (Some(Class::Ground | Class::Bed | Class::Bodies), true) => cells * ns,
+            _ => 0,
+        };
+        for (arr, v) in m.view.iter_mut().enumerate() {
+            v.resize(size(arr).max(v.len()), 0.0);
+        }
     }
     /// Node `x`, if it is of the domain open, is taken into its view from the store (if it is not yet), with its air node
     /// too where its amounts change and bodies see them (`mol`): what bodies see of the air is then taken before any of
-    /// it changes. Returns its place in the view, if it is of the domain open.
-    fn load(&mut self, x: Node, mol: bool) -> Option<usize> {
-        let cell = match x.class {
+    /// it changes. Returns its slot in the view, if it is of the domain open.
+    fn view_load(&mut self, x: Node, mol: bool) -> Option<usize> {
+        let at = match x.class {
             Class::Air if x.index == self.moves.air => None,
-            Class::Ground | Class::Bed | Class::Bodies if self.moves.place[x.index] > 0 || self.life.place(x.index).0 == self.moves.open => Some(x.index),
+            Class::Ground | Class::Bed | Class::Bodies => match self.life.cell_slot(x.index) {
+                (d, at) if d == self.moves.open => Some(at),
+                _ => return None,
+            },
             _ => return None,
         };
-        if let Some(i) = cell.filter(|&i| self.moves.place[i] == 0) {
-            let (n, ns, st, m) = (self.mesh.cells().n(), self.moves.ns, &self.store, &mut self.moves);
+        if let Some(at) = at.filter(|&at| !self.moves.held[at]) {
+            let (n, i, ns, st, m) = (self.mesh.cells().n(), x.index, self.moves.ns, &self.store, &mut self.moves);
             for c in [Class::Ground, Class::Bed, Class::Bodies] {
                 let (a, h, c) = (st.amounts(c), st.heat(c), c as usize);
-                m.view[2 * c].extend((0..ns).map(|k| a[k * n + i]));
-                m.view[2 * c + 1].extend(h.get(i));
+                (0..ns).for_each(|k| m.view[2 * c][at * ns + k] = a[k * n + i]);
+                if let Some(&e) = h.get(i) {
+                    m.view[2 * c + 1][at] = e;
+                }
             }
-            m.held.push(i as u32);
-            m.place[i] = m.held.len() as u32;
+            m.held[at] = true;
         }
-        if (cell.is_none() || x.class == Class::Bodies && mol) && !self.moves.air_held {
+        if (at.is_none() || x.class == Class::Bodies && mol) && !self.moves.air_held {
             let (n, na, j, st) = (self.mesh.cells().n(), self.mesh.level(AIR).n(), self.moves.air, &self.store);
             let (a, b, cells, m) = (st.amounts(Class::Air), st.amounts(Class::Bodies), self.life.cells_of(self.moves.open), &mut self.moves);
-            m.view[2 * Class::Air as usize].extend((0..m.ns).map(|k| a[k * na + j]));
-            m.view[2 * Class::Air as usize + 1].push(st.heat(Class::Air)[j]);
-            m.view[SEEN].extend((0..m.ns).map(|k| a[k * na + j] + cells.iter().map(|&c| b[k * n + c as usize]).sum::<f64>()));
+            for k in 0..m.ns {
+                m.view[2 * Class::Air as usize][k] = a[k * na + j];
+                m.view[SEEN][k] = a[k * na + j] + cells.iter().map(|&c| b[k * n + c as usize]).sum::<f64>();
+            }
+            m.view[2 * Class::Air as usize + 1][0] = st.heat(Class::Air)[j];
             m.air_held = true;
         }
-        self.kept(x)
+        Some(at.unwrap_or(0))
     }
     /// The moves gathered are booked, one call of `apply` for each domain in the order they opened, and they close.
     pub fn book_moves(&mut self) {
@@ -171,8 +181,7 @@ impl World {
         }
         self.counts.clamped_heat += std::mem::take(&mut self.moves.short);
         let m = &mut self.moves;
-        m.empty();
-        (m.list, m.opened, m.who, m.open, m.air) = (list, opened, None, NONE, NONE);
+        (m.list, m.opened, m.who, m.open, m.air, m.air_held) = (list, opened, None, NONE, NONE, false);
         m.list.clear();
         m.opened.clear();
     }
@@ -195,20 +204,22 @@ impl World {
         self.events.truncate(m.events);
         self.counts.rounded = m.rounded;
     }
-    /// Gather move `m` of the update running.
-    pub(crate) fn gather(&mut self, m: Move) {
-        let at = [self.load(m.from, m.mol != 0.0), self.load(m.to, m.mol != 0.0)];
+    /// Gather move `m` of the update running. A move takes only from its domain's nodes (checked in debug builds).
+    pub(crate) fn gather_move(&mut self, m: Move) {
+        let at = [self.view_load(m.from, m.mol != 0.0), self.view_load(m.to, m.mol != 0.0)];
+        let store = matches!(m.from.class, Class::Ground | Class::Bed | Class::Bodies | Class::Air);
+        debug_assert!(!store || (m.mol <= 0.0 && m.heat <= 0.0) || at[0].is_some(), "a take from {:?}, outside the domain open", m.from);
         self.moves.push(&self.chem, m, at);
     }
     /// `mol` of substance `k` and `heat` J go from node `x` of the store to the one whose update it is.
     pub(crate) fn take_move(&mut self, x: Node, k: usize, mol: f64, heat: f64) {
         let to = self.moves.who.expect(RUNNING).0;
-        self.gather(Move { from: x, to, k: k as u16, mol, heat });
+        self.gather_move(Move { from: x, to, k: k as u16, mol, heat });
     }
     /// `mol` of substance `k` and `heat` J go from the one whose update it is to node `x` of the store (`held_more` aside).
     pub(crate) fn give_move(&mut self, x: Node, k: usize, mol: f64, heat: f64) {
         let from = self.moves.who.expect(RUNNING).0;
-        self.gather(Move { from, to: x, k: k as u16, mol, heat });
+        self.gather_move(Move { from, to: x, k: k as u16, mol, heat });
     }
     /// `m` mol of gas `k` go from the one whose update it is into its cell's bodies' node, which the air's step empties
     /// into the air with the lift (laws.md 1.5); the giver pays its latent heat. Negative, `-m` mol come down from its
@@ -220,25 +231,35 @@ impl World {
         } else {
             self.take_move(air, k, -m, 0.0);
             let e = m * self.chem.subs[k].molar_mass * lift;
-            self.gather(Move { from: air, to: Node::new(Class::Potential, 0), k: 0, mol: 0.0, heat: e });
+            self.gather_move(Move { from: air, to: Node::new(Class::Potential, 0), k: 0, mol: 0.0, heat: e });
         }
     }
     /// Amount of substance `k` in node `x` (a ground, bed, bodies' or air node) as the moves gathered leave it, mol.
     #[inline(always)]
     pub(crate) fn amount_now(&self, x: Node, k: usize) -> f64 {
-        match self.kept(x) {
+        match self.view_at(x) {
             Some(at) => self.moves.view[2 * x.class as usize][at * self.moves.ns + k],
             None => self.store.amounts(x.class)[k * if x.class == Class::Air { self.mesh.level(AIR).n() } else { self.mesh.cells().n() } + x.index],
         }
     }
+    /// The amounts of node `x` (a ground, bed, bodies' or air node) as the moves gathered leave them: of substance `k`,
+    /// mol, at `k`. One look-up of the view for a node read substance by substance.
+    #[inline]
+    pub(crate) fn amounts_now(&self, x: Node) -> impl Fn(usize) -> f64 + '_ {
+        let (a, at, step) = match self.view_at(x) {
+            Some(at) => (&self.moves.view[2 * x.class as usize][..], at * self.moves.ns, 1),
+            None => (self.store.amounts(x.class), x.index, if x.class == Class::Air { self.mesh.level(AIR).n() } else { self.mesh.cells().n() }),
+        };
+        move |k| a[at + k * step]
+    }
     /// What bodies see of each substance in air node `j` (`World::a_seen`) as the moves gathered leave it, if the view
     /// holds that node.
     pub(crate) fn seen_now(&self, j: usize) -> Option<&[f64]> {
-        self.kept(Node::air(j)).map(|_| &self.moves.view[SEEN][..])
+        self.view_at(Node::air(j)).map(|_| &self.moves.view[SEEN][..])
     }
     /// Heat of node `x` (a ground node, an air node or a bodies' node) as the moves gathered leave it, J.
     pub(crate) fn heat_now(&self, x: Node) -> f64 {
-        match self.kept(x) {
+        match self.view_at(x) {
             Some(at) => self.moves.view[2 * x.class as usize + 1][at],
             None => self.store.heat(x.class)[x.index],
         }

@@ -199,9 +199,13 @@ impl Life {
         let listed: usize = self.domains.iter().map(|x| x.at.iter().map(|l| l.len()).sum::<usize>()).sum();
         (listed != self.table.len()).then(|| format!("{listed} bodies in the cells' lists, {} in the id table", self.table.len()))
     }
-    /// The domain of cell `i` and its place among that domain's cells (`cells_of`).
+    /// The domain of cell `i`.
+    pub(crate) fn domain_of(&self, i: usize) -> usize {
+        self.cell_in[i].0 as usize
+    }
+    /// The domain of cell `i` and its slot among that domain's cells (`cells_of`).
     #[inline]
-    pub(crate) fn place(&self, i: usize) -> (usize, usize) {
+    pub(crate) fn cell_slot(&self, i: usize) -> (usize, usize) {
         let (d, k) = self.cell_in[i];
         (d as usize, k as usize)
     }

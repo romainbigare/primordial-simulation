@@ -297,12 +297,13 @@ pub fn batch(w: &mut World) {
         return;
     }
     let life = &w.life;
-    let at = |id: u64| life.find(id).map(|s| life[s].cell as usize).map(|i| (life.place(i).0, i, id));
+    let at = |id: u64| life.find(id).map(|s| life[s].cell as usize).map(|i| (life.domain_of(i), i, id));
     let mut list: Vec<(usize, usize, u64)> = due.into_iter().filter_map(at).collect();
     list.sort_unstable();
-    // The busiest domain's share of the batch's updates (`Counters::busiest`).
+    // The busiest domain's share of the batch's updates (`Counters::busiest_share`).
     let most = list.chunk_by(|a, b| a.0 == b.0).map(|d| d.len()).max().unwrap_or(0);
-    (w.counts.busiest, w.counts.batches) = (w.counts.busiest + most as f64 / list.len().max(1) as f64, w.counts.batches + 1.0);
+    let c = &mut w.counts;
+    (c.busiest_share, c.body_batches) = (c.busiest_share + most as f64 / list.len().max(1) as f64, c.body_batches + 1.0);
     let mut faces = std::mem::take(&mut w.life.faces);
     faces.make(w);
     w.life.faces = faces;

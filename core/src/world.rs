@@ -17,9 +17,9 @@ pub struct Counters {
     pub greedy: f64,
     /// Batches of bodies' updates, and the busiest domain's share of each one's updates summed (`survey::batch`)
     #[serde(skip)]
-    pub batches: f64,
+    pub body_batches: f64,
     #[serde(skip)]
-    pub busiest: f64,
+    pub busiest_share: f64,
     /// Population nodes split in two since the start (`nodes::split`)
     pub splits: f64,
     /// Body updates since the start
@@ -39,8 +39,8 @@ pub struct Counters {
 pub struct Taken {
     pub decisions: f64,
     pub greedy: f64,
-    pub batches: f64,
-    pub busiest: f64,
+    pub body_batches: f64,
+    pub busiest_share: f64,
     pub parts: bond::Tally,
 }
 
@@ -112,12 +112,12 @@ impl World {
     pub fn drain_events(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.events)
     }
-    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `batches`, `busiest`, `parts`), and start them
-    /// again.
+    /// Hand the shell the yearly counts (`Counters::decisions`, `greedy`, `body_batches`, `busiest_share`, `parts`),
+    /// and start them again.
     pub fn take_counters(&mut self) -> Taken {
         let c = &mut self.counts;
-        let (decisions, greedy, batches, busiest) = (std::mem::take(&mut c.decisions), std::mem::take(&mut c.greedy), std::mem::take(&mut c.batches), std::mem::take(&mut c.busiest));
-        Taken { decisions, greedy, batches, busiest, parts: std::mem::take(&mut c.parts) }
+        let (decisions, greedy, body_batches, busiest_share) = (std::mem::take(&mut c.decisions), std::mem::take(&mut c.greedy), std::mem::take(&mut c.body_batches), std::mem::take(&mut c.busiest_share));
+        Taken { decisions, greedy, body_batches, busiest_share, parts: std::mem::take(&mut c.parts) }
     }
     pub fn days_per_year(&self) -> u64 {
         self.cfg.calendar().days(self.cfg.calendar().year)
