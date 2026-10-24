@@ -26,6 +26,7 @@ fn main() {
         eprintln!("{e}\n\n{USAGE}");
         std::process::exit(2);
     }
+    pcore::par::adopt_thread();
     match args.command() {
         "run" => {
             let (size, seed) = (args.get("--size", 128usize), args.get("--seed", 1u64));

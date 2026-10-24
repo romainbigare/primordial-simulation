@@ -23,6 +23,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | baseline | `16e6a4e` | 0.857 | 159 | 49 | 638 | 0 | 11 | 2,744 | 27,762 | 1.347 | 229 | 51 | 1,010 | 43 | 15 | 1,955 | 25,626 | 8,998 |
 | A2 | A2 | 0.702 | 128 | 40 | 525 | 0 | 10 | 2,744 | 27,762 | 1.220 | 210 | 49 | 905 | 43 | 12 | 1,955 | 25,626 | 8,998 |
 | E2.1 | E2.1 | 0.728 | 135 | 46 | 538 | 0 | 10 | 2,744 | 27,762 | 1.274 | 225 | 55 | 940 | 40 | 14 | 1,932 | 25,410 | 8,996 |
+| D3 | D3 | 0.730 | 122 | 44 | 553 | 0 | 11 | 2,744 | 27,762 | 1.215 | 188 | 48 | 922 | 43 | 13 | 1,955 | 25,626 | 9,001 |
 
 ### A2: compiler settings
 
@@ -87,6 +88,60 @@ members watch, and the split and the means are worked from the acting side (othe
 numbers: eaters OUT of the old range, inside after S49: 5.391 log10 kg (seeds 5.291, 5.474, 5.409) against 5.354 at
 `b75d5b0` (seeds 5.295, 5.414, 5.352), old range 4.86 +- 0.5 (up to 5.36); a variant with only E2.1's rounding (the old
 cap kept) gives 5.379 (seeds 5.305, 5.446, 5.385). The light-eaters' stored share is 0.557 before and after (S50).
+### D3: the physics on threads
+
+**The measure before D3** (callgrind, one simulated year, share of all instructions, island22 / globe36). Already on
+worker threads: the air's `pass` (5.45 island) and Change's reactor rows (4.3 island). Serial on the main thread and
+independent per cell or per air node, the candidates: the air's `gather` (with `solve` 1.3 / 2.3), the air state
+`nodes` and `sums` (0.45 / 0.39), `dissolve` (0.86 island), `fixed` and `room` (tiny), liquid `slopes` (0.25 / 0.04),
+land `ground_state` (0.98 / 0.80), Change's `Batches::add` (0.60 island) and the row work inside `air::book` (2.4 / 2.6,
+but most of that is `store::apply`, which stays serial). Together about 3% of the instructions, so the loops alone
+could not give 1.2 times on Flow (S48).
+
+**Each loop was judged** (S45) in wall time with threads (the stage timed inside the code, the mean of 4 years, 4 cores;
+the machine was shared with another job, so the ranges are wide) against its serial time. The cost of a call into the
+pool decided it: a loop that takes under about 200 µs
+a call gains nothing, because handing the rows out and waiting for them costs 30 to 55 µs, and a loop that reads its
+cells several times (`gather`) pays that again.
+
+| Loop (built as `par::rows`, results bit for bit) | Serial, ms a year (island / globe) | One call, µs | On threads, ms a year | Kept |
+|---|---|---|---|---|
+| air `gather`, per air node over its cells in cell order | 7.0 / 16 | 88 / 110 | 6.5 to 8.5 / 20 to 25 | no |
+| air `fixed` and `room` | 1.5 / 1.8 (`fixed`) | 42 / 50 | 2.5 to 3.5 / 3.0 to 4.2 | no (slower) |
+| liquid `slopes` | 2.2 to 2.5 / 4.2 to 5.0 | 190 / 400 | 2.0 to 2.2 / 3.0 to 4.2 | no (under 1 ms, under the noise) |
+
+Not built, because each takes under 200 µs a call and the table shows that does not pay: the air state's loops
+(`nodes`, `sums`, `seen`: 4.8 / 6.2 ms a year together, 133 / 172 µs a call for the three), `dissolve` (8.0 / 10.4 ms,
+of which 5 ms is `apply`), `ground_state` (4.8 / 10 ms, 57 / 120 µs), `Batches::add` (about 58 µs) and the row work of
+`book` (27 of 161 million instructions on the island, the rest is `apply`).
+
+**What did gain** is in `par.rs`, and it is for every loop that uses `par::rows`:
+
+- `par::rows` had a least size of task (4,096 numbers). The rows of the air's `pass` and of the reactor are heavy (an
+  iteration to a balance each), so a pass was cut into only a few tasks. Now the rows split as far as other threads are
+  idle. Alone this made Flow 1.14 times faster on the island (146 to 128 ms) and 1.17 times on the globe
+  (242 to 207 ms; 5 runs of each build, interleaved).
+- `ew` makes its main thread one of the pool's threads (`par::adopt_thread`). Before, the main thread handed each
+  loop to the workers and slept until they were done, which costs a wake-up each way. Now it starts the loop at once and
+  works on it with the others. On top of the first change: Flow 135 to 125 ms on the island (5 runs, interleaved).
+  `RAYON_NUM_THREADS=1` still works (the main thread alone).
+
+**The result** (7 runs of each build, interleaved in the same hour; a run during which another process used more than
+0.2 core was thrown away and made again; medians, ms a year):
+
+| | island22 flow | island22 change | globe36 flow | globe36 change |
+|---|---|---|---|---|
+| before D3 | 150.1 | 48.1 | 229.1 | 53.7 |
+| after D3 | 121.9 | 44.4 | 188.1 | 48.1 |
+| faster by | 1.23 times | 1.08 times | 1.22 times | 1.12 times |
+
+The air's `pass`, timed inside, went from about 53 to 31 ms a year on the island and from about 102 to 60 ms on the
+globe. The whole year (row D3 above) went from 0.792 to 0.730 s on the island and from 1.313 to 1.215 s on the globe
+(same-hour medians). One simulated year costs the same instructions as before (6.288 to 6.293 billion on the island,
+10.410 to 10.411 billion on the globe): the work is the same, spread over the four threads. The golden
+fingerprints are unchanged with and without threads, and the 5-year runs of both benches from their saves give the same
+`series.csv` (outside the `ms_*` columns) as before D3. The S48 target (Flow 1.2 times faster on 4 cores) is reached on both
+benches, by `par.rs` and not by the loops of the list. Core code: 9,002 lines (+4).
 
 ## Profile of the baseline
 
