@@ -24,34 +24,48 @@ pub(super) fn spread(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k:
     node.trace = trace(w, node, c, k, a, gain[a] - mean as f32);
 }
 
-/// `x` members of node `node` (in slot `slot`) do option `o`, split off by shares (`nodes::part`). Those still in its
-/// cell, holding and inside nothing, then go back in (watchers with the rows they copied); the others live on as a body
-/// with the trace of what they did, and those who moved join the first node of their kind and stage where they are
-/// (`copy::kin`). The node acts itself if less than one member would be left. Returns the change of their well-being, and whether they left the node (none: it moved whole).
+/// `x` members of node `node` (in slot `slot`) do option `o`. Members that stay in its cell (any option but a move or a
+/// bond) act as the node itself, holding and inside nothing, while the others wait aside with their share of its amounts
+/// (`nodes::Lot::split`); then those come back (`nodes::rejoin`: amounts, sizes and, after watching, rows by members).
+/// Members that move or bond are placed as a body of their own (`nodes::part`); those still in its cell, holding and
+/// inside nothing, then come back as well; the others live on as a body with the trace of what they did, and those who
+/// moved join the first node of their kind and stage where they are (`copy::kin`). The node acts itself if less than
+/// one member would be left. Returns the change of their well-being, and whether they left the node (none: it moved
+/// whole).
 fn part_acts(w: &mut World, slot: usize, node: &mut Body, c: &Choice, k: &Kit, (o, x): (usize, f64), rng: &mut Rng) -> (f32, Option<bool>) {
     let (cell, moves, bond) = (node.cell, (FIXED..TO_BODY).contains(&o), (FORM..FIXED).contains(&o) || o >= TO_PART);
+    let mut acts = |w: &mut World, s: usize, b: &mut Body| {
+        let before = (k.wb)(w, b);
+        act_as(w, s, b, c, k, o, rng);
+        (k.wb)(w, b) - before
+    };
     if node.count - x < 1.0 {
-        let before = (k.wb)(w, node);
-        act_as(w, slot, node, c, k, o, rng);
-        return ((k.wb)(w, node) - before, (node.cell == cell).then_some(false));
+        return (acts(w, slot, node), (node.cell == cell).then_some(false));
     }
-    let mut m = nodes::part(&mut w.life, node, x / node.count, x / node.count);
-    // Only a move or a bond takes a part out of its cell, or makes it hold or go inside: such a part is placed as a body
-    // of its own; the others act under the node's name, out of any slot.
-    let s = if moves || bond { w.place(std::mem::take(&mut m)) } else { slot };
-    if s == slot { w.see(&mut m) } else { m = std::mem::take(&mut w.life.bodies[s]) }
-    let before = (k.wb)(w, &m);
-    act_as(w, s, &mut m, c, k, o, rng);
-    let gain = (k.wb)(w, &m) - before;
-    if m.cell == cell && m.hold.is_none() && m.inside.is_none() {
-        let born = ((TO_BODY..TO_PART).contains(&o) && (o - TO_BODY) % VERBS == WATCH).then(|| w.life.born(node).to_vec());
-        if s != slot {
-            w.life.remove(s, &m);
-        }
-        nodes::take_in(w, node, m, born.as_deref(), true);
+    let f = x / node.count;
+    if !(moves || bond) {
+        // The others wait aside with their share; as members split by shares, their sizes are the node's.
+        let size = node.size_moments(&w.chem);
+        let rest = nodes::Lot::split(&mut w.life, node, 1.0 - f, 1.0 - f);
+        let held = (node.hold.take(), node.inside.take());
+        // A watcher changes its rows: the others keep the node's.
+        let kept_rows = ((TO_BODY..TO_PART).contains(&o) && (o - TO_BODY) % VERBS == WATCH).then(|| node.rows.clone());
+        let gain = acts(w, slot, node);
+        debug_assert!(node.hold.is_none() && node.inside.is_none(), "an action that stays in its cell takes no hold and enters nothing");
+        (node.hold, node.inside) = held;
+        nodes::rejoin(w, node, rest, size, kept_rows.as_deref());
         return (gain, Some(false));
     }
-    debug_assert_ne!(s, slot, "only a placed part leaves its node");
+    let part = nodes::part(&mut w.life, node, f, f);
+    let s = w.place(part);
+    let mut m = std::mem::take(&mut w.life.bodies[s]);
+    let gain = acts(w, s, &mut m);
+    if m.cell == cell && m.hold.is_none() && m.inside.is_none() {
+        w.life.remove(s, &m);
+        let size = m.size_moments(&w.chem);
+        nodes::rejoin(w, node, nodes::Lot::of(&mut m), size, None);
+        return (gain, Some(false));
+    }
     m.trace = trace(w, &m, c, k, o, 0.0);
     w.see(&mut m);
     // (Out of its slot, it is no node of its cell for `kin`.)

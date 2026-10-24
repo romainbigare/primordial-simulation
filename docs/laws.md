@@ -300,9 +300,13 @@ parent: its members mix inside it (one variance per gene and no covariances is f
 
 ### 4.4 Population nodes
 A node is one body for many members (handover 7.1): a speed tool that must give the patterns of individuals.
-- **Exact members** (`nodes::Lot`, `nodes::add`, one helper for every join, merge, split and birth): members, stores,
-  heat and brood split by shares and join as sums; genes, sizes and rows become means by members; the spread per gene
-  (`Body::spread`, `Body::row_spread`) pools each one's spread and its gap to the new mean.
+- **Exact members** (`nodes::Lot` for every split, `nodes::rejoin` for every join, inside `nodes::add` for merges and
+  births): members, stores, heat and brood split by shares and join as sums; genes, sizes and rows become means by
+  members; the spread per gene (`Body::spread`, `Body::row_spread`) and of the sizes (`Body::size_spread`) pools each
+  one's spread and its gap to the new mean. Members of a node with a brain that take any action but a move or a
+  bond (`choose::spread`) act as the node itself while the others wait aside with their share; these come back by
+  `rejoin` alone: their genes and spreads are the node's, so only amounts, sizes (members who fed are now larger than
+  those who waited) and, after watching, rows join.
 - **One lineage** per node (one brain). Children join the young node of their kind in their cell when alike within
   `alike` steps plus `WITHIN` standard deviations (`body::within`), else start one.
 - **Young that grow up** (`copy/young.rs`): a kind in a cell is an adult and a young node joined by a link. Below the

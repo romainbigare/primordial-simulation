@@ -45,7 +45,7 @@ fn share(m: f64, r: &mut Rng) -> f32 {
 
 /// The genes and the spread of `m` children of `a` and its partner `t`: each gene from one of them, drawn gene by gene
 /// (`share`); for a group of many the mean between them by the share drawn, and the
-/// spread what a merge pools (`nodes::take_in`). One child gets one parent's gene and that parent's spread. The
+/// spread what a merge pools (`nodes::add`). One child gets one parent's gene and that parent's spread. The
 /// generation's mutation (`body::vary`) is added after, as for one parent.
 pub(super) fn mix(a: &Body, t: &Body, m: f64, r: &mut Rng) -> (Vec<f32>, Vec<f32>) {
     (0..a.genes.len())

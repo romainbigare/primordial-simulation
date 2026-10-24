@@ -61,7 +61,7 @@ pub struct Body {
     pub parent: u64,
     pub born: u64,
     /// Day of the last update; for a node, the mean by members of the days its members' time was last integrated from
-    /// (members who joined since count from when they came, `nodes::add`)
+    /// (members who joined since count from when they came, `nodes::rejoin`)
     pub last: f64,
     /// The cell's cumulative light at the last update, J/m², moved since by what its shade gave
     /// it more or less than the cell's mean (`survey::shade`): it caught `light - mark` per m²

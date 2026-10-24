@@ -1,10 +1,10 @@
 //! Population nodes: the monthly merge of alike nodes in each cell (`crowd`), a body joining another (`merge`,
-//! `take_in`), a node splitting in two (`split`), and members drawn from a node as individuals (`open`). Members,
-//! stores and heat are kept exactly in every join and split.
+//! `add`), a part of a node coming back to it (`rejoin`), a node splitting in two (`split`), and members drawn from a
+//! node as individuals (`open`). Members, stores and heat are kept exactly in every join and split.
 
 use crate::bond::{held, let_go, room};
 use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
-use crate::brain::{row_step, shake};
+use crate::brain::{blend, row_step, shake};
 use crate::rng::{Purpose, Rng};
 use crate::life::Life;
 use crate::World;
@@ -109,14 +109,13 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
     w.cfg.nodes || w.life.brainless(b)
 }
 
-/// The body in slot `s` joins the body in slot `t`, of its lineage (`take_in`), letting go of what it holds.
+/// The body in slot `s` joins the body in slot `t`, of its lineage (`add`), letting go of what it holds.
 pub fn merge(w: &mut World, s: usize, t: usize) {
     let (born, mut c) = (w.life.born(&w.life.bodies[s]).to_vec(), std::mem::take(&mut w.life.bodies[s]));
     let_go(w, &mut c, false);
     w.life.remove(s, &c);
-    let mut o = std::mem::take(&mut w.life.bodies[t]);
-    take_in(w, &mut o, c, Some(&born), false);
-    w.life.bodies[t] = o;
+    let size = c.size_moments(&w.chem);
+    add(w, t, Lot::of(&mut c), (&c.genes, &c.spread), size, (&born, &c.rows, c.row_spread));
 }
 
 /// What splits and joins as an amount when members move between nodes, split by shares with the remainder kept so the
@@ -151,51 +150,48 @@ impl Lot {
     }
 }
 
-/// Members `c` join body `o` (taken out of its slot): amounts add up, genes, sizes and rows become the means by members
-/// and the spreads pool around them (laws.md 4.4); `rows` none: a member coming back with the node's own rows; `genes`
-/// (and spread) none: members coming back with the node's own, which a mean and a pool by members leave as they are.
-pub(crate) fn add(w: &mut World, o: &mut Body, c: Lot, genes: Option<(&[f32], &[f32])>, size: (f32, f32), rows: Option<(&[f32], &[f32], f32)>) {
-    let share = c.count / (o.count + c.count);
-    (o.last, o.mark, o.rained) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark), o.rained + share * (c.rained - o.rained));
-    let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, share as f32);
-    let (mo, vo) = o.size_moments(&w.chem);
-    let gap = size.0 - mo;
-    let (size_mean, size_var) = (mo + a * gap, (1.0 - a) * vo + a * size.1 + a * (1.0 - a) * gap * gap);
+/// Members `c` join the body in slot `t` with genes and spread `genes`, size moments `size` and rows `rows` (born rows,
+/// rows, row spread): amounts add up (`rejoin`), genes, sizes and rows become the means by members and the spreads pool
+/// around them (laws.md 4.4).
+pub(crate) fn add(w: &mut World, t: usize, c: Lot, (genes, spread): (&[f32], &[f32]), size: (f32, f32), (born, own, row_spread): (&[f32], &[f32], f32)) {
+    let mut o = std::mem::take(&mut w.life.bodies[t]);
+    let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
-    let mean = genes.map(|(genes, spread)| {
-        let mean = mix(&o.genes, genes);
-        let v = |g| {
-            pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0)
-        };
-        o.spread = (0..o.genes.len()).map(|g| spread_kept(&lay, g, mean[g], v(g))).collect();
-        mean
-    });
-    if let Some((rows, own, row_spread)) = rows {
-        let born = w.life.born(o);
-        let gap = born.iter().zip(rows).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / born.len().max(1) as f32;
-        o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
-        let rows = mix(born, rows);
-        o.rows = mix(&o.rows, own);
-        w.life.reborn(o, rows);
-    }
-    if let Some(mean) = mean {
-        o.set_genes(mean, &w.chem, &w.cfg.phys);
+    let mean = mix(&o.genes, genes);
+    let v = |g| pool(spread_at(&o.spread, g), spread_at(spread, g), (genes[g] - o.genes[g]).powi(2), range(&lay, g).0);
+    o.spread = (0..o.genes.len()).map(|g| spread_kept(&lay, g, mean[g], v(g))).collect();
+    let was = w.life.born(&o);
+    let gap = was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32;
+    o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
+    w.life.reborn(&mut o, mix(was, born));
+    o.set_genes(mean, &w.chem, &w.cfg.phys);
+    rejoin(w, &mut o, c, size, Some(own));
+    w.see(&mut o);
+    w.life.bodies[t] = o;
+}
+
+/// Members `c` with the genes and spreads of body `o` join it (taken out of its slot): the members of a node who waited
+/// aside while the others acted, a part of a node that moved or bonded and came back to its cell (both
+/// `choose::spread`), or joiners after `add` pooled their genes. Amounts add up; the last
+/// day, the marks and the sizes (moments `size`, `Body::size_moments`) become the means by members, the sizes' variance
+/// with the gap between the two means (members who fed are larger than those who did not); `rows`: the rows of `c`
+/// where they differ from `o`'s, which `o`'s become the mean by members of. `o`'s visible traits are the caller's to
+/// work out again (`World::see`).
+pub(crate) fn rejoin(w: &mut World, o: &mut Body, c: Lot, size: (f32, f32), rows: Option<&[f32]>) {
+    let share = c.count / (o.count + c.count);
+    (o.last, o.mark, o.rained) = (o.last + share * (c.last - o.last), o.mark + share * (c.mark - o.mark), o.rained + share * (c.rained - o.rained));
+    let ((mo, vo), a) = (o.size_moments(&w.chem), share as f32);
+    let gap = size.0 - mo;
+    let (size_mean, size_var) = (mo + a * gap, (1.0 - a) * vo + a * size.1 + a * (1.0 - a) * gap * gap);
+    if let Some(rows) = rows {
+        blend(&mut o.rows, rows, a);
     }
     o.store.iter_mut().zip(&c.store).for_each(|(s, x)| *s += x);
     o.brood += c.brood;
     (o.e, o.draw.owed) = (o.e + c.e, o.draw.owed + c.owed);
     w.life.set_count(o, o.count + c.count);
     o.set_size(&w.chem, size_mean as f64, size_var as f64);
-    w.see(o);
-}
-
-/// Members `c` (out of any slot) join body `o`, taken out of its slot (`add`), born with `rows` (none: those of `o`);
-/// `own`: members of `o` itself coming back with its genes and spread.
-pub(crate) fn take_in(w: &mut World, o: &mut Body, mut c: Body, rows: Option<&[f32]>, own: bool) {
-    let size = c.size_moments(&w.chem);
-    let lot = Lot::of(&mut c);
-    add(w, o, lot, (!own).then_some((&c.genes, &c.spread)), size, rows.map(|r| (r, c.rows.as_slice(), c.row_spread)));
 }
 
 /// Share `f` of node `b`'s members and share `fa` of each of its stores, of its brood and of its heat as a new body

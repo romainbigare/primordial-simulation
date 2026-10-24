@@ -207,7 +207,7 @@ ceiling is **9,700** code lines on `main` from the commit of this plan (`cli/tes
 |---|---|---|---|
 | E2.1, E2.2 | about 15 | about 15 | about 0 |
 | D3 | about 40 | about 10 | about +30 |
-| B1 | about 160 (the parts' state as shares, the parts in `Lot` and in `add`/`take_in`, the growth split, maturing inside a node, `open`'s draw of a part, the per-part helper and its about 15 uses, the two starvations, a gain per part, one think per part for nodes with a brain) | about 70 (`copy/young.rs`, 50 code lines; `Body::link` and its uses; `Grown::Joins` and the merge after maturing in `survey::update`; the stage in `nodes::Kin` and in `merge_closest`'s key; `copy::emit`'s young-node branches) | about +90 |
+| B1 | about 160 (the parts' state as shares, the parts in `Lot` and in `add`/`rejoin`, the growth split, maturing inside a node, `open`'s draw of a part, the per-part helper and its about 15 uses, the two starvations, a gain per part, one think per part for nodes with a brain) | about 70 (`copy/young.rs`, 50 code lines; `Body::link` and its uses; `Grown::Joins` and the merge after maturing in `survey::update`; the stage in `nodes::Kin` and in `merge_closest`'s key; `copy::emit`'s young-node branches) | about +90 |
 | B3 | about 20 | — | about +20 |
 | B2 | about 25 | about 35 (one predicate replaces the tests of `kin_of`, `merge_closest`'s distance and `copy::kin`) | about -10 |
 | C2 | about 30 to 50 (by the method chosen) | — | about +40 |
@@ -392,7 +392,7 @@ inside the domain as well as across its edge** (S22): one path, so a cell at a d
 
 **A node's part with a queued FORM** (S44) stays a body of its own until the serial phase, as a moving part does
 (`part_acts` treats it as leaving the node). After its Form entry is applied, the part body rejoins its node
-(`nodes::take_in`) if it holds nothing and both are in one cell; else it stays a body of its own.
+(`nodes::rejoin`) if it holds nothing and both are in one cell; else it stays a body of its own.
 
 The kinds, in the order the serial phase applies them:
 
@@ -401,7 +401,7 @@ The kinds, in the order the serial phase applies them:
 | Relocation | `choose::go` (a body, or a part placed by `part_acts`) | body id, from cell, to cell, the energy spent pushing, the lane area to clear | the body leaves the old cell's list for the new one's (id table, rings); `cell`, `mark`, `rained` of the new cell, `inside` none; the parts there are pushed (`bond::moved`); `counts.crossings[j] += n`; `Life::pushed[j] +=` the energy; `lanes::clear` on `Links::cleared` | the body died later in the batch: the relocation is dropped whole; its cost was paid and spent |
 | Arriving members | `spread::part_acts` (members that move) | a relocation, marked "look for kin" | after the relocation lands: the kin search in the new cell (`copy::kin`, through `nodes::may_join`) and the merge (`nodes::merge`); no kin: it stays a body of its own, as today | the part is gone: nothing lands, nothing joins |
 | Litter | `copy::emit`, children who start in another cell | the cell the parent was in, the target cell, members, stores and heat (taken from the parent by `give`), genes, spread, size, rows, lineage, parent id, whether it may be a node, whether it is mixed | the kin search in the target cell; it joins the young part of a node there (`nodes::add`) or is placed (`place_child`, ids as in 3.3); the `Born` event is made here (S25) | no kin and less than one member: back into the parent's brood if the parent lives (by id: stores, heat and brood back), else to the ground node of the cell the parent was in, as a move |
-| Watch | `learn::watch` | watcher id, its member count and lineage at watch time, the share of its members who watched (1 for an individual, x / count for a node's part), target id | if both live, the watcher is still of that lineage and their brains have one shape: the watcher's rows move toward the target's by `blend` × alike × the share × (count then / count now) (alike from the target's `vis` and the watcher's `visible`); the `Watched` event. The blend is linear, so this is the mean by members that `nodes::take_in` makes today (S40) | either is gone, or the watcher's lineage changed: nothing (the turn was spent) |
+| Watch | `learn::watch` | watcher id, its member count and lineage at watch time, the share of its members who watched (1 for an individual, x / count for a node's part), target id | if both live, the watcher is still of that lineage and their brains have one shape: the watcher's rows move toward the target's by `blend` × alike × the share × (count then / count now) (alike from the target's `vis` and the watcher's `visible`); the `Watched` event. The blend is linear, so this is the mean by members that `nodes::rejoin` makes today (S40) | either is gone, or the watcher's lineage changed: nothing (the turn was spent) |
 | Form | `bond::form` in the parallel phase (its cell holds no part), by a body or by a node's part placed by `part_acts` | body id, the shape drawn, and for a part the id of its node | run whole as today: the body pays, the part is made in its cell; a node's part then rejoins its node if it holds nothing and both are in one cell | the body is gone or can no longer pay: nothing (a part that can no longer pay rejoins its node by the same rule) |
 | New lineage, new born rows | `lineage::resize`, `copy::child_lineage`, `copy::place_child` | provisional id and its `Lineage` or rows | mapped to a global id; ids rewritten (3.3) | cannot fail |
 | Counts | every body placed or removed | per lineage and per born rows, the change of their holders | added; a lineage at zero dies out (`Life::brains` none), born rows at zero are freed | cannot fail |
@@ -460,7 +460,7 @@ for it (S8).
   - a `nodes::Lot` carries the members of each part; any split (`Lot::split`, `nodes::part`, `nodes::split`,
     `nodes::open`) takes the same share of each part, and stores taken beyond that share (`fa − f`) are a uniform
     rescale of both parts' bodies;
-  - `nodes::add` and `nodes::take_in` pool adults with adults and young with young (each part's moments pooled as
+  - `nodes::add` and `nodes::rejoin` pool adults with adults and young with young (each part's moments pooled as
     today's one set is);
   - an individual (`count` 1) is one part, chosen by its size: it moves to the adult part when it passes the copy mass;
   - `nodes::open` and its `draw` draw a part by a chance by members, and a size from that part;
@@ -537,13 +537,14 @@ are listed in the order they are built (section 5).
 Each its own commit with its measured gain (S31). **Kill line:** a spot that gains under 2% of a bench's
 instructions (callgrind, 2.6) is taken out again.
 
-- **E2.1 `spread::part_acts`.** For each option part, `nodes::part` makes a full clone of the node (`b.clone()`, with
-  its genes, spreads, rows and memory) and `nodes::take_in` puts it back through `nodes::add`'s pooling of genes,
-  sizes and rows. The measured inclusive share of `nodes::add` is 8% of the globe's instructions (`nodes::take_in`'s
-  6.5% overlaps it: it calls `add`). Where the part stays (same cell, holding nothing, inside nothing), act on the
-  members' share without placing a body and without taking them back through `add`. This drops the gap term of the
-  size variance that `add` adds when the part's size moved, so it is **level 3**, with the key-number test.
-  `docs/laws.md` (4.4) says it. Agent: Opus.
+- **E2.1 `spread::part_acts`.** For each option part, `nodes::part` made a full clone of the node (`b.clone()`, with
+  its genes, spreads, rows and memory) and `nodes::take_in` put it back through `nodes::add` (sizes, the rows of a
+  watcher, the row spread pooled and capped, `see`). The measured inclusive share of `nodes::add` was 8% of the globe's
+  instructions (`nodes::take_in`'s 6.5% overlapped it). Where the part stays (any action but a move or a bond), the
+  node acts itself with the part's share while the others wait aside, and they come back by `nodes::rejoin` (amounts,
+  sizes with the gap term of their variance, the rows of a watcher; S51). It drops the pool and cap of the row spread
+  at a watcher's return, so it is **level 3**, with the key-number test (S49, S50). `docs/laws.md` (4.4) says it.
+  Agent: Opus.
 - **E2.2 `pow`** (2.4% exclusive on the island): powers with a fixed exponent (mass^0.75, `10^x`) as cheaper forms.
   Level 2 (other rounding). Agent: Sonnet.
 - What the first plan also named is handled elsewhere: the sample (`copy::select::sample`) in B1 (S37); `nodes::crowd`

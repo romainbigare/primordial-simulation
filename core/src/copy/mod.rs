@@ -126,9 +126,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     let lot = Lot { count: m, store, e, brood: 0.0, owed: 0.0, last: w.day() as f64, mark: w.light[cell], rained: w.rained[cell] };
     if let Some(t) = hit {
         let born = rows.unwrap_or_else(|| w.life.born(b).to_vec());
-        let mut o = std::mem::take(&mut w.life.bodies[t]);
-        add(w, &mut o, lot, Some((&genes, &spread)), (l.body.log10() as f32, 0.0), Some((&born, &own, row_spread)));
-        w.life.bodies[t] = o;
+        add(w, t, lot, (&genes, &spread), (l.body.log10() as f32, 0.0), (&born, &own, row_spread));
         return true;
     }
     let c = Body {

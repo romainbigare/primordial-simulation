@@ -5,8 +5,8 @@
 //! since a soft cover holds no liquid and melts at its top and snow brings the ground no fusion enthalpy (decision 67);
 //! for the rain, the runs since clouds absorb heat radiation and the island lies at 40° (decision 34); for the
 //! heat-absorbing gas and the light-eaters, the runs after the
-//! body costs and the light-eaters' walls (decision 53); for the eaters, the runs after bodies take only what they use
-//! (decision 57). The climate and the land worn down are means over years 21 to 30; life
+//! body costs and the light-eaters' walls (decision 53); for the eaters, the runs before E2.1 of the speed work, after
+//! the final review's law changes (speed decision S49). The climate and the land worn down are means over years 21 to 30; life
 //! is read at year 30, ten years after the eaters came. Each run also keeps its books. Two numbers are also held to
 //! wide bounds around Earth's, as the references only keep a world near itself: the rain on land, and the share of the
 //! light-eaters' dry mass they hold as their stored solid.
@@ -60,7 +60,7 @@ const WORN: f64 = 0.141;
 /// Light-eaters (starting kind 0) at year 30, log10 kg (`root_0_kg`), in the reference runs.
 const PLANT_KG: f64 = 10.38;
 /// Eaters (starting kind 1) at year 30, log10 kg (`root_1_kg`), in the reference runs.
-const EATER_KG: f64 = 4.86;
+const EATER_KG: f64 = 5.354;
 /// The life light-eaters live at year 30, yr (`root_0_life_real`: members standing over deaths), in the reference runs.
 const PLANT_LIFE: f64 = 1.81;
 /// The factor either way the light-eaters' life may lie from `PLANT_LIFE`.

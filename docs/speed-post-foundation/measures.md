@@ -14,7 +14,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
   `bodies`, `parts`, `tape` are the `ms_*` columns of `series.csv` in ms a year: the wall time in Flow, in Change, in
   the bodies (the survey and the body days), in the parts, and in the tape itself. `alive` is the column `bodies`
   (bodies alive, nodes and individuals). `updates` is the column `updates` (body updates in the year). `core lines`
-  are the code lines of `core` (`cargo test --release -p cli --test core_size -- --nocapture`; the ceiling is 9,000).
+  are the code lines of `core` (`cargo test --release -p cli --test core_size -- --nocapture`; the ceiling is 9,700, decision S3).
 
 ## The rows
 
@@ -22,6 +22,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | baseline | `16e6a4e` | 0.857 | 159 | 49 | 638 | 0 | 11 | 2,744 | 27,762 | 1.347 | 229 | 51 | 1,010 | 43 | 15 | 1,955 | 25,626 | 8,998 |
 | A2 | A2 | 0.702 | 128 | 40 | 525 | 0 | 10 | 2,744 | 27,762 | 1.220 | 210 | 49 | 905 | 43 | 12 | 1,955 | 25,626 | 8,998 |
+| E2.1 | E2.1 | 0.728 | 135 | 46 | 538 | 0 | 10 | 2,744 | 27,762 | 1.274 | 225 | 55 | 940 | 40 | 14 | 1,932 | 25,410 | 8,996 |
 
 ### A2: compiler settings
 
@@ -73,6 +74,19 @@ four workers are shared and the cores are not oversubscribed.
 Advice: start the seeds as separate `ew` runs at the same time (`ew run ... --seed 1 & ew run ... --seed 2 & ... wait`),
 up to the number of cores. `RAYON_NUM_THREADS` does not matter on 4 cores with 3 runs; set it to 1 only with more runs
 than cores.
+
+### E2.1: members of a node that stay in their cell
+
+Three runs of `scripts/bench.sh` each, the code before (`b75d5b0`) and after taken in turn: globe36 bodies 1,022, 992
+and 971 ms against 940, 933 and 960 ms (best against best -4%, per update -3%; the island has no brains and does not
+change). Under callgrind, one year of globe36 takes 10.03 billion instructions against 10.41, the bodies
+(`survey::day`) 5.02 against 5.40 billion (-7%), and `spread` 1.17 against 1.51 billion: taking members back
+(`nodes::rejoin`) costs 48 million where `nodes::take_in` cost 363 million, and `nodes::part` (now only for moves and
+bonds) 71 against 124 million. Level 3: a node's row spread is no longer pooled with itself and capped again when its
+members watch, and the split and the means are worked from the acting side (other rounding); golden re-pinned. Key
+numbers: eaters OUT of the old range, inside after S49: 5.391 log10 kg (seeds 5.291, 5.474, 5.409) against 5.354 at
+`b75d5b0` (seeds 5.295, 5.414, 5.352), old range 4.86 +- 0.5 (up to 5.36); a variant with only E2.1's rounding (the old
+cap kept) gives 5.379 (seeds 5.305, 5.446, 5.385). The light-eaters' stored share is 0.557 before and after (S50).
 
 ## Profile of the baseline
 
