@@ -2,7 +2,7 @@
 //! (`survey`), and every day the updates due (`day`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
-use crate::{change::Reactor, choose, copy::Grown, life::Life, math::mean_decay, units::DAY, World};
+use crate::{change::Reactor, choose, copy::Grown, math::mean_decay, units::DAY, World};
 use crate::store::{apply, Batch, Class, Node};
 use serde::{Deserialize, Serialize};
 
@@ -46,8 +46,8 @@ fn sum_cells(w: &mut World) {
     let n = w.mesh.cells().n();
     let (mut abs, mut kept) = (vec![0.0; n], vec![0.0; n]);
     sums(w);
-    for (slot, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-        let (i, s) = (b.cell as usize, light_area(b) * w.life.shade[slot]);
+    for b in w.life.alive() {
+        let (i, s) = (b.cell as usize, light_area(b) * b.shade);
         (abs[i], kept[i]) = (abs[i] + s, kept[i] + s * b.keep as f64);
     }
     let World { life, mesh, canopy, .. } = w;
@@ -64,13 +64,14 @@ fn sum_cells(w: &mut World) {
 
 /// Per cell: its members, then their visible traits summed, then the energy to break its bodies (`Life::sum`).
 pub fn sums(w: &mut World) {
-    w.life.sum = vec![[0.0; 8]; w.mesh.cells().n()];
-    for b in w.life.bodies.iter().filter(|b| b.alive) {
-        let (s, m) = (&mut w.life.sum[b.cell as usize], b.n());
+    let mut sum = vec![[0.0; 8]; w.mesh.cells().n()];
+    for b in w.life.alive() {
+        let (s, m) = (&mut sum[b.cell as usize], b.n());
         s[0] += m;
         s[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
         s[7] += b.breaking(&w.chem, &w.cfg, 1.0);
     }
+    w.life.sum = sum;
 }
 
 /// The capture area of body `b`'s members times the share of light they absorb, m².
@@ -82,7 +83,7 @@ fn light_area(b: &Body) -> f64 {
 /// ground gave the node for each since its last update (`Draw::owed`).
 pub(crate) fn claims(w: &World) -> Vec<f64> {
     let mut claim = vec![0.0; w.mesh.cells().n()];
-    for b in w.life.bodies.iter().filter(|b| b.alive) {
+    for b in w.life.alive() {
         let i = b.cell as usize;
         claim[i] += light_area(b) * b.keep as f64 * (w.light[i] - b.mark) + b.draw.owed;
     }
@@ -142,15 +143,15 @@ impl Draws {
     /// stays for them to draw first, so a draw an update did not use spares the ground later rather than going back at
     /// once; the rest goes back to the ground now, so the step starts from it.
     pub(crate) fn settle(w: &mut World, dt: f64) -> Draws {
-        let (n, none) = (w.mesh.cells().n(), Vec::new());
+        let n = w.mesh.cells().n();
         let mut d = Draws { at: vec![0], slot: Vec::new(), each: Vec::new(), pool: vec![0.0; n] };
         // What the bodies of each cell could draw until their next updates, J.
         let mut most = vec![0.0; n];
-        for (i, cell) in (0..n).map(|i| (i, w.life.at.get(i).unwrap_or(&none))) {
-            for b in cell.iter().map(|&s| (s, &w.life.bodies[s as usize])).filter(|(_, b)| b.alive && b.draw.most > 0.0) {
-                d.slot.push(b.0);
+        for (i, most) in most.iter_mut().enumerate() {
+            for b in w.life.cell(i).map(|s| (s, &w.life[s])).filter(|(_, b)| b.alive && b.draw.most > 0.0) {
+                d.slot.push(b.0 as u32);
                 d.each.push(b.1.draw);
-                most[i] += b.1.draw.most * b.1.interval(w) as f64 * DAY;
+                *most += b.1.draw.most * b.1.interval(w) as f64 * DAY;
             }
             d.at.push(d.slot.len() as u32);
         }
@@ -192,7 +193,7 @@ impl Draws {
             if r > 0.0 {
                 let per = (got + r.min(self.pool[i]) * dt) / r;
                 for x in self.at[i] as usize..self.at[i + 1] as usize {
-                    w.life.bodies[self.slot[x] as usize].draw.owed += self.each[x].at(t(i)).0 * per;
+                    w.life[self.slot[x] as usize].draw.owed += self.each[x].at(t(i)).0 * per;
                 }
             }
         }
@@ -217,46 +218,48 @@ fn traffic(w: &mut World) {
 fn shade(w: &mut World) {
     // What a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
     let g = mean_decay;
-    let (Life { bodies, at, shade, stale, .. }, area) = (&mut w.life, w.mesh.cells().area());
-    shade.resize(bodies.len(), 1.0);
-    if stale.len() != at.len() {
-        *stale = vec![true; at.len()];
+    let (n, area) = (w.mesh.cells().n(), w.mesh.cells().area());
+    let life = &mut w.life;
+    if life.stale.len() != n {
+        life.stale = vec![true; n];
     }
     let mut l: Vec<(f32, f64, usize)> = Vec::new();
-    for (i, s) in at.iter().enumerate().filter(|&(i, _)| std::mem::take(&mut stale[i])) {
+    for (i, &a) in area.iter().enumerate() {
+        if !std::mem::take(&mut life.stale[i]) {
+            continue;
+        }
         l.clear();
-        l.extend(s.iter().map(|&s| (s as usize, &bodies[s as usize])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / area[i], s)));
+        l.extend(life.cell(i).map(|s| (s, &life[s])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / a, s)));
         l.sort_by(|a, b| b.0.total_cmp(&a.0));
         let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
         while k < l.len() {
             let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
             let x: f64 = l[k..e].iter().map(|x| x.1).sum();
             let f = (-above).exp() * g(x) / all;
-            l[k..e].iter().for_each(|y| shade[y.2] = f);
+            l[k..e].iter().for_each(|y| life[y.2].shade = f);
             (above, k) = (above + x, e);
         }
     }
 }
 
-/// Update the bodies due today.
+/// Update the bodies due today, domain by domain (`life::Domain`), cell by cell, and in a cell by id: an order that does
+/// not depend on where bodies are stored, and keeps memory reads close together.
 pub fn day(w: &mut World) {
     let due = w.life.take_due(w.day());
     if due.is_empty() {
         return;
     }
-    // Cell by cell (a fixed order that keeps memory reads close together).
-    let bodies = &w.life.bodies;
-    let mut list: Vec<(u32, u32, u32)> = due.iter().filter(|&&(s, g)| bodies[s as usize].alive && bodies[s as usize].gen == g).map(|&(s, g)| (bodies[s as usize].cell, s, g)).collect();
+    let life = &w.life;
+    let at = |id: u64| life.find(id).map(|s| life[s].cell as usize).map(|i| (life.domain_of(i), i, id));
+    let mut list: Vec<(usize, usize, u64)> = due.into_iter().filter_map(at).collect();
     list.sort_unstable();
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());
-    for (cell, slot, gen) in list {
-        let s = slot as usize;
-        if !w.life.bodies[s].alive || w.life.bodies[s].gen != gen {
-            continue;
-        }
+    for (_, cell, id) in list {
+        // (It may have died or joined another body since.)
+        let Some(s) = w.life.find(id) else { continue };
         // What it takes from and gives to the store is gathered and booked once, at the end of its update.
-        w.open_moves(cell as usize, Node::new(Class::Body, s));
+        w.open_moves(cell, Node::new(Class::Body, s));
         update(w, s, &mut rc, (&mut tmp, &mut act));
         w.book_moves();
     }
@@ -264,19 +267,19 @@ pub fn day(w: &mut World) {
 
 /// The update of the body in `slot`: its physics, decision, selection, lineage, maturing and split; or its death.
 fn update(w: &mut World, s: usize, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, &mut choose::ActTmp)) {
-    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    let mut b = std::mem::take(&mut w.life[s]);
     w.counts.updates += 1;
     // Its mean member's body before the update, for what its members grow (`copy::mature`).
     let before = b.member_body(&w.chem);
     // A node without a brain runs its update for a sample member too, which changes nothing (`copy::sample`).
     let sample = crate::copy::sample(w, s, &b, rc, tmp);
-    let lived = match live(w, s, &mut b, rc, tmp) {
+    let lived = match live(w, &mut b, rc, tmp) {
         Err(cause) => return die(w, s, b, cause),
         Ok(lived) => lived,
     };
     // A body with no brain takes no decision: its update is its physics only.
     if !w.life.brainless(&b) {
-        choose::act(w, s, &mut b, &lived, act);
+        choose::act(w, &mut b, &lived, act);
         // An action can leave nothing of a member: it dies at once, before another body deals with it.
         if b.empty_at(b.mass(&w.chem)) {
             return die(w, s, b, LACK);
@@ -286,14 +289,14 @@ fn update(w: &mut World, s: usize, rc: &mut Reactor, (tmp, act): (&mut LiveTmp, 
     if let Some(x) = sample {
         crate::copy::select(w, &mut b, x, lived.gain);
     }
-    crate::lineage::resize(w, s, &mut b);
+    crate::lineage::resize(w, &mut b);
     // Young members who grew past their copy mass join their adult node (`copy::mature`).
-    if let Grown::Joins(t) = crate::copy::mature(w, s, &mut b, before) {
-        w.life.bodies[s] = b;
+    if let Grown::Joins(t) = crate::copy::mature(w, &mut b, before) {
+        w.life[s] = b;
         return crate::nodes::merge(w, s, t);
     }
-    crate::nodes::split(w, s, &mut b);
+    crate::nodes::split(w, &mut b);
     w.see(&mut b);
-    w.life.schedule(w.day() + b.interval(w), s as u32, b.gen);
-    w.life.bodies[s] = b;
+    w.life.schedule(w.day() + b.interval(w), &mut b);
+    w.life[s] = b;
 }

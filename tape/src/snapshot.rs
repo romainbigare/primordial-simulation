@@ -10,7 +10,7 @@ use std::path::Path;
 /// Start of every snapshot file, before the bincode body: a tag, then the format version (little-endian `u32`).
 const SNAPSHOT_TAG: [u8; 4] = *b"EWSN";
 /// Raise it whenever the serialized layout of `World` (or of the shell's state) changes.
-const SNAPSHOT_VERSION: u32 = 45;
+const SNAPSHOT_VERSION: u32 = 46;
 /// Buffer between bincode and the compressor, bytes: bincode reads and writes 8 bytes at a time, and each call into
 /// the compressor is slow.
 const BUFFER: usize = 1 << 20;
@@ -49,7 +49,7 @@ pub fn load_snapshot<P: DeserializeOwned>(path: impl AsRef<Path>) -> io::Result<
     let mut w: World = bincode::deserialize_from(&mut z).map_err(bad)?;
     let plan = bincode::deserialize_from(&mut z).map_err(bad)?;
     w.mesh = World::mesh_of(&w.map, w.air_scale, &w.cfg);
-    w.life.bodies.iter_mut().filter(|b| b.alive).for_each(|b| b.prepare(&w.chem, &w.cfg.phys));
+    w.life.each_mut(|b| b.prepare(&w.chem, &w.cfg.phys));
     pcore::survey::sums(&mut w);
     Ok((w, plan))
 }

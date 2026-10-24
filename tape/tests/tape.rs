@@ -190,10 +190,10 @@ fn recording() -> &'static Recording {
         worldgen::life::seed(&mut w, 0);
         let (lay, fix) = (pcore::body::Layout::of(&w.chem), w.chem.fixing().expect("the fixing reaction"));
         let World { life, chem, cfg, .. } = &mut w;
-        for b in life.bodies.iter_mut().filter(|b| b.alive) {
+        life.each_mut(|b| {
             b.genes[lay.cat + fix] = -1.0;
             b.prepare(chem, &cfg.phys);
-        }
+        });
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         let cells = |w: &World| {
             let land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).count() as f64;

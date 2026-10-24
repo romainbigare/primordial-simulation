@@ -65,22 +65,23 @@ pub(super) fn walk(w: &World, i: usize, sight: usize, t: &mut ActTmp) {
 
 /// Bodies perceived, its own cell first, then a neighbour's from a random side, up to `nseen`: walls hide by how closed
 /// they are, cover with chance 1 - exp(-a), a the others' capture area per m². Then the parts in its cell.
-pub(super) fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
+pub(super) fn perceive(w: &World, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
     let i = b.cell as usize;
-    let (mut seen, mut cnt, side, cells) = ([(0usize, false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
+    let (mut seen, mut cnt, side, cells) = ([(0usize, 0u64, false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
     let room = bond::room(w, b);
     for q in 0..9 {
         let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
-        for &o in w.life.at[j].iter().filter(|&&o| o as usize != slot) {
+        // (Itself, taken out of its slot, is no living body there.)
+        for o in w.life.cell(j).filter(|&o| w.life[o].alive) {
             if cnt == nseen {
                 break;
             }
-            let ob = &w.life.bodies[o as usize];
+            let ob = &w.life[o];
             let their = bond::room(w, ob);
             let walls = if room.map(|r| r.0) == their.map(|r| r.0) { 0.0 } else { room.map_or(0.0, |r| r.1.closed).max(their.map_or(0.0, |r| r.1.closed)) };
             let cover = (w.canopy[j] as f64 - ob.vis[1] as f64 * ob.n() / w.mesh.cells().area()[j]).max(0.0);
             if (walls == 0.0 || rng.f64() as f32 >= walls) && (cover <= 0.0 || rng.f64() < (-cover).exp()) {
-                (seen[cnt], cnt) = ((o as usize, q == 0), cnt + 1);
+                (seen[cnt], cnt) = ((o, ob.id, q == 0), cnt + 1);
             }
         }
     }
@@ -115,7 +116,7 @@ pub(super) fn perceive(w: &World, slot: usize, b: &Body, nseen: usize, rng: &mut
 pub(super) fn inputs(w: &World, b: &Body, lived: &Lived, temp: f64, c: &Choice, x: &mut Vec<f32>) {
     let (i, ns, chem, mass) = (b.cell as usize, w.chem.ns(), &w.chem, lived.mass);
     let (env, pm) = (w.life.env[i], mass / b.n());
-    let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, &(o, _)| [0, 1].map(|k| h[k] + w.life.bodies[o].sig[k] / c.nseen as f32));
+    let heard = c.seen[..c.nseen].iter().fold([0f32; SIG], |h, &(o, ..)| [0, 1].map(|k| h[k] + w.life[o].sig[k] / c.nseen as f32));
     x.clear();
     let (none, min) = (SHARE_SENSE * ln(STORE_FLOOR), Layout::of(chem).min);
     x.extend((0..ns).map(|k| if b.store[k] > 0.0 { SHARE_SENSE * ln((b.store[k] * chem.subs[k].molar_mass / mass) as f32 + STORE_FLOOR) } else { none } - SHARE_SENSE * ln(b.genes[min + k].max(0.0) + MIN_FLOOR)));

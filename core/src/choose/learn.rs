@@ -39,8 +39,8 @@ pub(super) fn learn(w: &World, b: &mut Body, s: Shape, wb: f32, now: &[f32]) {
 
 /// Watch another body (it costs the turn): its rows move part of the way toward the other's if the brains have the same
 /// sizes, less the less alike the bodies are, as a body can only copy what its own body can do.
-pub(super) fn watch(w: &mut World, slot: usize, b: &mut Body, s: usize) {
-    let o = &w.life.bodies[s];
+pub(super) fn watch(w: &mut World, b: &mut Body, s: usize) {
+    let o = &w.life[s];
     let (u, v) = (o.vis, b.visible(&w.chem, &w.cfg));
     let d = |a: f32, b: f32| ln(a.max(1e-9) / b.max(1e-9)).powi(2);
     let alike = (-0.5 * (d(u[0], v[0]) + d(u[1], v[1]) + ((u[2] - v[2]) / STRENGTH_STEP).powi(2))).exp();
@@ -49,5 +49,5 @@ pub(super) fn watch(w: &mut World, slot: usize, b: &mut Body, s: usize) {
         brain::blend(&mut b.rows, &o.rows, alike);
     }
     let same = (o.lineage == b.lineage) as u8 as f64;
-    w.events.push(Event { day: w.day(), kind: EventKind::Watched { by: b.id(slot), of: o.id(s) }, node: b.cell, value: same });
+    w.events.push(Event { day: w.day(), kind: EventKind::Watched { by: b.id, of: o.id }, node: b.cell, value: same });
 }

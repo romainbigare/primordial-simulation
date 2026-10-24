@@ -84,22 +84,22 @@ fn run(seed: u64, learn: f32) -> Vec<Decision> {
     let strip: Vec<(usize, f64)> = strip.into_iter().map(|i| (i, w.g(RICH, i))).collect();
     let mut log = Vec::new();
     // Day by day, to see each decision.
-    while log.len() < DECISIONS && w.life.bodies[slot].alive {
-        let (u, from) = (w.counts.updates, w.life.bodies[slot].cell as usize);
+    while log.len() < DECISIONS && w.life[slot].alive {
+        let (u, from) = (w.counts.updates, w.life[slot].cell as usize);
         let near: Vec<usize> = w.mesh.cells().around(from).1.iter().map(|&j| j as usize).collect();
         let richer: Vec<usize> = near.iter().copied().filter(|&j| seen(&w, j) > seen(&w, from) + 0.02).collect();
         strip.iter().for_each(|&(i, a)| set_amount(&mut w, Node::ground(i), RICH, a));
         pcore::day(&mut w);
         // A body that has children: they die at once, their matter back to the ground where they were born, so the scene
         // stays one body.
-        for s in 0..w.life.bodies.len() {
-            if s != slot && w.life.bodies[s].alive {
-                let c = std::mem::take(&mut w.life.bodies[s]);
+        for s in w.life.living().map(|x| x.0).collect::<Vec<_>>() {
+            if s != slot {
+                let c = std::mem::take(&mut w.life[s]);
                 body::die(&mut w, s, c, body::LACK);
             }
         }
-        if w.counts.updates > u && w.life.bodies[slot].alive {
-            let to = w.life.bodies[slot].cell as usize;
+        if w.counts.updates > u && w.life[slot].alive {
+            let to = w.life[slot].cell as usize;
             log.push((from % W >= STRIP, to != from, !richer.is_empty(), richer.contains(&to), richer.len() as f64 / near.len() as f64));
         }
     }
@@ -266,7 +266,7 @@ fn a_body_gives_its_stores_but_not_its_body() {
         assert_eq!(pcore::check::broken(&w), None);
     }
     assert!(w.events.iter().any(|e| matches!(e.kind, EventKind::Gave { .. })), "nothing was given");
-    let b = &w.life.bodies[g];
+    let b = &w.life[g];
     assert!(b.alive && b.store[MATTER] > 0.99 * m0 && b.store[RICH] < 0.5 * fuel0, "matter {m0} -> {}, fuel {fuel0} -> {}", b.store[MATTER], b.store[RICH]);
     assert!(b.store[LIQUID] >= 0.99 * b.level(&w.chem, LIQUID, b.mass(&w.chem)), "the liquid of its body was given");
 }
@@ -289,7 +289,7 @@ fn a_body_with_no_brain_lives_and_copies() {
     testkit::add(&mut w, &mut b, RICH, fuel);
     let (n0, s) = (b.count, w.add(b, 1));
     // It pays nothing for a brain, however costly brains are.
-    let mut x = w.life.bodies[s].clone();
+    let mut x = w.life[s].clone();
     x.prepare(&w.chem, &w.cfg.phys);
     let (d, m, p0) = (x.interval(&w) as f64, x.mass(&w.chem), w.cfg.phys);
     let u0 = pcore::body::upkeep(&w, &x, d, m, x.temp(&w.chem));
@@ -301,7 +301,7 @@ fn a_body_with_no_brain_lives_and_copies() {
         pcore::step(&mut w);
         assert_eq!(pcore::check::broken(&w), None);
     }
-    let b = &w.life.bodies[s];
+    let b = &w.life[s];
     let born = testkit::born(&w);
     println!("updates {}, members {n0:.0} -> {:.0}, born {born:.0}", w.counts.updates - u, b.count);
     // (Its children are small against its members: young, so they are nodes of their own.)

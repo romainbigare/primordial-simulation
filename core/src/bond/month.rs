@@ -161,7 +161,7 @@ fn load(w: &mut World, r: usize) {
     // The holder of a structure not resting on the ground bears what hangs on its part by its own force, or lets go.
     let x = held.filter(|_| !s.anchored).and_then(|h| list.iter().position(|&p| p == h));
     if let Some((x, o)) = x.and_then(|x| holder(w, list[x]).map(|o| (x, o))) {
-        if wt[x] + push[x] > bears(w, &w.life.bodies[o]) {
+        if wt[x] + push[x] > bears(w, &w.life[o]) {
             torn_from(w, o);
         }
     }

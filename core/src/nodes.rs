@@ -15,7 +15,7 @@ use std::f32::consts::FRAC_2_PI;
 pub(crate) fn crowd(w: &mut World) {
     let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
     for i in 0..w.mesh.cells().n() {
-        if w.life.at[i].len() <= 1 {
+        if w.life.in_cell(i) <= 1 {
             continue;
         }
         let left = join_alike(w, &lay, i);
@@ -35,13 +35,13 @@ fn kin_of(w: &World, b: &Body) -> Kin {
     (b.lineage, b.adult(&w.chem), room(w, b).map(|r| r.0), held(w, b).map(|p| w.parts.parts[p].root as usize))
 }
 
-/// Each body of cell `i`, largest first, however few its members, joins the first larger node (more than one member,
+/// Each body of cell `i`, largest first (equals in the cell's order), however few its members, joins the first larger node (more than one member,
 /// as in `copy::kin`) alike in genes (`body::alike`, on the means only, so a split's halves stay apart for selection)
 /// of its `Kin`. Returns the bodies left.
 fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<usize> {
-    let b = &w.life.bodies;
-    let mut list: Vec<(u64, usize)> = w.life.at[i].iter().map(|&s| s as usize).filter(|&s| may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
-    list.sort_unstable();
+    let b = &w.life;
+    let mut list: Vec<(u64, usize)> = b.cell(i).filter(|&s| may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
+    list.sort_by_key(|x| x.0);
     let mut head: Vec<usize> = (0..list.len()).collect();
     // Each one's kin once, tested before the genes.
     let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_of(w, &b[s])).collect();
@@ -69,7 +69,7 @@ type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
     let steps = |w: &World, s: usize| {
-        let b = &w.life.bodies[s];
+        let b = &w.life[s];
         (steps(lay, &b.genes), spreads(b), (b.lineage, b.adult(&w.chem)))
     };
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
@@ -89,7 +89,7 @@ fn merge_closest(w: &mut World, lay: &Layout, mut left: Vec<usize>, max: usize) 
             break;
         }
         let (p, q) = (k / m, k % m);
-        let (s, t) = if w.life.bodies[left[q]].n() > w.life.bodies[left[p]].n() { (p, q) } else { (q, p) };
+        let (s, t) = if w.life[left[q]].n() > w.life[left[p]].n() { (p, q) } else { (q, p) };
         merge(w, left[s], left[t]);
         (left[s], v[t]) = (usize::MAX, steps(w, left[t]));
         for o in 0..m {
@@ -111,7 +111,7 @@ pub(crate) fn may_be_node(w: &World, b: &Body) -> bool {
 
 /// The body in slot `s` joins the body in slot `t`, of its lineage (`add`), letting go of what it holds.
 pub fn merge(w: &mut World, s: usize, t: usize) {
-    let (born, mut c) = (w.life.born(&w.life.bodies[s]).to_vec(), std::mem::take(&mut w.life.bodies[s]));
+    let (born, mut c) = (w.life.born(&w.life[s]).to_vec(), std::mem::take(&mut w.life[s]));
     let_go(w, &mut c, false);
     w.life.remove(s, &c);
     let size = c.size_moments(&w.chem);
@@ -154,7 +154,7 @@ impl Lot {
 /// rows, row spread): amounts add up (`rejoin`), genes, sizes and rows become the means by members and the spreads pool
 /// around them (laws.md 4.4).
 pub(crate) fn add(w: &mut World, t: usize, c: Lot, (genes, spread): (&[f32], &[f32]), size: (f32, f32), (born, own, row_spread): (&[f32], &[f32], f32)) {
-    let mut o = std::mem::take(&mut w.life.bodies[t]);
+    let mut o = std::mem::take(&mut w.life[t]);
     let (lay, p, a) = (Layout::of(&w.chem), &w.cfg.phys, (c.count / (o.count + c.count)) as f32);
     let mix = |x: &[f32], y: &[f32]| x.iter().zip(y).map(|(p, q)| p + a * (q - p)).collect::<Vec<f32>>();
     let pool = |v: f32, u: f32, d2: f32, step: f32| ((1.0 - a) * v + a * u + a * (1.0 - a) * d2).min(most(step, p.alike));
@@ -168,7 +168,7 @@ pub(crate) fn add(w: &mut World, t: usize, c: Lot, (genes, spread): (&[f32], &[f
     o.set_genes(mean, &w.chem, &w.cfg.phys);
     rejoin(w, &mut o, c, size, Some(own));
     w.see(&mut o);
-    w.life.bodies[t] = o;
+    w.life[t] = o;
 }
 
 /// Members `c` with the genes and spreads of body `o` join it (taken out of its slot): the members of a node who waited
@@ -212,8 +212,8 @@ const TIE: f32 = 1e-4;
 
 /// At its update a node whose two halves would not be alike splits in two along its widest gene, the mean and the
 /// spread of both kept, while its cell has room (fewer than `Config::crowd` - 1 bodies); laws.md 4.4.
-pub fn split(w: &mut World, slot: usize, b: &mut Body) {
-    if b.count < 2.0 || b.spread.is_empty() || w.life.at[b.cell as usize].len() + 1 >= w.cfg.crowd || !may_be_node(w, b) {
+pub fn split(w: &mut World, b: &mut Body) {
+    if b.count < 2.0 || b.spread.is_empty() || w.life.in_cell(b.cell as usize) + 1 >= w.cfg.crowd || !may_be_node(w, b) {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
@@ -231,12 +231,12 @@ pub fn split(w: &mut World, slot: usize, b: &mut Body) {
     }
     let mut gap: Vec<(usize, f32)> = (0..b.spread.len()).map(|g| (g, half(g).1)).collect();
     gap.retain(|x| x.1 >= top * (1.0 - TIE));
-    let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Split);
+    let mut r = Rng::new(w.seed, w.day(), b.id, Purpose::Split);
     let g = gap[r.below(gap.len())].0;
     let d = half(g).0;
     let mut c = part(&mut w.life, b, 0.5, 0.5);
     let mut genes = b.genes.clone();
-    // Which half keeps the slot (and so is first in the order of updates) is drawn.
+    // Which half stays the body (keeps its id) is drawn.
     let d = if r.below(2) == 0 { d } else { -d };
     (genes[g], c.genes[g]) = (genes[g] + d, genes[g] - d);
     b.spread[g] = (b.spread[g] - d * d).max(0.0);
@@ -255,8 +255,8 @@ pub(crate) const COUNT_SLACK: f64 = 1e-9;
 /// of all is kept. The node keeps at least one member (draws stop when it has fewer than two), seen as what is left of
 /// it. Returns the members' slots.
 pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
-    let mut b = std::mem::take(&mut w.life.bodies[slot]);
-    let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Open);
+    let mut b = std::mem::take(&mut w.life[slot]);
+    let mut r = Rng::new(w.seed, w.day(), b.id, Purpose::Open);
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let whole = b.count.round();
@@ -269,7 +269,7 @@ pub fn open(w: &mut World, slot: usize, n: usize) -> Vec<usize> {
         out.push(draw(w, &mut b, &mut r));
     }
     w.see(&mut b);
-    w.life.bodies[slot] = b;
+    w.life[slot] = b;
     out
 }
 

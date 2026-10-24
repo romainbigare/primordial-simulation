@@ -25,10 +25,10 @@ fn resting(w: &mut World, i: usize, copy: f32, strength: f32) -> Body {
 
 /// Body `a` bites body `v` once.
 fn bite(w: &mut World, a: usize, v: usize) {
-    let mut b = std::mem::take(&mut w.life.bodies[a]);
+    let mut b = std::mem::take(&mut w.life[a]);
     let r = &mut Rng::new(1, w.day(), 7, Purpose::Choose);
-    moved(w, (b.cell as usize, a), |w| choose::take_body(w, a, &mut b, v, r));
-    w.life.bodies[a] = b;
+    moved(w, (b.cell as usize, a), |w| choose::take_body(w, &mut b, v, r));
+    w.life[a] = b;
 }
 
 /// What a body looked like: its body, its matter, solid and liquid (kg), and its force.
@@ -42,7 +42,7 @@ struct Seen {
 
 /// What the body in slot `s` looks like.
 fn seen(w: &World, s: usize) -> Seen {
-    let b = &w.life.bodies[s];
+    let b = &w.life[s];
     Seen { built: b.built(&w.chem), matter: kg(w, b, MATTER), solid: kg(w, b, RICH), liquid: kg(w, b, LIQUID), force: bond::force(w, b) }
 }
 
@@ -57,11 +57,11 @@ fn an_attacked_individual_loses_body_and_lives_on_weaker() {
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
     let before = seen(&w, v);
-    let (n, ground0, gained0) = (w.mesh.cells().n(), w.store.amounts(Class::Ground)[RICH * w.mesh.cells().n() + i], kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER));
+    let (n, ground0, gained0) = (w.mesh.cells().n(), w.store.amounts(Class::Ground)[RICH * w.mesh.cells().n() + i], kg(&w, &w.life[a], RICH) + kg(&w, &w.life[a], MATTER));
     bite(&mut w, a, v);
-    assert!(w.life.bodies[v].alive, "the victim died of a bite of {} kg", before.built);
+    assert!(w.life[v].alive, "the victim died of a bite of {} kg", before.built);
     let after = seen(&w, v);
-    let gained = kg(&w, &w.life.bodies[a], RICH) + kg(&w, &w.life.bodies[a], MATTER) - gained0;
+    let gained = kg(&w, &w.life[a], RICH) + kg(&w, &w.life[a], MATTER) - gained0;
     let share = 1.0 - after.built / before.built;
     println!("bite: attacker took {gained:.3} kg, victim's body {:.2} -> {:.2} kg ({:.1}% torn), matter {:.3} -> {:.3}, solid {:.2} -> {:.2}, liquid {:.2} -> {:.2}, force {:.1} -> {:.1} N", before.built, after.built, 100.0 * share, before.matter, after.matter, before.solid, after.solid, before.liquid, after.liquid, before.force, after.force);
     // It lost body, and the stores that matter held in proportion (the same share of each, but where the taker took more
@@ -89,7 +89,7 @@ fn a_bite_of_more_than_half_the_body_kills() {
     let books = Books::now(&w);
     w.events.clear();
     bite(&mut w, a, v);
-    assert!(!w.life.bodies[v].alive && died(&w, body::TAKEN) > 0.0, "a victim bitten by a body 20 times its size lived");
+    assert!(!w.life[v].alive && died(&w, body::TAKEN) > 0.0, "a victim bitten by a body 20 times its size lived");
     books.assert_kept(&w, 1e-9);
 }
 
@@ -105,7 +105,7 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
     let v = node_of(&mut w, m, 100.0);
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
-    let b = &w.life.bodies[v];
+    let b = &w.life[v];
     let (n0, mean0, adult0) = (b.n(), b.built(&w.chem) / b.n(), b.adult(&w.chem));
     assert!(adult0, "members of {mean0} kg are not mature");
     let before = seen(&w, v);
@@ -113,10 +113,10 @@ fn a_node_grazed_by_small_bites_keeps_its_members_with_smaller_bodies() {
         bite(&mut w, a, v);
         w.time += DAY_S;
     }
-    let (b, after) = (&w.life.bodies[v], seen(&w, v));
+    let (b, after) = (&w.life[v], seen(&w, v));
     let (mean1, took) = (b.built(&w.chem) / b.n(), before.built - after.built);
     println!("{} members of {mean0:.3} kg after three small bites: {} members of {mean1:.3} kg ({took:.4} kg of body torn)", n0, b.n());
-    assert!(w.life.bodies[v].alive && b.n() == n0, "members died: {} of {n0}", b.n());
+    assert!(w.life[v].alive && b.n() == n0, "members died: {} of {n0}", b.n());
     assert!(took > 0.0 && mean1 < mean0, "no body torn");
     // A hurt adult node: below its copy mass, so immature until it has healed; still one node.
     let copy_mass = b.dec(COPY_MASS);
@@ -143,13 +143,13 @@ fn a_big_bite_kills_the_members_it_reaches() {
     v.brood = 0.5 * v.store[MATTER];
     let (a, v) = (place(&mut w, a), place(&mut w, v));
     let books = Books::now(&w);
-    let b = &w.life.bodies[v];
+    let b = &w.life[v];
     let (n0, mean0, brood0, held0) = (b.n(), b.built(&w.chem) / b.n(), b.brood, b.mass(&w.chem) / b.n());
     let before = seen(&w, v);
     w.events.clear();
     bite(&mut w, a, v);
     let got: f64 = w.events.iter().map(|e| if let pcore::event::EventKind::Took { .. } = e.kind { e.value } else { 0.0 }).sum();
-    let (b, after) = (&w.life.bodies[v], seen(&w, v));
+    let (b, after) = (&w.life[v], seen(&w, v));
     let (mean1, share, killed) = (b.built(&w.chem) / b.n(), 1.0 - after.built / before.built, n0 - b.n());
     println!("{n0} members of {mean0:.4} kg: {:.2} members left of {mean1:.4} kg ({:.2}% of the body torn by a bite of {got:.4} kg)", b.n(), 100.0 * share);
     assert!(killed > 1.0 && killed < n0 && (share - killed / n0).abs() < 1e-9, "count {} of {n0}, share {share}", b.n());
@@ -172,7 +172,7 @@ fn trampling_breaks_body_matter() {
     let small = node_of(&mut w, small, 10000.0);
     let (v, big, small) = (place(&mut w, v), place(&mut w, big), place(&mut w, small));
     let books = Books::now(&w);
-    let (b0, nb0, ns0) = (seen(&w, v), w.life.bodies[big].n(), w.life.bodies[small].n());
+    let (b0, nb0, ns0) = (seen(&w, v), w.life[big].n(), w.life[small].n());
     let (bb0, bs0) = (seen(&w, big), seen(&w, small));
     let (g0, e0) = (w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i], w.store.heat(Class::Ground)[i]);
     // Movers spent 2 kJ pushing through the cell's bodies since the last survey.
@@ -181,15 +181,15 @@ fn trampling_breaks_body_matter() {
     choose::wear(&mut w);
     let (b1, bb1, bs1) = (seen(&w, v), seen(&w, big), seen(&w, small));
     let (sv, sb, ss) = (1.0 - b1.built / b0.built, 1.0 - bb1.built / bb0.built, 1.0 - bs1.built / bs0.built);
-    println!("trampled: individual body -{:.2}%, node of 10 big members -{:.2}%, node of 10,000 small ones -{:.2}% (members {} of {ns0})", 100.0 * sv, 100.0 * sb, 100.0 * ss, w.life.bodies[small].n());
-    assert!(sv > 0.0 && w.life.bodies[v].alive, "an individual was not hurt");
+    println!("trampled: individual body -{:.2}%, node of 10 big members -{:.2}%, node of 10,000 small ones -{:.2}% (members {} of {ns0})", 100.0 * sv, 100.0 * sb, 100.0 * ss, w.life[small].n());
+    assert!(sv > 0.0 && w.life[v].alive, "an individual was not hurt");
     // The share of the matter broken is the share of the body and of every store (not gas).
     assert!((1.0 - b1.matter / b0.matter - sv).abs() < 1e-9 && (1.0 - b1.solid / b0.solid - sv).abs() < 1e-9 && (1.0 - b1.liquid / b0.liquid - sv).abs() < 1e-9);
     // Weaker.
     assert!((b1.force / b0.force).is_nan() || b0.force == 0.0 || (b1.force / b0.force - b1.built / b0.built).abs() < 1e-9);
     // Every member of a node is hurt alike: none dies short of half its body.
-    assert!(w.life.bodies[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life.bodies[big].n());
-    assert!(w.life.bodies[small].n() == ns0 && ss > 0.0, "a node of light members lost members: {} of {ns0}", w.life.bodies[small].n());
+    assert!(w.life[big].n() == nb0 && sb > 0.0, "a node of heavy members lost members: {} of {nb0}", w.life[big].n());
+    assert!(w.life[small].n() == ns0 && ss > 0.0, "a node of light members lost members: {} of {ns0}", w.life[small].n());
     assert!(w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i] > g0 && w.store.heat(Class::Ground)[i] > e0, "nothing went to the ground");
     books.assert_kept(&w, 1e-9);
 }
@@ -220,12 +220,12 @@ fn a_body_burnt_by_heat_and_alive_is_smaller_in_body() {
         // The cell held at 350 K, booked as an edit.
         hold_ground(&mut w, i, 350.0);
         pcore::day(&mut w);
-        if !w.life.bodies[s].alive {
+        if !w.life[s].alive {
             let cause = w.events.iter().find_map(|e| if let pcore::event::EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None });
             panic!("it died on day {d}, cause {cause:?} (0 lack, 1 phase, 2 spent)");
         }
     }
-    let alive = w.life.bodies[s].alive;
+    let alive = w.life[s].alive;
     let after = seen(&w, s);
     println!("alive {alive}: body {:.2} -> {:.2} kg, matter {:.3} -> {:.3}, solid {:.2} -> {:.2}", before.built, after.built, before.matter, after.matter, before.solid, after.solid);
     assert!(alive, "it died");

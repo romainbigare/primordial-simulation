@@ -265,7 +265,7 @@ pub fn out(w: &mut World, b: Body) -> (usize, Body) {
     let s = w.add(b, 1);
     pcore::survey::survey(w);
     w.time += DAY_S;
-    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    let mut b = std::mem::take(&mut w.life[s]);
     b.prepare(&w.chem, &w.cfg.phys);
     (s, b)
 }
@@ -341,7 +341,7 @@ pub fn same_totals(a: &(f64, Vec<f64>, f64), b: &(f64, Vec<f64>, f64)) {
 /// Body `b` placed and prepared where it is: its slot.
 pub fn place(w: &mut World, b: Body) -> usize {
     let (s, b) = out(w, b);
-    w.life.bodies[s] = b;
+    w.life[s] = b;
     s
 }
 
@@ -354,7 +354,7 @@ pub fn brood(w: &World, b: &mut Body, k: f64) {
 
 /// The live children of the body of id `id`.
 pub fn children(w: &World, id: u64) -> Vec<usize> {
-    (0..w.life.bodies.len()).filter(|&k| w.life.bodies[k].alive && w.life.bodies[k].parent == id).collect()
+    w.life.living().filter(|x| x.1.parent == id).map(|x| x.0).collect()
 }
 
 /// An eater that burns only the energy-rich solid: no catalyst for burning body matter, no roots for it.

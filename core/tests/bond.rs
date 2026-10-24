@@ -43,16 +43,16 @@ fn walls_keep_a_body_warm() {
     let r = w.parts.parts[parts[0]].root as usize;
     assert!(w.parts.parts[r].s.encl.closed > 0.99, "not closed: {:?}", w.parts.parts[r].s);
     // The same body outside and inside: one that does not capture light (its upkeep warms it), from the warmest place.
-    let bs = &w.life.bodies;
-    let slot = (0..bs.len()).filter(|&s| bs[s].alive && pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
-    let from = w.life.bodies[slot].cell as usize;
-    w.life.relocate(slot, from, i);
-    w.life.bodies[slot].cell = i as u32;
+    let bs = &w.life;
+    let slot = bs.living().map(|x| x.0).filter(|&s| pcore::body::light_cat(&w.chem, &bs[s].genes) < 5.0).max_by(|&a, &b| bs[a].temp(&w.chem).total_cmp(&bs[b].temp(&w.chem))).expect("a body");
+    let from = w.life[slot].cell as usize;
+    w.life.relocate(w.life[slot].id, from, i);
+    w.life[slot].cell = i as u32;
     // Enough liquid for a month without rain.
-    let b = &mut w.life.bodies[slot];
-    let k = (0..b.store.len()).max_by(|&x, &y| b.store[x].total_cmp(&b.store[y])).unwrap();
     // It rests (the biases of its brain's action rows: resting up, every other action down), so it stays where it is put.
-    let shape = w.life.brains[b.lineage as usize].as_ref().expect("a brain").shape;
+    let shape = w.life.brains[w.life[slot].lineage as usize].as_ref().expect("a brain").shape;
+    let b = &mut w.life[slot];
+    let k = (0..b.store.len()).max_by(|&x, &y| b.store[x].total_cmp(&b.store[y])).unwrap();
     let rows = (0..pcore::brain::FIXED).chain([shape.dir()]).chain((0..pcore::brain::VERBS + pcore::brain::OVERBS).map(|v| shape.verb(v)));
     for q in rows {
         b.rows[q * shape.r() + shape.h] += if q == pcore::brain::REST { 3.0 } else { -3.0 };
@@ -64,11 +64,11 @@ fn walls_keep_a_body_warm() {
     // (It does not grow: a warm body builds faster, at the pace of its temperature, and would burn the fuel of its month.)
     w.cfg.phys.c_build = 0.0;
     let mut inside = w.clone();
-    inside.life.bodies[slot].inside = Some(bond::id(&inside, parts[0]));
-    let temp = |w: &pcore::World| w.life.bodies[slot].temp(&w.chem) - w.life.env[i][0];
+    inside.life[slot].inside = Some(bond::id(&inside, parts[0]));
+    let temp = |w: &pcore::World| w.life[slot].temp(&w.chem) - w.life.env[i][0];
     pcore::step(&mut w);
     pcore::step(&mut inside);
-    assert!(w.life.bodies[slot].alive && inside.life.bodies[slot].alive);
+    assert!(w.life[slot].alive && inside.life[slot].alive);
     println!("inside {:.2} K, outside {:.2} K above the ground", temp(&inside), temp(&w));
     assert!(temp(&inside) > temp(&w) + 1.0, "inside {} K, outside {} K above the ground", temp(&inside), temp(&w));
 }
@@ -80,8 +80,8 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
     let (mut w, i) = world();
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
-    let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
-    let mut b = std::mem::take(&mut w.life.bodies[slot]);
+    let slot = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("an eater");
+    let mut b = std::mem::take(&mut w.life[slot]);
     b.cell = i as u32;
     let fed: Vec<f64> = b.store.iter().map(|a| 2.0 * a).collect();
     for _ in 0..8 {
@@ -91,7 +91,7 @@ fn a_small_body_can_make_parts_and_a_cell_holds_many() {
         let t = b.temp(&w.chem);
         (0..b.store.len()).filter(|&k| w.chem.phase(k, t) != Phase::Gas).for_each(|k| b.store[k] = b.store[k].max(fed[k]));
         b.e = b.energy_at(&w.chem, t);
-        moved(&mut w, (b.cell as usize, slot), |w| bond::form(w, slot, &mut b, [0.0, 0.5]));
+        moved(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
         b.hold = None;
     }
     assert!(w.parts.at[i].len() > 6, "{} parts in the cell", w.parts.at[i].len());
@@ -105,8 +105,8 @@ fn forming_never_takes_more_than_is_left() {
     let (mut w, _) = world();
     worldgen::life::seed(&mut w, 0);
     worldgen::life::seed(&mut w, 1);
-    let slot = (0..w.life.bodies.len()).find(|&s| w.life.bodies[s].alive && w.life.bodies[s].n() == 1.0).expect("an eater");
-    let (chem, b) = (&w.chem, &mut w.life.bodies[slot]);
+    let slot = w.life.living().map(|x| x.0).find(|&s| w.life[s].n() == 1.0).expect("an eater");
+    let (chem, b) = (&w.chem, &mut w.life[slot]);
     b.prepare(chem, &w.cfg.phys);
     let t = b.temp(chem);
     let solid = |k: usize| chem.phase(k, t) == Phase::Solid;
@@ -119,13 +119,13 @@ fn forming_never_takes_more_than_is_left() {
     // Half the fuel is to go out (`Physics::form` of its mass), and paying for it burns nearly all of it.
     let got = 0.5 * b.store[k] * chem.subs[k].molar_mass;
     w.cfg.phys.form = got / b.mass(chem);
-    let r = worldgen::testkit::release(&w, &w.life.bodies[slot], w.life.bodies[slot].interval(&w) as f64);
+    let r = worldgen::testkit::release(&w, &w.life[slot], w.life[slot].interval(&w) as f64);
     (w.cfg.phys.min_kg, w.cfg.phys.c_form) = (0.5 * got, 0.99 * r / got);
     let books = Books::now(&w);
-    let mut b = std::mem::take(&mut w.life.bodies[slot]);
-    moved(&mut w, (b.cell as usize, slot), |w| bond::form(w, slot, &mut b, [0.0, 0.5]));
+    let mut b = std::mem::take(&mut w.life[slot]);
+    moved(&mut w, (b.cell as usize, slot), |w| bond::form(w, &mut b, [0.0, 0.5]));
     assert!(b.store.iter().all(|&a| a >= 0.0), "{:?}", b.store);
-    w.life.bodies[slot] = b;
+    w.life[slot] = b;
     assert!(w.parts.alive().count() == 1 && pcore::check::broken(&w).is_none());
     books.assert_within(&w, 1e-12, 1e-9);
 }

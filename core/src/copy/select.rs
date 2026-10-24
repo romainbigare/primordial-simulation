@@ -74,7 +74,7 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
         return None;
     }
     let every = w.cfg.sample_every as usize;
-    let mut r = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Select);
+    let mut r = Rng::new(w.seed, w.day(), b.id, Purpose::Select);
     if every > 1 && r.below(every) != 0 {
         return None;
     }
@@ -91,7 +91,7 @@ pub(crate) fn sample(w: &mut World, slot: usize, b: &Body, rc: &mut Reactor, tmp
     genes[g] += step;
     s.set_genes(genes, &w.chem, &w.cfg.phys);
     let events = w.events.len();
-    let gain = gain_to_growth(w, slot, &mut s, rc, tmp);
+    let gain = gain_to_growth(w, &mut s, rc, tmp);
     w.open_moves(b.cell as usize, Node::new(Class::Body, slot));
     w.events.truncate(events);
     Some(Sample { gene: g, step, genes: (differ.len() * every) as f32, gain })

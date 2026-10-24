@@ -46,10 +46,10 @@ impl Soil {
 /// The physics of a body of `mass` kg at the plateau state `th0` (`Body::thermal`) over its update, with the heat its
 /// upkeep released. Returns the light it caught per kg per day, J.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, mass: f64, upkeep_heat: f64, th0: Melting) -> f64 {
+pub(super) fn physics(w: &mut World, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp, s: &Site, mass: f64, upkeep_heat: f64, th0: Melting) -> f64 {
     let gcap = w.heat_cap_ground(s.i);
     let (chem, cfg) = (&w.chem, &w.cfg);
-    let fall = rain_caught(w, slot, b, s);
+    let fall = rain_caught(w, b, s);
     // It soaks through the mass that works; its conductance is taken at its temperature at the start.
     let wk = b.size(chem) / mass;
     // The stages move sensible heat; liquids that come and go bring and take their fusion enthalpy as heat, until the
@@ -80,10 +80,10 @@ pub(super) fn physics(w: &mut World, slot: usize, b: &mut Body, rc: &mut Reactor
 
 /// The rain that fell on its capture area since its last update, mol: the cell's bodies intercept 1 - exp(-x) of it, x
 /// their capture area per ground area, shared by height as light is (`survey::shade`).
-fn rain_caught(w: &World, slot: usize, b: &mut Body, s: &Site) -> f64 {
-    let (i, World { rained, life, canopy, .. }) = (s.i, w);
+fn rain_caught(w: &World, b: &mut Body, s: &Site) -> f64 {
+    let (i, World { rained, canopy, .. }) = (s.i, w);
     let fell = rained[i] - std::mem::replace(&mut b.rained, rained[i]);
-    fell * b.vis[1] as f64 * b.n() * s.open * life.shade.get(slot).map_or(1.0, |&f| f) * mean_decay(canopy.get(i).map_or(0.0, |&c| c as f64))
+    fell * b.vis[1] as f64 * b.n() * s.open * b.shade * mean_decay(canopy.get(i).map_or(0.0, |&c| c as f64))
 }
 
 /// Light caught since the last update through any openings, less what it reflects, and what liquid over it leaves, J.

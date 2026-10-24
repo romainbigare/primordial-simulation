@@ -66,8 +66,8 @@ pub(crate) fn resized(lin: &Lineage, genes: &[f32], ns: usize, r: &mut Rng, nois
 
 /// At its update, a body whose brain-size genes are a whole unit away from its lineage's moves to a new lineage of
 /// those sizes, its born rows and its own rows carried over with the same new weights. Moves no matter and no energy.
-pub fn resize(w: &mut World, slot: usize, b: &mut Body) {
-    let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id(slot));
+pub fn resize(w: &mut World, b: &mut Body) {
+    let (ns, noise, id) = (w.chem.ns(), w.cfg.new_noise(), b.id);
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Resize);
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let Some(l) = resized(lin, &b.genes, ns, &mut r, noise) else { return };

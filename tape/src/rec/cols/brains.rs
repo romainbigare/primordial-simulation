@@ -73,18 +73,18 @@ impl Recorder {
     /// The members' mass range (kg), and the share of what a starting kind took from bodies that came from animals:
     /// for the kind with most bodies, and the highest of any.
     fn variety(&self, w: &World, row: &mut Row) {
-        let live: Vec<(usize, &pcore::body::Body)> = w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive).collect();
+        let live: Vec<&pcore::body::Body> = w.life.alive().collect();
         // Each member's mass with the starting kind of its lineage (NaN: none), the heaviest last.
-        let mut heavy: Vec<(f64, f64)> = live.iter().map(|(_, b)| (b.mass(&w.chem) / b.n(), w.life.brains[b.lineage as usize].as_ref().map_or(f64::NAN, |l| l.root as f64))).collect();
+        let mut heavy: Vec<(f64, f64)> = live.iter().map(|b| (b.mass(&w.chem) / b.n(), w.life.brains[b.lineage as usize].as_ref().map_or(f64::NAN, |l| l.root as f64))).collect();
         heavy.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mass: Vec<f64> = heavy.iter().map(|m| m.0).collect();
         let at = |q: usize| mass.get(q).copied().unwrap_or(f64::NAN);
         // Per starting kind: its bodies, and what they took from light-eaters and from others.
         let mut kinds: BTreeMap<u32, (usize, [f64; 2])> = BTreeMap::new();
-        for (i, b) in &live {
+        for b in &live {
             if let Some(l) = &w.life.brains[b.lineage as usize] {
                 let (cnt, took) = kinds.entry(l.root).or_default();
-                let t = self.social.eaten(b.id(*i)).unwrap_or([0.0; 2]);
+                let t = self.social.eaten(b.id).unwrap_or([0.0; 2]);
                 (*cnt, took[0], took[1]) = (*cnt + 1, took[0] + t[0] as f64, took[1] + t[1] as f64);
             }
         }

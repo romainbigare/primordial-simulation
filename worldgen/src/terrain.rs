@@ -297,6 +297,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
     let links = Links::new(mesh.cells().a().len());
     let mut parts = Parts::default();
     parts.at = vec![Vec::new(); n];
+    let life = Life::new(&mesh);
     let mut world = World {
         cfg,
         chem,
@@ -313,7 +314,7 @@ pub fn build(seed: u64, map: Square, chem: Chemistry, init: &Init, mut cfg: Conf
         liquid_flux: vec![0.0; n],
         evap: vec![0.0; n],
         off_land: vec![0.0; n],
-        life: Life::new(n),
+        life,
         parts,
         canopy: vec![0.0; n],
         links,

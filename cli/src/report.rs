@@ -71,7 +71,7 @@ pub fn year(w: &World, y: u64, t0: &Totals, clock: &Clock, rec: &Recorder) -> St
     // Microseconds per body update: the cost of one decision, whatever their number (none without updates).
     let updates = w.counts.updates - clock.updates;
     let us = if updates > 0 { format!("{:.2} us/update", ms[2] * 1e3 * years / updates as f64) } else { String::from("no updates") };
-    let most = w.life.at.iter().map(|v| v.len()).max().unwrap_or(0);
+    let most = (0..w.mesh.cells().n()).map(|i| w.life.in_cell(i)).max().unwrap_or(0);
     let born = w.life.genomes.iter().filter(|g| !g.rows.is_empty()).count();
     format!(
         "year {y}: element drift {de:.2e} ({}), energy drift {dq:.2e}, heat not given {:.2e} J, rounded to zero {:.1e} mol {:.1e} J, bodies {all} (at most {most} in a cell; {le} light-eaters with {:.3e} members; others {} single, {} nodes, {:.3e} members), lineages {}, born brains {born}; ms/yr flow {:.0}, change {:.0}, bodies {:.0}, parts {:.1}, tape {:.0}; {us} ({} parts); node splits {:.0} in two; gifts {}/yr, watches {}/yr",

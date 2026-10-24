@@ -6,20 +6,20 @@ use crate::rng::{Purpose, Rng};
 use crate::World;
 use crate::brain;
 
-/// The partner of body `b` (slot `slot`, taken out of it) for its children: another body of its cell that is mature
+/// The partner of body `b` (taken out of its slot) for its children: another body of its cell that is mature
 /// (`Body::adult`) and alike to it (`body::alike`), the most alike of them (the least squared gap in steps,
 /// `body::distance`), a keyed random pick among equals; never itself. None: the children are copies of one parent. It
 /// takes nothing from the partner. `Config::two_parents` off: none.
-pub(super) fn partner(w: &World, slot: usize, b: &Body, r: &mut Rng) -> Option<usize> {
+pub(super) fn partner(w: &World, b: &Body, r: &mut Rng) -> Option<usize> {
     if !w.cfg.two_parents {
         return None;
     }
     let (lay, lim) = (Layout::of(&w.chem), w.cfg.phys.alike);
-    // Among equals the one with the least key (a draw keyed by the call and the slot, not by the order of the cell's list).
+    // Among equals the one with the least key (a draw keyed by the call and its id, not by the order of the cell's list).
     let (mut best, mut pick, draw) = (f32::INFINITY, None, r.u64());
-    for &s in &w.life.at[b.cell as usize] {
-        let (s, t) = (s as usize, &w.life.bodies[s as usize]);
-        if s == slot || !t.alive {
+    for s in w.life.cell(b.cell as usize) {
+        let t = &w.life[s];
+        if !t.alive {
             continue;
         }
         // (The genes first, as they end at the first one unlike; the size of the body last.)
@@ -27,7 +27,7 @@ pub(super) fn partner(w: &World, slot: usize, b: &Body, r: &mut Rng) -> Option<u
         if !t.adult(&w.chem) {
             continue;
         }
-        let key = Rng::new(draw, 0, s as u64, Purpose::Partner).u64();
+        let key = Rng::new(draw, 0, t.id, Purpose::Partner).u64();
         if d < best || pick.is_some_and(|(_, k)| key < k) {
             (best, pick) = (d, Some((s, key)));
         }

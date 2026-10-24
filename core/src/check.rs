@@ -109,10 +109,10 @@ pub fn broken(w: &World) -> Option<String> {
     let f32s = [("rain", &w.rain), ("liquid_flux", &w.liquid_flux), ("canopy", &w.canopy), ("cleared", &w.links.cleared)];
     let found = amounts.into_iter().chain(energies).find_map(|(name, v)| first_bad(name, v, at_least_0));
     let found = found.or_else(|| f32s.into_iter().find_map(|(name, v)| first_bad(name, v, at_least_0)));
-    let body = w.life.bodies.iter().enumerate().filter(|e| e.1.alive).find_map(|(s, b)| {
+    let body = w.life.alive().find_map(|b| {
         let finite = b.rows.iter().all(|x| x.is_finite());
         let bad = !finite || !above_0(b.e) || !above_0(b.count) || !b.store.iter().all(|&x| at_least_0(x));
-        bad.then(|| format!("body {s}: energy {}, members {}, stores {:?}, brain ok {finite}", b.e, b.count, b.store))
+        bad.then(|| format!("body {}: energy {}, members {}, stores {:?}, brain ok {finite}", b.id, b.e, b.count, b.store))
     });
     let part = w.parts.parts.iter().enumerate().filter(|e| e.1.alive).find_map(|(s, p)| {
         let bad = !above_0(p.e) || !p.wall.iter().chain(&p.fill).all(|&x| at_least_0(x));

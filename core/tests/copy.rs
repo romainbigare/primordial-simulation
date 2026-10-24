@@ -15,9 +15,9 @@ use pcore::store::Class;
 /// dissolved mineral falls out of the liquid inside a body within days, so a store given from outside is gone by the
 /// next update; roots give it at the update, just before the body builds.)
 fn feed_minerals(w: &mut World, s: usize) {
-    let (i, n, lay) = (w.life.bodies[s].cell as usize, w.mesh.cells().n(), Layout::of(&w.chem));
+    let (i, n, lay) = (w.life[s].cell as usize, w.mesh.cells().n(), Layout::of(&w.chem));
     for (mk, _) in w.chem.minerals().to_vec() {
-        let b = &mut w.life.bodies[s];
+        let b = &mut w.life[s];
         (b.genes[lay.upt + mk], b.genes[LIQ]) = (0.01, b.genes[LIQ].max(-1.0));
         b.prepare(&w.chem, &w.cfg.phys);
         let a = (100.0 * b.level(&w.chem, mk, b.mass(&w.chem)) - w.store.amounts(Class::Ground)[mk * n + i]).max(0.0);
@@ -70,7 +70,7 @@ fn growth_makes_matter_of_the_solid_and_keeps_elements_and_energy() {
     let fused = |v: &[(u16, u16)]| v.iter().map(|&(k, n)| n as f64 * chem.fused_heat(k as usize, pcore::units::T_SURF, |_| 0.0)).sum::<f64>();
     let growth = chem.dh_of(bl) + fused(&bl.outputs) - fused(&bl.inputs);
     assert!(growth.abs() < 1.0, "growth takes {growth} J");
-    w.life.bodies[0] = b;
+    w.life[0] = b;
     books.assert_kept(&w, 1e-9);
 }
 
@@ -93,7 +93,7 @@ fn growth_is_limited_by_c_build() {
         let (built0, grew) = (b.built(&w.chem), testkit::moved(&mut w, (b.cell as usize, 0), |w| testkit::grow(w, &mut b, days)));
         let kg_matter = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
         let (brood, built1) = (b.brood * w.chem.subs[MATTER].molar_mass, b.built(&w.chem));
-        w.life.bodies[s] = b;
+        w.life[s] = b;
         (grew, kg_matter, room, brood, built1 - built0)
     };
     let (g1, one, room1, _, _) = built(1e4, 6.0, 0.8);
@@ -133,7 +133,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         let (up, release) = (body::upkeep(&w, &b, days, b.mass(&w.chem), b.temp(&w.chem)), testkit::release(&w, &b, days));
         let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         println!("fuel kept {keep}: built {built:.4} kg of matter (allowance {room:.3} kg), release {release:.3e} J against upkeep {up:.3e} J");
-        w.life.bodies[s] = b;
+        w.life[s] = b;
         results.push((keep, grew, built, room, up, release));
     }
     // With no fuel it builds nothing; with some, less than the allowance and still able to pay its upkeep; with a lot, the
@@ -183,7 +183,7 @@ fn storing_the_solid_costs_no_build() {
         pcore::day(&mut w);
         took += took_used(&w);
     }
-    let b = &w.life.bodies[s];
+    let b = &w.life[s];
     println!("took {took:.3} kg: solid {rich0:.3} -> {:.3} kg, matter {matter0:.3} -> {:.3} kg", kg(&w, b, RICH), kg(&w, b, MATTER));
     assert!(took > 0.5 && kg(&w, b, RICH) > rich0, "it stored nothing: took {took} kg, solid {rich0} -> {}", kg(&w, b, RICH));
     // (Matter does not rise; it rots in the open at 0.2 a year: 1.5% in a month.)
@@ -215,16 +215,16 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let (before, ground0, built0, size0, temp0) = (b.store.clone(), w.store.heat(Class::Ground).iter().sum::<f64>(), b.built(&w.chem), b.size(&w.chem), b.temp(&w.chem));
     assert!(b.adult(&w.chem), "the parent is mature: built {} kg", built0);
     w.time += DAY_S;
-    assert!(copy::copy(&mut w, s, &mut b), "no child");
-    let kids = children(&w, b.id(s));
+    assert!(copy::copy(&mut w, &mut b), "no child");
+    let kids = children(&w, b.id);
     // Two whole children (an individual's), the rest of the brood waits for the next.
-    let born: f64 = kids.iter().map(|&k| w.life.bodies[k].count).sum();
+    let born: f64 = kids.iter().map(|&k| w.life[k].count).sum();
     assert_eq!(born, 2.0, "births {born}");
     assert!((b.brood - 0.5 * child_mol).abs() < 1e-9 * child_mol, "the brood left is {} of {}", b.brood, 0.5 * child_mol);
     // A child's body is 10^CHILD of its parent's copy mass: 1 kg a member; its matter was the brood's.
     let mut given = 0.0;
     for &k in &kids {
-        let c = &w.life.bodies[k];
+        let c = &w.life[k];
         // (Its matter over 1 - h of its parent: its own keep gene is its parent's plus noise.)
         let body = c.store[MATTER] * mm / c.n() / (1.0 - h);
         assert!((body - 1.0).abs() < 1e-9, "a child's body is {body} kg, not 10^CHILD x the copy mass = 1 kg");
@@ -239,7 +239,7 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     }
     assert!((given - 2.0 * child_mol).abs() < 1e-9 * child_mol, "the children got {given} mol of matter, not {}", 2.0 * child_mol);
     for (q, &was) in before.iter().enumerate().take(w.chem.ns()) {
-        let kids_hold: f64 = kids.iter().map(|&k| w.life.bodies[k].store[q]).sum();
+        let kids_hold: f64 = kids.iter().map(|&k| w.life[k].store[q]).sum();
         assert!((b.store[q] + kids_hold - was).abs() <= 1e-9 * was.max(1.0), "substance {q} not kept");
     }
     assert_eq!(w.store.heat(Class::Ground).iter().sum::<f64>(), ground0, "work was paid for a child");
@@ -249,8 +249,8 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     assert!((b.built(&w.chem) - built0).abs() < 1e-9 * built0, "the parent's body fell: {built0} -> {}", b.built(&w.chem));
     assert!(b.size(&w.chem) >= size0 * (1.0 - 1e-9), "the parent's size fell: {size0} -> {}", b.size(&w.chem));
     // With less than a child in the brood it makes none.
-    assert!(!copy::copy(&mut w, s, &mut b));
-    w.life.bodies[s] = b;
+    assert!(!copy::copy(&mut w, &mut b));
+    w.life[s] = b;
     books.assert_kept(&w, 1e-9);
 
     // A node of five such members: the brood of 7.3 children makes 7.3 members, who are immature and so do not join
@@ -270,12 +270,12 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     assert!(n.adult(&w.chem), "the node is mature: built {} kg a member", n.built(&w.chem) / n.n());
     w.time += DAY_S;
     let at = w.life.alive().count();
-    assert!(copy::copy(&mut w, s, &mut n));
-    w.life.bodies[s] = std::mem::take(&mut n);
-    let n = &w.life.bodies[s];
-    let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
+    assert!(copy::copy(&mut w, &mut n));
+    w.life[s] = std::mem::take(&mut n);
+    let n = &w.life[s];
+    let kids: Vec<usize> = w.life.living().map(|x| x.0).filter(|&k| k != s).collect();
     assert_eq!((kids.len(), w.life.alive().count()), (2, at + 3), "the children are two nodes of their own");
-    let (c, other) = (&w.life.bodies[kids[0]], &w.life.bodies[kids[1]]);
+    let (c, other) = (&w.life[kids[0]], &w.life[kids[1]]);
     assert!(c.cell != other.cell && (c.count + other.count - 7.3).abs() < 1e-6 && !c.adult(&w.chem), "{} and {} young members", c.count, other.count);
     for q in 0..w.chem.ns() {
         let (x, y) = (c.store[q] / c.count, other.store[q] / other.count);
@@ -308,25 +308,25 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     w.time += DAY_S;
     pcore::survey::survey(&mut w);
     for round in 0..3 {
-        let mut n = std::mem::take(&mut w.life.bodies[s]);
+        let mut n = std::mem::take(&mut w.life[s]);
         n.prepare(&w.chem, &w.cfg.phys);
         // A brood of 4 children for the members together, besides what they hold.
         n.brood = (4.0 + copy::BROOD_HELD * 5.0) * child_mol;
         assert!(n.adult(&w.chem), "round {round}: the node is mature: {} kg", n.built(&w.chem) / n.n());
         let before = n.built(&w.chem) / n.n();
-        assert!(copy::copy(&mut w, s, &mut n), "round {round}: no children");
+        assert!(copy::copy(&mut w, &mut n), "round {round}: no children");
         assert_eq!(n.count, 5.0);
         // The mean member of the node is what it was, and mature.
         assert!(n.adult(&w.chem) && (n.built(&w.chem) / n.n() - before).abs() < 1e-9 * before, "round {round}: the mean member fell: {before} -> {}", n.built(&w.chem) / n.n());
-        w.life.bodies[s] = n;
+        w.life[s] = n;
         w.time += DAY_S;
     }
     // All three broods are in one young node, linked to its adult node; its members are all of one size.
-    let kids: Vec<usize> = (0..w.life.bodies.len()).filter(|&k| k != s && w.life.bodies[k].alive).collect();
+    let kids: Vec<usize> = w.life.living().map(|x| x.0).filter(|&k| k != s).collect();
     assert_eq!(kids.len(), 1, "the children are {} nodes", kids.len());
-    let (k, young) = (kids[0], &w.life.bodies[kids[0]]);
+    let young = &w.life[kids[0]];
     assert!((young.count - 12.0).abs() < 1e-4 && !young.adult(&w.chem), "young: {} members", young.count);
-    assert_eq!((young.link, w.life.bodies[s].link), (Some(w.life.bodies[s].id(s)), Some(young.id(k))), "not linked");
+    assert_eq!((young.link, w.life[s].link), (Some(w.life[s].id), Some(young.id)), "not linked");
     assert!(young.size_spread.abs() < 1e-9, "children of one size have a size spread {}", young.size_spread);
     // A month's merge: alike in genes, but the young are immature.
     let month = w.cfg.calendar().month;
@@ -350,27 +350,27 @@ fn young_members_mature_at_the_rate_their_growth_gives() {
     y.size_spread = 1.0 / 12.0;
     y.size_lag = ((y.built(&w.chem) / y.count).log10() - (top - 0.5)) as f32;
     let (sy, mut y) = out(&mut w, y);
-    assert!(!y.adult(&w.chem) && w.life.bodies[sa].adult(&w.chem));
+    assert!(!y.adult(&w.chem) && w.life[sa].adult(&w.chem));
     let x0 = y.member_body(&w.chem);
     // No growth: nobody matures.
-    assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives) && y.count == 1000.0, "members matured without growth");
+    assert!(matches!(copy::mature(&mut w, &mut y, x0), copy::Grown::Lives) && y.count == 1000.0, "members matured without growth");
     // Every member grows by 0.1 decades: the young node's matter times 10^0.1 (booked as an edit).
     let kg_in = (10f64.powf(0.1) - 1.0) * y.store[MATTER] * mm;
     add(&mut w, &mut y, MATTER, kg_in);
-    w.life.bodies[sy] = y;
+    w.life[sy] = y;
     let (books, before) = (Books::now(&w), life_totals(&w));
-    let mut y = std::mem::take(&mut w.life.bodies[sy]);
+    let mut y = std::mem::take(&mut w.life[sy]);
     let (n0, matter0) = (y.count, y.store[MATTER]);
     let (members, body) = (0.1, (1.0 - 10f64.powf(-0.1)) / 0.9);
-    let adult0 = w.life.bodies[sa].count;
-    assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives));
+    let adult0 = w.life[sa].count;
+    assert!(matches!(copy::mature(&mut w, &mut y, x0), copy::Grown::Lives));
     let moved = n0 - y.count;
     println!("matured {moved:.3} of {n0} members (wanted {:.3}), {:.4} of the body (wanted {body:.4})", members * n0, 1.0 - y.store[MATTER] / matter0);
     assert!((moved - members * n0).abs() < 1e-5 * n0, "{moved} matured, wanted {}", members * n0);
     assert!((1.0 - y.store[MATTER] / matter0 - body).abs() < 1e-5, "the body share that left");
-    assert!((w.life.bodies[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life.bodies[sa].count - adult0);
-    assert!(w.life.bodies[sa].adult(&w.chem) && !y.adult(&w.chem), "the stages mixed");
-    w.life.bodies[sy] = y;
+    assert!((w.life[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life[sa].count - adult0);
+    assert!(w.life[sa].adult(&w.chem) && !y.adult(&w.chem), "the stages mixed");
+    w.life[sy] = y;
     same_totals(&before, &life_totals(&w));
     books.assert_kept(&w, 1e-9);
 }
@@ -407,18 +407,18 @@ fn any_spread_of_sizes_matures_a_share_of_the_young() {
     // Every member grows by 0.05 decades (booked as an edit).
     let kg_in = (10f64.powf(0.05) - 1.0) * y.store[MATTER] * mm;
     add(&mut w, &mut y, MATTER, kg_in);
-    w.life.bodies[sy] = y;
+    w.life[sy] = y;
     let books = Books::now(&w);
-    let mut y = std::mem::take(&mut w.life.bodies[sy]);
-    let (n0, matter0, adult0) = (y.count, y.store[MATTER], w.life.bodies[sa].count);
-    assert!(matches!(copy::mature(&mut w, sy, &mut y, x0), copy::Grown::Lives));
+    let mut y = std::mem::take(&mut w.life[sy]);
+    let (n0, matter0, adult0) = (y.count, y.store[MATTER], w.life[sa].count);
+    assert!(matches!(copy::mature(&mut w, &mut y, x0), copy::Grown::Lives));
     let (moved, body) = (n0 - y.count, 1.0 - y.store[MATTER] / matter0);
     let (m, v) = y.size_moments(&w.chem);
     println!("matured {moved:.3} of {n0} members, {body:.4} of the body");
     assert!(moved > 0.0 && moved < n0 && body > 0.0 && body < 1.0, "matured {moved} members, {body} of the body");
     assert!(m.is_finite() && v.is_finite() && y.e.is_finite() && (m as f64) < 10f64.log10(), "the rest: mean {m}, variance {v}, heat {}", y.e);
-    assert!((w.life.bodies[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life.bodies[sa].count - adult0);
-    w.life.bodies[sy] = y;
+    assert!((w.life[sa].count - adult0 - moved).abs() < 1e-9 * n0, "the adult node took in {} members", w.life[sa].count - adult0);
+    w.life[sy] = y;
     books.assert_kept(&w, 1e-9);
 }
 
@@ -439,27 +439,27 @@ fn a_young_nodes_sizes_stay_between_birth_and_the_copy_mass() {
     let s = w.add(n, 1);
     let mut young = None;
     for round in 0..300 {
-        let mut n = std::mem::take(&mut w.life.bodies[s]);
+        let mut n = std::mem::take(&mut w.life[s]);
         // A brood of 10 children besides what the members hold, and matter that keeps them at the copy mass.
         n.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut n, 10.0);
-        let short = (2.5 * n.count - n.matter_kg(&w.chem)).max(0.0);
+        let short = (n.k.copy_mass * (1.0 - body::WET_TISSUE) * n.count - n.matter_kg(&w.chem)).max(0.0);
         add(&mut w, &mut n, MATTER, short);
         n.prepare(&w.chem, &w.cfg.phys);
-        assert!(copy::copy(&mut w, s, &mut n), "round {round}: no children");
-        w.life.bodies[s] = n;
-        let y = *young.get_or_insert_with(|| children(&w, w.life.bodies[s].id(s)).into_iter().find(|&k| k != s).expect("a young node"));
-        let mut b = std::mem::take(&mut w.life.bodies[y]);
+        assert!(copy::copy(&mut w, &mut n), "round {round}: no children");
+        w.life[s] = n;
+        let y = *young.get_or_insert_with(|| children(&w, w.life[s].id).into_iter().find(|&k| k != s).expect("a young node"));
+        let mut b = std::mem::take(&mut w.life[y]);
         let before = b.member_body(&w.chem);
         let grown = (10f64.powf(0.02) - 1.0) * b.store[MATTER] * mm;
         add(&mut w, &mut b, MATTER, grown);
-        assert!(matches!(copy::mature(&mut w, y, &mut b, before), copy::Grown::Lives), "round {round}: the young left");
+        assert!(matches!(copy::mature(&mut w, &mut b, before), copy::Grown::Lives), "round {round}: the young left");
         let (m, v) = b.size_moments(&w.chem);
         assert!((-1e-6..=1.0).contains(&m) && v <= 0.25, "round {round}: mean {m} and variance {v} of log10 kg");
         if round >= 200 {
             assert!((b.count / 500.0 - 1.0).abs() < 0.1, "round {round}: {} young", b.count);
         }
-        w.life.bodies[y] = b;
+        w.life[y] = b;
         w.time += DAY_S;
     }
 }
@@ -481,7 +481,7 @@ fn a_mature_body_splits_its_building_by_alloc() {
         assert!(testkit::moved(&mut w, (b.cell as usize, 0), |w| testkit::grow(w, &mut b, days)), "it did not build");
         let made = (b.store[MATTER] - m0) * mm;
         let (brood, grown) = (b.brood * mm, (b.built(&w.chem) - built0) * (1.0 - 0.75));
-        w.life.bodies[s] = b;
+        w.life[s] = b;
         (made, brood, grown)
     };
     // Mature (a body of 21 kg, copy mass 10 kg): the share ALLOC of what it made is brood, the rest its body.
@@ -520,11 +520,11 @@ fn an_immature_body_never_reproduces() {
     let mut b = immature(&mut w, i);
     let child = 0.1 * 24.0 * (1.0 - 0.75) / w.chem.subs[MATTER].molar_mass;
     b.brood = 3.0 * child;
-    let (s, mut b) = out(&mut w, b);
+    let (_, mut b) = out(&mut w, b);
     assert!(!b.adult(&w.chem));
     let at = w.life.alive().count();
     w.time += DAY_S;
-    assert!(!copy::copy(&mut w, s, &mut b) && w.life.alive().count() == at, "an immature body had children");
+    assert!(!copy::copy(&mut w, &mut b) && w.life.alive().count() == at, "an immature body had children");
     // Updates: it builds with all it has and has no brood and no child until it is mature.
     let (mut w, i) = start();
     w.cfg.phys.c_build = 1e5;
@@ -537,7 +537,7 @@ fn an_immature_body_never_reproduces() {
         feed_minerals(&mut w, s);
         w.events.clear();
         pcore::day(&mut w);
-        let b = &w.life.bodies[s];
+        let b = &w.life[s];
         if !b.alive {
             break;
         }
@@ -566,12 +566,12 @@ fn a_hurt_body_rebuilds_within_its_allowance_and_is_immature_until_healed() {
     let v = eater(&mut w, i, brain::REST, 15f32.log10());
     let v = testkit::place(&mut w, v);
     let books = Books::now(&w);
-    assert!(w.life.bodies[v].adult(&w.chem));
+    assert!(w.life[v].adult(&w.chem));
     // Movers spent in its cell the energy that breaks 40% of it (`Body::breaking`).
     w.life.pushed = vec![0.0; w.mesh.cells().n()];
-    w.life.pushed[i] = w.life.bodies[v].breaking(&w.chem, &w.cfg, 0.4);
+    w.life.pushed[i] = w.life[v].breaking(&w.chem, &w.cfg, 0.4);
     pcore::choose::wear(&mut w);
-    let mut b = std::mem::take(&mut w.life.bodies[v]);
+    let mut b = std::mem::take(&mut w.life[v]);
     assert!(!b.adult(&w.chem), "a body torn by 40% is still mature: {} kg", b.built(&w.chem));
     let days = b.interval(&w) as f64;
     // (Counted in all the matter it holds: the update that crosses maturity puts a share of what it builds into a brood.)
@@ -587,7 +587,7 @@ fn a_hurt_body_rebuilds_within_its_allowance_and_is_immature_until_healed() {
     }
     println!("mature again after {updates} updates of {days} days ({:.2} kg of body)", b.built(&w.chem));
     assert!(b.adult(&w.chem) && updates > 5, "mature after {updates} updates");
-    w.life.bodies[v] = b;
+    w.life[v] = b;
     books.assert_kept(&w, 1e-9);
 }
 
@@ -602,7 +602,7 @@ fn reproducing_updates_keep_elements_and_energy() {
     (b.genes[CHILD], b.genes[ALLOC]) = (-1.0, 0.8);
     let id = {
         let s = w.add(b, 1);
-        w.life.bodies[s].id(s)
+        w.life[s].id
     };
     let books = Books::now(&w);
     let mut born = 0.0;
@@ -648,14 +648,14 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
         // The eater founder's size of maturity: tissue costs per kg go by it across kinds (Kleiber). It does not die of age.
         (b.genes[COPY_MASS], w.cfg.phys.e_life) = (1.645, 1e30);
         let (s, b0) = out(&mut w, b);
-        w.life.bodies[s] = b0;
+        w.life[s] = b0;
         let area = w.mesh.cells().area()[0];
         let joule = -w.chem.dh(BURN) / w.chem.reactions[BURN].inputs.iter().find(|x| x.0 as usize == RICH).unwrap().1 as f64 / w.chem.subs[RICH].molar_mass;
         let (mut built, mut takes, mut ups) = (Vec::new(), vec![0.0; 360], vec![0.0; 360]);
         for day in 0..360usize {
             // Fuel and liquid in plenty: 100 kg per m² of each on its cell at every update (booked as an edit); the cell it
             // is in, as it has a brain and may step to a neighbour.
-            let i = w.life.bodies[s].cell as usize;
+            let i = w.life[s].cell as usize;
             for k in [RICH, LIQUID] {
                 let a = (100.0 * area / w.chem.subs[k].molar_mass - w.g(k, i)).max(0.0);
                 put(&mut w, k, i, a);
@@ -667,14 +667,14 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             testkit::hold_ground(&mut w, i, GROWTH_GROUND_K);
             w.events.clear();
             pcore::day(&mut w);
-            assert!(w.life.bodies[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
+            assert!(w.life[s].alive, "the body died on day {day}: {:?}", w.events.iter().filter_map(|e| if let EventKind::Died { cause, .. } = e.kind { Some(cause) } else { None }).collect::<Vec<_>>());
             // What its burning made and it holds above the level it keeps drains to the ground at its update (`live::shed`);
             // what a decision burns after it adds a trace.
-            let b = &w.life.bodies[s];
+            let b = &w.life[s];
             let level = b.level(&w.chem, LIQUID, b.mass(&w.chem));
             assert!(b.store[LIQUID] <= level * (1.0 + 1e-3), "day {day}: liquid over its level by a share {:.3e}", b.store[LIQUID] / level - 1.0);
             takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, used, .. } = e.kind { used as f64 * joule } else { 0.0 }).sum();
-            let mut b = w.life.bodies[s].clone();
+            let mut b = w.life[s].clone();
             b.prepare(&w.chem, &w.cfg.phys);
             ups[day] = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem));
             if day % 50 == 49 {
@@ -734,7 +734,7 @@ fn growth_builds_each_solid_in_its_share_and_hard_solids_hold_a_body_up() {
     let (h_soft, h, e_soft, e) = (soft.height(&w.chem, &w.cfg), hard.height(&w.chem, &w.cfg), soft.breaking(&w.chem, &w.cfg, 1.0), hard.breaking(&w.chem, &w.cfg, 1.0));
     println!("height {h_soft:.2} m of soft tissue alone, {h:.2} m with 1 kg of frame; breaking it all {e_soft:.0} J and {e:.0} J");
     assert!(h_soft < 1.5 && h > 2.0 * h_soft && e > 2.0 * e_soft);
-    w.life.bodies[s] = b;
+    w.life[s] = b;
     books.assert_kept(&w, 1e-9);
 }
 

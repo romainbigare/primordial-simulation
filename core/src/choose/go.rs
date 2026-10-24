@@ -8,7 +8,7 @@ use crate::{bond, lanes, World};
 /// Move to a neighbour, if its force gives the push a mover makes (`bump`; laws.md 3.5): cost by its whole mass at the
 /// real cost of transport (`Physics::walk`), the distance, the climb and the bodies in the way (`lanes::resist`); less
 /// afloat. The part spent pushing through bodies breaks them (`wear`) and clears the lane. A node moves as one.
-pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
+pub fn go(w: &mut World, b: &mut Body, j: usize) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
     if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.mesh.cells().area()[j] {
         return;
@@ -28,7 +28,7 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
     }
     bond::moved(w, b, carried, j, mb);
     w.counts.parts.afloat += afloat as u8 as f64;
-    w.life.relocate(slot, i, j);
+    w.life.relocate(b.id, i, j);
     b.cell = j as u32;
     (b.mark, b.rained) = (w.light[j], w.rained[j]);
     w.counts.crossings.resize(w.mesh.cells().n(), 0.0);
@@ -49,14 +49,14 @@ pub fn go(w: &mut World, slot: usize, b: &mut Body, j: usize) {
 pub fn wear(w: &mut World) {
     let pushed = std::mem::take(&mut w.life.pushed);
     for (j, &energy) in pushed.iter().enumerate().filter(|e| *e.1 > 0.0) {
-        let here = w.life.at[j].clone();
-        let total: f64 = here.iter().map(|&s| w.life.bodies[s as usize].mass(&w.chem)).sum();
+        let here: Vec<usize> = w.life.cell(j).collect();
+        let total: f64 = here.iter().map(|&s| w.life[s].mass(&w.chem)).sum();
         if total <= 0.0 {
             continue;
         }
-        w.open_moves(j, Node::new(Class::Body, here[0] as usize));
-        for s in here.into_iter().map(|s| s as usize) {
-            let o = std::mem::take(&mut w.life.bodies[s]);
+        w.open_moves(j, Node::new(Class::Body, here[0]));
+        for s in here {
+            let o = std::mem::take(&mut w.life[s]);
             let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
             let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
             let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();

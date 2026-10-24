@@ -48,7 +48,7 @@ struct Litter {
 /// A mature body makes children whenever its brood covers one: an individual whole children of one parent or two, a
 /// node fractional members of one parent beyond `BROOD_HELD`; a share `DISPERSE` starts in a neighbour cell (laws.md
 /// 4.2-4.4). Returns whether any were made.
-pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
+pub fn copy(w: &mut World, b: &mut Body) -> bool {
     let (chem, n, mc) = (&w.chem, b.n(), b.k.copy_mass);
     let Some(mi) = chem.matter() else { return false };
     if !b.adult(chem) {
@@ -66,10 +66,10 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     if births <= 0.0 {
         return false;
     }
-    let id = b.id(slot);
+    let id = b.id;
     let mut r = Rng::new(w.seed, w.day(), id, Purpose::Mutate);
     let i = b.cell as usize;
-    let mate = if node { None } else { partner(w, slot, b, &mut r) };
+    let mate = if node { None } else { partner(w, b, &mut r) };
     // Children that start in the neighbour cell of a compass direction drawn (no link that way: none): of a node, the
     // share `DISPERSE` of its births, however few (less than one member with no node to join there waits in the brood,
     // as the stayers do, `emit`); an individual's go together, by that chance.
@@ -86,12 +86,12 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
     };
     let mut made = false;
     if m > 0.0 {
-        made |= emit(w, slot, b, &litter, cell, m, &mut r);
+        made |= emit(w, b, &litter, cell, m, &mut r);
     }
     // A node's children who stay: a group of their own (less than one member waits in the brood unless there is a node
     // of theirs to join).
     if node && births - m > 0.0 {
-        made |= emit(w, slot, b, &litter, i, births - m, &mut r);
+        made |= emit(w, b, &litter, i, births - m, &mut r);
     }
     made
 }
@@ -99,8 +99,8 @@ pub fn copy(w: &mut World, slot: usize, b: &mut Body) -> bool {
 /// `m` children of `b` start in `cell`: their genes, stores, heat and rows, booked on the young node of their kind and
 /// lineage there (`kin`), or a body of their own (`place_child`). Less than one member of a node's children with no
 /// node to join waits in the brood (false).
-fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) -> bool {
-    let mixed = l.mate.map(|t| mix(b, &w.life.bodies[t], m, r));
+fn emit(w: &mut World, b: &mut Body, l: &Litter, cell: usize, m: f64, r: &mut Rng) -> bool {
+    let mixed = l.mate.map(|t| mix(b, &w.life[t], m, r));
     let (from, pooled) = mixed.as_ref().map_or((&b.genes, &b.spread), |x| (&x.0, &x.1));
     let (genes, spread) = vary(&Layout::of(&w.chem), from, pooled, m, w.cfg.phys.alike, !w.life.brainless(b), r);
     let size = mutation_size(from);
@@ -109,7 +109,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     // nodes of the cell or the children's genes, so the search made now holds for the join.
     let hit = match () {
         _ if l.alone => None,
-        _ if l.node && cell == b.cell as usize => young::linked(w, slot, b, false),
+        _ if l.node && cell == b.cell as usize => young::linked(w, b, false),
         _ => kin(w, cell, b.lineage, (&genes, &spread), false),
     };
     if l.node && m < 1.0 && hit.is_none() {
@@ -150,7 +150,7 @@ fn emit(w: &mut World, slot: usize, b: &mut Body, l: &Litter, cell: usize, m: f6
     };
     let s = place_child(w, b, l, c, rows);
     if l.node && cell == b.cell as usize {
-        young::link(w, slot, b, s);
+        young::link(w, b, s);
     }
     true
 }
@@ -189,8 +189,8 @@ fn provisions(chem: &Chemistry, b: &Body, mi: usize, matter: f64, births: f64) -
 /// mature into, or the node members who moved join.
 pub(crate) fn kin(w: &World, cell: usize, lineage: u32, (genes, spread): (&[f32], &[f32]), mature: bool) -> Option<usize> {
     let (lay, alike) = (Layout::of(&w.chem), w.cfg.phys.alike);
-    w.life.at[cell].iter().map(|&s| s as usize).find(|&s| {
-        let t = &w.life.bodies[s];
+    w.life.cell(cell).find(|&s| {
+        let t = &w.life[s];
         t.alive && t.n() > 1.0 && t.lineage == lineage && t.adult(&w.chem) == mature && within(&lay, alike, t, genes, spread)
     })
 }
@@ -207,7 +207,7 @@ fn child_rows(w: &World, b: &Body, l: &Litter, m: f64, size: f32, r: &mut Rng) -
     let row_noise = if w.cfg.null { 0.0 } else { p.row_noise };
     let (mut pre, mut spread) = (None, b.row_spread);
     if let Some(t) = l.mate.filter(|_| !w.cfg.null) {
-        if let Some((v, s)) = mix_rows(w, b, &w.life.bodies[t], m, r) {
+        if let Some((v, s)) = mix_rows(w, b, &w.life[t], m, r) {
             // (Rows the same as the parent's are shared, not copied.)
             (pre, spread) = ((v != w.life.born(b)).then_some(v), s);
         }
@@ -252,7 +252,7 @@ fn child_lineage(w: &mut World, b: &Body, l: &Litter, genes: &[f32], rows: &mut 
         shaken
     } else {
         let born = rows.as_deref().unwrap_or(w.life.born(b));
-        if let Some((k, to)) = l.mate.map(|t| w.life.bodies[t].lineage).and_then(|k| Some((k, fits(k)?.shape))) {
+        if let Some((k, to)) = l.mate.map(|t| w.life[t].lineage).and_then(|k| Some((k, fits(k)?.shape))) {
             *rows = Some(brain::rerow(born, lin.shape, to, r, noise));
             return k;
         }
@@ -276,15 +276,15 @@ fn place_child(w: &mut World, b: &Body, l: &Litter, mut c: Body, rows: Option<Ve
     // born frozen.)
     c.wet = c.key_liquids(&w.chem) | (b.wet & c.key_mask(&w.chem));
     let s = w.place(c);
-    if l.alone && w.life.bodies[s].count > 1.5 {
-        let k = w.life.bodies[s].count.round() as usize - 1;
+    if l.alone && w.life[s].count > 1.5 {
+        let k = w.life[s].count.round() as usize - 1;
         open(w, s, k);
-        let mut c = std::mem::take(&mut w.life.bodies[s]);
+        let mut c = std::mem::take(&mut w.life[s]);
         (c.spread, c.row_spread) = (Vec::new(), 0.0);
         w.life.set_count(&mut c, 1.0);
         // (The members drawn took their stores: what is seen of it is what is left.)
         w.see(&mut c);
-        w.life.bodies[s] = c;
+        w.life[s] = c;
     }
     s
 }

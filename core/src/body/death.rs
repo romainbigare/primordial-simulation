@@ -61,6 +61,6 @@ pub fn wound(w: &mut World, slot: usize, mut b: Body, (hit, f): (f64, f64), dead
         return false;
     }
     w.see(&mut b);
-    w.life.bodies[slot] = b;
+    w.life[slot] = b;
     true
 }

@@ -95,7 +95,7 @@ pub(crate) struct Ctx<'a> {
     pub bodies: Vec<f64>,
     /// Per ground cell: mass of made objects (parts), kg/m²
     pub parts: Vec<f64>,
-    /// Per body slot: a live light-eater (`body::light_eater`)
+    /// Per living body (`Life::alive`): a light-eater (`body::light_eater`)
     pub light: Vec<bool>,
 }
 
@@ -104,16 +104,16 @@ impl<'a> Ctx<'a> {
         let (na, ns) = (w.mesh.level(AIR).n(), w.chem.ns());
         let n = w.mesh.cells().n();
         let (t_air, vapor, absorber) = ((0..na).map(|j| w.t_air(j)).collect(), vec![0.0; na], vec![0.0; na]);
-        let light = w.life.bodies.iter().map(|b| b.alive && pcore::body::light_eater(&w.chem, &b.genes)).collect();
+        let light = w.life.alive().map(|b| pcore::body::light_eater(&w.chem, &b.genes)).collect();
         let mut c = Ctx { w, f: fields(w), t_air, vapor, absorber, plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light };
         for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
             let i = pcore::bond::cell(w, x);
             c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
         }
-        for (s, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
+        for (b, &light) in w.life.alive().zip(&c.light) {
             let i = b.cell as usize;
             let m = b.mass(&w.chem) / w.mesh.cells().area()[i];
-            *if c.light[s] { &mut c.plants[i] } else { &mut c.animals[i] } += m;
+            *if light { &mut c.plants[i] } else { &mut c.animals[i] } += m;
             c.bodies[i] += 1.0;
         }
         for (j, &area) in w.mesh.level(AIR).area().iter().enumerate() {

@@ -18,7 +18,7 @@ pub fn room(w: &World, b: &Body) -> Option<(usize, Enclosure)> {
 /// enclosure among the bodies inside.
 pub(crate) fn enclosure(w: &World, b: &Body) -> Option<Enclosure> {
     let (r, e) = room(w, b)?;
-    let others = w.life.at[b.cell as usize].iter().filter(|&&o| w.life.bodies[o as usize].alive && room(w, &w.life.bodies[o as usize]).is_some_and(|x| x.0 == r)).count();
+    let others = w.life.cell(b.cell as usize).filter(|&o| w.life[o].alive && room(w, &w.life[o]).is_some_and(|x| x.0 == r)).count();
     Some(Enclosure { g: e.g / (others + 1) as f64, ..e })
 }
 

@@ -18,6 +18,9 @@ A mean of nothing is written `NaN` (`null` in the viewer's file, drawn as a gap)
 
 **Raw events** (`core/src/event.rs`): born (with kind, one or two parents), died (with cause, kind,
 the light catalyst of the dead), took, gave, watched, bond made or broken, first time a substance appears. Only physical facts; the viewer shows the first appearances.
+Took, gave and watched name bodies by their id (`Body::id`): the domain the body was born in (the cells under one air
+node, in the order of the air nodes) times 2^40, plus that domain's count of births then (1, 2, ...). An id never
+changes and is never given again, wherever the body goes.
 
 **A globe in the viewer's file.** The header has `globe` (the rows wrap east to west), `lat_north` and `lat_south` (the
 latitudes of the north and south edges, degrees; 90 and -90 on a globe). The grid is the map: row `y` of `h` lies at

@@ -53,7 +53,9 @@ pub struct ActTmp {
 
 /// One decision: what the body perceives, its options with their scores and features, their chances and the action drawn.
 struct Choice {
-    seen: [(usize, bool); MAX_SEEN],
+    /// The bodies perceived: slot, id (a body seen may die and its slot be reused before a member of a node acts on it)
+    /// and whether it is in its own cell
+    seen: [(usize, u64, bool); MAX_SEEN],
     nseen: usize,
     parts: [usize; PARTS],
     nparts: usize,
@@ -69,8 +71,8 @@ struct Choice {
 
 /// A body's decision at its update: perceive, think and learn from the last decision, score the options, emit the
 /// signal; an individual draws one option, keeps its trace and acts, a node spreads its members over them (`spread`).
-pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
-    let mut rng = Rng::new(w.seed, w.day(), b.id(slot), Purpose::Choose);
+pub fn act(w: &mut World, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
+    let mut rng = Rng::new(w.seed, w.day(), b.id, Purpose::Choose);
     // Mass and heat capacity are as `body::live` just left them.
     let temp = b.temp(&w.chem);
     // A brain perceives sizes per member.
@@ -81,7 +83,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
-    let mut c = perceive(w, slot, b, nseen, &mut rng);
+    let mut c = perceive(w, b, nseen, &mut rng);
     inputs(w, b, lived, temp, &c, &mut t.input);
     brain::think(&lin.base, &b.rows, s, &t.input, &mut t.thought);
     learn::learn(w, b, s, wb, &t.thought.h);
@@ -92,10 +94,10 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, lived: &Lived, t: &mut ActT
     b.wb = wb;
     let k = Kit { s, t, z, form, wb: &now };
     if b.n() > 1.0 {
-        spread::spread(w, slot, b, &c, &k, &mut rng);
+        spread::spread(w, b, &c, &k, &mut rng);
     } else {
         b.trace = trace(w, b, &c, &k, c.a, 0.0);
-        act_as(w, slot, b, &c, &k, c.a, &mut rng);
+        act_as(w, b, &c, &k, c.a, &mut rng);
     }
 }
 
@@ -149,11 +151,11 @@ fn options(w: &World, b: &Body, s: Shape, (pm, vol): (f64, f64), c: &mut Choice,
         c.logit[FIXED + d] = score(&out[s.dir()..s.dir() + NF + 1], fd);
         c.to[d] = j;
     }
-    for (q, &(o, same)) in c.seen[..c.nseen].iter().enumerate() {
-        let ob = &w.life.bodies[o];
+    for (q, &(o, _, same)) in c.seen[..c.nseen].iter().enumerate() {
+        let ob = &w.life[o];
         let v = ob.vis;
         // How past dealings with it went, if it is known.
-        let known = b.known.iter().find(|k| k.0 == ob.id(o) && k.0 != 0).map(|k| k.1);
+        let known = b.known.iter().find(|k| k.0 == ob.id && k.0 != 0).map(|k| k.1);
         let fq = &mut c.fb[q * NT..(q + 1) * NT];
         fq.copy_from_slice(&[ln(v[0] / pm as f32) / LN_MASS, ln(v[1] / v[0]) / LN_LEAF, v[2], v[3], v[4], v[5], ob.sig[0], ob.sig[1], known.unwrap_or(0.0), known.is_some() as u8 as f32, ob.wb / WB_SCALE]);
         for verb in 0..VERBS {
@@ -252,27 +254,27 @@ fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f3
     v
 }
 
-/// Body `b` (in slot `slot`) does option `a`.
-fn act_as(w: &mut World, slot: usize, b: &mut Body, c: &Choice, k: &Kit, a: usize, rng: &mut Rng) {
+/// Body `b` (taken out of its slot) does option `a`.
+fn act_as(w: &mut World, b: &mut Body, c: &Choice, k: &Kit, a: usize, rng: &mut Rng) {
     match a {
         REST => {}
         PUT => feed::put(w, b),
-        TAKE => feed::take_node(w, slot, b),
-        FORM => bond::form(w, slot, b, [k.form[0], 0.5 * (k.form[1] + 1.0)]),
+        TAKE => feed::take_node(w, b),
+        FORM => bond::form(w, b, [k.form[0], 0.5 * (k.form[1] + 1.0)]),
         RELEASE => bond::release(w, b),
         ANCHOR => bond::anchor(w, b),
         DIG => bond::dig(w, b),
-        a if a < TO_BODY => go(w, slot, b, c.to[a - FIXED]),
+        a if a < TO_BODY => go(w, b, c.to[a - FIXED]),
         // (Members of a node acting before may have used up the part or killed the body.)
         a if a >= TO_PART && !w.parts.parts[c.parts[(a - TO_PART) / OVERBS]].alive => {}
-        a if a >= TO_PART => bond::act(w, slot, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
-        a if !w.life.bodies[c.seen[(a - TO_BODY) / VERBS].0].alive => {}
+        a if a >= TO_PART => bond::act(w, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
+        a if !w.life.holds(c.seen[(a - TO_BODY) / VERBS].0, c.seen[(a - TO_BODY) / VERBS].1) => {}
         a => {
             let (o, verb) = (c.seen[(a - TO_BODY) / VERBS].0, (a - TO_BODY) % VERBS);
             match verb {
-                TAKE_FROM => take_body(w, slot, b, o, rng),
-                GIVE => feed::give(w, slot, b, o),
-                _ => learn::watch(w, slot, b, o),
+                TAKE_FROM => take_body(w, b, o, rng),
+                GIVE => feed::give(w, b, o),
+                _ => learn::watch(w, b, o),
             }
         }
     }

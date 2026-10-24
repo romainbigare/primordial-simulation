@@ -1,4 +1,4 @@
-//! Bodies: nodes that hold substances, heat and genes, with stable ids (slot and generation). A body updates every
+//! Bodies: nodes that hold substances, heat and genes, each with an id that never changes (`life`). A body updates every
 //! `interval` days and integrates the time since at its update (`live`; laws.md 6).
 
 mod death;
@@ -50,7 +50,9 @@ pub(crate) const KNOWN: usize = 4;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Body {
-    pub gen: u32,
+    /// Its id, given at birth (`Life::add`); 0 for none
+    pub id: u64,
+    /// Whether it is a living body (not an empty slot)
     pub alive: bool,
     pub cell: u32,
     /// Members this node stands for (1: an individual). Stores and heat are the members' totals, genes and brain their
@@ -60,6 +62,8 @@ pub struct Body {
     /// The body it was copied from (id; 0 for a founder) and its day of birth
     pub parent: u64,
     pub born: u64,
+    /// Day of its next update (`Life::schedule`)
+    pub due: u64,
     /// Day of the last update; for a node, the mean by members of the days its members' time was last integrated from
     /// (members who joined since count from when they came, `nodes::rejoin`)
     pub last: f64,
@@ -68,6 +72,9 @@ pub struct Body {
     pub mark: f64,
     /// The cell's cumulative rain at the last update, mol/m²: it caught a share of `rained - this` (`physics::rain_caught`)
     pub rained: f64,
+    /// From the last survey: its light per m² of capture area over its cell's mean (`survey::shade`); not saved
+    #[serde(skip)]
+    pub shade: f64,
     /// The share of the light it caught that its light reactions stored at its last update: its cell sets that share
     /// aside in its bodies' node (`store::Class::Bodies`)
     pub keep: f32,
@@ -166,9 +173,6 @@ impl Body {
     #[inline]
     pub fn n(&self) -> f64 {
         self.count.max(1.0)
-    }
-    pub fn id(&self, slot: usize) -> u64 {
-        (self.gen as u64) << 32 | slot as u64
     }
     #[inline]
     pub fn gene(&self, g: usize) -> f64 {

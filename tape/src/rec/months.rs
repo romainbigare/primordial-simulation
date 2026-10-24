@@ -7,6 +7,7 @@ use crate::measure::area_mean;
 use super::{Recorder, CAUSES};
 use pcore::World;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// The columns after `year` and `month`, with the decimals each is written with (none: as it is).
 const COLS: [(&str, Option<usize>); 9] =
@@ -63,12 +64,12 @@ impl Recorder {
         // The row of the map of a cell (of its square, in a refined region).
         let row = |i: u32| w.map.xy(w.map.square_of(i as usize)).1 as f64;
         let (mut n, mut sum, mut inside, mut tm) = (0.0f64, [0.0; 4], 0.0, 0.0);
-        let mut last = vec![(u32::MAX, 0); w.life.bodies.len()];
+        let mut last = BTreeMap::new();
         // The surface heights of the last survey (`Life::env`, not saved), or, before the first survey of a resumed world,
         // from the amounts (`World::surface_z`).
         let z_of = |i: usize| w.life.env.get(i).map_or_else(|| w.surface_z(i), |e| e[2]);
         y.months += 1.0;
-        for (at, b) in w.life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
+        for b in w.life.alive() {
             let i = b.cell as usize;
             if let Some(l) = &w.life.brains[b.lineage as usize] {
                 bump(&mut y.stand, l.root as usize, b.n());
@@ -84,12 +85,12 @@ impl Recorder {
             if pcore::body::light_eater(chem, &b.genes) {
                 continue;
             }
-            last[at] = (b.gen, b.cell);
+            last.insert(b.id, b.cell);
             let ins = pcore::bond::room(w, b).is_some();
             let c = &mut y.inside[(t >= INSIDE_COLD_T) as usize];
             (c[0], c[1], inside, tm) = (c[0] + 1.0, c[1] + ins as u8 as f64, inside + ins as u8 as f64, tm + t);
-            let (dy, dz) = match s.last.get(at).filter(|l| l.0 == b.gen) {
-                Some(&(_, c)) => (row(b.cell) - row(c), z - z_of(c as usize)),
+            let (dy, dz) = match s.last.get(&b.id) {
+                Some(&c) => (row(b.cell) - row(c), z - z_of(c as usize)),
                 None => (0.0, 0.0),
             };
             n += 1.0;
@@ -98,6 +99,8 @@ impl Recorder {
             }
         }
         s.last = last;
+        // What the bodies that left the world took is forgotten.
+        s.took.retain(|&id, _| w.life.find(id).is_some());
         // The land's mean ground temperature this month (the land is listed again each year).
         if y.t_land.is_empty() {
             y.land = (0..w.mesh.cells().n()).filter(|&i| w.is_land(i)).map(|i| i as u32).collect();

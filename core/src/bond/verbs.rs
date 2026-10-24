@@ -5,12 +5,12 @@ use super::{dissolve, event, held, holder, id, link, make, move_structure, restr
 use crate::{body::{self, Body, STRENGTH}, chem::{Chemistry, Phase}, store::{Class, Move}, World};
 
 /// Body `b` takes hold of part `p` if it bears the weight of `p`'s structure (one bonded to the ground rests on it).
-fn grab(w: &mut World, slot: usize, b: &mut Body, p: usize) {
+fn grab(w: &mut World, b: &mut Body, p: usize) {
     let s = w.parts.parts[w.parts.parts[p].root as usize].s;
     if !s.anchored && s.mass * w.cfg.gravity > bears(w, b) {
         return;
     }
-    w.parts.parts[p].held = b.id(slot);
+    w.parts.parts[p].held = b.id;
     b.hold = Some(id(w, p));
     event(w, true, b.cell as usize, HELD);
 }
@@ -26,9 +26,9 @@ pub(crate) fn let_go(w: &mut World, b: &mut Body, load: bool) {
 
 /// The body in slot `o` lets go of what it holds, broken off by a load.
 pub(super) fn torn_from(w: &mut World, o: usize) {
-    let mut ob = std::mem::take(&mut w.life.bodies[o]);
+    let mut ob = std::mem::take(&mut w.life[o]);
     let_go(w, &mut ob, true);
-    w.life.bodies[o] = ob;
+    w.life[o] = ob;
 }
 
 /// What a held part multiplies a body's force by: more for a hard part, up to the body's size.
@@ -51,13 +51,13 @@ pub fn force(w: &World, b: &Body) -> f64 {
 }
 
 /// Verb `v` toward part `p`: hold, take from, put to, join the held part to, break, enter.
-pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
+pub fn act(w: &mut World, b: &mut Body, v: usize, p: usize) {
     let (mb, days) = (b.mass(&w.chem), b.interval(w) as f64);
     match v {
         0 => {
             if w.parts.parts[p].held == NOBODY && body::pay(w, b, w.cfg.phys.grab * w.cfg.phys.c_handle * w.parts.parts[p].mass(&w.chem), days) {
                 let_go(w, b, false);
-                grab(w, slot, b, p);
+                grab(w, b, p);
             }
         }
         1 => take(w, b, p, mb, days),
@@ -77,7 +77,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
                 return;
             }
             if let Some(o) = holder(w, p) {
-                if f > force(w, &w.life.bodies[o]) {
+                if f > force(w, &w.life[o]) {
                     torn_from(w, o);
                 }
             } else if let Some((o, s)) = w.parts.bonds.of(p).min_by(|a, b| a.1.total_cmp(&b.1)) {
@@ -88,7 +88,7 @@ pub fn act(w: &mut World, slot: usize, b: &mut Body, v: usize, p: usize) {
         }
         _ => {
             let (r, i) = (w.parts.parts[p].root as usize, b.cell as usize);
-            let used: f64 = w.life.at[i].iter().map(|&o| &w.life.bodies[o as usize]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| o.volume(&w.chem, o.temp(&w.chem))).sum();
+            let used: f64 = w.life.cell(i).map(|o| &w.life[o]).filter(|o| o.alive && room(w, o).is_some_and(|x| x.0 == r)).map(|o| o.volume(&w.chem, o.temp(&w.chem))).sum();
             let s = w.parts.parts[r].s;
             if s.encl.closed > 0.0 && s.space >= used + b.volume(&w.chem, b.temp(&w.chem)) && body::pay(w, b, w.cfg.phys.walk(mb / b.n()) * mb * w.parts.parts[p].size[0] as f64, days) {
                 b.inside = Some(id(w, p));
@@ -169,7 +169,7 @@ fn give_up(chem: &Chemistry, b: &mut Body, m: &[f64]) -> (Vec<f64>, f64) {
 
 /// Put the solids it holds above what it keeps (`Body::kept`) out as a new part (up to `form` of the body's mass, at least
 /// `min_kg`), shaped by the brain; the body holds it if its hands are free and its force bears it.
-pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
+pub fn form(w: &mut World, b: &mut Body, shape: [f32; 2]) {
     let i = b.cell as usize;
     let (chem, mb, t) = (&w.chem, b.mass(&w.chem), b.temp(&w.chem));
     let size = b.size(chem);
@@ -185,7 +185,7 @@ pub fn form(w: &mut World, slot: usize, b: &mut Body, shape: [f32; 2]) {
     let p = make(w, i, wall, e, shape[0], shape[1]);
     w.counts.parts.formed += 1.0;
     if held(w, b).is_none() {
-        grab(w, slot, b, p);
+        grab(w, b, p);
     }
 }
 

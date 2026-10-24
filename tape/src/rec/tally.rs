@@ -25,11 +25,6 @@ pub(super) fn bump(v: &mut Vec<f64>, k: usize, x: f64) {
     *slot(v, k) += x;
 }
 
-/// The slot and the generation a body id is made of (`Body::id`).
-pub(super) fn slot_gen(id: u64) -> (usize, u32) {
-    (id as u32 as usize, (id >> 32) as u32)
-}
-
 /// One starting kind's sums of the year (by `Lineage::root`): members born, of them those with two parents
 /// (`Born::mixed`), and members died by cause.
 #[derive(Clone, Copy, Default)]
@@ -97,9 +92,8 @@ pub(super) struct MonthTally {
 /// What the recorder keeps across years of what bodies do (a snapshot carries it: `Kept`).
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub(super) struct Social {
-    /// Per body slot: its generation and cell at the last month, for the bodies that are not light-eaters (for
-    /// movement by month); generation `u32::MAX`: none
-    pub last: Vec<(u32, u32)>,
+    /// The cell of each body that is not a light-eater at the last month, by id (for movement by month)
+    pub last: BTreeMap<u64, u32>,
     /// The busiest cells at the last decade, and the share of them still busiest then
     pub top: Vec<usize>,
     pub persist: f64,
@@ -107,16 +101,14 @@ pub(super) struct Social {
     pub worn: Vec<u32>,
     pub worn_old: Vec<u32>,
     pub worn_persist: f64,
-    /// Per body slot: its generation, and what it took from other bodies in its life, kg: from light-eaters, from
-    /// the others
-    pub took: Vec<(u32, [f32; 2])>,
+    /// What each living body took from other bodies in its life, by id, kg: from light-eaters, from the others
+    pub took: BTreeMap<u64, [f32; 2]>,
 }
 
 impl Social {
     /// What the body with this id took from other bodies in its life, kg (none if nothing).
     pub fn eaten(&self, id: u64) -> Option<[f32; 2]> {
-        let (s, g) = slot_gen(id);
-        self.took.get(s).filter(|t| t.0 == g).map(|t| t.1)
+        self.took.get(&id).copied()
     }
 }
 
@@ -153,18 +145,12 @@ impl Recorder {
             EventKind::Gave { from, to } => {
                 (y.gave, y.gave_kg) = (y.gave + 1.0, y.gave_kg + e.value);
                 y.pairs.insert((from, to));
-                let (slot, gen) = slot_gen(from);
-                let b = w.life.bodies.get(slot).filter(|b| b.alive && b.gen == gen);
+                let b = w.life.find(from).map(|s| &w.life[s]);
                 y.gave_eaters += b.is_some_and(|b| !light_eater(&w.chem, &b.genes)) as u8 as f64;
             }
             EventKind::Took { by, from, used, cat } => {
                 if from != u64::MAX {
-                    let (at, gen) = slot_gen(by);
-                    let t = slot(&mut s.took, at);
-                    if t.0 != gen {
-                        *t = (gen, [0.0; 2]);
-                    }
-                    t.1[(cat[1] < LIGHT_EATER) as usize] += e.value as f32;
+                    s.took.entry(by).or_default()[(cat[1] < LIGHT_EATER) as usize] += e.value as f32;
                 }
                 if cat[0] < LIGHT_EATER {
                     y.intake[if from == u64::MAX { 2 } else { (cat[1] < LIGHT_EATER) as usize }] += used as f64;

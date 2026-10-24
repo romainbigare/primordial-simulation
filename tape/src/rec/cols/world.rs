@@ -51,9 +51,9 @@ impl Recorder {
         row.push("rivers", "1", dry_land_flux(w, &c.f).iter().filter(|&&q| q > RIVER_WEB).count() as f64);
         // Bodies (nodes and individuals) and light-eaters; members of light-eaters and of the others; nodes of the others.
         let (mut members, mut nodes) = ([0.0; 2], 0.0);
-        for (s, b) in life.bodies.iter().enumerate().filter(|(_, b)| b.alive) {
-            members[!c.light[s] as usize] += b.n();
-            nodes += (!c.light[s] && b.n() > 1.0) as u8 as f64;
+        for (b, &light) in life.alive().zip(&c.light) {
+            members[!light as usize] += b.n();
+            nodes += (!light && b.n() > 1.0) as u8 as f64;
         }
         row.push("bodies", "1", life.alive().count() as f64);
         row.push("plants", "1", c.light.iter().filter(|&&l| l).count() as f64);

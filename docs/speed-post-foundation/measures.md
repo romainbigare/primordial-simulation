@@ -25,6 +25,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | E2.1 | E2.1 | 0.728 | 135 | 46 | 538 | 0 | 10 | 2,744 | 27,762 | 1.274 | 225 | 55 | 940 | 40 | 14 | 1,932 | 25,410 | 8,996 |
 | D3 | D3 | 0.730 | 122 | 44 | 553 | 0 | 11 | 2,744 | 27,762 | 1.215 | 188 | 48 | 922 | 43 | 13 | 1,955 | 25,626 | 9,001 |
 | E2.2 | E2.2 | 0.735 | 126 | 45 | 552 | 0 | 12 | 2,769 | 27,974 | 1.214 | 200 | 54 | 906 | 40 | 14 | 1,904 | 25,345 | 9,008 |
+| D2.1a (benches remade, `/tmp/d21-bench`) | D2.1a | 1.267 | 184 | 52 | 931 | 82 | 18 | 2,836 | 32,886 | 1.641 | 233 | 57 | 1,202 | 125 | 23 | 2,142 | 27,570 | 9,107 |
 
 ### A2: compiler settings
 
@@ -189,6 +190,28 @@ each year, `bodies` by up to 2.4% and `root_0_kg` by up to 2.7% (year 1: 0.2% an
 `bodies` -4.7%, `root_0_kg` -2.5% at year 5. Life's choices amplify rounding, as in A2 (the first year of the island
 differs in the bodies by 0.2%). The level-2 world check (the key numbers) is covered by the next key-number run (B1
 with B3); if that run falls out of range, the key numbers are run at E2.2 alone to tell the causes apart.
+
+### D2.1a: stable body ids
+
+Snapshot version 46, so both benches were remade with D2.1a's code (`BENCH_DIR=/tmp/d21-bench scripts/bench.sh
+--remake`, saves of commit `ff48805`). Remade worlds are other worlds (S65): the island now has parts (82 ms a year)
+and 2,836 bodies, so its row is not compared with the rows above. The row is the lowest of six runs (island) and two
+runs (globe) of the bench, interleaved with D2.1b's.
+
+Cost per body update, callgrind on one thread (`RAYON_NUM_THREADS=1`), one year: `survey::day` inclusive over the
+year's updates. `main` is `5a04c54`.
+
+| Build and saves | island22 updates | per update | globe36 updates | per update |
+|---|---|---|---|---|
+| `main` on `~/.cache/ew-bench` (made at the baseline) | 27,691 | 121,059 | 25,277 | 193,592 |
+| `main` on saves remade with `main` | 31,132 | 147,068 | 26,353 | 198,703 |
+| D2.1a on its remade saves | 33,527 | 152,243 | 27,633 | 210,957 |
+
+D2.1a against `main` on saves each remade with its own code: +3.5% (island) and +6.2% (globe) per update. The new
+rng keys give other worlds, and the difference is spread over the laws (on the globe `bond::month::step` and
+`choose::act` cost 2 times and 1.3 times as much: more parts and more bodies with a brain), not in the code D2.1a
+adds: the id table (a `BTreeMap`) costs 0.2% of the island's instructions in that run, and the walks of the cells'
+lists (`Life::alive`) about 0.1%. D2.1's own cost is measured exactly by D2.1b against D2.1a, on one world.
 
 ## Profile of the baseline
 

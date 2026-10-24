@@ -31,7 +31,7 @@ const NEWTON_STEPS: usize = 40;
 /// The cover of other bodies over a body's cell, kg/m²: the mass of the others there now per ground area.
 pub(super) fn cover_of(w: &World, b: &Body) -> f64 {
     let i = b.cell as usize;
-    let others = w.life.at[i].iter().map(|&s| &w.life.bodies[s as usize]).filter(|o| o.alive && !std::ptr::eq(*o, b));
+    let others = w.life.cell(i).map(|s| &w.life[s]).filter(|o| o.alive && !std::ptr::eq(*o, b));
     others.map(|o| o.vis[0] as f64 * o.n()).sum::<f64>() / w.mesh.cells().area()[i]
 }
 

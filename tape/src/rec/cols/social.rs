@@ -19,7 +19,7 @@ impl Recorder {
         let (w, gn) = (c.w, c.w.mesh.cells().n());
         let life = &w.life;
         // Bodies that took more from other eaters than from light-eaters in their life.
-        let eat = life.bodies.iter().enumerate().filter(|(i, b)| b.alive && self.social.eaten(b.id(*i)).is_some_and(|t| t[1] > t[0])).count();
+        let eat = life.alive().filter(|b| self.social.eaten(b.id).is_some_and(|t| t[1] > t[0])).count();
         row.push("eat_animals", "1", eat as f64);
         // Traffic: the share of crossings on the busiest cells, their overlap with the busiest a decade ago, and the
         // body mass per area there and on other land.

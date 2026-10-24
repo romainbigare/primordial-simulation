@@ -36,13 +36,13 @@ fn pair(w: &mut World, i: usize, gap: f32) -> (usize, Body, usize) {
 }
 
 /// Make `n` children of `a` one after another (a day apart, each from a new brood of one), and return them.
-fn copies(w: &mut World, s: usize, a: &mut Body, n: usize) -> Vec<Body> {
+fn copies(w: &mut World, a: &mut Body, n: usize) -> Vec<Body> {
     for _ in 0..n {
         w.time += DAY_S;
         brood(w, a, 1.0);
-        assert!(copy::copy(w, s, a), "no child");
+        assert!(copy::copy(w, a), "no child");
     }
-    let out: Vec<Body> = children(w, a.id(s)).into_iter().map(|k| w.life.bodies[k].clone()).collect();
+    let out: Vec<Body> = children(w, a.id).into_iter().map(|k| w.life[k].clone()).collect();
     assert_eq!(out.len(), n);
     out
 }
@@ -67,10 +67,10 @@ fn each_gene_and_row_of_a_child_is_one_parents() {
     // (No child starts a lineage of its own by chance, `Physics::new_lineage`: the lineage tested is the parents'.)
     w.cfg.phys.new_lineage = 0.0;
     let lay = Layout::of(&w.chem);
-    let (s, mut a, sb) = pair(&mut w, i, 2.0);
-    let (rows_a, rows_b) = (w.life.born(&a).to_vec(), w.life.born(&w.life.bodies[sb]).to_vec());
+    let (_, mut a, sb) = pair(&mut w, i, 2.0);
+    let (rows_a, rows_b) = (w.life.born(&a).to_vec(), w.life.born(&w.life[sb]).to_vec());
     w.events.clear();
-    let kids = copies(&mut w, s, &mut a, 200);
+    let kids = copies(&mut w, &mut a, 200);
     let (mut from_a, mut from_b, mut other) = (0, 0, 0);
     let (mut row_a, mut row_b, mut row_other) = (0, 0, 0);
     let r = w.life.brains[a.lineage as usize].as_ref().expect("brain").shape.r();
@@ -119,9 +119,9 @@ fn with_no_partner_a_child_has_one_parent() {
     // Alone in its cell.
     let mut a = mixer(&mut w, i, 1.0);
     (lay.cat..lay.min).for_each(|g| a.genes[g] = BASE);
-    let (s, mut a) = out(&mut w, a);
+    let (_, mut a) = out(&mut w, a);
     w.events.clear();
-    let kids = copies(&mut w, s, &mut a, 30);
+    let kids = copies(&mut w, &mut a, 30);
     for c in &kids {
         assert!((lay.cat..lay.min).all(|g| (c.genes[g] - BASE).abs() < 0.05), "a gene that is not its parent's");
         // (A child's rows change a little now and then: the generation's mutation.)
@@ -131,20 +131,20 @@ fn with_no_partner_a_child_has_one_parent() {
     assert_eq!(mixed(&w), (0.0, 30.0));
     // A partner that is not mature (its body under its copy mass) is not one.
     let (mut w, i) = start();
-    let (s, mut a, sb) = pair(&mut w, i, 2.0);
-    w.life.bodies[sb].genes[COPY_MASS] = 3.0;
-    w.life.bodies[sb].prepare(&w.chem, &w.cfg.phys);
-    assert!(!w.life.bodies[sb].adult(&w.chem));
+    let (_, mut a, sb) = pair(&mut w, i, 2.0);
+    w.life[sb].genes[COPY_MASS] = 3.0;
+    w.life[sb].prepare(&w.chem, &w.cfg.phys);
+    assert!(!w.life[sb].adult(&w.chem));
     w.events.clear();
-    let kids = copies(&mut w, s, &mut a, 30);
+    let kids = copies(&mut w, &mut a, 30);
     assert!(kids.iter().all(|c| (lay.cat..lay.min).all(|g| (c.genes[g] - BASE).abs() < 0.05)));
     assert_eq!(mixed(&w), (0.0, 30.0));
     // The only body in the cell that is mature is the parent itself: it is never its own partner.
     let (mut w, i) = start();
     let a = mixer(&mut w, i, 1.0);
-    let (s, mut a) = out(&mut w, a);
+    let (_, mut a) = out(&mut w, a);
     w.events.clear();
-    copies(&mut w, s, &mut a, 5);
+    copies(&mut w, &mut a, 5);
     assert_eq!(mixed(&w), (0.0, 5.0));
 }
 
@@ -156,36 +156,36 @@ fn unlike_bodies_never_mix() {
     let lay = Layout::of(&w.chem);
     let limit = w.cfg.phys.alike;
     // Five steps apart in every catalyst gene (past the limit of 4): asexual.
-    let (s, mut a, _) = pair(&mut w, i, limit + 1.0);
+    let (_, mut a, _) = pair(&mut w, i, limit + 1.0);
     w.events.clear();
-    let kids = copies(&mut w, s, &mut a, 30);
+    let kids = copies(&mut w, &mut a, 30);
     assert!(kids.iter().all(|c| (lay.cat..lay.min).all(|g| (c.genes[g] - BASE).abs() < 0.05)), "unlike bodies mixed");
     assert_eq!(mixed(&w).0, 0.0);
     // Alike in all but one gene, which is past the limit: still unlike.
     let (mut w, i) = start();
-    let (s, mut a, sb) = pair(&mut w, i, 1.0);
-    w.life.bodies[sb].genes[lay.cat] = BASE + (limit + 0.5) * STEP;
+    let (_, mut a, sb) = pair(&mut w, i, 1.0);
+    w.life[sb].genes[lay.cat] = BASE + (limit + 0.5) * STEP;
     w.events.clear();
-    copies(&mut w, s, &mut a, 10);
+    copies(&mut w, &mut a, 10);
     assert_eq!(mixed(&w).0, 0.0, "one gene past the limit is unlike");
     // Brain sizes count by whole units: a partner 6 units bigger in brain (past 4) is unlike, 3 units is alike.
     for (units, mixes) in [(6.0, false), (3.0, true)] {
         let (mut w, i) = start();
-        let (s, mut a, sb) = pair(&mut w, i, 1.0);
-        w.life.bodies[sb].genes[body::HIDDEN] += units;
+        let (_, mut a, sb) = pair(&mut w, i, 1.0);
+        w.life[sb].genes[body::HIDDEN] += units;
         w.events.clear();
-        copies(&mut w, s, &mut a, 10);
+        copies(&mut w, &mut a, 10);
         assert_eq!(mixed(&w).0 > 0.0, mixes, "{units} units of brain apart");
     }
     // Two partners, one near and one further but alike: all the children take the near one's genes.
     let (mut w, i) = start();
-    let (s, mut a, _) = pair(&mut w, i, 3.0);
+    let (_, mut a, _) = pair(&mut w, i, 3.0);
     let mut near = mixer(&mut w, i, 1.0);
     for g in lay.cat..lay.min {
         near.genes[g] = BASE + 1.0 * STEP;
     }
     w.add(near, 1);
-    let kids = copies(&mut w, s, &mut a, 60);
+    let kids = copies(&mut w, &mut a, 60);
     let (mut a_n, mut far) = (0, 0);
     for c in &kids {
         for g in lay.cat..lay.min {
@@ -208,21 +208,21 @@ fn unlike_bodies_never_mix() {
 fn the_partner_loses_nothing() {
     let (mut w, i) = start();
     let (s, mut a, sb) = pair(&mut w, i, 2.0);
-    let before = w.life.bodies[sb].clone();
+    let before = w.life[sb].clone();
     let books = Books::now(&w);
     w.events.clear();
-    copies(&mut w, s, &mut a, 20);
+    copies(&mut w, &mut a, 20);
     assert_eq!(mixed(&w).0, 20.0);
-    let after = &w.life.bodies[sb];
+    let after = &w.life[sb];
     assert_eq!((&after.store, after.e, &after.genes, after.brood, after.count), (&before.store, before.e, &before.genes, before.brood, before.count));
     assert_eq!(w.life.born(after), w.life.born(&before));
-    w.life.bodies[s] = a;
+    w.life[s] = a;
     books.assert_kept(&w, 1e-9);
 }
 
 /// Slots of the live bodies.
 fn live(w: &pcore::World) -> Vec<usize> {
-    (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).collect()
+    w.life.living().map(|x| x.0).collect()
 }
 
 /// A mature node's children start a node of their own (they are immature, `copy::young`) that carries the variance
@@ -235,37 +235,37 @@ fn a_node_spreads_with_its_children_and_splits_when_too_varied() {
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     let books = Books::now(&w);
-    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
-    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0).expect("a node");
+    let mut b = std::mem::take(&mut w.life[s]);
     // Members are mature (a low copy mass), each has a child and all children stay in the cell.
     (b.genes[COPY_MASS], b.genes[DISPERSE]) = (-0.4, 0.0);
     b.prepare(&w.chem, &w.cfg.phys);
     let n0 = b.count;
     brood(&w, &mut b, n0);
     let before = live(&w);
-    assert!(b.spread.is_empty() && copy::copy(&mut w, s, &mut b), "no children");
+    assert!(b.spread.is_empty() && copy::copy(&mut w, &mut b), "no children");
     assert_eq!(b.count, n0, "the children joined their mature parents");
-    w.life.bodies[s] = b;
+    w.life[s] = b;
     let kids: Vec<usize> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
     assert_eq!(kids.len(), 1, "the children are one node of their own");
-    let c = &w.life.bodies[kids[0]];
+    let c = &w.life[kids[0]];
     assert!((c.count - n0).abs() < 1e-6 * n0 && !c.adult(&w.chem), "{} young members", c.count);
     assert!(c.spread.iter().all(|&v| v >= 0.0) && c.spread.iter().any(|&v| v > 0.0) && c.row_spread > 0.0, "children keep no spread");
     // Grown, they join the node (as the month's merge does): its spread is widened.
     nodes::merge(&mut w, kids[0], s);
-    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    let mut b = std::mem::take(&mut w.life[s]);
     assert!(b.count > 1.5 * n0 && b.spread.iter().any(|&v| v > 0.0) && b.row_spread > 0.0, "the merge widened nothing");
 
     // Copy mass spread over 5 mutation steps (0.2 each): the halves are 2 sqrt(2/pi) 5 = 8 apart.
     b.spread[COPY_MASS] = 1.0;
     let (count, store, e, m) = (b.count, b.store.clone(), b.e, b.genes[COPY_MASS]);
     let before = live(&w);
-    nodes::split(&mut w, s, &mut b);
-    w.life.bodies[s] = b;
+    nodes::split(&mut w, &mut b);
+    w.life[s] = b;
     let new: Vec<usize> = live(&w).into_iter().filter(|x| !before.contains(x) && *x != s).collect();
     assert_eq!(new.len(), 1, "not split in two");
     seen_as_it_is(&w, new[0]);
-    let (a, c) = (&w.life.bodies[s], &w.life.bodies[new[0]]);
+    let (a, c) = (&w.life[s], &w.life[new[0]]);
     assert_eq!((a.count + c.count, a.lineage, a.cell), (count, c.lineage, c.cell));
     for (k, &x) in store.iter().enumerate() {
         assert!((a.store[k] + c.store[k] - x).abs() <= 1e-12 * x, "store {k}");
@@ -297,17 +297,17 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     w.cfg.two_parents = false;
     worldgen::life::seed(&mut w, 0);
     let len = Layout::of(&w.chem).len;
-    let b0 = &w.life.bodies[live(&w)[0]];
+    let b0 = &w.life[live(&w)[0]];
     let (per, e1) = (b0.store.iter().map(|a| 100.0 * a / b0.count).collect::<Vec<f64>>(), 100.0 * b0.e / b0.count);
     for s in live(&w) {
-        (w.life.bodies[s].genes[COPY_MASS], w.life.bodies[s].genes[MUT], w.life.bodies[s].genes[CHILD]) = (1.45, -0.8, -std::f32::consts::LOG10_2);
+        (w.life[s].genes[COPY_MASS], w.life[s].genes[MUT], w.life[s].genes[CHILD]) = (1.45, -0.8, -std::f32::consts::LOG10_2);
         if wide {
             // (The first children that stay bring every spread down to the split threshold.) A brain of 12 hidden units
             // for selection to shrink (light-eaters start with none).
-            w.life.bodies[s].spread = vec![1e9; len];
-            w.life.bodies[s].genes[HIDDEN] = 12.0;
+            w.life[s].spread = vec![1e9; len];
+            w.life[s].genes[HIDDEN] = 12.0;
         }
-        w.life.bodies[s].prepare(&w.chem, &w.cfg.phys);
+        w.life[s].prepare(&w.chem, &w.cfg.phys);
     }
     let mean = |w: &pcore::World| {
         let (mut g, mut n) = (vec![0.0f64; len], 0.0);
@@ -329,28 +329,28 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
             order.swap(k, r.below(k + 1));
         }
         for s in order {
-            let mut b = std::mem::take(&mut w.life.bodies[s]);
+            let mut b = std::mem::take(&mut w.life[s]);
             (b.store, b.e) = (per.iter().map(|a| a * b.count).collect(), e1 * b.count);
             // Mature with a body of twice its copy mass after the brood, children half the copy mass.
             let (body, n) = (b.built(&w.chem) / b.n(), b.count);
             (b.genes[COPY_MASS], b.genes[CHILD], b.brood) = ((0.4 * body).log10() as f32, -std::f32::consts::LOG10_2, 0.0);
             b.prepare(&w.chem, &w.cfg.phys);
             brood(&w, &mut b, n);
-            let (before, id) = (live(&w), b.id(s));
-            copy::copy(&mut w, s, &mut b);
-            lineage::resize(&mut w, s, &mut b);
-            nodes::split(&mut w, s, &mut b);
-            w.life.bodies[s] = b;
+            let (before, id) = (live(&w), b.id);
+            copy::copy(&mut w, &mut b);
+            lineage::resize(&mut w, &mut b);
+            nodes::split(&mut w, &mut b);
+            w.life[s] = b;
             // The children are young nodes of their own (immature, `copy::young`); here they grow up at once, and
             // would mature into their parent's node: they join it now, so the update's node math is the same.
-            let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life.bodies[*k].parent == id).collect();
+            let kids: Vec<usize> = live(&w).into_iter().filter(|k| *k != s && !before.contains(k) && w.life[*k].parent == id).collect();
             for k in kids {
                 nodes::merge(&mut w, k, s);
             }
         }
         for s in live(&w) {
-            let f = live_on(&w.life.bodies[s]);
-            w.life.bodies[s].count *= f;
+            let f = live_on(&w.life[s]);
+            w.life[s].count *= f;
         }
         w.events.clear();
     }
@@ -416,25 +416,25 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
     let a = w.cfg.phys.alike;
     let spread: Vec<f32> = inv.iter().map(|&x| if x > 0.0 { (a * a * std::f32::consts::FRAC_PI_8 + 1.0) / (x * x) } else { 0.0 }).collect();
     let s = live(&w).into_iter().find(|&s| {
-        let i = w.life.bodies[s].cell as usize;
+        let i = w.life[s].cell as usize;
         let near = w.mesh.cells().around(i).1;
-        near.len() == 8 && near.iter().all(|&j| !w.life.at[j as usize].is_empty())
+        near.len() == 8 && near.iter().all(|&j| w.life.in_cell(j as usize) > 0)
     }).expect("a node with nodes all around");
     // Members mature from 0.65 of their body, all children leave.
-    let mut genes = w.life.bodies[s].genes.clone();
-    (genes[COPY_MASS], genes[DISPERSE]) = ((0.65 * w.life.bodies[s].member_body(&w.chem) as f32).log10(), 1.0);
+    let mut genes = w.life[s].genes.clone();
+    (genes[COPY_MASS], genes[DISPERSE]) = ((0.65 * w.life[s].member_body(&w.chem) as f32).log10(), 1.0);
     for t in live(&w) {
-        (w.life.bodies[t].genes, w.life.bodies[t].spread) = (genes.clone(), spread.clone());
-        w.life.bodies[t].prepare(&w.chem, &w.cfg.phys);
+        (w.life[t].genes, w.life[t].spread) = (genes.clone(), spread.clone());
+        w.life[t].prepare(&w.chem, &w.cfg.phys);
         // The nodes around are immature (half the matter: a member's body half, under its copy mass at 0.65), as nodes
         // of children are: a child joins no mature node (`copy::kin`).
         if t != s {
             let m = w.chem.matter().expect("matter");
-            w.life.bodies[t].store[m] *= 0.5;
+            w.life[t].store[m] *= 0.5;
         }
     }
     // A node of two members: two children.
-    let b = w.life.bodies[s].clone();
+    let b = w.life[s].clone();
     let per: Vec<f64> = b.store.iter().map(|x| x / b.count).collect();
     let (mut joined, mut tries) = (0, 0);
     for _ in 0..200 {
@@ -444,7 +444,7 @@ fn dispersing_children_of_a_varied_node_join_their_kind() {
         brood(&w, &mut c, 2.0);
         let n0 = live(&w).len();
         w.time += DAY_S;
-        assert!(copy::copy(&mut w, s, &mut c), "no children");
+        assert!(copy::copy(&mut w, &mut c), "no children");
         (joined, tries) = (joined + (live(&w).len() == n0) as u32, tries + 1);
         w.events.clear();
     }
@@ -461,15 +461,15 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     let mut w = small_world();
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
     let books = Books::now(&w);
-    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
-    let mut b = std::mem::take(&mut w.life.bodies[s]);
+    let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0).expect("a node");
+    let mut b = std::mem::take(&mut w.life[s]);
     let lin0 = b.lineage;
     assert!(w.life.born(&b).is_empty() && b.rows.is_empty(), "a light-eater has a brain");
     b.genes[HIDDEN] += 0.9;
-    lineage::resize(&mut w, s, &mut b);
+    lineage::resize(&mut w, &mut b);
     assert_eq!(b.lineage, lin0, "moved for less than a unit");
     b.genes[HIDDEN] += 0.3;
-    lineage::resize(&mut w, s, &mut b);
+    lineage::resize(&mut w, &mut b);
     let shape = |w: &World, b: &Body| w.life.brains[b.lineage as usize].as_ref().expect("its lineage").shape;
     let (lin1, s1) = (b.lineage, shape(&w, &b));
     assert!(lin1 != lin0 && s1.h == 1, "no new lineage of one hidden unit");
@@ -479,9 +479,9 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
     b.rows[s1.h] += 0.5;
     let learned = b.rows[s1.h] - w.life.born(&b)[s1.h];
     b.genes[HIDDEN] += 1.0;
-    lineage::resize(&mut w, s, &mut b);
-    w.life.bodies[s] = b;
-    let b = &w.life.bodies[s];
+    lineage::resize(&mut w, &mut b);
+    w.life[s] = b;
+    let b = &w.life[s];
     let h = shape(&w, b).h;
     assert!(b.lineage != lin1 && h == 2, "no new lineage of two hidden units");
     assert!((b.rows[h] - w.life.born(b)[h] - learned).abs() < 1e-5, "what it learned is lost");
@@ -493,7 +493,7 @@ fn a_node_whose_size_genes_moved_changes_lineage() {
 
 /// Body `s` is seen as what it holds now: its visible traits are those its stores, genes and members give.
 fn seen_as_it_is(w: &World, s: usize) {
-    let b = &w.life.bodies[s];
+    let b = &w.life[s];
     assert_eq!(b.vis, b.visible(&w.chem, &w.cfg), "body {s} is seen as it was");
 }
 
@@ -511,37 +511,37 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     let i = testkit::dry_land(&w);
     let b = founder(&mut w, 0, i, &Brain::neutral());
     let s = w.add(b, 1);
-    assert!(w.life.bodies[s].count > 1000.0, "a node");
+    assert!(w.life[s].count > 1000.0, "a node");
     // A spread of one step in the copy mass (0.2), in the gas gene (0.3) and in a catalyst gene; and one in the
     // light-capture gene, so each is seen with its own leaf area (near its wall: its noise shrinks, so it is not
     // measured).
-    let (lay, genes0) = (Layout::of(&w.chem), w.life.bodies[s].genes.clone());
+    let (lay, genes0) = (Layout::of(&w.chem), w.life[s].genes.clone());
     let cat = lay.cat + 1;
     let wide = [(COPY_MASS, 0.04f64), (GAS, 0.09), (cat, 0.09)];
-    w.life.bodies[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
-    w.life.bodies[s].spread[LEAF] = 0.09;
+    w.life[s].spread = (0..lay.len).map(|g| wide.iter().find(|x| x.0 == g).map_or(0.0, |x| x.1 as f32)).collect();
+    w.life[s].spread[LEAF] = 0.09;
     // And one of 0.1 in the born rows.
-    w.life.bodies[s].row_spread = 0.01;
-    let rows0 = w.life.born(&w.life.bodies[s]).to_vec();
-    let (before, count0, cell) = (life_totals(&w), w.life.bodies[s].count, w.life.bodies[s].cell);
+    w.life[s].row_spread = 0.01;
+    let rows0 = w.life.born(&w.life[s]).to_vec();
+    let (before, count0, cell) = (life_totals(&w), w.life[s].count, w.life[s].cell);
     let n = 400;
     let drawn = nodes::open(&mut w, s, n);
     assert_eq!(drawn.len(), n);
     same_totals(&before, &life_totals(&w));
     assert!((life_totals(&w).0 - before.0).abs() <= 1e-9 * before.0, "members {} then {}", before.0, life_totals(&w).0);
     drawn.iter().chain([&s]).for_each(|&m| seen_as_it_is(&w, m));
-    let node = &w.life.bodies[s];
+    let node = &w.life[s];
     assert!((node.count + n as f64 - count0).abs() < 1e-6 && node.count >= 1.0 && node.alive);
     let mut mean = vec![0.0f64; lay.len];
     for &m in &drawn {
-        let b = &w.life.bodies[m];
+        let b = &w.life[m];
         assert!(b.alive && b.count == 1.0 && b.cell == cell && b.spread.is_empty());
         mean.iter_mut().zip(&b.genes).for_each(|(x, &y)| *x += y as f64 / n as f64);
     }
     for (g, var) in wide {
         let (se, off) = ((var / n as f64).sqrt(), mean[g] - genes0[g] as f64);
         assert!(off.abs() < 4.0 * se, "gene {g}: drawn mean {} against {} (standard error {se})", mean[g], genes0[g]);
-        let sd = (drawn.iter().map(|&m| (w.life.bodies[m].genes[g] as f64 - mean[g]).powi(2)).sum::<f64>() / n as f64).sqrt();
+        let sd = (drawn.iter().map(|&m| (w.life[m].genes[g] as f64 - mean[g]).powi(2)).sum::<f64>() / n as f64).sqrt();
         assert!(sd > 0.8 * var.sqrt() && sd < 1.2 * var.sqrt(), "gene {g}: spread {sd}, wanted {}", var.sqrt());
     }
     // The mean of all members, by count, is what it was.
@@ -550,7 +550,7 @@ fn opening_a_node_draws_members_and_keeps_everything() {
         assert!((all - genes0[g] as f64).abs() < 1e-4 * (1.0 + genes0[g].abs() as f64), "gene {g}: mean of all {all} against {}", genes0[g]);
     }
     let (mut rows, mut var) = (w.life.born(node).iter().map(|&x| x as f64 * node.count / count0).collect::<Vec<f64>>(), 0.0);
-    for b in drawn.iter().map(|&m| &w.life.bodies[m]) {
+    for b in drawn.iter().map(|&m| &w.life[m]) {
         for ((r, &x), &x0) in rows.iter_mut().zip(w.life.born(b)).zip(&rows0) {
             (*r, var) = (*r + x as f64 / count0, var + (x as f64 - x0 as f64).powi(2) / (n * rows0.len()) as f64);
         }
@@ -559,10 +559,10 @@ fn opening_a_node_draws_members_and_keeps_everything() {
     assert!(off < 1e-4 && var.sqrt() > 0.08 && var.sqrt() < 0.12, "born rows: mean of all off by {off}, drawn as wide as {}", var.sqrt());
     // A node keeps one member: asked for more than it has, it gives all but one. (Its rows made alike first, so that its
     // many members do not each get rows of their own.)
-    w.life.bodies[s].row_spread = 0.0;
-    let rest = w.life.bodies[s].count.floor() as usize;
+    w.life[s].row_spread = 0.0;
+    let rest = w.life[s].count.floor() as usize;
     assert_eq!(nodes::open(&mut w, s, rest + 5).len(), rest - 1);
-    assert!(w.life.bodies[s].count < 2.0);
+    assert!(w.life[s].count < 2.0);
     books.assert_kept(&w, 1e-9);
 }
 
@@ -573,14 +573,14 @@ fn joining_a_node_keeps_members_and_weighs_genes_by_them() {
     let mut w = worldgen::new_world(1, 16, 16);
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
-    let t = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 1.0).expect("a node");
-    w.life.bodies[t].count = 3.0;
-    let (o, before) = (w.life.bodies[t].clone(), life_totals(&w).0);
+    let t = live(&w).into_iter().find(|&s| w.life[s].count > 1.0).expect("a node");
+    w.life[t].count = 3.0;
+    let (o, before) = (w.life[t].clone(), life_totals(&w).0);
     let mut c = o.clone();
     (c.count, c.genes) = (1.4, o.genes.iter().map(|g| g + 0.1).collect());
     let s = w.add(c, 1);
     nodes::merge(&mut w, s, t);
-    let (after, node) = (life_totals(&w).0, &w.life.bodies[t]);
+    let (after, node) = (life_totals(&w).0, &w.life[t]);
     assert!((after - (before + 1.4)).abs() < 1e-12 * after && (node.count - 4.4).abs() < 1e-12, "members {before} + 1.4 then {after}");
     for (g, (x, y)) in o.genes.iter().zip(&node.genes).enumerate() {
         let want = x + 0.1 * 1.4 / 4.4;
@@ -597,13 +597,13 @@ fn splitting_and_joining_give_the_node_back() {
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
     w.cfg.crowd = 64;
     let books = Books::now(&w);
-    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0).expect("a node");
+    let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0).expect("a node");
     let lay = Layout::of(&w.chem);
     let mut r = Rng::new(1, 0, 0, Purpose::Split);
-    let (n0, before) = (w.life.bodies[s].count, life_totals(&w));
+    let (n0, before) = (w.life[s].count, life_totals(&w));
     for _ in 0..10_000 {
         let g = lay.cat + r.below(lay.min - lay.cat);
-        let mut b = std::mem::take(&mut w.life.bodies[s]);
+        let mut b = std::mem::take(&mut w.life[s]);
         // (A catalyst gene well clear of its walls, its spread past the split threshold and at most the most a node keeps,
         // `body::most`, which a join does not pass.)
         b.genes[g] = 6.0;
@@ -611,15 +611,15 @@ fn splitting_and_joining_give_the_node_back() {
         b.spread[g] = (1.0 - 0.1 * r.f64() as f32) * 0.3f32.powi(2) * (w.cfg.phys.alike.powi(2) * std::f32::consts::FRAC_PI_8 + 1.0);
         let (genes, spread) = (b.genes.clone(), b.spread.clone());
         let others = live(&w);
-        nodes::split(&mut w, s, &mut b);
-        w.life.bodies[s] = b;
+        nodes::split(&mut w, &mut b);
+        w.life[s] = b;
         let half = live(&w).into_iter().find(|x| *x != s && !others.contains(x)).expect("split in two");
         nodes::merge(&mut w, half, s);
-        let b = &w.life.bodies[s];
+        let b = &w.life[s];
         assert!((b.genes[g] - genes[g]).abs() < 1e-5 && (b.spread[g] - spread[g]).abs() < 1e-5 * spread[g], "gene {g}: {} and {} back as {} and {}", genes[g], spread[g], b.genes[g], b.spread[g]);
     }
     same_totals(&before, &life_totals(&w));
-    assert!((w.life.bodies[s].count - n0).abs() < 1e-9 * n0, "members {n0} then {}", w.life.bodies[s].count);
+    assert!((w.life[s].count - n0).abs() < 1e-9 * n0, "members {n0} then {}", w.life[s].count);
     books.assert_kept(&w, 1e-9);
 }
 
@@ -634,49 +634,49 @@ fn individuals_mode_children_of_an_animal_are_individuals() {
         worldgen::life::seed(&mut w, 0);
         worldgen::life::seed_with(&mut w, 1, &worldgen::life::Seeding::neutral());
         (w.cfg.nodes, w.cfg.phys.c_copy) = (nodes, 0.0);
-        let s = live(&w).into_iter().find(|&s| !pcore::body::light_eater(&w.chem, &w.life.bodies[s].genes)).expect("an animal");
+        let s = live(&w).into_iter().find(|&s| !pcore::body::light_eater(&w.chem, &w.life[s].genes)).expect("an animal");
         // A node of its own kind beside it, in its cell; its children stay in their cell.
-        let mut node = w.life.bodies[s].clone();
+        let mut node = w.life[s].clone();
         (node.count, node.genes[DISPERSE]) = (5.0, 0.0);
         node.store.iter_mut().for_each(|x| *x *= 5.0);
         // Young (half the matter of an adult founder), as a node children join is.
         node.store[w.chem.matter().expect("matter")] *= 0.5;
         node.e *= 5.0;
-        w.life.bodies[s].genes[DISPERSE] = 0.0;
+        w.life[s].genes[DISPERSE] = 0.0;
         let t = w.add(node, 1);
         // One child: its parent is mature (its copy mass is half its body, `Body::built`, which maturity reads, so it stays
         // mature with the brood out of its body whatever its sprayed `CHILD` gene).
-        let (at, before) = (live(&w).len(), life_totals(&w));
-        let mut b = std::mem::take(&mut w.life.bodies[s]);
+        let (was, before) = (live(&w), life_totals(&w));
+        let mut b = std::mem::take(&mut w.life[s]);
         b.genes[COPY_MASS] = (0.5 * b.built(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut b, 1.0);
         w.time += DAY_S;
-        assert!(copy::copy(&mut w, s, &mut b), "no child");
-        w.life.bodies[s] = b;
-        let kids: Vec<usize> = live(&w).into_iter().skip(at).collect();
-        println!("nodes {nodes}: bodies added {}, node of the kind now {}", kids.len(), w.life.bodies[t].count);
+        assert!(copy::copy(&mut w, &mut b), "no child");
+        w.life[s] = b;
+        let kids: Vec<usize> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
+        println!("nodes {nodes}: bodies added {}, node of the kind now {}", kids.len(), w.life[t].count);
         same_totals(&before, &life_totals(&w));
         if nodes {
-            assert!(kids.is_empty() && w.life.bodies[t].count > 5.0, "the child did not join the node of its kind");
+            assert!(kids.is_empty() && w.life[t].count > 5.0, "the child did not join the node of its kind");
             continue;
         }
-        assert!(kids.len() == 1 && w.life.bodies[t].count == 5.0 && w.life.bodies[kids[0]].count == 1.0, "the child joined a node");
+        assert!(kids.len() == 1 && w.life[t].count == 5.0 && w.life[kids[0]].count == 1.0, "the child joined a node");
         // Many children at once: its brood covers 3.5 of them.
-        let (at, before) = (live(&w).len(), life_totals(&w));
-        let mut b = std::mem::take(&mut w.life.bodies[s]);
+        let (was, before) = (live(&w), life_totals(&w));
+        let mut b = std::mem::take(&mut w.life[s]);
         b.genes[COPY_MASS] = (0.3 * b.built(&w.chem) as f32).log10();
         b.prepare(&w.chem, &w.cfg.phys);
         brood(&w, &mut b, 3.5);
         w.time += DAY_S;
-        assert!(copy::copy(&mut w, s, &mut b), "no children");
-        w.life.bodies[s] = b;
-        let kids: Vec<usize> = live(&w).into_iter().skip(at).collect();
+        assert!(copy::copy(&mut w, &mut b), "no children");
+        w.life[s] = b;
+        let kids: Vec<usize> = live(&w).into_iter().filter(|k| !was.contains(k)).collect();
         println!("many at once: {} children", kids.len());
         same_totals(&before, &life_totals(&w));
         assert!(kids.len() >= 3, "{} children", kids.len());
         for k in kids {
-            let c = &w.life.bodies[k];
+            let c = &w.life[k];
             assert!(c.alive && c.count == 1.0 && c.spread.is_empty(), "child {k}: count {}", c.count);
         }
     }
@@ -729,16 +729,16 @@ fn individuals_mode_merges_no_animal() {
 /// What body `s` holds that can become body (`worth`), mol, and its gene `g`, after its next update (`pcore::day` until
 /// it has updated).
 fn after_update(w: &mut World, s: usize, g: usize) -> (f64, f32) {
-    let last = w.life.bodies[s].last;
-    while w.life.bodies[s].last == last {
+    let last = w.life[s].last;
+    while w.life[s].last == last {
         pcore::day(w);
     }
-    (worth(w, s), w.life.bodies[s].genes[g])
+    (worth(w, s), w.life[s].genes[g])
 }
 
 /// What the body in slot `s` holds that can become body (`copy::buildable`), at its ground's temperature.
 fn worth(w: &World, s: usize) -> f64 {
-    let b = &w.life.bodies[s];
+    let b = &w.life[s];
     copy::buildable(w, b, w.t_ground_last(b.cell as usize))
 }
 
@@ -754,12 +754,12 @@ fn selection_inside_a_node_moves_its_mean_as_its_members_would() {
     let mut w = small_world();
     w.cfg.sample_every = 1;
     worldgen::life::seed_with(&mut w, 0, &worldgen::life::Seeding::alike());
-    let s = live(&w).into_iter().find(|&s| w.life.bodies[s].count > 10.0 && w.life.bodies[s].adult(&w.chem)).expect("an adult node");
+    let s = live(&w).into_iter().find(|&s| w.life[s].count > 10.0 && w.life[s].adult(&w.chem)).expect("an adult node");
     let books = Books::now(&w);
     let lay = Layout::of(&w.chem);
     for (g, name) in [(body::STRENGTH, "strength"), (body::REPAIR, "repair")] {
         let sd = 0.3 * pcore::body::steps(&lay, &vec![1.0; lay.len])[g].recip();
-        let b = &mut w.life.bodies[s];
+        let b = &mut w.life[s];
         (b.genes[ALLOC], b.brood) = (0.0, 0.0);
         b.prepare(&w.chem, &w.cfg.phys);
         b.spread = vec![0.0; lay.len];
@@ -768,7 +768,7 @@ fn selection_inside_a_node_moves_its_mean_as_its_members_would() {
         // The two halves, each on its own in a copy of the world.
         let half = |d: f32| {
             let mut v = w.clone();
-            let b = &mut v.life.bodies[s];
+            let b = &mut v.life[s];
             (b.genes[g], b.spread) = (z + d, Vec::new());
             b.prepare(&v.chem, &v.cfg.phys);
             (after_update(&mut v, s, g).0 / m0).ln()

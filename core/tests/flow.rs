@@ -691,18 +691,18 @@ fn a_body_draws_its_ground_no_colder_than_where_its_draw_stops() {
     pcore::step(&mut w);
     worldgen::life::seed(&mut w, 0);
     pcore::step(&mut w);
-    let s = (0..w.life.bodies.len()).filter(|&s| w.life.bodies[s].alive).max_by(|&a, &b| w.life.bodies[a].count.total_cmp(&w.life.bodies[b].count)).expect("a node");
-    let i = w.life.bodies[s].cell as usize;
-    for o in w.life.at[i].clone() {
-        w.life.bodies[o as usize].draw = Draw::default();
+    let s = w.life.living().map(|x| x.0).max_by(|&a, &b| w.life[a].count.total_cmp(&w.life[b].count)).expect("a node");
+    let i = w.life[s].cell as usize;
+    for o in w.life.cell(i).collect::<Vec<_>>() {
+        w.life[o].draw = Draw::default();
     }
     let (area, t0, dt) = (w.mesh.cells().area()[i], w.t_ground_last(i), 10.0 * DAY);
     let (most, stop) = (1e3 * area, t0 - 2.0);
     assert!(most * dt > 20.0 * (t0 - stop) * w.heat_cap_ground(i), "it asks too little");
-    w.life.bodies[s].draw = Draw { most, g: most / (t0 - stop), t: stop, owed: 0.0 };
+    w.life[s].draw = Draw { most, g: most / (t0 - stop), t: stop, owed: 0.0 };
     let books = Books::now(&w);
     flow_step(&mut w, dt);
-    let (t1, owed) = (w.t_ground_last(i), w.life.bodies[s].draw.owed);
+    let (t1, owed) = (w.t_ground_last(i), w.life[s].draw.owed);
     assert!(t1 > stop - 0.5 && t1 < t0, "the ground went from {t0:.2} to {t1:.2} K, its draw stops at {stop:.2} K");
     assert!(owed > 0.0 && owed <= w.store.heat(Class::Bodies)[i], "owed {owed:e} J, its node holds {:e} J", w.store.heat(Class::Bodies)[i]);
     books.assert_kept(&w, 1e-12);
@@ -747,20 +747,20 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     let mut crossed = 0;
     // Moving needs force: with the strength of the starting light-eaters (0.05: a force of 0.025 of its weight) the
     // body cannot give the push of a mover (`bump`, 0.05 of its weight) and stays; with its own (0.6) it goes.
-    let mut weak = w.life.bodies[slot].clone();
+    let mut weak = w.life[slot].clone();
     weak.genes[body::STRENGTH] = 0.05;
-    moved(&mut w, (a, slot), |w| choose::go(w, slot, &mut weak, b));
+    moved(&mut w, (a, slot), |w| choose::go(w, &mut weak, b));
     assert_eq!(weak.cell as usize, a, "a body too weak to push walked");
     for t in 0..5000 {
         // Fuel for the trip each time (the scene is not about eating), with its heat at the body's temperature.
-        let mut m = std::mem::take(&mut w.life.bodies[slot]);
+        let mut m = std::mem::take(&mut w.life[slot]);
         m.e += (1e3 - m.store[RICH]) * w.chem.subs[RICH].cp * m.temp(&w.chem);
         m.store[RICH] = 1e3;
         let (from, to) = if t % 2 == 0 { (a, b) } else { (b, a) };
         assert_eq!(m.cell as usize, from);
-        moved(&mut w, (from, slot), |w| choose::go(w, slot, &mut m, to));
+        moved(&mut w, (from, slot), |w| choose::go(w, &mut m, to));
         crossed += (m.cell as usize == to) as u32;
-        w.life.bodies[slot] = m;
+        w.life[slot] = m;
         pcore::survey::survey(&mut w);
         if lanes::eased(&w, link) > 3.0 {
             break;

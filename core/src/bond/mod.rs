@@ -287,7 +287,7 @@ fn dissolve(w: &mut World, s: usize) {
         unlink(w, s, o, true);
     }
     if let Some(h) = holder(w, s) {
-        w.life.bodies[h].hold = None;
+        w.life[h].hold = None;
     }
     let (i, p) = (cell(w, s), std::mem::take(&mut w.parts.parts[s]));
     for (k, (a, f)) in p.wall.iter().zip(&p.fill).enumerate().filter(|(_, (a, f))| *a + *f != 0.0) {
@@ -307,7 +307,6 @@ pub fn held(w: &World, b: &crate::body::Body) -> Option<usize> {
 
 /// The body holding part `p` (not one taken out of the list for its update).
 fn holder(w: &World, p: usize) -> Option<usize> {
-    let (h, me) = (w.parts.parts[p].held, Some(id(w, p)));
-    let s = h as u32 as usize;
-    (h != NOBODY && w.life.bodies.get(s).is_some_and(|o| o.alive && o.gen == (h >> 32) as u32 && o.hold == me)).then_some(s)
+    let (s, me) = (w.life.find(w.parts.parts[p].held)?, Some(id(w, p)));
+    (w.life[s].alive && w.life[s].hold == me).then_some(s)
 }
