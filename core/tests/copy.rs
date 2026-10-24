@@ -309,7 +309,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     let s = w.add(n, 1);
     let books = Books::now(&w);
     w.time += DAY_S;
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     for round in 0..3 {
         let mut n = std::mem::take(&mut w.life[s]);
         n.prepare(&w.chem, &w.cfg);
@@ -334,7 +334,7 @@ fn a_mature_nodes_children_gather_in_its_young_node() {
     // A month's merge: alike in genes, but the young are immature.
     let month = w.cfg.calendar().month;
     w.time = (w.time / month + 1) * month;
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     assert_eq!(w.life.alive().count(), 2, "the young merged into the mature node");
     books.assert_kept(&w, 1e-9);
 }
@@ -571,9 +571,8 @@ fn a_hurt_body_rebuilds_within_its_allowance_and_is_immature_until_healed() {
     let books = Books::now(&w);
     assert!(w.life[v].adult(&w.chem));
     // Movers spent in its cell the energy that breaks 40% of it (`Body::breaking`).
-    w.life.pushed = vec![0.0; w.mesh.cells().n()];
-    w.life.pushed[i] = w.life[v].breaking(&w.chem, &w.cfg, 0.4);
-    pcore::choose::wear(&mut w);
+    let energy = w.life[v].breaking(&w.chem, &w.cfg, 0.4);
+    testkit::moved(&mut w, (i, Handle::default()), |w, d| pcore::choose::wear(w, d, i, energy));
     let mut b = std::mem::take(&mut w.life[v]);
     assert!(!b.adult(&w.chem), "a body torn by 40% is still mature: {} kg", b.built(&w.chem));
     let days = b.interval(&w) as f64;
@@ -814,7 +813,7 @@ fn crowded_individuals_merge_into_a_node() {
     }
     // At the month's start (looked at before they act: within the month the node may give its members up one at a time
     // to the actions of Bond, as the draws go).
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     let nodes: Vec<f64> = w.life.alive().filter(|b| b.cell as usize == i && b.lineage == lineage && b.count > 1.0).map(|b| b.count).collect();
     assert!(!nodes.is_empty(), "no node of the lineage at the month's start");
     pcore::step(&mut w);
@@ -839,7 +838,7 @@ fn crowd_bounds_the_nodes_of_a_cell() {
     }
     let here = |w: &pcore::World| w.life.alive().filter(|b| b.cell as usize == i).map(|b| b.n()).collect::<Vec<f64>>();
     let before: f64 = here(&w).iter().sum();
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     let after = here(&w);
     assert!(after.len() <= w.cfg.crowd, "{} nodes left", after.len());
     assert!((after.iter().sum::<f64>() - before).abs() < 1e-9 * before, "members {before} then {after:?}");

@@ -1,7 +1,7 @@
 //! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
 //! (`survey`), and every batch of days the updates due, in a parallel and a serial phase (`batch`).
 
-use crate::body::{die, live, Body, LiveTmp, LACK};
+use crate::body::{die, live, Body, Layout, LiveTmp, LACK};
 use crate::{brain::SIG, change::Reactor, choose, copy::Grown, life::{Domain, Handle}, math::mean_decay, units::DAY, World};
 use crate::store::{apply, Batch, Class, Node};
 use serde::{Deserialize, Serialize};
@@ -16,16 +16,39 @@ pub fn env_of(w: &World, i: usize) -> [f64; 3] {
     [w.t_ground_last(i), d, z]
 }
 
-/// Before each physics step: what movers broke since the last (`choose::wear`), what each cell holds (`sum_cells`);
-/// once a month the merge of alike nodes, the traffic and each cell's surroundings.
-pub fn survey(w: &mut World) {
+/// Before each physics step, in each cell: what movers broke since the last (`choose::wear`) and once a month the merge
+/// of alike nodes (`nodes::crowd`); then each cell's light shared out (`shade`) and what it holds (`sum_cells`); once a
+/// month the traffic and each cell's surroundings. The wear and the merge run per domain on the pool (`on_domains`) in
+/// the cells where no part is and no body holds or is inside one; then in those cells, one by one, each a serial step
+/// with its outbox applied after it, as a death or a merge there lets go of a part (plan 3.10). With `reversed`, the
+/// domains start in reversed order: only for the order test.
+pub fn survey(w: &mut World, reversed: bool) {
     let n = w.mesh.cells().n();
     let monthly = w.time.is_multiple_of(w.cfg.calendar().month);
-    choose::wear(w);
-    if monthly {
-        crate::nodes::crowd(w);
+    let (pushed, lay) = (std::mem::take(&mut w.life.pushed), Layout::of(&w.chem));
+    let worn = |w: &World, d: &mut Domain, i: usize| {
+        if let Some(&e) = pushed.get(i).filter(|&&e| e > 0.0) {
+            choose::wear(w, d, i, e);
+        }
+        if monthly {
+            crate::nodes::crowd(w, d, &lay, i);
+        }
+    };
+    let parts = |w: &World, d: &Domain, i: usize| !w.parts.at[i].is_empty() || d.cell(i).any(|h| d[h].hold.is_some() || d[h].inside.is_some());
+    on_domains(w, peopled(w), reversed, |w, d, _| {
+        for k in 0..d.cells.len() {
+            let i = d.cells[k] as usize;
+            if !parts(w, d, i) {
+                worn(w, d, i);
+            }
+        }
+    });
+    let serial: Vec<usize> = (0..n).filter(|&i| parts(w, w.life.domain(i), i)).collect();
+    for i in serial {
+        w.in_domain(i, |w, d| worn(w, d, i));
+        crate::outbox::deliver(w);
     }
-    shade(w);
+    on_domains(w, peopled(w), reversed, |w, d, _| shade(w, d));
     sum_cells(w);
     if monthly && w.time > 0 {
         traffic(w);
@@ -40,38 +63,45 @@ pub fn survey(w: &mut World) {
     choose::cells(w);
 }
 
+/// The domains that store bodies, each with their count, for `on_domains`.
+fn peopled(w: &World) -> Vec<(usize, usize, ())> {
+    w.life.domains.iter().enumerate().map(|(k, d)| (k, d.at.iter().map(Vec::len).sum(), ())).filter(|x| x.1 > 0).collect()
+}
+
 /// Per cell: its members and visible traits summed, their capture area per ground area, the light they absorb and the
 /// share set aside for their light reactions.
 fn sum_cells(w: &mut World) {
-    let n = w.mesh.cells().n();
-    let (mut abs, mut kept) = (vec![0.0; n], vec![0.0; n]);
-    sums(w);
-    for b in w.life.alive() {
-        let (i, s) = (b.cell as usize, light_area(b) * b.shade);
-        (abs[i], kept[i]) = (abs[i] + s, kept[i] + s * b.keep as f64);
-    }
+    let (n, rows) = (w.mesh.cells().n(), sums(w));
     let World { life, mesh, canopy, .. } = w;
     life.absorb.resize(n, 0.0);
     life.keep.resize(n, 0.0);
     let area = mesh.cells().area();
-    for i in 0..n {
-        let s = life.sum[i][2];
-        canopy[i] = (s / area[i]) as f32;
-        life.absorb[i] = if s > 0.0 { (abs[i] / s) as f32 } else { 0.0 };
-        life.keep[i] = if abs[i] > 0.0 { (kept[i] / abs[i]) as f32 } else { 0.0 };
+    for (i, r) in rows.chunks_exact(ROW).enumerate() {
+        canopy[i] = (r[2] / area[i]) as f32;
+        life.absorb[i] = if r[2] > 0.0 { (r[8] / r[2]) as f32 } else { 0.0 };
+        life.keep[i] = if r[8] > 0.0 { (r[9] / r[8]) as f32 } else { 0.0 };
     }
 }
 
-/// Per cell: its members, then their visible traits summed, then the energy to break its bodies (`Life::sum`).
-pub fn sums(w: &mut World) {
-    let mut sum = vec![[0.0; 8]; w.mesh.cells().n()];
-    for b in w.life.alive() {
-        let (s, m) = (&mut sum[b.cell as usize], b.n());
-        s[0] += m;
-        s[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
-        s[7] += b.breaking(&w.chem, &w.cfg, 1.0);
-    }
-    w.life.sum = sum;
+/// The numbers `sums` gives per cell.
+const ROW: usize = 10;
+
+/// Per cell, cell by cell on the pool (`par::rows`), each cell's bodies in the order they came: its members, then their
+/// visible traits summed, then the energy to break its bodies (`Life::sum`, set here); then their capture area times
+/// their shade, and that times the share they set aside for their light reactions. Returns the rows of `ROW` numbers.
+pub fn sums(w: &mut World) -> Vec<f64> {
+    let mut rows = vec![0.0; w.mesh.cells().n() * ROW];
+    let v = &*w;
+    crate::par::rows(&mut rows, ROW, || (), |_, i, s| {
+        for b in v.life.cell(i).map(|h| &v.life[h]).filter(|b| b.alive) {
+            let (m, a) = (b.n(), light_area(b) * b.shade);
+            s[0] += m;
+            s[1..7].iter_mut().zip(&b.vis).for_each(|(x, &v)| *x += v as f64 * m);
+            (s[7], s[8], s[9]) = (s[7] + b.breaking(&v.chem, &v.cfg, 1.0), s[8] + a, s[9] + a * b.keep as f64);
+        }
+    });
+    w.life.sum = rows.chunks_exact(ROW).map(|r| std::array::from_fn(|k| r[k])).collect();
+    rows
 }
 
 /// The capture area of body `b`'s members times the share of light they absorb, m².
@@ -212,27 +242,29 @@ fn traffic(w: &mut World) {
     }
 }
 
-/// Light passes the bodies of a cell from the tallest member down, equal heights sharing a layer; a layer of capture
-/// area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the shades,
-/// weighted by capture area, have mean 1). Only cells whose bodies changed are worked out again (`Domain::stir`).
-fn shade(w: &mut World) {
+/// Light passes the bodies of a cell of domain `d` from the tallest member down, equal heights sharing a layer; a layer of
+/// capture area `x` per ground area absorbs 1 - exp(-x) of what reaches it. The cell's light is only shared out (the
+/// shades, weighted by capture area, have mean 1). Only cells whose bodies changed are worked out again
+/// (`Domain::stir`).
+fn shade(w: &World, d: &mut Domain) {
     // What a layer of capture area `x` per ground area intercepts, per unit of `x`: (1 - e^-x) / x.
     let g = mean_decay;
-    let (area, life) = (w.mesh.cells().area(), &mut w.life);
+    let area = w.mesh.cells().area();
     let mut l: Vec<(f32, f64, Handle)> = Vec::new();
-    for (i, &a) in area.iter().enumerate() {
-        if !life.take_stale(i) {
+    for c in 0..d.cells.len() {
+        if !std::mem::take(&mut d.stale[c]) {
             continue;
         }
+        let a = area[d.cells[c] as usize];
         l.clear();
-        l.extend(life.cell(i).map(|s| (s, &life[s])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / a, s)));
+        l.extend(d.at[c].iter().map(|&s| (s, &d[s])).map(|(s, b)| (b.vis[6], b.vis[1] as f64 * b.n() / a, s)));
         l.sort_by(|a, b| b.0.total_cmp(&a.0));
         let (all, mut above, mut k) = (g(l.iter().map(|x| x.1).sum()), 0f64, 0);
         while k < l.len() {
             let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
             let x: f64 = l[k..e].iter().map(|x| x.1).sum();
             let f = (-above).exp() * g(x) / all;
-            l[k..e].iter().for_each(|y| life[y.2].shade = f);
+            l[k..e].iter().for_each(|y| d[y.2].shade = f);
             (above, k) = (above + x, e);
         }
     }
@@ -284,7 +316,7 @@ impl Faces {
 }
 
 /// Update the bodies due in this batch, all at its first day (plan 3.6). First the parallel phase: the domains are taken
-/// out of the world (`life::Domain`), and each runs, on a thread of the pool with the feature `threads` (`par::each`),
+/// out of the world (`life::Domain`), and each runs, on a thread of the pool with the feature `threads` (`on_domains`),
 /// its bodies that hold no part and are inside none, cell by cell, and in a cell by id (an order that does not depend on
 /// where bodies are stored, and keeps memory reads close together), with the world read only. They see each other as
 /// they were at the batch's start (`Faces`) and the store as their domain's moves leave it (`store::Moves`); what they
@@ -313,24 +345,11 @@ pub fn batch(w: &mut World, reversed: bool) {
     w.life.faces = faces;
     let (serial, list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
     w.life.batch = true;
-    let mut domains = std::mem::take(&mut w.life.domains);
-    let mut free: Vec<Option<&mut Domain>> = domains.iter_mut().map(Some).collect();
-    let mut runs: Vec<_> = list.chunk_by(|a, b| a.0 == b.0).map(|run| (free[run[0].0].take().expect("one run a domain"), run)).collect();
-    // The domains with the most updates start first, so the batch does not wait on a large one started last (longest
-    // processing time first, Graham 1969).
-    runs.sort_by_key(|(_, run)| (std::cmp::Reverse(run.len()), run[0].0));
-    if reversed {
-        runs.reverse();
-    }
-    let v = &*w;
-    crate::par::each(&mut runs, |(d, run)| {
-        let mut scratch = (Reactor::new(&v.chem, &v.cfg), LiveTmp::default(), choose::ActTmp::default());
-        run.iter().for_each(|&(_, cell, id, _)| update(v, d, (cell, id), &mut scratch));
+    let runs = list.chunk_by(|a, b| a.0 == b.0).map(|run| (run[0].0, run.len(), run)).collect();
+    on_domains(w, runs, reversed, |w, d, run| {
+        let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
+        run.iter().for_each(|&(_, cell, id, _)| update(w, d, (cell, id), &mut scratch));
     });
-    w.life.domains = domains;
-    w.book_moves();
-    w.settle(0..w.life.domains.len());
-    crate::outbox::deliver(w);
     let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
     for (_, cell, id, _) in serial {
         w.in_domain(cell, |w, d| update(w, d, (cell, id), &mut scratch));
@@ -340,6 +359,26 @@ pub fn batch(w: &mut World, reversed: bool) {
     w.settle(0..w.life.domains.len());
     w.life.settle_moved();
     w.life.faces.clear();
+}
+
+/// Run `f` on the domains of `work` (each with its count of work and what it is given), taken out of the world
+/// (`life::Domain`), on the pool with the feature `threads` (`par::each`), the most work first so the last to end is a
+/// small one (longest processing time first, Graham 1969; ties by domain), backwards with `reversed`; then the domains
+/// back, their moves booked, the world settled (`World::settle`) and the outboxes applied (`outbox::deliver`).
+fn on_domains<T: Send + Sync>(w: &mut World, mut work: Vec<(usize, usize, T)>, reversed: bool, f: impl Fn(&World, &mut Domain, &T) + Sync + Send) {
+    work.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
+    if reversed {
+        work.reverse();
+    }
+    let mut domains = std::mem::take(&mut w.life.domains);
+    let mut free: Vec<Option<&mut Domain>> = domains.iter_mut().map(Some).collect();
+    let mut runs: Vec<_> = work.into_iter().map(|(k, _, t)| (free[k].take().expect("once a domain"), t)).collect();
+    let v = &*w;
+    crate::par::each(&mut runs, |(d, t)| f(v, d, t));
+    w.life.domains = domains;
+    w.book_moves();
+    w.settle(0..w.life.domains.len());
+    crate::outbox::deliver(w);
 }
 
 /// The update of body `id` of cell `cell` in domain `d`, if it is still stored there (it may have died or joined

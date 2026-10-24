@@ -152,11 +152,12 @@ fn a_holder_killed_in_the_parallel_phase_lets_go_in_the_serial_phase() {
     books.assert_kept(&w, 1e-12);
 }
 
-/// The order in which the domains run in the parallel phase of a batch, and the threads that run them, change nothing:
-/// the lineages and born rows made there get the same global ids (plan 3.3), and the world ends the same, bit for bit,
-/// with its events and counters. In the batches each kind of the serial phase happens: a dispersing litter lands, a
-/// watch and a part act are applied, a body that holds a part runs, one anchors its part, lineages are made; the books
-/// are kept.
+/// The order in which the domains run in the parallel phase of a batch and of the survey, and the threads that run them,
+/// change nothing: the lineages and born rows made there get the same global ids (plan 3.3), and the world ends the
+/// same, bit for bit, with its events and counters. In the batches each kind of the serial phase happens: a dispersing
+/// litter lands, a watch and a part act are applied, a body that holds a part runs, one anchors its part, lineages are
+/// made; in the surveys, movers wear the bodies of every cell (those with parts one by one) and the monthly merge joins
+/// nodes; the books are kept.
 #[test]
 fn the_order_of_the_domains_changes_nothing() {
     let mut w = worldgen::new_world(1, 16, 16);
@@ -191,6 +192,8 @@ fn the_order_of_the_domains_changes_nothing() {
     anchorer.hold = Some(bond::id(&w, r));
     let anchorer = w.add(anchorer, 1);
     w.parts.parts[r].held = w.life[anchorer].id;
+    // Movers pushed through the bodies of every cell, those with parts among them.
+    w.life.pushed = vec![1e3; w.mesh.cells().n()];
     w.drain_events();
     let books = Books::now(&w);
     let lineages = w.life.brains.len();
@@ -200,6 +203,7 @@ fn the_order_of_the_domains_changes_nothing() {
         pool.install(|| {
             let mut v = w.clone();
             for _ in 0..30 {
+                pcore::survey::survey(&mut v, reversed);
                 pcore::survey::batch(&mut v, reversed);
                 v.time += v.cfg.batch_days as u64 * DAY_S;
             }

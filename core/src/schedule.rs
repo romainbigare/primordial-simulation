@@ -48,7 +48,7 @@ fn processes(w: &World) -> [(Every, Run); 9] {
     let from_start = |period: u64| Every { period, within: period };
     let physics = days(cfg, cfg.phys_days);
     [
-        (physics, (Stage::Bodies, "survey", |w, _| survey::survey(w))),
+        (physics, (Stage::Bodies, "survey", |w, _| survey::survey(w, false))),
         (physics, (Stage::Flow, "state", |w, _| flow::state(w, days(&w.cfg, w.cfg.flow_days).span(w.time).is_some()))),
         (Every { period: cfg.air_hours as u64 * HOUR_S, within: cal.month }, (Stage::Flow, "air", |w, s| flow::air(w, s as f64))),
         (days(cfg, cfg.flow_days), (Stage::Flow, "liquid", |w, s| flow::liquid(w, s as f64))),

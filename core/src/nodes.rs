@@ -10,21 +10,17 @@ use crate::life::Handle;
 use crate::{life::Domain, World};
 use std::f32::consts::FRAC_2_PI;
 
-/// The monthly merge of nodes, a speed setting, not a law: in each cell a node joins the first larger one alike to it
-/// (`join_alike`), then past `Config::crowd` the most alike pairs merge (`merge_closest`); laws.md 4.4.
-pub(crate) fn crowd(w: &mut World) {
-    let (max, lay) = (w.cfg.crowd.max(1), Layout::of(&w.chem));
-    for i in 0..w.mesh.cells().n() {
-        if w.life.in_cell(i) <= 1 {
-            continue;
-        }
-        let left = join_alike(w, &lay, i);
-        if left.len() > max {
-            merge_closest(w, &lay, left, max);
-        }
+/// The monthly merge of nodes in cell `i` of domain `d`, a speed setting, not a law: a node joins the first larger one
+/// alike to it (`join_alike`), then past `Config::crowd` the most alike pairs merge (`merge_closest`); laws.md 4.4.
+pub(crate) fn crowd(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
+    let max = w.cfg.crowd.max(1);
+    if d.cell(i).nth(1).is_none() {
+        return;
     }
-    // (Those who joined another let go of what they held.)
-    crate::outbox::deliver(w);
+    let left = join_alike(w, d, lay, i);
+    if left.len() > max {
+        merge_closest(w, d, lay, left, max);
+    }
 }
 
 /// What a node shares with those it joins (`join_alike`): its lineage (a node has one brain), its stage (both mature or
@@ -40,8 +36,8 @@ fn kin_of(w: &World, b: &Body) -> Kin {
 /// Each body of cell `i`, largest first (equals in the cell's order), however few its members, joins the first larger node (more than one member,
 /// as in `copy::kin`) alike in genes (`body::alike`, on the means only, so a split's halves stay apart for selection)
 /// of its `Kin`. Returns the bodies left.
-fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<Handle> {
-    let b = &w.life;
+fn join_alike(w: &World, d: &mut Domain, lay: &Layout, i: usize) -> Vec<Handle> {
+    let b = &*d;
     let mut list: Vec<(u64, Handle)> = b.cell(i).filter(|&s| may_be_node(w, &b[s])).map(|s| (u64::MAX - b[s].n().to_bits(), s)).collect();
     list.sort_by_key(|x| x.0);
     let mut head: Vec<usize> = (0..list.len()).collect();
@@ -53,7 +49,7 @@ fn join_alike(w: &mut World, lay: &Layout, i: usize) -> Vec<Handle> {
         head[x] = (0..x).find(|&y| joins(y) && alike(lay, w.cfg.phys.alike, &b[list[y].1].genes, &a.genes)).unwrap_or(x);
     }
     for x in (0..list.len()).filter(|&x| head[x] != x) {
-        w.in_domain(i, |w, d| merge(w, d, list[x].1, list[head[x]].1));
+        merge(w, d, list[x].1, list[head[x]].1);
     }
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
@@ -68,38 +64,38 @@ type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 /// keep it apart in a full cell: they are states of its members, not a likeness; the one that joins lets go of its
 /// part and takes the other's room (`merge`). A pair's key: the squared distance of their genes in steps (infinite if
 /// unlike).
-fn merge_closest(w: &mut World, lay: &Layout, left: Vec<Handle>, max: usize) {
+fn merge_closest(w: &World, d: &mut Domain, lay: &Layout, left: Vec<Handle>, max: usize) {
     let (m, lim) = (left.len(), w.cfg.phys.alike);
-    let steps = |w: &World, s: Handle| {
-        let b = &w.life[s];
+    let steps = |d: &Domain, s: Handle| {
+        let b = &d[s];
         (steps(lay, &b.genes), spreads(b), (b.lineage, b.adult(&w.chem)))
     };
-    let mut v: Vec<Likeness> = left.iter().map(|&s| steps(w, s)).collect();
+    let mut v: Vec<Likeness> = left.iter().map(|&s| steps(d, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
         let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
         if p.2 != q.2 || (0..p.0.len()).any(gap) { f32::INFINITY } else { p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum() }
     };
-    let (mut d, mut gone) = (vec![f32::INFINITY; m * m], vec![false; m]);
+    let (mut far, mut gone) = (vec![f32::INFINITY; m * m], vec![false; m]);
     for p in 0..m {
         for q in p + 1..m {
-            d[p * m + q] = dist(&v[p], &v[q]);
+            far[p * m + q] = dist(&v[p], &v[q]);
         }
     }
     for _ in max..m {
-        let k = (0..m * m).fold(0, |k, x| if d[x] < d[k] { x } else { k });
-        if d[k] == f32::INFINITY {
+        let k = (0..m * m).fold(0, |k, x| if far[x] < far[k] { x } else { k });
+        if far[k] == f32::INFINITY {
             break;
         }
         let (p, q) = (k / m, k % m);
-        let (s, t) = if w.life[left[q]].n() > w.life[left[p]].n() { (p, q) } else { (q, p) };
-        w.in_domain(w.life[left[s]].cell as usize, |w, d| merge(w, d, left[s], left[t]));
-        (gone[s], v[t]) = (true, steps(w, left[t]));
+        let (s, t) = if d[left[q]].n() > d[left[p]].n() { (p, q) } else { (q, p) };
+        merge(w, d, left[s], left[t]);
+        (gone[s], v[t]) = (true, steps(d, left[t]));
         for o in 0..m {
             let (lo, hi) = (o.min(s), o.max(s));
-            d[lo * m + hi] = f32::INFINITY;
+            far[lo * m + hi] = f32::INFINITY;
             if o != t && !gone[o] {
                 let (lo, hi) = (o.min(t), o.max(t));
-                d[lo * m + hi] = dist(&v[o], &v[t]);
+                far[lo * m + hi] = dist(&v[o], &v[t]);
             }
         }
     }

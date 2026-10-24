@@ -166,7 +166,7 @@ fn a_node_acts_on_bonds_as_its_members_together() {
         b.count *= few;
         let (n0, genes) = (b.count, b.genes.clone());
         w.add(b, 1);
-        pcore::survey::survey(&mut w);
+        pcore::survey::survey(&mut w, false);
         w.time += w.cfg.batch_days as u64 * DAY_S;
         pcore::survey::batch(&mut w, false);
         let all: Vec<&Body> = w.life.alive().filter(|b| b.lineage == l).collect();

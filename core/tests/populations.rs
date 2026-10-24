@@ -322,7 +322,7 @@ fn churn(crowd: usize, updates: usize, wide: bool, live_on: impl Fn(&Body) -> f6
     for _ in 0..updates {
         w.time += 10 * DAY_S;
         if w.day().is_multiple_of(w.cfg.days_per_month as u64) {
-            pcore::survey::survey(&mut w);
+            pcore::survey::survey(&mut w, false);
         }
         // In a random order, so no body is first by its slot.
         let (mut order, mut r) = (live(&w), Rng::new(1, w.day(), 0, Purpose::Choose));
@@ -715,7 +715,7 @@ fn individuals_mode_merges_no_animal() {
         w.add(b, 1);
     }
     let n = here(&w);
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     assert_eq!(here(&w), n, "animals merged");
     // Animals alive at the end of each month, and animals born in the window (members).
     let (mut alive, mut born) = (Vec::new(), 0.0);

@@ -743,7 +743,7 @@ fn lane_scene() -> (World, usize, usize, Handle) {
 fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
     let (mut w, a, b, mut slot) = lane_scene();
     let link = w.mesh.cells().link(a, b).expect("the cells are neighbours");
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     assert!((lanes::eased(&w, link) - 1.0).abs() < 1e-9);
     let mut crossed = 0;
     // Moving needs force: with the strength of the starting light-eaters (0.05: a force of 0.025 of its weight) the
@@ -765,7 +765,7 @@ fn going_back_and_forth_clears_the_edge_and_cover_closes_it() {
         pcore::outbox::deliver(&mut w);
         slot = w.life.find(id).expect("the body lives");
         crossed += (w.life[slot].cell as usize == to) as u32;
-        pcore::survey::survey(&mut w);
+        pcore::survey::survey(&mut w, false);
         if lanes::eased(&w, link) > 3.0 {
             break;
         }

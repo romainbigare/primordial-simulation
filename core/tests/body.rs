@@ -99,7 +99,7 @@ fn wear_of_a_day(w: &World, b: Body) -> f64 {
     let days = v.cfg.batch_days as u64;
     let k = v.add(b, days);
     let n = v.life[k].count;
-    pcore::survey::survey(&mut v);
+    pcore::survey::survey(&mut v, false);
     v.time += days * DAY_S;
     v.events.clear();
     pcore::survey::batch(&mut v, false);
@@ -348,7 +348,7 @@ fn a_body_takes_from_the_ground_at_the_pace_of_its_temperature() {
         warm(w, &mut b, t);
         put_kg_m2(w, RICH, b.cell as usize, 100.0);
         let slot = w.add(b, 1);
-        pcore::survey::survey(w);
+        pcore::survey::survey(w, false);
         w.time += DAY_S;
         let mut b = std::mem::take(&mut w.life[slot]);
         b.prepare(&w.chem, &w.cfg);
@@ -463,7 +463,7 @@ fn a_body_evaporates_no_more_than_the_ground_can_pay() {
     let slot = w.add(b, days);
     let (books, rounded) = (Books::now(&w), w.counts.rounded);
     w.time += days * DAY_S;
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     pcore::survey::batch(&mut w, false);
     let b = &w.life[slot];
     let floor = w.heat_cap_ground(i) * T_FLOOR;
@@ -786,7 +786,7 @@ fn size_goes_by_body_not_by_fuel_or_free_liquid() {
     }
     // (Not at a month's start: alike nodes of a cell merge then.)
     w.time += DAY_S;
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     let (a, b) = (&w.life[sa], &w.life[sb]);
     let (ma, mb) = (a.mass(&w.chem) / n, b.mass(&w.chem) / n);
     println!("shade: A (member mass {ma:.0} kg, body {:.1}) {:.3}, B (member mass {mb:.0} kg, body {:.1}) {:.3}; leaf per ground area {:.2} and {:.2}", a.size(&w.chem) / n, w.life[sa].shade, b.size(&w.chem) / n, w.life[sb].shade, a.vis[1] as f64 * n / w.mesh.cells().area()[0], b.vis[1] as f64 * n / w.mesh.cells().area()[0]);
@@ -998,7 +998,7 @@ fn a_tall_member_shades_a_short_one() {
     (b.vis, tall.vis) = (b.visible(&w.chem, &w.cfg), tall.visible(&w.chem, &w.cfg));
     let slots = [w.add(tall, 1), short];
     let books = Books::now(&w);
-    pcore::survey::survey(&mut w);
+    pcore::survey::survey(&mut w, false);
     let (light0, dt) = (w.light[i], w.cfg.phys_days as f64 * DAY);
     worldgen::testkit::flow_step(&mut w, dt);
     let bs = &w.life;

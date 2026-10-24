@@ -32,6 +32,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.4b (island22 remade at `eec6f1d`, `/tmp/d24b-bench`; `eec6f1d` there: 2.093 s/yr) | D2.4b | 2.108 | 141 | 50 | 1,885 | 3 | 28 | 3,679 | 53,648 | — | — | — | — | — | — | — | — | 9,684 |
 | D2.5 (benches remade, `d25-bench` in a scratch folder; island22 the same world as D2.4b's) | D2.5 | 1.187 | 137 | 51 | 971 | 3 | 25 | 3,679 | 53,648 | 0.858 | 204 | 51 | 571 | 18 | 14 | 1,648 | 23,373 | 9,678 |
 | D2.5b, the largest domains first (the same saves) | D2.5b | 1.179 | 143 | 51 | 956 | 3 | 27 | 3,679 | 53,648 | 0.801 | 203 | 50 | 515 | 18 | 14 | 1,648 | 23,373 | 9,679 |
+| D2.6, the survey on threads (the same saves) | D2.6 | 1.062 | 143 | 48 | 841 | 3 | 27 | 3,679 | 53,648 | 0.777 | 203 | 50 | 493 | 18 | 14 | 1,648 | 23,373 | 9,691 |
 
 ### A2: compiler settings
 
@@ -492,6 +493,38 @@ same hour, the medians (the range in brackets). "Sorted only" sorts the list but
 | **sorted, taken in order (kept)** | **959 (904 to 1,014), -7.9%** | **552 (474 to 594), -4.3%** | **836 (727 to 853), -13.3%** |
 
 `scripts/bench.sh` (row above): island22 1.179 s/yr, globe36 0.801, region24 1.103 (bodies 956, 515 and 809 ms).
+
+### D2.6: the survey on threads
+
+Level 2 (golden re-pinned, the same with and without threads). The survey's wear of movers and its monthly merge run
+per domain on the pool, through the same helper as the batch's parallel phase (`survey::on_domains`: the domains taken
+out, the most work first, put back, their moves booked, the world settled, the outboxes applied), in the cells where no
+part is and no body holds or is inside one; then those cells one by one, each a serial step (`World::in_domain`) with
+its outbox applied after it. The shade runs per domain on the pool, the sums per cell (`par::rows`). Deaths and merges
+change the holders of lineages and born rows by the domains' deltas, and the born rows a merge makes are provisional,
+made global in domain order when the world settles (S72's mechanism, no second one). `counts.clamped_heat` is added
+domain by domain in order (`World::book_moves`). The Draws of the air step and the marks of light stay serial (S73).
+The order test runs a survey before each batch, every cell pushed through at the start (so wear runs in parallel and in
+the cells with parts), with the monthly merge joining nodes, on pools of 1 and 4 threads, in order and reversed.
+
+**The same world.** The three golden worlds end with the same events in the same order, and the same store, parts,
+counters, lineages and bodies, bit for bit, but for the ids of born rows (104 of 434 bodies in seed 1, 88 of 400 in seed
+2, 71 of 304 in seed 3; each body's rows are the same): the slots a merge's rows leave free are now freed after the
+domain's pass, so new rows take other slots. No random draw reads these ids. Two years from each D2.5 save give the
+same `series.csv`, all 224 columns but the timings, to the last digit (island22: plant members 7,041,668,247.591711,
+bodies 3,630, updates 54,298, `air_3` 0.0004036156847595971 in the second year; globe36 1,648 bodies; region24 3,997).
+
+**The gain.** The bodies' stage on 4 threads, ms a year: 7 runs of 2 years from each save, the two builds interleaved
+in the same hour, the medians (the range in brackets).
+
+| | island22 | globe36 | region24 |
+|---|---|---|---|
+| D2.5b | 938 (856 to 996) | 543 (494 to 566) | 818 (746 to 899) |
+| **D2.6** | **854 (768 to 896), -8.9%** | **506 (491 to 553), -6.9%** | **782 (711 to 832), -4.4%** |
+
+The survey costs the same instructions (callgrind, one thread, one year: 800 to 801 million on island22, 315 to 331 on
+globe36, 651 to 655 on region24); the gain is its threads. `scripts/bench.sh` (row above): island22 1.062 s/yr,
+globe36 0.777, region24 1.080 (bodies 841, 493 and 768 ms).
 
 ## Profile of the baseline
 

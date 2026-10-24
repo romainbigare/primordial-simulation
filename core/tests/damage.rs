@@ -177,9 +177,7 @@ fn trampling_breaks_body_matter() {
     let (bb0, bs0) = (seen(&w, big), seen(&w, small));
     let (g0, e0) = (w.store.amounts(Class::Ground)[MATTER * w.mesh.cells().n() + i], w.store.heat(Class::Ground)[i]);
     // Movers spent 2 kJ pushing through the cell's bodies since the last survey.
-    w.life.pushed = vec![0.0; w.mesh.cells().n()];
-    w.life.pushed[i] = 2_000.0;
-    choose::wear(&mut w);
+    moved(&mut w, (i, Handle::default()), |w, d| choose::wear(w, d, i, 2_000.0));
     let (b1, bb1, bs1) = (seen(&w, v), seen(&w, big), seen(&w, small));
     let (sv, sb, ss) = (1.0 - b1.built / b0.built, 1.0 - bb1.built / bb0.built, 1.0 - bs1.built / bs0.built);
     println!("trampled: individual body -{:.2}%, node of 10 big members -{:.2}%, node of 10,000 small ones -{:.2}% (members {} of {ns0})", 100.0 * sv, 100.0 * sb, 100.0 * ss, w.life[small].n());

@@ -391,7 +391,7 @@ fn null_run_freezes_the_brain_rows() {
     let go = |null: bool| {
         let mut w = world();
         w.cfg.null = null;
-        pcore::survey::survey(&mut w);
+        pcore::survey::survey(&mut w, false);
         // (Light-eaters of one lineage with neutral brains, in a few cells.)
         let line = worldgen::testkit::Line::new(&mut w, &worldgen::testkit::Brain::neutral(), 0);
         for i in worldgen::testkit::dry_lands(&w).into_iter().take(FEW) {

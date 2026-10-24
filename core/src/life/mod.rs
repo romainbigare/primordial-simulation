@@ -203,11 +203,6 @@ impl Life {
         if (b.id >> ID_SHIFT) as usize == d { self.away.remove(&b.id) } else { self.away.insert(b.id, d as u32) };
         self.domains[d].store(b)
     }
-    /// Whether the bodies of `cell` changed since the survey last shared out its light; from now, not.
-    pub(crate) fn take_stale(&mut self, cell: usize) -> bool {
-        let (d, k) = self.cell_in[cell];
-        std::mem::take(&mut self.domains[d as usize].stale[k as usize])
-    }
     /// No bodies yet on `mesh`: a domain under each air node, with its cells.
     pub fn new(mesh: &Mesh) -> Life {
         let air = mesh.level(AIR);

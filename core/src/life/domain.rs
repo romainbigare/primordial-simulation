@@ -14,19 +14,19 @@ use std::collections::BTreeMap;
 pub struct Domain {
     /// Its place among the domains, and its cells in order (`Level::children` of its air node)
     pub(super) index: u32,
-    pub(super) cells: Vec<u32>,
+    pub(crate) cells: Vec<u32>,
     /// Bodies placed in it so far (children, split halves, parts of nodes, members drawn, founders)
     pub(super) placed: u64,
     pub(super) bodies: Vec<Body>,
     pub(super) free: Vec<u32>,
     /// The bodies of each of its cells (by their order in `cells`), in the order they came
-    pub(super) at: Vec<Vec<Handle>>,
+    pub(crate) at: Vec<Vec<Handle>>,
     /// The slot of each body stored in it, by id
     pub(super) table: BTreeMap<u64, u32>,
     /// Updates due, by batch modulo RING: body ids (`Body::due`)
     pub(super) ring: Vec<Vec<u64>>,
     /// Per cell (by its order in `cells`): whether its bodies changed since the survey last shared out its light
-    pub(super) stale: Vec<bool>,
+    pub(crate) stale: Vec<bool>,
     /// What its bodies' updates do outside them, in the order made (`outbox`)
     pub out: Vec<Entry>,
     /// The length of `out` when the update running began (`queued`)

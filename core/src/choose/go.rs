@@ -69,28 +69,22 @@ pub(crate) fn land_move(w: &mut World, id: u64, (i, j): (usize, usize), (pushed,
     }
 }
 
-/// Before each survey: the energy movers spent pushing through the bodies of each cell since the last (`Life::pushed`)
-/// breaks their body matter. Each body there takes its share by mass and loses what that pays to break, each of its
-/// members alike (`Body::breaking`, `body::wound`; laws.md 6.8). A cell's bodies are worn once a survey, not once a move.
-pub fn wear(w: &mut World) {
-    let pushed = std::mem::take(&mut w.life.pushed);
-    for (j, &energy) in pushed.iter().enumerate().filter(|e| *e.1 > 0.0) {
-        let here: Vec<_> = w.life.cell(j).collect();
-        let total: f64 = here.iter().map(|&s| w.life[s].mass(&w.chem)).sum();
-        if total <= 0.0 {
-            continue;
-        }
-        w.in_domain(j, |w, d| {
-            d.moves.open(w, j, Node::new(Class::Body, here[0].slot as usize));
-            for s in here {
-                let o = std::mem::take(&mut d[s]);
-                let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
-                let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
-                let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
-                body::wound(w, d, s, o, (1.0, f), &dead, BROKEN);
-            }
-        });
-        // (Those who held a part let go of it, `bond::let_go`; the moves are booked.)
-        crate::outbox::deliver(w);
+/// Before each survey: the energy `energy` J movers spent pushing through the bodies of cell `j` of domain `d` since the
+/// last (`Life::pushed`) breaks their body matter. Each body there takes its share by mass and loses what that pays to
+/// break, each of its members alike (`Body::breaking`, `body::wound`; laws.md 6.8). A cell's bodies are worn once a
+/// survey, not once a move. (Those who held a part let go of it when the outbox is applied, `bond::let_go`.)
+pub fn wear(w: &World, d: &mut Domain, j: usize, energy: f64) {
+    let here: Vec<_> = d.cell(j).collect();
+    let total: f64 = here.iter().map(|&s| d[s].mass(&w.chem)).sum();
+    if total <= 0.0 {
+        return;
+    }
+    d.moves.open(w, j, Node::new(Class::Body, here[0].slot as usize));
+    for s in here {
+        let o = std::mem::take(&mut d[s]);
+        let (m, t) = (o.mass(&w.chem), o.temp(&w.chem));
+        let f = (energy * m / total / o.breaking(&w.chem, &w.cfg, 1.0).max(1e-30)).min(1.0);
+        let dead: Vec<f64> = (0..w.chem.ns()).map(|k| if w.chem.phase(k, t) != Phase::Gas { o.store[k] * f } else { 0.0 }).collect();
+        body::wound(w, d, s, o, (1.0, f), &dead, BROKEN);
     }
 }
