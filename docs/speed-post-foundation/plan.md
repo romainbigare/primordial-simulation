@@ -581,6 +581,10 @@ instructions (callgrind, 2.6) is taken out again.
 
 ### Phase B: fewer bodies
 
+**Status (S59):** B1 and B3 were built and judged together, and missed B1's kill line: they are not kept (branch
+`speed/b1-b3-not-kept`, `docs/history.md`). Kinds in a cell stay an adult node and a young node; section 3.8 describes
+the design that was tried. B2 and C2 work on today's nodes.
+
 #### B1. One node per kind per cell, its young inside it
 
 - **Measure first** (a Haiku agent, both benches): the share of bodies that are young nodes, the share of updates they
@@ -700,8 +704,8 @@ instructions (callgrind, 2.6) is taken out again.
 - **Check level:** 3. **Done when:** the pace test passes at 40 and 140 around `node_days` 70; the key numbers hold.
 - **Kill line:** if the pace test cannot pass at 140, C2 is killed: `node_days` stays 36 until D2.2 sets it to 40,
   and the method stays only if it makes the pace test closer at 70; the rest is logged.
-- **Code:** about +40. `docs/laws.md` and the `node_days` row change. **Agent:** Opus. **Depends on:** B1 (the node's
-  parts live in one body).
+- **Code:** about +40. `docs/laws.md` and the `node_days` row change. **Agent:** Opus. **Works on** today's adult and
+  young nodes (B1 is not kept, S59).
 
 #### C1. Dormant bodies rest
 
