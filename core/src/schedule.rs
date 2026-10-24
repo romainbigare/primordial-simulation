@@ -57,7 +57,7 @@ fn processes(w: &World) -> [(Every, Run); 9] {
         (physics, (Stage::Change, "change", |w, s| change::step(w, s as f64))),
         // (Bond's own spans are months, `bond::step`; the bodies' intervals whole batches of days, `survey::batch`.)
         (from_start(cal.month), (Stage::Parts, "bond", |w, _| bond::step(w))),
-        (days(cfg, cfg.batch_days), (Stage::Bodies, "body batch", |w, _| survey::batch(w))),
+        (days(cfg, cfg.batch_days), (Stage::Bodies, "body batch", |w, _| survey::batch(w, false))),
     ]
 }
 

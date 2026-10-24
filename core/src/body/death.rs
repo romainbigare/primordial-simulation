@@ -9,14 +9,19 @@ use crate::{bond, life::Handle, World};
 /// Remains go to the ground node as loose amounts, with the body's heat.
 pub fn die(w: &mut World, h: Handle, mut b: Body, cause: u8) {
     bond::let_go(w, &mut b, false);
+    remains(w, &b);
+    let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
+    w.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
+    w.life.remove(h, &b);
+}
+
+/// All that body `b` holds goes to its cell's ground node as loose amounts, with its heat (the update open moves it).
+pub(crate) fn remains(w: &mut World, b: &Body) {
     let i = b.cell as usize;
     for (k, &a) in b.store.iter().enumerate().filter(|x| *x.1 != 0.0) {
         w.give_move(Node::ground(i), k, a, 0.0);
     }
     w.give_move(Node::ground(i), 0, 0.0, b.e);
-    let (cat, root) = (light_cat(&w.chem, &b.genes), w.life.root(&b));
-    w.events.push(Event { day: w.day(), kind: EventKind::Died { cause, cat, root }, node: b.cell, value: b.count });
-    w.life.remove(h, &b);
 }
 
 /// Amounts `m` (mol of each substance, at most what it holds) go from body `b`, at the plateau state `th`, to its cell's

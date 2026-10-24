@@ -172,11 +172,14 @@ impl World {
         }
         Some(at.unwrap_or(0))
     }
-    /// The moves gathered are booked, one call of `apply` for each domain in the order they opened, and they close.
+    /// The moves gathered are booked, one call of `apply` for each domain in domain order, whatever the order they
+    /// opened in, and they close.
     pub fn book_moves(&mut self) {
-        let (list, opened) = (std::mem::take(&mut self.moves.list), std::mem::take(&mut self.moves.opened));
-        for (x, &(_, from)) in opened.iter().enumerate() {
-            let to = opened.get(x + 1).map_or(list.len(), |o| o.1);
+        let (list, mut opened) = (std::mem::take(&mut self.moves.list), std::mem::take(&mut self.moves.opened));
+        opened.push((NONE, list.len()));
+        let mut spans: Vec<[usize; 3]> = opened.windows(2).map(|x| [x[0].0, x[0].1, x[1].1]).collect();
+        spans.sort_unstable();
+        for [_, from, to] in spans {
             apply(self, &[], &list[from..to], &[]);
         }
         self.counts.clamped_heat += std::mem::take(&mut self.moves.short);

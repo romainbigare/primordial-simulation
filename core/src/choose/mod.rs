@@ -10,16 +10,20 @@ mod spread;
 
 pub use feed::take_body;
 pub use go::{go, wear};
+pub(crate) use go::land;
+pub(crate) use learn::watched;
 pub use perceive::cells;
+pub(crate) use spread::part_act;
 
 use perceive::{inputs, perceive, walk, DT_NEAR, DZ_SCALE, LN_LEAF, LN_MASS, WB_SCALE};
 
 use crate::body::{Body, Lived};
-use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, GIVE, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
+use crate::brain::{self, ln, score, squash, Shape, Thought, ANCHOR, DIG, FIXED, FORM, FORM_OUT, OVERBS, PUT, RELEASE, REST, SIG, TAKE, TAKE_FROM, VERBS, WATCH};
+use crate::outbox::Entry;
 use crate::rng::{Purpose, Rng};
 use crate::space::COMPASS;
 use crate::survey::Face;
-use crate::{bond, lanes, life::Handle, World};
+use crate::{bond, lanes, World};
 
 /// Features of a neighbour direction and of a perceived body.
 pub(crate) const NF: usize = 10;
@@ -81,7 +85,7 @@ pub fn act(w: &mut World, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
     let think = w.cfg.phys.think(w.cfg.phys.c_brain, b.k.copy_mass);
     let now = |w: &World, b: &Body| b.wellbeing_at(&w.chem, think, b.temp(&w.chem), lived.spare);
     let wb = now(w, b);
-    let Some(lin) = w.life.brains[b.lineage as usize].as_ref() else { return };
+    let Some(lin) = w.life.brain(b.lineage) else { return };
     let (s, nseen, sight) = (lin.shape, lin.seen.min(MAX_SEEN), lin.sight.max(1));
     b.mem.resize(s.mem, 0.0);
     let mut c = perceive(w, b, nseen, &mut rng);
@@ -98,7 +102,7 @@ pub fn act(w: &mut World, b: &mut Body, lived: &Lived, t: &mut ActTmp) {
         spread::spread(w, b, &c, &k, &mut rng);
     } else {
         b.trace = trace(w, b, &c, &k, c.a, 0.0);
-        act_as(w, b, &c, &k, c.a, &mut rng);
+        act_as(w, b, &c, &k, (c.a, None), &mut rng);
     }
 }
 
@@ -254,30 +258,30 @@ fn trace(w: &World, b: &Body, c: &Choice, k: &Kit, a: usize, adv: f32) -> Vec<f3
     v
 }
 
-/// Body `b` (taken out of its slot) does option `a`.
-fn act_as(w: &mut World, b: &mut Body, c: &Choice, k: &Kit, a: usize, rng: &mut Rng) {
+/// Body `b` (taken out of its slot), a part of node `part_of` if any (`spread`), does option `a`. Forming a part, acting
+/// on one and watching are queued in the outbox (`outbox`), applied when the batch ends; so is a move (`go`). A node's
+/// part that queued one of these but a watch leaves the node until it is applied (`Body::leaving`).
+fn act_as(w: &mut World, b: &mut Body, c: &Choice, k: &Kit, (a, part_of): (usize, Option<u64>), rng: &mut Rng) {
+    b.leaving |= part_of.is_some() && (a == FORM || a >= TO_PART);
+    let (i, act) = (b.cell as usize, |on| Entry::Act { id: b.id, on, shape: [k.form[0], 0.5 * (k.form[1] + 1.0)], node: part_of });
     match a {
         REST => {}
         PUT => feed::put(w, b),
         TAKE => feed::take_node(w, b),
-        FORM => bond::form(w, b, [k.form[0], 0.5 * (k.form[1] + 1.0)]),
+        FORM => w.life.queue(i, act(None)),
         RELEASE => bond::release(w, b),
         ANCHOR => bond::anchor(w, b),
         DIG => bond::dig(w, b),
-        a if a < TO_BODY => go(w, b, c.to[a - FIXED]),
-        // (Members of a node acting before may have used up the part or killed the body.)
-        a if a >= TO_PART && !w.parts.parts[c.parts[(a - TO_PART) / OVERBS]].alive => {}
-        a if a >= TO_PART => bond::act(w, b, (a - TO_PART) % OVERBS, c.parts[(a - TO_PART) / OVERBS]),
+        a if a < TO_BODY => go(w, b, c.to[a - FIXED], part_of.is_some()),
+        a if a >= TO_PART => w.life.queue(i, act(Some(((a - TO_PART) % OVERBS, bond::id(w, c.parts[(a - TO_PART) / OVERBS]))))),
         a => {
             let (id, verb) = (c.seen[(a - TO_BODY) / VERBS].0.id, (a - TO_BODY) % VERBS);
-            // The body seen as it is now, if it lives and, to take from it or give to it, is still in the cell.
-            let live = |o: Handle| w.life[o].alive && (verb == WATCH || w.life[o].cell == b.cell);
-            let Some(o) = w.life.find(id).filter(|&o| live(o)) else { return };
-            match verb {
-                TAKE_FROM => take_body(w, b, o, rng),
-                GIVE => feed::give(w, b, o),
-                _ => learn::watch(w, b, o),
+            if verb == WATCH {
+                return w.life.queue(i, Entry::Watch { by: b.id, n: b.n(), lineage: b.lineage, of: id });
             }
+            // The body seen as it is now, if it lives, is still in the cell and is not leaving it.
+            let Some(o) = w.life.find(id).filter(|&o| w.life[o].alive && !w.life[o].leaving && w.life[o].cell == b.cell) else { return };
+            if verb == TAKE_FROM { take_body(w, b, o, rng) } else { feed::give(w, b, o) }
         }
     }
 }

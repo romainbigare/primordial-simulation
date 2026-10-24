@@ -202,7 +202,7 @@ pub(crate) fn part(life: &mut Life, b: &mut Body, f: f64, fa: f64) -> Body {
     // (The trace and the stores are not the part's: set aside, not cloned.)
     let (trace, store) = (std::mem::take(&mut b.trace), std::mem::take(&mut b.store));
     let draw = crate::survey::Draw { owed: lot.owed, ..Default::default() };
-    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, draw, hold: None, inside: None, ..b.clone() };
+    let c = Body { count: lot.count, store: lot.store, e: lot.e, brood: lot.brood, draw, hold: None, inside: None, leaving: false, ..b.clone() };
     (b.trace, b.store) = (trace, store);
     c
 }
@@ -213,7 +213,7 @@ const TIE: f32 = 1e-4;
 /// At its update a node whose two halves would not be alike splits in two along its widest gene, the mean and the
 /// spread of both kept, while its cell has room (fewer than `Config::crowd` - 1 bodies); laws.md 4.4.
 pub fn split(w: &mut World, b: &mut Body) {
-    if b.count < 2.0 || b.spread.is_empty() || w.life.in_cell(b.cell as usize) + 1 >= w.cfg.crowd || !may_be_node(w, b) {
+    if b.count < 2.0 || b.leaving || b.spread.is_empty() || w.life.in_cell(b.cell as usize) + 1 >= w.cfg.crowd || !may_be_node(w, b) {
         return;
     }
     let (lay, p) = (Layout::of(&w.chem), &w.cfg.phys);
@@ -295,7 +295,7 @@ fn draw(w: &mut World, b: &mut Body, r: &mut Rng) -> Handle {
     if b.row_spread > 0.0 {
         let (mine, left, spread) = member_rows(w.life.born(b), b.row_spread, n, r);
         let shift = |rows: &mut [f32], to: &[f32], from: &[f32]| rows.iter_mut().zip(to).zip(from).for_each(|((x, t), f)| *x += t - f);
-        let born = &w.life.genomes[b.genome as usize].rows;
+        let born = w.life.born(b);
         shift(&mut c.rows, &mine, born);
         shift(&mut b.rows, &left, born);
         (c.genome, b.row_spread) = (w.life.new_genome(mine), spread);

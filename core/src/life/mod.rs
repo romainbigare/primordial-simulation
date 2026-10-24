@@ -1,11 +1,16 @@
-//! The registry of bodies: their storage, ids and cells, lineages, born rows, and the rings of updates due. The cells are
-//! cut into domains, the cells under one air node (`Domain`); each domain stores the bodies of its cells, their lists
-//! and its ring. A body's id is the domain it was placed in and that domain's count of bodies placed; it never changes,
-//! wherever the body is stored. A body that moves to a cell of another domain moves to that domain's storage.
+//! The registry of bodies: their storage, ids and cells, lineages and born rows (`registry`), the rings of updates due
+//! and the outboxes. The cells are cut into domains, the cells under one air node (`Domain`); each domain stores the
+//! bodies of its cells, their lists, its ring and its outbox. A body's id is the domain it was placed in and that
+//! domain's count of bodies placed; it never changes, wherever the body is stored. A body that moves to a cell of
+//! another domain moves to that domain's storage.
+
+mod registry;
+
+pub use registry::Genome;
 
 use crate::body::{Body, MAX_INTERVAL};
-use crate::brain::Shape;
 use crate::lineage::Lineage;
+use crate::outbox::Entry;
 use crate::space::Mesh;
 use crate::{World, AIR};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -40,6 +45,15 @@ struct Domain {
     at: Vec<Vec<Handle>>,
     /// Updates due, by batch modulo RING: body ids (`Body::due`)
     ring: Vec<Vec<u64>>,
+    /// What its bodies' updates in the batch running do outside them, in the order made (`outbox`)
+    out: Vec<Entry>,
+    /// The lineages and the born rows its bodies made in the parallel phase of the batch running, by provisional id
+    /// (`PROVISIONAL`) until the serial phase makes them global (`Life::remap`)
+    brains: Vec<Lineage>,
+    genomes: Vec<Vec<f32>>,
+    /// The changes of the holders its bodies made in the batch running: of lineage (false) or born rows (true) `x`
+    /// (`Life::count`)
+    counted: Vec<(bool, u32, i32)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -78,6 +92,10 @@ pub struct Life {
     /// Born brain rows, each shared by the bodies born with them (none: free)
     pub genomes: Vec<Genome>,
     free_genomes: Vec<u32>,
+    /// The domain whose bodies run in the parallel phase of a batch (none outside it): what they make is provisional
+    pub(crate) parallel: Option<usize>,
+    /// A batch runs: the changes of the holders of lineages and born rows wait in the domains until it ends (`count`)
+    pub(crate) batch: bool,
 }
 
 /// What a snapshot keeps of `Life`: per domain its cells, its count of bodies placed and its living bodies in the order of `Life::alive`;
@@ -127,13 +145,6 @@ impl<'de> Deserialize<'de> for Life {
         }
         Ok(life)
     }
-}
-
-/// Born brain rows and how many hold them: the living bodies born with them (most children share their parent's, `copy`).
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Genome {
-    pub rows: Vec<f32>,
-    pub refs: u32,
 }
 
 impl Life {
@@ -213,45 +224,6 @@ impl Life {
     pub(crate) fn cells_of(&self, d: usize) -> &[u32] {
         &self.domains[d].cells
     }
-    pub fn lineages(&self) -> usize {
-        self.members.iter().filter(|&&m| m > 0).count()
-    }
-    pub fn new_lineage(&mut self, l: Lineage) -> u32 {
-        self.brains.push(Some(l));
-        self.members.push(0);
-        (self.brains.len() - 1) as u32
-    }
-    /// The brain shape of `lineage` (none once it died out).
-    pub(crate) fn shape_of(&self, lineage: u32) -> Option<Shape> {
-        self.brains[lineage as usize].as_ref().map(|l| l.shape)
-    }
-    /// The rows of a body born with `born` from body `b`: its born rows plus what `b` learned, where the brains have one
-    /// shape; else its born rows.
-    pub(crate) fn inherit(&self, born: &[f32], lineage: u32, b: &Body) -> Vec<f32> {
-        let (from, rows) = (self.born(b), &b.rows);
-        if self.shape_of(lineage) != self.shape_of(b.lineage) || born.len() != rows.len() || from.len() != rows.len() {
-            return born.to_vec();
-        }
-        born.iter().zip(rows).zip(from).map(|((x, r), f)| x + (r - f)).collect()
-    }
-    /// New born rows (not yet given to a body).
-    pub fn new_genome(&mut self, rows: Vec<f32>) -> u32 {
-        let i = free_place(&mut self.genomes, &mut self.free_genomes);
-        self.genomes[i] = Genome { rows, refs: 0 };
-        i as u32
-    }
-    /// Body `b` has no brain (`Lineage::none`).
-    pub(crate) fn brainless(&self, b: &Body) -> bool {
-        self.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).is_some_and(|l| l.none())
-    }
-    /// The starting kind body `b` descends from (`Lineage::root`); `u32::MAX` if its lineage is gone.
-    pub fn root(&self, b: &Body) -> u32 {
-        self.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(u32::MAX, |l| l.root)
-    }
-    /// The rows body `b` was born with.
-    pub fn born(&self, b: &Body) -> &[f32] {
-        &self.genomes[b.genome as usize].rows
-    }
     /// Body `b` (taken out of its slot) now has `count` members.
     pub(crate) fn set_count(&mut self, b: &mut Body, count: f64) {
         b.count = count;
@@ -320,45 +292,6 @@ impl Life {
         self[to] = b;
         to
     }
-    /// Count body `b` into its lineage and its born rows.
-    fn enter(&mut self, b: &Body) {
-        self.members[b.lineage as usize] += 1;
-        self.genomes[b.genome as usize].refs += 1;
-    }
-    /// Count body `b` out of its born rows and its lineage (which dies out with its last body).
-    fn leave(&mut self, b: &Body) {
-        self.unref(b.genome);
-        let lin = b.lineage as usize;
-        self.members[lin] -= 1;
-        if self.members[lin] == 0 {
-            self.brains[lin] = None;
-        }
-    }
-    /// One holder fewer of born rows `g`.
-    fn unref(&mut self, g: u32) {
-        let gen = &mut self.genomes[g as usize];
-        gen.refs -= 1;
-        if gen.refs == 0 {
-            gen.rows = Vec::new();
-            self.free_genomes.push(g);
-        }
-    }
-    /// Body `b` (taken out of its slot) is now born with `rows` (its own rows are the caller's).
-    pub(crate) fn reborn(&mut self, b: &mut Body, rows: Vec<f32>) {
-        if rows == self.genomes[b.genome as usize].rows {
-            return;
-        }
-        let g = self.new_genome(rows);
-        self.genomes[g as usize].refs += 1;
-        self.unref(b.genome);
-        b.genome = g;
-    }
-    /// Body `b` (taken out of its slot) moves to `lineage`, born with `rows`.
-    pub(crate) fn move_to(&mut self, b: &mut Body, lineage: u32, rows: Vec<f32>) {
-        self.leave(b);
-        (b.lineage, b.genome) = (lineage, self.new_genome(rows));
-        self.enter(b);
-    }
     /// The bodies of `cell` changed: the survey shares out its light again (`survey::shade`).
     pub(crate) fn stir(&mut self, cell: u32) {
         if let Some(x) = self.stale.get_mut(cell as usize) {
@@ -391,6 +324,14 @@ impl Life {
     pub(crate) fn take_due(&mut self, batch: u64) -> Vec<u64> {
         let k = (batch % RING) as usize;
         self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.ring[k])).collect()
+    }
+    /// Queue `e`, made by an update of a body of cell `i`, in the outbox of its domain (`outbox`).
+    pub fn queue(&mut self, i: usize, e: Entry) {
+        self.domains[self.cell_in[i].0 as usize].out.push(e);
+    }
+    /// The entries of the outboxes, domain by domain, each's in the order made; they are left empty.
+    pub(crate) fn take_queued(&mut self) -> Vec<Entry> {
+        self.domains.iter_mut().flat_map(|d| std::mem::take(&mut d.out)).collect()
     }
     /// The body with id `id` moves from cell `from` to `to` (its cell is the caller's to set; its storage moves when it
     /// is put back, `put`).

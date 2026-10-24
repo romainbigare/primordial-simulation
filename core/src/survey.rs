@@ -1,5 +1,5 @@
 //! The bodies seen from their cells: before each physics step what each cell holds and the shade of its bodies
-//! (`survey`), and every batch of days the updates due (`batch`).
+//! (`survey`), and every batch of days the updates due, in a parallel and a serial phase (`batch`).
 
 use crate::body::{die, live, Body, LiveTmp, LACK};
 use crate::{brain::SIG, change::Reactor, choose, copy::Grown, life::Handle, math::mean_decay, units::DAY, World};
@@ -287,18 +287,23 @@ impl Faces {
     }
 }
 
-/// Update the bodies due in this batch, all at its first day, domain by domain (`life::Domain`), cell by cell, and in a
-/// cell by id: an order that does not depend on where bodies are stored, and keeps memory reads close together. They
-/// see each other as they were at the batch's start (`Faces`), and the store as this batch's moves of their domain
-/// leave it (`store::Moves`), booked when the batch ends.
-pub fn batch(w: &mut World) {
+/// Update the bodies due in this batch, all at its first day (plan 3.6). First the parallel phase: the bodies that hold
+/// no part and are inside none, domain by domain (`life::Domain`), cell by cell, and in a cell by id (an order that does
+/// not depend on where bodies are stored, and keeps memory reads close together). They see each other as they were at
+/// the batch's start (`Faces`) and the store as this batch's moves of their domain leave it (`store::Moves`); what they
+/// do outside their domain goes to its outbox (`outbox`), and the lineages and born rows they make are provisional.
+/// Then the serial phase: the moves booked, those ids made global (`Life::remap`), the outboxes applied, then the
+/// bodies that hold or are inside a part, each with its domain's view opened fresh and its outbox applied after it, and
+/// last the lineages and born rows left with no holder die out or are freed (`Life::settle`). With `reversed`, the
+/// domains of the parallel phase run in reversed order: only for the test that this order changes nothing.
+pub fn batch(w: &mut World, reversed: bool) {
     let due = w.life.take_due(w.batch());
     if due.is_empty() {
         return;
     }
     let life = &w.life;
-    let at = |id: u64| life.find(id).map(|s| life[s].cell as usize).map(|i| (life.domain_of(i), i, id));
-    let mut list: Vec<(usize, usize, u64)> = due.into_iter().filter_map(at).collect();
+    let at = |id: u64| life.find(id).map(|s| &life[s]).map(|b| (life.domain_of(b.cell as usize), b.cell as usize, id, b.hold.is_some() || b.inside.is_some()));
+    let mut list: Vec<(usize, usize, u64, bool)> = due.into_iter().filter_map(at).collect();
     list.sort_unstable();
     // The busiest domain's share of the batch's updates (`Counters::busiest_share`).
     let most = list.chunk_by(|a, b| a.0 == b.0).map(|d| d.len()).max().unwrap_or(0);
@@ -307,15 +312,33 @@ pub fn batch(w: &mut World) {
     let mut faces = std::mem::take(&mut w.life.faces);
     faces.make(w);
     w.life.faces = faces;
+    let (serial, mut list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
+    if reversed {
+        list.sort_by_key(|x| std::cmp::Reverse(x.0));
+    }
     let mut rc = Reactor::new(&w.chem, &w.cfg);
     let (mut tmp, mut act) = (LiveTmp::default(), choose::ActTmp::default());
-    for (_, cell, id) in list {
+    w.life.batch = true;
+    for (d, cell, id, _) in list {
+        w.life.parallel = Some(d);
         // (It may have died or joined another body since.)
         let Some(s) = w.life.find(id) else { continue };
         w.open_moves(cell, Node::new(Class::Body, s.slot as usize));
         update(w, s, &mut rc, (&mut tmp, &mut act));
     }
+    w.life.parallel = None;
     w.book_moves();
+    w.life.remap();
+    crate::outbox::deliver(w);
+    w.book_moves();
+    for (_, cell, id, _) in serial {
+        let Some(s) = w.life.find(id) else { continue };
+        w.open_moves(cell, Node::new(Class::Body, s.slot as usize));
+        update(w, s, &mut rc, (&mut tmp, &mut act));
+        crate::outbox::deliver(w);
+        w.book_moves();
+    }
+    w.life.settle();
     w.life.faces.clear();
 }
 

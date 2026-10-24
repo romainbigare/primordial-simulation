@@ -21,7 +21,7 @@ pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64) -> f64 {
         let sig = b.sig.iter().map(|s| s * s).sum::<f32>() as f64;
         p.c_learn * b.learn_rate() as f64 + p.c_signal * sig
     };
-    let think = w.life.brains.get(b.lineage as usize).and_then(|l| l.as_ref()).map_or(p.c_brain, |l| l.cost(p, &b.genes));
+    let think = w.life.brain(b.lineage).map_or(p.c_brain, |l| l.cost(p, &b.genes));
     let tissue = b.built(&w.chem) * b.k.tissue;
     let u = days * (tissue * (p.c_basal + p.c_cat * b.k.cats + p.c_strength * b.gene(STRENGTH) + mind) + p.c_leaf * b.vis[1] as f64 * b.n()) + p.think(think, mass / b.n()) * b.n();
     u * (1.0 - p.c_repair + p.c_repair * 2f64.powf(b.gene(REPAIR))) * b.activity(&w.chem, p) * b.upkeep_pace(&w.chem, t)

@@ -76,7 +76,9 @@ pub(super) fn perceive(w: &World, b: &Body, nseen: usize, rng: &mut Rng) -> Choi
     let mine = face.map_or_else(|| room.map(|(r, e)| (r as u32, e.closed)), |o| o.room);
     for q in 0..9 {
         let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
-        for o in w.life.faces.of(j).iter().filter(|o| o.id != b.id) {
+        // (Of its own cell, not those leaving it: they are there only until the batch ends, `Body::leaving`.)
+        let here = |o: &&Face| q > 0 || w.life.find(o.id).is_none_or(|h| !w.life[h].leaving);
+        for o in w.life.faces.of(j).iter().filter(|o| o.id != b.id).filter(here) {
             if cnt == nseen {
                 break;
             }

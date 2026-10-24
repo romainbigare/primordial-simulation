@@ -19,7 +19,7 @@ pub(super) fn partner(w: &World, b: &Body, r: &mut Rng) -> Option<Handle> {
     let (mut best, mut pick, draw) = (f32::INFINITY, None, r.u64());
     for s in w.life.cell(b.cell as usize) {
         let t = &w.life[s];
-        if !t.alive {
+        if !t.alive || t.leaving {
             continue;
         }
         // (The genes first, as they end at the first one unlike; the size of the body last.)

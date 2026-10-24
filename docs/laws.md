@@ -42,12 +42,35 @@ cell, each cell's bodies in the order they came. No order depends on where a bod
 **What a body sees in a batch** (`survey::batch`). At a batch's start each living body leaves a face (`survey::Faces`:
 its id, members, visible traits, signal, well-being, and the room it is in), cell by cell. A body perceives the others
 only by these faces, as they were then, whatever they did in the batch since; a body placed in the batch is seen from
-the next. It acts on a body it saw only if that body still lives and, to take from it or give to it, is still in its
-cell; the partner of its children and the cover over its cell are the bodies there now. It reads the store through its
-domain's view (`store::Moves`): the ground, bed and bodies' node of each cell of its domain and its air node, as the
-moves of the bodies before it in the batch left them; a node of another domain as it was at the batch's start. The
-batch's moves are booked when it ends, by one `apply` per domain in domain order. A sample member's update
-(`copy::sample`) runs in a checkpoint of the view and is rolled back.
+the next. It takes from or gives to a body it saw only if that body still lives, is still in its cell and is not
+leaving it; the partner of its children and the cover over its cell are the bodies there now. It reads the store
+through its domain's view (`store::Moves`): the ground, bed and bodies' node of each cell of its domain and its air
+node, as the moves of the bodies before it in the batch left them; a node of another domain as it was at the batch's
+start. A sample member's update (`copy::sample`) runs in a checkpoint of the view and is rolled back.
+**A batch's two phases** (`survey::batch`, `outbox`). First the parallel phase: the bodies due that hold no part and
+are inside none update, domain by domain. What an update does outside it goes to its domain's outbox
+(`outbox::Entry`), in the order made: every move to another cell, inside the domain or across its edge (`choose::go`
+pays and queues it), children who start in another cell (`copy::emit` takes them from the parent), a watch, and every
+act on a part (Bond's verbs, form among them). A body with a move queued, or a node's part with a part act queued, is
+**leaving** (`Body::leaving`): it stays in its old cell until the batch ends, where the rest of its update runs, but it
+does not split, and the others there neither see it in their cell nor take from it, give to it, join it or mix with
+it. Lineages and born rows made in this phase get provisional ids of their domain, and the changes of the holders of
+lineages and born rows wait in each domain. Then the serial phase, in a fixed order: the domains' moves booked, one
+`apply` per domain in domain order; the provisional lineages and born rows made global, domain by domain in the order
+made (`Life::remap`); the outboxes applied, domain by domain in the order made; the bodies that hold or are inside a
+part, whole updates in domain and body order, each with its domain's view opened fresh and booked after it, its own
+outbox applied after it; last the holders' changes added in domain order, and a lineage left with no body dies out,
+born rows left with no holder are freed (`Life::settle`). Each entry is applied by its law on the bodies and parts as
+they are then. A move lands (`choose::land`): the body enters the cell with its marks of light and rain, carries what
+it holds, pushes the structures there, counts in the crossings, and its push breaks the bodies there at the next
+survey and clears the lane; members of a node who moved join their kind there (`copy::kin`). A litter joins its kind
+there or starts a body, and its birth is recorded then (`copy::land`). A watch blends by the share of the watcher's
+members who watched (5.5). A part act runs whole (`choose::part_act`); a node's part then comes back to its node if it
+holds nothing, is inside nothing and both are in one cell. An entry whose body or target is gone does nothing: a move
+of a body that died (its cost was paid), a watch whose watcher is no longer of its lineage, a part act no longer
+possible or that cannot be paid; less than one member of a node's children with no node to join goes back into the
+parent's brood, or to the ground of the parent's cell if it died. So a body is seen as it was at the batch's start,
+and every move to another cell, every watch and every act on a part lands at the batch's end.
 
 **Sleep and wake** (`clock::Sleep`, a speed tool): a calm node sleeps until an alarm or until an amount grows by more
 than `wake_share`, then its law brings it up to date over the whole time since.
@@ -308,7 +331,8 @@ bodies copy by physics only. A child has a body of 10^`CHILD` × the copy mass, 
 parent's proportions (the key liquid × 10^`WET`, so children may be dry and dormant), its share of heat, and the genes
 plus noise. A node keeps half a child of brood per member (`copy::BROOD_HELD`), so its members' broods lie evenly
 between none and one child, as individuals' do. A share `DISPERSE` of the children starts in a neighbour cell in a
-random direction (for an individual, that chance). Less than one member with no node to join waits in the brood.
+random direction (for an individual, that chance), where they land when the batch ends (0). Less than one member
+with no node to join waits in the brood, or, landed in a neighbour cell, goes back into it.
 
 ### 4.3 Two parents
 A mature individual takes the most alike mature **partner** in its cell (`copy::mix::partner`); each gene and born row
@@ -324,8 +348,8 @@ A node is one body for many members (handover 7.1): a speed tool that must give 
   members; the spread per gene (`Body::spread`, `Body::row_spread`) and of the sizes (`Body::size_spread`) pools each
   one's spread and its gap to the new mean. Members of a node with a brain that take any action but a move or a
   bond (`choose::spread`) act as the node itself while the others wait aside with their share; these come back by
-  `rejoin` alone: their genes and spreads are the node's, so only amounts, sizes (members who fed are now larger than
-  those who waited) and, after watching, rows join.
+  `rejoin` alone: their genes and spreads are the node's, so only amounts and sizes (members who fed are now larger
+  than those who waited) join; what members who watched copy is applied when the batch ends (5.5).
 - **One lineage** per node (one brain). Children join the young node of their kind in their cell when alike within
   `alike` steps plus `WITHIN` standard deviations (`body::within`), else start one.
 - **Young that grow up** (`copy/young.rs`): a kind in a cell is an adult and a young node joined by a link. Below the
@@ -379,7 +403,8 @@ One action is drawn by the scores at each decision (`choose::act`), paid by its 
 a node spreads its members over the actions by those chances (`choose::spread`). **rest**; **move** (`choose::go`:
 `walk` per kg and metre, climbing, the bodies in the way; needs force, 3.5); **take**, **put**, **give**
 (`choose/feed.rs`); **watch** (5.5); Bond's form, hold, take from or put to a part, join, break, let go, anchor, dig,
-enter (`bond/verbs.rs`). No copy action, no "farm", "trade" or "attack": those must be patterns of these.
+enter (`bond/verbs.rs`). A move, a watch and an act on a part are applied when the batch ends, in the serial phase (0).
+No copy action, no "farm", "trade" or "attack": those must be patterns of these.
 
 **Taking** (`feed::intake`, one law for the ground and for bodies) goes by uptake genes (`Body::wanted`) at `c_handle`
 per kg, of food only (`Body::uses`: what it burns, the body matter and built solids it digests, the minerals it builds
@@ -403,8 +428,10 @@ member drawn among those who stayed, with the node's change plus how much more i
 mean, so its brain moves as an individual's does. **Across lives**: evolution of born rows and base.
 
 ### 5.5 Imitation, signals, memory
-**Watching** (`choose::learn::watch`) costs the turn and moves the watcher's rows part way (`blend`) toward the
-watched one's, if the brains have the same sizes, less the less alike they are. **Signals**: 2 numbers a decision with
+**Watching** (`choose::learn::watched`) costs the turn; when the batch ends, if both live and the watcher is still of
+the lineage it watched in, the watcher's rows move part way (`blend`) toward the watched one's, if the brains have the
+same sizes, less the less alike they are, times the share of the watcher's members now who watched (for a node, the
+mean by members). **Signals**: 2 numbers a decision with
 noise (`signal_noise`), meaningless at first, at an upkeep (`c_signal`). **Memory**: up to 4 others and how dealings
 went (`Body::note`, `Body::recall`). **Thinking** (`Physics::think`) costs by brain size and mass^0.25 per decision, so
 a long interval saves it. **Null run** (`--null`): no learning or imitation, rows frozen, genes still evolve.

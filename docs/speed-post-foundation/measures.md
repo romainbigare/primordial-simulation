@@ -28,6 +28,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.1a (benches remade, `/tmp/d21-bench`) | D2.1a | 1.267 | 184 | 52 | 931 | 82 | 18 | 2,836 | 32,886 | 1.641 | 233 | 57 | 1,202 | 125 | 23 | 2,142 | 27,570 | 9,107 |
 | D2.1b (the same saves) | D2.1b | 1.281 | 150 | 55 | 981 | 75 | 19 | 2,836 | 32,886 | 1.609 | 222 | 54 | 1,185 | 125 | 23 | 2,142 | 27,570 | 9,149 |
 | D2.3 (benches remade, `/tmp/d23-bench`) | D2.3 | 1.395 | 141 | 50 | 1,153 | 33 | 19 | 3,026 | 39,306 | 1.530 | 226 | 53 | 1,187 | 43 | 21 | 2,412 | 29,278 | 9,364 |
+| D2.4a (benches remade, `/tmp/d24-bench`) | D2.4a | 1.442 | 149 | 51 | 1,201 | 20 | 21 | 2,839 | 36,465 | 1.174 | 205 | 54 | 892 | 9 | 15 | 1,512 | 22,280 | 9,577 |
 
 ### A2: compiler settings
 
@@ -313,6 +314,54 @@ read the view per substance was not inlined and cost 3% an update.
 
 Key numbers (`the_key_numbers_stay_in_their_ranges`): all in their ranges; the eaters 5.364 (seeds 5.271, 5.403, 5.419)
 against 5.354 (S49); the light-eaters' stored share fails as before (S50), 0.555 (seeds 0.560, 0.554, 0.549).
+
+### D2.4a: the outbox and the serial phase
+
+Level 3 (the golden fingerprints are re-pinned, the same with and without threads; no change of the snapshot). Every
+effect of an update outside its domain goes to the domain's outbox and is applied in the serial phase; the bodies
+that hold or are inside a part run there; the update code still takes `&mut World` and the domains still run one
+after another (S69). The benches were remade with D2.4a's code (`BENCH_DIR=/tmp/d24-bench scripts/bench.sh
+--remake`, saves of commit `17344b2` plus D2.4a):
+
+| Bench | s/yr | flow | change | bodies | parts | tape | alive | updates/yr | busiest domain |
+|---|---|---|---|---|---|---|---|---|---|
+| island22 | 1.442 | 149 | 51 | 1,201 | 20 | 21 | 2,839 | 36,465 | 0.174 |
+| globe36 | 1.174 | 205 | 54 | 892 | 9 | 15 | 1,512 | 22,280 | 0.240 |
+| region24 | 2.760 | 239 | 89 | 2,308 | 79 | 45 | 5,165 | 64,404 | 0.271 |
+
+The globe's save holds fewer bodies (1,512 against 2,412 in D2.3's) and fewer parts; the worlds differ at level 3.
+
+Cost per body update, callgrind on one thread, one year from D2.4a's saves, the body batch inclusive
+(`survey::batch`) over the year's updates (D2.4a does not change the snapshot, so `main` resumes the same saves):
+
+| Build | island22 | globe36 |
+|---|---|---|
+| `main` (D2.3) | 156,765 | 186,744 |
+| D2.4a | 157,521 (+0.48%) | 186,019 (-0.39%) |
+| all instructions of the year, D2.4a against `main` | +1.26% | -0.01% |
+
+**The serial phase's share of the bodies' instructions** (it limits D2.5), from a build of D2.4a whose phases are
+kept out of line for the measure only, same saves, share of `survey::batch` inclusive:
+
+| Part | island22 | globe36 |
+|---|---|---|
+| the parallel phase (the bodies that touch no part) | 89.6% | 87.5% |
+| the serial phase, all | 9.8% | 12.0% |
+| of it: the domains' moves booked (one `apply` per domain) | 4.5% | 3.8% |
+| of it: the outboxes applied (`outbox::deliver`; litters landing are most of it on the island) | 4.2% | 6.0% |
+| of it: the bodies that hold or are inside a part | 0.6% | 1.4% |
+| of it: ids made global, holders counted, the serial moves booked | 0.5% | 0.8% |
+| before the phases (the faces, the list of updates) | 0.6% | 0.5% |
+
+So at most 1 / (0.104 + 0.896 / 4) = 3.0 times (island22) and 1 / (0.125 + 0.875 / 4) = 2.9 times (globe36) faster
+bodies on four threads, before the busiest domain's share and the threads' own cost.
+
+Key numbers (`the_key_numbers_stay_in_their_ranges`): all in their ranges; the eaters 5.377 (seeds 5.326, 5.434, 5.372)
+against 5.354 (S49); the light-eaters' stored share fails as before (S50), 0.555 (seeds 0.562, 0.551, 0.551). The
+nodes check (F7, `tape/tests/nodes.rs`): differences past the noise in the rules not held, 8 against 12 for `main`
+(D2.3) on the same machine (default plan 0 against 2, roster 8 against 10); rules (b) and (c) hold everywhere, rule (a)
+breaks once past the noise (roster, seed 1, kind 4 mass, broken but within the noise on `main`), the rest are rule
+(d)'s rarer deaths, as on `main`.
 
 ## Profile of the baseline
 

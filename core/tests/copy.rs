@@ -273,6 +273,8 @@ fn a_child_is_made_of_the_brood_at_the_size_its_gene_sets() {
     let at = w.life.alive().count();
     assert!(copy::copy(&mut w, &mut n));
     w.life[s] = std::mem::take(&mut n);
+    // (Those who start in the neighbour cell land there from the outbox.)
+    pcore::outbox::deliver(&mut w);
     let n = &w.life[s];
     let kids: Vec<Handle> = w.life.living().map(|x| x.0).filter(|&k| k != s).collect();
     assert_eq!((kids.len(), w.life.alive().count()), (2, at + 3), "the children are two nodes of their own");

@@ -16,7 +16,7 @@ use crate::{life::Handle, World};
 pub(crate) fn linked(w: &mut World, b: &mut Body, mature: bool) -> Option<Handle> {
     let at = b.link.and_then(|id| w.life.find(id)).filter(|&t| {
         let o = &w.life[t];
-        o.alive && o.n() > 1.0 && o.cell == b.cell && o.lineage == b.lineage && o.adult(&w.chem) == mature
+        o.alive && !o.leaving && o.n() > 1.0 && o.cell == b.cell && o.lineage == b.lineage && o.adult(&w.chem) == mature
     });
     at.or_else(|| {
         let t = kin(w, b.cell as usize, b.lineage, (&b.genes, &b.spread), mature)?;

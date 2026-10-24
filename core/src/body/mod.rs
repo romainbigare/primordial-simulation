@@ -13,7 +13,7 @@ mod tissue;
 
 pub use death::{die, wound};
 use death::thin;
-pub(crate) use death::{to_ground, torn_to_death};
+pub(crate) use death::{remains, to_ground, torn_to_death};
 pub use exchange::conductance_to_ground;
 pub use genes::*;
 pub(crate) use live::{gain_to_growth, live, LiveTmp};
@@ -122,6 +122,10 @@ pub struct Body {
     /// Well-being at the last decision; the trace of that decision for learning
     pub wb: f32,
     pub trace: Vec<f32>,
+    /// It has a move queued in the batch running, or is a node's part with a part act queued (`outbox`): it stays in
+    /// its cell until then, but the others there no longer deal with it (plan 3.6); false outside a batch, not saved
+    #[serde(skip)]
+    pub leaving: bool,
     /// Numbers that follow from the genes (`prepare`); not saved
     #[serde(skip)]
     pub k: Consts,
