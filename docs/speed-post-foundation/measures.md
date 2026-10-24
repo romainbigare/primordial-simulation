@@ -21,6 +21,32 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | Step | Commit | island22 s/yr | flow | change | bodies | parts | tape | alive | updates/yr | globe36 s/yr | flow | change | bodies | parts | tape | alive | updates/yr | core lines |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | baseline | `16e6a4e` | 0.857 | 159 | 49 | 638 | 0 | 11 | 2,744 | 27,762 | 1.347 | 229 | 51 | 1,010 | 43 | 15 | 1,955 | 25,626 | 8,998 |
+| A2 | A2 | 0.702 | 128 | 40 | 525 | 0 | 10 | 2,744 | 27,762 | 1.220 | 210 | 49 | 905 | 43 | 12 | 1,955 | 25,626 | 8,998 |
+
+### A2: compiler settings
+
+Each setting alone, then together, with `scripts/bench.sh` (lower of the runs of each bench; 2 to 4 runs per setting).
+The machine drifted by about 7% between hours, so the baseline was measured again between the settings: its best runs
+were 0.783 s (island22) and 1.341 s (globe36). Gains are against those.
+
+| Setting | island22 s/yr | gain | globe36 s/yr | gain | Kept |
+|---|---|---|---|---|---|
+| a. `lto = "fat"` | 0.786 | 0% | 1.323 | 1% | no (under 2%) |
+| b. `codegen-units = 1` | 0.727 | 7% | 1.284 | 4% | yes |
+| c. `target-cpu=native` | 0.808 | -3% | 1.379 | -3% | no (slower) |
+| d. a + b + c | 0.759 | 3% | 1.429 | -7% | no |
+| a + b | 0.748 | 4% | 1.304 | 3% | no (a adds under 1% to b) |
+| b + c | 0.752 | 4% | 1.365 | -2% | no |
+| e. `panic = "abort"` | not measured | | | | no: `core/tests/store.rs` has a `should_panic` test |
+| PGO on b (`-Cprofile-generate`, 2 years of both benches, `llvm-profdata merge`, `-Cprofile-use`) | 0.690 | 12% | 1.233 | 8% | no |
+
+Kept: `codegen-units = 1` (4 before). Not kept: fat LTO and `target-cpu=native` (no gain on the cores that matter);
+PGO gains 5% and 4% on top of b (about 12% and 8% against the baseline), under the 8% bar on both, and the final
+measure of the kept build (row A2) is 0.702 and 1.220, so PGO adds 1 to 2% over it at the same quiet hour (S35). Build
+time of `cargo build --release -p cli` after `touch core/src/lib.rs`: 25.6 s before, 36.4 s with b, 53.9 s with fat LTO
+and b. The golden fingerprints move (level 2): the bench worlds are bit for bit the same for 5 years from their saves,
+but fresh 16 x 16 worlds differ at rounding from year 3 (4 years, seed 1: 360 bodies against 356, `t_air` 246.664
+against 246.662 K). The builds with and without threads give the same new fingerprints.
 
 Stage times are in ms a year. The plan's guess of 1.5 and 2.1 s a year (from `docs/reports/foundation-l.md`) was
 higher than today's 0.86 and 1.35 s: the worlds here are the two benches, and the code is the one after the

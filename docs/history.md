@@ -811,3 +811,4 @@ the golden test.
 ## 5. Speed after the foundation
 
 - A1: the bench kit (scripts/bench.sh) and the baseline (docs/speed-post-foundation/measures.md).
+- A2: `codegen-units = 1` kept (island22 -7%, globe36 -4% a year; build 25.6 -> 36.4 s; golden re-pinned at level 2). Not kept: fat LTO (under 2%), `target-cpu=native` (slower), `panic = "abort"` (tests use `should_panic`), PGO (5% and 4% over the kept setting, under 8%).
