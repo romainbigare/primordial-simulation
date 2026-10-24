@@ -13,7 +13,8 @@ ask the owner.
 | Every free number: unit, anchor, mark (physical, anchored, tuned) | `docs/numbers.md` |
 | What the tape records | `docs/tape.md` |
 | What changed and when, what was tried and not kept | `docs/history.md` |
-| The work now: the foundation before M4 | `docs/foundation/plan.md` (read its main rule first) |
+| The work now: speed after the foundation | `docs/speed-post-foundation/plan.md` (its rules in 2; the foundation's main rule in `docs/foundation/plan.md` holds) |
+| The foundation before M4 (done) | `docs/foundation/plan.md` (read its main rule first) |
 | The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/` |
 | Physical constants and units | `core/src/units.rs` |
 | Tuned numbers | `Physics` and `Config` in `core/src/params.rs` (each with a row in `docs/numbers.md`) |
@@ -41,7 +42,7 @@ ask the owner.
 9. **No Earth words in `core/` and `worldgen/`** (`cli/tests/word_ban.rs`), including substance names (nitrogen,
    carbon, salt, sugar...). Use numbers and physical words.
 10. `cargo clippy --release --workspace --all-targets` gives no warnings.
-11. **Size.** `core` holds at most 9,000 lines of code (`docs/foundation/decisions.md` 42), not counting
+11. **Size.** `core` holds at most 9,700 lines of code (`docs/speed-post-foundation/decisions.md` S3), not counting
     comments and blank lines (`docs/handover.md` 14.3; the test `cli/tests/core_size.rs` counts them). Simplify before
     you add. Never delete useful comments to save lines: they are not counted. Never pick a slower or less honest
     design to save lines.
