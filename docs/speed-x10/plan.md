@@ -27,6 +27,11 @@ ideas; it is in sight on 16 or more cores, or with the gated steps passing.** 10
 (a GPU for Flow and the stands, `docs/reports/speed.md`), which is not in this plan. The plan says so now so that no step
 is judged against a hope.
 
+**The goal stays 10 times** (a settled year on 4 cores, against the start of the last round). The steps above do not
+reach it, so this plan also carries a *gap* design (`design/gap.md`): more strategies, with their arithmetic, until the
+sum reaches 10 times. **Rule: a review or a step that drops a strategy proposes an alternative in its place** (with its
+expected gain and the rule or law it would change); the architect logs both in `decisions.md`.
+
 ## 2. Rules for this round
 
 All of `CLAUDE.md` holds, except what decisions X1 to X6 change (the new wording is written into `CLAUDE.md` and the
