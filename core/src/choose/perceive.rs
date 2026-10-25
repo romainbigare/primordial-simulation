@@ -6,7 +6,7 @@ use crate::body::{Body, Layout, Lived};
 use crate::brain::{ln, REST, SIG};
 use crate::lanes::thickness;
 use crate::rng::Rng;
-use crate::survey::Face;
+use crate::survey::{Face, UNCOVERED};
 use crate::{bond, life::Domain, World};
 
 /// A brain perceives a share `x` of the body as `SHARE_SENSE` ln(x + floor): a store with the floor `STORE_FLOOR` (no
@@ -66,7 +66,7 @@ pub(super) fn walk(w: &World, i: usize, sight: usize, t: &mut ActTmp) {
 
 /// Bodies perceived, its own cell first, then a neighbour's from a random side, up to `nseen`, as they were at the
 /// batch's start (their faces, `survey::Faces`): walls hide by how closed they are, cover with chance 1 - exp(-a), a the
-/// others' capture area per m². Then the parts in its cell.
+/// others' capture area per m² (`Face::show`). Then the parts in its cell.
 pub(super) fn perceive(w: &World, d: &Domain, b: &Body, nseen: usize, rng: &mut Rng) -> Choice {
     let i = b.cell as usize;
     let (mut seen, mut cnt, side, cells) = ([(Face::default(), false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
@@ -83,8 +83,7 @@ pub(super) fn perceive(w: &World, d: &Domain, b: &Body, nseen: usize, rng: &mut 
                 break;
             }
             let walls = if mine.map(|r| r.0) == o.room.map(|r| r.0) { 0.0 } else { mine.map_or(0.0, |r| r.1).max(o.room.map_or(0.0, |r| r.1)) };
-            let cover = (w.canopy[j] as f64 - o.vis[1] as f64 * o.n / w.mesh.cells().area()[j]).max(0.0);
-            if (walls == 0.0 || rng.f64() as f32 >= walls) && (cover <= 0.0 || rng.f64() < (-cover).exp()) {
+            if (walls == 0.0 || rng.f64() as f32 >= walls) && (o.show == UNCOVERED || rng.f64() < o.show) {
                 (seen[cnt], cnt) = ((*o, q == 0), cnt + 1);
             }
         }

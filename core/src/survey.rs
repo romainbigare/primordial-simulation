@@ -165,7 +165,13 @@ pub struct Face {
     pub wb: f32,
     /// The root of the structure it is inside and how closed its walls are (`bond::room`)
     pub room: Option<(u32, f32)>,
+    /// The chance that the cover of the others over it leaves it seen, exp(-a) with a their capture area per m²
+    /// (`UNCOVERED` under no cover)
+    pub show: f64,
 }
+
+/// The `Face::show` of a face under no cover: above any chance, so that nothing is drawn for it.
+pub const UNCOVERED: f64 = 2.0;
 
 /// The faces of the living bodies at the start of the batch running: of cell `i`, `all[at[i]..at[i + 1]]`, in the
 /// order they came. Perception reads only these (`choose::perceive`), whatever happened in the batch since.
@@ -185,9 +191,12 @@ impl Faces {
         self.clear();
         self.at.push(0);
         for i in 0..w.mesh.cells().n() {
+            let (canopy, area) = (w.canopy[i] as f64, w.mesh.cells().area()[i]);
             for b in w.life.cell(i).map(|h| &w.life[h]).filter(|b| b.alive) {
                 let room = crate::bond::room(w, b).map(|(r, e)| (r as u32, e.closed));
-                self.all.push(Face { id: b.id, n: b.n(), vis: b.vis, sig: b.sig, wb: b.wb, room });
+                let cover = (canopy - b.vis[1] as f64 * b.n() / area).max(0.0);
+                let show = if cover <= 0.0 { UNCOVERED } else { (-cover).exp() };
+                self.all.push(Face { id: b.id, n: b.n(), vis: b.vis, sig: b.sig, wb: b.wb, room, show });
             }
             self.at.push(self.all.len() as u32);
         }

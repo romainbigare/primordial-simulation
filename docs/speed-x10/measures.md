@@ -1070,3 +1070,21 @@ to the same running sum, one reaction after the other).
 | Golden test, `RAYON_NUM_THREADS=1` | unchanged |
 
 Verdict: bit for bit; the kill line (not bit for bit) is not reached.
+
+## MI1: the cover of a face once a batch
+
+Level 1. `Faces::make` works out the chance that the cover leaves a face seen, `exp(-cover)` (`Face::show`;
+`UNCOVERED` under no cover, where nothing is drawn), once per face at the batch's start. `choose::perceive` reads it
+instead of working it out at every look. A cover so thin that `exp(-cover)` is 1 still draws, as before (a version
+that skipped that draw changed the world after a year, though the golden test did not see it).
+
+| Check | Result |
+|---|---|
+| Golden test, with threads and with one thread | unchanged |
+| One year from each bench save: the world's fingerprint, base and this step | the same on island22, globe36 and region24 |
+| island22, one year, one thread, callgrind (instructions), base `52d7f4a` | 7,386,006,660 |
+| island22, one year, one thread, callgrind (instructions), this step | 7,351,695,315 |
+| Change | -34.3 million, -0.46% |
+
+Verdict: bit for bit; the gain is under the kill line (-0.5%) by a little and under the aim (-0.8%). The commit stays
+on its branch for the architect to decide.
