@@ -861,3 +861,112 @@ this branch's script and read its counters (adults under their copy mass at `cop
 fixed (P1b or a step of its own), then for this probe again. A floor on young nodes only, with (g) fixed, keeps the
 eaters within the noise and still cuts animal node updates to about 0.6 (mean update 15.8 to 16.1 days, against 9.3 to
 9.7): a possible first G2 if the full floor stays out of reach.
+### PR-M: the plant month prototype
+
+Branch `probe/pr-m` (`545f16a`). `core/src/body/month.rs` runs a stand over its whole interval in one closed form,
+inside the update: light, rain and air over the interval; its liquids first (soaking against what its pores pass, so
+its activity is that of the soaked level); the stock equation of `animals.md` 3.1 (income, upkeep, growth above
+`R_res = U x D`, a release-limited phase with deaths at `(1 - kR/U) / D`); the extents booked (light reaction, other
+catalysed reactions, burnings, growth); the stand set to its ground's temperature. `EW_MONTH` switches it on (`gene`
+or a number of days for `D`); unset, the branch runs today's law bit for bit (island22, 2 years, 1 thread: hash
+`60d3476db372ada3`, as the head). Books: element drift 4e-16, energy 8e-15 a year. Two versions were measured: v1
+reused today's helpers for growth (`copy::grow`) and set the heat twice; v2 (the commit) books growth and the burnings
+as extents and sets the heat once.
+
+**Cost** (callgrind, island22 bench of `52d7f4a`, 1 year, 1 thread; µs at 5,400 instructions a µs, the ratio of R2's
+18.0 µs plant update to this bench's 97,400 instructions):
+
+| | today (day law) | month v1 | month v2, `D` = 36 | month v2, `D` = gene |
+|---|---|---|---|---|
+| the stand's law (`to_growth`), instructions a call | 57,100 | 52,300 | 37,900 | 38,000 |
+| same, µs | 10.6 | 9.7 | **7.0** | 7.0 |
+| whole stand update (sample, children, maturing), instructions | 97,400 | not split | 76,600 | 78,200 |
+| same, µs | 18.0 | | 14.2 | 14.5 |
+| stand updates a year; `run_for`, million instructions | 16,669; 6,254 | 23,326 calls; 6,393 | 20,129; 6,139 | 19,014; 6,064 |
+
+Where v2's 37,900 go (a call): evaporation 4,400; the two deaths (`lose_share`) 3,400; the gain for selection
+(`buildable`, twice) 2,400; growth booking 3,400; the upkeep's burnings and the release rate (`Payer::at`, `plan`,
+`pay_at`) 3,800; `check_stores` 2,000; gas pool 1,700; soil, soaking, roots 3,500; activity (3 times) 1,200; heat
+(`energy_at`, `thermal`, ground's heat capacity) 2,400; site, films, roles 2,000; the rest of `to_growth` (the balance
+itself is a few hundred) 3,600. A lean rewrite of every stage for stands (evaporation of the key liquid only in closed
+form, one death call, one gain, the burnings as extents with `k` on the card, the gas pool of the 3 gases, one soil, a
+cached `life_roles`) is estimated at about 21,000 instructions, 3.9 µs: at the line, not under it.
+
+**Error against `body::live`** (`tape/tests/month_probe.rs`): 3 stands of the island22 save (the smallest, median and
+largest adult by member body), each at light 0, 30, 100, 250 W/m², ground 275, 285, 295, 305 K, wetness 0.1, 0.5, 0.9,
+fuel 0.3, 1, 3, 10 times 36 days of upkeep; key liquid at its level, no rain, stand at its ground's temperature, `D` =
+36 (today's reserve). Error = |month - day law| / the larger of the day law's end and the start; median / 90% / most.
+"Pays": the day law paid its upkeep (no `SPENT` deaths); "short": it did not.
+
+| Days | Class (points) | members | fuel | body matter |
+|---|---|---|---|---|
+| 2 | pays (542) | 0.08 / 3.6 / 5.0% | 2.0 / 33 / 123% | 0.6 / 3.7 / 5.0% |
+| 2 | short (34) | 25 / 39 / 40% | 35 / 71 / 112% | 25 / 39 / 40% |
+| 6 | pays (370) | 0.02 / 3.9 / 11.6% | 3.9 / 43 / 118% | 0.7 / 6.4 / 13% |
+| 6 | short (198) | 4.7 / 66 / 78% | 37 / 280 / 973% | 6.6 / 66 / 79% |
+| 6 | pays, fuel 10 x 36 days (120) | | 1.9 / 4.1 / 54% | |
+| 30 (informative) | pays (169) | 0.03 / 1.3 / 8.3% | 9.9 / 55 / 95% | 2.8 / 25 / 96% |
+| 36 (informative) | pays (152) | 0.04 / 0.9 / 2.1% | 11 / 52 / 101% | 3.9 / 25 / 133% |
+| 36 (informative) | short (312) | 46 / 84 / 95% | 84 / 2,776 / 33,735% | 53 / 98 / 244% |
+
+`D` = gene changes the pays rows little at 2 and 6 days (members 90% 7.8 and 8.8%). The month's own splitting test
+(the same grid, 1 x 36 days against 6 x 6 and 18 x 2, `D` = 36) fails on fuel: members 0.15 / 4.2 / 37% and 0.27 / 8.4
+/ 51%, fuel 25 / 466 / 1,375% and 33 / 669 / 3,465%, body matter 6.5 / 41 / 139% and 9.9 / 65 / 164%.
+
+**Key numbers** (`the_key_numbers`, 3 seeds; today's law run on the same build with `EW_MONTH` unset):
+
+| Key number | today (`52d7f4a`) | month v2, `D` = 36 | month v2, `D` = gene | range |
+|---|---|---|---|---|
+| ground temperature on land, K | 292.14 | 291.62 | 291.60 | 291.79 +-1 |
+| seasonal swing, K | 15.47 | 14.81 | 14.74 | 15.13 +-1.5 |
+| heat-absorbing gas, ppm | 411.3 | 395.6 | 395.6 | 388.8 +-40 |
+| light-eaters, log10 kg | 10.243 | 10.431 | 10.424 | 10.38 +-0.3 |
+| eaters, log10 kg | 5.393 | 5.358 | 5.354 | 5.354 +-0.5 |
+| life of light-eaters, yr | 1.22 | 1.58 | 1.43 | 1.81 x/ 2 |
+| life of eaters, yr | 13.1 | 15.4 | 13.9 | 10.47 x/ 2 |
+| rain, rivers, land worn | in range | in range | in range | |
+| **S50** (seeds) | **0.556** (0.560, 0.555, 0.553) | **0.554** (0.555, 0.558, 0.550) | **0.565** (0.566, 0.567, 0.561) | under 0.5 |
+| S84: air_3 sleep bias, 5 cases (noise) | +0.64 to +1.22e-6 (6.5e-7) | +0.52 to +1.24e-6 (4.6e-7) | +0.55 to +1.31e-6 (4.4e-7) | |
+
+v1 gave S50 0.573 (`D` = 36) and 0.580 (gene), light-eaters 10.44 and 10.43, land 292.27 and 292.28 K.
+
+**Verdicts.**
+- **A stand over 4 µs: met (the line is crossed).** v2 costs 7.0 µs, v1 9.7 µs, today 10.6 µs. The closed form is
+  cheap; the cost is the stages around it. A lean rewrite of every stage is estimated at 3.9 µs, at the line. P1.2's
+  design is reviewed before it starts: its stage list must be the lean one, and the plan's 6 µs stand update (section
+  5) rests on it; today's whole stand update falls from 18.0 to 14.2 µs with v2.
+- **Over 5% error at 6 days: met (the line is crossed)** for fuel (90%: 43%) and for stands the day law leaves short.
+  Where the stand pays and is well stocked the month is within 4% (members 90% 3.9%, fuel at a full stock 4.1%). Most of
+  the gap is where today's law is itself not converged at 2 to 6 days (below); but the month's own splitting test
+  fails too, so P1.2's test 1 (2%) needs the fixes below.
+- **`D`: P1.2 starts with `D` = 36.** `D` = gene moves S50 by +0.010 against `D` = 36 in every seed (+0.011, +0.009,
+  +0.011; the seeds spread about +-0.004), past its seeds' noise and away from its range (v1: +0.007). Every other key
+  number stays in range for both; S84 does not move.
+
+**What P1.2 must know** (each found by the grid or the splitting test):
+1. **The release limit.** Today a node pays a 2-day upkeep from a release window of `max(days, interval)` (36 days,
+   `settle_upkeep`). A rate `k` from one day of breath makes most cool stands release-limited (in the save, 36 times a
+   day's release is under 36 days of upkeep in 14% of stands; a 36-day release in 22%). The prototype takes `k` =
+   `-ln(1 - release over the window / R) / window`, the window as today's.
+2. **The light reaction's catalyst limit grows as the square of the interval** in today's rate law (the gas pool is the
+   breath over the interval, and the contact grows with it). The month takes it as a rate on one day's breath and
+   soaking, times the days.
+3. **The light reaction's liquid is a store in today's law**: over 36 days it needs many times what a stand holds. It
+   must be a supply (the prototype soaks what it uses, up to the soaking rate times the level times the days).
+4. **The activity lags today**: it is read at the update's start for the whole update. A dry stand of the save
+   (activity about 1e-3) soaks to its level in a day, which changes its upkeep and income about 1000 times. Stage 3 must
+   run first.
+5. **Product inhibition must be inside the stock equation** (`P(R) = min(P_light, P_cat (1 - R/R*))`). Read at the
+   start (as today's reactor does), one 36-day update under strong light makes up to 10 times the fuel of 18 updates
+   of 2 days: the main failure of the splitting test.
+6. **Roots and soaking are capped by the room of a store per update**, so growth over one long update gets one room of
+   minerals: a flux is needed there too.
+7. **No sweating for stands.** With `COOL_T` and the update's released heat, `evaporate` drained a stand's key liquid
+   to zero in one 18-day update. The prototype turns it off and evaporates only the key liquids.
+8. **Heat.** Putting the liquids' fusion heat back with `energy_at` instead of `fused_of` broke the energy books (drift
+   6e-6); book it as `physics` does. Where the heat of growth goes and which draw is set moved the land by -0.52 K (v2)
+   against +0.13 K (v1): P1.3's climate gate is sensitive to stage 6. The light taken from the bodies' node rounds its
+   heat below zero by rounding (8e-3 J a year).
+9. **The death rule is a law change for stands too** (X14 (a)): at 275 K the day law killed 97% of a stand in 2 days
+   (the unpaid share at once), the month 5% (the rate over the days); over 36 days a deep famine kills 63%, not all.
+10. `Melting` needs `Clone`; `life_roles` costs 430 instructions a call (put it on the card).
