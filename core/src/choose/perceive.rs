@@ -72,13 +72,13 @@ pub(super) fn perceive(w: &World, d: &Domain, b: &Body, nseen: usize, rng: &mut 
     let (mut seen, mut cnt, side, cells) = ([(Face::default(), false); MAX_SEEN], 0, rng.below(MOVES), w.mesh.cells());
     let room = bond::room(w, b);
     // Its own room as the others' are seen, from its face (outside a batch, where there are none, as it is now).
-    let face = w.life.faces.of(i).iter().find(|o| o.id == b.id);
+    let face = w.life.faces_of(i).iter().find(|o| o.id == b.id);
     let mine = face.map_or_else(|| room.map(|(r, e)| (r as u32, e.closed)), |o| o.room);
     for q in 0..9 {
         let Some(j) = (if q == 0 { Some(i) } else { cells.way(i, (side + q) % MOVES).map(|e| cells.adj_cell()[e] as usize) }) else { continue };
         // (Of its own cell, not those leaving it: they are there only until the batch ends, `Body::leaving`.)
         let here = |o: &&Face| q > 0 || d.find(o.id).is_none_or(|h| !d[h].leaving);
-        for o in w.life.faces.of(j).iter().filter(|o| o.id != b.id).filter(here) {
+        for o in w.life.faces_of(j).iter().filter(|o| o.id != b.id).filter(here) {
             if cnt == nseen {
                 break;
             }

@@ -1252,3 +1252,55 @@ decisions: the bodies' stage gain must be estimated again from that. Two smaller
 planned interval, but updates come every 27.1 to 27.4 days at a 30-day floor (9.3 to 9.7 at the gene's pace), so a
 floored node is given 11% more food a day by the sizing alone (3% at the gene's pace): size a take by the days to the
 next one. And with today's law a 20-day floor is no fallback (-0.12, -0.16, -0.07).
+## E1b.1: faces per domain
+
+Level 1. A domain makes the faces its bodies show in the next batch at the end of its own task (`Domain::made`,
+`survey/faces.rs`); the batch ends by keeping them (`faces::keep`). They stay good while nothing they show is written
+(`Domain::touched`: any write through `Domain`'s `IndexMut`, `store` or `unstore`; `Domain::quiet` is the write that no
+face shows: a body's shade and what it owes) and while the canopy of each cell is the one they were made with (the end
+of a task works out the canopy that the next survey will, `canopy_of`, from the same sum). A domain with a body inside
+a structure is always made again (its faces read the parts). Before a batch the other domains make theirs again on the
+pool (`faces::remake`); in a debug build every domain's faces are compared with a fresh make there. The saved world
+does not change.
+
+| Check | Result |
+|---|---|
+| Golden test, with threads and with one thread | unchanged |
+| `cargo test --release --workspace` with debug assertions on (the comparison above runs in every batch) | passes |
+| `series.csv`, 3 years from each of island22 and globe36 (bench48), base and this step | the same in every column but `ms_*` |
+| Domains made again at a batch's start, 2 years, of all domains | island22 41%, globe36 42%, region24 52% |
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, bench48 saves, base `0308835`):
+
+| | island22 | globe36 |
+|---|---|---|
+| base | 7,885.1 M | 7,398.4 M |
+| this step | 7,940.7 M (+0.71%) | 7,423.4 M (+0.34%) |
+| `survey::batch`, inclusive, island22 | 4,418.1 M | 4,472.8 M |
+| `Faces::make`, inclusive, island22 | in the batch (not apart) | 124.3 M |
+
+A face made at the end of a task and touched later (a landing, a litter, a watch, a serial body) is made twice. That is
+the extra work on one thread.
+
+**Wall time on 4 threads, the bodies' stage** (`ms_bodies`, mean of years 2 and 3 of a run of 3 years from the bench
+save; 15 interleaved runs of each build, `flock` on `timing.lock`). The machine was loaded by other agents: the load
+average was 5.7 to 7.4 over the runs and 4 cores. The spread of a build against itself is 15 to 20%, so these are not
+reliable:
+
+| ms a year | base median (min) | this step median (min) | median / min change |
+|---|---|---|---|
+| island22 | 565 (447) | 609 (440) | +7.7% / -1.7% |
+| globe36 | 539 (402) | 515 (404) | -4.4% / +0.6% |
+
+**Verdict: not decided by the wall time; not shown slower, not shown faster.** The medians go both ways inside the
+noise. The extra work is about 0.3% to 0.7% of a year on one thread; the work that leaves the main thread is the make
+of the 58% of the domains that keep their faces (faces were 22 and 15 ms a year on the main thread, E0 (e)), and the
+rebuilds go to the pool. A kill-line answer needs a quiet machine. E1b.1 is a step of the chain judged at E1c (X40).
+
+For E1b.2: `Domain::make_next_faces(w)` is the call to make at the end of the landing task (P2); landing in a domain
+touches it through `store` and `Domain`'s `IndexMut`, so a landed domain would be made again unless P2 makes after the
+landing, which is the plan. The entries that stay in S2 (part acts, watches, returns of litters, lane clears) touch
+domains by `Life`'s `IndexMut` and `in_domain`, and mark them. A new writer of a number a face shows needs no mark if it
+goes through `IndexMut`; only a writer that bypasses it (as `Life::each_mut` does, which writes no face number) would.
+`Life::faces_of` reads nothing outside a batch (`Life::batch`). `Faces` are per domain by the slot of the cell in the
+domain (`Faces::of(k)`), so tiles of 4 cells change only their length.

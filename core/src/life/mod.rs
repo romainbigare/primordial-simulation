@@ -15,6 +15,7 @@ use crate::body::{Body, MAX_INTERVAL};
 use crate::lineage::Lineage;
 use crate::outbox::Entry;
 use crate::space::Mesh;
+use crate::survey::{Face, Faces};
 use crate::{World, AIR};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
@@ -64,9 +65,9 @@ pub struct Life {
     pub seen: Vec<f32>,
     /// Per cell, from the last survey: what a brain perceives of it as a place to move to (`choose::cells`)
     pub cellf: Vec<[f32; crate::choose::NF]>,
-    /// What each living body showed others at the start of the batch running, cell by cell (`survey::Faces`; empty
-    /// outside the batches)
-    pub faces: crate::survey::Faces,
+    /// What each living body shows others, domain by domain: made at the end of the domain's task in a batch, or before
+    /// the next if the domain changed since (`survey::Faces`); read only in a batch (`faces_of`)
+    pub(crate) faces: Vec<Faces>,
     /// The brain of each lineage (None once it died out), and its living bodies
     pub brains: Vec<Option<Lineage>>,
     pub members: Vec<u32>,
@@ -220,6 +221,15 @@ impl Life {
         let tables: usize = self.domains.iter().map(|x| x.table.len()).sum();
         (listed != tables).then(|| format!("{listed} bodies in the cells' lists, {tables} in the id tables"))
     }
+    /// The faces of the bodies of cell `i` as they were at the batch's start (none outside a batch).
+    pub fn faces_of(&self, i: usize) -> &[Face] {
+        let (d, k) = self.cell_slot(i);
+        if self.batch { self.faces[d].of(k) } else { &[] }
+    }
+    /// Body `h` for a write to a number that no face shows (`Domain::quiet`).
+    pub(crate) fn quiet(&mut self, h: Handle) -> &mut Body {
+        self.domains[h.domain as usize].quiet(h)
+    }
     /// The domain of cell `i`, read outside body code (by the shell and the tests).
     pub fn domain(&self, i: usize) -> &Domain {
         &self.domains[self.domain_of(i)]
@@ -263,9 +273,10 @@ impl Life {
         let domain = |(d, cells): (usize, Vec<u32>)| {
             let (at, stale, ring) = (vec![Vec::new(); cells.len()], vec![true; cells.len()], vec![Vec::new(); RING as usize]);
             let (pushed, crossings) = (vec![0.0; cells.len()], vec![0.0; cells.len()]);
-            Domain { index: d as u32, at, stale, ring, pushed, crossings, cells, ..Default::default() }
+            Domain { index: d as u32, at, stale, ring, pushed, crossings, cells, touched: true, ..Default::default() }
         };
         self.domains = cells.into_iter().enumerate().map(domain).collect();
+        self.faces = vec![Faces::default(); self.domains.len()];
     }
     /// The ids of the bodies due in `batch`, taken out of the rings, domain by domain (some may have left the world
     /// since).

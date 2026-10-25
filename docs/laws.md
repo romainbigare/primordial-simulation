@@ -42,7 +42,9 @@ members drawn); it never changes, and its random draws are keyed by it. The bodi
 due in a batch update domain by domain, cell by cell, and in a cell by id; sums over bodies go domain by domain, cell by
 cell, each cell's bodies in the order they came. No order depends on where a body is stored.
 **What a body sees in a batch** (`survey::batch`). At a batch's start each living body leaves a face (`survey::Faces`:
-its id, members, visible traits, signal, well-being, and the room it is in), cell by cell. A body perceives the others
+its id, members, visible traits, signal, well-being, and the room it is in), cell by cell. A domain makes its faces at
+the end of its own task in the batch before; it makes them again at this batch's start only if something they show was
+written since, or a body of it is inside a structure. A body perceives the others
 only by these faces, as they were then, whatever they did in the batch since; a body placed in the batch is seen from
 the next. It takes from or gives to a body it saw only if that body still lives, is still in its cell and is not
 leaving it; the partner of its children and the cover over its cell are the bodies there now. It reads the store

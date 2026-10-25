@@ -2,12 +2,14 @@
 //! (`survey`), and every batch of days the updates due, in a parallel and a serial phase (`batch`).
 
 use crate::body::{die, live, Body, Layout, LiveTmp, LACK};
-use crate::{brain::SIG, change::Reactor, choose, copy::Grown, life::{Domain, Handle}, math::mean_decay, World};
+use crate::{change::Reactor, choose, copy::Grown, life::{Domain, Handle}, math::mean_decay, World};
 use crate::store::{Class, Node};
 
 mod draws;
+mod faces;
 pub use draws::Draw;
 pub(crate) use draws::Draws;
+pub use faces::{Face, Faces, UNCOVERED};
 
 /// A brain perceives the loose amount of a substance in a cell, `a` mol/m², as `LOOSE_SENSE` ln(1 + a).
 const LOOSE_SENSE: f32 = 0.2;
@@ -81,7 +83,7 @@ fn sum_cells(w: &mut World) {
     life.keep.resize(n, 0.0);
     let area = mesh.cells().area();
     for (i, r) in life.sum.iter().enumerate() {
-        canopy[i] = (r[2] / area[i]) as f32;
+        canopy[i] = canopy_of(r[2], area[i]);
         life.absorb[i] = if r[2] > 0.0 { (r[8] / r[2]) as f32 } else { 0.0 };
         life.keep[i] = if r[8] > 0.0 { (r[9] / r[8]) as f32 } else { 0.0 };
     }
@@ -107,9 +109,19 @@ pub fn sums(w: &mut World) {
     w.life.sum = rows;
 }
 
+/// The capture area of `n` members who each show `vis` of it (`Body::vis`), m².
+pub(super) fn capture(vis: f32, n: f64) -> f64 {
+    vis as f64 * n
+}
+
+/// The canopy of a cell of area `area` m² whose bodies' capture areas sum to `sum` m².
+pub(super) fn canopy_of(sum: f64, area: f64) -> f32 {
+    (sum / area) as f32
+}
+
 /// The capture area of body `b`'s members times the share of light they absorb, m².
 fn light_area(b: &Body) -> f64 {
-    b.vis[1] as f64 * b.n() * (1.0 - b.reflectance())
+    capture(b.vis[1], b.n()) * (1.0 - b.reflectance())
 }
 
 /// The yearly moving average of the crossings of each cell (`Domain::crossings`, kept by its domain), once a month.
@@ -148,64 +160,9 @@ fn shade(w: &World, d: &mut Domain) {
             let e = k + l[k..].iter().take_while(|x| x.0 == l[k].0).count();
             let x: f64 = l[k..e].iter().map(|x| x.1).sum();
             let f = (-above).exp() * g(x) / all;
-            l[k..e].iter().for_each(|y| d[y.2].shade = f);
+            l[k..e].iter().for_each(|y| d.quiet(y.2).shade = f);
             (above, k) = (above + x, e);
         }
-    }
-}
-
-/// What a body shows others in a batch, as it was at the batch's start (laws.md 0): what they perceive of it.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Face {
-    pub id: u64,
-    /// Its members (`Body::n`), visible traits (`Body::vis`), signal and well-being at its last decision
-    pub n: f64,
-    pub vis: [f32; 7],
-    pub sig: [f32; SIG],
-    pub wb: f32,
-    /// The root of the structure it is inside and how closed its walls are (`bond::room`)
-    pub room: Option<(u32, f32)>,
-    /// The chance that the cover of the others over it leaves it seen, exp(-a) with a their capture area per m²
-    /// (`UNCOVERED` under no cover)
-    pub show: f64,
-}
-
-/// The `Face::show` of a face under no cover: above any chance, so that nothing is drawn for it.
-pub const UNCOVERED: f64 = 2.0;
-
-/// The faces of the living bodies at the start of the batch running: of cell `i`, `all[at[i]..at[i + 1]]`, in the
-/// order they came. Perception reads only these (`choose::perceive`), whatever happened in the batch since.
-#[derive(Clone, Debug, Default)]
-pub struct Faces {
-    all: Vec<Face>,
-    at: Vec<u32>,
-}
-
-impl Faces {
-    /// The faces of the bodies of cell `i` (none outside a batch).
-    pub fn of(&self, i: usize) -> &[Face] {
-        self.at.get(i + 1).map_or(&[], |&e| &self.all[self.at[i] as usize..e as usize])
-    }
-    /// The face of every living body of `w` as it is now, cell by cell, in the room these faces held.
-    fn make(mut self, w: &World) -> Faces {
-        self.clear();
-        self.at.push(0);
-        for i in 0..w.mesh.cells().n() {
-            let (canopy, area) = (w.canopy[i] as f64, w.mesh.cells().area()[i]);
-            for b in w.life.cell(i).map(|h| &w.life[h]).filter(|b| b.alive) {
-                let room = crate::bond::room(w, b).map(|(r, e)| (r as u32, e.closed));
-                let cover = (canopy - b.vis[1] as f64 * b.n() / area).max(0.0);
-                let show = if cover <= 0.0 { UNCOVERED } else { (-cover).exp() };
-                self.all.push(Face { id: b.id, n: b.n(), vis: b.vis, sig: b.sig, wb: b.wb, room, show });
-            }
-            self.at.push(self.all.len() as u32);
-        }
-        self
-    }
-    /// No batch runs.
-    fn clear(&mut self) {
-        self.all.clear();
-        self.at.clear();
     }
 }
 
@@ -234,13 +191,14 @@ pub fn batch(w: &mut World, reversed: bool) {
     let most = list.chunk_by(|a, b| a.0 == b.0).map(|d| d.len()).max().unwrap_or(0);
     let c = &mut w.counts;
     (c.busiest_share, c.body_batches) = (c.busiest_share + most as f64 / list.len().max(1) as f64, c.body_batches + 1.0);
-    w.life.faces = std::mem::take(&mut w.life.faces).make(w);
+    faces::remake(w);
     let (serial, list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
     w.life.batch = true;
     let runs = list.chunk_by(|a, b| a.0 == b.0).map(|run| (run[0].0, run.len(), run)).collect();
     on_domains(w, runs, reversed, |w, d, run| {
         let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
         run.iter().for_each(|&(_, cell, id, _)| update(w, d, (cell, id), &mut scratch));
+        d.make_next_faces(w);
     });
     let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
     for (_, cell, id, _) in serial {
@@ -250,7 +208,7 @@ pub fn batch(w: &mut World, reversed: bool) {
     w.life.batch = false;
     w.settle(0..w.life.domains.len());
     w.life.settle_moved();
-    w.life.faces.clear();
+    faces::keep(w);
 }
 
 /// Run `f` on the domains of `work` (each with its count of work and what it is given), taken out of the world
