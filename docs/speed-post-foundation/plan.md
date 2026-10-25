@@ -210,7 +210,7 @@ ceiling is **9,700** code lines on `main` from the commit of this plan (`cli/tes
 | D3 | about 40 | about 10 | about +30 |
 | B1 | about 160 (the parts' state as shares, the parts in `Lot` and in `add`/`rejoin`, the growth split, maturing inside a node, `open`'s draw of a part, the per-part helper and its about 15 uses, the two starvations, a gain per part, one think per part for nodes with a brain) | about 70 (`copy/young.rs`, 50 code lines; `Body::link` and its uses; `Grown::Joins` and the merge after maturing in `survey::update`; the stage in `nodes::Kin` and in `merge_closest`'s key; `copy::emit`'s young-node branches) | about +90 |
 | B3 | about 20 | — | about +20 |
-| B2 | about 25 | about 35 (one predicate replaces the tests of `kin_of`, `merge_closest`'s distance and `copy::kin`) | about -10 |
+| B2 | about 25 | about 35 (one predicate replaces the kin test of `join_alike`, `merge_closest`'s distance and `copy::kin`) | about -10 |
 | C2 | about 30 to 50 (by the method chosen) | — | about +40 |
 | C1 | about 35 (`Body::due`, `Body::gap`, the wake check) | about 10 (the reads of `interval` it replaces) | about +25 |
 | D2.1 to D2.6 | about 560 | about 40 | about +520 |
@@ -657,8 +657,8 @@ for the step that brings minds that must stay individual.
   1. **One predicate on data.** `nodes::may_join` takes the data of both sides (lineage, genes, spread, and the hook
      for a mind that stays individual), not two bodies, so `copy::kin` can ask it for children before they are a body.
      Every merge path asks it: `join_alike` and `merge_closest` (the monthly crowd), the kin joins of `copy`, and
-     `spread::part_acts`'s members that move. It holds the tests that are spread over `kin_of`, `merge_closest`'s
-     distance and `copy::kin` today, with no change of behaviour (level 1 for this part).
+     `spread::part_acts`'s members that move. It holds the tests that are spread over the kin test of `join_alike`,
+     `merge_closest`'s distance and `copy::kin`, with no change of behaviour (level 1 for this part).
   2. **The milder rule.** Past `Config::crowd` nodes at a month's start, the most alike pair of one lineage in a cell
      merges when the merged node's pooled spread (the variance of a mixture: within plus between, `nodes::add`) stays
      within its cap on every gene: `body::most` times `Config::merge_cap` (1). Unlike nodes beyond that stay apart.

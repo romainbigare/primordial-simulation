@@ -397,6 +397,8 @@ impl Config {
         // `dormancy` above 1 (`body::exchange::closing` divides by n - 1); `light_yield` in (0, 1] (a light reaction takes
         // what it stores over this share).
         require(p.dormancy > 1.0, || format!("dormancy ({}) must be above 1", p.dormancy))?;
+        // The bed and the skin of its top are layers of matter: a thickness of zero would give a node no heat capacity.
+        require(self.skin_m > 0.0 && p.bed_depth > 0.0, || format!("skin_m ({}) and bed_depth ({}) must be above 0", self.skin_m, p.bed_depth))?;
         let light = p.light_yield;
         require(light > 0.0 && light <= 1.0, || format!("light_yield ({light}) must be above 0 and at most 1"))
     }

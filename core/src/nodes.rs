@@ -33,8 +33,8 @@ fn join_alike(w: &World, d: &mut Domain, lay: &Layout, i: usize) -> Vec<Handle> 
     list.sort_by_key(|x| x.0);
     let mut head: Vec<usize> = (0..list.len()).collect();
     // Each one's kin once, tested before the genes.
-    let kin = |o: &Body| (o.lineage, o.adult(&w.chem), room(w, o).map(|r| r.0), held(w, o).map(|p| w.parts.parts[p].root as usize));
-    let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin(&b[s])).collect();
+    let kin_key = |o: &Body| (o.lineage, o.adult(&w.chem), room(w, o).map(|r| r.0), held(w, o).map(|p| w.parts.parts[p].root as usize));
+    let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_key(&b[s])).collect();
     for x in 0..list.len() {
         let a = &b[list[x].1];
         let joins = |y: usize| head[y] == y && b[list[y].1].n() > 1.0 && kind[y] == kind[x];
