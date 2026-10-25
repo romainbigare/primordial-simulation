@@ -85,13 +85,13 @@ impl Surface {
         let den = 4.0 * t3 + sensible + self.g_rain - self.slope;
         // The surface's end temperature and response with the node from `tn` behind a resistance `r`; held at `tn` where
         // `r` is too small to change it (`r den` below the last digit, where `1 / r` may overflow). The surface of a
-        // soft cover warms no further than the cover's melting point `tc`: past it the top melts and the melt soaks in,
-        // so the node takes all the heat that reaches the surface.
+        // soft cover warms no further than the cover's melting point `cap`: past it the top melts and the melt soaks
+        // in, so the node takes all the heat that reaches the surface.
         let [rc, tc, _] = s.cover[i];
-        let surface = |tn: f64, r: f64| {
+        let surface = |tn: f64, r: f64, cap: f64| {
             let d = 1.0 / r + den;
             let at = if r * den > f64::EPSILON { ((tn / r + num) / d, 1.0 / d) } else { (tn, 0.0) };
-            if at.0 > tc { (tc, 0.0) } else { at }
+            if at.0 > cap { (cap, 0.0) } else { at }
         };
         let flux = |ts: f64| (t3 * (4.0 * ts - 3.0 * t), sensible * (ts - self.tl));
         // The heat the node gets over the step with the surface at `ts`, J.
@@ -100,16 +100,22 @@ impl Surface {
             adt * (self.sw + down - up - hs + self.gain + self.slope * (ts - self.t0) + self.g_rain * (self.t_rain - ts))
         };
         let (c, free) = (s.cap[i].max(1.0), adt / s.cap[i] + rc);
+        // On the plateau at `tm` the node melts up to `melt` J or freezes up to `freeze` J. Where its heat over the step
+        // melts or freezes all of it, it stays at `tm` only for the share `part` of the step that takes (with the heat
+        // that brings it from `t` to `tm`), then goes on from `tm` for the rest; the surface is the mean of the two parts
+        // by time. So it ends where its energy says, as short steps do. A cover that held the surface at its melting
+        // point has then melted: neither its cap nor its resistance stays.
         let plateau = |tm: f64, (melt, freeze): (f64, f64)| {
-            let at = surface(tm, rc);
-            match net(at.0) - c * (tm - t) {
-                q if q < -freeze => surface(t - freeze / c, free),
-                q if q > melt => surface(t + melt / c, free),
-                _ => at,
-            }
+            let at = surface(tm, rc, tc);
+            let q = net(at.0) - c * (tm - t);
+            let through = if q > melt { melt } else if q < -freeze { -freeze } else { return at };
+            let part = ((c * (tm - t) + through) / net(at.0)).min(1.0);
+            let (r, cap) = if q > melt && at.0 >= tc { (0.0, f64::INFINITY) } else { (rc, tc) };
+            let rest = surface(tm, (1.0 - part) * adt / c + r, cap);
+            (part * at.0 + (1.0 - part) * rest.0, part * at.1 + (1.0 - part) * rest.1)
         };
         let (l, phi) = (s.latent[i], s.state.phi[i]);
-        let (mut ts, mut give) = if s.state.pk[i] != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { surface(t, free) };
+        let (mut ts, mut give) = if s.state.pk[i] != NONE { plateau(t, ((1.0 - phi) * fusion, phi * fusion)) } else { surface(t, free, tc) };
         // Off a plateau, the node's end temperature past the melting point below or above it.
         let end = t + net(ts) / c;
         if s.state.pk[i] == NONE && l.hi != f64::MIN {

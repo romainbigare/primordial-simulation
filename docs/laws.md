@@ -113,7 +113,10 @@ when its solid surface is above 0 m (`World::is_land`). The top `skin_m` trades 
 sideways yearly by one implicit `solve::spread`, a link passing the harmonic mean of conductivity × thickness, times
 width over length (Patankar 1980; `flow::land::conduct`): rock spreads a hot spot one cell in about 70,000 years.
 **Melting plateaus** (`ground::melting`): a node holds the fusion enthalpy of what is molten in it, so it stays at a
-melting point (lowered by solutes, 2.5) until that substance has all frozen or melted, in a long step as in short ones.
+melting point (lowered by solutes, 2.5) until that substance has all frozen or melted. A node whose heat melts or
+freezes all of it within a step stays there only for the share of the step that takes, then goes on from that point,
+and a soft cover that melts away holds its surface at the melting point only until it is gone (`air::radiation`), so a
+long step ends where short ones do.
 
 ### 1.2 Liquid
 `flow::liquid`, every `flow_days`: inside a month, counted from the month's start; over a month, counted from the world's start (a whole number of months, `Config::validate`).
@@ -149,7 +152,8 @@ and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving t
 `flow::air::step`, every `air_hours`: radiation, the ground's exchange with the air and the wind in one implicit step
 (backward Euler by Newton's method, `newton`, with a banded solve of the air level, `solve::band`), booked whole as
 solved (`air::book`). A long step gives the world of short ones: the long-step test (`tape/tests/ranges.rs`) holds each
-seed's climate at 10-day steps to its own at 6-hour steps. Wind pushes and clouds come from the step's start.
+seed's climate at 10-day steps to its own at 6-hour steps; a melting plateau used up inside a step holds only for
+its share of the step (1.1). Wind pushes and clouds come from the step's start.
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
   λ. The surface reflects as its cover is at the step's end (`land::reflectance`), so new snow reflects at once.
 - **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the
