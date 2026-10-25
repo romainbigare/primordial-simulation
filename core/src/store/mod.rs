@@ -1,7 +1,7 @@
 //! The store: the names of the world's nodes, what the fixed ones hold (`Store`, private arrays), and the one way the
-//! laws change them (moves, transforms and link fluxes, booked by `apply`, their only writer), with the boundary nodes
-//! that book what crosses the world's edge. It decides nothing physical: it adds what the laws give it and counts the
-//! rounding it sets to zero (laws.md 0, "The books").
+//! laws change them (moves, transforms and link fluxes, booked by `apply`; the bodies' moves by `Moves::book`, which
+//! adds as `apply` adds), with the boundary nodes that book what crosses the world's edge. It decides nothing
+//! physical: it adds what the laws give it and counts the rounding it sets to zero (laws.md 0, "The books").
 
 mod apply;
 mod batch;
@@ -22,13 +22,13 @@ use crate::World;
 use serde::{Deserialize, Serialize};
 
 /// What the fixed nodes hold, by class (`Class::Ground` to `Class::Potential`): amounts `[k * len + index]`, mol, and
-/// heat, J (the bed holds no heat, the potential no amounts). Only `apply` writes them.
+/// heat, J (the bed holds no heat, the potential no amounts). Only `apply` and `Moves::book` write them.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Store {
     amounts: Vec<Vec<f64>>,
     heat: Vec<Vec<f64>>,
-    /// What rounding took from the amounts of the ground and of the air (`CARRIED`) as `apply` added to them, by class,
-    /// `[k * len + index]`, mol: under half the last digit of each
+    /// What rounding took from the amounts of the ground and of the air (`CARRIED`) as `apply` and `Moves::book` added
+    /// to them, by class, `[k * len + index]`, mol: under half the last digit of each
     carry: Vec<Vec<f64>>,
 }
 

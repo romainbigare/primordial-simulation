@@ -173,7 +173,7 @@ fn the_order_of_the_domains_changes_nothing() {
     // A dispersing node, a watcher, a body that takes hold of an anchored part, one that holds a part and one that
     // anchors the part it holds, in cells spread over the island.
     let land = dry_lands(&w);
-    let at = |k: usize| land[k * land.len() / 5];
+    let at = |k: usize| land[(2 * k + 1) * land.len() / 10];
     let n = dispersing(&mut w, at(0), 3.0);
     let parent = w.add(n, 1);
     let parent = w.life[parent].id;

@@ -35,6 +35,7 @@ One row for each step that touches speed. The plan is `plan.md`; `scripts/bench.
 | D2.6, the survey on threads (the same saves) | D2.6 | 1.062 | 143 | 48 | 841 | 3 | 27 | 3,679 | 53,648 | 0.777 | 203 | 50 | 493 | 18 | 14 | 1,648 | 23,373 | 9,691 |
 | E2.3, the repeated reads of one update (the same saves) | E2.3 | 1.044 | 147 | 48 | 821 | 3 | 25 | 3,679 | 53,648 | 0.796 | 209 | 49 | 505 | 20 | 13 | 1,648 | 23,373 | 9,689 |
 | E2.3, the recorder on the pool, not kept (medians of 7 runs on 4 threads, the saves of the profile after D2; branch `speed/e23-tape-not-kept`) | `7e21f1f` | 1.096 | 146 | 50 | 879 | 3 | 20 | 3,679 | 53,648 | 0.826 | 213 | 52 | 530 | 19 | 12 | 1,648 | 23,373 | 9,689 |
+| E2.3 (1), the booking once per number (the same saves; another history, level 2) | E2.3 (1) | 1.056 | 142 | 51 | 833 | 3 | 26 | 3,634 | 53,515 | 0.795 | 210 | 50 | 505 | 16 | 15 | 1,620 | 23,160 | 9,688 |
 
 ### A2: compiler settings
 
@@ -712,6 +713,29 @@ Why it does not go further, from timers inside a probe build and callgrind (one 
 Under the bar on both (and under the 5% and 4% of A2, which were on one thread and the older code): not kept. The
 instruction cache loses 12% of the update's cycles, but the profile does not turn that into a gain above 4%. S35 stands:
 no PGO, no `scripts/pgo.sh`.
+
+### E2.3 (1): the booking once per number
+
+A domain's view keeps beside each number its change since it was taken from the store; the booking adds that change
+to the store once (`Moves::book`, with `Store::carry` for the ground's and the air's amounts, as `apply` adds), in
+place of one `apply` over the list of the domain's moves. The list goes. Callgrind, one year on one thread, D2.5's
+saves, before at f3c3c97 (million instructions):
+
+| | island22 before | island22 after | globe36 before | globe36 after |
+|---|---|---|---|---|
+| all instructions | 13,967.6 | 13,546.1 (-3.02%) | 9,169.6 | 8,983.8 (-2.03%) |
+| body updates in the year | 54,486 | 54,382 | 23,155 | 23,190 |
+| booking (`World::book_moves`, inclusive, serial) | 417.8 | 70.1 | 222.4 | 50.8 |
+| gathering (`Moves::gather`, inclusive, on the pool) | 530.7 | 491.6 | 244.5 | 226.3 |
+| the batch (`survey::batch`) per body update | 169,753 | 163,483 (-3.7%) | 203,844 | 197,404 (-3.2%) |
+
+The other rounding changes the history, so a little of the total is not the step's (the tape's compression -24 and
++4 million). Over the kill line of 2% on both benches. The bodies' stage on 4 threads, 6 interleaved runs of 3 years
+each on a quiet machine (`ms_bodies`, median, min to max): island22 840.9 (777 to 902) -> 795.6 (732 to 820) ms a
+year, -5.4%; globe36 508.8 (469 to 523) -> 483.8 (460 to 502), -4.9%. Level 2: golden re-pinned. Two years from the
+saves against f3c3c97: `t_land` within 4e-5, `t_air` within 4e-5, the bodies within 1.1%, the updates within 0.7%,
+the rain within 2e-4 (relative); the elements are kept to 1e-16. The order test's scenario cells moved (the old ones
+no longer gave a dispersing litter that lands in another cell with this history).
 
 ## Profile of the baseline
 

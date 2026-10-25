@@ -66,8 +66,8 @@ holding one, lets go there too). A body
 with a move queued, or a node's part with a part act queued, is **leaving** (`Body::leaving`): it stays in its old
 cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
 it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go or an anchor, does not
-split in that update. Then the serial phase, in a fixed order: the domains back, their moves booked, one `apply` per
-domain in domain order, and the world settles, domain by domain; the outboxes applied, domain by domain in the order
+split in that update. Then the serial phase, in a fixed order: the domains back, their moves booked in domain order
+(each number a domain's moves touched gets their sum once, `Moves::book`), and the world settles, domain by domain; the outboxes applied, domain by domain in the order
 made, then what applying them queued; the bodies that hold or are inside a part, whole updates in domain and body
 order, each a serial step on its domain with its view opened fresh and booked after it, its own outbox applied after
 it; last the holders' changes added in domain order. Each entry is applied by its law on the bodies and parts as
@@ -87,8 +87,8 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **One ground temperature**: every law and the tape read that of Flow's last step (`World::t_ground_last`).
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
-**The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` is the
-store's only writer. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
+**The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
+booking of the bodies' moves (`Moves::book`, which adds as `apply` adds) are the store's only writers. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
 lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. A ground node under
 deep standing liquid holds far more of it, and an air node far more of the main gases, than a body moves: what rounding takes from their
 amounts is kept apart and counted in the books (`Store::carry`, Neumaier 1974). Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
@@ -96,7 +96,7 @@ potential energy is one more node (`Class::Potential`): a lift moves heat into i
 element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
 links (`solve::spread::within`), never a whole field. A body takes no more than its domain's view holds, what the
-bodies before it in the batch left (checked in debug builds). `apply` only adds and sets rounding below zero to zero, counted
+bodies before it in the batch left (checked in debug builds). `apply` and `Moves::book` only add and set rounding below zero to zero, counted
 (`Counters::rounded`). A body takes ground heat no further than `T_FLOOR` (`World::take_from_ground`).
 
 ## 1. Flow: stuff moves from high push to low push
@@ -449,7 +449,7 @@ a long interval saves it. **Null run** (`--null`): no learning or imitation, row
 ## 6. Bodies
 Files: `core/src/body/`, `copy::grow`. `body::live` runs an update in stages: upkeep, the physics of the time since
 (`body/physics.rs`), keeping warm, store checks, growth and children, shedding; then the decision. Its trades are
-gathered as moves and booked with its batch's by one `store::apply` per domain (`store::Moves`, 0), each set by its
+gathered as moves and booked with its batch's, each number of the store once per domain (`store::Moves`, 0), each set by its
 law's rate over the update's span, so nodes and individuals take alike, never more than is there.
 
 ### 6.1 What a body is

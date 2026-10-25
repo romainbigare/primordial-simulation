@@ -351,14 +351,15 @@ found and fixed; a range or a tolerance is never loosened to pass (`CLAUDE.md` 5
   outside the batches (`survey::Draws::settle`, `bond::month`) stay as they are.
 - **No overdraw.** A domain's bodies take from its nodes in order, each seeing what the bodies before it left. A debug
   check holds that a take from the view never passes what the view holds.
-- **Checkpoint and roll back** (S38). The view can be checkpointed (the length of its move list, the values of its kept
+- **Checkpoint and roll back** (S38). The view can be checkpointed (the values of its kept
   nodes, its events and its counters) and rolled back to it. `copy::sample` runs inside a checkpoint and rolls back, as
   today a sample member's update drops its moves. A test holds that a sampled update leaves the view as an unsampled
   one would.
-- **Booking.** The batch's moves of a domain are booked by one `apply` per domain in the serial phase (level 3: one
-  `apply` for a batch changes the order of sums and what rounding sets to zero). This replaces today's `apply` per
-  update (`World::book_moves`); `store::apply` is 6 to 8% of the instructions, counting every `apply`, Flow's and
-  Change's too.
+- **Booking.** The batch's moves of a domain are booked in the serial phase (level 3: one booking for a batch changes
+  the order of sums and what rounding sets to zero). This replaces today's `apply` per update (`World::book_moves`);
+  `store::apply` is 6 to 8% of the instructions, counting every `apply`, Flow's and Change's too. From E2.3 (S79) the
+  view keeps beside each number its change, and `Moves::book` adds it to the store once, as `apply` adds; the moves
+  are no longer listed.
 
 ### 3.5 Faces (D2.3)
 

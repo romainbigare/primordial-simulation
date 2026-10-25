@@ -120,16 +120,24 @@ fn each_change<'x>(cx: &Ctx, (fluxes, lifted): (&'x [LinkFlux], &'x [Vec<f64>]),
 #[inline(always)]
 fn add(v: &mut f64, s: Slot, d: f64, low: &mut Vec<Slot>, carry: &mut [Vec<f64>]) {
     let was = *v;
-    *v += d;
     if s.arr.is_multiple_of(2) && s.arr < 2 * CARRIED {
-        let c = &mut carry[s.arr / 2][s.at];
-        let lost = *c + rounding_lost(was, d, *v);
-        let folded = *v + lost;
-        (*c, *v) = (rounding_lost(*v, lost, folded), folded);
+        add_carried(v, &mut carry[s.arr / 2][s.at], d);
+    } else {
+        *v += d;
     }
     if *v < 0.0 && was >= 0.0 && s.arr < BOUNDARY_ARRAYS {
         low.push(s);
     }
+}
+
+/// Adds `d` to amount `v` of a carried class, whose rounding so far is `carry` (Neumaier 1974).
+#[inline(always)]
+pub(super) fn add_carried(v: &mut f64, carry: &mut f64, d: f64) {
+    let was = *v;
+    *v += d;
+    let lost = *carry + rounding_lost(was, d, *v);
+    let folded = *v + lost;
+    (*carry, *v) = (rounding_lost(*v, lost, folded), folded);
 }
 
 /// Does `dmol` keep every element of the chemistry's table, to rounding? `sums` is room for the element totals.
