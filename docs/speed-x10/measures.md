@@ -545,10 +545,10 @@ worlds; P1.2's switch is tested by a test kit case, not by a run.
 
 ### G14-P1: the first overlap probe
 
-**Verdict: on the kill line, so G14 is at risk.** Joining the air step (all the physics) with the bodies' batch saves
+**Verdict: on the old kill line (15%); over the new one (10%, X38), so G14 goes on to G14-P2.** Joining the air step (all the physics) with the bodies' batch saves
 **15% of the year on the island and 13% on the globe** (medians of 16 paired runs on 4 threads; the middle half of the
 runs: 10% to 22% and 9% to 18%). A second way of timing (joined and separate windows in the same run) gives 14% and 19%.
-The kill line is 15%. The plan row for G14 expects 25% of the year. The reason is simple: the physics is only 25% to
+The kill line was 15%; the owner set it to 10% (X38). The plan row for G14 expects 25% of the year. The reason is simple: the physics is only 25% to
 30% of a year, the join hides 50% to 70% of it, and the bodies' lane keeps all the time that is left.
 
 **What was built** (branch `probe/g14-p1`, code `d406c5a` and `47c9465`, never merged; `core/src/schedule.rs`,
