@@ -188,7 +188,11 @@ fn seen_air(cx: &Ctx, i: usize, out: &mut [f64]) {
 /// each active gas less than `CALM_SHARE` of its amount since the air the row stands at, and no amount it gives ends
 /// below zero. A kept row is carried to `seen` to first order by its own slopes (`over` the share of the air it sees
 /// over it), so it stays the node's exchange linearised about the air of the round it was made in, and its slopes still
-/// enter the Newton step (an inexact Newton step, Dembo, Eisenstat and Steihaug 1982).
+/// enter the Newton step (an inexact Newton step, Dembo, Eisenstat and Steihaug 1982). The calm test bounds each
+/// round's move and the stored air moves at each keep, so a row may drift up to about (rounds - 1) x `CALM_K` from the
+/// air it was made at. The numbers the Newton step does not read (the heat to space `row[2]`, the end temperature
+/// `row[4]`, the heat given to bodies `row[7]` and the end reflectance `row[8]`) stay at the made-at air: an error of
+/// about 4 sigma T^3 x 0.01 K, a few hundredths of a W/m^2, and the books stay exact.
 fn keep(row: &mut [f64], seen: &[f64], over: f64) -> bool {
     let (at, nx) = (row.len() - seen.len(), seen.len() - 1);
     let d_tl = seen[0] - row[at];
@@ -211,4 +215,32 @@ fn keep(row: &mut [f64], seen: &[f64], over: f64) -> bool {
     row[0] += heat;
     row[at..].copy_from_slice(seen);
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_kept_row_is_linearised_about_the_air_it_was_made_at() {
+        // One gas: [m, m_col, m_tl, r, r_col, r_tl, h_col, lf].
+        let gas = [3.0, 0.02, 0.1, 2.0, 0.01, -0.05, 4.0, 1e3];
+        let (a0, over) = ([280.0, 1000.0], 0.8);
+        let mut made = vec![0.0; width(1)];
+        made[..FIXED].copy_from_slice(&[500.0, 30.0, 7.0, 8.0, 281.0, 9.0, 1.0, 2.0, 0.3]);
+        made[FIXED..FIXED + PER_GAS].copy_from_slice(&gas);
+        made[FIXED + PER_GAS..].copy_from_slice(&a0);
+        let (mut row, a1, a2) = (made.clone(), [280.004, 1000.05], [280.008, 1000.09]);
+        assert!(keep(&mut row, &a1, over) && keep(&mut row, &a2, over));
+        let (d_tl, d_col) = (a2[0] - a0[0], (a2[1] - a0[1]) * over);
+        let near = |got: f64, want: f64| assert!((got - want).abs() < 1e-12, "{got} != {want}");
+        near(row[FIXED], gas[0] + gas[1] * d_col + gas[2] * d_tl);
+        near(row[FIXED + 3], gas[3] + gas[4] * d_col + gas[5] * d_tl);
+        near(row[0], 500.0 + 30.0 * d_tl + gas[6] * d_col);
+        assert_eq!(row[FIXED + PER_GAS..], a2);
+        let mut far = made.clone();
+        assert!(!keep(&mut far, &[280.02, 1000.0], over) && far == made);
+        far[FIXED + 3] = -1.0;
+        assert!(!keep(&mut far, &[280.0, 1000.0], over));
+    }
 }
