@@ -614,6 +614,15 @@ loses 21.8% (island22) and 22.2% (globe36) of its estimated cycles to misses, ov
 instruction cache is 12.0% and 11.9%, which columns do not change; the data cache is 9.7% and 10.3%; the last level
 is 0.0% and 0.1%. The worst data misses are in `nodes::add`, `outbox::deliver` and `copy::young::mature`.
 
+**E1 probe (S77, S82), not built.** On a branch (`speed/e1-probe`), a domain's bodies were stored again in the order
+they update (cell, then id) before its updates of a batch, every batch or every 15, and in one version each body's lists
+were made anew in that order. The world stays the same bit for bit. On 4 threads (7 interleaved runs of 5 years) the
+bodies' stage was not faster: island22 +7.3%, +4.6% and +14.8%, globe36 -0.8%, +1.1% and +3.9%, with a noise of about
+1.5%. The cache simulation shows why: the update's data misses do not fall (island22 73.9 million on `main`, 74.9
+ordered), because a read of another body touches about 3 lines of a 0.7 KB body wherever it lies, an update visits
+about 8% of its domain's bodies, and most misses come from the update's own working set. Full columns would save at most
+about 1% of the update's cycles (the scans of a cell's bodies), under the 3% kill line, for a few hundred lines.
+
 **E3 gate:** work an update of a body without a brain repeats with the same inputs (`Body::activity` about 11 calls
 for 3 to 4 states, `Body::thermal`, `cover_of` and `depth`, the prologue of `plan`) is about 3% of the bodies'
 instructions (range 2 to 5%; island22 300 million of 10,051), under the 10% of the gate.
