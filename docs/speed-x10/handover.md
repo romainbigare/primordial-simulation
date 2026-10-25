@@ -26,7 +26,7 @@ points to. It is written in very simple English, as the owner wants for everythi
   speed; the three rules for smart bodies hold (individuals stay real; the step length per place; kinds of body code).
   The architect takes all decisions and logs them in `decisions.md`. The owner does not want to be asked for permission
   for each edit.
-- **Expected result (plan section 5.0, after P1.2):** "likely" about 4.0 to 5.4 times on the island and 5.9 to 8.1 on
+- **Expected result (plan section 5.0, after P1.2):** "likely" about 3.9 to 5.2 times on the island and 5.6 to 7.7 on
   the globe with every step; 10 times is out of reach with the steps planned. The steps that carry most: **P2.2 and
   G9a** (stands at 60 and 90 days on today's law, after the probe PR-C2), **G2** (a node decides about every 30 days,
   its body keeps its gene's pace) and **G14** (physics beside the bodies).

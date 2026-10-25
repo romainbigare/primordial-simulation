@@ -1553,3 +1553,24 @@ E0's 0.29 ms a million for `deliver` on 4 threads and E0's speed-up of 2.5 for w
 a year, plus about 8, 10 and 10 ms from the parallel phase's own instructions (the scratch per thread): about -3%
 of the bodies' stage on each bench, near the kill line of -2%, not far past it. Small phases on the calling thread save
 pool calls that the instructions do not show.
+
+## Lane A replan: the decision after MI5
+
+**How.** A throw-away build of `speed/x10` at `f85d626` (after MI5 and E1c) with three marks that change no result:
+`survey::update` calls one of two `#[inline(never)]` wrappers, one for stands and one for bodies with a brain; the
+take option of a node's decision runs through an `#[inline(never)]` wrapper of `part_acts`; `feed::take_node` is
+`#[inline(never)]`. Callgrind, one year, one thread, from the `bench48` saves (the same worlds as the base build: the
+whole run 7,860.7 M instructions on island22 and 7,161.8 M on globe36). Not merged; used by `design/lane-a.md` 3.3.
+
+| | island22 | globe36 |
+|---|---|---|
+| `schedule::run_for`, M instructions | 6,685 | 6,058 |
+| stand updates: M (share of `run_for`); calls | 2,341 (35.0%); 24,202 | 987 (16.3%); 9,895 |
+| animal updates: M (share); calls; thousand a call | 1,602 (24.0%); 9,151; 175 | 2,071 (34.2%); 10,794; 192 |
+| `choose::act`: M (share of the animal updates); calls; thousand a call | 535 (33.4%); 9,110; 58.7 | 857 (41.4%); 10,027; 85.5 |
+| the take option (`part_acts` for it: the split, `act_as`, `take_node`, the rejoin, two well-being reads): M; calls; thousand a decision | 191; 8,629; 21.0 | 225; 9,806; 22.5 |
+| `feed::take_node`: M; calls; thousand a call | 162; 8,755; 18.5 | 185; 9,945; 18.6 |
+
+**Verdict for G2** (X67): a decision costs 33% (island) and 41% (globe) of an animal update after MI5, and the take a
+habit keeps is 36% and 26% of it; with 0.67 to 0.70 of the node updates as habits, the animal updates cost x0.85 to
+x0.86 and x0.79 to x0.80 of today, the year -3.4 to -3.5% and -6.9 to -7.1% on one thread.

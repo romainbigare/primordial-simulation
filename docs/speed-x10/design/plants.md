@@ -1,6 +1,6 @@
 # Speed x10, section "plants": a field of stands, a card per genome, upkeep and light together
 
-> **After P1.2** (not kept, X62): `lane-a.md` 2 holds the plants' law and steps (PR-C2, P2.1, P2.2, G9a; P1.4 dropped);
+> **After P1.2** (not kept, X63): `lane-a.md` 2 holds the plants' law and steps (PR-C2, P2.1, P2.2, G9a; P1.4 dropped);
 > 2.3 and the month's numbers here are a record. P3 (2.5) and G9b stand.
 >
 > **Note: what the plan kept** (`plan.md` is the single source of the steps; this design keeps its old numbering).

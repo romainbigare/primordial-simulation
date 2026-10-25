@@ -1,6 +1,6 @@
 # Speed x10, section "month": one month law for every body, after the probes
 
-> **Not kept (X62).** P1.2 built this law for stands and it cost more than today's law (about 26 µs a stand update
+> **Not kept (X63).** P1.2 built this law for stands and it cost more than today's law (about 26 µs a stand update
 > against 18; `measures.md` "P1.2", branch `x10/p1.2-not-kept`). `lane-a.md` replaces this file: plants keep today's day
 > law at a longer pace with C2's causes fixed inside it, and G2 floors the brain on today's law. This file stays as the
 > record of the design and its findings (section 1).
