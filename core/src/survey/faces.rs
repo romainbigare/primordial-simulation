@@ -93,7 +93,8 @@ impl Domain {
 pub(super) fn remake(w: &mut World) {
     let (mut domains, mut faces) = (std::mem::take(&mut w.life.domains), std::mem::take(&mut w.life.faces));
     let mut stale: Vec<_> = faces.iter_mut().zip(&mut domains).filter(|(f, d)| !f.holds(w, d)).collect();
-    par::each(&mut stale, |(f, d)| d.touched = f.make(w, d, false));
+    let work = stale.iter().map(|(_, d)| d.at.iter().map(Vec::len).sum::<usize>()).sum();
+    par::each_init(&mut stale, work, || (), |_, (f, d)| d.touched = f.make(w, d, false));
     drop(stale);
     debug_assert!(
         faces.iter().zip(&domains).all(|(f, d)| {

@@ -59,8 +59,9 @@ added, those ids made global in the order made; the holders' changes are added a
 one, and a lineage left with no body dies out, born rows left with no holder are freed. Every serial step, a body or
 part law run on its own (a part act, a landing, the monthly merge and the wear of movers in a cell with a part), runs so
 too, on the domain of its cell (`World::in_domain`). First the parallel phase: the bodies due that hold no part and are
-inside none update, each domain on a thread of the pool with the feature `threads` (`par::each`, the domains with the
-most updates first), one after another without it. What an update does outside it goes to its domain's outbox
+inside none update, each domain on a thread of the pool with the feature `threads` (`survey::run`, the domains with
+the most updates first), one after another without it or when the phase is small (`par::SERIAL_BELOW`). What an
+update does outside it goes to its domain's outbox
 (`outbox::Entry`), in the order made: every move to another cell, inside the domain or across its edge (`choose::go`
 pays and queues it), children who start in another cell (`copy::emit` takes them from the parent), a watch, and every
 act on a part (Bond's verbs, form and anchoring among them; a body that lets go of its part, or dies or joins another
@@ -69,13 +70,15 @@ with a move queued, or a node's part with a part act queued, is **leaving** (`Bo
 cell until the batch ends, where the rest of its update runs, but it does not mature, and the others there neither see
 it in their cell nor take from it, give to it, join it or mix with it. A body with a move queued, or a part act but a let-go or an anchor, does not
 split in that update; when its domain's task ends, a body with a move queued leaves the domain's storage with its move
-(`Domain::post`). Then, in a fixed order: the domains back, the moves of the domains that ran booked in domain order
-(each number a domain's moves touched gets their sum once, `Moves::book`), and the world settles, domain by domain.
-Then the landing phase (`outbox::land`): the moves and the litters land, each in the domain of the cell it goes to, in
-the order of the domains they come from and then the order made, each domain on its own on the pool as in the parallel
-phase; then each domain that ran or landed makes the faces its bodies show in the next batch; the domains back, and
+(`Domain::post`). Then, in a fixed order: the domains back, and the world settles, domain by domain. Then the landing
+phase (`outbox::land`): the moves and the litters land, each in the domain of the cell it goes to, in the order of the
+domains they come from and then the order made, each domain on its own on the pool as in the parallel phase; beside
+them in the same call the moves of the domains that ran are booked, each array of the store by one task in domain
+order (each number a domain's moves touched gets their sum once, `store::book_by_array`; a landing reads no store);
+then each domain that ran or landed makes the faces its bodies show in the next batch; the domains back, and
 the world settles. Then one by one, each a serial step: the other entries of the outboxes (watches, part acts), domain
-by domain in the order made, then what landing and applying queued, the same way; the bodies that hold or are inside a
+by domain in the order made, then what landing and applying queued, the same way (in each round the moves gathered
+before are booked first, beside its landings); the bodies that hold or are inside a
 part, whole updates in domain and body order, each a serial step on its domain with its view opened fresh and booked
 after it, its own outbox delivered after it in the same phases; last the holders' changes added in domain order. Each
 entry is applied by its law on the bodies and parts as they are then. A move lands (`choose::land_move`): the body
@@ -97,7 +100,7 @@ than `wake_share`, then its law brings it up to date over the whole time since.
 **Checks before a run**: `Config::validate`, `Chemistry::validate` (every reaction keeps its elements and mass).
 
 **The books.** Every move takes from one node exactly what it gives another, with its heat; `store::apply` and the
-booking of the bodies' moves (`Moves::book`, which adds as `apply` adds) are the store's only writers. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
+booking of the bodies' moves (`store::book_by_array`, which adds as `apply` adds) are the store's only writers. A move out of the bed, which holds far more than its loose ground, takes only what the bed can
 lose exactly (`Move::loosen`), so no amount below the bed's rounding reaches the ground for free. A ground node under
 deep standing liquid holds far more of it, and an air node far more of the main gases, than a body moves: what rounding takes from their
 amounts is kept apart and counted in the books (`Store::carry`, Neumaier 1974). Boundary nodes stand for the sun, space and outside (`store::Boundary`, edits by `World::cross`);
@@ -105,7 +108,7 @@ potential energy is one more node (`Class::Potential`): a lift moves heat into i
 element and the energy are kept; `check::drift` checks it yearly and must stay near rounding.
 **No overdraw.** A law never asks a node for more than it holds; where it could, it cuts that node's own outgoing
 links (`solve::spread::within`), never a whole field. A body takes no more than its domain's view holds, what the
-bodies before it in the batch left (checked in debug builds). `apply` and `Moves::book` only add and set rounding below zero to zero, counted
+bodies before it in the batch left (checked in debug builds). `apply` and `book_by_array` only add and set rounding below zero to zero, counted
 (`Counters::rounded`). A body takes ground heat no further than `T_FLOOR` (`World::take_from_ground`).
 
 ## 1. Flow: stuff moves from high push to low push

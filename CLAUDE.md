@@ -65,6 +65,11 @@ ask the owner.
    counts it. A real overdraw breaks the books.
 5. **Validate inputs in one place.** `Chemistry::validate` and the config checks refuse bad worlds with a clear error
    (limits like `MAX_SUBSTANCES`, periods that must divide each other, numbers that must be positive).
+6. **One writer for each number.** In a parallel phase each number has one task that may write it: a domain its
+   bodies, its cells and its view; a booker one array of the store (`store::book_by_array`). What a task does to
+   another task's numbers waits in its outbox and lands in the next phase, in the task that owns it, in an order fixed
+   by the data (domain, cell, id), never by which thread ends first. Per-domain work runs on the one runner
+   (`survey::run`).
 
 ## 4. Comments and docs
 

@@ -62,11 +62,11 @@ pub fn deliver(w: &mut World) {
 
 /// The outboxes of the domains that ran are taken (`Life::take_queued`). The moves and the litters land per domain of
 /// their cell, the domains taken out of the world and run on the pool (`survey::run`; with `reversed` the domains
-/// start in reversed order, only for the order test); the domains of `faced` and those that landed something make
-/// their faces for the next batch then, after landing (`Domain::make_next_faces`). The domains back, their moves booked
-/// and the world settled (`World::settle`: also where the bodies that moved are stored), the other entries are
-/// applied one by one in order; then the same for what landing and applying queued, until nothing is left; last the
-/// moves gathered are booked.
+/// start in reversed order, only for the order test), while the moves gathered before are booked beside them
+/// (`World::book_moves_beside`); the domains of `faced` and those that landed something make their faces for the next
+/// batch then, after landing (`Domain::make_next_faces`). The domains back and the world settled (`World::settle`:
+/// also where the bodies that moved are stored), the other entries are applied one by one in order; then the same for
+/// what landing and applying queued, until nothing is left; last the moves gathered are booked.
 pub(crate) fn land(w: &mut World, reversed: bool, mut faced: Vec<usize>) {
     loop {
         let (to, rest) = w.life.take_queued();
@@ -80,18 +80,17 @@ pub(crate) fn land(w: &mut World, reversed: bool, mut faced: Vec<usize>) {
         // The work of each: the entries it lands and the bodies whose faces it makes.
         let work: Vec<_> = std::mem::take(&mut faced).into_iter().map(|k| (k, w.life.domains[k].landing(face), ())).collect();
         let ran: Vec<usize> = work.iter().map(|x| x.0).collect();
-        if !ran.is_empty() {
-            crate::survey::run(w, work, reversed, |w, d, _| {
+        w.book_moves_beside(|w| {
+            crate::survey::run(w, work, reversed, |_| (), |w, d, _, _| {
                 for e in std::mem::take(&mut d.inbox) {
                     land_one(w, d, e);
                 }
                 if face {
                     d.make_next_faces(w);
                 }
-            });
-            w.book_moves();
-            ran.into_iter().for_each(|k| w.settle(k..k + 1));
-        }
+            })
+        });
+        ran.into_iter().for_each(|k| w.settle(k..k + 1));
         rest.into_iter().for_each(|e| apply(w, e));
     }
     w.book_moves();

@@ -32,17 +32,27 @@ pub fn rows<S>(out: &mut [f64], width: usize, init: impl Fn() -> S + Sync + Send
     }
 }
 
-/// Run `f` on each item, each idle thread taking the next item in their order (so the first items start first), or in
-/// order without threads. Each item owns all it writes (a domain of bodies, `survey::on_domains`), so the order and the
-/// threads change nothing.
-pub fn each<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
+/// The least work of a phase that goes to the pool, counted in its items of work (updates, entries landed, bodies
+/// worn or shown, domains booked): a pool call costs 30 to 55 µs, more than a few updates, so a smaller phase runs on
+/// the calling thread.
+pub const SERIAL_BELOW: usize = 8;
+
+/// Run `f` on each item with a scratch `state` made by `init` once per thread, not per item; each idle thread takes the
+/// next item in their order (so the first items start first). In order on the calling thread without threads, or when
+/// the phase's `work` is under `SERIAL_BELOW`. Each item owns all it writes (a domain of bodies, `survey::run`; an
+/// array of the store, `store::book_by_array`), so the order and the threads change nothing.
+pub fn each_init<T: Send, S>(items: &mut [T], work: usize, init: impl Fn() -> S + Sync + Send, f: impl Fn(&mut S, &mut T) + Sync + Send) {
     #[cfg(feature = "threads")]
     {
         use rayon::prelude::*;
-        items.iter_mut().par_bridge().for_each(f);
+        if work >= SERIAL_BELOW {
+            return items.iter_mut().par_bridge().for_each_init(init, f);
+        }
     }
     #[cfg(not(feature = "threads"))]
-    items.iter_mut().for_each(f);
+    let _ = work;
+    let mut st = init();
+    items.iter_mut().for_each(|x| f(&mut st, x));
 }
 
 #[cfg(feature = "threads")]

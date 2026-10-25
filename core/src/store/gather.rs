@@ -10,11 +10,12 @@
 //! from what is booked by less than `ROUNDING`. A checkpoint of the view can be rolled back: a sample member's update
 //! changes nothing (`copy::sample`).
 
-use super::apply::{add_carried, zero_rounding, ROUNDING};
-use super::{held_more, Class, Move, Node, Store};
+use super::apply::ROUNDING;
+use super::{book_by_array, held_more, Booker, Class, Move, Node, Store};
 use crate::ground::{heat_above_floor, share};
+use crate::par::SERIAL_BELOW;
 use crate::units::T_FLOOR;
-use crate::{life::Domain, space::Mesh, Counters, World, AIR};
+use crate::{life::Domain, World, AIR};
 
 /// What a move made when no update runs says (moves are made inside an update).
 const RUNNING: &str = "an update running";
@@ -29,18 +30,19 @@ pub struct Moves {
     /// runs
     who: Option<(Node, usize)>,
     /// The domain open and its air node, and the count of substances. While a domain is open the store does not change
-    /// (only `Moves::book` writes it then, and closes it), so a node taken into the view early holds what it would later
-    /// (checked in debug builds, `apply`)
+    /// (only the booking writes it then, `World::book_moves_beside`, and closes it), so a node taken into the view early
+    /// holds what it would later (checked in debug builds, `apply`)
     pub(super) open: Option<(usize, usize)>,
     ns: usize,
     /// The view of the domain open: by class, the amounts of its nodes (`[2 * class][x * ns + k]`, mol) and their heat
     /// (`[2 * class + 1][x]`, J), `x` a cell's slot in its domain (`Life::cell_slot`; the air node: 0); then at `SEEN`
     /// what bodies see of each substance in its air node, mol. Each number with its change since it was taken from the
-    /// store (`Moves::book`)
+    /// store (`Moves::book_into`)
     view: [Vec<[f64; 2]>; SEEN + 1],
-    /// Which cells of the domain open the view holds, by slot (it holds its air node), and the cell of the update
-    /// running and its slot
+    /// Which cells of the domain open the view holds, by slot (it holds its air node), and those cells by slot and
+    /// index in the order taken in; the cell of the update running and its slot
     held: Vec<bool>,
+    taken: Vec<(u32, u32)>,
     own: (usize, usize),
     /// Heat a ground node could not give (`Moves::take_from_ground`), J
     short: f64,
@@ -118,6 +120,7 @@ impl Moves {
             debug_assert!(self.open.is_none(), "domain {d} opened over another whose moves are not booked");
             let (n, na, ns, st, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns(), &w.store, w.mesh.level(AIR).children(j));
             (self.open, self.ns) = (Some((d, j)), ns);
+            self.taken.clear();
             self.held.clear();
             self.held.resize(cells.len(), false);
             // (Room for its numbers, the cells' taken from the store as they are first touched: each array holds at
@@ -164,6 +167,7 @@ impl Moves {
             }
         }
         self.held[at] = true;
+        self.taken.push((at as u32, i as u32));
     }
     /// `mol` of substance `k` and `heat` J go from node `x` of the store to the one whose update it is, gathered as
     /// `gather` gathers that move (the updater's end is its law's).
@@ -248,38 +252,38 @@ impl Moves {
         }
         (mol, took)
     }
-    /// The moves gathered are booked, and they close: the change of each number the view holds is added to the
-    /// store once, as `apply` adds it (`add_carried` for the ground's and the air's amounts), and what rounding leaves
-    /// below zero is set to zero and counted (`Counters::rounded`); the lift is added to the potential, and the heat
-    /// the ground nodes could not give is counted.
-    fn book(&mut self, (counts, mesh, store): (&mut Counters, &Mesh, &mut Store)) {
-        // Number `v` of the store changes by `d` (with its rounding `carry`, an amount of a carried class); it ends below
-        // zero only by rounding, since `alter` checks each take against the view's running value.
-        let put = |v: &mut f64, carry: Option<&mut f64>, d: f64, rounded: &mut f64| {
-            if d != 0.0 {
-                add_carried(v, carry, d);
-                zero_rounding(v, rounded);
-            }
-        };
-        // Node `i` of class `c` (of `len` nodes), at slot `at` of the view.
-        let mut book = |c: usize, i: usize, at: usize, len: usize| {
-            for (k, x) in (0..self.ns).map(|k| (k, k * len + i)) {
-                let d = std::mem::take(&mut self.view[2 * c][at * self.ns + k][1]);
-                put(&mut store.amounts[c][x], store.carry.get_mut(c).map(|carry| &mut carry[x]), d, &mut counts.rounded[0]);
-            }
-            if let Some(e) = store.heat[c].get_mut(i) {
-                put(e, None, std::mem::take(&mut self.view[2 * c + 1][at][1]), &mut counts.rounded[1]);
-            }
-        };
+    /// Its changes to the arrays of booker `b` (`store::book_by_array`): the change of each number the view holds of
+    /// them, of its air node and of each cell taken in.
+    fn book_into(&self, b: &mut Booker) {
         // (No domain open: nothing gathered since the last booking.)
         let Some((_, j)) = self.open else { return };
-        book(Class::Air as usize, j, 0, mesh.level(AIR).n());
-        for (at, &i) in mesh.level(AIR).children(j).iter().enumerate().filter(|&(at, _)| self.held[at]) {
-            [Class::Ground, Class::Bed, Class::Bodies].iter().for_each(|&c| book(c as usize, i as usize, at, mesh.cells().n()));
+        let air = [(0, j as u32)];
+        // The nodes of the class the view holds, by slot and index.
+        let nodes: &[(u32, u32)] = match b.class {
+            Class::Air => &air,
+            Class::Ground | Class::Bed | Class::Bodies => &self.taken,
+            _ => &[],
+        };
+        let (c, ks, len, ns) = (b.class as usize, b.ks.clone(), b.len, self.ns);
+        // Array `v` of the view, which holds slot `at`'s number at `at * step + k`, to number `x + index` of the class.
+        let mut each = |v: &[[f64; 2]], step: usize, k: usize, x: usize| {
+            for &(at, i) in nodes {
+                let d = v[at as usize * step + k][1];
+                if d != 0.0 {
+                    b.add(x + i as usize, d);
+                }
+            }
+        };
+        match ks {
+            Some(ks) => ks.for_each(|k| each(&self.view[2 * c], ns, k, k * len)),
+            None => each(&self.view[2 * c + 1], 1, 0, 0),
         }
-        store.heat[Class::Potential as usize][0] += std::mem::take(&mut self.lift);
-        counts.clamped_heat += std::mem::take(&mut self.short);
+    }
+    /// The moves gathered close, once booked: returns the heat lifted into the potential and the heat the ground nodes
+    /// could not give, J.
+    fn close(&mut self) -> (f64, f64) {
         (self.who, self.open) = (None, None);
+        (std::mem::take(&mut self.lift), std::mem::take(&mut self.short))
     }
 }
 
@@ -304,13 +308,47 @@ impl Domain {
     }
 }
 
+/// The classes whose nodes a domain's view holds, which its booking writes.
+const VIEWED: [Class; 4] = [Class::Ground, Class::Air, Class::Bed, Class::Bodies];
+
 impl World {
-    /// The moves gathered by the domains that ran since the last booking are booked, domain by domain in order
-    /// (`Moves::book`).
-    pub fn book_moves(&mut self) {
-        let World { life, counts, mesh, store, .. } = self;
-        for k in life.unbooked.take() {
-            life.domains[k].moves.book((counts, mesh, store));
+    /// The moves gathered by the domains that ran since the last booking are booked (`Moves::book_into`): each array of
+    /// the store by one task, which adds each domain's changes in the domains' order (`store::book_by_array`); what
+    /// rounding leaves below zero is set to zero and counted (`Counters::rounded`), then the lift into the potential
+    /// and the heat the ground nodes could not give (`Counters::clamped_heat`), domain by domain. With work enough
+    /// for the pool, `f` runs beside it in the same call, the store out of the world meanwhile: `f` must not read the
+    /// store (a landing reads none: it moves no matter of the store, laws.md 0) nor open a view.
+    pub(crate) fn book_moves_beside<R: Send>(&mut self, f: impl FnOnce(&mut World) -> R + Send) -> R {
+        let crate::life::Life { unbooked, domains, .. } = &mut self.life;
+        // (A domain that ran but gathered nothing has no view open.)
+        let open: Vec<usize> = unbooked.take().filter(|&k| domains[k].moves.open.is_some()).collect();
+        let views: Vec<(usize, Moves)> = open.into_iter().map(|k| (k, std::mem::take(&mut domains[k].moves))).collect();
+        let ns = self.chem.ns();
+        let book = |store: &mut Store| book_by_array(store, ns, &VIEWED, views.len(), |b| views.iter().for_each(|(_, m)| m.book_into(b)));
+        let (r, rounded) = if views.is_empty() {
+            (f(self), [0.0; 2])
+        } else if views.len() < SERIAL_BELOW {
+            let rounded = book(&mut self.store);
+            (f(self), rounded)
+        } else {
+            let mut store = std::mem::take(&mut self.store);
+            let both = crate::par::join(|| f(self), || book(&mut store));
+            self.store = store;
+            both
+        };
+        let World { life, counts, store, .. } = self;
+        (counts.rounded[0], counts.rounded[1]) = (counts.rounded[0] + rounded[0], counts.rounded[1] + rounded[1]);
+        for (k, mut m) in views {
+            let (lift, short) = m.close();
+            store.heat[Class::Potential as usize][0] += lift;
+            counts.clamped_heat += short;
+            debug_assert!(life.domains[k].moves.open.is_none(), "a view opened while the moves gathered were booked");
+            life.domains[k].moves = m;
         }
+        r
+    }
+    /// The moves gathered by the domains that ran since the last booking are booked (`book_moves_beside`).
+    pub fn book_moves(&mut self) {
+        self.book_moves_beside(|_| ());
     }
 }

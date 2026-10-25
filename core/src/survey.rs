@@ -46,7 +46,7 @@ pub fn survey(w: &mut World, reversed: bool) {
     let peopled = |w: &World| w.life.domains.iter().enumerate().map(|(k, d)| (k, d.at.iter().map(Vec::len).sum(), ())).filter(|x| x.1 > 0).collect();
     // (Movers who pushed through cells where no body is break nothing.)
     w.life.domains.iter_mut().filter(|d| d.at.iter().all(Vec::is_empty)).for_each(|d| d.pushed.fill(0.0));
-    on_domains(w, peopled(w), reversed, false, |w, d, _| {
+    on_domains(w, peopled(w), reversed, false, |_| (), |w, d, _, _| {
         for k in 0..d.cells.len() {
             let i = d.cells[k] as usize;
             if !parts(w, d, i) {
@@ -59,7 +59,7 @@ pub fn survey(w: &mut World, reversed: bool) {
         w.in_domain(i, |w, d| worn(w, d, (w.life.cell_slot(i).1, i)));
         crate::outbox::deliver(w);
     }
-    on_domains(w, peopled(w), reversed, false, |w, d, _| shade(w, d));
+    on_domains(w, peopled(w), reversed, false, |_| (), |w, d, _, _| shade(w, d));
     sum_cells(w);
     if monthly && w.time > 0 {
         traffic(w);
@@ -172,11 +172,12 @@ fn shade(w: &World, d: &mut Domain) {
 /// where bodies are stored, and keeps memory reads close together), with the world read only. They see each other as
 /// they were at the batch's start (`Faces`) and the store as their domain's moves leave it (`store::Moves`); what they
 /// do outside their domain goes to its outbox (`outbox`), and the lineages and born rows they make are provisional. Then
-/// the domains back, the moves booked, the world settles (`World::settle`: events, counters, those ids made global), the
-/// moves and litters land per domain on the pool, where each domain then makes its faces for the next batch, and the
-/// other entries are applied one by one (`outbox::land`); then the bodies that hold or are inside a part, each a serial
-/// step on its domain (`World::in_domain`) with its outbox applied after it, and last the changes of holders are added:
-/// the lineages and born rows left with no holder die out or are freed.
+/// the domains back, the world settles (`World::settle`: events, counters, those ids made global), the moves and
+/// litters land per domain on the pool while the moves gathered are booked beside them, array by array, where each
+/// domain then makes its faces for the next batch, and the other entries are applied one by one (`outbox::land`); then
+/// the bodies that hold or are inside a part, each a serial step on its domain (`World::in_domain`) with its outbox
+/// applied after it, and last the changes of holders are added: the lineages and born rows left with no holder die out
+/// or are freed.
 /// With `reversed`, the domains of the parallel phase start in reversed order: only for the test that this order (and
 /// which thread runs a domain) changes nothing.
 pub fn batch(w: &mut World, reversed: bool) {
@@ -196,11 +197,10 @@ pub fn batch(w: &mut World, reversed: bool) {
     let (serial, list): (Vec<_>, Vec<_>) = list.into_iter().partition(|x| x.3);
     w.life.batch = true;
     let runs = list.chunk_by(|a, b| a.0 == b.0).map(|run| (run[0].0, run.len(), run)).collect();
-    on_domains(w, runs, reversed, true, |w, d, run| {
-        let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
-        run.iter().for_each(|&(_, cell, id, _)| update(w, d, (cell, id), &mut scratch));
+    on_domains(w, runs, reversed, true, scratch, |w, d, run, s| {
+        run.iter().for_each(|&(_, cell, id, _)| update(w, d, (cell, id), s));
     });
-    let mut scratch = (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default());
+    let mut scratch = scratch(w);
     for (_, cell, id, _) in serial {
         w.in_domain(cell, |w, d| update(w, d, (cell, id), &mut scratch));
         crate::outbox::deliver(w);
@@ -212,39 +212,49 @@ pub fn batch(w: &mut World, reversed: bool) {
 }
 
 /// Run `f` on the domains of `work` (`run`), each ending by taking its bodies that move out of its storage
-/// (`Domain::post`); then the domains back, their moves booked, the world settled (`World::settle`) and the outboxes
-/// applied (`outbox::land`), where with `faces` the domains of `work` make their faces for the next batch.
-fn on_domains<T: Send + Sync>(w: &mut World, work: Vec<(usize, usize, T)>, reversed: bool, faces: bool, f: impl Fn(&World, &mut Domain, &T) + Sync + Send) {
+/// (`Domain::post`); then the domains back, the world settled (`World::settle`) and the outboxes applied
+/// (`outbox::land`), where the moves gathered are booked beside the landing and, with `faces`, the domains of `work`
+/// make their faces for the next batch.
+fn on_domains<T: Send + Sync, S>(w: &mut World, work: Vec<(usize, usize, T)>, reversed: bool, faces: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &T, &mut S) + Sync + Send) {
     let faced = if faces { work.iter().map(|x| x.0).collect() } else { Vec::new() };
-    run(w, work, reversed, |w, d, t| {
-        f(w, d, t);
+    run(w, work, reversed, init, |w, d, t, s| {
+        f(w, d, t, s);
         d.post();
     });
-    w.book_moves();
     w.settle(0..w.life.domains.len());
     crate::outbox::land(w, reversed, faced);
 }
 
 /// Run `f` on the domains of `work` (each with its count of work and what it is given), marked as run (`Life::mark`)
-/// and taken out of the world (`life::Domain`), on the pool with the feature `threads` (`par::each`), the most work
-/// first so the last to end is a small one (longest processing time first, Graham 1969; ties by domain), backwards
-/// with `reversed`; then the domains back.
-pub(crate) fn run<T: Send + Sync>(w: &mut World, mut work: Vec<(usize, usize, T)>, reversed: bool, f: impl Fn(&World, &mut Domain, &T) + Sync + Send) {
+/// and taken out of the world (`life::Domain`), with a scratch made by `init` once per thread, on the pool with the
+/// feature `threads` when the work is large enough (`par::each_init`), the most work first so the last to end is a
+/// small one (longest processing time first, Graham 1969; ties by domain), backwards with `reversed`; then the
+/// domains back. The one runner of per-domain work: each domain writes only its own numbers (CLAUDE.md 3.6).
+pub(crate) fn run<T: Send + Sync, S>(w: &mut World, mut work: Vec<(usize, usize, T)>, reversed: bool, init: impl Fn(&World) -> S + Sync + Send, f: impl Fn(&World, &mut Domain, &T, &mut S) + Sync + Send) {
     work.iter().for_each(|x| w.life.mark(x.0));
     work.sort_by_key(|x| (std::cmp::Reverse(x.1), x.0));
     if reversed {
         work.reverse();
     }
+    let total = work.iter().map(|x| x.1).sum();
     let mut domains = std::mem::take(&mut w.life.domains);
     let mut free: Vec<Option<&mut Domain>> = domains.iter_mut().map(Some).collect();
     let mut runs: Vec<_> = work.into_iter().map(|(k, _, t)| (free[k].take().expect("once a domain"), t)).collect();
-    crate::par::each(&mut runs, |(d, t)| f(w, d, t));
+    crate::par::each_init(&mut runs, total, || init(w), |s, (d, t)| f(w, d, t, s));
     w.life.domains = domains;
+}
+
+/// The scratch of a body's update, made once per thread and used for each update it runs.
+type Scratch = (Reactor, LiveTmp, choose::ActTmp);
+
+/// A new scratch of a body's update.
+fn scratch(w: &World) -> Scratch {
+    (Reactor::new(&w.chem, &w.cfg), LiveTmp::default(), choose::ActTmp::default())
 }
 
 /// The update of body `id` of cell `cell` in domain `d`, if it is still stored there (it may have died or joined
 /// another body since): its physics, decision, selection, lineage, maturing and split; or its death.
-fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (rc, tmp, act): &mut (Reactor, LiveTmp, choose::ActTmp)) {
+fn update(w: &World, d: &mut Domain, (cell, id): (usize, u64), (rc, tmp, act): &mut Scratch) {
     let Some(s) = d.find(id) else { return };
     d.moves.open(w, cell, Node::new(Class::Body, s.slot as usize));
     let mut b = std::mem::take(&mut d[s]);

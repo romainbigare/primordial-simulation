@@ -1503,3 +1503,53 @@ colder.
 plan's stages (the gas pool, the release limit, the liquids, the light's and the reactions' rates read again in each
 sub-step) and in the booking and the sample (34k and 19k instructions an update, together more than a 6 µs update).
 A month law faster than today's would have to cut those, not the integration.
+## E1c: booking by array beside the landing, one runner
+
+Level 2. The moves the domains gathered are booked by one helper, `store::book_by_array`: each block of the store's
+arrays (the amounts of 4 substances of a class, or its heat; a whole class when the booking is small) is one task,
+which adds every domain's changes in domain order; the booking runs in the same pool call as the landing
+(`World::book_moves_beside`, `par::join`; the store is out of the world meanwhile, so a landing that read it would
+fail). All per-domain work runs on one runner, `survey::run`: longest first, a scratch per thread
+(`par::each_init`, rayon's `for_each_init`; the batch's reactor and buffers are made once per thread, not once per
+domain), and a phase of fewer than `par::SERIAL_BELOW` = 8 items runs on the calling thread. In each round of
+landing the moves gathered before are booked first. Before, a round that landed nothing applied its entries (watches,
+part acts, litters going back) while the views of the domains before it were still open; those entries then read
+the plain sums of an open view, not the store's compensated sums. This is the only change to the world (rounding).
+Core: 9,957 to 10,057 code lines (+150 -50).
+
+| Check | Result |
+|---|---|
+| Golden, with threads and with one thread | unchanged (its runs never meet a round that lands nothing) |
+| `cargo test --release --workspace`, also with `CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true` | passes |
+| One year from each bench, 1, 2 and 4 threads | the same fingerprint on any number of threads |
+| A variant that books only when something lands (as before) | the base's fingerprint on all three benches: the speed work alone changes nothing |
+| `series.csv`, 3 years from each bench48 save, base `19bdfcc` and E1c (4 threads) | land and air temperature within 1e-4 (relative), rain on land within 5e-4, the heat-absorbing gas within 6e-3; life's columns move by life's choices (bodies within 2.2%, plant members within 16% on the island) |
+
+**One thread, instructions of one year** (callgrind, `RAYON_NUM_THREADS=1`, bench48 saves, base `19bdfcc`; million
+instructions). "Same world" is the variant that books only when something lands: it runs the base's world, so its
+numbers are the code's own gain. "Main thread" is the delivery and booking work left out of the pool calls: `land`
+less its pool call (the landing, and now the booking beside it), plus the bookings outside `land` (all of `book_moves`
+in the base: after the batch's parallel phase, the survey's and Bond's; now Bond's and the small ones, counted whole).
+
+| | island22 base / same world / E1c | globe36 base / same world / E1c | region24 base / same world / E1c |
+|---|---|---|---|
+| the run | 7,901.6 / 7,832.2 (-0.88%) / 7,844.2 | 7,260.9 / 7,183.2 (-1.07%) / 7,171.4 | 16,852.2 / 16,738.3 (-0.68%) / 16,753.2 |
+| the simulation (`run_for`) | 6,730.4 / 6,661.0 (-1.03%) / 6,661.0 | 6,144.3 / 6,066.1 (-1.27%) / 6,063.0 | 14,090.6 / 13,975.0 (-0.82%) / 13,975.7 |
+| `survey::batch` | 4,456.9 / 4,386.3 (-1.58%) | 3,517.4 / 3,436.6 (-2.30%) | 10,144.2 / 10,026.7 (-1.16%) |
+| of it the parallel phase (the updates on the pool) | 4,006.2 / 3,939.5 (-1.67%) | 3,117.9 / 3,035.6 (-2.64%) | 9,075.6 / 8,988.1 (-0.96%) |
+| `survey::survey` | 451.3 / 451.6 | 226.9 / 227.3 | 898.0 / 898.4 |
+| booking, all | 43.3 / 33.2 | 40.0 / 36.5 | 105.3 / 69.8 |
+| of it beside the landing (pool) | 0 / 29.7 | 0 / 26.9 | 0 / 59.3 |
+| delivery and booking on the main thread | 68.7 / 34.1 (-50%) | 140.6 / 118.2 (-16%) | 198.6 / 114.8 (-42%) |
+
+Most of the gain on one thread is the scratch per thread (`Reactor::new` and its buffers: about -30 million a year on
+the globe in allocations alone). The booking costs less than before: a class's amounts in one task when the booking
+is small, the cells taken into a view kept in a list. On the globe most of the main thread's work is the watches and
+the part acts, applied one by one (S2); they stay there until E5 or G2.
+
+**Wall time on 4 threads: not measured** (the machine is shared; the architect judges the chain E1a to E1c in a quiet
+window, X40, X61). From the instructions, the work that leaves the main thread is 35, 22 and 84 million a year; at
+E0's 0.29 ms a million for `deliver` on 4 threads and E0's speed-up of 2.5 for work on the pool, about 6, 4 and 15 ms
+a year, plus about 8, 10 and 10 ms from the parallel phase's own instructions (the scratch per thread): about -3%
+of the bodies' stage on each bench, near the kill line of -2%, not far past it. Small phases on the calling thread save
+pool calls that the instructions do not show.

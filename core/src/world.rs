@@ -75,7 +75,7 @@ pub struct World {
     pub time: u64,
     /// The alarms of the nodes' own processes, and when each was last brought up to date (`clock::Sleep`)
     pub sleep: crate::clock::Sleep,
-    /// The amounts and heat of the store's fixed nodes, which only `store::apply` and `store::Moves::book` write
+    /// The amounts and heat of the store's fixed nodes, which only `store::apply` and `store::book_by_array` write
     pub store: Store,
     /// Elevation of the bottom of the ground column, m
     pub base_z: f64,
