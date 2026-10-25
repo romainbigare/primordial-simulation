@@ -464,8 +464,9 @@ core/       the five laws, world state, random numbers. No IO, no Earth words.
               or a globe whose rows wrap east to west), stacks of layers
   src/store/  the names of the nodes (a fixed node by class and index, among them the bed and the bodies' node of
               each cell; a part by slot and generation), what the fixed ones hold (`Store`: private arrays, read
-              through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`, their
-              only writer: moves, transforms, link fluxes), and the moves of a body's or a part's update (`Moves`)
+              through methods), the boundary nodes sun, space and outside, the one way to change them (`apply`:
+              moves, transforms, link fluxes; and `Moves::book` for the bodies' moves, which adds as `apply` adds),
+              and the moves of a body's or a part's update (`Moves`)
   src/clock/  time in whole seconds, the calendar, processes with periods, sleep and wake of nodes
   src/solve/  the shared maths: spread (implicit step on links), downhill, band (the air level with the wind)
   src/*.rs    schedule (the month), world, params (Config, Physics), ground (heat and plateaus), check (the books),
@@ -875,7 +876,8 @@ How the suite is built:
 
 - **The normal suite** (`cargo test --release --workspace`) takes about 15 seconds. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs`, one per part of the foundation's base (`core/tests/{space, store, clock, solve}.rs`), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
 - **The contract between the layers** (`docs/foundation/plan.md` 5.2) needs no test: the store's arrays are private
-  fields of `store::Store`, which only `store::apply` writes, so the compiler checks it. A test or an edit changes the
+  fields of `store::Store`, which only `store::apply` and `Moves::book` (for the bodies' moves, adding as `apply`
+  adds) write, both inside the module `store`, so the compiler checks it. A test or an edit changes the
   store by moves from the outside node (`World::cross`).
 - **The test kit.** The tests share one kit: `worldgen::testkit` (a small world, founders, edits booked from the outside node, the rock of a cell, the books of a world, chemistry 0's substances by number). It is behind the `testkit` feature, which only the dev-dependencies of `core` and `tape` turn on, so it is never in a run.
 - **The golden test** (`tape/tests/golden.rs`). Three small runs (16 × 16 cells, 2 years, every starting kind) must stay whole, keep their books and end on pinned fingerprints (`tape::fingerprint`, a hash of the whole saved state). A pure clean-up keeps the fingerprints; a change of the laws, or speed work that changes the order of sums, re-pins them in the same commit and says why: `GOLDEN=print` prints the new values. It runs with threads in the workspace's tests (the `cli` turns them on) and must give the same fingerprints without them: `cargo test --release -p tape --test golden`.

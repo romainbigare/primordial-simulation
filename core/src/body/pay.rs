@@ -12,13 +12,9 @@ use crate::{bond, life::Domain, lineage::Lineage, World, AIR};
 /// Upkeep over `days` of a body of `mass` kg, J (laws.md 6.2): per kg of living body its basal, catalyst, strength,
 /// learning and signal costs, times (copy mass)^(`intake_exp` - 1) so adults pay Kleiber's mass^0.75 while one body grows
 /// until keeping its tissue takes all it can supply (West, Brown and Enquist 2001); its leaf by the day; one decision
-/// per member; times repair, activity and the pace of its upkeep at its temperature (`Body::upkeep_pace`).
-pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64) -> f64 {
-    upkeep_at(w, b, days, mass, t, b.activity(&w.chem, &w.cfg.phys))
-}
-
-/// `upkeep` at the activity `dry` the caller has read (`Payer::dry`).
-pub(crate) fn upkeep_at(w: &World, b: &Body, days: f64, mass: f64, t: f64, dry: f64) -> f64 {
+/// per member; times repair, its activity `dry` (`Body::activity`, read by the caller) and the pace of its upkeep at its
+/// temperature (`Body::upkeep_pace`).
+pub fn upkeep(w: &World, b: &Body, days: f64, mass: f64, t: f64, dry: f64) -> f64 {
     let p = &w.cfg.phys;
     let mind = if w.life.brainless(b) {
         0.0

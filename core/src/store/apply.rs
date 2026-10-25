@@ -139,6 +139,12 @@ pub(super) fn add_carried(v: &mut f64, carry: Option<&mut f64>, d: f64) {
     }
 }
 
+/// What rounding left of number `v` below zero is set to zero and counted in `rounded` (mol or J).
+#[inline(always)]
+pub(super) fn zero_rounding(v: &mut f64, rounded: &mut f64) {
+    *rounded -= if *v < 0.0 { std::mem::take(v) } else { 0.0 };
+}
+
 /// Does `dmol` keep every element of the chemistry's table, to rounding? `sums` is room for the element totals.
 fn keeps_elements(chem: &Chemistry, dmol: &[(u16, f64)], sums: &mut [f64]) -> bool {
     let mut size = 0.0;
@@ -214,7 +220,7 @@ pub fn apply(w: &mut World, fluxes: &[LinkFlux], moves: &[Move], transforms: &[T
         }
     }
     for s in low {
-        counts.rounded[s.arr % 2] -= std::mem::take(&mut books[s.arr][s.at]);
+        zero_rounding(&mut books[s.arr][s.at], &mut counts.rounded[s.arr % 2]);
     }
     for (c, far) in [(Class::Boundary, &far_heat[..]), (Class::Potential, &far_lift[..])] {
         store.heat[c as usize].iter_mut().zip(far).for_each(|(v, d)| *v += d);

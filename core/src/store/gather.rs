@@ -10,7 +10,7 @@
 //! from what is booked by less than `ROUNDING`. A checkpoint of the view can be rolled back: a sample member's update
 //! changes nothing (`copy::sample`).
 
-use super::apply::add_carried;
+use super::apply::{add_carried, zero_rounding, ROUNDING};
 use super::{held_more, Class, Move, Node, Store};
 use crate::ground::{heat_above_floor, share};
 use crate::units::T_FLOOR;
@@ -64,7 +64,7 @@ impl Moves {
     /// the view holds (a law that does overdraws its node; checked in debug builds).
     fn alter(&mut self, arr: usize, at: usize, d: f64) {
         let x = &mut self.view[arr][at];
-        debug_assert!(arr == SEEN || d >= 0.0 || x[0] + d >= -super::ROUNDING * (x[0].abs() + d.abs()), "a take of {d} from a view that holds {x:?} (array {arr}, at {at})");
+        debug_assert!(arr == SEEN || d >= 0.0 || x[0] + d >= -ROUNDING * (x[0].abs() + d.abs()), "a take of {d} from a view that holds {x:?} (array {arr}, at {at})");
         if let Some(u) = &mut self.undo {
             u.push((arr as u8, at as u32, *x));
         }
@@ -73,6 +73,7 @@ impl Moves {
     /// Node `x`, at slot `at` of the view, gains `mol` of substance `k` and `heat` J (one end of a move).
     #[inline(always)]
     fn end(&mut self, (x, at): (Node, usize), k: usize, mol: f64, heat: f64) {
+        debug_assert!(heat == 0.0 || x.class != Class::Bed, "heat moved to the bed, which holds none");
         if mol != 0.0 {
             self.alter(2 * x.class as usize, at * self.ns + k, mol);
             // (The air node and the bodies' nodes under it are what bodies see of the air.)
@@ -114,9 +115,11 @@ impl Moves {
         let ((d, at), j) = (w.life.cell_slot(i), w.mesh.up(i, 0, AIR));
         (self.who, self.own) = (Some((who, i)), (i, at));
         if self.open.is_none_or(|o| o.0 != d) {
+            debug_assert!(self.open.is_none(), "domain {d} opened over another whose moves are not booked");
             let (n, na, ns, st, cells) = (w.mesh.cells().n(), w.mesh.level(AIR).n(), w.chem.ns(), &w.store, w.mesh.level(AIR).children(j));
             (self.open, self.ns) = (Some((d, j)), ns);
-            self.held = vec![false; cells.len()];
+            self.held.clear();
+            self.held.resize(cells.len(), false);
             // (Room for its numbers, the cells' taken from the store as they are first touched: each array holds at
             // most a number of each substance in each cell.)
             self.view.iter_mut().for_each(|v| v.resize((cells.len() * ns).max(v.len()), [0.0; 2]));
@@ -242,21 +245,25 @@ impl Moves {
     /// below zero is set to zero and counted (`Counters::rounded`); the lift is added to the potential, and the heat
     /// the ground nodes could not give is counted.
     fn book(&mut self, (counts, mesh, store): (&mut Counters, &Mesh, &mut Store)) {
-        // Number `v` of the store changes by `d` (with its rounding `carry`, an amount of a carried class).
-        let put = |v: &mut f64, carry: Option<&mut f64>, d: f64, rounded: &mut f64| {
+        // Number `v` of the store, of a node that holds `node` of that unit, changes by `d` (with its rounding `carry`,
+        // an amount of a carried class); it ends below zero only by rounding (checked in debug builds, as in `apply`).
+        let put = |v: &mut f64, carry: Option<&mut f64>, (d, node): (f64, f64), rounded: &mut f64| {
             if d != 0.0 {
+                let was = *v;
                 add_carried(v, carry, d);
-                *rounded -= if *v < 0.0 { std::mem::take(v) } else { 0.0 };
+                debug_assert!(-*v <= ROUNDING * (node + was.abs() + d.abs()), "a law overdrew a node: a number ends at {v}");
+                zero_rounding(v, rounded);
             }
         };
         // Node `i` of class `c` (of `len` nodes), at slot `at` of the view.
         let mut book = |c: usize, i: usize, at: usize, len: usize| {
+            let node = if cfg!(debug_assertions) { (0..self.ns).map(|k| store.amounts[c][k * len + i].abs()).sum() } else { 0.0 };
             for (k, x) in (0..self.ns).map(|k| (k, k * len + i)) {
                 let d = std::mem::take(&mut self.view[2 * c][at * self.ns + k][1]);
-                put(&mut store.amounts[c][x], store.carry.get_mut(c).map(|carry| &mut carry[x]), d, &mut counts.rounded[0]);
+                put(&mut store.amounts[c][x], store.carry.get_mut(c).map(|carry| &mut carry[x]), (d, node), &mut counts.rounded[0]);
             }
             if let Some(e) = store.heat[c].get_mut(i) {
-                put(e, None, std::mem::take(&mut self.view[2 * c + 1][at][1]), &mut counts.rounded[1]);
+                put(e, None, (std::mem::take(&mut self.view[2 * c + 1][at][1]), 0.0), &mut counts.rounded[1]);
             }
         };
         // (No domain open: nothing gathered since the last booking.)

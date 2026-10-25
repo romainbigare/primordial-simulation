@@ -20,8 +20,9 @@ pub fn grow(w: &World, d: &mut Domain, b: &mut Body, days: f64, th: Melting, cov
     let needs = if b.adult(chem) { 0.0 } else { (full - b.matter_kg(chem)).max(0.0) };
     let (ivl, dry) = (b.interval(w) as f64, b.activity(chem, &w.cfg.phys));
     let room0 = allowance(w, b, th.t, days.min(ivl), dry);
-    // (The payer, with the plateau state and the activity, holds until a conversion changes the body.)
-    let mut payer = Some(body::Payer::at(w, d, b, ivl, b.mass(chem), th, (cover, dry)));
+    // (The payer, with the plateau state and the activity, holds until a conversion changes the body; with no allowance
+    // nothing converts.)
+    let mut payer = (room0 > 0.0).then(|| body::Payer::at(w, d, b, ivl, b.mass(chem), th, (cover, dry)));
     // The other solids it builds first, each with its share (`Body::share`) of the allowance and of what it can spare, and up
     // to the level that share makes of its matter (`Body::level`), by the same work; then matter with the rest.
     let (mut room, mut built) = (room0, false);
@@ -103,7 +104,7 @@ fn convert(w: &World, d: &mut Domain, b: &mut Body, bl: &Reaction, room: f64, pa
     let (ins, outs) = (&bl.inputs, &bl.outputs);
     let fuel = ins.iter().map(|&(k, nu)| nu as f64 * b.heat_of(chem, k as usize, t)).sum::<f64>() / (mm * nu0);
     let per_kg = p.c_copy + fuel - b.heat_of(chem, m, t) / mm;
-    let spare = b.fuel(chem, t) * (1.0 - body::upkeep_at(w, b, ivl, mass, t, payer.dry) / r);
+    let spare = b.fuel(chem, t) * (1.0 - body::upkeep(w, b, ivl, mass, t, payer.dry) / r);
     let (floors, reach) = reach(chem, p, b, bl, t);
     let free = part * (room / p.c_copy).min(r / p.c_copy).min(spare / per_kg.max(1e-300));
     let kg = free.min(reach).min(most);

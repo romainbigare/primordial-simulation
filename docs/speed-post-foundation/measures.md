@@ -755,7 +755,8 @@ instructions):
 | `gather` and `view_load` (exclusive) | 478.8 | gone (`give` 144.7, `take` 53.9, `take_in` 20.6) | 223.0 | gone (`give` 62.5, `take` 23.0, `take_in` 13.7) |
 
 Over the kill line of 2% on island22, under it on globe36 (1.39%), where the bodies are a smaller share of the
-year. The opening of an update costs more (+23 and +28 million: the air node is taken whole at each opening of a
+year (kept by S80). The bench row (island22 1.056 -> 1.111 s a year on 4 threads) is within the table's noise of 1 to
+8%; the spot is judged on callgrind. The opening of an update costs more (+23 and +28 million: the air node is taken whole at each opening of a
 domain, also for a serial step that touches it little).
 
 ## Profile of the baseline

@@ -19,7 +19,7 @@ pub use genes::*;
 pub(crate) use live::{gain_to_growth, live, LiveTmp};
 pub use live::Lived;
 pub use pay::{pay, plan, upkeep, Payer};
-pub(crate) use pay::{spend, upkeep_at};
+pub(crate) use pay::spend;
 
 use crate::brain::{ln, SIG};
 use crate::chem::{Chemistry, Phase};

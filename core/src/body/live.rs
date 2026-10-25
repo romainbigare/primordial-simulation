@@ -2,7 +2,7 @@
 //! the end checks are here; the physics of the time between is in `physics`.
 
 use super::exchange::cover_of;
-use super::pay::{hold, pay_at, plan, spend, upkeep_at, Payer};
+use super::pay::{hold, pay_at, plan, spend, upkeep, Payer};
 use super::physics::{physics, soak_again};
 use super::{thin, to_ground, Body, Layout, AGE, KEEP_T, LACK, MARGIN, PHASE, REPAIR, SPENT};
 use crate::bond::{self, Enclosure};
@@ -152,7 +152,7 @@ fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, s: &Site, (mut mass, d
     // (One temperature and one activity for the stages that see the body as it came: the upkeep, the plan and the paying.)
     let span = s.days.max(b.interval(w) as f64);
     let p = Payer::at(w, d, b, span, mass, b.thermal(&w.chem), (s.cover, dry));
-    let cost = upkeep_at(w, b, s.days, mass, p.th.t, dry);
+    let cost = upkeep(w, b, s.days, mass, p.th.t, dry);
     let spare = plan(w, d, b, MARGIN * cost, &p).1 / cost.max(1e-300);
     let short = pay_at(w, d, b, cost, &p, true) / cost.max(1e-300);
     // Wear: the energy its upkeep turns over per kg of the body that is built (the tissue that wears, not the fuel it

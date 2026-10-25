@@ -131,7 +131,7 @@ fn growth_is_limited_by_what_the_body_can_spare() {
         let m0 = b.store[MATTER];
         let grew = testkit::moved(&mut w, (b.cell as usize, Handle::default()), |w, d| testkit::grow(w, d, &mut b, days));
         let built = (b.store[MATTER] - m0) * w.chem.subs[MATTER].molar_mass;
-        let (up, release) = (body::upkeep(&w, &b, days, b.mass(&w.chem), b.temp(&w.chem)), testkit::release(&w, &b, days));
+        let (up, release) = (body::upkeep(&w, &b, days, b.mass(&w.chem), b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys)), testkit::release(&w, &b, days));
         let room = w.cfg.phys.c_build * b.supply(&w.chem, &w.cfg.phys, b.temp(&w.chem)) / w.cfg.phys.m_ref * days / w.cfg.phys.c_copy;
         println!("fuel kept {keep}: built {built:.4} kg of matter (allowance {room:.3} kg), release {release:.3e} J against upkeep {up:.3e} J");
         w.life[s] = b;
@@ -678,7 +678,7 @@ fn growth_stops_where_upkeep_meets_what_the_body_can_take() {
             takes[day] = w.events.iter().map(|e| if let EventKind::Took { from: u64::MAX, used, .. } = e.kind { used as f64 * joule } else { 0.0 }).sum();
             let mut b = w.life[s].clone();
             b.prepare(&w.chem, &w.cfg);
-            ups[day] = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem));
+            ups[day] = body::upkeep(&w, &b, 1.0, b.mass(&w.chem), b.temp(&w.chem), b.activity(&w.chem, &w.cfg.phys));
             if day % 50 == 49 {
                 built.push(b.built(&w.chem));
             }
