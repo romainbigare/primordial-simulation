@@ -278,9 +278,13 @@ PR-A2 (5.2) found that what a long update must keep at the body's own pace is no
 once an update: eating and maturing. So **every month runs in segments of the body's own time**, one segment at
 today's pace:
 - **Where they fall: on a fixed grid of the body's own clock**, never cut from the update. A body with a brain: its
-  visits, every gene interval (`Consts::interval` days) on its own grid, each bringing its pulse. A stand: every `D` =
+  grid is the days of its updates and visits, every gene interval (`Consts::interval` days), each visit bringing its
+  pulse; at P1b (no floor) every update is a grid point, so animals keep maturing and giving birth at their own updates;
+  if its schedule shifts (a split, a merge, a blended `last`), its grid follows its update days. A stand: every `D` =
   `reserve_days`, 36 days, counted from its birth day (or worldgen, or the brain-loss switch); it keeps that phase as a
-  number, set where `mark` is set, and saved (P1.2's snapshot bump). So a stand matures and gives birth every 36 days of
+  number, set where `mark` is set, and saved (P1.2's snapshot bump). At worldgen, and when a save is turned for X50, a
+  stand's phase is set from its first scheduled update (or its id), never one shared day, so births are not bunched. A
+  merge (`nodes::rejoin`, `nodes::merge`) keeps the receiving node's phase: a phase is never blended as `last` is. So a stand matures and gives birth every 36 days of
   its own clock at every `field_days`, exactly today's cadence: one update of 60 days and six of 10 cross the same grid
   points, the splitting and pace tests compare like with like, and a first update after birth or an update of a blended
   `last` (`nodes::rejoin`) changes nothing. Segments of the gene interval (20, 10, 60 days) would make stands mature and
