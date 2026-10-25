@@ -1122,3 +1122,133 @@ counted one after the other (about 1 ms, 3 ms on the globe: the `BTreeMap`s of w
 totals (`check::totals`, compensated sums in a fixed order), the files of a decade.
 
 Verdict: above the kill line (-25%) on both benches, a little under the aim (-40%). Kept.
+
+### PR-A2: the adults at a 30-day pace
+
+**How.** Branch `probe/pr-a2` (from `probe/pr-a`; code `91e6290`, never merged; scripts in `scripts/probe-pr-a2/`). The
+same runs as PR-A: the bench saves of 52d7f4a, `ew resume` for 2 years, 4 threads, 5 seeds by `PROBE_SEED`, eaters'
+members at the end over the start (± the sd of the 5 seeds), their kg at the end over the start, births less deaths over
+the start's members. **Every run has (g) on** (`PROBE_G`: the eaten mineral 23 stays for growth). With no switch set the
+build gives the base hash (one year of island22: `cb4e04a4c3595a53`). New switches (all PR-A2):
+
+| Switch | What it does |
+|---|---|
+| pieces (`PROBE_SUB=1`) | the body law of a long update (`body::live`: upkeep, physics, keep-warm, checks, growth, starving, children, shed) runs in pieces of the gene's interval (3 at 30 days, 2 at 20); the take stays one, at the update's end, for the floor's interval |
+| + takes (`PROBE_SUB=3`, `PROBE_SIZE=1`) | pieces; between two pieces the node takes from the ground for the piece's days, with the chance to take of its last decision (no brain); one decision at the end |
+| + maturing (`PROBE_SUB=6`, `PROBE_SIZE=1`) | as above, and young members pass to their adult node after each piece (`copy::mature`) |
+| + decisions (`PROBE_SUB=7`, `PROBE_SIZE=1`) | pieces, each with its body law, a whole decision and maturing |
+| visits (`PROBE_SUB=5`) | the node is visited at its gene's pace and a visit only takes; the body law and the decision stay at 30 days (no pieces) |
+| finer (`PROBE_SUB=1`, `PROBE_PIECE=5` or `3`) | at the gene's pace, the body law of each update in pieces of 5 or 3 days (the take unchanged) |
+| `PROBE_R`, `PROBE_K`, `PROBE_T` | diagnostics: no bare burning of the fuel 5 in an animal node's reactor; the dead leave their stores to the others; a decision's cost paid once per gene interval of the time |
+
+**The runs** (members end/start ± sd (against the reference); kg end/start; births less deaths over the start's members):
+
+| Run | island22 | globe36 | region24 |
+|---|---|---|---|
+| reference (gene's pace) | 1.007 ±0.023; 1.01; +0.005 | 0.829 ±0.054; 0.87; -0.171 | 1.045 ±0.014; 1.05; +0.040 |
+| floor 30 (today's law) | 0.806 ±0.017 (-0.201); 0.75; -0.194 | 0.653 ±0.056 (-0.176); 0.63; -0.347 | 0.848 ±0.008 (-0.196); 0.83; -0.152 |
+| floor 30, pieces | 0.777 ±0.019 (-0.230); 0.76; -0.223 | 0.638 ±0.035 (-0.191); 0.62; -0.362 | 0.757 ±0.013 (-0.287); 0.76; -0.244 |
+| floor 30, pieces + takes | 0.906 ±0.025 (-0.101); 0.92; -0.095 | 0.732 ±0.018 (-0.097); 0.74; -0.268 | 0.975 ±0.008 (-0.069); 1.00; -0.026 |
+| **floor 30, pieces + takes + maturing** | **1.022 ±0.022 (+0.015); 1.01; +0.021** | **0.841 ±0.021 (+0.011); 0.82; -0.159** | **1.045 ±0.014 (+0.001); 1.03; +0.043** |
+| floor 30, pieces + takes + maturing + decisions | 1.026 ±0.027 (+0.020); 1.02; +0.026 | 0.870 ±0.060 (+0.040); 0.84; -0.130 | 1.055 ±0.008 (+0.010); 1.05; +0.053 |
+| floor 30, visits (takes at the gene's pace, one 30-day body law) | 1.396 ±0.013 (+0.389); 1.40; +0.396 | 1.160 ±0.023 (+0.331); 1.26; +0.160 | 1.318 ±0.010 (+0.274); 1.32; +0.317 |
+| gene's pace, body law in 5-day pieces | 0.963 ±0.016 (-0.044); 0.97; -0.039 | 0.725 ±0.059 (-0.104); 0.76; -0.275 | 0.957 ±0.018 (-0.087); 0.98; -0.046 |
+| gene's pace, body law in 3-day pieces | 0.888 ±0.027 (-0.119); 0.88; -0.113 | 0.705 ±0.045 (-0.125); 0.72; -0.295 | 0.887 ±0.018 (-0.157); 0.90; -0.117 |
+| `PROBE_R`: reference / floor 30 | 1.371 / 1.092 (gap -0.279) | 1.060 / 0.831 (gap -0.229) | 1.325 / 1.061 (gap -0.264) |
+| `PROBE_K`: reference / floor 30 | 1.602 / 1.179 (gap -0.423) | 1.424 / 0.943 (gap -0.481) | 1.425 / 1.127 (gap -0.298) |
+| `PROBE_T`: floor 30 (the reference is bit for bit the same) | 0.781 (-0.226) | 0.635 (-0.194) | 0.823 (-0.221) |
+
+**What the year-1 counters say** (island22, 5 seeds; per member-day; region and globe alike):
+
+| Run | food kg | takes cut by what lies | matter grown kg | starving deaths | births | young that mature (per young member-day) |
+|---|---|---|---|---|---|---|
+| reference | 0.155 | 34% | 0.0146 | 3.3e-4 | 5.0e-4 | 1.37e-3 |
+| floor 30 | 0.153 | 41% | 0.0121 | 5.6e-4 | 4.4e-4 | 0.80e-3 |
+| floor 30, pieces | 0.151 | 39% | 0.0118 | 5.8e-4 | 3.7e-4 | 0.75e-3 |
+| floor 30, pieces + takes | 0.162 | 38% | 0.0143 | 4.2e-4 | 4.6e-4 | 1.15e-3 |
+| floor 30, pieces + takes + maturing | 0.162 | 35% | 0.0144 | 4.0e-4 | 5.1e-4 | 1.31e-3 |
+
+**1. The body law over a long update is not the cause.** Run in pieces of the gene's interval, with the same one take,
+the eaters lose as much or more (-0.230, -0.191, -0.287). With food and maturing at the gene's pace, one 30-day body law
+is not worse but much better than the gene's pace (visits: +0.39, +0.33, +0.27): a long update nets, inside it, the days
+the stock is short against the days it is full. `starved` (97 to 99% of the eaters' deaths, PR-A) judges the body once
+per update (its loss is counted, its gain is not), and growth is capped once per update by the least of its allowance
+and its stock, so the same food in one long step kills fewer and builds more. The gene's pace itself is one such step:
+cut finer, it loses -0.04 to -0.10 (5 days) and -0.12 to -0.16 (3 days). Neither the bare burning of the stock (`PROBE_R`)
+nor the stores of the dead (`PROBE_K`) nor the decision's cost per update (`PROBE_T`) closes the gap; they move both paces.
+
+**2. PR-A's split into adult and young nodes is not sound.** With `PROBE_ONLY`, `Body::interval` reads `adult()` when it
+is called, so a node that crosses its copy mass inside an update changes its interval between the stages (growth's
+allowance and payer, the upkeep's span). An adult that dipped under its copy mass in the physics builds with the
+allowance of 10 days for a 27-day update (its allowance per member-day fell 25%). "The loss is in adult nodes" does not
+stand.
+
+**3. The root: two acts that come once per update, and a tight budget.**
+- **Eating.** A node takes once per update, 30 days of food from what lies at that moment. The ground holds about a
+  week of fallen fuel (the fuel 5 rots there in about a week, reaction 1), so the long take is cut by what lies more
+  often (41% of takes, against 34%), and the node gets its month as one pulse that its stock must stretch over 30 days.
+  With the body law in pieces, its growth falls from piece to piece (island: matter grown 0.018, 0.011, 0.007 kg per
+  member-day in the first, second and third piece; growth bound by the fuel stock at its safe minimum in 8%, 22%, 39%;
+  starving deaths 2.7e-4, 5.9e-4, 7.8e-4). Taking at the gene's pace, sized by the days, gives back +0.13, +0.09, +0.22.
+- **Maturing.** Young members who pass their copy mass join their adult node only at the young node's update. At 30
+  days they wait up to a month in the young node, where all they build is body, not brood: 42% fewer young mature per
+  young member-day, and the adults make fewer children. Maturing after each piece gives back +0.12, +0.11, +0.07.
+- **The tight budget.** Of the fuel an eater eats (about 5 mol of the fuel 5 a member-day), its upkeep burns about 3.6,
+  its reactor about 0.6 and growth uses about 0.7 to 0.8. So 2 to 6% less food is 15 to 20% less growth, and every
+  starving death comes in an update whose growth was bound by the fuel stock at its safe minimum (island reference: 90%
+  of them; the rest by the allowance). PR-A's "(f) is small, about 5% less food" missed this: 5% of the food is a fifth
+  of the growth.
+
+**The switch that brings the 30-day node back** (with (g)): pieces + takes + maturing, +0.015, +0.011, +0.001 against a
+seed noise of 0.023, 0.054, 0.014. The decision can stay at 30 days (adding it at each piece changes nothing beyond the
+noise: +0.020, +0.040, +0.010).
+
+**The candidate law, in physical words (for P1b).** A long update is the sum of the body's own intervals. Inside it, the
+body eats, burns, grows, matures and starves step by step at its gene's pace: the food comes as one pulse per gene
+interval, taken from what lies on that day (with the chance to take of the last decision, for the days to the next
+pulse), and young members pass to the adult node at the step where they reach the copy mass. Only the brain (the
+decision, its moves, gifts and learning) runs once per update. At the gene's pace nothing changes (one step per update:
+the reference is bit for bit the same on the island and the globe; region24 -0.001). It keeps the books (every take,
+growth and death is booked as today, each on both sides), and it is one law for every body (X6): an individual updates at
+its gene, so it has one step; a stand has no take and its light is income through the step, but its maturing waits for its
+36-day update the same way (C2's second cause), so it takes the same maturing step.
+
+**With the candidate and (g): the 30-day and the 20-day floor against the gene's pace** (members end/start ± sd, against
+the reference; kg end/start; births less deaths):
+
+| Run | island22 | globe36 | region24 |
+|---|---|---|---|
+| gene's pace (the candidate at the gene's pace) | 1.007 ±0.023; 1.01; +0.005 | 0.829 ±0.054; 0.87; -0.171 | 1.044 ±0.013; 1.05; +0.040 |
+| floor 30, candidate | 1.022 ±0.022 (+0.015); 1.01; +0.021 | 0.841 ±0.021 (+0.011); 0.82; -0.159 | 1.045 ±0.014 (+0.001); 1.03; +0.043 |
+| floor 20, candidate | 0.977 ±0.013 (-0.030); 0.98; -0.024 | 0.807 ±0.027 (-0.022); 0.81; -0.193 | 1.046 ±0.014 (+0.002); 1.06; +0.044 |
+| floor 30, today's law | 0.806 ±0.017 (-0.201); 0.75; -0.194 | 0.653 ±0.056 (-0.176); 0.63; -0.347 | 0.848 ±0.008 (-0.196); 0.83; -0.152 |
+| floor 20, today's law | 0.888 ±0.018 (-0.119); 0.85; -0.113 | 0.668 ±0.030 (-0.161); 0.70; -0.332 | 0.972 ±0.018 (-0.073); 0.99; -0.030 |
+| seed noise (sd of the reference) | 0.023 | 0.054 | 0.014 |
+
+At 30 days the candidate is within the noise on all three worlds; at 20 days too on the globe and the region, and just
+past it on the island (-0.030 against 0.023).
+
+**Verdict for P1b.**
+- "Food as a pulse at the interval's start" fails at 30 days: with the body law solved through the interval and one
+  30-day pulse, the eaters lose more than today (the "pieces" row). The food must come as one pulse per gene interval,
+  each on its day, so the takes stay at the gene's pace (a take-only visit: no brain, the last decision's chance to take,
+  sized by the days to the next visit), and the stock equation starts a new segment at each pulse (at most `paces`
+  segments an update).
+- The balance must hold the gene's step, not the update's: with food at the gene's pace and one 30-day step, today's
+  rules net the month and the eaters gain +0.27 to +0.39. So the stock equation must carry the body's own turnover (body
+  matter its reactor burns at the bare rate, about 0.04 kg a member a day, rebuilt by growth from the stock) as a drain
+  beside the upkeep, and starving must come from the stock in time (P1b's phase 3), not from `starved`'s loss over the
+  update. Growth's cap is the allowance per segment.
+- Maturing (and so children) at each segment, from growth through the segment (`math::Pass` already takes a growth).
+- (g) from PR-A stays: growth must use the mineral 23 before the body's reactor turns it into the solid 10.
+- (a) and (b) change nothing (PR-A); keep-warm burns little in these worlds (about 0.01 mol of fuel a member-day).
+- A law effect at today's pace: a body law resolved finer than the gene's step moves the eaters (the 5-day and 3-day
+  rows: -0.04 to -0.16 in 2 years), so a stock equation exact in time will move the key numbers at today's pace; that
+  is P1b's own law effect, to report.
+
+**Verdict for G2.** The floor can hold for the brain (decisions, moves, learning), not for eating, growth, maturing and
+children. G2 then needs P1b's segments (a cheap closed form per gene interval inside the update), or it saves only the
+decisions: the bodies' stage gain must be estimated again from that. Two smaller points: the take today is sized by the
+planned interval, but updates come every 27.1 to 27.4 days at a 30-day floor (9.3 to 9.7 at the gene's pace), so a
+floored node is given 11% more food a day by the sizing alone (3% at the gene's pace): size a take by the days to the
+next one. And with today's law a 20-day floor is no fallback (-0.12, -0.16, -0.07).
