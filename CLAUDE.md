@@ -82,7 +82,7 @@ ask the owner.
 
 1. **Few, fast and meaningful** (`docs/handover.md` 12.3). A test states a law or an invariant, not the story of a bug.
 2. Use the shared kit `worldgen::testkit` for setup. Never copy setup code between test files.
-3. **Slow tests are `#[ignore]`** (`cargo test --release --workspace -- --ignored --no-fail-fast`): run them before the
+3. **Slow tests are `#[ignore]`** (`cargo test --release --workspace --no-fail-fast -- --ignored`): run them before the
    last push of a phase, and the golden test also without threads (`cargo test --release -p tape --test golden`). There is no CI on GitHub for now. The
    normal suite stays under about 30 seconds.
 4. **The golden test** (`tape/tests/golden.rs`) pins the fingerprint of the whole world for three small runs. A pure

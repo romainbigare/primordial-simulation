@@ -180,7 +180,7 @@ The work must not close the door to smart, people-like bodies later (handover 13
 | The key-number test (`tape/tests/ranges.rs`, about 10 minutes today, faster later) | once in each level-3 step that changes a law or a speed setting: E2.1; B1 and B3 together (one run after B3); B2, C2, C1, D2.2 (its run also checks D2.1's new rng keys), D2.3, D2.4, E3 (S33) |
 | The nodes check (F7, `tape/tests/nodes.rs`, about 5 minutes) | before B1 merges, against today's result (S36); at the end of phases B and D |
 | The equivalence test of a new speed setting (× 2 and ÷ 2) | in the step that adds or changes it |
-| The slow suite (`cargo test --release --workspace -- --ignored --no-fail-fast`) | at the end of each phase |
+| The slow suite (`cargo test --release --workspace --no-fail-fast -- --ignored`) | at the end of each phase |
 | The debug checks: `cargo test -p pcore --test outbox` and the store, body, copy and choose tests without `--release` (the golden fingerprint is pinned for release only) | at the end of each phase |
 
 **Tests are few and fast** (`CLAUDE.md` 5). A new test states a law or an invariant. A step that deletes a mechanism
