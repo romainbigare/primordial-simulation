@@ -16,8 +16,8 @@
   a brain differ in their reserve time `D`, their heat stage and whether they sweat (section 5).
 - **Rates, not pulses.** Everything a body does between two updates is a rate over the interval. The only pulses are
   its food: one per gene interval, on its day (X42, X55).
-- **Segments** (PR-A2, X55): a long update is the sum of the body's own times (its gene interval for a body with a
-  brain, at most 36 days for a stand, today's cadence). In each segment the body burns,
+- **Segments** (PR-A2, X55): a long update is cut at the points of the body's own clock (every gene interval for a body
+  with a brain, every 36 days for a stand, counted from its birth: today's cadence). In each segment the body burns,
   grows and starves; at each boundary its young members that reached the copy mass pass to the adult node and its brood
   makes children; a body that takes is visited at its gene's pace for a take-only visit (no brain), and its update's
   month starts a segment at each take. Only the brain runs once an update (G2).
@@ -38,10 +38,11 @@
 - **The reference is the month's own splitting test**, now with young stands, young animal nodes, a dip that recovers,
   a seasonal ramp of light and temperature, and long intervals centred on the summer's peak and the winter's low (X47).
 - **Cost:** the stand's law about 4.5 to 5 µs (PR-M's v2: 7.0, without bare reactions; today 10.6), a sample run
-  about 2.5 to 3 µs (about 1.1 µs on average), a whole stand update about 10 to 10.5 µs at 30 days and about 9 after P3.
+  about 2.5 to 3 µs (about 1.1 µs on average), a whole stand update about 10.5 to 11 µs at 30 days and about 9 to 9.5
+  after P3.
   Section 5 of the plan assumed 6 µs (X46).
-- **Gain now** (one thread, instructions of a year): P1.2 with P1.4 island -9 to -11%, globe -4.5 to -5.5%; with P2
-  about -18% and -9%. P1b, an estimate with its sub-steps counted: an animal update -8 to -16% at the gene's pace, the
+- **Gain now** (one thread, instructions of a year): P1.2 with P1.4 island -8.5 to -10%, globe -4 to -5%; with P2
+  about -19% and -9%. P1b, an estimate with its sub-steps counted: an animal update -8 to -16% at the gene's pace, the
   year -2.5 to -5% and -3 to -6%. G2, which now saves the brain's work and the per-update work but keeps the segments
   and the visits: about 0.6 of the animal node updates' cost, not 0.7 (7).
 
@@ -167,9 +168,10 @@ This is the reactor's kernel at a fixed temperature, not a second reactor.
 
 **How many sub-steps.** A stand: its minerals sit near their level (roots refill what growth takes), its pair of 10 and
 23 near its balance, its matter's bare burning about a thousandth a day; the fuel changes phase in about 10 to 15% of
-the updates (P0: the stock crosses its reserve in 10%, runs low in 0.5 to 1.4%). So about 1.2 sub-steps a segment, and
-a segment's boundary ends a sub-step: about 1.2 sub-steps a stand update at `field_days` 30 (one segment), 2.4 at 60
-(two), 3.6 at 90 (three); P1.2, P2 and G9a count them. An eater: the eaten mineral 23 falls 46% in 9.7 days and 77% in 27 (PR-A),
+the updates (P0: the stock crosses its reserve in 10%, runs low in 0.5 to 1.4%): about 1.2 sub-steps without a
+boundary. A grid point inside the update ends a sub-step; it falls in `field_days / 36` of the updates on average (0.83
+at 30 days, 1.67 at 60, 2.5 at 90). So about 2.0 sub-steps a stand update at `field_days` 30, 2.9 at 60, 3.7 at 90;
+P1.2, P2 and G9a count them. An eater: the eaten mineral 23 falls 46% in 9.7 days and 77% in 27 (PR-A),
 mostly at first. Its return is third order, so a sub-step that loses 0.3 at its starting rate keeps about
 `1 / sqrt(1.6)`, 0.79, of the store, not 0.7 (`gone`); it takes about `ln(x0 / x) / 0.236` sub-steps: about 3 at the
 gene's pace (about 9.5 days), about 4 with the fuel's phase changes: about 4 a segment, as each segment starts with its
@@ -275,13 +277,16 @@ its rates are read at the temperature it holds, its own, as for a body with a br
 PR-A2 (5.2) found that what a long update must keep at the body's own pace is not the body law but the acts that come
 once an update: eating and maturing. So **every month runs in segments of the body's own time**, one segment at
 today's pace:
-- **Their length.** A body with a brain: its visits, at its gene's pace (`Consts::interval` days), each bringing its
-  pulse. A stand: equal segments of at most `D` = `reserve_days`, 36 days (`ceil(Δ / D)` of them: one at `field_days`
-  30, two at 60, three at 90). Stands mature and give birth at their 36-day update today; segments of their gene
-  interval (20, 10, 60 days) would do it two to three times as often, a law change that moves the young stands' world.
-  Segments of `D` keep today's cadence at every pace, so P2 and G9a do not make young stands wait longer than today;
-  the one change is P1.2's 30-day floor (every 30 days, not 36), announced with it. It is one rule: a body's segment is
-  its own time `D`, which for a body with a brain is its gene interval.
+- **Where they fall: on a fixed grid of the body's own clock**, never cut from the update. A body with a brain: its
+  visits, every gene interval (`Consts::interval` days) on its own grid, each bringing its pulse. A stand: every `D` =
+  `reserve_days`, 36 days, counted from its birth day (or worldgen, or the brain-loss switch); it keeps that phase as a
+  number, set where `mark` is set, and saved (P1.2's snapshot bump). So a stand matures and gives birth every 36 days of
+  its own clock at every `field_days`, exactly today's cadence: one update of 60 days and six of 10 cross the same grid
+  points, the splitting and pace tests compare like with like, and a first update after birth or an update of a blended
+  `last` (`nodes::rejoin`) changes nothing. Segments of the gene interval (20, 10, 60 days) would make stands mature and
+  give birth two to three times as often, a law change; segments cut from the update would follow its length. One rule:
+  a boundary every `D` days of the body's own clock, `D` its gene interval for a body with a brain.
+- **The update's end is not a boundary:** maturing and children come only at grid points.
 - **Inside the update, per segment:** the body burns, grows and starves through the segment (the sub-steps of 3.2; a
   segment boundary ends a sub-step); at each boundary, the young members that have reached the copy mass pass to the
   adult node (`copy::mature`'s `math::Pass`, from the growth through the segment), and the brood that covers children
@@ -307,7 +312,7 @@ today's pace:
 At today's pace (one segment, the take at the update) this is today's order. PR-A2's probe of it (today's body law in
 pieces, takes and maturing at the gene's pace, with the mineral kept): +0.015, +0.011, +0.001 against a seed noise of
 0.023, 0.054, 0.014 at a 30-day floor; at 20 days within the noise on the globe and the region, -0.030 on the island.
-Stands take no food; their maturing and children take segments of `D`.
+Stands take no food; their maturing and children come at the points of their 36-day grid.
 
 ### 5.2 Animals (P1b and G2)
 
@@ -347,8 +352,8 @@ once an update and growth is capped once an update), which is why the exact-in-t
    10 times `D` of upkeep) **and young growing stands**, each at constant forcing and with a **seasonal ramp** (the
    light and the ground's temperature of a spring and of an autumn month, as the air would give them), **and intervals
    of 60 and 90 days centred on the summer's peak and on the winter's low** (where Arrhenius' curve and the mean
-   temperature matter most; G9a's 90 days is that case); stands of a short gene interval at 60 and 90 days, so several
-   segments mature and give birth in one update. P1b adds **young and adult animal nodes**, also at 260 K, and **a dip
+   temperature matter most; G9a's 90 days is that case); young and adult stands at 60 and 90 days, whose 36-day grid points
+   fall inside the long update (the short updates cross the same points). P1b adds **young and adult animal nodes**, also at 260 K, and **a dip
    that recovers** (food short for a third of the time, then plenty); G2 adds one update of 30 days with its three
    visits' pulse rows against three updates of 10 days with the same takes on the same days.
 2. **Against the day law** (a sanity check): members and body matter of adult stands that pay, at 2 days, the 90th
@@ -401,21 +406,23 @@ average: one update in two, and `read` skips most). Here: a copy into a scratch 
 of updates run one) **about 1.1 µs on average**.
 
 **A whole stand update**, island22: today 18.0 µs (the law 10.6; children, shedding and soaking again 3.3; the sample
-2.3; maturing 1.0; the rest 0.7). After P1.2 with P1.4: about 4.75 + 1.1 + 2.8 + 1.0 + 0.7 = **10 to 10.5 µs**; P3 takes
-about 1.5 µs (site per cell, faces at the update, no ring): **about 9 µs**. Each segment boundary of a longer update
-adds a sub-step (about 0.25 µs), its share of maturing (about 0.1 µs; the merge stays once) and, for an adult stand, its
-own litter (about 1 µs, half the stands): about +0.9 µs at 60 days (two segments) and +1.8 µs at 90 (three).
+2.3; maturing 1.0; the rest 0.7). After P1.2 with P1.4, without its grid: about 4.75 + 1.1 + 2.8 + 1.0 + 0.7 = 10 to
+10.5 µs. Each grid point inside an update adds a sub-step (about 0.25 µs) and, for an adult stand (about half), its
+litter (about 1 µs; the litters now come at grid points, so this is an upper end: they replace part of the update's own
+`copy` call). At `field_days` 30 (0.83 points an update): about +0.2 and +0.4 µs, **about 10.5 to 11 µs**; P3 takes
+about 1.5 µs (site per cell, faces at the update, no ring): **about 9 to 9.5 µs**. At 60 days (1.67 points) about +0.4
+and +0.8 µs; at 90 (2.5 points) about +0.6 and +1.25 µs.
 
-**Per stand and year** (today 10.6 updates of 18.0 µs, 191 µs): P1.2 (`field_days` 30, 12.2 updates of about 10.4 µs):
-about 127 µs (x0.66); P2 (60 days, about 11.3 µs): about 69 µs (x0.36); P3 (about 9.8 µs): about 60 µs; G9a (90 days,
-about 10.7 µs after P3): about 44 µs.
+**Per stand and year** (today 10.6 updates of 18.0 µs, 191 µs): P1.2 (`field_days` 30, 12.2 updates of about 10.8 µs):
+about 132 µs (x0.69); P2 (60 days, about 11.2 µs): about 68 µs (x0.36); P3 (about 9.7 µs): about 59 µs; G9a (90 days,
+about 10.3 µs after P3): about 42 µs.
 
 **Gain on one thread** (plant updates are 30.0% of island22's year and 14.7% of globe36's, R2):
 
 | Step | island22 | globe36 | the plan said |
 |---|---|---|---|
-| P1.2 with P1.4 | -9 to -11% | -4.5 to -5.5% | -12% and -8% (P1.1 to P1.4) |
-| P2 | -8.5 to -9.5% | -4.5% | -7% and -3% |
+| P1.2 with P1.4 | -8.5 to -10% | -4 to -5% | -12% and -8% (P1.1 to P1.4) |
+| P2 | -9.5 to -10.5% | -5% | -7% and -3% |
 | P3 | -3 to -5% | -2 to -3% | -5% and -3% |
 | P1b (an estimate: an animal update -8 to -16%, below) | -2.5 to -5% | -3 to -6% | about 0 (a law step) |
 
