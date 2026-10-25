@@ -906,8 +906,10 @@ cells on the globe are about 650 to 690 in a real run (below).
 `ew run --seed 1 --years 1000` with the default `--every 10`, `--frames-every 10`, `--monthly-years 2` (a snapshot, the
 tape so far and a picture every 10 years), one run at a time, nothing else on the machine, 4 threads, the build of
 `60a05eb`. Wall time is the time of the process (start to end, with the writing of snapshots and pictures); "own clock"
-is the sum of the stage clocks that `ew` prints. The "before" times are those of `docs/reports/foundation-l.md` (the
-foundation's final code, one run at a time, the island beside another run).
+is the sum of the stage clocks that `ew` prints. The "before" times are those of `docs/reports/foundation-l.md` (one run at a
+time; the refined region on the foundation's final code, the 22 x 22 island and the 36 x 18 globe on the code before
+its last three fixes, wear once a survey and its decisions 70 to 72; its run beside another was the 17 x 17 island,
+not used here).
 
 | Run | Cells | Wall | Own clock | Before | Faster | Mean year | Hash |
 |---|---|---|---|---|---|---|---|

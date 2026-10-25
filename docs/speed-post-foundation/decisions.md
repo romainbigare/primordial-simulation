@@ -4,6 +4,9 @@ The owner asked the architect to take every decision of this work and to log it 
 why, and what to change if the owner disagrees. The runs behind a row are in `docs/history.md` (section 5) and in
 `measures.md`.
 
+Numbers missing below are on the branches of steps not kept: S55, S57 and S58 on `speed/b1-b3-not-kept`, S60 on
+`speed/b2-rule-not-kept` and `speed/b2-predicate-not-kept`, S61 on `speed/c2-not-kept` (S62 below refers to it).
+
 | # | Step | Decision | Why | If you disagree |
 |---|---|---|---|---|
 | S1 | all | Ideas A to E of the speed list are built; group F (life as a field, slow stores sped up, climate on repeat, a GPU, a learned shortcut, threads that may change the history) waits | The owner's choice (24 October 2026) | — |

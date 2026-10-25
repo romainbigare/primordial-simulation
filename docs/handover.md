@@ -187,8 +187,7 @@ This is the main tool for speed. Do not build it first (see milestones). Build t
   may take (a planet run of 1,000 years in under 15 minutes on the owner's machine). The cost of one cell and of one
   body node per simulated year, measured at each step of the work, gives that size (`docs/foundation/plan.md`, "The
   time budget" and 5.7). Faster code buys a bigger planet. Today the largest globe that fits is 36 × 18 cells (648
-  cells; a run of 1,000 years takes about 14 minutes on 4 cores), against about 290 cells before the speed work
-  (`docs/reports/speed.md`).
+  cells; a run of 1,000 years takes about 14 minutes on 4 cores; `docs/reports/speed.md`).
 
 ---
 
@@ -456,7 +455,7 @@ This is a speed tool, not a law: the history is the same with and without thread
 
 - The cells are cut into **domains**: the cells under one air node. A domain owns its bodies, its ring of updates and its view of the store.
 - Bodies update in **batches** of `batch_days` (2) days. In a batch each domain runs on its own thread. Body code reads the world as it was at the batch's start and writes only its own domain. What leaves the domain (a move to another cell, a litter that starts in another cell, a watch, an act on a part) waits in the domain's **outbox** and is applied at the batch's end, in a fixed order, on one thread. Bodies that hold a part or are inside one run in that serial phase.
-- Flow's air step and Change's reactors, the survey's wear, merge and shade, and the recorder's sums use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
+- Flow's air step and Change's reactors and the survey's wear, merge and shade use the same pool where a loop is large enough to pay for a call into it (30 to 55 µs).
 - How it works: `docs/laws.md` 0. What it gave and what limits it: `docs/reports/speed.md`. On 4 cores the bodies run about 2 times faster than on one, and a whole year about 1.6 to 1.8 times; the rest stays on one thread (the serial phase of a batch, the booking, Flow's ordered passes).
 - A zone that needs a shorter step later (7.3) can run several sub-batches inside one global batch: its edge effects still land at the global batch's end. Nothing built blocks that.
 
@@ -921,7 +920,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 | M4 planet, coarse with detail in places | 1,000 years in under 15 minutes, on the largest planet that fits (the size follows the budget, 5.4) |
 | M6 god mode | 200 years of one region in about 1–2 minutes |
 
-**Where they stand** (`docs/reports/speed.md`, 4 cores): a settled year takes 0.61 s on the 22 × 22 island and 0.74 s on the 36 × 18 globe. 1,000 years take 12.8 minutes on the island (the M1–M3 target of 10 minutes is not met) and 14.3 minutes on the globe (648 cells, the largest that fits the M4 budget; a 40 × 20 globe of 800 cells takes 21.7 minutes). The speed work aimed at 10 times faster than before it and gives 1.5 to 2.6 times.
+**Where they stand** (`docs/reports/speed.md`, 4 cores): a settled year takes 0.61 s on the 22 × 22 island and 0.74 s on the 36 × 18 globe. 1,000 years take 12.8 minutes on the island (the M1–M3 target of 10 minutes is not met) and 14.3 minutes on the globe (648 cells, the largest that fits the M4 budget; a 40 × 20 globe of 800 cells takes 21.7 minutes).
 
 **Be honest about these targets.** They are hard. For example, 50,000 bodies with one step per day for 1,000 years in 10 minutes means about 30 million brain decisions per second, plus physics. Expect to miss the M1–M3 target at first. Report the real number (years per second) in every watch report, and do not slow down the project to chase the target before something has emerged.
 

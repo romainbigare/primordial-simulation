@@ -21,7 +21,7 @@ the decisions in `decisions.md` (S1 to S84), and what changed and when in `docs/
   bodies only about 2 times, as a third of their time stays on one thread.
 - **The two big ideas that cut the work did not pay** (fewer bodies, B; fewer updates, C): they were tried and not kept.
   The speed comes from the compiler (A), hot spots in the code (E2), and threads (D3, D2).
-- **Open, and your choice:** seven items, on the last page of this report. The main ones: the world that makes many
+- **Open, and your choice:** eight items, on the last page of this report. The main ones: the world that makes many
   bodies in one cell (S66), the law question that C2 found, and the sleep bias that costs 20% to fix (S84).
 
 ## Where the speed stands
@@ -54,7 +54,9 @@ Bodies are still the largest stage (69%, 62% and 66% of a year; at the baseline 
 32% and 30%.
 
 **1,000 years** (one run at a time, nothing else on the machine; default pictures and snapshots every 10 years). The
-"before" column is the foundation's report (`docs/reports/foundation-l.md`; its code was the foundation's final code).
+"before" column is the foundation's report (`docs/reports/foundation-l.md`): its refined region ran on the foundation's
+final code, its 22 x 22 island and 36 x 18 globe on the code before the foundation's last three fixes (wear once a
+survey, its decisions 70 to 72).
 
 | Run | Cells | Before | Now | Faster |
 |---|---|---|---|---|
@@ -65,8 +67,9 @@ Bodies are still the largest stage (69%, 62% and 66% of a year; at the baseline 
 
 ![Minutes for 1,000 years](speed/minutes-1000-years.svg)
 
-The 1,000-year gain is bigger than the gain of one settled year. The "before" times come from another hour and from the
-foundation's final code, and its island run ran beside another run, so this gain is less exact than the gain of a year.
+The 1,000-year gain is bigger than the gain of one settled year. The "before" times come from another hour, and those
+of the island and the globe from code before the foundation's last three fixes (see `foundation-l.md`), so this gain
+is less exact than the gain of a year.
 
 **The largest planet in 15 minutes.** The foundation's model is: the time of a run is the cost of a cell and of a body
 for a year, times their numbers (plan 5.7). Now a settled cell costs 1.1 to 1.3 ms a year on 4 cores (1.8 to 2.1 ms at
@@ -118,7 +121,7 @@ named. The steps do not multiply into the 1.5 to 2 times of the year, as the ben
 | A | The bench kit (A1); one code unit for the compiler (A2); many worlds at once (A3) | A2: the year 0.857 to 0.702 s (island) and 1.347 to 1.220 s (globe). A3: three runs side by side make 2.9 times more worlds a minute |
 | E2.1 | Members of a node that stay in their cell act as the node, no clone for each part | the globe's bodies 4% faster (7% of their instructions) |
 | E2.2 | Powers and exponentials in the body update kept once, cube root and square roots | 2.1% (island) and 1.4% (globe) of a year's instructions |
-| D3 | The air's passes and Change's rows use all the threads (no least size of task; the main thread joins the pool) | Flow 1.23 and 1.22 times faster, the year about 8% |
+| D3 | The air's passes and Change's rows use all the threads (no least size of task; the main thread joins the pool) | Flow 1.23 and 1.22 times faster; Flow and Change about 4% of the year; the year 8% in that hour's runs |
 | D2 | The world cut into domains; each runs its bodies on its own thread in 2-day batches; what leaves a domain waits in an outbox (D2.1 to D2.6, with the largest domain first and the survey on threads) | the bodies on 4 threads against 1: 2.10, 1.83 and 2.07 times; against the code before D2: 1.82, 1.79 and 1.98 times (aim 2.2, kill line 1.6). It cost about 3% an update on one thread |
 | E2.3 | The repeated reads of an update; the booking once for each number; a fast path for taking from the store | 2.35% and 1.45%; 3.0% and 2.0%; 2.1% and 1.4% of a year's instructions (island, globe). The bodies' stage on 4 threads 5% faster for the booking |
 | Room | Simplifications that made room for D1 (b); the tape written once at the end | 0.4% of instructions, and 100 lines fewer |
@@ -185,7 +188,9 @@ solve are the ones that act on the part that stops 10 times.
 ## The slow suite (Z2)
 
 The slow tests (`cargo test --release --workspace --no-fail-fast -- --ignored`, 70 minutes) ran at the end, and the
-debug checks of plan 2.3 too. They pass: the century of books, the nodes check (nodes and individuals make the same
+debug checks of plan 2.3 too. They ran only here, at Z2: plan 2.3 asks for the slow suite and the nodes check at the end
+of each phase (the nodes check at the end of phase D too), and that was not done. So the churn test failed from D2.4a
+until Z2 without anyone seeing it (first item below). They pass: the century of books, the nodes check (nodes and individuals make the same
 world), the pace of nodes, the batches of bodies, the eaters, the climate of the globe and of the long step, the scale
 test, the learning scene, the island's wear, the speed test and the golden test without threads. Five failed at first:
 
@@ -221,6 +226,16 @@ test, the learning scene, the island's wear, the speed test and the golden test 
    13 times as many). This is a splitting error of the laws, not a speed question. It is yours to rule on (branch `speed/c2-not-kept`).
 7. **Phases B and C gave no speed**, and D2 reached 1.8 to 2.0 against its target of 2.2. If you want the 10 times, it
    needs group F or a new solve for the air; A to E are used up.
+8. **The three rules for smart bodies (plan 2.2).** Where each stands:
+   - Individuals stay real: a node can always be split back into individuals (`nodes::open`, tested), and the control
+     run `--individuals` is kept.
+   - The step per place: each domain owns its bodies and its ring of updates, and the ring (`RING`, 384 batches) holds
+     the longest interval even with batches of one day, so a zone can later run shorter sub-batches inside a batch.
+   - Two kinds of body code: the update splits once between bodies with a brain and without one (`survey::update`);
+     a body with a brain keeps its own path, and nothing assumes all bodies take the same branches.
+   - Open: rule 1's one predicate for who may join whom, `nodes::may_join`, was not built (S67: dearer, and no speed).
+     The merge paths still test who may join each in their own place. It waits for the step that brings minds that
+     must stay individual.
 
 ## Surprises
 
@@ -236,7 +251,7 @@ test, the learning scene, the island's wear, the speed test and the golden test 
   scratch folder and run on the old saves in the same hour, three sets.
 - **Profiles:** `scripts/bench.sh profile` (callgrind, one year, one thread).
 - **Long runs:** one `ew run` at a time on a quiet machine of 4 cores, with the default pictures, frames and
-  snapshots, wall time of the process. "Before" is from `foundation-l.md` (another hour; its island ran beside another
-  run).
+  snapshots, wall time of the process. "Before" is from `foundation-l.md` (another hour; its 22 x 22 island and
+  36 x 18 globe ran on the code before the foundation's last three fixes).
 - **Pictures:** made from the runs' `series.csv` and the bench lines by a small script kept outside the repository.
 - **The machine drifts** by about 6% to 11% between hours; every comparison above is inside one hour or says so.
