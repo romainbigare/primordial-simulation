@@ -858,7 +858,7 @@ If the world cannot do something (for example nothing burns, or there is no dise
 
 ### 12.1 Numbers
 
-- Use `f64` for the world state in the prototype. Optimise to `f32` only where measurement shows it is needed and conservation still holds.
+- Use `f64` for every number that holds matter or energy, and book each move on both sides with one `f64` number: the world's amounts span 27 decades and the books must close to about 1e-12 (`docs/speed-x10/decisions.md` X4). Use `f32` only for numbers that hold nothing (cards, brain rows, faces, rates), and only where a measure shows a gain.
 - Clamp tiny negative amounts from rounding to zero, and count how much you clamp. If the clamped total grows, there is a bug.
 
 ### 12.2 Conservation checks
@@ -878,7 +878,7 @@ What the tests must cover:
 
 - **Conservation** (as above) on a small world for 100 years.
 - **No NaN, no infinity, no negative amounts.**
-- **Repeatability:** run the same seed twice on the same machine, and the state must be the same, bit for bit.
+- **Repeatability:** run the same seed twice on the same machine, and the state must be the same, bit for bit, with any number of threads (12.5).
 - **Snapshot round-trip:** save, load, continue. The result must match an unbroken run.
 - **One tiny scene per law** showing basic physical behaviour: liquid flows downhill; heat spreads; a reaction runs faster when hot; a bond breaks under too much load; a child has its parent's genes plus noise; a body learns to move towards food.
 - **Speed benchmark:** years per second on the reference island. Track it over time.
@@ -908,6 +908,7 @@ Each milestone ends with a short report for the owner, in simple English, saved 
 ### 12.5 Repeatability (cheap kind only)
 
 - Same seed, same code version and same machine/build give the same history.
+- The number of threads does not change the history: every order (of sums, of landings, of writes) is fixed by the data, never by which thread is first (`docs/speed-x10/decisions.md` X3). The golden test checks it with and without threads.
 - Purpose: finding bugs, and replaying a run.
 - **Do not** build identical results across machines, CPU/GPU agreement to the last bit, receipts or replay proofs.
 
@@ -990,7 +991,7 @@ Only items that are still open. Do not build them before M4 starts unless the ow
 - **The methane-like gas** lives by the air's temperature (months at 280 K, years at 255 K). If a warm world has a methane story, look here first.
 - **Fire and disease.** Natural fire starts wait for M4: they need a "burning share of a cell" law (a fire front) and M4's weather, with the spark booked like the sun. Disease (bodies inside bodies) waits until after M4.
 - **Reading the eaters.** Eaters settle by years 90 to 100, so report their log10 kg over years 91 to 100 and their births less deaths over years 71 to 100 (a decade swings by about 15% of births), three seeds at least. Under 2 times is noise.
-- **Core size.** `core` holds at most 9,700 code lines (14.3, counted by `cli/tests/core_size.rs`; `docs/speed-post-foundation/decisions.md` S3).
+- **Core size.** `core` holds at most 12,000 code lines (14.3, counted by `cli/tests/core_size.rs`; `docs/speed-x10/decisions.md` X22).
 
 ---
 
@@ -1017,7 +1018,7 @@ All of these must be true:
 
 | Part | Budget |
 |---|---|
-| `core` (five laws, state, random numbers) | ≤ 9,700 lines of code through M7 (`docs/speed-post-foundation/decisions.md` S3), not counting comments and blank lines |
+| `core` (five laws, state, random numbers) | ≤ 12,000 lines of code through M7 (`docs/speed-x10/decisions.md` X22), not counting comments and blank lines |
 | `worldgen` | ≤ 3,000 lines |
 | `analyze` + `library` loader | ≤ 6,000 lines |
 | whole repository (excluding art assets and library data) | ≤ 25,000 lines through M7 |
@@ -1026,11 +1027,11 @@ All of these must be true:
 
 **Counting code size.** A comment line starts with `//` after its spaces. The test `cli/tests/core_size.rs` counts
 the code lines of `core/src`, prints them per folder (`cargo test --release -p cli --test core_size -- --nocapture`)
-and fails above its ceiling: 9,700 lines (`docs/speed-post-foundation/decisions.md` S3). Comments are not counted, so do not delete them to save lines. The foundation
+and fails above its ceiling: 12,000 lines (`docs/speed-x10/decisions.md` X22). Comments are not counted, so do not delete them to save lines. The foundation
 keeps `core` small by replacing special code with general pieces, not by adding to it (`docs/foundation/plan.md`,
 "The main rule" and "The line budget").
 
-If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2).
+If you hit a code budget, simplify before adding. The budgets are **goals, not hard stops**: the viewer and the pattern finder may need more than expected. If a part goes over its budget, tell the owner with the number and the reason, and keep going. Going over by 20% with a reason is fine. Going over by 3× means something is wrong (see Section 2). The `core` row goes past the 20% in the speed x10 round (9,700 × 1.2 = 11,640; the row is 12,000) with the owner's explicit yes (`docs/speed-x10/decisions.md` X22).
 
 ### 14.4 Earth-word ban in `core` and `worldgen`
 
@@ -1049,7 +1050,7 @@ Note: words like `liquid`, `gas`, `solid`, `energy`, `heat`, `body`, `bond`, `fl
 - Do not write a rule, action or system named after an Earth outcome.
 - Do not hand-shape rewards for specific behaviours.
 - Do not add realism (field data, calibrated species, real-world parameters) unless it is needed for something to emerge.
-- Do not build proof machinery: cross-machine determinism, receipts, replay proofs, proof campaigns. (Reviews of the code and the laws in rounds, by the agent and the owner together, are part of the work.)
+- Do not build proof machinery: cross-machine determinism, receipts, replay proofs, proof campaigns. (Reviews of the code and the laws in rounds, by the agent and the owner together, are part of the work. Orders fixed by the data, so that threads do not change the world on one machine (12.5), are not proof machinery: they are the same-machine repeatability that 12.3 asks for.)
 - Do not build branching timelines.
 - Do not let the LLM or the library influence the simulation.
 - Do not try to find or rebuild version 1.

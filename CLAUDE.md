@@ -13,6 +13,7 @@ ask the owner.
 | Every free number: unit, anchor, mark (physical, anchored, tuned) | `docs/numbers.md` |
 | What the tape records | `docs/tape.md` |
 | What changed and when, what was tried and not kept | `docs/history.md` |
+| The work now: speed x10 | `docs/speed-x10/plan.md` on the branch `speed/x10` (the single source of the steps; decisions X1 to X36 in `docs/speed-x10/decisions.md`, the designs in `docs/speed-x10/design/`). The earlier rounds' rules below hold |
 | Speed after the foundation (done) | The result: `docs/reports/speed.md`. The plan, the decisions (S1 to S84) and the measures: `docs/speed-post-foundation/` (`plan.md`, `decisions.md`, `measures.md`). Its rules in 2 of the plan and the foundation's main rule in `docs/foundation/plan.md` hold for any new speed work |
 | The foundation before M4 (done) | `docs/foundation/plan.md` (read its main rule first) |
 | The laws | `core/src/<law>/` (`flow`, `change`, `bond`, `copy`, `choose`), bodies in `core/src/body/` |
@@ -42,8 +43,8 @@ ask the owner.
 9. **No Earth words in `core/` and `worldgen/`** (`cli/tests/word_ban.rs`), including substance names (nitrogen,
    carbon, salt, sugar...). Use numbers and physical words.
 10. `cargo clippy --release --workspace --all-targets` gives no warnings.
-11. **Size.** `core` holds at most 9,700 lines of code (`docs/speed-post-foundation/decisions.md` S3), not counting
-    comments and blank lines (`docs/handover.md` 14.3; the test `cli/tests/core_size.rs` counts them). Simplify before
+11. **Size.** `core` holds at most 12,000 lines of code (`docs/speed-x10/decisions.md` X22; the owner said yes to going past
+    the 20% of `docs/handover.md` 14.3), not counting comments and blank lines (`docs/handover.md` 14.3; the test `cli/tests/core_size.rs` counts them). Simplify before
     you add. Never delete useful comments to save lines: they are not counted. Never pick a slower or less honest
     design to save lines.
 12. **Replace, do not patch.** When you build a general piece, delete the special code it replaces in the same change
@@ -52,7 +53,9 @@ ask the owner.
 ## 3. The physics must stay honest
 
 1. **Everything is kept.** Each element, the energy and the members of a node. Every transfer books both sides through
-   a shared helper. A drift above about 1e-12 is a bug: find it, do not hide it.
+   a shared helper. A drift above about 1e-12 is a bug: find it, do not hide it. **The books are 64-bit:** numbers that
+   hold matter or energy stay 64-bit, and each move is booked on both sides with one 64-bit number. 32-bit is for
+   numbers that hold nothing (cards, brain rows, faces, rates), and only where a step measures a gain (`docs/speed-x10/decisions.md` X4).
 2. **Counts are real.** A member count is never rounded up (`Body::n()` is "at least one" only where the physics means
    one body). Means over a node or a group are weighted by members.
 3. **One source for each quantity.** One ground temperature (`World::t_ground_last`), one melting rule, one way to pay
@@ -97,6 +100,8 @@ ask the owner.
    fingerprint, same `series.csv`). Keep the order of floating-point sums; `a*b*c` is not `a*(b*c)`.
    **Speed work may change the order of sums** (check level 2 of `docs/foundation/plan.md` 6.1): it re-pins the golden
    test and shows the same world (a few series columns, or the key numbers where life's choices amplify rounding).
+   **The number of threads does not change the world:** every order is fixed by the data, so the golden test gives the
+   same fingerprints with and without threads (`docs/speed-x10/decisions.md` X3).
 2. **A change of the laws is its own commit**, with the physics reason and its effect on a few numbers of a long run
    (populations, temperatures, drift).
 3. Before you push: build, all tests, clippy, the wasm build (`cargo build -p pcore --target wasm32-unknown-unknown`).
