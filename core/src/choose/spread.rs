@@ -8,11 +8,10 @@ use crate::life::Handle;
 use crate::store::{Class, Node, NodeId};
 use crate::nodes;
 
-/// Node `node` (taken out of its slot) spreads its members over the options: count × chance of them do each, a part of less
-/// than one member being one member with that chance. The members that move are one group, count × the sum of the
-/// chances to go in every direction, and the group takes the one direction drawn by its chance over that sum (`movers`).
-/// A part acts as so many members together (`part_acts`; the moves last, so the others act where the node is). Its brain learns as from one member drawn among those who stayed (`trace`): from what that member did,
-/// and how much more its part's action raised their well-being than the mean of the members.
+/// Node `node` (taken out of its slot) spreads its members over the options (`members`), and each part acts as so many
+/// members together (`part_acts`; the moves last, so the others act where the node is). Its brain learns as from one
+/// member drawn among those who stayed (`trace`): from what that member did, and how much more its part's action raised
+/// their well-being than the mean of the members.
 pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
     let x = members(node, c, rng);
     // The members of each option in the node after acting, and the change of their well-being.
@@ -30,7 +29,8 @@ pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: 
 }
 
 /// The members of node `node` that do each option: count × chance, a part of less than one member being one member with
-/// that chance. The movers are one group whose direction is drawn, so their option holds the group and the other
+/// that chance. The members that move are one group, count × the sum of the chances to go in every direction, and the
+/// group takes the one direction drawn by its chance over that sum, so its option holds the group and the other
 /// directions none.
 fn members(node: &Body, c: &Choice, rng: &mut Rng) -> [f64; OPTS] {
     let mut part = |chance: f64| match node.count * chance { x if x > 0.0 && x < 1.0 => (rng.f64() < x) as u8 as f64, x => x };

@@ -329,7 +329,9 @@ A body inside exchanges through that link in series with its own surface. "Shelt
 
 ### 3.5 Moving needs force
 A mover pushes what it passes with `bump` of its weight, so it moves only if its force is at least `bump` × its whole
-mass and load × gravity (`choose::go`). The starting plants are too weak to move.
+mass and load × gravity (`choose::go`). The starting plants are too weak to move. A move refused for room or force
+changes nothing: a body lets go of what it cannot carry only once it can step. A move that passes both but cannot pay
+its cost does not happen either, and the body has let go of what it cannot carry before it was asked to pay.
 
 ### 3.6 What a body is built of holds it up and resists breaking
 **Height** (`Body::height`), by Greenhill's self-buckling column: h⁴ = 7.837 / 4π × (Σ E·V) × V / (m·g), V the volume

@@ -2,7 +2,7 @@
 //! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
 //! domains run and the threads that run them change nothing.
 
-use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ, MUT};
+use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ};
 use pcore::event::EventKind;
 use pcore::life::Handle;
 use pcore::outbox::{deliver, Entry};
@@ -175,11 +175,9 @@ fn the_order_of_the_domains_changes_nothing() {
     // anchors the part it holds, in cells spread over the island.
     let land = dry_lands(&w);
     let at = |k: usize| land[(2 * k + 1) * land.len() / 10];
-    let mut n = dispersing(&mut w, at(0), 3.0);
-    // (Its children are alike, so whether a litter lives does not hang on a mutation draw.)
-    n.genes[MUT] = -6.0;
+    let n = dispersing(&mut w, at(0), 3.0);
     let parent = w.add(n, 1);
-    let parent = w.life[parent].id;
+    let root = w.life.brain(w.life[parent].lineage).expect("the parent has a brain").root;
     let watcher = founder(&mut w, 1, at(1), &Brain::verb(brain::WATCH));
     w.add(watcher, 1);
     let (p, q) = (plate(&mut w, at(2), 5.0, false), plate(&mut w, at(3), 5.0, false));
@@ -284,7 +282,9 @@ fn the_order_of_the_domains_changes_nothing() {
     assert!(ends.iter().all(|v| state(v) == state(&ends[0])), "the threads or the order of the domains changed the world");
     let v = &ends[0];
     let kind = |f: &dyn Fn(&EventKind) -> bool| v.events.iter().filter(|e| f(&e.kind)).count();
-    let landed = children(v, parent).iter().filter(|&&c| v.life[c].cell as usize != at(0)).count();
+    // (A litter's birth is recorded when it lands, `copy::land_litter`: the parent's, in a cell next to it.)
+    let near = v.mesh.cells().around(at(0)).1;
+    let landed = v.events.iter().filter(|e| matches!(e.kind, EventKind::Born { root: r, .. } if r == root) && near.contains(&e.node)).count();
     let (watched, held) = (kind(&|k| matches!(k, EventKind::Watched { .. })), kind(&|k| matches!(k, EventKind::BondMade)));
     let ran = v.life.find(holder).is_none_or(|h| v.life[h].last > last);
     let made = v.life.brains.len() - lineages;
