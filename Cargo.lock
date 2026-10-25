@@ -291,7 +291,6 @@ dependencies = [
  "bincode",
  "flate2",
  "pcore",
- "rayon",
  "serde",
  "serde_json",
  "worldgen",

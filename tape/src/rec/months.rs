@@ -4,7 +4,7 @@
 
 use super::tally::{bump, slot, NC};
 use crate::measure::area_mean;
-use crate::par;
+use pcore::par;
 use super::{Recorder, CAUSES};
 use pcore::body::Body;
 use pcore::World;

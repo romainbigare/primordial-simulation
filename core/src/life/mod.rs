@@ -290,10 +290,12 @@ impl Life {
         self.unsent.add(k);
     }
     /// The entries of the outboxes of the domains that ran since the last, domain by domain, each's in the order made;
-    /// they are left empty.
+    /// they are left empty. Only a domain that ran has an outbox (checked in debug builds).
     pub(crate) fn take_queued(&mut self) -> Vec<Entry> {
         let Life { domains, unsent, .. } = self;
-        unsent.take().flat_map(|k| std::mem::take(&mut domains[k].out)).collect()
+        let queued = unsent.take().flat_map(|k| std::mem::take(&mut domains[k].out)).collect();
+        debug_assert!(domains.iter().all(|d| d.out.is_empty()), "an outbox in a domain that did not run");
+        queued
     }
     /// `members` members entered cell `i` in a move that spent `pushed` J pushing through its bodies
     /// (`choose::land_move`).

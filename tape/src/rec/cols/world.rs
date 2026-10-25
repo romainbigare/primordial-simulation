@@ -16,7 +16,8 @@ impl Recorder {
     pub(super) fn world_cols(&self, c: &Ctx, land: &[usize], row: &mut Row) {
         let w = c.w;
         let (life, area, air_area) = (&w.life, w.mesh.cells().area(), w.mesh.level(AIR).area());
-        let tot = &c.tot;
+        // What the world holds in all (`check::totals`).
+        let tot = pcore::check::totals(w);
         row.push("year", "yr", w.year());
         row.push("null", "1", w.cfg.null as u8 as f64);
         for (j, &v) in tot.elems.iter().enumerate() {

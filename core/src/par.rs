@@ -44,3 +44,40 @@ pub fn each<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
     #[cfg(not(feature = "threads"))]
     items.iter_mut().for_each(f);
 }
+
+#[cfg(feature = "threads")]
+/// Fewest items in a task of `map` and `map_n`: an item there costs about a microsecond, and a task costs more to start
+/// than a few of them.
+const MIN_TASK: usize = 32;
+
+/// `f` of each of `items`, in parallel, in the order of `items` (the tape adds them up in that order).
+pub fn map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync + Send) -> Vec<R> {
+    #[cfg(feature = "threads")]
+    {
+        use rayon::prelude::*;
+        items.par_iter().with_min_len(MIN_TASK).map(f).collect()
+    }
+    #[cfg(not(feature = "threads"))]
+    items.iter().map(f).collect()
+}
+
+/// `f(i)` for `i` in `0..n`, in parallel, in order.
+pub fn map_n<R: Send>(n: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
+    #[cfg(feature = "threads")]
+    {
+        use rayon::prelude::*;
+        (0..n).into_par_iter().with_min_len(MIN_TASK).map(f).collect()
+    }
+    #[cfg(not(feature = "threads"))]
+    (0..n).map(f).collect()
+}
+
+/// `a()` and `b()`, side by side on the pool (tasks that write different things); both results, in this order.
+pub fn join<A: Send, B: Send>(a: impl FnOnce() -> A + Send, b: impl FnOnce() -> B + Send) -> (A, B) {
+    #[cfg(feature = "threads")]
+    {
+        rayon::join(a, b)
+    }
+    #[cfg(not(feature = "threads"))]
+    (a(), b())
+}

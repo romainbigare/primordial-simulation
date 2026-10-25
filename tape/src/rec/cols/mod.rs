@@ -10,7 +10,7 @@ mod world;
 
 use super::{Column, Recorder, Spent};
 use crate::layers::Ctx;
-use crate::par;
+use pcore::par;
 
 /// The unit of the mineral columns counted in mol: 10^9 mol.
 const GIGA: f64 = 1e9;
@@ -44,7 +44,7 @@ fn ratio(a: f64, b: f64) -> f64 {
 impl Recorder {
     /// Write the yearly row, then start the sums of the year again.
     pub(super) fn push_series(&mut self, c: &Ctx, spent: &Spent) {
-        let land: Vec<usize> = (0..c.f.z.len()).filter(|&i| c.f.z[i] > 0.0).collect();
+        let land: Vec<usize> = (0..c.f.z.len()).filter(|&i| c.w.is_land(i)).collect();
         // The parts of the row that only read the recorder are made side by side; the rest follow, in the row's order.
         let ((world, kinds), (brains, parts)) = par::join(
             || par::join(|| made(|r| self.world_cols(c, &land, r)), || made(|r| self.kind_cols(c, r))),

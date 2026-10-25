@@ -1,6 +1,7 @@
 //! Flow in and through the air, solved together over a step (`step`; laws.md 1.4). Here: the state of the air nodes.
 
 mod book;
+mod cell;
 mod exchange;
 mod newton;
 mod radiation;

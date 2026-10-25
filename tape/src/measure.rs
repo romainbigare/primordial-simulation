@@ -1,7 +1,7 @@
 //! Numbers computed from the world's raw facts: how far learning has moved the brains, and means over areas. The core
 //! knows none of this.
 
-use crate::par;
+use pcore::par;
 use pcore::body::Body;
 use pcore::World;
 

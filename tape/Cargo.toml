@@ -8,12 +8,7 @@ pcore = { path = "../core" }
 serde.workspace = true
 serde_json = { version = "1", features = ["float_roundtrip"] }
 bincode = "1.3"
-rayon = { version = "1", optional = true }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [dev-dependencies]
 worldgen = { path = "../worldgen", features = ["testkit"] }
-
-[features]
-# The recorder's walks over bodies and cells on the pool (`par`); the rows come out the same without it.
-threads = ["dep:rayon"]

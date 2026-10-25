@@ -724,7 +724,9 @@ limit (+0.19 / +0.26 / +0.08 K). Expected gain of TR-BDF2 in calm months: Flow x
 The step (level 1): `pushed` and `crossings` live in each domain (`Domain::pushed`, `Domain::crossings`, one number
 per cell of the domain, saved with it, snapshot version 48); `Life` keeps two sets of domains (bits): the ones that ran
 since their moves were booked and since their outboxes were taken. `World::book_moves` and `Life::take_queued` visit only
-those. `Counters::crossings` and `Life::pushed` are gone. Core: +55 code lines (9,606 to 9,661): the sets, the saved shape of a domain, and `Life::pushed`, which the order test reads.
+those. The two world-wide lists (`Counters::crossings` and the list `Life::pushed`) are gone. Core: +55 code lines
+(9,606 to 9,661): the sets, the saved shape of a domain, and the reader `Life::pushed(i)`, which the test
+`an_entry_whose_target_is_gone_does_nothing_and_keeps_the_books` (`core/tests/outbox.rs`) reads.
 
 **Same world, bit for bit.** The snapshot has a new shape, so the bench saves of version 47 cannot be read: the three
 benches were made again with this build (`ew run` from worldgen, as `scripts/bench.sh`). The last line of each run
@@ -1059,7 +1061,7 @@ world one year later (seed 1) moves `run_for` by +0.15% (island22) and -1.3% (gl
 
 Doubt: the spread of three seeds is itself a noisy estimate (two degrees of freedom). The rule uses it as a guide, not as
 a test.
-## P1.1: `body::apply_extent`
+## P1.1: `pay::apply_extent`
 
 Level 1. The booking of a reaction's extent on a body's stores and on the air is one helper (`pay::apply_extent`), cut
 out of `pay::pay_at`, which calls it. The order of the floating-point operations is the same (the latent heat is added
@@ -1087,8 +1089,8 @@ that skipped that draw changed the world after a year, though the golden test di
 | island22, one year, one thread, callgrind (instructions), this step | 7,351,695,315 |
 | Change | -34.3 million, -0.46% |
 
-Verdict: bit for bit; the gain is under the kill line (-0.5%) by a little and under the aim (-0.8%). The commit stays
-on its branch for the architect to decide.
+Verdict: bit for bit; the gain is under the kill line (-0.5%) by a little and under the aim (-0.8%). It is kept (X54):
+the simpler code, and the 0.04 points are smaller than what it removes from E1b.1's work on faces.
 
 ## G8: the tape's recorder on the pool
 

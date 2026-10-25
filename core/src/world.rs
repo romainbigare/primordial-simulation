@@ -35,7 +35,8 @@ pub struct Counters {
 
 impl Counters {
     /// The counts `c` of a domain's bodies are added (`World::settle`), and start again. Every field is named, so a new
-    /// one cannot be left out; a domain keeps no counts per cell (checked in debug builds).
+    /// one cannot be left out. A domain's own counts per cell are its fields (`Domain::crossings`, `Domain::pushed`), so
+    /// its `traffic` stays empty (checked in debug builds).
     pub(crate) fn add(&mut self, c: &mut Counters) {
         let Counters { traffic, decisions, greedy, body_batches, busiest_share, splits, updates, clamped_heat, parts, rounded } = std::mem::take(c);
         debug_assert!(traffic.is_empty(), "a domain counted per cell");

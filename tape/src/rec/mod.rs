@@ -8,7 +8,7 @@ mod months;
 mod tally;
 
 use crate::layers::{frame, Ctx};
-use crate::par;
+use pcore::par;
 use months::MonthRow;
 use pcore::event::{Event, EventKind};
 use pcore::{Taken, World, AIR};

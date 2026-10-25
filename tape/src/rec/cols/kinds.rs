@@ -4,7 +4,7 @@
 
 use super::{ratio, Row};
 use crate::layers::Ctx;
-use crate::par;
+use pcore::par;
 use crate::rec::{Recorder, CAUSES};
 use pcore::body::{self, Body};
 use pcore::World;

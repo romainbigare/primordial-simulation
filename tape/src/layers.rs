@@ -1,9 +1,8 @@
 //! Surface fields, the layer table and byte quantisation for viewer frames.
 //! To add a layer, add one line to `LAYERS` (and the data it needs to `Ctx`).
 
-use crate::par;
+use pcore::par;
 use pcore::body::Body;
-use pcore::check::{totals, Totals};
 use pcore::chem::{Phase, Substance};
 use pcore::{World, AIR};
 
@@ -112,8 +111,6 @@ pub(crate) struct Ctx<'a> {
     /// Per living body (`Life::alive`): a light-eater (`body::light_eater`), and its mass, kg
     pub light: Vec<bool>,
     pub mass: Vec<f64>,
-    /// What the world holds in all (`check::totals`)
-    pub tot: Totals,
 }
 
 impl<'a> Ctx<'a> {
@@ -122,8 +119,8 @@ impl<'a> Ctx<'a> {
         let t_air = (0..w.mesh.level(AIR).n()).map(|j| w.t_air(j)).collect();
         let bodies: Vec<&Body> = w.life.alive().collect();
         let (light, mass) = par::map(&bodies, |b| (pcore::body::light_eater(&w.chem, &b.genes), b.mass(&w.chem))).into_iter().unzip();
-        let (f, tot) = par::join(|| fields(w), || totals(w));
-        let mut c = Ctx { w, f, tot, t_air, vapor: vec![], absorber: vec![], plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light, mass };
+        let f = fields(w);
+        let mut c = Ctx { w, f, t_air, vapor: vec![], absorber: vec![], plants: vec![0.0; n], animals: vec![0.0; n], bodies: vec![0.0; n], parts: vec![0.0; n], light, mass };
         for (x, p) in w.parts.parts.iter().enumerate().filter(|(_, p)| p.alive) {
             let i = pcore::bond::cell(w, x);
             c.parts[i] += p.mass(&w.chem) / w.mesh.cells().area()[i];
