@@ -2,7 +2,7 @@
 //! the books, a holder killed in the parallel phase lets go of its part in the serial phase, and the order in which the
 //! domains run and the threads that run them change nothing.
 
-use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ};
+use pcore::body::{die, Body, BROKEN, CHILD, COPY_MASS, DISPERSE, HIDDEN, LACK, LIQ, MUT};
 use pcore::event::EventKind;
 use pcore::life::Handle;
 use pcore::outbox::{deliver, Entry};
@@ -174,7 +174,9 @@ fn the_order_of_the_domains_changes_nothing() {
     // anchors the part it holds, in cells spread over the island.
     let land = dry_lands(&w);
     let at = |k: usize| land[(2 * k + 1) * land.len() / 10];
-    let n = dispersing(&mut w, at(0), 3.0);
+    let mut n = dispersing(&mut w, at(0), 3.0);
+    // (Its children are alike, so whether a litter lives does not hang on a mutation draw.)
+    n.genes[MUT] = -6.0;
     let parent = w.add(n, 1);
     let parent = w.life[parent].id;
     let watcher = founder(&mut w, 1, at(1), &Brain::verb(brain::WATCH));

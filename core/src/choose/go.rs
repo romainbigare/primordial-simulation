@@ -13,10 +13,10 @@ use crate::{bond, copy, lanes, nodes, life::Domain, outbox::Entry, World};
 /// node who join their kind where they land.
 pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
     let (i, mb) = (b.cell as usize, b.mass(&w.chem));
-    if (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body > w.cfg.phys.layer * w.mesh.cells().area()[j] {
+    let carried = bond::carry(w, b);
+    if !can_go(w, b, j, 1.0, carried.map_or(0.0, |c| c.1)) {
         return;
     }
-    let carried = bond::carry(w, b);
     if carried.is_none() {
         bond::let_go(w, d, b, true);
     }
@@ -24,10 +24,6 @@ pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
     let climb = if afloat { 0.0 } else { (w.life.env[j][2] - w.life.env[i][2]).max(0.0) };
     let resist = lanes::resist(w, i, j);
     let mass = mb + carried.map_or(0.0, |c| c.1);
-    // A mover pushes what it passes with `bump` of its weight, so it must push that much itself.
-    if bond::bears(w, b) < w.cfg.phys.bump * mass * w.cfg.gravity {
-        return;
-    }
     let cost = mass * (w.cfg.phys.walk(mb / b.n()) * w.mesh.cells().dist()[lanes::link(w, i, j)] + w.cfg.gravity * climb) * resist * if afloat { w.cfg.phys.afloat } else { 1.0 };
     if !body::pay(w, d, b, cost, b.interval(w) as f64) {
         return;
@@ -39,6 +35,16 @@ pub fn go(w: &World, d: &mut Domain, b: &mut Body, j: usize, kin: bool) {
     let lane = if all > 0.0 { pushed * w.mesh.cells().area()[j] / all } else { 0.0 };
     b.leaving = true;
     d.out.push(Entry::Go { id: b.id, from: i as u32, to: j as u32, pushed, lane, carries: carried.is_some(), kin });
+}
+
+/// Whether share `share` of body `b` (a node's movers, or the body whole with 1) carrying `load` kg can step into cell
+/// `j`: the cell has room for its mass (`Physics::layer`), and the body bears the `bump` share of the weight it moves
+/// (`Physics::bump`), since it pushes what it passes. Both go by the mover's mass, so a node asks before it splits any
+/// movers off. (What a move pays and where it lands are for `go`.)
+pub(super) fn can_go(w: &World, b: &Body, j: usize, share: f64, load: f64) -> bool {
+    let mb = share * b.mass(&w.chem);
+    (w.life.sum[j][1] + mb) / w.cfg.phys.rho_body <= w.cfg.phys.layer * w.mesh.cells().area()[j]
+        && share * bond::bears(w, b) >= w.cfg.phys.bump * (mb + load) * w.cfg.gravity
 }
 
 /// The move of body `id` from cell `i` to `j` that `go` queued lands, if the body still lives: it enters `j` (its

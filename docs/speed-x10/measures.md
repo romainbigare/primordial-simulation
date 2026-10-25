@@ -1304,3 +1304,46 @@ domains by `Life`'s `IndexMut` and `in_domain`, and mark them. A new writer of a
 goes through `IndexMut`; only a writer that bypasses it (as `Life::each_mut` does, which writes no face number) would.
 `Life::faces_of` reads nothing outside a batch (`Life::batch`). `Faces` are per domain by the slot of the cell in the
 domain (`Faces::of(k)`), so tiles of 4 cells change only their length.
+## MI5: a node's movers leave as one group
+
+Level 3 (the world changes: the movers come in groups, and the random draws change). The members that move are
+`count` times the sum of the chances to go in every direction, in the one direction drawn by its chance over that sum.
+`can_go` (room in the cell, force for the weight) is asked before any movers are split off. Core code 9,680 to 9,699.
+
+| Check | Result |
+|---|---|
+| Golden test, with threads and with one thread | re-pinned (the movers' draws changed); the same fingerprints with both |
+| globe36, one year, one thread, callgrind (instructions), base `0308835`, bench48 save | 7,399,600,928 |
+| globe36, one year, one thread, callgrind (instructions), this step | 7,187,380,613 |
+| Change | -212.2 million, **-2.87%** |
+| Body updates in that year, base and this step | 20,762 and 20,712 (-0.24%), so per update -2.6% |
+| Animal members and nodes at the end of that year, base and this step | 5.659e10 and 5.666e10; 338 and 344 nodes |
+| Nodes check (`nodes_and_individuals_make_the_same_world`, 458 s) | passes: rules (b) and (c), the held ones, break nowhere. Rules (a) and (d) are not held; they print the same kind of gaps as before (roster seed 5: two masses, one real life) |
+| Other tests | the workspace suite passes, clippy has no warnings, the wasm build passes; the slow learning scene (`body_learns_to_move_toward_what_it_can_take`) passes |
+| Key numbers (once, 144 s) | all in range; only S50 fails (0.556, the known failure) |
+
+The key numbers against the references after AIR4.0 (seeds 1, 2, 3 in the references; here the mean):
+
+| Key number | This step | Reference after AIR4.0 |
+|---|---|---|
+| ground temperature on land | 292.158861 K | 292.141805 K |
+| seasonal swing on land | 15.470413 K | 15.466616 K |
+| rain on land | 0.001813 mol/m2/s | 0.001813 |
+| heat-absorbing gas | 411.570531 ppm | 411.302593 ppm |
+| river cells | 694.3 | 691.9 |
+| land worn down | 0.145058 mm/yr | 0.145151 mm/yr |
+| light-eaters | 10.241703 log10 kg | 10.243410 |
+| eaters | 5.377900 log10 kg | 5.392981 |
+| life of light-eaters | 1.170361 yr | 1.217728 yr |
+| life of eaters | 13.828174 yr | 13.115309 yr |
+| light-eaters' stored share (S50) | 0.556 | 0.556 (known failure) |
+
+One more change comes with `can_go`: `go` asks it too, before a body lets go of what it cannot carry, so a body too weak
+to push itself no longer drops what it holds when its move fails.
+
+The scene of `the_order_of_the_domains_changes_nothing` (`core/tests/outbox.rs`) counted a litter that lands by the
+children left alive 30 batches later. The world before the scene changed, the parent got another id, its litter drew
+other mutations and died young. The parent's mutation size is now 10^-6, so its litter is as fit as itself and lives.
+The test's assertions are the same.
+
+Verdict: -2.87% on the globe against the kill line of -1.5%, and the nodes check passes. The commit is kept.

@@ -1,6 +1,7 @@
 //! A node's decision as a spread of actions (handover 7.1): its members spread over the options by the chances its
 //! brain gives them, the chances an individual draws from, and each part acts as so many members would.
 
+use super::go::can_go;
 use super::*;
 use crate::body::{die, LACK};
 use crate::life::Handle;
@@ -8,11 +9,12 @@ use crate::store::{Class, Node, NodeId};
 use crate::nodes;
 
 /// Node `node` (taken out of its slot) spreads its members over the options: count × chance of them do each, a part of less
-/// than one member being one member with that chance. A part acts as so many members together (`part_acts`; the moves
-/// last, so the others act where the node is). Its brain learns as from one member drawn among those who stayed (`trace`): from what that member did,
+/// than one member being one member with that chance. The members that move are one group, count × the sum of the
+/// chances to go in every direction, and the group takes the one direction drawn by its chance over that sum (`movers`).
+/// A part acts as so many members together (`part_acts`; the moves last, so the others act where the node is). Its brain learns as from one member drawn among those who stayed (`trace`): from what that member did,
 /// and how much more its part's action raised their well-being than the mean of the members.
 pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, rng: &mut Rng) {
-    let x: [f64; OPTS] = std::array::from_fn(|o| match node.count * c.p[o] as f64 { x if x > 0.0 && x < 1.0 => (rng.f64() < x) as u8 as f64, x => x });
+    let x = members(node, c, rng);
     // The members of each option in the node after acting, and the change of their well-being.
     let (mut kept, mut gain) = ([0.0; OPTS], [0f32; OPTS]);
     for o in (0..FIXED).chain(TO_BODY..OPTS).chain(FIXED..TO_BODY).filter(|&o| x[o] > 0.0) {
@@ -25,6 +27,24 @@ pub(super) fn spread(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: 
     let mut u = rng.f64() * kept.iter().sum::<f64>();
     let a = (0..OPTS).find(|&o| { u -= kept[o]; u < 0.0 }).unwrap_or(REST);
     node.trace = trace(w, node, c, k, a, gain[a] - mean as f32);
+}
+
+/// The members of node `node` that do each option: count × chance, a part of less than one member being one member with
+/// that chance. The movers are one group whose direction is drawn, so their option holds the group and the other
+/// directions none.
+fn members(node: &Body, c: &Choice, rng: &mut Rng) -> [f64; OPTS] {
+    let mut part = |chance: f64| match node.count * chance { x if x > 0.0 && x < 1.0 => (rng.f64() < x) as u8 as f64, x => x };
+    let moves = FIXED..TO_BODY;
+    let mut x: [f64; OPTS] = std::array::from_fn(|o| if moves.contains(&o) { 0.0 } else { part(c.p[o] as f64) });
+    let chance: f64 = c.p[moves.clone()].iter().map(|&p| p as f64).sum();
+    let group = part(chance);
+    if group > 0.0 {
+        // The direction: the chance of each over their sum.
+        let mut u = rng.f64() * chance;
+        let way = moves.clone().filter(|&o| c.p[o] > 0.0).find(|&o| { u -= c.p[o] as f64; u < 0.0 });
+        x[way.unwrap_or_else(|| moves.rev().find(|&o| c.p[o] > 0.0).expect("a group of movers has a direction"))] = group;
+    }
+    x
 }
 
 /// `x` members of node `node` (taken out of its slot) do option `o`. Members that stay in its cell (any option but a move or a
@@ -57,6 +77,10 @@ fn part_acts(w: &World, d: &mut Domain, node: &mut Body, c: &Choice, k: &Kit, (o
         (node.hold, node.inside) = held;
         nodes::rejoin(w, d, node, rest, size, None);
         return (gain, Some(false));
+    }
+    // (A move that cannot happen splits nothing.)
+    if moves && !can_go(w, node, c.to[o - FIXED], f, 0.0) {
+        return (0.0, Some(false));
     }
     let part = nodes::part(d, node, f, f);
     let s = d.place(w, part);
