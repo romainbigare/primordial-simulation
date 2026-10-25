@@ -38,10 +38,8 @@ impl Body {
     pub fn digest(&mut self, chem: &Chemistry, taken: f64, rounded: &mut f64) -> f64 {
         let Some(bl) = chem.build.as_ref() else { return 0.0 };
         let m = bl.outputs[0].0 as usize;
-        let mut x = (taken / bl.outputs[0].1 as f64).min(self.store[m] / bl.outputs[0].1 as f64);
-        for &(k, nu) in &bl.outputs[1..] {
-            x = x.min(self.store[k as usize] / nu as f64);
-        }
+        let most = (taken / bl.outputs[0].1 as f64).min(self.store[m] / bl.outputs[0].1 as f64);
+        let x = bl.outputs[1..].iter().fold(most, |x, &(k, nu)| x.min(self.store[k as usize] / nu as f64));
         if x <= 0.0 {
             return 0.0;
         }
@@ -51,7 +49,7 @@ impl Body {
         for &(k, nu) in &bl.inputs {
             self.store[k as usize] += nu as f64 * x;
         }
-        self.e -= -chem.build.as_ref().map_or(0.0, |b| chem.dh_of(b)) * x;
+        self.e -= -chem.dh_of(bl) * x;
         x
     }
     /// Energy a mole of `k` gives its body's burnings at `t`, J: the best over `Consts::burn` (0 for a gas).

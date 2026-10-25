@@ -39,10 +39,7 @@ impl Body {
     /// Body matter taken in is digested into what it was built of, so it fills those stores' room: amounts `m` are cut
     /// together until the fuels and what the matter becomes fit (else an eater's room would grow without end).
     pub(crate) fn digest_room(&self, chem: &Chemistry, paces: f64, m: &mut [f64], mass: f64) {
-        let (Some(bl), Some(km)) = (chem.build.as_ref(), chem.matter()) else { return };
-        if m[km] <= 0.0 {
-            return;
-        }
+        let (Some(bl), Some(km)) = (chem.build.as_ref(), chem.matter().filter(|&km| m[km] > 0.0)) else { return };
         let room = |k: usize| self.room(chem, paces, k, mass);
         let per = bl.outputs[0].1 as f64;
         // Only the fuels: the minerals it makes of the matter it sheds.

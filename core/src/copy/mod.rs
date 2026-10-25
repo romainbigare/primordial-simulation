@@ -276,14 +276,12 @@ fn child_rows(w: &World, d: &Domain, b: &Body, l: &Births, m: f64, size: f32, r:
         0.0
     };
     let left = (var * (1.0 - 1.0 / mm)).min(most(row_step(p, size), p.alike));
-    match (pre, sd > 0.0) {
-        (v, false) => (v, left),
-        (v, true) => {
-            let mut v = v.unwrap_or_else(|| d.born(w, b).to_vec());
-            shake(&mut v, r, sd);
-            (Some(v), left)
-        }
+    if sd > 0.0 {
+        let mut v = pre.unwrap_or_else(|| d.born(w, b).to_vec());
+        shake(&mut v, r, sd);
+        return (Some(v), left);
     }
+    (pre, left)
 }
 
 /// The lineage of an individual's child: its parent's if its brain-size genes fit it (no size a whole unit away,

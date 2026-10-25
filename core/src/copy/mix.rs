@@ -23,10 +23,7 @@ pub(super) fn partner(w: &World, d: &Domain, b: &Body, r: &mut Rng) -> Option<Ha
             continue;
         }
         // (The genes first, as they end at the first one unlike; the size of the body last.)
-        let Some(d) = distance(&lay, &b.genes, &t.genes, |_| lim).filter(|&d| d <= best) else { continue };
-        if !t.adult(&w.chem) {
-            continue;
-        }
+        let Some(d) = distance(&lay, &b.genes, &t.genes, |_| lim).filter(|&d| d <= best && t.adult(&w.chem)) else { continue };
         let key = Rng::new(draw, 0, t.id, Purpose::Partner).u64();
         if d < best || pick.is_some_and(|(_, k)| key < k) {
             (best, pick) = (d, Some((s, key)));

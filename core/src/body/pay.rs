@@ -71,7 +71,7 @@ pub fn pay(w: &World, d: &mut Domain, b: &mut Body, cost: f64, days: f64) -> boo
 pub(crate) fn spend(w: &World, d: &mut Domain, b: &mut Body, cost: f64, dt: f64, part: bool, p: &Payer) -> f64 {
     let (left, mass, th0) = (pay_at(w, d, b, cost, p, part), p.mass, &p.th);
     // The heat released leaves through its surface over `dt`: the body keeps the share `hold`, the ground gets the rest.
-    let (keep, i) = (b.energy_in(&w.chem, th0), b.cell as usize);
+    let (keep, i) = (b.heat_with(&w.chem, th0, &b.store), b.cell as usize);
     if b.e > keep {
         let held = hold(w, d, b, mass, th0.t, dt);
         d.moves.give(w, Node::ground(i), 0, 0.0, (b.e - keep) * (1.0 - held));
@@ -94,11 +94,8 @@ pub fn plan(w: &World, d: &Domain, b: &Body, cost: f64, p: &Payer) -> (Vec<f64>,
     let (t, days, share, tot) = (p.th.t, p.days, p.share, p.tot);
     let gas = |k: usize| chem.phase(k, t) == Phase::Gas;
     let mut have = [0.0f64; MAX_SUBSTANCES];
-    for &(r, _) in &b.k.burn {
-        for &(k, _) in &chem.reactions[r].inputs {
-            let k = k as usize;
-            have[k] = if gas(k) { air(k) * share } else { b.store[k] };
-        }
+    for k in b.k.burn.iter().flat_map(|&(r, _)| &chem.reactions[r].inputs).map(|p| p.0 as usize) {
+        have[k] = if gas(k) { air(k) * share } else { b.store[k] };
     }
     let (mut ext, mut got) = (vec![0.0f64; b.k.burn.len()], 0.0);
     for (q, &(r, e)) in b.k.burn.iter().enumerate() {
@@ -136,11 +133,8 @@ pub(super) fn pay_at(w: &World, d: &mut Domain, b: &mut Body, cost: f64, p: &Pay
     let held = b.matter_mol(&w.chem);
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
         // Its inputs, then its outputs.
-        let ins = w.chem.reactions[r].inputs.len();
-        for x in 0..ins + w.chem.reactions[r].outputs.len() {
-            let rx = &w.chem.reactions[r];
-            let ((k, nu), sign) = if x < ins { (rx.inputs[x], -1.0) } else { (rx.outputs[x - ins], 1.0) };
-            let (k, dn) = (k as usize, sign * nu as f64 * ext[q]);
+        for (k, nu) in crate::change::terms(&w.chem.reactions[r]) {
+            let dn = nu * ext[q];
             if w.chem.phase(k, t) == Phase::Gas {
                 d.moves.gas(w, k, dn, lift);
                 latent += dn * w.chem.subs[k].latent_gas();

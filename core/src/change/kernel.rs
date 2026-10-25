@@ -97,7 +97,7 @@ fn frozen_below(rx: &Reaction, year: f64) -> f64 {
 }
 
 /// The substances reaction `rx` changes, each with what a reaction unit makes of it (minus what it uses).
-fn terms(rx: &Reaction) -> impl Iterator<Item = (usize, f64)> + '_ {
+pub(crate) fn terms(rx: &Reaction) -> impl Iterator<Item = (usize, f64)> + '_ {
     rx.inputs.iter().map(|&(k, nu)| (k as usize, -(nu as f64))).chain(rx.outputs.iter().map(|&(k, nu)| (k as usize, nu as f64)))
 }
 

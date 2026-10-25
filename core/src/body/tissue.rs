@@ -145,13 +145,8 @@ impl Body {
         let share = |f: f64| f.clamp(0.0, MAX_KEEP) / (1.0 - f.clamp(0.0, MAX_KEEP));
         match chem.matter() {
             Some(_) if chem.is_material(k) => self.share(chem, k) / (1.0 - self.share(chem, usize::MAX)) * self.matter_kg(chem) / mm,
-            Some(m) if k != m => {
-                if self.wet >> k & 1 == 1 {
-                    share(f) * self.matter_kg(chem) / mm
-                } else {
-                    f.max(0.0) * self.built(chem) / mm
-                }
-            }
+            Some(m) if k != m && self.wet >> k & 1 == 1 => share(f) * self.matter_kg(chem) / mm,
+            Some(m) if k != m => f.max(0.0) * self.built(chem) / mm,
             _ => (share(f) * (mass - self.store[k] * mm) / mm).max(0.0),
         }
     }

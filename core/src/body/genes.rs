@@ -185,11 +185,6 @@ pub(crate) fn spread_kept(lay: &Layout, g: usize, x: f32, v: f32) -> f32 {
     if g >= lay.cat && x < 0.0 { 0.0 } else { v }
 }
 
-/// A body's spread per gene (`spread_at`).
-pub(crate) fn spreads(b: &Body) -> Vec<f32> {
-    (0..b.genes.len()).map(|g| spread_at(&b.spread, g)).collect()
-}
-
 /// How far apart genes `a` and `b` are: the sum of their squared gaps in steps (`step`), if in every gene `g` the gap
 /// is at most `reach(g)` steps; else none.
 pub(crate) fn distance(lay: &Layout, a: &[f32], b: &[f32], reach: impl Fn(usize) -> f32) -> Option<f32> {

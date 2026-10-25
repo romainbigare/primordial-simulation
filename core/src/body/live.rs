@@ -79,30 +79,22 @@ fn site(w: &World, d: &Domain, b: &Body) -> Site {
 /// Flow and Change on one body since its last update: upkeep, the physics of the time (`physics`), the heat it keeps,
 /// the checks of its stores, growth and copying, and what it sheds. Returns what it left for its decision, or a death cause.
 pub(crate) fn live(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<Lived, u8> {
-    let (g, s) = to_growth(w, d, b, rc, tmp)?;
+    let (mut lived, built, s) = to_growth(w, d, b, rc, tmp)?;
     // Offspring are made whenever the brood covers a child, by physics, whatever its brain does (`copy::copy`). The key
     // liquid the new tissue lacks and the children took soaks in again (`soak_again`).
     let born = b.brood > 0.0 && crate::copy::copy(w, d, b);
-    if g.built || born {
+    if built || born {
         soak_again(w, d, b, &s);
     }
-    let mass = shed(w, d, b);
-    Ok(Lived { lit: g.lit, spare: g.spare, mass, gain: g.gain })
-}
-
-/// What an update did as far as its growth (`to_growth`): the light it caught per kg per day, J, its spare, whether it
-/// built, and what its members gained (`Lived::gain`).
-struct Growth {
-    lit: f64,
-    spare: f64,
-    built: bool,
-    gain: f64,
+    lived.mass = shed(w, d, b);
+    Ok(lived)
 }
 
 /// The update of body `b` as far as its growth (`live`): upkeep, the physics of the time, the heat it keeps, the
 /// checks of its stores, and growth, which builds body matter paid by work (`copy::grow`; past maturity a share
-/// `ALLOC` of it goes into the brood). Returns what it did and where it is, or a death cause.
-fn to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<(Growth, Site), u8> {
+/// `ALLOC` of it goes into the brood). Returns what it left for its decision but its mass (`live` sets it after it
+/// sheds), whether it built, and where it is; or a death cause.
+fn to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mut LiveTmp) -> Result<(Lived, bool, Site), u8> {
     let s = site(w, d, b);
     // (Its activity as the update begins: the stages that pay and what it can build read it from here.)
     let (mass, dry) = (b.mass(&w.chem), b.activity(&w.chem, &w.cfg.phys));
@@ -121,7 +113,7 @@ fn to_growth(w: &World, d: &mut Domain, b: &mut Body, rc: &mut Reactor, tmp: &mu
         return Err(SPENT);
     }
     let gain = (crate::copy::buildable(w, b, s.tg, b.activity(&w.chem, &w.cfg.phys)) / held.max(f64::MIN_POSITIVE)).ln();
-    Ok((Growth { lit, spare, built, gain }, s))
+    Ok((Lived { lit, spare, mass: 0.0, gain }, built, s))
 }
 
 /// What the members of body `b` (taken out of its slot) gain in an update as far as its growth (`Lived::gain`;
@@ -162,7 +154,7 @@ fn settle_upkeep(w: &World, d: &mut Domain, b: &mut Body, s: &Site, (mut mass, d
     let worn = cost / (b.built(&w.chem).max(1e-9 * mass) * w.cfg.phys.e_life * b.dec(REPAIR));
     // The heat set aside is what the burning released less what its products take to stand at the body's temperature, so
     // the body keeps its temperature as its stores change (as in `pay`).
-    let kept = b.energy_in(&w.chem, &p.th);
+    let kept = b.heat_with(&w.chem, &p.th, &b.store);
     let upkeep_heat = b.e - kept;
     b.e = kept;
     for (f, cause) in [(short, SPENT), (one_minus_exp(worn), AGE)] {
@@ -232,10 +224,7 @@ fn check_stores(w: &World, d: &mut Domain, b: &mut Body, tmp: &mut LiveTmp) -> R
     let frozen = (0..ns).filter(|&k| key(k)).map(frozen).fold(0.0, f64::max);
     if frozen > 0.0 {
         let f = frozen * b.activity(chem, &w.cfg.phys);
-        if f >= 1.0 - 1e-9 {
-            return Err(PHASE);
-        }
-        if !lose_share(w, d, b, b.over_span(f, w), PHASE, &mut tmp.dead, &th) {
+        if f >= 1.0 - 1e-9 || !lose_share(w, d, b, b.over_span(f, w), PHASE, &mut tmp.dead, &th) {
             return Err(PHASE);
         }
         return Ok(b.thermal(&w.chem));

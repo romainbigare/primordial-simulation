@@ -86,9 +86,8 @@ pub(crate) fn sample(w: &World, d: &mut Domain, b: &Body, rc: &mut Reactor, tmp:
         return None;
     }
     let mut s = b.clone();
-    let mut genes = b.genes.clone();
-    genes[g] += step;
-    s.set_genes(genes, &w.chem, &w.cfg);
+    s.genes[g] += step;
+    s.prepare(&w.chem, &w.cfg);
     let mark = d.checkpoint();
     let gain = gain_to_growth(w, d, &mut s, rc, tmp);
     d.roll_back(mark);
@@ -104,8 +103,7 @@ pub(crate) fn select(w: &World, b: &mut Body, s: Sample, gain: f64) {
         return;
     }
     let (_, lo, hi) = range(&Layout::of(&w.chem), s.gene);
-    let mut genes = b.genes.clone();
     let cap = w.cfg.sample_every as f32 * s.step.abs();
-    genes[s.gene] = (genes[s.gene] + (s.genes * s.step * f).clamp(-cap, cap)).clamp(lo, hi);
-    b.set_genes(genes, &w.chem, &w.cfg);
+    b.genes[s.gene] = (b.genes[s.gene] + (s.genes * s.step * f).clamp(-cap, cap)).clamp(lo, hi);
+    b.prepare(&w.chem, &w.cfg);
 }

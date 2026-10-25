@@ -37,12 +37,6 @@ struct Soil {
     rate: f64,
 }
 
-impl Soil {
-    fn liquid(&self, k: usize) -> bool {
-        self.wets >> k & 1 == 1
-    }
-}
-
 /// The physics of a body of `mass` kg at the plateau state `th0` (`Body::thermal`) over its update, with the heat its
 /// upkeep released. Returns the light it caught per kg per day, J.
 #[allow(clippy::too_many_arguments)]
@@ -209,16 +203,16 @@ fn evaporate(w: &World, d: &mut Domain, b: &mut Body, tmp: &LiveTmp, s: &Site, h
         let need = ((e1 - ct * b.gene(COOL_T)) / bx / chem.subs[k].latent_gas()).max(0.0);
         let spare = if b.wet >> k & 1 == 1 { b.store[k] - b.gene(lay.min + k) * size / chem.subs[k].molar_mass } else { 0.0 };
         let gk = d.moves.amount(w, Node::ground(i), k);
-        let soak_rate = if soil.in_ground > 0.0 && soil.liquid(k) { soil.rate * chem.subs[k].solubility * gk / soil.in_ground } else { 0.0 };
+        let soak_rate = if soil.in_ground > 0.0 && soil.wets >> k & 1 == 1 { soil.rate * chem.subs[k].solubility * gk / soil.in_ground } else { 0.0 };
         let open_m = if b.wet >> k & 1 == 1 { through(b.store[k], b.level(chem, k, 0.0), push * reach, soak_rate * days, cfg.phys.dormancy) } else { push * reach };
         let (cp, latent, flows) = (chem.subs[k].cp, chem.subs[k].latent_gas(), soak_rate > 0.0 && b.wet >> k & 1 == 1);
         let fused = chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j));
         let (own, conduct) = (h.heat - h.lit + h.took - warmed, g * dt * (tg - chem.t_sat(k, tmp.x[k])).max(0.0));
-        let (per, cool) = (PerMol { latent, brings: fused - cp * (t0 - tg) }, (push * wide).min(need).min(spare));
+        let (per, cool) = ((latent, fused - cp * (t0 - tg)), (push * wide).min(need).min(spare));
         let want = open_m.max(cool);
-        let m = want.min(heat_bound(own + conduct.min(held), &per, b.store[k], flows));
+        let m = want.min(heat_bound(own + conduct.min(held), per, b.store[k], flows));
         // What the surface could conduct in beyond that, it asks of the ground until its next update (`survey::Draw`).
-        h.asked += (want.min(heat_bound(own + conduct, &per, b.store[k], flows)) - m).max(0.0) * latent;
+        h.asked += (want.min(heat_bound(own + conduct, per, b.store[k], flows)) - m).max(0.0) * latent;
         // What flows through it comes from the ground, which pays its heat and fusion enthalpy.
         let inflow = if flows { (m - b.store[k]).max(0.0).min(gk) } else { 0.0 };
         let pre = d.moves.take_from_ground(w, i, (k, inflow, cp), inflow * (cp * tg + fused), h.gcap).0;
@@ -244,21 +238,15 @@ fn held_for(w: &World, d: &Domain, b: &Body, i: usize) -> f64 {
     b.draw.owed.min(d.moves.heat(w, Node::bodies(i))).max(0.0)
 }
 
-/// Per mol of a liquid that evaporates, J: its latent heat; and of what flows in from the ground, the heat it brings the
-/// body (its fusion enthalpy less its warming to the body).
-struct PerMol {
-    latent: f64,
-    brings: f64,
-}
-
-/// The most of a liquid a body holding `held` mol can evaporate with `pay` J, mol. Past its store the liquid flows in
-/// from the ground (if `flows`): (held + u) latent <= pay + u brings.
-fn heat_bound(pay: f64, per: &PerMol, held: f64, flows: bool) -> f64 {
-    if !flows || pay <= held * per.latent {
-        return pay.max(0.0) / per.latent;
+/// The most of a liquid a body holding `held` mol can evaporate with `pay` J, mol: per mol it takes its latent heat
+/// `latent`, J. Past its store the liquid flows in from the ground (if `flows`), each mol bringing the body `brings` J
+/// (its fusion enthalpy less its warming to the body): (held + u) latent <= pay + u brings.
+fn heat_bound(pay: f64, (latent, brings): (f64, f64), held: f64, flows: bool) -> f64 {
+    if !flows || pay <= held * latent {
+        return pay.max(0.0) / latent;
     }
-    let cost = per.latent - per.brings;
-    held + if cost > 0.0 { (pay - held * per.latent) / cost } else { f64::INFINITY }
+    let cost = latent - brings;
+    held + if cost > 0.0 { (pay - held * latent) / cost } else { f64::INFINITY }
 }
 
 /// Liquids of the ground soak in up to the body's room (`Body::room`) at the rate of `Soil` × solubility, while it loses
@@ -268,7 +256,7 @@ fn heat_bound(pay: f64, per: &PerMol, held: f64, flows: bool) -> f64 {
 fn soak(w: &World, d: &mut Domain, b: &mut Body, s: &Site, gcap: f64, heat: &mut f64, soil: &Soil, lost: &[f64], fall: f64, mass2: f64) {
     let paces = b.paces(w);
     let (i, tg, days) = (s.i, s.tg, s.days);
-    for k in (0..w.chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.liquid(k)) {
+    for k in (0..w.chem.ns()).filter(|&k| soil.in_ground > 0.0 && soil.wets >> k & 1 == 1) {
         let (chem, gk) = (&w.chem, d.moves.amount(w, Node::ground(i), k));
         let (x, room) = (gk / soil.in_ground, b.room(chem, paces, k, mass2));
         // At rate r per day over `days` with a loss e a day it takes gap f + e days (1 - f / (r days)), f = 1 - exp(-r days).
@@ -281,13 +269,12 @@ fn soak(w: &World, d: &mut Domain, b: &mut Body, s: &Site, gcap: f64, heat: &mut
 }
 
 /// Up to `want` mol of liquid `k` of ground node `i` go into the body with their heat at `tg` and their fusion enthalpy
-/// (into `heat`), which the ground pays, or the body takes less. Returns the mol taken.
-fn soak_in(w: &World, d: &mut Domain, b: &mut Body, (i, tg, gcap): (usize, f64, f64), (k, want): (usize, f64), heat: &mut f64) -> f64 {
+/// (into `heat`), which the ground pays, or the body takes less.
+fn soak_in(w: &World, d: &mut Domain, b: &mut Body, (i, tg, gcap): (usize, f64, f64), (k, want): (usize, f64), heat: &mut f64) {
     let (cp, fused) = (w.chem.subs[k].cp, w.chem.fused_heat(k, tg, |j| d.moves.amount(w, Node::ground(i), j)));
     let per = cp * tg;
     let took = d.moves.take_from_ground(w, i, (k, want, cp), want * (per + fused), gcap).0;
     (b.store[k], b.e, *heat) = (b.store[k] + took, b.e + took * per, *heat + took * fused);
-    took
 }
 
 /// After growth and children the key liquids soak in again at the same update: new matter raises their level and

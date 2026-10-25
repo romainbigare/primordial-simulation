@@ -39,7 +39,6 @@ pub fn cover_of(w: &World, d: &Domain, b: &Body) -> f64 {
 /// surface at Ts, then in parallel the still air (`film`) and radiation (from Ts, found once). A cover passes `shelter` /
 /// `cover` per m² of skin in series with the skin's still air; walls are in series with it all. A 30 kg member with a
 /// coat gene of -1.0 gets 0.8 W/K (Herreid and Kessel 1967 measured 0.94 for fur).
-#[allow(clippy::too_many_arguments)]
 pub(super) fn surface(cfg: &crate::Config, b: &Body, mass: f64, f: &Film, walls: Option<Enclosure>, t: f64, tg: f64) -> f64 {
     let coat = b.conductance(cfg.phys.m_ref, mass);
     let out = f.g + radiated(f.area, t, tg);

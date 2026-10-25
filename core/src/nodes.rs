@@ -3,7 +3,7 @@
 //! node as individuals (`open`). Members, stores and heat are kept exactly in every join and split.
 
 use crate::bond::{held, let_go, room};
-use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, spreads, steps, wall_room, within_steps, Body, Layout, REACH};
+use crate::body::{self, alike, most, noise, range, spread_at, spread_kept, steps, wall_room, within_steps, Body, Layout, REACH};
 use crate::brain::{blend, row_step, shake};
 use crate::rng::{Purpose, Rng};
 use crate::life::Handle;
@@ -24,11 +24,6 @@ pub(crate) fn crowd(w: &World, d: &mut Domain, lay: &Layout, i: usize) {
 /// room it is in (its root, as the room law counts those inside, `bond::room`) and the structure it holds (its root).
 type Kin = (u32, bool, Option<usize>, Option<usize>);
 
-/// The `Kin` of body `b`.
-fn kin_of(w: &World, b: &Body) -> Kin {
-    (b.lineage, b.adult(&w.chem), room(w, b).map(|r| r.0), held(w, b).map(|p| w.parts.parts[p].root as usize))
-}
-
 /// Each body of cell `i`, largest first (equals in the cell's order), however few its members, joins the first larger node (more than one member,
 /// as in `copy::kin`) alike in genes (`body::alike`, on the means only, so a split's halves stay apart for selection)
 /// of its `Kin`. Returns the bodies left.
@@ -38,7 +33,8 @@ fn join_alike(w: &World, d: &mut Domain, lay: &Layout, i: usize) -> Vec<Handle> 
     list.sort_by_key(|x| x.0);
     let mut head: Vec<usize> = (0..list.len()).collect();
     // Each one's kin once, tested before the genes.
-    let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin_of(w, &b[s])).collect();
+    let kin = |o: &Body| (o.lineage, o.adult(&w.chem), room(w, o).map(|r| r.0), held(w, o).map(|p| w.parts.parts[p].root as usize));
+    let kind: Vec<Kin> = list.iter().map(|&(_, s)| kin(&b[s])).collect();
     for x in 0..list.len() {
         let a = &b[list[x].1];
         let joins = |y: usize| head[y] == y && b[list[y].1].n() > 1.0 && kind[y] == kind[x];
@@ -50,7 +46,7 @@ fn join_alike(w: &World, d: &mut Domain, lay: &Layout, i: usize) -> Vec<Handle> 
     (0..list.len()).filter(|&x| head[x] == x).map(|x| list[x].1).collect()
 }
 
-/// A body's genes in steps (`body::steps`), its spread (`body::spreads`), and its lineage and stage
+/// A body's genes in steps (`body::steps`), its spread per gene (`body::spread_at`), and its lineage and stage
 /// (`merge_closest`).
 type Likeness = (Vec<f32>, Vec<f32>, (u32, bool));
 
@@ -64,17 +60,18 @@ fn merge_closest(w: &World, d: &mut Domain, lay: &Layout, left: Vec<Handle>, max
     let (m, lim) = (left.len(), w.cfg.phys.alike);
     let steps = |d: &Domain, s: Handle| {
         let b = &d[s];
-        (steps(lay, &b.genes), spreads(b), (b.lineage, b.adult(&w.chem)))
+        (steps(lay, &b.genes), (0..b.genes.len()).map(|g| spread_at(&b.spread, g)).collect(), (b.lineage, b.adult(&w.chem)))
     };
     let mut v: Vec<Likeness> = left.iter().map(|&s| steps(d, s)).collect();
     let dist = |p: &Likeness, q: &Likeness| {
         let gap = |g: usize| (p.0[g] - q.0[g]).abs() > within_steps(lay, lim, p.1[g] + q.1[g], g);
         if p.2 != q.2 || (0..p.0.len()).any(gap) { f32::INFINITY } else { p.0.iter().zip(&q.0).map(|(x, y)| (x - y) * (x - y)).sum() }
     };
-    let (mut far, mut gone) = (vec![f32::INFINITY; m * m], vec![false; m]);
+    // The key of each pair `p`, `q` lies at `at(p, q)`, the smaller first.
+    let (mut far, mut gone, at) = (vec![f32::INFINITY; m * m], vec![false; m], |p: usize, q: usize| p.min(q) * m + p.max(q));
     for p in 0..m {
         for q in p + 1..m {
-            far[p * m + q] = dist(&v[p], &v[q]);
+            far[at(p, q)] = dist(&v[p], &v[q]);
         }
     }
     for _ in max..m {
@@ -87,11 +84,9 @@ fn merge_closest(w: &World, d: &mut Domain, lay: &Layout, left: Vec<Handle>, max
         merge(w, d, left[s], left[t]);
         (gone[s], v[t]) = (true, steps(d, left[t]));
         for o in 0..m {
-            let (lo, hi) = (o.min(s), o.max(s));
-            far[lo * m + hi] = f32::INFINITY;
+            far[at(o, s)] = f32::INFINITY;
             if o != t && !gone[o] {
-                let (lo, hi) = (o.min(t), o.max(t));
-                far[lo * m + hi] = dist(&v[o], &v[t]);
+                far[at(o, t)] = dist(&v[o], &v[t]);
             }
         }
     }
@@ -159,7 +154,8 @@ pub(crate) fn add(w: &World, d: &mut Domain, t: Handle, c: Lot, (genes, spread):
     let gap = was.iter().zip(born).map(|(p, q)| (q - p) * (q - p)).sum::<f32>() / was.len().max(1) as f32;
     o.row_spread = pool(o.row_spread, row_spread, gap, row_step(p, body::mutation_size(&o.genes)));
     d.reborn(w, &mut o, mix(was, born));
-    o.set_genes(mean, &w.chem, &w.cfg);
+    o.genes = mean;
+    o.prepare(&w.chem, &w.cfg);
     rejoin(w, d, &mut o, c, size, Some(own));
     d.see(w, &mut o);
     d[t] = o;
@@ -230,13 +226,12 @@ pub fn split(w: &World, d: &mut Domain, b: &mut Body) {
     let g = gap[r.below(gap.len())].0;
     let shift = half(g).0;
     let mut c = part(d, b, 0.5, 0.5);
-    let mut genes = b.genes.clone();
     // Which half stays the body (keeps its id) is drawn.
     let shift = if r.below(2) == 0 { shift } else { -shift };
-    (genes[g], c.genes[g]) = (genes[g] + shift, genes[g] - shift);
+    (b.genes[g], c.genes[g]) = (b.genes[g] + shift, b.genes[g] - shift);
     b.spread[g] = (b.spread[g] - shift * shift).max(0.0);
     c.spread[g] = b.spread[g];
-    b.set_genes(genes, &w.chem, &w.cfg);
+    b.prepare(&w.chem, &w.cfg);
     d.counts.splits += 1.0;
     d.place(w, c);
 }
@@ -276,13 +271,13 @@ fn draw(w: &World, d: &mut Domain, b: &mut Body, r: &mut Rng) -> Handle {
     let (lay, n) = (Layout::of(&w.chem), b.count as f32);
     // (The member keeps no spread: it is left out of the clone.)
     let spread = std::mem::take(&mut b.spread);
-    let (mut c, mut genes) = (part(d, b, 1.0 / b.count, 1.0 / b.count), b.genes.clone());
+    let mut c = part(d, b, 1.0 / b.count, 1.0 / b.count);
     b.spread = spread;
     for (g, x) in c.genes.iter_mut().enumerate() {
         let ((_, lo, hi), v) = (range(&lay, g), spread_at(&b.spread, g));
         *x += v.sqrt().min(wall_room(*x, lo, hi) / REACH) * noise(r);
-        let d = *x - genes[g];
-        genes[g] = (genes[g] - d / (n - 1.0)).clamp(lo, hi);
+        let d = *x - b.genes[g];
+        b.genes[g] = (b.genes[g] - d / (n - 1.0)).clamp(lo, hi);
         if let Some(s) = b.spread.get_mut(g) {
             *s = ((n * v - d * d * n / (n - 1.0)) / (n - 1.0)).max(0.0);
         }
@@ -296,7 +291,7 @@ fn draw(w: &World, d: &mut Domain, b: &mut Body, r: &mut Rng) -> Handle {
         (c.genome, b.row_spread) = (d.new_genome(mine), spread);
         d.reborn(w, b, left);
     }
-    b.set_genes(genes, &w.chem, &w.cfg);
+    b.prepare(&w.chem, &w.cfg);
     (c.count, c.spread, c.row_spread, c.size_spread, c.size_lag) = (1.0, Vec::new(), 0.0, 0.0, 0.0);
     d.place(w, c)
 }

@@ -9,7 +9,7 @@ mod kernel;
 pub use balance::reversible;
 pub(crate) use gas::{send_gas, GasMove};
 pub use kernel::Reactor;
-pub(crate) use kernel::{denature, frac, pace, scarce};
+pub(crate) use kernel::{denature, frac, pace, scarce, terms};
 
 use crate::{flow::FlowView, ground::share, store::{apply, Batch, Class, LinkFlux, Node, Transform}, AIR, World};
 

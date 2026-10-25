@@ -219,10 +219,6 @@ impl Body {
         ks[..m].sort_by(|a, b| a.0.total_cmp(&b.0));
         melting(cap, self.e, ks[..m].iter().map(|&(tm, k)| (tm, k, lat(k))))
     }
-    /// Its energy at the plateau state `th`: heat capacity times `th.t` plus the fusion enthalpy molten there, J.
-    pub(crate) fn energy_in(&self, chem: &Chemistry, th: &Melting) -> f64 {
-        self.heat_with(chem, th, &self.store)
-    }
     /// The fusion enthalpy amounts `m` hold at the plateau state `th` (a store `th` does not know, by its melting point
     /// now), J.
     pub(crate) fn fused_of(&self, chem: &Chemistry, th: &Melting, m: &[f64]) -> f64 {
@@ -259,11 +255,6 @@ impl Body {
     pub(crate) fn over_span(&self, f: f64, w: &crate::World) -> f64 {
         let d = self.paces(w);
         if d == 1.0 { f } else { 1.0 - (1.0 - f).powf(d) }
-    }
-    /// Its genes are `genes` (`prepare` follows).
-    pub(crate) fn set_genes(&mut self, genes: Vec<f32>, chem: &Chemistry, cfg: &crate::Config) {
-        self.genes = genes;
-        self.prepare(chem, cfg);
     }
     /// Work `k` out from the genes and the settings, at every change of the genes.
     pub fn prepare(&mut self, chem: &Chemistry, cfg: &crate::Config) {
