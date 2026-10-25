@@ -23,7 +23,7 @@
   ground by the chance of its last decision (a habit on a clock), with no thinking. PR-A2 measured this within the seed
   noise on all three worlds. Measured after MI5, the animal updates then cost x0.85 (island) and x0.79 (globe) of today.
   P1b is not needed (X66); MI3a is dropped, as G2 is its clock-only form (X68).
-- **The outlook falls** (plan 5.0): likely island about 3.9 to 5.2 times, globe about 5.6 to 7.7 (was 5.8 to 8.1 and
+- **The outlook falls** (plan 5.0): likely island about 3.9 to 5.2 times, globe about 5.6 to 7.6 (was 5.8 to 8.1 and
   7.7 to 11.3). 10 times is out of reach on both benches with the steps planned.
 
 ## 1. What P1.2 teaches
@@ -137,8 +137,9 @@ day (their `last` and marks), so 5.4.
 | (b) the grid: 12.7 + 2 an update (a growth piece to its end), 5.4 a grid point (10.1 a year) | 6.08 x 14.7 + 55 = **about 144 µs (x0.79)** | 4.06 x 14.7 + 55 = **about 114 µs (x0.63)** |
 | (b) with `sample_every` 1 (if selection needs it) | about 158 µs (x0.87): past the line | about 123 µs (x0.68) |
 
-One thread, island22 (plant updates 30.0% of the year, R2) and globe36 (14.7%): (b) at 60 -6.3% and -3.1%, then 90
--4.9% and -2.4%; (a) at 60 -12% and -5.9%, then 90 -6.0% and -2.9%. (b) at 90 is no better than (a) at 60.
+One thread, on the bench48 saves X50 judges against (plant updates 35.0% of island22's year and 16.3% of globe36's,
+`measures.md` "Lane A replan"; R2: 30.0% and 14.7%): (b) at 60 -7.3% and -3.4%, then 90 -5.8% and -2.7%; (a) at 60
+-14% and -6.5%, then 90 -7.1% and -3.3%. (b) at 90 is no better than (a) at 60.
 
 **What it costs if it fails:** the probe's time (a branch, about a day of runs), no core lines. The plants' rows of plan
 5.0 fall to none: P2, G9a, and P3 too (P3 needs a pace that is a multiple of `phys_days`; at 30 days stands would update
@@ -229,9 +230,9 @@ takes on the same body while it lives in the cell (by its id), before any fallba
 ## 4. The outlook
 
 Plan 5.0 holds the rows. In short (four threads, Z1's scale): lane A's steps save island about 67 ms (plants 52, G2
-15) and globe about 64 (plants 29, G2 35) in the likely case (b), against about 168 and 170 in the month's plan. Likely
-with everything: **island about 3.9 to 5.2 times, globe about 5.6 to 7.7**; with variant (a) at 60 and 90, up to 5.8
-and 8.1.
+15) and globe about 61 (plants 29, G2 32) in the likely case (b), against about 168 and 170 in the month's plan. Likely
+with everything: **island about 3.9 to 5.2 times, globe about 5.6 to 7.6**; with variant (a) at 60 and 90, up to 5.8
+and 8.0.
 
 ## 5. Lines
 

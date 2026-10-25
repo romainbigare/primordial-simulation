@@ -27,17 +27,17 @@ and G2 floors the brain on today's day law (X67). **"Likely" is PR-C2's variant 
 | Set of steps | island22 | globe36 |
 |---|---|---|
 | today | 1.5 times | 2.0 times |
-| **likely, everything with G14 (-15 to -35% of the year; globe from -13%)** | **3.9 to 5.2** | **5.6 to 7.7** |
-| of it, G2 at 30 days | 4.0 to 5.2 | 5.7 to 7.7 |
+| **likely, everything with G14 (-15 to -35% of the year; globe from -13%)** | **3.9 to 5.2** | **5.6 to 7.6** |
+| of it, G2 at 30 days | 4.0 to 5.2 | 5.7 to 7.6 |
 | of it, G2 at 20 days (X58) | 3.9 to 5.2 | 5.6 to 7.5 |
-| PR-C2's variant (a) passes at 60 and 90 (no grid), G2 at 30 | 4.5 to 5.8 | 6.1 to 8.1 |
-| stands at 60 only (no variant passes at 90) | 3.7 to 4.8 | 5.5 to 7.4 |
-| no plant pace passes (P2, G9a, P3 not built) | 3.2 to 4.2 | 5.1 to 6.8 |
+| PR-C2's variant (a) passes at 60 and 90 (no grid), G2 at 30 | 4.5 to 5.8 | 6.0 to 8.0 |
+| stands at 60 only (no variant passes at 90) | 3.7 to 4.8 | 5.5 to 7.3 |
+| no plant pace passes (P2, G9a, P3 not built) | 3.2 to 4.2 | 5.0 to 6.7 |
 | without G2 | 3.8 to 5.0 | 5.2 to 7.0 |
-| without G14 | 3.4 to 3.8 | 5.0 to 5.3 |
+| without G14 | 3.4 to 3.8 | 4.9 to 5.2 |
 
 **Plainly:** **10 times is out of reach on both benches with the steps planned**: likely about 3.9 to 5.2 times on the
-island and 5.6 to 7.7 on the globe. The month law cost more per stand than today's law (P1.2: about 26 µs against 18), so
+island and 5.6 to 7.6 on the globe. The month law cost more per stand than today's law (P1.2: about 26 µs against 18), so
 the plants' gain must come from fewer updates of today's update, and the grid that keeps maturing and births on today's
 cadence costs about 5 µs a grid point; G2 now saves the decision less the take a habit keeps (measured after MI5: the
 decision 33% / 41% of an animal update, the take 36% / 26% of the decision) on today's body, x0.85 to 0.86 / x0.79 to
@@ -140,7 +140,7 @@ holds the rest. A kill line reverts the step and keeps it on a branch.
 does not apply; the owner is told the restated end: island about 5.8 to 8.1 times, globe about 7.7 to 11.3 (G2 at 30
 or 20 days on the segmented law, after PR-A2). The month law is redesigned after PR-M, PR-A, PR-A2 and its reviews
 (`design/month.md`, X41 to X53, X55 to X59). **After P1.2** (not kept, X63) lane A is replanned (`design/lane-a.md`,
-X63 to X70) and section 5.0 restated again: island about 3.9 to 5.2 times, globe about 5.6 to 7.7.
+X63 to X70) and section 5.0 restated again: island about 3.9 to 5.2 times, globe about 5.6 to 7.6.
 
 ### Phase 1: five lanes in parallel
 
@@ -154,7 +154,7 @@ X63 to X70) and section 5.0 restated again: island about 3.9 to 5.2 times, globe
 | P1.4 | **Dropped** (X63): its base was the month's cheap sample. Today's sample stays (a clone run, `sample_every` 2); if the selection test fails at a longer pace, P2.2 sets `sample_every` 1 (about +2.3 µs an update) | | | | | | |
 | PR-C2 | **Probe** (branch `probe/pr-c2`, switches off by default): today's day law with C2's causes fixed (P2.1's three changes), (a) alone, then (b) with growth, maturing and children on the stand's 36-day grid (what a grid point makes starts at its day: `last` and marks of that day); stands at 60 and 90 days. The splitting test of the day law (1 x 60 against 6 x 10; 1 x 90 against 9 x 10 and 3 x 30; young and adult stands, constant forcing, a seasonal ramp, the summer's peak and the winter's low; members and body matter, fuel reported) beside today's law; the pace test for stands around today's pace with the law (gene, 36, 72, 18: C2's method broke it at 72, seed 1, `air_3`) and at the new pace (gene, 60, 120, 30; then 90's); the selection tests at 60 with `sample_every` 2; key numbers once a variant that passes; counters (deaths by unpaid upkeep, births and young that mature per member-day, the mineral 23 left at growth, stand updates where the light catalyst's limit binds); the plant nodes at year 30; instructions per stand update and stand-year at 36, 60, 90 on one save | none | a table in `measures.md`; the variant and pace chosen | the law fails the pace test around 36; or no variant passes the pace test at 60 with its x2 and /2, or the splitting line (members and body matter: 90th percentile under 5%, and no worse than today's law at 1 x 36 against 6 x 6), or the key numbers; or a stand-year at 60, times the plant nodes' rise at year 30 past 10% (charged in full) and with `sample_every` 1 if the selection tests need it (about +14 µs), over x0.85 of today's: stands stay at 36 days on today's law; P2.1, P2.2, G9a and P3 are not built (if only the sample's fallback takes 60 past the line, 90 is judged on its own) | none | Opus | lane-a 2.3 |
 | P2.1 | **The law, at today's pace** (X64, one law for every body): upkeep the stock cannot pay is owed and paid after `physics` from what the time brought (C2's `pay_owed`); the unpaid share `u` kills `1 - e^(-u Δ / D)`, `D` = `Physics::reserve_days` 36 for a stand, the gene interval for a body with a brain; a stand's growth reserve and `buildable`'s horizon read `D`; with PR-C2's variant (b), growth in pieces cut at the stand's 36-day grid points (`d mod 36 = id mod 36`), each point maturing the young stand and making the adult's children, which start at that day (their `last` and the marks of that day, through `nodes::rejoin`'s blend). **A law change, announced:** a famine kills `1 - e^-u`, not `u`; a stand pays its upkeep from the time's light before members die; the effect on light-eaters, S50 and births less deaths reported. `laws.md` 6.2, 6.6, 4.4; `numbers.md` `reserve_days`; snapshot bumped | 3 | the pace test for stands around today's pace (gene, 36, 72, 18); PR-C2's splitting test as a kept test (`the_day_law_splits_alike`, four points, the line of PR-C2); a starving stand dies at its own time in one update and in six; books 1e-12 in the century; key numbers within the references, S50 not past its noise unless explained | key numbers out and not accepted | PR-C2 | Opus, adversarial review | lane-a 2.2 |
-| P2.2 | **`node_days` becomes `field_days` 60** (stands' pace; `Config::validate` wants a multiple of `batch_days`, and P3 of `phys_days`, X17). `numbers.md` `field_days`; handover 7.1, 7.3; snapshot bumped | 3 | the pace test for stands at gene, 60, 120, 30; `selection_inside_a_node_moves_its_mean_as_its_members_would`; key numbers; per stand-year at most x0.82 (variant (b)) or x0.65 (variant (a)) of today's on one world (X50), island22 1T about -6% ((b)) or -12% ((a)) | the pace test fails at 60: 36 stays (P3 then not built); island 1T under -4% | P2.1 | Sonnet | lane-a 2.3 |
+| P2.2 | **`node_days` becomes `field_days` 60** (stands' pace; `Config::validate` wants a multiple of `batch_days`, and P3 of `phys_days`, X17). `numbers.md` `field_days`; handover 7.1, 7.3; snapshot bumped | 3 | the pace test for stands at gene, 60, 120, 30; `selection_inside_a_node_moves_its_mean_as_its_members_would`; key numbers; per stand-year at most x0.82 (variant (b)) or x0.65 (variant (a)) of today's on one world (X50), island22 1T about -7% ((b)) or -14% ((a)) (plant updates 35.0% of the bench48 year) | the pace test fails at 60: 36 stays (P3 then not built); island 1T under -4.6% | P2.1 | Sonnet | lane-a 2.3 |
 | P1b | **Dropped** (X66): its base was the month law; G2 no longer needs it (the body keeps today's law at its gene's pace, X67); one energy law for every body holds with P2.1. **Alternative:** G2 on today's law | | | | | | lane-a 3.2 |
 | G2 | **The brain floored, the body at its gene's pace, on today's day law** (X67, `lane-a.md` 3): a population node with a brain keeps its gene's update and runs today's body update each time; it decides at the update nearest to `Config::think_days` 30 after its last decision; at its other updates the share of its members that took from the ground at its last decision (`p[TAKE]`, saved) takes again as `spread` does for that one option, with no perception, network or learning; moves, body takes, gifts and bond acts come at decisions only, where the movers (`count x min(1, Σp x paces)`, MI5's one group), learning's discount (`discount^paces`) and `away` (gene intervals) follow the paces since the last decision; upkeep pays one decision per update, as today; MI6 is never written; snapshot bumped. **The floor (X58):** 30 days; else 20; else young nodes only; else revert. `laws.md` 0, 4.4, 5.4; handover 7.3; `numbers.md` `think_days` | 3 | PR-A2's script with G2 at 30 days ((g) off; 20 for the fallback): the eaters within the seed noise of `think_days` 0, PR-A2's counters near it, the globe's body takes reported; the animals' pace test (`think_days` 0, 15, 30, 60); nodes check; learning scene; key numbers; on one world (X50, the base after MI5 measured in `measures.md` "Lane A replan"): a habit update's take path no dearer than the take option of today's decision (21.0 / 22.5 thousand instructions a decision, island / globe), and the animal updates' instructions x0.86 (island) and x0.80 (globe) or less, 1T year about -3.4% and -7% (20 days: x0.89 and x0.84; young only: x0.92 and x0.89) | the animal updates over x0.89 (island) or x0.85 (globe) at 30 days, x0.91 or x0.88 at 20 days, x0.94 or x0.91 young only, or the check fails at every floor: revert | MI5, PR-A2 | Opus, adversarial review | lane-a 3 |
 
@@ -207,7 +207,7 @@ leaves the ring, books kept). PR-B saw no brain loss in 1,000 years of island22 
 | P3 | The field step per cell in the survey; stands out of the ring. `field_days` must be 30, 60 or 90 (a multiple of `phys_days`, X17). Files: `survey::survey`; `Life::unsound` (stands are in no ring); `copy::place_child` and `Domain::add` (no ring entry for a stand); `Body::interval` (its `n() > 1` test: every stand by `field_days`); the snapshot reader (`life/mod.rs:118`); the brain-loss switch leaves the ring, and its test | 3 | plants test 4; key numbers; island 1T -5% on top of P2.2 | under -5% | P2.2, E1b.3, E1c | Opus | plants 2.5 |
 | G13 | One heat draw per cell for stands | 2 | `Draws` and the light marks loop over cells for stands | under 2 ms a year | P3 | Sonnet | gap G13 |
 | G6 | The whole survey per domain on E1c's runner (in G14 it runs in the bodies' lane) | 2 | survey 4T -35% on both | under -20% | P3, E1c | Sonnet | gap G6 |
-| G9a | `field_days` 90, on the day law and PR-C2's variant that passed at 90. **Comes after G4 and G5.** The test's settings are 30, 60, 90 and 180, all multiples of `phys_days` 30 and of `batch_days` 10 | 3 | PR-C2's splitting test at 90 (1 x 90 against 3 x 30); the field's pace test at 30 (the reference: every survey, once `phys_days` is 30), 60, 90, 180; key numbers; per stand-year at most x0.65 ((b)) or x0.42 ((a)) of today's on one world, island 1T -4.5% ((b)) or -6% ((a)) | PR-C2 had no variant pass at 90, or the pace test fails at 90, or island 1T under -3%: 60 | P3, G5 | Sonnet | lane-a 2.3 |
+| G9a | `field_days` 90, on the day law and PR-C2's variant that passed at 90. **Comes after G4 and G5.** The test's settings are 30, 60, 90 and 180, all multiples of `phys_days` 30 and of `batch_days` 10 | 3 | PR-C2's splitting test at 90 (1 x 90 against 3 x 30); the field's pace test at 30 (the reference: every survey, once `phys_days` is 30), 60, 90, 180; key numbers; per stand-year at most x0.65 ((b)) or x0.42 ((a)) of today's on one world, island 1T -5.3% ((b)) or -7.1% ((a)) | PR-C2 had no variant pass at 90, or the pace test fails at 90, or island 1T under -3.5%: 60 | P3, G5 | Sonnet | lane-a 2.3 |
 | G9b | Compact stands (P4). Gate: the handling of `Body` values (moves, clones) at least 5% of a year in P3's profile (if P3 is not built: in today's profile) | 1 | stands 1T -10% | under -3% of a year on 4T | P3 (or the gate on today's code), G9a | Opus | plants P4, gap G9 |
 | G4 | `batch_days` 10 (replaces S64). `field_days` must then be 30, 60 or 90, a multiple of 10 (`Config::validate`, X17). A small law effect: gene intervals from 5 to 15 days all become 10 days | 3 | the batch test (`the_batches_of_bodies_keep_life`) changes from 1 against 2 days to 2 against 10; key numbers; bodies' stage 4T -10% | under -6%: back to 2 | E1c | Sonnet, Opus review | gap G4 |
 | G5 | `phys_days` 30; the air stays at 10 days (`field_days` 30, 60 or 90). **Expect the fallback:** 75% of Change's rests are under 10 days, and a 30-day span for every node grows S84's bias, so Change likely keeps 10 days and the rest takes 30; section 5's "likely" column counts only that part | 3 | long-step and globe climate tests at `phys_days` 30; the sleep test within noise; key numbers; year 4T -4% | a climate test fails or under -3%: 10, or Change at 10 and the rest at 30 | G4, G1 | Opus | gap G5 |
@@ -265,7 +265,8 @@ estimates; this section says where the measures move them, and its end is the pl
 
 **The rows that move** (four threads, ms a year saved, Z1's scale, in the order of 5.1). "After P1.2" counts plant
 updates at about 139 ms (island) and 77 ms (globe) a year at today's ~182 µs a stand-year (the rows' own base: P1.x's
--43 / -24 at x0.69), and animal node updates at about 100 and 170 ms (G2's base in 5.1, -73 at x0.28 and -121 at x0.31):
+-43 / -24 at x0.69), and animal node updates at about 100 and 170 ms (G2's base in 5.1, -73 at x0.28 and -121 at x0.31), on the globe about
+154 ms after MI5 (it took about 212 M of the globe's 1,290 M decision instructions; the island moves under 1 ms):
 
 | Step | island, 5.1 | island, after phase P | island, after P1.2 | globe, 5.1 | globe, after phase P | globe, after P1.2 | Why (after P1.2) |
 |---|---|---|---|---|---|---|---|
@@ -273,31 +274,31 @@ updates at about 139 ms (island) and 77 ms (globe) a year at today's ~182 µs a 
 | P2 (60 days) | -32 | -45 | -29 ((b)); -55 ((a)) | -22 | -31 | -16 ((b)); -31 ((a)) | today's update at 60 days: a stand-year x0.79 with the grid, x0.60 without (`lane-a.md` 2.3) |
 | P3 | -13 | -13 | -13 | -16 | -16 | -16 | unchanged; mostly faces and the ring |
 | P1b | 0 | -11 | 0 | 0 | -15 | 0 | dropped (X66) |
-| G2 at 30 days | -73 | -55 | -14 to -15 | -121 | -88 | -34 to -36 | the decision less the take a habit keeps, on today's body, measured after MI5: x0.85 to 0.86 / x0.79 to 0.80 of the animal updates' cost (X67) |
+| G2 at 30 days | -73 | -55 | -14 to -15 | -121 | -88 | -31 to -32 | the decision less the take a habit keeps, on today's body, measured after MI5: x0.85 to 0.86 / x0.79 to 0.80 of the animal updates' cost (X67) |
 | MI3a, MI4 | -6 | -2 | -2 | -8 | -2 | -2 | MI3a dropped (X68); MI4 gated, G16 |
 | G3 | -9 | -4 | 0 | -12 | -6 | 0 | dropped (X69) |
 | G9a, G9b | -10 | -10 | -23 ((b)); -27 ((a)) | -6 | -6 | -13 ((b)); -15 ((a)) | 90 days: a stand-year x0.63 with the grid, x0.40 without; G9b gated, not counted |
 | G14 | -32 to -51 | -15 to -35% | -15 to -35% | -40 to -65 | -13 to -35% | -13 to -35% | G14-P1 (its low end per bench) |
 
 **The end, restated after P1.2.** Without any lane A step but P3 and MI4 the year before G14 is about 350 ms (island)
-and 394 ms (globe). With PR-C2's variant (b) at 60 and 90 days and G2 at 30 days it is about 284 and 330 ms; at 20 days
-about 287 and 338; with variant (a) about 254 and 313; with stands at 60 only about 307 and 343; with no plant pace (P3
-not built either) about 349 and 375; without G2 about 298 and 365. With G14 at -15 to -35% (island) and -13 to -35%
+and 394 ms (globe). With PR-C2's variant (b) at 60 and 90 days and G2 at 30 days it is about 284 and 333 ms; at 20 days
+about 287 and 340; with variant (a) about 254 and 316; with stands at 60 only about 307 and 346; with no plant pace (P3
+not built either) about 349 and 379; without G2 about 298 and 365. With G14 at -15 to -35% (island) and -13 to -35%
 (globe):
 
 | Case | island22 | globe36 |
 |---|---|---|
-| variant (b) at 60 and 90, G2 at 30 days | 184 to 241 ms, 4.0 to 5.2 times | 215 to 287 ms, 5.7 to 7.7 times |
-| variant (b) at 60 and 90, G2 at 20 days | 186 to 244 ms, 3.9 to 5.2 times | 219 to 294 ms, 5.6 to 7.5 times |
-| **likely: the span of the two** | **3.9 to 5.2 times** | **5.6 to 7.7 times** |
-| variant (a) at 60 and 90, G2 at 30 days | 165 to 215 ms, 4.5 to 5.8 times | 203 to 272 ms, 6.1 to 8.1 times |
-| stands at 60 only, G2 at 30 days | 199 to 261 ms, 3.7 to 4.8 times | 223 to 298 ms, 5.5 to 7.4 times |
-| no plant pace passes (P2, G9a, P3 not built), G2 at 30 days | 227 to 296 ms, 3.2 to 4.2 times | 244 to 326 ms, 5.1 to 6.8 times |
+| variant (b) at 60 and 90, G2 at 30 days | 184 to 241 ms, 4.0 to 5.2 times | 217 to 290 ms, 5.7 to 7.6 times |
+| variant (b) at 60 and 90, G2 at 20 days | 186 to 244 ms, 3.9 to 5.2 times | 221 to 296 ms, 5.6 to 7.5 times |
+| **likely: the span of the two** | **3.9 to 5.2 times** | **5.6 to 7.6 times** |
+| variant (a) at 60 and 90, G2 at 30 days | 165 to 215 ms, 4.5 to 5.8 times | 206 to 275 ms, 6.0 to 8.0 times |
+| stands at 60 only, G2 at 30 days | 199 to 261 ms, 3.7 to 4.8 times | 225 to 301 ms, 5.5 to 7.3 times |
+| no plant pace passes (P2, G9a, P3 not built), G2 at 30 days | 227 to 296 ms, 3.2 to 4.2 times | 246 to 329 ms, 5.0 to 6.7 times |
 | without G2 (variant (b)) | 194 to 253 ms, 3.8 to 5.0 times | 237 to 318 ms, 5.2 to 7.0 times |
-| without G14 (variant (b) or (a), G2 at 30 days) | 3.4 to 3.8 times | 5.0 to 5.3 times |
+| without G14 (variant (b) or (a), G2 at 30 days) | 3.4 to 3.8 times | 4.9 to 5.2 times |
 
-Where it went: the month's plan counted lane A's steps at about 168 ms (island) and 170 (globe); now about 67 and 64 in
-the likely case (plants 52 and 29, G2 15 and 35). The plants keep most of their gain (fewer updates of today's update
+Where it went: the month's plan counted lane A's steps at about 168 ms (island) and 170 (globe); now about 67 and 61 in
+the likely case (plants 52 and 29, G2 15 and 32). The plants keep most of their gain (fewer updates of today's update
 in place of a cheaper update at 30 days), but the grid that keeps maturing and births on today's cadence costs about 5
 µs a grid point. G2 loses most of its: it saves the decision less the take a habit keeps (after MI5 the decision is 33%
 / 41% of an animal update, the take 36% / 26% of the decision), not the body's day, which the month would have made
@@ -307,7 +308,7 @@ What would lift it: PR-C2's variant (a) passing at 60 and 90 (no grid); G14 at t
 G4, G5, AIR2, AIR3); AIR4 without its climate risk; a cheaper body's day at its gene's pace (GB says where), as a step
 of its own; a cheaper take (`take_node` pays its handling through a payer of its own: 18.5 thousand instructions a call,
 a level-1 step). **The owner is told:** 10 times is out of reach on both benches with the steps planned: likely about
-3.9 to 5.2 times on the island and 5.6 to 7.7 on the globe.
+3.9 to 5.2 times on the island and 5.6 to 7.6 on the globe.
 
 ### 5.1 Four threads, ms of a year (the goal's measure)
 
@@ -369,31 +370,31 @@ Kept apart from 5.1: one-thread gains do not add up to the 4T year (the parallel
 |---|---|---|---|
 | P1.1 to P1.4 | 0 | 0 | P1.1 done (bit for bit); P1.2, P1.3 not kept, P1.4 dropped (X63) |
 | P2.1 | about 0 | about 0 | a law step at today's pace; its effect reported |
-| P2.2 (60 days) | -6.3% ((b)); -12% ((a)) | -3.1% ((b)); -5.9% ((a)) | plant updates are 30.0% and 14.7% of a 1T year (R2); a stand-year x0.79 with the grid, x0.60 without (`lane-a.md` 2.3); with `sample_every` 1, if the selection tests need it, (b) about x0.87, past PR-C2's line |
+| P2.2 (60 days) | -7.3% ((b)); -14% ((a)) | -3.4% ((b)); -6.5% ((a)) | plant updates are 35.0% and 16.3% of a 1T year on the bench48 saves X50 judges against (`measures.md` "Lane A replan"; R2: 30.0% and 14.7%); a stand-year x0.79 with the grid, x0.60 without (`lane-a.md` 2.3); with `sample_every` 1, if the selection tests need it, (b) about x0.87, past PR-C2's line |
 | P3 | -5% | -3% | |
 | P1b | 0 | 0 | dropped (X66) |
 | E1, E2, AIR2, G1, G6, G7, G8, G14, G15 | 0 to +3% | 0 to +3% | they share work out; they cost a little on one thread |
 | AIR1 | about 0 | -2% (Flow -8% or more) | the island already needs 2.26 rounds |
 | AIR3 | -1% | -1% | |
 | MI1, MI5 | -1 to -2% | -2 to -3% (MI1 -0.3%) | `choose::act` is 11.6% and 17.8% of a 1T year (Z1) |
-| MI4 (after G2, gated) | about -0.5% | about -0.5 to -1% | after G2 a node's decisions are 0.30 to 0.31 of today; MI3a dropped (X68) |
+| MI4 (after G2, gated) | about -0.5% | about -0.5 to -1% | after G2 a node's decisions are 0.30 to 0.33 of today (`lane-a.md` 3.3); MI3a dropped (X68) |
 | G2 | -3.4 to -3.5% | -6.9 to -7.1% | the decision less the take a habit keeps, on today's body, measured after MI5: animal updates x0.85 to 0.86 and x0.79 to 0.80 (X67); region24 about -1% |
 | G3 | 0 | 0 | dropped (X69) |
 | G4, G5 | -5% | -5% | faces x0.22; Change x0.4 |
-| G9a, G9b, G12, AIR4, G11 | -4.9% ((b)) or -6% ((a)), -2%, -2%, -6%, -2% | -2.4% ((b)) or -2.9% ((a)), -1%, -2%, -10%, -3% | G9a: 90 days on the day law |
+| G9a, G9b, G12, AIR4, G11 | -5.8% ((b)) or -7.1% ((a)), -2%, -2%, -6%, -2% | -2.7% ((b)) or -3.3% ((a)), -1%, -2%, -10%, -3% | G9a: 90 days on the day law, on the bench48 plant shares |
 
 ### 5.3 What reaches 10 times, and what is at risk
 
 | | island22 | globe36 |
 |---|---|---|
-| needs | no case of 5.0 reaches it: even with variant (a) and G2 at 30 days the year before G14 is about 254 ms, and 96 needs -62% | no case of 5.0 reaches it: about 313 ms with variant (a), and 165 needs -47% (G14's good end is -35%) |
-| likely with everything (5.0: variant (b) at 60 and 90, G2 at 30 or 20 days) | 3.9 to 5.2 times | 5.6 to 7.7 times |
-| at risk | PR-C2: C2 failed the pace test's x2 at 140 days and around 36 at 72; stands at 60 only: 3.7 to 4.8 times; no plant pace: 3.2 to 4.2 | the same: 5.5 to 7.4; 5.1 to 6.8 |
+| needs | no case of 5.0 reaches it: even with variant (a) and G2 at 30 days the year before G14 is about 254 ms, and 96 needs -62% | no case of 5.0 reaches it: about 316 ms with variant (a), and 165 needs -48% (G14's good end is -35%) |
+| likely with everything (5.0: variant (b) at 60 and 90, G2 at 30 or 20 days) | 3.9 to 5.2 times | 5.6 to 7.6 times |
+| at risk | PR-C2: C2 failed the pace test's x2 at 140 days and around 36 at 72; stands at 60 only: 3.7 to 4.8 times; no plant pace: 3.2 to 4.2 | the same: 5.5 to 7.3; 5.0 to 6.7 |
 | at risk | G2: its 30-day check on today's law with (g) off and the paces' rules on (PR-A2 ran neither); fallbacks 20 days, then young-only (X58); without G2: 3.8 to 5.0 | without G2: 5.2 to 7.0 |
 | at risk | G14: the hardest step; G14-P1 saved 15% (globe 13%) today, G14-P2 decides | AIR4: its climate test (0.3 K) |
 | at risk | G5 (its fallback is expected), G12 (not measured) | the same |
-| without G14 | 3.4 to 3.8 times | 5.0 to 5.3 times |
-| without G14 and AIR4 | 3.0 to 3.4 times | 4.5 to 4.7 times |
+| without G14 | 3.4 to 3.8 times | 4.9 to 5.2 times |
+| without G14 and AIR4 | 3.0 to 3.4 times | 4.4 to 4.7 times |
 
 ## 6. Order and lanes
 
