@@ -970,3 +970,91 @@ v1 gave S50 0.573 (`D` = 36) and 0.580 (gene), light-eaters 10.44 and 10.43, lan
 9. **The death rule is a law change for stands too** (X14 (a)): at 275 K the day law killed 97% of a stand in 2 days
    (the unpaid share at once), the month 5% (the rate over the days); over 36 days a deep famine kills 63%, not all.
 10. `Melting` needs `Clone`; `life_roles` costs 430 instructions a call (put it on the card).
+### PR-S: the noise of the judging method
+
+A step that bumps `SNAPSHOT_VERSION` cannot load the other build's save (X24). The probe branch `probe/pr-s` (`5f3916c`)
+adds a `Config` field that nothing reads (`probe_dummy`) and sets the version to 48. The world is the same bit for bit:
+a 40-year run gives the same `series.csv` columns (all but the clocks) as the base build `ew-head`, and its snapshot
+body equals the base's with only the 4 zero bytes of the field added. (The fingerprint differs, because `Config` is in
+the bytes it covers.) So every difference below between the two builds on one world is noise of the method.
+
+How it was taken: one thread, the machine busy (load 1.4 to 12 from other lanes; the wall runs shared the lock
+`timing.lock` with them). Instructions: `valgrind --tool=callgrind`, one year of `ew resume`, the instructions of
+`schedule::run_for` (loading the file left out). Bench worlds made by the dummy build with `ew run --seed N` at the bench
+settings (island22 to year 300, globe36 to year 200), seeds 1, 2, 3. Wall: `ew run --size 22 --seed N --years 200`,
+one thread, base and dummy build in turns under the lock, 2 runs of each per seed (12 runs); the cost of years 150 to
+200 is the mean of the clocks in `series.csv` over those years, per update (clocks in µs over `updates`).
+Scripts: `x10/pr-s/` in the scratch folder.
+
+**1. The same world, two builds.** The bench save of the base (version 47) was turned into a version 48 save by adding
+the 4 zero bytes at byte 107 after the 8-byte header, so both builds run the same world.
+
+| Measure | island22 | globe36 |
+|---|---|---|
+| `run_for` instructions, base build, run twice | 6,242,953,769 and 6,243,122,916 (0.003%) | not repeated |
+| `run_for`, dummy build on the turned save, against base | +0.009% | -0.022% |
+| `run_for`, dummy build on its own remade seed-1 bench, against base | -0.002% | not made |
+| Same year, same world: `series.csv` (all but the clocks) | equal | equal |
+| Whole run with load and save of the file, against base | +0.17% | +0.15% |
+
+Instruction counts move by 0.02% or less for the part that is simulated. They are exact enough for any gain above
+0.1%. (The load and save of the file moves more, and is left out.)
+
+**2. Wall time, the same world, two builds** (6 pairs: seeds 1 to 3, 2 runs each; the hashes of a seed's two runs
+agree, so each pair ran the same world).
+
+| Cost, dummy / base | Mean | Standard deviation | Range |
+|---|---|---|---|
+| µs per update, years 150 to 200 | -0.3% | 4.6% | -8.5% to +4.3% |
+| µs per update, years 100 to 120 | +0.7% | 7.4% | -9.4% to +12.6% |
+| Whole run, 200 years (ms per year) | -0.5% | 1.2% | -2.1% to +0.9% |
+
+A repeat of one build on one world (second run against first) moved by a standard deviation of 4.3% (years 150 to 200)
+and 8.2% (years 100 to 120), and by 2.8% over 200 years; the second runs were mostly on a quieter machine (they ran 4%
+faster in the mean), so interleave the builds. The shorter the window, the wider the noise. Without the lock, three
+runs side by side at load 18 cost 4 to 6 times more per update than the quiet figure, so such clocks judge nothing.
+
+**3. Different worlds: seeds 1, 2 and 3** (the band of a step that changes the law, or is compared on its own remade
+bench or its own same-seed run). One thread, one year from the end of the bench.
+
+| Measure | island22 (seed 1 / 2 / 3) | sd of the 3 | globe36 (seed 1 / 2 / 3) | sd of the 3 |
+|---|---|---|---|---|
+| `run_for` instructions (millions) | 6,243 / 8,957 / 5,217 | 28% | 7,275 / 5,238 / 5,929 | 17% |
+| updates in that year | 27,149 / 43,284 / 28,825 | 27% | 23,572 / 18,176 / 21,942 | 13% |
+| `run_for` instructions per update (thousands) | 230 / 207 / 181 | 12% | 309 / 288 / 270 | 6.7% |
+| `survey::update` per update (thousands; plants and animals together) | 130 / 145 / 98 | 19% | 157 / 137 / 131 | 9.9% |
+| `flow::air` (millions) | 1,022 / 886 / 855 | 9.6% | 1,583 / 1,474 / 1,604 | 4.5% |
+| wall µs per update, years 150 to 200 | 34.0 / 30.3 / 25.7 | 14% | not run | |
+| wall ms per year, years 150 to 200 | 827 / 803 / 558 | 20% | not run | |
+| wall µs per update, years 100 to 120 | 34.2 / 33.9 / 31.8 | 3.9% | not run | |
+
+The mix of the world sets the cost: island seed 3 has no animal (no `choose::act`), so an update is cheaper. The same
+world one year later (seed 1) moves `run_for` by +0.15% (island22) and -1.3% (globe36), and per update by +2.7% and
+-1.9%. A world has a year-to-year drift of a few percent beside the spread of the seeds.
+
+**The rule a step uses.**
+
+1. **The base can run the same world** (no law change, or the save can be turned): judge on instructions of
+   `run_for` of the same save, and a gain counts when it is above **0.1%**. Wall time on this method counts above
+   **3%** over a whole 200-year run, and above **9%** over a 50-year window (two standard deviations). Interleave the
+   builds, take the lock, and take the load before and after.
+2. **A step that changes the saved world cannot do 1 on the old save, so it turns it.** A step that only adds a
+   field to `Config` or to the world: insert the bytes of the default value in the base save (found as above: run
+   both builds on a short world and compare the two snapshots) and run both builds one year from that same save. A
+   step that changes a law: run its build one year from the turned save of the base and judge the instructions per
+   update of that year against the base's on the original; the start world is the same and only the one year
+   differs. This band is not measured here (it is the effect of the law in one year, which is what the step is
+   judged for), but the build noise inside it is 0.02%.
+3. **Different worlds** (a remade bench or a same-seed run of both builds, when 2 cannot be done): compare the mean of
+   seeds 1 to 3 of each build per update. One standard deviation of the difference of two such means is 9.7%
+   (island22 instructions per update), 5.5% (globe36) and 11% (wall µs per update, years 150 to 200). **A gain counts
+   when both methods, (a) per update on remade benches and (b) the cost of years 150 to 200 of the same seeds, show a
+   cut above two of these: 19% on island22, 11% on globe36 and 22% on the wall time.** A cut between one and two of
+   them is a hint, not a gain: say so and run more seeds (the band falls with the root of the number of seeds). A cut
+   on one seed alone counts only above 34% (island22) and 19% (globe36).
+4. **Compare the parts, not only the total:** the spread of `flow::air` (4.5% to 9.6%) is smaller than that of the
+   updates (10% to 19%), because the air does not depend on the mix of life. A step that touches the air can use a
+   tighter band, one that touches the updates cannot.
+
+Doubt: the spread of three seeds is itself a noisy estimate (two degrees of freedom). The rule uses it as a guide, not as
+a test.
