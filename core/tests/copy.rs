@@ -451,7 +451,9 @@ fn a_young_nodes_sizes_stay_between_birth_and_the_copy_mass() {
         n.prepare(&w.chem, &w.cfg);
         assert!(w.in_domain(n.cell as usize, |w, d| copy::copy(w, d, &mut n)), "round {round}: no children");
         w.life[s] = n;
-        let y = *young.get_or_insert_with(|| children(&w, w.life[s].id).into_iter().find(|&k| k != s).expect("a young node"));
+        // (The few members who start in a neighbour cell land there, or go back to their parent's brood, as at a batch's end.)
+        pcore::outbox::deliver(&mut w);
+        let y =*young.get_or_insert_with(|| children(&w, w.life[s].id).into_iter().find(|&k| k != s).expect("a young node"));
         let mut b = std::mem::take(&mut w.life[y]);
         let before = b.member_body(&w.chem);
         let grown = (10f64.powf(0.02) - 1.0) * b.store[MATTER] * mm;
