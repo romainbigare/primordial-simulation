@@ -1058,3 +1058,15 @@ world one year later (seed 1) moves `run_for` by +0.15% (island22) and -1.3% (gl
 
 Doubt: the spread of three seeds is itself a noisy estimate (two degrees of freedom). The rule uses it as a guide, not as
 a test.
+## P1.1: `body::apply_extent`
+
+Level 1. The booking of a reaction's extent on a body's stores and on the air is one helper (`pay::apply_extent`), cut
+out of `pay::pay_at`, which calls it. The order of the floating-point operations is the same (the latent heat is added
+to the same running sum, one reaction after the other).
+
+| Check | Result |
+|---|---|
+| Golden test, with threads | unchanged |
+| Golden test, `RAYON_NUM_THREADS=1` | unchanged |
+
+Verdict: bit for bit; the kill line (not bit for bit) is not reached.

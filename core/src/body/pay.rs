@@ -128,22 +128,27 @@ pub(super) fn pay_at(w: &World, d: &mut Domain, b: &mut Body, cost: f64, p: &Pay
     if left > 1e-9 * cost && !part {
         return cost;
     }
-    // Gas crosses as all a body's gas does (`Moves::gas`): given with its latent heat, the air paying the lift.
     let (lift, mut latent) = (w.lift(b.cell as usize), 0.0);
     let held = b.matter_mol(&w.chem);
     for (q, &(r, _)) in b.k.burn.iter().enumerate().filter(|p| ext[p.0] > 0.0) {
-        // Its inputs, then its outputs.
-        for (k, nu) in crate::change::terms(&w.chem.reactions[r]) {
-            let dn = nu * ext[q];
-            if w.chem.phase(k, t) == Phase::Gas {
-                d.moves.gas(w, k, dn, lift);
-                latent += dn * w.chem.subs[k].latent_gas();
-            } else {
-                super::add_store(&mut b.store[k], dn, &mut d.counts.rounded[0]);
-            }
-        }
+        apply_extent(w, d, &mut b.store, r, ext[q], (t, lift), &mut latent);
     }
     b.brood_share(&w.chem, held);
     b.e += paid - latent;
     if left > 1e-9 * cost { left } else { 0.0 }
+}
+
+/// Book the extent `ext` of reaction `r` on a body's `store` at `t` K, its inputs then its outputs: gas crosses as all
+/// a body's gas does (`Moves::gas`), given with its latent heat, the air paying the `lift`, and that latent heat is
+/// added to `latent`; solids and liquids go to the body's stores. Every element is kept by the stoichiometry.
+pub(super) fn apply_extent(w: &World, d: &mut Domain, store: &mut [f64], r: usize, ext: f64, (t, lift): (f64, f64), latent: &mut f64) {
+    for (k, nu) in crate::change::terms(&w.chem.reactions[r]) {
+        let dn = nu * ext;
+        if w.chem.phase(k, t) == Phase::Gas {
+            d.moves.gas(w, k, dn, lift);
+            *latent += dn * w.chem.subs[k].latent_gas();
+        } else {
+            super::add_store(&mut store[k], dn, &mut d.counts.rounded[0]);
+        }
+    }
 }
