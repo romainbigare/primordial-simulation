@@ -2,8 +2,7 @@
 
 Watch report for the owner (handover 12.4; `docs/speed-post-foundation/plan.md`, Phase Z). Pictures are in
 `docs/reports/speed/`. The numbers behind it are in `docs/speed-post-foundation/measures.md` (section Z and the rows),
-the decisions in `decisions.md` (S1 to S84), and what changed and when in `docs/history.md`, section 5. The slow suite
-(Z2) is not part of this report.
+the decisions in `decisions.md` (S1 to S84), and what changed and when in `docs/history.md`, section 5.
 
 ## In short
 
@@ -182,6 +181,24 @@ would cut the bodies further, and with it the crowded cells; *a GPU* would take 
 reactors; *threads that may change the history* would put Flow's serial loops on all cores. The plan also names a
 cheaper solve of the air and of the liquid (new physics algorithms). The plan's own count says the first two and the
 solve are the ones that act on the part that stops 10 times.
+
+## The slow suite (Z2)
+
+The slow tests (`cargo test --release --workspace --no-fail-fast -- --ignored`, 70 minutes) ran at the end, and the
+debug checks of plan 2.3 too. They pass: the century of books, the nodes check (nodes and individuals make the same
+world), the pace of nodes, the batches of bodies, the eaters, the climate of the globe and of the long step, the scale
+test, the learning scene, the island's wear, the speed test and the golden test without threads. Five failed at first:
+
+- **The genes without selection, and two more node tests:** the tests called the law of children directly and never
+  delivered the outbox, so since D2.4a the children that start in another cell never landed (one test checked nothing:
+  200 of 200 "joined" because none landed). The tests now deliver it, as a batch's end does; the churn gives the digits
+  of the code before D2.4a again. No law changed.
+- **The ground under dense canopies:** it held no cell. Since the foundation's decision 63 plants weigh about half and
+  no land cell passes its old 20 kg/m²; it now takes the densest 5% of the land cells (S83), and passes (1 of 80 moves
+  more than 10 K).
+- **The light-eaters' stored share** (0.556, "under 0.5"): known since the foundation (S50).
+- **The sleep of Change** on the air's gas 3: a small bias of the sleep, there since the first commit (S84; see the open
+  items).
 
 ## Open items for you
 
