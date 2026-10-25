@@ -1436,3 +1436,70 @@ same with and without threads. Key numbers once, on the world with E1b.2 (88 s):
 temperature 292.154 K, swing 15.479 K, rain 0.001814, heat-absorbing gas 411.31 ppm, river cells 694.4, land worn down
 0.1446 mm/yr, light-eaters 10.240 log10 kg, eaters 5.339, life of light-eaters 1.271 yr, life of eaters 13.297 yr; all
 within the noise of the references after AIR4.0.
+
+### P1.2: the month law for stands, tried and not kept
+
+**Verdict: not kept** (the code is on the branch `x10/p1.2-not-kept`). A stand update costs about 26 µs against the
+kill line's 6 µs, so a stand-year costs more than today's law at every `field_days`: about 316 µs at 30 days against
+today's about 182 µs (18 µs every 36 days), and about 225 and 200 µs at 60 and 90 days, where the sub-steps grow
+(about 5.7 and 8.5 an update). The architect replans lane A.
+
+**What was built.** The plan of `design/month.md` (stages 0 to 5: site, supplies, liquids, rates, then sub-steps with
+the fuel's closed form) and one booking (stages 6 to 8); a running total of each cell's ground temperature and a
+stand's mark of it; the stand's own 36-day grid for maturing and births; the sample on a scratch body; `node_days`
+became `field_days` 30 and `Physics::reserve_days` 36; the brain-loss switch; snapshot 49. Two rounds:
+
+1. **First round:** a sub-step ended where a store would lose 30% at its starting rates (`MONTH_SHARE`), lengthened by a
+   look-ahead of the kernel (`fits`, up to 5 halvings).
+2. **Second round** (the coordinator's answer to the first): the other reactions, bare ones too, run alone in each
+   sub-step from its start, integrated by `gone`, cut by what their inputs hold, booked at its end (an operator split);
+   a sub-step ends only at a change of the fuel's phase, where an input of growth reaches its safe minimum, and (added
+   to pass the splitting test) where the light reaction's liquid would lose 10%; the Arrhenius factors read once an
+   update, levels once a sub-step, no allocation in growth's allotment.
+
+**Cost** (32 × 32, seed 1, one year from year 20, one thread, callgrind; every body there is a stand):
+
+| | base 118bef7 | first round | second round |
+|---|---|---|---|
+| instructions per update | 121k | 424k | 173k |
+| sub-steps per month | — | 7.0 (2.9 at year 3, 5.2 at year 12) | 2.83 |
+| about µs per update (base = 18 µs) | 18 | 63 | 26 |
+| 20 years of the world, wall, one thread | 9.1 s | 12.5 s | 9.3 s |
+
+In the first round, 47% of the sub-steps cut short were cut by the dissolved salt (23), which a bare third-order
+reaction turns into lime in about 17 days; a sub-step cost about 43k instructions, the look-ahead alone 15% of the year.
+
+**Where the 173k instructions of an update go (second round):** the plan 107k (its sub-steps 83k, about 29k each, of
+which the reactions' extents worked out twice about 11k; its stages 0 to 3, 24k: gas pool, release limit, site, film,
+liquids), the booking 34k, the selection sample 19k, the end of the update and opening its moves 7k. The booking and
+the sample alone pass the 40k of a 6 µs update.
+
+**The splitting test** (one update of 60 days against six of 10, members, fuel and body matter, each case from a stand
+that lived one month under its forcing, with the air, the ground's liquid and the light set aside held as the world
+holds them): the four kept points ended within 1.4% (first round) and 1.3% (second round, with the light-liquid rule;
+without it the fuel was off by 3.3% where the light limits the income and 4.7% where the product inhibits it, and by
+0.1% with sub-steps capped at 10 days). The starving stand died at its own time in one update and in six (0.1783 and
+0.1782 left after 60 days); the books held to 1e-12; the brain-loss switch worked.
+
+**Key numbers** (first round, 3 seeds, against the base run the same day): ground temperature on land 292.15 ->
+291.37 K (-0.78 K), seasonal swing 15.47 -> 14.85 K, rain on land 0.001813 -> 0.001775, light-eaters 10.24 -> 10.34,
+eaters 5.34 -> 5.08, life of light-eaters 1.18 -> 2.60 years, S50 0.556 -> 0.636. All in range but S50, past its
+seeds' noise. **Their cause was not found.** In a 32 × 32 run the month law had far fewer light-eaters in the first
+years (a third of the members at year 5, half the mass at year 17), less evaporation on land and a land 0.2 to 1.0 K
+colder.
+
+**Bugs found on the way** (all in the new code):
+- `came` gave no inflow to a store exactly at its level, so a store at its level drained for a whole sub-step.
+- The fuel's pay line with no release (k = 0) put its edge at infinity, so an empty stock ran sub-steps of 0 days.
+- The fuel's phases crept toward an edge in ever smaller sub-steps until the end was set on the edge itself.
+- The evaporation budget of an update was paid by upkeep at the start's activity (a full liquid), while upkeep goes
+  with the activity: a 60-day update evaporated about 3 times too much; the activity was then solved together with it.
+- The light reaction's rate and the inflow rates were read once an update (14% off in the splitting test); they were
+  then read each sub-step.
+- The selection gain read the plan's mean activity at both ends (half the selection of today); the activity of each
+  end was then read, as today.
+
+**What this teaches.** The closed form of the fuel is cheap (`Fuel::run` about 600 instructions). The cost is in the
+plan's stages (the gas pool, the release limit, the liquids, the light's and the reactions' rates read again in each
+sub-step) and in the booking and the sample (34k and 19k instructions an update, together more than a 6 µs update).
+A month law faster than today's would have to cut those, not the integration.
