@@ -156,7 +156,9 @@ and creep are cut by 1 / (1 + their mass per area / `hold`). Most rock leaving t
 solved (`air::book`). A long step gives the world of short ones: the long-step test (`tape/tests/ranges.rs`) holds each
 seed's climate at 10-day steps to its own at 6-hour steps; a melting plateau used up inside a step holds only for
 its share of the step (1.1). Wind pushes and clouds come from the step's start. The rounds stop at a tolerance, and a node
-whose air stood still keeps its row of the round before: speed numbers, held by the same two tests (`CLAUDE.md` 6.5).
+whose air stood still (its temperature and each gas it exchanges) keeps the row of an earlier round, carried to the
+round's air by its own slopes, so it stays linearised about the air it was made at (an inexact Newton step, Dembo,
+Eisenstat and Steihaug 1982): speed numbers, held by the same two tests (`CLAUDE.md` 6.5).
 - **Sun** (`radiation`): the daily mean by latitude, season and day length (Berger 1978), declination sin δ = sin ε sin
   λ. The surface reflects as its cover is at the step's end (`land::reflectance`), so new snow reflects at once.
 - **Heat radiation**: surfaces emit σT⁴; the air absorbs 1 − exp(−x), x the optical depth of the gases (each as the

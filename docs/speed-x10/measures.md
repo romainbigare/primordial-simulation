@@ -319,58 +319,59 @@ than 28% (island), 26% (globe) and 23% (region), before the cost of correcting e
 
 ### AIR1: calm cells and a calm solver
 
-Built as the plan says, with one change: `STILL_SHARE` is 2e-4, not 1e-4. At 1e-4 the globe needs 3.69 rounds a step
-(the plan asks for 3.3 at most); at 2e-4 it needs 3.25. A row keeps its last air in two numbers at its end
-(`SEEN`), so `pass` can test it without a new cache. Level 3, on the benches at `52d7f4a` (one year, from the saves).
+Built as the plan says, with one change: `STILL_SHARE` is 2e-4, not 1e-4 (X39). On the benches at `52d7f4a`, at 1e-4
+the globe needed 3.69 rounds a step (the plan asks for 3.3 at most), at 1.5e-4 3.33, at 2e-4 3.25; calm cells alone
+(gas test 1e-5) left it at 4.14 rounds. The calm solver stops the round in which calm cells are most frequent (R2
+found 97% of the cells calm in round 4), so the two gains overlap.
 
-| | island22 | globe36 | region24 |
+A row ends with the air it stands at: the temperature and each active gas (`step::width`). In a later round a ground
+node keeps its row when its air moved less than `CALM_K` (0.01 K) and each active gas less than `CALM_SHARE` (1e-4) of
+its own amount since then, and the row is carried to the round's air by its own slopes (`step::keep`): what
+evaporates and rains with the column's gas and the air's temperature, the heat to the air with both. So a kept row is
+the node's exchange linearised about the air of the round it was made in, and the Newton step is an inexact one. A row
+whose carried evaporation or rain would fall below zero is made again.
+
+Level 3. Globe36 from `$X/bench48` (one year, one thread). "Before" is today's code with the air's step of before AIR1
+(`5a37ed5^`: no calm cells, `STILL_SHARE` 1e-5); "AIR1" is `038f6ee`.
+
+| globe36 | before | AIR1 | AIR1 now |
 |---|---|---|---|
-| rounds a step, before | 2.26 | 4.12 | 2.24 |
-| rounds a step, after | 2.25 | 3.25 | 2.24 |
-| cell rows a step, before | 1,096 | 2,673 | 1,717 |
-| cell rows a step, after | 1,083 | 1,922 | 1,705 |
-| cell rows | -1.2% | **-28.1%** | -0.7% |
+| rounds a step | 4.19 | 3.36 | 3.36 |
+| cell rows a step | 2,718 | 1,934 | 1,930 |
+| cell rows | | -28.8% | **-29.0%** |
+| `flow::air`, instructions | 1,562 M | 1,326 M | 1,341 M |
+| Flow (air, liquid and state; creep and refresh are small and left out) | 2,056 M | 1,821 M | 1,835 M |
+| Flow | | -11.5% | **-10.8%** |
+| the year (the worlds part within the year) | 7,639 M | 7,422 M | 7,448 M |
 
-Rounds with `STILL_SHARE` 1e-4 and calm cells: globe36 3.69 (4 rounds in 69% of the steps). With 1.5e-4: 3.33. With
-2e-4: 3.25 (3 rounds in 75%). Calm cells alone (gas test 1e-5) leave the globe at 4.14 rounds. The calm solver stops
-the round in which calm cells were most frequent (R2 found 97% of the cells calm in round 4), so the two gains
-overlap: the rows fall 28% in all, as the design measured on a 64 x 32 globe (-36% there).
+Kill line (Flow 1T under -8% on globe36): passed. The air costs 1.1% more than with AIR1 as it was, with as many
+rows (the test of each gas, the carried rows, and a world that parts within the year). The island and the region have
+no calm cell (island22 2.36 rounds a step, 1,143 rows; region24 2.22, 1,684): they do not gain.
 
-**Instructions** (callgrind, one year, one thread, globe36, base `ew-head` against this build):
+**Climate:**
+- `the_long_step_keeps_the_climate`: passes. Off from the short steps (limit 0.3 K): t_land 0.125, summer 0.138,
+  winter 0.011; rain, `air_3`, rivers far under their limits.
+- `a_globe_without_life_keeps_an_earth_like_climate`: passes. Land 285.84 K, drift 0.008 K a year, ice at most
+  0.104, surface 290.00 K, vapour 0.0069, rain on land 1.78 m/yr.
 
-| | base | AIR1 | change |
-|---|---|---|---|
-| the whole year | 8,488 M | 8,183 M | -3.6% |
-| `flow::air` | 1,583 M | 1,339 M | -15.4% |
-| Flow (air, liquid and state; creep and refresh are small and left out) | about 2,078 M | about 1,834 M | **-11.7%** |
+**Key numbers** (once, against the references after AIR4.0):
 
-Kill line (Flow 1T under -8% on globe36): passed. The island and the region do not gain (calm cells skip 1% there).
+| | AIR1 now | reference after AIR4.0 |
+|---|---|---|
+| ground temperature on land, K | 292.15 | 292.14 |
+| seasonal swing, K | 15.47 | 15.47 |
+| rain on land, mol/m2/s | 0.001813 | 0.001813 |
+| heat-absorbing gas, ppm | 411.4 | 411.3 |
+| river cells | 694.9 | 691.9 |
+| land worn down, mm/yr | 0.1448 | 0.1452 |
+| light-eaters, log10 kg | 10.236 | 10.243 |
+| eaters, log10 kg | 5.397 | 5.393 |
+| life of light-eaters, yr | 1.237 | 1.218 |
+| life of eaters, yr | 13.41 | 13.12 |
+| stored share (S50, known failure) | 0.556 | 0.556 |
 
-**Climate** (the debug build with the same numbers gave the same digits):
-- `the_long_step_keeps_the_climate`: passes. Off from the short steps (limit 0.3 K): t_land 0.131 (AIR4.0: 0.118),
-  summer 0.141 (0.133), winter 0.014 (0.002); rain, `air_3`, rivers far under their limits. The short runs use the
-  same tolerances.
-- `a_globe_without_life_keeps_an_earth_like_climate`: passes. Land 285.88 K (design table, before: 285.94), drift
-  0.008 K a year, ice at most 0.104 (0.1025), surface 290.02 K, vapour 0.0069, rain on land 1.78 m/yr.
-
-**Key numbers** (once, against the base build at the head, `raw/keys-head.log`, since AIR4.0 moved the law after R2):
-
-| | base head | AIR1 | reference |
-|---|---|---|---|
-| ground temperature on land, K | 292.14 | 292.15 | 291.79 +-1 |
-| seasonal swing, K | 15.47 | 15.47 | 15.13 +-1.5 |
-| rain on land, mol/m2/s | 0.001813 | 0.001813 | 0.001714 x/ 1.3 |
-| heat-absorbing gas, ppm | 411.3 | 411.4 | 388.8 +-40 |
-| river cells | 691.9 | 693.6 | 712.4 x/ 1.5 |
-| land worn down, mm/yr | 0.1452 | 0.1450 | 0.141 x/ 2 |
-| light-eaters, log10 kg | 10.243 | 10.242 | 10.38 +-0.3 |
-| eaters, log10 kg | 5.393 | 5.342 | 5.354 +-0.5 |
-| life of light-eaters, yr | 1.218 | 1.182 | 1.81 x/ 2 |
-| life of eaters, yr | 13.12 | 12.86 | 10.47 x/ 2 |
-| stored share (S50, known failure) | 0.556 | 0.556 | under 0.5 |
-
-Every number is inside the noise of its three seeds. Only the stored share is out, as in the base. Books: the golden
-runs keep them to 1e-12. Golden re-pinned (three fingerprints). Core code 9,606 -> 9,618 (+12).
+Every number is inside the noise of its three seeds; only the stored share is out, as in the references. The golden
+runs keep their books to 1e-12, and their fingerprints do not move: no row of their 16 x 16 worlds is ever calm.
 
 ### MI0: the minds
 
