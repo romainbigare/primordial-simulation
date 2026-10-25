@@ -886,7 +886,7 @@ What the tests must cover:
 
 How the suite is built:
 
-- **The normal suite** (`cargo test --release --workspace`) takes about 15 seconds. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs`, one per part of the foundation's base (`core/tests/{space, store, clock, solve}.rs`), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
+- **The normal suite** (`cargo test --release --workspace`) takes about 18 seconds on 4 cores. Its tests are in one file per law: `core/tests/{flow, change, bond, copy, choose, body}.rs` (with `populations.rs` for Copy in populations and `damage.rs` for the damage to a body), one per part of the foundation's base (`core/tests/{space, store, clock, solve}.rs`), `core/tests/outbox.rs` (the outbox and the serial phase of a batch), with `chemistry0.rs` (chemistry 0's facts) and `numbers.rs` (the rows and budgets of `docs/numbers.md`); `worldgen/tests/` (the start, the roster, the fixers, the names of chemistry 0); `tape/tests/tape.rs` (snapshots, the viewer file, the series, resuming, the null run); `cli/tests/word_ban.rs` (14.4) and `cli/tests/core_size.rs` (14.3).
 - **The contract between the layers** (`docs/foundation/plan.md` 5.2) needs no test: the store's arrays are private
   fields of `store::Store`, which only `store::apply` and `Moves::book` (for the bodies' moves, adding as `apply`
   adds) write, both inside the module `store`, so the compiler checks it. A test or an edit changes the
