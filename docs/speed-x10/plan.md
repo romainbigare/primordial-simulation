@@ -7,8 +7,9 @@ and gives the order of the work. Measures go in `measures.md`. History goes in `
 ## 1. Why, and what to expect
 
 The last round (`docs/reports/speed.md`) made a year about 2 times faster and stopped: it changed how the computer does
-the work, not what the world computes. The owner now accepts changes of laws and rules for speed, and asked to try
-eleven ideas (section 3). This plan tries each one, and keeps only what pays.
+the work, not what the world computes. The owner now accepts changes of laws and rules for speed, and named eleven
+ideas (section 3). The designs studied each one against the code; this plan builds the ones that can pay and drops the
+ones the designs showed to be bad from the start (section 3 says which and why).
 
 **What the four designs found, in short:**
 
@@ -22,7 +23,7 @@ eleven ideas (section 3). This plan tries each one, and keeps only what pays.
 **Honest arithmetic.** Multiplied, the sure steps give a year about 1.8 to 2.4 times faster on 4 cores than today, so
 about 3 to 4.5 times the start of the last round. The research and gated steps could add 1.3 to 1.6 times more. On 16
 cores the engine's pipeline adds 2 to 3 times over today's design. **10 times on 4 cores is not in sight with these
-eleven ideas; it is in sight on 16 or more cores, or with the gated steps passing.** 100 times needs a different engine
+ideas; it is in sight on 16 or more cores, or with the gated steps passing.** 100 times needs a different engine
 (a GPU for Flow and the stands, `docs/reports/speed.md`), which is not in this plan. The plan says so now so that no step
 is judged against a hope.
 
@@ -46,20 +47,20 @@ re-pins golden rebases and re-pins on the branch it merges into.
 judges a step on one world: the same save run with both builds. Wall-time runs wait for a quiet machine (no other
 cargo, rustc, valgrind or ew).
 
-## 3. The eleven ideas and what this plan does with each
+## 3. The eleven ideas: what is built, what is dropped
 
 | # | Owner's idea | What we build | Design | Decision |
 |---|---|---|---|---|
 | 1 | Plants as a field | Plants (bodies of a lineage with no brain) become *stands*: a stand is the plant node of a cell, stepped by one month-long law (P1); then a field step per cell in the survey takes them out of the ring (P3) | plants 3, 4 | X7 |
-| 2 | A growth table per genome | A *card*: the constants of a genome's month law, made in `prepare` (P1). A grid table over light, heat, water and stores is also built and measured, on a branch (P5) | plants 6 | X8 |
+| 2 | A growth table per genome | A *card*: the constants of a genome's month law, made in `prepare` (P1). A grid table is dropped | plants 6 | X8 |
 | 3 | Upkeep and light together across the interval | The month law for plants (P1); then the same law for animals (P1b), so there is one energy law and animals can update less often (MI6) | plants 4 | X9 |
-| 4 | Accept a different history with threads | The fixed-order pipeline is built first (E1, E2: no history change needed). An order-free variant is built and measured (E8); kept only if it gains at least 5% of a year on 4 cores over the fixed-order one | engine 2, 3 | X3 |
-| 5 | Exact books per cell and month, 32-bit inside | Numbers that hold matter or energy stay 64-bit; 32-bit is allowed for numbers that hold nothing (cards, tables, brain rows, faces). A 32-bit store is built and measured on a branch (E6) | engine 5 | X4 |
-| 6 | Fewer air steps where calm; a coarser air grid | Calm cells keep their rows and a calm solver (AIR1); the per-cell loops on all cores (AIR2); a dense book (AIR3); calm months by an error-controlled step, research (AIR4); a coarser air grid, measured on a branch against the climate tests (AIR5); shared sea balance, gated (AIR6) | air 4 to 8 | X10 |
+| 4 | Accept a different history with threads | Not needed: the pipeline E1, E2 shares the cross-domain writes out in an order fixed by the data, with the same gain; the history stays the same with any number of threads. An order-free variant is dropped | engine 2, 3 | X3 |
+| 5 | Exact books per cell and month, 32-bit inside | Dropped for numbers that hold matter or energy: they stay 64-bit (32 bits would break the books and buy no speed). 32-bit is allowed for numbers that hold nothing (cards, brain rows, faces) where a step measures a gain | engine 5 | X4 |
+| 6 | Fewer air steps where calm; a coarser air grid | Calm cells keep their rows and a calm solver (AIR1); the per-cell loops on all cores (AIR2); a dense book (AIR3); calm months by an error-controlled step, research (AIR4); shared sea balance, gated (AIR6). A coarser air grid is dropped: the air is already 4 x 4 coarser and its solve is 6 to 8% of its step | air 4 to 8 | X10 |
 | 7 | Raise the code ceiling | 11,500 code lines in `core` | engine 4 | X2 |
 | 8 | Think only when something changes | Habits (MI3): a body thinks again when its senses move, a body of another lineage comes or goes, its habit is no longer possible, or a season has passed | minds 2 | X11 |
 | 9 | Think in groups | Shared senses of a place (MI4); a node's movers leave as one group (MI5). One decision for unlike nodes is not built (a merge of unlike nodes, S66) | minds 3 | X11 |
-| 10 | Neural networks in batches | Built and measured (MI7), with decisions first and acts after; kept only if it pays its kill line | minds 4 | X12 |
+| 10 | Neural networks in batches | Dropped: each body owns 76% of its brain's weights, so a batch shares little (about 0.1% of a year), and the network is 1.4 to 2.1% of a year | minds 4 | X12 |
 | 11 | Full thinking for smart bodies | `--full-minds` (every body thinks at every update) is the control run of habits; a lineage at or over `Config::full_hidden` hidden units is never a node and always thinks fully (MI8) | minds 5 | X13 |
 
 ## 4. The steps
@@ -83,24 +84,19 @@ Each lane is a chain; the lanes touch different files (plants: `body/`, `copy/`,
 
 | Lane | Steps in order | Notes |
 |---|---|---|
-| Plants | **P1** the plant month and the card (Opus, level 3; kill line: under 10% fewer island instr.) → **P2** `field_days` 60 if the pace test passes (Sonnet) → **P1b** the month law for animals (Opus, level 3; X9) → **P3** the field step per cell, plants out of the ring (Opus, gated: at least 5% more) | P4 (compact stands) not built unless P3's profile asks |
-| Engine | **E1a, E1b, E1c** the pipeline: leaving bodies and sorted outboxes, global ids in a short serial step, landing and booking per destination on the pool, the small serial rest (Opus; kill line: under 6% on 4T) → **E2** tiles of 4 cells, each taking at most its cells' share of their air node (Opus, level 3; gated by R2) → **E4, E5** gated | E6 and E8 in phase 2 |
-| Air | **AIR1** calm cells and calm solver (Sonnet, level 2) → **AIR3** dense book (Sonnet, level 1 or 2) → **AIR2** the air's and liquid's per-cell loops on all cores (Opus, level 1 with the fixed-order rule) | AIR4, AIR5, AIR6 in phase 2 |
-| Minds | **MI1** the face cover once per batch (Sonnet, level 1) → **MI3** habits (Opus, level 3; gate: sleep share at least 40%) → **MI4** shared place senses (Sonnet, level 2) → **MI8** full minds by `full_hidden` (Sonnet) | MI5, MI6, MI7 in phase 2 |
+| Plants | **P1** the plant month and the card (Opus, level 3; kill line: under 10% fewer island instr.) → **P2** `field_days` 60 if the pace test passes (Sonnet) → **P1b** the month law for animals (Opus, level 3; X9) → **P3** the field step per cell, plants out of the ring (Opus, gated: at least 5% more) | |
+| Engine | **E1a, E1b, E1c** the pipeline: leaving bodies and sorted outboxes, global ids in a short serial step, landing and booking per destination on the pool, the small serial rest (Opus; kill line: under 6% on 4T) → **E2** tiles of 4 cells, each taking at most its cells' share of their air node (Opus, level 3; gated by R2) → **E4, E5** gated | |
+| Air | **AIR1** calm cells and calm solver (Sonnet, level 2) → **AIR3** dense book (Sonnet, level 1 or 2) → **AIR2** the air's and liquid's per-cell loops on all cores (Opus, level 1 with the fixed-order rule) | AIR4, AIR6 in phase 2 |
+| Minds | **MI1** the face cover once per batch (Sonnet, level 1) → **MI3** habits (Opus, level 3; gate: sleep share at least 40%) → **MI4** shared place senses (Sonnet, level 2) → **MI8** full minds by `full_hidden` (Sonnet) | MI5, MI6 in phase 2 |
 
-### Phase 2: the probes and the gated steps
+### Phase 2: the gated and research steps
 
 | Step | What | Where | Kept when |
 |---|---|---|---|
-| P5 | Grid growth table for discrete strains | branch | it gains at least 10% of the plants' time and the key numbers hold |
-| E6 | 32-bit store (numbers that hold matter) | branch | the books hold to 1e-12 per cell and month and it gains at least 5% (expected to fail, X4) |
-| E8 | Order-free variant of the pipeline (ids by atomics, landing as it comes) | branch, then the lane | at least 5% of a year on 4T over the fixed-order pipeline (X3) |
 | AIR4 | Calm months by TR-BDF2 with an error estimate: first find why long steps warm the winters (R1 of air) | lane | the climate tests hold (0.3 K) and Flow gains at least 15% |
-| AIR5 | The air grid one level coarser | branch | the climate key numbers hold and a year gains at least 5% |
 | AIR6 | Alike open-sea cells share one surface balance | lane, gated | the gate's measure, then 10% of Flow |
 | MI5 | A node's movers leave as one group | lane | the nodes check holds and decisions gain at least 10% |
 | MI6 | Calm animals update less often (needs P1b) | lane | a new animal pace test holds and a year gains at least 5% |
-| MI7 | Batched networks (decisions first, acts after) | lane | the network's share falls by half and a year gains at least 2% |
 | E7 | Scaling check on more cores (as far as the machine allows) | measure | `measures.md` |
 
 ### Phase Z: the final check
@@ -113,7 +109,7 @@ the island, the globe, the refined region and the largest planet that fits 15 mi
 
 ```
 R1, R2, R3 ──► plants: P1 ──► P2 ──► P1b ──► P3 ─────────────┐
-           ├─► engine: E1a ──► E1b ──► E1c ──► E2 ──► (E4, E5)  ├─► review per lane ─► phase 2 probes ─► Z
+           ├─► engine: E1a ──► E1b ──► E1c ──► E2 ──► (E4, E5)  ├─► review per lane ─► phase 2 ─► Z
            ├─► air:    AIR1 ──► AIR3 ──► AIR2 ────────────────┤
            └─► minds:  MI1 ──► MI3 ──► MI4 ──► MI8 ───────────┘
 ```
