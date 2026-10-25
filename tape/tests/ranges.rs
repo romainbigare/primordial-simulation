@@ -401,23 +401,27 @@ fn the_eaters_live_and_stop_growing() {
     assert!(!boomed, "the eaters boomed past {EATER_MOST_KG_KM2} kg/km2: {eaters:?}");
 }
 
-/// The canopy check: the years before it, the body mass per area over which a cell is a dense canopy, kg/m², how far
-/// its ground may move against the mean of its neighbours within 30 days, K, and the share of canopies that may move
-/// more.
+/// The canopy check: the years before it, the share of land cells with the most body mass per area that are dense
+/// canopies (by rank, so the check keeps its cells when a law moves body mass), how far a canopy's ground may move
+/// against the mean of its neighbours within 30 days, K, and the share of canopies that may move more.
 const CANOPY_YEARS: u64 = 20;
-const CANOPY_KG: f64 = 20.0;
+const CANOPY_TOP: f64 = 0.05;
 const CANOPY_SWING: f64 = 10.0;
 const CANOPY_SHARE: f64 = 0.15;
 
 /// Bodies draw their heat from the ground inside the air's implicit step (laws.md 1.4), so the ground under a dense
-/// canopy follows its neighbours: through a year, day by day, after `CANOPY_YEARS` of seed 1, fewer than
-/// `CANOPY_SHARE` of the dense canopies move more than `CANOPY_SWING` against their neighbours within 30 days.
+/// canopy (the densest `CANOPY_TOP` of the land cells with life) follows its neighbours: through a year, day by day,
+/// after `CANOPY_YEARS` of seed 1, fewer than `CANOPY_SHARE` of the dense canopies move more than `CANOPY_SWING`
+/// against their neighbours within 30 days.
 #[test]
 #[ignore = "slow: a 20-year run of a 64 x 64 world, then a year day by day"]
 fn the_ground_under_dense_canopies_stays_near_its_neighbours() {
     let (mut w, _) = run(1, SIDE, CANOPY_YEARS, false, |_| {}, |_, _, _| {});
     let area = w.mesh.cells().area().to_vec();
-    let dense: Vec<usize> = (0..area.len()).filter(|&i| w.is_land(i) && w.life.sum.get(i).map_or(0.0, |s| s[1]) / area[i] > CANOPY_KG).collect();
+    let per_area = |i: usize| w.life.sum.get(i).map_or(0.0, |s| s[1]) / area[i];
+    let mut land: Vec<usize> = (0..area.len()).filter(|&i| w.is_land(i) && per_area(i) > 0.0).collect();
+    land.sort_by(|&a, &b| per_area(b).total_cmp(&per_area(a)));
+    let dense: Vec<usize> = land[..(CANOPY_TOP * land.len() as f64).ceil() as usize].to_vec();
     // The gap of each canopy's ground to the mean of its neighbours, every 10 days.
     let gap = |w: &World, i: usize| {
         let around = w.mesh.cells().around(i).1;
