@@ -488,3 +488,18 @@ The raw output is in `raw/keys.log`.
 | MI4: sharing at least 1.5 | 1.95 / 2.17 / 1.48 | met on island and globe |
 | G15: an update on 4T at most 1.2 x its 1T cost | 1.22 to 1.31 | 0.02 to 0.11 away |
 | the key numbers | all but S50 in range | S50 stays a known failure |
+
+### What is measured and what is not yet
+
+All gates named for R2 have a number above. These parts are weaker than the rest, or not done:
+
+| Item | State |
+|---|---|
+| P0, E0 (a) to (f), AIR0, MI0, G0, the minds breakdown, the key-number references | measured |
+| Plants' share of booking and outbox | a proxy: counts of number changes and of litters, not time per kind |
+| E0 (d), the 4-thread gain of tiles | counted (busiest share, longest-task-first share), not timed on a tiled build |
+| E5's S2 time (part acts, watches, litter returns) | not measured per kind; only an upper bound (`deliver` plus serial bodies) |
+| MI0, `others` keyed by lineage, and merges under 5% | what-if variants on the side; the world ran as it does |
+| S84 (sleep bias on `air_3`) | not run (a different test) |
+| Wall times | made on a busy machine (4% to 14% above Z1); judge steps by instructions (S45) |
+| PR-A, PR-B, PR-M, PR-S, G14-P1, AIR4-R1, R3 | not part of R2; not done here |
